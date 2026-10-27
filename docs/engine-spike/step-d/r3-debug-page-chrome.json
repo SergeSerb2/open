@@ -1,0 +1,1222 @@
+{
+  "config": "Debug",
+  "engine": {
+    "distributionUUID": "4C4C4432-5555-3144-A144-B678285BC5F4",
+    "embeddedUUID": "4C4C4432-5555-3144-A144-B678285BC5F4",
+    "source": "fork",
+    "stamp": "fork /Users/serge/Developer/open-engine/chromium_git/chromium/src/cef/binary_distrib/cef_binary_156.0.14+g4fa4ab5+chromium-156.0.8078.48_macosarm64_minimal 1793036548"
+  },
+  "interrupted_attempts": [
+    {
+      "attempt": 1,
+      "checks": {
+        "capture_missing_window_refused": {
+          "ok": true
+        },
+        "find_bar_next_previous": {
+          "assertion": {
+            "initial": 1,
+            "ok": true,
+            "state": {
+              "count": 3,
+              "frame": [
+                1002,
+                18,
+                260,
+                24
+              ],
+              "index": 1,
+              "page": 1,
+              "text": "needle",
+              "visible": true
+            }
+          },
+          "focus": [
+            {
+              "event": "frontmostChanged",
+              "frontmostApp": "T3 Pretty Internal (Nightly)",
+              "frontmostBundle": "com.sergeserb.t3code",
+              "frontmostPID": 61495,
+              "openPID": 61291,
+              "uptime": 163542.97566641666
+            },
+            {
+              "active": false,
+              "event": "NSApplicationDidResignActiveNotification",
+              "frontmostApp": "T3 Pretty Internal (Nightly)",
+              "frontmostPID": 61495,
+              "keyWindow": 0,
+              "openPID": 61291,
+              "uptime": 163542.9793075
+            }
+          ],
+          "status": "INTERRUPTED"
+        },
+        "find_bar_open_type": {
+          "ok": true,
+          "state": {
+            "count": 3,
+            "frame": [
+              1002,
+              18,
+              260,
+              24
+            ],
+            "index": 1,
+            "page": 1,
+            "text": "needle",
+            "visible": true
+          }
+        },
+        "owned_window_cleanup": {
+          "apps": [
+            {
+              "dialogs": [
+                {
+                  "label": "suite quit",
+                  "ok": true,
+                  "pendingBefore": 0,
+                  "remaining": [],
+                  "windowsBefore": [
+                    {
+                      "layer": 0,
+                      "number": 163351,
+                      "pid": 61291,
+                      "title": "Page chrome fixture"
+                    }
+                  ]
+                }
+              ],
+              "pid": 61291,
+              "quit": {
+                "forced": false,
+                "killed": [],
+                "ok": true,
+                "remainingWindows": [],
+                "reply": true,
+                "rootPathProbe": "/Users/serge/.t3/worktrees/open/t3-d8b5b30a/build/Debug/Open.app/Contents/MacOS/Open",
+                "windowsBeforeKill": []
+              }
+            }
+          ],
+          "ok": true,
+          "subprocesses": []
+        },
+        "permission_transient_setting_refused": {
+          "ok": true
+        }
+      },
+      "focus": [
+        {
+          "event": "frontmostChanged",
+          "frontmostApp": "T3 Pretty Internal (Nightly)",
+          "frontmostBundle": "com.sergeserb.t3code",
+          "frontmostPID": 61495,
+          "openPID": 61291,
+          "uptime": 163542.97566641666
+        },
+        {
+          "active": false,
+          "event": "NSApplicationDidResignActiveNotification",
+          "frontmostApp": "T3 Pretty Internal (Nightly)",
+          "frontmostPID": 61495,
+          "keyWindow": 0,
+          "openPID": 61291,
+          "uptime": 163542.9793075
+        }
+      ],
+      "reason": "foreground lost during find_bar_next_previous",
+      "status": "INTERRUPTED"
+    },
+    {
+      "attempt": 2,
+      "checks": {
+        "capture_missing_window_refused": {
+          "ok": true
+        },
+        "dialog_alert": {
+          "closed": true,
+          "ok": true,
+          "result": "alert done",
+          "sheet": {
+            "buttons": [
+              "OK"
+            ],
+            "held": false,
+            "kind": 0,
+            "message": "page chrome alert",
+            "pending": 1,
+            "sourceMessageBytes": 17,
+            "sourcePromptBytes": 0,
+            "text": "",
+            "visible": true,
+            "window": 163454
+          }
+        },
+        "dialog_beforeunload_leave": {
+          "ok": true
+        },
+        "dialog_beforeunload_stay": {
+          "ok": true,
+          "sheet": {
+            "buttons": [
+              "Leave",
+              "Stay"
+            ],
+            "held": false,
+            "kind": 3,
+            "message": "Is it OK to leave/reload this page?",
+            "pending": 1,
+            "sourceMessageBytes": 35,
+            "sourcePromptBytes": 0,
+            "text": "",
+            "visible": true,
+            "window": 163472
+          }
+        },
+        "dialog_confirm_accept": {
+          "closed": true,
+          "ok": true,
+          "result": true,
+          "sheet": {
+            "buttons": [
+              "OK",
+              "Cancel"
+            ],
+            "held": false,
+            "kind": 1,
+            "message": "page chrome confirm",
+            "pending": 1,
+            "sourceMessageBytes": 19,
+            "sourcePromptBytes": 0,
+            "text": "",
+            "visible": true,
+            "window": 163458
+          }
+        },
+        "dialog_confirm_cancel": {
+          "closed": true,
+          "ok": true,
+          "result": false,
+          "sheet": {
+            "buttons": [
+              "OK",
+              "Cancel"
+            ],
+            "held": false,
+            "kind": 1,
+            "message": "page chrome confirm",
+            "pending": 1,
+            "sourceMessageBytes": 19,
+            "sourcePromptBytes": 0,
+            "text": "",
+            "visible": true,
+            "window": 163456
+          }
+        },
+        "dialog_dismiss_policy": {
+          "ok": true,
+          "result": [
+            false,
+            null
+          ]
+        },
+        "dialog_hold_policy": {
+          "ok": true
+        },
+        "dialog_prompt_accept": {
+          "closed": true,
+          "ok": true,
+          "result": "typed response",
+          "sheet": {
+            "buttons": [
+              "OK",
+              "Cancel"
+            ],
+            "held": false,
+            "kind": 2,
+            "message": "page chrome prompt",
+            "pending": 1,
+            "sourceMessageBytes": 18,
+            "sourcePromptBytes": 4,
+            "text": "seed",
+            "visible": true,
+            "window": 163460
+          }
+        },
+        "dialog_prompt_cancel": {
+          "closed": true,
+          "ok": true,
+          "result": null,
+          "sheet": {
+            "buttons": [
+              "OK",
+              "Cancel"
+            ],
+            "held": false,
+            "kind": 2,
+            "message": "page chrome prompt",
+            "pending": 1,
+            "sourceMessageBytes": 18,
+            "sourcePromptBytes": 4,
+            "text": "seed",
+            "visible": true,
+            "window": 163466
+          }
+        },
+        "dialog_unanswered_host_close": {
+          "ok": true
+        },
+        "extension_chrome_model_pending": {
+          "reason": "pending #93: native Chrome toolbar action/popup implementation is not on main",
+          "status": "BLOCKED"
+        },
+        "extension_popup_input": {
+          "ok": true
+        },
+        "extension_popup_key_escape": {
+          "ok": true
+        },
+        "extension_popup_key_l": {
+          "ok": true
+        },
+        "extension_popup_key_return": {
+          "ok": true
+        },
+        "extension_popup_key_t": {
+          "ok": true
+        },
+        "extension_popup_key_w": {
+          "ok": true
+        },
+        "extension_popup_outside_click": {
+          "ok": true
+        },
+        "extension_popup_panel": {
+          "ok": true,
+          "state": {
+            "content": 4,
+            "extension": "pdnclfgkpaghggbbmmmmpdmndkjaoaof",
+            "pending": "#93",
+            "size": [
+              360,
+              480
+            ],
+            "visible": true,
+            "window": 163439
+          }
+        },
+        "extension_popup_resize": {
+          "after": {
+            "content": 4,
+            "extension": "pdnclfgkpaghggbbmmmmpdmndkjaoaof",
+            "pending": "#93",
+            "size": [
+              300,
+              140
+            ],
+            "visible": true,
+            "window": 163439
+          },
+          "before": {
+            "content": 4,
+            "extension": "pdnclfgkpaghggbbmmmmpdmndkjaoaof",
+            "pending": "#93",
+            "size": [
+              360,
+              480
+            ],
+            "visible": true,
+            "window": 163439
+          },
+          "ok": true
+        },
+        "extension_popup_second_click": {
+          "ok": true
+        },
+        "extension_popup_window_close": {
+          "ok": true
+        },
+        "find_bar_empty": {
+          "ok": true
+        },
+        "find_bar_escape": {
+          "ok": true
+        },
+        "find_bar_next_previous": {
+          "initial": 1,
+          "ok": true,
+          "state": {
+            "count": 3,
+            "frame": [
+              1002,
+              18,
+              260,
+              24
+            ],
+            "index": 1,
+            "page": 1,
+            "text": "needle",
+            "visible": true
+          }
+        },
+        "find_bar_open_type": {
+          "ok": true,
+          "state": {
+            "count": 3,
+            "frame": [
+              1002,
+              18,
+              260,
+              24
+            ],
+            "index": 1,
+            "page": 1,
+            "text": "needle",
+            "visible": true
+          }
+        },
+        "find_bar_peek_scope": {
+          "ok": true,
+          "state": {
+            "count": 1,
+            "frame": [
+              1002,
+              18,
+              260,
+              24
+            ],
+            "index": 1,
+            "page": 2,
+            "text": "needle",
+            "visible": true
+          }
+        },
+        "find_bar_split_scope": {
+          "focusedEngine": 1,
+          "ok": true,
+          "state": {
+            "count": 3,
+            "frame": [
+              1002,
+              18,
+              260,
+              24
+            ],
+            "index": 1,
+            "page": 1,
+            "text": "needle",
+            "visible": true
+          }
+        },
+        "owned_window_cleanup": {
+          "apps": [
+            {
+              "dialogs": [
+                {
+                  "label": "page-chrome dialog button",
+                  "ok": true,
+                  "pendingBefore": 0,
+                  "remaining": [],
+                  "windowsBefore": [
+                    {
+                      "layer": 0,
+                      "number": 163412,
+                      "pid": 62305,
+                      "title": "Page chrome fixture"
+                    }
+                  ]
+                },
+                {
+                  "label": "page-chrome dialog button",
+                  "ok": true,
+                  "pendingBefore": 0,
+                  "remaining": [],
+                  "windowsBefore": [
+                    {
+                      "layer": 0,
+                      "number": 163412,
+                      "pid": 62305,
+                      "title": "Page chrome fixture"
+                    }
+                  ]
+                },
+                {
+                  "label": "page-chrome dialog button",
+                  "ok": true,
+                  "pendingBefore": 0,
+                  "remaining": [],
+                  "windowsBefore": [
+                    {
+                      "layer": 0,
+                      "number": 163459,
+                      "pid": 62305,
+                      "title": "(untitled owned window)"
+                    },
+                    {
+                      "layer": 0,
+                      "number": 163412,
+                      "pid": 62305,
+                      "title": "Page chrome fixture"
+                    }
+                  ]
+                },
+                {
+                  "label": "page-chrome dialog button",
+                  "ok": true,
+                  "pendingBefore": 0,
+                  "remaining": [],
+                  "windowsBefore": [
+                    {
+                      "layer": 0,
+                      "number": 163461,
+                      "pid": 62305,
+                      "title": "(untitled owned window)"
+                    },
+                    {
+                      "layer": 0,
+                      "number": 163412,
+                      "pid": 62305,
+                      "title": "Page chrome fixture"
+                    }
+                  ]
+                },
+                {
+                  "label": "page-chrome dialog button",
+                  "ok": true,
+                  "pendingBefore": 0,
+                  "remaining": [],
+                  "windowsBefore": [
+                    {
+                      "layer": 0,
+                      "number": 163412,
+                      "pid": 62305,
+                      "title": "Page chrome fixture"
+                    }
+                  ]
+                },
+                {
+                  "label": "dialog dismiss policy",
+                  "ok": true,
+                  "pendingBefore": 0,
+                  "remaining": [],
+                  "windowsBefore": [
+                    {
+                      "layer": 0,
+                      "number": 163412,
+                      "pid": 62305,
+                      "title": "Page chrome fixture"
+                    }
+                  ]
+                },
+                {
+                  "label": "dialog hold policy",
+                  "ok": true,
+                  "pendingBefore": 0,
+                  "remaining": [],
+                  "windowsBefore": [
+                    {
+                      "layer": 0,
+                      "number": 163412,
+                      "pid": 62305,
+                      "title": "Page chrome fixture"
+                    }
+                  ]
+                },
+                {
+                  "label": "unanswered host close",
+                  "ok": true,
+                  "pendingBefore": 0,
+                  "remaining": [],
+                  "windowsBefore": [
+                    {
+                      "layer": 0,
+                      "number": 163412,
+                      "pid": 62305,
+                      "title": "Linked fixture"
+                    }
+                  ]
+                },
+                {
+                  "label": "beforeunload Stay",
+                  "ok": true,
+                  "pendingBefore": 0,
+                  "remaining": [],
+                  "windowsBefore": [
+                    {
+                      "layer": 0,
+                      "number": 163412,
+                      "pid": 62305,
+                      "title": "Page chrome fixture"
+                    }
+                  ]
+                },
+                {
+                  "label": "beforeunload Leave",
+                  "ok": true,
+                  "pendingBefore": 0,
+                  "remaining": [],
+                  "windowsBefore": [
+                    {
+                      "layer": 0,
+                      "number": 163412,
+                      "pid": 62305,
+                      "title": "Linked fixture"
+                    }
+                  ]
+                },
+                {
+                  "label": "suite quit",
+                  "ok": true,
+                  "pendingBefore": 0,
+                  "remaining": [],
+                  "windowsBefore": [
+                    {
+                      "layer": 0,
+                      "number": 163412,
+                      "pid": 62305,
+                      "title": "Page chrome fixture"
+                    }
+                  ]
+                }
+              ],
+              "pid": 62305,
+              "quit": {
+                "forced": false,
+                "killed": [],
+                "ok": true,
+                "remainingWindows": [],
+                "reply": true,
+                "rootPathProbe": "/Users/serge/.t3/worktrees/open/t3-d8b5b30a/build/Debug/Open.app/Contents/MacOS/Open",
+                "windowsBeforeKill": []
+              }
+            }
+          ],
+          "ok": true,
+          "subprocesses": []
+        },
+        "permission_allow_remember": {
+          "assertion": {
+            "expectedStored": 1,
+            "ok": true,
+            "prompt": {
+              "appActive": true,
+              "containerKey": true,
+              "containerWindow": 163412,
+              "decisions": 1,
+              "keyWindow": 163412,
+              "kinds": 8,
+              "origin": "http://127.0.0.1:63222/",
+              "ownerKey": true,
+              "ownerSheet": false,
+              "pending": 1,
+              "pendingPage": 15,
+              "remember": false,
+              "selectedPage": 15,
+              "visible": true,
+              "window": 163476
+            },
+            "stored": 1
+          },
+          "focus": [
+            {
+              "event": "frontmostChanged",
+              "frontmostApp": "T3 Code (Nightly)",
+              "frontmostBundle": "com.t3tools.t3code",
+              "frontmostPID": 63831,
+              "openPID": 62305,
+              "uptime": 163562.64959895835
+            },
+            {
+              "active": false,
+              "event": "NSApplicationDidResignActiveNotification",
+              "frontmostApp": "T3 Code (Nightly)",
+              "frontmostPID": 63831,
+              "keyWindow": 0,
+              "openPID": 62305,
+              "uptime": 163562.66088708333
+            }
+          ],
+          "status": "INTERRUPTED"
+        },
+        "permission_deny_once": {
+          "expectedStored": 0,
+          "ok": true,
+          "prompt": {
+            "appActive": true,
+            "containerKey": true,
+            "containerWindow": 163412,
+            "decisions": 0,
+            "keyWindow": 163412,
+            "kinds": 8,
+            "origin": "http://127.0.0.1:63221/",
+            "ownerKey": true,
+            "ownerSheet": false,
+            "pending": 1,
+            "pendingPage": 14,
+            "remember": false,
+            "selectedPage": 14,
+            "visible": true,
+            "window": 163476
+          },
+          "stored": 0
+        },
+        "permission_deny_policy": {
+          "ok": true
+        },
+        "permission_transient_setting_refused": {
+          "ok": true
+        }
+      },
+      "focus": [
+        {
+          "event": "frontmostChanged",
+          "frontmostApp": "T3 Code (Nightly)",
+          "frontmostBundle": "com.t3tools.t3code",
+          "frontmostPID": 63831,
+          "openPID": 62305,
+          "uptime": 163562.64959895835
+        },
+        {
+          "active": false,
+          "event": "NSApplicationDidResignActiveNotification",
+          "frontmostApp": "T3 Code (Nightly)",
+          "frontmostPID": 63831,
+          "keyWindow": 0,
+          "openPID": 62305,
+          "uptime": 163562.66088708333
+        }
+      ],
+      "reason": "foreground lost during permission_allow_remember",
+      "status": "INTERRUPTED"
+    },
+    {
+      "attempt": 3,
+      "checks": {
+        "capture_missing_window_refused": {
+          "ok": true
+        },
+        "dialog_alert": {
+          "assertion": {
+            "closed": true,
+            "ok": true,
+            "result": "alert done",
+            "sheet": {
+              "buttons": [
+                "OK"
+              ],
+              "held": false,
+              "kind": 0,
+              "message": "page chrome alert",
+              "pending": 1,
+              "sourceMessageBytes": 17,
+              "sourcePromptBytes": 0,
+              "text": "",
+              "visible": true,
+              "window": 163514
+            }
+          },
+          "focus": [
+            {
+              "event": "frontmostChanged",
+              "frontmostApp": "T3 Pretty Internal (Nightly)",
+              "frontmostBundle": "com.sergeserb.t3code",
+              "frontmostPID": 73084,
+              "openPID": 64847,
+              "uptime": 163577.5508862917
+            },
+            {
+              "active": false,
+              "event": "NSApplicationDidResignActiveNotification",
+              "frontmostApp": "T3 Pretty Internal (Nightly)",
+              "frontmostPID": 73084,
+              "keyWindow": 0,
+              "openPID": 64847,
+              "uptime": 163577.558868375
+            }
+          ],
+          "status": "INTERRUPTED"
+        },
+        "extension_chrome_model_pending": {
+          "reason": "pending #93: native Chrome toolbar action/popup implementation is not on main",
+          "status": "BLOCKED"
+        },
+        "extension_popup_input": {
+          "ok": true
+        },
+        "extension_popup_key_escape": {
+          "ok": true
+        },
+        "extension_popup_key_l": {
+          "ok": true
+        },
+        "extension_popup_key_return": {
+          "ok": true
+        },
+        "extension_popup_key_t": {
+          "ok": true
+        },
+        "extension_popup_key_w": {
+          "ok": true
+        },
+        "extension_popup_outside_click": {
+          "ok": true
+        },
+        "extension_popup_panel": {
+          "ok": true,
+          "state": {
+            "content": 4,
+            "extension": "pdnclfgkpaghggbbmmmmpdmndkjaoaof",
+            "pending": "#93",
+            "size": [
+              360,
+              480
+            ],
+            "visible": true,
+            "window": 163499
+          }
+        },
+        "extension_popup_resize": {
+          "after": {
+            "content": 4,
+            "extension": "pdnclfgkpaghggbbmmmmpdmndkjaoaof",
+            "pending": "#93",
+            "size": [
+              300,
+              140
+            ],
+            "visible": true,
+            "window": 163499
+          },
+          "before": {
+            "content": 4,
+            "extension": "pdnclfgkpaghggbbmmmmpdmndkjaoaof",
+            "pending": "#93",
+            "size": [
+              360,
+              480
+            ],
+            "visible": true,
+            "window": 163499
+          },
+          "ok": true
+        },
+        "extension_popup_second_click": {
+          "ok": true
+        },
+        "extension_popup_window_close": {
+          "ok": true
+        },
+        "find_bar_empty": {
+          "ok": true
+        },
+        "find_bar_escape": {
+          "ok": true
+        },
+        "find_bar_next_previous": {
+          "initial": 1,
+          "ok": true,
+          "state": {
+            "count": 3,
+            "frame": [
+              1002,
+              18,
+              260,
+              24
+            ],
+            "index": 1,
+            "page": 1,
+            "text": "needle",
+            "visible": true
+          }
+        },
+        "find_bar_open_type": {
+          "ok": true,
+          "state": {
+            "count": 3,
+            "frame": [
+              1002,
+              18,
+              260,
+              24
+            ],
+            "index": 1,
+            "page": 1,
+            "text": "needle",
+            "visible": true
+          }
+        },
+        "find_bar_peek_scope": {
+          "ok": true,
+          "state": {
+            "count": 1,
+            "frame": [
+              1002,
+              18,
+              260,
+              24
+            ],
+            "index": 1,
+            "page": 2,
+            "text": "needle",
+            "visible": true
+          }
+        },
+        "find_bar_split_scope": {
+          "focusedEngine": 1,
+          "ok": true,
+          "state": {
+            "count": 3,
+            "frame": [
+              1002,
+              18,
+              260,
+              24
+            ],
+            "index": 1,
+            "page": 1,
+            "text": "needle",
+            "visible": true
+          }
+        },
+        "owned_window_cleanup": {
+          "apps": [
+            {
+              "dialogs": [
+                {
+                  "label": "page-chrome dialog button",
+                  "ok": true,
+                  "pendingBefore": 0,
+                  "remaining": [],
+                  "windowsBefore": [
+                    {
+                      "layer": 0,
+                      "number": 163488,
+                      "pid": 64847,
+                      "title": "Page chrome fixture"
+                    }
+                  ]
+                },
+                {
+                  "label": "suite quit",
+                  "ok": true,
+                  "pendingBefore": 0,
+                  "remaining": [],
+                  "windowsBefore": [
+                    {
+                      "layer": 0,
+                      "number": 163488,
+                      "pid": 64847,
+                      "title": "Page chrome fixture"
+                    }
+                  ]
+                }
+              ],
+              "pid": 64847,
+              "quit": {
+                "forced": false,
+                "killed": [],
+                "ok": true,
+                "remainingWindows": [],
+                "reply": true,
+                "rootPathProbe": "/Users/serge/.t3/worktrees/open/t3-d8b5b30a/build/Debug/Open.app/Contents/MacOS/Open",
+                "windowsBeforeKill": []
+              }
+            }
+          ],
+          "ok": true,
+          "subprocesses": []
+        },
+        "permission_transient_setting_refused": {
+          "ok": true
+        }
+      },
+      "focus": [
+        {
+          "event": "frontmostChanged",
+          "frontmostApp": "T3 Pretty Internal (Nightly)",
+          "frontmostBundle": "com.sergeserb.t3code",
+          "frontmostPID": 73084,
+          "openPID": 64847,
+          "uptime": 163577.5508862917
+        },
+        {
+          "active": false,
+          "event": "NSApplicationDidResignActiveNotification",
+          "frontmostApp": "T3 Pretty Internal (Nightly)",
+          "frontmostPID": 73084,
+          "keyWindow": 0,
+          "openPID": 64847,
+          "uptime": 163577.558868375
+        }
+      ],
+      "reason": "foreground lost during dialog_alert",
+      "status": "INTERRUPTED"
+    }
+  ],
+  "page-chrome": {
+    "capture_missing_window_refused": {
+      "ok": true
+    },
+    "dialog_alert": {
+      "assertion": {
+        "closed": true,
+        "ok": true,
+        "result": "alert done",
+        "sheet": {
+          "buttons": [
+            "OK"
+          ],
+          "held": false,
+          "kind": 0,
+          "message": "page chrome alert",
+          "pending": 1,
+          "sourceMessageBytes": 17,
+          "sourcePromptBytes": 0,
+          "text": "",
+          "visible": true,
+          "window": 163514
+        }
+      },
+      "focus": [
+        {
+          "event": "frontmostChanged",
+          "frontmostApp": "T3 Pretty Internal (Nightly)",
+          "frontmostBundle": "com.sergeserb.t3code",
+          "frontmostPID": 73084,
+          "openPID": 64847,
+          "uptime": 163577.5508862917
+        },
+        {
+          "active": false,
+          "event": "NSApplicationDidResignActiveNotification",
+          "frontmostApp": "T3 Pretty Internal (Nightly)",
+          "frontmostPID": 73084,
+          "keyWindow": 0,
+          "openPID": 64847,
+          "uptime": 163577.558868375
+        }
+      ],
+      "status": "INTERRUPTED"
+    },
+    "extension_chrome_model_pending": {
+      "reason": "pending #93: native Chrome toolbar action/popup implementation is not on main",
+      "status": "BLOCKED"
+    },
+    "extension_popup_input": {
+      "ok": true
+    },
+    "extension_popup_key_escape": {
+      "ok": true
+    },
+    "extension_popup_key_l": {
+      "ok": true
+    },
+    "extension_popup_key_return": {
+      "ok": true
+    },
+    "extension_popup_key_t": {
+      "ok": true
+    },
+    "extension_popup_key_w": {
+      "ok": true
+    },
+    "extension_popup_outside_click": {
+      "ok": true
+    },
+    "extension_popup_panel": {
+      "ok": true,
+      "state": {
+        "content": 4,
+        "extension": "pdnclfgkpaghggbbmmmmpdmndkjaoaof",
+        "pending": "#93",
+        "size": [
+          360,
+          480
+        ],
+        "visible": true,
+        "window": 163499
+      }
+    },
+    "extension_popup_resize": {
+      "after": {
+        "content": 4,
+        "extension": "pdnclfgkpaghggbbmmmmpdmndkjaoaof",
+        "pending": "#93",
+        "size": [
+          300,
+          140
+        ],
+        "visible": true,
+        "window": 163499
+      },
+      "before": {
+        "content": 4,
+        "extension": "pdnclfgkpaghggbbmmmmpdmndkjaoaof",
+        "pending": "#93",
+        "size": [
+          360,
+          480
+        ],
+        "visible": true,
+        "window": 163499
+      },
+      "ok": true
+    },
+    "extension_popup_second_click": {
+      "ok": true
+    },
+    "extension_popup_window_close": {
+      "ok": true
+    },
+    "find_bar_empty": {
+      "ok": true
+    },
+    "find_bar_escape": {
+      "ok": true
+    },
+    "find_bar_next_previous": {
+      "initial": 1,
+      "ok": true,
+      "state": {
+        "count": 3,
+        "frame": [
+          1002,
+          18,
+          260,
+          24
+        ],
+        "index": 1,
+        "page": 1,
+        "text": "needle",
+        "visible": true
+      }
+    },
+    "find_bar_open_type": {
+      "ok": true,
+      "state": {
+        "count": 3,
+        "frame": [
+          1002,
+          18,
+          260,
+          24
+        ],
+        "index": 1,
+        "page": 1,
+        "text": "needle",
+        "visible": true
+      }
+    },
+    "find_bar_peek_scope": {
+      "ok": true,
+      "state": {
+        "count": 1,
+        "frame": [
+          1002,
+          18,
+          260,
+          24
+        ],
+        "index": 1,
+        "page": 2,
+        "text": "needle",
+        "visible": true
+      }
+    },
+    "find_bar_split_scope": {
+      "focusedEngine": 1,
+      "ok": true,
+      "state": {
+        "count": 3,
+        "frame": [
+          1002,
+          18,
+          260,
+          24
+        ],
+        "index": 1,
+        "page": 1,
+        "text": "needle",
+        "visible": true
+      }
+    },
+    "owned_window_cleanup": {
+      "apps": [
+        {
+          "dialogs": [
+            {
+              "label": "page-chrome dialog button",
+              "ok": true,
+              "pendingBefore": 0,
+              "remaining": [],
+              "windowsBefore": [
+                {
+                  "layer": 0,
+                  "number": 163488,
+                  "pid": 64847,
+                  "title": "Page chrome fixture"
+                }
+              ]
+            },
+            {
+              "label": "suite quit",
+              "ok": true,
+              "pendingBefore": 0,
+              "remaining": [],
+              "windowsBefore": [
+                {
+                  "layer": 0,
+                  "number": 163488,
+                  "pid": 64847,
+                  "title": "Page chrome fixture"
+                }
+              ]
+            }
+          ],
+          "pid": 64847,
+          "quit": {
+            "forced": false,
+            "killed": [],
+            "ok": true,
+            "remainingWindows": [],
+            "reply": true,
+            "rootPathProbe": "/Users/serge/.t3/worktrees/open/t3-d8b5b30a/build/Debug/Open.app/Contents/MacOS/Open",
+            "windowsBeforeKill": []
+          }
+        }
+      ],
+      "ok": true,
+      "subprocesses": []
+    },
+    "permission_transient_setting_refused": {
+      "ok": true
+    },
+    "suite": {
+      "attempts": 3,
+      "focus": [
+        {
+          "event": "frontmostChanged",
+          "frontmostApp": "T3 Pretty Internal (Nightly)",
+          "frontmostBundle": "com.sergeserb.t3code",
+          "frontmostPID": 73084,
+          "openPID": 64847,
+          "uptime": 163577.5508862917
+        },
+        {
+          "active": false,
+          "event": "NSApplicationDidResignActiveNotification",
+          "frontmostApp": "T3 Pretty Internal (Nightly)",
+          "frontmostPID": 73084,
+          "keyWindow": 0,
+          "openPID": 64847,
+          "uptime": 163577.558868375
+        }
+      ],
+      "reason": "foreground lost during dialog_alert",
+      "status": "INTERRUPTED"
+    }
+  },
+  "started": "2026-10-26 21:23:00",
+  "style": "chrome"
+}

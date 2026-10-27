@@ -1171,7 +1171,9 @@ def page_popover_checks(factory, results, tmp):
             remaining={t['id'] for t in app.call('tabs')}
             results['permission_native_'+pressed]={'ok':bool(ok) and remaining==(before-{target} if pressed=='w' else before),'window':prompt['window']}
             if app.call('permission-state')['visible']:app.call('permission-press',allow=False,remember=False)
-            if target in remaining:app.call('close',tab=target)
+            if target in remaining:
+                app.call('close',tab=target)
+                assert wait_until(lambda:all(t['id']!=target for t in app.call('tabs')),timeout=5,step=.02)
     finally:
         app.quit()
         for server in servers:server.shutdown();server.server_close()
@@ -4529,6 +4531,7 @@ def main():
             if opts.only == "features":
                 page_chrome_checks(factory, results["features"], tmp)
                 page_key_checks(factory, results["features"], tmp)
+                page_popover_checks(factory, results["features"], tmp)
 
     interrupted_attempts = []
     for attempt in range(1, 4):

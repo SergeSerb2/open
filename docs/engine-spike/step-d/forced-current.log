@@ -1,0 +1,38 @@
+127.0.0.1 - - [26/Oct/2026 21:20:52] "GET /page.html HTTP/1.1" 200 -
+127.0.0.1 - - [26/Oct/2026 21:20:52] code 404, message File not found
+127.0.0.1 - - [26/Oct/2026 21:20:52] "GET /image.svg HTTP/1.1" 404 -
+127.0.0.1 - - [26/Oct/2026 21:20:52] code 404, message File not found
+127.0.0.1 - - [26/Oct/2026 21:20:52] "GET /favicon.ico HTTP/1.1" 404 -
+127.0.0.1 - - [26/Oct/2026 21:20:52] code 404, message File not found
+127.0.0.1 - - [26/Oct/2026 21:20:52] "GET /favicon.ico HTTP/1.1" 404 -
+127.0.0.1 - - [26/Oct/2026 21:20:53] "GET /page.html?peek HTTP/1.1" 200 -
+127.0.0.1 - - [26/Oct/2026 21:20:53] code 404, message File not found
+127.0.0.1 - - [26/Oct/2026 21:20:53] "GET /image.svg HTTP/1.1" 404 -
+127.0.0.1 - - [26/Oct/2026 21:20:53] code 404, message File not found
+127.0.0.1 - - [26/Oct/2026 21:20:53] "GET /favicon.ico HTTP/1.1" 404 -
+127.0.0.1 - - [26/Oct/2026 21:20:53] "GET /page.html?close HTTP/1.1" 200 -
+127.0.0.1 - - [26/Oct/2026 21:20:53] code 404, message File not found
+127.0.0.1 - - [26/Oct/2026 21:20:53] "GET /image.svg HTTP/1.1" 404 -
+127.0.0.1 - - [26/Oct/2026 21:20:53] code 404, message File not found
+127.0.0.1 - - [26/Oct/2026 21:20:53] "GET /favicon.ico HTTP/1.1" 404 -
+Traceback (most recent call last):
+  File "/Users/serge/.t3/worktrees/open/t3-d8b5b30a/tools/e2e/engine_e2e.py", line 4472, in main
+    except FocusInterruption as error:
+  File "/Users/serge/.t3/worktrees/open/t3-d8b5b30a/tools/e2e/engine_e2e.py", line 4428, in execute
+    elif opts.only == "page-chrome":
+  File "/Users/serge/.t3/worktrees/open/t3-d8b5b30a/tools/e2e/engine_e2e.py", line 1088, in page_key_checks
+    key('a',modifiers=['cmd'],window=dialog['window']);key(text='native response',window=dialog['window']);key('return',window=dialog['window'])
+AssertionError: FORCED EARLY PROMPT ASSERTION
+find_escape_precedes_peek PASS
+find_cmd_t               PASS
+find_cmd_l               PASS
+find_cmd_w_once          PASS
+find_text_limit_at       PASS
+find_text_limit_over     PASS
+dialog_blocks_cmd_t      PASS
+dialog_blocks_cmd_l      PASS
+dialog_blocks_cmd_w      PASS
+dialog_native_escape     PASS
+suite                    FAIL
+owned_window_cleanup     PASS
+wrote /Users/serge/.t3/worktrees/open/t3-d8b5b30a/.re/step-d/forced-current-out/results-page-keys-debug.json

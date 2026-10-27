@@ -1,0 +1,23 @@
+{
+  "config": "Debug",
+  "engine": {
+    "distributionUUID": "4C4C44C8-5555-3144-A168-35B709BBDA3A",
+    "embeddedUUID": "4C4C44C8-5555-3144-A168-35B709BBDA3A",
+    "source": "fork",
+    "stamp": "fork /Users/serge/Developer/open-engine/chromium_git/chromium/src/cef/binary_distrib/cef_binary_156.0.14+g4fa4ab5+chromium-156.0.8078.48_macosarm64_minimal 1793075034"
+  },
+  "interrupted_attempts": [],
+  "page-popovers": {
+    "owned_window_cleanup": {
+      "apps": [],
+      "ok": true,
+      "subprocesses": []
+    },
+    "suite": {
+      "error": "Refused stale App build; newer source: App/PageChrome/PageChromeLimits.swift",
+      "ok": false
+    }
+  },
+  "started": "2026-10-26 21:59:04",
+  "style": "chrome"
+}

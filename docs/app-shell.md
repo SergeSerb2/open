@@ -1224,7 +1224,7 @@ Socket timeouts and crashes fail. CDM presence before/after the request or at
 app exit fails; an intentionally unsupported feature no longer remains a FAIL
 by design. This changes the v1 acceptance contract, not the engine.
 
-The boundary pass also found Chromium truncates alert messages to 10 KiB before
+The boundary pass also found Chromium truncates the tested long ASCII alert to 10240 bytes before
 its callback. The App limit is therefore 8 KiB, below that upstream cap; the
 harness checks the actual callback byte count at 8192 and refusal at 8193.
 Prompt defaults use 4096/4097. Oversize checks wait for a refusal event before
@@ -1238,3 +1238,79 @@ The download flow found CEF clears suggestedFilename after choosing a destinatio
 The shared provider now displays the actual destination filename, with a plain
 fallback before a destination exists. The first download receipt retains the
 empty-name FAIL; the engine downloaded the correct bytes to the correct path.
+
+Native popover key checks found Downloads could own a key window while its
+first responder was the page. Return reached the page, Escape left the tray up,
+and Cmd+W lost the owning document context. Permission and Downloads popovers
+now have their own plain-key responder and explicit factory window ownership.
+Cmd+T/L dismiss the current prompt/tray and open the owning command bar. Cmd+W
+dismisses Downloads; from a permission prompt it closes that request's page.
+Permission Return invokes the real Allow button; Escape invokes Dismiss. With
+no selected action, Downloads Return stays in the tray. These keyboard choices
+are explicit guesses where no Arc capture is supplied. The old-code FAIL and
+its zero-window post-kill cleanup are retained separately from accepted runs.
+
+
+### Step D paused checkpoint — 2026-10-26 22:26
+
+No PR is open. The branch is `t3/app-shell-page-chrome`. Main is merged through
+`49b5660` (#120); its follow-ups were preserved alongside the App permission
+follow-up. Debug and automation-enabled Release build on the recorded
+**21:23:54 fork distribution** (stamp `1793075034`, UUID
+`4C4C44C8-5555-3144-A168-35B709BBDA3A`). Debug was rebuilt at this checkpoint.
+No on-screen suite or new full gate was started after the pause order.
+
+The following completed R6 runs used that distribution, before the final
+native-popover key fix and the #120 merge:
+
+| Suite | Result | Interrupted attempts retained |
+|---|---|---:|
+| Debug page-chrome | 60 PASS, 2 dependency BLOCKED | 0 |
+| Debug page-keys | 19 PASS | 0 |
+| Debug features | 97 PASS, 2 dependency BLOCKED | 1 |
+| Release features | 97 PASS, 2 dependency BLOCKED | 2 |
+| Debug sidebar | 19 PASS, 1 named SKIP | 0 |
+| Debug window | 54 PASS, 1 FAIL, 2 timing SKIP | 2 |
+
+Features covers Find, context menus, all JS dialog kinds and policies,
+beforeunload Stay/Leave, permissions and remembered/one-shot relaunch, Downloads
+progress/pause/resume/finish/cancel/Finder, SCC shell/keys and current extension
+panel flows. **Widevine out of v1 (expected absent)** passes in both configs:
+no CDM, normal NotSupportedError, page/app alive and no dialog. The two BLOCKED
+rows are SCC sections/editor (#96/#103) and native extension actions/popups
+(#93/#94); the current API's popup adapter and merged #69 SCC shell are wired.
+
+Focus interruptions were real foreground changes to **T3 Code (Nightly)** or
+**T3 Pretty Internal (Nightly)**. A separate page-chrome invocation exhausted
+three such attempts; its receipt remains INTERRUPTED. All accepted R6 workflows
+finished without an interruption in their accepted attempt. No interrupted
+step counts as PASS. The window FAIL is `traffic_light_stale_hover`, hide/rehover:
+hover/key/dimmed state passes, but the Zoom background-derived pixel expectation
+is 169/168/172 versus the captured dim core 106/106/115. This is retained as an
+unresolved pixel failure from the pre-#120 window run. D changes no traffic-light
+geometry or reveal behavior.
+
+A later checklist control found Downloads Return reached the page, Escape did
+not dismiss, and Cmd+W lost the owning document context. That control FAIL and
+its zero-window post-kill cleanup are retained. The final source adds native
+popover responders and exact factory ownership for Permission/Downloads;
+Cmd+T/L dismiss the surface and open the owning command bar, Downloads Cmd+W
+only dismisses the tray, and Permission Cmd+W closes the requesting page.
+**This final fix is build-verified only.** Positive `--only page-popovers`
+Debug/Release checks remain to run; features now includes those checks too.
+
+The prompt Return regression and forced early assertion cleanup controls were
+completed earlier: the old key path FAILS; forced assertion cleanup leaves zero
+windows with no human input. R6 normal runs also end with zero owned windows.
+Snapshots and red/green receipts are in [the checkpoint evidence](engine-spike/step-d/README.md).
+Find/dialog/permission/download/popup styling without an Arc capture remains a
+marked guess. No new Arc pixel comparison is claimed.
+
+Full verify-all before #120: **21 PASS, no SKIP**. The restarted gate after
+#120 passed build, the new space-pad comparison and CLI/settings rows, then was
+cancelled during sidebar-render. **It is incomplete, not PASS.** After resuming:
+run native popover keys first, then affected Debug/Release features/window/shell,
+sidebar/Peek/actions/profiles as needed, and the complete merged gate. The
+[review checklist](engine-spike/step-d/review-checklist.md) is a checkpoint draft.
+No job remains running from this worktree. Do not open a PR until the lead lifts
+the pause and the remaining verification is complete.

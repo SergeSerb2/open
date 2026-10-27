@@ -1,0 +1,67 @@
+Traceback (most recent call last):
+  File "/Users/serge/.t3/worktrees/open/t3-d8b5b30a/tools/e2e/engine_e2e.py", line 4471, in main
+    execute()
+  File "/Users/serge/.t3/worktrees/open/t3-d8b5b30a/tools/e2e/engine_e2e.py", line 4461, in execute
+    page_chrome_checks(factory, results["features"], tmp)
+  File "/Users/serge/.t3/worktrees/open/t3-d8b5b30a/tools/e2e/engine_e2e.py", line 883, in page_chrome_checks
+    app.call('select',tab=tab);app.call('focus',tab=tab)
+  File "/Users/serge/.t3/worktrees/open/t3-d8b5b30a/tools/e2e/engine_e2e.py", line 247, in call
+    raise RuntimeError("%s: %s" % (cmd, resp.get("error")))
+RuntimeError: focus: key focus not ready: active=true target=164159 targetIsKey=false key=164159 keySameObject=true frontmost=Open frontmostPID=57994
+js_dialogs               PASS
+permissions              PASS
+popups_new_tabs          PASS
+find_in_page             PASS
+zoom                     PASS
+context_menu             PASS
+audio_state              PASS
+fullscreen               PASS
+picture_in_picture       PASS
+pdf_viewer               PASS
+print_to_pdf             PASS
+downloads                PASS
+user_scripts             PASS
+request_filter           PASS
+profiles                 PASS
+adblock_control          PASS
+codecs                   PASS
+Widevine out of v1 (expected absent) PASS
+crash_recovery           PASS
+permission_transient_setting_refused PASS
+capture_missing_window_refused PASS
+find_bar_open_type       PASS
+find_bar_next_previous   PASS
+find_bar_escape          PASS
+find_bar_empty           PASS
+find_bar_peek_scope      PASS
+find_bar_split_scope     PASS
+extension_popup_panel    PASS
+extension_popup_input    PASS
+extension_popup_resize   PASS
+extension_popup_second_click PASS
+extension_popup_window_close PASS
+extension_popup_outside_click PASS
+extension_popup_key_escape PASS
+extension_popup_key_w    PASS
+extension_popup_key_t    PASS
+extension_popup_key_l    PASS
+extension_popup_key_return PASS
+extension_chrome_model_pending BLOCKED: pending #93: native Chrome toolbar action/popup implementation is not on main
+dialog_alert             PASS
+dialog_confirm_cancel    PASS
+dialog_confirm_accept    PASS
+dialog_prompt_accept     PASS
+dialog_prompt_cancel     PASS
+dialog_dismiss_policy    PASS
+dialog_hold_policy       PASS
+dialog_unanswered_host_close PASS
+dialog_beforeunload_stay PASS
+dialog_beforeunload_leave PASS
+permission_deny_policy   PASS
+permission_deny_once     PASS
+permission_allow_remember PASS
+permission_deny_remember PASS
+permission_stored_no_prompt PASS
+suite                    FAIL
+owned_window_cleanup     PASS
+wrote /Users/serge/.t3/worktrees/open/t3-d8b5b30a/docs/engine-spike/results-features-chrome.json

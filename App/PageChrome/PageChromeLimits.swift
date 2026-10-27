@@ -7,7 +7,8 @@ import OpenEngine
 /// upstream OE request decoding remains the engine's responsibility.
 @MainActor
 enum PageChromeLimits {
-  // Chromium truncates a page alert to 10 KiB before this callback. Keep
+  // Chromium truncated the real long ASCII alert to 10240 bytes before
+  // this callback. Keep
   // our limit below that boundary so a real page can prove refusal.
   static let messageBytes = 8 * 1024
   static let promptBytes = 4096

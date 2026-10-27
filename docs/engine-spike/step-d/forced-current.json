@@ -1,0 +1,184 @@
+{
+  "config": "Debug",
+  "engine": {
+    "distributionUUID": "4C4C4432-5555-3144-A144-B678285BC5F4",
+    "embeddedUUID": "4C4C4432-5555-3144-A144-B678285BC5F4",
+    "source": "fork",
+    "stamp": "fork /Users/serge/Developer/open-engine/chromium_git/chromium/src/cef/binary_distrib/cef_binary_156.0.14+g4fa4ab5+chromium-156.0.8078.48_macosarm64_minimal 1793036548"
+  },
+  "interrupted_attempts": [],
+  "page-keys": {
+    "dialog_blocks_cmd_l": {
+      "ok": true
+    },
+    "dialog_blocks_cmd_t": {
+      "ok": true
+    },
+    "dialog_blocks_cmd_w": {
+      "ok": true
+    },
+    "dialog_native_escape": {
+      "ok": true
+    },
+    "find_cmd_l": {
+      "bar": {
+        "created": true,
+        "editorCanUndo": false,
+        "editorText": "http://127.0.0.1:62146/page.html",
+        "final": true,
+        "firstResultsMs": 3.3725416666666206,
+        "mode": "editCurrentURL",
+        "newTabHighlighted": false,
+        "openFirstResultsMs": 3.8214166666666642,
+        "presented": true,
+        "profile": "9D0B1ECC-F08B-465D-8031-1BD89CD66758",
+        "range": [
+          0,
+          32
+        ],
+        "rows": [
+          {
+            "action": "",
+            "id": "typed:url",
+            "kind": "navigate",
+            "space": "",
+            "tab": "",
+            "title": "http://127.0.0.1:62146/page.html",
+            "url": "http://127.0.0.1:62146/page.html"
+          }
+        ],
+        "selected": 0,
+        "space": "F1EA37E8-61FE-45F4-9092-FFCD658F6EE1",
+        "text": "http://127.0.0.1:62146/page.html",
+        "timingScope": "showCommandBar entry to first snapshot applied; excludes preceding key routing, socket transport and frame presentation"
+      },
+      "ok": true
+    },
+    "find_cmd_t": {
+      "bar": {
+        "created": true,
+        "editorCanUndo": false,
+        "editorText": "",
+        "final": true,
+        "firstResultsMs": 10.413375000000087,
+        "mode": "newTab",
+        "newTabHighlighted": true,
+        "openFirstResultsMs": 13.060583333332943,
+        "presented": true,
+        "profile": "9D0B1ECC-F08B-465D-8031-1BD89CD66758",
+        "range": [
+          0,
+          0
+        ],
+        "rows": [],
+        "selected": -1,
+        "space": "F1EA37E8-61FE-45F4-9092-FFCD658F6EE1",
+        "text": "",
+        "timingScope": "showCommandBar entry to first snapshot applied; excludes preceding key routing, socket transport and frame presentation"
+      },
+      "ok": true
+    },
+    "find_cmd_w_once": {
+      "ok": true
+    },
+    "find_escape_precedes_peek": {
+      "find": {
+        "count": 0,
+        "frame": [
+          1002,
+          18,
+          260,
+          24
+        ],
+        "index": 0,
+        "page": 0,
+        "text": "",
+        "visible": false
+      },
+      "ok": true,
+      "peekShown": true
+    },
+    "find_text_limit_at": {
+      "bytes": 4096,
+      "ok": true
+    },
+    "find_text_limit_over": {
+      "bytes": 4097,
+      "ok": true
+    },
+    "owned_window_cleanup": {
+      "apps": [
+        {
+          "dialogs": [
+            {
+              "label": "native confirm keys",
+              "ok": true,
+              "pendingBefore": 0,
+              "remaining": [],
+              "windowsBefore": [
+                {
+                  "layer": 0,
+                  "number": 162799,
+                  "pid": 40827,
+                  "title": "Page chrome fixture"
+                }
+              ]
+            },
+            {
+              "label": "native prompt Return",
+              "ok": true,
+              "pendingBefore": 1,
+              "remaining": [],
+              "windowsBefore": [
+                {
+                  "layer": 0,
+                  "number": 162876,
+                  "pid": 40827,
+                  "title": "(untitled owned window)"
+                },
+                {
+                  "layer": 0,
+                  "number": 162799,
+                  "pid": 40827,
+                  "title": "Page chrome fixture"
+                }
+              ]
+            },
+            {
+              "label": "suite quit",
+              "ok": true,
+              "pendingBefore": 0,
+              "remaining": [],
+              "windowsBefore": [
+                {
+                  "layer": 0,
+                  "number": 162799,
+                  "pid": 40827,
+                  "title": "Page chrome fixture"
+                }
+              ]
+            }
+          ],
+          "pid": 40827,
+          "quit": {
+            "forced": false,
+            "killed": [],
+            "ok": true,
+            "remainingWindows": [],
+            "reply": true,
+            "rootPathProbe": "/Users/serge/.t3/worktrees/open/t3-d8b5b30a/build/Debug/Open.app/Contents/MacOS/Open",
+            "windowsBeforeKill": []
+          }
+        }
+      ],
+      "ok": true,
+      "subprocesses": []
+    },
+    "suite": {
+      "error": "FORCED EARLY PROMPT ASSERTION",
+      "ok": false
+    }
+  },
+  "started": "2026-10-26 21:20:48",
+  "style": "chrome"
+}

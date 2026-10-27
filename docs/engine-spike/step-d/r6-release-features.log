@@ -1,0 +1,158 @@
+127.0.0.1 - - [26/Oct/2026 21:41:35] "GET /page.html HTTP/1.1" 200 -
+127.0.0.1 - - [26/Oct/2026 21:41:35] code 404, message File not found
+127.0.0.1 - - [26/Oct/2026 21:41:35] "GET /image.svg HTTP/1.1" 404 -
+127.0.0.1 - - [26/Oct/2026 21:41:35] code 404, message File not found
+127.0.0.1 - - [26/Oct/2026 21:41:35] "GET /favicon.ico HTTP/1.1" 404 -
+127.0.0.1 - - [26/Oct/2026 21:41:35] code 404, message File not found
+127.0.0.1 - - [26/Oct/2026 21:41:35] "GET /favicon.ico HTTP/1.1" 404 -
+127.0.0.1 - - [26/Oct/2026 21:41:35] "GET /page.html?peek HTTP/1.1" 200 -
+127.0.0.1 - - [26/Oct/2026 21:41:35] code 404, message File not found
+127.0.0.1 - - [26/Oct/2026 21:41:35] "GET /image.svg HTTP/1.1" 404 -
+127.0.0.1 - - [26/Oct/2026 21:41:36] code 404, message File not found
+127.0.0.1 - - [26/Oct/2026 21:41:36] "GET /favicon.ico HTTP/1.1" 404 -
+127.0.0.1 - - [26/Oct/2026 21:41:37] "GET /page.html?close HTTP/1.1" 200 -
+127.0.0.1 - - [26/Oct/2026 21:41:37] code 404, message File not found
+127.0.0.1 - - [26/Oct/2026 21:41:37] "GET /image.svg HTTP/1.1" 404 -
+127.0.0.1 - - [26/Oct/2026 21:41:37] code 404, message File not found
+127.0.0.1 - - [26/Oct/2026 21:41:37] "GET /favicon.ico HTTP/1.1" 404 -
+features attempt 1 INTERRUPTED: foreground lost during find_text_limit_over
+127.0.0.1 - - [26/Oct/2026 21:42:52] "GET /page.html HTTP/1.1" 200 -
+127.0.0.1 - - [26/Oct/2026 21:42:52] code 404, message File not found
+127.0.0.1 - - [26/Oct/2026 21:42:52] "GET /image.svg HTTP/1.1" 404 -
+127.0.0.1 - - [26/Oct/2026 21:42:52] code 404, message File not found
+127.0.0.1 - - [26/Oct/2026 21:42:52] "GET /favicon.ico HTTP/1.1" 404 -
+127.0.0.1 - - [26/Oct/2026 21:42:52] code 404, message File not found
+127.0.0.1 - - [26/Oct/2026 21:42:52] "GET /favicon.ico HTTP/1.1" 404 -
+127.0.0.1 - - [26/Oct/2026 21:42:53] "GET /page.html?peek HTTP/1.1" 200 -
+127.0.0.1 - - [26/Oct/2026 21:42:53] code 404, message File not found
+127.0.0.1 - - [26/Oct/2026 21:42:53] "GET /image.svg HTTP/1.1" 404 -
+127.0.0.1 - - [26/Oct/2026 21:42:53] code 404, message File not found
+127.0.0.1 - - [26/Oct/2026 21:42:53] "GET /favicon.ico HTTP/1.1" 404 -
+127.0.0.1 - - [26/Oct/2026 21:42:54] "GET /page.html?close HTTP/1.1" 200 -
+127.0.0.1 - - [26/Oct/2026 21:42:54] code 404, message File not found
+127.0.0.1 - - [26/Oct/2026 21:42:54] "GET /image.svg HTTP/1.1" 404 -
+127.0.0.1 - - [26/Oct/2026 21:42:54] code 404, message File not found
+127.0.0.1 - - [26/Oct/2026 21:42:54] "GET /favicon.ico HTTP/1.1" 404 -
+features attempt 2 INTERRUPTED: foreground lost during find_text_limit_at
+127.0.0.1 - - [26/Oct/2026 21:44:03] "GET /page.html HTTP/1.1" 200 -
+127.0.0.1 - - [26/Oct/2026 21:44:03] code 404, message File not found
+127.0.0.1 - - [26/Oct/2026 21:44:03] "GET /image.svg HTTP/1.1" 404 -
+127.0.0.1 - - [26/Oct/2026 21:44:03] code 404, message File not found
+127.0.0.1 - - [26/Oct/2026 21:44:03] "GET /favicon.ico HTTP/1.1" 404 -
+127.0.0.1 - - [26/Oct/2026 21:44:03] code 404, message File not found
+127.0.0.1 - - [26/Oct/2026 21:44:03] "GET /favicon.ico HTTP/1.1" 404 -
+127.0.0.1 - - [26/Oct/2026 21:44:03] "GET /page.html?peek HTTP/1.1" 200 -
+127.0.0.1 - - [26/Oct/2026 21:44:03] code 404, message File not found
+127.0.0.1 - - [26/Oct/2026 21:44:03] "GET /image.svg HTTP/1.1" 404 -
+127.0.0.1 - - [26/Oct/2026 21:44:03] code 404, message File not found
+127.0.0.1 - - [26/Oct/2026 21:44:03] "GET /favicon.ico HTTP/1.1" 404 -
+127.0.0.1 - - [26/Oct/2026 21:44:05] "GET /page.html?close HTTP/1.1" 200 -
+127.0.0.1 - - [26/Oct/2026 21:44:05] code 404, message File not found
+127.0.0.1 - - [26/Oct/2026 21:44:05] "GET /image.svg HTTP/1.1" 404 -
+127.0.0.1 - - [26/Oct/2026 21:44:05] code 404, message File not found
+127.0.0.1 - - [26/Oct/2026 21:44:05] "GET /favicon.ico HTTP/1.1" 404 -
+127.0.0.1 - - [26/Oct/2026 21:44:28] "GET /page.html?native-unload HTTP/1.1" 200 -
+127.0.0.1 - - [26/Oct/2026 21:44:28] code 404, message File not found
+127.0.0.1 - - [26/Oct/2026 21:44:28] "GET /image.svg HTTP/1.1" 404 -
+127.0.0.1 - - [26/Oct/2026 21:44:28] code 404, message File not found
+127.0.0.1 - - [26/Oct/2026 21:44:28] "GET /favicon.ico HTTP/1.1" 404 -
+js_dialogs               PASS
+permissions              PASS
+popups_new_tabs          PASS
+find_in_page             PASS
+zoom                     PASS
+context_menu             PASS
+audio_state              PASS
+fullscreen               PASS
+picture_in_picture       PASS
+pdf_viewer               PASS
+print_to_pdf             PASS
+downloads                PASS
+user_scripts             PASS
+request_filter           PASS
+profiles                 PASS
+adblock_control          PASS
+codecs                   PASS
+Widevine out of v1 (expected absent) PASS
+crash_recovery           PASS
+permission_transient_setting_refused PASS
+capture_missing_window_refused PASS
+find_bar_open_type       PASS
+find_bar_next_previous   PASS
+find_bar_escape          PASS
+find_bar_empty           PASS
+find_bar_peek_scope      PASS
+find_bar_split_scope     PASS
+extension_popup_panel    PASS
+extension_popup_input    PASS
+extension_popup_resize   PASS
+extension_popup_second_click PASS
+extension_popup_window_close PASS
+extension_popup_outside_click PASS
+extension_popup_key_escape PASS
+extension_popup_key_w    PASS
+extension_popup_key_t    PASS
+extension_popup_key_l    PASS
+extension_popup_key_return PASS
+extension_chrome_model_pending BLOCKED: pending #93: native Chrome toolbar action/popup implementation is not on main
+dialog_alert             PASS
+dialog_confirm_cancel    PASS
+dialog_confirm_accept    PASS
+dialog_prompt_accept     PASS
+dialog_prompt_cancel     PASS
+dialog_dismiss_policy    PASS
+dialog_hold_policy       PASS
+dialog_unanswered_host_close PASS
+dialog_beforeunload_stay PASS
+dialog_beforeunload_leave PASS
+permission_deny_policy   PASS
+permission_deny_once     PASS
+permission_allow_remember PASS
+permission_deny_remember PASS
+permission_stored_no_prompt PASS
+dialog_message_limit     PASS
+dialog_prompt_limit      PASS
+dialog_queue_limit       PASS
+page_context_page        PASS
+page_context_link        PASS
+page_context_image       PASS
+page_context_selection   PASS
+page_context_new_tab_engine PASS
+context_url_limit_at     PASS
+context_url_limit_over   PASS
+site_control_shell       PASS
+site_control_escape      PASS
+site_control_key_return  PASS
+site_control_key_t       PASS
+site_control_key_l       PASS
+site_control_key_w       PASS
+site_control_sections_pending BLOCKED: pending #96 sections / #103 editor; merged #69 shell is presented
+permission_remember_relaunch PASS
+permission_one_shot_relaunch PASS
+downloads_empty          PASS
+downloads_start_progress PASS
+downloads_pause          PASS
+downloads_resume         PASS
+downloads_finish         PASS
+downloads_cancel         PASS
+downloads_show_in_finder PASS
+find_escape_precedes_peek PASS
+find_cmd_t               PASS
+find_cmd_l               PASS
+find_cmd_w_once          PASS
+find_text_limit_at       PASS
+find_text_limit_over     PASS
+dialog_blocks_cmd_t      PASS
+dialog_blocks_cmd_l      PASS
+dialog_blocks_cmd_w      PASS
+dialog_native_escape     PASS
+dialog_native_text_return PASS
+dialog_native_prompt_enter PASS
+dialog_native_prompt_escape PASS
+dialog_native_alert_return PASS
+dialog_native_alert_escape PASS
+dialog_native_confirm_return PASS
+dialog_native_beforeunload_escape PASS
+dialog_native_beforeunload_return PASS
+owned_window_cleanup     PASS
+wrote /Users/serge/.t3/worktrees/open/t3-d8b5b30a/docs/engine-spike/results-features-chrome.json

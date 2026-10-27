@@ -1,0 +1,1 @@
+{"exit": 0, "seconds": 19.89, "command": ["/Users/serge/Library/Caches/OpenRE/scripts/heavy.sh", "nice", "-n", "10", "tools/build.sh", "Debug"]}

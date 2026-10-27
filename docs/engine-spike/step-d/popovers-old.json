@@ -1,0 +1,68 @@
+{
+  "config": "Debug",
+  "engine": {
+    "distributionUUID": "4C4C44C8-5555-3144-A168-35B709BBDA3A",
+    "embeddedUUID": "4C4C44C8-5555-3144-A168-35B709BBDA3A",
+    "source": "fork",
+    "stamp": "fork /Users/serge/Developer/open-engine/chromium_git/chromium/src/cef/binary_distrib/cef_binary_156.0.14+g4fa4ab5+chromium-156.0.8078.48_macosarm64_minimal 1793075034"
+  },
+  "interrupted_attempts": [],
+  "page-popovers": {
+    "downloads_native_escape": {
+      "ok": false,
+      "window": 167136
+    },
+    "downloads_native_return": {
+      "ok": false,
+      "window": 167136
+    },
+    "owned_window_cleanup": {
+      "apps": [
+        {
+          "dialogs": [
+            {
+              "error": "policy: no window",
+              "killed": [
+                8359,
+                8351,
+                8348,
+                8347,
+                8257
+              ],
+              "label": "suite quit",
+              "ok": false,
+              "remaining": [],
+              "remainingAfterKill": [],
+              "windowsBefore": [
+                {
+                  "layer": 0,
+                  "number": 167135,
+                  "pid": 8257,
+                  "title": "Popover key fixture"
+                }
+              ]
+            }
+          ],
+          "pid": 8257,
+          "quit": {
+            "error": "Dialog cleanup failed: {\"label\": \"suite quit\", \"ok\": false, \"remaining\": [], \"windowsBefore\": [{\"pid\": 8257, \"number\": 167135, \"title\": \"Popover key fixture\", \"layer\": 0}], \"error\": \"policy: no window\", \"killed\": [8359, 8351, 8348, 8347, 8257], \"remainingAfterKill\": []}",
+            "forced": false,
+            "killed": [],
+            "ok": false,
+            "remainingWindows": [],
+            "rootPathProbe": "/Users/serge/.t3/worktrees/open/t3-d8b5b30a/build/Debug/Open.app/Contents/MacOS/Open",
+            "windowsBeforeKill": []
+          }
+        }
+      ],
+      "ok": false,
+      "subprocesses": []
+    },
+    "suite": {
+      "error": "downloads-state: no window",
+      "ok": false
+    }
+  },
+  "started": "2026-10-26 21:48:27",
+  "style": "chrome"
+}

@@ -1,0 +1,19 @@
+Traceback (most recent call last):
+  File "/Users/serge/.t3/worktrees/open/t3-d8b5b30a/tools/e2e/engine_e2e.py", line 4540, in main
+    execute()
+  File "/Users/serge/.t3/worktrees/open/t3-d8b5b30a/tools/e2e/engine_e2e.py", line 4493, in execute
+    page_popover_checks(factory, results[opts.only], tmp)
+  File "/Users/serge/.t3/worktrees/open/t3-d8b5b30a/tools/e2e/engine_e2e.py", line 1155, in page_popover_checks
+    else:ok=bool(wait_until(lambda:not app.call('downloads-state')['visible'],timeout=2,step=.02))
+  File "/Users/serge/.t3/worktrees/open/t3-d8b5b30a/tools/e2e/engine_e2e.py", line 440, in wait_until
+    last = fn()
+  File "/Users/serge/.t3/worktrees/open/t3-d8b5b30a/tools/e2e/engine_e2e.py", line 1155, in <lambda>
+    else:ok=bool(wait_until(lambda:not app.call('downloads-state')['visible'],timeout=2,step=.02))
+  File "/Users/serge/.t3/worktrees/open/t3-d8b5b30a/tools/e2e/engine_e2e.py", line 249, in call
+    raise RuntimeError("%s: %s" % (cmd, resp.get("error")))
+RuntimeError: downloads-state: no window
+downloads_native_return  FAIL
+downloads_native_escape  FAIL
+suite                    FAIL
+owned_window_cleanup     FAIL
+wrote /Users/serge/.t3/worktrees/open/t3-d8b5b30a/docs/engine-spike/results-page-popovers-debug.json

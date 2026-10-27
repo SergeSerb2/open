@@ -1,0 +1,408 @@
+{
+  "config": "Debug",
+  "engine": {
+    "distributionUUID": "4C4C44C8-5555-3144-A168-35B709BBDA3A",
+    "embeddedUUID": "4C4C44C8-5555-3144-A168-35B709BBDA3A",
+    "source": "fork",
+    "stamp": "fork /Users/serge/Developer/open-engine/chromium_git/chromium/src/cef/binary_distrib/cef_binary_156.0.14+g4fa4ab5+chromium-156.0.8078.48_macosarm64_minimal 1793075034"
+  },
+  "interrupted_attempts": [],
+  "sidebar": {
+    "background_space_window_open": {
+      "child": {
+        "audible": false,
+        "canGoBack": false,
+        "canGoForward": false,
+        "crashed": false,
+        "favicon": false,
+        "hasWebContent": true,
+        "id": "F6A6B695-68A9-4513-949E-16FD71D44F4F",
+        "loaded": true,
+        "loading": false,
+        "page": {
+          "audible": false,
+          "browser": 3,
+          "browserIndex": 0,
+          "browserPinned": false,
+          "canGoBack": false,
+          "chromeTabId": 761259872,
+          "chromeWindowId": 761259869,
+          "context": "Profile-72A67215",
+          "crash": 0,
+          "extension": "",
+          "favicon": false,
+          "fullscreen": false,
+          "hidden": false,
+          "hostTab": "F6A6B695-68A9-4513-949E-16FD71D44F4F",
+          "identifier": 12,
+          "kind": "tab",
+          "live": true,
+          "loading": false,
+          "muted": false,
+          "pageBackground": [
+            255,
+            255,
+            255,
+            255
+          ],
+          "popup": true,
+          "style": "chrome",
+          "title": "Background child",
+          "url": "about:blank",
+          "zoom": 0
+        },
+        "profile": "D19B786F-36F6-41B7-8875-01BD9EF325CF",
+        "progress": 1,
+        "section": "today",
+        "selected": true,
+        "sleepPhase": "live",
+        "space": "76D380E9-A5A0-4725-8F40-C6282033AA6E",
+        "title": "Background child",
+        "url": "about:blank",
+        "visible": true
+      },
+      "ok": true
+    },
+    "clear_today": {
+      "ok": true
+    },
+    "close_pinned_unloads": {
+      "ok": true
+    },
+    "close_today_archives": {
+      "ok": true
+    },
+    "comparison": {
+      "capture": "F0001",
+      "elements": [
+        {
+          "delta_e00": 0.57,
+          "element": "background (sidebar column) (101 points, max \u0394E 1.11)",
+          "position_pt": null
+        },
+        {
+          "delta_e00": 0.4,
+          "element": "panel fill (empty state) (11 points, max \u0394E 1.13)",
+          "position_pt": null
+        },
+        {
+          "delta_e00": 0.76,
+          "element": "toolbar: sidebar toggle",
+          "position_pt": 1.0
+        },
+        {
+          "delta_e00": 0.33,
+          "element": "toolbar: back",
+          "position_pt": 0.0
+        },
+        {
+          "delta_e00": 0.24,
+          "element": "toolbar: forward",
+          "position_pt": 1.0
+        },
+        {
+          "delta_e00": 0.18,
+          "element": "toolbar: reload",
+          "position_pt": 0.0
+        },
+        {
+          "delta_e00": 0.09,
+          "element": "URL field fill",
+          "position_pt": 0.0
+        },
+        {
+          "delta_e00": 0.54,
+          "element": "URL field magnifier",
+          "position_pt": 0.0
+        },
+        {
+          "delta_e00": 0.2,
+          "element": "URL field placeholder",
+          "position_pt": 0.0
+        },
+        {
+          "delta_e00": 0.11,
+          "element": "favorite tile 1",
+          "position_pt": 0.0
+        },
+        {
+          "delta_e00": 0.07,
+          "element": "favorite tile 2",
+          "position_pt": 0.0
+        },
+        {
+          "delta_e00": 0.28,
+          "element": "favorite tile 3",
+          "position_pt": 0.0
+        },
+        {
+          "delta_e00": 0.18,
+          "element": "favorite tile 4",
+          "position_pt": 0.0
+        },
+        {
+          "delta_e00": 0.09,
+          "element": "favorite tile 5",
+          "position_pt": 0.0
+        },
+        {
+          "delta_e00": 0.18,
+          "element": "favorite tile 6",
+          "position_pt": 0.0
+        },
+        {
+          "delta_e00": null,
+          "element": "Space icon (centroid \u0394 0.1, 0.2 px)",
+          "position_pt": 0.2
+        },
+        {
+          "delta_e00": 0.15,
+          "element": "Space title",
+          "position_pt": 0.0
+        },
+        {
+          "delta_e00": 0.24,
+          "element": "row 1 title",
+          "position_pt": 0.0
+        },
+        {
+          "delta_e00": 0.2,
+          "element": "row 2 title",
+          "position_pt": 0.0
+        },
+        {
+          "delta_e00": 0.05,
+          "element": "row 3 title",
+          "position_pt": 0.0
+        },
+        {
+          "delta_e00": 0.14,
+          "element": "row 4 title",
+          "position_pt": 0.0
+        },
+        {
+          "delta_e00": 0.26,
+          "element": "row 5 title",
+          "position_pt": 0.0
+        },
+        {
+          "delta_e00": 0.1,
+          "element": "row 6 title",
+          "position_pt": 0.0
+        },
+        {
+          "delta_e00": 0.12,
+          "element": "row 7 title",
+          "position_pt": 0.0
+        },
+        {
+          "delta_e00": 0.16,
+          "element": "row 8 title",
+          "position_pt": 0.0
+        },
+        {
+          "delta_e00": 0.11,
+          "element": "row 9 title",
+          "position_pt": 0.0
+        },
+        {
+          "delta_e00": 0.04,
+          "element": "row 10 title",
+          "position_pt": 0.0
+        },
+        {
+          "delta_e00": 1.34,
+          "element": "New Tab plus",
+          "position_pt": 1.0
+        },
+        {
+          "delta_e00": 0.35,
+          "element": "New Tab label",
+          "position_pt": 0.0
+        },
+        {
+          "delta_e00": 0.5,
+          "element": "bottom: Home",
+          "position_pt": 0.0
+        },
+        {
+          "delta_e00": 1.55,
+          "element": "bottom: plus",
+          "position_pt": 0.0
+        }
+      ],
+      "method": "docs/design.md section 7; live Open snapshot converted to 1x; same masks",
+      "ok": true,
+      "private_artifacts": ".re/app-shell-comparison-sidebar",
+      "worst_delta_e00": 1.55,
+      "worst_position_pt": 1.0
+    },
+    "drag_reorder_intent": {
+      "ok": true
+    },
+    "durable_profile_storage": {
+      "reason": "covered by --only profiles (durable_second_profile: a cookie survives a relaunch)",
+      "status": "SKIP"
+    },
+    "empty": {
+      "ok": true
+    },
+    "evicted_live_state_stays_unloaded": {
+      "ok": true,
+      "samples": [
+        {
+          "hasWebContent": false,
+          "loaded": false,
+          "loading": false,
+          "progress": 0
+        },
+        {
+          "hasWebContent": false,
+          "loaded": false,
+          "loading": false,
+          "progress": 0
+        },
+        {
+          "hasWebContent": false,
+          "loaded": false,
+          "loading": false,
+          "progress": 0
+        },
+        {
+          "hasWebContent": false,
+          "loaded": false,
+          "loading": false,
+          "progress": 0
+        },
+        {
+          "hasWebContent": false,
+          "loaded": false,
+          "loading": false,
+          "progress": 0
+        },
+        {
+          "hasWebContent": false,
+          "loaded": false,
+          "loading": false,
+          "progress": 0
+        }
+      ]
+    },
+    "folder_toggle": {
+      "ok": true
+    },
+    "hidden_cache_lru": {
+      "ok": true,
+      "retained_before_wake": 9
+    },
+    "new_tab_lazy": {
+      "ok": true
+    },
+    "owned_window_cleanup": {
+      "apps": [
+        {
+          "dialogs": [
+            {
+              "label": "suite quit",
+              "ok": true,
+              "pendingBefore": 0,
+              "remaining": [],
+              "windowsBefore": [
+                {
+                  "layer": 0,
+                  "number": 167119,
+                  "pid": 5688,
+                  "title": "Cache 0"
+                }
+              ]
+            }
+          ],
+          "pid": 5688,
+          "quit": {
+            "forced": false,
+            "killed": [],
+            "ok": true,
+            "remainingWindows": [],
+            "reply": true,
+            "rootPathProbe": "/Users/serge/.t3/worktrees/open/t3-d8b5b30a/build/Debug/Open.app/Contents/MacOS/Open",
+            "windowsBeforeKill": []
+          }
+        },
+        {
+          "dialogs": [
+            {
+              "label": "suite quit",
+              "ok": true,
+              "pendingBefore": 0,
+              "remaining": [],
+              "windowsBefore": [
+                {
+                  "layer": 0,
+                  "number": 167130,
+                  "pid": 7913,
+                  "title": "Open"
+                }
+              ]
+            }
+          ],
+          "pid": 7913,
+          "quit": {
+            "forced": false,
+            "killed": [],
+            "ok": true,
+            "remainingWindows": [],
+            "reply": true,
+            "rootPathProbe": "/Users/serge/.t3/worktrees/open/t3-d8b5b30a/build/Debug/Open.app/Contents/MacOS/Open",
+            "windowsBeforeKill": []
+          }
+        }
+      ],
+      "ok": true,
+      "subprocesses": []
+    },
+    "pin_unpin": {
+      "ok": true
+    },
+    "profile_change_tears_down": {
+      "inactive_tab": {
+        "audible": false,
+        "canGoBack": false,
+        "canGoForward": false,
+        "crashed": false,
+        "favicon": false,
+        "hasWebContent": false,
+        "id": "23E5D4FB-4DF5-483F-A8C1-956979173F89",
+        "loaded": false,
+        "loading": false,
+        "profile": "D19B786F-36F6-41B7-8875-01BD9EF325CF",
+        "progress": 0,
+        "section": "today",
+        "selected": false,
+        "sleepPhase": "placeholder",
+        "space": "76D380E9-A5A0-4725-8F40-C6282033AA6E",
+        "title": "Profile background",
+        "url": "data:text/html,%3Ctitle%3EProfile%20background%3C/title%3E%3Ch1%3EProfile%20background%3C/h1%3E",
+        "visible": false
+      },
+      "ok": true
+    },
+    "refused_move": {
+      "ok": true
+    },
+    "select": {
+      "ok": true
+    },
+    "space_switch_wrapper": {
+      "ok": true
+    },
+    "wake_pinned": {
+      "ok": true
+    },
+    "window_png": {
+      "file": "sidebar-window.png",
+      "ok": true
+    }
+  },
+  "started": "2026-10-26 21:48:13",
+  "style": "chrome"
+}

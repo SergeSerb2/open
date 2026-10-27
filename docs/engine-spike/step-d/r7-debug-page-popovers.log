@@ -1,0 +1,15 @@
+Traceback (most recent call last):
+  File "/Users/serge/.t3/worktrees/open/t3-d8b5b30a/tools/e2e/engine_e2e.py", line 4543, in main
+    execute()
+  File "/Users/serge/.t3/worktrees/open/t3-d8b5b30a/tools/e2e/engine_e2e.py", line 4495, in execute
+    page_popover_checks(factory, results[opts.only], tmp)
+  File "/Users/serge/.t3/worktrees/open/t3-d8b5b30a/tools/e2e/engine_e2e.py", line 1136, in page_popover_checks
+    url=origin();app=factory(urls=(url,),fresh=True)
+  File "/Users/serge/.t3/worktrees/open/t3-d8b5b30a/tools/e2e/engine_e2e.py", line 4470, in factory
+    app = Open(opts.config, opts.style, user_data, extra, log, urls=urls, extra_env=extra_env)
+  File "/Users/serge/.t3/worktrees/open/t3-d8b5b30a/tools/e2e/engine_e2e.py", line 147, in __init__
+    raise RuntimeError('Refused stale App build; newer source: '+str(latest_source.relative_to(ROOT)))
+RuntimeError: Refused stale App build; newer source: App/PageChrome/PageChromeLimits.swift
+suite                    FAIL
+owned_window_cleanup     PASS
+wrote /Users/serge/.t3/worktrees/open/t3-d8b5b30a/docs/engine-spike/results-page-popovers-debug.json

@@ -1,0 +1,585 @@
+{
+  "config": "Debug",
+  "engine": {
+    "distributionUUID": "4C4C4432-5555-3144-A144-B678285BC5F4",
+    "embeddedUUID": "4C4C4432-5555-3144-A144-B678285BC5F4",
+    "source": "fork",
+    "stamp": "fork /Users/serge/Developer/open-engine/chromium_git/chromium/src/cef/binary_distrib/cef_binary_156.0.14+g4fa4ab5+chromium-156.0.8078.48_macosarm64_minimal 1793036548"
+  },
+  "interrupted_attempts": [],
+  "page-chrome": {
+    "capture_missing_window_refused": {
+      "ok": true
+    },
+    "dialog_alert": {
+      "closed": true,
+      "ok": true,
+      "result": "alert done",
+      "sheet": {
+        "buttons": [
+          "OK"
+        ],
+        "held": false,
+        "kind": 0,
+        "message": "page chrome alert",
+        "pending": 1,
+        "text": "",
+        "visible": true,
+        "window": 162292
+      }
+    },
+    "dialog_beforeunload_leave": {
+      "ok": true
+    },
+    "dialog_beforeunload_stay": {
+      "ok": true,
+      "sheet": {
+        "buttons": [
+          "Leave",
+          "Stay"
+        ],
+        "held": false,
+        "kind": 3,
+        "message": "Is it OK to leave/reload this page?",
+        "pending": 1,
+        "text": "",
+        "visible": true,
+        "window": 162310
+      }
+    },
+    "dialog_confirm_accept": {
+      "closed": true,
+      "ok": true,
+      "result": true,
+      "sheet": {
+        "buttons": [
+          "OK",
+          "Cancel"
+        ],
+        "held": false,
+        "kind": 1,
+        "message": "page chrome confirm",
+        "pending": 1,
+        "text": "",
+        "visible": true,
+        "window": 162296
+      }
+    },
+    "dialog_confirm_cancel": {
+      "closed": true,
+      "ok": true,
+      "result": false,
+      "sheet": {
+        "buttons": [
+          "OK",
+          "Cancel"
+        ],
+        "held": false,
+        "kind": 1,
+        "message": "page chrome confirm",
+        "pending": 1,
+        "text": "",
+        "visible": true,
+        "window": 162294
+      }
+    },
+    "dialog_dismiss_policy": {
+      "ok": true,
+      "result": [
+        false,
+        null
+      ]
+    },
+    "dialog_hold_policy": {
+      "ok": true
+    },
+    "dialog_prompt_accept": {
+      "closed": true,
+      "ok": true,
+      "result": "typed response",
+      "sheet": {
+        "buttons": [
+          "OK",
+          "Cancel"
+        ],
+        "held": false,
+        "kind": 2,
+        "message": "page chrome prompt",
+        "pending": 1,
+        "text": "seed",
+        "visible": true,
+        "window": 162298
+      }
+    },
+    "dialog_prompt_cancel": {
+      "closed": true,
+      "ok": true,
+      "result": null,
+      "sheet": {
+        "buttons": [
+          "OK",
+          "Cancel"
+        ],
+        "held": false,
+        "kind": 2,
+        "message": "page chrome prompt",
+        "pending": 1,
+        "text": "seed",
+        "visible": true,
+        "window": 162304
+      }
+    },
+    "dialog_unanswered_host_close": {
+      "ok": true
+    },
+    "extension_chrome_model_pending": {
+      "reason": "pending #93: native Chrome toolbar action/popup implementation is not on main",
+      "status": "BLOCKED"
+    },
+    "extension_popup_input": {
+      "ok": true
+    },
+    "extension_popup_key_escape": {
+      "ok": true
+    },
+    "extension_popup_key_l": {
+      "ok": true
+    },
+    "extension_popup_key_return": {
+      "ok": true
+    },
+    "extension_popup_key_t": {
+      "ok": true
+    },
+    "extension_popup_key_w": {
+      "ok": true
+    },
+    "extension_popup_outside_click": {
+      "ok": true
+    },
+    "extension_popup_panel": {
+      "ok": true,
+      "state": {
+        "content": 4,
+        "extension": "pdnclfgkpaghggbbmmmmpdmndkjaoaof",
+        "pending": "#93",
+        "size": [
+          360,
+          480
+        ],
+        "visible": true,
+        "window": 162277
+      }
+    },
+    "extension_popup_resize": {
+      "after": {
+        "content": 4,
+        "extension": "pdnclfgkpaghggbbmmmmpdmndkjaoaof",
+        "pending": "#93",
+        "size": [
+          300,
+          140
+        ],
+        "visible": true,
+        "window": 162277
+      },
+      "before": {
+        "content": 4,
+        "extension": "pdnclfgkpaghggbbmmmmpdmndkjaoaof",
+        "pending": "#93",
+        "size": [
+          360,
+          480
+        ],
+        "visible": true,
+        "window": 162277
+      },
+      "ok": true
+    },
+    "extension_popup_second_click": {
+      "ok": true
+    },
+    "extension_popup_window_close": {
+      "ok": true
+    },
+    "find_bar_empty": {
+      "ok": true
+    },
+    "find_bar_escape": {
+      "ok": true
+    },
+    "find_bar_next_previous": {
+      "initial": 1,
+      "ok": true,
+      "state": {
+        "count": 3,
+        "frame": [
+          1002,
+          18,
+          260,
+          24
+        ],
+        "index": 1,
+        "page": 1,
+        "text": "needle",
+        "visible": true
+      }
+    },
+    "find_bar_open_type": {
+      "ok": true,
+      "state": {
+        "count": 3,
+        "frame": [
+          1002,
+          18,
+          260,
+          24
+        ],
+        "index": 1,
+        "page": 1,
+        "text": "needle",
+        "visible": true
+      }
+    },
+    "find_bar_peek_scope": {
+      "ok": true,
+      "state": {
+        "count": 1,
+        "frame": [
+          1002,
+          18,
+          260,
+          24
+        ],
+        "index": 1,
+        "page": 2,
+        "text": "needle",
+        "visible": true
+      }
+    },
+    "find_bar_split_scope": {
+      "focusedEngine": 1,
+      "ok": true,
+      "state": {
+        "count": 3,
+        "frame": [
+          1002,
+          18,
+          260,
+          24
+        ],
+        "index": 1,
+        "page": 1,
+        "text": "needle",
+        "visible": true
+      }
+    },
+    "owned_window_cleanup": {
+      "apps": [
+        {
+          "dialogs": [
+            {
+              "label": "page-chrome dialog button",
+              "ok": true,
+              "pendingBefore": 0,
+              "remaining": [],
+              "windowsBefore": [
+                {
+                  "layer": 0,
+                  "number": 162266,
+                  "pid": 95814,
+                  "title": "Page chrome fixture"
+                }
+              ]
+            },
+            {
+              "label": "page-chrome dialog button",
+              "ok": true,
+              "pendingBefore": 0,
+              "remaining": [],
+              "windowsBefore": [
+                {
+                  "layer": 0,
+                  "number": 162295,
+                  "pid": 95814,
+                  "title": "(untitled owned window)"
+                },
+                {
+                  "layer": 0,
+                  "number": 162266,
+                  "pid": 95814,
+                  "title": "Page chrome fixture"
+                }
+              ]
+            },
+            {
+              "label": "page-chrome dialog button",
+              "ok": true,
+              "pendingBefore": 0,
+              "remaining": [],
+              "windowsBefore": [
+                {
+                  "layer": 0,
+                  "number": 162266,
+                  "pid": 95814,
+                  "title": "Page chrome fixture"
+                }
+              ]
+            },
+            {
+              "label": "page-chrome dialog button",
+              "ok": true,
+              "pendingBefore": 0,
+              "remaining": [],
+              "windowsBefore": [
+                {
+                  "layer": 0,
+                  "number": 162299,
+                  "pid": 95814,
+                  "title": "(untitled owned window)"
+                },
+                {
+                  "layer": 0,
+                  "number": 162266,
+                  "pid": 95814,
+                  "title": "Page chrome fixture"
+                }
+              ]
+            },
+            {
+              "label": "page-chrome dialog button",
+              "ok": true,
+              "pendingBefore": 0,
+              "remaining": [],
+              "windowsBefore": [
+                {
+                  "layer": 0,
+                  "number": 162266,
+                  "pid": 95814,
+                  "title": "Page chrome fixture"
+                }
+              ]
+            },
+            {
+              "label": "dialog dismiss policy",
+              "ok": true,
+              "pendingBefore": 0,
+              "remaining": [],
+              "windowsBefore": [
+                {
+                  "layer": 0,
+                  "number": 162266,
+                  "pid": 95814,
+                  "title": "Page chrome fixture"
+                }
+              ]
+            },
+            {
+              "label": "dialog hold policy",
+              "ok": true,
+              "pendingBefore": 0,
+              "remaining": [],
+              "windowsBefore": [
+                {
+                  "layer": 0,
+                  "number": 162266,
+                  "pid": 95814,
+                  "title": "Page chrome fixture"
+                }
+              ]
+            },
+            {
+              "label": "unanswered host close",
+              "ok": true,
+              "pendingBefore": 0,
+              "remaining": [],
+              "windowsBefore": [
+                {
+                  "layer": 0,
+                  "number": 162266,
+                  "pid": 95814,
+                  "title": "Linked fixture"
+                }
+              ]
+            },
+            {
+              "label": "beforeunload Stay",
+              "ok": true,
+              "pendingBefore": 0,
+              "remaining": [],
+              "windowsBefore": [
+                {
+                  "layer": 0,
+                  "number": 162311,
+                  "pid": 95814,
+                  "title": "(untitled owned window)"
+                },
+                {
+                  "layer": 0,
+                  "number": 162266,
+                  "pid": 95814,
+                  "title": "Page chrome fixture"
+                }
+              ]
+            },
+            {
+              "label": "beforeunload Leave",
+              "ok": true,
+              "pendingBefore": 0,
+              "remaining": [],
+              "windowsBefore": [
+                {
+                  "layer": 0,
+                  "number": 162313,
+                  "pid": 95814,
+                  "title": "(untitled owned window)"
+                },
+                {
+                  "layer": 0,
+                  "number": 162266,
+                  "pid": 95814,
+                  "title": "Linked fixture"
+                }
+              ]
+            },
+            {
+              "label": "dialog size boundary",
+              "ok": true,
+              "pendingBefore": 1,
+              "remaining": [],
+              "windowsBefore": [
+                {
+                  "layer": 0,
+                  "number": 162266,
+                  "pid": 95814,
+                  "title": "Page chrome fixture"
+                }
+              ]
+            }
+          ],
+          "pid": 95814,
+          "quit": {
+            "forced": true,
+            "killed": [
+              98950,
+              98943,
+              98918,
+              98870,
+              98869,
+              98630,
+              96739,
+              96612,
+              96609,
+              96607,
+              96606
+            ],
+            "ok": false,
+            "remainingWindows": [
+              {
+                "layer": 0,
+                "number": 162266,
+                "pid": 95814,
+                "title": "Page chrome fixture"
+              }
+            ],
+            "windowsBeforeKill": [
+              {
+                "layer": 0,
+                "number": 162266,
+                "pid": 95814,
+                "title": "Page chrome fixture"
+              }
+            ]
+          }
+        }
+      ],
+      "ok": false,
+      "subprocesses": []
+    },
+    "permission_allow_remember": {
+      "expectedStored": 1,
+      "ok": true,
+      "prompt": {
+        "appActive": true,
+        "containerKey": true,
+        "containerWindow": 162266,
+        "decisions": 1,
+        "keyWindow": 162266,
+        "kinds": 8,
+        "origin": "http://127.0.0.1:59428/",
+        "ownerKey": true,
+        "ownerSheet": false,
+        "pending": 1,
+        "pendingPage": 15,
+        "remember": false,
+        "selectedPage": 15,
+        "visible": true,
+        "window": 162314
+      },
+      "stored": 1
+    },
+    "permission_deny_once": {
+      "expectedStored": 0,
+      "ok": true,
+      "prompt": {
+        "appActive": true,
+        "containerKey": true,
+        "containerWindow": 162266,
+        "decisions": 0,
+        "keyWindow": 162266,
+        "kinds": 8,
+        "origin": "http://127.0.0.1:59427/",
+        "ownerKey": true,
+        "ownerSheet": false,
+        "pending": 1,
+        "pendingPage": 14,
+        "remember": false,
+        "selectedPage": 14,
+        "visible": true,
+        "window": 162314
+      },
+      "stored": 0
+    },
+    "permission_deny_policy": {
+      "ok": true
+    },
+    "permission_deny_remember": {
+      "expectedStored": 2,
+      "ok": true,
+      "prompt": {
+        "appActive": true,
+        "containerKey": true,
+        "containerWindow": 162266,
+        "decisions": 2,
+        "keyWindow": 162266,
+        "kinds": 8,
+        "origin": "http://127.0.0.1:59429/",
+        "ownerKey": true,
+        "ownerSheet": false,
+        "pending": 1,
+        "pendingPage": 16,
+        "remember": false,
+        "selectedPage": 16,
+        "visible": true,
+        "window": 162314
+      },
+      "stored": 2
+    },
+    "permission_stored_no_prompt": {
+      "ok": true,
+      "outcomes": [
+        "granted",
+        "denied"
+      ]
+    },
+    "permission_transient_setting_refused": {
+      "ok": true
+    },
+    "suite": {
+      "error": "timed out",
+      "ok": false
+    }
+  },
+  "started": "2026-10-26 21:14:58",
+  "style": "chrome"
+}

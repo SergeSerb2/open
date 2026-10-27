@@ -1,0 +1,304 @@
+{
+  "config": "Debug",
+  "engine": {
+    "distributionUUID": "4C4C44C8-5555-3144-A168-35B709BBDA3A",
+    "embeddedUUID": "4C4C44C8-5555-3144-A168-35B709BBDA3A",
+    "source": "fork",
+    "stamp": "fork /Users/serge/Developer/open-engine/chromium_git/chromium/src/cef/binary_distrib/cef_binary_156.0.14+g4fa4ab5+chromium-156.0.8078.48_macosarm64_minimal 1793075034"
+  },
+  "interrupted_attempts": [],
+  "page-keys": {
+    "dialog_blocks_cmd_l": {
+      "ok": true
+    },
+    "dialog_blocks_cmd_t": {
+      "ok": true
+    },
+    "dialog_blocks_cmd_w": {
+      "ok": true
+    },
+    "dialog_native_alert_escape": {
+      "closedByKey": true,
+      "ok": true
+    },
+    "dialog_native_alert_return": {
+      "closedByKey": true,
+      "ok": true
+    },
+    "dialog_native_beforeunload_escape": {
+      "closedByKey": true,
+      "ok": true
+    },
+    "dialog_native_beforeunload_return": {
+      "closedByKey": true,
+      "ok": true
+    },
+    "dialog_native_confirm_return": {
+      "closedByKey": true,
+      "ok": true
+    },
+    "dialog_native_escape": {
+      "ok": true
+    },
+    "dialog_native_prompt_enter": {
+      "closedByKey": true,
+      "ok": true
+    },
+    "dialog_native_prompt_escape": {
+      "closedByKey": true,
+      "ok": true
+    },
+    "dialog_native_text_return": {
+      "closedByKey": true,
+      "ok": true
+    },
+    "find_cmd_l": {
+      "bar": {
+        "created": true,
+        "editorCanUndo": false,
+        "editorText": "http://127.0.0.1:55006/page.html",
+        "final": true,
+        "firstResultsMs": 11.573333333332812,
+        "mode": "editCurrentURL",
+        "newTabHighlighted": false,
+        "openFirstResultsMs": 12.040166666666664,
+        "presented": true,
+        "profile": "3617F867-6648-487D-BB2A-1327D74795C3",
+        "range": [
+          0,
+          32
+        ],
+        "rows": [
+          {
+            "action": "",
+            "id": "typed:url",
+            "kind": "navigate",
+            "space": "",
+            "tab": "",
+            "title": "http://127.0.0.1:55006/page.html",
+            "url": "http://127.0.0.1:55006/page.html"
+          }
+        ],
+        "selected": 0,
+        "space": "7A3130BB-335D-4AE4-8FF4-4FB5E3623ADE",
+        "text": "http://127.0.0.1:55006/page.html",
+        "timingScope": "showCommandBar entry to first snapshot applied; excludes preceding key routing, socket transport and frame presentation"
+      },
+      "ok": true
+    },
+    "find_cmd_t": {
+      "bar": {
+        "created": true,
+        "editorCanUndo": false,
+        "editorText": "",
+        "final": false,
+        "firstResultsMs": 33.77158333333318,
+        "mode": "newTab",
+        "newTabHighlighted": true,
+        "openFirstResultsMs": 36.36533333333409,
+        "presented": true,
+        "profile": "3617F867-6648-487D-BB2A-1327D74795C3",
+        "range": [
+          0,
+          0
+        ],
+        "rows": [],
+        "selected": -1,
+        "space": "7A3130BB-335D-4AE4-8FF4-4FB5E3623ADE",
+        "text": "",
+        "timingScope": "showCommandBar entry to first snapshot applied; excludes preceding key routing, socket transport and frame presentation"
+      },
+      "ok": true
+    },
+    "find_cmd_w_once": {
+      "ok": true
+    },
+    "find_escape_precedes_peek": {
+      "find": {
+        "count": 0,
+        "frame": [
+          1002,
+          18,
+          260,
+          24
+        ],
+        "index": 0,
+        "page": 0,
+        "text": "",
+        "visible": false
+      },
+      "ok": true,
+      "peekShown": true
+    },
+    "find_text_limit_at": {
+      "bytes": 4096,
+      "ok": true
+    },
+    "find_text_limit_over": {
+      "bytes": 4097,
+      "ok": true
+    },
+    "owned_window_cleanup": {
+      "apps": [
+        {
+          "dialogs": [
+            {
+              "label": "native confirm keys",
+              "ok": true,
+              "pendingBefore": 0,
+              "remaining": [],
+              "windowsBefore": [
+                {
+                  "layer": 0,
+                  "number": 165478,
+                  "pid": 87613,
+                  "title": "Page chrome fixture"
+                }
+              ]
+            },
+            {
+              "label": "native prompt Return",
+              "ok": true,
+              "pendingBefore": 0,
+              "remaining": [],
+              "windowsBefore": [
+                {
+                  "layer": 0,
+                  "number": 165478,
+                  "pid": 87613,
+                  "title": "Page chrome fixture"
+                }
+              ]
+            },
+            {
+              "label": "native prompt_enter",
+              "ok": true,
+              "pendingBefore": 0,
+              "remaining": [],
+              "windowsBefore": [
+                {
+                  "layer": 0,
+                  "number": 165478,
+                  "pid": 87613,
+                  "title": "Page chrome fixture"
+                }
+              ]
+            },
+            {
+              "label": "native prompt_escape",
+              "ok": true,
+              "pendingBefore": 0,
+              "remaining": [],
+              "windowsBefore": [
+                {
+                  "layer": 0,
+                  "number": 165478,
+                  "pid": 87613,
+                  "title": "Page chrome fixture"
+                }
+              ]
+            },
+            {
+              "label": "native alert_return",
+              "ok": true,
+              "pendingBefore": 0,
+              "remaining": [],
+              "windowsBefore": [
+                {
+                  "layer": 0,
+                  "number": 165478,
+                  "pid": 87613,
+                  "title": "Page chrome fixture"
+                }
+              ]
+            },
+            {
+              "label": "native alert_escape",
+              "ok": true,
+              "pendingBefore": 0,
+              "remaining": [],
+              "windowsBefore": [
+                {
+                  "layer": 0,
+                  "number": 165478,
+                  "pid": 87613,
+                  "title": "Page chrome fixture"
+                }
+              ]
+            },
+            {
+              "label": "native confirm_return",
+              "ok": true,
+              "pendingBefore": 0,
+              "remaining": [],
+              "windowsBefore": [
+                {
+                  "layer": 0,
+                  "number": 165478,
+                  "pid": 87613,
+                  "title": "Page chrome fixture"
+                }
+              ]
+            },
+            {
+              "label": "native beforeunload escape",
+              "ok": true,
+              "pendingBefore": 0,
+              "remaining": [],
+              "windowsBefore": [
+                {
+                  "layer": 0,
+                  "number": 165478,
+                  "pid": 87613,
+                  "title": "Page chrome fixture"
+                }
+              ]
+            },
+            {
+              "label": "native beforeunload return",
+              "ok": true,
+              "pendingBefore": 0,
+              "remaining": [],
+              "windowsBefore": [
+                {
+                  "layer": 0,
+                  "number": 165478,
+                  "pid": 87613,
+                  "title": "Page chrome fixture"
+                }
+              ]
+            },
+            {
+              "label": "suite quit",
+              "ok": true,
+              "pendingBefore": 0,
+              "remaining": [],
+              "windowsBefore": [
+                {
+                  "layer": 0,
+                  "number": 165478,
+                  "pid": 87613,
+                  "title": "Page chrome fixture"
+                }
+              ]
+            }
+          ],
+          "pid": 87613,
+          "quit": {
+            "forced": false,
+            "killed": [],
+            "ok": true,
+            "remainingWindows": [],
+            "reply": true,
+            "rootPathProbe": "/Users/serge/.t3/worktrees/open/t3-d8b5b30a/build/Debug/Open.app/Contents/MacOS/Open",
+            "windowsBeforeKill": []
+          }
+        }
+      ],
+      "ok": true,
+      "subprocesses": []
+    }
+  },
+  "started": "2026-10-26 21:36:41",
+  "style": "chrome"
+}

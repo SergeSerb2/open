@@ -1,0 +1,28 @@
+127.0.0.1 - - [26/Oct/2026 20:13:42] "GET /page.html HTTP/1.1" 200 -
+127.0.0.1 - - [26/Oct/2026 20:13:42] code 404, message File not found
+127.0.0.1 - - [26/Oct/2026 20:13:42] "GET /image.svg HTTP/1.1" 404 -
+127.0.0.1 - - [26/Oct/2026 20:13:42] code 404, message File not found
+127.0.0.1 - - [26/Oct/2026 20:13:42] "GET /favicon.ico HTTP/1.1" 404 -
+127.0.0.1 - - [26/Oct/2026 20:13:42] code 404, message File not found
+127.0.0.1 - - [26/Oct/2026 20:13:42] "GET /favicon.ico HTTP/1.1" 404 -
+127.0.0.1 - - [26/Oct/2026 20:13:42] "GET /page.html?peek HTTP/1.1" 200 -
+127.0.0.1 - - [26/Oct/2026 20:13:42] code 404, message File not found
+127.0.0.1 - - [26/Oct/2026 20:13:42] "GET /image.svg HTTP/1.1" 404 -
+127.0.0.1 - - [26/Oct/2026 20:13:42] code 404, message File not found
+127.0.0.1 - - [26/Oct/2026 20:13:42] "GET /favicon.ico HTTP/1.1" 404 -
+127.0.0.1 - - [26/Oct/2026 20:13:42] "GET /page.html?close HTTP/1.1" 200 -
+127.0.0.1 - - [26/Oct/2026 20:13:42] code 404, message File not found
+127.0.0.1 - - [26/Oct/2026 20:13:42] "GET /image.svg HTTP/1.1" 404 -
+127.0.0.1 - - [26/Oct/2026 20:13:42] code 404, message File not found
+127.0.0.1 - - [26/Oct/2026 20:13:42] "GET /favicon.ico HTTP/1.1" 404 -
+find_escape_precedes_peek FAIL
+find_cmd_t               PASS
+find_cmd_l               PASS
+find_cmd_w_once          PASS
+dialog_blocks_cmd_t      PASS
+dialog_blocks_cmd_l      PASS
+dialog_blocks_cmd_w      PASS
+dialog_native_escape     PASS
+dialog_native_text_return FAIL
+owned_window_cleanup     PASS
+wrote /Users/serge/.t3/worktrees/open/t3-d8b5b30a/docs/engine-spike/results-page-keys-debug.json

@@ -1,0 +1,4741 @@
+{
+  "config": "Release",
+  "engine": {
+    "distributionUUID": "4C4C44C8-5555-3144-A168-35B709BBDA3A",
+    "embeddedUUID": "4C4C44C8-5555-3144-A168-35B709BBDA3A",
+    "source": "fork",
+    "stamp": "fork /Users/serge/Developer/open-engine/chromium_git/chromium/src/cef/binary_distrib/cef_binary_156.0.14+g4fa4ab5+chromium-156.0.8078.48_macosarm64_minimal 1793075034"
+  },
+  "features": {
+    "Widevine out of v1 (expected absent)": {
+      "appAlive": true,
+      "cdmAfter": [],
+      "cdmAtExit": [],
+      "cdmBefore": [],
+      "eme": {
+        "name": "NotSupportedError",
+        "rejected": true
+      },
+      "noDialog": true,
+      "ok": true,
+      "pageAlive": true,
+      "releaseArgsWidevineDisabled": true
+    },
+    "adblock_control": {
+      "ok": true,
+      "without_extensions": {
+        "https://pagead2.googlesyndication.com/pagead/js/adsbygoogle.js": "loaded",
+        "https://securepubads.g.doubleclick.net/tag/js/gpt.js": "loaded"
+      }
+    },
+    "audio_state": {
+      "audible_after_pause": false,
+      "audible_while_playing": true,
+      "muted": {
+        "audible": true,
+        "muted": true
+      },
+      "ok": true
+    },
+    "capture_missing_window_refused": {
+      "ok": true
+    },
+    "codecs": {
+      "ok": true,
+      "support": {
+        "aac": true,
+        "av1": true,
+        "h264": true,
+        "hevc": true,
+        "mp3": "probably",
+        "opus": true,
+        "vp9": true
+      }
+    },
+    "context_menu": {
+      "items": [
+        "Copy",
+        "Copy Link to Highlight",
+        "Print\u2026",
+        "Open in Reading Mode",
+        "",
+        "Inspect"
+      ],
+      "ok": true
+    },
+    "context_url_limit_at": {
+      "bytes": 65536,
+      "ok": true
+    },
+    "context_url_limit_over": {
+      "bytes": 65537,
+      "ok": true
+    },
+    "crash_recovery": {
+      "after_reload": {
+        "crash": 0,
+        "url": "https://example.com/"
+      },
+      "crash_state": 1,
+      "model_crashed": true,
+      "ok": true
+    },
+    "dialog_alert": {
+      "closed": true,
+      "ok": true,
+      "result": "alert done",
+      "sheet": {
+        "buttons": [
+          "OK"
+        ],
+        "held": false,
+        "kind": 0,
+        "message": "page chrome alert",
+        "pending": 1,
+        "sourceMessageBytes": 17,
+        "sourcePromptBytes": 0,
+        "text": "",
+        "visible": true,
+        "window": 166557
+      }
+    },
+    "dialog_beforeunload_leave": {
+      "ok": true
+    },
+    "dialog_beforeunload_stay": {
+      "ok": true,
+      "sheet": {
+        "buttons": [
+          "Leave",
+          "Stay"
+        ],
+        "held": false,
+        "kind": 3,
+        "message": "Is it OK to leave/reload this page?",
+        "pending": 1,
+        "sourceMessageBytes": 35,
+        "sourcePromptBytes": 0,
+        "text": "",
+        "visible": true,
+        "window": 166575
+      }
+    },
+    "dialog_blocks_cmd_l": {
+      "ok": true
+    },
+    "dialog_blocks_cmd_t": {
+      "ok": true
+    },
+    "dialog_blocks_cmd_w": {
+      "ok": true
+    },
+    "dialog_confirm_accept": {
+      "closed": true,
+      "ok": true,
+      "result": true,
+      "sheet": {
+        "buttons": [
+          "OK",
+          "Cancel"
+        ],
+        "held": false,
+        "kind": 1,
+        "message": "page chrome confirm",
+        "pending": 1,
+        "sourceMessageBytes": 19,
+        "sourcePromptBytes": 0,
+        "text": "",
+        "visible": true,
+        "window": 166561
+      }
+    },
+    "dialog_confirm_cancel": {
+      "closed": true,
+      "ok": true,
+      "result": false,
+      "sheet": {
+        "buttons": [
+          "OK",
+          "Cancel"
+        ],
+        "held": false,
+        "kind": 1,
+        "message": "page chrome confirm",
+        "pending": 1,
+        "sourceMessageBytes": 19,
+        "sourcePromptBytes": 0,
+        "text": "",
+        "visible": true,
+        "window": 166559
+      }
+    },
+    "dialog_dismiss_policy": {
+      "ok": true,
+      "result": [
+        false,
+        null
+      ]
+    },
+    "dialog_hold_policy": {
+      "ok": true
+    },
+    "dialog_message_limit": {
+      "atBytes": 8192,
+      "ok": true,
+      "overBytes": 8193
+    },
+    "dialog_native_alert_escape": {
+      "closedByKey": true,
+      "ok": true
+    },
+    "dialog_native_alert_return": {
+      "closedByKey": true,
+      "ok": true
+    },
+    "dialog_native_beforeunload_escape": {
+      "closedByKey": true,
+      "ok": true
+    },
+    "dialog_native_beforeunload_return": {
+      "closedByKey": true,
+      "ok": true
+    },
+    "dialog_native_confirm_return": {
+      "closedByKey": true,
+      "ok": true
+    },
+    "dialog_native_escape": {
+      "ok": true
+    },
+    "dialog_native_prompt_enter": {
+      "closedByKey": true,
+      "ok": true
+    },
+    "dialog_native_prompt_escape": {
+      "closedByKey": true,
+      "ok": true
+    },
+    "dialog_native_text_return": {
+      "closedByKey": true,
+      "ok": true
+    },
+    "dialog_prompt_accept": {
+      "closed": true,
+      "ok": true,
+      "result": "typed response",
+      "sheet": {
+        "buttons": [
+          "OK",
+          "Cancel"
+        ],
+        "held": false,
+        "kind": 2,
+        "message": "page chrome prompt",
+        "pending": 1,
+        "sourceMessageBytes": 18,
+        "sourcePromptBytes": 4,
+        "text": "seed",
+        "visible": true,
+        "window": 166563
+      }
+    },
+    "dialog_prompt_cancel": {
+      "closed": true,
+      "ok": true,
+      "result": null,
+      "sheet": {
+        "buttons": [
+          "OK",
+          "Cancel"
+        ],
+        "held": false,
+        "kind": 2,
+        "message": "page chrome prompt",
+        "pending": 1,
+        "sourceMessageBytes": 18,
+        "sourcePromptBytes": 4,
+        "text": "seed",
+        "visible": true,
+        "window": 166569
+      }
+    },
+    "dialog_prompt_limit": {
+      "atBytes": 4096,
+      "ok": true,
+      "overBytes": 4097
+    },
+    "dialog_queue_limit": {
+      "at": 8,
+      "ok": true,
+      "over": 9
+    },
+    "dialog_unanswered_host_close": {
+      "ok": true
+    },
+    "downloads": {
+      "events": [],
+      "ok": true
+    },
+    "downloads_cancel": {
+      "ok": true,
+      "row": {
+        "host": "127.0.0.1",
+        "id": "Default:2",
+        "name": "cancel.bin",
+        "path": "/Users/serge/Library/Application Support/Open-E2E-features-chrome-34870-cddf656e/downloads/cancel.bin",
+        "received": 0,
+        "speed": 0,
+        "state": "cancelled",
+        "total": 8519680
+      }
+    },
+    "downloads_empty": {
+      "ok": true,
+      "state": {
+        "button": [
+          1083,
+          23,
+          15,
+          15
+        ],
+        "profile": "E082A555-27BE-438A-AB98-7CB6DD1141A1",
+        "rows": [],
+        "visible": true
+      }
+    },
+    "downloads_finish": {
+      "ok": true,
+      "row": {
+        "host": "127.0.0.1",
+        "id": "Default:1",
+        "name": "page-chrome.bin",
+        "path": "/Users/serge/Library/Application Support/Open-E2E-features-chrome-34870-cddf656e/downloads/page-chrome.bin",
+        "received": 8519680,
+        "speed": 0,
+        "state": "completed",
+        "total": 8519680
+      }
+    },
+    "downloads_pause": {
+      "ok": true,
+      "row": {
+        "host": "127.0.0.1",
+        "id": "Default:1",
+        "name": "page-chrome.bin",
+        "path": "/Users/serge/Library/Application Support/Open-E2E-features-chrome-34870-cddf656e/downloads/page-chrome.bin",
+        "received": 524288,
+        "speed": 0,
+        "state": "paused",
+        "total": 8519680
+      }
+    },
+    "downloads_resume": {
+      "ok": true,
+      "row": {
+        "host": "127.0.0.1",
+        "id": "Default:1",
+        "name": "page-chrome.bin",
+        "path": "/Users/serge/Library/Application Support/Open-E2E-features-chrome-34870-cddf656e/downloads/page-chrome.bin",
+        "received": 2293760,
+        "speed": 764586,
+        "state": "inProgress",
+        "total": 8519680
+      }
+    },
+    "downloads_show_in_finder": {
+      "boundary": "Real NSWorkspace reveal request and Finder foreground; Finder selection UI is not inspected.",
+      "ok": true,
+      "request": {
+        "performed": true,
+        "reveal": {
+          "id": "Default:1",
+          "path": "/Users/serge/Library/Application Support/Open-E2E-features-chrome-34870-cddf656e/downloads/page-chrome.bin"
+        }
+      }
+    },
+    "downloads_start_progress": {
+      "ok": true,
+      "row": {
+        "host": "127.0.0.1",
+        "id": "Default:1",
+        "name": "page-chrome.bin",
+        "path": "/Users/serge/Library/Application Support/Open-E2E-features-chrome-34870-cddf656e/downloads/page-chrome.bin",
+        "received": 524288,
+        "speed": 524288,
+        "state": "inProgress",
+        "total": 8519680
+      },
+      "window": {
+        "attachedSheet": 0,
+        "class": "_NSPopoverWindow",
+        "firstResponder": "RenderWidgetHostViewCocoa",
+        "frame": "{{1007, 681}, {366, 184}}",
+        "key": true,
+        "level": 0,
+        "number": 166592,
+        "parent": 166591,
+        "sheet": false,
+        "title": "",
+        "visible": true
+      }
+    },
+    "extension_chrome_model_pending": {
+      "reason": "pending #93: native Chrome toolbar action/popup implementation is not on main",
+      "status": "BLOCKED"
+    },
+    "extension_popup_input": {
+      "ok": true
+    },
+    "extension_popup_key_escape": {
+      "ok": true
+    },
+    "extension_popup_key_l": {
+      "ok": true
+    },
+    "extension_popup_key_return": {
+      "ok": true
+    },
+    "extension_popup_key_t": {
+      "ok": true
+    },
+    "extension_popup_key_w": {
+      "ok": true
+    },
+    "extension_popup_outside_click": {
+      "ok": true
+    },
+    "extension_popup_panel": {
+      "ok": true,
+      "state": {
+        "content": 4,
+        "extension": "pdnclfgkpaghggbbmmmmpdmndkjaoaof",
+        "pending": "#93",
+        "size": [
+          360,
+          480
+        ],
+        "visible": true,
+        "window": 166542
+      }
+    },
+    "extension_popup_resize": {
+      "after": {
+        "content": 4,
+        "extension": "pdnclfgkpaghggbbmmmmpdmndkjaoaof",
+        "pending": "#93",
+        "size": [
+          300,
+          140
+        ],
+        "visible": true,
+        "window": 166542
+      },
+      "before": {
+        "content": 4,
+        "extension": "pdnclfgkpaghggbbmmmmpdmndkjaoaof",
+        "pending": "#93",
+        "size": [
+          360,
+          480
+        ],
+        "visible": true,
+        "window": 166542
+      },
+      "ok": true
+    },
+    "extension_popup_second_click": {
+      "ok": true
+    },
+    "extension_popup_window_close": {
+      "ok": true
+    },
+    "find_bar_empty": {
+      "ok": true
+    },
+    "find_bar_escape": {
+      "ok": true
+    },
+    "find_bar_next_previous": {
+      "initial": 1,
+      "ok": true,
+      "state": {
+        "count": 3,
+        "frame": [
+          1002,
+          18,
+          260,
+          24
+        ],
+        "index": 1,
+        "page": 1,
+        "text": "needle",
+        "visible": true
+      }
+    },
+    "find_bar_open_type": {
+      "ok": true,
+      "state": {
+        "count": 3,
+        "frame": [
+          1002,
+          18,
+          260,
+          24
+        ],
+        "index": 1,
+        "page": 1,
+        "text": "needle",
+        "visible": true
+      }
+    },
+    "find_bar_peek_scope": {
+      "ok": true,
+      "state": {
+        "count": 1,
+        "frame": [
+          1002,
+          18,
+          260,
+          24
+        ],
+        "index": 1,
+        "page": 2,
+        "text": "needle",
+        "visible": true
+      }
+    },
+    "find_bar_split_scope": {
+      "focusedEngine": 1,
+      "ok": true,
+      "state": {
+        "count": 3,
+        "frame": [
+          1002,
+          18,
+          260,
+          24
+        ],
+        "index": 1,
+        "page": 1,
+        "text": "needle",
+        "visible": true
+      }
+    },
+    "find_cmd_l": {
+      "bar": {
+        "created": true,
+        "editorCanUndo": false,
+        "editorText": "http://127.0.0.1:59648/page.html",
+        "final": true,
+        "firstResultsMs": 13.236541666666653,
+        "mode": "editCurrentURL",
+        "newTabHighlighted": false,
+        "openFirstResultsMs": 13.612958333333154,
+        "presented": true,
+        "profile": "C7DE6B45-54A7-4B0E-9B20-AC9F8DD1545C",
+        "range": [
+          0,
+          32
+        ],
+        "rows": [
+          {
+            "action": "",
+            "id": "typed:url",
+            "kind": "navigate",
+            "space": "",
+            "tab": "",
+            "title": "http://127.0.0.1:59648/page.html",
+            "url": "http://127.0.0.1:59648/page.html"
+          }
+        ],
+        "selected": 0,
+        "space": "03B9B0A8-D63C-41BC-AB0B-B8FE2E1DBD62",
+        "text": "http://127.0.0.1:59648/page.html",
+        "timingScope": "showCommandBar entry to first snapshot applied; excludes preceding key routing, socket transport and frame presentation"
+      },
+      "ok": true
+    },
+    "find_cmd_t": {
+      "bar": {
+        "created": true,
+        "editorCanUndo": false,
+        "editorText": "",
+        "final": false,
+        "firstResultsMs": 39.03583333333336,
+        "mode": "newTab",
+        "newTabHighlighted": true,
+        "openFirstResultsMs": 41.02774999999997,
+        "presented": true,
+        "profile": "C7DE6B45-54A7-4B0E-9B20-AC9F8DD1545C",
+        "range": [
+          0,
+          0
+        ],
+        "rows": [],
+        "selected": -1,
+        "space": "03B9B0A8-D63C-41BC-AB0B-B8FE2E1DBD62",
+        "text": "",
+        "timingScope": "showCommandBar entry to first snapshot applied; excludes preceding key routing, socket transport and frame presentation"
+      },
+      "ok": true
+    },
+    "find_cmd_w_once": {
+      "ok": true
+    },
+    "find_escape_precedes_peek": {
+      "find": {
+        "count": 0,
+        "frame": [
+          1002,
+          18,
+          260,
+          24
+        ],
+        "index": 0,
+        "page": 0,
+        "text": "",
+        "visible": false
+      },
+      "ok": true,
+      "peekShown": true
+    },
+    "find_in_page": {
+      "active": 0,
+      "final": true,
+      "matches": 134,
+      "ok": true
+    },
+    "find_text_limit_at": {
+      "bytes": 4096,
+      "ok": true
+    },
+    "find_text_limit_over": {
+      "bytes": 4097,
+      "ok": true
+    },
+    "fullscreen": {
+      "document_fullscreen": true,
+      "events": [
+        true
+      ],
+      "ok": true
+    },
+    "js_dialogs": {
+      "events": [
+        0,
+        1,
+        2
+      ],
+      "ok": true,
+      "result": [
+        true,
+        "hello"
+      ]
+    },
+    "owned_window_cleanup": {
+      "apps": [
+        {
+          "dialogs": [
+            {
+              "label": "legacy alert confirm prompt",
+              "ok": true,
+              "pendingBefore": 0,
+              "remaining": [],
+              "windowsBefore": [
+                {
+                  "layer": 0,
+                  "number": 166521,
+                  "pid": 55644,
+                  "title": "Web browser - Wikipedia"
+                }
+              ]
+            },
+            {
+              "label": "Widevine out of v1",
+              "ok": true,
+              "pendingBefore": 0,
+              "remaining": [],
+              "windowsBefore": [
+                {
+                  "layer": 0,
+                  "number": 166521,
+                  "pid": 55644,
+                  "title": "Example Domain"
+                }
+              ]
+            },
+            {
+              "label": "suite quit",
+              "ok": true,
+              "pendingBefore": 0,
+              "remaining": [],
+              "windowsBefore": [
+                {
+                  "layer": 0,
+                  "number": 166521,
+                  "pid": 55644,
+                  "title": "Web browser"
+                }
+              ]
+            }
+          ],
+          "pid": 55644,
+          "quit": {
+            "forced": false,
+            "killed": [],
+            "ok": true,
+            "remainingWindows": [],
+            "reply": true,
+            "rootPathProbe": "/Users/serge/.t3/worktrees/open/t3-d8b5b30a/build/Release/Open.app/Contents/MacOS/Open",
+            "windowsBeforeKill": []
+          }
+        },
+        {
+          "dialogs": [
+            {
+              "label": "page-chrome dialog button",
+              "ok": true,
+              "pendingBefore": 0,
+              "remaining": [],
+              "windowsBefore": [
+                {
+                  "layer": 0,
+                  "number": 166531,
+                  "pid": 57080,
+                  "title": "Page chrome fixture"
+                }
+              ]
+            },
+            {
+              "label": "page-chrome dialog button",
+              "ok": true,
+              "pendingBefore": 0,
+              "remaining": [],
+              "windowsBefore": [
+                {
+                  "layer": 0,
+                  "number": 166560,
+                  "pid": 57080,
+                  "title": "(untitled owned window)"
+                },
+                {
+                  "layer": 0,
+                  "number": 166531,
+                  "pid": 57080,
+                  "title": "Page chrome fixture"
+                }
+              ]
+            },
+            {
+              "label": "page-chrome dialog button",
+              "ok": true,
+              "pendingBefore": 0,
+              "remaining": [],
+              "windowsBefore": [
+                {
+                  "layer": 0,
+                  "number": 166531,
+                  "pid": 57080,
+                  "title": "Page chrome fixture"
+                }
+              ]
+            },
+            {
+              "label": "page-chrome dialog button",
+              "ok": true,
+              "pendingBefore": 0,
+              "remaining": [],
+              "windowsBefore": [
+                {
+                  "layer": 0,
+                  "number": 166564,
+                  "pid": 57080,
+                  "title": "(untitled owned window)"
+                },
+                {
+                  "layer": 0,
+                  "number": 166531,
+                  "pid": 57080,
+                  "title": "Page chrome fixture"
+                }
+              ]
+            },
+            {
+              "label": "page-chrome dialog button",
+              "ok": true,
+              "pendingBefore": 0,
+              "remaining": [],
+              "windowsBefore": [
+                {
+                  "layer": 0,
+                  "number": 166531,
+                  "pid": 57080,
+                  "title": "Page chrome fixture"
+                }
+              ]
+            },
+            {
+              "label": "dialog dismiss policy",
+              "ok": true,
+              "pendingBefore": 0,
+              "remaining": [],
+              "windowsBefore": [
+                {
+                  "layer": 0,
+                  "number": 166531,
+                  "pid": 57080,
+                  "title": "Page chrome fixture"
+                }
+              ]
+            },
+            {
+              "label": "dialog hold policy",
+              "ok": true,
+              "pendingBefore": 0,
+              "remaining": [],
+              "windowsBefore": [
+                {
+                  "layer": 0,
+                  "number": 166531,
+                  "pid": 57080,
+                  "title": "Page chrome fixture"
+                }
+              ]
+            },
+            {
+              "label": "unanswered host close",
+              "ok": true,
+              "pendingBefore": 0,
+              "remaining": [],
+              "windowsBefore": [
+                {
+                  "layer": 0,
+                  "number": 166531,
+                  "pid": 57080,
+                  "title": "Linked fixture"
+                }
+              ]
+            },
+            {
+              "label": "beforeunload Stay",
+              "ok": true,
+              "pendingBefore": 0,
+              "remaining": [],
+              "windowsBefore": [
+                {
+                  "layer": 0,
+                  "number": 166531,
+                  "pid": 57080,
+                  "title": "Page chrome fixture"
+                }
+              ]
+            },
+            {
+              "label": "beforeunload Leave",
+              "ok": true,
+              "pendingBefore": 0,
+              "remaining": [],
+              "windowsBefore": [
+                {
+                  "layer": 0,
+                  "number": 166531,
+                  "pid": 57080,
+                  "title": "Linked fixture"
+                }
+              ]
+            },
+            {
+              "label": "dialog size boundary",
+              "ok": true,
+              "pendingBefore": 0,
+              "remaining": [],
+              "windowsBefore": [
+                {
+                  "layer": 0,
+                  "number": 166531,
+                  "pid": 57080,
+                  "title": "Page chrome fixture"
+                }
+              ]
+            },
+            {
+              "label": "dialog size boundary",
+              "ok": true,
+              "pendingBefore": 0,
+              "remaining": [],
+              "windowsBefore": [
+                {
+                  "layer": 0,
+                  "number": 166531,
+                  "pid": 57080,
+                  "title": "Page chrome fixture"
+                }
+              ]
+            },
+            {
+              "label": "dialog queue boundary",
+              "ok": true,
+              "pendingBefore": 0,
+              "remaining": [],
+              "windowsBefore": [
+                {
+                  "layer": 0,
+                  "number": 166531,
+                  "pid": 57080,
+                  "title": "Page chrome fixture"
+                }
+              ]
+            },
+            {
+              "label": "suite quit",
+              "ok": true,
+              "pendingBefore": 0,
+              "remaining": [],
+              "windowsBefore": [
+                {
+                  "layer": 0,
+                  "number": 166582,
+                  "pid": 57080,
+                  "title": "(untitled owned window)"
+                },
+                {
+                  "layer": 0,
+                  "number": 166531,
+                  "pid": 57080,
+                  "title": "Page chrome fixture"
+                }
+              ]
+            }
+          ],
+          "pid": 57080,
+          "quit": {
+            "forced": false,
+            "killed": [],
+            "ok": true,
+            "remainingWindows": [],
+            "reply": true,
+            "rootPathProbe": "/Users/serge/.t3/worktrees/open/t3-d8b5b30a/build/Release/Open.app/Contents/MacOS/Open",
+            "windowsBeforeKill": []
+          }
+        },
+        {
+          "dialogs": [
+            {
+              "label": "suite quit",
+              "ok": true,
+              "pendingBefore": 0,
+              "remaining": [],
+              "windowsBefore": [
+                {
+                  "layer": 0,
+                  "number": 166591,
+                  "pid": 61079,
+                  "title": "Page chrome fixture"
+                }
+              ]
+            }
+          ],
+          "pid": 61079,
+          "quit": {
+            "forced": false,
+            "killed": [],
+            "ok": true,
+            "remainingWindows": [],
+            "reply": true,
+            "rootPathProbe": "/Users/serge/.t3/worktrees/open/t3-d8b5b30a/build/Release/Open.app/Contents/MacOS/Open",
+            "windowsBeforeKill": []
+          }
+        },
+        {
+          "dialogs": [
+            {
+              "label": "native confirm keys",
+              "ok": true,
+              "pendingBefore": 0,
+              "remaining": [],
+              "windowsBefore": [
+                {
+                  "layer": 0,
+                  "number": 166600,
+                  "pid": 62061,
+                  "title": "Page chrome fixture"
+                }
+              ]
+            },
+            {
+              "label": "native prompt Return",
+              "ok": true,
+              "pendingBefore": 0,
+              "remaining": [],
+              "windowsBefore": [
+                {
+                  "layer": 0,
+                  "number": 166600,
+                  "pid": 62061,
+                  "title": "Page chrome fixture"
+                }
+              ]
+            },
+            {
+              "label": "native prompt_enter",
+              "ok": true,
+              "pendingBefore": 0,
+              "remaining": [],
+              "windowsBefore": [
+                {
+                  "layer": 0,
+                  "number": 166600,
+                  "pid": 62061,
+                  "title": "Page chrome fixture"
+                }
+              ]
+            },
+            {
+              "label": "native prompt_escape",
+              "ok": true,
+              "pendingBefore": 0,
+              "remaining": [],
+              "windowsBefore": [
+                {
+                  "layer": 0,
+                  "number": 166600,
+                  "pid": 62061,
+                  "title": "Page chrome fixture"
+                }
+              ]
+            },
+            {
+              "label": "native alert_return",
+              "ok": true,
+              "pendingBefore": 0,
+              "remaining": [],
+              "windowsBefore": [
+                {
+                  "layer": 0,
+                  "number": 166600,
+                  "pid": 62061,
+                  "title": "Page chrome fixture"
+                }
+              ]
+            },
+            {
+              "label": "native alert_escape",
+              "ok": true,
+              "pendingBefore": 0,
+              "remaining": [],
+              "windowsBefore": [
+                {
+                  "layer": 0,
+                  "number": 166600,
+                  "pid": 62061,
+                  "title": "Page chrome fixture"
+                }
+              ]
+            },
+            {
+              "label": "native confirm_return",
+              "ok": true,
+              "pendingBefore": 0,
+              "remaining": [],
+              "windowsBefore": [
+                {
+                  "layer": 0,
+                  "number": 166600,
+                  "pid": 62061,
+                  "title": "Page chrome fixture"
+                }
+              ]
+            },
+            {
+              "label": "native beforeunload escape",
+              "ok": true,
+              "pendingBefore": 0,
+              "remaining": [],
+              "windowsBefore": [
+                {
+                  "layer": 0,
+                  "number": 166600,
+                  "pid": 62061,
+                  "title": "Page chrome fixture"
+                }
+              ]
+            },
+            {
+              "label": "native beforeunload return",
+              "ok": true,
+              "pendingBefore": 0,
+              "remaining": [],
+              "windowsBefore": [
+                {
+                  "layer": 0,
+                  "number": 166600,
+                  "pid": 62061,
+                  "title": "Page chrome fixture"
+                }
+              ]
+            },
+            {
+              "label": "suite quit",
+              "ok": true,
+              "pendingBefore": 0,
+              "remaining": [],
+              "windowsBefore": [
+                {
+                  "layer": 0,
+                  "number": 166600,
+                  "pid": 62061,
+                  "title": "Page chrome fixture"
+                }
+              ]
+            }
+          ],
+          "pid": 62061,
+          "quit": {
+            "forced": false,
+            "killed": [],
+            "ok": true,
+            "remainingWindows": [],
+            "reply": true,
+            "rootPathProbe": "/Users/serge/.t3/worktrees/open/t3-d8b5b30a/build/Release/Open.app/Contents/MacOS/Open",
+            "windowsBeforeKill": []
+          }
+        }
+      ],
+      "ok": true,
+      "subprocesses": []
+    },
+    "page_context_image": {
+      "items": [
+        {
+          "enabled": true,
+          "engine": false,
+          "key": "image-new-tab",
+          "submenu": "",
+          "title": "Open Image in New Tab"
+        },
+        {
+          "enabled": true,
+          "engine": false,
+          "key": "image-copy-url",
+          "submenu": "",
+          "title": "Copy Image Address"
+        },
+        {
+          "enabled": true,
+          "engine": true,
+          "id": 50120,
+          "key": "engine:50120",
+          "submenu": "",
+          "title": "Save Image As\u2026"
+        },
+        {
+          "enabled": true,
+          "engine": true,
+          "id": 50122,
+          "key": "engine:50122",
+          "submenu": "",
+          "title": "Copy Image"
+        },
+        {
+          "enabled": true,
+          "engine": true,
+          "id": 51034,
+          "key": "engine:51034",
+          "submenu": "",
+          "title": "Create QR Code for this Image"
+        },
+        {
+          "enabled": true,
+          "engine": true,
+          "id": 50127,
+          "key": "engine:50127",
+          "submenu": "",
+          "title": "Search Image with Google"
+        },
+        {
+          "enabled": true,
+          "engine": true,
+          "id": 50162,
+          "key": "engine:50162",
+          "submenu": "",
+          "title": "Inspect"
+        }
+      ],
+      "ok": true
+    },
+    "page_context_link": {
+      "items": [
+        {
+          "enabled": true,
+          "engine": false,
+          "key": "link-open",
+          "submenu": "",
+          "title": "Open Link"
+        },
+        {
+          "enabled": true,
+          "engine": false,
+          "key": "link-new-tab",
+          "submenu": "",
+          "title": "Open Link in New Tab"
+        },
+        {
+          "enabled": true,
+          "engine": false,
+          "key": "link-peek",
+          "submenu": "",
+          "title": "Open Link in Peek"
+        },
+        {
+          "enabled": false,
+          "engine": false,
+          "key": "link-little-open",
+          "submenu": "",
+          "title": "Open Link in Little Open"
+        },
+        {
+          "enabled": true,
+          "engine": false,
+          "key": "link-copy",
+          "submenu": "",
+          "title": "Copy Link"
+        },
+        {
+          "enabled": true,
+          "engine": true,
+          "id": 50101,
+          "key": "engine:50101",
+          "submenu": "",
+          "title": "Open Link in New Window"
+        },
+        {
+          "enabled": true,
+          "engine": true,
+          "id": 50111,
+          "key": "engine:50111",
+          "submenu": "",
+          "title": "Open Link in Split View"
+        },
+        {
+          "enabled": true,
+          "engine": true,
+          "id": 50102,
+          "key": "engine:50102",
+          "submenu": "",
+          "title": "Open Link in Incognito Window"
+        },
+        {
+          "enabled": true,
+          "engine": true,
+          "id": 50103,
+          "key": "engine:50103",
+          "submenu": "",
+          "title": "Save Link As\u2026"
+        },
+        {
+          "enabled": true,
+          "engine": true,
+          "id": 50104,
+          "key": "engine:50104",
+          "submenu": "",
+          "title": "Copy Link Address"
+        },
+        {
+          "enabled": true,
+          "engine": true,
+          "id": 50162,
+          "key": "engine:50162",
+          "submenu": "",
+          "title": "Inspect"
+        }
+      ],
+      "ok": true
+    },
+    "page_context_new_tab_engine": {
+      "ok": true
+    },
+    "page_context_page": {
+      "items": [
+        {
+          "enabled": false,
+          "engine": true,
+          "id": 33000,
+          "key": "engine:33000",
+          "submenu": "",
+          "title": "Back"
+        },
+        {
+          "enabled": false,
+          "engine": true,
+          "id": 33001,
+          "key": "engine:33001",
+          "submenu": "",
+          "title": "Forward"
+        },
+        {
+          "enabled": true,
+          "engine": true,
+          "id": 33002,
+          "key": "engine:33002",
+          "submenu": "",
+          "title": "Reload"
+        },
+        {
+          "enabled": true,
+          "engine": true,
+          "id": 35004,
+          "key": "engine:35004",
+          "submenu": "",
+          "title": "Save As\u2026"
+        },
+        {
+          "enabled": true,
+          "engine": true,
+          "id": 35003,
+          "key": "engine:35003",
+          "submenu": "",
+          "title": "Print\u2026"
+        },
+        {
+          "enabled": true,
+          "engine": true,
+          "id": 35011,
+          "key": "engine:35011",
+          "submenu": "",
+          "title": "Cast\u2026"
+        },
+        {
+          "enabled": true,
+          "engine": true,
+          "id": 50169,
+          "key": "engine:50169",
+          "submenu": "",
+          "title": "Open in Reading Mode"
+        },
+        {
+          "enabled": true,
+          "engine": true,
+          "id": 51034,
+          "key": "engine:51034",
+          "submenu": "",
+          "title": "Create QR Code for this Page"
+        },
+        {
+          "enabled": true,
+          "engine": true,
+          "id": 35002,
+          "key": "engine:35002",
+          "submenu": "",
+          "title": "View Page Source"
+        },
+        {
+          "enabled": true,
+          "engine": true,
+          "id": 50162,
+          "key": "engine:50162",
+          "submenu": "",
+          "title": "Inspect"
+        }
+      ],
+      "ok": true
+    },
+    "page_context_selection": {
+      "items": [
+        {
+          "enabled": true,
+          "engine": false,
+          "key": "selection-copy-link",
+          "submenu": "",
+          "title": "Copy Link to Highlight"
+        },
+        {
+          "enabled": true,
+          "engine": true,
+          "id": 50165,
+          "key": "engine:50165",
+          "submenu": "",
+          "title": "Look Up \u201cDistinct selection text\u201d"
+        },
+        {
+          "enabled": true,
+          "engine": true,
+          "id": 50150,
+          "key": "engine:50150",
+          "submenu": "",
+          "title": "Copy"
+        },
+        {
+          "enabled": true,
+          "engine": true,
+          "id": 50191,
+          "key": "engine:50191",
+          "submenu": "",
+          "title": "Search Google for \u201cDistinct selection text\u201d"
+        },
+        {
+          "enabled": true,
+          "engine": true,
+          "id": 35003,
+          "key": "engine:35003",
+          "submenu": "",
+          "title": "Print\u2026"
+        },
+        {
+          "enabled": true,
+          "engine": true,
+          "id": 50169,
+          "key": "engine:50169",
+          "submenu": "",
+          "title": "Open in Reading Mode"
+        },
+        {
+          "enabled": true,
+          "engine": true,
+          "id": 50162,
+          "key": "engine:50162",
+          "submenu": "",
+          "title": "Inspect"
+        },
+        {
+          "enabled": true,
+          "engine": true,
+          "id": 101,
+          "key": "engine:101",
+          "submenu": "Speech",
+          "title": "Start Speaking"
+        },
+        {
+          "enabled": false,
+          "engine": true,
+          "id": 102,
+          "key": "engine:102",
+          "submenu": "Speech",
+          "title": "Stop Speaking"
+        }
+      ],
+      "ok": true
+    },
+    "pdf_viewer": {
+      "document": {
+        "body": "\n    \n  \n\n",
+        "embed": false,
+        "iframe": false,
+        "type": "application/pdf"
+      },
+      "ok": true,
+      "screenshot": "chrome-pdf-viewer.png",
+      "viewer_targets": [
+        "chrome-extension://mhjfbmdgcfjbbpaeojofohoefgiehjai/index.html"
+      ]
+    },
+    "permission_allow_remember": {
+      "expectedStored": 1,
+      "ok": true,
+      "prompt": {
+        "appActive": true,
+        "containerKey": true,
+        "containerWindow": 166531,
+        "decisions": 1,
+        "keyWindow": 166531,
+        "kinds": 8,
+        "origin": "http://127.0.0.1:59169/",
+        "ownerKey": true,
+        "ownerSheet": false,
+        "pending": 1,
+        "pendingPage": 15,
+        "remember": false,
+        "selectedPage": 15,
+        "visible": true,
+        "window": 166579
+      },
+      "stored": 1
+    },
+    "permission_deny_once": {
+      "expectedStored": 0,
+      "ok": true,
+      "prompt": {
+        "appActive": true,
+        "containerKey": true,
+        "containerWindow": 166531,
+        "decisions": 0,
+        "keyWindow": 166531,
+        "kinds": 8,
+        "origin": "http://127.0.0.1:59168/",
+        "ownerKey": true,
+        "ownerSheet": false,
+        "pending": 1,
+        "pendingPage": 14,
+        "remember": false,
+        "selectedPage": 14,
+        "visible": true,
+        "window": 166579
+      },
+      "stored": 0
+    },
+    "permission_deny_policy": {
+      "ok": true
+    },
+    "permission_deny_remember": {
+      "expectedStored": 2,
+      "ok": true,
+      "prompt": {
+        "appActive": true,
+        "containerKey": true,
+        "containerWindow": 166531,
+        "decisions": 2,
+        "keyWindow": 166531,
+        "kinds": 8,
+        "origin": "http://127.0.0.1:59170/",
+        "ownerKey": true,
+        "ownerSheet": false,
+        "pending": 1,
+        "pendingPage": 16,
+        "remember": false,
+        "selectedPage": 16,
+        "visible": true,
+        "window": 166579
+      },
+      "stored": 2
+    },
+    "permission_one_shot_relaunch": {
+      "ok": true,
+      "stored": 0
+    },
+    "permission_remember_relaunch": {
+      "ok": true,
+      "values": [
+        1,
+        2
+      ]
+    },
+    "permission_stored_no_prompt": {
+      "ok": true,
+      "outcomes": [
+        "granted",
+        "denied"
+      ]
+    },
+    "permission_transient_setting_refused": {
+      "ok": true
+    },
+    "permissions": {
+      "events": [
+        {
+          "kinds": 8,
+          "origin": "https://en.wikipedia.org/"
+        }
+      ],
+      "geolocation": "not tested",
+      "notification": "granted",
+      "ok": true
+    },
+    "picture_in_picture": {
+      "ok": true,
+      "result": true,
+      "visible_windows": [
+        [
+          "BrowserWindow",
+          "{{80, 60}, {1360, 860}}"
+        ],
+        [
+          "NativeWidgetMacFramelessNSWindow",
+          "{{2027, 32}, {501, 282}}"
+        ]
+      ]
+    },
+    "popups_new_tabs": {
+      "new_sidebar_tabs": [
+        "https://example.com/"
+      ],
+      "ok": true,
+      "page_kinds": [
+        "popup",
+        "tab",
+        "tab",
+        "tab"
+      ]
+    },
+    "print_to_pdf": {
+      "bytes": 435169,
+      "ok": true
+    },
+    "profiles": {
+      "ok": true,
+      "work_engine_dir_exists": true,
+      "work_profile_sees": {
+        "cookie": "",
+        "storage": null
+      },
+      "work_space": "76789240-E67E-4AC2-AB91-0A221C9B4531",
+      "work_tab_context": "Profile-FCD762C6"
+    },
+    "request_filter": {
+      "ok": true,
+      "stats": {
+        "blocked": 1,
+        "recent": [
+          "https://example.org/?x=1"
+        ]
+      },
+      "with_filter": "blocked",
+      "without_filter": "loaded"
+    },
+    "site_control_escape": {
+      "ok": true
+    },
+    "site_control_key_l": {
+      "ok": true
+    },
+    "site_control_key_return": {
+      "ok": true
+    },
+    "site_control_key_t": {
+      "ok": true
+    },
+    "site_control_key_w": {
+      "ok": true
+    },
+    "site_control_sections_pending": {
+      "reason": "pending #96 sections / #103 editor; merged #69 shell is presented",
+      "status": "BLOCKED"
+    },
+    "site_control_shell": {
+      "ok": true,
+      "state": {
+        "anchor": [
+          186,
+          49,
+          30,
+          30
+        ],
+        "available": true,
+        "panel": [
+          83,
+          91,
+          236,
+          297
+        ],
+        "pending": "#96/#103",
+        "request": {
+          "anchor": [
+            186,
+            49,
+            30,
+            30
+          ],
+          "origin": "http://127.0.0.1:59168",
+          "profile": "E082A555-27BE-438A-AB98-7CB6DD1141A1",
+          "tab": "98F4F33F-7222-43CF-9BA0-FE608207EB43"
+        },
+        "requests": 1,
+        "visible": true
+      }
+    },
+    "user_scripts": {
+      "matched": {
+        "boost": "number",
+        "early": true,
+        "outline": "rgb(255, 0, 0)"
+      },
+      "ok": true,
+      "unmatched_site": "undefined"
+    },
+    "zoom": {
+      "innerWidth_100": 1122,
+      "innerWidth_zoomed": 935,
+      "level": 1,
+      "ok": true
+    }
+  },
+  "interrupted_attempts": [
+    {
+      "attempt": 1,
+      "checks": {
+        "Widevine out of v1 (expected absent)": {
+          "appAlive": true,
+          "cdmAfter": [],
+          "cdmAtExit": [],
+          "cdmBefore": [],
+          "eme": {
+            "name": "NotSupportedError",
+            "rejected": true
+          },
+          "noDialog": true,
+          "ok": true,
+          "pageAlive": true,
+          "releaseArgsWidevineDisabled": true
+        },
+        "adblock_control": {
+          "ok": true,
+          "without_extensions": {
+            "https://pagead2.googlesyndication.com/pagead/js/adsbygoogle.js": "loaded",
+            "https://securepubads.g.doubleclick.net/tag/js/gpt.js": "loaded"
+          }
+        },
+        "audio_state": {
+          "audible_after_pause": false,
+          "audible_while_playing": true,
+          "muted": {
+            "audible": true,
+            "muted": true
+          },
+          "ok": true
+        },
+        "capture_missing_window_refused": {
+          "ok": true
+        },
+        "codecs": {
+          "ok": true,
+          "support": {
+            "aac": true,
+            "av1": true,
+            "h264": true,
+            "hevc": true,
+            "mp3": "probably",
+            "opus": true,
+            "vp9": true
+          }
+        },
+        "context_menu": {
+          "items": [
+            "Look Up \u201cbehind\u201d",
+            "",
+            "Copy",
+            "Copy Link to Highlight",
+            "Search Google for \u201cbehind\u201d",
+            "Print\u2026",
+            "Open in Reading Mode",
+            "",
+            "Inspect",
+            "",
+            "Speech"
+          ],
+          "ok": true
+        },
+        "context_url_limit_at": {
+          "bytes": 65536,
+          "ok": true
+        },
+        "context_url_limit_over": {
+          "bytes": 65537,
+          "ok": true
+        },
+        "crash_recovery": {
+          "after_reload": {
+            "crash": 0,
+            "url": "https://example.com/"
+          },
+          "crash_state": 1,
+          "model_crashed": true,
+          "ok": true
+        },
+        "dialog_alert": {
+          "closed": true,
+          "ok": true,
+          "result": "alert done",
+          "sheet": {
+            "buttons": [
+              "OK"
+            ],
+            "held": false,
+            "kind": 0,
+            "message": "page chrome alert",
+            "pending": 1,
+            "sourceMessageBytes": 17,
+            "sourcePromptBytes": 0,
+            "text": "",
+            "visible": true,
+            "window": 166254
+          }
+        },
+        "dialog_beforeunload_leave": {
+          "ok": true
+        },
+        "dialog_beforeunload_stay": {
+          "ok": true,
+          "sheet": {
+            "buttons": [
+              "Leave",
+              "Stay"
+            ],
+            "held": false,
+            "kind": 3,
+            "message": "Is it OK to leave/reload this page?",
+            "pending": 1,
+            "sourceMessageBytes": 35,
+            "sourcePromptBytes": 0,
+            "text": "",
+            "visible": true,
+            "window": 166280
+          }
+        },
+        "dialog_confirm_accept": {
+          "closed": true,
+          "ok": true,
+          "result": true,
+          "sheet": {
+            "buttons": [
+              "OK",
+              "Cancel"
+            ],
+            "held": false,
+            "kind": 1,
+            "message": "page chrome confirm",
+            "pending": 1,
+            "sourceMessageBytes": 19,
+            "sourcePromptBytes": 0,
+            "text": "",
+            "visible": true,
+            "window": 166258
+          }
+        },
+        "dialog_confirm_cancel": {
+          "closed": true,
+          "ok": true,
+          "result": false,
+          "sheet": {
+            "buttons": [
+              "OK",
+              "Cancel"
+            ],
+            "held": false,
+            "kind": 1,
+            "message": "page chrome confirm",
+            "pending": 1,
+            "sourceMessageBytes": 19,
+            "sourcePromptBytes": 0,
+            "text": "",
+            "visible": true,
+            "window": 166256
+          }
+        },
+        "dialog_dismiss_policy": {
+          "ok": true,
+          "result": [
+            false,
+            null
+          ]
+        },
+        "dialog_hold_policy": {
+          "ok": true
+        },
+        "dialog_message_limit": {
+          "atBytes": 8192,
+          "ok": true,
+          "overBytes": 8193
+        },
+        "dialog_prompt_accept": {
+          "closed": true,
+          "ok": true,
+          "result": "typed response",
+          "sheet": {
+            "buttons": [
+              "OK",
+              "Cancel"
+            ],
+            "held": false,
+            "kind": 2,
+            "message": "page chrome prompt",
+            "pending": 1,
+            "sourceMessageBytes": 18,
+            "sourcePromptBytes": 4,
+            "text": "seed",
+            "visible": true,
+            "window": 166260
+          }
+        },
+        "dialog_prompt_cancel": {
+          "closed": true,
+          "ok": true,
+          "result": null,
+          "sheet": {
+            "buttons": [
+              "OK",
+              "Cancel"
+            ],
+            "held": false,
+            "kind": 2,
+            "message": "page chrome prompt",
+            "pending": 1,
+            "sourceMessageBytes": 18,
+            "sourcePromptBytes": 4,
+            "text": "seed",
+            "visible": true,
+            "window": 166266
+          }
+        },
+        "dialog_prompt_limit": {
+          "atBytes": 4096,
+          "ok": true,
+          "overBytes": 4097
+        },
+        "dialog_queue_limit": {
+          "at": 8,
+          "ok": true,
+          "over": 9
+        },
+        "dialog_unanswered_host_close": {
+          "ok": true
+        },
+        "downloads": {
+          "events": [
+            [
+              1,
+              0
+            ],
+            [
+              1,
+              10
+            ],
+            [
+              1,
+              10
+            ],
+            [
+              1,
+              10
+            ],
+            [
+              1,
+              10
+            ],
+            [
+              1,
+              10
+            ],
+            [
+              2,
+              10
+            ]
+          ],
+          "ok": true
+        },
+        "downloads_cancel": {
+          "ok": true,
+          "row": {
+            "host": "127.0.0.1",
+            "id": "Default:2",
+            "name": "cancel.bin",
+            "path": "/Users/serge/Library/Application Support/Open-E2E-features-chrome-34870-cddf656e/downloads/cancel.bin",
+            "received": 0,
+            "speed": 0,
+            "state": "cancelled",
+            "total": 8519680
+          }
+        },
+        "downloads_empty": {
+          "ok": true,
+          "state": {
+            "button": [
+              1083,
+              23,
+              15,
+              15
+            ],
+            "profile": "DC711C0D-1AF1-4DE9-8BDB-2CEF4035FE3D",
+            "rows": [],
+            "visible": true
+          }
+        },
+        "downloads_finish": {
+          "ok": true,
+          "row": {
+            "host": "127.0.0.1",
+            "id": "Default:1",
+            "name": "page-chrome.bin",
+            "path": "/Users/serge/Library/Application Support/Open-E2E-features-chrome-34870-cddf656e/downloads/page-chrome.bin",
+            "received": 8519680,
+            "speed": 0,
+            "state": "completed",
+            "total": 8519680
+          }
+        },
+        "downloads_pause": {
+          "ok": true,
+          "row": {
+            "host": "127.0.0.1",
+            "id": "Default:1",
+            "name": "page-chrome.bin",
+            "path": "/Users/serge/Library/Application Support/Open-E2E-features-chrome-34870-cddf656e/downloads/page-chrome.bin",
+            "received": 524288,
+            "speed": 0,
+            "state": "paused",
+            "total": 8519680
+          }
+        },
+        "downloads_resume": {
+          "ok": true,
+          "row": {
+            "host": "127.0.0.1",
+            "id": "Default:1",
+            "name": "page-chrome.bin",
+            "path": "/Users/serge/Library/Application Support/Open-E2E-features-chrome-34870-cddf656e/downloads/page-chrome.bin",
+            "received": 2359296,
+            "speed": 786432,
+            "state": "inProgress",
+            "total": 8519680
+          }
+        },
+        "downloads_show_in_finder": {
+          "boundary": "Real NSWorkspace reveal request and Finder foreground; Finder selection UI is not inspected.",
+          "ok": true,
+          "request": {
+            "performed": true,
+            "reveal": {
+              "id": "Default:1",
+              "path": "/Users/serge/Library/Application Support/Open-E2E-features-chrome-34870-cddf656e/downloads/page-chrome.bin"
+            }
+          }
+        },
+        "downloads_start_progress": {
+          "ok": true,
+          "row": {
+            "host": "127.0.0.1",
+            "id": "Default:1",
+            "name": "page-chrome.bin",
+            "path": "/Users/serge/Library/Application Support/Open-E2E-features-chrome-34870-cddf656e/downloads/page-chrome.bin",
+            "received": 524288,
+            "speed": 524288,
+            "state": "inProgress",
+            "total": 8519680
+          },
+          "window": {
+            "attachedSheet": 0,
+            "class": "_NSPopoverWindow",
+            "firstResponder": "RenderWidgetHostViewCocoa",
+            "frame": "{{1007, 681}, {366, 184}}",
+            "key": true,
+            "level": 0,
+            "number": 166375,
+            "parent": 166365,
+            "sheet": false,
+            "title": "",
+            "visible": true
+          }
+        },
+        "extension_chrome_model_pending": {
+          "reason": "pending #93: native Chrome toolbar action/popup implementation is not on main",
+          "status": "BLOCKED"
+        },
+        "extension_popup_input": {
+          "ok": true
+        },
+        "extension_popup_key_escape": {
+          "ok": true
+        },
+        "extension_popup_key_l": {
+          "ok": true
+        },
+        "extension_popup_key_return": {
+          "ok": true
+        },
+        "extension_popup_key_t": {
+          "ok": true
+        },
+        "extension_popup_key_w": {
+          "ok": true
+        },
+        "extension_popup_outside_click": {
+          "ok": true
+        },
+        "extension_popup_panel": {
+          "ok": true,
+          "state": {
+            "content": 4,
+            "extension": "pdnclfgkpaghggbbmmmmpdmndkjaoaof",
+            "pending": "#93",
+            "size": [
+              360,
+              480
+            ],
+            "visible": true,
+            "window": 166239
+          }
+        },
+        "extension_popup_resize": {
+          "after": {
+            "content": 4,
+            "extension": "pdnclfgkpaghggbbmmmmpdmndkjaoaof",
+            "pending": "#93",
+            "size": [
+              300,
+              140
+            ],
+            "visible": true,
+            "window": 166239
+          },
+          "before": {
+            "content": 4,
+            "extension": "pdnclfgkpaghggbbmmmmpdmndkjaoaof",
+            "pending": "#93",
+            "size": [
+              360,
+              480
+            ],
+            "visible": true,
+            "window": 166239
+          },
+          "ok": true
+        },
+        "extension_popup_second_click": {
+          "ok": true
+        },
+        "extension_popup_window_close": {
+          "ok": true
+        },
+        "find_bar_empty": {
+          "ok": true
+        },
+        "find_bar_escape": {
+          "ok": true
+        },
+        "find_bar_next_previous": {
+          "initial": 1,
+          "ok": true,
+          "state": {
+            "count": 3,
+            "frame": [
+              1002,
+              18,
+              260,
+              24
+            ],
+            "index": 1,
+            "page": 1,
+            "text": "needle",
+            "visible": true
+          }
+        },
+        "find_bar_open_type": {
+          "ok": true,
+          "state": {
+            "count": 3,
+            "frame": [
+              1002,
+              18,
+              260,
+              24
+            ],
+            "index": 1,
+            "page": 1,
+            "text": "needle",
+            "visible": true
+          }
+        },
+        "find_bar_peek_scope": {
+          "ok": true,
+          "state": {
+            "count": 1,
+            "frame": [
+              1002,
+              18,
+              260,
+              24
+            ],
+            "index": 1,
+            "page": 2,
+            "text": "needle",
+            "visible": true
+          }
+        },
+        "find_bar_split_scope": {
+          "focusedEngine": 1,
+          "ok": true,
+          "state": {
+            "count": 3,
+            "frame": [
+              1002,
+              18,
+              260,
+              24
+            ],
+            "index": 1,
+            "page": 1,
+            "text": "needle",
+            "visible": true
+          }
+        },
+        "find_cmd_l": {
+          "bar": {
+            "created": true,
+            "editorCanUndo": false,
+            "editorText": "http://127.0.0.1:58104/page.html",
+            "final": true,
+            "firstResultsMs": 11.510125000000016,
+            "mode": "editCurrentURL",
+            "newTabHighlighted": false,
+            "openFirstResultsMs": 11.832833333333156,
+            "presented": true,
+            "profile": "DB442C68-AE37-4745-AE85-D9DE898A4642",
+            "range": [
+              0,
+              32
+            ],
+            "rows": [
+              {
+                "action": "",
+                "id": "typed:url",
+                "kind": "navigate",
+                "space": "",
+                "tab": "",
+                "title": "http://127.0.0.1:58104/page.html",
+                "url": "http://127.0.0.1:58104/page.html"
+              }
+            ],
+            "selected": 0,
+            "space": "918832B7-6EE7-49CA-B230-124DD928AFCD",
+            "text": "http://127.0.0.1:58104/page.html",
+            "timingScope": "showCommandBar entry to first snapshot applied; excludes preceding key routing, socket transport and frame presentation"
+          },
+          "ok": true
+        },
+        "find_cmd_t": {
+          "bar": {
+            "created": true,
+            "editorCanUndo": false,
+            "editorText": "",
+            "final": false,
+            "firstResultsMs": 31.626375000000053,
+            "mode": "newTab",
+            "newTabHighlighted": true,
+            "openFirstResultsMs": 33.79537499999992,
+            "presented": true,
+            "profile": "DB442C68-AE37-4745-AE85-D9DE898A4642",
+            "range": [
+              0,
+              0
+            ],
+            "rows": [],
+            "selected": -1,
+            "space": "918832B7-6EE7-49CA-B230-124DD928AFCD",
+            "text": "",
+            "timingScope": "showCommandBar entry to first snapshot applied; excludes preceding key routing, socket transport and frame presentation"
+          },
+          "ok": true
+        },
+        "find_cmd_w_once": {
+          "ok": true
+        },
+        "find_escape_precedes_peek": {
+          "find": {
+            "count": 0,
+            "frame": [
+              1002,
+              18,
+              260,
+              24
+            ],
+            "index": 0,
+            "page": 0,
+            "text": "",
+            "visible": false
+          },
+          "ok": true,
+          "peekShown": true
+        },
+        "find_in_page": {
+          "active": 0,
+          "final": true,
+          "matches": 134,
+          "ok": true
+        },
+        "find_text_limit_at": {
+          "bytes": 4096,
+          "ok": true
+        },
+        "find_text_limit_over": {
+          "assertion": {
+            "bytes": 4097,
+            "ok": true
+          },
+          "focus": [
+            {
+              "event": "frontmostChanged",
+              "frontmostApp": "T3 Code (Nightly)",
+              "frontmostBundle": "com.t3tools.t3code",
+              "frontmostPID": 43784,
+              "openPID": 42622,
+              "uptime": 164673.57821604167
+            },
+            {
+              "active": false,
+              "event": "NSApplicationDidResignActiveNotification",
+              "frontmostApp": "T3 Code (Nightly)",
+              "frontmostPID": 43784,
+              "keyWindow": 0,
+              "openPID": 42622,
+              "uptime": 164673.58726687502
+            }
+          ],
+          "status": "INTERRUPTED"
+        },
+        "fullscreen": {
+          "document_fullscreen": true,
+          "events": [
+            true
+          ],
+          "ok": true
+        },
+        "js_dialogs": {
+          "events": [
+            0,
+            1,
+            2
+          ],
+          "ok": true,
+          "result": [
+            true,
+            "hello"
+          ]
+        },
+        "owned_window_cleanup": {
+          "apps": [
+            {
+              "dialogs": [
+                {
+                  "label": "legacy alert confirm prompt",
+                  "ok": true,
+                  "pendingBefore": 0,
+                  "remaining": [],
+                  "windowsBefore": [
+                    {
+                      "layer": 0,
+                      "number": 166109,
+                      "pid": 34907,
+                      "title": "Web browser - Wikipedia"
+                    }
+                  ]
+                },
+                {
+                  "label": "Widevine out of v1",
+                  "ok": true,
+                  "pendingBefore": 0,
+                  "remaining": [],
+                  "windowsBefore": [
+                    {
+                      "layer": 0,
+                      "number": 166109,
+                      "pid": 34907,
+                      "title": "Example Domain"
+                    }
+                  ]
+                },
+                {
+                  "label": "suite quit",
+                  "ok": true,
+                  "pendingBefore": 0,
+                  "remaining": [],
+                  "windowsBefore": [
+                    {
+                      "layer": 0,
+                      "number": 166109,
+                      "pid": 34907,
+                      "title": "Web browser"
+                    }
+                  ]
+                }
+              ],
+              "pid": 34907,
+              "quit": {
+                "forced": false,
+                "killed": [],
+                "ok": true,
+                "remainingWindows": [],
+                "reply": true,
+                "rootPathProbe": "/Users/serge/.t3/worktrees/open/t3-d8b5b30a/build/Release/Open.app/Contents/MacOS/Open",
+                "windowsBeforeKill": []
+              }
+            },
+            {
+              "dialogs": [
+                {
+                  "label": "page-chrome dialog button",
+                  "ok": true,
+                  "pendingBefore": 0,
+                  "remaining": [],
+                  "windowsBefore": [
+                    {
+                      "layer": 0,
+                      "number": 166194,
+                      "pid": 41225,
+                      "title": "Page chrome fixture"
+                    }
+                  ]
+                },
+                {
+                  "label": "page-chrome dialog button",
+                  "ok": true,
+                  "pendingBefore": 0,
+                  "remaining": [],
+                  "windowsBefore": [
+                    {
+                      "layer": 0,
+                      "number": 166257,
+                      "pid": 41225,
+                      "title": "(untitled owned window)"
+                    },
+                    {
+                      "layer": 0,
+                      "number": 166194,
+                      "pid": 41225,
+                      "title": "Page chrome fixture"
+                    }
+                  ]
+                },
+                {
+                  "label": "page-chrome dialog button",
+                  "ok": true,
+                  "pendingBefore": 0,
+                  "remaining": [],
+                  "windowsBefore": [
+                    {
+                      "layer": 0,
+                      "number": 166194,
+                      "pid": 41225,
+                      "title": "Page chrome fixture"
+                    }
+                  ]
+                },
+                {
+                  "label": "page-chrome dialog button",
+                  "ok": true,
+                  "pendingBefore": 0,
+                  "remaining": [],
+                  "windowsBefore": [
+                    {
+                      "layer": 0,
+                      "number": 166261,
+                      "pid": 41225,
+                      "title": "(untitled owned window)"
+                    },
+                    {
+                      "layer": 0,
+                      "number": 166194,
+                      "pid": 41225,
+                      "title": "Page chrome fixture"
+                    }
+                  ]
+                },
+                {
+                  "label": "page-chrome dialog button",
+                  "ok": true,
+                  "pendingBefore": 0,
+                  "remaining": [],
+                  "windowsBefore": [
+                    {
+                      "layer": 0,
+                      "number": 166194,
+                      "pid": 41225,
+                      "title": "Page chrome fixture"
+                    }
+                  ]
+                },
+                {
+                  "label": "dialog dismiss policy",
+                  "ok": true,
+                  "pendingBefore": 0,
+                  "remaining": [],
+                  "windowsBefore": [
+                    {
+                      "layer": 0,
+                      "number": 166194,
+                      "pid": 41225,
+                      "title": "Page chrome fixture"
+                    }
+                  ]
+                },
+                {
+                  "label": "dialog hold policy",
+                  "ok": true,
+                  "pendingBefore": 0,
+                  "remaining": [],
+                  "windowsBefore": [
+                    {
+                      "layer": 0,
+                      "number": 166194,
+                      "pid": 41225,
+                      "title": "Page chrome fixture"
+                    }
+                  ]
+                },
+                {
+                  "label": "unanswered host close",
+                  "ok": true,
+                  "pendingBefore": 0,
+                  "remaining": [],
+                  "windowsBefore": [
+                    {
+                      "layer": 0,
+                      "number": 166194,
+                      "pid": 41225,
+                      "title": "Linked fixture"
+                    }
+                  ]
+                },
+                {
+                  "label": "beforeunload Stay",
+                  "ok": true,
+                  "pendingBefore": 0,
+                  "remaining": [],
+                  "windowsBefore": [
+                    {
+                      "layer": 0,
+                      "number": 166194,
+                      "pid": 41225,
+                      "title": "Page chrome fixture"
+                    }
+                  ]
+                },
+                {
+                  "label": "beforeunload Leave",
+                  "ok": true,
+                  "pendingBefore": 0,
+                  "remaining": [],
+                  "windowsBefore": [
+                    {
+                      "layer": 0,
+                      "number": 166283,
+                      "pid": 41225,
+                      "title": "(untitled owned window)"
+                    },
+                    {
+                      "layer": 0,
+                      "number": 166194,
+                      "pid": 41225,
+                      "title": "Linked fixture"
+                    }
+                  ]
+                },
+                {
+                  "label": "dialog size boundary",
+                  "ok": true,
+                  "pendingBefore": 0,
+                  "remaining": [],
+                  "windowsBefore": [
+                    {
+                      "layer": 0,
+                      "number": 166194,
+                      "pid": 41225,
+                      "title": "Page chrome fixture"
+                    }
+                  ]
+                },
+                {
+                  "label": "dialog size boundary",
+                  "ok": true,
+                  "pendingBefore": 0,
+                  "remaining": [],
+                  "windowsBefore": [
+                    {
+                      "layer": 0,
+                      "number": 166194,
+                      "pid": 41225,
+                      "title": "Page chrome fixture"
+                    }
+                  ]
+                },
+                {
+                  "label": "dialog queue boundary",
+                  "ok": true,
+                  "pendingBefore": 0,
+                  "remaining": [],
+                  "windowsBefore": [
+                    {
+                      "layer": 0,
+                      "number": 166194,
+                      "pid": 41225,
+                      "title": "Page chrome fixture"
+                    }
+                  ]
+                },
+                {
+                  "label": "suite quit",
+                  "ok": true,
+                  "pendingBefore": 0,
+                  "remaining": [],
+                  "windowsBefore": [
+                    {
+                      "layer": 0,
+                      "number": 166326,
+                      "pid": 41225,
+                      "title": "(untitled owned window)"
+                    },
+                    {
+                      "layer": 0,
+                      "number": 166194,
+                      "pid": 41225,
+                      "title": "Page chrome fixture"
+                    }
+                  ]
+                }
+              ],
+              "pid": 41225,
+              "quit": {
+                "forced": false,
+                "killed": [],
+                "ok": true,
+                "remainingWindows": [],
+                "reply": true,
+                "rootPathProbe": "/Users/serge/.t3/worktrees/open/t3-d8b5b30a/build/Release/Open.app/Contents/MacOS/Open",
+                "windowsBeforeKill": []
+              }
+            },
+            {
+              "dialogs": [
+                {
+                  "label": "suite quit",
+                  "ok": true,
+                  "pendingBefore": 0,
+                  "remaining": [],
+                  "windowsBefore": [
+                    {
+                      "layer": 0,
+                      "number": 166365,
+                      "pid": 42059,
+                      "title": "Page chrome fixture"
+                    }
+                  ]
+                }
+              ],
+              "pid": 42059,
+              "quit": {
+                "forced": false,
+                "killed": [],
+                "ok": true,
+                "remainingWindows": [],
+                "reply": true,
+                "rootPathProbe": "/Users/serge/.t3/worktrees/open/t3-d8b5b30a/build/Release/Open.app/Contents/MacOS/Open",
+                "windowsBeforeKill": []
+              }
+            },
+            {
+              "dialogs": [
+                {
+                  "label": "suite quit",
+                  "ok": true,
+                  "pendingBefore": 0,
+                  "remaining": [],
+                  "windowsBefore": [
+                    {
+                      "layer": 0,
+                      "number": 166386,
+                      "pid": 42622,
+                      "title": "Page chrome fixture"
+                    }
+                  ]
+                }
+              ],
+              "pid": 42622,
+              "quit": {
+                "forced": false,
+                "killed": [],
+                "ok": true,
+                "remainingWindows": [],
+                "reply": true,
+                "rootPathProbe": "/Users/serge/.t3/worktrees/open/t3-d8b5b30a/build/Release/Open.app/Contents/MacOS/Open",
+                "windowsBeforeKill": []
+              }
+            }
+          ],
+          "ok": true,
+          "subprocesses": []
+        },
+        "page_context_image": {
+          "items": [
+            {
+              "enabled": true,
+              "engine": false,
+              "key": "image-new-tab",
+              "submenu": "",
+              "title": "Open Image in New Tab"
+            },
+            {
+              "enabled": true,
+              "engine": false,
+              "key": "image-copy-url",
+              "submenu": "",
+              "title": "Copy Image Address"
+            },
+            {
+              "enabled": true,
+              "engine": true,
+              "id": 50120,
+              "key": "engine:50120",
+              "submenu": "",
+              "title": "Save Image As\u2026"
+            },
+            {
+              "enabled": true,
+              "engine": true,
+              "id": 50122,
+              "key": "engine:50122",
+              "submenu": "",
+              "title": "Copy Image"
+            },
+            {
+              "enabled": true,
+              "engine": true,
+              "id": 51034,
+              "key": "engine:51034",
+              "submenu": "",
+              "title": "Create QR Code for this Image"
+            },
+            {
+              "enabled": true,
+              "engine": true,
+              "id": 50127,
+              "key": "engine:50127",
+              "submenu": "",
+              "title": "Search Image with Google"
+            },
+            {
+              "enabled": true,
+              "engine": true,
+              "id": 50162,
+              "key": "engine:50162",
+              "submenu": "",
+              "title": "Inspect"
+            }
+          ],
+          "ok": true
+        },
+        "page_context_link": {
+          "items": [
+            {
+              "enabled": true,
+              "engine": false,
+              "key": "link-open",
+              "submenu": "",
+              "title": "Open Link"
+            },
+            {
+              "enabled": true,
+              "engine": false,
+              "key": "link-new-tab",
+              "submenu": "",
+              "title": "Open Link in New Tab"
+            },
+            {
+              "enabled": true,
+              "engine": false,
+              "key": "link-peek",
+              "submenu": "",
+              "title": "Open Link in Peek"
+            },
+            {
+              "enabled": false,
+              "engine": false,
+              "key": "link-little-open",
+              "submenu": "",
+              "title": "Open Link in Little Open"
+            },
+            {
+              "enabled": true,
+              "engine": false,
+              "key": "link-copy",
+              "submenu": "",
+              "title": "Copy Link"
+            },
+            {
+              "enabled": true,
+              "engine": true,
+              "id": 50101,
+              "key": "engine:50101",
+              "submenu": "",
+              "title": "Open Link in New Window"
+            },
+            {
+              "enabled": true,
+              "engine": true,
+              "id": 50111,
+              "key": "engine:50111",
+              "submenu": "",
+              "title": "Open Link in Split View"
+            },
+            {
+              "enabled": true,
+              "engine": true,
+              "id": 50102,
+              "key": "engine:50102",
+              "submenu": "",
+              "title": "Open Link in Incognito Window"
+            },
+            {
+              "enabled": true,
+              "engine": true,
+              "id": 50103,
+              "key": "engine:50103",
+              "submenu": "",
+              "title": "Save Link As\u2026"
+            },
+            {
+              "enabled": true,
+              "engine": true,
+              "id": 50104,
+              "key": "engine:50104",
+              "submenu": "",
+              "title": "Copy Link Address"
+            },
+            {
+              "enabled": true,
+              "engine": true,
+              "id": 50162,
+              "key": "engine:50162",
+              "submenu": "",
+              "title": "Inspect"
+            }
+          ],
+          "ok": true
+        },
+        "page_context_new_tab_engine": {
+          "ok": true
+        },
+        "page_context_page": {
+          "items": [
+            {
+              "enabled": false,
+              "engine": true,
+              "id": 33000,
+              "key": "engine:33000",
+              "submenu": "",
+              "title": "Back"
+            },
+            {
+              "enabled": false,
+              "engine": true,
+              "id": 33001,
+              "key": "engine:33001",
+              "submenu": "",
+              "title": "Forward"
+            },
+            {
+              "enabled": true,
+              "engine": true,
+              "id": 33002,
+              "key": "engine:33002",
+              "submenu": "",
+              "title": "Reload"
+            },
+            {
+              "enabled": true,
+              "engine": true,
+              "id": 35004,
+              "key": "engine:35004",
+              "submenu": "",
+              "title": "Save As\u2026"
+            },
+            {
+              "enabled": true,
+              "engine": true,
+              "id": 35003,
+              "key": "engine:35003",
+              "submenu": "",
+              "title": "Print\u2026"
+            },
+            {
+              "enabled": true,
+              "engine": true,
+              "id": 35011,
+              "key": "engine:35011",
+              "submenu": "",
+              "title": "Cast\u2026"
+            },
+            {
+              "enabled": true,
+              "engine": true,
+              "id": 50169,
+              "key": "engine:50169",
+              "submenu": "",
+              "title": "Open in Reading Mode"
+            },
+            {
+              "enabled": true,
+              "engine": true,
+              "id": 51034,
+              "key": "engine:51034",
+              "submenu": "",
+              "title": "Create QR Code for this Page"
+            },
+            {
+              "enabled": true,
+              "engine": true,
+              "id": 35002,
+              "key": "engine:35002",
+              "submenu": "",
+              "title": "View Page Source"
+            },
+            {
+              "enabled": true,
+              "engine": true,
+              "id": 50162,
+              "key": "engine:50162",
+              "submenu": "",
+              "title": "Inspect"
+            }
+          ],
+          "ok": true
+        },
+        "page_context_selection": {
+          "items": [
+            {
+              "enabled": true,
+              "engine": false,
+              "key": "selection-copy-link",
+              "submenu": "",
+              "title": "Copy Link to Highlight"
+            },
+            {
+              "enabled": true,
+              "engine": true,
+              "id": 50165,
+              "key": "engine:50165",
+              "submenu": "",
+              "title": "Look Up \u201cDistinct selection text\u201d"
+            },
+            {
+              "enabled": true,
+              "engine": true,
+              "id": 50150,
+              "key": "engine:50150",
+              "submenu": "",
+              "title": "Copy"
+            },
+            {
+              "enabled": true,
+              "engine": true,
+              "id": 50191,
+              "key": "engine:50191",
+              "submenu": "",
+              "title": "Search Google for \u201cDistinct selection text\u201d"
+            },
+            {
+              "enabled": true,
+              "engine": true,
+              "id": 35003,
+              "key": "engine:35003",
+              "submenu": "",
+              "title": "Print\u2026"
+            },
+            {
+              "enabled": true,
+              "engine": true,
+              "id": 50169,
+              "key": "engine:50169",
+              "submenu": "",
+              "title": "Open in Reading Mode"
+            },
+            {
+              "enabled": true,
+              "engine": true,
+              "id": 50162,
+              "key": "engine:50162",
+              "submenu": "",
+              "title": "Inspect"
+            },
+            {
+              "enabled": true,
+              "engine": true,
+              "id": 101,
+              "key": "engine:101",
+              "submenu": "Speech",
+              "title": "Start Speaking"
+            },
+            {
+              "enabled": false,
+              "engine": true,
+              "id": 102,
+              "key": "engine:102",
+              "submenu": "Speech",
+              "title": "Stop Speaking"
+            }
+          ],
+          "ok": true
+        },
+        "pdf_viewer": {
+          "document": {
+            "body": "\n    \n  \n\n",
+            "embed": false,
+            "iframe": false,
+            "type": "application/pdf"
+          },
+          "ok": true,
+          "screenshot": "chrome-pdf-viewer.png",
+          "viewer_targets": [
+            "chrome-extension://mhjfbmdgcfjbbpaeojofohoefgiehjai/index.html"
+          ]
+        },
+        "permission_allow_remember": {
+          "expectedStored": 1,
+          "ok": true,
+          "prompt": {
+            "appActive": true,
+            "containerKey": true,
+            "containerWindow": 166194,
+            "decisions": 1,
+            "keyWindow": 166194,
+            "kinds": 8,
+            "origin": "http://127.0.0.1:57790/",
+            "ownerKey": true,
+            "ownerSheet": false,
+            "pending": 1,
+            "pendingPage": 15,
+            "remember": false,
+            "selectedPage": 15,
+            "visible": true,
+            "window": 166284
+          },
+          "stored": 1
+        },
+        "permission_deny_once": {
+          "expectedStored": 0,
+          "ok": true,
+          "prompt": {
+            "appActive": true,
+            "containerKey": true,
+            "containerWindow": 166194,
+            "decisions": 0,
+            "keyWindow": 166194,
+            "kinds": 8,
+            "origin": "http://127.0.0.1:57789/",
+            "ownerKey": true,
+            "ownerSheet": false,
+            "pending": 1,
+            "pendingPage": 14,
+            "remember": false,
+            "selectedPage": 14,
+            "visible": true,
+            "window": 166284
+          },
+          "stored": 0
+        },
+        "permission_deny_policy": {
+          "ok": true
+        },
+        "permission_deny_remember": {
+          "expectedStored": 2,
+          "ok": true,
+          "prompt": {
+            "appActive": true,
+            "containerKey": true,
+            "containerWindow": 166194,
+            "decisions": 2,
+            "keyWindow": 166194,
+            "kinds": 8,
+            "origin": "http://127.0.0.1:57791/",
+            "ownerKey": true,
+            "ownerSheet": false,
+            "pending": 1,
+            "pendingPage": 16,
+            "remember": false,
+            "selectedPage": 16,
+            "visible": true,
+            "window": 166284
+          },
+          "stored": 2
+        },
+        "permission_one_shot_relaunch": {
+          "ok": true,
+          "stored": 0
+        },
+        "permission_remember_relaunch": {
+          "ok": true,
+          "values": [
+            1,
+            2
+          ]
+        },
+        "permission_stored_no_prompt": {
+          "ok": true,
+          "outcomes": [
+            "granted",
+            "denied"
+          ]
+        },
+        "permission_transient_setting_refused": {
+          "ok": true
+        },
+        "permissions": {
+          "events": [
+            {
+              "kinds": 8,
+              "origin": "https://en.wikipedia.org/"
+            }
+          ],
+          "geolocation": "not tested",
+          "notification": "granted",
+          "ok": true
+        },
+        "picture_in_picture": {
+          "ok": true,
+          "result": true,
+          "visible_windows": [
+            [
+              "BrowserWindow",
+              "{{80, 60}, {1360, 860}}"
+            ],
+            [
+              "NativeWidgetMacFramelessNSWindow",
+              "{{2027, 32}, {501, 282}}"
+            ]
+          ]
+        },
+        "popups_new_tabs": {
+          "new_sidebar_tabs": [
+            "https://example.com/"
+          ],
+          "ok": true,
+          "page_kinds": [
+            "popup",
+            "tab",
+            "tab",
+            "tab"
+          ]
+        },
+        "print_to_pdf": {
+          "bytes": 396523,
+          "ok": true
+        },
+        "profiles": {
+          "ok": true,
+          "work_engine_dir_exists": true,
+          "work_profile_sees": {
+            "cookie": "",
+            "storage": null
+          },
+          "work_space": "5B405B22-BB74-4061-B91C-49597053A687",
+          "work_tab_context": "Profile-AC12E613"
+        },
+        "request_filter": {
+          "ok": true,
+          "stats": {
+            "blocked": 1,
+            "recent": [
+              "https://example.org/?x=1"
+            ]
+          },
+          "with_filter": "blocked",
+          "without_filter": "loaded"
+        },
+        "site_control_escape": {
+          "ok": true
+        },
+        "site_control_key_l": {
+          "ok": true
+        },
+        "site_control_key_return": {
+          "ok": true
+        },
+        "site_control_key_t": {
+          "ok": true
+        },
+        "site_control_key_w": {
+          "ok": true
+        },
+        "site_control_sections_pending": {
+          "reason": "pending #96 sections / #103 editor; merged #69 shell is presented",
+          "status": "BLOCKED"
+        },
+        "site_control_shell": {
+          "ok": true,
+          "state": {
+            "anchor": [
+              186,
+              49,
+              30,
+              30
+            ],
+            "available": true,
+            "panel": [
+              83,
+              91,
+              236,
+              297
+            ],
+            "pending": "#96/#103",
+            "request": {
+              "anchor": [
+                186,
+                49,
+                30,
+                30
+              ],
+              "origin": "http://127.0.0.1:57789",
+              "profile": "DC711C0D-1AF1-4DE9-8BDB-2CEF4035FE3D",
+              "tab": "607657DD-4ED2-4D11-8DEA-E84421208CB5"
+            },
+            "requests": 1,
+            "visible": true
+          }
+        },
+        "user_scripts": {
+          "matched": {
+            "boost": "number",
+            "early": true,
+            "outline": "rgb(255, 0, 0)"
+          },
+          "ok": true,
+          "unmatched_site": "undefined"
+        },
+        "zoom": {
+          "innerWidth_100": 1122,
+          "innerWidth_zoomed": 935,
+          "level": 1,
+          "ok": true
+        }
+      },
+      "focus": [
+        {
+          "event": "frontmostChanged",
+          "frontmostApp": "T3 Code (Nightly)",
+          "frontmostBundle": "com.t3tools.t3code",
+          "frontmostPID": 43784,
+          "openPID": 42622,
+          "uptime": 164673.57821604167
+        },
+        {
+          "active": false,
+          "event": "NSApplicationDidResignActiveNotification",
+          "frontmostApp": "T3 Code (Nightly)",
+          "frontmostPID": 43784,
+          "keyWindow": 0,
+          "openPID": 42622,
+          "uptime": 164673.58726687502
+        }
+      ],
+      "reason": "foreground lost during find_text_limit_over",
+      "status": "INTERRUPTED"
+    },
+    {
+      "attempt": 2,
+      "checks": {
+        "Widevine out of v1 (expected absent)": {
+          "appAlive": true,
+          "cdmAfter": [],
+          "cdmAtExit": [],
+          "cdmBefore": [],
+          "eme": {
+            "name": "NotSupportedError",
+            "rejected": true
+          },
+          "noDialog": true,
+          "ok": true,
+          "pageAlive": true,
+          "releaseArgsWidevineDisabled": true
+        },
+        "adblock_control": {
+          "ok": true,
+          "without_extensions": {
+            "https://pagead2.googlesyndication.com/pagead/js/adsbygoogle.js": "loaded",
+            "https://securepubads.g.doubleclick.net/tag/js/gpt.js": "loaded"
+          }
+        },
+        "audio_state": {
+          "audible_after_pause": false,
+          "audible_while_playing": true,
+          "muted": {
+            "audible": true,
+            "muted": true
+          },
+          "ok": true
+        },
+        "capture_missing_window_refused": {
+          "ok": true
+        },
+        "codecs": {
+          "ok": true,
+          "support": {
+            "aac": true,
+            "av1": true,
+            "h264": true,
+            "hevc": true,
+            "mp3": "probably",
+            "opus": true,
+            "vp9": true
+          }
+        },
+        "context_menu": {
+          "items": [
+            "Copy",
+            "Copy Link to Highlight",
+            "Print\u2026",
+            "Open in Reading Mode",
+            "",
+            "Inspect"
+          ],
+          "ok": true
+        },
+        "context_url_limit_at": {
+          "bytes": 65536,
+          "ok": true
+        },
+        "context_url_limit_over": {
+          "bytes": 65537,
+          "ok": true
+        },
+        "crash_recovery": {
+          "after_reload": {
+            "crash": 0,
+            "url": "https://example.com/"
+          },
+          "crash_state": 1,
+          "model_crashed": true,
+          "ok": true
+        },
+        "dialog_alert": {
+          "closed": true,
+          "ok": true,
+          "result": "alert done",
+          "sheet": {
+            "buttons": [
+              "OK"
+            ],
+            "held": false,
+            "kind": 0,
+            "message": "page chrome alert",
+            "pending": 1,
+            "sourceMessageBytes": 17,
+            "sourcePromptBytes": 0,
+            "text": "",
+            "visible": true,
+            "window": 166450
+          }
+        },
+        "dialog_beforeunload_leave": {
+          "ok": true
+        },
+        "dialog_beforeunload_stay": {
+          "ok": true,
+          "sheet": {
+            "buttons": [
+              "Leave",
+              "Stay"
+            ],
+            "held": false,
+            "kind": 3,
+            "message": "Is it OK to leave/reload this page?",
+            "pending": 1,
+            "sourceMessageBytes": 35,
+            "sourcePromptBytes": 0,
+            "text": "",
+            "visible": true,
+            "window": 166468
+          }
+        },
+        "dialog_confirm_accept": {
+          "closed": true,
+          "ok": true,
+          "result": true,
+          "sheet": {
+            "buttons": [
+              "OK",
+              "Cancel"
+            ],
+            "held": false,
+            "kind": 1,
+            "message": "page chrome confirm",
+            "pending": 1,
+            "sourceMessageBytes": 19,
+            "sourcePromptBytes": 0,
+            "text": "",
+            "visible": true,
+            "window": 166454
+          }
+        },
+        "dialog_confirm_cancel": {
+          "closed": true,
+          "ok": true,
+          "result": false,
+          "sheet": {
+            "buttons": [
+              "OK",
+              "Cancel"
+            ],
+            "held": false,
+            "kind": 1,
+            "message": "page chrome confirm",
+            "pending": 1,
+            "sourceMessageBytes": 19,
+            "sourcePromptBytes": 0,
+            "text": "",
+            "visible": true,
+            "window": 166452
+          }
+        },
+        "dialog_dismiss_policy": {
+          "ok": true,
+          "result": [
+            false,
+            null
+          ]
+        },
+        "dialog_hold_policy": {
+          "ok": true
+        },
+        "dialog_message_limit": {
+          "atBytes": 8192,
+          "ok": true,
+          "overBytes": 8193
+        },
+        "dialog_prompt_accept": {
+          "closed": true,
+          "ok": true,
+          "result": "typed response",
+          "sheet": {
+            "buttons": [
+              "OK",
+              "Cancel"
+            ],
+            "held": false,
+            "kind": 2,
+            "message": "page chrome prompt",
+            "pending": 1,
+            "sourceMessageBytes": 18,
+            "sourcePromptBytes": 4,
+            "text": "seed",
+            "visible": true,
+            "window": 166456
+          }
+        },
+        "dialog_prompt_cancel": {
+          "closed": true,
+          "ok": true,
+          "result": null,
+          "sheet": {
+            "buttons": [
+              "OK",
+              "Cancel"
+            ],
+            "held": false,
+            "kind": 2,
+            "message": "page chrome prompt",
+            "pending": 1,
+            "sourceMessageBytes": 18,
+            "sourcePromptBytes": 4,
+            "text": "seed",
+            "visible": true,
+            "window": 166462
+          }
+        },
+        "dialog_prompt_limit": {
+          "atBytes": 4096,
+          "ok": true,
+          "overBytes": 4097
+        },
+        "dialog_queue_limit": {
+          "at": 8,
+          "ok": true,
+          "over": 9
+        },
+        "dialog_unanswered_host_close": {
+          "ok": true
+        },
+        "downloads": {
+          "events": [],
+          "ok": true
+        },
+        "downloads_cancel": {
+          "ok": true,
+          "row": {
+            "host": "127.0.0.1",
+            "id": "Default:2",
+            "name": "cancel.bin",
+            "path": "/Users/serge/Library/Application Support/Open-E2E-features-chrome-34870-cddf656e/downloads/cancel.bin",
+            "received": 0,
+            "speed": 0,
+            "state": "cancelled",
+            "total": 8519680
+          }
+        },
+        "downloads_empty": {
+          "ok": true,
+          "state": {
+            "button": [
+              1083,
+              23,
+              15,
+              15
+            ],
+            "profile": "1BC37542-006A-43D7-9B7B-F07AC0C43251",
+            "rows": [],
+            "visible": true
+          }
+        },
+        "downloads_finish": {
+          "ok": true,
+          "row": {
+            "host": "127.0.0.1",
+            "id": "Default:1",
+            "name": "page-chrome.bin",
+            "path": "/Users/serge/Library/Application Support/Open-E2E-features-chrome-34870-cddf656e/downloads/page-chrome.bin",
+            "received": 8519680,
+            "speed": 0,
+            "state": "completed",
+            "total": 8519680
+          }
+        },
+        "downloads_pause": {
+          "ok": true,
+          "row": {
+            "host": "127.0.0.1",
+            "id": "Default:1",
+            "name": "page-chrome.bin",
+            "path": "/Users/serge/Library/Application Support/Open-E2E-features-chrome-34870-cddf656e/downloads/page-chrome.bin",
+            "received": 524288,
+            "speed": 0,
+            "state": "paused",
+            "total": 8519680
+          }
+        },
+        "downloads_resume": {
+          "ok": true,
+          "row": {
+            "host": "127.0.0.1",
+            "id": "Default:1",
+            "name": "page-chrome.bin",
+            "path": "/Users/serge/Library/Application Support/Open-E2E-features-chrome-34870-cddf656e/downloads/page-chrome.bin",
+            "received": 2424832,
+            "speed": 808277,
+            "state": "inProgress",
+            "total": 8519680
+          }
+        },
+        "downloads_show_in_finder": {
+          "boundary": "Real NSWorkspace reveal request and Finder foreground; Finder selection UI is not inspected.",
+          "ok": true,
+          "request": {
+            "performed": true,
+            "reveal": {
+              "id": "Default:1",
+              "path": "/Users/serge/Library/Application Support/Open-E2E-features-chrome-34870-cddf656e/downloads/page-chrome.bin"
+            }
+          }
+        },
+        "downloads_start_progress": {
+          "ok": true,
+          "row": {
+            "host": "127.0.0.1",
+            "id": "Default:1",
+            "name": "page-chrome.bin",
+            "path": "/Users/serge/Library/Application Support/Open-E2E-features-chrome-34870-cddf656e/downloads/page-chrome.bin",
+            "received": 524288,
+            "speed": 524288,
+            "state": "inProgress",
+            "total": 8519680
+          },
+          "window": {
+            "attachedSheet": 0,
+            "class": "_NSPopoverWindow",
+            "firstResponder": "RenderWidgetHostViewCocoa",
+            "frame": "{{1007, 681}, {366, 184}}",
+            "key": true,
+            "level": 0,
+            "number": 166485,
+            "parent": 166484,
+            "sheet": false,
+            "title": "",
+            "visible": true
+          }
+        },
+        "extension_chrome_model_pending": {
+          "reason": "pending #93: native Chrome toolbar action/popup implementation is not on main",
+          "status": "BLOCKED"
+        },
+        "extension_popup_input": {
+          "ok": true
+        },
+        "extension_popup_key_escape": {
+          "ok": true
+        },
+        "extension_popup_key_l": {
+          "ok": true
+        },
+        "extension_popup_key_return": {
+          "ok": true
+        },
+        "extension_popup_key_t": {
+          "ok": true
+        },
+        "extension_popup_key_w": {
+          "ok": true
+        },
+        "extension_popup_outside_click": {
+          "ok": true
+        },
+        "extension_popup_panel": {
+          "ok": true,
+          "state": {
+            "content": 4,
+            "extension": "pdnclfgkpaghggbbmmmmpdmndkjaoaof",
+            "pending": "#93",
+            "size": [
+              360,
+              480
+            ],
+            "visible": true,
+            "window": 166435
+          }
+        },
+        "extension_popup_resize": {
+          "after": {
+            "content": 4,
+            "extension": "pdnclfgkpaghggbbmmmmpdmndkjaoaof",
+            "pending": "#93",
+            "size": [
+              300,
+              140
+            ],
+            "visible": true,
+            "window": 166435
+          },
+          "before": {
+            "content": 4,
+            "extension": "pdnclfgkpaghggbbmmmmpdmndkjaoaof",
+            "pending": "#93",
+            "size": [
+              360,
+              480
+            ],
+            "visible": true,
+            "window": 166435
+          },
+          "ok": true
+        },
+        "extension_popup_second_click": {
+          "ok": true
+        },
+        "extension_popup_window_close": {
+          "ok": true
+        },
+        "find_bar_empty": {
+          "ok": true
+        },
+        "find_bar_escape": {
+          "ok": true
+        },
+        "find_bar_next_previous": {
+          "initial": 1,
+          "ok": true,
+          "state": {
+            "count": 3,
+            "frame": [
+              1002,
+              18,
+              260,
+              24
+            ],
+            "index": 1,
+            "page": 1,
+            "text": "needle",
+            "visible": true
+          }
+        },
+        "find_bar_open_type": {
+          "ok": true,
+          "state": {
+            "count": 3,
+            "frame": [
+              1002,
+              18,
+              260,
+              24
+            ],
+            "index": 1,
+            "page": 1,
+            "text": "needle",
+            "visible": true
+          }
+        },
+        "find_bar_peek_scope": {
+          "ok": true,
+          "state": {
+            "count": 1,
+            "frame": [
+              1002,
+              18,
+              260,
+              24
+            ],
+            "index": 1,
+            "page": 2,
+            "text": "needle",
+            "visible": true
+          }
+        },
+        "find_bar_split_scope": {
+          "focusedEngine": 1,
+          "ok": true,
+          "state": {
+            "count": 3,
+            "frame": [
+              1002,
+              18,
+              260,
+              24
+            ],
+            "index": 1,
+            "page": 1,
+            "text": "needle",
+            "visible": true
+          }
+        },
+        "find_cmd_l": {
+          "bar": {
+            "created": true,
+            "editorCanUndo": false,
+            "editorText": "http://127.0.0.1:58859/page.html",
+            "final": true,
+            "firstResultsMs": 22.845374999999876,
+            "mode": "editCurrentURL",
+            "newTabHighlighted": false,
+            "openFirstResultsMs": 23.201499999999896,
+            "presented": true,
+            "profile": "36E1C240-846E-4768-9077-6519BD5069AC",
+            "range": [
+              0,
+              32
+            ],
+            "rows": [
+              {
+                "action": "",
+                "id": "typed:url",
+                "kind": "navigate",
+                "space": "",
+                "tab": "",
+                "title": "http://127.0.0.1:58859/page.html",
+                "url": "http://127.0.0.1:58859/page.html"
+              }
+            ],
+            "selected": 0,
+            "space": "17C571C0-4B1D-4FF6-BB78-FD86849FBDAB",
+            "text": "http://127.0.0.1:58859/page.html",
+            "timingScope": "showCommandBar entry to first snapshot applied; excludes preceding key routing, socket transport and frame presentation"
+          },
+          "ok": true
+        },
+        "find_cmd_t": {
+          "bar": {
+            "created": true,
+            "editorCanUndo": false,
+            "editorText": "",
+            "final": false,
+            "firstResultsMs": 47.4545833333334,
+            "mode": "newTab",
+            "newTabHighlighted": true,
+            "openFirstResultsMs": 49.54854166666655,
+            "presented": true,
+            "profile": "36E1C240-846E-4768-9077-6519BD5069AC",
+            "range": [
+              0,
+              0
+            ],
+            "rows": [],
+            "selected": -1,
+            "space": "17C571C0-4B1D-4FF6-BB78-FD86849FBDAB",
+            "text": "",
+            "timingScope": "showCommandBar entry to first snapshot applied; excludes preceding key routing, socket transport and frame presentation"
+          },
+          "ok": true
+        },
+        "find_cmd_w_once": {
+          "ok": true
+        },
+        "find_escape_precedes_peek": {
+          "find": {
+            "count": 0,
+            "frame": [
+              1002,
+              18,
+              260,
+              24
+            ],
+            "index": 0,
+            "page": 0,
+            "text": "",
+            "visible": false
+          },
+          "ok": true,
+          "peekShown": true
+        },
+        "find_in_page": {
+          "active": 0,
+          "final": true,
+          "matches": 134,
+          "ok": true
+        },
+        "find_text_limit_at": {
+          "assertion": {
+            "bytes": 4096,
+            "ok": true
+          },
+          "focus": [
+            {
+              "event": "frontmostChanged",
+              "frontmostApp": "T3 Pretty Internal (Nightly)",
+              "frontmostBundle": "com.sergeserb.t3code",
+              "frontmostPID": 55141,
+              "openPID": 54364,
+              "uptime": 164741.46850295833
+            },
+            {
+              "active": false,
+              "event": "NSApplicationDidResignActiveNotification",
+              "frontmostApp": "T3 Pretty Internal (Nightly)",
+              "frontmostPID": 55141,
+              "keyWindow": 0,
+              "openPID": 54364,
+              "uptime": 164741.48258441666
+            }
+          ],
+          "status": "INTERRUPTED"
+        },
+        "fullscreen": {
+          "document_fullscreen": true,
+          "events": [
+            true
+          ],
+          "ok": true
+        },
+        "js_dialogs": {
+          "events": [
+            0,
+            1,
+            2
+          ],
+          "ok": true,
+          "result": [
+            true,
+            "hello"
+          ]
+        },
+        "owned_window_cleanup": {
+          "apps": [
+            {
+              "dialogs": [
+                {
+                  "label": "legacy alert confirm prompt",
+                  "ok": true,
+                  "pendingBefore": 0,
+                  "remaining": [],
+                  "windowsBefore": [
+                    {
+                      "layer": 0,
+                      "number": 166415,
+                      "pid": 44838,
+                      "title": "Web browser - Wikipedia"
+                    }
+                  ]
+                },
+                {
+                  "label": "Widevine out of v1",
+                  "ok": true,
+                  "pendingBefore": 0,
+                  "remaining": [],
+                  "windowsBefore": [
+                    {
+                      "layer": 0,
+                      "number": 166415,
+                      "pid": 44838,
+                      "title": "Example Domain"
+                    }
+                  ]
+                },
+                {
+                  "label": "suite quit",
+                  "ok": true,
+                  "pendingBefore": 0,
+                  "remaining": [],
+                  "windowsBefore": [
+                    {
+                      "layer": 0,
+                      "number": 166415,
+                      "pid": 44838,
+                      "title": "Web browser"
+                    }
+                  ]
+                }
+              ],
+              "pid": 44838,
+              "quit": {
+                "forced": false,
+                "killed": [],
+                "ok": true,
+                "remainingWindows": [],
+                "reply": true,
+                "rootPathProbe": "/Users/serge/.t3/worktrees/open/t3-d8b5b30a/build/Release/Open.app/Contents/MacOS/Open",
+                "windowsBeforeKill": []
+              }
+            },
+            {
+              "dialogs": [
+                {
+                  "label": "page-chrome dialog button",
+                  "ok": true,
+                  "pendingBefore": 0,
+                  "remaining": [],
+                  "windowsBefore": [
+                    {
+                      "layer": 0,
+                      "number": 166424,
+                      "pid": 50610,
+                      "title": "Page chrome fixture"
+                    }
+                  ]
+                },
+                {
+                  "label": "page-chrome dialog button",
+                  "ok": true,
+                  "pendingBefore": 0,
+                  "remaining": [],
+                  "windowsBefore": [
+                    {
+                      "layer": 0,
+                      "number": 166424,
+                      "pid": 50610,
+                      "title": "Page chrome fixture"
+                    }
+                  ]
+                },
+                {
+                  "label": "page-chrome dialog button",
+                  "ok": true,
+                  "pendingBefore": 0,
+                  "remaining": [],
+                  "windowsBefore": [
+                    {
+                      "layer": 0,
+                      "number": 166424,
+                      "pid": 50610,
+                      "title": "Page chrome fixture"
+                    }
+                  ]
+                },
+                {
+                  "label": "page-chrome dialog button",
+                  "ok": true,
+                  "pendingBefore": 0,
+                  "remaining": [],
+                  "windowsBefore": [
+                    {
+                      "layer": 0,
+                      "number": 166424,
+                      "pid": 50610,
+                      "title": "Page chrome fixture"
+                    }
+                  ]
+                },
+                {
+                  "label": "page-chrome dialog button",
+                  "ok": true,
+                  "pendingBefore": 0,
+                  "remaining": [],
+                  "windowsBefore": [
+                    {
+                      "layer": 0,
+                      "number": 166424,
+                      "pid": 50610,
+                      "title": "Page chrome fixture"
+                    }
+                  ]
+                },
+                {
+                  "label": "dialog dismiss policy",
+                  "ok": true,
+                  "pendingBefore": 0,
+                  "remaining": [],
+                  "windowsBefore": [
+                    {
+                      "layer": 0,
+                      "number": 166424,
+                      "pid": 50610,
+                      "title": "Page chrome fixture"
+                    }
+                  ]
+                },
+                {
+                  "label": "dialog hold policy",
+                  "ok": true,
+                  "pendingBefore": 0,
+                  "remaining": [],
+                  "windowsBefore": [
+                    {
+                      "layer": 0,
+                      "number": 166424,
+                      "pid": 50610,
+                      "title": "Page chrome fixture"
+                    }
+                  ]
+                },
+                {
+                  "label": "unanswered host close",
+                  "ok": true,
+                  "pendingBefore": 0,
+                  "remaining": [],
+                  "windowsBefore": [
+                    {
+                      "layer": 0,
+                      "number": 166424,
+                      "pid": 50610,
+                      "title": "Linked fixture"
+                    }
+                  ]
+                },
+                {
+                  "label": "beforeunload Stay",
+                  "ok": true,
+                  "pendingBefore": 0,
+                  "remaining": [],
+                  "windowsBefore": [
+                    {
+                      "layer": 0,
+                      "number": 166469,
+                      "pid": 50610,
+                      "title": "(untitled owned window)"
+                    },
+                    {
+                      "layer": 0,
+                      "number": 166424,
+                      "pid": 50610,
+                      "title": "Page chrome fixture"
+                    }
+                  ]
+                },
+                {
+                  "label": "beforeunload Leave",
+                  "ok": true,
+                  "pendingBefore": 0,
+                  "remaining": [],
+                  "windowsBefore": [
+                    {
+                      "layer": 0,
+                      "number": 166471,
+                      "pid": 50610,
+                      "title": "(untitled owned window)"
+                    },
+                    {
+                      "layer": 0,
+                      "number": 166424,
+                      "pid": 50610,
+                      "title": "Linked fixture"
+                    }
+                  ]
+                },
+                {
+                  "label": "dialog size boundary",
+                  "ok": true,
+                  "pendingBefore": 0,
+                  "remaining": [],
+                  "windowsBefore": [
+                    {
+                      "layer": 0,
+                      "number": 166424,
+                      "pid": 50610,
+                      "title": "Page chrome fixture"
+                    }
+                  ]
+                },
+                {
+                  "label": "dialog size boundary",
+                  "ok": true,
+                  "pendingBefore": 0,
+                  "remaining": [],
+                  "windowsBefore": [
+                    {
+                      "layer": 0,
+                      "number": 166424,
+                      "pid": 50610,
+                      "title": "Page chrome fixture"
+                    }
+                  ]
+                },
+                {
+                  "label": "dialog queue boundary",
+                  "ok": true,
+                  "pendingBefore": 0,
+                  "remaining": [],
+                  "windowsBefore": [
+                    {
+                      "layer": 0,
+                      "number": 166424,
+                      "pid": 50610,
+                      "title": "Page chrome fixture"
+                    }
+                  ]
+                },
+                {
+                  "label": "suite quit",
+                  "ok": true,
+                  "pendingBefore": 0,
+                  "remaining": [],
+                  "windowsBefore": [
+                    {
+                      "layer": 0,
+                      "number": 166475,
+                      "pid": 50610,
+                      "title": "(untitled owned window)"
+                    },
+                    {
+                      "layer": 0,
+                      "number": 166424,
+                      "pid": 50610,
+                      "title": "Page chrome fixture"
+                    }
+                  ]
+                }
+              ],
+              "pid": 50610,
+              "quit": {
+                "forced": false,
+                "killed": [],
+                "ok": true,
+                "remainingWindows": [],
+                "reply": true,
+                "rootPathProbe": "/Users/serge/.t3/worktrees/open/t3-d8b5b30a/build/Release/Open.app/Contents/MacOS/Open",
+                "windowsBeforeKill": []
+              }
+            },
+            {
+              "dialogs": [
+                {
+                  "label": "suite quit",
+                  "ok": true,
+                  "pendingBefore": 0,
+                  "remaining": [],
+                  "windowsBefore": [
+                    {
+                      "layer": 0,
+                      "number": 166484,
+                      "pid": 53071,
+                      "title": "Page chrome fixture"
+                    }
+                  ]
+                }
+              ],
+              "pid": 53071,
+              "quit": {
+                "forced": false,
+                "killed": [],
+                "ok": true,
+                "remainingWindows": [],
+                "reply": true,
+                "rootPathProbe": "/Users/serge/.t3/worktrees/open/t3-d8b5b30a/build/Release/Open.app/Contents/MacOS/Open",
+                "windowsBeforeKill": []
+              }
+            },
+            {
+              "dialogs": [
+                {
+                  "label": "suite quit",
+                  "ok": true,
+                  "pendingBefore": 0,
+                  "remaining": [],
+                  "windowsBefore": [
+                    {
+                      "layer": 0,
+                      "number": 166494,
+                      "pid": 54364,
+                      "title": "Page chrome fixture"
+                    }
+                  ]
+                }
+              ],
+              "pid": 54364,
+              "quit": {
+                "forced": false,
+                "killed": [],
+                "ok": true,
+                "remainingWindows": [],
+                "reply": true,
+                "rootPathProbe": "/Users/serge/.t3/worktrees/open/t3-d8b5b30a/build/Release/Open.app/Contents/MacOS/Open",
+                "windowsBeforeKill": []
+              }
+            }
+          ],
+          "ok": true,
+          "subprocesses": []
+        },
+        "page_context_image": {
+          "items": [
+            {
+              "enabled": true,
+              "engine": false,
+              "key": "image-new-tab",
+              "submenu": "",
+              "title": "Open Image in New Tab"
+            },
+            {
+              "enabled": true,
+              "engine": false,
+              "key": "image-copy-url",
+              "submenu": "",
+              "title": "Copy Image Address"
+            },
+            {
+              "enabled": true,
+              "engine": true,
+              "id": 50120,
+              "key": "engine:50120",
+              "submenu": "",
+              "title": "Save Image As\u2026"
+            },
+            {
+              "enabled": true,
+              "engine": true,
+              "id": 50122,
+              "key": "engine:50122",
+              "submenu": "",
+              "title": "Copy Image"
+            },
+            {
+              "enabled": true,
+              "engine": true,
+              "id": 51034,
+              "key": "engine:51034",
+              "submenu": "",
+              "title": "Create QR Code for this Image"
+            },
+            {
+              "enabled": true,
+              "engine": true,
+              "id": 50127,
+              "key": "engine:50127",
+              "submenu": "",
+              "title": "Search Image with Google"
+            },
+            {
+              "enabled": true,
+              "engine": true,
+              "id": 50162,
+              "key": "engine:50162",
+              "submenu": "",
+              "title": "Inspect"
+            }
+          ],
+          "ok": true
+        },
+        "page_context_link": {
+          "items": [
+            {
+              "enabled": true,
+              "engine": false,
+              "key": "link-open",
+              "submenu": "",
+              "title": "Open Link"
+            },
+            {
+              "enabled": true,
+              "engine": false,
+              "key": "link-new-tab",
+              "submenu": "",
+              "title": "Open Link in New Tab"
+            },
+            {
+              "enabled": true,
+              "engine": false,
+              "key": "link-peek",
+              "submenu": "",
+              "title": "Open Link in Peek"
+            },
+            {
+              "enabled": false,
+              "engine": false,
+              "key": "link-little-open",
+              "submenu": "",
+              "title": "Open Link in Little Open"
+            },
+            {
+              "enabled": true,
+              "engine": false,
+              "key": "link-copy",
+              "submenu": "",
+              "title": "Copy Link"
+            },
+            {
+              "enabled": true,
+              "engine": true,
+              "id": 50101,
+              "key": "engine:50101",
+              "submenu": "",
+              "title": "Open Link in New Window"
+            },
+            {
+              "enabled": true,
+              "engine": true,
+              "id": 50111,
+              "key": "engine:50111",
+              "submenu": "",
+              "title": "Open Link in Split View"
+            },
+            {
+              "enabled": true,
+              "engine": true,
+              "id": 50102,
+              "key": "engine:50102",
+              "submenu": "",
+              "title": "Open Link in Incognito Window"
+            },
+            {
+              "enabled": true,
+              "engine": true,
+              "id": 50103,
+              "key": "engine:50103",
+              "submenu": "",
+              "title": "Save Link As\u2026"
+            },
+            {
+              "enabled": true,
+              "engine": true,
+              "id": 50104,
+              "key": "engine:50104",
+              "submenu": "",
+              "title": "Copy Link Address"
+            },
+            {
+              "enabled": true,
+              "engine": true,
+              "id": 50162,
+              "key": "engine:50162",
+              "submenu": "",
+              "title": "Inspect"
+            }
+          ],
+          "ok": true
+        },
+        "page_context_new_tab_engine": {
+          "ok": true
+        },
+        "page_context_page": {
+          "items": [
+            {
+              "enabled": false,
+              "engine": true,
+              "id": 33000,
+              "key": "engine:33000",
+              "submenu": "",
+              "title": "Back"
+            },
+            {
+              "enabled": false,
+              "engine": true,
+              "id": 33001,
+              "key": "engine:33001",
+              "submenu": "",
+              "title": "Forward"
+            },
+            {
+              "enabled": true,
+              "engine": true,
+              "id": 33002,
+              "key": "engine:33002",
+              "submenu": "",
+              "title": "Reload"
+            },
+            {
+              "enabled": true,
+              "engine": true,
+              "id": 35004,
+              "key": "engine:35004",
+              "submenu": "",
+              "title": "Save As\u2026"
+            },
+            {
+              "enabled": true,
+              "engine": true,
+              "id": 35003,
+              "key": "engine:35003",
+              "submenu": "",
+              "title": "Print\u2026"
+            },
+            {
+              "enabled": true,
+              "engine": true,
+              "id": 35011,
+              "key": "engine:35011",
+              "submenu": "",
+              "title": "Cast\u2026"
+            },
+            {
+              "enabled": true,
+              "engine": true,
+              "id": 50169,
+              "key": "engine:50169",
+              "submenu": "",
+              "title": "Open in Reading Mode"
+            },
+            {
+              "enabled": true,
+              "engine": true,
+              "id": 51034,
+              "key": "engine:51034",
+              "submenu": "",
+              "title": "Create QR Code for this Page"
+            },
+            {
+              "enabled": true,
+              "engine": true,
+              "id": 35002,
+              "key": "engine:35002",
+              "submenu": "",
+              "title": "View Page Source"
+            },
+            {
+              "enabled": true,
+              "engine": true,
+              "id": 50162,
+              "key": "engine:50162",
+              "submenu": "",
+              "title": "Inspect"
+            }
+          ],
+          "ok": true
+        },
+        "page_context_selection": {
+          "items": [
+            {
+              "enabled": true,
+              "engine": false,
+              "key": "selection-copy-link",
+              "submenu": "",
+              "title": "Copy Link to Highlight"
+            },
+            {
+              "enabled": true,
+              "engine": true,
+              "id": 50165,
+              "key": "engine:50165",
+              "submenu": "",
+              "title": "Look Up \u201cDistinct selection text\u201d"
+            },
+            {
+              "enabled": true,
+              "engine": true,
+              "id": 50150,
+              "key": "engine:50150",
+              "submenu": "",
+              "title": "Copy"
+            },
+            {
+              "enabled": true,
+              "engine": true,
+              "id": 50191,
+              "key": "engine:50191",
+              "submenu": "",
+              "title": "Search Google for \u201cDistinct selection text\u201d"
+            },
+            {
+              "enabled": true,
+              "engine": true,
+              "id": 35003,
+              "key": "engine:35003",
+              "submenu": "",
+              "title": "Print\u2026"
+            },
+            {
+              "enabled": true,
+              "engine": true,
+              "id": 50169,
+              "key": "engine:50169",
+              "submenu": "",
+              "title": "Open in Reading Mode"
+            },
+            {
+              "enabled": true,
+              "engine": true,
+              "id": 50162,
+              "key": "engine:50162",
+              "submenu": "",
+              "title": "Inspect"
+            },
+            {
+              "enabled": true,
+              "engine": true,
+              "id": 101,
+              "key": "engine:101",
+              "submenu": "Speech",
+              "title": "Start Speaking"
+            },
+            {
+              "enabled": false,
+              "engine": true,
+              "id": 102,
+              "key": "engine:102",
+              "submenu": "Speech",
+              "title": "Stop Speaking"
+            }
+          ],
+          "ok": true
+        },
+        "pdf_viewer": {
+          "document": {
+            "body": "\n    \n  \n\n",
+            "embed": false,
+            "iframe": false,
+            "type": "application/pdf"
+          },
+          "ok": true,
+          "screenshot": "chrome-pdf-viewer.png",
+          "viewer_targets": [
+            "chrome-extension://mhjfbmdgcfjbbpaeojofohoefgiehjai/index.html"
+          ]
+        },
+        "permission_allow_remember": {
+          "expectedStored": 1,
+          "ok": true,
+          "prompt": {
+            "appActive": true,
+            "containerKey": true,
+            "containerWindow": 166424,
+            "decisions": 1,
+            "keyWindow": 166424,
+            "kinds": 8,
+            "origin": "http://127.0.0.1:58513/",
+            "ownerKey": true,
+            "ownerSheet": false,
+            "pending": 1,
+            "pendingPage": 15,
+            "remember": false,
+            "selectedPage": 15,
+            "visible": true,
+            "window": 166472
+          },
+          "stored": 1
+        },
+        "permission_deny_once": {
+          "expectedStored": 0,
+          "ok": true,
+          "prompt": {
+            "appActive": true,
+            "containerKey": true,
+            "containerWindow": 166424,
+            "decisions": 0,
+            "keyWindow": 166424,
+            "kinds": 8,
+            "origin": "http://127.0.0.1:58512/",
+            "ownerKey": true,
+            "ownerSheet": false,
+            "pending": 1,
+            "pendingPage": 14,
+            "remember": false,
+            "selectedPage": 14,
+            "visible": true,
+            "window": 166472
+          },
+          "stored": 0
+        },
+        "permission_deny_policy": {
+          "ok": true
+        },
+        "permission_deny_remember": {
+          "expectedStored": 2,
+          "ok": true,
+          "prompt": {
+            "appActive": true,
+            "containerKey": true,
+            "containerWindow": 166424,
+            "decisions": 2,
+            "keyWindow": 166424,
+            "kinds": 8,
+            "origin": "http://127.0.0.1:58514/",
+            "ownerKey": true,
+            "ownerSheet": false,
+            "pending": 1,
+            "pendingPage": 16,
+            "remember": false,
+            "selectedPage": 16,
+            "visible": true,
+            "window": 166472
+          },
+          "stored": 2
+        },
+        "permission_one_shot_relaunch": {
+          "ok": true,
+          "stored": 0
+        },
+        "permission_remember_relaunch": {
+          "ok": true,
+          "values": [
+            1,
+            2
+          ]
+        },
+        "permission_stored_no_prompt": {
+          "ok": true,
+          "outcomes": [
+            "granted",
+            "denied"
+          ]
+        },
+        "permission_transient_setting_refused": {
+          "ok": true
+        },
+        "permissions": {
+          "events": [
+            {
+              "kinds": 8,
+              "origin": "https://en.wikipedia.org/"
+            }
+          ],
+          "geolocation": "not tested",
+          "notification": "granted",
+          "ok": true
+        },
+        "picture_in_picture": {
+          "ok": true,
+          "result": true,
+          "visible_windows": [
+            [
+              "BrowserWindow",
+              "{{80, 60}, {1360, 860}}"
+            ],
+            [
+              "NativeWidgetMacFramelessNSWindow",
+              "{{2027, 32}, {501, 282}}"
+            ]
+          ]
+        },
+        "popups_new_tabs": {
+          "new_sidebar_tabs": [
+            "https://example.com/"
+          ],
+          "ok": true,
+          "page_kinds": [
+            "popup",
+            "tab",
+            "tab",
+            "tab"
+          ]
+        },
+        "print_to_pdf": {
+          "bytes": 440939,
+          "ok": true
+        },
+        "profiles": {
+          "ok": true,
+          "work_engine_dir_exists": true,
+          "work_profile_sees": {
+            "cookie": "",
+            "storage": null
+          },
+          "work_space": "62C10D47-4C7E-4658-B412-AC1C4F51BAD3",
+          "work_tab_context": "Profile-F1B9C92C"
+        },
+        "request_filter": {
+          "ok": true,
+          "stats": {
+            "blocked": 1,
+            "recent": [
+              "https://example.org/?x=1"
+            ]
+          },
+          "with_filter": "blocked",
+          "without_filter": "loaded"
+        },
+        "site_control_escape": {
+          "ok": true
+        },
+        "site_control_key_l": {
+          "ok": true
+        },
+        "site_control_key_return": {
+          "ok": true
+        },
+        "site_control_key_t": {
+          "ok": true
+        },
+        "site_control_key_w": {
+          "ok": true
+        },
+        "site_control_sections_pending": {
+          "reason": "pending #96 sections / #103 editor; merged #69 shell is presented",
+          "status": "BLOCKED"
+        },
+        "site_control_shell": {
+          "ok": true,
+          "state": {
+            "anchor": [
+              186,
+              49,
+              30,
+              30
+            ],
+            "available": true,
+            "panel": [
+              83,
+              91,
+              236,
+              297
+            ],
+            "pending": "#96/#103",
+            "request": {
+              "anchor": [
+                186,
+                49,
+                30,
+                30
+              ],
+              "origin": "http://127.0.0.1:58512",
+              "profile": "1BC37542-006A-43D7-9B7B-F07AC0C43251",
+              "tab": "32EFEAC7-E105-404A-86E9-082AD096734A"
+            },
+            "requests": 1,
+            "visible": true
+          }
+        },
+        "user_scripts": {
+          "matched": {
+            "boost": "number",
+            "early": true,
+            "outline": "rgb(255, 0, 0)"
+          },
+          "ok": true,
+          "unmatched_site": "undefined"
+        },
+        "zoom": {
+          "innerWidth_100": 1122,
+          "innerWidth_zoomed": 935,
+          "level": 1,
+          "ok": true
+        }
+      },
+      "focus": [
+        {
+          "event": "frontmostChanged",
+          "frontmostApp": "T3 Pretty Internal (Nightly)",
+          "frontmostBundle": "com.sergeserb.t3code",
+          "frontmostPID": 55141,
+          "openPID": 54364,
+          "uptime": 164741.46850295833
+        },
+        {
+          "active": false,
+          "event": "NSApplicationDidResignActiveNotification",
+          "frontmostApp": "T3 Pretty Internal (Nightly)",
+          "frontmostPID": 55141,
+          "keyWindow": 0,
+          "openPID": 54364,
+          "uptime": 164741.48258441666
+        }
+      ],
+      "reason": "foreground lost during find_text_limit_at",
+      "status": "INTERRUPTED"
+    }
+  ],
+  "ping": {
+    "cef": "156.0.14+g4fa4ab5+chromium-156.0.8078.48",
+    "chromium": "156.0.8078.48",
+    "mallocZones": [
+      "PartitionAlloc",
+      "objc-class_rw_t",
+      "DefaultMallocZone",
+      "DefaultPurgeableMallocZone",
+      "QuartzCore",
+      "LSBindingEvaluator",
+      "AttributeGraph",
+      "AttributeGraph graph data"
+    ],
+    "pid": 55644,
+    "root": "/Users/serge/Library/Application Support/Open-E2E-features-chrome-34870-cddf656e",
+    "userData": "/Users/serge/Library/Application Support/Open-E2E-features-chrome-34870-cddf656e/Engine"
+  },
+  "started": "2026-10-26 21:40:35",
+  "style": "chrome"
+}
