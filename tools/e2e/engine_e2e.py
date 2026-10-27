@@ -3803,6 +3803,38 @@ def space_manager_owned_windows(pids):
         cf.CFRelease(info)
 
 
+
+def space_manager_engine_provenance(config):
+    """Hash the actual embedded and recorded engine, without loading either."""
+    framework = 'Chromium Embedded Framework.framework/Chromium Embedded Framework'
+    embedded = Path(ROOT, 'build', config, 'Open.app/Contents/Frameworks', framework)
+    recorded = Path(ROOT, 'Vendor/cef/Release', framework)
+    def digest(path):
+        value = hashlib.sha256()
+        with path.open('rb') as stream:
+            for chunk in iter(lambda: stream.read(1024 * 1024), b''): value.update(chunk)
+        return value.hexdigest()
+    stamp = Path(ROOT, 'Vendor/cef/.open-source').read_text().strip()
+    embedded_hash, recorded_hash = digest(embedded), digest(recorded)
+    signed_hash = recorded_hash
+    if embedded_hash != recorded_hash:
+        # embed-cef.sh re-signs the copied framework. Reproduce only that
+        # existing signing step on an APFS clone; never change Vendor/cef.
+        with tempfile.TemporaryDirectory(prefix='open-manager-engine-signature-') as directory:
+            signed = Path(directory, 'Chromium Embedded Framework.framework')
+            subprocess.run(['cp', '-cR', str(recorded.parent), str(signed)], check=True)
+            for library in sorted((signed / 'Libraries').glob('*.dylib')):
+                subprocess.run(['codesign', '--force', '--sign', '-', '--timestamp=none', str(library)], check=True, capture_output=True)
+            subprocess.run(['codesign', '--force', '--sign', '-', '--timestamp=none', str(signed)], check=True, capture_output=True)
+            signed_hash = digest(signed / 'Chromium Embedded Framework')
+    return {'embeddedSHA256': embedded_hash, 'recordedSHA256': recorded_hash,
+            'recordedAfterEmbedSigningSHA256': signed_hash,
+            'expectedSHA256': os.environ.get('OPEN_SPACE_MANAGER_ENGINE_SHA256', ''),
+            'suppliedProvenance': os.environ.get('OPEN_SPACE_MANAGER_ENGINE_PROVENANCE', ''),
+            'signing': 'tools/embed-cef.sh ad-hoc signing reproduced on disposable clone when needed',
+            'stamp': stamp}
+
+
 def space_manager_checks(results, tmp, config, style):
     """E5/E6: real Library injection, native reorder/undo, stores and lifetimes."""
     import plistlib
@@ -3814,7 +3846,7 @@ def space_manager_checks(results, tmp, config, style):
     run_name = 'Open-E2E-spacemanager-%s-%s' % (style, token)
     root = os.path.expanduser('~/Library/Application Support/' + run_name)
     cache = os.path.expanduser('~/Library/Caches/' + run_name)
-    evidence = os.path.join(ROOT, '.re', 'space-manager', 'run-' + token)
+    evidence = os.path.join(os.environ.get('OPEN_SPACE_MANAGER_EVIDENCE_ROOT', os.path.join(ROOT, '.re', 'space-manager')), 'run-' + token)
     os.makedirs(evidence, exist_ok=True)
     apps, owned_pids = [], set()
     tracker = results.tracker
@@ -3847,6 +3879,11 @@ def space_manager_checks(results, tmp, config, style):
         return path
 
     try:
+        provenance = space_manager_engine_provenance(config)
+        expected = provenance['expectedSHA256']
+        require('engine_framework_provenance', provenance['stamp'].startswith('fork ')
+                and provenance['embeddedSHA256'] == provenance['recordedAfterEmbedSigningSHA256']
+                and (not expected or provenance['recordedSHA256'] == expected), **provenance)
         # A clone of our own built app gives CFPreferences a unique, disposable
         # domain. Frameworks and engine are the recorded distribution, unchanged.
         os.makedirs(bundle_dir)

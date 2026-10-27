@@ -384,3 +384,16 @@ at cleanup makes the suite fail, even if it was cancelled during cleanup.
 `OPEN_SPACE_MANAGER_EARLY_FAILURE=1` forces an assertion immediately after the
 real Library opens; the suite must fail and still write a passing cleanup
 receipt. Remove that environment variable for the passing flow.
+
+For a recorded engine refresh, pin `OPEN_SPACE_MANAGER_ENGINE_SHA256` to the
+supplied framework SHA256. The suite streams hashes of both the embedded App
+framework and `Vendor/cef/Release` framework, and records the fork stamp.
+The recorded framework must match the pinned hash. Because `embed-cef.sh`
+re-signs the embedded copy, the suite reproduces that existing ad-hoc signing
+step on a disposable APFS clone and requires exact embedded-byte equality
+with the re-signed clone. It records all three hashes and fails before launch
+on a mismatch. It never changes the recorded distribution. `OPEN_SPACE_MANAGER_ENGINE_PROVENANCE`
+records the supplied distribution label; it is a label, not an inferred build
+revision. `OPEN_SPACE_MANAGER_EVIDENCE_ROOT` separates current and historical
+receipts/PNGs. Rebuild against the refreshed distribution before rerunning real
+flow, forced-failure cleanup, and break-and-revert proofs.
