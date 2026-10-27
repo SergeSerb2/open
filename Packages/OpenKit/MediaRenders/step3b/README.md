@@ -110,7 +110,7 @@ F1–F11 from the Muse review are reflected in media plan §13 and this code:
   prune/undo restore. Slot rounding uses the actual window backing scale.
 - PP-16 Close-width and track-symbol evidence wording is reconciled with the capture.
 
-## Design review r1 fixes and verification
+## Design review r1 response
 
 | Finding | Status | Change and evidence |
 |---|---|---|
@@ -118,42 +118,49 @@ F1–F11 from the Muse review are reflected in media plan §13 and this code:
 | F2: interrupted collapse snaps backward | Fixed | Capture presentation position, size, opacity and shadow path before model changes for container, pager, cards, child views and title fades. Stale title-fade completions are ignored. One- and three-card re-entry checks fail on `85fd361` and pass after the fix. |
 | F3: title/drawer overlap controls | Fixed | Pin row frames using the reviewed formulas; the clipped content edge reveals them. Presentation samples during expand, collapse, re-entry and drawer opening show no control-row overlap. |
 | F4: plate radius | Fixed | `MiniPlayerMetrics.buttonPlateRadius = 5`, continuous, applied only to mini-player buttons. Spec/design now label the value as an E3/E7 fit. |
-| F5: default tooltip fill | Deferred to assigned token-fix task | No tooltip color change here. Open remains `#1C1B22`; Arc is `#0A0D4F` (E3/S2 04/0021, review ΔE00 19.5). |
+| F5: default tooltip fill | Inherited from main #113 | The separate token task owns the measured `#0A0D4F` fill. The main merge brings it here; no mini-player-specific token fix. |
 | F6: spring response | Fixed, still a guess | Mini-player stack response is 0.2 s, damping 1, based on the measured sidebar spring. O9 still needs a mini-player motion capture. |
 | F7: native play/pause coverage | Added | Reduce Motion OFF: check the shipping `NSImageView` path, live AppKit ink, and native-event pause/play replacement. Actual App-window comparison remains with Step 6 integration. |
 
+[Design motion regression proof and historical receipts](evidence/design-r1/README.md).
+
+## Code review r1 fixes and verification
+
+| Finding | Status | Change and evidence |
+|---|---|---|
+| C1: Reduce Motion blink | Fixed | One 0.1 s container CATransition cross-fades the subtree. Pager and child frames apply immediately. Hover in/out and same-height fourth-source checks reject opacity-from-zero and verify full pager/container opacity at +16 ms. |
+| C2: width drag trails and re-animates | Fixed | Container/card flags allow animation only for media changes. Width drags cancel existing media animations and apply geometry with implicit actions disabled. 400 → 228 pt drags check every step for no keys and exact model/presentation widths, in both motion modes and expanded/collapsed states. |
+| C3: missing assertions | Added | MC6 asserts exit collapse, MC8 asserts collapsed 33 pt rest, MC10 asserts Peek opacity restoration. Expanded add/remove checks assert visible title rows and C=145 → 74. MC15 asserts one root cross-fade and full presentation opacity. |
+| C4: hidden sidebar keeps stale expansion | Fixed | Hide cancels collapse work and resets an unforced stack to collapsed without animation. Hide/show within the 0.3 s delay checks C=55, 33 pt cards, no pending collapse, and clean layers. |
+| C5: removal under real pointer | Manual check pending | No tracking-area behavior change. §8.5 asks the user to expand two cards, click the top title or Close, move over the tab list, and confirm collapse. The agent cannot confirm this without driving the real pointer. |
+| C6: stale flags and dead hitTest branch | Fixed | §8.2 uses expanded\|title:N and points to §13.8.4; the card returns super.hitTest after its visibility/retiring guard. |
+
 `tools/verify-all.sh`: **20/20 PASS**, no skips or retries, exit 0, through
-`heavy.sh` in a detached session after merging main `d92a695`.
-`sidebar-render check`: **525 passed, 0 failed**, including **49 motion checks**.
-MC8 idle CPU: **0.014%** over 2 s, no idle animation keys or collapse work.
-The focused motion suite passes **49/49**. The identical harness fails the old
-`85fd361` production code with **36 failures** (13 PASS), proving the F1/F2 gates
-are sensitive to the reported defects.
+`heavy.sh` in a detached session after merging main `ebea09f`.
+`sidebar-render check`: **558 passed, 0 failed**, including **49 motion** and
+**30 lifecycle checks**. MC8 idle CPU: **0.013%** over 2 s, collapsed 33 pt,
+no idle animation keys or collapse work, one store expiry item.
+The identical lifecycle harness fails frozen `3504776` with **18 failures**
+(12 PASS) and passes the fixes **30/30**. Existing motion remains **49/49**.
 
-MC9: **PASS**, 12 interleaved pairs against main `d92a695`, with
+MC9: **PASS**, 12 interleaved pairs against pinned main `ebea09f`, with
 `/tmp/open-onscreen-e2e.lock` held across the full series. Paired median delta
-**-0.155 ms**, 20%-trimmed mean **-0.275 ms** (limit +0.3 ms).
-Baseline/head median p95: 4.350/4.140 ms.
-Collapsed 3-card report-only: 3.76 ms p95.
+**-0.105 ms**, 20%-trimmed mean **-0.135 ms** (limit +0.3 ms).
+Baseline/head median p95: 3.100/2.885 ms.
+Collapsed 3-card report-only: 3.24 ms p95.
 
-The R3 2 pt number is a threshold artifact: the ring crosses the front-card
-fill inside a rounded 7 pt strip. Independent per-row crossings against the
-no-media reference agree within 1 px on every visible strip row. R4's 2 pt title
-number is from different strings/descenders; the same-string type matches exactly.
-These are measurement artifacts, not product geometry errors. The raw tables
-remain intact. The mini-player plate radius is now the independently fitted 5 pt.
+Tooltip F5 was owned by the separate token task. Its fix merged in main #113
+and is inherited here; no mini-player-specific tooltip color change was made.
+All 62 PNGs were regenerated with synthetic titles and this final renderer.
+The §7 comparison tables retain the R3/R4 measurement artifacts accepted by
+design review; no geometry token changed. C5 needs the manual §8.5 pointer check.
 
-F5 remains with the assigned token-fix task. The default tooltip fill is still
-`#1C1B22` here; Arc's capsule is `#0A0D4F` (E3 and S2 04/0021, review ΔE00 19.5).
-
-[Review regression proof](evidence/design-r1/README.md),
+[Code review regression proof](evidence/code-r1/README.md),
 [complete verification table](evidence/verify-summary.md),
 [full sidebar checks](evidence/sidebar-check.log), [MC9](evidence/mc9.json),
 [62-image synthetic manifest](evidence/render-manifest.json).
 
-All 62 committed PNGs were regenerated from synthetic input. No AX-title PNG or
-Arc pixels were committed. Renders, full verification and MC9 use the same final
-renderer SHA-256. Earlier receipts are retained under `evidence/design-r1/pre-review-*`,
-`evidence/mc9-pre-review-contended.json`, `evidence/mc9-pre-merge.json` and the
-historical A/A receipts. Those A/A receipts belong to the initial implementation,
-not this revised binary.
+Renders, full verification and MC9 use the same final renderer SHA-256.
+Prior-head receipts remain in `evidence/code-r1/pre-code-*` and
+`evidence/design-r1/`; initial A/A receipts belong to the original binary.
+No AX-title PNG or Arc pixels were committed or pushed.

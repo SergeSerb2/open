@@ -1164,7 +1164,7 @@ Light/themed fills, drawer and motion retain their provisional labels.
 | F2: interrupted collapse snaps backward | Fixed | Capture presentation position, size, opacity and shadow path before model changes for container, pager, cards, child views and title fades. Stale title-fade completions are ignored. One- and three-card re-entry checks fail on `85fd361` and pass after the fix. |
 | F3: title/drawer overlap controls | Fixed | Pin row frames using the reviewed formulas; the clipped content edge reveals them. Presentation samples during expand, collapse, re-entry and drawer opening show no control-row overlap. |
 | F4: plate radius | Fixed | `MiniPlayerMetrics.buttonPlateRadius = 5`, continuous, applied only to mini-player buttons. Spec/design now label the value as an E3/E7 fit. |
-| F5: default tooltip fill | Deferred to assigned token-fix task | No tooltip color change here. Open remains `#1C1B22`; Arc is `#0A0D4F` (E3/S2 04/0021, review ΔE00 19.5). |
+| F5: default tooltip fill | Deferred at design review; now inherited from main #113 | The separate token task owns the measured `#0A0D4F` fill. No mini-player-specific token fix. |
 | F6: spring response | Fixed, still a guess | Mini-player stack response is 0.2 s, damping 1, based on the measured sidebar spring. O9 still needs a mini-player motion capture. |
 | F7: native play/pause coverage | Added | Reduce Motion OFF: check the shipping `NSImageView` path, live AppKit ink, and native-event pause/play replacement. Actual App-window comparison remains with Step 6 integration. |
 
@@ -1186,6 +1186,39 @@ Independent design review confirmed that the R3/R4 2 pt values in the initial
 tables are measurement artifacts: rounded-strip ring sampling and different
 strings/descenders, respectively. No product geometry correction is needed for
 those values. All 62 synthetic renders were regenerated; the raw comparison tables
-remain available. Tooltip F5 stays with the assigned token-fix task.
+remain available. Tooltip F5 was deferred at design review; the current main merge inherits the separate #113 token fix.
 
 [Final evidence and review receipts](../Packages/OpenKit/MediaRenders/step3b/README.md).
+
+### 22.3 Code review r1 fixes and verification (2026-10-26)
+
+| Finding | Status | Change and evidence |
+|---|---|---|
+| C1: Reduce Motion blink | Fixed | One 0.1 s container CATransition cross-fades the subtree. Pager and child frames apply immediately. Hover in/out and same-height fourth-source checks reject opacity-from-zero and verify full pager/container opacity at +16 ms. |
+| C2: width drag trails and re-animates | Fixed | Container/card flags allow animation only for media changes. Width drags cancel existing media animations and apply geometry with implicit actions disabled. 400 → 228 pt drags check every step for no keys and exact model/presentation widths, in both motion modes and expanded/collapsed states. |
+| C3: missing assertions | Added | MC6 asserts exit collapse, MC8 asserts collapsed 33 pt rest, MC10 asserts Peek opacity restoration. Expanded add/remove checks assert visible title rows and C=145 → 74. MC15 asserts one root cross-fade and full presentation opacity. |
+| C4: hidden sidebar keeps stale expansion | Fixed | Hide cancels collapse work and resets an unforced stack to collapsed without animation. Hide/show within the 0.3 s delay checks C=55, 33 pt cards, no pending collapse, and clean layers. |
+| C5: removal under real pointer | Manual check pending | No tracking-area behavior change. §8.5 asks the user to expand two cards, click the top title or Close, move over the tab list, and confirm collapse. The agent cannot confirm this without driving the real pointer. |
+| C6: stale flags and dead hitTest branch | Fixed | §8.2 uses expanded\|title:N and points to §13.8.4; the card returns super.hitTest after its visibility/retiring guard. |
+
+`tools/verify-all.sh`: **20/20 PASS**, no skips or retries, exit 0, through
+`heavy.sh` in a detached session after merging main `ebea09f`.
+`sidebar-render check`: **558 passed, 0 failed**, including **49 motion** and
+**30 lifecycle checks**. MC8 idle CPU: **0.013%** over 2 s, collapsed 33 pt,
+no idle animation keys or collapse work, one store expiry item.
+The identical lifecycle harness fails frozen `3504776` with **18 failures**
+(12 PASS) and passes the fixes **30/30**. Existing motion remains **49/49**.
+
+MC9: **PASS**, 12 interleaved pairs against pinned main `ebea09f`, with
+`/tmp/open-onscreen-e2e.lock` held across the full series. Paired median delta
+**-0.105 ms**, 20%-trimmed mean **-0.135 ms** (limit +0.3 ms).
+Baseline/head median p95: 3.100/2.885 ms.
+Collapsed 3-card report-only: 3.24 ms p95.
+
+Tooltip F5 was owned by the separate token task. Its fix merged in main #113
+and is inherited here; no mini-player-specific tooltip color change was made.
+All 62 PNGs were regenerated with synthetic titles and this final renderer.
+The §7 comparison tables retain the R3/R4 measurement artifacts accepted by
+design review; no geometry token changed. C5 needs the manual §8.5 pointer check.
+
+[Current evidence and review receipts](../Packages/OpenKit/MediaRenders/step3b/README.md).

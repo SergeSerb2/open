@@ -2,8 +2,8 @@
   "title_source": "Synthetic.model only; no --media-title-from-ax",
   "generator": "render-scenes.py",
   "generator_sha256": "58bae297367dc59c8b7214da649f83b210725ec541982084dd65dcee1fcb3818",
-  "renderer_sha256": "1736fbdebbec9a80357d3a8f65c2648f9aa70b2af59178945663381b8880006b",
-  "main_ref": "d92a695bb12feaf38a06c7c99891a491cd7ca711",
+  "renderer_sha256": "3bbc42df2a29902b6801f235d983978992288ce684faf7975796b671a7bec6fb",
+  "main_ref": "ebea09f54ea64a926c3af80d899548f1852894b6",
   "images": [
     {
       "file": "R-rest-dark-228.png",
@@ -333,25 +333,25 @@
       "file": "tooltip-dark-228.png",
       "width_px": 456,
       "height_px": 206,
-      "sha256": "d3b7d8d3fc6dc15049bb9a421c4310db404869a7bd1649eb7f2d8cd451964d38"
+      "sha256": "dda1aac00367013e976b0b563094373bd2ac5b8bde8b52ec0d945ccc5527cf7c"
     },
     {
       "file": "tooltip-dark-500.png",
       "width_px": 1000,
       "height_px": 206,
-      "sha256": "58bed76afb33ba253bdb888488125822b951c598d8ccf716ab217e4f30129352"
+      "sha256": "b3319a67fa1a159803c4c20c4c8748ef452657f813b1d9d70eb8f67b4f3777c4"
     },
     {
       "file": "tooltip-light-228.png",
       "width_px": 456,
       "height_px": 206,
-      "sha256": "90e763423897ae62fa26ffb10285feb6a7c0a85bd7be2d846cb94e5a6f161c76"
+      "sha256": "c74e8deddb27b26f822deaac4e1d8f4e1221c0f258be2e94848a9f514801788d"
     },
     {
       "file": "tooltip-light-500.png",
       "width_px": 1000,
       "height_px": 206,
-      "sha256": "4ecdac8ce5f685fca2907e9ff7bbdca640211029dafade19743547f07c9eda3f"
+      "sha256": "0a7cd5da39ec3f01afb5b6f2987e105494c1d5f79c77b4ebbc8aae956ea5c830"
     },
     {
       "file": "video-expanded-dark-228.png",
@@ -378,5 +378,5 @@
       "sha256": "90a4d0cc96cffeeb0346e66334f180850d8bab0a08915ece46699da001f009c0"
     }
   ],
-  "review": "PR110 design r1: F1-F4/F6-F7; F5 deferred"
+  "review": "PR110 code r1: C1-C4/C6; C5 manual pointer check pending; tooltip token inherited from main #113"
 }
