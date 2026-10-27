@@ -75,6 +75,66 @@ takes 1–3 seconds. Host load, cold compiler caches, npm, and list downloads ca
 increase these estimates. The final table and each log give actual times/results.
 Performance budgets are never retried or relaxed by the runner.
 
+### SM6 instruction measurement (calibration pending)
+
+`sidebar-render sm6-measure` runs only the real 10-Space × 100-row Library
+construction and first layout in a fresh process. It shares its fixture and
+measured body with SM6 in `check`: `SidebarContext`, `SpaceManagerView`, a
+900×700 frame, and `OffscreenRenderer.host(scale: 1)` with three synchronous
+settle passes. Fixture creation precedes the counters. Scroll-in and property
+reload checks run after measurement. The host stays at −20000,−20000, is never
+ordered front, and closes in `defer`, including `--fail-after-host` (expected
+exit 1). Unknown or extra arguments fail before host creation.
+
+The command prints `SM6_JSON` with positive process-wide retired instructions,
+cycles, wall and main-thread CPU diagnostics, load1, and raw before/after Mach
+thread census data. Counter errors, zero values, and backward deltas fail;
+there is no CPU-time fallback or instruction threshold yet. `check` uses the
+same counter wrapper once, still enforces the original 120 ms wall budget, and
+keeps the lazy-column and reload protections. It does not yet run SM6 in a
+child process; its caches and helper threads differ from the standalone command.
+
+Build before sampling, through the machine's heavy wrapper. For example:
+
+```sh
+~/Library/Caches/OpenRE/scripts/heavy.sh tools/verify-all.sh --only build
+python3 tools/sm6-proof.py --binary Packages/OpenKit/.build/release/sidebar-render \
+  --out /tmp/sm6-low-UNIQUE --load low --runs 5
+python3 tools/sm6-proof.py --binary Packages/OpenKit/.build/release/sidebar-render \
+  --out /tmp/sm6-high-UNIQUE --load high --runs 5
+python3 tools/sm6-proof.py --binary Packages/OpenKit/.build/release/sidebar-render \
+  --out /tmp/sm6-cleanup-UNIQUE --load low --case early-failure --runs 1
+```
+
+Output directories must be new. Runs are bounded to 1…5. Each invocation gets
+a temporary working/data directory, `TMPDIR`, `CFFIXED_USER_HOME`, and preferences
+suite. The high-load driver starts exactly twice the active CPU count of owned
+`/usr/bin/yes` children. It waits at most 120 seconds for load1 ≥15, then fails
+if unmet. The low-load target is ≤2; if unmet after 120 seconds it reports the
+actual load and samples without claiming low-load acceptance. `finally` checks
+burner commands, terminates/reaps only recorded children, and verifies PIDs gone.
+The full default suite can be recorded with `--case check --runs 1`; wrap that
+driver invocation in `/usr/bin/lockf /tmp/open-onscreen-e2e.lock`, without a
+concurrent build. Its timeout is 300 seconds; standalone runs allow 90 seconds.
+
+The census is outside the counter window and spans a slightly wider interval.
+It identifies threads by Mach thread ID and reports CPU deltas and names,
+including newly observed threads. Exited threads have no final CPU sample;
+threads born and exited between censuses can be missed. CPU is evidence about
+contamination, not per-thread instructions. Report any helper over ~1 ms and
+any low/high median instruction shift over 5% to the lead. A separate process
+alone does not prove clean counts. Cold process caches can also change this
+workload from the original suite's cached SM6 section.
+
+M5 calibration remains a later step: compare the identical standalone code on
+both OS builds, then use the M5 reference count `I_ref` and
+`B = ceil(I_ref × 120 / 70)` with no extra padding. The 70 ms reference is the
+median of 15 historical same-section M5 runs (59.7…87.2 ms), not the earlier
+33.7…36 ms Library-build number. OS drift outside measured noise must be
+reported. No instruction gate or negative threshold crossing is claimed here.
+Instructions measure work; later timeout gates must still assert schedules and
+behavior because waiting alone retires little work.
+
 ## Logs and privacy
 
 The default directory is `$TMPDIR/open-verify-<local timestamp>.<unique suffix>/`

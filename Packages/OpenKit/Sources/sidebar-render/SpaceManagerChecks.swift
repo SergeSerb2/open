@@ -148,33 +148,23 @@ enum SpaceManagerChecks {
     }
 
     private static func checkLargeManager() {
-        let model = Synthetic.model(), profile = model.profiles[0]
-        model.spaces = (0..<10).map { i in
-            let space = Space(title: "Space \(i + 1)", icon: .emoji("📚"), profileID: profile.id)
-            Synthetic.fillBulk(space, rows: 100); return space
+        let model = SM6Fixture.makeModel()
+        do {
+            let measured = try SM6Fixture.measure(model: model)
+            let manager = measured.manager, host = measured.host
+            defer { host.contentView = nil; host.close() }
+            print(String(format: "  .. SM6 first layout instructions %llu; wall %.3f ms, main-thread CPU %.3f ms, load1 %.2f (instructions informational; budget pending M5)",
+                         measured.after.instructions - measured.before.instructions, measured.wallMS,
+                         measured.mainCPUMS, Checks.loadAverage1()))
+            // Stage A retains the original wall gate. No instruction budget yet.
+            Checks.check(measured.wallMS <= 120 && manager.builtColumnIDs.count <= 4, "SM6 10×100 Library to first layout \(Bench.ms(measured.wallMS / 1000)) ≤ 120 ms; only \(manager.builtColumnIDs.count) visible columns built")
+            checkLargeManagerUpdates(model: model, manager: manager)
+        } catch {
+            Checks.check(false, "SM6 instructions unavailable: \(error)")
         }
-        model.windows[0].focusedSpaceID = model.spaces[0].id; model.rebuildIndex()
-        // A wall-clock perf budget: machine load can stretch one build, so
-        // allow up to 3 attempts at the same 120 ms budget and print each
-        // attempt's time and load. The passing build is kept for later checks.
-        var manager: SpaceManagerView!
-        var host: ScaledWindow!
-        var elapsed: TimeInterval = 0
-        var attempts: [String] = []
-        for attempt in 1...3 {
-            let started = CACurrentMediaTime()
-            manager = SpaceManagerView(context: SidebarContext(model: model, windowID: model.windows[0].id))
-            manager.frame = CGRect(x: 0, y: 0, width: 900, height: 700)
-            host = OffscreenRenderer.host(manager, scale: 1)
-            elapsed = CACurrentMediaTime() - started
-            attempts.append(String(format: "attempt %d %@, load1 %.2f", attempt, Bench.ms(elapsed), Checks.loadAverage1()))
-            print("  .. SM6 first layout \(attempts.last!)")
-            if elapsed <= 0.120 { break }
-            host.contentView = nil; host.close()
-            if attempt == 3 { host = OffscreenRenderer.host(manager, scale: 1) }
-        }
-        defer { host.contentView = nil; host.close() }
-        Checks.check(elapsed <= 0.120 && manager.builtColumnIDs.count <= 4, "SM6 10×100 Library to first layout \(Bench.ms(elapsed)) ≤ 120 ms; only \(manager.builtColumnIDs.count) visible columns built — \(attempts.joined(separator: "; "))")
+    }
+
+    static func checkLargeManagerUpdates(model: BrowserModel, manager: SpaceManagerView) {
         let loaded = manager.builtColumnIDs, reloads = SidebarDiagnostics.fullReloads
         manager.scrollView.contentView.scroll(to: CGPoint(x: 1700, y: 0))
         manager.scrollView.reflectScrolledClipView(manager.scrollView.contentView)

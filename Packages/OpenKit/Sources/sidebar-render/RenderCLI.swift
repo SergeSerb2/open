@@ -20,6 +20,7 @@ enum RenderCLI {
         case "compare-media": try MediaCompare.run(rest)
         case "bench": try Bench.run(rest)
         case "check": try Checks.run(rest)
+        case "sm6-measure": try SM6Measure.run(rest)
         case "divider-check": try DividerChecks.run(rest)
         default: throw CLIError(description: usage)
         }
@@ -46,6 +47,7 @@ enum RenderCLI {
       sidebar-render bench [--rows N] [--selection] [--bulk N] [--expand-all N] [--row-media mixed] [--media-card|--media-stack]
       sidebar-render compare-media --arc FILE.png --ours FILE.png --out DIR --state rest|expanded|stack|stack-expanded
       sidebar-render check
+      sidebar-render sm6-measure [--fail-after-host]
     """
 
     static func value(_ args: [String], _ name: String) -> String? {
