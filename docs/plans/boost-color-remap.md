@@ -4,7 +4,11 @@ Status: plan, 2026-10-26; revised same day for PR #119 review round 1 (Opus arch
 transport and per-frame install reworked, scheme channel dropped from v1 by lead ruling, coverage
 and gates tightened; see plan §4, §5.2, §5.6, §11). A re-check against the tree then moved the
 CEF API to global functions with one owner patch per hook file (§5.4, §10.1) and replaced the
-first-paint hook, which does not exist in 156, with view paint stamps (§5.2, §5.4). Implementer: one engine agent (tree owner) plus one shell-side helper
+first-paint hook, which does not exist in 156, with view paint stamps (§5.2, §5.4). Revised again
+for review round 2 (final, MERGE AFTER FIXES): the small-ρ hue seam is stated and gated (§7.2,
+§8), the page background remaps after the blend (§5.3b), print skips the install (§3.4), and
+the SVG-gradient threading, G6/G7 timing, per-browser deltas, and document-start URL rules are
+fixed (§5.3, §5.4, §5.5, §11). Implementer: one engine agent (tree owner) plus one shell-side helper
 (no tree build). Parent decisions: `docs/plans/site-control-boost-editor.md` Step 4R (§10, line
 1353), Q12 ruling (§11.2), R-2, D-7, §4.4.5, and the Step 4R gates at §7 (line 1157). Color facts:
 `docs/re/features-advanced.md` §4.8, BO-23. Engine boundary facts: `docs/re/arccore-engine.md`
@@ -153,9 +157,14 @@ stay unremapped. Painters need no changes: unlike auto-dark, Boost enablement do
    boost pause on the context at the CSS mask paint entry (implementer checkpoint: find where
    mask phases build their recording context; SVG `<mask>` already uses a fresh builder and is
    safe, `layout_svg_resource_masker.cc:56`). The fixture carries a luminance-mask swatch (G3).
-7. Printing and paint preview: the filter is installed only by `PaintFrame` on the production
-   paint path. Print rendering constructs its own contexts through the printing code, which never
-   receives the pointer. Print output is therefore unremapped in v1 (guess; §13 Q-B9).
+7. Printing (review r2 N2): print also paints through `PaintFrame` (`PrintPage` →
+   `PaintOutsideOfLifecycle` → `PaintFrame`, `local_frame_view.cc:4459-4468`). So `PaintFrame`
+   skips the scoped install while this frame's document or its local root's document is
+   printing (`Document::Printing()`, `document.h:1074`). The print context starts null, so a
+   skipped frame and its skipped children paint unremapped: print output is unremapped in v1
+   (Open choice; Arc unobserved, §13 Q-B9). Paint preview (`web_local_frame_impl.cc:607-613`),
+   the selection drag image (`drag_controller.cc:1231-1236`), and `WebViewImpl::PaintContent`
+   (`web_view_impl.cc:1603`) are not printing, so they follow the screen and remap.
 
 ## 4. Data path overview
 
@@ -189,7 +198,7 @@ the push raced navigations (`CefFrameHostImpl` queues frame actions while the pi
   `host->GetChannel()->GetRemoteAssociatedInterface(&remote)`
   (`chrome/browser/profiles/renderer_updater.cc:176-185`). The initial snapshot is sent from
   `RenderProcessWillLaunch` (CEF already overrides it,
-  `chrome_content_browser_client_cef.cc:321`); every registry change re-sends the full snapshot
+  `chrome_content_browser_client_cef.cc:311`); every registry change re-sends the full snapshot
   with a bumped generation.
 - Renderer side: a `content::RenderThreadObserver` registers the receiver in
   `RegisterMojoInterfaces` (`content/public/renderer/render_thread_observer.h:29`; Chrome's use at
@@ -199,11 +208,15 @@ the push raced navigations (`CefFrameHostImpl` queues frame actions while the pi
   that commits ride the same channel: `CommitNavigation` goes over `mojom::NavigationClient`,
   an associated remote from the frame's route provider
   (`render_frame_host_impl.cc:14157-14160`, `:3969-3975`), whose agent scheduling group uses
-  the process channel (`agent_scheduling_group_host.cc:248-252`). Mojo's multiplex router
-  keeps one in-order queue for every associated endpoint on a pipe, even when the renderer binds
-  them on different main-thread task runners (`NavigationClient` uses
-  `kInternalNavigationAssociated`, `render_frame_impl.cc:2166`). G6 proves the ordering on the
-  real build, and its break arm shows the gate fails when the order is wrong (§11.2).
+  the process channel (`agent_scheduling_group_host.cc:248-252`) while `kMBIMode` stays legacy
+  (off by default; its own comment says other modes break cross-group ordering,
+  `content_features.cc:705-731`). The ordering mechanism: `IPC::ChannelAssociatedGroupController`
+  posts every channel-associated message to the one proxy task runner, unless an endpoint was
+  bound off-sequence on purpose (`ipc/ipc_mojo_bootstrap.cc:1073-1101`), and the renderer
+  channel has one listener task runner (`content/child/child_thread_impl.cc:608-611`). So the
+  thread observer's endpoint and `NavigationClient` (`kInternalNavigationAssociated`,
+  `render_frame_impl.cc:2166`) dispatch in send order. G6 proves the ordering on the real build,
+  and its break arm shows the gate fails when the order is wrong (§11.2).
 - The renderer resolves locally: the snapshot holds the pattern table (with optional path
   prefixes, m4) plus per-browser values keyed by CEF browser id. Each frame agent resolves its
   own frame at document start from its real URL (no renderer-supplied strings cross a trust
@@ -220,7 +233,8 @@ the push raced navigations (`CefFrameHostImpl` queues frame actions while the pi
   same exposure for content-setting rules, and the rejected pull allowed probing for it anyway.
 - This removes the `cef.mojom` method, the `CefFrameImpl` receiver, all browser-side frame
   enumeration, and the sync IPC. Live preview (BO-13; site-control D-6) is the same snapshot with
-  a newer per-browser value: one small message per coalesced drag frame (§6.2).
+  a newer per-browser value, sent as a ~100 B delta on the same interface: one small message
+  per coalesced drag frame (§5.4, §6.2).
 
 Registration stays two-level, mirroring Arc (BO-23a/b): per-host-pattern registration on the
 Profile covers future navigations; per-tab apply covers live preview. The registry is the single
@@ -295,11 +309,11 @@ Hook patch 0401 touches exactly these upstream files:
 | `third_party/blink/renderer/platform/graphics/graphics_context.h` | Add `void SetBoostColorFilter(BoostColorFilter*)` (non-owning), `BoostColorFilter* GetBoostColorFilter() const`, a `ScopedBoostColorFilter` RAII (save/set/restore, modeled on `ScopedAutoDarkModeState`), and member `BoostColorFilter* boost_color_filter_ = nullptr;` next to `dark_mode_filter_` |
 | `third_party/blink/renderer/platform/graphics/graphics_context.cc` | In `DarkModeColor()`: after the dark-mode branch, `if (auto* f = context.GetBoostColorFilter()) return f->RemapColor(color);` (order rule §3.4.1 — apply to the possibly-inverted color). In `DarkModeFlags` ctor: after the dark-mode branch, if a boost filter exists, run `ApplyToFlags` on the (possibly dark-rewritten) flags. In `CopyConfigFrom` (:232-237): copy `boost_color_filter_` (SVG markers record through `PaintRecordBuilder(paint_info.context)`, `svg_shape_painter.cc:314` — review M1). Rename no helper; keep each hunk small |
 | `third_party/blink/renderer/platform/graphics/gradient.h/.cc` | §5.3 |
-| `third_party/blink/renderer/core/frame/local_frame_view.h/.cc` | Add `void SetBoostColorState(BoostColorState, std::optional<BoostHslaMatrix>)`, members `boost_state_`, `std::unique_ptr<BoostColorFilter> boost_color_filter_;`, `std::optional<BoostHslaMatrix> boost_matrix_;`, and `uint64_t boost_generation_ = 0;` (snapshot generation that produced the state). Paint stamps for the §5.4 readback: `std::optional<BoostPaintStamp> boost_first_paint_` (set once, at this view's first `PaintFrame`) and `BoostPaintStamp boost_last_paint_` (updated at every `PaintFrame`), each `{generation, state}`; that is two small stores per frame paint, not per draw op, so recorded ops do not change. A cross-document navigation makes a new `LocalFrameView`, so "first" means the document's first paint. In `PaintFrame` (:4454): wrap the body in the scoped swap — `kUnset` leaves the context as-is, `kNone` installs nullptr, `kValue` installs the filter. Do **not** touch the :3292 construction site (the context starts null, B2). `SetBoostColorState` compares (state, matrix) exactly, no-ops when equal (generation still updates), otherwise replaces the filter and invalidates paint (§6.2). Identity matrix collapses to `kNone`. Also the `DocumentBackgroundColor` branch (§5.3b) |
+| `third_party/blink/renderer/core/frame/local_frame_view.h/.cc` | Add `void SetBoostColorState(BoostColorState, std::optional<BoostHslaMatrix>)`, members `boost_state_`, `std::unique_ptr<BoostColorFilter> boost_color_filter_;`, `std::optional<BoostHslaMatrix> boost_matrix_;`, and `uint64_t boost_generation_ = 0;` (snapshot generation that produced the state). Paint stamps for the §5.4 readback: `std::optional<BoostPaintStamp> boost_first_paint_` (set once, at this view's first `PaintFrame`) and `BoostPaintStamp boost_last_paint_` (updated at every `PaintFrame`), each `{generation, state}` and `mutable`, because `PaintFrame` is `const` (`:4454`, review r2 N12); that is two small stores per frame paint, not per draw op, so recorded ops do not change. A cross-document navigation makes a new `LocalFrameView`, so "first" means the document's first paint. In `PaintFrame` (:4454): wrap the body in the scoped swap — `kUnset` leaves the context as-is, `kNone` installs nullptr, `kValue` installs the filter — except while printing, when it installs nothing (§3.4 rule 7). Do **not** touch the :3292 construction site (the context starts null, B2). `SetBoostColorState` compares (state, matrix) exactly, no-ops when equal (generation still updates), otherwise replaces the filter and invalidates paint (§6.2). Identity matrix collapses to `kNone`. Also the `DocumentBackgroundColor` branch (§5.3b) |
 | `third_party/blink/renderer/core/paint/box_painter_base.cc` | `ResolveShadowColor` boost branch (§5.3b) |
 | `third_party/blink/renderer/core/paint/text_painter.cc` | `CreateDrawLooper` text-shadow branch (§5.3b) |
 | `third_party/blink/renderer/core/paint/decoration_line_painter.cc` | Wavy-decoration branch (§5.3b; optional — may be stated as a gap instead, one line either way) |
-| `third_party/blink/renderer/core/layout/svg/layout_svg_resource_gradient.cc` (or `svg_object_painter.cc`) | SVG gradient matrix threading (§5.3) |
+| `third_party/blink/renderer/core/paint/svg_object_painter.{h,cc}`, `svg_shape_painter.cc`, `svg_container_painter.cc`, and `third_party/blink/renderer/core/layout/svg/layout_svg_resource_gradient.cc` (plus `text_painter.cc` and the `AutoDarkMode` field in `graphics_context.h`, both listed above) | SVG gradient threading (§5.3, review r2 N4) |
 | `third_party/blink/renderer/platform/BUILD.gn` (or the graphics sources list it includes) | Add the two new overlay sources. Implementer checkpoint: find where `dark_mode_filter.cc` is listed and add beside it |
 
 No `web_local_frame_impl.{h,cc}` change: the renderer agent reaches the view through one overlay
@@ -314,21 +328,32 @@ process changes. Nothing in `ComputedStyle` or `StyleEngine` changes.
 rewritten at :334. Boost mirrors it, with review m1's corrections:
 
 - `Gradient` **borrows** the frame's filter; it never owns one (heavy-2 has ~500 gradients — no
-  per-gradient filter or LRU). It stores only the non-owning `BoostColorFilter*` it was last
-  applied with, beside `is_dark_mode_enabled_`.
+  per-gradient filter or LRU). It keeps **no pointer**: beside `is_dark_mode_enabled_` it stores
+  the 20 floats of the matrix it last applied, and it uses the borrowed pointer only inside
+  `ApplyToFlags`. A `Gradient` shared through `StyleSheetContents` can outlive the
+  `LocalFrameView` that owns the filter (review r2 N12).
 - `ImageDrawOptions` (`graphics_context.h:99`) gains `BoostColorFilter* boost_filter = nullptr`
   (the borrowed pointer, not the matrix). Constructions that build `ImageDrawOptions` from an
   `AutoDarkMode` also pass the current context's filter. Implementer checkpoint: enumerate the
   `ImageDrawOptions(` constructions in `graphics_context.cc` (three `DrawImage` variants at
   ~537/577/653), in `platform/graphics/image.cc`, and — the one a first pass misses —
   `LayoutSVGResourceGradient::ApplyShader`, which builds its own options with no context
-  (`layout_svg_resource_gradient.cc:165-170`): thread the filter through `SVGObjectPainter`,
-  which has the context (review M1). The gradient path is the only consumer of the new field;
+  (`layout_svg_resource_gradient.cc:165-170`). `SVGObjectPainter` has no context either: its
+  constructor takes `(LayoutObject, SvgContextPaints*)` (`svg_object_painter.h:32-46`), and it
+  builds the `AutoDarkMode` from style (`svg_object_painter.cc:38-44`). Thread it this way
+  (review r2 N4): add a `const BoostColorFilter*` argument to the `SVGObjectPainter`
+  constructor; the callers that have a context pass `paint_info.context.GetBoostColorFilter()`
+  (`svg_shape_painter.cc:119`, `:147`, `:322`; `text_painter.cc:252`;
+  `svg_container_painter.cc:122`); the painter copies the pointer into a new `AutoDarkMode`
+  field, which reaches `ApplyShader` with no change to that virtual's signature
+  (`layout_svg_resource_paint_server.h:36-41`). The fresh-builder callers
+  (`svg_fe_image.cc:243`, `layout_svg_resource_pattern.cc:249`,
+  `layout_svg_resource_masker.cc:65`) pass null by design. The gradient path is the only consumer of the new field;
   image consumers must ignore it. Do not set it during mask paint (§3.4 rule 6).
 - **Compare by value, not pointer, for shader reuse:** CSS gradient images can be shared across
   frames through shared `StyleSheetContents`, and two frames can hold different filter objects
   with equal matrices. In `ApplyToFlags`, rebuild `cached_shader_` when the incoming filter's
-  matrix differs by value from the last-applied one (store the 20 floats, not just the pointer).
+  matrix differs by value from the last-applied 20 floats.
 - **Subdivide stops (m1):** per-stop remap + sRGB interpolation drifts from per-pixel remap
   (black→white midpoint `#8F7D96` vs `#935BB9`, ΔE00 17.2 in the review's fit). When a filter is
   set, subdivide each stop interval into 8 stops interpolated in the gradient's own interpolation
@@ -349,7 +374,7 @@ handling at that site (if any), apply `context.GetBoostColorFilter()` when non-n
 |---|---|---|
 | box-shadow | Color goes into a `DrawLooper` that `DarkModeFlags` never rewrites; dark mode patches it in `ResolveShadowColor` (`box_painter_base.cc:251`) | One boost branch in `ResolveShadowColor` |
 | text-shadow | `CreateDrawLooper` (`text_painter.cc:83-104`); dark mode misses it too | Remap the shadow color where the looper is built (the painter has the context) |
-| Document background (compositor + browser) | `LocalFrameView::DocumentBackgroundColor` has its own dark branch (`local_frame_view.cc:2054`, dark at ~2085-2092); feeds `LayerTreeHost::set_background_color` and the browser's background-color change (`web_frame_widget_impl.cc:1863-1869`). Without a hook, Mac rubber-band gutters and the pre-first-frame fill stay white on a tinted page | One boost branch beside the dark one (applies when this view's state is `kValue`). Gated deterministically via the browser-side background readback (G10), not by screenshotting a gutter |
+| Document background (compositor + browser) | `LocalFrameView::DocumentBackgroundColor` has its own dark branch (`local_frame_view.cc:2054`, dark at ~2085-2092); feeds `LayerTreeHost::set_background_color` and the browser's background-color change (`web_frame_widget_impl.cc:1863-1869`). Without a hook, Mac rubber-band gutters and the pre-first-frame fill stay white on a tinted page | Remap the **returned** value, after the blend (`:2093-2095`, both return paths), when the view's effective filter is non-null — not `doc_bg` alone (review r2 N3). A page with no CSS background has a transparent `doc_bg`, which rule 4 passes through, so the function returns the base white (`BaseBackgroundColor()`, `:2059`), while `ViewPainter` fills that same base through `FillRect` and the `DarkModeColor` path (`view_painter.cc:365-369`) and the canvas tints. Effective filter: the view's own for `kValue`; none for `kNone` and for a `kUnset` main frame. Gated deterministically via the browser-side background readback on a page with and a page without a CSS background (G10), not by screenshotting a gutter |
 | SVG markers | `CopyConfigFrom` does not copy the pointer | Copy it (§5.2 table) |
 | Wavy decorations (spelling, CSS `wavy`) | Color applied as `ColorFilter::MakeBlend` on shader-carrying flags (`decoration_line_painter.cc:518-519`), so `ApplyToFlags` declines | Remap the color before `MakeBlend`, or state the gap in the PR — one line either way; do not leave it undecided |
 | SVG `<pattern>`, `feImage`, `-webkit-box-reflect` | Fresh `PaintRecordBuilder` with no config copy (`layout_svg_resource_pattern.cc:246`, `svg_fe_image.cc:242`, `box_reflection_utils.cc:62`) | **Unremapped in v1, like images** (stated in §6.4). Remapping patterns would also need `pattern_map_` invalidation |
@@ -377,8 +402,10 @@ class BoostColorRegistry : public base::SupportsUserData::Data {
   void Register(std::string host_pattern, std::string path_prefix, BoostColorValue value);
   void Unregister(const std::string& host_pattern, const std::string& path_prefix);
   // Also attaches a WebContentsObserver; WebContentsDestroyed clears the entry.
+  // Sends a per-browser delta, not a full snapshot (review r2 N7).
   void SetPerBrowserValue(int browser_id, content::WebContents* contents,
                           std::optional<BoostColorValue> value);
+  static BoostColorRegistry* GetIfExists(content::BrowserContext*);  // launch send only
   // Launch send: skips an empty snapshot unless paint reports are on (§4).
   void SendSnapshotTo(content::RenderProcessHost* host);
   uint64_t generation() const { return generation_; }
@@ -415,11 +442,19 @@ class BoostColorRegistry : public base::SupportsUserData::Data {
   in the payload and resolve per frame's context — do not ship a build where one Profile's
   snapshot reaches another's frames.
 - **Launch send.** Hook in CEF's existing `RenderProcessWillLaunch` override
-  (`chrome_content_browser_client_cef.cc:321`): after the base call,
-  `BoostColorRegistry::Get(host->GetBrowserContext())->SendSnapshotTo(host)` — through an overlay
-  entry point so the hook stays one call. Because the interface is channel-associated, this
+  (`chrome_content_browser_client_cef.cc:311`): after the base call, an overlay entry point
+  does `BoostColorRegistry::GetIfExists(host->GetBrowserContext())` and, if a registry exists,
+  `SendSnapshotTo(host)`. A launch in a context that never registered anything creates no
+  registry (review r2 N12). Because the interface is channel-associated, this
   message is ordered before any frame commit on that channel.
-- **Per-tab apply** is `SetPerBrowserValue` + broadcast: same transport, no second pipe.
+- **Per-tab apply** is `SetPerBrowserValue`: same interface and FIFO, no second pipe, but a
+  **delta** (review r2 N7). It bumps the generation and sends
+  `SetBoostColorBrowserValue(generation, browser_id, matrix?)` (~100 B) to every live process
+  of the context — not only the processes that host that browser today, because an existing
+  process can later receive one of its frames. The renderer patches its snapshot copy and
+  re-resolves only that browser's frames. Pattern changes still send the full snapshot, and a
+  launch snapshot carries the current per-browser values. A 60 Hz drag therefore costs one
+  ~100 B message per renderer per frame instead of the full pattern table.
   Precedence is resolved renderer-side: per-browser value beats pattern value for every frame of
   that browser (§5.5). The registry clears the entry when that browser's `WebContents` is
   destroyed (its own `content::WebContentsObserver`, overlay code, no CEF hook), so a reused
@@ -433,8 +468,15 @@ class BoostColorRegistry : public base::SupportsUserData::Data {
   restore) through `WebFrameWidget::NotifyPresentationTime` (`web_frame_widget.h:171`). In the
   callback it reads the view's paint stamps (§5.2) through the blink glue and sends one report:
   frame host, renderer pid (`base::GetCurrentProcId()`), first-paint `{generation, state}`,
-  last-paint `{generation, state}`, and the presentation `base::TimeTicks`. If the view has no
-  paint stamp yet, it asks again, at most 10 times, then sends a "never painted" report. The
+  last-paint `{generation, state}`, the presentation `base::TimeTicks`, and
+  `presentation_failed` (`FrameTimingDetails.presentation_feedback.failed()`). The callback also
+  runs, with a failure timestamp, when no frame was presented (`ReportTimeSwapPromise::DidNotSwap`
+  on `COMMIT_NO_UPDATE` / `SWAP_FAILS`, `web_frame_widget_impl.cc:3975-4002`; review r2 N6): on
+  a failure the agent re-arms, and a failure never counts toward the tries below. If the view has
+  no paint stamp yet, it asks again, at most 10 times, then sends a "never painted" report.
+  Asking does not request a frame (`QueueSwapPromise`, `cc/trees/layer_tree_host.cc:361-365`),
+  so the loop relies on frames being produced; the e2e fixture pages carry a small CSS
+  animation so frames keep coming (product use never turns reports on). The
   callback holds a weak pointer to the agent, so a frame destroyed first sends nothing. The
   report travels over the existing CEF process-message path (`CefFrame::SendProcessMessage`,
   name `OpenBoostColorPaint`); OpenEngine keeps the latest report per frame and exposes them to
@@ -514,6 +556,9 @@ struct BoostColorSnapshot {
 };
 interface BoostColorConfiguration {
   SetBoostColorSnapshot(BoostColorSnapshot snapshot);
+  // Per-tab live apply (review r2 N7): null matrix clears that browser's value.
+  SetBoostColorBrowserValue(uint64 generation, int32 browser_id,
+                            array<float, 20>? matrix);
 };
 ```
 
@@ -560,7 +605,10 @@ class BoostColorFrameAgent : public content::RenderFrameObserver {
   Both lines go into the one owner patch of that file. The ad-block agent hook uses the same
   file, so the file has one owner patch shared by both features (§10.1).
 - **Resolution.** At `DidCreateDocumentElement` the agent reads its frame's committed URL from
-  the `RenderFrame` itself and its CEF browser id from
+  the `RenderFrame` itself and stores it as `document_start_url_`. Every later re-resolution of
+  that document (snapshot update, delta, BFCache restore) uses the stored URL, never the current
+  `Document::Url()`, so `pushState` or a hash change cannot flip a path-scoped Boost at the next
+  unrelated broadcast (review r2 N8). It gets its CEF browser id from
   `CefRenderManager::Get()->GetBrowserForView(render_frame->GetWebView())`
   (`cef/libcef/renderer/render_manager.h:65`) → `CefBrowserImpl::browser_id()`
   (`browser_impl.h:81`). If no CEF browser exists for the view, per-browser values do not
@@ -569,7 +617,7 @@ class BoostColorFrameAgent : public content::RenderFrameObserver {
   http(s) document resolves to `kNone` or `kValue` — including with an empty snapshot, which is
   what makes an unboosted child under a boosted parent paint unremapped (G5).
 - **Snapshot updates** re-resolve every live agent (the observer keeps a registry of agents by
-  routing id). Equal results no-op in `LocalFrameView` (§5.2), so a drag broadcast costs one
+  routing id and by CEF browser id); a per-browser delta re-resolves only that browser's agents. Equal results no-op in `LocalFrameView` (§5.2), so a drag broadcast costs one
   compare per frame plus repaints only where the value changed.
 - **Blink entry (review m8).** The agent never includes Blink core headers. One overlay glue
   pair, `open/renderer/boost_color/boost_color_blink_glue.{h,cc}`, does:
@@ -600,7 +648,7 @@ Why not the originally planned mechanism, for the record: writing
 (`web_view_impl.cc:1933`), and subframes do not read Settings at all
 (`style_engine.cc:4473-4477` uses `owner_preferred_color_scheme_`). If a post-v1 control needs
 this, build it browser-side on the per-tab WebContents preferences path — CEF's existing
-`OverrideWebPreferences` override (`chrome_content_browser_client_cef.cc:448`) plus
+`OverrideWebPreferences` override (`chrome_content_browser_client_cef.cc:438`) plus
 `WebContents::OnWebPreferencesChanged()` — which survives prefs updates and reaches every
 process with no Blink patch. §13 Q-B7/Q-B15 record the ruling; C-4R-9 stays on the capture list
 as a fact-finding item only.
@@ -630,7 +678,8 @@ as a fact-finding item only.
 One full repaint per changed frame is the accepted cost (same as a forced-dark toggle, BO-23g
 guess for Arc). A snapshot broadcast re-resolves every frame in the process, but only frames
 whose resolution changed repaint (equal values no-op, §5.2). During an editor drag at ≤ 60 Hz
-(site-control D-6), each broadcast carries one new per-browser value; the LRU (256 entries) is
+(site-control D-6), each drag frame sends one ~100 B per-browser delta to every live process of
+the Profile, and only that browser's frames re-resolve (§5.4); the LRU (256 entries) is
 rebuilt per filter object, so drag cost is bounded by distinct colors, not pixels. If G8's drag
 case misses its budget, the fix is coalescing in the App (drop to 30 Hz, the R-3 precedent), not
 caching in the engine.
@@ -639,7 +688,7 @@ caching in the engine.
 
 | Event | Rule |
 |---|---|
-| Same-document navigation (pushState, hash) | No re-resolution. Resolution is per document-start URL; an SPA route change keeps it, including for path-scoped patterns (Arc unobserved) |
+| Same-document navigation (pushState, hash) | No re-resolution. Resolution is per document-start URL; an SPA route change keeps it, including for path-scoped patterns (Arc unobserved). Later re-resolutions of the same document also use the stored document-start URL (§5.5, review r2 N8) |
 | Cross-document navigation, same process | The agent resolves locally at `DidCreateDocumentElement` from the process snapshot — document-start, before first paint, no IPC. Channel FIFO guarantees the snapshot includes every change sent before this document's commit (§4) |
 | New subframe (any origin) | Its agent resolves its own URL at its document start. Per-browser value (if any) wins; else pattern+path match on the subframe's own URL. Non-http(s) children (about:blank, srcdoc) do not resolve and inherit (§6.4) |
 | Renderer process swap (cross-site navigation, crash + reload) | The new process received the current snapshot at `RenderProcessWillLaunch`, before any commit on its channel. No replay, no browser-side frame tracking |
@@ -669,7 +718,8 @@ Non-http(s) documents never resolve; their view stays `kUnset`:
   the target page (accepted in v1; implementer checkpoint: skip if `DidFailProvisionalLoad`
   makes it cheap — §13 Q-B14).
 - Unremapped by construction or by statement in v1: the PDF viewer's plugin surface and its
-  internal-page chrome; print output (§3.4 rule 7); SVG `<pattern>`, `feImage`,
+  internal-page chrome; print output (`PaintFrame` skips the install while printing, §3.4
+  rule 7; paint preview and drag images do remap); SVG `<pattern>`, `feImage`,
   `-webkit-box-reflect`, CSS `filter: drop-shadow()`, SVG `flood-color`/`lighting-color`,
   `theme-color` (§5.3b); native form controls and Mac scrollbars (§3.2 M2 row); DevTools,
   validation, and frame-color overlays (they paint outside `PaintFrame`, §3.1).
@@ -764,12 +814,30 @@ fixture swatch set, the worst per-channel step from 0 to 0.2 is ≤ 8 levels at 
 ≤ 5 at Δρ = 0.0005 (bounds measured from this builder during review r1; a true discontinuity
 fails the second bound because its step does not shrink with Δρ); invert-only (ρ = 0)
 saturated swatches keep their hue within 2° (only L flips). These can fail: they fail on the
-pre-review builder (`#FF0000 → #954DC6` at ρ = 0.03 full-strength vs unchanged at 0.019). One
-known wart, stated: the hue lerp travels in turns toward (Hp + Δ), which for hues far from the
-knob (red → purple) takes the long way around the wheel at intermediate w. The end points are
-right; the path is a guess. C-4R-2's small-ρ shots settle whether Arc fades this way at all —
-Arc may instead scale the knob colors' own saturation, which the builder can express by moving
-the fade into `s0`/`k` if the capture says so.
+pre-review builder (`#FF0000 → #954DC6` at ρ = 0.03 full-strength vs unchanged at 0.019).
+
+One stated defect, the **hue seam** (review r2 N1). The interpolated H row is
+`H′ = (1 − w)·H + w·knobHue(L)`. For 0 < w < 1 the input-hue coefficient (1 − w) is not an
+integer, so the map is discontinuous on the hue circle at H = 0 ≡ 1, and two reds that look the
+same split. With Hp 252°, Δ 45°, rampEnd 0.2 (`.re/boost-remap-plan/seam-r2.py`, local; it
+reproduces the review's table):
+
+| ρ | `#FF0008` (H 358.1°) → | `#FF0800` (H 1.9°) → | hue gap |
+|---|---|---|---|
+| 0.02 | `#F90831` | `#F97D08` | 40° |
+| 0.05 | `#F01468` | `#CBF014` | 93° |
+| 0.10 | `#E425B0` (magenta) | `#25E45F` (green) | 178° |
+| 0.20 | `#9441D2` | `#9441D2` | 0° |
+
+A red at H ≈ 2° sweeps through orange, yellow, green, and cyan on its way to the knob purple,
+and every pad drag out of the center crosses this band. Reds are common in page UI (badges,
+errors, links). No affine H row avoids this: to respect the wrap, the input-hue coefficient
+must be 0 or 1, and a switch between those values is a jump in ρ (the jump review r1 removed).
+v1 keeps this form because it is continuous in ρ and keeps invert-only hues. The ρ-continuity
+cases cannot see the seam, because the defect is in input hue, not in ρ, so the harness
+records it with its own case (§9.1). C-4R-2's small-radius shots include the seam pair to show
+which artifact Arc has, and §8 item 4 names the engine terms S4 can choose instead. S4 already
+waits for C-4R-2 (§12).
 
 Note what full-strength K implies and accept it: at w = 1 hue never reads the input hue, so a
 colored page loses its hues to the knob gradient. That is what the grey evidence proves (hue
@@ -828,6 +896,28 @@ order of preference:
    (advanced mapper) are a possible alternative explanation for the residual; if a capture with
    advanced sliders moved shows curve-shaped behavior, stop and take it to the lead before
    building either form.
+4. **Small-ρ fade term (review r2 N1; decide with C-4R-2 before S4).** No hue-only fade can be
+   continuous on the whole hue circle. It would have to deform the identity map of the circle
+   into the constant knob hue, and that is impossible (the identity has winding number 1, a
+   constant map has 0). So any fade either splits hues somewhere or passes through low
+   saturation. Two engine terms fit; each adds one branch in `RemapColor` after the matrix, the
+   builder emits the full-strength knob rows, and the CEF API is EXPERIMENTAL, so the wire can
+   grow (numbers from `.re/boost-remap-plan/seam-r2.py`, local):
+   - **T1, hue mix** (the review's proposal): `H′ = H_in + m·shortestArc(H_in → H_matrix)`,
+     with `m = w` and the S/L rows interpolated as in v1. One float on the wire. It removes the
+     red seam but moves the split to the antipode of the knob hue. At ρ 0.1 the knob hue at
+     L 0.5 is 274.5°, so `#73FF00` (93°) → `#E43125` (red) and `#66FF00` (96°) → `#25D3E4`
+     (cyan), 178° apart.
+   - **T2, RGB mix:** `C′ = C_base + m·(C_matrix − C_base)` in sRGB, with `m = w`, where `C_base`
+     is Stage A alone and `C_matrix` is the full-strength `A ∘ K`. Stage A rides as a second
+     20-float matrix (41 floats on the wire). It is continuous everywhere, in ρ and in input
+     color: both ends are continuous maps of RGB, and the mix passes through low saturation at
+     any split point. At ρ 0.1 the seam pair → `#C9246A` / `#C92866` and the antipode pair →
+     `#83A466` / `#7DA466`. The worst per-channel step over the swatch set at Δρ 0.001 is
+     1.1 levels (v1: 6.2, T1: 3.8).
+   The capture decides. Reds that split in Arc → keep v1. A smooth sweep along the short arc →
+   T1. A greyed midpoint → T2. If C-4R-2 does not settle it, prefer T2, the only form with no
+   split. Neither term blocks E1–E5 or S1–S3; each needs its own e2e seam case in S4.
 
 Acceptance for Step 2: the §11 G1/G2 gates keep passing, plus new saturated-swatch gates (ΔE00 ≤ 3
 against the Arc capture values) added to the same suite. Until then, G1/G2 use the S2-22 pairs
@@ -843,13 +933,16 @@ and text-shadow samples, a wavy underline, an SVG gradient icon, inline SVG rect
 "unremapped in v1" rows of §5.3b (an SVG `<pattern>` fill, an `feImage`, a `-webkit-box-reflect`
 box, a CSS `drop-shadow()`, an `feFlood`), an SVG `<img>`, a raster `<img>`, a luminance-mask sample, a canvas rect, a `<video>` with poster, form
 controls (button/input/select/checkbox), selected text, a same-origin iframe, and a `srcdoc` iframe
-(both with the grey ramp). The user opens this exact file in Arc (agents never launch Arc, rule 4)
+(both with the grey ramp), the seam pair `#FF0008` / `#FF0800` beside pure `#FF0000`, and a fine
+hue strip (120 swatches, 3° apart, S 1, L 0.5) so a hue split shows wherever a knob puts it
+(review r2 N1). The fixture also runs a small CSS animation, so frames keep coming for the
+§5.4 paint reports. The user opens this exact file in Arc (agents never launch Arc, rule 4)
 and screenshots it at:
 
 | # | Capture | Settles |
 |---|---|---|
 | C-4R-1 | S2-22 repeat on the fixture: primary knob 252°, radius ≈ 0.69 (same as S2 10/0039), sliders neutral. The whole fixture in frame (shadows, wavy, SVG gradient, alpha pair, srcdoc child included), plus one overscroll flick so the rubber-band gutter color shows | Anchor law on 11 greys (Step 2.1); every §5.3b row; alpha blending (m9); gutter/document-background behavior |
-| C-4R-2 | ρ sweep: radius ≈ 0.05 / 0.1 / 0.25 / 0.5 / 1.0 at hues 0°, 120°, 240° (grey ramp + saturated row; the 0.05/0.1 radii need a note of the knob position since they are small) | `s0(ρ)`, `rampEnd`, the small-ρ hue fade (§7.2). **Blocks S4** (§12) |
+| C-4R-2 | ρ sweep: radius ≈ 0.05 / 0.1 / 0.25 / 0.5 / 1.0 at hues 0°, 120°, 240° (grey ramp + saturated row; the 0.05/0.1 radii need a note of the knob position since they are small). At ρ ≈ 0.05 and 0.1, the seam pair, pure `#FF0000`, and the fine hue strip must be in frame | `s0(ρ)`, `rampEnd`, the small-ρ fade law: v1 split, T1, or T2 (§7.2, §8 item 4). **Blocks S4** (§12) |
 | C-4R-3 | Saturated grid close-up at ρ ≈ 0.69, hue 252° and hue 0° | `k`, hue preservation (Step 2.2/2.3) |
 | C-4R-4 | Gradient bars close-up, any one color set (read the black→white midpoint) | Per-stop vs per-pixel vs skipped (§5.3) |
 | C-4R-5 | Inline SVG vs SVG-`<img>` vs `srcdoc` iframe region | §3.4 rules 2–3; srcdoc inheritance (§6.4) |
@@ -911,8 +1004,19 @@ carries a `colorMatrix`, the native side does **not** put a `colorAdjustment` in
 payload at all (`PickerMessages.swift` wire type keeps the field for legacy plans; a matrix plan
 sends `colorAdjustment: nil`). The applier JS itself is unchanged — it already does nothing
 color-wise when the field is absent. The OpenBoosts harness gains numeric cases: S2-22 inputs →
-the four §7.3 predicted hex values, the §7.2 continuity bounds, and invert-only hue preservation
-(Swift HSL helpers in the harness only — product code never converts colors in Swift).
+the four §7.3 predicted hex values, the §7.2 continuity bounds, invert-only hue preservation,
+and the seam pair (`#FF0008` / `#FF0800` at ρ 0.02 and 0.1 must give §7.2's table values, so a
+later builder change shows up; review r2 N1). Swift HSL helpers live in the harness only —
+product code never converts colors in Swift.
+
+Op-log exactness rule (review r2 N9). G1, G2, and G10 compare the prediction with the recorded
+8-bit op color exactly. That holds only if: the harness HSL helpers use `Float`, not `Double`,
+with the same operation order as `boost_color_filter.cc`; neither side fuses multiply-adds
+(Chromium builds with `-ffp-contract=off`, `build/config/compiler/BUILD.gn:668-670`; implementer
+checkpoint for the Swift side); and quantization matches `SkColor4f::toSkColor` (the op log
+prints `paint.getColor()`). The e2e suite reads the predictions the harness writes; it never
+recomputes them in Python doubles. If exactness cannot be reached, the gates use ±1 level and
+the implementation PR says why.
 
 ### 9.2 OpenEngine (ObjC++, `Engine/OpenEngine/`)
 
@@ -944,6 +1048,7 @@ typedef NS_ENUM(NSInteger, OEBoostColorState) {
 @property (nonatomic, readonly) uint64_t lastPaintGeneration;     // latest paint
 @property (nonatomic, readonly) OEBoostColorState lastPaintState;
 @property (nonatomic, readonly) NSTimeInterval presentationTime;  // seconds, TimeTicks clock
+@property (nonatomic, readonly) BOOL presentationFailed;  // DidNotSwap time, not a real frame (r2 N6)
 @end
 
 // OEBrowserContext (profile registry; calls the cef_boost_color.h functions, §5.4)
@@ -1046,8 +1151,8 @@ when overlay headers under `cef/include/` change — `docs/engine-fork.md`, P1 s
 
 | Patch | Series file line (rationale after `#`) | Upstream files touched (manifest `paths:`) |
 |---|---|---|
-| `chromium/0401-open-boost-color-blink.patch` | `0401-open-boost-color-blink.patch  # Step 4R: per-frame HSLA remap in Blink paint (GraphicsContext, Gradient, LocalFrameView, shadow/text bypass sites)` | `third_party/blink/renderer/platform/graphics/graphics_context.{h,cc}`, `gradient.{h,cc}`, `third_party/blink/renderer/core/frame/local_frame_view.{h,cc}`, `third_party/blink/renderer/core/paint/box_painter_base.cc`, `text_painter.cc`, `decoration_line_painter.cc` (if the §5.3b branch is taken), `third_party/blink/renderer/core/layout/svg/layout_svg_resource_gradient.cc` (or `svg_object_painter.cc`), `third_party/blink/renderer/platform/BUILD.gn` (or its graphics sources `.gni` — checkpoint §5.2) |
-| `cef/0401-open-browser-client-hooks.patch` (owner patch, see below) | `0401-open-browser-client-hooks.patch  # Open hooks in ChromeContentBrowserClientCef, one forwarding line per feature: Boost color snapshot send at RenderProcessWillLaunch (Step 4R)` | `cef/libcef/browser/chrome/chrome_content_browser_client_cef.h`, `.cc`. Boost adds one include and one call after the base call in `RenderProcessWillLaunch` (`:321`); no `.h` change, because CEF already overrides it |
+| `chromium/0401-open-boost-color-blink.patch` | `0401-open-boost-color-blink.patch  # Step 4R: per-frame HSLA remap in Blink paint (GraphicsContext, Gradient, LocalFrameView, shadow/text bypass sites)` | `third_party/blink/renderer/platform/graphics/graphics_context.{h,cc}`, `gradient.{h,cc}`, `third_party/blink/renderer/core/frame/local_frame_view.{h,cc}`, `third_party/blink/renderer/core/paint/box_painter_base.cc`, `text_painter.cc`, `decoration_line_painter.cc` (if the §5.3b branch is taken), `svg_object_painter.{h,cc}`, `svg_shape_painter.cc`, `svg_container_painter.cc` (all in `third_party/blink/renderer/core/paint/`), `third_party/blink/renderer/core/layout/svg/layout_svg_resource_gradient.cc`, `third_party/blink/renderer/platform/BUILD.gn` (or its graphics sources `.gni` — checkpoint §5.2) |
+| `cef/0401-open-browser-client-hooks.patch` (owner patch, see below) | `0401-open-browser-client-hooks.patch  # Open hooks in ChromeContentBrowserClientCef, one forwarding line per feature: Boost color snapshot send at RenderProcessWillLaunch (Step 4R)` | `cef/libcef/browser/chrome/chrome_content_browser_client_cef.h`, `.cc`. Boost adds one include and one call after the base call in `RenderProcessWillLaunch` (`:311`); no `.h` change, because CEF already overrides it |
 | `cef/0402-open-renderer-client-hooks.patch` (owner patch, see below) | `0402-open-renderer-client-hooks.patch  # Open hooks in ChromeContentRendererClientCef, one creation line per feature: Boost color thread observer + frame agent (Step 4R)` | `cef/libcef/renderer/chrome/chrome_content_renderer_client_cef.cc`. Boost adds one include, the observer in `RenderThreadStarted` (`:30`), and the agent in `RenderFrameCreated` (`:42`) |
 
 No other CEF file is patched. The API is global functions in an overlay header (§5.4), so
@@ -1123,6 +1228,8 @@ precedent (`open/browser/tab_strip/*`).
 | `dark_mode_filter.*`, `graphics_context.h` (`AutoDarkMode`, `ImageDrawOptions`) | Same refactor surface | `ImageDrawOptions` constructor changes hit §5.3's new field |
 | `gradient.cc` | Stop-color handling moves with CSS gradient work | The `is_dark_mode_enabled_` block is the anchor; re-find it by that member name |
 | `local_frame_view.cc` (`PaintFrame`, `DocumentBackgroundColor`) | Lifecycle/paint churn | Anchors: the `PaintFrame` signature and the dark branch inside `DocumentBackgroundColor` |
+| `svg_object_painter.{h,cc}`, `svg_shape_painter.cc`, `svg_container_painter.cc`, `layout_svg_resource_gradient.cc` | SVG paint-server refactors (review r2 N4) | Anchors: the `SVGObjectPainter` constructor and the `AutoDarkMode` built in it; keep the filter in an `AutoDarkMode` field so `ApplyShader`'s virtual signature never changes |
+| `content/public/common/content_features.cc` `kMBIMode` | The B1 FIFO guarantee needs the legacy mode (`:705-731`) | If upstream changes the default away from legacy, stop the rebase: frame commits would leave the process channel and the no-flash ordering (§4) breaks. G6 catches it |
 | `box_painter_base.cc`, `text_painter.cc` | Shadow/decoration paint churn (review r1: rebase risk concentrates here with `graphics_context.cc`) | Anchors: `ResolveShadowColor` and `CreateDrawLooper` by name; keep each boost branch ≤ 3 lines |
 | `chrome_content_renderer_client_cef.cc` | One owner patch shared with ad-block's agent hook (§10.1) | Keep every feature's creation lines; each is one line, so re-adding them is trivial |
 | `chrome_content_browser_client_cef.cc` `RenderProcessWillLaunch` | CEF launch-hook churn; one owner patch shared with ad-block's network hooks (§10.1) | One overlay call after the base call; re-add beside it. (No `ExposeInterfacesToRenderer` or `cef.mojom` hunk remains after B1) |
@@ -1180,11 +1287,11 @@ bordered/text divs, tall), `heavy-2.html` (500 gradient/shadow boxes, tall), `he
 | G3 | Untouched: raster `<img>`, CSS `background-image`, canvas rect, luminance-mask coverage, default `<button>` face and checkbox box (M2 guard; probe points away from label text, which is ordinary text paint and does remap) | Each channel within 1 level (sRGB) of the same run's no-Boost baseline |
 | G4 | Remove while showing: delete the Boost's color via automation; JS marker (`window.__alive`) survives; re-probe G1–G3 | All points back within 1 level of baseline; marker intact (no reload); op log shows original colors |
 | G5 | Frames, five cases. (a) same-origin child, own pattern matches; (b) **same-site different host** (`a.boost.test` page, `b.boost.test` child, pattern for b only — the B2 case); (c) cross-process child (`127.0.0.1` → `localhost`), pattern for parent only; (d) `srcdoc` child under a boosted parent; (e) **same-origin child under an unboosted parent** (`a.boost.test/` page, child at `/child/`, Boost path-scoped to `/child/` — in-process by definition, so the B2 case cannot fall back to OOPIF) | (a) child remapped; (b) and (e) child remapped, parent not, and the parent's and child's reports carry the **same pid** (else the case FAILs as "precondition not met", never passes as an OOPIF); (c) child unchanged, pids differ; (d) child inherits the parent's remap (§6.4). Second pass with per-tab apply: all frames remapped. Child assertions read the child's own `#FFFFFF` swatch and the child's report state |
-| G6 | **No-flash proof:** register the pattern, read `boostColorGeneration` (G_reg), then navigate (same-process and cross-site/process-swap variants). Read the main frame's report in `boostColorPaintReports` | `painted`, `firstPaintState == Value`, and `firstPaintGeneration ≥ G_reg`: the document's very first paint already used the registration. Break arm (§11.2): register *after* navigation start → the same assertion must FAIL (first paint at an older generation or state `None`), proving the gate can see a late arrival |
-| G7 | Live preview latency: store edit → `boostColorApplyTime` / `boostColorApplyGeneration` vs the `presentationTime` of the first report with `lastPaintGeneration` ≥ that generation (one clock, §9.2) | < 100 ms, ≤ 3 attempts, lateness + load average printed. Final color probed once (G1 method), not polled |
+| G6 | **No-flash proof:** register the pattern, read `boostColorGeneration` (G_reg), then navigate (same-process and cross-site/process-swap variants). Read the main frame's report in `boostColorPaintReports` | `painted`, `firstPaintState == Value`, and `firstPaintGeneration ≥ G_reg`: the document's very first paint already used the registration. Break arm (§11.2, review r2 N5): navigate first, wait until the main frame's report for that document says `painted`, then register; for that same document the predicate must be false (`firstPaintGeneration < G_reg` or `firstPaintState == None`). Registering only "after navigation start" is not enough: the snapshot can still arrive before the commit and the arm would pass |
+| G7 | Live preview latency (the D-6 path, review r2 N6): one `applyBoostColorFilter:` with a value that differs from the current one → `boostColorApplyTime` / `boostColorApplyGeneration` vs the `presentationTime` of the first report with `presentationFailed == NO` and `lastPaintGeneration` ≥ that generation (one clock, §9.2). Not a store commit: a commit ends with `removeBoostColor()`, which re-resolves to an equal value, paints nothing, and would wait forever | < 100 ms, ≤ 3 attempts, lateness + load average printed. Final color probed once (G1 method), not polled |
 | G8 | Performance (§11.3) | Budgets below |
 | G9 | Back/forward with **proven BFCache**: boosted page → other page → back; assert `pageshow.persisted === true` by eval (a fresh load fails the gate, not skips it) | Remapped on return; disable the Boost on the other page, back again → unremapped, `persisted` still true |
-| G10 | Coverage (M1/M2/m1/m9): box-shadow and text-shadow swatch pixels; browser-side document background readback (`pageBackgroundColor`, from `WebContents::GetBackgroundColor()`, §5.4) on a white boosted page; black→white gradient midpoint; 50%-alpha overlay pair | Shadows within ΔE00 3 of builder prediction for their colors; background readback equals the builder's remapped white exactly, and equals plain white with the Boost removed; gradient midpoint within ΔE00 3 of the per-pixel prediction (subdivision, §5.3); alpha pair within ΔE00 3 of remap-then-blend prediction (remap runs before compositing) |
+| G10 | Coverage (M1/M2/m1/m9): box-shadow and text-shadow swatch pixels; browser-side document background readback (`pageBackgroundColor`, from `WebContents::GetBackgroundColor()`, §5.4) on two white boosted pages, one with `background:#FFFFFF` and one with no CSS background at all (review r2 N3); black→white gradient midpoint; 50%-alpha overlay pair | Shadows within ΔE00 3 of builder prediction for their colors; background readback on **both** pages equals the builder's remapped white exactly, and plain white with the Boost removed; gradient midpoint within ΔE00 3 of the per-pixel prediction (subdivision, §5.3); alpha pair within ΔE00 3 of remap-then-blend prediction (remap runs before compositing) |
 | G11 | DOM truth: with the remap on, `getComputedStyle(document.body).backgroundColor` and canvas `getImageData` | Original values (paint-only effect, §3.3) |
 | G12 | Two Boosts, one host (one wheel, one legacy-filter); plus a path-scoped Boost (`/only/`) probed on matching and non-matching paths | Exactly one color system active (planner rule §9.4); path-scoped: remapped under the prefix from first paint (generation check as G6), unremapped outside it |
 
@@ -1198,8 +1305,9 @@ plan's PR does not touch that file.
 1. **CDN build:** run `--only boostcolor` against a `CEF_SOURCE=cdn` build (OpenEngine no-ops,
    §9.2): G1, G2, G5, G6, G7, G10, G12 must FAIL; G3/G11 PASS. Record the FAIL lines in the
    implementation PR next to the fork-build PASS run.
-2. **Late-registration arm (G6):** with the fork build, register after navigation start and show
-   G6's generation assertion FAILs — proving the no-flash gate measures ordering, not just color.
+2. **Late-registration arm (G6):** with the fork build, navigate, wait for the document's
+   `painted` report, then register, and show that G6's predicate is false for that document —
+   proving the no-flash gate measures ordering, not just color (review r2 N5).
 3. **B2 arm (G5b):** during E1/E2 development, run G5 once against a build with the filter
    (incorrectly) installed at the `:3292` site and record G5b FAILing while G5a passes — or, if
    that variant is never built, state in the PR that G5b is the regression guard and show it
@@ -1218,12 +1326,12 @@ median reported.
 
 | Gate | Budget |
 |---|---|
-| **Zero cost when off (exact):** `snapshotCommandLog` for heavy-1, fork build with empty registry vs `CEF_SOURCE=cdn` build, both without the paint-report switch | **Byte-identical op logs.** This proves the §3.2 claim directly: no Boost → the recorded display list does not change at all. Also `boostColorSnapshotsSent == 0` on the fork build (no launch message, readback §9.2) |
+| **Zero cost when off (exact):** `snapshotCommandLog` for heavy-1, fork build with empty registry vs `CEF_SOURCE=cdn` build, both without the paint-report switch. First run CDN vs CDN once to prove the log is stable between runs (heavy-1 has no images, so no image `uniqueID`, `logging_canvas.cc:229`; review r2 N9) | **Byte-identical op logs.** This proves the §3.2 claim directly: no Boost → the recorded display list does not change at all. Also `boostColorSnapshotsSent == 0` on the fork build (no launch message, readback §9.2) |
 | Zero cost when off (time): Tracing paint+record total over the heavy-1 scroll script, fork (empty registry) vs CDN build | Δ ≤ 2% (paired medians). The op-log identity above is the real gate; this bounds anything outside recording |
 | Navigation with empty registry | No budget needed beyond identity: no IPC exists to pay for (§4). Without the paint-report switch, load heavy-1, navigate 10 times (same- and cross-process), then assert `boostColorSnapshotsSent == 0` and `boostColorGeneration == 0`. A count, not a duration. Break arm: the same run with one registered-then-removed pattern must read `boostColorSnapshotsSent > 0` |
 | One Boost color: Tracing paint+record total per scroll pass on heavy-1/2/3, remap on vs off, same build/run | On ≤ off × 1.10 per fixture, and rAF p95 stays ≤ 8.3 ms (120 Hz) on each. Scroll replay after first paint records nothing new, so steady-scroll cost should be ~0; > 10% means invalidation is over-firing |
 | Toggle: apply a matrix to the visible heavy-1 page | One full repaint only: Tracing shows one paint of the view between apply stamp and first-paint stamp (G7's numbers); no second full paint within the following 500 ms at rest |
-| Drag: 2 s of 60 Hz snapshot updates to the visible page | rAF p95 during drag ≤ pre-drag p95 + one vsync step (8.3 ms); if missed, App coalescing drops to 30 Hz (§6.2) and the gate reruns. Lateness + load printed |
+| Drag: 2 s of 60 Hz per-browser deltas to the visible page, with 50 registered patterns and at least 10 other renderers of the Profile open | rAF p95 during drag ≤ pre-drag p95 + one vsync step (8.3 ms); if missed, App coalescing drops to 30 Hz (§6.2) and the gate reruns. The run prints the delta message size and the messages sent per second (review r2 N7). Lateness + load printed |
 | Snapshot size sanity | 100 registered patterns: broadcast payload printed in the run log; no budget in v1, but a payload > 256 KiB fails review (it would mean the entry encoding is wrong — 100 × (host+path+80 B matrix) is ~35 KiB) |
 
 Idle CPU stays at the existing near-zero budget: registry, observer, and agents hold no timers.
@@ -1244,7 +1352,7 @@ parallel from day one. Estimates are guesses for planning, not commitments.
 | S1 | shell | `BoostColorMatrix.swift` (two-stage builder) + planner fields + harness numeric/continuity cases (§9.1) | `boosts` harness green under `verify-all.sh --only boosts` (through `heavy.sh`) |
 | S2 | shell | OpenWeb mirror types + `BoostEngineAdapter` registration/apply logic (§9.3), capability-gated so the App works on the current distrib (calls no-op) | App runs; existing `boosts` automation unchanged; filter runtime still live |
 | S3 | shell | Fixtures (§8/§11) + `boostcolor` suite with G1–G12 written against the spec | Suite runs and FAILs G1/G2/G5/G7/G10/G12 on the current engine (the §11.2.1 break proof, recorded early) |
-| S4 | shell | Flip: planner emits `colorMatrix`, applier payload drops the filter for wheel Boosts (§9.4), B2 rewrite handed to the site-control owner. **Blocked until C-4R-7 and the extended C-4R-2 have landed** (§8) and the §7.2 tokens are re-fitted | Full suite green on the E4 distrib; `verify-all.sh` full run for the flip PR |
+| S4 | shell | Flip: planner emits `colorMatrix`, applier payload drops the filter for wheel Boosts (§9.4), B2 rewrite handed to the site-control owner. **Blocked until C-4R-7 and the extended C-4R-2 have landed** (§8), the §7.2 tokens are re-fitted, and the small-ρ fade law is chosen (v1, T1, or T2, §8 item 4) | Full suite green on the E4 distrib; `verify-all.sh` full run for the flip PR |
 
 Landing order: S1–S3 can merge before E1–E5 (all inert). E1–E5 land as one engine PR series
 (patches + overlay + OpenEngine), then S4 flips the runtime. Step 4R starts after #103 merges
@@ -1263,14 +1371,14 @@ E1–E5 or S1–S3; C-4R-7 + extended C-4R-2 block only S4** (§8).
 | Q-B6 | Inline SVG vs SVG-as-image; srcdoc inheritance | Inline remaps, image does not (falls out of §5); srcdoc inherits (§6.4) | C-4R-5 |
 | Q-B7 | ~~Scheme scope/mechanism~~ **Ruled (lead, review r1): dropped from v1** (§5.6). Post-v1 only, on per-tab WebContents preferences if a control ever needs it | Nothing ships | C-4R-9 (fact-finding only) |
 | Q-B8 | Per-tab apply covering non-matching subframes | Yes (whole WebContents, resolved renderer-side) | No dedicated capture; Arc's `applyColorFilter:` is per web contents (name only) |
-| Q-B9 | Print, PDF chrome, extension popups, DevTools | Excluded (Open choice, §6.4) | Lead decision if a user-visible gap appears; no capture planned |
+| Q-B9 | Print, PDF chrome, extension popups, DevTools | Excluded (Open choice, §6.4). Print is excluded by the `Printing()` skip in `PaintFrame` (§3.4 rule 7); paint preview and drag images follow the screen | Lead decision if a user-visible gap appears; no capture planned |
 | Q-B10 | Peek / Little Open recoloring in Arc | Applies | C-4R-10 |
 | Q-B11 | Form controls and Mac scrollbars | **Unremapped in v1** — native-theme paint is canvas-direct and never reaches the hook (review M2, §3.2). Selection highlight *does* remap (solid-color paint). Follow-up if C-4R-11 shows Arc remaps controls: scoped `cc::PaintCanvas` proxy around `WebThemeEngine::Paint` calls only (never a canvas-wide hook — canvas 2D shares `RecordPaintCanvas`) | C-4R-11 decides the follow-up; nothing blocks v1 |
 | Q-B12 | Stage-A invert form | `L′ = 1 − (aA·L + bA)`, hues untouched | C-4R-7 (blocks S4) |
 | Q-B13 | Arc's exact paint hook and cache (BO-23d/g) | Not needed: Open matches pixels, not the hook (Open choice) | — |
 | Q-B14 | Error pages resolving with the failed URL (§6.4) | Remap accepted in v1 | Implementer checkpoint during E2 |
 | Q-B15 | ~~Which editor control sets the scheme~~ **Ruled with Q-B7:** no v1 control, no channel | Nothing ships | C-4R-9 (fact-finding only) |
-| Q-B17 | Small-ρ fade law: matrix interpolation (long-way hue path) vs knob-saturation scaling (§7.2 wart); `rampEnd` value | Matrix interpolation, `rampEnd` 0.20 | C-4R-2 small radii (blocks S4) |
+| Q-B17 | Small-ρ fade law: v1 matrix interpolation (splits reds at the hue seam for 0 < ρ < rampEnd, §7.2), T1 hue mix (splits at the knob's antipode), or T2 RGB mix (no split) (§8 item 4); `rampEnd` value | v1 matrix interpolation, `rampEnd` 0.20 | C-4R-2 small radii with the seam pair and hue strip (blocks S4) |
 | Q-B16 | Wide-gamut (`display-p3`, `oklch`) solid colors: exact Arc behavior unknown (Arc's HSL is presumably sRGB too) | Convert as stored, clamp (§5.1); e2e probe asserts no crash and a stable color, not parity | Future capture if p3-heavy sites look wrong |
 
 ## 14. Review checklist self-run (this docs PR)
