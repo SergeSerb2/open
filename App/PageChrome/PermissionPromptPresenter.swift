@@ -43,14 +43,18 @@ final class PermissionPromptPresenter: NSObject, NSPopoverDelegate {
   }
   func presentPending() {
     guard !popover.isShown, let owner, !owner.isClosing, let first = pending.first,
-          owner.selectedContent === first.page, let container = owner.controller?.container,
-          owner.window?.isKeyWindow == true, NSApp.isActive else { return }
+          NSApp.isActive else { return }
+    let anchor: NSView
+    if owner.selectedContent === first.page, let container = owner.controller?.container { anchor = container }
+    else if owner.extensionPopup.owns(first.page) || owner.auxiliaryPages.contains(where: { $0.content === first.page }) { anchor = first.page.view }
+    else { return }
+    guard anchor.window?.isKeyWindow == true else { return }
     let origin = first.request.origin
     view.origin.stringValue = (origin.host() ?? origin.absoluteString) + (origin.port.map { ":\($0)" } ?? "")
     let names = Self.kinds.filter { first.request.kinds.contains($0.0) }.map(\.1)
     view.message.stringValue = "Wants to use \(names.isEmpty ? "additional permissions" : names.joined(separator: " and "))"
     view.remember.state = .off; presentedRequest = first.request
-    popover.show(relativeTo: CGRect(x: min(160, container.bounds.midX), y: 0, width: 1, height: 1), of: container, preferredEdge: .maxY)
+    popover.show(relativeTo: CGRect(x: min(160, anchor.bounds.midX), y: anchor.isFlipped ? 0 : anchor.bounds.maxY, width: 1, height: 1), of: anchor, preferredEdge: anchor.isFlipped ? .maxY : .minY)
   }
   func answer(_ state: OEPermissionState?) {
     guard !finishing, !pending.isEmpty else { return }

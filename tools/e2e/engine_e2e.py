@@ -692,6 +692,12 @@ def page_chrome_checks(factory, results, tmp):
         held = wait_until(lambda: (lambda s: s if s['pending'] == 1 and s['held'] else None)(app.call('page-dialog-state')), timeout=5, step=.02)
         answered = app.call('dialog', accept=True)
         results['dialog_hold_policy'] = {'ok': bool(held) and not held['visible'] and answered and bool(wait_until(lambda: app.eval(tab,'window.outcome') is True, timeout=3, step=.02))}
+        unanswered = app.call('open',url=origin+'/page?unanswered')['id'];app.call('wait',tab=unanswered)
+        app.eval(unanswered,'setTimeout(()=>confirm("unanswered close"),0);true')
+        assert wait_until(lambda:app.call('page-dialog-state')['pending']==1,timeout=5,step=.02)
+        app.call('close',tab=unanswered)
+        removed_unanswered=wait_until(lambda:all(t['id']!=unanswered for t in app.call('tabs')),timeout=5,step=.02)
+        results['dialog_unanswered_host_close']={'ok':bool(removed_unanswered) and app.call('page-dialog-state')['pending']==0}
         app.call('policy', dialogs='')
         closing = app.call('open', url=origin + '/page?unsaved')['id']; app.call('wait', tab=closing); app.call('focus', tab=closing)
         app.call('click', tab=closing, selector='#unload'); before_hosts = app.call('host-counts')['created']
@@ -709,6 +715,14 @@ def page_chrome_checks(factory, results, tmp):
         results['dialog_beforeunload_leave'] = {'ok': bool(removed) and app.call('page-dialog-state')['pending'] == 0}
         app.call('select', tab=tab); app.call('focus', tab=tab)
 
+        # A policy denial must reach the real permission callback and draw no UI.
+        app.call('policy',permissions='deny')
+        app.call('permission-setting',tab=tab,origin=origin,kind=8,state=0);app.call('events')
+        denied=app.eval(tab,'Notification.requestPermission()')
+        policy_events=app.call('events')
+        results['permission_deny_policy']={'ok':denied=='denied' and any(e['type']=='permission' for e in policy_events)
+            and not app.call('permission-state')['visible'] and app.call('permission-state')['pending']==0}
+        app.call('policy',permissions='')
         # Separate secure localhost origins keep remembered decisions independent.
         remembered = []
         for index, allow, remember in [(0,False,False),(1,True,True),(2,False,True)]:

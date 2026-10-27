@@ -1090,7 +1090,7 @@
               windowNumber: target.windowNumber, context: nil, characters: String(ch),
               charactersIgnoringModifiers: String(ch), isARepeat: false, keyCode: ch == "\r" ? 36 : 0)
             {
-              target.sendEvent(event)
+              app.activationTrace.deliverSyntheticKey(event, to: target)
             }
           }
         }
@@ -1124,7 +1124,7 @@
             windowNumber: target.windowNumber, context: nil, characters: chars, charactersIgnoringModifiers: chars,
             isARepeat: false, keyCode: code)
         else { continue }
-        if route == "window" { target.sendEvent(event) } else { NSApp.sendEvent(event) }
+        app.activationTrace.deliverSyntheticKey(event, to: route == "window" ? target : nil)
       }
       // CEF's window key callback is asynchronous. Report after its next pump
       // turn, as a user-facing automation caller expects.

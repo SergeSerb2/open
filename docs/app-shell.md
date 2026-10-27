@@ -1133,3 +1133,47 @@ record is awaited through engineShutdownEnd; both configurations reject forced
 cleanup and require zero pending work/hosts before shutdown.
 
 [Full review table, verifier rows, timing and retained failures](engine-spike/step-c-review-r1/summary.md).
+
+### Step D page chrome
+
+The App owns separate presenters for the Find bar, native page menus, JavaScript
+sheets, permission prompts, Downloads tray and extension panels. They call only
+OpenEngine. Closing a host cancels its unanswered requests; window teardown
+cancels choices, close tasks and panels before hosts and engine shutdown.
+
+Find uses the planned 260 × 24 pt bar, 8 pt from the container's top-right. It
+searches the focused split pane or Peek host. Its own field editor receives
+Return/Shift+Return directly and keeps a text undo manager. Engine result
+callbacks supply both counts and active ordinals, which may arrive separately.
+No ordinal is invented in the UI. Empty text and Escape stop Find and restore
+page focus only in an active, key window.
+
+JS alert/confirm/prompt/beforeunload use asynchronous native sheets. Closing a
+loaded tab first sends `Page.close` through OpenEngine's public DevTools method;
+only the engine close callback removes or unloads the model tab. Stay preserves
+the same model tab and host. Unloaded tabs still close without creating a host.
+Permission prompts check stored per-origin decisions first, offer Allow/Block
+and an opt-in Remember checkbox, and dismiss on close/navigation. Native page
+menus preserve engine entries and add link/Peek/image/highlight actions.
+Little Open routing stays with Step E and its context item is disabled.
+
+The Downloads toolbar tray shares the real Library provider. It shows name,
+origin, bytes, speed and progress, with pause/resume/cancel and Show in Finder.
+The profile supplies its destination or an asynchronous native Save sheet.
+Per the lead appendix, Cmd+Shift+J still selects Downloads in the shared Library;
+the toolbar opens the tray. No second Library or SnapshotStore is created.
+
+The supplied RE documents contain no Arc captures of Find, JS sheets, permission
+prompts, the Downloads tray or extension popups. Their colors, spacing and exact
+wording are explicit Arc-like guesses; no 1:1 visual comparison is claimed.
+Evidence for native menu behavior is `docs/re/interaction-states.md` §15 (sidebar
+menus, not proof of page grouping); link/highlight behavior and Downloads data
+come from `docs/re/features-advanced.md` LK-1/LK-2 and DL-1. The plan supplies Find
+size and placement. Screenshots use only Open's synthetic fixtures.
+
+Pending dependencies: #69/#96 supply the reworked Site Control overlay. The URL
+button and sidebar intent currently prepare its real host inputs and anchor,
+then refuse presentation. #93/#94 supply native Chrome extension action/popup
+support. Current OpenEngine popup callbacks are wired to anchored child panels
+with auto-size, Escape, outside-click and lifecycle handling. Passing the current
+fixture does not claim the pending native Chrome implementation has landed.

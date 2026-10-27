@@ -24,6 +24,7 @@ final class FindBarView: NSView {
     let immediate = field.sendsSearchStringImmediately, whole = field.sendsWholeSearchString
     let cell = FindSearchCell(textCell: ""); cell.editor = editor; field.cell = cell
     field.target = target; field.action = action; field.placeholderString = placeholder
+    field.isEditable = true; field.isSelectable = true
     field.sendsSearchStringImmediately = immediate; field.sendsWholeSearchString = whole
     editor.isFieldEditor = true; editor.isRichText = false; editor.allowsUndo = true
     editor.onReturn = { [weak self] previous in if previous { self?.onPrevious?() } else { self?.onNext?() } }

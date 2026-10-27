@@ -83,6 +83,7 @@ private final class DownloadsBodyView: NSView {
     for (index, row) in rows.enumerated() {
       let y = CGFloat(index * 66)
       let name = NSTextField(labelWithString: row.fileName); name.font = .systemFont(ofSize: 13, weight: .medium); name.lineBreakMode = .byTruncatingMiddle
+      name.toolTip = row.filePath
       name.frame = CGRect(x: 14, y: y + 4, width: 244, height: 18); document.addSubview(name)
       let bytes = ByteCountFormatter.string(fromByteCount: row.receivedBytes, countStyle: .file)
       let speed = row.bytesPerSecond > 0 ? " · \(ByteCountFormatter.string(fromByteCount: row.bytesPerSecond, countStyle: .file))/s" : ""
@@ -94,6 +95,10 @@ private final class DownloadsBodyView: NSView {
         progress.minValue = 0; progress.maxValue = Double(max(1, row.totalBytes ?? 1)); progress.doubleValue = Double(row.receivedBytes)
         document.addSubview(progress)
         if progress.isIndeterminate { progress.startAnimation(nil) }
+      } else if let path = row.filePath {
+        let location = NSTextField(labelWithString: path); location.font = .systemFont(ofSize: 10)
+        location.textColor = .secondaryLabelColor; location.lineBreakMode = .byTruncatingMiddle; location.toolTip = path
+        location.frame = CGRect(x: 14, y: y + 44, width: 244, height: 16); document.addSubview(location)
       }
       let actions: [(String, String, String)]
       switch row.state {

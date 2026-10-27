@@ -315,3 +315,47 @@ ordering check queues actual Save/background work with the automation-only
 `OPEN_AUTOMATION_ASYNC_TASK_DELAY_MS` scheduling delay, then quits. Cancellation
 must clear work and close hosts before the actual engine shutdown boundary. The
 flag delays scheduling; it does not replace engine responses.
+
+### Step D page chrome
+
+`--only page-chrome` runs the new local HTTP/extension fixtures without the
+19 inherited M1 checks. `--only features` runs both sets against the real shell.
+Every on-screen invocation takes `/usr/bin/lockf /tmp/open-onscreen-e2e.lock`.
+The fixtures use private data roots and the default fork distribution.
+
+- `find-state` reports the actual search text, count, active engine ordinal,
+  page handle, visibility and container-relative frame. Keys go through the
+  real Find field editor, including Return, Shift+Return and Escape.
+- `page-dialog-state` reports the pending engine dialog and owned native sheet.
+  `page-dialog-press(accept:text:)` performs its actual NSAlert button action.
+  Existing `policy(dialogs:accept|dismiss|hold)` and `dialog` retain their caller
+  contract. Hold leaves the engine callback pending without drawing a sheet.
+- `permission-state` reports the owned prompt. `permission-press(allow:remember:)`
+  sets its checkbox and performs the native button action. `permission-setting`
+  reads/writes OpenEngine's real per-origin state, including relaunch checks.
+- `context-menu-state` reports the built native NSMenu tree.
+  `context-menu-select(key:)` performs the same enabled NSMenuItem action as a
+  user selection. The `hold` policy defers native tracking so the socket caller
+  can choose an item; it does not replace engine request completion.
+- `downloads-show` performs the actual toolbar button. `downloads-state` reports
+  the shared Library provider rows and anchor. `downloads-action(id:action:)`
+  uses the same pause/resume/cancel/Finder actions as the tray buttons.
+  `download-profile-options(directory:ask:)` configures only the fixture profile.
+  Finder verification ends at the real NSWorkspace request and observed Finder
+  activation; the runner never drives or inspects Finder's selection UI.
+- `site-controls` records the selected tab, profile, origin and URL-button
+  anchor. `site-controls-state.available=false` means presentation is pending
+  #69; this is not a successful presentation result.
+- `extension-toolbar-press` performs the actual extension toolbar button;
+  `extension-popup-state` reports the live engine panel and size. Native Chrome
+  popup work pending #93 is recorded separately from the current API flows.
+
+Explicit e2e launches set `OPEN_AUTOMATION_VIRTUAL_INPUT=1`. Only in those
+short-lived automation profiles, a local event monitor drops untagged queued
+key events before text fields retain user input. It records only the event kind
+and monotonic time, never characters or key codes. Tagged socket pointer events
+and exact event-identity-scoped socket key delivery remain real AppKit events. Ordinary app launches
+are unchanged. `virtual-input-state` reports the opt-in; `queued-key-control`
+posts a fixed synthetic sentinel to verify the guard. A hardware interaction
+makes the affected assertion INTERRUPTED, never PASS. Each workflow allows at
+most three fresh attempts. No external application receives input.

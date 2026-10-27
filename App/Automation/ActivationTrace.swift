@@ -8,6 +8,7 @@ final class ActivationTrace {
   private(set) var events: [[String: Any]] = []
   private var applicationObservers: [any NSObjectProtocol] = []
   private var hardwareMonitor: Any?
+  private var syntheticKey: NSEvent?
   private var syntheticPointerTags: Set<Int> = []
   private var workspaceObserver: (any NSObjectProtocol)?
 
@@ -18,6 +19,7 @@ final class ActivationTrace {
     if ProcessInfo.processInfo.environment["OPEN_AUTOMATION_VIRTUAL_INPUT"] == "1" {
       hardwareMonitor = NSEvent.addLocalMonitorForEvents(matching: [.keyDown, .keyUp, .leftMouseDown, .rightMouseDown]) { [weak self] event in
         let dropKey = MainActor.assumeIsolated {
+          if self?.syntheticKey === event { return false }
           if event.type == .leftMouseDown || event.type == .rightMouseDown {
             if self?.syntheticPointerTags.remove(event.eventNumber) == nil {
               self?.append(["event": "hardwareInteraction", "kind": "pointer", "uptime": ProcessInfo.processInfo.systemUptime])
@@ -50,6 +52,11 @@ final class ActivationTrace {
           "frontmostApp": name, "frontmostPID": pid, "frontmostBundle": bundle])
       }
     }
+  }
+  func deliverSyntheticKey(_ event: NSEvent, to window: NSWindow? = nil) {
+    syntheticKey = event
+    defer { syntheticKey = nil }
+    if let window { window.sendEvent(event) } else { NSApp.sendEvent(event) }
   }
   func tagSyntheticPointer(_ tag: Int) { if hardwareMonitor != nil { syntheticPointerTags.insert(tag) } }
   private func append(_ event: [String: Any]) {
