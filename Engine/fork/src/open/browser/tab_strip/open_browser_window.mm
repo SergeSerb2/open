@@ -421,7 +421,10 @@ bool OpenBrowserWindow::IsTabStripEditable() const {
 }
 
 bool OpenBrowserWindow::IsToolbarVisible() const {
-  return false;
+  // The embedder draws the window's extension actions (fork patch P2), so
+  // chrome.action.openPopup has a toolbar to open from. Other readers need a
+  // BrowserView as well (iOS promo).
+  return true;
 }
 
 bool OpenBrowserWindow::IsLocationBarVisible() const {

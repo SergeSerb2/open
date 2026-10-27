@@ -93,7 +93,7 @@ Arguments are `key=value`; values that parse as JSON are sent as JSON.
 | `click` | `tab`, `selector` or `text` | Click an element with DevTools input events (a real user gesture inside the page) |
 | `rightclick` | `tab`, `x`, `y` | Right click in the page |
 | `type` | `tab`, `text` | Insert text in the focused page field |
-| `key` | `key`, `modifiers`, `route` | Key press inside Open. `route: "app"` (default) goes through `NSApplication.sendEvent`, like real typing; `route: "window"` goes straight to the window's first responder (the page view), which tests the engine's pre-key hook. `text` sends plain characters to the first responder. |
+| `key` | `key`, `modifiers`, `route`, `window` | Key press inside Open. `route: "app"` (default) goes through `NSApplication.sendEvent`, like real typing; `route: "window"` goes straight to the window's first responder (the page view), which tests the engine's pre-key hook. `window: "popup"` targets the action popup's panel instead. `text` sends plain characters to the first responder. |
 | `mouse` | `window`, `x`, `y`; `action=move`, `action=hover`, or `action=click` with `modifiers` (`option`, `command`, `shift`, `control`); or `from` / `to` point pairs | Own-window click, queued pointer motion, or native resize drag; system cursor stays unchanged. `click` runs the window's layout pass first (as real input follows a display cycle) and queues the mouse-up before sending the mouse-down, so controls that track the mouse (the window buttons) finish. Motion events carry a tag; from the first one on, pointer-driven window logic (the sidebar hover reveal) ignores the hardware pointer, so someone using the Mac cannot disturb a check. `move` and `click` also set the automation pointer at once (`BrowserWindowController.automationPointer`), and `hover` sets it after it has delivered enter, move, and exit (it rebuilds every tracking area first, and those rebuilds must still see the old point). A `move` delivers no enter or exit, so it clears `hover`'s record of entered owners and the next `hover` enters the owners under its point again; state that reads where the pointer is, not an event (the window buttons' hover after a full-screen exit, a restore, or a show), reads it instead of the hardware pointer. `hover` also delivers enter, move, and exit to the owners of the tracking areas under the point, title bar included (tracking areas follow the hardware pointer), and returns the owners it found. macOS's own window-button glyphs and tiling menu follow only the hardware pointer |
 | `focus` | `tab` | Give the page keyboard focus |
 | `find` / `zoom` / `mute` | `tab`, … | Find in page, zoom level, mute |
@@ -102,6 +102,13 @@ Arguments are `key=value`; values that parse as JSON are sent as JSON.
 | `extensions` | — | Installed extensions and the window's toolbar actions (through the OpenWeb `ExtensionHost` protocol) |
 | `popup` | `extension` | Run the action like a click on its button; returns the popup page |
 | `popup-close` | — | Close the open popup |
+| `actions` | — | The focused window's toolbar actions from Chrome's model (fork patch P2): `ready`, and per action id, name, title, tooltip, accessible name, badge and colors, enabled, has popup, pinned and pinned index, wants to run, site access, showing popup, `live` (from the live model, else the profile's list), and the toolbar image and plain icon (PNG byte count, hash, point width, `pixels`: each representation's pixel size, and `object`: the image object's identity) |
+| `ext-pin` | `extension`, `pinned` (default `true`) | Pin or unpin an action |
+| `ext-move` | `extension`, `index` | Move a pinned action to a pinned index |
+| `ext-run` | `extension`, `source` (`toolbar` default, `menu`, `command`) | Run the action as the user would; returns whether it ran (a popup opens, or `chrome.action.onClicked` fires) |
+| `ext-menu` | `extension`, `source` (`toolbar` default, `menu`), `select`, `keep`, `stale` | The action's context menu items (title, command, enabled, checked, separator, submenu); with `select`, run the item with that title and return `items` and `ran`. `keep` keeps this menu open (not cancelled); `select` with `stale` then runs the item on that kept menu and cancels the new one |
+| `ext-popup` | — | The open popup: `open`, its page, its extension, its source (`user`, `command`, `api`), and `staysOpenOnBlur` |
+| `activate` | — | Activate Open and make the focused window key (Chrome's "active window"), even with a popup panel in front; returns `key` |
 | `windows` | — | Open's windows: number, class, frame, key, first responder |
 | `shell-windows` | — | Standard controller IDs and native window numbers |
 | `window-state` | `id` (optional: another standard window, not made key) | Frame, sidebar mode/width/reveal, panel frame, traffic-light centers, frames, and visibility, the title bar frame, the hardware pointer in window coordinates (read only), hover-reveal state (`reveal`: phase, show/hide counts, last dwell, zone, the card's frame and on-screen offset), chrome geometry (`chrome`: URL field, favorites section, Space header band, title frame and baseline, hover states), window buttons (`trafficLightsDimmed`, `trafficLightsHovered`, per button alpha and action, the window's AX button attributes `axWindowButtons` with role and subrole), the automation pointer (`automationPointer`, window coordinates, or null when it is in another window or never moved), `key`, `appActive`, `miniaturized`, `zoomed`, selection, shown page IDs, engine URL/active ID, native and HTML full-screen state, transition state and completed transition count. Runs the window's pending layout first |
@@ -156,11 +163,14 @@ Arguments are `key=value`; values that parse as JSON are sent as JSON.
 /usr/bin/lockf /tmp/open-onscreen-e2e.lock python3 tools/e2e/engine_e2e.py --only extensions --style alloy    # needs .re/ext/unpacked/*
 /usr/bin/lockf /tmp/open-onscreen-e2e.lock python3 tools/e2e/engine_e2e.py --only extensions --style chrome
 /usr/bin/lockf /tmp/open-onscreen-e2e.lock python3 tools/e2e/engine_e2e.py --only tabstrip --style chrome     # fork patch P1: chrome.tabs sees Open's tabs
+/usr/bin/lockf /tmp/open-onscreen-e2e.lock python3 tools/e2e/engine_e2e.py --only actions --style chrome      # fork patch P2: toolbar actions and popups
 OPEN_AUTOMATION=1 ~/Library/Caches/OpenRE/scripts/heavy.sh nice -n 10 tools/build.sh Release
 /usr/bin/lockf /tmp/open-onscreen-e2e.lock python3 tools/e2e/engine_e2e.py --only measure --config Release    # launch, memory, idle CPU
 ```
 
 Every run is isolated, because several agents run the harness at once: it gets its own data root `~/Library/Application Support/Open-E2E-<suite>-<style>-<pid>-<random>`, the matching Chromium cache root `~/Library/Caches/<same name>` (Chromium's rule for roots under Application Support), and a scratch folder in the system temp folder. All three are deleted when the run ends, also after `timeout` or Ctrl-C; `--keep` keeps them and prints their paths. A run also deletes the folders of earlier runs whose process is gone. No folder name is shared between runs. Each suite writes `docs/engine-spike/results-*.json` plus screenshots. `tabs` reports `page.chromeTabId` and `page.chromeWindowId` (the `chrome.tabs`/`chrome.windows` ids of a hosted tab, else -1). The `tabstrip` suite loads `tools/e2e/fixtures/tabs-probe` (records tab events, sets a badge) and Bitwarden. Extensions come from `.re/ext/unpacked/{ublock-lite,darkreader,1password,bitwarden}` (CRX files from the Chrome Web Store, unpacked with `tools/crx-unpack.py`, which keeps the store ID).
+
+The `actions` suite loads a copy of `tools/e2e/fixtures/action-probe` and Bitwarden. It checks extension toolbar actions, menus and popups, including update, reload, renderer crash and window teardown. `--only app-actions` retains main's app-command suite (also available through `--only commandbar`).
 
 Startup regression flags exist only in automation builds:
 `OPEN_AUTOMATION_SKIP_DISPLAY_LINK=1` leaves the real three-second first-frame
@@ -268,7 +278,7 @@ Window-chrome receipts retain this timeline to distinguish foreground loss from
 an edge or animation failure. Only foreground app metadata is read; input goes
 only to Open, and no other app's window content is read.
 
-`--only actions` runs the complete Step C command-bar/native-menu/action flow,
+`--only app-actions` runs the complete Step C command-bar/native-menu/action flow,
 including page Copy/Paste/Undo/Select All, model undo, lazy duplication, and real
 Settings/Library. `--only commandbar` remains available with the same checks.
 Use `--style chrome` to exercise production P1 tab hosting. Screenshot comparisons
@@ -276,8 +286,7 @@ request the existing `window-frame unconstrained=true` mode and wait for the exa
 reference size; their dimensions and ≤1 pt/ΔE00≤2 assertions stay unchanged.
 
 
-The harness's data root is `.re/e2e-<suite>-<style>/user-data` in its own worktree,
-not a shared Application Support path. A native activation helper addresses the
+Each run uses its unique `Open-E2E-*` data and cache roots described above. A native activation helper addresses the
 PID returned by that socket and first checks its exact executable path; it never
 activates an Open instance by bundle identifier. App cleanup waits for that PID
 to exit even if the LaunchServices waiter has ended. Native mouse moves carry a
@@ -338,3 +347,34 @@ ordering check queues actual Save/background work with the automation-only
 `OPEN_AUTOMATION_ASYNC_TASK_DELAY_MS` scheduling delay, then quits. Cancellation
 must clear work and close hosts before the actual engine shutdown boundary. The
 flag delays scheduling; it does not replace engine responses.
+
+### Unattended cleanup
+
+Every suite closes owned dialogs and popups from `finally`, then terminates every
+process it started. Cleanup records exact executable paths for the app and its
+children, sends the normal quit request, and kills any verified owned PID that
+remains. A small CoreGraphics helper checks only on-screen window numbers for
+those PIDs; it reads no other app's UI. Each result has a `cleanup` receipt and
+fails if an owned process or on-screen window remains.
+
+The extension `actions` suite matches the uninstall confirmation by Chromium's
+window class, the probe extension's name and the Cancel/Remove controls. Its menu
+case always dismisses the dialog from `finally`. Set
+`OPEN_E2E_FAIL_UNINSTALL=1` for an intentional failure after that exact dialog
+appears; cleanup must still report PASS with zero owned windows and processes.
+`popup-callback-close phase=open|resize|ready toggle=true|false` closes from a
+real engine delegate callback (`phase=clear` cancels the policy).
+`ext-run` / `ext-menu focusTab=<split pane>` focuses a real Split View pane and
+runs the action/menu in the same socket turn. `ext-menu snapshot=true` returns
+the action snapshot before yielding. `window-close releaseBrowsers=true` drops
+the mirror's browsers without calling `OEBrowser.close` and reports whether they
+were released; this covers the destructor path with an open popup.
+
+For a revision-specific engine gate, pass `--engine-sha256 <64 lowercase hex>`.
+The runner requires the complete Vendor framework to match that exact digest.
+Xcode re-signs the embedded copy, so it also compares every byte of both binaries
+after removing signatures on private APFS clones and normalizing only the
+signature-storage `__LINKEDIT.vmsize` and `filesize` fields. It refuses to launch if the code
+fingerprints differ. Receipts record raw and code fingerprints, the required
+Vendor hash, UUIDs and source stamp. UUID equality alone does not identify an
+engine revision. Real app/Vendor bundles are never modified by the comparison.

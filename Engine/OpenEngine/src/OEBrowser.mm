@@ -6,11 +6,14 @@
 // contents inserted here become its tabs, hosted in our views, so
 // chrome.tabs and chrome.windows see the shell's tabs. The shell owns order,
 // pinning, and selection; this class mirrors them into the strip, and turns
-// Chromium's own tab changes into delegate requests. P2 replaces the
-// manifest-based actions and the URL-loaded popup with Chrome's
-// ToolbarActionsModel and a real ExtensionViewHost popup.
+// Chromium's own tab changes into delegate requests. P2 adds Chrome's
+// ToolbarActionsModel (the window's extension actions) and real
+// ExtensionViewHost popups.
 
 #import "OEClient.h"
+
+#include <functional>
+#include <string_view>
 
 #include "include/internal/cef_types_mac.h"
 
@@ -25,6 +28,21 @@
 - (void)oe_pinRequested:(CefRefPtr<CefBrowser>)browser pinned:(BOOL)pinned;
 - (BOOL)oe_discardRequested:(CefRefPtr<CefBrowser>)browser;
 - (void)oe_closeRequested;
+- (void)oe_extensionActionUpdated:(NSString*)identifier;
+- (void)oe_preparePopupClient:(CefRefPtr<CefClient>&)client
+                     settings:(CefBrowserSettings&)settings
+                    extraInfo:(CefRefPtr<CefDictionaryValue>&)extraInfo
+                    extension:(NSString*)identifier;
+- (void)oe_extensionPopupOpened:(CefRefPtr<CefBrowser>)browser
+                      extension:(NSString*)identifier
+                         source:(int)source;
+- (void)oe_extensionPopupResized:(CefRefPtr<CefBrowser>)browser
+                            size:(NSSize)size;
+- (void)oe_extensionPopupReady:(CefRefPtr<CefBrowser>)browser;
+- (void)oe_extensionPopupClosed:(CefRefPtr<CefBrowser>)browser;
+- (void)oe_extensionActionMenuRequested:(NSString*)identifier;
+- (BOOL)oe_runMenu:(int)menu command:(NSInteger)command;
+- (void)oe_releaseMenu:(int)menu;
 + (void)oe_markPagesClosingForBrowser:(NSInteger)identifier;
 @end
 
@@ -36,6 +54,80 @@ constexpr NSSize kPopupMinSize = {25, 25};
 constexpr NSSize kPopupMaxSize = {800, 600};
 
 NSInteger gNextBrowserIdentifier = 1;
+
+// A CefImage (1x and 2x) as an NSImage of `points` square. Raw pixels, no
+// PNG encode and decode. `cache` keeps the last image per `key`: an
+// unchanged image (most updates: a tab switch, a badge on another action)
+// costs two pixel copies and a hash, and returns the same NSImage.
+NSImage* OEImageFromCef(CefRefPtr<CefImage> image,
+                        CGFloat points,
+                        NSString* key,
+                        NSMutableDictionary<NSString*, NSArray*>* cache) {
+  if (!image || image->IsEmpty()) {
+    [cache removeObjectForKey:key];
+    return nil;
+  }
+  NSMutableData* pixels[2] = {nil, nil};
+  int widths[2] = {0, 0};
+  int heights[2] = {0, 0};
+  size_t hash = 0;
+  for (int i = 0; i < 2; ++i) {
+    CefRefPtr<CefBinaryValue> bitmap =
+        image->GetAsBitmap(i ? 2.0f : 1.0f, CEF_COLOR_TYPE_RGBA_8888,
+                           CEF_ALPHA_TYPE_PREMULTIPLIED, widths[i], heights[i]);
+    if (!bitmap || !bitmap->GetSize() || widths[i] <= 0 || heights[i] <= 0 ||
+        bitmap->GetSize() != size_t(widths[i]) * size_t(heights[i]) * 4) {
+      continue;
+    }
+    pixels[i] = [NSMutableData dataWithLength:bitmap->GetSize()];
+    bitmap->GetData(pixels[i].mutableBytes, pixels[i].length, 0);
+    hash = hash * 31 + std::hash<std::string_view>()(std::string_view(
+                           static_cast<const char*>(pixels[i].bytes),
+                           pixels[i].length)) +
+           size_t(widths[i]);
+  }
+  NSArray* cached = cache[key];
+  if (cached && [cached[0] unsignedLongValue] == hash) {
+    return cached[1];
+  }
+  NSImage* out = [[NSImage alloc] initWithSize:NSMakeSize(points, points)];
+  CGColorSpaceRef sRGB = CGColorSpaceCreateWithName(kCGColorSpaceSRGB);
+  for (int i = 0; i < 2; ++i) {
+    if (!pixels[i]) {
+      continue;
+    }
+    CGContextRef context = CGBitmapContextCreate(
+        pixels[i].mutableBytes, widths[i], heights[i], 8, size_t(widths[i]) * 4,
+        sRGB, kCGImageAlphaPremultipliedLast | kCGBitmapByteOrder32Big);
+    CGImageRef cgImage = context ? CGBitmapContextCreateImage(context) : nullptr;
+    if (cgImage) {
+      NSBitmapImageRep* rep = [[NSBitmapImageRep alloc] initWithCGImage:cgImage];
+      rep.size = NSMakeSize(points, points);
+      [out addRepresentation:rep];
+      CGImageRelease(cgImage);
+    }
+    if (context) {
+      CGContextRelease(context);
+    }
+  }
+  CGColorSpaceRelease(sRGB);
+  if (!out.representations.count) {
+    [cache removeObjectForKey:key];
+    return nil;
+  }
+  cache[key] = @[ @(hash), out ];
+  return out;
+}
+
+NSArray<OEContextMenuItem*>* OEMenuItems(CefRefPtr<CefListValue> list) {
+  NSMutableArray* items = [NSMutableArray array];
+  for (size_t i = 0; list && i < list->GetSize(); ++i) {
+    if (CefRefPtr<CefDictionaryValue> item = list->GetDictionary(i)) {
+      [items addObject:[[OEContextMenuItem alloc] initOEWithDictionary:item]];
+    }
+  }
+  return items;
+}
 
 // Chromium's tab requests, on the browser UI thread (our main thread).
 class OETabStripHandler : public CefTabStripHandler {
@@ -80,7 +172,47 @@ class OETabStripHandler : public CefTabStripHandler {
   }
   void OnExtensionActionUpdated(CefRefPtr<CefTabStrip> tab_strip,
                                 const CefString& extension_id) override {
+    [browser_ oe_extensionActionUpdated:OEString(extension_id)];
+  }
+  void OnExtensionActionsChanged(CefRefPtr<CefTabStrip> tab_strip) override {
     [browser_ oe_extensionsChanged];
+  }
+  void OnExtensionActionMenuRequested(CefRefPtr<CefTabStrip> tab_strip,
+                                      const CefString& extension_id) override {
+    [browser_ oe_extensionActionMenuRequested:OEString(extension_id)];
+  }
+  void OnBeforeExtensionPopupCreated(
+      CefRefPtr<CefTabStrip> tab_strip,
+      const CefString& extension_id,
+      CefRefPtr<CefClient>& client,
+      CefBrowserSettings& settings,
+      CefRefPtr<CefDictionaryValue>& extra_info) override {
+    [browser_ oe_preparePopupClient:client
+                           settings:settings
+                          extraInfo:extra_info
+                          extension:OEString(extension_id)];
+  }
+  void OnExtensionPopupOpened(CefRefPtr<CefTabStrip> tab_strip,
+                              CefRefPtr<CefBrowser> browser,
+                              const CefString& extension_id,
+                              int source) override {
+    [browser_ oe_extensionPopupOpened:browser
+                            extension:OEString(extension_id)
+                               source:source];
+  }
+  void OnExtensionPopupResized(CefRefPtr<CefTabStrip> tab_strip,
+                               CefRefPtr<CefBrowser> browser,
+                               int width,
+                               int height) override {
+    [browser_ oe_extensionPopupResized:browser size:NSMakeSize(width, height)];
+  }
+  void OnExtensionPopupReady(CefRefPtr<CefTabStrip> tab_strip,
+                             CefRefPtr<CefBrowser> browser) override {
+    [browser_ oe_extensionPopupReady:browser];
+  }
+  void OnExtensionPopupClosed(CefRefPtr<CefTabStrip> tab_strip,
+                              CefRefPtr<CefBrowser> browser) override {
+    [browser_ oe_extensionPopupClosed:browser];
   }
 
  private:
@@ -94,8 +226,19 @@ class OETabStripHandler : public CefTabStripHandler {
   NSMutableArray<OEWebContent*>* _tabs;
   NSHashTable<OEWebContent*>* _pinned;
   NSArray<OEExtensionAction*>* _actions;
+  // _actions came from the live model (extensionActionsReady at the time).
+  BOOL _actionsLive;
+  BOOL _actionsAwaitContext;
+  // OEImageFromCef's cache: "<id>/<size>/<toolbar>" -> @[hash, NSImage].
+  NSMutableDictionary<NSString*, NSArray*>* _actionImages;
   OEWebContent* _popup;
   OEExtensionAction* _popupAction;
+  // P2: the page made for the popup Chromium is opening, until it opens.
+  OEWebContent* _pendingPopup;
+  OEExtensionPopupSource _popupSource;
+  NSString* _popupExtension;
+  NSUInteger _popupDelegateDepth;
+  BOOL _popupCloseScheduled;
   // Fork patch P1.
   CefRefPtr<CefTabStrip> _strip;
   // Pages Chromium is creating in the strip, until OnTabCreated.
@@ -116,6 +259,7 @@ class OETabStripHandler : public CefTabStripHandler {
     _tabs = [NSMutableArray array];
     _pinned = [NSHashTable weakObjectsHashTable];
     _chromiumTabs = [NSMutableArray array];
+    _actionImages = [NSMutableDictionary dictionary];
     [[OEEngine shared] oe_registerBrowser:self];
   }
   return self;
@@ -123,6 +267,13 @@ class OETabStripHandler : public CefTabStripHandler {
 
 - (void)dealloc {
   if (_strip) {
+    // The Browser leaves Chromium's collection before its asynchronous
+    // deletion. Native key notifications during popup/window teardown must
+    // not activate that unregistered Browser in the meantime.
+    _strip->SetHostView(nullptr);
+    // Without -close: close the popup first, as -close does. The handler's
+    // weak reference to self is already nil, so no delegate calls follow.
+    _strip->CloseExtensionPopup();
     [OEBrowser oe_markPagesClosingForBrowser:_identifier];
     _strip->Close();
   }
@@ -242,6 +393,14 @@ class OETabStripHandler : public CefTabStripHandler {
 }
 
 - (void)close {
+  if (_popupDelegateDepth) {
+    // Keep this browser alive until Chromium's popup callback unwinds too.
+    dispatch_async(dispatch_get_main_queue(), ^{ [self close]; });
+    return;
+  }
+  if (_strip) {
+    _strip->SetHostView(nullptr);
+  }
   [self closeExtensionPopup];
   for (OEWebContent* content in [_tabs copy]) {
     [self removeWebContent:content];
@@ -447,95 +606,238 @@ class OETabStripHandler : public CefTabStripHandler {
 
 #pragma mark Extension actions
 
+- (BOOL)extensionActionsReady {
+  return _strip && _strip->AreExtensionActionsReady();
+}
+
+// P2: one action's snapshot from Chrome's toolbar action model (live), or
+// from the profile's action list.
+- (nullable OEExtensionAction*)oe_engineActionFor:(NSString*)identifier {
+  CefString cid = OECef(identifier);
+  CefRefPtr<CefDictionaryValue> state = _strip->GetExtensionActionState(cid);
+  if (!state) {
+    return nil;
+  }
+  NSString* key = [identifier stringByAppendingString:@"/"];
+  return [[OEExtensionAction alloc]
+      initOEWithIdentifier:identifier
+                     state:state
+              toolbarImage:OEImageFromCef(
+                               _strip->GetExtensionActionImage(cid, 28, true),
+                               28, [key stringByAppendingString:@"28/t"],
+                               _actionImages)
+                      icon:OEImageFromCef(
+                               _strip->GetExtensionActionImage(cid, 16, false),
+                               16, [key stringByAppendingString:@"16"],
+                               _actionImages)];
+}
+
 - (NSArray<OEExtensionAction*>*)extensionActions {
-  if (!_actions) {
+  const BOOL live = self.extensionActionsReady;
+  if (_actions && _actionsLive != live) {
+    _actions = nil;
+  }
+  if (_actions) {
+    return _actions;
+  }
+  // The profile's list needs the strip object (not its Chrome window), and
+  // the strip needs a ready context.
+  CefRefPtr<CefTabStrip> strip =
+      [self oe_tabStripCreatingIfNeeded:_context.oe_isReady];
+  if (strip) {
+    std::vector<CefString> ids;
+    strip->GetExtensionActionIds(ids);
     NSMutableArray* actions = [NSMutableArray array];
-    for (OEExtension* extension in _context.extensions.installedExtensions) {
-      if (extension.enabled && extension.oe_hasAction) {
-        OEExtensionAction* action =
-            [[OEExtensionAction alloc] initOEWithExtension:extension];
-        if (_strip) {
-          // Live state from Chrome's action model for the active tab (P1).
-          CefString identifier = OECef(extension.identifier);
-          cef_color_t color = _strip->GetExtensionActionBadgeColor(identifier);
-          NSColor* badgeColor =
-              CefColorGetA(color)
-                  ? [NSColor colorWithSRGBRed:CefColorGetR(color) / 255.0
-                                        green:CefColorGetG(color) / 255.0
-                                         blue:CefColorGetB(color) / 255.0
-                                        alpha:CefColorGetA(color) / 255.0]
-                  : nil;
-          [action
-              oe_applyBadgeText:OEString(
-                                    _strip->GetExtensionActionBadgeText(identifier))
-                     badgeColor:badgeColor
-                          title:OEString(_strip->GetExtensionActionTitle(identifier))
-                        enabled:_strip->IsExtensionActionEnabled(identifier)];
-        }
+    for (const CefString& cid : ids) {
+      if (OEExtensionAction* action = [self oe_engineActionFor:OEString(cid)]) {
         [actions addObject:action];
       }
     }
-    _actions = actions;
+    // An empty profile list may only mean the profile's model is not
+    // initialized yet: read it again next time.
+    _actions = live || actions.count ? actions : nil;
+    _actionsLive = live;
+    return actions;
   }
+  if (!_stripRefused) {
+    // Not ready yet (or closed): nothing to show, and nothing cached.
+    if (!_closed && !_actionsAwaitContext) {
+      _actionsAwaitContext = YES;
+      __weak OEBrowser* weakSelf = self;
+      [_context oe_whenReady:^{
+        OEBrowser* strongSelf = weakSelf;
+        if (strongSelf) {
+          strongSelf->_actionsAwaitContext = NO;
+          [strongSelf oe_extensionsChanged];
+        }
+      }];
+    }
+    return @[];
+  }
+  // The engine refused this profile a Chrome window: the manifest list, for
+  // display only. Nothing runs.
+  NSMutableArray* actions = [NSMutableArray array];
+  for (OEExtension* extension in _context.extensions.installedExtensions) {
+    if (extension.enabled && extension.oe_hasAction) {
+      [actions addObject:[[OEExtensionAction alloc]
+                             initOEWithExtension:extension]];
+    }
+  }
+  _actions = actions;
+  _actionsLive = NO;
   return _actions;
 }
 
 - (void)oe_extensionsChanged {
   _actions = nil;
+  if (!self.extensionActionsReady) {
+    [_actionImages removeAllObjects];
+  }
   if ([_delegate respondsToSelector:@selector
                  (browserDidUpdateExtensionActions:)]) {
     [_delegate browserDidUpdateExtensionActions:self];
   }
 }
 
-- (BOOL)executeExtensionAction:(NSString*)extensionIdentifier {
-  OEExtensionAction* action = nil;
-  for (OEExtensionAction* a in self.extensionActions) {
-    if ([a.extensionIdentifier isEqualToString:extensionIdentifier]) {
-      action = a;
-      break;
-    }
+- (void)oe_extensionActionUpdated:(NSString*)identifier {
+  NSUInteger index = [_actions indexOfObjectPassingTest:^BOOL(
+                                   OEExtensionAction* a, NSUInteger i, BOOL* stop) {
+    return [a.extensionIdentifier isEqualToString:identifier];
+  }];
+  OEExtensionAction* fresh =
+      self.extensionActionsReady && _actions && index != NSNotFound
+          ? [self oe_engineActionFor:identifier]
+          : nil;
+  if (!fresh || ![_delegate respondsToSelector:@selector
+                            (browser:didUpdateExtensionAction:)]) {
+    [self oe_extensionsChanged];
+    return;
   }
-  if (!action || !action.enabled || !action.hasPopup) {
-    // Popup-less actions dispatch chrome.action.onClicked inside Chrome's
-    // ExtensionActionViewModel, which stock CEF does not expose (patch P2).
+  NSMutableArray* actions = [_actions mutableCopy];
+  actions[index] = fresh;
+  _actions = actions;
+  if ([_popupAction.extensionIdentifier isEqualToString:identifier]) {
+    _popupAction = fresh;
+  }
+  [_delegate browser:self didUpdateExtensionAction:fresh];
+}
+
+- (void)setExtensionAction:(NSString*)extensionIdentifier pinned:(BOOL)pinned {
+  if (_strip) {
+    _strip->SetExtensionActionPinned(OECef(extensionIdentifier), pinned);
+  }
+}
+
+- (void)moveExtensionAction:(NSString*)extensionIdentifier
+              toPinnedIndex:(NSUInteger)index {
+  if (_strip) {
+    _strip->MoveExtensionAction(OECef(extensionIdentifier), (int)index);
+  }
+}
+
+- (BOOL)executeExtensionAction:(NSString*)extensionIdentifier
+                        source:(OEExtensionActionSource)source {
+  if (_stripSyncScheduled) {
+    [self oe_syncTabStrip];
+  }
+  if (!self.extensionActionsReady) {
+    // No live Chrome tab in this window: nothing can run. Never the
+    // manifest popup in a plain page: extensions see a tab there, not their
+    // popup (Bitwarden does not work, P1).
     return NO;
   }
-  // Like Chrome: clicking the action of the open popup closes it.
-  BOOL toggleOff = _popup &&
-                   [_popupAction.extensionIdentifier
-                       isEqualToString:extensionIdentifier];
-  [self closeExtensionPopup];
-  if (toggleOff) {
+  if (_popupDelegateDepth) {
+    // Executing can toggle or replace the current popup. Neither may delete
+    // the ExtensionViewHost while it is notifying us.
+    BOOL known = NO;
+    for (OEExtensionAction* action in self.extensionActions) {
+      if ([action.extensionIdentifier isEqualToString:extensionIdentifier]) {
+        known = YES;
+        break;
+      }
+    }
+    if (!known) {
+      return NO;
+    }
+    NSString* identifier = [extensionIdentifier copy];
+    OEWebContent* popup = _popup;
+    const BOOL togglesPopup =
+        popup && [_popupExtension isEqualToString:identifier];
+    dispatch_async(dispatch_get_main_queue(), ^{
+      if (!togglesPopup || self->_popup == popup) {
+        [self executeExtensionAction:identifier source:source];
+      }
+    });
     return YES;
   }
-  // Stock CEF: load the popup page in a plain web content. It renders and
-  // runs, but Chromium sees a tab, not an ExtensionViewHost popup, so
-  // chrome.tabs.query({active: true, currentWindow: true}) inside it does not
-  // return the page the user is looking at (patch P2).
-  OEWebContentConfiguration* config =
-      [[OEWebContentConfiguration alloc] initWithContext:_context];
-  // Alloy until patch P2: a Chrome style popup would get its own Views
-  // window. Its chrome.tabs calls see this window as the current window
-  // (the most recently active Chrome window of the profile, P1).
-  config.runtimeStyle = OERuntimeStyleAlloy;
-  OEWebContent* popup = [[OEWebContent alloc] initWithConfiguration:config
-                                                                URL:action.popupURL];
-  popup.oe_popupOwner = self;
-  popup.oe_popupExtension = extensionIdentifier;
-  [popup enableAutoResizeWithMinimumSize:kPopupMinSize
-                             maximumSize:kPopupMaxSize];
-  _popup = popup;
-  _popupAction = action;
-  if ([_delegate respondsToSelector:@selector
-                 (browser:didOpenExtensionPopup:forAction:)]) {
-    [_delegate browser:self didOpenExtensionPopup:popup forAction:action];
+  // Like Chrome's toolbar button: running the action whose popup is open
+  // closes it.
+  if (_popup && [_popupExtension isEqualToString:extensionIdentifier]) {
+    [self closeExtensionPopup];
+    return YES;
   }
-  return YES;
+  // Chrome's model: the popup, or chrome.action.onClicked.
+  return _strip->ExecuteExtensionAction(OECef(extensionIdentifier),
+                                        (int)source);
+}
+
+- (BOOL)executeExtensionAction:(NSString*)extensionIdentifier {
+  return [self executeExtensionAction:extensionIdentifier
+                               source:OEExtensionActionSourceToolbarButton];
+}
+
+- (nullable OEExtensionActionMenu*)
+    contextMenuForExtensionAction:(NSString*)extensionIdentifier
+                           source:(OEExtensionMenuSource)source {
+  if (_stripSyncScheduled) {
+    [self oe_syncTabStrip];
+  }
+  if (!self.extensionActionsReady) {
+    return nil;
+  }
+  int menu = 0;
+  CefRefPtr<CefListValue> list = _strip->GetExtensionActionMenu(
+      OECef(extensionIdentifier), (int)source, menu);
+  if (!list || !menu) {
+    return nil;
+  }
+  return [[OEExtensionActionMenu alloc] initOEWithBrowser:self
+                                                extension:extensionIdentifier
+                                                     menu:menu
+                                                    items:OEMenuItems(list)];
+}
+
+- (BOOL)oe_runMenu:(int)menu command:(NSInteger)command {
+  return _strip && _strip->RunExtensionActionMenuCommand(menu, (int)command);
+}
+
+- (void)oe_releaseMenu:(int)menu {
+  if (_strip) {
+    _strip->ReleaseExtensionActionMenu(menu);
+  }
+}
+
+- (void)oe_extensionActionMenuRequested:(NSString*)identifier {
+  if ([_delegate respondsToSelector:@selector
+                 (browser:requestsContextMenuForExtensionAction:)]) {
+    [_delegate browser:self requestsContextMenuForExtensionAction:identifier];
+  }
 }
 
 - (nullable OEWebContent*)extensionPopup {
   return _popup;
+}
+
+- (OEExtensionPopupSource)extensionPopupSource {
+  return _popupSource;
+}
+
+- (nullable NSString*)extensionPopupExtensionIdentifier {
+  return _popupExtension;
+}
+
+- (BOOL)extensionPopupStaysOpenOnBlur {
+  return _popup && _strip && _strip->ExtensionPopupStaysOpenOnBlur();
 }
 
 - (void)closeExtensionPopup {
@@ -543,7 +845,110 @@ class OETabStripHandler : public CefTabStripHandler {
   if (!popup) {
     return;
   }
-  [popup close];  // -> oe_webContentClosed: is not called: no tab strip.
+  if (_popupDelegateDepth) {
+    if (!_popupCloseScheduled) {
+      _popupCloseScheduled = YES;
+      dispatch_async(dispatch_get_main_queue(), ^{
+        self->_popupCloseScheduled = NO;
+        // A request for an older popup must not close its replacement.
+        if (self->_popup == popup) {
+          [self closeExtensionPopup];
+        }
+      });
+    }
+    return;
+  }
+  // The engine closes the popup and reports the close.
+  if (_strip) {
+    _strip->CloseExtensionPopup();
+  }
+  if (_popup == popup) {
+    [self oe_finishPopup];
+  }
+}
+
+#pragma mark Chrome popups (fork patch P2)
+
+- (void)oe_preparePopupClient:(CefRefPtr<CefClient>&)client
+                     settings:(CefBrowserSettings&)settings
+                    extraInfo:(CefRefPtr<CefDictionaryValue>&)extraInfo
+                    extension:(NSString*)identifier {
+  OEWebContent* content =
+      [[OEWebContent alloc] initOEForExtensionPopupInBrowser:self
+                                                   extension:identifier];
+  _pendingPopup = content;
+  // The engine reports the open in this same call. Still pending on the
+  // next turn: the popup's browser failed, so drop the page.
+  __weak OEBrowser* weakSelf = self;
+  dispatch_async(dispatch_get_main_queue(), ^{
+    OEBrowser* strongSelf = weakSelf;
+    if (strongSelf && strongSelf->_pendingPopup == content) {
+      strongSelf->_pendingPopup = nil;
+      [content close];
+    }
+  });
+  client = content.oe_client.get();
+  settings = [content oe_browserSettings];
+  extraInfo = [content oe_extraInfo];
+}
+
+- (void)oe_extensionPopupOpened:(CefRefPtr<CefBrowser>)browser
+                      extension:(NSString*)identifier
+                         source:(int)source {
+  OEWebContent* content = _pendingPopup;
+  _pendingPopup = nil;
+  if (!content) {
+    return;
+  }
+  if (_popup && _popup != content) {
+    [self oe_finishPopup];
+  }
+  _popup = content;
+  _popupSource = (OEExtensionPopupSource)source;
+  _popupExtension = [identifier copy];
+  OEExtensionAction* action = nil;
+  for (OEExtensionAction* a in self.extensionActions) {
+    if ([a.extensionIdentifier isEqualToString:identifier]) {
+      action = a;
+      break;
+    }
+  }
+  _popupAction = action;
+  if (action && [_delegate respondsToSelector:@selector
+                           (browser:didOpenExtensionPopup:forAction:)]) {
+    ++_popupDelegateDepth;
+    [_delegate browser:self didOpenExtensionPopup:content forAction:action];
+    --_popupDelegateDepth;
+  }
+}
+
+- (BOOL)oe_isPopupBrowser:(CefRefPtr<CefBrowser>)browser {
+  CefRefPtr<CefBrowser> own = _popup.oe_browser;
+  return own && browser && own->IsSame(browser);
+}
+
+- (void)oe_extensionPopupResized:(CefRefPtr<CefBrowser>)browser
+                            size:(NSSize)size {
+  if ([self oe_isPopupBrowser:browser]) {
+    [self oe_popupDidResize:_popup size:size];
+  }
+}
+
+- (void)oe_extensionPopupReady:(CefRefPtr<CefBrowser>)browser {
+  if ([self oe_isPopupBrowser:browser] &&
+      [_delegate respondsToSelector:@selector(browser:extensionPopupIsReady:)]) {
+    ++_popupDelegateDepth;
+    [_delegate browser:self extensionPopupIsReady:_popup];
+    --_popupDelegateDepth;
+  }
+}
+
+- (void)oe_extensionPopupClosed:(CefRefPtr<CefBrowser>)browser {
+  if (![self oe_isPopupBrowser:browser]) {
+    return;
+  }
+  // The engine closes the page next; that is not a close the page asked for.
+  _popup.oe_client->SetClosing();
   [self oe_finishPopup];
 }
 
@@ -554,6 +959,7 @@ class OETabStripHandler : public CefTabStripHandler {
   }
   _popup = nil;
   _popupAction = nil;
+  _popupExtension = nil;
   popup.oe_popupOwner = nil;
   if ([_delegate respondsToSelector:@selector(browser:didCloseExtensionPopup:)]) {
     [_delegate browser:self didCloseExtensionPopup:popup];
@@ -569,7 +975,9 @@ class OETabStripHandler : public CefTabStripHandler {
       MIN(MAX(size.height, kPopupMinSize.height), kPopupMaxSize.height));
   if ([_delegate respondsToSelector:@selector
                  (browser:didResizeExtensionPopup:toSize:)]) {
+    ++_popupDelegateDepth;
     [_delegate browser:self didResizeExtensionPopup:popup toSize:clamped];
+    --_popupDelegateDepth;
   }
 }
 
@@ -577,6 +985,48 @@ class OETabStripHandler : public CefTabStripHandler {
   if (popup == _popup) {
     [self closeExtensionPopup];
   }
+}
+
+@end
+
+@implementation OEExtensionActionMenu {
+  __weak OEBrowser* _browser;
+  int _menu;
+  BOOL _done;
+}
+
+- (instancetype)initOEWithBrowser:(OEBrowser*)browser
+                        extension:(NSString*)extensionIdentifier
+                             menu:(int)menu
+                            items:(NSArray<OEContextMenuItem*>*)items {
+  if ((self = [super init])) {
+    _browser = browser;
+    _extensionIdentifier = [extensionIdentifier copy];
+    _menu = menu;
+    _items = [items copy];
+  }
+  return self;
+}
+
+- (void)dealloc {
+  [self cancel];
+}
+
+- (BOOL)selectCommand:(NSInteger)commandIdentifier {
+  if (_done) {
+    return NO;
+  }
+  _done = YES;
+  OEBrowser* browser = _browser;
+  return [browser oe_runMenu:_menu command:commandIdentifier];
+}
+
+- (void)cancel {
+  if (_done) {
+    return;
+  }
+  _done = YES;
+  [_browser oe_releaseMenu:_menu];
 }
 
 @end
