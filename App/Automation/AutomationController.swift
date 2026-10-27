@@ -164,6 +164,15 @@
       case "space-manager-state": return spaceManagerState()
       case "space-manager-drag": return try await dragSpaceManager(a)
       case "space-manager-menu": return try performSpaceManagerMenu(a)
+      case "space-manager-intent":
+        // The production intent a native URL drop on a Manager column sends (the drop
+        // mapping itself is checked offscreen in sidebar-render).
+        let (manager, _) = try realSpaceManager()
+        guard a["kind"] as? String == "openURL", let raw = a["space"] as? String,
+          let space = app.model.spaces.first(where: { $0.id.description == raw }),
+          let text = a["url"] as? String, let url = URL(string: text) else { throw Failure(message: "invalid Manager intent") }
+        let parent: NodeParent = a["section"] as? String == "pinned" ? .spacePinned(space.id) : .spaceToday(space.id)
+        return manager.onIntent?(.openURL(url, in: parent, index: 0)) == true
       case "library-close":
         let target = app.settingsPresenter.libraryPresenter?.window
         var dialogs: [Int] = []

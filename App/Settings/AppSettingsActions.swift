@@ -65,7 +65,21 @@ final class AppSettingsActions: SettingsActions, LibraryActions, DownloadsProvid
            .copyCurrentURL, .showLibrary, .manageSpaces: return false
       default: break
       }
-      if let factory = self.app.hostFactories[context.windowID], let handled = factory.performSidebar(intent) { return handled }
+      let factory = self.app.hostFactories[context.windowID]
+      switch intent {
+      case .openURL(let url, let parent, let index):
+        // The Manager shows every Space: create the tab in the column it was
+        // dropped on, not in the browser's focused Space, then select it there.
+        return self.openDroppedURL(url, parent: parent, index: index, factory: factory, windowID: context.windowID)
+      case .openInSplitView(let id), .addSplitView(let id), .addTabToSplit(let id):
+        // Split View lives in the browser window: show the node's Space there,
+        // then use the browser controller's own split path.
+        guard let factory, let controller = factory.controller, let space = self.spaceID(containing: id) else { return false }
+        if controller.context.focusedSpace?.id != space, factory.performSidebar(.switchSpace(space)) != true { return false }
+        return controller.sidebar(controller.sidebar, didRequest: intent)
+      default: break
+      }
+      if let factory, let handled = factory.performSidebar(intent) { return handled }
       // No live browser (or a model-only intent): closing a pin must never archive it.
       switch intent {
       case .unloadTab: return false
@@ -92,6 +106,37 @@ final class AppSettingsActions: SettingsActions, LibraryActions, DownloadsProvid
     }
     spaceManager = manager
     return manager
+  }
+  /// The Space whose Pinned or Today list holds `id`, through folders and splits.
+  private func spaceID(containing id: ItemID) -> SpaceID? {
+    var current = id
+    for _ in 0..<64 {
+      switch app.model.parent(of: current) {
+      case .spacePinned(let space)?, .spaceToday(let space)?: return space
+      case .folder(let folder)?: current = folder
+      case .splitPane(let split)?: current = split
+      case .favorites?, nil: return nil
+      }
+    }
+    return nil
+  }
+  private func openDroppedURL(_ url: URL, parent: NodeParent, index: Int?, factory: EngineWebContentHostFactory?, windowID: WindowID) -> Bool {
+    guard let model = app.model else { return false }
+    let title = url.host() ?? url.absoluteString
+    let space: SpaceID?
+    switch parent {
+    case .spacePinned(let id), .spaceToday(let id): space = id
+    case .folder(let folder): space = spaceID(containing: folder)
+    case .favorites, .splitPane: space = nil
+    }
+    guard let space, model.space(id: space) != nil else { return false }
+    let tab = model.newTab(in: space, url: url, title: title, at: parent == .spaceToday(space) ? index : 0)
+    // A refused move (a folder removed meanwhile) keeps the new tab at the top of Today.
+    if parent != .spaceToday(space) { _ = model.moveNode(id: tab.id, to: parent, at: index) }
+    if let factory { _ = factory.performSidebar(.select(nodeID: tab.id, space: space)) }
+    else { model.selectNode(windowID: windowID, spaceID: space, nodeID: tab.id) }
+    app.scheduleSave(); app.scheduleMenuRebuild()
+    return true
   }
   func refreshSpaceManagerContext() {
     guard libraryPresenter?.window?.isVisible == true else { return }

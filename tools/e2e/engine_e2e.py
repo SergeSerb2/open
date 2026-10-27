@@ -5355,6 +5355,29 @@ def space_manager_checks(results, tmp, config, style):
         require('rebound_manager_intents', selected and state(app)['contextWindow'] == second, browser=selected, actualBrowser=app.call('window-state', id=second), manager=state(app), point=row['point'], tab=tab, png=capture(app, 'manager-rebound-click'))
         pin = space_manager_route_checks(app, results, s2, library_key, tmp)
         if not results['manager_today_archive_selects_neighbor']['ok']: raise AssertionError('manager_today_archive_selects_neighbor')
+        # #124 review: a URL dropped on another Space's column lands in that Space
+        # (not the browser's focused one) and the browser shows it there.
+        app.call('library-close'); app.call('window-focus', id=second, activate=True); app.call('space', space=s3)
+        app.call('library-open'); manager_ready(app)
+        drop_file = Path(tmp) / 'manager-drop-target.html'
+        drop_file.write_text('<title>Manager Drop Target</title><h1>Manager Drop Target</h1>')
+        drop_url = drop_file.as_uri()
+        dropped = app.call('space-manager-intent', kind='openURL', space=s2, section='today', url=drop_url)
+        landed = wait_until(lambda: (lambda tabs: tabs if any(t['url'].endswith('/manager-drop-target.html') and t['section'] == 'today' and t['selected'] for t in tabs) else None)(app.call('tabs')), timeout=5)
+        focused = next((sp['id'] for sp in app.call('spaces') if sp['focused']), None)
+        require('manager_url_drop_other_space', dropped and landed and focused == s2, focused=focused, expected=s2, tabs=app.call('tabs'))
+        # #124 review: Open in Split View from a column whose Space the browser is
+        # not showing goes through the browser controller in that Space.
+        split_partner = next(t['id'] for t in app.call('tabs') if t['url'].endswith('/manager-drop-target.html'))
+        split_source = app.call('open', url=fixture('Manager Split Source'))['id']
+        app.call('wait', tab=split_source); app.call('select', tab=split_partner)
+        app.call('space', space=s3); app.call('library-open'); manager_ready(app)
+        app.call('space-manager-menu', space=s2, node=split_source, item='Open in Split View')
+        split_state = wait_until(lambda: (lambda st: st if len(st.get('shownPages', [])) == 2 else None)(app.call('window-state')), timeout=5)
+        focused = next((sp['id'] for sp in app.call('spaces') if sp['focused']), None)
+        require('manager_split_through_browser', split_state and focused == s2 and set(split_state['shownPages']) == {split_source, split_partner},
+                state=split_state or app.call('window-state'), focused=focused)
+        app.call('library-open'); manager_ready(app)
         pin_url_before_close = app.tab(pin)['url']
         app.call('library-close')
         app.call('window-focus', id=second, activate=True); app.call('window-close')
