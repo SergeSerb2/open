@@ -64,7 +64,7 @@ Read these first. Each row is a decision or a written plan answer that the captu
 | Folder expansion (sidebar S3) | `expandedItems` `{expanded: {}}` | Also `{peeked: {_0: [childID]}}`: a collapsed folder shows its last active child, its glyph shows "•••" (`FolderEllipses*` images; the lane S design reviewer saw the same); a click collapses fully, the next expands (S2 08/0090, 0100; V 46.49–55.04 s) | Sidebar S3 #95 | must change (state and glyph); import too |
 | Folder row hover | — | White 0.10 fill and a "—" at the right (S2 08/0090) | #95 | check |
 | New Folder placement | — | Above the Today divider (S2 08/0100) | — | check |
-| Folder hover preview (sidebar §3.6, C4) | Look, size, delay guessed | Not captured (did not appear for synthetic events) | Sidebar S5 #102 | open |
+| Folder hover preview (sidebar §3.6, C4) | Look, size, delay guessed | Seen once in the video (added 2026-10-26, review r1): card ≈ 240 pt wide, 4 pt right of the sidebar, centered on the row, a "Search \<folder\>…" field, rows ≈ 45 pt with "N minutes ago"; hover-to-card ≈ 0.42 s; fade in ≈ 0.08 s, out ≈ 0.10 s. Positions only (V 45.69, 46.11–46.46 s; IS §20.4). No still frame | Sidebar S5 #102; lane C | check (Open keeps 0.5 s as an Open choice) |
 | Previews sheet (sidebar Q3) | Two switches | 7 checkboxes (S2 02/0050) | #102 | C5 |
 | Auto-archive banner (sidebar §3.11, C6, Q12) | Copy from strings | Not captured: options are 12 hours (default), 24 hours, 7 days, 30 days (S2 02/0034) | #102 | open |
 
@@ -203,7 +203,7 @@ PR #104's agent timed the same video independently (Cmd+S ≈ 0.1 s each way, sh
 
 - Item 15: back-to-PiP, and what Close on a mini player or PiP does to playback.
 - Item 22: the auto-archive banner. The shortest "Archive tabs after" option is 12 hours, so it could not trigger in the session.
-- The folder hover-preview card (no preview for synthetic pointer events).
+- The folder hover-preview card's colors and type (it appeared once in the video, positions only; IS §20.4).
 - PiP hover controls and the PiP menu (no response to synthetic events).
 - The microphone and recording states (skipped), so the recording dot and recording mini player stay open.
 - The Boost code editor body ("Internal debugging pages are currently disabled").

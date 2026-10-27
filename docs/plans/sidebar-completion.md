@@ -12,6 +12,18 @@ This plan closes the sidebar rows of `docs/status.md` §3: gaps 6, 7, 10, 11,
 17–21, 31–34, and 36. RE facts with evidence are in
 `docs/re/sidebar-completion.md` (cited as **SC §n**).
 
+Amended 2026-10-26 for Arc capture session 2 (`docs/re/interaction-states.md`
+§20; routing in `docs/re/capture-session-2-results.md`). Changes: the first-hide
+hint shows on the first hide by any path (§3.12); the gesture hide follows the
+measured 164–500 range, hides while the button is still down, and gains the
+compact toolbar (§3.16; the window parts are specified in
+`docs/plans/app-shell.md` §3.3); a new Step S6 for folders that keep their
+last active child visible ("peek", §3.17); the Previews sheet decision and
+Arc's live-data sources as post-v1 (§3.6, Q3); new motion values (§2.7).
+Evidence notation: **S2 08/0090** = frame 0090 of
+`.re/runtime/sessions/20261026-102027-08-folder-preview/`; **V 46.49 s** = time
+in `.re/runtime/video/21-motion.mov`. Frames and the video stay in `.re/`.
+
 Read first, in this order:
 
 1. `AGENTS.md` (rules 1–10).
@@ -47,7 +59,10 @@ behavior, without any full reload of the tab list:
 13. Haptics when reordering; Open's own sound effects (infrastructure and assets).
 14. Change Icon… for folders and pinned tabs (owned by the theme plan; checks here).
 15. Archive a whole folder and restore it as a folder.
-16. Hide the sidebar with the resize gesture, with a live preview.
+16. Hide the sidebar with the resize gesture (past the 164 pt minimum, while
+    the button is still down), and the compact toolbar at narrow widths.
+17. A collapsed folder that keeps its last active child visible ("peek"),
+    with the three-dot folder glyph (Step S6).
 
 ## Success criteria
 
@@ -70,7 +85,11 @@ behavior, without any full reload of the tab list:
 - Live Folders, Easels, Notes, Arc Max (Tidy Tabs AI), Share Space (`AGENTS.md`).
 - Arc's site-specific glance views (Gmail unread list, calendar events,
   "recent pages" of Linear, Notion, Figma). §3.6 uses a live page preview
-  instead (Q2).
+  instead (Q2). Arc's Previews sheet lists them as sources (Google Calendar,
+  Google Mail, Outlook Calendar, Outlook Mail, Recent pages on Linear, Notion,
+  and Figma, Notion Calendar; S2 02/0050). They are Arc's live-data
+  integrations (accounts and site APIs) and are **post-v1** (Q3, lead
+  decision 2026-10-26).
 - The Today auto-archive timer itself (status gap 4, app-shell Step G/H). The
   banner (§3.11) only listens to it.
 - The Arc toast look (status gap 15). New toasts here use the existing
@@ -155,6 +174,7 @@ case openProfileSettings(ProfileID)                              // banner "Sett
 case dismissAutoArchiveBanner
 case hoverPreview(SidebarHoverPreviewRequest?)                   // nil hides
 case sidebarHiddenByGesture                                       // §3.16, for the hint
+case setFolderExpansion(folderID: ItemID, expansion: FolderExpansion) // §3.17 (S6)
 ```
 
 ```swift
@@ -204,7 +224,7 @@ event, and registers no undo. Undo and redo call primitives only.
 
 | Store | Change | Compatibility |
 |---|---|---|
-| Snapshot (`State/browser.json`) | None. `Tab.isUnread` already persists. Selection, previews, banners, and hints are transient. | — |
+| Snapshot (`State/browser.json`) | None for Steps M1–S5. `Tab.isUnread` already persists. Selection, previews, banners, and hints are transient. Step S6 adds `FolderDTO.peekedChildID` (optional string, §3.17). | Absent = nil; older builds ignore it. |
 | Archive (`archived_tabs`) | New column `kind TEXT NOT NULL DEFAULT 'tab'`, values `tab` / `folder`. On open: if `PRAGMA user_version` is 0 and the column is missing, run `ALTER TABLE archived_tabs ADD COLUMN kind TEXT NOT NULL DEFAULT 'tab'` and set `user_version = 1`, in one transaction on the store's queue. | Old rows read as tabs. Older builds ignore the column. |
 | `ArchivedTabRecord` (OpenModel) | New `kind: ArchiveRecordKind` (`.tab`, `.folder`), default `.tab`. | Source compatible. |
 | `UserDefaults` (app scope; add to `settings-library.md` §2.1 registry and `SettingsTypes.swift` defaults) | `open.sidebar.hideHintShown` Bool false; `open.sidebar.autoArchiveBannerDismissed` Bool false; `open.sidebar.autoArchiveBannerEligible` Bool true. | New keys only. |
@@ -255,9 +275,17 @@ pinned URL; the others as today.
 | `SpaceListMetrics.unreadDotSize` 6, `unreadDotCenterX` `W − 26`, `unreadDotCenterY` `y + 20` | | guess |
 | `SpaceListMetrics.resetGlyphPlate` `[17 + indent − 2, y + 9, 22, 22]`, radius 6 | | guess |
 | `BannerMetrics` inset 8, padding 12, radius 10, title 13 Semibold, message 12 Regular, line height 15, button 24 pt tall | | guess |
-| `HoverPreviewMetrics` page card 420 × min(560, H − 20), folder card 300 wide, row 32, gap to sidebar 8, radius 10, shadow black 0.25 radius 12 y +4 | | guess |
+| `HoverPreviewMetrics` page card 420 × min(560, H − 20), gap to sidebar 8, radius 10, shadow black 0.25 radius 12 y +4 | | guess (no capture of a page preview) |
+| `HoverPreviewMetrics` folder card: width 240, gap to sidebar 4, vertically centered on the hovered row, search header 48, rows 45 (two lines) | | positions measured from one video sample (V 46.11–46.46 s; §3.6); radius, shadow, fill, and type are guesses (lane C calibrates them) |
 | `HintToastMetrics` (OpenFeatures, new file `OpenDesign/HintToastTokens.swift`) | §3.12 | measured |
-| `Motion.previewIn` 0.15 s, `Motion.previewOut` 0.10 s, `Motion.hintIn` 0.20 s, `Motion.hintOut` 0.25 s, `Motion.hintLifetime` 5.5 s, `Motion.bannerIn` 0.22 s | | guess (lifetime measured ≈ 5–6 s) |
+| `Motion.previewIn` 0.08 s (fade, no scale), `Motion.previewOut` 0.10 s, `Motion.hintIn` 0.20 s, `Motion.hintOut` 0.25 s, `Motion.hintLifetime` 5.5 s, `Motion.bannerIn` 0.22 s | | preview in and out measured once on the folder card (V 46.11–46.19 s, 46.36–46.46 s); the rest guess (lifetime measured ≈ 5–6 s) |
+| `Motion.spaceSwitch` spring response **0.20 s**, critically damped (was 0.30; used by §3.2 switcher items and the pager) | | measured (V 35.05, 43.63 s; `docs/plans/app-shell.md` §3.3). The #104 follow-up changes the token |
+| `Motion.sidebarToggle` spring response 0.10 s, damping 0.95 (used by §3.16 and Cmd+S); no show delay | | measured (V 16.26–32.41 s; app-shell §3.3). Arc's ≈ 0.29 s delay before the show is not copied (app-shell Q11, Open decision) |
+| `WindowMetrics.sidebarDragHidePoint` 82 (pointer x for the hide while pressed, §3.16) | | **guess** inside the measured 65–85 band (S2 06/0035; notes 10:12:34) |
+| `HoverPreviewMetrics.armDelay` 0.5 s (fixed; replaces the `open.general.previewsDelaySeconds` setting, §3.6) | | **Open choice** (lead ruling 2026-10-26): one Arc sample ≈ 0.42 s at V 46.11–46.46 s (row hover state at V 45.69 s, card fade-in from V 46.11 s); refine with a higher-rate capture. Arc has no delay setting (S2 02/0050) |
+| `Motion.folderExpand` 0.20 s ease-out; `Motion.folderCollapse` 0.25 s (default curve) (§3.17 and every folder toggle) | | measured (V 46.49–55.04 s; `docs/design.md` §2.4 keeps 0.22 s until #104 edits it) |
+| `CompactToolbarMetrics`: button 28 × 28 at y 9, pitch 28, last button's right edge at `W − 6`; compact below `S` 219 | | buttons measured (S2 06/0025–0029); the 219 pt switch is a guess inside the measured 207–228 band (§3.16) |
+| `CustomIcon.folderPeek`: Open's closed-folder vector plus three dots; `SidebarRole.folderPeekDots` = white a 0.65 over the Space accent | | our own drawing; dot fill fitted from the dot **center** pixels `#B8B3FF`, `#B6B1FF`, `#B0AAFF` on body `#202AFF` (S2 08/0090, 0100; row y 260, x 22 / 26 / 30). Review r1 corrected the earlier `#8287FE`, which was the mean of each dot's 3 × 3 footprint, not its fill |
 
 ## 3. Feature specs
 
@@ -462,13 +490,21 @@ TF1–TF3; e2e E10.
 
 ### 3.6 Hover Previews (gap 19)
 
-**Targets.** Folder rows; pinned tab rows (pinned ancestry, also inside
-folders); Favorites tiles. Not: Today tabs, split rows, the current row or
-tile (already on screen), and any row while a drag, rename, menu, or Space
-swipe is active.
+**Targets.** Collapsed and peeked folder rows; pinned tab rows (pinned
+ancestry, also inside folders); Favorites tiles. Not: expanded folder rows
+(**guess**: no card appeared during a 3 s hover on the expanded folder at
+V 56–61 s, while the peeked folder got one at V 46.11 s), Today tabs, split
+rows, the current row or tile (already on screen), and any row while a drag,
+rename, menu, or Space swipe is active.
 
 **Arm and show.** `HoverPreviewTracker` (OpenSidebar) arms when the pointer
-rests on a target for `open.general.previewsDelaySeconds` (default 0.5 s).
+rests on a target for a fixed 0.5 s (`HoverPreviewMetrics.armDelay`). The
+0.5 s is an **Open choice**: one Arc sample ≈ 0.42 s at V 46.11–46.46 s (the
+folder row shows its hover state at V 45.69 s and the card starts to fade in
+at V 46.11 s; synthetic pointer); refine with a higher-rate capture. There is
+no delay setting, as in Arc (lead ruling 2026-10-26; the
+`open.general.previewsDelaySeconds` key and its pop-up are removed by Step
+S5b).
 Pointer moves inside the same target do not restart the timer. After a
 preview has shown, moving to another target swaps at once for 1.0 s after
 the last preview hid (Arc `lastCommittedHover`; **guess**). While a preview is
@@ -492,24 +528,45 @@ the host joins the hidden LRU (8) and the sleep policy. A click inside the card
 selects the tab; the container shows the same host (no reload) and focuses it.
 
 **Folder preview** (OpenSidebar `FolderPreviewView`, shown by the same
-controller). Card 300 pt wide, same panel, radius, shadow, and fill. Header 36
-pt: folder glyph 16 pt at x 12 and the title, 13 Semibold. A search field
-(`NSSearchField`, 24 pt) under the header when the folder has more than 8 tabs
-(**guess**; Arc's view has `searchQuery`). Rows 32 pt: favicon 16 at x 12,
-title 13 Regular at x 36, depth-first, at most 10 rows visible, then it
-scrolls. Hover row fill `SidebarColors.itemHoveredBackground`. Click a row →
-select that tab (the model expands its folder chain). Up / Down move a
-highlight, Return opens it. The card follows the Space's content appearance.
+controller). The video shows Arc's card once (V 46.11–46.46 s, a peeked
+folder of three tabs, sidebar 228; **positions only**, colors are not read
+from the video):
 
-**Motion.** In: alpha 0 → 1 and scale 0.97 → 1.0, 0.15 s ease-out. Out: alpha
-1 → 0, 0.10 s. Swap: content crossfade 0.10 s, frame animates 0.15 s.
+| Part | Value | Mark |
+|---|---|---|
+| Frame | x = sidebar width + 4 (232); width 240; vertically centered on the hovered row (card `[232, 163, 240, 191]`, center y 258.5, row center 259); clamped to `[10, H − 10 − h]` | measured (one sample); centering rule and clamp guess |
+| Header | A search field "Search \<folder title\>…" with a magnifier, about 48 pt tall with a separator under it, shown even for three tabs. A caret shows in the field | measured; guess: the field takes key focus while the card shows |
+| Rows | ≈ 45 pt each: favicon, title, and a second line "N minutes ago" (time since the tab was last active, guess); the first row has a highlight plate | measured; highlight meaning guess (last active tab, or the Up / Down highlight) |
+| Height | header + 45 per row + ≈ 8 (191 for three rows); at most 10 rows visible, then it scrolls | 191 measured; the 10-row cap is a guess |
+| Motion | Fade in ≈ 0.08 s (V 46.11–46.19 s); fade out ≈ 0.10 s (V 46.36–46.46 s, when the click arrives) | measured, one sample; no scale was visible at the video rate |
+| Radius, shadow, fill, type sizes | Same as the page preview tokens until lane C calibrates them | guess |
 
-**Persistence.** None. Q3 proposes better Previews settings keys.
+Behavior: typing filters the rows by title (guess; Arc's view has
+`searchQuery`). Hover row fill `SidebarColors.itemHoveredBackground`. Click a
+row → select that tab (the model expands its folder chain). Up / Down move
+the highlight, Return opens it. The card follows the Space's content
+appearance. Lane C (§7) calibrates the card's colors, radius, and type from a
+higher-rate capture.
+
+**Motion.** In: alpha 0 → 1, 0.08 s ease-out, no scale (folder card measured
+once; the page preview uses the same, guess). Out: alpha 1 → 0, 0.10 s
+(measured once). Swap: content crossfade 0.10 s, frame animates 0.15 s
+(guess). `Motion.previewIn` becomes 0.08 s.
+
+**Persistence.** None. The Previews sheet has two sources, "Folders" and
+"Pinned tabs and Favorites" (Q3, lead decision 2026-10-26: an Open product
+choice). Arc's sheet has seven sources (S2 02/0050); the live-data ones are
+post-v1 (Non-goals). Open has no preview delay setting: the delay is fixed
+at 0.5 s (Open choice; one Arc sample ≈ 0.42 s), and Arc's sheet has none
+(lead ruling 2026-10-26, Step S5b). The folder card was seen once in the
+video (V 46.11–46.46 s, positions only, above); in item 8 a 5 s synthetic
+hover did not open it (notes 10:23:34).
 
 **Verification.** `sidebar-render check` HP1–HP6 (tracker timing and gates,
 folder card layout); `features-render check` HP7–HP10 (host reuse with
 `FakeWebContentHost`); e2e E11–E12 (no reload after select: a JavaScript
-global set during the preview survives). No capture (§8.2 C4).
+global set during the preview survives). Folder card positions: one video
+sample (V 46.11–46.46 s); page previews: no capture (§8.2 C4).
 
 ### 3.7 Tidy titles (gap 20)
 
@@ -655,10 +712,14 @@ e2e E16 (automation `archive-sweep now=<date>` drives the real sweep path).
 
 ### 3.12 First-hide hint (gap 31)
 
-**When.** The first time the sidebar hides by the toolbar toggle button or by
-the gesture (§3.16) while `open.sidebar.hideHintShown` is false. Set the key
-when the hint shows. A hide by Cmd+S or the menu sets the key without showing
-the hint (the user knows the shortcut; **guess**, Q13).
+**When.** The first time the sidebar hides by **any** path (toolbar toggle
+button, Cmd+S, View menu, or the gesture of §3.16) while
+`open.sidebar.hideHintShown` is false. Set the key when the hint shows; it
+never shows again. Evidence: session 1 showed the hint after a Cmd+S hide
+(A0438); session 2 showed none on any path (S2 04; notes 10:11:20), which fits
+a once-only hint that session 1 had already used. The "first hide by any path"
+reading is a **guess** (C17); it supersedes the earlier "no hint after Cmd+S"
+rule (Q13).
 
 **Visuals** (measured on A0440, SC §10; `OpenFeatures/HintToastView.swift`,
 tokens in `OpenDesign/HintToastTokens.swift`):
@@ -767,21 +828,156 @@ L2–L3; e2e E18.
 ### 3.16 Hide the sidebar with the gesture (gap 36)
 
 Arc's gesture is the sidebar resize pan, not a trackpad swipe (SC §10).
-PR #52 already hides the sidebar when a drag ends below 180 pt. Add the live
-preview Arc shows (A0422):
+Capture session 2 measured it (S2 06; `docs/re/interaction-states.md` §20.1).
+The normative window spec is `docs/plans/app-shell.md` §3.3 (built by the
+PR #104 follow-up). This section keeps the parts lane A1 owns and the checks.
 
-- Let `x` be the dragged edge position in window points. While `x` is below
-  the 228 pt minimum, the sidebar width stays 228 and the whole sidebar slides
-  left by `o = x − 228` (clamped to `[−228, 0]`); the
-  web panel's left edge follows (`max(10, 228 + o)`). No model write per tick.
-- Release with `x < 180`: the slide finishes in 0.22 s, `sidebarMode =
-  .hidden`, and the window controller sends `.sidebarHiddenByGesture`
-  (triggers §3.12). Release at 180 or more: spring back to 228
-  (`Motion.sidebarToggle`).
-- Under Reduce Motion: no slide; the release decides.
+- Range: the drag resizes between **164** and **500** pt (was 228–500 with a
+  live slide below 228; session 1's A0422 slide is the hide motion, not a
+  proportional preview).
+- Past the minimum: with the pointer left of 164 the width stays 164. When
+  the pointer passes x < `WindowMetrics.sidebarDragHidePoint` (82, half the
+  minimum; **guess** inside the measured 65–85 band) while the button is still
+  down, the sidebar hides with the
+  Cmd+S hide motion (`Motion.sidebarToggle`). Back at x ≥ 82 before release,
+  it shows again at 164 (**guess**). No model write per tick.
+- Release while hidden: `sidebarMode = .hidden`, the stored width stays the
+  width from before the drag (Cmd+S restores it, S2 06/0066), and the window
+  controller sends `.sidebarHiddenByGesture` once (it triggers §3.12 when the
+  hint has not shown yet). Release while visible: the width is written once.
+- Double-click on the resize edge: width 228 (S2 06/0009, 0088).
+- Under Reduce Motion: no slide; the state changes at once.
 
-**Verification.** `features-render check` GH1–GH4 (synthesized drags through
-the real resize handle); e2e E19 (extends the `window` suite).
+**Compact toolbar** (lane A1; `OpenSidebar/ChromeViews.swift`, an allowed
+exception now that lane S is finished). Measured at widths 207, 197, 187,
+167, and 164 (S2 06/0025–0029); 228 is still the full toolbar (S2 06/0009):
+
+| Width `S` | Toolbar | Mark |
+|---|---|---|
+| ≥ 219 | Full: toggle at x 77, back / forward / reload at `W − 106 / W − 72 / W − 38` (`docs/design.md` §2.2) | measured at 228; the 219 pt switch is a **guess**: below it the back button would come within 4 pt of the toggle (77 + 32 + 4 > W − 106) |
+| < 219 | Compact: Back `[W − 90, 9, 28, 28]`, Forward `[W − 62, 9, 28, 28]`, "More options" `[W − 34, 9, 28, 28]` (pitch 28, the last one 6 pt from the sidebar edge). No toggle and no Reload buttons. | measured (AX frames, S2 06/0025–0029) |
+| "More options" click | A menu: "Reload This Page ⌘R" (or "Stop Loading"), "Hide Sidebar ⌘S" | **guess** (the menu was not opened) |
+
+Glyphs, tones, and hover plates follow the full toolbar's tokens. At 164 the
+traffic lights keep their frames (Arc clips its full-screen button's AX frame
+to 13 pt, S2 06/0029; Open does not clip the system button).
+
+**Verification.** `features-render check` GH1–GH5 (synthesized drags through
+the real resize handle); `sidebar-render check` CT1–CT3; e2e E19 (extends the
+`window` suite). Compare: §5.5 "Compact toolbar".
+
+### 3.17 Folder peek: a collapsed folder keeps its last active child (Step S6)
+
+Evidence: S2 08/0090 and 0100 (a collapsed folder with one child row under it
+and a three-dot glyph, while other children are hidden); notes 10:22:29 (the
+folder was collapsed while that child was the selected tab); video frames at
+V 46.3, 47.2, 50.2, 53.2, 56.0 s (peeking while a Today tab is selected →
+fully collapsed → expanded → collapsed → expanded); on disk
+`StorableWindows.windows[].expandedItems` holds `[folderID, {peeked: {_0:
+[childID]}}]` next to `{expanded: {}}` entries
+(`appsupport/s2-little-arc-open/StorableWindows.json`; `docs/re/data-model.md`
+§2 "expandedItems"). Arc ships images named `FolderEllipsesDark` /
+`FolderEllipsesLight` (`docs/re/design-tokens.md` §2.3): names only; Open draws
+its own glyph.
+
+**States.** A folder has one of three expansion states:
+
+| State | Rows under the folder | Glyph |
+|---|---|---|
+| Expanded | All children | Open folder (existing) |
+| Collapsed | None | Closed folder (existing) |
+| Peeked(child) | Only `child`, one direct child row (a tab or a split) | Closed folder with three dots ("•••") |
+
+**Transitions** (one model command and one undo step each, like
+`setExpanded` today):
+
+| Event | Result | Mark |
+|---|---|---|
+| Collapse an expanded folder (click on its row, Left arrow on its focused row, the folder menu) while the window's selected node in this Space is a **direct child** of the folder | Peeked(that child). The other children slide up with `Motion.folderCollapse` (0.25 s); the selected row stays in place. | measured (notes 10:22:29; S2 08/0090) |
+| Same, while the selected node is not a direct child of the folder (anywhere else, or deeper in a nested folder) | Collapsed. | measured for "elsewhere" (V 52.19 s: all 3 rows, 123 pt, slide up); nested: **guess** |
+| Click on the row of a peeked folder | Collapsed: the peeking row slides up into the folder (41 pt in ≈ 0.25 s). | measured (V 46.49 s) |
+| Click on the row of a collapsed folder | Expanded (`Motion.folderExpand`, 0.20 s ease-out). | measured (V 49.33, 55.04 s) |
+| Right arrow on a focused peeked folder | Expanded. | **guess** (keyboard not captured) |
+| Select another tab anywhere | No change: the peek stays. | measured (V 46.3 s: peeking while a Today tab is selected) |
+| Select the peeked row | Normal selection; no change. | Open rule |
+| Select a hidden child by other means (keyboard next/previous tab, command bar, routing) | Unchanged existing rule (the model expands the folder chain). | not captured; Q17 |
+| The peeked child is closed, archived, moved out of the folder (also by drag), or turned into a split pane elsewhere | Collapsed. | Open rule |
+| Expand All Folders / Collapse All Folders (§3.4) | Every folder becomes expanded / collapsed; Collapse All never peeks. | **guess** |
+| Delete or archive the folder | As today; the archive record keeps `isExpanded` false and drops the peek. | Open rule |
+
+**Display.** The peeked row is a real child row: same indent (16 pt per
+level), fills, hover, close button, context menu, drag, multi-selection, and
+unread dot as when the folder is expanded. Folder glyph (`CustomIcon.folderPeek`,
+18 pt frame like the other folder glyphs): Open's closed-folder vector in the
+Space accent with three round dots in `SidebarRole.folderPeekDots` = white
+a 0.65 over the accent. Measured on S2 08/0090 and 0100 (folder row top
+y 239): each dot is 3 px wide at 1x, centers at x 22 / 26 / 30 (pitch 4 pt)
+on y 260 = row y + 21 (rows 259–261), body `#202AFF`, dot center pixels
+`#B8B3FF`, `#B6B1FF`, `#B0AAFF`; the 0.65 alpha is fitted to those centers
+(fill, not the footprint mean). AX: the folder row reports
+`isAccessibilityExpanded` false and the value "1 tab shown" (**Open choice**;
+Arc's AX value is not known). Folder row hover (S2 08/0090): fill white 0.10
+on the row frame (existing hover) and, on folders in Pinned, a "—" button
+(ink 12 × 2 at x 196–207, y 258–259, peak `#B1AEB7`). The button has no AX
+element; its frame `[W − 39, y + 7, 26, 26]` is **derived** from the ink
+center (201.5, 258.5), the close-button slot. It unloads the folder's loaded
+tabs (**guess**: the action of the pinned-row "−"; Q18). Today folders show
+no "—" (**guess**).
+
+**Outline mechanics** (`OpenSidebar/SpacePageView.swift`). A peeked folder is
+an *expanded* item in `NSOutlineView` whose child list is `[child]`. Moving
+between states edits that list with `removeItems` / `insertItems` inside one
+`beginUpdates` block (expanded → peeked removes the others; peeked → collapsed
+removes the child and collapses the item; collapsed → expanded expands with
+all children). No `reloadData` (`SidebarDiagnostics.fullReloads` unchanged).
+
+**Model** (`OpenModel`). Add `Folder.peekedChildID: ItemID?` (nil unless
+`isExpanded` is false; always a direct child) and a computed
+`expansion: FolderExpansion` (`.expanded`, `.collapsed`, `.peeked(ItemID)`).
+New command `setFolderExpansion(folderID:_:)` (refuses a peek child that is not
+a direct child; same undo and event behavior as `setExpanded`, which stays and
+means expanded / collapsed). The sidebar computes the peek child from its
+window's `selectedNodeBySpace` and sends the new intent
+`.setFolderExpansion(folderID:expansion:)`; `ModelSidebarActions` maps it to
+`setFolderExpansion`, and the existing `.setExpanded` row click goes through
+the same peek decision. Every command that removes or
+moves a node clears a `peekedChildID` that points at it, in the same undo step.
+Scope: Arc keeps expansion per window (`StorableWindows`); Open keeps
+`isExpanded` and the peek in the model, shared by windows (existing Open
+design, `docs/model.md`).
+
+**Persistence.** `FolderDTO.peekedChildID: String?`, optional on decode (absent
+= nil); older builds ignore it. Import (`OpenImport/ArcImport.swift`):
+
+1. **Window.** Use the first entry of `StorableWindows.windows[]` whose `style`
+   has neither a `little` key (Arc 1.170 stores Little Arc windows as
+   `style.little`, `docs/re/interaction-states.md` §20.10) nor a `littleArc`
+   key (the importer's current test, `ArcImport.swift` window loop). This is
+   the "front window". Use the same window for
+   `spacesWithCollapsedPinnedSections`: today that line reads `winArr.first`,
+   which can be a Little Arc window; S6 moves both reads to one helper.
+   No such window → no expansion data: every folder imports expanded (today's
+   behavior).
+2. **Map.** `expandedItems` is an alternating array: an Arc item ID, then a
+   one-key enum object. Arc item IDs map to Open IDs with the importer's
+   existing deterministic mapping, `ArcImport.itemID(forArcID:)` (UUID in
+   the "item" namespace), for both the folder and the child.
+3. **Values.** `{expanded: {}}` → `isExpanded = true`. `{peeked: {_0: [IDs]}}`
+   → `isExpanded = false`, and `peekedChildID` = the **first** ID in `_0`
+   whose mapped item imported as a direct child of that folder; the other IDs
+   are ignored. An empty `_0`, or no ID that is a direct child → collapsed
+   with no peek. An unknown enum key → collapsed (guess).
+4. **Absent.** Folders that are absent from the map import collapsed
+   (**guess**, data-model.md: "folders absent from the map are collapsed").
+   This changes today's import, which leaves every folder expanded; the
+   import report counts how many folders imported collapsed.
+
+**Performance.** A transition lays out only the rows it inserts or removes.
+`sidebar-render bench`: a peek transition ≤ 2 ms main thread; scroll p95
+unchanged with 50 peeked folders.
+
+**Verification.** `openkit commands-demo` FP1–FP4, `sidebar-render check`
+FP5–FP10, `openkit import-arc` + `roundtrip` FP11, e2e E20 (§5).
 
 ## 4. Harness and automation additions
 
@@ -897,6 +1093,15 @@ data dir, socket only, no desktop input. Checks E1–E19 in §5.4. Results go to
 | HG2 | A Space swipe past the threshold: `.levelChange` ×1; a short swipe: 0 |
 | HG3 | Setting off: 0 calls |
 | HG4 | Switcher reorder across 2 slots: `.alignment` ×2 |
+| CT1 | Toolbar at widths 228, 219, 218, 207, 164: full at 228 and 219; compact (Back, Forward, "More options" at `[W − 90 / W − 62 / W − 34, 9, 28, 28]`) at 218 and below; no toggle and no Reload in compact |
+| CT2 | "More options" menu items and their intents (reload, hide sidebar) |
+| CT3 | Resizing across 219 swaps the toolbar once per crossing, with no outline layout (`tabRowLayouts` unchanged) |
+| FP5 | Collapse an expanded folder of 3 tabs while its 2nd tab is selected: the outline shows the folder and only that tab; `fullReloads` unchanged; 2 rows removed |
+| FP6 | The peeked folder draws `CustomIcon.folderPeek`; `sidebar-render compare` against the Arc frame S2 08/0090 (same window size and sidebar width, 1x): the three dot center pixels at x 22 / 26 / 30, row y + 21 within ΔE00 2 of the capture's pixels (`#B8B3FF`, `#B6B1FF`, `#B0AAFF`), dot pitch 4 pt ± 0.5, glyph body within ΔE00 2 of `#202AFF`. Comparing with the token alone does not pass this check. Expanded and collapsed folders keep their glyphs |
+| FP7 | Click on the peeked folder row → collapsed (1 row removed); click again → expanded (3 rows); click again with a Today tab selected → collapsed (3 rows removed), no peek |
+| FP8 | Selecting a Today tab keeps the peek; closing the peeked tab collapses the folder; dragging the peeked row out of the folder collapses it |
+| FP9 | The peeked row keeps its hover, close button, context menu, and multi-select fill; AX: folder expanded false, value "1 tab shown" |
+| FP10 | Bench: a peek transition ≤ 2 ms main thread; scroll p95 unchanged with 50 peeked folders in a 1,000-row Space |
 
 ### 5.2 `features-render check`
 
@@ -913,13 +1118,14 @@ data dir, socket only, no desktop input. Checks E1–E19 in §5.4. Results go to
 | HP10 | Card frame per §3.6, clamped at the window bottom |
 | SP5 | `separateFromPinned` rekeys the live host to the new tab ID; the pinned tab has no host |
 | SP6 | A host without rebind support closes; the new tab loads its URL |
-| HT1 | Hint shows on the first toggle-button hide only; the key becomes true |
-| HT2 | Cmd+S as the first hide sets the key and shows nothing |
+| HT1 | Hint shows on the first hide by the toolbar button; the key becomes true; a second hide by any path shows nothing |
+| HT2 | Cmd+S as the first hide shows the hint and sets the key (C17; was: shows nothing) |
 | HT3 | Lifetime 5.5 s then 0.25 s fade (driven by the forced animation clock) |
-| GH1 | Drag below 228: sidebar offset follows `x − 228`; width stays 228; no model write |
-| GH2 | Release at 170: hidden, `.sidebarHiddenByGesture` sent once |
-| GH3 | Release at 200: springs back, still anchored |
+| GH1 | Drag from 228 to pointer x 150: width stops at 164; no model write per tick |
+| GH2 | Continue to pointer x 60 with the button down: the sidebar hides before the mouse-up; release keeps it hidden; `.sidebarHiddenByGesture` sent once; stored width still 228 |
+| GH3 | Drag to x 70, then back to x 120 before release: shown again at 164; release writes 164 |
 | GH4 | Reduce Motion: no slide frames |
+| GH5 | Double-click on the handle at widths 364 and 500 sets 228 with one model write; a drag right stops at 500 |
 | SE1 | Both sound files load; duration and peak within 5 % of §3.13 |
 | SE2 | `play` does nothing when the setting is off |
 
@@ -951,6 +1157,11 @@ data dir, socket only, no desktop input. Checks E1–E19 in §5.4. Results go to
 | FA5 | Undo of restore writes the folder row back; undo of archive drops it |
 | FA6 | The store migrates a pre-change archive file (adds `kind`, keeps every row) |
 | FA7 | A round trip through snapshot save and load does not change archived rows |
+| FP1 | `setFolderExpansion(.peeked(child))` on a folder with that direct child: state peeked; one undo step restores expanded; redo repeats |
+| FP2 | Refusals: a peek child that is not a direct child (nested, other folder, missing) changes nothing and registers no undo |
+| FP3 | `closeTab`, `moveNode`, `moveNodes`, `archiveNodes`, and `makeSplit` on the peeked child clear `peekedChildID` in the same undo step; undo restores the peek |
+| FP4 | Snapshot save and load keep `peekedChildID`; a snapshot without the field decodes with nil |
+| FP11 | `openkit import-arc` on a synthetic fixture (made-up IDs, never the user's file) whose `StorableWindows.json` has a Little Arc window first (`style.little`, with its own `expandedItems`) and then a standard window with `[folderA, {peeked: {_0: [childA]}}]`, `[folderB, {peeked: {_0: [notAChild, childB1, childB2]}}]`, `[folderC, {peeked: {_0: []}}]`, and `[folderD, {expanded: {}}]`, plus folder E absent: A imports collapsed with peek childA; B collapsed with peek childB1 (the first direct child; the others ignored); C collapsed with no peek; D expanded; E collapsed; the Little Arc window's entries are ignored; Open IDs equal `ArcImport.itemID(forArcID:)` of the Arc IDs; `roundtrip` PASS |
 | L1 | `settings-preview`: the Library Spaces section hosts the injected view (preview injects a labeled stand-in) |
 | L2 | Folder rows show "Folder · N tabs" with N counted at any depth |
 | L3 | Folder restore status text and View action |
@@ -977,7 +1188,8 @@ data dir, socket only, no desktop input. Checks E1–E19 in §5.4. Results go to
 | E16 | `archive-sweep` with a date 13 h ahead archives a Today tab and shows the banner; "Got it" hides it; relaunch keeps it hidden |
 | E17 | First hide by the toolbar button shows the hint; `defaults key=open.sidebar.hideHintShown` is true; a second hide shows nothing |
 | E18 | Archive Folder → Library restore → the folder returns with its tabs and IDs |
-| E19 | Drag the resize handle to 150 pt and release: hidden; the hint shows (if not shown before) |
+| E19 | Drag the resize handle to pointer x 150: width 164; continue to x 60: hidden before the mouse-up; release; the hint shows (if not shown before); Cmd+S restores the width from before the drag; at width 200 the toolbar is compact (`snapshot`) |
+| E20 | Folder peek: select the 2nd tab of an expanded 3-tab folder, collapse the folder with `sidebar-click`: `tabs` shows the folder collapsed with one visible child; select a Today tab: still one visible child; relaunch: still peeked; `sidebar-click` on the folder: no visible child |
 
 ### 5.5 Comparisons with Arc captures
 
@@ -988,7 +1200,10 @@ Captures stay in `.re/` and are never committed or cropped into the repo.
 | State | Capture | Elements | Tool |
 |---|---|---|---|
 | First-hide hint | A0440 (anim session, window 2216 × 1394, sidebar hidden) | toast frame, fill at y + 2 and y + 43, text ink boxes (both halves), keycap plate frame and fill, keycap ink | `features-render compare --spec hint-toast` |
-| Gesture slide-out | A0422 | motion only: sidebar slides, no width change below 228 | `features-render render --scene gesture-hide --at` (visual check, no numeric target) |
+| Gesture slide-out | S2 06/0025–0035, 0066, 0069–0072 | widths 207…164 then hidden while pressed; 228 after Cmd+S; 500 maximum (AX widths, numeric) | `features-render check` GH1–GH5 |
+| Compact toolbar | S2 06/0025, 0029 (widths 207 and 164) | three button frames, glyph ink boxes, glyph peak tone | `sidebar-render compare` (same window size and width) |
+| Folder peek | S2 08/0090 (peeking child, folder hover) and the V 46.3 s video frame (positions only) | folder row, glyph body, the three dot **center pixels** against the capture's pixels (FP6, not the token), peeked row frame and indent, the "—" hover ink | `sidebar-render compare` |
+| Folder hover card | V 46.11–46.46 s video frame (positions only) | card frame (x = sidebar + 4, width 240, centered on the row), header height, row pitch 45 | `sidebar-render compare --positions-only` (no color target until lane C) |
 | Divider with "Clear" | F0041, F0066 | unchanged (CU5) | `sidebar-render compare` |
 | Menus | F0115, F0116, F0117, F0119 | single-row menu order unchanged; curly quotes in F0117 and F0119 titles | `sidebar-render check` (menu dumps) |
 | 13 baseline states | `docs/design.md` §15.1 | every state within its recorded worst values; report tidy-title text changes | `.re/vf/run-states.sh` |
@@ -1037,13 +1252,18 @@ File ownership (no file is edited by both lanes):
 | S4 | S | Space switcher reorder; `SpaceManagerView` and `SpaceControlsView`; `SidebarHaptics` and its call sites | M1 | SW1–SW4, SM1–SM6, HG1–HG4 PASS |
 | M5 | M | Library `.spaces` section that hosts an injected view (`SettingsActions.makeSpaceManagerView() -> NSView?`) | — | L1 PASS |
 | S5 | S | `HoverPreviewTracker`, `FolderPreviewView`, `SidebarBannerView` | M3 | HP1–HP6, BN1–BN4 PASS |
-| A1 | A | OpenFeatures intents: alerts, toasts, Clear toast, Expand/Reset/Space Manager commands, `HintToastView`, gesture-hide preview; add `features-render` to `verify-all.sh` | app-shell Step B (PR #52) merged; S2 | DA1–DA5, HT1–HT3, GH1–GH4 PASS; hint compare within §5.5 targets |
+| A1 | A | OpenFeatures intents: alerts, toasts, Clear toast, Expand/Reset/Space Manager commands, `HintToastView` (first hide by any path, §3.12), the `.sidebarHiddenByGesture` trigger, the compact toolbar (§3.16; edits `OpenSidebar/ChromeViews.swift`, allowed because lane S is finished); add `features-render` to `verify-all.sh`. The width range, drag-hide, double-click, and motion are the PR #104 follow-up (app-shell §3.3); GH1–GH5 run against that code | app-shell Step B (PR #52) merged; S2; the #104 follow-up for GH1–GH5 | DA1–DA5, HT1–HT3, GH1–GH5, CT1–CT3 PASS; hint and compact-toolbar compares within §5.5 targets |
 | A2 | A | `HoverPreviewController` (host reuse), host `rebind` / `rekey`, separate flow, banner trigger from the sweep, unread triggers | A1, S3, S5 | HP7–HP10, SP5–SP6 PASS |
 | A3 | A | App: menu and command handlers (§2.5) once app-shell Step C lands, Library Spaces wiring, automation commands (§4.4), e2e suite | A2, M5, app-shell Step C | E1–E19 PASS on the real app; `tools/verify-all.sh` all PASS |
-| C | S | Calibration after the §8.2 capture session: replace guessed values with measured ones, each citing its frame | captures | each changed value meets ≤ 1 pt / ΔE00 ≤ 2 on its capture |
+| S5b | S + M | Previews delay removal (lead ruling 2026-10-26): delete the "Delay" pop-up from the Previews sheet (`OpenSettings/GeneralPane.swift`), drop `open.general.previewsDelaySeconds` from `SettingsTypes.swift` defaults and the `settings-library.md` §2.1 registry (a stored value is ignored, not migrated), make `OpenSidebar/HoverPreviewTracker.swift` use `HoverPreviewMetrics.armDelay` 0.5 s instead of reading the key, and stop setting the key in `sidebar-render/PreviewChecks.swift`. One implementer edits both lanes' files (lanes M and S are finished) | S5 (#102) | `settings-preview check` PASS with the sheet showing only the master switch and the two sources; `settings-preview dump-keys` lists no `previewsDelaySeconds` default; HP1 still PASS (0.5 s ± 50 ms); the receipts `docs/settings/checks.txt` and `docs/first-run/checks.txt` (both list `default open.general.previewsDelaySeconds = 0.5`) are regenerated with the same `settings-preview check` run, or marked historical in `docs/settings.md` and `docs/first-run.md` |
+| S6 | S + M | Folder peek (§3.17): `Folder.peekedChildID`, `FolderExpansion`, `setFolderExpansion`, peek clearing in node commands, `FolderDTO` field, import of `expandedItems`, `.setFolderExpansion` intent, outline child-list edits, `CustomIcon.folderPeek` and `folderPeekDots`, the Pinned folder "—" hover button, `Motion.folderExpand` / `folderCollapse`. One implementer edits both lanes' files: lanes M and S are finished (M1–M5, S1–S5 merged), so no file is shared with running work | S3 (#95) | FP1–FP11 PASS; folder-peek compare within §5.5 targets; the 13 baseline states unchanged; `roundtrip` PASS; E20 once A3 lands |
+| C | S | Calibration after the §8.2 capture session: replace guessed values with measured ones, each citing its frame. Includes the folder hover card (§3.6): positions from the video sample are already in `HoverPreviewMetrics`; colors, radius, type, and the arm delay need a higher-rate capture | captures | each changed value meets ≤ 1 pt / ΔE00 ≤ 2 on its capture |
 
 Parallel schedule: M1 ‖ S1 → M2 ‖ (S2 waits for M2) → M3 ‖ S2 → M4 ‖ S3 →
-M5 ‖ S4 → A1 ‖ S5 → A2 → A3, then C when captures exist. Lanes never edit the
+M5 ‖ S4 → A1 ‖ S5 → A2 → A3, then C when captures exist. S6 (added
+2026-10-26) can start now and runs in parallel with A1–A3 (no shared files:
+A-lane files are `OpenFeatures/*`, `App/*`, and `ChromeViews.swift`; S6
+does not edit them). Lanes never edit the
 same file. Each lane records its results in its own doc (`docs/model.md`,
 `docs/design.md`, `docs/app-shell.md`) and in the PR. Neither lane edits this file.
 
@@ -1055,7 +1275,7 @@ same file. Each lane records its results in its own doc (`docs/model.md`,
 |---|---|---|
 | Q1 | Folder menu: Arc shows "Delete" (flag off, captured) or "Archive Folder" in the same slot (flag on, code). | Show both: "Archive Folder" above "Delete". Both v1 features stay one click away; the captured items keep their order. |
 | Q2 | Pinned and Favorite previews: Arc shows site-specific glance views (mail, calendar, recent pages). | Ship the live page preview through the tab's own host (D-6). Glance views need site APIs and are not v1. |
-| Q3 | The Settings Previews sheet has "Show previews when hovering links" and a delay, which do not exist in Arc. Arc's sheet lists sources ("Show Arc Previews:"). | Change the sheet to "Show Open Previews:" with two switches, "Folders" and "Pinned tabs and Favorites" (keys `open.general.previewsFolders`, `open.general.previewsPages`, default true), and keep the delay pop-up. Until then the master switch and the delay apply. |
+| Q3 | The Settings Previews sheet has "Show previews when hovering links" and a delay, which do not exist in Arc. Arc's sheet lists sources ("Show Arc Previews:"). | **Decided 2026-10-26 (lead):** Open v1 keeps two switches, "Folders" and "Pinned tabs and Favorites" (keys `open.general.previewsFolders`, `open.general.previewsPages`, default true), as an Open product choice. Arc's sheet has seven sources (S2 02/0050): Arc Folders, Google Calendar, Google Mail, Outlook Calendar, Outlook Mail, Recent pages on Linear, Notion, and Figma, and Notion Calendar. All but Arc Folders are live-data integrations that v1 does not include; they are post-v1. The preview delay setting is removed to match Arc; the delay is fixed at 0.5 s (lead ruling 2026-10-26, Step S5b). The sheet's other parts are in `docs/plans/settings-library.md` §5.1.1. |
 | Q4 | Space Manager: Library section or its own window. | Library section (SC §2 evidence). |
 | Q5 | Drag to reorder in the bottom switcher (Arc's flag is Windows-only). | Ship it; the task asks for it and it does not conflict with any Arc behavior. |
 | Q6 | Which events play the generic sound; default of the sound switch (Arc's key polarity means on). | Keep the switch off and no `.event` caller until a capture session (§8.2 C9) names the events; then turn the default on. |
@@ -1065,10 +1285,12 @@ same file. Each lane records its results in its own doc (`docs/model.md`,
 | Q10 | Modifier for Separate From Pinned Tab. | ⌥, until C7. |
 | Q11 | Unread triggers. | Background-created tabs, plus "Move to" into a Space the window does not show. |
 | Q12 | Banner threshold text. | Insert the Profile's threshold ("12 hours" by default, which is Arc's text). |
-| Q13 | Hint after a Cmd+S hide. | No hint; mark it shown. |
+| Q13 | Hint after a Cmd+S hide. | **Superseded 2026-10-26 (lead ruling, C17 in `docs/re/capture-session-2-results.md`):** the hint shows once, on the first hide by any path, Cmd+S included (§3.12). Evidence: session 1 hid the sidebar with Cmd+S and showed the hint (`.re/runtime/sessions/index-20261024.json` state `sidebar-hidden-and-hover-reveal`: "Cmd+S: … hint toast"; hide animation A0436–A0438, hint visible A0438–A0446, gone A0447; `docs/re/interaction-states.md` §13 "Hint toast"). Session 2 hid it by the toolbar button (notes 10:10:15), Cmd+S (10:10:26), and View ▸ Hide Sidebar (10:10:36) with no hint on any path (S2 04/0001–0096, `.re/runtime/sessions/20261026-101007-04-hide-hint/`; notes 10:11:20 "no first-hide hint on any path … likely already shown once on this install"). Reading: a once-only hint that session 1 used up (guess). |
 | Q14 | Key for "Clear unselected". | ⌥, until C8. |
 | Q15 | Alert title for several folders. | "Are you sure?" (Arc's own fallback string). |
 | Q16 | "Archive Tabs Below / Above". | Defer until C8 shows how Arc reaches them. |
+| Q17 | Folder peek: selecting a hidden child of a collapsed or peeked folder by keyboard, command bar, or routing. Does Arc peek that child instead of expanding? | Keep the existing rule (expand the folder chain) until a capture shows it (§8.2 C11). |
+| Q18 | Folder row "—" on hover (S2 08/0090): what does it do? | On Pinned folders: unload the folder's loaded tabs, like the pinned-row "−". No "—" on Today folders. Confirm with C11. |
 
 ### 8.2 Screenshots needed from the user
 
@@ -1086,7 +1308,8 @@ Run the recorder from `docs/re/runtime-observations.md` §7 (`capture-loop.sh
 | C7 | `pinned-reset` | Navigate a pinned tab to another page; hover its favicon; hold ⇧, then ⌥, then ⌘ (one at a time). | §3.9 plate, key |
 | C8 | `clear-option` | Hover the Today "Clear" control, then hold ⌥; right-click a Today tab and hold ⌥ with the menu open. | §3.10 |
 | C9 | `sounds` | Turn "Play Arc sound effects" on; for 5 minutes use the sidebar normally and say aloud (or note the time) when a sound plays. | §3.13 event mapping |
-| C10 | `gesture-hide` | Drag the sidebar edge slowly to the left past its minimum, hold, then release. | §3.16 |
+| C10 | `gesture-hide` | Done in session 2 (S2 06, `docs/re/interaction-states.md` §20.1). | §3.16 |
+| C11 | `folder-peek` | Collapse a folder while one of its tabs is selected; then use Ctrl+Tab or the command bar to select a hidden tab of that folder; hover a Pinned folder and click its "—"; open the "More options" toolbar menu at a narrow width. | §3.17 Q17, Q18; §3.16 menu |
 
 ## 9. Verification log
 
@@ -1104,6 +1327,8 @@ Each lane records its results in its own doc (§7). The lead fills this table wi
 | S4 | | |
 | M5 | | |
 | S5 | | |
+| S5b | | |
+| S6 | | |
 | A1 | | |
 | A2 | | |
 | A3 | | |
@@ -1129,3 +1354,15 @@ Each lane records its results in its own doc (§7). The lead fills this table wi
 - Q15 The alert title for deleting several folders is "Are you sure?".
 - Q16 answered by capture session 2: `.re/runtime/sessions/20261026-102027-08-folder-preview`, frame 0050 and `s2-notes.txt` “FINDING item 8”. A single Today row has “Archive Tab” followed by the normal “Archive Tabs Below” item (not an Option alternate). It archives all later Today rows in one undo step; the item stays visible but disabled on the last row (lead decision). Multi-selection keeps “Archive Items” (guess: not captured). “Archive Other Tabs” stays an Option alternate (guess). “Archive Tabs Above” remains deferred.
 - Captures C1–C10 go into the user's single combined Arc capture session.
+
+## Appendix — Lead decisions (2026-10-26, capture session 2)
+
+These supersede the entries above where they conflict. Evidence: `docs/re/interaction-states.md` §20.1, §20.4, §20.12, §20.13; `docs/re/capture-session-2-results.md` C5, C16, C17, §2.2.
+
+- Sidebar width (A lane): minimum **164**, maximum **500**. Dragging past the minimum hides the sidebar while the button is still down; Cmd+S then restores the width from before the drag; a double-click on the edge resets the width to 228. The window parts follow `docs/plans/app-shell.md` §3.3 and are built by the PR #104 owner; A1 keeps the hint trigger and the compact toolbar. The old "slide below 228, hide below 180" rule is superseded.
+- Motion: Space switch spring 0.20 s (not 0.30); Cmd+S hide and show ≈ 0.1 s each, and the show starts with the key (Open decision, app-shell Q11: Arc's ≈ 0.29 s delay is latency and is not copied); the hover-reveal card slides in in ≈ 0.14 s with a 3 pt overshoot and is translucent (spec: app-shell §3.3).
+- The drag-hide point is pointer x < 82, the named token `WindowMetrics.sidebarDragHidePoint`, a guess inside the measured 65–85 band.
+- Q13 superseded: the first-hide hint shows once, on the first hide by any path (C17). Evidence: session 1 index state `sidebar-hidden-and-hover-reveal` (Cmd+S hide, hint A0438–A0446); session 2 S2 04/0001–0096 with notes 10:10:15, 10:10:26, 10:10:36 (three paths) and 10:11:20 (no hint on any path).
+- New Step S6: a collapsed folder keeps its last active child visible, the folder glyph shows three dots, and the state round-trips as Arc's `expandedItems` `peeked` (§3.17).
+- Q3: Open v1 keeps two Previews switches, "Folders" and "Pinned tabs and Favorites", as an Open product choice. Arc's other sources (Google Calendar, Google Mail, Outlook Calendar, Outlook Mail, Recent pages on Linear, Notion, and Figma, Notion Calendar) are Arc's live-data integrations and are post-v1.
+- Previews delay: Open's delay setting is removed to match Arc (no delay control in Arc's sheet, S2 02/0050). The hover delay is fixed at 0.5 s (Open choice; one Arc sample ≈ 0.42 s) (`HoverPreviewMetrics.armDelay`). Step S5b.

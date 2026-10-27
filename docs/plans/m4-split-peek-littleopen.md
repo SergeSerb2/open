@@ -1263,7 +1263,7 @@ Work in order. A step is done only when its acceptance passes.
 | Q4 | Peek Split-button semantics (glyph-proven only)? | §4.4 guess; marked in code. |
 | Q5 | Expand keeps page state (PK open Q4)? | Yes via reparenting (A2); reload fallback noted. |
 | Q6 | Focus after closing the focused pane: model `takePane` picks the first remaining pane — left/top neighbor? | Model behavior as built; verify against Arc (SV open Q5) later. |
-| Q7 | Little Open default size/position (LA open Q1)? | 720×540 centered/cascade (R-§9.3 guess). |
+| Q7 | Little Open default size/position (LA open Q1)? | 720×540 centered/cascade (R-§9.3 guess). **Superseded 2026-10-26** by capture session 2: routing plan §9.3 (490 × 329 command-bar window at the screen's top-right, then 1185 × 832) and its Step 6a. |
 | Q8 | Divider keyboard resizing? | Skipped in v1 (§3.4). |
 
 ---
@@ -1304,4 +1304,5 @@ numbers only here — the same discipline as routing.md and sleep.md.
 - Q4: Peek's Split button opens the peeked page as a split pane next to the current tab (the peek closes).
 - Q5: Expand moves the same live web content into the new tab (no reload; page state preserved). If the engine cannot reparent, reload with restored history (fallback).
 - Q6–Q7: stated defaults accepted (720×540 Little Open).
+- 2026-10-26: Q7 is superseded by the routing plan's capture-session-2 lead decisions (Little Open frames, a new window per ⌥⌘N, Arc's title bar). The routing plan's §9.2–§9.5 and Step 6a win over §6.1's Little Open window bullet and §6.3's inset page.
 - Sequencing: Steps 1–7 start after PR #33 (OpenDesign/OpenSidebar) merges; Steps 8–9 after the App target + engine.
