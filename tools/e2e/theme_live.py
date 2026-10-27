@@ -16,13 +16,21 @@ def run(factory, results, scratch, root, wait_until):
     output.mkdir(parents=True)
     data = json.loads(Path(root, 'Packages/OpenKit/Fixtures/space-schema1/State/browser.json').read_text())
     data['spaces'][0]['theme'] = {'gradientStopsLight': [], 'gradientStopsDark': []}
+    # Match the capture's opaque white page behind the popover. Empty-window
+    # chrome is translucent and is a different NSVisualEffectView backdrop.
+    backdrop_tabs = {}
+    for space in data['spaces'][:2]:
+        tab = next(node['tab']['_0'] for node in space['pinned'] if 'tab' in node)
+        tab['url'] = 'data:text/html,%3Chtml%20style%3D%22background%3Awhite%3Bcolor-scheme%3Alight%22%3E%3C%2Fhtml%3E'
+        tab['pinnedURL'] = tab['url']; tab['title'] = 'Theme backdrop'
+        backdrop_tabs[space['id']] = tab['id']
     template = data['windows'][0]
     data['windows'] = []
     for index in range(3):
         window = copy.deepcopy(template)
         window.update(id=str(uuid.uuid4()).upper(), focusedSpaceID=data['spaces'][index // 2]['id'],
                       frameWidth=1280, frameHeight=800, frameX=40 + index * 24,
-                      frameY=80 + index * 24, sidebarWidth=500, selectedNodeBySpace={})
+                      frameY=80 + index * 24, sidebarWidth=500, selectedNodeBySpace={data['spaces'][index // 2]['id']: backdrop_tabs[data['spaces'][index // 2]['id']]})
         data['windows'].append(window)
     fixture = Path(scratch, 'theme-live.json')
     fixture.write_text(json.dumps(data))
@@ -32,6 +40,8 @@ def run(factory, results, scratch, root, wait_until):
         windows = app.call('shell-windows')
         owner, other, third = windows
         app.call('window-focus', id=owner['id'], activate=True)
+        assert wait_until(lambda: app.eval(backdrop_tabs[data['spaces'][0]['id']],
+                          "document.readyState === 'complete' && getComputedStyle(document.documentElement).backgroundColor === 'rgb(255, 255, 255)'"), timeout=10, step=.02)
         owner_state = app.call('window-state')
         results['three_real_windows'] = {'ok': len(windows) == 3 and owner_state['space'] == data['spaces'][0]['id']}
 
@@ -114,16 +124,16 @@ def run(factory, results, scratch, root, wait_until):
         p = opened()
         app.call('key', window=p['number'], key='return', route='app')
         results['return_keeps_editor'] = {'ok': panel() is not None}
-        app.call('key', window=p['number'], key='t', modifiers=['cmd'], route='app')
-        results['cmd_t_editor_context'] = {'ok': wait_until(lambda: app.call('commandbar-state')['presented'], timeout=3, step=.02) and not panel()}
+        key_t = app.call('key', window=p['number'], key='t', modifiers=['cmd'], route='app')
+        results['cmd_t_editor_context'] = {'ok': bool(wait_until(lambda: app.call('commandbar-state')['presented'] and not panel(), timeout=3, step=.02)), 'keyResult': key_t, 'panelAfter': panel() is not None}
         app.call('key', key='escape', route='app')
         p = opened()
-        app.call('key', window=p['number'], key='l', modifiers=['cmd'], route='app')
-        results['cmd_l_editor_context'] = {'ok': wait_until(lambda: app.call('commandbar-state')['presented'], timeout=3, step=.02) and not panel()}
+        key_l = app.call('key', window=p['number'], key='l', modifiers=['cmd'], route='app')
+        results['cmd_l_editor_context'] = {'ok': bool(wait_until(lambda: app.call('commandbar-state')['presented'] and not panel(), timeout=3, step=.02)), 'keyResult': key_l, 'panelAfter': panel() is not None}
         app.call('key', key='escape', route='app')
         p = opened()
-        app.call('key', window=p['number'], key='w', modifiers=['cmd'], route='app')
-        results['cmd_w_editor_context'] = {'ok': wait_until(lambda: not panel(), timeout=3, step=.02)}
+        key_w = app.call('key', window=p['number'], key='w', modifiers=['cmd'], route='app')
+        results['cmd_w_editor_context'] = {'ok': bool(wait_until(lambda: not panel(), timeout=3, step=.02)), 'keyResult': key_w, 'panelAfter': panel() is not None}
         p = opened()
         peer = app.foreground_peer()
         try:
@@ -140,6 +150,8 @@ def run(factory, results, scratch, root, wait_until):
         app.call('window-close')
         results['owner_close_closes_editor'] = {'ok': wait_until(lambda: not panel(), timeout=3, step=.02)}
         results['scope'] = {'status': 'PASS', 'note': 'Step 5 generic automation only; Step 8 theme/icon/create APIs are not added'}
+        failed = [name for name, row in results.items() if isinstance(row, dict) and 'ok' in row and row['ok'] is not True]
+        assert not failed, 'failed native checks: ' + ', '.join(failed)
     finally:
         app.quit()
         dict.__setitem__(results, 'cleanup', {'ok': not app.quit_report.get('forced', False), 'forced': app.quit_report.get('forced', False)})

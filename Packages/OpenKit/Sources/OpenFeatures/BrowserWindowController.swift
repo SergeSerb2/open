@@ -544,7 +544,7 @@ public final class BrowserWindowController: NSWindowController, NSWindowDelegate
     public var peekBadgeTabIDs: Set<ItemID> { peekStorage?.peekBadgeTabIDs ?? [] }
     /// Shared window-local key path. Focus comes from AppKit's current responder.
     @discardableResult public func handleKeyDown(_ event: NSEvent, unconsumed: Bool = false) -> Bool {
-        guard let eventWindow = event.window,
+        guard let eventWindow = event.window ?? NSApp.keyWindow,
               eventWindow === window || eventWindow === themeEditor?.panel || ownsAdditionalKeyWindow?(eventWindow) == true else { return false }
         // Editor keys stay on its responder chain. App-level commands first
         // close and flush it, then use the browser's existing key router.

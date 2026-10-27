@@ -1638,6 +1638,15 @@ the real windows in `engine_e2e.py --only theme-live`; Step 8's dedicated
 The already-landed thumb-overhang `hitTest` path is retained and checked
 through the native panel path.
 
+Step 5 checkpoint (22:26): implementation is committed for handoff, but is
+not ready to ship. The focused E7/E8/B1 harness passed at this
+checkpoint. The latest real-window run with the opaque white page passed
+live propagation, save scheduling, app key routing, and close triggers;
+its thumb-overhang assertion and dependent undo-after-close assertion
+failed and still need investigation. Real-window rest/hover calibration,
+the review checklist, and the full verification gate remain open. No Step 5
+PR is opened during the requested pause.
+
 ### Step 9 review r1 response (2026-10-26)
 
 The undo action closure retains its relay; Foundation's undo target itself
