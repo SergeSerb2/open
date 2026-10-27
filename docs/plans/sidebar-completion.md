@@ -1327,7 +1327,7 @@ Each lane records its results in its own doc (§7). The lead fills this table wi
 | S4 | | |
 | M5 | | |
 | S5 | | |
-| S5b | | |
+| S5b | [#123](https://github.com/SergeSerb2/open/pull/123) | Fixed 0.5 s arm delay, no delay setting; HP1 stored-delay proofs; real-App Previews flow PASS (M5 gate: display-only rows as on main) |
 | S6 | | |
 | A1 | | |
 | A2 | | |

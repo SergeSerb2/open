@@ -1415,7 +1415,14 @@
             let frame = outline.convert(outline.rect(ofRow: row), to: nil)
             return ["id": nodeID.description, "point": [frame.midX, (target?.frame.height ?? 0) - frame.midY]]
           }
-          return ["id": id.description, "grabber": [rect.midX, (target?.frame.height ?? 0) - rect.midY], "rows": rows]
+          // Spec geometry (plan §3.2, S4 R1): column frame in the manager's flipped
+          // coordinates (scroll origin removed) and header parts in column coordinates.
+          let origin = manager.scrollView.contentView.bounds.origin
+          let column = manager.columnFrame(spaceID: id).map { $0.offsetBy(dx: -origin.x, dy: -origin.y) } ?? .zero
+          let parts = (manager.controls(spaceID: id)?.partFrames ?? [:]).mapValues { [$0.minX, $0.minY, $0.width, $0.height] }
+          return ["id": id.description, "grabber": [rect.midX, (target?.frame.height ?? 0) - rect.midY], "rows": rows,
+            "column": [column.minX, column.minY, column.width, column.height], "header": parts,
+            "managerSize": [manager.bounds.width, manager.bounds.height]]
         }
       } ?? []
       let switchers = app.windowControllers.map { controller -> [String: Any] in

@@ -58,6 +58,10 @@ public final class SpaceControlsView: NSView {
         profile.frame = CGRect(x: 41, y: 23, width: min(max(0, bounds.width - 103), profile.textWidth + 6), height: 18)
         profile.layer?.backgroundColor = GrayScale.a(4).cgColor(context.appearance(for: space))
     }
+    /// Laid-out header parts in this view's flipped coordinates (automation and spec checks).
+    public var partFrames: [String: CGRect] {
+        ["grabber": grip.frame, "icon": icon.frame, "title": title.frame, "more": more.frame]
+    }
     public var showsProfileChip: Bool { !profile.isHidden }
     public var displayedTitle: String { title.text() }
     public var displayedProfile: String? { showsProfileChip ? profile.text() : nil }
