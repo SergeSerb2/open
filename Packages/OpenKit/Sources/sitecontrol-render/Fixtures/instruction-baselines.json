@@ -1,0 +1,10 @@
+{
+  "version": 1,
+  "machines": [
+    {
+      "cpuBrand": "Apple M5 Pro",
+      "osBuild": "26B5112a",
+      "coldOpenInstructions": 95035968
+    }
+  ]
+}

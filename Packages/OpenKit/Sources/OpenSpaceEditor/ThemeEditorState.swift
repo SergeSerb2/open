@@ -45,7 +45,7 @@ public struct ThemeEditorState: Equatable, Sendable {
             }
             let target: CGPoint
             if relative, let startKnob, let startPointer {
-                target = CGPoint(x: startKnob.x + point.x - startPointer.x, y: startKnob.y + point.y - startPointer.y)
+                target = ColorPadGeometry.relative(point,startPointer: startPointer,startKnob: startKnob)
                 if point == startPointer { return }
             } else { target = point }
             setColor(at: target)

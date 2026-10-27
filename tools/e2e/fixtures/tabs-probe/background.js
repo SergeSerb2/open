@@ -29,6 +29,18 @@ chrome.windows.onFocusChanged.addListener((windowId) => record("focus", { window
 chrome.action.setBadgeText({ text: "P1" });
 chrome.action.setBadgeBackgroundColor({ color: "#3366ff" });
 
+// Context-menu fixtures: a normal item, an invisible item, and an enabled
+// child of a disabled submenu exercise delivery and execution filtering.
+chrome.runtime.onInstalled.addListener(() => {
+  chrome.contextMenus.create({ id: "probe", title: "Tabs probe item", contexts: ["all"] });
+  chrome.contextMenus.create({ id: "probe-hidden", title: "Invisible tabs probe item", contexts: ["all"], visible: false });
+  chrome.contextMenus.create({ id: "probe-disabled", title: "Disabled tabs probe submenu", contexts: ["all"], enabled: false }, () => {
+    chrome.contextMenus.create({ id: "probe-disabled-child", parentId: "probe-disabled",
+      title: "Disabled child probe item", contexts: ["all"], enabled: true });
+  });
+});
+chrome.contextMenus.onClicked.addListener((info) => record("menu", { id: info.menuItemId }));
+
 // Calls that switch tabs run here, not in the popup: a tab switch closes the
 // action popup (as in Chrome), which would end a popup-side call before its
 // result arrives. The result goes to chrome.storage.session.lastOp.

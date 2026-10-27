@@ -1,5 +1,6 @@
 import CoreGraphics
 import Foundation
+import OpenModel
 
 // Layout metrics in points. Frames are `[x, y, w, h]` from the window's top-left
 // corner (y grows down), measured on Arc 1.170.0 at sidebar width 228
@@ -239,10 +240,14 @@ public enum PanelMetrics {
 /// Window-level values.
 public enum WindowMetrics {
     public static let defaultSidebarWidth: CGFloat = 228
-    /// guess: 500 is the widest stop (the user dragged to it, F0127).
+    /// Measured right stop: S2 06/0072 (interaction-states §20.1).
     public static let maxSidebarWidth: CGFloat = 500
-    /// guess: Arc's minimum was not captured; below it a drag hides the sidebar.
-    public static let minSidebarWidth: CGFloat = 180
+    /// Temporary floor: full-toolbar plates retain 3 pt clearances at 218; compact toolbar is lane A1.
+    public static let minSidebarWidth = CGFloat(BrowserWindowState.minimumSidebarWidth)
+    /// Measured left stop: S2 06/0029. Requires lane A1's compact toolbar.
+    public static let targetMinSidebarWidth: CGFloat = 164
+    /// Guess inside the captured 65–85 pt band, S2 06/0035; app-shell §3.3.
+    public static let sidebarDragHidePoint: CGFloat = 82
     /// System window corner: continuous, about 16 pt.
     public static let cornerRadius: CGFloat = 16
     /// Hover-reveal card when the sidebar is hidden: `[5, 5, S, H − 10]` (F0129, F0130). The

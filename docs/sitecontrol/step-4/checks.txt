@@ -1,0 +1,107 @@
+| Result | Check |
+|---|---|
+| PASS | F11 screen point 1 and both knob centers |
+| PASS | F11 screen point 2 and both knob centers |
+| PASS | F11 screen point 3 and both knob centers |
+| PASS | F11 screen point 4 and both knob centers |
+| PASS | F11 screen point 5 and both knob centers |
+| PASS | F11 screen point 6 and both knob centers |
+| PASS | F11 screen point 7 and both knob centers |
+| PASS | F11 screen point 8 and both knob centers |
+| PASS | F11 screen point 9 and both knob centers |
+| PASS | F11 screen point 10 and both knob centers |
+| PASS | F11 screen point 11 and both knob centers |
+| PASS | F11 screen point 12 and both knob centers |
+| PASS | F10 knob drag retains its pointer offset |
+| PASS | F25 pointer pad/buttons/font cells keep the native browser window key |
+| PASS | F24 advanced window frame is (-34,258,250,232) |
+| PASS | F25 advanced pointer use keeps browser key |
+| PASS | F24 Esc closes only the advanced popover |
+| PASS | F24 native outside click closes the advanced popover |
+| PASS | F25 rename text sheet becomes key |
+| PASS | F25 native floating-window key entry focuses Done |
+| PASS | F25 Tab follows Done with the name menu |
+| PASS | F25 Done returns key to the native browser window (closed=true, visible=false, parentKey=true, active=true, sheet=false) |
+| PASS | F25 native suite completes all nine checks and exits |
+| PASS | F10 drag leaves the real store unchanged before mouse-up |
+| PASS | F10 live preview uses real planner and strips JavaScript |
+| PASS | F10 mouse-up commits once and derives the wheel adjustment |
+| PASS | F14 one Cmd+Z restores the complete pre-drag value |
+| PASS | F14 Cmd+Shift+Z restores the drag |
+| PASS | F11 wheel input 1 through store and injection planner |
+| PASS | F11 wheel input 2 through store and injection planner |
+| PASS | F11 wheel input 3 through store and injection planner |
+| PASS | F11 wheel input 4 through store and injection planner |
+| PASS | F11 wheel input 5 through store and injection planner |
+| PASS | F11 wheel input 6 through store and injection planner |
+| PASS | F11 wheel input 7 through store and injection planner |
+| PASS | F11 wheel input 8 through store and injection planner |
+| PASS | F11 wheel input 9 through store and injection planner |
+| PASS | F11 wheel input 10 through store and injection planner |
+| PASS | F11 wheel input 11 through store and injection planner |
+| PASS | F11 wheel input 12 through store and injection planner |
+| PASS | F12 System font cell persists the safe CSS family |
+| PASS | F14 font undo restores Original |
+| PASS | F14 font redo restores System |
+| PASS | F12 text size cycle 2 |
+| PASS | F12 text size cycle 3 |
+| PASS | F12 text size cycle 4 |
+| PASS | F12 text size cycle 0 |
+| PASS | F12 text size cycle 1 |
+| PASS | F12 Shift-click cycles size backwards |
+| PASS | F12 text case cycle 1 |
+| PASS | F12 text case cycle 2 |
+| PASS | F12 text case cycle 3 |
+| PASS | F12 text case cycle 0 |
+| PASS | F14 case undo restores lowercase |
+| PASS | F14 case redo restores default |
+| PASS | F15 All Boosts delegates and keeps editor open |
+| PASS | F15 Shuffle sets wheel and font, preserving text options |
+| PASS | F14 Shuffle is one complete undo step |
+| PASS | F15 native rename Done permits 'Evening colors' |
+| PASS | F15 native rename Done permits '' |
+| PASS | F15 rename Cancel preserves name |
+| PASS | F15 reset Cancel preserves edits |
+| PASS | F15 Reset clears all edit fields and preserves scope/name |
+| PASS | F14 Reset is one undo step |
+| PASS | F15 delete Cancel keeps editor and stored Boost |
+| PASS | F15 Delete closes editor and deletes from the real store |
+| PASS | F16 close new Boost changed=false |
+| PASS | F16 close new Boost changed=true |
+| PASS | F19 Make your own persists only the dismissed flag |
+| PASS | F19 close leaves interstitial flag false |
+| PASS | legacy filter is exact and the wheel is editable with a note |
+| PASS | non-color edit retains exact legacy filter |
+| PASS | first color edit replaces legacy values with normalized wheel values |
+| PASS | legacy first-edit undo restores byte-identical colorAdjustment and nil wheel |
+| PASS | F15 Reset also clears stored CSS, JS and Zaps |
+| PASS | F14 Reset restores CSS, JS and Zaps together |
+| PASS | scope menu labels host and subdomains without changing stored meaning |
+| PASS | news.example.com scope applies to child.news.example.com |
+| PASS | news.example.com scope does not apply to example.com |
+| PASS | saved IP path scope has one host choice and a checked path item |
+| PASS | 103-4 saved IP /news is checked while page is /other/page |
+| PASS | 103-4 saved IP /news is checked while page is / |
+| PASS | root IP scope hides path and registrable-domain items |
+| PASS | 103-1 commit then close flushes to a fresh store without caller saveNow |
+| PASS | 103-1 native Delete is durable immediately |
+| PASS | 103-2 slider repeats keep live state out of store before the group ends |
+| PASS | 103-2 one second slider repeats commit once |
+| PASS | 103-2 one undo restores every repeated slider step |
+| PASS | 103-2 AX slider repeats commit once on AX focus loss |
+| PASS | 103-2 one undo restores all AX increments |
+| PASS | 103-2 keyboard focus loss commits the slider group |
+| PASS | 103-3 slider drag has its own undo entry after wheel repeat |
+| PASS | 103-3 second undo restores the wheel repeat separately |
+| PASS | 103-5 an invalid request preserves the live editor |
+| PASS | 103-7 load removes only stale atomic-write files |
+| PASS | 103-8 pending page sampling disables Shuffle and wheel edits |
+| PASS | 103-8 sampling enables Shuffle and wheel edits |
+| PASS | F12 font grid keeps 26 pt cells and keyboard focus |
+| PASS | design 12 disabled tile copy is user-facing |
+| PASS | F21 real editor AX hierarchy labels all controls |
+| PASS | navigation keeps the editor and shows Not active |
+| PASS | tab switch finalizes and closes the bound editor |
+| PASS | global-off permits stored edits and skips every preview |
+
+103/103 passed

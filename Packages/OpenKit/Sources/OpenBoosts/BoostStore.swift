@@ -44,6 +44,15 @@ public final class BoostStore: @unchecked Sendable {
     }
 
     public func load() -> [Boost] {
+        // load precedes mutation. Only our abandoned atomic-write files are removed.
+        queue.sync {
+            let directory = fileURL.deletingLastPathComponent(), prefix = fileURL.lastPathComponent + ".tmp-"
+            let siblings = (try? FileManager.default.contentsOfDirectory(at: directory, includingPropertiesForKeys: [.isRegularFileKey, .isSymbolicLinkKey])) ?? []
+            for sibling in siblings where sibling.lastPathComponent.hasPrefix(prefix) {
+                let values = try? sibling.resourceValues(forKeys: [.isRegularFileKey, .isSymbolicLinkKey])
+                if values?.isRegularFile == true && values?.isSymbolicLink != true { try? FileManager.default.removeItem(at: sibling) }
+            }
+        }
         guard FileManager.default.fileExists(atPath: fileURL.path) else {
             lock.withLock { boosts = [:]; sorted = nil; loadedSchemaVersion = 1 }
             return []
@@ -148,10 +157,17 @@ public final class BoostStore: @unchecked Sendable {
         BoostFileDTO(schemaVersion: loadedSchemaVersion, profileID: profileID.description,
                      boosts: boosts.values.sorted { $0.id.description < $1.id.description })
     }
+    /// Normalize an in-memory preview through the same writer as persistence.
+    /// This does not mutate the store, schedule a save, or acquire its lock.
+    public static func normalizedForPreview(_ input: Boost) -> Boost { normalized(input) }
+
     private static func normalized(_ input: Boost) -> Boost {
         var b = input
         b.siteMatch = .normalized(domain: b.siteMatch.domain, pathPrefix: b.siteMatch.pathPrefix)
-        b.colorAdjustment = b.colorAdjustment?.clamped()
+        if let wheel = b.colorWheel?.clamped() {
+            b.colorAdjustment = wheel.adjustment
+            b.colorWheel = wheel.isIdentity ? nil : wheel
+        } else { b.colorAdjustment = b.colorAdjustment?.clamped() }
         if b.fontFamily?.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty == true { b.fontFamily = nil }
         if let zoom = b.textZoom { b.textZoom = zoom.isNaN ? 1 : min(2, max(0.5, zoom)) }
         if let transform = b.textTransform, !["none", "uppercase", "lowercase", "capitalize"].contains(transform) { b.textTransform = nil }

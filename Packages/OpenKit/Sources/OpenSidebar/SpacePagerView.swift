@@ -18,6 +18,7 @@ final class SpacePagerView: NSView {
     private var offset: CGFloat = 0
     private var shownSpaceID: SpaceID?
     private var animating = false
+    private(set) var lastSlideAnimation: CAAnimation?
     private var swipe: SwipeState?
     private var loop: ObservationLoop?
 
@@ -87,6 +88,7 @@ final class SpacePagerView: NSView {
     /// Slides to the focused Space. Every page between the old and the new one is
     /// shown during the slide (Arc passes through them, A0227).
     func showFocused(animated: Bool) {
+        let requestedAt = CACurrentMediaTime()
         guard let focused = context.focusedSpace, bounds.width > 0, swipe == nil else { return }
         let previous = shownSpaceID
         guard previous != focused.id else {
@@ -110,23 +112,30 @@ final class SpacePagerView: NSView {
         offset = CGFloat(target) * w
         placeStrip()
         let style = context.style(for: focused)
-        guard animated, previous != nil, animatesSidebarChanges else {
+        guard animated, previous != nil, animatesSidebarChanges, !Motion.reducesMotion else {
+            strip.layer?.removeAnimation(forKey: "slide")
+            lastSlideAnimation = nil
+            animating = false
             themeBackground?.crossfade(to: style, animated: false)
             finishSlide()
             return
         }
-        slide(from: presentationX, spring: Motion.spaceSwitch)
+        slide(from: presentationX, spring: Motion.spaceSwitch, requestedAt: requestedAt)
         themeBackground?.crossfade(to: style, animated: true)
     }
 
-    private func slide(from x: CGFloat, spring token: SpringToken) {
+    private func slide(from x: CGFloat, spring token: SpringToken, requestedAt: CFTimeInterval? = nil) {
         animating = true
         let spring = token.animation(keyPath: "position.x")
         spring.fromValue = x
         spring.toValue = -offset
         CATransaction.begin()
         CATransaction.setCompletionBlock { [weak self] in MainActor.assumeIsolated { self?.animating = false; self?.finishSlide() } }
+        let request = requestedAt ?? CACurrentMediaTime()
+        spring.beginTime = strip.layer?.convertTime(CACurrentMediaTime(), from: nil) ?? CACurrentMediaTime()
+        spring.setValue(strip.layer?.convertTime(request, from: nil) ?? request, forKey: "openRequestedAt")
         strip.layer?.add(spring, forKey: "slide")
+        lastSlideAnimation = strip.layer?.animation(forKey: "slide")
         CATransaction.commit()
     }
 

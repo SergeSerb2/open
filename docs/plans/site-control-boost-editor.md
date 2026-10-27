@@ -264,6 +264,14 @@ Body padding 10 on every side (S2 09/0010). Blocks from the top (S2 09/0010 with
 Section label: baseline 14 pt above the section's first item (S2 09/0010). A section with no items
 is removed with its gap. Order: Extensions, Boosts, Settings (D-11 superseded; S2-2).
 
+**Separator, measured 2026-10-26 (lead ruling).** In S2 09/0010 at y 335,
+(98, 334) / (98, 335) read (67, 65, 86) / (102, 100, 121), and
+(263, 334) / (263, 335) read (122, 122, 123) / (157, 157, 158).
+Both materials gain 35 sRGB levels in every channel. Draw the Dark separator with
+`#232323` and plus-lighter compositing, replacing the earlier white 0.22 guess.
+The Light alpha value stays a guess. This is the separator's compositing rule,
+not a change to the material fallback or the white 0.20 rim.
+
 ### 3.4 Action row
 
 Four buttons, 48 × 32, gap 8, from x 10 (x 10, 66, 122, 178) (S2 09/0010). Each button is a
@@ -374,7 +382,7 @@ Row (one per matching Boost, matcher order) — the shared `SiteControlRow` (§3
 | Subtitle | "Enabled" / "Disabled", 13 pt Regular, #9F9EA9 | S2 11/0005 (SC-13); size from ink widths (§3.8) |
 | Hover | No row plate. `chevron.right` 11 pt Semibold #9F9EA9 at x `236 − 10 − 11`. Focus ring (keyboard): the text area `[46, −4, 180, 40]` relative to the row, corner 8. | chevron measured (notes 10:47:57); no plate and style guess |
 | Sparkles | Three Open-drawn 4-point sparkles on the circle, at the brush's top-left, top-right, and bottom-right, knocked out like the glyph. Static: the top-right at full opacity, the top-left and bottom-right at 0.35 (the average look of the captured frames; no frame shows all three at full). Each opacity is one token, so the Q15 follow-up can animate the same layers. Arc fades them in and out one by one while the panel is open, but the motion is **not measurable** from session 2: the two recorders give frame pairs 0.03–0.2 s apart with 1.6–2.5 s gaps, and the video does not show the panel. Q15 ruling: static until a capture measures it (`docs/followups.md`). | S2 11/0004–0017 (sheet in `.re/scb-design/`); IS §20.15; Q15 |
-| Global off | `open.advanced.enableBoosts` false: rows draw at 50 % alpha, circles do nothing, and a 28 pt note above the rows: "Boosts are off. Turn them on in Settings." 13 pt Regular #9F9EA9. | Open choice |
+| Global off | `open.advanced.enableBoosts` false: rows draw at 50 % alpha, circles do nothing, and a 28 pt note above the rows: "Boosts are off. Turn them on in Settings." 13 pt Regular #9F9EA9, with two baselines at +11 / +26 (15 pt pitch), within the 28 pt band. | Open choice; baseline geometry guess, lead ruling 2026-10-26 |
 | Incognito | Circle and row actions disabled; tooltip "Boosts can't be edited in a private window." | D-10 |
 
 Actions (guesses on Arc's click targets; Open choice):
@@ -579,7 +587,7 @@ vertical padding, 11 pt Medium #252526 text on `BoostEditorColors.warning` (`#FF
 28 pt for one line, 42 pt for two; the 183 pt width wraps most texts to two lines.
 
 - Not active: "This Boost doesn't apply to <host>."
-- Global off: "Boosts are off. Changes show when you turn Boosts on in Settings."
+- Global off: "Boosts are off. Turn them on in Settings to see changes." (lead ruling 2026-10-26; measured at 11 pt Medium / 155 pt: two lines).
 
 ### 4.4 Color pad
 
@@ -594,13 +602,21 @@ vertical padding, 11 pt Medium #252526 text on `BoostEditorColors.warning` (`#FF
 | Plate fill | #FAFAFA; after a color, a faint tint of the ring: the ring image blurred (σ 12) at 4 % over the plate (guess fit to #FBFFFA near green, #FDFAF6 near orange) | S2 10/0030, 0041 |
 | Dot grid | 1 pt round dots, pitch 4.0, aligned to the plate origin, black 0.075. Our own cached `CGImage` tile per scale (as `ColorPadView.DotGrid`). | S2 10/0030 |
 | Hue ring (color chosen) | Conic gradient centered on the pad center, angle 0 at 3 o'clock, increasing clockwise on screen. Stops (sRGB): 0° #EB4838 · 30° #EB7636 · 60° #F4BA49 · 90° #D4FD58 · 120° #90FC74 · 150° #80FCAD · 180° #7CF8F1 · 210° #356FF6 · 240° #392EF4 · 270° #8237F5 · 300° #DD31BF · 330° #DF3470 · 360° = 0°. Clipped to the 7 pt band. | IS §20.15 |
-| Hue ring (no color) | The same stops converted to grey by Rec. 709 luma (for example 90° #EAEAEA, 225° #454545). | IS §20.15 (within ≈ 10 levels) |
+| Hue ring (no color) | **Measured** neutral stops at 0°, 30° … 330°: 113, 141, 191, 233, 226, 227, 227, 117, 72, 92, 110, 107 (each repeated on R/G/B; 360° repeats 113). | editor child-window capture only, S2 10/0030–0031; parent capture omits child-window content |
 | Ring vs knob hue | The ring's own hue leads or lags the angle by up to ≈ 20° (for example 90° reads HSL hue 75°), while each knob's fill hue equals its angle within 1.5°. Compute knob fills from θ (§4.4.2); never sample the ring. | IS §20.15 |
 | Primary knob | 30 pt disc + 2 pt white ring (34 outside) + shadow black 0.10 radius 1.5 y 0.5 (guess). On mouse down the disc grows 30 → 38 (scale 1.27) with `Motion.knobRelease`; on mouse up it springs back to 30 with the same token. | S2 10/0039 (38 while dragging), 0040 (32, returning), 0041 (30) |
 | Secondary knob | 19 pt disc + 2 pt white ring + 1 pt outline #C8C2CA (23 + 2 outside). Not draggable (guess: only the primary was dragged in the capture). | S2 10/0041 |
 | Knob fill gradient | Each disc fill is a vertical linear gradient: the §4.4.2 color at the center, ≈ 14 levels darker at the top (HSB brightness −0.055) and ≈ 12 levels lighter at the bottom. This is Boost-only; do not put it in the shared `ColorPadStyle` default (the theme pad gets it only if its captures show it). | S2 10/0041 primary top #4A2ABE / center #5C3CC8 / bottom #694CCB; secondary #321533 / #3D203C / #533953; S2 10/0030 no-color primary #636363 / #717171 / #7D7D7D, secondary #252525 / #333333 / #414141 |
 | Drag guide | While dragging: a 2 pt circle, black 0.06, centered on the pad center, through the primary knob's center. Removed on mouse up. | S2 10/0038–0040 |
 | Knob z-order | Knobs draw above the ring and are not clipped by the plate (Open choice; the measured knobs stayed inside the plate). | guess |
+
+Calibration (lead rulings 2026-10-26 23:35 / 23:37): ImageCms converts the embedded AW2726DM
+profile to Display P3 before fitting. The complete ring and font regions in the editor child-window
+captures 0030 and 0031 agree exactly (maximum channel difference 0; no pixel differs by more than
+1). The grey stops are the neutral channel values at the 12 square-ring midline intersections.
+The rendered comparisons retain position ≤1 pt and ΔE00 ≤2; the 12 grey-stop residuals are
+0.72, 0.68, 0.89, 0.51, 0.54, 0.51, 0.58, 0.40, 1.05, 0.75, 0.00, 0.00 (maximum 1.05).
+The color ring stops and the runtime law are unchanged.
 
 #### 4.4.2 Interim mapping (Open's law until Arc's math is decoded)
 
@@ -744,7 +760,7 @@ edge. Window 250 × 232 at editor (−34, 258); body ≈ 222 × 205 (14 pt shado
 - Placement: the popover clamps inside the `visibleFrame` of the editor's screen (§4.2) with 8 pt
   margins; the arrow stays on the button within the §3.1 corner limits.
 
-Content inset 18:
+Content inset 18. The label y values below are the AX label-frame tops; the 13 pt text baseline is 12 pt below that top (S2 10/0042).
 
 | Row | Label (13 pt Regular #3A3A3B) | Slider |
 |---|---|---|
@@ -762,10 +778,26 @@ Drag previews live; one undo step per drag. Esc, a click outside, or the button 
 |---|---|---|
 | Card | `[18, 273, 147, 120]`, white, corner 11, shadow black 0.06 radius 8 y 1 (fit to the 7–9 pt fades) | S2 10/0041 |
 | Grid | 5 columns at x 23, 51, 79, 106, 134 (pitch ≈ 27.75); 4 rows at y 281, 307, 333, 359; cells 26 × 26 | AX S2 10/0018 |
-| Cell | "Aa" ≈ 14 pt in the cell's family, #999999, centered | S2 10/0030 |
+| Cell | "Aa" **12 pt measured** in the cell's family, #999999, centered | editor child-window capture only, S2 10/0030–0031; parent capture omits child-window content |
 | Selected | A 26 pt circle #D9D9D9 behind the cell; glyph #8C8C8C. No cell is selected for "Original". | S2 10/0046 |
 | Hover / pressed | Circle #ECECEC / #D9D9D9 (guess). The selected circle cross-fades over 0.12 s (`Motion.selectionFade`). | guess |
 | Focus ring | A 30 pt circle around the cell, keyboard focus only | Open choice |
+
+Final ink metrics (lead ruling 2026-10-26 23:50, **measured**): the one named
+`BoostEditorMetrics.fontBaselineOffsets` table contains Courier −2, Hoefler Text −2,
+SignPainter −2, Papyrus −3 pt; other families use 0. This keeps all 26 pt cell frames and the
+12 pt glyph size. At the existing position limit, every installed cell's four ink edges are within
+1 pt of stable editor child-window captures S2 10/0030–0031. The "Make a Boost" label alone uses
+`BoostEditorMetrics.makeLabelKern = −0.25` pt at 14 pt Medium; its four edges are within 1 pt of
+stable S2 10/0018–0019. No other label gets that kern. The name chevron core in stable 0030–0031
+is Display P3 (141,141,142), after ImageCms conversion from the embedded display profile. Its
+Regular SF raster uses fitted input #7C7C7D; the current comparison residual is ΔE00 2.30
+(**FAIL**, limit 2), with maximum edge error 1 pt. It is reported, not hidden by a wider threshold.
+Font ink metrics were fitted on macOS 27.2 build 26B5112a and must be checked again after OS updates.
+
+The cell size fit uses the ink widths of all installed families at the existing 26 pt cell frames,
+not the frame size or PNG length. At 12 pt, each measured ink width is within 1 pt of S2 10/0030.
+The 0030/0031 stability check and profile conversion are recorded in §4.4.1 (lead ruling 2026-10-26).
 
 Fonts, row by row (the 18 named faces in the binary's string order; cells 1 and 6 are visual guesses,
 IS §20.15): System (`system-ui, -apple-system, sans-serif`), Helvetica Neue, Avenir, Futura, DIN
@@ -875,7 +907,7 @@ Shown the first time an editor opens (`open.boosts.hasDismissedInterstitial` fal
 |---|---|---|
 | Dim | The whole window above the card is dimmed with black 0.30 (controls stay drawn under it, inactive). | S2 10/0018 |
 | Card | White, from y 271 to the bottom, with a soft top shadow (black 0.25 fading over 9 pt). | S2 10/0018 |
-| Icon | Open's own 70 pt rounded-square badge: brand blue #4848FF, a 3 pt white border, and Open's outlined brush (`BoostGlyph.outline`, 34 pt) with two Open-drawn sparkles in white. Rotated 12° counter-clockwise on screen (its top edge rises to the right; write the angle for the layer's flip state, since "−12°" flips on a non-flipped AppKit layer). Centered at x 91.5, overlapping the card top (bounding box ≈ `[49, 238, 86, 86]`). Not Arc's asset. | position S2 10/0018 AX `InterstitialIcon`; border and tilt direction measured (design review r1, work file `badge.png`); art Open's |
+| Icon | Open's own art in an unchanged 70 pt canvas: brand blue #4848FF, a 3 pt white border, and Open's outlined brush (`BoostGlyph.outline`, 34 pt before art scaling) with two Open-drawn sparkles in white. The art scales to 0.71 inside the canvas; border width stays 3 pt. Rotated 12° counter-clockwise on screen (its top edge rises to the right; write the angle for the layer's flip state, since "−12°" flips on a non-flipped AppKit layer). The canvas stays centered at x 91.5 over the card; the internal art offset is (−1, +2) pt. **Measured** saturated-blue box `[64, 256, 53, 54]` (each edge ±1 pt), using B >160 and B−max(R,G) >80 after conversion to Display P3. The same region in editor child-window captures S2 10/0018–0019 agrees exactly (maximum channel difference 0); parent capture omits child-window content. Lead ruling 2026-10-26. Not Arc's asset. | position S2 10/0018 AX `InterstitialIcon`; border and tilt direction measured (design review r1, work file `badge.png`); art Open's |
 | Title | "Edit the Internet with Boosts", 22 pt Bold, default design (SF Pro, flat terminals; not Rounded), #3139FF, centered, three lines with cap tops at y 332, 355, 378 and baselines at 347, 370, 393 (pitch 23) | S2 10/0018: ink widths 78 / 131 / 69 vs SF Pro 22 Bold advances 78.3 / 130.8 / 71.3 (20 Bold: 71.9 / 120.3 / 65.3); cap height ≈ 15 |
 | Body | "Make <host> your own!" with the host in Semibold, 13 pt, #95939F, centered, two lines from y 411 (ink 107). A long host truncates in the middle so the body keeps two lines. | S2 10/0018; truncation Open choice |
 | Footer | #CEDBFC from the wavy edge to the bottom. Wavy edge: our own sine path, crest line y 463, peak-to-trough 3.9 (amplitude 1.95), period 17, first crest at x 7. | S2 10/0018 edge profile x 0–59: crests y 463.06 at x 7, 24, 41, 58; troughs y 466.98 |
@@ -1191,7 +1223,23 @@ three heavy pages, which the engine plan names, within the budget it sets.
 
 ### 8.1 Offscreen renders and flows: `sitecontrol-render`
 
-Commands unchanged (`render`, `ax`, `flows`, `check`, `bench`, `screens`, `motion`, `compare`).
+Commands: `render`, `ax`, `flows`, `check`, `bench`, `screens`, `motion`, `compare`.
+`bench --fixture cold` gates the median main-thread retired instructions for the
+20-Boost/12-row native open span at 2x, after 5 discarded warmups and 30 measured
+opens. The machine/build fixture records the accepted count; the limit is
+`ceil(accepted × 1.10)`. M5 Pro / 26B5112a: accepted 95,035,968, limit 104,539,565
+(lead ruling, 2026-10-26 21:21). Unknown machine/build entries print the count and
+reason as INFO, never PASS. Missing/invalid counters fail. The lighter
+`bench --fixture skeleton` is retained as a diagnostic; the full cold workload
+owns the acceptance gate. `check` runs both. CPU p95, wall p95, load1, and CPU
+lateness remain diagnostics. The absolute product target is still p95 <8 ms;
+the lead will measure it on a quiet M5 before merge and require more optimization
+if it misses. See `docs/verification.md` for the offscreen perf-gate method.
+
+`cold-measure --thread-instructions` prints all 30 instruction samples for A/B
+profiling of the same span. The dynamically resolved `thread_selfcounts`
+THSC_CPI=1 helper validates the ABI and exists only in this harness executable.
+No counter code is linked into App or library targets.
 
 States: `scc-no-boosts` (S2 09/0010 content: "+", Developer Mode hidden, one allowed setting),
 `scc-boost` (S2 11/0005 content plus one Boost), `scc-adblock-on`, `scc-adblock-excluded`,
@@ -1464,7 +1512,7 @@ non-pad work (window, header, grid, buttons) can start at once; its pad work wai
 | Area | Change | Stays |
 |---|---|---|
 | `OpenSiteControl/SiteControlTiles.swift` → `SiteControlRows.swift` | Replace `SiteControlTileButton` (2-column 142 × 48 tiles, two-line titles) with `SiteControlRow` (32 pt disc with a **knocked-out** glyph, 14 pt Semibold title, 13 pt Regular subtitle, pitch 43, one-line truncation, no hover plate, pressed disc −8 levels). Rebuild `SiteControlBoostRow` on `SiteControlRow`: `BoostGlyph.fill` knocked out, static sparkles (top-right 1.0, others 0.35), circle toggles, row and hover chevron (#9F9EA9) open the editor; delete `SiteControlSwitch` and the edit button. `SiteControlSectionButton` becomes the label row (14 pt Semibold; accessory text 13 pt Regular #9F9EA9, no chevron). Add the "+" extension tile (corner 6, row pitch 40). Focus-ring shapes per §3.4–§3.9. | `SiteControlButton` base, `SiteControlDrawing` caches, keyboard-only focus rings |
-| `OpenSiteControl/SiteControlView.swift` | Section order Extensions, Boosts, Settings with the §3.3 gaps; Extensions shows the "+" tile without `OpenExtensionsUI`; reload row and global-off note keep their baselines (row top + 20) at 13 pt; height changes follow the §3.11 curves and choreography. | height animation of surface, mask, shadow, viewport, footer |
+| `OpenSiteControl/SiteControlView.swift` | Section order Extensions, Boosts, Settings with the §3.3 gaps; Extensions shows the "+" tile without `OpenExtensionsUI`; reload baseline stays at row top +20 (13 pt); the two-line global-off note uses +11/+26 baselines inside its 28 pt band (13 pt, 15 pt pitch; guess, lead ruling 2026-10-26); height changes follow the §3.11 curves and choreography. | height animation of surface, mask, shadow, viewport, footer |
 | `OpenSiteControl/SiteControlController.swift` | ⋯ menu always lists Manage Boosts… and New Boost… (New Boost… disabled when not allowed); open the menu at the click point; picker fallback focuses the "+" tile (Return runs `add-extension`). | native `NSMenu` routing, cancellation handling, Command-modifier rejection, Return/Space fall-through |
 | `OpenSiteControl/SiteControlTypes.swift`, `SiteControlDataSource.swift` | `SiteSettingTile.symbol` default `gearshape.fill`. | `openAdBlockSettings`, observer tokens |
 | `sitecontrol-render/*` | New state list (§8.1); flows F3–F9 rewritten for rows; height probes 297 / 372; the knock-out probe; delete tile and two-line-title renders. | `NativeOverlayCapture` (popup readiness wait) |
@@ -1564,7 +1612,7 @@ public enum SiteControlColors {            // macOS Dark measured (IS §20.15); 
     public static let circleOn = DesignColor(light: RGBA(hex: 0x2B2A3C), dark: RGBA(hex: 0xECEDFF))  // disc; glyph is a knock-out
     public static let circleOff = DesignColor(light: .black(0.10), dark: .white(0.28))     // disc; glyph is a knock-out
     public static let tileFill = DesignColor(light: .black(0.05), dark: .white(0.08))
-    public static let separator = DesignColor(light: .black(0.12), dark: .white(0.22))
+    public static let separator = DesignColor(light: .black(0.12), dark: RGBA(hex: 0x232323)) // m: additive +35, plus-lighter in Dark
     public static let pillFill = DesignColor(light: .black(0.04), dark: .white(0.05))
     public static let moreFill = DesignColor(light: .black(0.10), dark: .black(0.28))
 }
@@ -1630,7 +1678,7 @@ extension Motion {
     public static let popoverOpenFade: CFTimeInterval = 0.08, popoverClose: CFTimeInterval = 0.19   // g / m duration (theme popover); close curve and scale g
     public static let knobRelease = SpringToken(response: 0.2, dampingFraction: 0.9)    // g; also the press growth
     public static let heightGrow: CFTimeInterval = 0.20, heightShrink: CFTimeInterval = 0.25       // m (folder expand / collapse curves, IS §20.12) / g for the panel
-    public static let editorOpen: CFTimeInterval = 0.15, editorClose: CFTimeInterval = 0.12, codeModeResize: CFTimeInterval = 0.20 // g
+    public static let boostEditorOpenDuration: CFTimeInterval = 0.15, boostEditorCloseDuration: CFTimeInterval = 0.12, codeModeResize: CFTimeInterval = 0.20 // g
 }
 extension Typography {
     public static let siteControlLabel = FontToken(14, .semibold), siteControlRowTitle = FontToken(14, .semibold) // m (ink width, S2 09/0010)
@@ -1641,6 +1689,8 @@ extension Typography {
     public static let firstRunTitle = FontToken(22, .bold), firstRunPrimary = FontToken(14, .medium), firstRunSecondary = FontToken(12, .medium) // m (ink width, S2 10/0018); SF Pro default design
 }
 ```
+
+Implementation naming note (2026-10-26, #103): main already owns `Motion.editorOpen` as the theme editor’s `SpringToken(response: 0.25, dampingFraction: 0.85)`. The Boost fade durations therefore use `boostEditorOpenDuration` / `boostEditorCloseDuration`; the §4.2 values and theme spring stay unchanged.
 
 Removed from the first version: the 320 width, header, tile, switch, and edit-button metrics; the
 hue-ring wheel (128 / 18 / 46 / puck 24), font strip, tool tiles, accent colors, and every dark
@@ -1798,3 +1848,13 @@ Conflicts resolved:
   browser went inactive only when the editor became key). Behavior is the plan review's area, so the
   trigger is now stated, but it follows the capture and adds the system "Move focus to floating
   window" shortcut for keyboard entry.
+
+### #103 published comparison residuals (2026-10-27)
+
+The lead's final token ruling (2026-10-26 23:50) keeps the thresholds and asks that any remaining
+rows be reported. The numeric tables in `docs/sitecontrol/step-4/comparisons/` retain those FAIL
+rows: no-color 55/60, color 54/60, dragging 4/7, advanced 11/25; first-run 22/22 and selected font
+2/2 pass. All font-cell boxes and all 12 measured grey ring stops pass. The remaining rows concern
+SF glyph cores, one primary gradient sample, three drag-guide samples, and advanced arrow/label
+ink. No threshold was widened. These tables are separate from the native flow/frame/AX harness
+acceptance and the full consolidated gate. Raw captures and private composites remain local.

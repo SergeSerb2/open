@@ -1,0 +1,5 @@
+
+added 25 packages in 730ms
+A7 PASS: banner highlight, commit, hide, and active picker
+A11 PASS: precise pick, two related previews, replacement, and three hidden posts
+boosts: 2/2 passed
