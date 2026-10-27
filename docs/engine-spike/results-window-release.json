@@ -6,73 +6,799 @@
     "source": "fork",
     "stamp": "fork /Users/serge/Developer/open-engine/chromium_git/chromium/src/cef/binary_distrib/cef_binary_156.0.14+g4fa4ab5+chromium-156.0.8078.48_macosarm64_minimal 1793036548"
   },
-  "interrupted_attempts": [],
-  "started": "2026-10-26 16:14:16",
+  "interrupted_attempts": [
+    {
+      "attempt": 1,
+      "checks": {
+        "cpu_count": 18,
+        "load_average": [
+          12.1572265625,
+          10.92236328125,
+          8.95556640625
+        ],
+        "window_before_engine_0": {
+          "assertion": {
+            "evidence": {
+              "contextsBeforeEngine": 0,
+              "pagesBeforeEngine": 0,
+              "sidebarClass": "OpenSidebar.SidebarView",
+              "visibleWindows": 1
+            },
+            "ok": true
+          },
+          "focus": [
+            {
+              "event": "frontmostChanged",
+              "frontmostApp": "UserNotificationCenter",
+              "frontmostPID": 1624,
+              "openPID": 22679,
+              "uptime": 157024.47194116667
+            },
+            {
+              "active": false,
+              "event": "NSApplicationDidResignActiveNotification",
+              "frontmostApp": "UserNotificationCenter",
+              "frontmostPID": 1624,
+              "keyWindow": 0,
+              "openPID": 22679,
+              "uptime": 157024.4865669167
+            }
+          ],
+          "status": "INTERRUPTED"
+        }
+      },
+      "focus": [
+        {
+          "event": "frontmostChanged",
+          "frontmostApp": "UserNotificationCenter",
+          "frontmostPID": 1624,
+          "openPID": 22679,
+          "uptime": 157024.47194116667
+        },
+        {
+          "active": false,
+          "event": "NSApplicationDidResignActiveNotification",
+          "frontmostApp": "UserNotificationCenter",
+          "frontmostPID": 1624,
+          "keyWindow": 0,
+          "openPID": 22679,
+          "uptime": 157024.4865669167
+        }
+      ],
+      "reason": "foreground lost during window_before_engine_0",
+      "status": "INTERRUPTED"
+    },
+    {
+      "attempt": 2,
+      "checks": {
+        "close_unloaded_pinned": {
+          "after_close": {
+            "created": 1,
+            "engineContents": 1,
+            "retained": 1
+          },
+          "after_unload": {
+            "created": 1,
+            "engineContents": 1,
+            "retained": 1
+          },
+          "before": {
+            "created": 1,
+            "engineContents": 1,
+            "retained": 1
+          },
+          "ok": true
+        },
+        "cold_fresh_profile": {
+          "median_ms": {
+            "engineStart": 332,
+            "engineStarted": 412,
+            "firstContentfulPaint": 554,
+            "main": 180,
+            "modelLoaded": 183,
+            "sidebarDrawn": 332
+          },
+          "ok": false,
+          "samples": 5
+        },
+        "cpu_count": 18,
+        "engine_failure_alert": {
+          "exit": 1,
+          "ok": true
+        },
+        "first_frame_timeout_continues": {
+          "hosts": {
+            "created": 1,
+            "engineContents": 1,
+            "retained": 1
+          },
+          "ok": true,
+          "timing": {
+            "clock": "mach_continuous_time; kernel ri_proc_start_abstime",
+            "didFinishLaunching": 3300,
+            "engineInitialized": 3294,
+            "engineStart": 3209,
+            "engineStarted": 3289,
+            "firstContentfulPaint": 3430,
+            "firstFrameConfirmed": false,
+            "firstFrameWaitTimedOut": 3207,
+            "firstLoadEnd": 3419,
+            "firstPaintClockUncertaintyMs": 0.22,
+            "kernelProcessStart": true,
+            "main": 85,
+            "modelLoaded": 88,
+            "windowShown": 169
+          }
+        },
+        "frame_save_debounced": {
+          "assertion": {
+            "before": {
+              "captures": 1,
+              "dirty": false,
+              "mirrorSyncs": 1,
+              "scheduled": 1,
+              "treeChanges": 0
+            },
+            "debounced": {
+              "captures": 2,
+              "dirty": false,
+              "mirrorSyncs": 1,
+              "scheduled": 12,
+              "treeChanges": 0
+            },
+            "immediate": {
+              "captures": 1,
+              "dirty": true,
+              "mirrorSyncs": 1,
+              "scheduled": 12,
+              "treeChanges": 0
+            },
+            "ok": true
+          },
+          "focus": [
+            {
+              "event": "frontmostChanged",
+              "frontmostApp": "T3 Pretty Internal (Nightly)",
+              "frontmostPID": 42462,
+              "openPID": 28385,
+              "uptime": 157043.08533245834
+            },
+            {
+              "active": false,
+              "event": "NSApplicationDidResignActiveNotification",
+              "frontmostApp": "T3 Pretty Internal (Nightly)",
+              "frontmostPID": 42462,
+              "keyWindow": 0,
+              "openPID": 28385,
+              "uptime": 157043.08952725
+            }
+          ],
+          "status": "INTERRUPTED"
+        },
+        "kernel_process_start": {
+          "ok": true,
+          "samples": 10
+        },
+        "keys_keep_peek_lazy": {
+          "ok": true
+        },
+        "launch_runs": {
+          "cold_fresh_profile": [
+            {
+              "clock": "mach_continuous_time; kernel ri_proc_start_abstime",
+              "didFinishLaunching": 358,
+              "engineInitialized": 354,
+              "engineStart": 273,
+              "engineStarted": 350,
+              "firstContentfulPaint": 529,
+              "firstFrameConfirmed": true,
+              "firstLoadEnd": 514,
+              "firstPaintClockUncertaintyMs": 0.09,
+              "kernelProcessStart": true,
+              "main": 180,
+              "modelLoaded": 182,
+              "sidebarDrawn": 272,
+              "windowShown": 237
+            },
+            {
+              "clock": "mach_continuous_time; kernel ri_proc_start_abstime",
+              "didFinishLaunching": 441,
+              "engineInitialized": 438,
+              "engineStart": 348,
+              "engineStarted": 432,
+              "firstContentfulPaint": 576,
+              "firstFrameConfirmed": true,
+              "firstLoadEnd": 563,
+              "firstPaintClockUncertaintyMs": 0.17,
+              "kernelProcessStart": true,
+              "main": 194,
+              "modelLoaded": 197,
+              "sidebarDrawn": 347,
+              "windowShown": 294
+            },
+            {
+              "clock": "mach_continuous_time; kernel ri_proc_start_abstime",
+              "didFinishLaunching": 418,
+              "engineInitialized": 415,
+              "engineStart": 332,
+              "engineStarted": 412,
+              "firstContentfulPaint": 554,
+              "firstFrameConfirmed": true,
+              "firstLoadEnd": 541,
+              "firstPaintClockUncertaintyMs": 0.09,
+              "kernelProcessStart": true,
+              "main": 181,
+              "modelLoaded": 183,
+              "sidebarDrawn": 332,
+              "windowShown": 266
+            },
+            {
+              "clock": "mach_continuous_time; kernel ri_proc_start_abstime",
+              "didFinishLaunching": 417,
+              "engineInitialized": 415,
+              "engineStart": 332,
+              "engineStarted": 411,
+              "firstContentfulPaint": 552,
+              "firstFrameConfirmed": true,
+              "firstLoadEnd": 539,
+              "firstPaintClockUncertaintyMs": 0.1,
+              "kernelProcessStart": true,
+              "main": 173,
+              "modelLoaded": 175,
+              "sidebarDrawn": 331,
+              "windowShown": 272
+            },
+            {
+              "clock": "mach_continuous_time; kernel ri_proc_start_abstime",
+              "didFinishLaunching": 438,
+              "engineInitialized": 436,
+              "engineStart": 351,
+              "engineStarted": 432,
+              "firstContentfulPaint": 568,
+              "firstFrameConfirmed": true,
+              "firstLoadEnd": 557,
+              "firstPaintClockUncertaintyMs": 0.11,
+              "kernelProcessStart": true,
+              "main": 173,
+              "modelLoaded": 191,
+              "sidebarDrawn": 350,
+              "windowShown": 286
+            }
+          ],
+          "warm_existing_profile": [
+            {
+              "clock": "mach_continuous_time; kernel ri_proc_start_abstime",
+              "didFinishLaunching": 426,
+              "engineInitialized": 422,
+              "engineStart": 341,
+              "engineStarted": 417,
+              "firstContentfulPaint": 559,
+              "firstFrameConfirmed": true,
+              "firstLoadEnd": 545,
+              "firstPaintClockUncertaintyMs": 0.08,
+              "kernelProcessStart": true,
+              "main": 183,
+              "modelLoaded": 185,
+              "sidebarDrawn": 340,
+              "windowShown": 286
+            },
+            {
+              "clock": "mach_continuous_time; kernel ri_proc_start_abstime",
+              "didFinishLaunching": 437,
+              "engineInitialized": 432,
+              "engineStart": 352,
+              "engineStarted": 429,
+              "firstContentfulPaint": 589,
+              "firstFrameConfirmed": true,
+              "firstLoadEnd": 580,
+              "firstPaintClockUncertaintyMs": 0.1,
+              "kernelProcessStart": true,
+              "main": 190,
+              "modelLoaded": 193,
+              "sidebarDrawn": 351,
+              "windowShown": 289
+            },
+            {
+              "clock": "mach_continuous_time; kernel ri_proc_start_abstime",
+              "didFinishLaunching": 422,
+              "engineInitialized": 417,
+              "engineStart": 337,
+              "engineStarted": 414,
+              "firstContentfulPaint": 554,
+              "firstFrameConfirmed": true,
+              "firstLoadEnd": 542,
+              "firstPaintClockUncertaintyMs": 0.1,
+              "kernelProcessStart": true,
+              "main": 182,
+              "modelLoaded": 184,
+              "sidebarDrawn": 336,
+              "windowShown": 282
+            },
+            {
+              "clock": "mach_continuous_time; kernel ri_proc_start_abstime",
+              "didFinishLaunching": 406,
+              "engineInitialized": 401,
+              "engineStart": 316,
+              "engineStarted": 398,
+              "firstContentfulPaint": 533,
+              "firstFrameConfirmed": true,
+              "firstLoadEnd": 524,
+              "firstPaintClockUncertaintyMs": 0.11,
+              "kernelProcessStart": true,
+              "main": 168,
+              "modelLoaded": 170,
+              "sidebarDrawn": 316,
+              "windowShown": 257
+            },
+            {
+              "clock": "mach_continuous_time; kernel ri_proc_start_abstime",
+              "didFinishLaunching": 399,
+              "engineInitialized": 395,
+              "engineStart": 317,
+              "engineStarted": 392,
+              "firstContentfulPaint": 520,
+              "firstFrameConfirmed": true,
+              "firstLoadEnd": 511,
+              "firstPaintClockUncertaintyMs": 0.13,
+              "kernelProcessStart": true,
+              "main": 176,
+              "modelLoaded": 178,
+              "sidebarDrawn": 316,
+              "windowShown": 260
+            }
+          ]
+        },
+        "launch_waiter_early_exit": {
+          "actualAppPID": 28321,
+          "launcherExit": 0,
+          "ok": true,
+          "waiterEndedBeforeAutomation": true
+        },
+        "load_average": [
+          11.77734375,
+          10.8759765625,
+          8.96142578125
+        ],
+        "malloc_zones_early": {
+          "ok": true,
+          "zones": [
+            "PartitionAlloc",
+            "objc-class_rw_t",
+            "DefaultMallocZone",
+            "DefaultPurgeableMallocZone",
+            "QuartzCore",
+            "LSBindingEvaluator",
+            "AttributeGraph",
+            "AttributeGraph graph data"
+          ]
+        },
+        "native_window": {
+          "ok": true,
+          "state": {
+            "activationPolicy": 0,
+            "appActive": true,
+            "automationPointer": null,
+            "axWindowButtons": [
+              {
+                "attribute": "AXCloseButton",
+                "role": "AXButton",
+                "subrole": "AXCloseButton"
+              },
+              {
+                "attribute": "AXMinimizeButton",
+                "role": "AXButton",
+                "subrole": "AXMinimizeButton"
+              },
+              {
+                "attribute": "AXZoomButton",
+                "role": "AXButton",
+                "subrole": "AXFullScreenButton"
+              },
+              {
+                "attribute": "AXFullScreenButton",
+                "role": "AXButton",
+                "subrole": "AXFullScreenButton"
+              }
+            ],
+            "chrome": {
+              "favorites": [
+                0,
+                82,
+                228,
+                8
+              ],
+              "header": [
+                0,
+                90,
+                228,
+                36
+              ],
+              "headerHovered": false,
+              "headerTitle": [
+                41,
+                99,
+                170,
+                18
+              ],
+              "headerTitleBaseline": 113,
+              "urlField": [
+                8,
+                46,
+                212,
+                36
+              ],
+              "urlFieldHovered": false
+            },
+            "cursor": [
+              2421,
+              56
+            ],
+            "engineSelected": 0,
+            "engineURL": "",
+            "firstResponder": "FavoritesCollectionView",
+            "frame": [
+              100,
+              100,
+              1280,
+              800
+            ],
+            "fullscreen": false,
+            "fullscreenChanges": 0,
+            "fullscreenTransition": false,
+            "hiddenTitle": true,
+            "id": "52497ED7-C7F4-4918-A3D6-E037623D35BD",
+            "isKeyWindow": true,
+            "key": true,
+            "keyWindow": 148162,
+            "layoutPasses": 7,
+            "miniaturized": false,
+            "number": 148162,
+            "pageFullscreen": false,
+            "paneBackgrounds": [],
+            "panel": [
+              228,
+              10,
+              1042,
+              780
+            ],
+            "peekCreated": false,
+            "reveal": {
+              "card": [
+                0,
+                0,
+                0,
+                0
+              ],
+              "dwell": 0,
+              "hides": 0,
+              "offset": null,
+              "phase": "idle",
+              "pointerEvents": 0,
+              "shows": 0,
+              "zone": ""
+            },
+            "revealed": false,
+            "screenFrame": [
+              0,
+              0,
+              2560,
+              1440
+            ],
+            "selected": "",
+            "shownPages": [],
+            "sidebarClass": "OpenSidebar.SidebarView",
+            "sidebarMode": "anchored",
+            "sidebarVisible": true,
+            "sidebarWidth": 228,
+            "space": "666C607C-0451-4CEC-91B4-B22A4B02A2B7",
+            "titlebar": [
+              0,
+              0,
+              1280,
+              32
+            ],
+            "titled": true,
+            "trafficLightButtons": [
+              {
+                "action": "_close:",
+                "alpha": 0.001,
+                "hidden": false
+              },
+              {
+                "action": "miniaturize:",
+                "alpha": 0.001,
+                "hidden": false
+              },
+              {
+                "action": "_setNeedsZoom:",
+                "alpha": 0.001,
+                "hidden": false
+              }
+            ],
+            "trafficLightFrames": [
+              [
+                13,
+                17,
+                14,
+                14
+              ],
+              [
+                36,
+                17,
+                14,
+                14
+              ],
+              [
+                59,
+                17,
+                14,
+                14
+              ]
+            ],
+            "trafficLights": [
+              [
+                20,
+                24
+              ],
+              [
+                43,
+                24
+              ],
+              [
+                66,
+                24
+              ]
+            ],
+            "trafficLightsDimmed": true,
+            "trafficLightsHidden": [
+              false,
+              false,
+              false
+            ],
+            "trafficLightsHovered": false,
+            "visible": true,
+            "zoomed": false
+          }
+        },
+        "navigation_before_engine": {
+          "hosts": {
+            "created": 1,
+            "engineContents": 1,
+            "retained": 1
+          },
+          "ok": true,
+          "readiness_probe": true,
+          "title": "Queued"
+        },
+        "quit_before_engine": {
+          "exit": 0,
+          "ok": true
+        },
+        "selected_only_0": {
+          "ok": true,
+          "tabs": [
+            {
+              "loaded": false,
+              "selected": false,
+              "title": "Unselected"
+            },
+            {
+              "loaded": true,
+              "selected": true,
+              "title": "Open launch fixture"
+            }
+          ]
+        },
+        "selected_only_1": {
+          "ok": true,
+          "tabs": [
+            {
+              "loaded": false,
+              "selected": false,
+              "title": "Unselected"
+            },
+            {
+              "loaded": true,
+              "selected": true,
+              "title": "Open launch fixture"
+            }
+          ]
+        },
+        "selected_only_2": {
+          "ok": true,
+          "tabs": [
+            {
+              "loaded": false,
+              "selected": false,
+              "title": "Unselected"
+            },
+            {
+              "loaded": true,
+              "selected": true,
+              "title": "Open launch fixture"
+            }
+          ]
+        },
+        "selected_only_3": {
+          "ok": true,
+          "tabs": [
+            {
+              "loaded": false,
+              "selected": false,
+              "title": "Unselected"
+            },
+            {
+              "loaded": true,
+              "selected": true,
+              "title": "Open launch fixture"
+            }
+          ]
+        },
+        "selected_only_4": {
+          "ok": true,
+          "tabs": [
+            {
+              "loaded": false,
+              "selected": false,
+              "title": "Unselected"
+            },
+            {
+              "loaded": true,
+              "selected": true,
+              "title": "Open launch fixture"
+            }
+          ]
+        },
+        "warm_existing_profile": {
+          "median_ms": {
+            "engineStart": 337,
+            "engineStarted": 414,
+            "firstContentfulPaint": 554,
+            "main": 182,
+            "modelLoaded": 184,
+            "sidebarDrawn": 336
+          },
+          "ok": false,
+          "samples": 5
+        },
+        "window_before_engine_0": {
+          "evidence": {
+            "contextsBeforeEngine": 0,
+            "pagesBeforeEngine": 0,
+            "sidebarClass": "OpenSidebar.SidebarView",
+            "visibleWindows": 1
+          },
+          "ok": true
+        },
+        "window_before_engine_1": {
+          "evidence": {
+            "contextsBeforeEngine": 0,
+            "pagesBeforeEngine": 0,
+            "sidebarClass": "OpenSidebar.SidebarView",
+            "visibleWindows": 1
+          },
+          "ok": true
+        },
+        "window_before_engine_2": {
+          "evidence": {
+            "contextsBeforeEngine": 0,
+            "pagesBeforeEngine": 0,
+            "sidebarClass": "OpenSidebar.SidebarView",
+            "visibleWindows": 1
+          },
+          "ok": true
+        },
+        "window_before_engine_3": {
+          "evidence": {
+            "contextsBeforeEngine": 0,
+            "pagesBeforeEngine": 0,
+            "sidebarClass": "OpenSidebar.SidebarView",
+            "visibleWindows": 1
+          },
+          "ok": true
+        },
+        "window_before_engine_4": {
+          "evidence": {
+            "contextsBeforeEngine": 0,
+            "pagesBeforeEngine": 0,
+            "sidebarClass": "OpenSidebar.SidebarView",
+            "visibleWindows": 1
+          },
+          "ok": true
+        },
+        "window_png": {
+          "file": "window-startup.png",
+          "ok": true
+        }
+      },
+      "focus": [
+        {
+          "event": "frontmostChanged",
+          "frontmostApp": "T3 Pretty Internal (Nightly)",
+          "frontmostPID": 42462,
+          "openPID": 28385,
+          "uptime": 157043.08533245834
+        },
+        {
+          "active": false,
+          "event": "NSApplicationDidResignActiveNotification",
+          "frontmostApp": "T3 Pretty Internal (Nightly)",
+          "frontmostPID": 42462,
+          "keyWindow": 0,
+          "openPID": 28385,
+          "uptime": 157043.08952725
+        }
+      ],
+      "reason": "foreground lost during frame_save_debounced",
+      "status": "INTERRUPTED"
+    }
+  ],
+  "started": "2026-10-26 19:34:18",
   "style": "alloy",
   "window": {
     "all_spaces_strip_order": {
       "first_after": [
         {
-          "active": "C0ED5E76-42A9-4F2D-8BD9-33EA8A1122B5",
+          "active": "9AC8033C-AF4D-4417-9966-858E1F9F336C",
           "activeIsMember": true,
           "contents": [
             2,
             1
           ],
           "context": "Default",
-          "profile": "0FB862E1-4A6D-41D4-8B63-D0B5A0A594AA",
+          "profile": "FEC7985A-FAEC-4FA6-965D-AE35887F0221",
           "tabs": [
-            "C0ED5E76-42A9-4F2D-8BD9-33EA8A1122B5",
-            "1DFA04DB-414F-4C39-BE32-165A5667AFB6"
+            "9AC8033C-AF4D-4417-9966-858E1F9F336C",
+            "05899558-B991-4C2E-8481-BE93ADE50110"
           ]
         }
       ],
       "first_before": [
         {
-          "active": "C0ED5E76-42A9-4F2D-8BD9-33EA8A1122B5",
+          "active": "9AC8033C-AF4D-4417-9966-858E1F9F336C",
           "activeIsMember": true,
           "contents": [
             2,
             1
           ],
           "context": "Default",
-          "profile": "0FB862E1-4A6D-41D4-8B63-D0B5A0A594AA",
+          "profile": "FEC7985A-FAEC-4FA6-965D-AE35887F0221",
           "tabs": [
-            "C0ED5E76-42A9-4F2D-8BD9-33EA8A1122B5",
-            "1DFA04DB-414F-4C39-BE32-165A5667AFB6"
+            "9AC8033C-AF4D-4417-9966-858E1F9F336C",
+            "05899558-B991-4C2E-8481-BE93ADE50110"
           ]
         }
       ],
       "ok": true,
       "second_after": [
         {
-          "active": "6F0C4FDC-2822-4B58-B96C-38A828E05FAA",
+          "active": "1ECC38EF-0FBF-4ADD-A7C4-48DA361633B0",
           "activeIsMember": true,
           "contents": [
             4,
             3
           ],
           "context": "Default",
-          "profile": "0FB862E1-4A6D-41D4-8B63-D0B5A0A594AA",
+          "profile": "FEC7985A-FAEC-4FA6-965D-AE35887F0221",
           "tabs": [
-            "1DFA04DB-414F-4C39-BE32-165A5667AFB6",
-            "6F0C4FDC-2822-4B58-B96C-38A828E05FAA"
+            "05899558-B991-4C2E-8481-BE93ADE50110",
+            "1ECC38EF-0FBF-4ADD-A7C4-48DA361633B0"
           ]
         }
       ],
       "second_before": [
         {
-          "active": "1DFA04DB-414F-4C39-BE32-165A5667AFB6",
+          "active": "05899558-B991-4C2E-8481-BE93ADE50110",
           "activeIsMember": true,
           "contents": [
             0,
             3
           ],
           "context": "Default",
-          "profile": "0FB862E1-4A6D-41D4-8B63-D0B5A0A594AA",
+          "profile": "FEC7985A-FAEC-4FA6-965D-AE35887F0221",
           "tabs": [
-            "1DFA04DB-414F-4C39-BE32-165A5667AFB6",
-            "6F0C4FDC-2822-4B58-B96C-38A828E05FAA"
+            "05899558-B991-4C2E-8481-BE93ADE50110",
+            "1ECC38EF-0FBF-4ADD-A7C4-48DA361633B0"
           ]
         }
       ]
@@ -3002,9 +3728,9 @@
         "active": true,
         "event": "NSApplicationDidBecomeActiveNotification",
         "frontmostApp": "Open",
-        "frontmostPID": 45627,
-        "keyWindow": 128926,
-        "uptime": 145064.15876175
+        "frontmostPID": 29236,
+        "keyWindow": 148361,
+        "uptime": 157082.678993125
       }
     ],
     "close_unloaded_pinned": {
@@ -3030,12 +3756,12 @@
     },
     "cold_fresh_profile": {
       "median_ms": {
-        "engineStart": 413,
-        "engineStarted": 509,
-        "firstContentfulPaint": 649,
-        "main": 198,
-        "modelLoaded": 200,
-        "sidebarDrawn": 412
+        "engineStart": 345,
+        "engineStarted": 427,
+        "firstContentfulPaint": 571,
+        "main": 189,
+        "modelLoaded": 192,
+        "sidebarDrawn": 344
       },
       "ok": false,
       "samples": 5
@@ -3219,19 +3945,19 @@
       "ok": true,
       "timing": {
         "clock": "mach_continuous_time; kernel ri_proc_start_abstime",
-        "didFinishLaunching": 3568,
-        "engineInitialized": 3560,
-        "engineStart": 3451,
-        "engineStarted": 3550,
-        "firstContentfulPaint": 3716,
+        "didFinishLaunching": 3419,
+        "engineInitialized": 3415,
+        "engineStart": 3328,
+        "engineStarted": 3412,
+        "firstContentfulPaint": 3556,
         "firstFrameConfirmed": false,
-        "firstFrameWaitTimedOut": 3448,
-        "firstLoadEnd": 3704,
-        "firstPaintClockUncertaintyMs": 0.23,
+        "firstFrameWaitTimedOut": 3326,
+        "firstLoadEnd": 3515,
+        "firstPaintClockUncertaintyMs": 0.24,
         "kernelProcessStart": true,
-        "main": 233,
-        "modelLoaded": 235,
-        "windowShown": 393
+        "main": 191,
+        "modelLoaded": 193,
+        "windowShown": 282
       }
     },
     "focus_preserves_find": {
@@ -3265,9 +3991,9 @@
       "native": {
         "active": true,
         "frontmostApp": "Open",
-        "frontmostPID": 45460,
-        "keyWindow": 128869,
-        "uptime": 145057.90003854167
+        "frontmostPID": 29025,
+        "keyWindow": 148317,
+        "uptime": 157077.71988045835
       },
       "ok": true,
       "peerPID": null
@@ -3303,12 +4029,12 @@
       "native": {
         "active": false,
         "frontmostApp": "Open",
-        "frontmostPID": 45596,
+        "frontmostPID": 29212,
         "keyWindow": 0,
-        "uptime": 145062.61682925
+        "uptime": 157081.34896020836
       },
       "ok": true,
-      "peerPID": 45596
+      "peerPID": 29212
     },
     "focus_preserves_inactive_load": {
       "after": {
@@ -3341,12 +4067,12 @@
       "native": {
         "active": false,
         "frontmostApp": "Open",
-        "frontmostPID": 45548,
+        "frontmostPID": 29094,
         "keyWindow": 0,
-        "uptime": 145059.97867829166
+        "uptime": 157079.376174
       },
       "ok": true,
-      "peerPID": 45548
+      "peerPID": 29094
     },
     "focus_preserves_sidebar": {
       "after": {
@@ -3379,9 +4105,9 @@
       "native": {
         "active": true,
         "frontmostApp": "Open",
-        "frontmostPID": 45414,
-        "keyWindow": 128856,
-        "uptime": 145056.32502720834
+        "frontmostPID": 29012,
+        "keyWindow": 148306,
+        "uptime": 157076.425943
       },
       "ok": true,
       "peerPID": null
@@ -3414,19 +4140,19 @@
       "ok": true
     },
     "fullscreen_hover_reveal": {
-      "dismissed_on_selection_s": 0.514,
+      "dismissed_on_selection_s": 0.519,
       "hidden": "hidden",
       "ok": true,
-      "revealed_s": 0.889
+      "revealed_s": 0.612
     },
     "hide_reveal": {
-      "dismissed_s": 0.573,
+      "dismissed_s": 0.536,
       "hidden": "hidden",
-      "left_s": 0.734,
+      "left_s": 0.68,
       "ok": true,
       "panel_x": 10,
-      "revealed_again_s": 0.87,
-      "revealed_s": 0.861,
+      "revealed_again_s": 0.614,
+      "revealed_s": 0.615,
       "selected": true
     },
     "html_fullscreen_from_window": {
@@ -3489,8 +4215,8 @@
           "urlFieldHovered": false
         },
         "cursor": [
-          2244,
-          167
+          2243,
+          168
         ],
         "engineSelected": 3,
         "engineURL": "data:text/html,%3Ctitle%3EWindow%20C%3C/title%3E%3Ch1%3EWindow%20C%3C/h1%3E",
@@ -3505,18 +4231,18 @@
         "fullscreenChanges": 4,
         "fullscreenTransition": false,
         "hiddenTitle": true,
-        "id": "51FB8031-8E0E-4F0D-AF84-0812C34F4B06",
+        "id": "662DB0F0-DF91-4278-992E-DC92BA2D88F2",
         "isKeyWindow": true,
         "key": true,
-        "keyWindow": 128801,
-        "layoutPasses": 421,
+        "keyWindow": 148269,
+        "layoutPasses": 618,
         "miniaturized": false,
-        "number": 128801,
+        "number": 148269,
         "pageFullscreen": false,
         "paneBackgrounds": [
           {
             "color": [],
-            "tab": "6F0C4FDC-2822-4B58-B96C-38A828E05FAA"
+            "tab": "1ECC38EF-0FBF-4ADD-A7C4-48DA361633B0"
           }
         ],
         "panel": [
@@ -3533,7 +4259,7 @@
             0,
             0
           ],
-          "dwell": 0.1573671666556038,
+          "dwell": 0.16175012500025332,
           "hides": 1,
           "offset": null,
           "phase": "idle",
@@ -3548,15 +4274,15 @@
           2560,
           1440
         ],
-        "selected": "6F0C4FDC-2822-4B58-B96C-38A828E05FAA",
+        "selected": "1ECC38EF-0FBF-4ADD-A7C4-48DA361633B0",
         "shownPages": [
-          "6F0C4FDC-2822-4B58-B96C-38A828E05FAA"
+          "1ECC38EF-0FBF-4ADD-A7C4-48DA361633B0"
         ],
         "sidebarClass": "OpenSidebar.SidebarView",
         "sidebarMode": "anchored",
         "sidebarVisible": true,
         "sidebarWidth": 228,
-        "space": "E25A5F22-CD84-413A-97E0-12D286E08611",
+        "space": "A7DFDD6F-ED13-4999-B0EB-9CB3AC0C59FD",
         "titlebar": [
           0,
           0,
@@ -3685,8 +4411,8 @@
           "urlFieldHovered": false
         },
         "cursor": [
-          2544,
-          807
+          2543,
+          808
         ],
         "engineSelected": 3,
         "engineURL": "data:text/html,%3Ctitle%3EWindow%20C%3C/title%3E%3Ch1%3EWindow%20C%3C/h1%3E",
@@ -3701,18 +4427,18 @@
         "fullscreenChanges": 3,
         "fullscreenTransition": false,
         "hiddenTitle": true,
-        "id": "51FB8031-8E0E-4F0D-AF84-0812C34F4B06",
+        "id": "662DB0F0-DF91-4278-992E-DC92BA2D88F2",
         "isKeyWindow": true,
         "key": true,
-        "keyWindow": 128801,
-        "layoutPasses": 397,
+        "keyWindow": 148269,
+        "layoutPasses": 591,
         "miniaturized": false,
-        "number": 128801,
+        "number": 148269,
         "pageFullscreen": true,
         "paneBackgrounds": [
           {
             "color": [],
-            "tab": "6F0C4FDC-2822-4B58-B96C-38A828E05FAA"
+            "tab": "1ECC38EF-0FBF-4ADD-A7C4-48DA361633B0"
           }
         ],
         "panel": [
@@ -3729,7 +4455,7 @@
             0,
             0
           ],
-          "dwell": 0.1573671666556038,
+          "dwell": 0.16175012500025332,
           "hides": 1,
           "offset": null,
           "phase": "idle",
@@ -3744,15 +4470,15 @@
           2560,
           1440
         ],
-        "selected": "6F0C4FDC-2822-4B58-B96C-38A828E05FAA",
+        "selected": "1ECC38EF-0FBF-4ADD-A7C4-48DA361633B0",
         "shownPages": [
-          "6F0C4FDC-2822-4B58-B96C-38A828E05FAA"
+          "1ECC38EF-0FBF-4ADD-A7C4-48DA361633B0"
         ],
         "sidebarClass": "OpenSidebar.SidebarView",
         "sidebarMode": "anchored",
         "sidebarVisible": false,
         "sidebarWidth": 228,
-        "space": "E25A5F22-CD84-413A-97E0-12D286E08611",
+        "space": "A7DFDD6F-ED13-4999-B0EB-9CB3AC0C59FD",
         "titlebar": [
           0,
           0,
@@ -3882,8 +4608,8 @@
           "urlFieldHovered": false
         },
         "cursor": [
-          2544,
-          807
+          2543,
+          808
         ],
         "engineSelected": 3,
         "engineURL": "data:text/html,%3Ctitle%3EWindow%20C%3C/title%3E%3Ch1%3EWindow%20C%3C/h1%3E",
@@ -3898,18 +4624,18 @@
         "fullscreenChanges": 1,
         "fullscreenTransition": false,
         "hiddenTitle": true,
-        "id": "51FB8031-8E0E-4F0D-AF84-0812C34F4B06",
+        "id": "662DB0F0-DF91-4278-992E-DC92BA2D88F2",
         "isKeyWindow": true,
         "key": true,
-        "keyWindow": 128801,
-        "layoutPasses": 155,
+        "keyWindow": 148269,
+        "layoutPasses": 318,
         "miniaturized": false,
-        "number": 128801,
+        "number": 148269,
         "pageFullscreen": false,
         "paneBackgrounds": [
           {
             "color": [],
-            "tab": "6F0C4FDC-2822-4B58-B96C-38A828E05FAA"
+            "tab": "1ECC38EF-0FBF-4ADD-A7C4-48DA361633B0"
           }
         ],
         "panel": [
@@ -3926,7 +4652,7 @@
             0,
             0
           ],
-          "dwell": 0.1573671666556038,
+          "dwell": 0.16175012500025332,
           "hides": 1,
           "offset": null,
           "phase": "idle",
@@ -3941,15 +4667,15 @@
           2560,
           1440
         ],
-        "selected": "6F0C4FDC-2822-4B58-B96C-38A828E05FAA",
+        "selected": "1ECC38EF-0FBF-4ADD-A7C4-48DA361633B0",
         "shownPages": [
-          "6F0C4FDC-2822-4B58-B96C-38A828E05FAA"
+          "1ECC38EF-0FBF-4ADD-A7C4-48DA361633B0"
         ],
         "sidebarClass": "OpenSidebar.SidebarView",
         "sidebarMode": "anchored",
         "sidebarVisible": true,
         "sidebarWidth": 228,
-        "space": "E25A5F22-CD84-413A-97E0-12D286E08611",
+        "space": "A7DFDD6F-ED13-4999-B0EB-9CB3AC0C59FD",
         "titlebar": [
           0,
           0,
@@ -4078,8 +4804,8 @@
           "urlFieldHovered": false
         },
         "cursor": [
-          2544,
-          807
+          2543,
+          808
         ],
         "engineSelected": 3,
         "engineURL": "data:text/html,%3Ctitle%3EWindow%20C%3C/title%3E%3Ch1%3EWindow%20C%3C/h1%3E",
@@ -4094,18 +4820,18 @@
         "fullscreenChanges": 1,
         "fullscreenTransition": false,
         "hiddenTitle": true,
-        "id": "51FB8031-8E0E-4F0D-AF84-0812C34F4B06",
+        "id": "662DB0F0-DF91-4278-992E-DC92BA2D88F2",
         "isKeyWindow": true,
         "key": true,
-        "keyWindow": 128801,
-        "layoutPasses": 149,
+        "keyWindow": 148269,
+        "layoutPasses": 312,
         "miniaturized": false,
-        "number": 128801,
+        "number": 148269,
         "pageFullscreen": true,
         "paneBackgrounds": [
           {
             "color": [],
-            "tab": "6F0C4FDC-2822-4B58-B96C-38A828E05FAA"
+            "tab": "1ECC38EF-0FBF-4ADD-A7C4-48DA361633B0"
           }
         ],
         "panel": [
@@ -4122,7 +4848,7 @@
             0,
             0
           ],
-          "dwell": 0.1573671666556038,
+          "dwell": 0.16175012500025332,
           "hides": 1,
           "offset": null,
           "phase": "idle",
@@ -4137,15 +4863,15 @@
           2560,
           1440
         ],
-        "selected": "6F0C4FDC-2822-4B58-B96C-38A828E05FAA",
+        "selected": "1ECC38EF-0FBF-4ADD-A7C4-48DA361633B0",
         "shownPages": [
-          "6F0C4FDC-2822-4B58-B96C-38A828E05FAA"
+          "1ECC38EF-0FBF-4ADD-A7C4-48DA361633B0"
         ],
         "sidebarClass": "OpenSidebar.SidebarView",
         "sidebarMode": "anchored",
         "sidebarVisible": false,
         "sidebarWidth": 228,
-        "space": "E25A5F22-CD84-413A-97E0-12D286E08611",
+        "space": "A7DFDD6F-ED13-4999-B0EB-9CB3AC0C59FD",
         "titlebar": [
           0,
           0,
@@ -4232,11 +4958,11 @@
           1000,
           700
         ],
-        "id": "DB984EBA-2DC1-4D6F-A075-DADFA6260F3A",
-        "selected": "6F0C4FDC-2822-4B58-B96C-38A828E05FAA",
+        "id": "7568585C-3C75-4BD3-84A6-0B75586D3A26",
+        "selected": "1ECC38EF-0FBF-4ADD-A7C4-48DA361633B0",
         "sidebarMode": "hidden",
         "sidebarWidth": 300,
-        "space": "E25A5F22-CD84-413A-97E0-12D286E08611"
+        "space": "A7DFDD6F-ED13-4999-B0EB-9CB3AC0C59FD"
       },
       "ok": true,
       "restored": {
@@ -4246,11 +4972,11 @@
           1000,
           700
         ],
-        "id": "DB984EBA-2DC1-4D6F-A075-DADFA6260F3A",
-        "selected": "6F0C4FDC-2822-4B58-B96C-38A828E05FAA",
+        "id": "7568585C-3C75-4BD3-84A6-0B75586D3A26",
+        "selected": "1ECC38EF-0FBF-4ADD-A7C4-48DA361633B0",
         "sidebarMode": "hidden",
         "sidebarWidth": 300,
-        "space": "E25A5F22-CD84-413A-97E0-12D286E08611"
+        "space": "A7DFDD6F-ED13-4999-B0EB-9CB3AC0C59FD"
       }
     },
     "last_window_reopen": {
@@ -4262,11 +4988,11 @@
           1000,
           700
         ],
-        "id": "DB984EBA-2DC1-4D6F-A075-DADFA6260F3A",
-        "selected": "6F0C4FDC-2822-4B58-B96C-38A828E05FAA",
+        "id": "7568585C-3C75-4BD3-84A6-0B75586D3A26",
+        "selected": "1ECC38EF-0FBF-4ADD-A7C4-48DA361633B0",
         "sidebarMode": "hidden",
         "sidebarWidth": 300,
-        "space": "E25A5F22-CD84-413A-97E0-12D286E08611"
+        "space": "A7DFDD6F-ED13-4999-B0EB-9CB3AC0C59FD"
       },
       "no_windows_after_close": true,
       "ok": true,
@@ -4277,189 +5003,189 @@
           1000,
           700
         ],
-        "id": "DB984EBA-2DC1-4D6F-A075-DADFA6260F3A",
-        "selected": "6F0C4FDC-2822-4B58-B96C-38A828E05FAA",
+        "id": "7568585C-3C75-4BD3-84A6-0B75586D3A26",
+        "selected": "1ECC38EF-0FBF-4ADD-A7C4-48DA361633B0",
         "sidebarMode": "hidden",
         "sidebarWidth": 300,
-        "space": "E25A5F22-CD84-413A-97E0-12D286E08611"
+        "space": "A7DFDD6F-ED13-4999-B0EB-9CB3AC0C59FD"
       }
     },
     "launch_runs": {
       "cold_fresh_profile": [
         {
           "clock": "mach_continuous_time; kernel ri_proc_start_abstime",
-          "didFinishLaunching": 3991,
-          "engineInitialized": 3989,
-          "engineStart": 413,
-          "engineStarted": 3984,
-          "firstContentfulPaint": 4166,
+          "didFinishLaunching": 443,
+          "engineInitialized": 430,
+          "engineStart": 345,
+          "engineStarted": 427,
+          "firstContentfulPaint": 614,
           "firstFrameConfirmed": true,
-          "firstLoadEnd": 4152,
-          "firstPaintClockUncertaintyMs": 0.16,
-          "kernelProcessStart": true,
-          "main": 224,
-          "modelLoaded": 227,
-          "sidebarDrawn": 412,
-          "windowShown": 362
-        },
-        {
-          "clock": "mach_continuous_time; kernel ri_proc_start_abstime",
-          "didFinishLaunching": 467,
-          "engineInitialized": 464,
-          "engineStart": 371,
-          "engineStarted": 460,
-          "firstContentfulPaint": 635,
-          "firstFrameConfirmed": true,
-          "firstLoadEnd": 613,
-          "firstPaintClockUncertaintyMs": 0.13,
-          "kernelProcessStart": true,
-          "main": 187,
-          "modelLoaded": 189,
-          "sidebarDrawn": 370,
-          "windowShown": 321
-        },
-        {
-          "clock": "mach_continuous_time; kernel ri_proc_start_abstime",
-          "didFinishLaunching": 516,
-          "engineInitialized": 512,
-          "engineStart": 416,
-          "engineStarted": 509,
-          "firstContentfulPaint": 649,
-          "firstFrameConfirmed": true,
-          "firstLoadEnd": 635,
-          "firstPaintClockUncertaintyMs": 0.11,
-          "kernelProcessStart": true,
-          "main": 198,
-          "modelLoaded": 200,
-          "sidebarDrawn": 415,
-          "windowShown": 353
-        },
-        {
-          "clock": "mach_continuous_time; kernel ri_proc_start_abstime",
-          "didFinishLaunching": 470,
-          "engineInitialized": 467,
-          "engineStart": 371,
-          "engineStarted": 463,
-          "firstContentfulPaint": 630,
-          "firstFrameConfirmed": true,
-          "firstLoadEnd": 614,
+          "firstLoadEnd": 601,
           "firstPaintClockUncertaintyMs": 0.1,
           "kernelProcessStart": true,
-          "main": 178,
-          "modelLoaded": 180,
-          "sidebarDrawn": 370,
-          "windowShown": 304
+          "main": 208,
+          "modelLoaded": 210,
+          "sidebarDrawn": 344,
+          "windowShown": 296
         },
         {
           "clock": "mach_continuous_time; kernel ri_proc_start_abstime",
-          "didFinishLaunching": 527,
-          "engineInitialized": 524,
-          "engineStart": 420,
-          "engineStarted": 516,
-          "firstContentfulPaint": 687,
+          "didFinishLaunching": 443,
+          "engineInitialized": 440,
+          "engineStart": 346,
+          "engineStarted": 432,
+          "firstContentfulPaint": 700,
           "firstFrameConfirmed": true,
-          "firstLoadEnd": 672,
-          "firstPaintClockUncertaintyMs": 0.11,
+          "firstLoadEnd": 688,
+          "firstPaintClockUncertaintyMs": 0.1,
           "kernelProcessStart": true,
-          "main": 198,
-          "modelLoaded": 200,
-          "sidebarDrawn": 418,
-          "windowShown": 345
+          "main": 189,
+          "modelLoaded": 192,
+          "sidebarDrawn": 345,
+          "windowShown": 292
+        },
+        {
+          "clock": "mach_continuous_time; kernel ri_proc_start_abstime",
+          "didFinishLaunching": 428,
+          "engineInitialized": 425,
+          "engineStart": 341,
+          "engineStarted": 420,
+          "firstContentfulPaint": 554,
+          "firstFrameConfirmed": true,
+          "firstLoadEnd": 542,
+          "firstPaintClockUncertaintyMs": 0.08,
+          "kernelProcessStart": true,
+          "main": 180,
+          "modelLoaded": 182,
+          "sidebarDrawn": 340,
+          "windowShown": 283
+        },
+        {
+          "clock": "mach_continuous_time; kernel ri_proc_start_abstime",
+          "didFinishLaunching": 444,
+          "engineInitialized": 441,
+          "engineStart": 361,
+          "engineStarted": 438,
+          "firstContentfulPaint": 571,
+          "firstFrameConfirmed": true,
+          "firstLoadEnd": 559,
+          "firstPaintClockUncertaintyMs": 0.08,
+          "kernelProcessStart": true,
+          "main": 215,
+          "modelLoaded": 218,
+          "sidebarDrawn": 360,
+          "windowShown": 312
+        },
+        {
+          "clock": "mach_continuous_time; kernel ri_proc_start_abstime",
+          "didFinishLaunching": 422,
+          "engineInitialized": 418,
+          "engineStart": 336,
+          "engineStarted": 414,
+          "firstContentfulPaint": 548,
+          "firstFrameConfirmed": true,
+          "firstLoadEnd": 537,
+          "firstPaintClockUncertaintyMs": 0.07,
+          "kernelProcessStart": true,
+          "main": 178,
+          "modelLoaded": 181,
+          "sidebarDrawn": 335,
+          "windowShown": 282
         }
       ],
       "warm_existing_profile": [
         {
           "clock": "mach_continuous_time; kernel ri_proc_start_abstime",
-          "didFinishLaunching": 484,
-          "engineInitialized": 480,
-          "engineStart": 397,
-          "engineStarted": 477,
-          "firstContentfulPaint": 616,
+          "didFinishLaunching": 429,
+          "engineInitialized": 425,
+          "engineStart": 343,
+          "engineStarted": 420,
+          "firstContentfulPaint": 557,
           "firstFrameConfirmed": true,
-          "firstLoadEnd": 583,
-          "firstPaintClockUncertaintyMs": 0.17,
+          "firstLoadEnd": 543,
+          "firstPaintClockUncertaintyMs": 0.09,
           "kernelProcessStart": true,
-          "main": 194,
-          "modelLoaded": 197,
-          "sidebarDrawn": 397,
-          "windowShown": 340
+          "main": 185,
+          "modelLoaded": 188,
+          "sidebarDrawn": 342,
+          "windowShown": 280
+        },
+        {
+          "clock": "mach_continuous_time; kernel ri_proc_start_abstime",
+          "didFinishLaunching": 447,
+          "engineInitialized": 439,
+          "engineStart": 347,
+          "engineStarted": 432,
+          "firstContentfulPaint": 590,
+          "firstFrameConfirmed": true,
+          "firstLoadEnd": 579,
+          "firstPaintClockUncertaintyMs": 0.11,
+          "kernelProcessStart": true,
+          "main": 189,
+          "modelLoaded": 191,
+          "sidebarDrawn": 346,
+          "windowShown": 293
+        },
+        {
+          "clock": "mach_continuous_time; kernel ri_proc_start_abstime",
+          "didFinishLaunching": 418,
+          "engineInitialized": 414,
+          "engineStart": 336,
+          "engineStarted": 411,
+          "firstContentfulPaint": 540,
+          "firstFrameConfirmed": true,
+          "firstLoadEnd": 532,
+          "firstPaintClockUncertaintyMs": 0.09,
+          "kernelProcessStart": true,
+          "main": 177,
+          "modelLoaded": 179,
+          "sidebarDrawn": 335,
+          "windowShown": 282
+        },
+        {
+          "clock": "mach_continuous_time; kernel ri_proc_start_abstime",
+          "didFinishLaunching": 413,
+          "engineInitialized": 409,
+          "engineStart": 330,
+          "engineStarted": 406,
+          "firstContentfulPaint": 537,
+          "firstFrameConfirmed": true,
+          "firstLoadEnd": 506,
+          "firstPaintClockUncertaintyMs": 0.08,
+          "kernelProcessStart": true,
+          "main": 175,
+          "modelLoaded": 177,
+          "sidebarDrawn": 330,
+          "windowShown": 270
         },
         {
           "clock": "mach_continuous_time; kernel ri_proc_start_abstime",
           "didFinishLaunching": 445,
-          "engineInitialized": 438,
-          "engineStart": 353,
-          "engineStarted": 435,
-          "firstContentfulPaint": 593,
+          "engineInitialized": 441,
+          "engineStart": 348,
+          "engineStarted": 428,
+          "firstContentfulPaint": 590,
           "firstFrameConfirmed": true,
-          "firstLoadEnd": 577,
-          "firstPaintClockUncertaintyMs": 0.14,
+          "firstLoadEnd": 581,
+          "firstPaintClockUncertaintyMs": 0.11,
           "kernelProcessStart": true,
-          "main": 187,
-          "modelLoaded": 189,
-          "sidebarDrawn": 352,
-          "windowShown": 297
-        },
-        {
-          "clock": "mach_continuous_time; kernel ri_proc_start_abstime",
-          "didFinishLaunching": 513,
-          "engineInitialized": 508,
-          "engineStart": 406,
-          "engineStarted": 502,
-          "firstContentfulPaint": 668,
-          "firstFrameConfirmed": true,
-          "firstLoadEnd": 656,
-          "firstPaintClockUncertaintyMs": 0.12,
-          "kernelProcessStart": true,
-          "main": 193,
-          "modelLoaded": 195,
-          "sidebarDrawn": 405,
-          "windowShown": 340
-        },
-        {
-          "clock": "mach_continuous_time; kernel ri_proc_start_abstime",
-          "didFinishLaunching": 462,
-          "engineInitialized": 453,
-          "engineStart": 362,
-          "engineStarted": 449,
-          "firstContentfulPaint": 612,
-          "firstFrameConfirmed": true,
-          "firstLoadEnd": 599,
-          "firstPaintClockUncertaintyMs": 0.19,
-          "kernelProcessStart": true,
-          "main": 203,
-          "modelLoaded": 205,
-          "sidebarDrawn": 361,
-          "windowShown": 305
-        },
-        {
-          "clock": "mach_continuous_time; kernel ri_proc_start_abstime",
-          "didFinishLaunching": 508,
-          "engineInitialized": 503,
-          "engineStart": 398,
-          "engineStarted": 497,
-          "firstContentfulPaint": 668,
-          "firstFrameConfirmed": true,
-          "firstLoadEnd": 655,
-          "firstPaintClockUncertaintyMs": 0.13,
-          "kernelProcessStart": true,
-          "main": 184,
-          "modelLoaded": 186,
-          "sidebarDrawn": 397,
-          "windowShown": 326
+          "main": 189,
+          "modelLoaded": 191,
+          "sidebarDrawn": 347,
+          "windowShown": 296
         }
       ]
     },
     "launch_waiter_early_exit": {
-      "actualAppPID": 45023,
+      "actualAppPID": 28730,
       "launcherExit": 0,
       "ok": true,
       "waiterEndedBeforeAutomation": true
     },
     "load_average": [
-      9.25048828125,
-      11.24853515625,
-      12.486328125
+      12.01025390625,
+      10.96484375,
+      9.02587890625
     ],
     "malloc_zones_early": {
       "ok": true,
@@ -4482,12 +5208,12 @@
       "ok": true,
       "windows": [
         {
-          "id": "DB984EBA-2DC1-4D6F-A075-DADFA6260F3A",
-          "number": 128784
+          "id": "7568585C-3C75-4BD3-84A6-0B75586D3A26",
+          "number": 148263
         },
         {
-          "id": "51FB8031-8E0E-4F0D-AF84-0812C34F4B06",
-          "number": 128801
+          "id": "662DB0F0-DF91-4278-992E-DC92BA2D88F2",
+          "number": 148269
         }
       ]
     },
@@ -4549,8 +5275,8 @@
           "urlFieldHovered": false
         },
         "cursor": [
-          2444,
-          267
+          2443,
+          268
         ],
         "engineSelected": 0,
         "engineURL": "",
@@ -4565,13 +5291,13 @@
         "fullscreenChanges": 0,
         "fullscreenTransition": false,
         "hiddenTitle": true,
-        "id": "DB984EBA-2DC1-4D6F-A075-DADFA6260F3A",
+        "id": "7568585C-3C75-4BD3-84A6-0B75586D3A26",
         "isKeyWindow": true,
         "key": true,
-        "keyWindow": 128784,
+        "keyWindow": 148263,
         "layoutPasses": 7,
         "miniaturized": false,
-        "number": 128784,
+        "number": 148263,
         "pageFullscreen": false,
         "paneBackgrounds": [],
         "panel": [
@@ -4609,7 +5335,7 @@
         "sidebarMode": "anchored",
         "sidebarVisible": true,
         "sidebarWidth": 228,
-        "space": "E3609641-5EB8-4AE6-B576-1B5E178BD7E3",
+        "space": "C60C980F-190A-472D-8EB7-2561EEF2863D",
         "titlebar": [
           0,
           0,
@@ -4751,8 +5477,8 @@
           "urlFieldHovered": false
         },
         "cursor": [
-          2464,
-          127
+          2463,
+          128
         ],
         "engineSelected": 1,
         "engineURL": "data:text/html,%3Ctitle%3EWindow%20A%3C/title%3E%3Ch1%3EWindow%20A%3C/h1%3E",
@@ -4767,18 +5493,18 @@
         "fullscreenChanges": 0,
         "fullscreenTransition": false,
         "hiddenTitle": true,
-        "id": "DB984EBA-2DC1-4D6F-A075-DADFA6260F3A",
+        "id": "7568585C-3C75-4BD3-84A6-0B75586D3A26",
         "isKeyWindow": true,
         "key": true,
-        "keyWindow": 128784,
-        "layoutPasses": 137,
+        "keyWindow": 148263,
+        "layoutPasses": 133,
         "miniaturized": false,
-        "number": 128784,
+        "number": 148263,
         "pageFullscreen": false,
         "paneBackgrounds": [
           {
             "color": [],
-            "tab": "1DFA04DB-414F-4C39-BE32-165A5667AFB6"
+            "tab": "05899558-B991-4C2E-8481-BE93ADE50110"
           }
         ],
         "panel": [
@@ -4810,15 +5536,15 @@
           2560,
           1440
         ],
-        "selected": "1DFA04DB-414F-4C39-BE32-165A5667AFB6",
+        "selected": "05899558-B991-4C2E-8481-BE93ADE50110",
         "shownPages": [
-          "1DFA04DB-414F-4C39-BE32-165A5667AFB6"
+          "05899558-B991-4C2E-8481-BE93ADE50110"
         ],
         "sidebarClass": "OpenSidebar.SidebarView",
         "sidebarMode": "anchored",
         "sidebarVisible": true,
         "sidebarWidth": 300,
-        "space": "E3609641-5EB8-4AE6-B576-1B5E178BD7E3",
+        "space": "C60C980F-190A-472D-8EB7-2561EEF2863D",
         "titlebar": [
           0,
           0,
@@ -4898,7 +5624,7 @@
         228,
         790
       ],
-      "dwell_s": 0.157,
+      "dwell_s": 0.152,
       "edge_walk": [
         [
           2,
@@ -5006,7 +5732,7 @@
           2
         ]
       ],
-      "exit_to_idle_s": 0.253,
+      "exit_to_idle_s": 0.168,
       "held": {
         "card": [
           5,
@@ -5014,7 +5740,7 @@
           228,
           790
         ],
-        "dwell": 0.15659950001281686,
+        "dwell": 0.1524643749871757,
         "hides": 2,
         "offset": 0,
         "phase": "shown",
@@ -5045,8 +5771,8 @@
       },
       "ok": true,
       "pass_by_without_reveal": true,
-      "settled_s": 0.797,
-      "slide_out_s": 0.463
+      "settled_s": 0.606,
+      "slide_out_s": 0.53
     },
     "selected_only_0": {
       "ok": true,
@@ -6092,20 +6818,20 @@
             "miniaturized": false,
             "trafficLightFrames": [
               [
-                9,
-                9,
+                13,
+                17,
                 14,
                 14
               ],
               [
-                32,
-                9,
+                36,
+                17,
                 14,
                 14
               ],
               [
-                55,
-                9,
+                59,
+                17,
                 14,
                 14
               ]
@@ -6633,12 +7359,12 @@
     },
     "warm_existing_profile": {
       "median_ms": {
-        "engineStart": 397,
-        "engineStarted": 477,
-        "firstContentfulPaint": 616,
-        "main": 193,
-        "modelLoaded": 195,
-        "sidebarDrawn": 397
+        "engineStart": 343,
+        "engineStarted": 420,
+        "firstContentfulPaint": 557,
+        "main": 185,
+        "modelLoaded": 188,
+        "sidebarDrawn": 342
       },
       "ok": false,
       "samples": 5
@@ -6697,12 +7423,12 @@
         "crashed": false,
         "favicon": false,
         "hasWebContent": true,
-        "id": "1DFA04DB-414F-4C39-BE32-165A5667AFB6",
+        "id": "05899558-B991-4C2E-8481-BE93ADE50110",
         "loaded": true,
         "loading": false,
         "page": {
           "audible": false,
-          "browser": 2,
+          "browser": 1,
           "browserIndex": 1,
           "browserPinned": false,
           "canGoBack": false,
@@ -6714,7 +7440,7 @@
           "favicon": false,
           "fullscreen": false,
           "hidden": true,
-          "hostTab": "1DFA04DB-414F-4C39-BE32-165A5667AFB6",
+          "hostTab": "05899558-B991-4C2E-8481-BE93ADE50110",
           "identifier": 3,
           "kind": "tab",
           "live": true,
@@ -6732,12 +7458,12 @@
           "url": "data:text/html,%3Ctitle%3EWindow%20A%3C/title%3E%3Ch1%3EWindow%20A%3C/h1%3E",
           "zoom": 0
         },
-        "profile": "0FB862E1-4A6D-41D4-8B63-D0B5A0A594AA",
+        "profile": "FEC7985A-FAEC-4FA6-965D-AE35887F0221",
         "progress": 1,
         "section": "today",
         "selected": false,
         "sleepPhase": "live",
-        "space": "E3609641-5EB8-4AE6-B576-1B5E178BD7E3",
+        "space": "C60C980F-190A-472D-8EB7-2561EEF2863D",
         "title": "Window A",
         "url": "data:text/html,%3Ctitle%3EWindow%20A%3C/title%3E%3Ch1%3EWindow%20A%3C/h1%3E",
         "visible": false
@@ -6745,56 +7471,56 @@
     },
     "window_persistence": {
       "expected": {
-        "51FB8031-8E0E-4F0D-AF84-0812C34F4B06": {
+        "662DB0F0-DF91-4278-992E-DC92BA2D88F2": {
           "frame": [
             300,
             200,
             900,
             600
           ],
-          "selected": "6F0C4FDC-2822-4B58-B96C-38A828E05FAA",
+          "selected": "1ECC38EF-0FBF-4ADD-A7C4-48DA361633B0",
           "sidebarMode": "anchored",
           "sidebarWidth": 228,
-          "space": "E25A5F22-CD84-413A-97E0-12D286E08611"
+          "space": "A7DFDD6F-ED13-4999-B0EB-9CB3AC0C59FD"
         },
-        "DB984EBA-2DC1-4D6F-A075-DADFA6260F3A": {
+        "7568585C-3C75-4BD3-84A6-0B75586D3A26": {
           "frame": [
             80,
             60,
             1000,
             700
           ],
-          "selected": "C0ED5E76-42A9-4F2D-8BD9-33EA8A1122B5",
+          "selected": "9AC8033C-AF4D-4417-9966-858E1F9F336C",
           "sidebarMode": "hidden",
           "sidebarWidth": 300,
-          "space": "E3609641-5EB8-4AE6-B576-1B5E178BD7E3"
+          "space": "C60C980F-190A-472D-8EB7-2561EEF2863D"
         }
       },
       "ok": true,
       "restored": {
-        "51FB8031-8E0E-4F0D-AF84-0812C34F4B06": {
+        "662DB0F0-DF91-4278-992E-DC92BA2D88F2": {
           "frame": [
             300,
             200,
             900,
             600
           ],
-          "selected": "6F0C4FDC-2822-4B58-B96C-38A828E05FAA",
+          "selected": "1ECC38EF-0FBF-4ADD-A7C4-48DA361633B0",
           "sidebarMode": "anchored",
           "sidebarWidth": 228,
-          "space": "E25A5F22-CD84-413A-97E0-12D286E08611"
+          "space": "A7DFDD6F-ED13-4999-B0EB-9CB3AC0C59FD"
         },
-        "DB984EBA-2DC1-4D6F-A075-DADFA6260F3A": {
+        "7568585C-3C75-4BD3-84A6-0B75586D3A26": {
           "frame": [
             80,
             60,
             1000,
             700
           ],
-          "selected": "C0ED5E76-42A9-4F2D-8BD9-33EA8A1122B5",
+          "selected": "9AC8033C-AF4D-4417-9966-858E1F9F336C",
           "sidebarMode": "hidden",
           "sidebarWidth": 300,
-          "space": "E3609641-5EB8-4AE6-B576-1B5E178BD7E3"
+          "space": "C60C980F-190A-472D-8EB7-2561EEF2863D"
         }
       }
     },
