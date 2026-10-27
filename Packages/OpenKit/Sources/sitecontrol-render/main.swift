@@ -38,6 +38,9 @@ enum CLI {
             _ = stage.render(scale: scale)
             print(Flows.accessibilityDump(stage.controller.view.panel), terminator: "")
         case "flows": report(Flows.run())
+        case "cold-measure":
+            guard args == ["cold-measure","--thread-instructions"] else { throw CLIError(description: "usage: sitecontrol-render cold-measure --thread-instructions") }
+            try Bench.measureThreadInstructions()
         case "bench":
             let fixture: Bench.Fixture?
             if let raw = value(args,"--fixture") {

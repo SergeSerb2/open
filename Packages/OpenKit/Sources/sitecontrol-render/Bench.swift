@@ -10,6 +10,8 @@ enum Bench {
         var cpu: [Double] = []
         var wall: [Double] = []
         var parts: [[Double]] = []
+        var instructions: [UInt64] = []
+        var instructionError: String?
     }
     static func cpu() -> Double { Double(clock_gettime_nsec_np(CLOCK_THREAD_CPUTIME_ID))/1e6 }
     static func p95(_ values: [Double]) -> Double { values.sorted()[Int(ceil(Double(values.count)*0.95))-1] }
@@ -50,13 +52,24 @@ enum Bench {
         }
         return result
     }
-    private static func cold() -> Samples {
+    static func measureThreadInstructions() throws {
+        let samples = cold(probeInstructions: true)
+        guard samples.instructionError == nil,samples.instructions.count == 30 else {
+            throw CLIError(description: samples.instructionError ?? "incomplete main-thread instruction samples")
+        }
+        let sorted = samples.instructions.sorted(),median = (sorted[14]+sorted[15])/2
+        var load = [Double](repeating: 0,count: 3); _ = getloadavg(&load,3)
+        print(String(format: "cold instructions: 2x; 30 samples, 5 warmups; main-thread median %llu; min %llu; max %llu; CPU p95 %.3f ms (8 ms gate unchanged); wall p95 %.3f ms (diagnostic); load1 %.2f",median,sorted.first!,sorted.last!,p95(samples.cpu),p95(samples.wall),load[0]))
+        print("main-thread instruction samples: "+samples.instructions.map(String.init).joined(separator: ","))
+    }
+    private static func cold(probeInstructions: Bool = false) -> Samples {
         let stage = Stage(state: "scc-many",scale: 2)
         stage.controller.dismiss(reason: .action,animated: false)
         var result = Samples()
         for index in 0..<35 {
             autoreleasepool {
                 OffscreenRenderer.settle(stage.root)
+                let first = probeInstructions ? ThreadInstructions.read() : nil
                 let start = CACurrentMediaTime(),startCPU = cpu()
                 let controller = SiteControlController(source: stage.source,actions: stage.source)
                 let afterInit = cpu()
@@ -70,9 +83,15 @@ enum Bench {
                 let afterPresent = cpu()
                 controller.view.layoutSubtreeIfNeeded(); stage.window.displayIfNeeded(); CATransaction.flush()
                 let elapsedCPU = cpu()-startCPU,elapsed = (CACurrentMediaTime()-start)*1000
+                let last = probeInstructions ? ThreadInstructions.read() : nil
                 if index>=5 {
                     result.cpu.append(elapsedCPU); result.wall.append(elapsed)
                     result.parts.append([afterInit-startCPU,afterAttach-afterInit,afterPresent-afterAttach,startCPU+elapsedCPU-afterPresent])
+                    if probeInstructions {
+                        if let before = first?.sample,let after = last?.sample,after.instructions>before.instructions {
+                            result.instructions.append(after.instructions-before.instructions)
+                        } else { result.instructionError = last?.sample == nil ? last?.status : first?.status ?? "zero/backward thread instruction delta" }
+                    }
                 }
                 controller.dismiss(reason: .action,animated: false); controller.view.removeFromSuperview()
             }
