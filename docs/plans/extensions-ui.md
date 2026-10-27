@@ -352,7 +352,7 @@ Command results the shell must handle:
   through P1 (`browser(_:didOpen:active:)`); the shell adopts it as a
   selected Today tab (app-shell §4.13).
 - "Inspect Popup" → DevTools window (engine); the popup stays open while
-  DevTools is attached (§3.7 D1).
+  DevTools is attached (§3.7 D1, `extensionPopupStaysOpenOnBlur`).
 
 ### 3.7 Popup panel
 
@@ -411,24 +411,33 @@ Focus:
 
 - F1. On show, make the panel key and call `popup.focusPage()`. The
   browser window stays main.
-- F2. Keys while the panel is key: the page gets them first. An
-  unconsumed Esc (`webContent(_:handleUnconsumedKeyEvent:)`) closes the
-  popup. Cmd+W closes the popup, not the tab (guess). Every other app
-  shortcut goes through `OEApplication.keyEquivalentHandler` and the
-  main menu as usual and acts on the browser window.
+- F2. Keys while the panel is key: the popup's delegate sees them first
+  (`webContent(_:handleKeyEventBeforePage:)`, as for a tab), then the page,
+  then `webContent(_:handleUnconsumedKeyEvent:)`. Esc closes the popup
+  inside Chrome (`ExtensionViewHost`). Cmd+W in the before-page call closes
+  the popup, not the tab (guess); the debug shell does this today. Every
+  other app shortcut goes through `OEApplication.keyEquivalentHandler` and
+  the main menu as usual and acts on the browser window.
 
 Dismissal (D rules; Chrome `ExtensionPopup` behavior unless marked):
 
 - D1. The panel resigns key to anything else (another Open window, the
-  browser window, another app) → close. Exception: DevTools is attached
-  to the popup ("Inspect Popup").
+  browser window, another app) → close, unless
+  `browser.extensionPopupStaysOpenOnBlur` is true at that moment: a
+  JavaScript dialog, a web-modal dialog of the popup (a WebAuthn or
+  passkey request), or DevTools on the popup ("Inspect Popup") is showing
+  (Chrome's `CloseUnlessBlockedByInspectionOrJSDialog`). The shell adds
+  its own JavaScript dialogs for tabs. Closing then would drop the
+  dialog's request (a Bitwarden passkey request).
 - D2. Click on the same action button → close. Click on another action →
   the engine closes the first and opens the second.
-- D3. Esc not consumed by the page → close.
+- D3. Esc → the engine closes the popup (`ExtensionViewHost`).
 - D4. `window.close()` in the popup → the engine reports
   `didCloseExtensionPopup`.
 - D5. The window's active tab changes (tab switch, Space switch, focused
-  pane change) → close.
+  pane change) → close. The engine closes the popup itself when
+  Chromium's active tab changes (Chrome's `ExtensionPopup`); the shell
+  still closes it for a change that does not reach the strip.
 - D6. The browser window closes, miniaturizes, or enters or leaves full
   screen → close.
 - D7. The sidebar hides (Cmd+S) while the anchor is in the sidebar →
@@ -1590,7 +1599,7 @@ measuring.
 | P2/P3 slip | Popups stay Alloy pages; no context menu; no prompts | Steps 1–4 do not need them (§10.4); `chrome://extensions` still manages |
 | `toolbarImage` font differs from Arc | Badge text looks a little different (Views `CONTEXT_BADGE` font on macOS) | Same Chromium code as Arc; compare with S-12 |
 | Hover-only slots hide badges | Users miss counts | Arc 1:1 per EX-1; Q2 lets the lead decide |
-| Popup focus and child windows | Some extensions open a native file picker or alert from the popup; focus moves and D1 closes the popup | Chrome has the same rule; keep it. Sheets from the popup attach to the panel |
+| Popup focus and child windows | Some extensions open a native file picker or a dialog from the popup; focus moves and D1 would close the popup | D1 reads `extensionPopupStaysOpenOnBlur` (JavaScript dialogs, web-modal dialogs such as WebAuthn, DevTools), as Chrome does. Sheets from the popup attach to the panel |
 | Extension shortcut conflicts with page shortcuts | Router order §6.2 (3) before the page may surprise | Matches Chrome; reported in Settings |
 | Many profiles | One `OEBrowser` per window and profile | Strips always follow the focused Space's profile |
 
@@ -1622,3 +1631,19 @@ measuring.
 - Q9 When a keyword is the same, Site Search wins over an extension omnibox keyword. The extension stays reachable by its name.
 - Extension keyboard shortcuts (`chrome.commands`) need a keybinding registry without a focus manager; see PR #53 follow-up E15.
 - The screenshots go into the user's single combined Arc capture session.
+
+## Appendix — Engine P2 as built (2026-10-26, branch `m7/ext-p2-actions`)
+
+The engine side of E1–E7 is in (docs/engine-patches.md, P2 status; docs/engine-api.md, `OEBrowser`). What the shell steps need to know:
+
+- **E1.** As specified. `extensionActions` comes from Chrome's model while the window has a live Chrome style tab (`extensionActionsReady`, `isLive`). Without one (a new window, all tabs asleep) it is the profile's list: pins, names, default titles and icons, `isLive` false; nothing runs, and there is no manifest popup fallback (engine review r1). The shell hears `browserDidUpdateExtensionActions` when the live model comes or goes.
+- **E2.** As specified, except `shortcutKeyEquivalent` and `shortcutModifierFlags`. They need the keybinding registry (E9, `docs/followups.md`). `toolbarImage` is nullable (nil without P2). `icon` is the current plain action icon (`setIcon` included), not the manifest icon. Both images are shared objects: copy one before you change its size. An unchanged image keeps its object across updates. `siteAccess` adds `.thisTab` (an `activeTab` grant).
+- **E3.** As specified. A delegate without `browser(_:didUpdate:)` gets `browserDidUpdateExtensionActions` for single-action changes too.
+- **E4.** As specified. Q4 is on: a new install (Web Store, Load unpacked) is pinned at the end of the pinned list. Extensions loaded with `--load-extension` at startup are not pinned; Chrome does the same.
+- **E5.** As specified. The engine also gives D2: running the action whose popup is open closes it (Chrome's `ExecuteUserAction` does not toggle). An action with no popup for the tab fires `onClicked`. Example: 1Password without an account calls `setPopup({popup: ""})`, so its click opens its welcome tab through `browser(_:didOpen:active:)`. A disabled action asks for its context menu (`browser(_:requestsContextMenuForExtensionAction:)`), as Chrome shows it.
+- **E6.** As specified. `didOpenExtensionPopup` comes first. `extensionPopupIsReady` comes once, when the first load stops. `didResizeExtensionPopup` comes whenever the page's size changes, so one can arrive after ready. `chrome.action.openPopup()` opens the popup with `extensionPopupSource == .api` (A4 anchor rules). Chrome allows that only for the profile's active window, and not while a popup is open. The engine closes the popup on an active-tab change (D5) and reports Chrome's keep-open state for D1 (`extensionPopupStaysOpenOnBlur`).
+- **E7.** As specified. Chromium 156 titles in this build: the extension name, "Remove from Chromium" (no ellipsis; the product name is not branded yet), "Pin"/"Unpin" (not "Pin to Toolbar"), "Manage Extension", "View Web Permissions", plus "Options", the site-access submenu, and "Inspect Popup" when they apply. The §3.6 relabel table must match "Chromium", not only "Chrome". Each `OEExtensionActionMenu` keeps its own Chrome model, so an overflow menu and a Site Control Center menu can be open together; `select(command:)` returns whether it ran. Command results seen end to end:
+  - Pin: pins.
+  - Manage Extension: opens `chrome://extensions/?id=…` as a new tab.
+  - View Web Permissions: opens `chrome://settings/content/siteDetails?site=…` as a new tab.
+  - Remove: shows Chrome's own uninstall dialog until P3 (E10).

@@ -1,0 +1,26 @@
+diff --git a/cef/libcef/browser/chrome/chrome_browser_delegate.h b/cef/libcef/browser/chrome/chrome_browser_delegate.h
+index 639ecc820..b4254ddd0 100644
+--- a/cef/libcef/browser/chrome/chrome_browser_delegate.h
++++ b/cef/libcef/browser/chrome/chrome_browser_delegate.h
+@@ -19,6 +19,10 @@ class CefWindowImpl;
+ class CefWindowView;
+ class ChromeBrowserHostImpl;
+ 
++namespace open_engine {
++class OpenExtensionPopup;
++}
++
+ // Implementation of the cef::BrowserDelegate interface. Lifespan is controlled
+ // by the Browser object. Only accessed on the UI thread.
+ //
+@@ -38,6 +42,10 @@ class ChromeBrowserHostImpl;
+ // WebContents is destroyed. The associated WebContents object does not change,
+ // but the Browser object will change when the tab is dragged between windows.
+ class ChromeBrowserDelegate : public cef::BrowserDelegate {
++  // Open (fork patch P2): an extension action popup's WebContents gets a
++  // browser host like a popup (CreateBrowserHostForPopup).
++  friend class open_engine::OpenExtensionPopup;
++
+  public:
+   // The |create_params| and |opener| values are specified via the
+   // Browser::CreateParams passed to Browser::Create. |opener| will only be

@@ -59,7 +59,11 @@ final class EngineWebContentHostFactory: NSResponder, WebContentHostFactory {
   }
   private var enteredWindowFullscreenForPage = false
   private(set) var auxiliaryPages: [AuxiliaryPage] = []
-  private var popupPanel: NSPanel?
+  private(set) var popupPanel: NSPanel?
+  #if OPEN_AUTOMATION
+  var popupCallbackClose: (phase: String, toggle: Bool)?
+  func releaseBrowsersForAutomation() -> [String: Any] { mirror.releaseWithoutClosingForAutomation() }
+  #endif
   private lazy var extensionBar = makeExtensionBar()
   private lazy var findField = makeFindField()
   private var extensionBarCreated = false
@@ -446,8 +450,11 @@ extension EngineWebContentHostFactory {
     guard app.engineReady else { return }
     extensionBar.arrangedSubviews.forEach { $0.removeFromSuperview() }
     for action in focusedBrowser?.extensionActions ?? [] {
+      // Fork patch P2: Chrome's toolbar image (badge, disabled state).
+      // A copy: the snapshot's image keeps its own size.
       let image =
-        action.icon ?? NSImage(systemSymbolName: "puzzlepiece.extension", accessibilityDescription: nil)!
+        (action.toolbarImage ?? action.icon)?.copy() as? NSImage
+        ?? NSImage(systemSymbolName: "puzzlepiece.extension", accessibilityDescription: nil)!
       image.size = NSSize(width: 18, height: 18)
       let button = NSButton(image: image, target: self, action: #selector(extensionButtonClicked(_:)))
       button.bezelStyle = .accessoryBarAction
@@ -580,6 +587,10 @@ extension EngineWebContentHostFactory {
   }
 
   @objc func closeTab(_ sender: Any?) {
+    if let popupPanel, NSApp.keyWindow === popupPanel {
+      focusedBrowser?.closeExtensionPopup()
+      return
+    }
     if let panel = NSApp.keyWindow as? NSPanel, let page = auxiliaryPages.first(where: { $0.panel === panel }) { closeAuxiliary(page); return }
     if let tab = selectedTab { closeTab(id: tab.id) }
   }
@@ -787,7 +798,21 @@ extension EngineWebContentHostFactory: OEWebContentDelegate {
   /// Key events that reach the page view directly (not through
   /// NSApplication.sendEvent) still get the reserved app shortcuts.
   func webContent(_ webContent: OEWebContent, handleKeyEventBeforePage event: NSEvent) -> Bool {
-    controller?.handleKeyDown(event) == true
+    // An action popup's keys arrive here too (Chrome's ExtensionViewHost
+    // pre-handles them through the hidden window, whose delegate is CEF's).
+    // Cmd+W closes the popup, not the tab (extensions plan §3.7 F2).
+    if let browser = focusedBrowser, webContent === browser.extensionPopup {
+      record("popupKey", webContent, ["key": event.charactersIgnoringModifiers ?? "", "phase": "beforePage"])
+      if Self.isCommandW(event) {
+        browser.closeExtensionPopup()
+        return true
+      }
+    }
+    return controller?.handleKeyDown(event) == true
+  }
+
+  private static func isCommandW(_ event: NSEvent) -> Bool {
+    event.modifierFlags.intersection(.deviceIndependentFlagsMask) == .command && event.charactersIgnoringModifiers == "w"
   }
 
   func webContentDidRequestClose(_ webContent: OEWebContent) {
@@ -926,7 +951,12 @@ extension EngineWebContentHostFactory: OEWebContentDelegate {
     }
   }
 
-  func webContent(_ webContent: OEWebContent, handleUnconsumedKeyEvent event: NSEvent) -> Bool { controller?.handleKeyDown(event, unconsumed: true) == true }
+  func webContent(_ webContent: OEWebContent, handleUnconsumedKeyEvent event: NSEvent) -> Bool {
+    if webContent === focusedBrowser?.extensionPopup {
+      record("popupKey", webContent, ["key": event.charactersIgnoringModifiers ?? "", "phase": "unconsumed"])
+    }
+    return controller?.handleKeyDown(event, unconsumed: true) == true
+  }
 
   func webContent(_ webContent: OEWebContent, didFinishLoadWithStatus status: Int) {
     finishCommandBarNavigation(webContent)
@@ -952,7 +982,23 @@ extension EngineWebContentHostFactory: OEWebContentDelegate {
 // MARK: - OEBrowserDelegate (extension actions and popups)
 
 extension EngineWebContentHostFactory: OEBrowserDelegate {
+  private func closePopupInCallbackForAutomation(_ browser: OEBrowser, popup: OEWebContent, phase: String) {
+    #if OPEN_AUTOMATION
+    guard let policy = popupCallbackClose, policy.phase == phase else { return }
+    popupCallbackClose = nil
+    if policy.toggle, let identifier = browser.extensionPopupExtensionIdentifier {
+      _ = browser.executeExtensionAction(identifier)
+    } else {
+      browser.closeExtensionPopup()
+      browser.closeExtensionPopup() // repeated requests must remain safe
+    }
+    record("popupCallbackClose", popup, ["phase": phase, "toggle": policy.toggle,
+      "stillOpenInsideCallback": browser.extensionPopup === popup])
+    #endif
+  }
+
   func browserDidUpdateExtensionActions(_ browser: OEBrowser) {
+    record("extensionActions", nil, ["browser": browser.identifier, "ready": browser.extensionActionsReady])
     if browser === focusedBrowser { reloadExtensionBar() }
   }
 
@@ -970,9 +1016,12 @@ extension EngineWebContentHostFactory: OEBrowserDelegate {
     }
     present(panel)
     record("extensionPopup", popup, ["extension": action.extensionIdentifier, "open": true])
+    closePopupInCallbackForAutomation(browser, popup: popup, phase: "open")
   }
 
   func browser(_ browser: OEBrowser, didResizeExtensionPopup popup: OEWebContent, to size: NSSize) {
+    record("extensionPopup", popup, ["resize": [size.width, size.height]])
+    closePopupInCallbackForAutomation(browser, popup: popup, phase: "resize")
     guard let panel = popupPanel else { return }
     let frame = panel.frameRect(forContentRect: NSRect(origin: .zero, size: size))
     var f = panel.frame
@@ -981,11 +1030,23 @@ extension EngineWebContentHostFactory: OEBrowserDelegate {
     panel.setFrame(f, display: true)
   }
 
+  /// Fork patch P2: the popup's first load stopped.
+  func browser(_ browser: OEBrowser, extensionPopupIsReady popup: OEWebContent) {
+    record("extensionPopup", popup, ["ready": true])
+    closePopupInCallbackForAutomation(browser, popup: popup, phase: "ready")
+  }
+
   func browser(_ browser: OEBrowser, didCloseExtensionPopup popup: OEWebContent) {
     popup.view.removeFromSuperview()
     popupPanel?.orderOut(nil)
     popupPanel = nil
     record("extensionPopup", popup, ["open": false])
+  }
+
+  /// A disabled action ran: Chrome shows its context menu (this shell only
+  /// records it).
+  func browser(_ browser: OEBrowser, requestsContextMenuForExtensionAction extensionIdentifier: String) {
+    record("extensionMenuRequest", nil, ["extension": extensionIdentifier])
   }
 }
 
