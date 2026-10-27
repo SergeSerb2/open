@@ -763,6 +763,14 @@ int64_t NowNs() {
   return static_cast<int64_t>(clock_gettime_nsec_np(CLOCK_UPTIME_RAW));
 }
 
+// The bench thread's CPU time. Wall time also counts the time the thread
+// waits for a core, which a busy machine adds to single checks; the gates
+// read wall time, and the CPU column shows how much of a slow check was the
+// check itself.
+int64_t ThreadCpuNs() {
+  return static_cast<int64_t>(clock_gettime_nsec_np(CLOCK_THREAD_CPUTIME_ID));
+}
+
 // Matcher sequence: the corpus 10x, then the G-3 long URLs 10x each.
 void RunBench(scoped_refptr<OpenAdBlockMatcher> matcher,
               std::vector<BenchItem> items,
@@ -770,8 +778,14 @@ void RunBench(scoped_refptr<OpenAdBlockMatcher> matcher,
   Line("bench matcher thread=" + std::string(base::PlatformThread::GetName()) +
        " cap=" + std::to_string(cap) + " urls=" + std::to_string(items.size()));
   std::vector<int64_t> warm;
+  std::vector<int64_t> warm_cpu;
   warm.reserve(items.size() * 9);
+  warm_cpu.reserve(items.size() * 9);
   int64_t first_max = 0;
+  int64_t first_max_cpu = 0;
+  // The warm checks with the largest wall and CPU time: line and URL length.
+  int64_t slowest_wall = -1, slowest_cpu = -1;
+  size_t slowest_wall_line = 0, slowest_cpu_line = 0;
   size_t matched = 0;
   size_t truncated = 0;
   // §7.8 manifest third_party_share: registrable domains differ (the
@@ -779,13 +793,17 @@ void RunBench(scoped_refptr<OpenAdBlockMatcher> matcher,
   size_t third_party = 0;
   std::map<std::string, int> matched_by_source;
   for (int rep = 1; rep <= 10; ++rep) {
-    for (const BenchItem& item : items) {
+    for (size_t line = 0; line < items.size(); ++line) {
+      const BenchItem& item = items[line];
+      const int64_t start_cpu = ThreadCpuNs();
       const int64_t start = NowNs();
       const open_adblock::OpenBlockerResult result =
           matcher->Check(item.url, item.source, item.type, cap);
       const int64_t ns = NowNs() - start;
+      const int64_t cpu_ns = ThreadCpuNs() - start_cpu;
       if (rep == 1) {
         first_max = std::max(first_max, ns);
+        first_max_cpu = std::max(first_max_cpu, cpu_ns);
         matched += result.matched;
         truncated += result.truncated;
         third_party += !net::registry_controlled_domains::SameDomainOrHost(
@@ -796,10 +814,28 @@ void RunBench(scoped_refptr<OpenAdBlockMatcher> matcher,
         }
       } else {
         warm.push_back(ns);
+        warm_cpu.push_back(cpu_ns);
+        if (ns > slowest_wall) {
+          slowest_wall = ns;
+          slowest_wall_line = line + 1;
+        }
+        if (cpu_ns > slowest_cpu) {
+          slowest_cpu = cpu_ns;
+          slowest_cpu_line = line + 1;
+        }
       }
     }
   }
   PrintTimings("bench corpus", std::move(warm), first_max);
+  PrintTimings("bench corpus cpu", std::move(warm_cpu), first_max_cpu);
+  if (!items.empty()) {
+    Line("bench corpus slowest wall: line=" + std::to_string(slowest_wall_line) +
+         " url_length=" +
+         std::to_string(items[slowest_wall_line - 1].url.spec().size()) +
+         "; slowest cpu: line=" + std::to_string(slowest_cpu_line) +
+         " url_length=" +
+         std::to_string(items[slowest_cpu_line - 1].url.spec().size()));
+  }
   Line("bench corpus matched=" + std::to_string(matched) +
        " truncated=" + std::to_string(truncated) +
        " third_party=" + std::to_string(third_party));

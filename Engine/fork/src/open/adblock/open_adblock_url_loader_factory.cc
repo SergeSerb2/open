@@ -63,27 +63,45 @@ std::array<std::atomic<uint64_t>, kLatencyBuckets>& LatencyBuckets() {
 }
 
 // G-5 (§7.8): the matcher sequence's time in proxies and loaders, summed over
-// the process.
+// the process: wall time, and (non-official builds) the thread's CPU time,
+// which leaves out the time the thread waited for a core.
 std::atomic<uint64_t>& BusyNanoseconds() {
   static std::atomic<uint64_t> nanoseconds{0};
   return nanoseconds;
 }
+std::atomic<uint64_t>& BusyCpuNanoseconds() {
+  static std::atomic<uint64_t> nanoseconds{0};
+  return nanoseconds;
+}
 
-// Adds its own lifetime to BusyNanoseconds(). Safe in methods that destroy
+// Adds its own lifetime to the busy counters. Safe in methods that destroy
 // their object: it touches only the stack.
 class BusyScope {
  public:
-  BusyScope() : start_(base::TimeTicks::Now()) {}
+  BusyScope() : start_(base::TimeTicks::Now()) {
+#if !defined(OFFICIAL_BUILD)
+    start_cpu_ = base::ThreadTicks::Now();
+#endif
+  }
   BusyScope(const BusyScope&) = delete;
   BusyScope& operator=(const BusyScope&) = delete;
   ~BusyScope() {
     BusyNanoseconds().fetch_add(
         static_cast<uint64_t>((base::TimeTicks::Now() - start_).InNanoseconds()),
         std::memory_order_relaxed);
+#if !defined(OFFICIAL_BUILD)
+    BusyCpuNanoseconds().fetch_add(
+        static_cast<uint64_t>(
+            (base::ThreadTicks::Now() - start_cpu_).InNanoseconds()),
+        std::memory_order_relaxed);
+#endif
   }
 
  private:
   const base::TimeTicks start_;
+#if !defined(OFFICIAL_BUILD)
+  base::ThreadTicks start_cpu_;
+#endif
 };
 
 // --- Request mapping (§7.3) ----------------------------------------------
@@ -217,6 +235,10 @@ void RecordAdBlockRequestLatency(base::TimeDelta latency) {
 
 uint64_t AdBlockMatcherBusyMicroseconds() {
   return BusyNanoseconds().load(std::memory_order_relaxed) / 1000;
+}
+
+uint64_t AdBlockMatcherBusyCpuMicroseconds() {
+  return BusyCpuNanoseconds().load(std::memory_order_relaxed) / 1000;
 }
 
 std::string AdBlockLatencyHistogramText() {

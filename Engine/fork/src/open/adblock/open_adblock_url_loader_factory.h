@@ -62,6 +62,8 @@ std::string AdBlockLatencyHistogramText();
 // G-5 (§7.8): the time the matcher sequence spent in proxies and loaders
 // (checks included) since the process started. Any thread.
 uint64_t AdBlockMatcherBusyMicroseconds();
+// The same as thread CPU time; 0 in official builds.
+uint64_t AdBlockMatcherBusyCpuMicroseconds();
 
 // The proxy of one URLLoaderFactory (§7.4, §7.5). Lives on the matcher
 // sequence, owns its loaders, and deletes itself when its receivers are gone

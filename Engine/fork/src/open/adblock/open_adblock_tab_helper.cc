@@ -89,9 +89,12 @@ void OpenAdBlockTabHelper::MaybeLogSmoke() const {
   }
   const GURL url = web_contents()->GetPrimaryMainFrame()->GetLastCommittedURL();
   // busy_us: process-wide, for the G-5 harness (§7.8).
-  fprintf(stderr, "OpenAdBlockSmoke: blocked_count=%d url_host=%s busy_us=%llu\n",
+  fprintf(stderr,
+          "OpenAdBlockSmoke: blocked_count=%d url_host=%s busy_us=%llu "
+          "busy_cpu_us=%llu\n",
           total_count(), std::string(url.host()).c_str(),
-          static_cast<unsigned long long>(AdBlockMatcherBusyMicroseconds()));
+          static_cast<unsigned long long>(AdBlockMatcherBusyMicroseconds()),
+          static_cast<unsigned long long>(AdBlockMatcherBusyCpuMicroseconds()));
 #endif
 }
 
