@@ -1,0 +1,555 @@
+{
+  "code_head": "64876d7e65a859a40e5b447c04e24c135a50834b",
+  "e2e_code_head": "7b18870634e6141cfff962c9acf417148edfa2e8",
+  "engine": {
+    "distributionCodeSHA256": "35b37ba3a72d079ed4e76fc7932bfe76e49b57c3456eda06f7fea9d928b901ae",
+    "distributionSHA256": "61c9ab17b6b08525af836cca93bba67819bfa1544f04abe5eae3baf4b57b98a8",
+    "distributionUUID": "4C4C44C8-5555-3144-A168-35B709BBDA3A",
+    "embeddedCodeSHA256": "35b37ba3a72d079ed4e76fc7932bfe76e49b57c3456eda06f7fea9d928b901ae",
+    "embeddedSHA256": "3e246c99539902496c44c4c6ed2533f3f4fd4a85f03b4f5e6dcaaf49f75f28d2",
+    "embeddedUUID": "4C4C44C8-5555-3144-A168-35B709BBDA3A",
+    "requiredSHA256": "61c9ab17b6b08525af836cca93bba67819bfa1544f04abe5eae3baf4b57b98a8",
+    "source": "fork",
+    "stamp": "fork /Users/serge/Developer/open-engine/chromium_git/chromium/src/cef/binary_distrib/cef_binary_156.0.14+g4fa4ab5+chromium-156.0.8078.48_macosarm64_minimal 1793075034"
+  },
+  "fixed": {
+    "checks": {
+      "context_menu_allowlist": {
+        "dropped_seen": {},
+        "kept_missing": {},
+        "menus": {
+          "editable": [
+            "Look Up \u201cMispeled wordd\u201d",
+            "",
+            "Emoji & Symbols",
+            "",
+            "Undo",
+            "Redo",
+            "",
+            "Cut",
+            "Copy",
+            "Paste",
+            "Paste and Match Style",
+            "Select All",
+            "",
+            "Print\u2026",
+            "",
+            "Writing Direction",
+            "",
+            "Open tabs probe",
+            "",
+            "Inspect",
+            "",
+            "Speech"
+          ],
+          "image": [
+            "Open Image in New Tab",
+            "Save Image As\u2026",
+            "Copy Image",
+            "Copy Image Address",
+            "",
+            "Open tabs probe",
+            "",
+            "Inspect"
+          ],
+          "link": [
+            "Open Link in New Tab",
+            "Open Link in New Window",
+            "",
+            "Save Link As\u2026",
+            "Copy Link Address",
+            "",
+            "Copy",
+            "Copy Link to Highlight",
+            "Print\u2026",
+            "",
+            "Open tabs probe",
+            "",
+            "Inspect",
+            "",
+            "Speech"
+          ],
+          "page": [
+            "Back",
+            "Forward",
+            "Reload",
+            "",
+            "Save As\u2026",
+            "Print\u2026",
+            "",
+            "Open tabs probe",
+            "",
+            "View Page Source",
+            "Inspect"
+          ],
+          "selection": [
+            "Look Up \u201cSelectable sentence for the context menu check.\u201d",
+            "",
+            "Copy",
+            "Copy Link to Highlight",
+            "Print\u2026",
+            "",
+            "Open tabs probe",
+            "",
+            "Inspect",
+            "",
+            "Speech"
+          ],
+          "video": [
+            "Loop",
+            "Show All Controls",
+            "",
+            "Open Video in New Tab",
+            "Save Video Frame As\u2026",
+            "Save Video As\u2026",
+            "Copy Video Frame",
+            "Copy Video Address",
+            "Picture in Picture",
+            "",
+            "Open tabs probe",
+            "",
+            "Inspect"
+          ]
+        },
+        "ok": true,
+        "separators": {}
+      },
+      "context_menu_commands": {
+        "crashed": null,
+        "disabled_submenu": {
+          "clicks": 0,
+          "found": true,
+          "id": 49004
+        },
+        "dismissed": [],
+        "failures": [],
+        "hidden_command": {
+          "foreign_windows": [],
+          "id": 50102,
+          "new_windows": [],
+          "window_requests": []
+        },
+        "ok": true,
+        "ran": 0,
+        "scope": "models_and_refusals",
+        "skipped": [],
+        "targets": {
+          "editable": [],
+          "image": [],
+          "link": [],
+          "page": [],
+          "selection": [],
+          "video": []
+        },
+        "video": "video.webm"
+      },
+      "context_menu_disabled_submenu_refused": {
+        "clicks": 0,
+        "found": true,
+        "id": 49004,
+        "ok": true
+      },
+      "context_menu_hidden_command_refused": {
+        "foreign_windows": [],
+        "id": 50102,
+        "new_windows": [],
+        "ok": true,
+        "window_requests": []
+      }
+    },
+    "cleanup": {
+      "forced": false,
+      "ok": true,
+      "owned_pids": [
+        90644,
+        90825,
+        90826,
+        90829,
+        90831,
+        90833,
+        90835,
+        90895
+      ],
+      "remaining_processes": [],
+      "reply": true,
+      "windows_after_quit": {
+        "count": 0,
+        "windows": []
+      },
+      "windows_before_quit": 1
+    },
+    "expected": true
+  },
+  "inherited_pr93": "4625aa18538c437a768e550a44083f27340700a5",
+  "main": "b5d042b45a5aa90f07e7e585959758a46cf244fe",
+  "main_merge_evidence": "Incoming6f88195..b5d042b changes no App/, Engine/, tools/e2e/, or project.yml; Release/full gate rerun after merge.",
+  "mutation": "Remove only IsVisibleAt filtering and the disabled-parent OECollectCommands guard; keep the fixtures and real context_menu_commands flow unchanged.",
+  "old": {
+    "checks": {
+      "context_menu_allowlist": {
+        "dropped_seen": {
+          "editable": [
+            "Invisible tabs probe item"
+          ],
+          "image": [
+            "Invisible tabs probe item"
+          ],
+          "link": [
+            "Invisible tabs probe item"
+          ],
+          "page": [
+            "Invisible tabs probe item"
+          ],
+          "selection": [
+            "Invisible tabs probe item"
+          ],
+          "video": [
+            "Invisible tabs probe item"
+          ]
+        },
+        "kept_missing": {},
+        "menus": {
+          "editable": [
+            "Look Up \u201cMispeled wordd\u201d",
+            "",
+            "Emoji & Symbols",
+            "",
+            "Undo",
+            "Redo",
+            "",
+            "Cut",
+            "Copy",
+            "Paste",
+            "Paste and Match Style",
+            "Select All",
+            "",
+            "Print\u2026",
+            "",
+            "Writing Direction",
+            "",
+            "Open tabs probe",
+            "",
+            "Inspect",
+            "",
+            "Speech"
+          ],
+          "image": [
+            "Open Image in New Tab",
+            "Save Image As\u2026",
+            "Copy Image",
+            "Copy Image Address",
+            "",
+            "Open tabs probe",
+            "",
+            "Inspect"
+          ],
+          "link": [
+            "Open Link in New Tab",
+            "Open Link in New Window",
+            "",
+            "Save Link As\u2026",
+            "Copy Link Address",
+            "",
+            "Copy",
+            "Copy Link to Highlight",
+            "Print\u2026",
+            "",
+            "Open tabs probe",
+            "",
+            "Inspect",
+            "",
+            "Speech"
+          ],
+          "page": [
+            "Back",
+            "Forward",
+            "Reload",
+            "",
+            "Save As\u2026",
+            "Print\u2026",
+            "",
+            "Open tabs probe",
+            "",
+            "View Page Source",
+            "Inspect"
+          ],
+          "selection": [
+            "Look Up \u201cSelectable sentence for the context menu check.\u201d",
+            "",
+            "Copy",
+            "Copy Link to Highlight",
+            "Print\u2026",
+            "",
+            "Open tabs probe",
+            "",
+            "Inspect",
+            "",
+            "Speech"
+          ],
+          "video": [
+            "Loop",
+            "Show All Controls",
+            "",
+            "Open Video in New Tab",
+            "Save Video Frame As\u2026",
+            "Save Video As\u2026",
+            "Copy Video Frame",
+            "Copy Video Address",
+            "Picture in Picture",
+            "",
+            "Open tabs probe",
+            "",
+            "Inspect"
+          ]
+        },
+        "ok": false,
+        "separators": {}
+      },
+      "context_menu_commands": {
+        "crashed": null,
+        "disabled_submenu": {
+          "clicks": 1,
+          "found": true,
+          "id": 49004
+        },
+        "dismissed": [],
+        "failures": [],
+        "hidden_command": {
+          "foreign_windows": [],
+          "id": 50102,
+          "new_windows": [],
+          "window_requests": []
+        },
+        "ok": true,
+        "ran": 0,
+        "scope": "models_and_refusals",
+        "skipped": [],
+        "targets": {
+          "editable": [],
+          "image": [],
+          "link": [],
+          "page": [],
+          "selection": [],
+          "video": []
+        },
+        "video": "video.webm"
+      },
+      "context_menu_disabled_submenu_refused": {
+        "clicks": 1,
+        "found": true,
+        "id": 49004,
+        "ok": false
+      },
+      "context_menu_hidden_command_refused": {
+        "foreign_windows": [],
+        "id": 50102,
+        "new_windows": [],
+        "ok": true,
+        "window_requests": []
+      }
+    },
+    "cleanup": {
+      "forced": false,
+      "ok": true,
+      "owned_pids": [
+        88083,
+        88377,
+        88379,
+        88389,
+        88400,
+        88402,
+        88404,
+        88614
+      ],
+      "remaining_processes": [],
+      "reply": true,
+      "windows_after_quit": {
+        "count": 0,
+        "windows": []
+      },
+      "windows_before_quit": 1
+    },
+    "expected": true
+  },
+  "status": "VALIDATED_NEW_ENGINE",
+  "suites": {
+    "actions": {
+      "cleanup": {
+        "ok": true,
+        "processes": [
+          {
+            "forced": false,
+            "ok": true,
+            "owned_pids": [
+              309,
+              2389,
+              2465,
+              2830,
+              2915,
+              3123,
+              3860,
+              4173,
+              4178,
+              4203,
+              4454,
+              96038,
+              96127,
+              96128,
+              96129,
+              96211,
+              96212,
+              96214,
+              96215,
+              96312,
+              96393,
+              96427,
+              96520,
+              96812,
+              96921,
+              96987,
+              97105,
+              97219,
+              97432,
+              98001,
+              98038,
+              98444,
+              98563,
+              98565,
+              98583,
+              98681,
+              98779,
+              98879,
+              99302,
+              99478,
+              99576
+            ],
+            "remaining_processes": [],
+            "reply": true,
+            "windows_after_quit": {
+              "count": 0,
+              "windows": []
+            },
+            "windows_before_quit": 2
+          }
+        ]
+      },
+      "interrupted_attempts": 0,
+      "pass": 26,
+      "total": 26
+    },
+    "extensions": {
+      "cleanup": {
+        "ok": true,
+        "processes": [
+          {
+            "forced": false,
+            "ok": true,
+            "owned_pids": [
+              6430,
+              6512,
+              6513,
+              6514,
+              6731,
+              6732,
+              6737,
+              6738,
+              6739,
+              6756,
+              6757,
+              7744,
+              9927,
+              10076,
+              10101,
+              10231,
+              10232,
+              10253,
+              10487
+            ],
+            "remaining_processes": [],
+            "reply": true,
+            "windows_after_quit": {
+              "count": 0,
+              "windows": []
+            },
+            "windows_before_quit": 2
+          }
+        ]
+      },
+      "interrupted_attempts": 0,
+      "pass": 8,
+      "total": 8
+    },
+    "tabstrip": {
+      "cleanup": {
+        "ok": true,
+        "processes": [
+          {
+            "forced": false,
+            "ok": true,
+            "owned_pids": [
+              92081,
+              92098,
+              92099,
+              92100,
+              92129,
+              92130,
+              92132,
+              92133,
+              92157,
+              92374,
+              92450,
+              92476,
+              92478,
+              92825,
+              93005,
+              93098,
+              93149,
+              93192,
+              93241,
+              93330,
+              93337,
+              93397,
+              93398,
+              93448,
+              93480,
+              93487,
+              93735,
+              93737,
+              94953,
+              95451,
+              96360,
+              96993,
+              97008,
+              97409,
+              98625,
+              98633,
+              98844,
+              98933,
+              99237,
+              99347,
+              99468,
+              99472,
+              99502
+            ],
+            "remaining_processes": [],
+            "reply": true,
+            "windows_after_quit": {
+              "count": 0,
+              "windows": []
+            },
+            "windows_before_quit": 1
+          }
+        ]
+      },
+      "interrupted_attempts": 0,
+      "pass": 28,
+      "total": 28
+    }
+  },
+  "verify": {
+    "fail": 0,
+    "logs": "/var/folders/s6/_07cr4w13vsg_myjkv9ldpqc0000gn/T/open-verify-20261026-230433.4zM7bW",
+    "pass": 22,
+    "skip": 0
+  }
+}

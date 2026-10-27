@@ -4,7 +4,7 @@
       "first": {
         "bytes": 5120,
         "hash": "562998a981ed6661a9258dd52c9bf0c615933f170c986853f8bf429eaf1cff6c",
-        "object": 609122544288107094,
+        "object": -5652882173118005306,
         "pixels": [
           [
             16,
@@ -21,7 +21,7 @@
       "tab_b": {
         "bytes": 5120,
         "hash": "562998a981ed6661a9258dd52c9bf0c615933f170c986853f8bf429eaf1cff6c",
-        "object": 609122544288107094,
+        "object": -5652882173118005306,
         "pixels": [
           [
             16,
@@ -92,7 +92,7 @@
         "icon": {
           "bytes": 5120,
           "hash": "562998a981ed6661a9258dd52c9bf0c615933f170c986853f8bf429eaf1cff6c",
-          "object": 1015951338876875090,
+          "object": -841348581108835394,
           "pixels": [
             [
               16,
@@ -116,7 +116,7 @@
         "toolbarImage": {
           "bytes": 15680,
           "hash": "c4ede19eb9ae69945177729de707be016351e6351aa582ae9d848ec71f097243",
-          "object": -3840494411454011860,
+          "object": 7498215577641648281,
           "pixels": [
             [
               28,
@@ -162,7 +162,7 @@
           "content": 0,
           "extension": "jihnllejimhgcmfmcnchbekapeajboik",
           "tab": "",
-          "time": 1793078275.615746,
+          "time": 1793079916.513871,
           "type": "extensionMenuRequest"
         }
       ]
@@ -203,7 +203,7 @@
         "icon": {
           "bytes": 5120,
           "hash": "7d646905a308a8e5b9980dfc80bd46121f3e499467c0e735cb5d1356aff5b950",
-          "object": 3852934191552206580,
+          "object": -3179489844290632656,
           "pixels": [
             [
               16,
@@ -227,7 +227,7 @@
         "toolbarImage": {
           "bytes": 15680,
           "hash": "20aa85807abe2fed5aa5a6379ef514a083f80c9b9f7a0a43120ac5b8ab4a6e5c",
-          "object": 3463182269738938123,
+          "object": 6148176928752803882,
           "pixels": [
             [
               28,
@@ -257,7 +257,7 @@
       "popup_opened": false,
       "storage": {
         "clicks": 1,
-        "lastClickTab": 1391089822
+        "lastClickTab": 814994580
       }
     },
     "open_popup_api": {
@@ -317,7 +317,7 @@
               "phase": "open",
               "stillOpenInsideCallback": true,
               "tab": "",
-              "time": 1793078282.2459579,
+              "time": 1793079923.110506,
               "toggle": false,
               "type": "popupCallbackClose"
             }
@@ -333,7 +333,7 @@
               "phase": "open",
               "stillOpenInsideCallback": true,
               "tab": "",
-              "time": 1793078282.3199692,
+              "time": 1793079923.207614,
               "toggle": true,
               "type": "popupCallbackClose"
             }
@@ -349,7 +349,7 @@
               "phase": "ready",
               "stillOpenInsideCallback": true,
               "tab": "",
-              "time": 1793078283.569711,
+              "time": 1793079924.429698,
               "toggle": false,
               "type": "popupCallbackClose"
             }
@@ -365,7 +365,7 @@
               "phase": "ready",
               "stillOpenInsideCallback": true,
               "tab": "",
-              "time": 1793078284.153744,
+              "time": 1793079924.9786758,
               "toggle": true,
               "type": "popupCallbackClose"
             }
@@ -381,7 +381,7 @@
               "phase": "resize",
               "stillOpenInsideCallback": true,
               "tab": "",
-              "time": 1793078282.444972,
+              "time": 1793079923.3008099,
               "toggle": false,
               "type": "popupCallbackClose"
             }
@@ -397,7 +397,7 @@
               "phase": "resize",
               "stillOpenInsideCallback": true,
               "tab": "",
-              "time": 1793078283.00733,
+              "time": 1793079923.862629,
               "toggle": true,
               "type": "popupCallbackClose"
             }
@@ -463,11 +463,11 @@
       "ok": true
     },
     "split_pane_action_and_menu": {
-      "expected_tab": 1391089824,
+      "expected_tab": 814994582,
       "menu_action_title": "Split right",
       "ok": true,
       "popup_stayed_open": true,
-      "popup_tab": 1391089824
+      "popup_tab": 814994582
     },
     "tab_switch_closes_popup": {
       "ok": true
@@ -507,47 +507,47 @@
         "forced": false,
         "ok": true,
         "owned_pids": [
-          46735,
-          46740,
-          46741,
-          46745,
-          46792,
-          46793,
-          46802,
-          46810,
-          46843,
-          46932,
-          46933,
-          46934,
-          46937,
-          46941,
-          46957,
-          46967,
-          46971,
-          46986,
-          47110,
-          47112,
-          47132,
-          47144,
-          47146,
-          47148,
-          47171,
-          47217,
-          47219,
-          47278,
-          47282,
-          47284,
-          47379,
-          47502,
-          47733,
-          48274,
-          48424,
-          48639,
-          49279,
-          49445,
-          49454,
-          49487,
-          49798
+          309,
+          2389,
+          2465,
+          2830,
+          2915,
+          3123,
+          3860,
+          4173,
+          4178,
+          4203,
+          4454,
+          96038,
+          96127,
+          96128,
+          96129,
+          96211,
+          96212,
+          96214,
+          96215,
+          96312,
+          96393,
+          96427,
+          96520,
+          96812,
+          96921,
+          96987,
+          97105,
+          97219,
+          97432,
+          98001,
+          98038,
+          98444,
+          98563,
+          98565,
+          98583,
+          98681,
+          98779,
+          98879,
+          99302,
+          99478,
+          99576
         ],
         "remaining_processes": [],
         "reply": true,
@@ -555,7 +555,7 @@
           "count": 0,
           "windows": []
         },
-        "windows_before_quit": 1
+        "windows_before_quit": 2
       }
     ]
   },
@@ -585,10 +585,10 @@
       "AttributeGraph",
       "AttributeGraph graph data"
     ],
-    "pid": 46735,
-    "root": "/Users/serge/Library/Application Support/Open-E2E-actions-chrome-46514-b6be8d44",
-    "userData": "/Users/serge/Library/Application Support/Open-E2E-actions-chrome-46514-b6be8d44/Engine"
+    "pid": 96038,
+    "root": "/Users/serge/Library/Application Support/Open-E2E-actions-chrome-95467-701a3623",
+    "userData": "/Users/serge/Library/Application Support/Open-E2E-actions-chrome-95467-701a3623/Engine"
   },
-  "started": "2026-10-26 22:17:46",
+  "started": "2026-10-26 22:45:07",
   "style": "chrome"
 }
