@@ -37,6 +37,32 @@ enum SiteControlCompare {
                      Element(name: "More glyph",region: CGRect(x: body.minX+202,y: footer+9,width: 16,height: 14),kind: .ink),
                      Element(name: "top rim",region: body,kind: .fill(CGRect(x: body.minX+37,y: body.minY,width: 1,height: 1))),
                      Element(name: "bottom rim",region: body,kind: .fill(CGRect(x: body.minX+37,y: body.maxY-1,width: 1,height: 1)))]
+        // §8.3: Developer Mode is masked. Open's allowed PiP row is
+        // compared with the captured second Settings row, in window coordinates.
+        func text(_ name: String,_ x: CGFloat,_ y: CGFloat,_ w: CGFloat,_ h: CGFloat) {
+            elements.append(Element(name: name,region: CGRect(x: body.minX+x,y: body.minY+y,width: w,height: h),kind: .text))
+        }
+        text("Extensions label",8,52,90,20)
+        let tile = CGRect(x: body.minX+10,y: body.minY+79,width: 48,height: 32)
+        elements.append(Element(name: "Extension + tile",region: tile.insetBy(dx: -2,dy: -2),kind: .fill(CGRect(x: tile.minX+6,y: tile.minY+25,width: 3,height: 3))))
+        elements.append(Element(name: "Extension + glyph",region: tile.insetBy(dx: 15,dy: 6),kind: .ink))
+        let boost = state == "scc-boost" || state == "scc-hover-boost"
+        let settingsOffset: CGFloat = boost ? 75 : 0
+        text("Settings label",8,127+settingsOffset,75,20)
+        let row = CGRect(x: body.minX+10,y: body.minY+197+settingsOffset,width: 32,height: 32)
+        elements.append(Element(name: "PiP circle",region: row.insetBy(dx: -1,dy: -1),kind: .fill(CGRect(x: row.minX+5,y: row.minY+5,width: 2,height: 2))))
+        elements.append(Element(name: "PiP knocked-out gear",region: row.insetBy(dx: 8,dy: 8),kind: .ink))
+        text("PiP title",49,197+settingsOffset,178,16)
+        text("PiP subtitle",49,214+settingsOffset,90,17)
+        elements.append(Element(name: "separator",region: body,kind: .fill(CGRect(x: body.minX+180,y: body.maxY-53,width: 30,height: 1))))
+        if boost {
+            text("Boosts label",8,127,75,20)
+            let circle = CGRect(x: body.minX+10,y: body.minY+154,width: 32,height: 32)
+            elements.append(Element(name: "Boost circle",region: circle.insetBy(dx: -1,dy: -1),kind: .fill(CGRect(x: circle.minX+5,y: circle.minY+5,width: 2,height: 2))))
+            elements.append(Element(name: "Boost knocked-out brush and sparkles",region: circle.insetBy(dx: 4,dy: 4),kind: .ink))
+            text("Boost name",49,154,150,16); text("Boost subtitle",49,171,90,17)
+        }
+        if boost { elements = elements.filter { $0.name.hasPrefix("Boost") } }
         var table = "| Element | Arc ink box | Open ink box | Max edge error (pt) | DE00 | Result |\n|---|---|---|---|---|---|\n", failed = 0, deferred = 0
         for element in elements {
             let ab: CGRect?,ob: CGRect?,ac: [Double]?,oc: [Double]?
@@ -51,14 +77,14 @@ enum SiteControlCompare {
             case .ink,.text: (ab,ac) = arc.ink(element.region); (ob,oc) = ours.ink(element.region)
             case .fill(let sample): ac = arc.mean(sample); oc = ours.mean(sample)
                 // Sample-only gradient/rim rows have no separate positional gate.
-                if element.name.contains("gradient") || element.name.contains("highlight") || element.name.contains("rim") || element.name.hasSuffix(" ring") { ab = nil; ob = nil }
+                if element.name.contains("gradient") || element.name.contains("highlight") || element.name.contains("rim") || element.name == "separator" || element.name.hasSuffix(" ring") { ab = nil; ob = nil }
                 else { ab = arc.inkBox(element.region,contrastFrom: sample); ob = ours.inkBox(element.region,contrastFrom: sample) }
             }
             let error = ab.flatMap { a in ob.map { o in [abs(a.minX-o.minX),abs(a.minY-o.minY),abs(a.maxX-o.maxX),abs(a.maxY-o.maxY)].max()! } }
             let de = ac.flatMap { a in oc.map { ColorMath.deltaE2000(a,$0) } }
             let textOnly: Bool; if case .text = element.kind { textOnly = true } else { textOnly = false }
             let requiresBox: Bool
-            switch element.kind { case .ink,.text,.arrow: requiresBox = true; case .ring: requiresBox = false; case .fill: requiresBox = !element.name.contains("gradient") && !element.name.contains("highlight") && !element.name.contains("rim") && !element.name.hasSuffix(" ring") }
+            switch element.kind { case .ink,.text,.arrow: requiresBox = true; case .ring: requiresBox = false; case .fill: requiresBox = !element.name.contains("gradient") && !element.name.contains("highlight") && !element.name.contains("rim") && element.name != "separator" && !element.name.hasSuffix(" ring") }
             let pass = (!requiresBox || (ab != nil && ob != nil)) && (error ?? 0)<=1 && (textOnly || (de ?? .infinity)<=2)
             // Lead ruling 2026-10-26: the window-only recorder has neither
             // cursor coordinates nor mouse-button state. Keep the fixed glyph
@@ -69,7 +95,7 @@ enum SiteControlCompare {
             table += "| \(element.name) | \(box(ab)) | \(box(ob)) | \(error.map { String(format: "%.2f",$0) } ?? "—") | \(de.map { String(format: "%.2f",$0) } ?? "—") | \(unconfirmedShare ? "DEFERRED: hover or press, unconfirmed" : (pass ? "PASS" : "FAIL")) |\n"
         }
         table += "\n| Material probe | Arc sRGB | Open sRGB | DE00 | Result |\n|---|---|---|---|---|\n"
-        for (x,y,gated) in [(150,330,true),(180,240,true),(240,330,true),(260,250,true),(235,180,false),(300,330,false)] {
+        for (x,y,gated) in (boost ? [] : [(150,330,true),(180,240,true),(240,330,true),(260,270,true),(235,180,false),(300,330,false)]) {
             let a = arc.pixel(x,y),o = ours.pixel(x,y),de = ColorMath.deltaE2000(a,o)
             let pass = de<=3
             if gated && !pass { failed += 1 }
@@ -77,14 +103,14 @@ enum SiteControlCompare {
             table += "| (\(x), \(y)) | #\(rgb(a)) | #\(rgb(o)) | \(String(format: "%.2f",de)) | \(gated ? (pass ? "PASS" : "FAIL") : "reported, not gated") |\n"
         }
         table += "\n| Offscreen glow edge | Set | Arc sRGB | Open sRGB | DE00 | Result |\n|---|---|---|---|---|---|\n"
-        for (x,y,fit) in [(120,91,true),(140,91,false),(160,91,false),(180,91,false),(120,387,true),(140,387,false),(160,387,false),(180,387,false)] {
+        for (x,y,fit) in (boost ? [] : [(120,91,true),(140,91,false),(160,91,false),(180,91,false),(120,Int(body.maxY)-1,true),(140,Int(body.maxY)-1,false),(160,Int(body.maxY)-1,false),(180,Int(body.maxY)-1,false)]) {
             let a = arc.pixel(x,y),o = ours.pixel(x,y),de = ColorMath.deltaE2000(a,o)
             if !fit && de>2 { failed += 1 }
             func rgb(_ p: [Double]) -> String { p.map { String(format: "%02X",Int($0.rounded())) }.joined() }
             table += "| (\(x), \(y)) | \(fit ? "fit" : "held out") | #\(rgb(a)) | #\(rgb(o)) | \(String(format: "%.2f",de)) | \(de<=2 ? "PASS" : "FAIL") |\n"
         }
         if deferred>0 { table += "\n\(deferred) comparison deferred per lead ruling 2026-10-26: S2 09/0016 has no recorded pointer coordinates or mouse-button state. Raw values remain above; no threshold was changed.\n" }
-        table += "\nStep 1 chrome only. Section labels, extension tile, row titles and row behavior are Step 2. Developer Mode is masked per Q14. Real-app material/S11-S13 are deferred to Step 3 per plan §12/§11.\n"
+        table += "\nStep 2 chrome and sections. Developer Mode is masked per Q14. Real-app material/S11-S13 are deferred to Step 3 per plan §12/§11.\n"
         try FileManager.default.createDirectory(at: directory,withIntermediateDirectories: true)
         try table.write(to: directory.appendingPathComponent("table.md"),atomically: true,encoding: .utf8)
         // No Arc pixels outside this private directory, including underlying sidebar data.

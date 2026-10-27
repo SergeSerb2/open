@@ -42,11 +42,13 @@ final class Stage {
     private var materialFrame: CGRect?
     private let syntheticMaterialKey: String?
     private static var syntheticSurfaces: [String: CGImage] = [:]
+    private var overlayCapture: NativeOverlayCapture?
     private let appearance: ContentAppearance
     let state: String
     init(state: String = "scc-no-boosts",scale: CGFloat = 1,appearance: ContentAppearance = .dark,source: FakeSource? = nil,open: Bool = true,sidebarWidth: CGFloat = 228,size: CGSize = CGSize(width: 1000,height: 760),privateBackdrop: CGImage? = nil) {
         self.state = state; self.scale = scale; self.appearance = appearance
         self.source = source ?? FakeSource()
+        if source == nil { self.source.configure(state) }
         let fixtureSize = state == "scc-clamped" ? CGSize(width: 400,height: 300) : size
         syntheticMaterialKey = privateBackdrop == nil ? "\(state == "scc-pane-anchor")|\(fixtureSize)|\(sidebarWidth)|\(scale)|\(appearance)" : nil
         root = Backdrop(frame: CGRect(origin: .zero,size: fixtureSize)); root.sidebarWidth = sidebarWidth; root.privateBackdrop = privateBackdrop; root.showsPaneBar = state == "scc-pane-anchor"; root.appearance = appearance.nsAppearance
@@ -71,10 +73,16 @@ final class Stage {
         }
         for b in controller.view.panel.controls {
             let id = b.controlID.replacingOccurrences(of: "action.",with: "")
-            if let phase = MaterialFallback.phases[id] { b.symbolPhase = phase }
+            if let phase = MaterialFallback.phases[b.symbol == "gearshape.fill" ? "gear" : id] { b.symbolPhase = phase }
         }
         prepareMaterial(); OffscreenRenderer.settle(root)
         openCPU = Double(clock_gettime_nsec_np(CLOCK_THREAD_CPUTIME_ID)-cpu)/1_000_000; openWall = Double(DispatchTime.now().uptimeNanoseconds-wall)/1_000_000
+        if state == "scc-picker" { controller.present(anchor: .urlField,tabID: self.source.tabID,mode: .extensionPicker,animated: false) }
+        if state == "scc-reload" { controller.view.panel.showsReload = true; self.source.changed(); prepareMaterial() }
+        if state == "scc-focus-boost",let row = controller.view.panel.controls.first(where: { $0.controlID.hasSuffix(".row") }) { controller.view.panel.focus(row) }
+        if state == "scc-keyboard-focus" { controller.view.panel.focus(controller.view.panel.control(id: "extension.add")!) }
+        if state == "scc-hover-label" { controller.view.panel.control(id: "section.extensions")?.mouseEntered(with: NSEvent()); OffscreenRenderer.settle(root); RunLoop.main.run(until: Date().addingTimeInterval(Motion.hoverFade+0.01)) }
+        if state == "scc-hover-boost",let row = controller.view.panel.controls.first(where: { $0.controlID.hasSuffix(".row") }) { row.mouseEntered(with: NSEvent()); OffscreenRenderer.settle(root) }
         if state == "scc-hover-action" { controller.view.panel.controls.first?.mouseEntered(with: NSEvent()); OffscreenRenderer.settle(root); RunLoop.main.run(until: Date().addingTimeInterval(Motion.hoverFade+0.01)) }
     }
     isolated deinit { controller.view.removeFromSuperview(); window.contentView = nil; window.close(); CATransaction.flush() }
@@ -105,8 +113,40 @@ final class Stage {
         let up: NSEvent.EventType = button == .rightMouseDown ? .rightMouseUp : button == .otherMouseDown ? .otherMouseUp : .leftMouseUp
         for type in [button,up] { let e = NSEvent.mouseEvent(with: type,location: wp,modifierFlags: [],timestamp: ProcessInfo.processInfo.systemUptime,windowNumber: window.windowNumber,context: nil,eventNumber: eventNumber,clickCount: 1,pressure: type == .leftMouseDown ? 1 : 0)!; window.sendEvent(e) }
     }
+    var focusedID: String? { (window.firstResponder as? NSView)?.identifier?.rawValue }
+    func tap(_ id: String,offset: CGPoint? = nil) {
+        guard let control = controller.view.panel.control(id: id) else { return }
+        control.scrollToVisible(control.bounds)
+        let point = control.convert(offset ?? CGPoint(x: control.bounds.midX,y: control.bounds.midY),to: root)
+        click(point)
+    }
+    func menu(_ title: String) {
+        let menu = controller.makeMenu()
+        if let item = menu.items.first(where: { $0.title == title }),item.isEnabled { menu.performActionForItem(at: menu.index(of: item)) }
+    }
     func render(scale: CGFloat,presentation: Bool = false) -> CGImage {
         prepareMaterial(); OffscreenRenderer.settle(root)
+        if state == "scc-menu" {
+            if overlayCapture == nil {
+                let capture = NativeOverlayCapture(); overlayCapture = capture
+                controller.onMenu = { [weak window] menu,_ in guard let window else { return }; capture.captureMenu(menu,excluding: window,scale: scale) }
+                tap("more")
+                controller.onMenu = nil
+                controller.present(anchor: .urlField,tabID: source.tabID,animated: false)
+            }
+            return overlayCapture!.composite(root,scale: scale,at: CGPoint(x: controller.view.panelFrame.maxX-26,y: controller.view.panelFrame.maxY-26))
+        }
+        if state.hasPrefix("scc-tooltip") {
+            let owner: SiteControlButton?
+            if state == "scc-tooltip" { owner = controller.view.panel.control(id: "action.capture") }
+            else if state == "scc-tooltip-private" { owner = controller.view.panel.controls.first { $0.controlID.hasSuffix(".row") } }
+            else { owner = controller.view.panel.control(id: "contentBlocking") }
+            let tooltip = TooltipView(tooltip: Tooltip(title: owner?.tooltipTitle ?? "",keys: owner?.tooltipKeys ?? [],style: .defaultTheme(system: appearance)))
+            tooltip.frame = CGRect(origin: CGPoint(x: controller.view.panelFrame.minX+78,y: controller.view.panelFrame.minY+48),size: tooltip.fittingSize)
+            root.addSubview(tooltip); defer { tooltip.removeFromSuperview() }
+            OffscreenRenderer.settle(root)
+            return OffscreenRenderer().snapshot(root,scale: scale)
+        }
         return OffscreenRenderer().snapshot(root,scale: scale,presentation: presentation)
     }
 }

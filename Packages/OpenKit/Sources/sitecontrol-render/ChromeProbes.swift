@@ -11,7 +11,7 @@ enum ChromeProbes {
         func near(_ p: [UInt8],_ rgb: [Int],tolerance: Int = 3) -> Bool { zip(p.prefix(3),rgb).allSatisfy { abs(Int($0)-$1)<=tolerance } }
         var result: [Flows.Check] = []
         func check(_ name: String,_ pass: Bool) { result.append(.init(name: prefix+" "+name,pass: pass)) }
-        check("236 pt body; height fits content and window",body.width == 236 && body.height == min(297,stage.root.bounds.height-8-body.minY))
+        check("236 pt body; height fits content and window",body.width == 236 && body.height == min(stage.controller.view.panel.preferredHeight,640,stage.root.bounds.height-8-body.minY))
         check("complete opaque capture",CLI.fullyOpaque(image))
         check("four 48x32 actions at measured positions",stage.controller.view.panel.controls.prefix(4).enumerated().allSatisfy { i,b in b.frame == CGRect(x: 10+CGFloat(i)*56,y: stage.controller.view.panel.bodyRect.minY+10,width: 48,height: 32) })
         if appearance == .dark {
@@ -19,6 +19,12 @@ enum ChromeProbes {
             check("action gradient top \(top.prefix(3)) ~= #272727",near(top,[39,39,39]))
             check("action gradient bottom \(bottom.prefix(3)) ~= #161616",near(bottom,[22,22,22]))
             check("action outer ring is darker than material",CLI.luminance(pixel(body.minX+34,body.minY+9)) < CLI.luminance(pixel(body.minX+34,body.minY+7)))
+            for offset: CGFloat in [37,180] {
+                let x = body.minX+offset,y = body.maxY-52-1/scale
+                let line = pixel(x,y),above = pixel(x,y-1/scale)
+                let lift = zip(line.prefix(3),above.prefix(3)).map { Int($0)-Int($1) }
+                check("separator additive RGB lift \(lift) ~= +35",lift.allSatisfy { abs($0-35)<=3 })
+            }
             let rim = pixel(body.minX+37,body.minY)
             if body.minX+37 < stage.root.sidebarWidth { check("white 0.20 rim \(rim.prefix(3)) ~= #75738F",near(rim,[117,115,143])) }
         }
@@ -34,19 +40,23 @@ enum ChromeProbes {
             let p1 = pixel(88,215),p2 = pixel(300,140)
             let d1 = ColorMath.deltaE2000(p1.prefix(3).map(Double.init),[64,62,84]),d2 = ColorMath.deltaE2000(p2.prefix(3).map(Double.init),[123,123,123])
             check(String(format: "fallback formula regression only P1/P2 DE %.2f / %.2f",d1,d2),d1<=2 && d2<=2)
-            // Exercise the actual reusable native circle renderer in the complete
-            // window. Sections and row actions remain the Step 2 responsibility.
-            let sample = SiteControlButton(id: "harness.knockout",label: "Knock-out sample",symbol: "gearshape.fill",pointSize: 15)
-            sample.style = .circle; sample.setAccessibilityElement(false); sample.setAccessibilityHidden(true)
-            sample.frame = CGRect(x: 10,y: stage.controller.view.panel.bodyRect.minY+197,width: 32,height: 32)
-            stage.controller.view.panel.addSubview(sample)
-            let rendered = stage.render(scale: scale), center = CGPoint(x: body.minX+26,y: body.minY+213)
-            let core = CLI.pixel(rendered,x: Int((center.x+4)*scale),y: Int(center.y*scale))
-            let outside = CLI.pixel(rendered,x: Int((body.minX+8)*scale),y: Int(center.y*scale))
+            let row = stage.controller.view.panel.control(id: "content.automaticPictureInPicture")!
+            let origin = row.convert(row.bounds,to: stage.root).origin
+            let center = CGPoint(x: origin.x+26,y: origin.y+16)
+            // Pick the opaque core of the cut-out, not an antialiased tooth.
+            // The calibrated glyph's core moves within this fixed 16 pt box.
+            var core = pixel(center.x,center.y)
+            for y in 0..<Int(16*scale) { for x in 0..<Int(16*scale) {
+                let sample = pixel(center.x-8+CGFloat(x)/scale,center.y-8+CGFloat(y)/scale)
+                if CLI.luminance(sample)<CLI.luminance(core) { core = sample }
+            } }
+            let outside = pixel(origin.x+8,center.y)
             let de = ColorMath.deltaE2000(core.prefix(3).map(Double.init),outside.prefix(3).map(Double.init))
-            check(String(format: "gear knock-out equals nearby material DE %.2f",de),de<=3)
-            sample.removeFromSuperview()
+            check(String(format: "real Settings gear knock-out equals nearby material DE %.2f",de),de<=3)
+            check("297 pt no-Boosts stack",body.height == 297)
+
         }
+        if stage.state == "scc-boost" { check("372 pt one-Boost stack",body.height == 372) }
         return result
     }
     static func arrowWidth(_ image: CGImage,tip: CGPoint,offset: CGFloat,scale: CGFloat) -> CGFloat {

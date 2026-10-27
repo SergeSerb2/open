@@ -2,9 +2,10 @@ import AppKit
 import QuartzCore
 import OpenModel
 import OpenDesign
+import OpenBoosts
 
 @MainActor
-public final class SiteControlController: NSObject {
+public final class SiteControlController: NSObject, NSMenuDelegate {
     public let view = SiteControlView(frame: .zero)
     public private(set) var isPresented = false
     public private(set) var tabID: ItemID?
@@ -13,6 +14,10 @@ public final class SiteControlController: NSObject {
     public var geometry: ((SiteControlAnchor) -> SiteControlGeometry?)?
     public var onDismiss: ((SiteControlDismissReason) -> Void)?
     public var onUnavailable: ((ItemID) -> Void)?
+    public var onMenu: ((NSMenu,String?) -> Void)?
+    public private(set) var preferredMenuItemTitle: String?
+    private var activeMenu: NSMenu?
+    private var menuActionInvoked = false
     private let source: SiteControlDataSource
     private let actions: SiteControlActions
     private weak var previousResponder: NSResponder?
@@ -27,16 +32,49 @@ public final class SiteControlController: NSObject {
         view.onAnchor = { [weak self] in self?.dismiss(reason: .anchor, animated: false) }
         view.onKey = { [weak self] in self?.handleKey($0) ?? false }
         view.panel.onAction = { [weak self] action, rect in self?.performAction(action, rect: rect) }
+        view.panel.onMore = { [weak self] button in self?.showMenu(from: button) }
+        view.panel.onToggle = { [weak self] tile in
+            guard let self, let tabID = self.tabID else { return }
+            if tile.state == .unavailable {
+                self.actions.openAdBlockSettings(tabID: tabID)
+            } else {
+                let generation = self.presentationGeneration
+                self.actions.toggle(tile, tabID: tabID)
+                guard self.isPresented,self.tabID == tabID,self.presentationGeneration == generation else { return }
+                self.view.panel.showsReload = true; self.refreshView(animated: true)
+            }
+        }
+        view.panel.onBoostEnabled = { [weak self] id, enabled in
+            guard let self, let tabID = self.tabID else { return }
+            self.actions.setBoostEnabled(id, enabled: enabled, tabID: tabID)
+        }
+        view.panel.onEdit = { [weak self] id in
+            guard let self, let tabID = self.tabID else { return }
+            self.dismiss(reason: .action, animated: false)
+            self.actions.openEditor(boostID: id, tabID: tabID, mode: .simple)
+        }
+        view.panel.onSection = { [weak self] section in
+            guard let self, let tabID = self.tabID else { return }
+            self.dismiss(reason: .action, animated: false)
+            if section == "settings" { self.openSiteSettings(tabID: tabID) }
+            else { self.actions.perform(command: section == "boosts" ? "view-boosts" : "manage-extensions", tabID: tabID, anchor: nil) }
+        }
+        view.panel.onReload = { [weak self] in
+            guard let self, let tabID = self.tabID else { return }
+            self.dismiss(reason: .action, animated: false); self.actions.reload(tabID: tabID)
+        }
+        view.panel.onAddExtension = { [weak self] in
+            guard let self,let tabID = self.tabID else { return }
+            self.dismiss(reason: .action,animated: false)
+            self.actions.perform(command: "add-extension",tabID: tabID,anchor: nil)
+        }
         view.panel.onSecurity = { [weak self] in
             guard let self, let tabID = self.tabID else { return }
             self.actions.showSecurityDetails(tabID: tabID)
         }
         changeObserver = source.observeChanges { [weak self] changed in
             guard let self, self.isPresented, self.tabID == changed else { return }
-            guard let snapshot = self.source.snapshot(for: changed) else {
-                self.reportUnavailable(changed); return
-            }
-            self.view.panel.apply(snapshot); self.layout()
+            self.refreshView(animated: true)
         }
     }
     isolated deinit { if let changeObserver { source.removeChangeObserver(changeObserver) } }
@@ -51,13 +89,17 @@ public final class SiteControlController: NSObject {
         self.anchor = anchor; self.tabID = tabID; self.mode = mode
         presentationGeneration += 1
         isPresented = true; view.isHidden = false; view.isActive = true
-        view.panel.apply(snapshot); layout()
+        view.panel.showsReload = false
+        view.panel.apply(snapshot); configureKeys(); layout()
         guard isPresented else { return }
         unavailableTabs.remove(tabID)
         view.window?.makeFirstResponder(view)
+        if mode == .extensionPicker { view.panel.focusExtensionPickerItem() }
         animateOpen(animated)
     }
-    public func layout() {
+    public func layout() { layout(preservingStructureMotion: false) }
+    private func layout(preservingStructureMotion: Bool) {
+        if !preservingStructureMotion { view.clearStructureAnimations() }
         guard let anchor, let tabID else { return }
         guard let g = geometry?(anchor) else { reportUnavailable(tabID); return }
         view.anchorFrame = g.anchor
@@ -84,6 +126,8 @@ public final class SiteControlController: NSObject {
     public func dismiss(reason: SiteControlDismissReason, animated: Bool = true) {
         guard isPresented else { return }
         isPresented = false; view.isActive = false
+        activeMenu?.cancelTrackingWithoutAnimation()
+        view.panel.controls.forEach { TooltipController.shared.cancel(for: $0) }
         presentationGeneration += 1; let generation = presentationGeneration
         view.window?.makeFirstResponder(previousResponder)
         let finish = { [weak self] in
@@ -110,9 +154,123 @@ public final class SiteControlController: NSObject {
     }
     @discardableResult public func handleKey(_ event: NSEvent) -> Bool {
         guard isPresented else { return false }
+        if event.modifierFlags.contains(.command) { dismiss(reason: .command,animated: false); return false }
+        if let menu = activeMenu {
+            if event.keyCode == 53 { dismiss(reason: .menuCancelled,animated: false); return true }
+            if event.keyCode == 36, let item = menu.highlightedItem, item.isEnabled {
+                menu.performActionForItem(at: menu.index(of: item)); menu.cancelTrackingWithoutAnimation(); return true
+            }
+        }
         if event.keyCode == 53 { dismiss(reason: .escape); return true }
-        if event.modifierFlags.contains(.command) { dismiss(reason: .command, animated: false); return false }
+        let controls = view.panel.focusableControls
+        guard !controls.isEmpty else { return false }
+        let current = controls.firstIndex { view.window?.firstResponder === $0 }
+        if event.keyCode == 48 {
+            let delta = event.modifierFlags.contains(.shift) ? -1 : 1
+            let index = current.map { ($0 + delta + controls.count) % controls.count } ?? (delta > 0 ? 0 : controls.count - 1)
+            view.panel.focus(controls[index]); return true
+        }
+        if event.keyCode == 36 || event.keyCode == 49 {
+            guard let current else { return false }; view.panel.focus(controls[current]); controls[current].performClick(nil); return true
+        }
+        if [123, 124, 125, 126].contains(event.keyCode), let current {
+            let button = controls[current], id = button.controlID
+            let group: [SiteControlButton]
+            let step: Int
+            let backwards = event.keyCode == 123 || event.keyCode == 126
+            if id.hasPrefix("action.") { group = controls.filter { $0.controlID.hasPrefix("action.") }; step = 1 }
+            else if id.hasPrefix("extension.") {
+                group = controls.filter { $0.controlID.hasPrefix("extension.") }; step = [125,126].contains(event.keyCode) ? 4 : 1
+            } else if button is SiteControlRow && !id.hasPrefix("boost.") {
+                group = controls.filter { $0 is SiteControlRow && !$0.controlID.hasPrefix("boost.") }; step = 1
+            } else if id.hasPrefix("boost.") {
+                group = controls.filter { $0.controlID.hasPrefix("boost.") }; step = 1
+            } else { group = controls; step = 1 }
+            if let position = group.firstIndex(where: { $0 === button }) {
+                let index = max(0, min(group.count - 1, position + (backwards ? -step : step)))
+                view.panel.focus(group[index])
+            }
+            return true
+        }
         return false
+    }
+    private func configureKeys() { view.panel.configureKeys { [weak self] in self?.handleKey($0) ?? false } }
+    private func refreshView(animated: Bool) {
+        guard let tabID else { return }
+        guard let snapshot = source.snapshot(for: tabID) else { reportUnavailable(tabID); return }
+        let focused = view.window?.firstResponder as? SiteControlButton
+        let oldHeight = view.panel.frame.height
+        let structure = view.panel.captureStructure(extra: [view.panelShadow])
+        CATransaction.begin(); CATransaction.setDisableActions(true)
+        view.panel.apply(snapshot); configureKeys(); layout(preservingStructureMotion: true)
+        guard isPresented else { CATransaction.commit(); return }
+        if let focused {
+            if let control = view.panel.focusableControls.first(where: { $0.controlID == focused.controlID }) {
+                view.panel.focus(control,keyboard: focused.showsKeyboardFocus)
+            } else { view.window?.makeFirstResponder(view) }
+        }
+        view.prepareAnimationAnchor()
+        if animated,oldHeight != view.panel.frame.height {
+            if NSWorkspace.shared.accessibilityDisplayShouldReduceMotion {
+                for layer in view.presentationLayers { let fade = CATransition(); fade.type = .fade; fade.duration = Motion.heightGrow; layer.add(fade,forKey: "rows.fade") }
+            } else { structure.animate(growing: view.panel.frame.height>oldHeight,newRows: view.panel.structureRows) }
+        }
+        CATransaction.commit()
+    }
+    public func makeMenu() -> NSMenu {
+        let menu = NSMenu(); menu.autoenablesItems = false
+        guard let snapshot = view.panel.snapshot else { return menu }
+        func item(_ title: String, _ id: String, enabled: Bool = true) {
+            let item = NSMenuItem(title: title, action: #selector(menuAction(_:)), keyEquivalent: "")
+            item.target = self; item.representedObject = SiteControlMenuCommand(id: id,tabID: snapshot.context.tabID,generation: presentationGeneration); item.isEnabled = enabled; menu.addItem(item)
+        }
+        func separator() { if menu.items.last?.isSeparatorItem == false { menu.addItem(.separator()) } }
+        if snapshot.context.isWebsite {
+            if snapshot.capabilities.contains(.clearCache) { item("Clear Cache", "clearCache") }
+            item("Clear Cookies", "clearCookies")
+        }
+        separator(); item("Manage Boosts…","view-boosts")
+        item("New Boost…","newBoost",enabled: snapshot.canCreateBoost)
+        separator(); item("Manage Extensions…", "manage-extensions"); item("Add Extension…", "add-extension")
+        if snapshot.context.isWebsite { separator(); item("All Site Settings…", "siteSettings") }
+        return menu
+    }
+    @objc private func menuAction(_ sender: NSMenuItem) {
+        guard isPresented,sender.isEnabled,let request = sender.representedObject as? SiteControlMenuCommand,
+              let tabID,request.tabID == tabID,request.generation == presentationGeneration else { return }
+        let id = request.id
+        menuActionInvoked = true
+        switch id {
+        case "clearCache", "clearCookies":
+            actions.clearSiteData(id == "clearCache" ? .cache : .cookies, tabID: tabID)
+            guard isPresented,self.tabID == tabID,presentationGeneration == request.generation else { return }
+            view.panel.showsReload = true; refreshView(animated: true)
+        case "newBoost":
+            dismiss(reason: .action, animated: false); actions.openEditor(boostID: nil, tabID: tabID, mode: .simple)
+        case "siteSettings": dismiss(reason: .action, animated: false); openSiteSettings(tabID: tabID)
+        default: dismiss(reason: .action, animated: false); actions.perform(command: id, tabID: tabID, anchor: nil)
+        }
+    }
+    public func menuWillOpen(_ menu: NSMenu) { onMenu?(menu, preferredMenuItemTitle) }
+    private func showMenu(from button: SiteControlButton) {
+        guard button.window?.isVisible == true else { return }
+        let menu = makeMenu(); menu.delegate = self
+        activeMenu = menu; menuActionInvoked = false
+        let keyboardItem = button.activationPoint == nil ? menu.items.first { $0.isEnabled && !$0.isSeparatorItem } : nil
+        // NSMenu.h: nil aligns the menu content frame's corner at the pointer;
+        // a selected item aligns that item's corner for keyboard presentation.
+        let selected = menu.popUp(positioning: keyboardItem,
+                                  at: button.activationPoint ?? CGPoint(x: button.bounds.minX,y: button.bounds.maxY),in: button)
+        activeMenu = nil
+        if !selected && !menuActionInvoked && isPresented { dismiss(reason: .menuCancelled, animated: false) }
+    }
+    private func openSiteSettings(tabID: ItemID) {
+        guard let context = source.snapshot(for: tabID)?.context,
+              var origin = URLComponents(url: context.url, resolvingAgainstBaseURL: false) else { return }
+        origin.path = ""; origin.query = nil; origin.fragment = nil; origin.user = nil; origin.password = nil
+        var url = URLComponents(string: "chrome://settings/content/siteDetails")!
+        url.queryItems = [URLQueryItem(name: "site", value: origin.string)]
+        if let url = url.url { actions.openURLInNewTab(url, tabID: tabID) }
     }
     private func performAction(_ id: String, rect: NSRect) {
         guard let tabID else { return }
@@ -134,4 +292,11 @@ public final class SiteControlController: NSObject {
             }
         }
     }
+}
+
+/// A retained native menu cannot act on a later panel/tab generation.
+private struct SiteControlMenuCommand {
+    let id: String
+    let tabID: ItemID
+    let generation: Int
 }
