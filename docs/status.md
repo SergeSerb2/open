@@ -5,6 +5,8 @@ Open work read with `git` (not edited): PR #45 `f11822b`, PR #52 `6c4e7ee`, PR #
 
 This file lists every v1 line item from the RE catalog (`docs/re/`), the AGENTS.md v1 scope, and the platform basics a browser needs. For each item it names the plan, the library code, the App wiring, and the evidence. It is an inventory. It changes no code.
 
+Update 2026-10-26 (Arc capture session 2, `re/interaction-states.md` §20, `re/capture-session-2-results.md`): only the rows and gaps that the session-2 plan amendments close or change were edited. Their notes start with "S2 (2026-10-26)". The rest of the file is still the 2026-10-25 audit. Review r1 also folded in the folder hover-card video sample (V 46.11–46.46 s) and the Essential Keyboard Shortcuts row.
+
 ## 0. How to read this file
 
 ### 0.1 Status values
@@ -54,18 +56,18 @@ I did not read the in-progress plans. Where a row says "plan in progress", the s
 - No `App/` file on `main` or in PR #52 uses `MenuBuilder`, `CommandBarController`, `SuggestEngine`, `HistoryStore`, `FaviconStore`, `BoostStore`, `AdBlockStore`, `SleepController`, `ScriptHost`, `RoutingEvaluator`, or `GlobalHotkeyService` (`git grep` on both trees). These land in app-shell Steps C–H. PR #52 reaches `KeyboardRouter` only inside `OpenFeatures.BrowserWindowController`, for split, Peek, and back/forward keys.
 - Biggest unplanned gaps: Open's own password manager, writing imported Arc passwords and cookies into Open, and the dispatch of system menu items (Cut, Copy, Paste, Quit…) once `MenuBuilder` replaces the M1 menu (§3).
 
-Row count by status (282 rows in §1; a "(partial)" row counts under its base status):
+Row count by status (283 rows in §1 after the 2026-10-26 update; a "(partial)" row counts under its base status):
 
 | Area | done | in PR | planned | unplanned | out of scope |
 |---|---:|---:|---:|---:|---:|
-| 1.1 Sidebar | 0 | 17 | 4 | 7 | 0 |
+| 1.1 Sidebar | 0 | 17 | 7 | 4 | 0 |
 | 1.2 Spaces | 2 | 7 | 4 | 3 | 2 |
 | 1.3 Tabs | 7 | 5 | 11 | 6 | 0 |
 | 1.4 Favorites | 1 | 4 | 0 | 0 | 0 |
-| 1.5 Folders | 0 | 4 | 1 | 3 | 0 |
+| 1.5 Folders | 0 | 4 | 2 | 3 | 0 |
 | 1.6 Archive | 1 | 0 | 3 | 1 | 0 |
-| 1.7 Command bar | 0 | 0 | 11 | 5 | 0 |
-| 1.8 Menus and hotkeys | 0 | 2 | 5 | 1 | 0 |
+| 1.7 Command bar | 0 | 0 | 12 | 3 | 1 |
+| 1.8 Menus and hotkeys | 0 | 2 | 6 | 0 | 0 |
 | 1.9 Split View, Peek, Little Open | 0 | 15 | 12 | 1 | 1 |
 | 1.10 Profiles | 0 | 2 | 8 | 0 | 0 |
 | 1.11 Air Traffic Control | 0 | 0 | 5 | 1 | 0 |
@@ -78,7 +80,7 @@ Row count by status (282 rows in §1; a "(partial)" row counts under its base st
 | 1.18 Settings and Library | 0 | 0 | 10 | 0 | 2 |
 | 1.19 First run | 0 | 0 | 4 | 0 | 0 |
 | 1.20 Release | 0 | 1 | 8 | 0 | 0 |
-| **Total** | **23** | **61** | **140** | **50** | **8** |
+| **Total** | **23** | **61** | **146** | **44** | **9** |
 
 ## 1. Feature tables
 
@@ -93,29 +95,29 @@ Columns: feature · RE doc + section · plan · library code · App wiring · ve
 | Tab row states: hover fill, selected fill and shadow, close ×, "−" on loaded pinned rows | FC §1.2 r8, r11; IS §3 | design.md §5.3 | `OpenSidebar/SidebarRows.swift` | PR #52 | `sidebar-render check`; design.md §8 (ΔE ≤ 2.03) | in PR | |
 | Engine favicon on loaded rows | FC §1.2 r8 | app-shell §4.13 | — | PR #52 | none named (`docs/app-shell.md` Step B: favicon events update model slices) | in PR | |
 | Stored favicons for unloaded and imported rows | FC §1.2 r8 | app-shell §4.8 (Step H) | `OpenStore/FaviconStore.swift`, `OpenStore/FaviconFetcher.swift` | none | verify-all `favicons` | planned | |
-| Per-tab audio icon and mute button | FC §1.2 r10 | app-shell §4.1; media-pip | `SidebarRows.swift`; model `setMuted` | PR #52 (`toggleMute` sets host `isMuted`) | e2e `features` "Audible state and mute" (`docs/engine-spike.md`) | in PR | Web Audio is missed until engine patch P6 (planned, `docs/engine-patches.md`). |
+| Per-tab audio icon and mute button | FC §1.2 r10 | app-shell §4.1; media-pip | `SidebarRows.swift`; model `setMuted` | PR #52 (`toggleMute` sets host `isMuted`) | e2e `features` "Audible state and mute" (`docs/engine-spike.md`) | in PR | Web Audio is missed until engine patch P6 (planned, `docs/engine-patches.md`). S2 (2026-10-26): Arc's speaker is **leading**, a 26 × 26 outline glyph right after the favicon (IS §20.7, C18); #67 built a trailing 20 × 20 filled one. Follow-up: media-pip Step 2b. |
 | Mute all tabs / Unmute all tabs | FC §1.2 r10, §4.4 | media-pip (command-bar actions) | `OpenCommands/CommandRegistry.swift` (`mute-all-tabs`, `unmute-all-tabs`, no menu) | none | `commands-dump` (registered) | planned | Not in the app-shell §4.3 table. |
 | Recording indicator on rows (camera or microphone in use) | FC §1.2 r10 (2026-10-25 update); FA §8 | media-pip | none | none | none | planned | |
 | Tidy titles for known sites (for example Gmail fragment → "Inbox") | FC §1.2 r9 | none | none | none | none | unplanned | Non-AI rule table. |
 | Unread badge on rows added in the background | FC §1.2 r12 | none | model field `Tab.isUnread` (`OpenModel/LiveNodes.swift`), set by import; the sidebar does not draw it | none | none | unplanned (partial) | |
-| Hover Previews of folder, pinned, and favorite rows | FC §1.2 r13; IS §18 General | settings §5.1 (switch and Previews sheet only) | `OpenSettings` switch | none | none | unplanned (behavior) | |
+| Hover Previews of folder, pinned, and favorite rows | FC §1.2 r13; IS §18 General, §20.13 | sidebar-completion §3.6 (S5, #102); App in A2; settings §5.1.1 | `OpenSidebar` `HoverPreviewTracker`, `FolderPreviewView` (#102); `OpenSettings` sheet | none | `sidebar-render` HP1–HP6 (#102) | planned | S2 (2026-10-26): lead decision — two Previews sources, "Folders" and "Pinned tabs and Favorites" (Open product choice). Arc's other sources (Google and Outlook Calendar and Mail, Recent pages on Linear, Notion, Figma, Notion Calendar) are live-data integrations: post-v1. No delay setting, as in Arc: the delay is fixed at 0.5 s, an Open choice (lead ruling; one Arc sample ≈ 0.42 s at V 46.11–46.46 s; sidebar-completion Step S5b). The folder card was seen once in the video (V 46.11–46.46 s): ≈ 240 pt wide, a "Search \<folder\>…" field, rows with "N minutes ago" (positions only; sidebar-completion §3.6). |
 | Rename a row inline (double-click, "Rename…", Return, Esc) | FC §1.3 r15–16 | design.md §5.6 | `SpacePageView.swift` (`doubleAction` → `beginRename`); model `renameNode` | PR #52 (model intent) | `sidebar-render check` (menus); no e2e check | in PR | |
 | Row context menus: Today tab, pinned tab, favorite, folder, split row, Space, plus | IS §15; MH "Context menus", "Split row menu" | design.md §5.6 | `OpenSidebar/SidebarMenus.swift` | PR #52 (partial) | `sidebar-render check` (order for 4 targets) | in PR (partial) | PR #52 returns `false` for 16 intents: Site Control, Library, Manage Spaces, Space icon, theme, New Profile, Share Space, Export into Folder, Edit Pinned URL, Share, Change Icon, Customize Page, Duplicate, Copy All Links, Turn Folder into Space, Move to New Space (`App/WebContent/EngineWebContentHostFactory.swift` `performSidebar`, PR #52). Favorite and plus menus are guesses (design.md §5.6). |
 | Multi-select rows (Shift/Cmd click) and New Folder from Selection | FC §1.5 r24; MH "Gestures and mouse" | none | none: the outline uses single selection (`SpacePageView.swift`); model `createFolder(withNodes:)` already takes several nodes | none | none | unplanned | |
 | Drag and drop: reorder, Today ↔ Pinned (pin/unpin), into folders, Favorites, URLs from other apps, Space icon hover-switch | FC §1.6 r28–32 | design.md §5.5 | `OpenSidebar/DragDrop.swift`; model `canMoveNode` | PR #52 | `sidebar-render check` (drop mapping, cross-Space drag, refusals); e2e `sidebar` (reorder through the production intent) | in PR | No test drives a real macOS drag session (`docs/app-shell.md`, PR #52). |
 | Haptic feedback when reordering | FC §1.6 r33; IS §18 Advanced | settings (switch only) | `OpenSettings` switch | none | none | unplanned (behavior) | |
-| Show/Hide Sidebar (Cmd+S) with 0.22 s animation | FC §1.7 r35–36; IS §13 | app-shell §3.3 | `OpenFeatures/BrowserWindowController.swift` | PR #52; main (M1 list toggle) | e2e `window` (PR #52) | in PR | |
-| Hover-reveal card while hidden | IS §13 | app-shell §3.3 | `OpenFeatures/BrowserWindowController.swift`, `OpenFeatures/SidebarRevealController.swift` | PR #52, window-chrome PR | e2e `window` (`hide_reveal`, `fullscreen_hover_reveal`, `reveal_timing`, `card_edges_*`) | in PR | Zones and the 0.15 s dwell decoded (IS §13); exit delay and slide motion are guesses. |
-| Resize 228–500 pt; drag past 180 pt hides | FC §1.7 r36; IS §13 | app-shell §3.3 (D4) | `OpenDesign` `WindowMetrics` | PR #52 | e2e `window` (drag to 300 pt, limits, hide) | in PR | 180 pt is a guess (app-shell Q3). |
-| Hint toast on first hide ("You can use ⌘S…") | IS §13 | none | none | none | none | unplanned | |
+| Show/Hide Sidebar (Cmd+S) with Arc's motion | FC §1.7 r35–36; IS §13, §20.12 | app-shell §3.3 | `OpenFeatures/BrowserWindowController.swift` | PR #52; main (M1 list toggle) | e2e `window` (PR #52) | in PR | S2 (2026-10-26): Arc hides and shows in ≈ 0.10 s each (spring); the code uses 0.22 s. Arc starts its show ≈ 0.29 s after the key; Open starts it with the key (Open decision, app-shell Q11). Change: app-shell §3.3, PR #104 follow-up. |
+| Hover-reveal card while hidden | IS §13, §20.2 | app-shell §3.3 | `OpenFeatures/BrowserWindowController.swift`, `OpenFeatures/SidebarRevealController.swift` | PR #52, window-chrome PR | e2e `window` (`hide_reveal`, `fullscreen_hover_reveal`, `reveal_timing`, `card_edges_*`) | in PR | Zones and the 0.15 s dwell decoded (IS §13); exit delay is a guess. S2 (2026-10-26): slide in ≈ 0.14 s with a 3 pt overshoot, out ≈ 0.10 s; the card is translucent over the blurred page. Change: app-shell §3.3, PR #104 follow-up. |
+| Resize 164–500 pt; drag past the minimum hides while pressed; Cmd+S restores the pre-drag width; double-click on the edge resets to 228 | FC §1.7 r36; IS §13, §20.1 | app-shell §3.3 (D4) | `OpenDesign` `WindowMetrics` | PR #52 (228–500, hide past 180) | e2e `window` (drag to 300 pt, limits, hide) | in PR | S2 (2026-10-26): measured (S2 06/0009–0088); app-shell Q3 answered. The PR #52 code still uses 228 and 180: PR #104 follow-up. |
+| Hint toast on first hide ("You can use ⌘S…") | IS §13 | sidebar-completion §3.12 (A1) | none | none | none | planned | S2 (2026-10-26): shows once, on the first hide by any path, Cmd+S included (C17, guess); session 2 showed none because session 1 had used it. |
 | URL pill: host, Copy button, Site Control button; click opens Cmd+L | FC §4.1 r2; IS §3 | app-shell §3.5 (Step C) | `OpenSidebar/ChromeViews.swift` | PR #52 (click opens a temporary URL editor until Step C) | `sidebar-render check` (click reaches the delegate) | in PR (partial) | |
-| Toolbar row: toggle, back, forward, reload; a split keeps only the toggle | IS §11; design.md §15 | design.md | `ChromeViews.swift` | PR #52 | `sidebar-render check` | in PR | |
+| Toolbar row: toggle, back, forward, reload; a split keeps only the toggle | IS §11; design.md §15 | design.md | `ChromeViews.swift` | PR #52 | `sidebar-render check` | in PR | S2 (2026-10-26): below ≈ 219 pt (measured at 207 and below) Arc shows only Back, Forward, and "More options" (28 × 28); planned in sidebar-completion §3.16 (A1). |
 | Bottom bar: Home (Library), Space switcher, plus menu | FC §1.1 r6, §1.8 r41; FA SP-1; IS §5 | design.md | `OpenSidebar/BottomBarView.swift` | PR #52 (Home is refused until Library is wired) | `sidebar-render check` | in PR (partial) | |
 | Tooltips: capsule, keycaps, placement | IS §5 | design.md §5.6 | `OpenSidebar/Tooltip.swift` | PR #52 | `sidebar-render check` (one schedule per hover) | in PR | 0.6 s delay is a guess. |
 | Inactive-window glyph tones | design.md §5.3 | app-shell §3.1 | `OpenSidebar` | PR #52 | `sidebar-render` inactive comparison (design.md §8) | in PR | |
 | Row accessibility and keyboard navigation | — (Open requirement) | design.md §14 | `OpenSidebar` | PR #52 | `sidebar-render check` (AX dump, key events) | in PR | |
 | Sidebar media controls (mini player stack above the bottom bar) | FA §8 (PP-6, PP-20) | media-pip (D-1, D-3) | none (new `OpenMedia` library planned, media-pip D-10) | none | none | planned | |
-| Edge-swipe gesture to hide the sidebar | MH "Gestures" (`hideSidebarWithGesture`) | none | none | none | none | unplanned | |
+| Hide the sidebar with the gesture (`hideSidebarWithGesture`) | MH "Gestures"; SC §10; IS §20.1 | sidebar-completion §3.16; app-shell §3.3 | none | none | none | planned | S2 (2026-10-26): the gesture is the resize drag past the 164 pt minimum, which hides the sidebar while the button is still down. |
 
 ### 1.2 Spaces
 
@@ -123,12 +125,12 @@ Columns: feature · RE doc + section · plan · library code · App wiring · ve
 |---|---|---|---|---|---|---|---|
 | Space model: name, icon, theme, one profile; at least one Space; "Space N" fallback | FC §2.1 r1–3 | `docs/model.md` | `OpenModel/Containers.swift`; `BrowserModel.displayTitle(for:)` | PR #52 | `openkit commands-demo` (verify-all) | in PR | |
 | Switcher in the bottom bar (current in color, others gray 0.55) | FC §2.5 r14 | design.md §5.3 | `BottomBarView.swift` | PR #52 | `sidebar-render check` | in PR | |
-| Switch by click: page slide, theme cross-fade, content swaps at once | FC §2.4 r12; IS §10 | design.md §5.4 | `OpenSidebar/SpacePagerView.swift` | PR #52 | `sidebar-render check` (pager and theme); e2e `sidebar` (Space switch) | in PR | Duration is a guess (IS §10). |
+| Switch by click: page slide, theme cross-fade, content swaps at once | FC §2.4 r12; IS §10, §20.12 | design.md §5.4 | `OpenSidebar/SpacePagerView.swift` | PR #52 | `sidebar-render check` (pager and theme); e2e `sidebar` (Space switch) | in PR | S2 (2026-10-26): the slide is a critically damped spring with response 0.20 s (code: 0.30); change in app-shell §3.3, PR #104 follow-up. |
 | Two-finger swipe between Spaces | MH "Gestures" | design.md §5.4 | `SpacePagerView.swift` | PR #52 | `sidebar-render check` (swipe; short swipe snaps back) | in PR | |
 | Next/Previous Space (Cmd+Opt+→/←) | MH Spaces | app-shell §4.3 | — | main (M1 `cycleSpace`), PR #52 | none (code read: `App/MainMenu.swift`) | done | |
 | Go to Space 1–9 (Ctrl+1…9) | MH "Shortcuts that live in code" (keys are a guess) | app-shell §4.3 (Step C) | registry `go-to-space-1…9` | none | `commands-dump` | planned | |
 | Last active tab per Space | FC §2.4 r13 | — | model `selectedNodeBySpace` | main, PR #52 | e2e `window` (restores selections, PR #52) | done | |
-| New Space flow: name, icon, theme, profile | FC §2.2 r4 | plan in progress: Space creation + theme editor | model `createSpace` | PR #52 creates a Space titled "Space" with no flow | none | planned | |
+| New Space flow: name, icon, theme, profile | FC §2.2 r4 | plan in progress: Space creation + theme editor | model `createSpace` | PR #52 creates a Space titled "Space" with no flow | none | planned | S2 (2026-10-26): a new Space starts with no theme unless a color is picked in the form (C10; space-theme-editor Q2). |
 | Rename Space inline (header double-click, menu) | FC §2.2 r5 | design.md | `SpacePageView.swift` header `beginRename`; model `updateSpace` | PR #52 | none | in PR | Spaces ▸ Rename Space has no dispatch (§2). |
 | Change Space icon (emoji and symbol picker) | FC §2.3 r9 | plan in progress (the Space creation flow includes an icon per FC §2.2 r4; scope not confirmed) | model `SpaceIcon`; `OpenModel/NamedSpaceIcons.swift` | PR #52 refuses `changeSpaceIcon` | none | planned | |
 | Theme rendering: gradient, grain, light/dark content | FC §2.3 r10; DT §6; RO §3.3 | design.md §3 | `OpenDesign/ThemeField.swift`, `Grain.swift`, `SpaceThemeStyle.swift` | PR #52 | `sidebar-render check`; design.md §8 per-state ΔE | in PR | Light-mode default theme is a guess (design.md §9). |
@@ -191,7 +193,8 @@ Columns: feature · RE doc + section · plan · library code · App wiring · ve
 | Folders in Pinned or Today; nested; collapse state persists | FC §1.5 r21–23 | design.md | model `createFolder`, `setExpanded`; `SidebarRows.swift` | PR #52 | `sidebar-render check`; e2e `sidebar` (folder collapse) | in PR | |
 | New Folder (menus; Cmd+Shift+N with the sidebar focused) and New Nested Folder | FC §1.5 r24; IS §15 | app-shell §4.3 (key) | intents `newFolder`, `newNestedFolder`; registry `new-folder` | PR #52 (menus); key in Step C | `sidebar-render check` | in PR (partial) | |
 | Delete folder archives its tabs | FC §1.5 r25 | — | model `deleteFolder` (reason `folderDeleted`) | PR #52 | `openkit commands-demo` | in PR | FC asks for a confirmation ("Deleting this folder will archive the tabs inside it."); none is built or planned. |
-| Expand and collapse animation | IS §7 | design.md §5.7 | `OpenSidebar` | PR #52 | `sidebar-render` forced-animation frames | in PR | Timing is provisional. |
+| Expand and collapse animation | IS §7, §20.12 | design.md §5.7 | `OpenSidebar` | PR #52 | `sidebar-render` forced-animation frames | in PR | S2 (2026-10-26): expand ≈ 0.20 s ease-out, collapse ≈ 0.25 s (code: 0.22 s both). |
+| Collapsed folder keeps its last active child visible ("peek"; three-dot folder glyph; Arc `expandedItems` `peeked`) | IS §20.4 | sidebar-completion §3.17 (Step S6) | none | none | none | planned | S2 (2026-10-26): new. |
 | Expand All Folders / Collapse All Folders | FC §1.5 r23 | none | registry only | none | none | unplanned | |
 | Copy All Links (plain, Markdown) | IS §15 | app-shell §4.1 | intent `copyAllLinks` | PR #52 refuses | none | planned | |
 | Archive a whole folder; restore it as a folder | FC §1.5 r26 | none (settings §6.2 shows folder records as tab rows) | `ArchiveStore` stores tab records | none | none | unplanned | `docs/settings.md`: "Current archive folder deletions are individual tab records". |
@@ -211,22 +214,22 @@ Columns: feature · RE doc + section · plan · library code · App wiring · ve
 
 | Feature | RE | Plan | Library code | App wiring | Verified how | Status | Notes |
 |---|---|---|---|---|---|---|---|
-| Panel UI: centered overlay, 50 pt rows, theme selection color | IS §9.1–9.2 | `docs/commandbar.md` | `OpenCommandBar/*`, `OpenDesign/CommandBarTokens.swift` | none (Step C uncommitted) | `commandbar-render check` 78/78; commandbar.md §8 comparisons | planned | |
+| Panel UI: centered overlay, 50 pt rows, theme selection color | IS §9.1–9.2 | `docs/commandbar.md` | `OpenCommandBar/*`, `OpenDesign/CommandBarTokens.swift` | none (Step C uncommitted) | `commandbar-render check` 78/78; commandbar.md §8 comparisons | planned | S2 (2026-10-26): Arc has no open or close animation (CC-44); the library animates; commandbar-completion Step 0 removes it. |
 | Cmd+T new-tab mode; Cmd+L edit-current-URL mode (URL selected) | FC §4.1 r1; IS §9.3 | app-shell §3.5, §4.2 | `CommandBarController.swift` | none | `commandbar-render check` (Cmd+T and Cmd+L flows) | planned | |
 | Esc closes; click outside dismisses; focus returns to the page | FC §4.1 r3 | app-shell §3.5 | `CommandBarController.swift` | none | `commandbar-render check` | planned | |
 | Sources: what you typed, open tabs of the profile, pinned and favorites, history, remote suggestions, calculator, actions, Site Search | FC §4.2 r4 | `docs/suggest.md` | `OpenSuggest/Providers.swift` and siblings | none | verify-all `suggest-check` (31/31) | planned | |
 | Results stay inside the current profile | FC §4.2 r5 | suggest.md "Modes" | `OpenSuggest` | none | `suggest-check` | planned | |
 | Ranking and dedupe hosts | FC §4.3 r6–7 | suggest.md "Ranking" | `OpenSuggest/Ranking.swift` | none | `suggest-check` | planned | Empty Cmd+T order differs from Arc (commandbar.md §10 gap 1). |
-| Inline autocomplete in the field | IS §9.3 | none (commandbar.md §10 gap 3) | none | none | none | unplanned | |
+| Inline autocomplete in the field | IS §9.3, §20.9 | commandbar-completion §4.1 | none | none | none | planned | S2 (2026-10-26): captured (CC-40): the completed part is selected; Backspace removes only it. |
 | One row per Split View ("Switch to Split View") | FC §4.2 r4; suggest.md Q1 | none (commandbar.md §10 gap 2) | none | none | none | unplanned | |
 | Browser actions by name (89 actions; 79 Arc seed ids) | FC §4.4 r9 | `docs/commands.md` | `OpenCommands/SuggestAdapter.swift`, `OpenSuggest/ActionRegistry.swift` | none | `commands-dump` (actions 89, seed coverage 79/79) | planned | |
 | Search engines: Google default, built-in list, custom engines per profile | FC §4.5 r11–12 | settings §5.2 | `OpenModel/SearchEngine.swift` (moved by #51), `OpenSuggest/SearchEngine.swift`; custom-engine sheet in `OpenSettings` | main (the M1 address field searches with the profile engine) | `settings-preview` `profile-search` | planned (partial) | Since #51 a new profile defaults to Google (`OpenModel/Containers.swift`); before #51 it was DuckDuckGo. Custom engines need the Settings window in the App. |
-| Search-suggestion privacy notice | FC §4.5 r13 | settings (review "Code 4") | `OpenSettings` `prepareForRemoteSuggestions` | none | `settings-preview` `suggestion-notice` | planned | |
-| Site Search: Tab or Space trigger, pill, Backspace exits | FC §4.6 r15–16 | suggest.md §7 | `OpenSuggest/SiteSearch.swift`; input pill in `OpenCommandBar` | none | `suggest-check` | planned | Scoped look not captured (commandbar.md §11 q5). |
+| Search-suggestion privacy notice | FC §4.5 r13 | settings (review "Code 4"); commandbar-completion §4.8 | `OpenSettings` `prepareForRemoteSuggestions` | none | `settings-preview` `suggestion-notice` | planned | S2 (2026-10-26): Arc's (i) button shows it as an inline footer in the bar with "Search Settings…" and "Dismiss" (CC-42). |
+| Site Search: Tab or Space trigger, pill, Backspace exits | FC §4.6 r15–16 | suggest.md §7; commandbar-completion §4.3.6 | `OpenSuggest/SiteSearch.swift`; input pill in `OpenCommandBar` | none | `suggest-check` | planned | S2 (2026-10-26): captured (CC-41): orange text-only chip, placeholder "Search…", orange scoped selection; the library's chip is a guess to replace. |
 | Search-tabs scope | FC §4.6 r14 | suggest.md "Modes" (`searchTabs`) | `OpenSuggest` | none | `suggest-check` | planned | Entry gesture is a guess. |
 | Browser-actions-only scope | FC §4.6 r14 | none | none | none | none | unplanned | |
 | Toast after Copy URL ("Copied Current URL" with Share) | FC §4.7 r18; IS §16 | none for the Copy URL command (app-shell §4.2 plans a toast only for the command bar's `.copy`) | none | none | none | unplanned | |
-| Keycaps and hold-Cmd shortcut hints | MH "Command Bar" | none | registry `show-shortcuts-overlay` (no key) | none | none | unplanned | |
+| Hold-Cmd shortcut hints | MH "Command Bar"; CC-39 | commandbar-completion §4.4 (no hints) | registry `show-shortcuts-overlay` (no key, stays disabled) | none | none | out of scope | S2 (2026-10-26): Arc shows no hints after 2–4 s (CC-39); lead decision: Open builds none. Keycaps on action rows are part of `OpenCommandBar` (commandbar.md §3.3). |
 
 ### 1.8 Menus and hotkeys (summary; numbers in §2)
 
@@ -236,9 +239,9 @@ Columns: feature · RE doc + section · plan · library code · App wiring · ve
 | Arc-order menu bar built from the registry | MH "Full menu tree" | app-shell §4.3 | `OpenCommands/MenuBuilder.swift` | none | `commands-dump` (missing 0, extra 0, different 0) | planned | Every MenuBuilder item calls `performCommand(id)`; see §3, gap 3. |
 | Keyboard routing: browser key vs page key; site-then-browser double press | MH "Custom shortcuts" | app-shell §4.3 | `OpenCommands/KeyboardRouter.swift` | main: reserved items only (`MainMenu.performReservedShortcut`); PR #52: also the OpenFeatures key monitor for split, Peek, and back/forward keys | `commands-dump` (router priority) | in PR (partial) | |
 | Custom shortcuts: record, conflicts, reset, priority | MH "Custom shortcuts"; FC §7.2 Shortcuts | settings §5.4 | `OpenCommands/KeyBindings.swift`; `OpenSettings/ShortcutsPane.swift` | none | `commands-dump` (overrides); `settings-preview` `shortcuts-save` | planned | |
-| Global Little Open hotkey (Cmd+Opt+N) | MH "Global hotkey and Little Arc" | app-shell §4.3 | `OpenCommands/GlobalHotkey.swift` | none | `commands-dump` (register, unregister) | planned | |
+| Global Little Open hotkey (Cmd+Opt+N) | MH "Global hotkey and Little Arc" | app-shell §4.3 | `OpenCommands/GlobalHotkey.swift` | none | `commands-dump` (register, unregister) | planned | S2 (2026-10-26): every press opens a new Little Open window (routing §9.2). |
 | Dynamic Spaces and Tabs menu sections | MH "Menu bar at a glance" | commands.md | `MenuBuilder.swift` | none | `commands-dump` | planned | |
-| Essential Keyboard Shortcuts window | MH Help | app-shell §4.2 (placeholder: open the Help Center) | none | none | none | unplanned (window) | |
+| Essential Keyboard Shortcuts window | MH Help | commandbar-completion §4.5 (Step 6) | none | none | none | planned | S2 (2026-10-26): reached from Help, the command bar action, and Settings ▸ Shortcuts; the (i) button opens the privacy footer instead (CC-42). |
 | Reference table complete | MH | — | `OpenCommands/Resources/expected-menu.json` | — | this audit (§2.3) | in PR (partial) | The table lacks Tabs ▸ "Reveal Tab in Sidebar". |
 
 ### 1.9 Split View, Peek, Little Open
@@ -263,12 +266,12 @@ Columns: feature · RE doc + section · plan · library code · App wiring · ve
 | Peek Split button | IS §12; m4 lead Q4 | m4 | `PeekController.swift` | PR #52 | `features-render P3` ("lead Q4 Split promotes same host beside source"), `R4` (favorite refusal) | in PR | |
 | Peek Email (Cmd+Shift+E) | FA PK-4 | app-shell §4.3: disabled in v1 | — | — | — | planned (disabled) | |
 | Peek settings switches | FA PK-5; IS §18 Links | settings §5.3 | `OpenSettings/LinksPane.swift` | none | `settings-preview` | planned | |
-| Little Open window: 720×540, toolbar, one page, no sidebar | FA LA-1 | routing §9.3; m4 §6 | `OpenFeatures/LittleOpenWindowController.swift`, `LittleOpenSession.swift` | none | `features-render L1` | planned (Step E) | |
+| Little Open window: a 490×329 command-bar first frame at the screen's top-right, 1185×832 after load, Arc's title bar, one page, no sidebar | FA LA-1; IS §20.10 | routing §9.3 and Step 6a; m4 §6 | `OpenFeatures/LittleOpenWindowController.swift`, `LittleOpenSession.swift` (built with the old 720×540 guesses) | none | `features-render L1` | planned (Step E) | S2 (2026-10-26): measured (C15); replaces the 720×540 centered guess. |
 | Entry: links from other apps | FA LA-2 | routing §8 (Phase B); app-shell Step E | `OpenRouting` | none (`App/Info.plist` declares http/https, but the App has no open-URL handler) | verify-all `route` (A1–A17) | planned | |
 | Entry: global hotkey Cmd+Opt+N | FA LA-3 | app-shell §4.3, §4.4 | `GlobalHotkey.swift` | none | `commands-dump` | planned | |
 | Entry: Opt+Cmd-click a link | FA LA-4 | app-shell §4.4 (only if the engine hook exists, Q5) | — | none | none | planned (conditional) | |
 | Entry: File ▸ New Little Open Window; AppleScript app-level `tab` | FA LA-5 | app-shell §4.3, §4.10 | `OpenScripting` `makeLittleTab` hook | none | — | planned | |
-| Move to a Space (Cmd+O "Open Little Open or Peek in…") | FA LA-6 | m4; routing | `OpenFeatures/LittleOpenCoordinator.swift` | PR #52 (Peek half only) | `features-render L2` | planned | |
+| Move to a Space (Cmd+O "Open Little Open or Peek in…") | FA LA-6; IS §20.10 | m4; routing §9.3–§9.5 | `OpenFeatures/LittleOpenCoordinator.swift` | PR #52 (Peek half only) | `features-render L2` | planned | S2 (2026-10-26): the title bar has an "Open in \<Space\> ⌘O" pill and a chevron Space picker with "Search Spaces…"; ⌘O opens the page in the pill's Space. |
 | One profile per Little Open window; switch with confirmation | FA LA-7 | routing §9.2 | `LittleOpenSession.swift` | none | none (no check name covers it) | planned | |
 | Auto-archive stale Little Open windows (6 h) | FA LA-8 | routing §9.6 | `LittleOpenCoordinator` `archiveExpired` | none | `features-render L3` (real SQLite) | planned | |
 | First-run intro (NUX) | FA LA-9 | routing §9.3 | `LittleOpenWindowController.swift` | none | none | planned | |
@@ -557,24 +560,24 @@ Ranking is by user impact for an Arc user who switches to Open. **P0** blocks da
 16. **Zoom level toast** ("110%"). Evidence: IS §16. Belongs in: app-shell §3.7.
 17. **Expand / Collapse All Folders; Reset all tabs in this Space.** Registry only. Evidence: FC §1.5 r23, §3.2 r8. Belongs in: app-shell §4.3 (model loops).
 18. **Turn folder into Space; Export Space into folder; Turn Space into folder.** Intents and menu items exist; no model command. Evidence: FC §2.2 r7; IS §15. Belongs in: `OpenModel` plus app-shell §4.1.
-19. **Hover Previews** of folder, pinned, and favorite rows. The Settings switch exists (`OpenSettings`). Evidence: FC §1.2 r13. Belongs in: `OpenSidebar` plus `OpenFeatures` (reuse the Peek host).
+19. **Hover Previews** of folder, pinned, and favorite rows. The Settings switch exists (`OpenSettings`). Evidence: FC §1.2 r13. Belongs in: `OpenSidebar` plus `OpenFeatures` (reuse the Peek host). **S2 (2026-10-26): planned** (sidebar-completion §3.6; library in #102, App in A2). Lead decision: two Previews sources ("Folders", "Pinned tabs and Favorites"); Arc's live-data sources are post-v1; no delay setting (fixed 0.5 s, an Open choice; one Arc sample ≈ 0.42 s, V 46.11–46.46 s; Step S5b).
 20. **Tidy titles** for known sites. Evidence: FC §1.2 r9. Belongs in: `OpenSidebar` or `OpenModel` (an Open-written rule table).
 21. **Unread badge** on rows added in the background (field exists, never drawn). Evidence: FC §1.2 r12. Belongs in: `OpenSidebar`.
-22. **Inline autocomplete** in the command bar. Evidence: IS §9.3. Belongs in: `OpenCommandBar` and `OpenSuggest` (commandbar.md §10 gap 3).
+22. **Inline autocomplete** in the command bar. Evidence: IS §9.3. Belongs in: `OpenCommandBar` and `OpenSuggest` (commandbar.md §10 gap 3). **S2 (2026-10-26): planned** in commandbar-completion §4.1; Backspace rule captured (CC-40).
 23. **One command-bar row per Split View.** Evidence: FC §4.2 r4. Belongs in: `OpenSuggest` (suggest.md Q1).
 24. **Browser-actions-only scope** in the command bar. Evidence: FC §4.6 r14. Belongs in: `OpenSuggest` modes.
-25. **Hold-Cmd shortcut hints and the Essential Keyboard Shortcuts window.** Evidence: MH "Command Bar", Help. Belongs in: `OpenCommandBar` and a small App window.
+25. **Hold-Cmd shortcut hints and the Essential Keyboard Shortcuts window.** Evidence: MH "Command Bar", Help. Belongs in: `OpenCommandBar` and a small App window. **S2 (2026-10-26): closed for hints** (Arc shows none, CC-39; lead decision: Open builds none). The window is planned in commandbar-completion §4.5; the (i) button opens the privacy footer, not this window (CC-42).
 26. **Optional toolbar** (Show/Hide Toolbar, full URL). Evidence: FC §8.2 r6. Belongs in: `OpenFeatures` window layout.
 27. **Website appearance menu** (Automatic, Light, Dark). Evidence: MH View ▸ Appearance. Belongs in: OpenEngine (color-scheme override) and app-shell §4.3.
 28. **Clear Cache / Clear Cookies and Refresh.** Evidence: MH View. Belongs in: app-shell §4.3 (reuse `clearBrowsingData(origin:)`).
 29. **Developer menu extras and Troubleshooting items** (Network Inspector, Toggle Developer Mode, Allow JavaScript from Apple Events, Task Manager, traces, Copy Open Info, Reveal Open Data). Evidence: MH Developer, Help ▸ Troubleshooting. Belongs in: app-shell §4.3.
 30. **Cast.** Evidence: MH View. Belongs in: OpenEngine (Chromium media router) — may stay out of v1.
-31. **Separate From Pinned Tab; Clear unselected Today tabs; auto-archive education banner; first-hide sidebar hint.** Evidence: FC §3.2 r7, §1.8 r40, §3.3 r15; IS §13. Belongs in: `OpenModel` and `OpenSidebar`.
+31. **Separate From Pinned Tab; Clear unselected Today tabs; auto-archive education banner; first-hide sidebar hint.** Evidence: FC §3.2 r7, §1.8 r40, §3.3 r15; IS §13. Belongs in: `OpenModel` and `OpenSidebar`. **S2 (2026-10-26):** the hint is planned in sidebar-completion §3.12 (A1) and shows on the first hide by any path (C17).
 32. **Haptic feedback on reorder; sound effects.** Settings switches exist (`OpenSettings`). Evidence: FC §1.6 r33; FA §9.7. Belongs in: `OpenSidebar` (haptics) and a small sound player with Open's own recordings.
 33. **Change Icon… for folders and pinned tabs.** Evidence: IS §15. Belongs in: the in-progress Space icon picker, if it covers items.
 34. **Archive a whole folder and restore it as a folder.** Evidence: FC §1.5 r26. Belongs in: `OpenStore/ArchiveStore.swift` (folder records) and settings §6.2.
 35. **Little Open downloads tray.** Deferred by routing §0.2. Evidence: FA LA-10. Belongs in: routing Phase B or the downloads step.
-36. **Edge-swipe gesture to hide the sidebar.** Evidence: MH "Gestures". Belongs in: `OpenFeatures`.
+36. **Edge-swipe gesture to hide the sidebar.** Evidence: MH "Gestures". Belongs in: `OpenFeatures`. **S2 (2026-10-26): planned.** The gesture is the resize drag past the 164 pt minimum (sidebar-completion §3.16; window parts in app-shell §3.3).
 37. **Extension keyboard shortcuts and extension omnibox keywords.** Evidence: MH "Custom shortcuts" ("Extension Shortcuts"); FC §4.2 r4. Belongs in: the in-progress extensions UI plan, if it does not cover them already.
 38. **Import Arc Boosts.** Blocked on a sample file. Evidence: DM §2.6, §6 item 2. Belongs in: `OpenImport`.
 39. **Join Meeting** (Cmd+Ctrl+J) and **Meet link toast** (deferred by routing §0.2). Evidence: FC §4.4, §6.2 r7. Needs a calendar source; possibly out of scope.
@@ -634,10 +637,10 @@ Agents must not launch or drive Arc (AGENTS.md rules 4–5). These need the user
 
 | What | Why | Source |
 |---|---|---|
-| 60 fps video of Space switch, folder expand, Peek open, command bar open, sidebar hide | Motion tokens are provisional | IS §19 item 1; DT §9 item 6 |
+| 60 fps video of Space switch, folder expand, Peek open, command bar open, sidebar hide | Motion tokens are provisional | IS §19 item 1; DT §9 item 6. S2 (2026-10-26): done except Peek (IS §20.12; app-shell §3.3) |
 | Active-window traffic lights and glyphs | Active state never captured | IS §19 item 2; RO §7 #1 |
-| Sidebar minimum width (slow drag) | 180 pt hide threshold is a guess | IS §19 item 3; app-shell Q3 |
-| Little Arc window (Cmd+Opt+N), Library (Home button), Site Control Center popover | No capture of these surfaces | IS §19 item 4; RO §7 #11, #18, #19 |
+| Sidebar minimum width (slow drag) | 180 pt hide threshold is a guess | IS §19 item 3; app-shell Q3. S2 (2026-10-26): done: minimum 164, maximum 500 (IS §20.1) |
+| Little Arc window (Cmd+Opt+N), Library (Home button), Site Control Center popover | No capture of these surfaces | IS §19 item 4; RO §7 #11, #18, #19. S2 (2026-10-26): Little Arc done (IS §20.10, routing §9.3); Site Control Center captured (IS §20.5); Library still open |
 | Favorite tile hover and its context menu; empty sidebar menu; split row menu | Menus and hover are guesses | IS §19 item 5; IS §15 |
 | Light macOS appearance and a dark Space | Light-mode default theme and dark tokens are guesses | IS §2; design.md §9; RO §7 #16 |
 | Theme editor with color, grain, intensity changes | Theme fit and editor layout | RO §7 #15; design.md §9 |
