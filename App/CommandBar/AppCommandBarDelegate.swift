@@ -89,8 +89,7 @@ final class AppCommandBarSession: CommandBarDelegate {
          .search(_, let url, _, let destination, let modifiers):
       factory.navigateFromCommandBar(url, current: destination == .currentTab, background: modifiers.contains(.command))
     case .switchToTab(let id, let space): factory.selectTabForCommand(id, spaceID: space)
-    case .runAction(let id, let space):
-      factory.controller?.performCommand(AppCommand.canonicalID(id), payload: space?.description)
+    case .runAction(let id, let space): factory.controller?.performCommand(AppCommand.canonicalID(id), payload: space?.description)
     case .copy(let value):
       NSPasteboard.general.clearContents(); NSPasteboard.general.setString(value, forType: .string)
       factory.controller?.showToast("Copied", undo: nil)

@@ -6,6 +6,7 @@ import OpenModel
 import OpenStore
 import OpenEngine
 import OpenAdBlock
+import OpenSidebar
 
 /// App-owned adapters for the two shared OpenSettings presenters. Neither
 /// presenter owns a second snapshot writer or an engine context.
@@ -36,7 +37,7 @@ final class AppSettingsActions: SettingsActions, LibraryActions, DownloadsProvid
     if library == nil {
       let vm = LibraryViewModel(model: app.model, defaults: .standard, actions: self,
         downloads: self, captures: captures, archives: archives, histories: histories,
-        snapshot: app.snapshotStore, faviconStore: app.stores.favicons)
+        snapshot: app.snapshotStore, faviconStore: app.stores.favicons, settingsActions: self)
       library = vm; libraryPresenter = LibraryPresenter(viewModel: vm)
     }
     library?.registerStores(archives: archives, histories: histories)
@@ -44,6 +45,103 @@ final class AppSettingsActions: SettingsActions, LibraryActions, DownloadsProvid
   }
   func prepareForRemoteSuggestions(profileID: ProfileID) -> Bool { settingsPresenter.prepareForRemoteSuggestions(profileID: profileID) }
   func refreshDownloads() { downloadRevision += 1 }
+  @ObservationIgnored private var spaceManager: SpaceManagerView?
+  /// No persistent preference writes: this context never arms hover previews.
+  @ObservationIgnored private let managerPreferences: UserDefaults = SpaceManagerPreferences()
+  func makeSpaceManagerView() -> NSView? {
+    // Closing the last browser retains its model window for normal reopen.
+    // Prefer a live browser, then that existing state; never create a window here.
+    let id = app.frontWindowController?.windowID ?? app.model.windows.first(where: { $0.style == .standard })?.id
+    guard let id, app.model.windows.contains(where: { $0.id == id }) else { spaceManager = nil; return nil }
+    if let spaceManager, spaceManager.context.windowID == id { return spaceManager }
+    let context = SidebarContext(model: app.model, windowID: id, previewPreferences: managerPreferences)
+    context.systemAppearance = NSApp.effectiveAppearance.bestMatch(from: [.darkAqua, .aqua]) == .darkAqua ? .dark : .light
+    let manager = SpaceManagerView(context: context)
+    manager.onIntent = { [weak self, weak context] intent in
+      guard let self, let context, self.app.model.windows.contains(where: { $0.id == context.windowID }) else { return false }
+      switch intent {
+      case .hoverPreview: return true
+      case .toggleSidebar, .openCommandBar, .newTab, .goBack, .goForward, .reload, .stopLoading,
+           .copyCurrentURL, .showLibrary, .manageSpaces: return false
+      default: break
+      }
+      let factory = self.app.hostFactories[context.windowID]
+      switch intent {
+      case .openURL(let url, let parent, let index):
+        // The Manager shows every Space: create the tab in the column it was
+        // dropped on, not in the browser's focused Space, then select it there.
+        return self.openDroppedURL(url, parent: parent, index: index, factory: factory, windowID: context.windowID)
+      case .openInSplitView(let id), .addSplitView(let id), .addTabToSplit(let id):
+        // Split View lives in the browser window: show the node's Space there,
+        // then use the browser controller's own split path.
+        guard let factory, let controller = factory.controller, let space = self.spaceID(containing: id) else { return false }
+        if controller.context.focusedSpace?.id != space, factory.performSidebar(.switchSpace(space)) != true { return false }
+        return controller.sidebar(controller.sidebar, didRequest: intent)
+      default: break
+      }
+      if let factory, let handled = factory.performSidebar(intent) { return handled }
+      // No live browser (or a model-only intent): closing a pin must never archive it.
+      switch intent {
+      case .unloadTab: return false
+      case .close(let id) where self.app.model.isPinned(tabID: id): return false
+      case .copyLink(let id, let markdown):
+        guard let tab = self.app.model.tab(id: id) else { return false }
+        NSPasteboard.general.clearContents()
+        NSPasteboard.general.setString(markdown ? "[\(tab.displayTitle)](\(tab.url.absoluteString))" : tab.url.absoluteString, forType: .string)
+        return true
+      default: break
+      }
+      let accepted = ModelSidebarActions(context: context).perform(intent)
+      if accepted { self.app.scheduleSave(); self.app.scheduleMenuRebuild() }
+      return accepted
+    }
+    if let previous = spaceManager {
+      manager.frame.size = previous.frame.size
+      manager.layoutSubtreeIfNeeded()
+      let clip = manager.scrollView.contentView
+      var bounds = clip.bounds
+      bounds.origin = previous.scrollView.contentView.bounds.origin
+      clip.scroll(to: clip.constrainBoundsRect(bounds).origin)
+      manager.scrollView.reflectScrolledClipView(clip)
+    }
+    spaceManager = manager
+    return manager
+  }
+  /// The Space whose Pinned or Today list holds `id`, through folders and splits.
+  private func spaceID(containing id: ItemID) -> SpaceID? {
+    var current = id
+    for _ in 0..<64 {
+      switch app.model.parent(of: current) {
+      case .spacePinned(let space)?, .spaceToday(let space)?: return space
+      case .folder(let folder)?: current = folder
+      case .splitPane(let split)?: current = split
+      case .favorites?, nil: return nil
+      }
+    }
+    return nil
+  }
+  private func openDroppedURL(_ url: URL, parent: NodeParent, index: Int?, factory: EngineWebContentHostFactory?, windowID: WindowID) -> Bool {
+    guard let model = app.model else { return false }
+    let title = url.host() ?? url.absoluteString
+    let space: SpaceID?
+    switch parent {
+    case .spacePinned(let id), .spaceToday(let id): space = id
+    case .folder(let folder): space = spaceID(containing: folder)
+    case .favorites, .splitPane: space = nil
+    }
+    guard let space, model.space(id: space) != nil else { return false }
+    let tab = model.newTab(in: space, url: url, title: title, at: parent == .spaceToday(space) ? index : 0)
+    // A refused move (a folder removed meanwhile) keeps the new tab at the top of Today.
+    if parent != .spaceToday(space) { _ = model.moveNode(id: tab.id, to: parent, at: index) }
+    if let factory { _ = factory.performSidebar(.select(nodeID: tab.id, space: space)) }
+    else { model.selectNode(windowID: windowID, spaceID: space, nodeID: tab.id) }
+    app.scheduleSave(); app.scheduleMenuRebuild()
+    return true
+  }
+  func refreshSpaceManagerContext() {
+    guard libraryPresenter?.window?.isVisible == true else { return }
+    library?.refreshSpaceManagerView()
+  }
   var downloads: [DownloadItemSnapshot] {
     _ = downloadRevision
     return OEEngine.shared.contexts.flatMap { context in
@@ -148,5 +246,19 @@ final class AppSettingsActions: SettingsActions, LibraryActions, DownloadsProvid
   func viewSpace(id: SpaceID) {
     guard let controller = app.frontWindowController ?? app.makeWindow(focusedSpaceID: id), let space = app.model.space(id: id), let factory = app.hostFactories[controller.windowID] else { return }
     app.focusWindow(controller.windowID, activate: true); factory.focus(space: space)
+  }
+}
+
+/// A read-only in-memory override. NSArgumentDomain is process-shared, so
+/// mutating it on a suite would also disable previews in browser sidebars.
+private final class SpaceManagerPreferences: UserDefaults, @unchecked Sendable {
+  override func set(_ value: Any?, forKey defaultName: String) {}
+  override func object(forKey defaultName: String) -> Any? {
+    if defaultName == "open.general.previewsEnabled" { return false }
+    return super.object(forKey: defaultName)
+  }
+  override func bool(forKey defaultName: String) -> Bool {
+    if defaultName == "open.general.previewsEnabled" { return false }
+    return super.bool(forKey: defaultName)
   }
 }

@@ -197,7 +197,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, OEEngineDelegate, OEBr
       return createWindowController(state: state)
     }
     guard let spaceID = focusedSpaceID ?? frontWindowController?.context.focusedSpace?.id ?? model.spaces.first?.id,
-      let state = model.createWindow(focusedSpaceID: spaceID) else { return nil }
+      let state = withoutWindowUndo({ model.createWindow(focusedSpaceID: spaceID) }) else { return nil }
     let offset = Double(windowControllers.count * 24)
     state.frameX += offset; state.frameY -= offset
     let controller = createWindowController(state: state)
@@ -216,16 +216,18 @@ final class AppDelegate: NSObject, NSApplicationDelegate, OEEngineDelegate, OEBr
     activeWindowID = id
     for (otherID, factory) in hostFactories where otherID != id { factory.commandBarSession?.dismiss() }
     MainMenu.targetWindowCommands(hostFactories[id])
+    settingsPresenter.refreshSpaceManagerContext()
   }
 
   func windowDidClose(_ id: WindowID) {
     if model.windows.filter({ $0.style == .standard }).count > 1 {
-      model.closeWindow(windowID: id)
+      withoutWindowUndo { model.closeWindow(windowID: id) }
     }
     windowControllers.removeAll { $0.windowID == id }; hostFactories[id] = nil
     if activeWindowID == id { activeWindowID = windowControllers.last?.windowID }
     MainMenu.targetWindowCommands(frontWindowController.flatMap { hostFactories[$0.windowID] })
     scheduleSave()
+    settingsPresenter.refreshSpaceManagerContext()
   }
 
   static func makeDefaultModel() -> BrowserModel {
@@ -233,6 +235,15 @@ final class AppDelegate: NSObject, NSApplicationDelegate, OEEngineDelegate, OEBr
     let space = Space(title: "Space", profileID: profile.id)
     let window = BrowserWindowState(focusedSpaceID: space.id)
     return BrowserModel(profiles: [profile], spaces: [space], windows: [window])
+  }
+
+  /// Shell window lifetime cannot be undone as a sidebar edit. Preserve an
+  /// enclosing caller's disabled registration state, including on early return.
+  private func withoutWindowUndo<T>(_ body: () -> T) -> T {
+    let wasEnabled = undoManager.isUndoRegistrationEnabled
+    if wasEnabled { undoManager.disableUndoRegistration() }
+    defer { if wasEnabled { undoManager.enableUndoRegistration() } }
+    return body()
   }
 
   func scheduleSave() {
@@ -387,7 +398,16 @@ extension AppDelegate: CommandDispatcher {
     commandServicesPrepared = true
     _ = settingsPresenter.settings
     commandWindowObserver = NotificationCenter.default.addObserver(forName: NSWindow.didBecomeKeyNotification, object: nil, queue: .main) { [weak self] _ in
-      MainActor.assumeIsolated { self?.scheduleMenuRebuild() }
+      MainActor.assumeIsolated {
+        guard let self else { return }
+        // A window no browser owns (Library, Settings) must stop routing menu keys to the
+        // browser at once: a key pressed before a deferred rebuild (or while another one is
+        // pending) would otherwise run in the browser behind it (Cmd+L, Cmd+W).
+        if let window = NSApp.keyWindow, window.sheetParent == nil, self.factory(forKeyWindow: window) == nil, !self.shutdownPrepared {
+          self.menuRebuildTask?.cancel(); self.menuRebuildTask = nil
+          NSApp.mainMenu = MainMenu.build()
+        } else { self.scheduleMenuRebuild() }
+      }
     }
     reloadKeyBindings()
   }
@@ -432,7 +452,7 @@ extension AppDelegate: CommandDispatcher {
   func isCommandEnabled(_ id: String, enabledKey: String) -> Bool {
     if SystemCommandActions.selectors[id] != nil { return SystemCommandActions.isEnabled(id) }
     if ["archive-tab", "close-window"].contains(id) { return NSApp.keyWindow != nil }
-    return ["new-window", "blank-window", "new-tab", "settings", "search-settings", "air-traffic-control", "import-from-browser", "set-default-browser", "check-for-updates", "view-archive", "view-history", "view-library", "view-downloads", "view-boosts", "quit-open", "new-little-open-window", "little-open-global", "about-open", "hide-open", "hide-others", "show-all", "help-center", "keyboard-shortcuts-edu", "show-shortcuts-overlay", "getting-started", "release-notes", "contact-team"].contains(id)
+    return ["new-window", "blank-window", "new-tab", "settings", "search-settings", "air-traffic-control", "import-from-browser", "set-default-browser", "check-for-updates", "view-archive", "view-history", "view-library", "view-downloads", "view-boosts", "quit-open", "new-little-open-window", "little-open-global", "about-open", "hide-open", "hide-others", "show-all", "help-center", "keyboard-shortcuts-edu", "show-shortcuts-overlay", "getting-started", "release-notes", "contact-team", "manage-spaces"].contains(id)
   }
   func performCommand(_ id: String, payload: String?) { performCommand(id) }
   func performCommand(_ id: String) {
@@ -455,6 +475,7 @@ extension AppDelegate: CommandDispatcher {
     case "view-boosts": settingsPresenter.show(); settingsPresenter.settings.statusText = "Boost editing is not available in this build."
     case "keyboard-shortcuts-edu": settingsPresenter.show(pane: .shortcuts)
     case "archive-tab": NSApp.keyWindow?.performClose(nil)
+    case "manage-spaces": settingsPresenter.showLibrary(section: .spaces)
     case "new-little-open-window", "little-open-global": showLittleOpenStub()
     case "help-center", "show-shortcuts-overlay", "getting-started", "release-notes", "contact-team":
       let controller = frontWindowController ?? makeWindow()
