@@ -1,10 +1,11 @@
 import CoreGraphics
 import Foundation
+import OpenModel
 
 /// Computes the Space background color at any point of the window.
 ///
-/// The math follows what we measured from Arc's theme shader and captures
-/// (docs/design.md, "Theme rendering"):
+/// Gradient geometry retains the capture fit (docs/design.md, "Theme
+/// rendering"). Editor opacity, wash, and final blend follow plan §17.2:
 ///
 /// 1. Two linear gradients in window uv space (0…1, y down): the base gradient
 ///    and an overlay gradient. Each gets a start and end point. The projection is
@@ -17,13 +18,16 @@ import Foundation
 ///    base in linear light, the result is encoded to sRGB (sign-preserving).
 /// 4. The gradient is drawn with `layerAlpha` over a neutral underlay. The
 ///    underlay is darker while the window is key/active and lighter when it is not.
+///    Editor styles mix in encoded Display P3; legacy styles retain sRGB.
 ///
-/// The CPU-side numbers (angles, alpha, underlay grays) are fitted to captures;
-/// they reproduce three captured Spaces at ≈1.3–1.6 / 255 RMS.
+/// Legacy snapshots keep the original 0.64/sRGB fit byte for byte. Editor
+/// styles use 0.2 + 0.55·intensity and encoded Display P3; F0139
+/// remains a documented 1.89 ΔE00 regression versus the older 0.84 fit.
 public enum ThemeField {
-    /// Gradient opacity over the underlay. Fitted 0.62–0.645 on two Spaces with
-    /// `intensityFactor` 0.8.
-    public static func layerAlpha(intensity: Double) -> Double { 0.8 * min(1, max(0, intensity)) }
+    /// Decoded §17.2 opacity. At intensity 0.8 it retains the fitted 0.64.
+    public static func layerAlpha(intensity: Double) -> Double {
+        ThemeTuning.intensityAlphaFloor + ThemeTuning.intensityAlphaSlope * min(1, max(0, intensity.isFinite ? intensity : 0))
+    }
     /// Underlay gray for `translucencyStyle: light`, active and inactive window.
     public static let lightUnderlayActive: Double = 0.694
     public static let lightUnderlayInactive: Double = 0.83
@@ -76,38 +80,52 @@ public enum ThemeField {
         let overlayParam: Param
         let alpha: Double
         let underlay: Double
+        let legacy: Bool
+        let solidColor: (Double, Double, Double)?
 
         public init(style: SpaceThemeStyle, windowSize: CGSize, isActive: Bool) {
-            // New editor styles clamp render inputs only. Imported/stops
-            // themes retain the original extended-color path byte for byte.
-            func fill(_ color: RGBA) -> RGBA {
-                if style.usesLegacyIntensity { return color }
-                func channel(_ value: Double) -> Double { value.isFinite ? min(1, max(0, value)) : 0 }
-                return RGBA(channel(color.red), channel(color.green), channel(color.blue), color.alpha)
-            }
+            legacy = style.usesLegacyIntensity
+            let solidKey: P3?
             switch style.fill {
             case .blended(let b, let o):
-                base = b.map(fill).map { OKLab.fromSRGB($0.red, $0.green, $0.blue) }
-                var ov = o.map(fill).map { (OKLab.fromSRGB($0.red, $0.green, $0.blue), $0.alpha) }
+                solidKey = !legacy && b.count == 1 && o.isEmpty ? ThemeColorMath.toP3(b[0].modelColor) : nil
+                base = b.map { OKLab.fromSRGB($0.red, $0.green, $0.blue) }
+                var ov = o.map { (OKLab.fromSRGB($0.red, $0.green, $0.blue), $0.alpha) }
                 // A clear first stop fades in the second stop's own color
                 // (no darkening through black; measured).
                 if ov.count == 2, ov[0].1 == 0 { ov[0].0 = ov[1].0 }
                 overlay = ov
                 corners = []
             case .corners(let c):
-                base = []; overlay = []; corners = c.map(fill)
+                base = []; overlay = []; corners = c; solidKey = nil
             }
             baseParam = Param(ThemeField.endpoints(ThemeField.baseLine, size: windowSize))
             overlayParam = Param(ThemeField.endpoints(ThemeField.overlayLine, size: windowSize))
             alpha = style.usesLegacyIntensity ? 0.64 : ThemeField.layerAlpha(intensity: style.intensityFactor)
+            let fitted: Double
             switch style.translucency {
-            case .light: underlay = isActive ? ThemeField.lightUnderlayActive : ThemeField.lightUnderlayInactive
-            case .dark: underlay = isActive ? ThemeField.darkUnderlayActive : ThemeField.darkUnderlayInactive
+            case .light: fitted = isActive ? ThemeField.lightUnderlayActive : ThemeField.lightUnderlayInactive
+            case .dark: fitted = isActive ? ThemeField.darkUnderlayActive : ThemeField.darkUnderlayInactive
             }
+            // §17.2: preserve U0 at and above the wash cap. Light's uncaptured
+            // white-wash branch remains today's fitted underlay (documented guess).
+            underlay = !legacy && style.windowColorScheme == .dark
+                ? fitted * (1 - ThemeTuning.darkWashAlpha * min(alpha, ThemeTuning.washOpacityCap))
+                    / (1 - ThemeTuning.darkWashAlpha * ThemeTuning.washOpacityCap)
+                : fitted
+            if let key = solidKey {
+                let u0 = underlay * (1 - alpha)
+                solidColor = P3Transfer.toSRGB(P3(key.r * alpha + u0, key.g * alpha + u0, key.b * alpha + u0))
+            } else { solidColor = nil }
         }
 
         /// Final color (extended, gamma-encoded sRGB) at window uv.
         public func color(u: Double, v: Double) -> (Double, Double, Double) {
+            func mixP3(_ color: P3, alpha: Double) -> (Double, Double, Double) {
+                let u0 = underlay * (1 - alpha)
+                return P3Transfer.toSRGB(P3(color.r * alpha + u0, color.g * alpha + u0, color.b * alpha + u0))
+            }
+            if let solidColor { return solidColor }
             if !corners.isEmpty {
                 let c = corners
                 func lerp(_ a: Double, _ b: Double, _ t: Double) -> Double { a + (b - a) * t }
@@ -138,6 +156,7 @@ public enum ThemeField {
                     bl = (ob * oa + bl * ba * (1 - oa)) / outA
                 }
             }
+            if !legacy { return mixP3(P3Transfer.fromLinearSRGB(r, g, bl), alpha: outA) }
             let er = OKLab.encode(r), eg = OKLab.encode(g), eb = OKLab.encode(bl)
             let u0 = underlay * (1 - outA)
             return (er * outA + u0, eg * outA + u0, eb * outA + u0)
@@ -168,5 +187,33 @@ public enum ThemeField {
         return CGImage(width: n, height: n, bitsPerComponent: 32, bitsPerPixel: 128, bytesPerRow: n * 16,
                        space: space, bitmapInfo: info, provider: provider, decode: nil,
                        shouldInterpolate: true, intent: .defaultIntent)
+    }
+}
+
+/// Cache ColorSync's two linear primary matrices once. Transfer curves are
+/// shared by sRGB and Display P3. No per-pixel CGColor/profile allocation.
+private enum P3Transfer {
+    private struct Matrix: Sendable {
+        let red, green, blue: SIMD3<Double>
+        func apply(_ r: Double, _ g: Double, _ b: Double) -> SIMD3<Double> { red * r + green * g + blue * b }
+    }
+    private static func matrix(from: CFString, to: CFString) -> Matrix {
+        let source = CGColorSpace(name: from)!, destination = CGColorSpace(name: to)!
+        func primary(_ column: Int) -> SIMD3<Double> {
+            var values = [CGFloat](repeating: 0, count: 4); values[column] = 1; values[3] = 1
+            let c = CGColor(colorSpace: source, components: values)!.converted(to: destination, intent: .relativeColorimetric, options: nil)!.components!
+            return SIMD3(Double(c[0]), Double(c[1]), Double(c[2]))
+        }
+        return Matrix(red: primary(0), green: primary(1), blue: primary(2))
+    }
+    private static let p3 = matrix(from: CGColorSpace.extendedLinearSRGB, to: CGColorSpace.extendedLinearDisplayP3)
+    private static let srgb = matrix(from: CGColorSpace.extendedLinearDisplayP3, to: CGColorSpace.extendedLinearSRGB)
+    static func fromLinearSRGB(_ r: Double, _ g: Double, _ b: Double) -> P3 {
+        let c = p3.apply(r, g, b)
+        return P3(min(1, max(0, OKLab.encode(c.x))), min(1, max(0, OKLab.encode(c.y))), min(1, max(0, OKLab.encode(c.z))))
+    }
+    static func toSRGB(_ c: P3) -> (Double, Double, Double) {
+        let c = srgb.apply(OKLab.decode(c.r), OKLab.decode(c.g), OKLab.decode(c.b))
+        return (OKLab.encode(c.x), OKLab.encode(c.y), OKLab.encode(c.z))
     }
 }
