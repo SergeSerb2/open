@@ -62,6 +62,15 @@
       return (try? JSONSerialization.data(withJSONObject: safe, options: [.sortedKeys])) ?? Data("{}".utf8)
     }
 
+    static func mallocZoneNames() -> [String] {
+      var zones: UnsafeMutablePointer<vm_address_t>?
+      var count: UInt32 = 0
+      guard malloc_get_all_zones(mach_task_self_, nil, &zones, &count) == KERN_SUCCESS, let zones else { return [] }
+      return (0..<Int(count)).map { i in
+        UnsafePointer<malloc_zone_t>(bitPattern: UInt(zones[i]))?.pointee.zone_name.map { String(cString: $0) } ?? ""
+      }
+    }
+
     // MARK: Dispatch
 
     private func run(_ cmd: String, _ a: [String: Any]) async throws -> Any {
@@ -72,6 +81,10 @@
           "pid": Int(getpid()), "chromium": OEEngine.shared.chromiumVersion, "cef": OEEngine.shared.cefVersion,
           "userData": OEEngine.shared.configuration.userDataDirectory.path,
           "root": app.directories.root.path,
+          // Malloc zone names in registration order: with OpenEngine's early
+          // delegating zone, PartitionAlloc replaced it in place, so the
+          // system zone stays second (docs/engine-fork.md).
+          "mallocZones": Self.mallocZoneNames(),
         ]
       case "menu-context":
         return ["services": NSApp.servicesMenu?.title == "Services", "window": NSApp.windowsMenu?.title == "Window",

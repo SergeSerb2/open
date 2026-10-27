@@ -5,6 +5,8 @@ let package = Package(
     name: "OpenKit",
     platforms: [.macOS(.v26)],
     products: [
+        .library(name: "OpenSiteControl", targets: ["OpenSiteControl"]),
+        .executable(name: "sitecontrol-render", targets: ["sitecontrol-render"]),
         .library(name: "OpenMedia", targets: ["OpenMedia"]),
         .library(name: "OpenSettings", targets: ["OpenSettings"]),
         .executable(name: "settings-preview", targets: ["settings-preview"]),
@@ -32,6 +34,8 @@ let package = Package(
         .executable(name: "commandbar-render", targets: ["commandbar-render"]),
     ],
     targets: [
+        .target(name: "OpenSiteControl", dependencies: ["OpenModel", "OpenDesign", "OpenBoosts", "OpenAdBlock", "OpenWeb"]),
+        .executableTarget(name: "sitecontrol-render", dependencies: ["OpenSiteControl", "OpenModel", "OpenDesign", "OpenBoosts", "OpenWeb"]),
         .target(name: "OpenMedia", dependencies: ["OpenModel", "OpenWeb"], resources: [.copy("Resources/pip-site-rules.json")]),
         .target(name: "OpenSettings", dependencies: ["OpenModel", "OpenRouting", "OpenCommands", "OpenSuggest", "OpenStore", "OpenDesign", "OpenAdBlock", "OpenImport"]),
         .executableTarget(name: "settings-preview", dependencies: ["OpenSettings", "OpenModel", "OpenRouting", "OpenCommands", "OpenSuggest", "OpenStore", "OpenImport", "OpenAdBlock"]),

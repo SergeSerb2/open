@@ -317,6 +317,57 @@ with the patcher skipped. With only the CEF patch reversed, apply peeled both
 Open Chromium patches, ran the patcher, and re-applied them (same 10 files
 identical).
 
+## PartitionAlloc and the launch race (2026-10-26)
+
+A Release launch in the window suite crashed 1 s after start with
+`[FATAL:allocator_shim_apple.cc(61)] Check failed: false. Oops! No zone found`
+on a CoreSpotlight dispatch queue (`Open-2026-10-26-110130.ips`: SIGTRAP in
+`allocator_shim::TryFreeDefaultFallbackToFindZoneAndFree`, called from
+`-[__NSDictionaryM dealloc]` in `-[CSInlineDonation _reportErrorWithCode:…]`).
+
+Cause, in our startup order, not in the fork's patches. The framework's
+PartitionAlloc makes itself the default malloc zone from a load-time
+constructor (`InitializeDefaultMallocZoneWithPartitionAlloc`,
+`partition_alloc/shim/allocator_shim_override_apple_default_zone.h`). When no
+delegating zone is registered, it takes the path its own comment calls racy:
+`malloc_zone_register(PartitionAlloc)`, `malloc_zone_unregister(system)`,
+`malloc_zone_register(system)`. Between the last two, a `free()` of a system
+pointer on another thread reaches PartitionAlloc's `try_free_default`, finds
+no zone that owns the pointer, and the CHECK fires. Chrome avoids this with
+`partition_alloc::EarlyMallocZoneRegistration()` at the top of `main()`
+(`chrome/app/chrome_exe_main_mac.cc`); CEF's samples load the framework
+before any thread starts. Open shows its first window before it loads the
+framework (`App/main.swift` calls `OEEngine.start(configuration:)` after the
+first frame, and that loads it with `CefScopedLibraryLoader::LoadInMain`), so
+AppKit, CoreSpotlight and other system threads are already running then.
+
+Fix: `Engine/OpenEngine/src/OEMallocZone.mm`, a load-time constructor of the
+OpenEngine framework (so it runs before `main()` in the app and in every
+helper), installs Chrome's delegating zone: it forwards allocations to the
+system zone, owns nothing, and is named `DelegatingDefaultZoneForPartitionAlloc`
+with zone version 13. PartitionAlloc recognizes the name and swaps itself in
+for it in one step; the system zone is registered throughout. The code is
+adapted from Chromium's `base/allocator/early_zone_registration_apple.cc`
+(BSD license).
+
+Evidence:
+
+- Repro (`.re/malloc-zone-race/probe.mm`): 8 threads free system-zone blocks
+  while the main thread dlopens the fork's framework, as `LoadInMain` does.
+  Without the zone: 50 of 50 runs end in the same `Oops! No zone found` FATAL.
+  With `OEMallocZone.mm` linked: 50 of 50 exit cleanly; zone 0 is
+  `DelegatingDefaultZoneForPartitionAlloc` before the dlopen and
+  `PartitionAlloc` after it.
+- In the app: `ping` reports the zone names (`mallocZones`); the window
+  suite's `malloc_zones_early` check requires `PartitionAlloc` first and the
+  system zone before the purgeable zone (on the racy path the system zone is
+  registered again at the end).
+
+Rebase watch: the zone name and `kZoneVersion` in OEMallocZone.mm must match
+`partition_alloc/shim/early_zone_registration_utils_apple.h`
+(`kDelegatingZoneName`, `kZoneVersion`). If they drift, PartitionAlloc takes
+the racy path again and `malloc_zones_early` fails.
+
 ## Rebase watch list
 
 Things Open copies from upstream or relies on without a patch, so no patch
