@@ -267,6 +267,10 @@ class OETabStripHandler : public CefTabStripHandler {
 
 - (void)dealloc {
   if (_strip) {
+    // The Browser leaves Chromium's collection before its asynchronous
+    // deletion. Native key notifications during popup/window teardown must
+    // not activate that unregistered Browser in the meantime.
+    _strip->SetHostView(nullptr);
     // Without -close: close the popup first, as -close does. The handler's
     // weak reference to self is already nil, so no delegate calls follow.
     _strip->CloseExtensionPopup();
@@ -393,6 +397,9 @@ class OETabStripHandler : public CefTabStripHandler {
     // Keep this browser alive until Chromium's popup callback unwinds too.
     dispatch_async(dispatch_get_main_queue(), ^{ [self close]; });
     return;
+  }
+  if (_strip) {
+    _strip->SetHostView(nullptr);
   }
   [self closeExtensionPopup];
   for (OEWebContent* content in [_tabs copy]) {
