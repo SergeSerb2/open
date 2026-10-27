@@ -60,6 +60,10 @@ final class EngineWebContentHostFactory: NSResponder, WebContentHostFactory {
   private var enteredWindowFullscreenForPage = false
   private(set) var auxiliaryPages: [AuxiliaryPage] = []
   private(set) var popupPanel: NSPanel?
+  #if OPEN_AUTOMATION
+  var popupCallbackClose: (phase: String, toggle: Bool)?
+  func releaseBrowsersForAutomation() -> [String: Any] { mirror.releaseWithoutClosingForAutomation() }
+  #endif
   private lazy var extensionBar = makeExtensionBar()
   private lazy var findField = makeFindField()
   private var extensionBarCreated = false
@@ -582,6 +586,10 @@ extension EngineWebContentHostFactory {
   }
 
   @objc func closeTab(_ sender: Any?) {
+    if let popupPanel, NSApp.keyWindow === popupPanel {
+      focusedBrowser?.closeExtensionPopup()
+      return
+    }
     if let panel = NSApp.keyWindow as? NSPanel, let page = auxiliaryPages.first(where: { $0.panel === panel }) { closeAuxiliary(page); return }
     if let tab = selectedTab { closeTab(id: tab.id) }
   }
@@ -973,7 +981,23 @@ extension EngineWebContentHostFactory: OEWebContentDelegate {
 // MARK: - OEBrowserDelegate (extension actions and popups)
 
 extension EngineWebContentHostFactory: OEBrowserDelegate {
+  private func closePopupInCallbackForAutomation(_ browser: OEBrowser, popup: OEWebContent, phase: String) {
+    #if OPEN_AUTOMATION
+    guard let policy = popupCallbackClose, policy.phase == phase else { return }
+    popupCallbackClose = nil
+    if policy.toggle, let identifier = browser.extensionPopupExtensionIdentifier {
+      _ = browser.executeExtensionAction(identifier)
+    } else {
+      browser.closeExtensionPopup()
+      browser.closeExtensionPopup() // repeated requests must remain safe
+    }
+    record("popupCallbackClose", popup, ["phase": phase, "toggle": policy.toggle,
+      "stillOpenInsideCallback": browser.extensionPopup === popup])
+    #endif
+  }
+
   func browserDidUpdateExtensionActions(_ browser: OEBrowser) {
+    record("extensionActions", nil, ["browser": browser.identifier, "ready": browser.extensionActionsReady])
     if browser === focusedBrowser { reloadExtensionBar() }
   }
 
@@ -991,10 +1015,12 @@ extension EngineWebContentHostFactory: OEBrowserDelegate {
     }
     present(panel)
     record("extensionPopup", popup, ["extension": action.extensionIdentifier, "open": true])
+    closePopupInCallbackForAutomation(browser, popup: popup, phase: "open")
   }
 
   func browser(_ browser: OEBrowser, didResizeExtensionPopup popup: OEWebContent, to size: NSSize) {
     record("extensionPopup", popup, ["resize": [size.width, size.height]])
+    closePopupInCallbackForAutomation(browser, popup: popup, phase: "resize")
     guard let panel = popupPanel else { return }
     let frame = panel.frameRect(forContentRect: NSRect(origin: .zero, size: size))
     var f = panel.frame
@@ -1006,6 +1032,7 @@ extension EngineWebContentHostFactory: OEBrowserDelegate {
   /// Fork patch P2: the popup's first load stopped.
   func browser(_ browser: OEBrowser, extensionPopupIsReady popup: OEWebContent) {
     record("extensionPopup", popup, ["ready": true])
+    closePopupInCallbackForAutomation(browser, popup: popup, phase: "ready")
   }
 
   func browser(_ browser: OEBrowser, didCloseExtensionPopup popup: OEWebContent) {

@@ -41,6 +41,7 @@ from pathlib import Path
 ROOT = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 OUT = os.path.join(ROOT, "docs", "engine-spike")
 _ACTIVE_FOCUS_TRACKER = None
+_OWNED_APPS = []
 
 EXT = {
     "ublock": "ddkjiahejlhfcafbddmgiahcphecmpfh",
@@ -128,6 +129,12 @@ class Open:
             os.makedirs(os.path.dirname(self.activator), exist_ok=True)
             subprocess.run(["nice", "-n", "10", "xcrun", "swiftc", "-O", "-swift-version", "6", "-parse-as-library",
                             activator_source, "-o", self.activator], check=True)
+        counter_source = os.path.join(ROOT, "tools", "e2e", "owned-window-count.swift")
+        self.window_counter = os.path.join(ROOT, ".re", "e2e-tools", "owned-window-count")
+        if not os.path.exists(self.window_counter) or os.path.getmtime(self.window_counter) < os.path.getmtime(counter_source):
+            subprocess.run(["nice", "-n", "10", "xcrun", "swiftc", "-O", "-swift-version", "6", "-parse-as-library",
+                            counter_source, "-o", self.window_counter], check=True)
+        self.owned_processes = {}
         self.pid = None
         self.launch_waiter_ended_before_automation = False
         self.closed = False
@@ -138,7 +145,7 @@ class Open:
         self.focus_tracker = None
         env = dict(os.environ, OPEN_USER_DATA=user_data)
         env.update(extra_env or {})
-        args = [app, "--style=%s" % style] + list(urls) + extra_args
+        args = [app, "--user-data-dir=" + user_data, "--style=%s" % style] + list(urls) + extra_args
         self.log = open(log_path, "a")
         self.started = time.time()
         # A raw executable launch can have a visible window but no foreground
@@ -155,10 +162,12 @@ class Open:
                 launch += ["--env", key + "=" + value]
         launch += ["--args"] + args[1:]
         self.proc = subprocess.Popen(launch, stdout=self.log, stderr=subprocess.STDOUT)
+        _OWNED_APPS.append(self)
         deadline = time.time() + 60
         while time.time() < deadline:
             try:
                 self.pid = self.call("ping")["pid"]
+                self.discover_owned_processes()
                 return
             except (OSError, json.JSONDecodeError):
                 time.sleep(0.1)
@@ -166,12 +175,12 @@ class Open:
                 # LaunchServices may fail its -W GetProcessPID wait independently
                 # of launching the app. Only the real socket establishes readiness.
                 self.launch_waiter_ended_before_automation = True
-        self.proc.kill()
-        self.proc.wait()
-        self.log.close()
+        self.quit()
         raise RuntimeError("Open automation was not ready within 60 s (launcher exit %s); see %s" % (self.proc.returncode, log_path))
 
     def call(self, cmd, timeout=120, **args):
+        if cmd in ("window-close", "popup-close", "quit") or (cmd == "devtools" and args.get("method") == "Page.crash"):
+            self.discover_owned_processes()
         foreground_input = cmd in ("key", "focus") or (cmd == "window-focus" and args.get("activate"))
         if foreground_input and self.pid and not self.call("window-state").get("appActive", False):
             # `NSApp.activate()` is a request, not a grant. Renew the explicit
@@ -246,46 +255,103 @@ class Open:
                     raise
                 time.sleep(1)
 
+    @staticmethod
+    def process_path(pid):
+        path = ctypes.create_string_buffer(4096)
+        size = ctypes.CDLL("/usr/lib/libproc.dylib").proc_pidpath(pid, path, len(path))
+        return os.path.realpath(os.fsdecode(path.value)) if size > 0 else ""
+
+    def discover_owned_processes(self):
+        # The unique data-root argument also finds a launch that failed before
+        # ping returned its PID. Do not kill by app name or bundle identifier.
+        rows = []
+        for line in subprocess.check_output(["ps", "-axo", "pid=,ppid="], text=True).splitlines():
+            fields = line.split()
+            if len(fields) == 2:
+                rows.append((int(fields[0]), int(fields[1])))
+        root_path = os.path.realpath(self.executable)
+        owned = set(self.owned_processes)
+        if self.pid and self.process_path(self.pid) == root_path:
+            owned.add(self.pid)
+        if not self.pid:
+            for pid, _ in rows:
+                if self.process_path(pid) != root_path:
+                    continue
+                args = subprocess.run(["ps", "-p", str(pid), "-o", "args="], capture_output=True, text=True).stdout
+                if "--user-data-dir=" + self.user_data in args:
+                    owned.add(pid)
+                    self.pid = pid
+        for _ in range(16):
+            found = {pid for pid, parent in rows if parent in owned}
+            if found <= owned:
+                break
+            owned.update(found)
+        bundle = os.path.realpath(self.bundle) + os.sep
+        for pid in owned:
+            path = self.process_path(pid)
+            if path == root_path or path.startswith(bundle):
+                self.owned_processes[pid] = path
+
+    def owned_windows(self):
+        result = subprocess.run([self.window_counter] + [str(pid) for pid in self.owned_processes],
+                                capture_output=True, text=True, timeout=10, check=True)
+        return json.loads(result.stdout)
+
+    def cleanup_surfaces(self):
+        for cmd in ("dismiss", "popup-close"):
+            try:
+                self.call(cmd, timeout=3)
+            except Exception:
+                pass  # quit's verified-PID kill is the final fallback
+
     def quit(self):
         if self.closed:
             return
-        try:
-            self.activation_trace = self.call("activation-events")
-        except Exception:
-            pass
         self.quit_report = {}
         try:
-            self.quit_report["reply"] = self.call("quit")
-        except Exception as error:
-            self.quit_report["error"] = str(error)
-        # The launch waiter may have been interrupted independently of its app.
-        # Wait for the actual app PID too, and never kill another executable.
-        def still_ours():
-            if not self.pid:
-                return False
-            path = ctypes.create_string_buffer(4096)
-            libproc = ctypes.CDLL("/usr/lib/libproc.dylib")
-            size = libproc.proc_pidpath(self.pid, path, len(path))
-            actual = os.path.realpath(os.fsdecode(path.value)) if size > 0 else ""
-            if "observedExecutable" not in self.quit_report:
-                self.quit_report["observedExecutable"] = actual
-                self.quit_report["expectedExecutable"] = os.path.realpath(self.executable)
-            return size > 0 and actual == os.path.realpath(self.executable)
-        deadline = time.monotonic() + 15
-        while still_ours() and time.monotonic() < deadline:
-            time.sleep(.05)
-        self.quit_report["forced"] = still_ours()
-        if self.quit_report["forced"]:
-            os.kill(self.pid, signal.SIGKILL)
-        try:
-            self.proc.wait(2)
-        except subprocess.TimeoutExpired:
-            self.proc.kill()
-            self.proc.wait()
-        if os.path.exists(self.launch_log_path):
-            self.log.write(Path(self.launch_log_path).read_text(errors="replace"))
-        self.log.close()
-        self.closed = True
+            self.discover_owned_processes()
+            self.cleanup_surfaces()
+            try:
+                self.activation_trace = self.call("activation-events", timeout=3)
+            except Exception:
+                pass
+            try:
+                self.quit_report["windows_before_quit"] = self.owned_windows()["count"]
+                self.quit_report["reply"] = self.call("quit", timeout=3)
+            except Exception as error:
+                self.quit_report["error"] = str(error)
+        finally:
+            def living():
+                return [pid for pid, path in self.owned_processes.items() if path and self.process_path(pid) == path]
+            deadline = time.monotonic() + 10
+            while living() and time.monotonic() < deadline:
+                time.sleep(.05)
+            remaining = living()
+            self.quit_report["forced"] = bool(remaining)
+            for pid in remaining:
+                try:
+                    os.kill(pid, signal.SIGKILL)
+                except ProcessLookupError:
+                    pass
+            deadline = time.monotonic() + 5
+            while living() and time.monotonic() < deadline:
+                time.sleep(.05)
+            try:
+                self.quit_report["windows_after_quit"] = self.owned_windows()
+                self.quit_report["remaining_processes"] = living()
+                self.quit_report["ok"] = not living() and self.quit_report["windows_after_quit"]["count"] == 0
+            except Exception as error:
+                self.quit_report.update(ok=False, cleanup_error=str(error))
+            self.quit_report["owned_pids"] = sorted(self.owned_processes)
+            try:
+                self.proc.wait(2)
+            except subprocess.TimeoutExpired:
+                self.proc.kill()
+                self.proc.wait()
+            if os.path.exists(self.launch_log_path):
+                self.log.write(Path(self.launch_log_path).read_text(errors="replace"))
+            self.log.close()
+            self.closed = True
 
     def tab(self, tab_id):
         return [t for t in self.call("tabs") if t["id"] == tab_id][0]
@@ -3083,6 +3149,13 @@ ACTION_PROBE_COPY = None
 
 
 def actions_checks(app, results):
+    try:
+        _actions_checks(app, results)
+    finally:
+        app.cleanup_surfaces()
+
+
+def _actions_checks(app, results):
     def actions():
         return app.call("actions")
 
@@ -3161,6 +3234,49 @@ def actions_checks(app, results):
               and info["last_size"][0] == 320 and info.get("showing_popup"),
         **info}
 
+    # Focus the other real Split View pane and run the action in the SAME
+    # socket turn, before the pending engine sync can run on its own.
+    close_popup()
+    left = new_tab(app, "https://example.com/?split-left")
+    right = new_tab(app, "https://example.org/?split-right")
+    pane_popup = open_popup(ACTION_PROBE)
+    pane_ids = {"left": app.page(left)["chromeTabId"], "right": app.page(right)["chromeTabId"]}
+    if pane_popup:
+        popup_eval(pane_popup, "Promise.all([chrome.action.setTitle({tabId: %(left)d, title: 'Split left'}),"
+                              "chrome.action.setTitle({tabId: %(right)d, title: 'Split right'})]).then(() => true)" % pane_ids)
+    close_popup()
+    wait_until(lambda: (lambda x: x and x["title"] == "Split right")(action(ACTION_PROBE)), timeout=10)
+    panes = app.call("split")
+    app.call("ext-run", extension=ACTION_PROBE, focusTab=left)
+
+    def focused_popup():
+        popup = app.call("ext-popup")
+        try:
+            return popup if popup.get("open") and popup["page"]["live"] and popup_eval(popup, "window.currentTab !== undefined") else None
+        except RuntimeError as error:
+            if "app.open.engine error 4" in str(error) or "no page" in str(error):
+                return None  # The regression closes the popup during this poll.
+            raise
+    pane_state = wait_until(focused_popup, timeout=10)
+    pane_tab = popup_eval(pane_state, "window.currentTab && window.currentTab.id") if pane_state else None
+    still_open = app.call("ext-popup").get("open")
+    close_popup()
+    # Capture the action snapshot before the same socket command returns.
+    # A getter after yielding would let the scheduled sync hide the bug.
+    pane_menu = app.call("ext-menu", extension=ACTION_PROBE, focusTab=right, snapshot=True)
+    results["split_pane_action_and_menu"] = {
+        "ok": bool(pane_popup) and {left, right} <= {p["id"] for p in panes}
+              and bool(pane_state) and pane_tab == pane_ids["left"] and still_open
+              and pane_menu.get("action", {}).get("title") == "Split right" and bool(pane_menu.get("items")),
+        "popup_tab": pane_tab, "expected_tab": pane_ids["left"], "popup_stayed_open": still_open,
+        "menu_action_title": pane_menu.get("action", {}).get("title")}
+    app.call("split")  # separate the temporary panes again
+    for pane in (left, right):
+        if any(t["id"] == pane for t in app.call("tabs")):
+            app.call("close", tab=pane)
+    app.call("select", tab=a)
+    state = open_popup(ACTION_PROBE)
+
     # Per-tab state set by the extension shows for the active tab only.
     ids = {"a": app.page(a)["chromeTabId"], "b": app.page(b)["chromeTabId"]}
     if state:
@@ -3178,7 +3294,9 @@ def actions_checks(app, results):
     results["per_tab_state"] = {
         "ok": bool(on_a) and on_a["title"] == "Probe A" and on_a["badgeColor"] == "#ff0000ff" and on_a["enabled"]
               and bool(on_b) and on_b["badge"] == "" and on_b["title"] == "Action probe"
+              and len(on_a["toolbarImage"].get("hash", "")) == 64 and len(on_b["toolbarImage"].get("hash", "")) == 64
               and on_a["toolbarImage"]["hash"] != on_b["toolbarImage"]["hash"]
+              and len(on_a["icon"].get("hash", "")) == 64 and len(on_b["icon"].get("hash", "")) == 64
               and on_a["icon"]["hash"] != on_b["icon"]["hash"],
         "tab_a": on_a and {k: on_a[k] for k in ("badge", "badgeColor", "title", "enabled")},
         "tab_b": on_b and {k: on_b[k] for k in ("badge", "title", "enabled")}}
@@ -3296,7 +3414,7 @@ def actions_checks(app, results):
             [x for x in app.call("events") if x["type"] == "popupKey"]), timeout=5)
         keys["ctrl_d_stages"] = sorted({x.get("phase") for x in stages or []})
         keys["still_open"] = bool(app.call("ext-popup").get("open"))
-        app.call("key", key="w", modifiers=["cmd"], window="popup", route="window")
+        app.call("key", key="w", modifiers=["cmd"], window="popup", route="app")
         keys["closed"] = bool(wait_until(lambda: not app.call("ext-popup").get("open"), timeout=5))
         keys["tabs_kept"] = len(app.call("tabs")) == tabs_before
         if not keys["closed"]:
@@ -3304,6 +3422,37 @@ def actions_checks(app, results):
     results["popup_keys"] = {
         "ok": keys["opened"] and keys.get("ctrl_d_stages") == ["beforePage", "unconsumed"] and keys.get("still_open")
               and keys.get("closed") and keys.get("tabs_kept"), **keys}
+
+    # A delegate closes (twice), or toggles the action, from each engine
+    # callback. The popup must remain alive INSIDE that callback and close
+    # on the next turn; the app and its tab must survive.
+    callback_rows = {}
+    for phase in ("open", "resize", "ready"):
+        for toggle in (False, True):
+            try:
+                app.call("events")
+                app.call("popup-callback-close", phase=phase, toggle=toggle)
+                app.call("ext-run", extension=ACTION_PROBE)
+                callbacks = []
+
+                def callback_closed():
+                    callbacks.extend(e for e in app.call("events") if e["type"] == "popupCallbackClose")
+                    return callbacks and not app.call("ext-popup").get("open")
+                closed = wait_until(callback_closed, timeout=10)
+                alive = app.call("ping") is not None
+                callback_rows[phase + (" toggle" if toggle else " close")] = {
+                    "ok": bool(closed) and alive and callbacks[-1].get("stillOpenInsideCallback") is True,
+                    "callbacks": callbacks, "closed": bool(closed), "alive": alive}
+            except Exception as error:
+                dict.__setitem__(results, "popup_callback_close", {"ok": False, "phase": phase,
+                                 "toggle": toggle, "error": str(error), "rows": callback_rows})
+                raise
+            finally:
+                try:
+                    app.call("popup-callback-close", phase="clear", timeout=3)
+                finally:
+                    app.cleanup_surfaces()
+    results["popup_callback_close"] = {"ok": all(row["ok"] for row in callback_rows.values()), "rows": callback_rows}
 
     # A tab switch closes the popup (Chrome's ExtensionPopup does). The first
     # tab: tab a has no popup since the onClicked check.
@@ -3376,34 +3525,44 @@ def actions_checks(app, results):
     # dismissed, so the extension stays.
     ran = {}
     for prefix in ("Pin", "Manage Extension", "View Web Permissions", "Remove from"):
-        items = [x for x in app.call("ext-menu", extension=ACTION_PROBE)
-                 if not x["separator"] and x["title"].startswith(prefix) and not x["title"].startswith("Pinned")]
-        if not items or not items[0]["enabled"]:
-            ran[prefix] = {"ok": False, "item": items[0] if items else None}
-            continue
-        title = items[0]["title"]
-        before_tabs = {t["id"] for t in app.call("tabs")}
-        before_windows = {w["number"] for w in app.call("windows")}
-        app.call("ext-menu", extension=ACTION_PROBE, select=title)
-        r = {"title": title}
-        if prefix == "Pin":
-            r["ok"] = bool(wait_until(lambda: (lambda x: x and x["pinned"])(action(ACTION_PROBE)), timeout=10))
-        elif prefix == "Remove from":
-            r["dialog"] = wait_until(lambda: [w["class"] for w in app.call("windows") if w["visible"]
-                                              and w["number"] not in before_windows], timeout=10)
-            r["dismissed"] = app.call("dismiss")
-            time.sleep(1)
-            r["ok"] = bool(r["dialog"]) and bool(action(ACTION_PROBE))
-        else:
-            opened = wait_until(lambda: [t["url"] for t in app.call("tabs") if t["id"] not in before_tabs
-                                         and t["url"].startswith("chrome://")], timeout=10)
-            r["opened"] = opened
-            r["ok"] = bool(opened)
-            for t in app.call("tabs"):
-                if t["id"] not in before_tabs:
-                    app.call("close", tab=t["id"])
-        app.call("ping")
-        ran[prefix] = r
+        try:
+            items = [x for x in app.call("ext-menu", extension=ACTION_PROBE)
+                     if not x["separator"] and x["title"].startswith(prefix) and not x["title"].startswith("Pinned")]
+            if not items or not items[0]["enabled"]:
+                ran[prefix] = {"ok": False, "item": items[0] if items else None}
+                continue
+            title = items[0]["title"]
+            before_tabs = {t["id"] for t in app.call("tabs")}
+            before_windows = {w["number"] for w in app.call("windows")}
+            app.call("ext-menu", extension=ACTION_PROBE, select=title)
+            r = {"title": title}
+            if prefix == "Pin":
+                r["ok"] = bool(wait_until(lambda: (lambda x: x and x["pinned"])(action(ACTION_PROBE)), timeout=10))
+            elif prefix == "Remove from":
+                r["dialog"] = wait_until(lambda: [
+                    {"class": w["class"], "title": w["title"], "text": w.get("text", [])}
+                    for w in app.call("windows", accessibility=True) if w["visible"] and w["number"] not in before_windows
+                    and w["class"] == "NativeWidgetMacNSWindow"
+                    and "Open action probe" in " ".join([w["title"]] + w.get("text", []))
+                    and {"Cancel", "Remove"} <= set(w.get("text", []))], timeout=10)
+                if os.environ.get("OPEN_E2E_FAIL_UNINSTALL") == "1" and r["dialog"]:
+                    results["forced_uninstall_failure"] = {"ok": False, "dialog_seen": True}
+                    raise RuntimeError("forced early failure in uninstall confirmation case")
+                r["dismissed"] = app.call("dismiss")
+                time.sleep(1)
+                r["ok"] = bool(r["dialog"]) and bool(action(ACTION_PROBE))
+            else:
+                opened = wait_until(lambda: [t["url"] for t in app.call("tabs") if t["id"] not in before_tabs
+                                             and t["url"].startswith("chrome://")], timeout=10)
+                r["opened"] = opened
+                r["ok"] = bool(opened)
+                for t in app.call("tabs"):
+                    if t["id"] not in before_tabs:
+                        app.call("close", tab=t["id"])
+            app.call("ping")
+            ran[prefix] = r
+        finally:
+            app.cleanup_surfaces()
     results["action_menu_commands"] = {"ok": all(v["ok"] for v in ran.values()), "commands": ran}
     popup_teardown_checks(app, results, actions, action, popup_eval, open_popup, close_popup, first)
 
@@ -3545,8 +3704,8 @@ def popup_teardown_checks(app, results, actions, action, popup_eval, open_popup,
     for t in app.call("tabs"):
         app.call("close", tab=t["id"])
     gone = wait_until(lambda: (lambda r: r if not r["ready"] else None)(actions()), timeout=15)
-    told = [e for e in app.call("events")]
-    idle = {"not_ready": bool(gone)}
+    told = [e for e in app.call("events") if e["type"] == "extensionActions"]
+    idle = {"not_ready": bool(gone), "notified_gone": any(e.get("ready") is False for e in told)}
     if gone:
         listed = [x for x in gone["actions"] if x["id"] == bitwarden]
         idle["listed"] = listed[0] if listed else None
@@ -3557,30 +3716,35 @@ def popup_teardown_checks(app, results, actions, action, popup_eval, open_popup,
     back = wait_until(lambda: (lambda r: r if r["ready"] and [x for x in r["actions"] if x["id"] == bitwarden and x["live"]]
                                else None)(actions()), timeout=20)
     idle["live_again"] = bool(back)
+    idle["notified_back"] = any(e["type"] == "extensionActions" and e.get("ready") is True for e in app.call("events"))
     results["no_live_tab_actions"] = {
         "ok": idle["not_ready"] and bool(idle.get("listed")) and idle["listed"]["pinned"] and not idle["listed"]["live"]
-              and idle.get("ran") is False and not idle.get("popup") and idle["live_again"],
+              and idle.get("ran") is False and not idle.get("popup") and idle["live_again"]
+              and idle["notified_gone"] and idle["notified_back"],
         **idle}
 
-    # Closing the Open window with a popup open closes the popup with it;
-    # the app keeps running, and a reopened window works.
-    app.call("select", tab=fresh)
-    time.sleep(0.5)
-    state = open_popup(bitwarden)
-    closing = {"opened": bool(state)}
-    popup_page = state["page"]["identifier"] if state else None
-    app.call("window-close")
-    closing["windows_after_close"] = wait_until(lambda: len(app.call("shell-windows")) == 0, timeout=10)
-    closing["alive"] = app.call("ping") is not None
-    app.call("window-reopen")
-    wait_until(lambda: app.call("shell-windows"), timeout=10)
-    closing["popup_page_gone"] = bool(wait_until(lambda: popup_page not in [p["identifier"] for p in app.call("pages")],
-                                                 timeout=10))
-    closing["new_window_popup"] = app.call("ext-popup").get("open")
-    results["window_close_with_popup"] = {
-        "ok": closing["opened"] and bool(closing["windows_after_close"]) and closing["alive"] and closing["popup_page_gone"]
-              and not closing["new_window_popup"],
-        **closing}
+    # Both teardown paths: explicit -close, and releasing the browser while
+    # it still owns its popup/toolbar (the round 1 double-delete path).
+    closing_rows = {}
+    for release in (False, True):
+        app.call("select", tab=fresh)
+        wait_until(lambda: actions()["ready"], timeout=15)
+        state = open_popup(bitwarden)
+        closing = {"opened": bool(state)}
+        popup_page = state["page"]["identifier"] if state else None
+        released = app.call("window-close", releaseBrowsers=release)
+        closing["released_without_close"] = released if release else None
+        closing["windows_after_close"] = bool(wait_until(lambda: len(app.call("shell-windows")) == 0, timeout=10))
+        closing["alive"] = app.call("ping") is not None
+        app.call("window-reopen")
+        wait_until(lambda: app.call("shell-windows"), timeout=10)
+        closing["popup_page_gone"] = bool(wait_until(lambda: popup_page not in [p["identifier"] for p in app.call("pages")], timeout=10))
+        closing["new_window_popup"] = app.call("ext-popup").get("open")
+        closing["ok"] = (closing["opened"] and closing["windows_after_close"] and closing["alive"]
+                         and closing["popup_page_gone"] and not closing["new_window_popup"]
+                         and (not release or (released.get("released", 0) > 0 and released.get("remaining") == 0 and released.get("hadPopup"))))
+        closing_rows["dealloc" if release else "close"] = closing
+    results["window_close_with_popup"] = {"ok": all(row["ok"] for row in closing_rows.values()), "rows": closing_rows}
 
 
 # ----------------------------------------------------------------------------
@@ -4331,6 +4495,7 @@ def main():
                 subprocess.run(["chmod", "-R", "u+rwX", folder], capture_output=True)
             shutil.rmtree(folder, ignore_errors=True)
     atexit.register(remove_run_folders)
+    atexit.register(lambda: [instance.quit() for instance in _OWNED_APPS])
     # `timeout` and Ctrl-C end the run with a signal: still clean up.
     for sig in (signal.SIGTERM, signal.SIGHUP):
         signal.signal(sig, lambda *_: sys.exit(128 + 15))
@@ -4435,14 +4600,17 @@ def main():
         except FocusInterruption as error:
             interruption = {"reason": str(error), "focus": error.evidence}
         except Exception as error:
-            loss = tracker.loss()
+            try:
+                loss = tracker.loss()
+            except Exception:
+                loss = []  # A crashed owned app cannot answer a focus query.
             if loss:
                 interruption = {"reason": str(error), "focus": loss}
             else:
                 dict.__setitem__(results.setdefault(opts.only, {}), "suite", {"ok": False, "error": str(error)})
                 traceback.print_exc()
         finally:
-            for instance in tracker.apps:
+            for instance in _OWNED_APPS:
                 instance.quit()
         if interruption is None:
             break
@@ -4453,6 +4621,9 @@ def main():
             dict.__setitem__(results.setdefault(opts.only, {}), "suite", {
                 "status": "INTERRUPTED", "reason": interruption["reason"], "focus": interruption["focus"], "attempts": 3})
     results["interrupted_attempts"] = interrupted_attempts
+    results["cleanup"] = {"ok": all(instance.quit_report.get("ok") for instance in _OWNED_APPS),
+                          "processes": [instance.quit_report for instance in _OWNED_APPS]}
+    print("owned_process_cleanup    " + ("PASS" if results["cleanup"]["ok"] else "FAIL"), flush=True)
     name = "results-%s-%s.json" % (opts.only, opts.style if opts.only in ("extensions", "features", "tabstrip", "actions")
                                    else opts.config.lower())
     with open(os.path.join(OUT, name), "w") as f:
@@ -4466,7 +4637,7 @@ def main():
     print("wrote", os.path.join(OUT, name))
     failures = [k for group in ("shell", "extensions", "features", "measure", "tabstrip", "window", "sidebar", "peek", "commandbar", "app-actions", "actions")
                 for k, v in results.get(group, {}).items() if isinstance(v, dict) and v.get("ok") is False]
-    if failures:
+    if failures or not results["cleanup"]["ok"]:
         sys.exit(1)
     if any(isinstance(v, dict) and v.get("status") == "INTERRUPTED" for v in results.get(opts.only, {}).values()):
         sys.exit(2)

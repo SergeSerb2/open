@@ -1,5 +1,6 @@
 #if OPEN_AUTOMATION
   import AppKit
+  import CryptoKit
   import OpenEngine
   import OpenModel
   import OpenWeb
@@ -490,12 +491,14 @@
         return true
       case "ext-run":
         guard let id = a["extension"] as? String else { throw Failure(message: "missing extension") }
+        try focusActionPane(a, w)
         let source: OEBrowser.ExtensionActionSource =
           switch a["source"] as? String { case "menu": .menuEntry; case "command": .command; default: .toolbarButton }
         return try focusedBrowser(w).executeExtensionAction(id, source: source)
       case "ext-menu":
         // The action's context menu: its items, or select one by title.
         guard let id = a["extension"] as? String else { throw Failure(message: "missing extension") }
+        try focusActionPane(a, w)
         let browser = try focusedBrowser(w)
         guard let menu = browser.contextMenu(forExtensionAction: id, source: a["source"] as? String == "menu" ? .menuItem : .toolbarAction)
         else { throw Failure(message: "no menu") }
@@ -524,6 +527,9 @@
         } else {
           menu.cancel()
         }
+        if a["snapshot"] as? Bool == true {
+          return ["items": listed, "action": browser.extensionActions.first(where: { $0.extensionIdentifier == id }).map(describe) ?? [:]] as [String: Any]
+        }
         return listed
       case "ext-popup":
         let browser = try focusedBrowser(w)
@@ -531,6 +537,13 @@
         return ["open": true, "page": describe(popup, in: w), "extension": browser.extensionPopupExtensionIdentifier ?? "",
                 "source": ["user", "command", "api"][browser.extensionPopupSource.rawValue],
                 "staysOpenOnBlur": browser.extensionPopupStaysOpenOnBlur] as [String: Any]
+      case "popup-callback-close":
+        if a["phase"] as? String == "clear" { w.popupCallbackClose = nil; return true }
+        guard let phase = a["phase"] as? String, ["open", "resize", "ready"].contains(phase) else {
+          throw Failure(message: "expected popup callback phase: open, resize, ready")
+        }
+        w.popupCallbackClose = (phase, a["toggle"] as? Bool ?? false)
+        return true
       case "activate":
         // Makes Open's window key (Chrome's "active window"), even with an
         // action popup's panel in front.
@@ -540,7 +553,11 @@
 
       // Windows and pixels (Open's own windows only).
       case "windows":
-        return NSApp.windows.map(describe)
+        return NSApp.windows.map { nativeWindow in
+          var row = describe(nativeWindow)
+          if a["accessibility"] as? Bool == true { row["text"] = windowText(nativeWindow) }
+          return row
+        }
       case "panel-close":
         // The close button of the panel that shows page `page` (performClose).
         guard let n = a["page"] as? Int, let aux = w.auxiliaryPages.first(where: { $0.content.identifier == n })
@@ -552,6 +569,10 @@
         // (Save As), and windows that are not Open's (DevTools, Chrome
         // windows). Open's browser windows and panels stay.
         var dismissed: [String] = []
+        staleMenu?.cancel(); staleMenu = nil
+        for owner in app.hostFactories.values {
+          while owner.completePendingDialog(accept: false, text: nil) { dismissed.append("javascript") }
+        }
         if let modal = NSApp.modalWindow {
           dismissed.append("modal:" + String(describing: type(of: modal)))
           NSApp.abortModal()
@@ -660,7 +681,9 @@
         if a["activate"] as? Bool == true, let target = controller.window { try await activateForInput(target) }
         return true
       case "window-close":
-        w.window?.performClose(nil); return true
+        let released = a["releaseBrowsers"] as? Bool == true ? w.releaseBrowsersForAutomation() : [:]
+        w.window?.performClose(nil)
+        return released.isEmpty ? true : released as Any
       case "window-fullscreen":
         w.window?.toggleFullScreen(nil); return true
       case "window-deminiaturize":
@@ -877,12 +900,34 @@
     }
 
     private func describe(_ action: OEExtensionAction) -> [String: Any] {
-      func png(_ image: NSImage?) -> [String: Any] {
-        guard let image, let data = EngineWebContentHostFactory.pngData(image) else { return ["bytes": 0] }
-        // Each representation's pixel size: 1x and 2x.
-        let reps = image.representations.map { [$0.pixelsWide, $0.pixelsHigh] }.sorted { $0[0] < $1[0] }
-        return ["bytes": data.count, "hash": data.hashValue, "width": image.size.width, "pixels": reps,
-                "object": ObjectIdentifier(image).hashValue]
+      func pixels(_ image: NSImage?) -> [String: Any] {
+        guard let image else { return ["bytes": 0] }
+        let reps = image.representations.compactMap { $0 as? NSBitmapImageRep }
+          .sorted { $0.pixelsWide < $1.pixelsWide }
+        guard !reps.isEmpty, reps.count <= 4 else { return ["bytes": 0] }
+        var hash = SHA256(), byteCount = 0
+        for rep in reps {
+          let width = rep.pixelsWide, height = rep.pixelsHigh
+          // Automation only. Largest permitted single allocation: 256 * 256 * 4 = 262144 bytes.
+          guard width > 0, height > 0, width <= 256, height <= 256, let source = rep.cgImage,
+                let space = CGColorSpace(name: CGColorSpace.sRGB) else { return ["bytes": 0] }
+          var rgba = Data(count: width * height * 4)
+          let drawn = rgba.withUnsafeMutableBytes { buffer -> Bool in
+            guard let context = CGContext(data: buffer.baseAddress, width: width, height: height,
+              bitsPerComponent: 8, bytesPerRow: width * 4, space: space,
+              bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue | CGBitmapInfo.byteOrder32Big.rawValue)
+            else { return false }
+            context.draw(source, in: CGRect(x: 0, y: 0, width: CGFloat(width), height: CGFloat(height)))
+            return true
+          }
+          guard drawn else { return ["bytes": 0] }
+          hash.update(data: Data("\(width)x\(height):".utf8))
+          hash.update(data: rgba)
+          byteCount += rgba.count
+        }
+        return ["bytes": byteCount, "hash": hash.finalize().map { String(format: "%02x", $0) }.joined(),
+          "width": image.size.width, "pixels": reps.map { [$0.pixelsWide, $0.pixelsHigh] },
+          "object": ObjectIdentifier(image).hashValue]
       }
       func hex(_ color: NSColor?) -> Any {
         guard let c = color?.usingColorSpace(.sRGB) else { return NSNull() }
@@ -895,7 +940,7 @@
         "badgeColor": hex(action.badgeBackgroundColor), "badgeTextColor": hex(action.badgeTextColor),
         "enabled": action.isEnabled, "hasPopup": action.hasPopup, "pinned": action.isPinned,
         "pinnedIndex": action.pinnedIndex, "wantsToRun": action.wantsToRun, "siteAccess": action.siteAccess.rawValue,
-        "showingPopup": action.isShowingPopup, "toolbarImage": png(action.toolbarImage), "icon": png(action.icon),
+        "showingPopup": action.isShowingPopup, "toolbarImage": pixels(action.toolbarImage), "icon": pixels(action.icon),
         "live": action.isLive,
       ]
     }
@@ -991,7 +1036,40 @@
       ]
     }
 
+    /// Bounded accessibility text from this process's own windows. Used to
+    /// identify Chromium's uninstall confirmation, not merely any new window.
+    private func windowText(_ window: NSWindow) -> [String] {
+      var seen: Set<ObjectIdentifier> = [], text: Set<String> = []
+      func walk(_ object: NSObject, depth: Int) {
+        guard depth <= 16, seen.count < 512, seen.insert(ObjectIdentifier(object)).inserted else { return }
+        for name in ["accessibilityLabel", "accessibilityTitle", "accessibilityValue"] {
+          let selector = NSSelectorFromString(name)
+          if object.responds(to: selector), let value = object.perform(selector)?.takeUnretainedValue() as? String,
+             !value.isEmpty { text.insert(String(value.prefix(400))) }
+        }
+        let children = NSSelectorFromString("accessibilityChildren")
+        if object.responds(to: children), let nodes = object.perform(children)?.takeUnretainedValue() as? [NSObject] {
+          for child in nodes.prefix(512) { walk(child, depth: depth + 1) }
+        }
+        if let view = object as? NSView { for child in view.subviews.prefix(512) { walk(child, depth: depth + 1) } }
+      }
+      walk(window, depth: 0)
+      if let content = window.contentView { walk(content, depth: 0) }
+      return text.sorted()
+    }
+
     // MARK: Helpers
+
+    /// Focus the actual Split View pane and execute in this same socket turn.
+    /// This is the pane-toolbar click path: no yield can flush the engine for it.
+    private func focusActionPane(_ a: [String: Any], _ w: EngineWebContentHostFactory) throws {
+      guard let handle = a["focusTab"] else { return }
+      let tab = try modelTab(["tab": handle], w)
+      guard let controller = w.controller, let split = controller.splitController.split,
+            split.panes.contains(where: { $0.id == tab.id }) else { throw Failure(message: "tab is not a split pane") }
+      controller.splitController.focus(tab.id)
+    }
+
 
     private func waitForLoad(_ page: OEWebContent, timeout: Double) async throws -> [String: Any] {
       let deadline = Date().addingTimeInterval(timeout)
@@ -1039,11 +1117,6 @@
       return String(arr.dropFirst().dropLast())
     }
 
-    /// Posts a key event inside Open. `route: "app"` (default) goes through
-    /// NSApplication.sendEvent, like a real key press; `route: "window"`
-    /// sends it straight to the window's first responder (the page view when
-    /// it has focus), which exercises the engine's pre-key hook. In-process
-    /// only: the system keyboard is never touched.
     private func describeNode(_ node: SidebarNode) -> [String: Any] {
       switch node {
       case .tab(let tab): return ["id": tab.id.description, "kind": "tab", "url": tab.url.absoluteString, "title": tab.displayTitle, "loaded": tab.live.hasWebContent]
@@ -1099,6 +1172,11 @@
       }
     }
 
+    /// Posts a key event inside Open. `route: "app"` (default) goes through
+    /// NSApplication.sendEvent, like a real key press; `route: "window"`
+    /// sends it straight to the window's first responder (the page view when
+    /// it has focus), which exercises the engine's pre-key hook. In-process
+    /// only: the system keyboard is never touched.
     private func sendKey(_ a: [String: Any], _ w: EngineWebContentHostFactory) async throws -> Any {
       guard let target = a["window"] as? String == "popup" ? w.popupPanel :
         (a["window"] as? Int).flatMap({ n in NSApp.windows.first { $0.windowNumber == n } }) ?? w.window

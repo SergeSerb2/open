@@ -278,7 +278,7 @@ Window-chrome receipts retain this timeline to distinguish foreground loss from
 an edge or animation failure. Only foreground app metadata is read; input goes
 only to Open, and no other app's window content is read.
 
-`--only actions` runs the complete Step C command-bar/native-menu/action flow,
+`--only app-actions` runs the complete Step C command-bar/native-menu/action flow,
 including page Copy/Paste/Undo/Select All, model undo, lazy duplication, and real
 Settings/Library. `--only commandbar` remains available with the same checks.
 Use `--style chrome` to exercise production P1 tab hosting. Screenshot comparisons
@@ -286,8 +286,7 @@ request the existing `window-frame unconstrained=true` mode and wait for the exa
 reference size; their dimensions and ≤1 pt/ΔE00≤2 assertions stay unchanged.
 
 
-The harness's data root is `.re/e2e-<suite>-<style>/user-data` in its own worktree,
-not a shared Application Support path. A native activation helper addresses the
+Each run uses its unique `Open-E2E-*` data and cache roots described above. A native activation helper addresses the
 PID returned by that socket and first checks its exact executable path; it never
 activates an Open instance by bundle identifier. App cleanup waits for that PID
 to exit even if the LaunchServices waiter has ended. Native mouse moves carry a
@@ -348,3 +347,25 @@ ordering check queues actual Save/background work with the automation-only
 `OPEN_AUTOMATION_ASYNC_TASK_DELAY_MS` scheduling delay, then quits. Cancellation
 must clear work and close hosts before the actual engine shutdown boundary. The
 flag delays scheduling; it does not replace engine responses.
+
+### Unattended cleanup
+
+Every suite closes owned dialogs and popups from `finally`, then terminates every
+process it started. Cleanup records exact executable paths for the app and its
+children, sends the normal quit request, and kills any verified owned PID that
+remains. A small CoreGraphics helper checks only on-screen window numbers for
+those PIDs; it reads no other app's UI. Each result has a `cleanup` receipt and
+fails if an owned process or on-screen window remains.
+
+The extension `actions` suite matches the uninstall confirmation by Chromium's
+window class, the probe extension's name and the Cancel/Remove controls. Its menu
+case always dismisses the dialog from `finally`. Set
+`OPEN_E2E_FAIL_UNINSTALL=1` for an intentional failure after that exact dialog
+appears; cleanup must still report PASS with zero owned windows and processes.
+`popup-callback-close phase=open|resize|ready toggle=true|false` closes from a
+real engine delegate callback (`phase=clear` cancels the policy).
+`ext-run` / `ext-menu focusTab=<split pane>` focuses a real Split View pane and
+runs the action/menu in the same socket turn. `ext-menu snapshot=true` returns
+the action snapshot before yielding. `window-close releaseBrowsers=true` drops
+the mirror's browsers without calling `OEBrowser.close` and reports whether they
+were released; this covers the destructor path with an open popup.

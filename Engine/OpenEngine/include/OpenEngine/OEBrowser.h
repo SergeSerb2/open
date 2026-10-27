@@ -55,6 +55,11 @@ NS_SWIFT_UI_ACTOR
 /// An action popup opened. Host `popup.view` in a panel anchored to the
 /// action's button. The engine created the web content and owns its
 /// lifetime: it reports size changes and the close below.
+/// During didOpenExtensionPopup, didResizeExtensionPopup and
+/// extensionPopupIsReady, -closeExtensionPopup, -close and action execution
+/// are safe to request: OpenEngine defers them to the next main-queue turn,
+/// after Chromium's popup/ExtensionViewHost callback returns. A deferred
+/// popup close applies only to that popup, never to its replacement.
 - (void)browser:(OEBrowser*)browser
     didOpenExtensionPopup:(OEWebContent*)popup
                 forAction:(OEExtensionAction*)action
@@ -171,6 +176,8 @@ OE_EXPORT @interface OEBrowser : NSObject
 - (BOOL)isPinnedWebContent:(OEWebContent*)webContent
     NS_SWIFT_NAME(isPinned(_:));
 /// The selected tab. In Split View, the focused pane.
+/// Pending strip changes are flushed before executing an action or building
+/// its context menu, including a focus change in the same event.
 @property(nonatomic, weak, nullable) OEWebContent* activeWebContent;
 
 #pragma mark Extension actions

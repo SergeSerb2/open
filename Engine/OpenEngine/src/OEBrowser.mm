@@ -237,6 +237,8 @@ class OETabStripHandler : public CefTabStripHandler {
   OEWebContent* _pendingPopup;
   OEExtensionPopupSource _popupSource;
   NSString* _popupExtension;
+  NSUInteger _popupDelegateDepth;
+  BOOL _popupCloseScheduled;
   // Fork patch P1.
   CefRefPtr<CefTabStrip> _strip;
   // Pages Chromium is creating in the strip, until OnTabCreated.
@@ -387,6 +389,11 @@ class OETabStripHandler : public CefTabStripHandler {
 }
 
 - (void)close {
+  if (_popupDelegateDepth) {
+    // Keep this browser alive until Chromium's popup callback unwinds too.
+    dispatch_async(dispatch_get_main_queue(), ^{ [self close]; });
+    return;
+  }
   [self closeExtensionPopup];
   for (OEWebContent* content in [_tabs copy]) {
     [self removeWebContent:content];
@@ -723,11 +730,38 @@ class OETabStripHandler : public CefTabStripHandler {
 
 - (BOOL)executeExtensionAction:(NSString*)extensionIdentifier
                         source:(OEExtensionActionSource)source {
+  if (_stripSyncScheduled) {
+    [self oe_syncTabStrip];
+  }
   if (!self.extensionActionsReady) {
     // No live Chrome tab in this window: nothing can run. Never the
     // manifest popup in a plain page: extensions see a tab there, not their
     // popup (Bitwarden does not work, P1).
     return NO;
+  }
+  if (_popupDelegateDepth) {
+    // Executing can toggle or replace the current popup. Neither may delete
+    // the ExtensionViewHost while it is notifying us.
+    BOOL known = NO;
+    for (OEExtensionAction* action in self.extensionActions) {
+      if ([action.extensionIdentifier isEqualToString:extensionIdentifier]) {
+        known = YES;
+        break;
+      }
+    }
+    if (!known) {
+      return NO;
+    }
+    NSString* identifier = [extensionIdentifier copy];
+    OEWebContent* popup = _popup;
+    const BOOL togglesPopup =
+        popup && [_popupExtension isEqualToString:identifier];
+    dispatch_async(dispatch_get_main_queue(), ^{
+      if (!togglesPopup || self->_popup == popup) {
+        [self executeExtensionAction:identifier source:source];
+      }
+    });
+    return YES;
   }
   // Like Chrome's toolbar button: running the action whose popup is open
   // closes it.
@@ -748,6 +782,9 @@ class OETabStripHandler : public CefTabStripHandler {
 - (nullable OEExtensionActionMenu*)
     contextMenuForExtensionAction:(NSString*)extensionIdentifier
                            source:(OEExtensionMenuSource)source {
+  if (_stripSyncScheduled) {
+    [self oe_syncTabStrip];
+  }
   if (!self.extensionActionsReady) {
     return nil;
   }
@@ -799,6 +836,19 @@ class OETabStripHandler : public CefTabStripHandler {
 - (void)closeExtensionPopup {
   OEWebContent* popup = _popup;
   if (!popup) {
+    return;
+  }
+  if (_popupDelegateDepth) {
+    if (!_popupCloseScheduled) {
+      _popupCloseScheduled = YES;
+      dispatch_async(dispatch_get_main_queue(), ^{
+        self->_popupCloseScheduled = NO;
+        // A request for an older popup must not close its replacement.
+        if (self->_popup == popup) {
+          [self closeExtensionPopup];
+        }
+      });
+    }
     return;
   }
   // The engine closes the popup and reports the close.
@@ -859,7 +909,9 @@ class OETabStripHandler : public CefTabStripHandler {
   _popupAction = action;
   if (action && [_delegate respondsToSelector:@selector
                            (browser:didOpenExtensionPopup:forAction:)]) {
+    ++_popupDelegateDepth;
     [_delegate browser:self didOpenExtensionPopup:content forAction:action];
+    --_popupDelegateDepth;
   }
 }
 
@@ -878,7 +930,9 @@ class OETabStripHandler : public CefTabStripHandler {
 - (void)oe_extensionPopupReady:(CefRefPtr<CefBrowser>)browser {
   if ([self oe_isPopupBrowser:browser] &&
       [_delegate respondsToSelector:@selector(browser:extensionPopupIsReady:)]) {
+    ++_popupDelegateDepth;
     [_delegate browser:self extensionPopupIsReady:_popup];
+    --_popupDelegateDepth;
   }
 }
 
@@ -914,7 +968,9 @@ class OETabStripHandler : public CefTabStripHandler {
       MIN(MAX(size.height, kPopupMinSize.height), kPopupMaxSize.height));
   if ([_delegate respondsToSelector:@selector
                  (browser:didResizeExtensionPopup:toSize:)]) {
+    ++_popupDelegateDepth;
     [_delegate browser:self didResizeExtensionPopup:popup toSize:clamped];
+    --_popupDelegateDepth;
   }
 }
 
