@@ -21,11 +21,13 @@ final class SpacePagerView: NSView {
     private var swipe: SwipeState?
     private var loop: ObservationLoop?
 
+
     private struct SwipeState {
         var baseIndex: Int
         var startOffset: CGFloat
         var neighbor: Int?
         var lastDeltas: [CGFloat] = []
+        var pastThreshold = false
     }
 
     init(context: SidebarContext, menus: SidebarMenus) {
@@ -87,7 +89,17 @@ final class SpacePagerView: NSView {
     func showFocused(animated: Bool) {
         guard let focused = context.focusedSpace, bounds.width > 0, swipe == nil else { return }
         let previous = shownSpaceID
-        guard previous != focused.id else { return }
+        guard previous != focused.id else {
+            // Space order can change while focus stays on the same Space.
+            // Keep the cached page objects and re-offset the strip immediately.
+            layoutPages()
+            strip.layer?.removeAnimation(forKey: "slide")
+            animating = false
+            offset = CGFloat(focusedIndex) * bounds.width
+            placeStrip(); finishSlide()
+            return
+        }
+        if previous != nil { context.selection.clear(); context.existingHoverPreviews?.dismiss() }
         let target = focusedIndex
         let w = bounds.width
         let from = previous.flatMap { id in spaces.firstIndex { $0.id == id } } ?? target
@@ -134,6 +146,7 @@ final class SpacePagerView: NSView {
         switch event.phase {
         case .began:
             guard abs(event.scrollingDeltaX) > abs(event.scrollingDeltaY) else { return false }
+            context.suppressPreviews(.swipe, true)
             strip.layer?.removeAnimation(forKey: "slide")
             animating = false
             let base = focusedIndex
@@ -153,6 +166,10 @@ final class SpacePagerView: NSView {
             let lo = max(0, CGFloat(s.baseIndex - 1) * w), hi = min(CGFloat(spaces.count - 1) * w, base + w)
             if next < lo { next = lo - rubber(lo - next, w) } else if next > hi { next = hi + rubber(next - hi, w) }
             offset = next
+            let past = abs(offset - base) / w > 0.5
+            let direction = offset > base ? 1 : -1
+            if past, !s.pastThreshold, spaces.indices.contains(s.baseIndex + direction) { context.haptics.perform(.levelChange) }
+            s.pastThreshold = past
             placeStrip()
             let dir = offset >= base ? 1 : -1
             let n = s.baseIndex + dir
@@ -171,6 +188,8 @@ final class SpacePagerView: NSView {
                 target = min(max(s.baseIndex + (moved > 0 ? 1 : -1), 0), spaces.count - 1)
             }
             swipe = nil
+            context.suppressPreviews(.swipe, false)
+            if target != s.baseIndex { context.selection.clear() }
             // The delegate changes focus synchronously; snap to whatever is focused now.
             if target != s.baseIndex { context.send(.switchSpace(spaces[target].id)) }
             let landed = focusedIndex
@@ -199,6 +218,10 @@ final class SpacePagerView: NSView {
     func apply(_ change: TreeChange) {
         for p in pages.values { p.apply(change) }
     }
+
+    func applyBulk(_ changes: [TreeChange]) {
+        for page in pages.values { page.applyBulk(changes) }
+    }
 }
 
 /// The strip holding the pages. Flipped, layer-backed.
@@ -220,6 +243,7 @@ final class PageScrollView: NSScrollView {
     private var routing = false
 
     override func scrollWheel(with event: NSEvent) {
+        (documentView as? SidebarOutlineView)?.page?.context.existingHoverPreviews?.dismiss()
         if event.phase == .began { routing = abs(event.scrollingDeltaX) > abs(event.scrollingDeltaY) }
         if routing, let pager, pager.handleScroll(event) {
             if event.phase == .ended || event.phase == .cancelled { routing = false }

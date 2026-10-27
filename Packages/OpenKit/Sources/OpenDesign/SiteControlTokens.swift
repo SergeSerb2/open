@@ -1,17 +1,59 @@
 import AppKit
 import QuartzCore
 
-// Layout guesses and measured colors from site-control-boost-editor.md §§3–4.
-public enum SiteControlMetrics {          // §3; all guess unless a section cites evidence
-    public static let width: CGFloat = 320, maxHeight: CGFloat = 640, cornerRadius: CGFloat = 16
-    public static let sidebarPanelGap: CGFloat = 13, panePanelGap: CGFloat = 11
-    public static let inset: CGFloat = 14, headerHeight: CGFloat = 48, actionRowHeight: CGFloat = 44
-    public static let actionButton = CGSize(width: 44, height: 36), actionGap: CGFloat = 4, actionRadius: CGFloat = 8
-    public static let sectionHeaderHeight: CGFloat = 28, sectionBottomPadding: CGFloat = 10
-    public static let tile = CGSize(width: 142, height: 48), tileGap: CGFloat = 8, tileRadius: CGFloat = 10, tileIcon: CGFloat = 28
-    public static let boostRowHeight: CGFloat = 40   // extension item metrics belong to OpenExtensionsUI (§3.6)
-    public static let footerHeight: CGFloat = 44, reloadRowHeight: CGFloat = 32
-    public static let shadowOpacity: Float = 0.25, shadowRadius: CGFloat = 16, shadowOffsetY: CGFloat = 6
+// Measured Site Control values: plan §3, Appendix A; S2 09/0010.
+public enum SiteControlMetrics {           // §3. m = measured (S2), g = guess, o = Open choice
+    public static let width: CGFloat = 236, padding: CGFloat = 10                         // m
+    public static let cornerRadius: CGFloat = 16                                           // m ≈ 16–18; lead C
+    public static let arrowHeight: CGFloat = 10, arrowSideAngle: CGFloat = 45               // m (visible tip → body top; 2 pt/row)
+    public static let arrowTipRadius: CGFloat = 7, arrowBaseWidth: CGFloat = 26             // m (fit to rows 81–90)
+    public static let arrowBaseFillet: CGFloat = 2, arrowTipBelowAnchor: CGFloat = 2        // g / m
+    public static let windowMargin: CGFloat = 8, contentAnchorInset: CGFloat = 12          // o
+    public static let actionButton = CGSize(width: 48, height: 32), actionGap: CGFloat = 8 // m
+    public static let actionRadius: CGFloat = 6, actionGlyph: CGFloat = 17                 // m (corner insets) / g (visual)
+    public static let gapAfterActions: CGFloat = 37, sectionGap: CGFloat = 43              // m
+    public static let labelBaselineAboveContent: CGFloat = 14, labelRowHeight: CGFloat = 24 // m / g
+    public static let extensionTile = CGSize(width: 48, height: 32), extensionColumns = 4  // m / g
+    public static let extensionRowPitch: CGFloat = 40, extensionIcon: CGFloat = 16, tileRadius: CGFloat = 6 // g / g / m
+    public static let rowIcon: CGFloat = 32, rowPitch: CGFloat = 43, rowTextX: CGFloat = 50 // m
+    public static let rowTitleBaseline: CGFloat = 13, rowSubtitleBaseline: CGFloat = 29   // m (±1)
+    public static let rowGlyph: CGFloat = 15, circlePressedLevels: CGFloat = -8             // g (no row hover plate)
+    public static let focusOutset: CGFloat = 2, circleFocusDiameter: CGFloat = 36          // o
+    public static let gapBeforeSeparator: CGFloat = 15, gapAfterSeparator: CGFloat = 10    // m
+    public static let footerHeight: CGFloat = 32, pillRadius: CGFloat = 8, pillPadding: CGFloat = 10 // m / g / g
+    public static let pillLockGlyph: CGFloat = 13, pillLockGap: CGFloat = 6                // m (ink 10 × 14)
+    public static let moreButton: CGFloat = 32                                             // m
+    public static let reloadRowHeight: CGFloat = 32, reloadGap: CGFloat = 11, globalOffHeight: CGFloat = 28 // o
+    public static let maxHeight: CGFloat = 640, inUseDot: CGFloat = 6                      // o; height = min(content, maxHeight, window room) (§3.1)
+    public static let sparkleOpacity = (topRight: 1.0, topLeft: 0.35, bottomRight: 0.35)   // g (resting frame, Q15)
+    public static let buttonSparkleOpacity: CGFloat = 0.45                                 // g (URL field button, Q15)
+    public static let shadowOpacity: Float = 0.25, shadowRadius: CGFloat = 12, shadowOffsetY: CGFloat = 4 // g; shared with the theme popover
+}
+public enum SiteControlColors {            // macOS Dark measured (IS §20.15); Light = guess; mode = the window's (§3.2)
+    public static let fallbackTint = RGBA(hex: 0x49475A), fallbackBackdropWeight: [CGFloat] = [0.28, 0.28, 0.21]
+    public static let fallbackBlurSigma: CGFloat = 5                                       // fit + validation (§3.2)
+    public static let rim = DesignColor(light: .black(0.10), dark: .white(0.20))           // m (dark) / g (light)
+    public static let actionFillTop = DesignColor(light: .black(0.04), dark: RGBA(hex: 0x272727))    // m / g
+    public static let actionFillBottom = DesignColor(light: .black(0.08), dark: RGBA(hex: 0x161616)) // m / g
+    public static let actionRing = DesignColor(light: .black(0.12), dark: .black(0.30))    // m / g
+    public static let actionShadow = DesignColor(light: .black(0.10), dark: .black(0.20))  // fit (radius 1, y 1) / g
+    public static let actionHighlight = DesignColor(light: .white(0.6), dark: RGBA(hex: 0x575757))
+    public static let actionHighlightHover = DesignColor(light: .white(0.4), dark: RGBA(hex: 0x484848))
+    public static let glyph = DesignColor(light: .black(0.75), dark: .white(0.85))
+    public static let label = DesignColor(light: .black(0.80), dark: RGBA(hex: 0xDBDBDF))
+    public static let rowTitle = DesignColor(light: .black(0.85), dark: RGBA(hex: 0xDFDFE2))
+    public static let rowSubtitle = DesignColor(light: .black(0.50), dark: RGBA(hex: 0x9F9EA9))   // also hover accessory, chevron, notes
+    public static let circleOn = DesignColor(light: RGBA(hex: 0x2B2A3C), dark: RGBA(hex: 0xECEDFF))  // disc; glyph is a knock-out
+    public static let circleOff = DesignColor(light: .black(0.10), dark: .white(0.28))     // disc; glyph is a knock-out
+    public static let tileFill = DesignColor(light: .black(0.05), dark: .white(0.08))
+    /// S2 09/0010 y335: +35 sRGB levels on sidebar and page material.
+    /// Dark uses plus-lighter compositing; Light remains an alpha guess.
+    public static let separator = DesignColor(light: .black(0.12), dark: RGBA(hex: 0x232323))
+    public static let pillFill = DesignColor(light: .black(0.04), dark: .white(0.05))
+    public static let moreFill = DesignColor(light: .black(0.10), dark: .black(0.28))
+}
+public enum BoostGlyph {                    // one token for the Boost identity (§3.4, §3.7, §4.11, §4.13); Open's own sparkles as layers
+    public static let outline = "paintbrush.pointed", fill = "paintbrush.pointed.fill"
 }
 public enum BoostEditorMetrics {          // §4
     public static let width: CGFloat = 268, inset: CGFloat = 14, headerHeight: CGFloat = 52
@@ -48,56 +90,31 @@ public enum BoostEditorColors {           // BO-22 values (facts); usage per §4
     public static let accents: [DesignColor] = [0x300EFF, 0x55B948, 0xDD0EFF, 0xFF560E, 0xFF0E82, 0x860EFF, 0xFF0E0E, 0xF1A23C]
         .enumerated().map { DesignColor(RGBA(hex: UInt32($0.element), [1, 7].contains($0.offset) ? .displayP3 : .sRGB)) }
 }
-extension Motion { public static let popoverOpen: CFTimeInterval = 0.18, popoverClose: CFTimeInterval = 0.12 }
-extension Typography {
-    public static let siteControlTitle = FontToken(14, .semibold), sectionTitle = FontToken(12, .semibold)
-    public static let tileTitle = FontToken(12, .semibold), tileSubtitle = FontToken(11, .regular)
-    public static let boostRowTitle = FontToken(13, .medium), editorTitle = FontToken(14, .semibold)
-}
-
 public extension SiteControlMetrics {
-    static let windowMargin: CGFloat = 8, contentAnchorInset: CGFloat = 12, anchorAlignmentY: CGFloat = 24
-    static let faviconFrame = CGRect(x: 14, y: 16, width: 16, height: 16)
-    static let titleX: CGFloat = 36, titleBaseline: CGFloat = 29
-    static let actionGlyph: CGFloat = 18, actionButtonInsetY: CGFloat = 0, disabledAlpha: CGFloat = 0.3
-    static let separatorInset: CGFloat = 12
-    static let footerInset: CGFloat = 10, footerButton: CGFloat = 28, footerY: CGFloat = 8
-    static let securityPadding: CGFloat = 6, securityGlyph: CGFloat = 12, securityRadius: CGFloat = 6
-    static let moreGlyph: CGFloat = 13, focusWidth: CGFloat = 2
-    static let sectionBodyGap: CGFloat = 2, sectionChevron: CGFloat = 9
-    static let tileIconInset: CGFloat = 10, tileGlyph: CGFloat = 14
-    static let tileTextX: CGFloat = 46, tileTitleBaseline: CGFloat = 21, tileSubtitleBaseline: CGFloat = 36, tileTextTrailing: CGFloat = 8
-    static let inUseDot: CGFloat = 6, inUseGap: CGFloat = 4
-    static let boostIcon: CGFloat = 18, boostTextX: CGFloat = 42, boostTitleBaseline: CGFloat = 18, boostSubtitleBaseline: CGFloat = 32
-    static let switchSize = CGSize(width: 26, height: 16), switchKnob: CGFloat = 12, switchInset: CGFloat = 2
-    static let editButton: CGFloat = 24, editGap: CGFloat = 6, editGlyph: CGFloat = 13
-    static let globalOffHeight: CGFloat = 28, globalOffAlpha: CGFloat = 0.5
-    static let focusOutset: CGFloat = 2, closeScale: CGFloat = 0.96, openScale: CGFloat = 0.66
-    static let switchDuration: CFTimeInterval = 0.12
-    static let captionSize: CGFloat = 11, bodySize: CGFloat = 12, accessoryGap: CGFloat = 6
+    static let disabledAlpha: CGFloat = 0.3, focusWidth: CGFloat = 2, moreGlyph: CGFloat = 13
+    // SF vector optical boxes are calibrated separately from their point size.
+    static let symbolRasterPhase: [String: CGPoint] = ["square.and.arrow.up": CGPoint(x: 0.25,y: 0.5),"paintbrush.pointed": CGPoint(x: 0.75,y: 0.75),"gearshape.fill": CGPoint(x: 0.75,y: 0)]
+    static let symbolRasterCompensation: [String: CGSize] = ["square.and.arrow.up": CGSize(width: 1,height: 0),"paintbrush.pointed": CGSize(width: 1,height: 0),"camera": CGSize(width: 1,height: 0),"text.viewfinder": CGSize(width: 1,height: 1),"lock.fill": CGSize(width: 2,height: 0),"ellipsis": CGSize(width: 2,height: 1),"gearshape.fill": CGSize(width: 2,height: 2)]
+    static let actionInk = [CGSize(width: 14,height: 17),CGSize(width: 16,height: 16),CGSize(width: 19,height: 15),CGSize(width: 15,height: 18)]
+    static let gearInk = CGSize(width: 13,height: 13) // S2 09/0010; 15 pt symbol optical box
+    static let rowTitleTrailing: CGFloat = 16 // includes the tail-ellipsis optical inset
+    static let pillLockInk = CGSize(width: 10,height: 14), moreInk = CGSize(width: 13,height: 3)
+    static let actionRingWidth: CGFloat = 1, actionHighlightHeight: CGFloat = 1
+    static let actionShadowRadius: CGFloat = 1, actionShadowOffsetY: CGFloat = 1, actionPressedLevels: CGFloat = -6
+    static let separatorHeight: CGFloat = 1
+    static let openScale: CGFloat = 0.15, closeScale: CGFloat = 0.9, openSettle: CFTimeInterval = 0.30
+    /// Step 1 reserves the measured no-Boosts section stack; Step 2 supplies its views.
+    static var reservedSectionHeight: CGFloat { gapAfterActions + extensionTile.height + sectionGap + rowIcon + rowPitch }
+    static var chromeHeight: CGFloat { padding*2 + actionButton.height + reservedSectionHeight + gapBeforeSeparator + separatorHeight + gapAfterSeparator + footerHeight }
 }
-
-/// A continuous superellipse corner. Fill, inner edge and shadow share this path.
-public enum SiteControlShape {
-    public static func path(in rect: CGRect, radius: CGFloat) -> CGPath {
-        // Own G2 corner: zero curvature at the straight joins, fitted to the
-        // continuous-r16 targets (20 pt blend; 4.7 pt diagonal), all still guesses.
-        let r = min(radius, rect.width/2.56, rect.height/2.56), extent = 1.28*r
-        let path = CGMutablePath()
-        let centers = [CGPoint(x: rect.maxX,y: rect.minY),CGPoint(x: rect.maxX,y: rect.maxY),CGPoint(x: rect.minX,y: rect.maxY),CGPoint(x: rect.minX,y: rect.minY)]
-        let controls = [CGPoint(x: -extent,y: 0),CGPoint(x: -0.75*r,y: 0),CGPoint(x: -0.436*r,y: 0),CGPoint(x: 0,y: 0.436*r),CGPoint(x: 0,y: 0.75*r),CGPoint(x: 0,y: extent)]
-        let coefficients: [CGFloat] = [1,5,10,10,5,1]
-        for (corner,center) in centers.enumerated() {
-            for step in 0...40 {
-                let t = CGFloat(step)/40
-                var p = CGPoint.zero
-                for i in 0...5 { let w = coefficients[i]*pow(1-t,CGFloat(5-i))*pow(t,CGFloat(i)); p.x += controls[i].x*w; p.y += controls[i].y*w }
-                let local = p
-                let angle = CGFloat(corner) * .pi / 2
-                let point = CGPoint(x: center.x+local.x*cos(angle)-local.y*sin(angle),y: center.y+local.x*sin(angle)+local.y*cos(angle))
-                if corner == 0 && step == 0 { path.move(to: point) } else { path.addLine(to: point) }
-            }
-        }
-        path.closeSubpath(); return path
-    }
+extension Motion {
+    public static let popoverOpen = SpringToken(response: 0.20, dampingFraction: 0.8)
+    public static let popoverOpenFade: CFTimeInterval = 0.08, popoverClose: CFTimeInterval = 0.19
+    public static let heightGrow: CFTimeInterval = 0.20, heightShrink: CFTimeInterval = 0.25
+}
+extension Typography {
+    public static let siteControlLabel = FontToken(14, .semibold), siteControlRowTitle = FontToken(14, .semibold)
+    public static let siteControlRowSubtitle = FontToken(13, .regular), siteControlPill = FontToken(14, .medium)
+    public static let siteControlSecondary = FontToken(13, .regular)
+    public static let editorTitle = FontToken(14, .semibold)
 }

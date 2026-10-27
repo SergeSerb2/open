@@ -30,6 +30,14 @@ public struct SpringToken: Sendable, Hashable {
 /// Every number below is PROVISIONAL. Evidence: docs/re/interaction-states.md §9–§10
 /// (frames ≈ 0.47 s apart, so only progress points and upper bounds exist).
 public enum Motion {
+    /// Theme editor container motion; PROVISIONAL, plan §5.10.
+    public static let editorOpen = SpringToken(response: 0.25, dampingFraction: 0.85)
+    public static let editorFade: CFTimeInterval = 0.12
+    public static let editorCloseScale: Double = 0.96
+    public static let editorKnobReturn = SpringToken(response: 0.2, dampingFraction: 0.85)
+    /// Sidebar completion guesses until unread motion is captured.
+    public static let unreadAppear = SpringToken(response: 0.2, dampingFraction: 0.8)
+    public static let unreadClearFade: CFTimeInterval = 0.12
     /// Space page slide after a click or shortcut. Visible part ≈ 0.2–0.35 s; the
     /// slide leads the background fade (A0222: slide 0.65, fade 0.53).
     public static let spaceSwitch = SpringToken(response: 0.3, dampingFraction: 1.0)
@@ -68,15 +76,22 @@ extension Motion {
     /// Guesses centralized per media plan §4.2.7 and §4.4.7; reduce motion uses fades.
     /// Finite fallback approved after the native offscreen transition produced no effect keys.
     public static let rowMediaFallback: CFTimeInterval = 0.25
-    public static let miniPlayerStack = SpringToken(response: 0.3, dampingFraction: 1)
+    // Media plan §13.6: guess from the measured 0.20 s Space spring (§20.12); pending mini-player O9 capture.
+    public static let miniPlayerStack = SpringToken(response: 0.2, dampingFraction: 1)
     public static let miniPlayerResize: CFTimeInterval = 0.2
     public static let miniPlayerTitle: CFTimeInterval = 0.12
     public static let miniPlayerReveal: CFTimeInterval = 0.15
     public static let miniPlayerAppearDelay: CFTimeInterval = 0.05
     public static let miniPlayerDisappear: CFTimeInterval = 0.12
     public static let reducedMedia: CFTimeInterval = 0.1
+    public static let pipPresentAlpha: CFTimeInterval = 0.1
     public static let pipPresent = SpringToken(response: 0.3, dampingFraction: 1)
     public static let pipFade: CFTimeInterval = 0.15
     public static let pipControlsHide: CFTimeInterval = 0.3
+    public static let previewIn: CFTimeInterval = 0.15
+    public static let previewOut: CFTimeInterval = 0.10
+    public static let previewSwap: CFTimeInterval = 0.10
+    public static let bannerIn: CFTimeInterval = 0.22
+    public static let bannerOut: CFTimeInterval = 0.18
     public static let pipBackToTab: CFTimeInterval = 0.25
 }

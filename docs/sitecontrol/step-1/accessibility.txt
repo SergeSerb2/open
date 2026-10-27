@@ -1,11 +1,8 @@
 AXPopover label=Site Control Center
   description=news.example.com
   AXButton label=Share
-  AXButton label=Copy URL
   AXButton label=New Boost
   AXButton label=Capture a portion of this page
   AXButton label=Capture the full page
-  AXButton label=Capture in Portrait Mode
   AXStaticText label=Connection: Secure
-    description=Connection: Secure
   AXMenuButton label=More

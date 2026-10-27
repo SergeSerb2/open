@@ -62,40 +62,49 @@ public enum RowMediaMetrics {
     public static let glyphInsetX: CGFloat = 2
 }
 
-/// Media plan §4.2; guesses stay centralized until S3–S8. PP-6/16/17 supply the noted constants.
+/// Media plan §13 (Step 3b). Capture session 2 frames are cited per value.
 public enum MiniPlayerMetrics {
-    public static let inset: CGFloat = 8
-    public static let verticalInset: CGFloat = 4
-    public static let height: CGFloat = 68
-    public static let cornerRadius: CGFloat = 10
-    public static let titleRowHeight: CGFloat = 36
-    public static let titleX: CGFloat = 35
-    public static let titleBaseline: CGFloat = 23
-    public static let titleTrailing: CGFloat = 9
-    public static let rightButtonPitch: CGFloat = 26
-    public static let favicon = CGRect(x: 9, y: 9, width: 18, height: 18)
-    public static let faviconInk: CGFloat = 16
-    public static let button: CGFloat = 24 // PP-16
-    public static let rightButtonInset: CGFloat = 30
-    public static let titleButtonY: CGFloat = 6
-    public static let controlsY: CGFloat = 40
-    public static let controlsInset: CGFloat = 6
-    public static let controlsPitch: CGFloat = 28
-    public static let stackOffset: CGFloat = 5
-    public static let stackWidthOffset: CGFloat = 6
-    public static let stackOpacity: Float = 0.3
-    public static let expandedGap: CGFloat = 6
-    public static let collapseDelay: TimeInterval = 0.3
-    public static let tooltipDelay: TimeInterval = 0.45 // PP-6
-    public static let drawerHeight: CGFloat = 28
+    public static let inset: CGFloat = 8                  // fact E2
+    public static let gapAbove: CGFloat = 8               // fact E2: the pager ends 8 pt above the stack
+    public static let rowHeight: CGFloat = 33             // fact E2, E3
+    public static let cornerRadius: CGFloat = 10          // fit E2, E3; cornerCurve .continuous
+    public static let button: CGFloat = 24                // code PP-16; fact E2
+    public static let buttonY: CGFloat = 5                // inside a row; fact E2, E3
+    public static let buttonPlateRadius: CGFloat = 5      // fit E3/E7: continuous RMS 0.034 vs 0.116 at 6
+    public static let slotInset: CGFloat = 10             // first slot x, and the gap after the last slot; fact E2, E6
+    public static let slotCount = 5                       // fact E2
+    public static let faviconSize: CGFloat = 16           // fact E2
+    public static let titleX: CGFloat = 14                // fact E3
+    public static let titleBaseline: CGFloat = 22         // fact E3
+    public static let titleGap: CGFloat = 10              // title end → first title-row button; fact E3
+    public static let closeTrailing: CGFloat = 34         // Close x = cardW − 34; fact E3
+    public static let pipTrailing: CGFloat = 58           // PiP x = cardW − 58; fact E3
+    public static let stackOffset: CGFloat = 7            // fact E6
+    public static let stackInset: CGFloat = 5             // per side, per level; fact E6
+    public static let stackOpacityStep: CGFloat = 0.2     // fit E6
+    public static let expandedGap: CGFloat = 5            // fact E7
+    public static let shadowOpacity: Float = 0.21         // fit E2
+    public static let shadowRadius: CGFloat = 4           // fit E2
+    public static let collapseDelay: TimeInterval = 0.3   // guess
+    public static let tooltipDelay: TimeInterval = 0.45   // code PP-6
+    // Volume drawer: guess (§13.7 O2).
+    public static let drawerSliderInset: CGFloat = 44
     public static let drawerTrackHeight: CGFloat = 4
+    public static let drawerTrackRadius: CGFloat = 2
     public static let drawerKnob: CGFloat = 12
+    public static let drawerShadowBlur: CGFloat = 2
+    public static let drawerShadowOffset = CGSize(width: 0, height: -1)
     public static let volumeStep: Double = 0.05
-    public static let marqueeLeftFade: CGFloat = 4 // PP-17
-    public static let marqueeRightFade: CGFloat = 8
-    public static let marqueeSpacing: CGFloat = 32
-    public static let marqueeDelay: TimeInterval = 3
-    public static let marqueeSpeed: CGFloat = 30 // guess, pt/s
+
+    /// Card height: one row at rest, two expanded, three with the drawer.
+    public static func cardHeight(expanded: Bool, drawer: Bool) -> CGFloat {
+        expanded ? (drawer ? 3 : 2) * rowHeight : rowHeight
+    }
+    /// Slot k's x in a card of width w, on the backing pixel grid (halves round up). Fact E2, E6.
+    public static func slotX(_ k: Int, cardWidth w: CGFloat, scale: CGFloat) -> CGFloat {
+        let x = slotInset + CGFloat(k) * (w - 2 * slotInset - button) / CGFloat(slotCount - 1)
+        return (x * scale + 0.5).rounded(.down) / scale
+    }
 }
 
 /// Media plan §4.4/§4.6. PP-6 proves corner button sizes/padding and the 15 s skip.
@@ -103,14 +112,21 @@ public enum PiPMetrics {
     public static let cornerRadius: CGFloat = 12
     public static let minimum = CGSize(width: 284, height: 160)
     public static let compactWidth: CGFloat = 300
-    public static let compactPlayGlyph: CGFloat = 22
+    public static let compactPlayGlyph: CGFloat = 24
     public static let compactPadding: CGFloat = 8
     public static let regularPadding: CGFloat = 10
     public static let cornerButton: CGFloat = 28
     public static let cornerPitch: CGFloat = 32
     public static let playButton: CGFloat = 48
     public static let skipButton: CGFloat = 40
-    public static let skipGlyph: CGFloat = 24
+    public static let skipGlyph: CGFloat = 20
+    public static let compactSkipGlyph: CGFloat = 16
+    public static let minimumSkipWidth: CGFloat = 168
+    public static let packedTrackGap: CGFloat = 16
+    public static let scrubDragThreshold: CGFloat = 3
+    public static let disabledControlOpacity: CGFloat = 0.4
+    public static let centerGlyphShadowRadius: CGFloat = 2 // guess, N3; pending capture
+    public static let documentButtonRadius: CGFloat = 5
     public static let skipDistance: CGFloat = 72
     public static let compactSkipDistance: CGFloat = 56
     public static let trackButton: CGFloat = 32
@@ -121,10 +137,17 @@ public enum PiPMetrics {
     public static let pillHeight: CGFloat = 24
     public static let pillPadding: CGFloat = 10
     public static let bottomControlsOffset: CGFloat = 16
-    public static let screenInset: CGFloat = 16
-    public static let initialScreenFraction: CGFloat = 0.2
+    public static let screenInset: CGFloat = 10 // video PiP, capture session 2 item 13
+    public static let documentScreenInset: CGFloat = 16 // Document PiP remains provisional
+    public static let initialScreenFraction: CGFloat = 0.125 // /8 fits one 2560x1440 capture; guess elsewhere
     public static let maximumScreenFraction: CGFloat = 0.5
+    public static let minimizedScale: CGFloat = 0.9
     public static let hoverScale: CGFloat = 1.08
+    public static let expandedControlGap: CGFloat = 6
+    public static let meetingButton: CGFloat = 32
+    public static let meetingGap: CGFloat = 12
+    public static let precisionLabelGap: CGFloat = 8
+    public static let precisionLabelHeight: CGFloat = 14
     public static let hideDelay: TimeInterval = 2
     public static let scrubberHeight: CGFloat = 4
     public static let scrubberHoverHeight: CGFloat = 6
@@ -132,6 +155,7 @@ public enum PiPMetrics {
     public static let precisionStep: CGFloat = 40
     public static let maximumPrecision: Double = 8
     public static let documentTopBar: CGFloat = 28
+    public static let documentTitleGap: CGFloat = 6 // guess pending S11
     public static let documentFavicon: CGFloat = 16
     public static let documentLeading: CGFloat = 10
     public static let documentButton: CGFloat = 20

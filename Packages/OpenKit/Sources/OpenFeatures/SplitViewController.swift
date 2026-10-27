@@ -79,8 +79,8 @@ public final class SplitViewController: NSViewController, CommandDispatcher {
         } else {
             // A collapsing split hands the selection to its surviving tab in the model.
             model.removePane(splitID: split.id, tabID: id, archive: !separate)
-            // The model owns selection after collapse. A larger split stays
-            // valid, so separation still selects the newly detached sibling.
+            // The model retargets a collapsed split. A larger split remains
+            // valid, so separating its pane still selects the new sibling.
             if separate, model.node(id: split.id)?.split != nil { select(id) }
         }
         maximizedPaneID = nil; refresh(); onChange?()

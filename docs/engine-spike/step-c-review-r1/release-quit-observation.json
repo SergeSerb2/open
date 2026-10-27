@@ -1,0 +1,161 @@
+{
+  "ping": {
+    "cef": "156.0.14+g4fa4ab5+chromium-156.0.8078.48",
+    "chromium": "156.0.8078.48",
+    "pid": 25265,
+    "root": "/Users/serge/.t3/worktrees/open/t3-d8b5b30a/.re/pr85-r1/release-quit-probe",
+    "userData": "/Users/serge/.t3/worktrees/open/t3-d8b5b30a/.re/pr85-r1/release-quit-probe/Profiles"
+  },
+  "expectedPID": 25265,
+  "pending": {
+    "background": 1,
+    "captures": 1
+  },
+  "envTrace": true,
+  "envDelay": true,
+  "actualExecutable": "/Users/serge/.t3/worktrees/open/t3-d8b5b30a/build/Release/Open.app/Contents/MacOS/Open",
+  "expectedExecutable": "/Users/serge/.t3/worktrees/open/t3-d8b5b30a/build/Release/Open.app/Contents/MacOS/Open",
+  "pidpathResult": 86,
+  "quitReply": true,
+  "observations": [
+    {
+      "elapsed": 0.0,
+      "live": true,
+      "trace": false
+    },
+    {
+      "elapsed": 0.11,
+      "live": false,
+      "error": "Expecting value: line 1 column 1 (char 0)",
+      "trace": true
+    }
+  ],
+  "traceExists": true,
+  "trace": [
+    {
+      "asyncEngineCalls": {},
+      "backgroundTasks": 1,
+      "captureTasks": 1,
+      "closedFactories": 0,
+      "factories": 1,
+      "hosts": 1,
+      "lateAsyncEngineCalls": 0,
+      "phase": "prepare",
+      "selectionTasks": 0,
+      "uptime": 144076.21292079167
+    },
+    {
+      "asyncEngineCalls": {},
+      "backgroundTasks": 0,
+      "captureTasks": 0,
+      "closedFactories": 1,
+      "factories": 1,
+      "hosts": 0,
+      "lateAsyncEngineCalls": 0,
+      "phase": "hostsClosed",
+      "selectionTasks": 0,
+      "uptime": 144076.217477
+    }
+  ],
+  "traceAfterHarnessQuit": [
+    {
+      "asyncEngineCalls": {},
+      "backgroundTasks": 1,
+      "captureTasks": 1,
+      "closedFactories": 0,
+      "factories": 1,
+      "hosts": 1,
+      "lateAsyncEngineCalls": 0,
+      "phase": "prepare",
+      "selectionTasks": 0,
+      "uptime": 144076.21292079167
+    },
+    {
+      "asyncEngineCalls": {},
+      "backgroundTasks": 0,
+      "captureTasks": 0,
+      "closedFactories": 1,
+      "factories": 1,
+      "hosts": 0,
+      "lateAsyncEngineCalls": 0,
+      "phase": "hostsClosed",
+      "selectionTasks": 0,
+      "uptime": 144076.217477
+    },
+    {
+      "asyncEngineCalls": {},
+      "backgroundTasks": 0,
+      "captureTasks": 0,
+      "closedFactories": 1,
+      "factories": 1,
+      "hosts": 0,
+      "lateAsyncEngineCalls": 0,
+      "phase": "engineShutdownBegin",
+      "selectionTasks": 0,
+      "uptime": 144076.24858487502
+    },
+    {
+      "asyncEngineCalls": {},
+      "backgroundTasks": 0,
+      "captureTasks": 0,
+      "closedFactories": 1,
+      "factories": 1,
+      "hosts": 0,
+      "lateAsyncEngineCalls": 0,
+      "phase": "engineShutdownEnd",
+      "selectionTasks": 0,
+      "uptime": 144076.27546133334
+    }
+  ],
+  "launchExit": 0,
+  "finalTrace": [
+    {
+      "asyncEngineCalls": {},
+      "backgroundTasks": 1,
+      "captureTasks": 1,
+      "closedFactories": 0,
+      "factories": 1,
+      "hosts": 1,
+      "lateAsyncEngineCalls": 0,
+      "phase": "prepare",
+      "selectionTasks": 0,
+      "uptime": 144076.21292079167
+    },
+    {
+      "asyncEngineCalls": {},
+      "backgroundTasks": 0,
+      "captureTasks": 0,
+      "closedFactories": 1,
+      "factories": 1,
+      "hosts": 0,
+      "lateAsyncEngineCalls": 0,
+      "phase": "hostsClosed",
+      "selectionTasks": 0,
+      "uptime": 144076.217477
+    },
+    {
+      "asyncEngineCalls": {},
+      "backgroundTasks": 0,
+      "captureTasks": 0,
+      "closedFactories": 1,
+      "factories": 1,
+      "hosts": 0,
+      "lateAsyncEngineCalls": 0,
+      "phase": "engineShutdownBegin",
+      "selectionTasks": 0,
+      "uptime": 144076.24858487502
+    },
+    {
+      "asyncEngineCalls": {},
+      "backgroundTasks": 0,
+      "captureTasks": 0,
+      "closedFactories": 1,
+      "factories": 1,
+      "hosts": 0,
+      "lateAsyncEngineCalls": 0,
+      "phase": "engineShutdownEnd",
+      "selectionTasks": 0,
+      "uptime": 144076.27546133334
+    }
+  ]
+}

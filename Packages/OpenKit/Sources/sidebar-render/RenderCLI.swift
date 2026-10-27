@@ -15,9 +15,12 @@ enum RenderCLI {
         case "render": try render(rest)
         case "synth": try synth(rest)
         case "tooltip": try tooltip(rest)
+        case "space-manager": try spaceManager(rest)
         case "compare": try Compare.run(rest)
+        case "compare-media": try MediaCompare.run(rest)
         case "bench": try Bench.run(rest)
         case "check": try Checks.run(rest)
+        case "divider-check": try DividerChecks.run(rest)
         default: throw CLIError(description: usage)
         }
     }
@@ -27,15 +30,21 @@ enum RenderCLI {
       sidebar-render render --snapshot DIR --out FILE.png [--size WxH] [--scale 1|2] [--space N]
                             [--width W] [--select ROW] [--hover TARGET] [--loaded] [--new-tab-open]
                             [--hidden] [--reveal] [--inactive] [--appearance light|dark]
+                            [--multi-select ROW,ROW…] [--option-held] [--unread ROW,…] [--hover-favicon ROW]
+                            [--banner auto-archive] [--preview folder:N]
                             [--clear-today] [--collapse-folders] [--no-lights] [--page] [--crop X,Y,W,H]
-          --media "today:0=audible,today:1=muted,today:2=recording" [--media-depth N] [--media-theme default|red] [--reduce-motion] [--crop-media]
+          --media "today:0=audible,today:1=muted,today:2=recording" [--media-depth N] [--media-theme default|red] [--reduce-motion] [--crop-media] [--crop-media-controls]
+          --media-hover expanded|title:N --media-drawer N [--media-title-from-ax PATH]
+          --media-button-hover NAME[:N] [--media-button-pressed] [--media-tooltip] [--media-increase-contrast]
           ROW: pinned:N | today:N | favorite:N | folder:N/M (child M of the N-th pinned folder)
           TARGET: ROW | newtab | divider | header | url | home | plus | switcher:N | toolbar:back|forward|reload|toggle
           --switch-to N --at SECONDS: start an animated switch to Space N and capture that moment
       sidebar-render tooltip --snapshot DIR [--space N] --title TEXT [--subtitle TEXT] [--keys "⌘,["] --out FILE.png [--scale S]
+      sidebar-render space-manager --out FILE.png [--snapshot DIR] [--size WxH] [--scale 1|2] [--profiles 2] [--columns N --rows N --scroll-x X]
       sidebar-render synth --out DIR [--rows N]
       sidebar-render compare --arc FILE.png --ours FILE.png --spec NAME --out DIR [--scale S]
-      sidebar-render bench [--rows N] [--row-media mixed]
+      sidebar-render bench [--rows N] [--selection] [--bulk N] [--expand-all N] [--row-media mixed] [--media-card|--media-stack]
+      sidebar-render compare-media --arc FILE.png --ours FILE.png --out DIR --state rest|expanded|stack|stack-expanded
       sidebar-render check
     """
 
@@ -107,6 +116,11 @@ enum RenderCLI {
         context.systemAppearance = value(args, "--appearance") == "light" ? .light : .dark
         context.isWindowActive = !args.contains("--inactive")
         context.isNewTabCommandBarOpen = args.contains("--new-tab-open")
+        context.isOptionHeld = args.contains("--option-held")
+        if let banner = value(args, "--banner") {
+            guard banner == "auto-archive" else { throw CLIError(description: "unknown banner") }
+            context.autoArchiveBannerRequested = true
+        }
         if args.contains("--clear-today"), let s = context.focusedSpace { s.today = []; model.rebuildIndex() }
         // Capture-matching edits (render only): clear a Space title, insert a tab into a folder.
         if let n = value(args, "--untitled").flatMap(Int.init), model.spaces.indices.contains(n) { model.spaces[n].title = "" }
@@ -133,6 +147,24 @@ enum RenderCLI {
             window.selectedNodeBySpace[space.id] = id
         }
         if args.contains("--loaded") { for tab in model.index.values.compactMap(\.tab) { tab.live.hasWebContent = true } }
+        if let specs = value(args, "--multi-select") {
+            let ids = try specs.split(separator: ",").map { spec -> ItemID in
+                guard !spec.hasPrefix("favorite:"), let id = resolve(String(spec), context: context) else { throw CLIError(description: "no selectable row \(spec)") }
+                return id
+            }
+            context.selection.select(ids, anchor: ids.first)
+        }
+        if let specs = value(args, "--unread") {
+            for spec in specs.split(separator: ",") {
+                guard let id = resolve(String(spec), context: context), let tab = model.tab(id: id) else { throw CLIError(description: "no unread tab \(spec)") }
+                tab.isUnread = true
+            }
+        }
+        if let spec = value(args, "--hover-favicon") {
+            guard let id = resolve(spec, context: context) else { throw CLIError(description: "no favicon row \(spec)") }
+            context.forcedFaviconHoverID = id
+            context.forcedHover = .row(id)
+        }
         if let h = value(args, "--hover") {
             guard let t = hoverTarget(h, context: context) else { throw CLIError(description: "no hover target \(h)") }
             context.forcedHover = t
@@ -143,6 +175,10 @@ enum RenderCLI {
 
     static func render(_ args: [String]) throws {
         guard let dir = value(args, "--snapshot"), let out = value(args, "--out") else { throw CLIError(description: usage) }
+        if value(args, "--media-title-from-ax") != nil,
+           !URL(fileURLWithPath: out).standardizedFileURL.pathComponents.contains(".re") {
+            throw CLIError(description: "AX-title renders must stay under .re; use synthetic titles for committed images")
+        }
         let model = try loadModel(dir)
         let context = try makeContext(args, model: model)
         var options = RenderScene.Options()
@@ -151,8 +187,14 @@ enum RenderCLI {
         options.revealCard = args.contains("--reveal")
         options.trafficLights = !args.contains("--no-lights")
         options.emptyPanel = !args.contains("--page")
+        if let preview = value(args, "--preview"), let space = context.focusedSpace {
+            let parts = preview.split(separator: ":")
+            let folders = (space.pinned + space.today).compactMap(\.folder)
+            guard parts.count == 2, parts[0] == "folder", let index = Int(parts[1]), folders.indices.contains(index) else { throw CLIError(description: "no preview folder \(preview)") }
+            options.previewFolderID = folders[index].id
+        }
         let scale = CGFloat(Double(value(args, "--scale") ?? "1") ?? 1)
-        let delegate = RecordingDelegate()
+        let delegate: any SidebarDelegate = context.media == nil ? RecordingDelegate() : MediaScene.delegate(context: context)
         let scene = RenderScene(context: context, options: options, delegate: delegate)
         scene.background.renderScale = scale
         var image: CGImage
@@ -166,8 +208,18 @@ enum RenderCLI {
             image = OffscreenRenderer().snapshot(scene, scale: scale, presentation: true)
             host.contentView = nil
             host.close()
+        } else if value(args, "--media-button-hover") != nil || args.contains("--media-tooltip") {
+            image = try MediaScene.captureInteraction(scene, args: args, scale: scale)
         } else {
             image = OffscreenRenderer().render(scene, scale: scale)
+        }
+        if args.contains("--crop-media-controls") {
+            let mediaFrame = scene.sidebar.mediaControls.convert(scene.sidebar.mediaControls.bounds, to: scene)
+            let y = max(0, mediaFrame.minY - 12)
+            guard let crop = image.cropping(to: CGRect(x: 0, y: y * scale, width: context.sidebarWidth * scale, height: (scene.bounds.height - y) * scale)) else {
+                throw CLIError(description: "could not crop media controls")
+            }
+            image = crop
         }
         if args.contains("--crop-media") {
             let ids = model.index.values.compactMap(\.tab).filter { $0.live.isAudible || $0.isMuted || $0.live.isCapturing }.map(\.id)
@@ -185,6 +237,51 @@ enum RenderCLI {
         }
         OffscreenRenderer.writePNG(image, to: URL(fileURLWithPath: out))
         print("wrote \(out) \(image.width)x\(image.height)")
+    }
+
+    static func spaceManager(_ args: [String]) throws {
+        guard let out = value(args, "--out") else { throw CLIError(description: usage) }
+        let model = try value(args, "--snapshot").map(loadModel) ?? Synthetic.model()
+        if value(args, "--profiles") == "2", let profile = model.createProfile(name: "Work") { model.updateSpace(id: model.spaces[0].id, profileID: profile.id) }
+        if let count = value(args, "--columns").flatMap(Int.init) {
+            guard count > 0 else { throw CLIError(description: "--columns must be positive") }
+            model.spaces = (0..<count).map { i in
+                let space = Space(title: "Space \(i + 1)", icon: .emoji("📚"), profileID: model.profiles[0].id)
+                Synthetic.fillBulk(space, rows: Int(value(args, "--rows") ?? "100") ?? 100); return space
+            }
+            model.windows[0].focusedSpaceID = model.spaces[0].id; model.rebuildIndex()
+        }
+        let context = SidebarContext(model: model, windowID: model.windows[0].id)
+        context.systemAppearance = value(args, "--appearance") == "light" ? .light : .dark
+        let manager = SpaceManagerView(context: context)
+        manager.frame.size = size(value(args, "--size")) ?? CGSize(width: 1000, height: 700)
+        let scale = CGFloat(Double(value(args, "--scale") ?? "1") ?? 1)
+        // The same opaque content background used by LibraryContent.
+        let library = NSView(frame: manager.frame); library.wantsLayer = true
+        library.appearance = context.systemAppearance.nsAppearance
+        library.layer?.backgroundColor = SettingsTokens.content.cgColor(context.systemAppearance)
+        library.addSubview(manager)
+        let host = OffscreenRenderer.host(library, scale: scale)
+        defer { SidebarDiagnostics.spaceReorderFrame = nil; host.contentView = nil; host.close() }
+        if let x = value(args, "--scroll-x").flatMap(Double.init) {
+            manager.scrollView.contentView.scroll(to: CGPoint(x: x, y: 0))
+            manager.scrollView.reflectScrolledClipView(manager.scrollView.contentView)
+            OffscreenRenderer.settle(library, runLoop: 0.002)
+        }
+        var captured: CGImage?
+        if let index = value(args, "--lift-column").flatMap(Int.init), model.spaces.indices.contains(index), let grip = manager.controls(spaceID: model.spaces[index].id)?.grabber {
+            SidebarDiagnostics.spaceReorderFrame = { OffscreenRenderer.settle(library); captured = OffscreenRenderer().snapshot(library, scale: scale) }
+            let point = grip.convert(CGPoint(x: 12, y: 12), to: nil)
+            func event(_ type: NSEvent.EventType, dx: CGFloat) -> NSEvent {
+                NSEvent.mouseEvent(with: type, location: CGPoint(x: point.x+dx,y: point.y), modifierFlags: [], timestamp: 0, windowNumber: host.windowNumber, context: nil, eventNumber: 0, clickCount: 1, pressure: 1)!
+            }
+            NSApp.postEvent(event(.leftMouseDragged, dx: 20), atStart: false)
+            NSApp.postEvent(event(.leftMouseUp, dx: 20), atStart: false)
+            grip.mouseDown(with: event(.leftMouseDown, dx: 0))
+        }
+        let image = captured ?? OffscreenRenderer().snapshot(library, scale: scale)
+        OffscreenRenderer.writePNG(image, to: URL(fileURLWithPath: out))
+        print("wrote \(out) \(image.width)x\(image.height); built \(manager.builtColumnIDs.count)/\(model.spaces.count) columns")
     }
 
     /// Renders one Arc-style tooltip capsule in a Space's colors.

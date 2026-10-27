@@ -1,0 +1,26 @@
+Traceback (most recent call last):
+  File "/Users/serge/.t3/worktrees/open/t3-d8b5b30a/tools/e2e/engine_e2e.py", line 3392, in main
+    execute()
+  File "/Users/serge/.t3/worktrees/open/t3-d8b5b30a/tools/e2e/engine_e2e.py", line 3354, in execute
+    shell_checks(factory, results["shell"], tmp)
+  File "/Users/serge/.t3/worktrees/open/t3-d8b5b30a/tools/e2e/engine_e2e.py", line 884, in shell_checks
+    shutdown_order_checks(app_factory, results, tmp)
+  File "/Users/serge/.t3/worktrees/open/t3-d8b5b30a/tools/e2e/engine_e2e.py", line 1596, in shutdown_order_checks
+    app.call('save-page-confirm', path=destination)
+  File "/Users/serge/.t3/worktrees/open/t3-d8b5b30a/tools/e2e/engine_e2e.py", line 192, in call
+    resp = json.loads(buf)
+  File "/Applications/Xcode.app/Contents/Developer/Library/Frameworks/Python3.framework/Versions/3.9/lib/python3.9/json/__init__.py", line 346, in loads
+    return _default_decoder.decode(s)
+  File "/Applications/Xcode.app/Contents/Developer/Library/Frameworks/Python3.framework/Versions/3.9/lib/python3.9/json/decoder.py", line 337, in decode
+    obj, end = self.raw_decode(s, idx=_w(s, 0).end())
+  File "/Applications/Xcode.app/Contents/Developer/Library/Frameworks/Python3.framework/Versions/3.9/lib/python3.9/json/decoder.py", line 355, in raw_decode
+    raise JSONDecodeError("Expecting value", s, err.value) from None
+json.decoder.JSONDecodeError: Expecting value: line 1 column 1 (char 0)
+fresh_model              PASS
+tab_strip_mirror         PASS
+keyboard                 PASS
+split_view               PASS
+window_png               PASS
+persistence              PASS
+suite                    FAIL
+wrote /Users/serge/.t3/worktrees/open/t3-d8b5b30a/docs/engine-spike/results-shell-debug.json

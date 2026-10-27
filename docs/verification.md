@@ -3,11 +3,16 @@
 Run from any directory on macOS with Swift and Python 3 installed:
 
 ```sh
-tools/verify-all.sh
-tools/verify-all.sh --quick
-tools/verify-all.sh --only route,favicons
-tools/verify-all.sh --with-arc-data --keep-logs
+~/Library/Caches/OpenRE/scripts/heavy.sh tools/verify-all.sh
+~/Library/Caches/OpenRE/scripts/heavy.sh tools/verify-all.sh --quick
+~/Library/Caches/OpenRE/scripts/heavy.sh tools/verify-all.sh --only route,favicons
+~/Library/Caches/OpenRE/scripts/heavy.sh tools/verify-all.sh --with-arc-data --keep-logs
 ```
+
+The Site Control check opens native menus and acquires
+`/tmp/open-onscreen-e2e.lock` around that suite. Do not hold this lock around the
+whole runner: the release build needs no on-screen lock. Standalone native-menu
+harness commands still need the lock, per AGENTS.md rule 11.
 
 The runner uses `/bin/bash` 3.2. It builds `Packages/OpenKit` exactly once with
 `nice -n 10 swift build -c release -j "${VERIFY_JOBS:-6}"`. The build runs in its
@@ -52,10 +57,66 @@ also makes the optional Boosts check SKIP. Checks excluded by flags have no row.
 | `boosts` | Headless system Chrome loads the actual Boosts harness and production scripts. A7 asserts banner highlight geometry/color, selector commit, hidden banner, and active picker. A11 asserts the precise pick, two aligned related previews, three-match replacement, and hidden posts. Saves both PNGs and rejects runtime errors. See [boosts.md](boosts.md). | 5–20 s; npm install dependent |
 | `import-arc` | Opt-in only. Read-only copies of Arc's top-level JSON files pass sidebar/archive accounting, `archive-list --limit 0`, and roundtrip. Also inspects default-profile output when profiles exists (P-9). | <2 s |
 
+### Focused checks for intermediate pushes
+
+`AGENTS.md` rule 10 asks for the full gate before a PR opens and when it is reported ready. For pushes in between, run the build plus the checks for what you changed. Shared targets (`OpenDesign`, `OpenModel`, `OpenStore`) reach many checks, so use the full gate when you change them.
+
+| You changed | Run at least |
+|---|---|
+| `OpenSidebar`, `OpenMedia` sidebar views | `sidebar-render,sidebar-compare,media-demo` |
+| `OpenCommandBar`, `OpenSuggest`, `OpenCommands` | `commandbar-render,suggest-check,commands-dump` |
+| `OpenFeatures` (Split, Peek, Little Open, PiP, Site Control) | `features-render` |
+| `OpenSpaceEditor`, theme tokens | `space-editor,space-legacy` |
+| `OpenSettings` | `settings-preview,profiles` |
+| `OpenRouting` | `route` |
+| `OpenSleep` | `sleep-demo` |
+| `OpenAdBlock` | `adblock-perf,adblock-catalog` |
+| `OpenBoosts` | `boosts` |
+| `OpenWeb` favicons | `favicons` |
+| `App/` or `Engine/` | the e2e suites for the flow (`tools/e2e/engine_e2e.py --only …`) plus `build` |
+
 An initial release build usually takes 20–90 seconds. An incremental build usually
 takes 1–3 seconds. Host load, cold compiler caches, npm, and list downloads can
 increase these estimates. The final table and each log give actual times/results.
 Performance budgets are never retried or relaxed by the runner.
+
+## Performance gates for offscreen harnesses
+
+Offscreen performance regression gates use **main-thread retired instructions**
+with accepted counts per CPU brand and macOS build. CPU p95, wall p95 and load
+remain printed diagnostics. Scheduling onto different cores under heavy load can
+change CPU milliseconds; it does not change the amount of instruction work in
+the same span. Absolute product time targets still need a quiet-machine check.
+
+`sitecontrol-render` applies this method to the full 2x cold-open workload
+(20 Boosts, 12 Settings rows, fresh native tree and first draw). It discards five
+warmups, measures 30 opens, takes their median (rounded up to an instruction), and
+requires `median <= ceil(accepted × 1.10)`. The small versioned fixture is
+`Packages/OpenKit/Sources/sitecontrol-render/Fixtures/instruction-baselines.json`.
+M5 Pro / 26B5112a records the lead-accepted 95,035,968 instructions; the limit is
+104,539,565. Add an M1 entry only after its accepted measurement. An unknown
+CPU/build prints the count and reason as **INFO**, not PASS. A missing counter
+or invalid fixture fails; neither CPU nor process totals substitute for it.
+The lightweight skeleton timing is informational; the full cold workload owns
+the regression gate.
+
+The helper resolves `thread_selfcounts` with `dlsym`, checks the THSC_CPI=1 C ABI,
+and reads the current main thread. It is compiled only in the harness executable,
+never in App or library targets. It reuses the SM6 measurement helper. A negative
+proof adds an O(n) native row-construction pass inside the measured span and must
+fail the unchanged instruction limit, then restores the source.
+
+After a release build, this exact command prints the CPU p95 for the lead's
+quiet M5 check (the product target remains **<8 ms**):
+
+```sh
+~/Library/Caches/OpenRE/scripts/heavy.sh Packages/OpenKit/.build/release/sitecontrol-render bench --fixture cold
+```
+
+`cold-measure --thread-instructions` prints the sample counts for independent A/B
+runs. Raw traces stay local; commit only synthetic numeric evidence and hashes.
+The Site Control A/B report is in `docs/sitecontrol/step-2/performance/README.md`.
+This method does not claim that other existing harnesses have already migrated.
 
 ## Logs and privacy
 

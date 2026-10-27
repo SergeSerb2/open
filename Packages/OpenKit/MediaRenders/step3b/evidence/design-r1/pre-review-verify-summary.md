@@ -1,0 +1,28 @@
+# Complete verification
+
+Merged main: `f3c9cc5a921c4b1de409db63645a38c08aa1b9a0`.
+
+| Check | Result | Seconds |
+|---|---|---|
+| build | PASS | 2 |
+| commands-demo | PASS | 2 |
+| roundtrip | PASS | 0 |
+| space-legacy | PASS | 1 |
+| space-editor | PASS | 1 |
+| suggest-check | PASS | 10 |
+| commands-dump | PASS | 1 |
+| route | PASS | 1 |
+| favicons | PASS | 2 |
+| media-demo | PASS | 0 |
+| sleep-demo | PASS | 0 |
+| adblock-perf | PASS | 1 |
+| adblock-catalog | PASS | 0 |
+| profiles | PASS | 2 |
+| settings-preview | PASS | 79 |
+| sidebar-render | PASS | 78 |
+| sidebar-compare | PASS | 17 |
+| commandbar-render | PASS | 14 |
+| features-render | PASS | 24 |
+| boosts | PASS | 3 |
+
+20/20 PASS, no skips or retries; exit 0.

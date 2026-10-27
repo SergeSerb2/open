@@ -1,4 +1,14 @@
 # Open fragment. Merged into third_party/rust/chromium_crates_io/Cargo.toml
-# by the Rust step (§7.4). Direct dependencies only; gnrt finds transitive deps.
-# Pins: docs/adblock-design.md §Benchmark (adblock 0.8.11 + rmp 0.8.11, MPL-2.0).
-adblock = "=0.8.11"
+# by the Rust step (adblock-fork §4.3). Direct dependencies only; gnrt finds
+# transitive deps. Pins: docs/adblock-design.md §Benchmark (adblock 0.8.11,
+# MPL-2.0). Features per adblock-fork D-3: no object-pooling and no
+# unsync-regex-caching, so Engine stays Send + Sync in the browser process.
+[dependencies.adblock]
+version = "=0.8.11"
+default-features = false
+features = ["embedded-domain-resolver", "full-regex-handling", "resource-assembler"]
+
+# Direct pin only to hold rmp-serde 0.15's dependency at the tested version
+# (adblock-fork §4.2): without it gnrt resolves rmp 0.8.15.
+[dependencies.rmp]
+version = "=0.8.11"

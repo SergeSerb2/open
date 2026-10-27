@@ -1,0 +1,89 @@
+{
+  "actions": {
+    "cmd_l_selection": {
+      "ok": true,
+      "state": {
+        "created": true,
+        "editorCanUndo": false,
+        "editorText": "http://127.0.0.1:51501/new",
+        "final": true,
+        "firstResultsMs": 6.653458333333219,
+        "mode": "editCurrentURL",
+        "newTabHighlighted": false,
+        "openFirstResultsMs": 6.93154166666659,
+        "presented": true,
+        "profile": "F6F42026-62AE-4102-9850-C7B30C001807",
+        "range": [
+          0,
+          26
+        ],
+        "rows": [
+          {
+            "action": "",
+            "id": "typed:url",
+            "kind": "navigate",
+            "space": "",
+            "tab": "",
+            "title": "http://127.0.0.1:51501/new",
+            "url": "http://127.0.0.1:51501/new"
+          }
+        ],
+        "selected": 0,
+        "space": "AD03C81C-C476-43B2-A188-C6A115BC3EB9",
+        "text": "http://127.0.0.1:51501/new"
+      }
+    },
+    "cmd_t_mode": {
+      "ok": true,
+      "state": {
+        "created": true,
+        "editorCanUndo": false,
+        "editorText": "",
+        "final": true,
+        "firstResultsMs": 15.002750000000106,
+        "mode": "newTab",
+        "newTabHighlighted": true,
+        "openFirstResultsMs": 18.8914166666666,
+        "presented": true,
+        "profile": "F6F42026-62AE-4102-9850-C7B30C001807",
+        "range": [
+          0,
+          0
+        ],
+        "rows": [],
+        "selected": -1,
+        "space": "AD03C81C-C476-43B2-A188-C6A115BC3EB9",
+        "text": ""
+      }
+    },
+    "edit_current_tab": {
+      "ok": true,
+      "title": "Shell C /edited"
+    },
+    "first_open_results_budget": {
+      "milliseconds": 18.8914166666666,
+      "ok": true
+    },
+    "lazy_commandbar": {
+      "ok": true
+    },
+    "suite": {
+      "error": "key: key focus not ready: active=true target=104345 key=104345",
+      "ok": false
+    },
+    "typed_top_today": {
+      "ok": true,
+      "tab": "9E400C4E-1001-49ED-92BF-24052E23BBC4"
+    }
+  },
+  "config": "Release",
+  "engine": {
+    "distributionUUID": "4C4C4432-5555-3144-A144-B678285BC5F4",
+    "embeddedUUID": "4C4C4432-5555-3144-A144-B678285BC5F4",
+    "source": "fork",
+    "stamp": "fork /Users/serge/Developer/open-engine/chromium_git/chromium/src/cef/binary_distrib/cef_binary_156.0.14+g4fa4ab5+chromium-156.0.8078.48_macosarm64_minimal 1793036548"
+  },
+  "interrupted_attempts": [],
+  "started": "2026-10-26 13:29:18",
+  "style": "chrome"
+}

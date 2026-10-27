@@ -1,5 +1,6 @@
 import AppKit
 import QuartzCore
+import OpenModel
 
 /// Window background for a Space theme: the gradient field plus grain, as plain
 /// CALayers. Place it behind the sidebar and the web panel so it fills the whole
@@ -198,7 +199,7 @@ final class ThemeLayer: CALayer {
     private var grainKey: GrainKey?
 
     private struct FieldKey: Equatable { var active: Bool; var aspect: Int }
-    private struct GrainKey: Equatable { var noise: Double; var scale: CGFloat }
+    private struct GrainKey: Equatable { var noise: Double; var scale: CGFloat; var texture: SpaceStyleTexture }
 
     init(style: SpaceThemeStyle) {
         self.theme = style
@@ -225,7 +226,7 @@ final class ThemeLayer: CALayer {
 
     @MainActor func resize(to size: CGSize) {
         field.frame = CGRect(origin: .zero, size: size)
-        let t = Grain.tilePoints
+        let t = theme.usesLegacyIntensity ? Grain.tilePoints : ThemeTexture.period(theme.texture)
         grainTile.frame = CGRect(x: 0, y: 0, width: t, height: t)
         grainRows.frame = CGRect(x: 0, y: 0, width: t, height: size.height)
         grainRows.instanceCount = Int((size.height / t).rounded(.up))
@@ -246,11 +247,16 @@ final class ThemeLayer: CALayer {
             field.contents = ThemeField.makeImage(style: theme, windowSize: size, isActive: active)
         }
         let noise = theme.noiseFactor
+        grainTile.opacity = theme.usesLegacyIntensity ? 1 : Float(ThemeTexture.layerAlpha(theme.texture, noiseFactor: noise))
         guard noise > 0 else { grainColumns.isHidden = true; return rebuilt }
-        let gkey = GrainKey(noise: noise, scale: scale)
+        let gkey = GrainKey(noise: noise, scale: scale, texture: theme.texture)
         if gkey != grainKey {
             grainKey = gkey
-            grainTile.contents = Grain.tile(noiseFactor: noise, scale: scale)
+            // Legacy snapshots keep exact-noise grain bytes; editor noise
+            // changes only the intrinsic texture layer's opacity.
+            grainTile.contents = theme.usesLegacyIntensity
+                ? Grain.tile(noiseFactor: noise, scale: scale)
+                : ThemeTexture.tile(theme.texture, noiseFactor: noise, scale: scale)
             grainTile.contentsScale = scale
         }
         grainColumns.isHidden = false

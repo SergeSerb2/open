@@ -1,0 +1,450 @@
+[
+  {
+    "file": "compact-meeting@1x.png",
+    "pixels": [
+      284,
+      160
+    ],
+    "sha256": "d60a9f2cca92bba7ad0d5df9d9053f7eefb325f770aa52e27475c11b2e37e5b7"
+  },
+  {
+    "file": "compact-meeting@2x.png",
+    "pixels": [
+      568,
+      320
+    ],
+    "sha256": "4bd866dc01fe32b1b41fbc36864879e2f85405c3fcd0640ef899cfa714f2f027"
+  },
+  {
+    "file": "compact-paused@1x.png",
+    "pixels": [
+      284,
+      160
+    ],
+    "sha256": "07a14ffe3c4eb98749e07a621072083e900eb1aa07e770989dcc1bfb580a0683"
+  },
+  {
+    "file": "compact-paused@2x.png",
+    "pixels": [
+      568,
+      320
+    ],
+    "sha256": "a1060d34a4142fc97de332ed0e44dc2f10500636f679617e2ce06fe6b7ac3331"
+  },
+  {
+    "file": "compact-playing@1x.png",
+    "pixels": [
+      284,
+      160
+    ],
+    "sha256": "742bbc955dba258555513a33502be6880e0eb0221a75ba10a72746029221fd6f"
+  },
+  {
+    "file": "compact-playing@2x.png",
+    "pixels": [
+      568,
+      320
+    ],
+    "sha256": "11bd484c1f043f62ee42555feb64fb72e6ff7b0910d4ec759a19e1b844d24adb"
+  },
+  {
+    "file": "compact-precision-1@1x.png",
+    "pixels": [
+      284,
+      160
+    ],
+    "sha256": "2125f6a78da44df4e32aecad408ae619fe26d7900534c75902b7a7107ea26602"
+  },
+  {
+    "file": "compact-precision-1@2x.png",
+    "pixels": [
+      568,
+      320
+    ],
+    "sha256": "84ed1a326c0f8fe21223a92e7f134108e09f706808d64c9abb5bbb663a03bc6e"
+  },
+  {
+    "file": "compact-precision-3@1x.png",
+    "pixels": [
+      284,
+      160
+    ],
+    "sha256": "e29968c7e0aeac718b3e7cf14f7e3b3ed98c85bb7c35e90915faf54b3090e64c"
+  },
+  {
+    "file": "compact-precision-3@2x.png",
+    "pixels": [
+      568,
+      320
+    ],
+    "sha256": "07b0fba445404c177452bd77c2b1220b940fbf7dd499cf97bbb230c1f7e309d4"
+  },
+  {
+    "file": "controls-hidden@1x.png",
+    "pixels": [
+      384,
+      216
+    ],
+    "sha256": "01fc792c488c098fef24fff9346ed33c167a674a0bcca0eef2db23156cf96f98"
+  },
+  {
+    "file": "controls-hidden@2x.png",
+    "pixels": [
+      768,
+      432
+    ],
+    "sha256": "abae1561e68c0008079fcf26c9775e1dcc01b542c03aa90603dc2345c987a9e4"
+  },
+  {
+    "file": "document-hover@1x.png",
+    "pixels": [
+      384,
+      300
+    ],
+    "sha256": "1ddf9cb965934e5a2875e368c2e6a1d90653ae185d0c84378605e72b6879c820"
+  },
+  {
+    "file": "document-hover@2x.png",
+    "pixels": [
+      768,
+      600
+    ],
+    "sha256": "00bc035fbb56a45fedf04264b9398f0463b0f990253597127e592396d04a9fc6"
+  },
+  {
+    "file": "document-pressed@1x.png",
+    "pixels": [
+      384,
+      300
+    ],
+    "sha256": "0bbfd7dc411b1252033c5b84312b78b53d0e8879a9ca32407af82422027f9086"
+  },
+  {
+    "file": "document-pressed@2x.png",
+    "pixels": [
+      768,
+      600
+    ],
+    "sha256": "7150f57d92d29f67aef9b5e1cfa5727fb8c2c29682b4489d16513f3ef78913d5"
+  },
+  {
+    "file": "document@1x.png",
+    "pixels": [
+      384,
+      300
+    ],
+    "sha256": "a67eb69de8749b48f1360a4688a9a213fe92216cf9f9f4952a4fce3663e3af19"
+  },
+  {
+    "file": "document@2x.png",
+    "pixels": [
+      768,
+      600
+    ],
+    "sha256": "96c4a6530ae03f5871fadcaf3d6bb265549d66d5c7e567a6b8493a0ba77fa31a"
+  },
+  {
+    "file": "first-open-landscape-clamped@1x.png",
+    "pixels": [
+      285,
+      160
+    ],
+    "sha256": "0b6bff6ab1f07d145f92862530569ac2f891e0c559b549edf6dbc8d419ebda6c"
+  },
+  {
+    "file": "first-open-landscape-clamped@2x.png",
+    "pixels": [
+      570,
+      320
+    ],
+    "sha256": "1271181c0733b3b807621d343f63d69983d10661b5980e223686760ba2acaab3"
+  },
+  {
+    "file": "first-open-landscape@1x.png",
+    "pixels": [
+      320,
+      180
+    ],
+    "sha256": "9b16a9a667612944bfa8a59a90de679c0967fe10b302978c570c31ebe4dd7143"
+  },
+  {
+    "file": "first-open-landscape@2x.png",
+    "pixels": [
+      640,
+      360
+    ],
+    "sha256": "ee452a46d27e2ec5d2c096ff36abe6698347da121669d26c3f94af41fbe851eb"
+  },
+  {
+    "file": "first-open-portrait@1x.png",
+    "pixels": [
+      160,
+      285
+    ],
+    "sha256": "633b16d0f040e25e374f7eec2b9f6051046ca36aaf7a0afd5940fab3c08ad2b8"
+  },
+  {
+    "file": "first-open-portrait@2x.png",
+    "pixels": [
+      320,
+      570
+    ],
+    "sha256": "2d9ecafa4897100fae0f01c0d1150004a5e012b24b359ac2c29304f624763ae8"
+  },
+  {
+    "file": "meet@1x.png",
+    "pixels": [
+      384,
+      216
+    ],
+    "sha256": "10cd1dd07d1b88a82988652f81040d3179b58e731024ad9ada8f9c75c0cc7b81"
+  },
+  {
+    "file": "meet@2x.png",
+    "pixels": [
+      768,
+      432
+    ],
+    "sha256": "81fd75d0def7a37f2b8d95605a63d73aaf23dba531c223ded2bc9238101c7fd3"
+  },
+  {
+    "file": "portrait-meeting@1x.png",
+    "pixels": [
+      160,
+      284
+    ],
+    "sha256": "68bdbca4f96ffbf1069419ea6e62d39b98e5dc96779fb75d975d4d99283f8601"
+  },
+  {
+    "file": "portrait-meeting@2x.png",
+    "pixels": [
+      320,
+      568
+    ],
+    "sha256": "041d765f834b5fa0f3b2d4bd2a29621178f46be179843768c8e4a3b74ff1196c"
+  },
+  {
+    "file": "portrait-minimum@1x.png",
+    "pixels": [
+      160,
+      284
+    ],
+    "sha256": "2e3e3d2d885d4464f4232fc6151e01246311550f7e6c3b82abccbab449ec28d1"
+  },
+  {
+    "file": "portrait-minimum@2x.png",
+    "pixels": [
+      320,
+      568
+    ],
+    "sha256": "cd073f487e88ef00052d80cbb1b8b99ff78d1d9c05d3e09bec899eb9dc60b4ea"
+  },
+  {
+    "file": "portrait-precision-1@1x.png",
+    "pixels": [
+      160,
+      284
+    ],
+    "sha256": "74d8f56920e96479537d1b1cca8ad0539273143bbfb68a5900e22fea727c60a8"
+  },
+  {
+    "file": "portrait-precision-1@2x.png",
+    "pixels": [
+      320,
+      568
+    ],
+    "sha256": "8d3f9f81febc1f05aab3da091939a69bb47f6b249a70a11dc4d309d2e2f540e6"
+  },
+  {
+    "file": "portrait-precision@1x.png",
+    "pixels": [
+      160,
+      284
+    ],
+    "sha256": "4a6885ebb7ef4f16eec7e76e2be76f0dbc82290f4b1d7fc924b79ad2c956e3ad"
+  },
+  {
+    "file": "portrait-precision@2x.png",
+    "pixels": [
+      320,
+      568
+    ],
+    "sha256": "03b0948e6af277b1018e812afddfa38880db62a10c26533d7bb987b63af09616"
+  },
+  {
+    "file": "portrait@1x.png",
+    "pixels": [
+      252,
+      448
+    ],
+    "sha256": "caf798ca46248ce5b35e0d4714176a2b19eea81b170354d2c47b4645fb1ec545"
+  },
+  {
+    "file": "portrait@2x.png",
+    "pixels": [
+      504,
+      896
+    ],
+    "sha256": "2119a835f1dd566ccc11c9b95e35e4551894dc1a1414c8a80c5c18e0e773bd8e"
+  },
+  {
+    "file": "precision-1@1x.png",
+    "pixels": [
+      384,
+      216
+    ],
+    "sha256": "c76a85f8ee3f1304aaab7bdcb685627fe0a433faf059af8148aef41e95157889"
+  },
+  {
+    "file": "precision-1@2x.png",
+    "pixels": [
+      768,
+      432
+    ],
+    "sha256": "170100d0945349e257756103b55e2998a89ec46df50e7e24aef70919a4303b89"
+  },
+  {
+    "file": "precision-3@1x.png",
+    "pixels": [
+      384,
+      216
+    ],
+    "sha256": "0fd06846a43f3e0615aba06306a9a0ce73e39b0587095713c4262532fda4ccdf"
+  },
+  {
+    "file": "precision-3@2x.png",
+    "pixels": [
+      768,
+      432
+    ],
+    "sha256": "00a821691b9a3dd1980ba125ba26f085ae00bc9646cfa1180dc79246b767c386"
+  },
+  {
+    "file": "precision-8@1x.png",
+    "pixels": [
+      384,
+      216
+    ],
+    "sha256": "d783bc42decc2fb79850af78505d18e6db76a2dbbd6ae93e130085d542db6fe3"
+  },
+  {
+    "file": "precision-8@2x.png",
+    "pixels": [
+      768,
+      432
+    ],
+    "sha256": "f4a5a337235b2fec323d4d3f2cf98d948b4de27ec4fba7511ac427a6638baed9"
+  },
+  {
+    "file": "regular-ended-hover@1x.png",
+    "pixels": [
+      384,
+      216
+    ],
+    "sha256": "a00d0f27cae7614e28ca207cf922b642ddb35dce36a8f4a44e6572c4fff2c543"
+  },
+  {
+    "file": "regular-ended-hover@2x.png",
+    "pixels": [
+      768,
+      432
+    ],
+    "sha256": "8cb8f7d512b336f7499bbf4583b7fd624135d7a0b8dbfd29142dc79d03411640"
+  },
+  {
+    "file": "regular-ended@1x.png",
+    "pixels": [
+      384,
+      216
+    ],
+    "sha256": "a00d0f27cae7614e28ca207cf922b642ddb35dce36a8f4a44e6572c4fff2c543"
+  },
+  {
+    "file": "regular-ended@2x.png",
+    "pixels": [
+      768,
+      432
+    ],
+    "sha256": "8cb8f7d512b336f7499bbf4583b7fd624135d7a0b8dbfd29142dc79d03411640"
+  },
+  {
+    "file": "regular-paused@1x.png",
+    "pixels": [
+      384,
+      216
+    ],
+    "sha256": "872de7745703c2d7b3b1e038cff428728a51ff22f4afb10b9bc9af04c3389696"
+  },
+  {
+    "file": "regular-paused@2x.png",
+    "pixels": [
+      768,
+      432
+    ],
+    "sha256": "e9b895e9e44058fa5269f1826f0b76320d600d400eb972b98e8c418f8e0bc2f1"
+  },
+  {
+    "file": "regular-playing@1x.png",
+    "pixels": [
+      384,
+      216
+    ],
+    "sha256": "0f0599a48d49b457b52d614afa0b2a0d33378037faf4af2d518c61abe654962b"
+  },
+  {
+    "file": "regular-playing@2x.png",
+    "pixels": [
+      768,
+      432
+    ],
+    "sha256": "570cd3854db70163df36fb04462cb678a3a5cbf9c154d658b33856e308f7fa32"
+  },
+  {
+    "file": "square@1x.png",
+    "pixels": [
+      450,
+      450
+    ],
+    "sha256": "e74dc292812961503e4557b49e6a16faad31bc85e5d96102c95f619110e6b4a0"
+  },
+  {
+    "file": "square@2x.png",
+    "pixels": [
+      900,
+      900
+    ],
+    "sha256": "a64aa43ea9ac9723b7bc99190248727f03f31167293e6458b589c964c9ff939c"
+  },
+  {
+    "file": "twitch@1x.png",
+    "pixels": [
+      384,
+      216
+    ],
+    "sha256": "9082324bd4061645b7ba4253a9701be0a72a9f9b07a5368fba65b12d6eb2892c"
+  },
+  {
+    "file": "twitch@2x.png",
+    "pixels": [
+      768,
+      432
+    ],
+    "sha256": "d35483d5264d1695e59f95a3b2ef34a2d3f713a4bb2fd575e29eddddd151fe7b"
+  },
+  {
+    "file": "youtube@1x.png",
+    "pixels": [
+      384,
+      216
+    ],
+    "sha256": "f8edde7a5818dcc5dfb5e9ec4e3fd0d75857b858655509c055e192095556cac0"
+  },
+  {
+    "file": "youtube@2x.png",
+    "pixels": [
+      768,
+      432
+    ],
+    "sha256": "ad59a9c3f2ce65343e026bdee859b0fdd0bea03969e485009ea1ab824f9aeae6"
+  }
+]

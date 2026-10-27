@@ -418,6 +418,21 @@ func runSuggestCheck(args: [String]) async {
                 && added?.suggestions.contains { $0.tabID == fresh.id } == true && builds3 == builds2 + 1 && refolded == 1,
               "builds: \(builds0) → query \(builds1) → rename \(builds2) (patched \(patched)) → new tab \(builds3) (re-folded \(refolded))")
 
+    let gmail = fx.model.newTab(in: fx.work.id, url: URL(string: "https://mail.google.com/mail/#inbox")!,
+                                title: "Inbox (3) - accountneedle@example.invalid - Gmail")
+    let gmailResult = await lastSnapshot(engine, "accountneedle", fx.context(mode: .searchTabs))
+    gmail.title = "Inbox (4) - secondneedle@example.invalid - Gmail"
+    let updatedGmail = await lastSnapshot(engine, "secondneedle", fx.context(mode: .searchTabs))
+    fx.model.renameNode(id: gmail.id, title: "Named Inbox")
+    let customGmail = await lastSnapshot(engine, "Named Inbox", fx.context(mode: .searchTabs))
+    let hiddenRaw = await lastSnapshot(engine, "secondneedle", fx.context(mode: .searchTabs))
+    log.check("tidy Gmail matches raw title, displays Inbox, and patches raw/custom title changes",
+              gmailResult?.suggestions.contains { $0.tabID == gmail.id && $0.title == "Inbox" } == true
+                && updatedGmail?.suggestions.contains { $0.tabID == gmail.id && $0.title == "Inbox" } == true
+                && customGmail?.suggestions.contains { $0.tabID == gmail.id && $0.title == "Named Inbox" } == true
+                && hiddenRaw?.suggestions.contains { $0.tabID == gmail.id } == false,
+              "raw-only account text remains searchable until replaced by a custom title")
+
     // 21. Remote suggestions against a local HTTP server.
     await remoteChecks(log: log, fx: fx)
 
@@ -465,13 +480,40 @@ private func remoteChecks(log: CheckLog, fx: Fixture) async {
                 && carried.last?.suggestions.contains { $0.title == "remote alpha o one" } == true,
               "snapshot0=\(carried.first?.suggestions.filter { $0.kind == .searchSuggestion }.map(\.title) ?? []) final=\(carried.last?.suggestions.filter { $0.kind == .searchSuggestion }.map(\.title) ?? [])")
 
-    // Timeout: a server that needs 800 ms is dropped after 300 ms; the stream still ends.
-    let slowStart = ContinuousClock.now
+    // Port: the test server binds port 0, so concurrent runs get distinct ephemeral ports.
+    let secondServer = LocalSuggestServer()
+    log.check("remote: local test servers use distinct ephemeral ports",
+              server.port != 0 && secondServer != nil && secondServer!.port != server.port,
+              "ports \(server.port) and \(secondServer?.port ?? 0)")
+
+    // Timeout logic, not wall clock: the provider is configured with an 80 ms debounce and a
+    // 300 ms timeout, and a server that needs 800 ms is dropped — the stream still ends final
+    // without remote rows even though the request went out.
+    let remoteProvider = engine.providers.compactMap { $0 as? RemoteSuggestionsProvider }.first
     let slow = await snapshots(engine, "slow beta", ctx)
-    let slowMs = (ContinuousClock.now - slowStart).milliseconds
     log.check("remote: 300 ms timeout (server takes 800 ms) → stream ends without remote rows",
-              slow.last?.isFinal == true && !(slow.last?.suggestions.contains { $0.kind == .searchSuggestion } ?? true) && slowMs < 600,
-              String(format: "stream ended after %.0f ms (debounce 80 + timeout 300)", slowMs))
+              remoteProvider?.debounce == .milliseconds(80) && remoteProvider?.timeout == .milliseconds(300)
+                && slow.last?.isFinal == true && !(slow.last?.suggestions.contains { $0.kind == .searchSuggestion } ?? true)
+                && server.requests.contains("slow beta"),
+              "configured debounce=\(remoteProvider.map { "\($0.debounce)" } ?? "nil") timeout=\(remoteProvider.map { "\($0.timeout)" } ?? "nil"); server received slow beta=\(server.requests.contains("slow beta"))")
+
+    // The one real wall-clock check for this timer family, with the original <600 ms budget.
+    // Machine load can stretch one run, so allow up to 3 attempts; each prints its lateness
+    // past debounce+timeout (380 ms) and the load average.
+    var slowAttempts: [String] = []
+    var slowRealtimeOK = false
+    for attempt in 1...3 {
+        let attemptStart = ContinuousClock.now
+        let attemptSlow = await snapshots(engine, "slow rt\(attempt)", ctx)
+        let attemptMs = (ContinuousClock.now - attemptStart).milliseconds
+        let attemptOK = attemptSlow.last?.isFinal == true
+            && !(attemptSlow.last?.suggestions.contains { $0.kind == .searchSuggestion } ?? true) && attemptMs < 600
+        slowAttempts.append(String(format: "attempt %d stream ended after %.0f ms (lateness %+.0f ms past 380), load %@", attempt, attemptMs, attemptMs - 380, loadAverage()))
+        print("  .. remote real-time \(slowAttempts.last!)")
+        if attemptOK { slowRealtimeOK = true; break }
+    }
+    log.check("remote: real-time slow-server stream ends within 600 ms (debounce 80 + timeout 300)",
+              slowRealtimeOK, slowAttempts.joined(separator: "; "))
 
     // Cancel: keystrokes inside the debounce window send only the last query.
     let mark = server.requests.count

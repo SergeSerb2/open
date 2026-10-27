@@ -1,0 +1,824 @@
+{
+  "commandbar": {
+    "action_pin-tab": {
+      "ok": true
+    },
+    "action_unpin-tab": {
+      "ok": true
+    },
+    "calculator_copy": {
+      "clipboard": "84",
+      "ok": true
+    },
+    "cmd_l_selection": {
+      "ok": true,
+      "state": {
+        "created": true,
+        "editorCanUndo": false,
+        "editorText": "http://127.0.0.1:60736/new",
+        "final": true,
+        "firstResultsMs": 9.639375000000655,
+        "mode": "editCurrentURL",
+        "newTabHighlighted": false,
+        "openFirstResultsMs": 9.860166666666373,
+        "presented": true,
+        "profile": "B38F0DAF-8DF1-4472-A5BC-7999B331B92C",
+        "range": [
+          0,
+          26
+        ],
+        "rows": [
+          {
+            "action": "",
+            "id": "typed:url",
+            "kind": "navigate",
+            "space": "",
+            "tab": "",
+            "title": "http://127.0.0.1:60736/new",
+            "url": "http://127.0.0.1:60736/new"
+          }
+        ],
+        "selected": 0,
+        "space": "861BD6DC-1A40-4FCB-9763-3BBB71B7122D",
+        "text": "http://127.0.0.1:60736/new"
+      }
+    },
+    "cmd_s_page_swallowing_keys": {
+      "ok": true
+    },
+    "cmd_t_mode": {
+      "ok": true,
+      "state": {
+        "created": true,
+        "editorCanUndo": false,
+        "editorText": "",
+        "final": true,
+        "firstResultsMs": 25.701166666666722,
+        "mode": "newTab",
+        "newTabHighlighted": true,
+        "openFirstResultsMs": 28.750125000000025,
+        "presented": true,
+        "profile": "B38F0DAF-8DF1-4472-A5BC-7999B331B92C",
+        "range": [
+          0,
+          0
+        ],
+        "rows": [],
+        "selected": -1,
+        "space": "861BD6DC-1A40-4FCB-9763-3BBB71B7122D",
+        "text": ""
+      }
+    },
+    "command_return_background": {
+      "ok": true
+    },
+    "custom_search_engine_navigation": {
+      "expectedURL": "http://127.0.0.1:60736/search?q=local%20custom%20query",
+      "ok": true
+    },
+    "double_press_shared_router": {
+      "first": false,
+      "ok": true,
+      "second": true
+    },
+    "duplicate_folder_lazy": {
+      "folders": [
+        {
+          "children": [
+            {
+              "id": "9C4763AF-4F50-4DAF-B3C7-71D428821AA0",
+              "kind": "tab",
+              "loaded": true,
+              "title": "Shell C /cross",
+              "url": "http://127.0.0.1:60736/cross"
+            }
+          ],
+          "id": "CECF360C-7F78-4696-AB82-1FC5914AE0E2",
+          "kind": "folder",
+          "title": "Copy subtree"
+        },
+        {
+          "children": [
+            {
+              "id": "7B4E747C-E46C-4DAE-86F5-69F11EB5881D",
+              "kind": "tab",
+              "loaded": false,
+              "title": "Shell C /cross",
+              "url": "http://127.0.0.1:60736/cross"
+            }
+          ],
+          "id": "3593D3BC-1E24-4247-B813-64274C13CB5E",
+          "kind": "folder",
+          "title": "Copy subtree"
+        }
+      ],
+      "ok": true
+    },
+    "duplicate_single_undo": {
+      "ok": true
+    },
+    "duplicate_split_lazy": {
+      "copy": {
+        "children": [
+          {
+            "id": "A611AE0E-B143-44B7-8E01-86CF6ADDBD96",
+            "kind": "tab",
+            "loaded": false,
+            "title": "",
+            "url": "http://127.0.0.1:60736/split"
+          },
+          {
+            "id": "E774174A-B55F-4023-951A-794E683F2F9B",
+            "kind": "tab",
+            "loaded": false,
+            "title": "Shell C /cross",
+            "url": "http://127.0.0.1:60736/cross"
+          }
+        ],
+        "id": "601F8745-6739-4072-B5ED-87166FFFA1A2",
+        "kind": "split"
+      },
+      "ok": true
+    },
+    "duplicate_tab_lazy": {
+      "copies": [
+        {
+          "id": "851F8B46-E919-41E8-AE94-2318A9EFA6B3",
+          "kind": "tab",
+          "loaded": false,
+          "title": "Shell C /cross",
+          "url": "http://127.0.0.1:60736/cross"
+        }
+      ],
+      "ok": true
+    },
+    "dynamic_menus": {
+      "entries": 169,
+      "ok": true
+    },
+    "edit_current_tab": {
+      "ok": true,
+      "title": "Shell C /edited"
+    },
+    "escape_then_page": {
+      "keys": [
+        "Escape"
+      ],
+      "ok": true
+    },
+    "first_open_results_budget": {
+      "milliseconds": 28.750125000000025,
+      "ok": true
+    },
+    "first_results_budget": {
+      "milliseconds": 19.308458333332965,
+      "ok": true
+    },
+    "global_hotkey_toggle": {
+      "off": {
+        "attempts": 5,
+        "enabled": false,
+        "error": "",
+        "prepared": true,
+        "registered": false
+      },
+      "ok": true,
+      "on": {
+        "attempts": 6,
+        "enabled": true,
+        "error": "",
+        "prepared": true,
+        "registered": true
+      }
+    },
+    "invalid_overrides_fallback": {
+      "ok": true
+    },
+    "lazy_commandbar": {
+      "ok": true
+    },
+    "library_archive_restore": {
+      "ok": true
+    },
+    "library_history_profile_open": {
+      "ok": true
+    },
+    "library_shared_window": {
+      "ok": true
+    },
+    "native_field_undo_preserves_model": {
+      "after": {
+        "created": true,
+        "editorCanUndo": false,
+        "editorText": "",
+        "final": true,
+        "firstResultsMs": 5.040791666666337,
+        "mode": "newTab",
+        "newTabHighlighted": true,
+        "openFirstResultsMs": 4.558125000000473,
+        "presented": true,
+        "profile": "B38F0DAF-8DF1-4472-A5BC-7999B331B92C",
+        "range": [
+          0,
+          0
+        ],
+        "rows": [
+          {
+            "action": "",
+            "id": "tab:00C99B56-BEEC-4D0D-A635-EFD4C3584D23",
+            "kind": "switchToTab",
+            "space": "861BD6DC-1A40-4FCB-9763-3BBB71B7122D",
+            "tab": "00C99B56-BEEC-4D0D-A635-EFD4C3584D23",
+            "title": "Shell C /start",
+            "url": "http://127.0.0.1:60736/start"
+          },
+          {
+            "action": "",
+            "id": "history:127.0.0.1:60736/edited",
+            "kind": "history",
+            "space": "",
+            "tab": "",
+            "title": "127.0.0.1",
+            "url": "http://127.0.0.1:60736/edited"
+          },
+          {
+            "action": "",
+            "id": "history:127.0.0.1:60736/new",
+            "kind": "history",
+            "space": "",
+            "tab": "",
+            "title": "127.0.0.1",
+            "url": "http://127.0.0.1:60736/new"
+          }
+        ],
+        "selected": 0,
+        "space": "861BD6DC-1A40-4FCB-9763-3BBB71B7122D",
+        "text": ""
+      },
+      "before": {
+        "created": true,
+        "editorCanUndo": true,
+        "editorText": "word",
+        "final": true,
+        "firstResultsMs": 13.15362499999992,
+        "mode": "newTab",
+        "newTabHighlighted": true,
+        "openFirstResultsMs": 4.558125000000473,
+        "presented": true,
+        "profile": "B38F0DAF-8DF1-4472-A5BC-7999B331B92C",
+        "range": [
+          4,
+          0
+        ],
+        "rows": [
+          {
+            "action": "",
+            "id": "typed:search",
+            "kind": "search",
+            "space": "",
+            "tab": "",
+            "title": "word",
+            "url": "https://www.google.com/search?q=word"
+          },
+          {
+            "action": "import-from-browser",
+            "id": "action:import-from-browser",
+            "kind": "action",
+            "space": "",
+            "tab": "",
+            "title": "Import from Another Browser",
+            "url": ""
+          }
+        ],
+        "selected": 0,
+        "space": "861BD6DC-1A40-4FCB-9763-3BBB71B7122D",
+        "text": "word"
+      },
+      "ok": true,
+      "route": {
+        "barPresented": true,
+        "firstResponder": "CommandBarFieldEditor",
+        "keyWindow": 35287,
+        "sidebarMode": "anchored"
+      }
+    },
+    "native_font_traits": {
+      "ok": true
+    },
+    "native_menu_registration": {
+      "menus": {
+        "font": true,
+        "services": true,
+        "window": true
+      },
+      "ok": true
+    },
+    "override_menu_and_router": {
+      "ok": true
+    },
+    "page_copy_native_responder": {
+      "clipboard": "PAGE COPY",
+      "ok": true
+    },
+    "page_cut_native_responder": {
+      "ok": true
+    },
+    "page_paste_native_responder": {
+      "ok": true
+    },
+    "page_select_all_native_responder": {
+      "ok": true
+    },
+    "page_undo_native_responder": {
+      "ok": true
+    },
+    "save_page_sheet": {
+      "last": {
+        "number": 35390,
+        "pending": true,
+        "requests": 1,
+        "visible": true
+      },
+      "ok": true,
+      "state": {
+        "number": 35390,
+        "pending": true,
+        "requests": 1,
+        "visible": true
+      }
+    },
+    "settings_persist_relaunch": {
+      "ok": true
+    },
+    "settings_shared_window": {
+      "ok": true
+    },
+    "suggest_profile_isolation": {
+      "ok": true
+    },
+    "switch_tab_across_spaces": {
+      "barAfterReturn": {
+        "created": true,
+        "editorCanUndo": false,
+        "editorText": "",
+        "final": true,
+        "firstResultsMs": 9.14570833333346,
+        "mode": "newTab",
+        "newTabHighlighted": false,
+        "openFirstResultsMs": 11.545791666666446,
+        "presented": false,
+        "profile": "B38F0DAF-8DF1-4472-A5BC-7999B331B92C",
+        "range": [
+          -1,
+          0
+        ],
+        "rows": [
+          {
+            "action": "",
+            "id": "tab:9C4763AF-4F50-4DAF-B3C7-71D428821AA0",
+            "kind": "switchToTab",
+            "space": "08933E3F-7DF5-4A33-99B0-BFFE84295D0E",
+            "tab": "9C4763AF-4F50-4DAF-B3C7-71D428821AA0",
+            "title": "Shell C /cross",
+            "url": "http://127.0.0.1:60736/cross"
+          },
+          {
+            "action": "",
+            "id": "typed:search",
+            "kind": "search",
+            "space": "",
+            "tab": "",
+            "title": "Shell C /cross",
+            "url": "https://www.google.com/search?q=Shell%20C%20%2Fcross"
+          }
+        ],
+        "selected": 0,
+        "space": "861BD6DC-1A40-4FCB-9763-3BBB71B7122D",
+        "text": "Shell C /cross"
+      },
+      "expectedSpace": "08933E3F-7DF5-4A33-99B0-BFFE84295D0E",
+      "expectedTab": "9C4763AF-4F50-4DAF-B3C7-71D428821AA0",
+      "ok": true,
+      "returnRouting": {
+        "barPresented": false,
+        "firstResponder": "RenderWidgetHostViewCocoa",
+        "keyWindow": 35287,
+        "sidebarMode": "anchored"
+      },
+      "rows": [
+        {
+          "action": "",
+          "id": "tab:9C4763AF-4F50-4DAF-B3C7-71D428821AA0",
+          "kind": "switchToTab",
+          "space": "08933E3F-7DF5-4A33-99B0-BFFE84295D0E",
+          "tab": "9C4763AF-4F50-4DAF-B3C7-71D428821AA0",
+          "title": "Shell C /cross",
+          "url": "http://127.0.0.1:60736/cross"
+        },
+        {
+          "action": "",
+          "id": "typed:search",
+          "kind": "search",
+          "space": "",
+          "tab": "",
+          "title": "Shell C /cross",
+          "url": "https://www.google.com/search?q=Shell%20C%20%2Fcross"
+        }
+      ],
+      "state": {
+        "engineSelected": 4,
+        "engineURL": "http://127.0.0.1:60736/cross",
+        "frame": [
+          100,
+          100,
+          1280,
+          800
+        ],
+        "fullscreen": false,
+        "fullscreenChanges": 0,
+        "fullscreenTransition": false,
+        "hiddenTitle": true,
+        "id": "CA01758A-3108-40F8-A913-66FB0852CE62",
+        "number": 35287,
+        "pageFullscreen": false,
+        "paneBackgrounds": [
+          {
+            "color": [],
+            "tab": "9C4763AF-4F50-4DAF-B3C7-71D428821AA0"
+          }
+        ],
+        "panel": [
+          228,
+          10,
+          1042,
+          780
+        ],
+        "peekCreated": false,
+        "revealed": false,
+        "selected": "9C4763AF-4F50-4DAF-B3C7-71D428821AA0",
+        "shownPages": [
+          "9C4763AF-4F50-4DAF-B3C7-71D428821AA0"
+        ],
+        "sidebarClass": "OpenSidebar.SidebarView",
+        "sidebarMode": "anchored",
+        "sidebarVisible": true,
+        "sidebarWidth": 228,
+        "space": "08933E3F-7DF5-4A33-99B0-BFFE84295D0E",
+        "titled": true,
+        "trafficLights": [
+          [
+            12,
+            16
+          ],
+          [
+            35,
+            16
+          ],
+          [
+            58,
+            16
+          ]
+        ]
+      }
+    },
+    "system_menu_nil_targets": {
+      "ok": true,
+      "rows": [
+        {
+          "action": "hide:",
+          "enabled": true,
+          "id": "hide-open",
+          "key": "h",
+          "payload": "",
+          "tag": 0,
+          "targetNil": true,
+          "title": "Hide Open"
+        },
+        {
+          "action": "hideOtherApplications:",
+          "enabled": true,
+          "id": "hide-others",
+          "key": "h",
+          "payload": "",
+          "tag": 0,
+          "targetNil": true,
+          "title": "Hide Others"
+        },
+        {
+          "action": "unhideAllApplications:",
+          "enabled": false,
+          "id": "show-all",
+          "key": "",
+          "payload": "",
+          "tag": 0,
+          "targetNil": true,
+          "title": "Show All"
+        },
+        {
+          "action": "terminate:",
+          "enabled": true,
+          "id": "quit-open",
+          "key": "q",
+          "payload": "",
+          "tag": 0,
+          "targetNil": true,
+          "title": "Quit Open"
+        },
+        {
+          "action": "performClose:",
+          "enabled": true,
+          "id": "close-window",
+          "key": "w",
+          "payload": "",
+          "tag": 0,
+          "targetNil": true,
+          "title": "Close Window"
+        },
+        {
+          "action": "undo:",
+          "enabled": true,
+          "id": "undo",
+          "key": "z",
+          "payload": "",
+          "tag": 0,
+          "targetNil": true,
+          "title": "Undo"
+        },
+        {
+          "action": "redo:",
+          "enabled": true,
+          "id": "redo",
+          "key": "z",
+          "payload": "",
+          "tag": 0,
+          "targetNil": true,
+          "title": "Redo"
+        },
+        {
+          "action": "cut:",
+          "enabled": true,
+          "id": "cut",
+          "key": "x",
+          "payload": "",
+          "tag": 0,
+          "targetNil": true,
+          "title": "Cut"
+        },
+        {
+          "action": "copy:",
+          "enabled": true,
+          "id": "copy",
+          "key": "c",
+          "payload": "",
+          "tag": 0,
+          "targetNil": true,
+          "title": "Copy"
+        },
+        {
+          "action": "paste:",
+          "enabled": true,
+          "id": "paste",
+          "key": "v",
+          "payload": "",
+          "tag": 0,
+          "targetNil": true,
+          "title": "Paste"
+        },
+        {
+          "action": "pasteAsPlainText:",
+          "enabled": false,
+          "id": "paste-and-match-style",
+          "key": "v",
+          "payload": "",
+          "tag": 0,
+          "targetNil": true,
+          "title": "Paste and Match Style"
+        },
+        {
+          "action": "selectAll:",
+          "enabled": true,
+          "id": "select-all",
+          "key": "a",
+          "payload": "",
+          "tag": 0,
+          "targetNil": true,
+          "title": "Select All"
+        },
+        {
+          "action": "performFindPanelAction:",
+          "enabled": true,
+          "id": "find",
+          "key": "f",
+          "payload": "",
+          "tag": 1,
+          "targetNil": true,
+          "title": "Find\u2026"
+        },
+        {
+          "action": "performFindPanelAction:",
+          "enabled": true,
+          "id": "find-next",
+          "key": "g",
+          "payload": "",
+          "tag": 2,
+          "targetNil": true,
+          "title": "Find Next"
+        },
+        {
+          "action": "performFindPanelAction:",
+          "enabled": true,
+          "id": "find-previous",
+          "key": "g",
+          "payload": "",
+          "tag": 3,
+          "targetNil": true,
+          "title": "Find Previous"
+        },
+        {
+          "action": "startSpeaking:",
+          "enabled": true,
+          "id": "start-speaking",
+          "key": "",
+          "payload": "",
+          "tag": 0,
+          "targetNil": true,
+          "title": "Start Speaking"
+        },
+        {
+          "action": "stopSpeaking:",
+          "enabled": true,
+          "id": "stop-speaking",
+          "key": "",
+          "payload": "",
+          "tag": 0,
+          "targetNil": true,
+          "title": "Stop Speaking"
+        },
+        {
+          "action": "orderFrontFontPanel:",
+          "enabled": true,
+          "id": "show-fonts",
+          "key": "",
+          "payload": "",
+          "tag": 0,
+          "targetNil": true,
+          "title": "Show Fonts"
+        },
+        {
+          "action": "addFontTrait:",
+          "enabled": false,
+          "id": "font-bold",
+          "key": "b",
+          "payload": "",
+          "tag": 2,
+          "targetNil": true,
+          "title": "Bold"
+        },
+        {
+          "action": "addFontTrait:",
+          "enabled": false,
+          "id": "font-italic",
+          "key": "i",
+          "payload": "",
+          "tag": 1,
+          "targetNil": true,
+          "title": "Italic"
+        },
+        {
+          "action": "underline:",
+          "enabled": true,
+          "id": "font-underline",
+          "key": "u",
+          "payload": "",
+          "tag": 0,
+          "targetNil": true,
+          "title": "Underline"
+        },
+        {
+          "action": "orderFrontCharacterPalette:",
+          "enabled": true,
+          "id": "emoji-and-symbols",
+          "key": " ",
+          "payload": "",
+          "tag": 0,
+          "targetNil": true,
+          "title": "Emoji & Symbols"
+        },
+        {
+          "action": "toggleFullScreen:",
+          "enabled": true,
+          "id": "toggle-full-screen",
+          "key": "f",
+          "payload": "",
+          "tag": 0,
+          "targetNil": true,
+          "title": "Enter Full Screen"
+        },
+        {
+          "action": "toggleFullScreen:",
+          "enabled": true,
+          "id": "toggle-full-screen",
+          "key": "f",
+          "payload": "",
+          "tag": 0,
+          "targetNil": true,
+          "title": "Enter Full Screen"
+        },
+        {
+          "action": "performMiniaturize:",
+          "enabled": true,
+          "id": "minimize-window",
+          "key": "m",
+          "payload": "",
+          "tag": 0,
+          "targetNil": true,
+          "title": "Minimize"
+        },
+        {
+          "action": "performZoom:",
+          "enabled": true,
+          "id": "zoom-window",
+          "key": "",
+          "payload": "",
+          "tag": 0,
+          "targetNil": true,
+          "title": "Zoom"
+        },
+        {
+          "action": "arrangeInFront:",
+          "enabled": true,
+          "id": "bring-all-to-front",
+          "key": "",
+          "payload": "",
+          "tag": 0,
+          "targetNil": true,
+          "title": "Bring All to Front"
+        }
+      ]
+    },
+    "tabs_reveal_registered": {
+      "ok": true
+    },
+    "typed_top_today": {
+      "ok": true,
+      "tab": "FF68B432-4FFF-4B2A-80D9-29726DE7E251"
+    },
+    "unsupported_disabled": {
+      "ok": true
+    },
+    "view-archive_real_library": {
+      "ok": true,
+      "state": {
+        "archive": [],
+        "archiveRows": 0,
+        "external": true,
+        "historyRows": 3,
+        "hotkey": true,
+        "library": 35382,
+        "librarySection": "archive",
+        "sameSnapshot": true,
+        "settings": 35378,
+        "sharedArchives": true
+      }
+    },
+    "view-downloads_real_library": {
+      "ok": true,
+      "state": {
+        "archive": [],
+        "archiveRows": 0,
+        "external": true,
+        "historyRows": 3,
+        "hotkey": true,
+        "library": 35382,
+        "librarySection": "downloads",
+        "sameSnapshot": true,
+        "settings": 35378,
+        "sharedArchives": true
+      }
+    },
+    "view-history_real_library": {
+      "ok": true,
+      "state": {
+        "archive": [],
+        "archiveRows": 0,
+        "external": true,
+        "historyRows": 3,
+        "hotkey": true,
+        "library": 35382,
+        "librarySection": "history",
+        "sameSnapshot": true,
+        "settings": 35378,
+        "sharedArchives": true
+      }
+    }
+  },
+  "config": "Release",
+  "engine": {
+    "distributionUUID": "4C4C44B8-5555-3144-A161-028377002F35",
+    "embeddedUUID": "4C4C44B8-5555-3144-A161-028377002F35",
+    "source": "fork",
+    "stamp": "fork /Users/serge/Developer/open-engine/chromium_git/chromium/src/cef/binary_distrib/cef_binary_156.0.14+g4fa4ab5+chromium-156.0.8078.48_macosarm64_minimal 1793000323"
+  },
+  "started": "2026-10-26 00:44:38",
+  "style": "alloy"
+}

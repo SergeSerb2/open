@@ -1,0 +1,97 @@
+{
+  "before": {
+    "runs": [
+      {
+        "run": 1,
+        "median": 125376057,
+        "minimum": 125266587,
+        "maximum": 125525868,
+        "cpu95": 10.209,
+        "load1": 20.12
+      },
+      {
+        "run": 2,
+        "median": 125480554,
+        "minimum": 125294928,
+        "maximum": 125882949,
+        "cpu95": 12.466,
+        "load1": 20.12
+      },
+      {
+        "run": 3,
+        "median": 125485667,
+        "minimum": 125204145,
+        "maximum": 126075889,
+        "cpu95": 13.304,
+        "load1": 20.12
+      },
+      {
+        "run": 4,
+        "median": 125439846,
+        "minimum": 125234307,
+        "maximum": 125862207,
+        "cpu95": 12.494,
+        "load1": 19.15
+      },
+      {
+        "run": 5,
+        "median": 125788131,
+        "minimum": 125578020,
+        "maximum": 128257100,
+        "cpu95": 15.919,
+        "load1": 19.15
+      }
+    ],
+    "median": 125480554,
+    "spread_percent": 0.32839670121316167,
+    "binary_sha256": "9db7c1dc3d902aa8aeccbf2e7109523fb30307f1be1cb4ed375c532297dc3c2b"
+  },
+  "after": {
+    "runs": [
+      {
+        "run": 1,
+        "median": 95076269,
+        "minimum": 94768093,
+        "maximum": 95751539,
+        "cpu95": 8.983,
+        "load1": 20.12
+      },
+      {
+        "run": 2,
+        "median": 94896697,
+        "minimum": 94799059,
+        "maximum": 95120470,
+        "cpu95": 9.85,
+        "load1": 20.12
+      },
+      {
+        "run": 3,
+        "median": 95035968,
+        "minimum": 94907833,
+        "maximum": 95798210,
+        "cpu95": 9.932,
+        "load1": 20.12
+      },
+      {
+        "run": 4,
+        "median": 94988707,
+        "minimum": 94832082,
+        "maximum": 95480011,
+        "cpu95": 10.693,
+        "load1": 19.15
+      },
+      {
+        "run": 5,
+        "median": 95078338,
+        "minimum": 94892441,
+        "maximum": 95317366,
+        "cpu95": 10.929,
+        "load1": 19.15
+      }
+    ],
+    "median": 95035968,
+    "spread_percent": 0.1911286892979298,
+    "binary_sha256": "c2bdab8d887c4c317fbc38a00cd13f34f4d6d38bff695cbebd6b00ac473ba85b"
+  },
+  "reduction_percent": 24.262393677350204
+}

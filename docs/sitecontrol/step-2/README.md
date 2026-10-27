@@ -1,15 +1,17 @@
+# Site Control Step 2
 
-## Round 2 review fixes
+Capture-session-2 library migration: Extensions → optional Boosts → Settings, the Extensions “+” fallback, native row circles with real glyph cut-outs, section hover actions, reload row, and the captured native menu. The panel's material/chrome and arrow-tip spring come from merged Step 1.
 
-The current set contains 80 light/dark, 1x/2x renders, including static Reload,
-section/row hover, keyboard focus, picker fallback, the native menu, ad-block tooltips
-(on/off/unavailable), private-window tooltip, a pane bar and a dark-Space/light-system state.
-The 16 motion frames were regenerated. SHA256SUMS covers the current files.
-Native event flows cover tracked Return and menu cancellation, command-key guards,
-fixed top-left motion, recovered error episodes, and unclipped Reload growth.
-The host is exposed once through the panel AX description; actions precede the labeled scroll area.
+The 104 synthetic Light/Dark 1x/2x renders and 20 native presentation frames have SHA-256 receipts. `sitecontrol-render check` verifies the 104 committed still receipts. `motion/SHA256SUMS` records the presentation captures. All frames here contain Open-only synthetic content; no Arc frame, private backdrop, or personal data is committed.
 
-Native menu capture waits for AppKit's actual visible popup surface, with a 2 s timeout.
-It opens once; it does not retry a menu or a test. This fixes a first-popup capture race
-found in the full Step 4 gate under machine load. The current menu renders are byte-identical.
-The preceding raw gate is retained in review-r2-prior-checks.txt / review-r2-prior-verify-all.txt.
+Latest focused results: 90/90 native flows; 1048/1048 pixel/geometry probes; base comparison 62 PASS; qualified hover comparison 61 PASS plus the one explicitly deferred Share-glyph comparison; Boost comparison 5 PASS. Thresholds are unchanged: maximum ink-box edge error 1 pt, non-text ΔE00 ≤2, material ΔE00 ≤3. See `comparison-base.md`, `comparison-hover.md`, and `comparison-boost.md`.
+
+Flows send clicks and keys through the native window. They cover tracked NSMenu Return/Clear Cookies and Esc cancellation, Command guards, requested picker mode, stale menu generations, nonzero AX heading frames, host exposed once, and newly visible Settings title pixels after scrolling. The native hierarchy keeps every row and focus target. Drawing is lazy only while a row is clipped. Motion checks read configured durations before sampling and check fixed arrow tips/action positions.
+
+The dark separator uses the captured additive +35 RGB rule, not the earlier white 0.22 guess. The global-off note uses the lead-approved 28 pt guessed band, baselines +11/+26; Reload remains +20. Outside/anchor dismissal stays immediate because the available captures do not resolve a fade. The qualified Share comparison remains “hover or press, unconfirmed”.
+
+`performance/README.md` contains five-pair main-thread instruction measurements and numeric profiler attribution. The lead-approved instruction gate uses the machine/build fixture and a 10% ceiling over the accepted median. CPU/wall/load remain diagnostics; the absolute 8 ms product target awaits the lead’s quiet-machine check.
+
+S11–S13 and the real-app snapshot comparison are deferred to Step 3 per plan §12/§11. This PR adds no app hook. The latest full-gate result is recorded separately in `verify-all.txt`.
+
+Final full gate on the merged theme Step 9 main: **22/22 PASS**. `sitecontrol-render`: **1244/1244 PASS +1 INFO** (the skeleton diagnostic). Cold median **102,283,082 ≤104,539,565** instructions; CPU p95 **13.891 ms**, wall p95 **15.428 ms**, load1 **37.60**, all timing values diagnostic. The quiet-M5 <8 ms product check remains pending with the lead.

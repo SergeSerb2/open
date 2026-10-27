@@ -8,6 +8,21 @@ import OpenModel
 /// read change.
 @MainActor
 final class TextLabel: NSView {
+    private(set) var lastDrawnText = ""
+    /// Optional receipt for a real Core Text draw. Only mini-player titles install it.
+    var onDrawnLine: (@MainActor (CTLine, String, Bool, CGFloat) -> Void)?
+    private static let truncationToken = NSAttributedString.Key("OpenTextLabelTruncationToken")
+
+    static func visibleText(_ line: CTLine, original: String) -> String {
+        let source = original as NSString
+        return (CTLineGetGlyphRuns(line) as! [CTRun]).map { run in
+            let attrs = CTRunGetAttributes(run) as NSDictionary
+            if attrs[truncationToken.rawValue] as? Bool == true { return "…" }
+            let range = CTRunGetStringRange(run)
+            guard range.location >= 0, range.length >= 0, range.location + range.length <= source.length else { return "" }
+            return source.substring(with: NSRange(location: range.location, length: range.length))
+        }.joined()
+    }
     var text: @MainActor () -> String = { "" } { didSet { needsDisplay = true } }
     var color: @MainActor () -> NSColor = { .labelColor } { didSet { needsDisplay = true } }
     var font: NSFont = Typography.tabTitle.font { didSet { needsDisplay = true } }
@@ -38,17 +53,21 @@ final class TextLabel: NSView {
 
     override func draw(_ dirtyRect: NSRect) {
         let (string, textColor) = tracked({ (text(), color()) }) { [weak self] in self?.needsDisplay = true }
+        lastDrawnText = ""
         guard !string.isEmpty, let ctx = NSGraphicsContext.current?.cgContext else { return }
         let attrs: [NSAttributedString.Key: Any] = [.font: font, .foregroundColor: textColor]
         var line = CTLineCreateWithAttributedString(NSAttributedString(string: string, attributes: attrs))
         let available = bounds.width - inset - trailingInset
         let width = CTLineGetTypographicBounds(line, nil, nil, nil)
+        var wasTruncated = false
         if width > available {
             // Tail truncation, like Arc's titles ("Keepi…", F0079). A box too narrow
             // for even "…" (four-pane split rows) draws nothing rather than overflow.
-            let token = CTLineCreateWithAttributedString(NSAttributedString(string: "…", attributes: attrs))
+            var tokenAttrs = attrs
+            if onDrawnLine != nil { tokenAttrs[Self.truncationToken] = true }
+            let token = CTLineCreateWithAttributedString(NSAttributedString(string: "…", attributes: tokenAttrs))
             guard available > 0, let truncated = CTLineCreateTruncatedLine(line, available, .end, token) else { return }
-            line = truncated
+            line = truncated; wasTruncated = true
         }
         let lineWidth = CTLineGetTypographicBounds(line, nil, nil, nil)
         var x = inset
@@ -57,6 +76,8 @@ final class TextLabel: NSView {
         ctx.textMatrix = CGAffineTransform(scaleX: 1, y: -1)
         ctx.textPosition = CGPoint(x: x, y: baseline)
         CTLineDraw(line, ctx)
+        lastDrawnText = string
+        onDrawnLine?(line, string, wasTruncated, lineWidth)
         ctx.restoreGState()
     }
 }
@@ -131,11 +152,15 @@ final class FaviconView: NSView {
 
     override func draw(_ dirtyRect: NSRect) {
         guard let tab else { return }
-        let (icon, png, host, tint) = tracked({ (tab.customIcon, tab.live.faviconPNG, tab.displayHost, fallbackTint()) }) { [weak self] in
+        let (override, icon, png, host, tint) = tracked({ (tab.iconOverride, tab.customIcon, tab.live.faviconPNG, tab.displayHost, fallbackTint()) }) { [weak self] in
             self?.needsDisplay = true
         }
         let ink = backingAlignedRect(NSRect(x: (bounds.width - inkSize) / 2, y: (bounds.height - inkSize) / 2, width: inkSize, height: inkSize),
                                      options: .alignAllEdgesNearest)
+        if let override {
+            NodeIconRenderer.draw(override, in: ink, tint: tint)
+            return
+        }
         if let icon, !icon.isEmpty {
             if let symbol = NSImage(systemSymbolName: icon, accessibilityDescription: nil) {
                 let img = symbol.withSymbolConfiguration(.init(pointSize: inkSize - 3, weight: .medium)) ?? symbol
@@ -152,6 +177,30 @@ final class FaviconView: NSView {
         }
         CustomIcon.letterFavicon(host.first.map(String.init) ?? "·", size: inkSize,
                                  fill: tint.withAlphaComponent(0.25), text: tint).draw(in: ink, from: .zero, operation: .sourceOver, fraction: 1, respectFlipped: true, hints: nil)
+    }
+}
+
+/// Typed icon resolution shared by tab and folder rows. Legacy tab drawing stays unchanged.
+@MainActor
+enum NodeIconRenderer {
+    static func legacy(_ value: String?) -> SpaceIcon? {
+        guard let value, !value.isEmpty else { return nil }
+        return NSImage(systemSymbolName: value, accessibilityDescription: nil) == nil ? .emoji(value) : .symbol(value)
+    }
+
+    static func draw(_ icon: SpaceIcon, in ink: CGRect, tint: NSColor) {
+        let name: String
+        switch icon {
+        case .emoji(let emoji): EmojiRenderer.draw(emoji, in: ink); return
+        case .named(let identifier): name = NamedSpaceIcons.symbolName(for: identifier)
+        case .symbol(let symbol): name = symbol
+        }
+        guard let symbol = NSImage(systemSymbolName: name, accessibilityDescription: nil)
+                ?? NSImage(systemSymbolName: NamedSpaceIcons.fallbackSymbol, accessibilityDescription: nil) else { return }
+        let image = symbol.withSymbolConfiguration(.init(pointSize: ink.height - 3, weight: .medium)) ?? symbol
+        let size = image.size
+        image.drawTinted(in: CGRect(x: ink.midX - size.width / 2, y: ink.midY - size.height / 2,
+                                   width: size.width, height: size.height), color: tint)
     }
 }
 

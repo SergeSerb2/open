@@ -13,4 +13,11 @@ open_libcef_mac_sources = [
   "//open/browser/tab_strip/open_hosted_platform_delegate.mm",
   "//open/browser/tab_strip/open_tab_strip.cc",
   "//open/browser/tab_strip/open_tab_strip.h",
+  "//open/browser/tab_strip/tab_groups.h",
+]
+
+# Open GN targets libcef_static links (also wired in by patch 0302).
+open_libcef_deps = [
+  # Native ad blocking: the per-Profile service (docs/plans/adblock-fork.md).
+  "//open/adblock",
 ]

@@ -100,7 +100,7 @@ enum FeatureChecks {
             && !c.handleKeyDown(focusSecond) && split.focusedPaneID == first.id, "R9 text field retains split-focus shortcut")
         textField.removeFromSuperview(); c.container.host(for: first.id)?.focus()
         c.performCommand("expand-current-split"); settle(); check(c.container.slots[0].frame == c.container.bounds && c.container.slots[1].isHidden, "S5 maximize hides other slots")
-        c.splitController.performCommand("escape"); settle(); check(c.container.slots.allSatisfy { !$0.isHidden }, "S5 Escape restores layout")
+        c.handleKeyDown(key("\u{1b}", code: 53)); settle(); check(c.container.slots.allSatisfy { !$0.isHidden }, "S5 Escape restores layout")
         c.performCommand("add-split-view"); c.performCommand("add-split-view"); settle()
         check(split.panes.count == 4 && c.container.slots.count == 4 && !c.splitController.canAddPane, "S6 four-pane cap and disabled command")
         let extra = space.today.compactMap(\.tab).first { model.parent(of: $0.id) != .splitPane(split.id) }!
@@ -336,6 +336,8 @@ enum FeatureChecks {
         check(image.width == 2216 && image.height == 1394, "C1 real CARenderer scene snapshot")
         try await visualFinish { check($0, $1) }
         try await reviewRound1 { check($0, $1) }
+        try await PiPChecks.run { condition, label in check(condition, label) }
+        try SoundChecks.run { check($0, $1) }
         print("features-render check: \(passed) passed, \(failed) failed")
         if failed > 0 { throw CLIError(description: "\(failed) feature scenarios failed") }
     }

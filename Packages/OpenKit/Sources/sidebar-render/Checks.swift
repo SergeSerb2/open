@@ -1,4 +1,5 @@
 import AppKit
+import Darwin
 import OpenDesign
 import OpenModel
 import OpenSidebar
@@ -15,6 +16,25 @@ enum Checks {
     static func check(_ ok: Bool, _ what: String) {
         if ok { passes += 1 } else { failures += 1 }
         print("  \(ok ? "OK  " : "FAIL") \(what)")
+    }
+
+    /// The 1-minute load average, for timing-check diagnostics.
+    static func loadAverage1() -> Double {
+        var loads = [Double](repeating: 0, count: 3)
+        return getloadavg(&loads, 3) == 3 ? loads[0] : -1
+    }
+
+    /// Pump the main run loop in 5 ms slices until `condition` holds or the
+    /// generous upper bound passes. Use this instead of a fixed sleep followed
+    /// by an assertion: machine load stretches fixed sleeps, not conditions.
+    static func waitFor(timeout: TimeInterval = 5, settle view: NSView? = nil, _ condition: () -> Bool) -> Bool {
+        let deadline = Date().addingTimeInterval(timeout)
+        while true {
+            if let view { OffscreenRenderer.settle(view) }
+            if condition() { return true }
+            if Date() >= deadline { return condition() }
+            RunLoop.main.run(until: Date().addingTimeInterval(0.005))
+        }
     }
 
     /// Display rows the outline should show for the focused Space.
@@ -35,6 +55,21 @@ enum Checks {
     }
 
     static func run(_ args: [String]) throws {
+        if args == ["--media-lifecycle-only"] {
+            MediaLifecycleChecks.run()
+            print("\nchecks: \(passes) passed, \(failures) failed")
+            if failures > 0 { exit(1) }
+            return
+        }
+        if args == ["--media-motion-only"] {
+            MediaMotionChecks.run()
+            print("\nchecks: \(passes) passed, \(failures) failed")
+            if failures > 0 { exit(1) }
+            return
+        }
+        // Checks that write preferences use one disposable suite per run.
+        let suite = "com.open.sidebar-render-check.\(UUID().uuidString)"
+        SidebarHaptics.defaults = UserDefaults(suiteName: suite)!
         let model = Synthetic.model()
         model.rebuildIndex()
         let undo = UndoManager()
@@ -149,7 +184,7 @@ enum Checks {
         check(sidebar.menuTitles(nodeID: pinnedTab.id) == ["Copy Link", "Share…", "—", "Change Icon…", "Rename…", "Mute", "Customize Page…", "Edit Pinned Page", "—", "Add Split View", "Duplicate", "Move to", "—", "Remove Pin"],
               "pinned tab menu (F0116 order): \(sidebar.menuTitles(nodeID: pinnedTab.id).joined(separator: " · "))")
         if let todayTab = space.today.first {
-            check(sidebar.menuTitles(nodeID: todayTab.id) == ["Copy Link", "—", "Open in Split View", "Move to", "—", "Archive Item"], "Today tab menu (F0115 order)")
+            check(sidebar.menuTitles(nodeID: todayTab.id) == ["Copy Link", "—", "Open in Split View", "Move to", "—", "Archive Tab", "Archive Tabs Below"], "Today tab menu (capture session 2 frame 0050)")
         }
         check(sidebar.menuTitles(nodeID: folder.id).first == "Share Folder…" && sidebar.menuTitles(nodeID: folder.id).last == "Delete", "folder menu (F0119 order)")
         check(sidebar.menuTitles(nodeID: nil).first == "Change Space Icon…" && sidebar.menuTitles(nodeID: nil).last == "Delete Space", "Space menu on empty space (F0117 order)")
@@ -275,8 +310,15 @@ enum Checks {
               "unknown named icons use the neutral symbol")
 
         MediaChecks.runRowIndicators()
+        MediaChecks.runMiniPlayers()
+        MediaMotionChecks.run()
+        MediaLifecycleChecks.run()
         ReviewChecks.run()
         VisualFinishChecks.run()
+        CompletionChecks.run()
+        SpaceManagerChecks.run()
+        PreviewChecks.run()
+        SidebarHaptics.defaults.removePersistentDomain(forName: suite)
 
         print("\nchecks: \(passes) passed, \(failures) failed")
         host.contentView = nil

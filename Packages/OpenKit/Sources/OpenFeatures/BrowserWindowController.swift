@@ -39,6 +39,13 @@ public final class BrowserWindowController: NSWindowController, NSWindowDelegate
     private let defaults: UserDefaults
     public var onSidebarIntent: ((SidebarIntent) -> Bool?)?
     public var onCommand: ((String) -> Bool)?
+    public var onCommandWithPayload: ((String, String?) -> Bool)?
+    public var onCommandValidation: ((String, String) -> Bool?)?
+    public var ownsAdditionalKeyWindow: ((NSWindow) -> Bool)?
+    public var isApplicationActive: (() -> Bool)?
+    public var isCommandBarPresented = false
+    public var keyBindingOverrides = KeyBindingStore.empty
+    private var lastKeyRoute: (window: Int, code: UInt16, flags: UInt, timestamp: TimeInterval, handled: Bool)?
     public var onStateChange: (() -> Void)?
     public var onClose: (() -> Void)?
     public var onFocus: (() -> Void)?
@@ -60,11 +67,21 @@ public final class BrowserWindowController: NSWindowController, NSWindowDelegate
     private var cardGeneration = 0
     private var trafficLightObservers: [NSObjectProtocol] = []
     private var placingTrafficLights = false
+    /// Arc's window buttons at rest (docs/design.md §2.2): the system buttons fade out and
+    /// this view shows the dimmed circles; the pointer over the group shows the system
+    /// buttons again (colors, glyphs, the tiling menu, Option-click).
+    private let dimmedLights = DimmedTrafficLightsView()
+    private var trafficLightsHovered = false
+    private var appliedTrafficLightDim: Bool?
     private struct WeakView { weak var view: NSView? }
     private var observedTrafficLightViews: [WeakView] = []
     /// Automation builds drive the pointer with tagged events; this lets them ignore the
     /// hardware pointer so a test is not disturbed by someone using the Mac. nil: accept all.
     public static var pointerEventFilter: ((NSEvent) -> Bool)?
+    /// The automation pointer's position (window number, window base coordinates), set with
+    /// `pointerEventFilter`. While automation drives the pointer, the window buttons' hover
+    /// state reads this instead of the hardware pointer.
+    public static var automationPointer: (window: Int, location: NSPoint)?
     /// Automation builds can turn this off to keep a capture-size frame on a smaller screen.
     public static var constrainsFramesToScreen = true
     private var toastTask: Task<Void, Never>?
@@ -135,8 +152,13 @@ public final class BrowserWindowController: NSWindowController, NSWindowDelegate
         }
         reveal.onChange = { [weak self] shown in self?.setRevealCard(shown) }
         // Another app took the pointer: no more pointer events will come to hide the card.
+        // Not while automation drives the pointer: then the hardware pointer is ignored, and
+        // a deactivation comes from someone using the Mac, not from the check.
         trafficLightObservers.append(NotificationCenter.default.addObserver(forName: NSApplication.didResignActiveNotification, object: nil, queue: .main) { [weak self] _ in
-            MainActor.assumeIsolated { self?.dismissSidebarReveal() }
+            MainActor.assumeIsolated {
+                guard BrowserWindowController.pointerEventFilter == nil else { return }
+                self?.dismissSidebarReveal()
+            }
         })
         pointerMonitor = NSEvent.addLocalMonitorForEvents(matching: [.mouseMoved, .leftMouseDragged]) { [weak self] event in
             MainActor.assumeIsolated {
@@ -296,7 +318,71 @@ public final class BrowserWindowController: NSWindowController, NSWindowDelegate
             let origin = CGPoint(x: (center.x - size.width / 2).rounded(), y: (center.y - size.height / 2).rounded())
             if button.frame.origin != origin { button.setFrameOrigin(origin) }
         }
+        placeDimmedLights(window)
     }
+
+    /// The dimmed circles sit right under the buttons, in their title bar view, and follow
+    /// them (anchored, on the card, hidden with them). In full screen the system buttons show.
+    private func placeDimmedLights(_ window: NSWindow) {
+        let buttons = Self.trafficLightKinds.compactMap { window.standardWindowButton($0) }
+        guard buttons.count == 3, let parent = buttons[0].superview, !fullscreenTransition else { return }
+        if dimmedLights.superview !== parent {
+            dimmedLights.onHoverChange = { [weak self] inside in
+                self?.trafficLightsHovered = inside
+                self?.applyTrafficLightDim(animated: true)
+            }
+            dimmedLights.pointerLocation = { [weak self] in
+                guard let window = self?.window else { return nil }
+                guard BrowserWindowController.pointerEventFilter != nil else { return window.mouseLocationOutsideOfEventStream }
+                guard let pointer = BrowserWindowController.automationPointer, pointer.window == window.windowNumber else {
+                    return NSPoint(x: -.greatestFiniteMagnitude, y: -.greatestFiniteMagnitude) // in another window
+                }
+                return pointer.location
+            }
+            parent.addSubview(dimmedLights, positioned: .below, relativeTo: buttons[0])
+        }
+        let group = buttons.map(\.frame).reduce(CGRect.null) { $0.union($1) }
+        let frame = group.insetBy(dx: -2, dy: -2)
+        if dimmedLights.frame != frame { dimmedLights.frame = frame }
+        dimmedLights.centers = buttons.map { CGPoint(x: $0.frame.midX - frame.minX, y: $0.frame.midY - frame.minY) }
+        dimmedLights.groupRect = group.offsetBy(dx: -frame.minX, dy: -frame.minY)
+        dimmedLights.tone = context.focusedSpace.map { context.appearance(for: $0) } ?? context.systemAppearance
+        dimmedLights.showsRing = window.isKeyWindow
+        let hidden = buttons[0].isHidden
+        // Hiding clears the hover state and showing reads it from the pointer (the view).
+        if dimmedLights.isHidden != hidden { dimmedLights.isHidden = hidden }
+        applyTrafficLightDim(animated: false)
+    }
+
+    /// At rest the system buttons are all but transparent (still there for clicks and AX)
+    /// and the dimmed circles show; over the group, the reverse. Not alpha 0: AppKit ignores
+    /// a window button at alpha 0, so `performClose:`, `performZoom:`, and an AX press would
+    /// stop working; 0.001 draws nothing visible (under 0.3 of one 8-bit level). AppKit may
+    /// reset the buttons' alpha when it lays the title bar out; this puts it back in the same pass.
+    private static let restButtonAlpha: CGFloat = 0.001
+
+    private func applyTrafficLightDim(animated: Bool) {
+        guard let window else { return }
+        let buttons = Self.trafficLightKinds.compactMap { window.standardWindowButton($0) }
+        let dim = !trafficLightsHovered && !fullscreenTransition && !window.styleMask.contains(.fullScreen)
+        let buttonAlpha: CGFloat = dim ? Self.restButtonAlpha : 1, circlesAlpha: CGFloat = dim ? 1 : 0
+        let changed = appliedTrafficLightDim != dim
+        appliedTrafficLightDim = dim
+        if animated && changed && window.isVisible && !NSWorkspace.shared.accessibilityDisplayShouldReduceMotion {
+            NSAnimationContext.runAnimationGroup { context in
+                context.duration = Motion.hoverFade
+                for button in buttons { button.animator().alphaValue = buttonAlpha }
+                dimmedLights.animator().alphaValue = circlesAlpha
+            }
+        } else if changed || buttons.contains(where: { $0.alphaValue != buttonAlpha }) || dimmedLights.alphaValue != circlesAlpha {
+            for button in buttons where button.alphaValue != buttonAlpha { button.alphaValue = buttonAlpha }
+            if dimmedLights.alphaValue != circlesAlpha { dimmedLights.alphaValue = circlesAlpha }
+        }
+    }
+
+    /// The window buttons show Arc's dimmed look (checks and automation).
+    public var trafficLightsDimmed: Bool { appliedTrafficLightDim == true }
+    public var trafficLightsHoveredState: Bool { trafficLightsHovered }
 
     /// Observes each button once per instance (AppKit can replace them, for example around
     /// full screen). Weak references, not ObjectIdentifier: a replacement can reuse a freed address.
@@ -371,7 +457,7 @@ public final class BrowserWindowController: NSWindowController, NSWindowDelegate
 
     private func slideCard(from: CGFloat, to: CGFloat, generation: Int, completion: (@MainActor () -> Void)?) {
         let layers = [sidebar.layer, cardShadow.layer].compactMap { $0 }
-        let buttons = Self.trafficLightKinds.compactMap { window?.standardWindowButton($0)?.layer }
+        let buttons = Self.trafficLightKinds.compactMap { window?.standardWindowButton($0)?.layer } + [dimmedLights.layer].compactMap { $0 }
         CATransaction.begin()
         CATransaction.setCompletionBlock {
             MainActor.assumeIsolated { [weak self] in
@@ -397,7 +483,7 @@ public final class BrowserWindowController: NSWindowController, NSWindowDelegate
         cardState = .off
         sidebar.isHidden = true
         cardShadow.isHidden = true
-        for layer in [sidebar.layer, cardShadow.layer].compactMap({ $0 }) + Self.trafficLightKinds.compactMap({ window?.standardWindowButton($0)?.layer }) {
+        for layer in [sidebar.layer, cardShadow.layer, dimmedLights.layer].compactMap({ $0 }) + Self.trafficLightKinds.compactMap({ window?.standardWindowButton($0)?.layer }) {
             layer.removeAnimation(forKey: "reveal")
         }
         sidebar.presentation = .anchored
@@ -453,29 +539,59 @@ public final class BrowserWindowController: NSWindowController, NSWindowDelegate
     }
     public var peekBadgeTabIDs: Set<ItemID> { peekStorage?.peekBadgeTabIDs ?? [] }
     /// Shared window-local key path. Focus comes from AppKit's current responder.
-    @discardableResult public func handleKeyDown(_ event: NSEvent) -> Bool {
-        guard event.window === window else { return false }
-        if event.keyCode == 53 {
-            if let peek = peekStorage, peek.isShown { peek.escape() }
-            else { splitController.performCommand("escape"); container.cancelOperation(nil) }
+    @discardableResult public func handleKeyDown(_ event: NSEvent, unconsumed: Bool = false) -> Bool {
+        guard let eventWindow = event.window,
+              eventWindow === window || ownsAdditionalKeyWindow?(eventWindow) == true else { return false }
+        let flags = event.modifierFlags.rawValue
+        if let last = lastKeyRoute, last.window == eventWindow.windowNumber, last.code == event.keyCode,
+           last.flags == flags, unconsumed || (event.timestamp > 0 && last.timestamp == event.timestamp) { return last.handled }
+        if event.keyCode == 53, !isCommandBarPresented, let peek = peekStorage, peek.isShown {
+            peek.escape()
+            lastKeyRoute = (eventWindow.windowNumber, event.keyCode, flags, event.timestamp, true)
             return true
         }
-        let responder = window?.firstResponder
+        if event.keyCode == 53, !isCommandBarPresented, container.maximizedTabID != nil {
+            splitController.performCommand("escape"); container.cancelOperation(nil)
+            lastKeyRoute = (eventWindow.windowNumber, event.keyCode, flags, event.timestamp, true)
+            return true
+        }
+        let responder = eventWindow.firstResponder
         let view = responder as? NSView
         let textFocused = responder is NSTextView || responder is NSTextField
         func within(_ ancestor: NSView?) -> Bool {
             guard let view, let ancestor else { return false }
             return view === ancestor || view.isDescendant(of: ancestor)
         }
-        let webFocused = !textFocused && (container.slots.contains { within($0.contentHostView) }
+        let webFocused = !textFocused && (eventWindow !== window || container.slots.contains { within($0.contentHostView) }
             || (peekStorage?.isShown == true && within(peekStorage?.stack.last?.host?.view)))
-        let routing = RoutingContext(isCommandBarOpen: context.isNewTabCommandBarOpen,
-            isSidebarFocused: within(sidebar), isTextFocused: textFocused, isWebContentFocused: webFocused)
-        guard case .browserCommand(let id)? = keyboard.route(event: event, context: routing), handles(id) else { return false }
+        // Web editing keys go through Chromium's text system. Its unconsumed
+        // hook can still offer them to the menu (for model undo, for example).
+        let routing = RoutingContext(isAppActive: isApplicationActive?() ?? true,
+            isCommandBarOpen: isCommandBarPresented || context.isNewTabCommandBarOpen,
+            isSidebarFocused: within(sidebar), isTextFocused: textFocused || webFocused, isWebContentFocused: webFocused)
+        let decision = KeyboardShortcut.from(event: event).map {
+            keyboard.route(shortcut: $0, context: routing, overrides: keyBindingOverrides,
+                now: Date(timeIntervalSinceReferenceDate: event.timestamp))
+        }
+        lastKeyRoute = (eventWindow.windowNumber, event.keyCode, flags, event.timestamp, false)
+        // CEF can deliver a page event straight to the window. Keep native
+        // edit actions on the same nil-target responder path in that layer.
+        if case .system? = decision, webFocused, routing.isAppActive,
+           let shortcut = KeyboardShortcut.from(event: event),
+           let id = SystemCommandActions.command(for: shortcut, overrides: keyBindingOverrides),
+           SystemCommandActions.isEnabled(id), SystemCommandActions.perform(id) {
+            lastKeyRoute = (eventWindow.windowNumber, event.keyCode, flags, event.timestamp, true)
+            return true
+        }
+        guard case .browserCommand(let id)? = decision,
+              handles(id) || onCommand != nil,
+              isCommandEnabled(id, enabledKey: CommandRegistry.byID[id]?.enabledKey ?? EnabledKey.always) else { return false }
         // These bindings have window scope in the registry; restrict them to the
         // page here so sidebar controls and AppKit field editors retain their keys.
         if id.hasPrefix("focus-split-pane-"), !webFocused { return false }
-        performCommand(id); return true
+        performCommand(id)
+        lastKeyRoute = (eventWindow.windowNumber, event.keyCode, flags, event.timestamp, true)
+        return true
     }
     private func handles(_ id: String) -> Bool { ["add-split-view", "close-split-pane", "expand-current-split", "separate-from-split-view", "next-split-pane", "previous-split-pane", "open-in-current-space", "go-back", "go-forward"].contains(id) || id.hasPrefix("focus-split-pane-") }
     public func performCommand(_ id: String) {
@@ -490,7 +606,17 @@ public final class BrowserWindowController: NSWindowController, NSWindowDelegate
         else if id == "go-forward", peekStorage?.isShown == true { peekStorage?.stack.last?.host?.goForward() }
         else { splitController.performCommand(id) }
     }
-    public func isCommandEnabled(_ id: String, enabledKey: String) -> Bool { splitController.isCommandEnabled(id, enabledKey: enabledKey) }
+    public func performCommand(_ id: String, payload: String?) {
+        if onCommandWithPayload?(id, payload) == true { return }
+        performCommand(id)
+    }
+    public func isCommandEnabled(_ id: String, enabledKey: String) -> Bool {
+        if let enabled = onCommandValidation?(id, enabledKey) { return enabled }
+        if id == "open-in-current-space" { return peekStorage?.isShown == true }
+        if id == "go-back" { return peekStorage?.isShown == true ? peekStorage?.stack.last?.host?.canGoBack == true : splitController.focusedTab.flatMap { container.host(for: $0.id) }?.canGoBack == true }
+        if id == "go-forward" { return peekStorage?.isShown == true ? peekStorage?.stack.last?.host?.canGoForward == true : splitController.focusedTab.flatMap { container.host(for: $0.id) }?.canGoForward == true }
+        return splitController.isCommandEnabled(id, enabledKey: enabledKey)
+    }
     public func sidebar(_ sidebar: SidebarView, didRequest intent: SidebarIntent) -> Bool {
         if let handled = onSidebarIntent?(intent) { return handled }
         switch intent {
@@ -511,21 +637,39 @@ public final class BrowserWindowController: NSWindowController, NSWindowDelegate
         refresh(); changed(); return true
     }
     public func windowWillClose(_ notification: Notification) { saveWindowState(); visibilityOverride = .closed; removeRevealCard(); container.closeAll(); onClose?(); onVisibilityChange?() }
-    public func windowWillReturnUndoManager(_ window: NSWindow) -> UndoManager? { model.undoManager }
+    public var onTextUndoManager: ((NSWindow) -> UndoManager?)?
+    private lazy var nativeTextUndoManager = UndoManager()
+    public func windowWillReturnUndoManager(_ window: NSWindow) -> UndoManager? {
+        if let editor = onTextUndoManager?(window) { return editor }
+        if window.firstResponder is NSTextView || window.firstResponder is NSTextField { return nativeTextUndoManager }
+        return model.undoManager
+    }
     public func windowDidResize(_ notification: Notification) { layoutContent() }
     public func windowDidMove(_ notification: Notification) { saveWindowState(); snapshotStore?.scheduleSave(model: model) }
     public func windowDidEndLiveResize(_ notification: Notification) { saveWindowState(); snapshotStore?.scheduleSave(model: model) }
-    public func windowWillEnterFullScreen(_ notification: Notification) { saveWindowState(); fullscreenTransition = true }
-    public func windowWillExitFullScreen(_ notification: Notification) { fullscreenTransition = true }
+    public func windowWillEnterFullScreen(_ notification: Notification) { saveWindowState(); fullscreenTransition = true; applyTrafficLightDim(animated: false); dimmedLights.isHidden = true }
+    public func windowWillExitFullScreen(_ notification: Notification) { fullscreenTransition = true; applyTrafficLightDim(animated: false) }
     public func windowDidEnterFullScreen(_ notification: Notification) { fullscreenTransition = false; fullScreenTransitionCount += 1; layoutContent(); onVisibilityChange?() }
-    public func windowDidExitFullScreen(_ notification: Notification) { fullscreenTransition = false; fullScreenTransitionCount += 1; layoutContent(); onVisibilityChange?() }
-    public func windowDidBecomeKey(_ notification: Notification) { context.isWindowActive = true; background.isWindowActive = true; positionTrafficLights(); onFocus?() }
+    public func windowDidExitFullScreen(_ notification: Notification) {
+        fullscreenTransition = false; fullScreenTransitionCount += 1; layoutContent(); onVisibilityChange?()
+        // The window is back at its frame; the pointer may or may not be over the buttons.
+        dimmedLights.syncWithPointer()
+    }
+    public func windowDidBecomeKey(_ notification: Notification) {
+        context.isWindowActive = true; background.isWindowActive = true; positionTrafficLights(); onFocus?()
+        // Back from another app or a hide (Cmd+H): the pointer may have left the buttons meanwhile.
+        dimmedLights.syncWithPointer()
+    }
     public func windowDidResignKey(_ notification: Notification) { context.isWindowActive = false; background.isWindowActive = false; positionTrafficLights() }
     public func windowDidChangeBackingProperties(_ notification: Notification) { positionTrafficLights() }
     public func windowDidBecomeMain(_ notification: Notification) { context.isWindowActive = true }
     public func windowDidResignMain(_ notification: Notification) { context.isWindowActive = window?.isKeyWindow == true }
     public func windowDidMiniaturize(_ notification: Notification) { onVisibilityChange?() }
-    public func windowDidDeminiaturize(_ notification: Notification) { onVisibilityChange?() }
+    public func windowDidDeminiaturize(_ notification: Notification) {
+        onVisibilityChange?()
+        // The pointer was on the yellow button when the window left, and has moved since.
+        dimmedLights.syncWithPointer()
+    }
     public func windowDidChangeOcclusionState(_ notification: Notification) { onVisibilityChange?() }
 }
 

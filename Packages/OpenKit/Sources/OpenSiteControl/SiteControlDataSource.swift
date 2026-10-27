@@ -9,6 +9,9 @@ import OpenBoosts
     func removeChangeObserver(_ token: SiteControlObservationToken)
 }
 
+/// Synchronous callbacks may close or replace their caller. The controller keeps
+/// itself alive during each call, binds the tab, and rechecks its presentation
+/// generation before applying any callback-dependent UI changes.
 @MainActor public protocol SiteControlActions: AnyObject {
     func toggle(_ tile: SiteSettingTile, tabID: ItemID)
     func setBoostEnabled(_ id: BoostID, enabled: Bool, tabID: ItemID)

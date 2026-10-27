@@ -26,4 +26,11 @@ enum DurableFiles {
     static func crashPoint(_ point: String) {
         if ProcessInfo.processInfo.environment["OPENKIT_DEBUG_MIGRATION_CRASH"] == point { _exit(86) }
     }
+    /// A simulated I/O error at `point` (sets errno to EIO), to exercise
+    /// rollback paths that real errors reach only rarely.
+    static func failPoint(_ point: String) -> Bool {
+        guard ProcessInfo.processInfo.environment["OPENKIT_DEBUG_MIGRATION_FAIL"] == point else { return false }
+        errno = EIO
+        return true
+    }
 }
