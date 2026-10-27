@@ -71,6 +71,12 @@ public struct SpaceThemeStyle: Sendable, Hashable {
         appearance == .dark ? darkPalette : lightPalette
     }
 
+    /// Mini-player fill: media plan §13.4.2, capture session 2.
+    public func miniPlayerFill(_ appearance: ContentAppearance) -> RGBA {
+        if let palette = palette(for: appearance) { return palette.backgroundExtra.withAlpha(1) }
+        return appearance == .dark ? DefaultThemePalette.darkBackgroundExtra : DefaultThemePalette.lightBackgroundExtra
+    }
+
     /// Tab and folder title color. Measured: fully covered title pixels equal the
     /// theme's `title` for the content appearance (#320E00 in Space 1). Without a
     /// theme: measured on the default dark Space (F0072), see `DefaultThemeText`.
@@ -280,4 +286,10 @@ public enum DefaultThemeText {
     public static let title = DesignColor(light: RGBA(hex: 0x0E0F10, alpha: 0.9, .displayP3), dark: RGBA(hex: 0xDDDEFF))
     /// Split-row titles: dimmer and neutral. Dark: white 0.80 (`ForegroundPrimary`), F0079.
     public static let splitTitle = Core.foregroundPrimary
+}
+
+/// Media plan §13.4.2: dark is fact (E2); light is derived, pending capture.
+public enum DefaultThemePalette {
+    public static let darkBackgroundExtra = RGBA(hex: 0x050627)
+    public static let lightBackgroundExtra = RGBA(hex: 0xFDFDFF)
 }

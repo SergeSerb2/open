@@ -134,21 +134,24 @@ public final class SidebarView: NSView {
         let bannerHeight = bannerShown ? banner?.height(for: max(0, w - 2 * BannerMetrics.inset)) ?? 0 : 0
         let listBottom = bottom - mediaHeight - (bannerShown ? bannerHeight + 2 * BannerMetrics.inset : 0)
         let oldPager = pager.frame, oldMedia = mediaControls.frame
+        let mediaWidthChanged = oldMedia.width > 0 && oldMedia.width != w
+        if mediaWidthChanged { removeMediaAnimations(pager.layer); removeMediaAnimations(mediaControls.layer) }
+        let pagerStart = MediaAnimationStart(layer: pager.layer, frame: oldPager)
+        let mediaStart = MediaAnimationStart(layer: mediaControls.layer, frame: oldMedia)
         CATransaction.begin(); CATransaction.setDisableActions(true)
         pager.frame = CGRect(x: 0, y: favTop + favH, width: w, height: max(0, listBottom - favTop - favH))
         mediaControls.frame = CGRect(x: 0, y: bottom - mediaHeight, width: w, height: mediaHeight)
         CATransaction.commit()
-        if oldMedia.height != mediaHeight && oldPager != .zero && animatesMediaChanges {
-            for (view, old) in [(pager as NSView, oldPager), (mediaControls as NSView, oldMedia)] {
+        if oldMedia.height != mediaHeight && oldPager != .zero && animatesMediaChanges && mediaControls.hasPendingTransition && !mediaWidthChanged {
+            for (view, start) in [(pager as NSView, pagerStart), (mediaControls as NSView, mediaStart)] {
                 if SidebarDiagnostics.mediaReducesMotion {
-                    let fade = CABasicAnimation(keyPath: "opacity"); fade.fromValue = 0; fade.toValue = 1
-                    fade.duration = Motion.reducedMedia; view.layer?.add(fade, forKey: "media.reducedHeight")
+                    if view === mediaControls { mediaControls.crossFadeReducedTransition() }
                 } else {
                     let spring = mediaControls.heightTransition == .stack
                     let move = spring ? Motion.miniPlayerStack.animation(keyPath: "position") : CABasicAnimation(keyPath: "position")
                     let resize = spring ? Motion.miniPlayerStack.animation(keyPath: "bounds.size") : CABasicAnimation(keyPath: "bounds.size")
-                    move.fromValue = CGPoint(x: old.midX, y: old.midY); move.toValue = view.layer?.position
-                    resize.fromValue = old.size; resize.toValue = view.bounds.size
+                    move.fromValue = start.position; move.toValue = view.layer?.position
+                    resize.fromValue = start.size; resize.toValue = view.bounds.size
                     if !spring {
                         let duration = mediaControls.heightTransition == .drawer ? Motion.miniPlayerResize : Motion.rowStructure
                         for animation in [move, resize] { animation.duration = duration; animation.timingFunction = Motion.easeInOut }
