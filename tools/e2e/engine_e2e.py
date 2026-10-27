@@ -2764,6 +2764,8 @@ def window_chrome_followup_checks(factory, results, tmp):
             try: pointer("up", 600)
             except Exception: pass
         app.quit()
+        if app.quit_report.get("forced"):
+            raise RuntimeError("window-chrome flow required force quit; owned process was killed during cleanup")
 
 
 def window_chrome_checks(factory, results, tmp):
