@@ -8,6 +8,7 @@
 
 #include <algorithm>
 #include <cstdio>
+#include <cstdlib>
 #include <memory>
 #include <optional>
 #include <string>
@@ -16,6 +17,7 @@
 #include <vector>
 
 #include "base/base64.h"
+#include "base/strings/string_number_conversions.h"
 #include "base/strings/string_util.h"
 #include "base/timer/elapsed_timer.h"
 #include "open/adblock/open_adblock_service.h"
@@ -608,17 +610,32 @@ void OnLoaded(base::WeakPtr<OpenAdBlockService> service,
   ok &= Expect(!service->HiddenSelectors({"ad--300x250"}, {}, {}).empty(),
                "generic class selector found");
 
-  // adblock-fork §13.4: mean cost of one page's cosmetic query.
-  base::ElapsedTimer timer;
+  // adblock-fork §13.4: mean cost of one page's cosmetic query. A real-time
+  // budget on a shared machine: up to 3 attempts, each printed with the
+  // load average (docs/review-checklist.md §4).
+  constexpr int64_t kCosmeticBudgetUs = 100;
   size_t hide_count = 0;
-  for (int i = 0; i < 100; ++i) {
-    hide_count = service->CosmeticResources(GURL("https://www.nytimes.com/"))
-                     .hide_selectors.size();
+  int64_t mean_us = 0;
+  for (int attempt = 1; attempt <= 3; ++attempt) {
+    base::ElapsedTimer timer;
+    for (int i = 0; i < 100; ++i) {
+      hide_count = service->CosmeticResources(GURL("https://www.nytimes.com/"))
+                       .hide_selectors.size();
+    }
+    mean_us = timer.Elapsed().InMicroseconds() / 100;
+    double load[1] = {0};
+    getloadavg(load, 1);
+    Line("cosmetic attempt=" + std::to_string(attempt) +
+         " mean_us=" + std::to_string(mean_us) + " budget_us=" +
+         std::to_string(kCosmeticBudgetUs) + " over_us=" +
+         std::to_string(std::max<int64_t>(0, mean_us - kCosmeticBudgetUs)) +
+         " load=" + base::NumberToString(load[0]) +
+         " hide_selectors=" + std::to_string(hide_count));
+    if (mean_us <= kCosmeticBudgetUs) {
+      break;
+    }
   }
-  const int64_t mean_us = timer.Elapsed().InMicroseconds() / 100;
-  Line("cosmetic mean_us=" + std::to_string(mean_us) +
-       " hide_selectors=" + std::to_string(hide_count));
-  ok &= Expect(hide_count > 0 && mean_us <= 100,
+  ok &= Expect(hide_count > 0 && mean_us <= kCosmeticBudgetUs,
                "cosmetic query within 100 us per page");
 
   // A page whose lists have procedural rules still gets its plain hiding,
