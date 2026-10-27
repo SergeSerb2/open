@@ -49,8 +49,9 @@ import OpenWeb
                 windowNumber: host.windowNumber, context: nil, eventNumber: 0, clickCount: 1, pressure: type == .leftMouseDown ? 1 : 0)!
         }
         func tooltip(_ button: NSView, _ text: String) {
-            button.mouseEntered(with: event(.mouseMoved, button)); pump(0.24)
-            Checks.check(TooltipController.shared.visibleTooltip?.title == text && button.accessibilityHelp() == text,
+            button.mouseEntered(with: event(.mouseMoved, button))
+            let shown = Checks.waitFor(settle: scene) { TooltipController.shared.visibleTooltip?.title == text }
+            Checks.check(shown && button.accessibilityHelp() == text,
                          "RI tooltip and help are exact: \(text)")
             button.mouseExited(with: event(.mouseMoved, button)); pump(0.05)
         }
@@ -58,7 +59,8 @@ import OpenWeb
         pump()
         Checks.check(speaker() == nil, "RI1 silent unmuted row builds no speaker")
         Checks.check(host.frame.maxX < 0 && !host.isKeyWindow, "RI animation window stays offscreen and non-key (visible \(host.isVisible), occlusion \(host.occlusionState.rawValue))")
-        tab.live.isAudible = true; pump(0.12)
+        tab.live.isAudible = true
+        _ = Checks.waitFor(settle: scene) { speaker() != nil }
         guard let button = speaker() else { Checks.check(false, "RI1 audible speaker exists"); return }
         let symbol = descendants(button).compactMap { $0 as? NSImageView }.first
         Checks.check(button.frame.size == CGSize(width: 20, height: 20) && button.frame.minY == 10 && symbol?.image === Glyph.audioPlaying.image && button.accessibilityLabel() == "Mute tab", "RI1 audible unmuted frame and symbol")
@@ -186,8 +188,9 @@ extension MediaChecks {
                          "MC3 frame, glyph, tooltip and help: \(id)")
         }
         if let play = first.control(named: "play")?.view {
-            play.mouseEntered(with: event(.mouseMoved, play)); pump(0.55)
-            Checks.check(TooltipController.shared.visibleTooltip?.title == "Pause", "MC3 actual media tooltip appears after its 0.45 s delay")
+            play.mouseEntered(with: event(.mouseMoved, play))
+            let tooltipShown = Checks.waitFor(settle: scene) { TooltipController.shared.visibleTooltip?.title == "Pause" }
+            Checks.check(tooltipShown, "MC3 actual media tooltip appears after its 0.45 s delay")
             play.mouseExited(with: event(.mouseMoved, play)); pump(0.2)
         }
         Checks.check(first.control(named: "close")?.view.frame.width == 0, "MC4 close starts 0 wide")
@@ -224,12 +227,15 @@ extension MediaChecks {
                      "MC6 three collapsed cards reserve 68+10 pt")
         Checks.check(controls.cards.dropFirst().allSatisfy { ($0.layer?.mask as? CAShapeLayer)?.path?.boundingBox.height == 5 && !$0.marquee.isRunning },
                      "MC6 back cards are clipped and their marquees stop")
-        controls.mouseEntered(with: event(.mouseMoved, controls)); pump(0.7)
-        Checks.check(controls.isExpanded && controls.stackHeight == 216 && controls.cards.allSatisfy { $0.layer?.mask == nil }, "MC6 hover expands to 3*68+12")
-        controls.mouseExited(with: event(.mouseMoved, controls)); pump(0.15)
-        Checks.check(controls.isExpanded && controls.pendingCollapseCount == 1, "MC6 exit waits 0.3 s")
-        pump(0.6)
-        Checks.check(!controls.isExpanded && controls.pendingCollapseCount == 0 && controls.stackHeight == 78, "MC6 real delayed work collapses the stack")
+        controls.mouseEntered(with: event(.mouseMoved, controls))
+        let expanded = Checks.waitFor(settle: scene) { controls.isExpanded && controls.stackHeight == 216 && controls.cards.allSatisfy { $0.layer?.mask == nil } }
+        Checks.check(expanded, "MC6 hover expands to 3*68+12")
+        controls.mouseExited(with: event(.mouseMoved, controls))
+        // Logic, not wall clock: the exit schedules one collapse at 0.3 s and
+        // the stack is still expanded until that work runs.
+        Checks.check(controls.isExpanded && controls.pendingCollapseCount == 1 && controls.pendingCollapseDelay == 0.3, "MC6 exit waits 0.3 s")
+        let collapsed = Checks.waitFor(settle: scene) { !controls.isExpanded && controls.pendingCollapseCount == 0 }
+        Checks.check(collapsed && controls.stackHeight == 78, "MC6 real delayed work collapses the stack")
         store.remove(tabID: extra1.id); store.remove(tabID: extra2.id); pump(0.7)
         tab.title = "A deliberately long playing title which must overflow this narrow mini player and keep scrolling"; mediaHost.perform(.play); pump(0.25)
         Checks.check(first.marquee.isOverflowing && first.marquee.isRunning, "MC7 overflowing playing title runs in a visible window")

@@ -82,6 +82,9 @@ final class SwitcherItemView: PlateButton {
     private var springLoad: DispatchWorkItem?
     private var springPayload: [ItemID]?
     private var springScheduled = false
+    private var springDelay: TimeInterval?
+    /// Delay the pending spring-load switch was scheduled with, nil when none is pending.
+    var pendingSpringLoadDelay: TimeInterval? { springLoad == nil ? nil : springDelay }
 
     isolated deinit { springLoad?.cancel() }
 
@@ -149,12 +152,15 @@ final class SwitcherItemView: PlateButton {
             let work = DispatchWorkItem { [weak self] in
                 MainActor.assumeIsolated {
                     guard let self, self.springScheduled, let context = self.context else { return }
+                    self.springLoad = nil; self.springDelay = nil
                     if let ids, !ids.contains(where: { context.model.canMoveNode(id: $0, to: SidebarPasteboard.destination(for: $0, in: self.space.id, model: context.model)) }) { return }
                     context.send(.switchSpace(self.space.id))
                 }
             }
+            let delay: TimeInterval = 0.5
             springLoad = work
-            DispatchQueue.main.asyncAfter(deadline: .now() + 0.5, execute: work)
+            springDelay = delay
+            DispatchQueue.main.asyncAfter(deadline: .now() + delay, execute: work)
         }
         return operation
     }
@@ -162,6 +168,7 @@ final class SwitcherItemView: PlateButton {
     private func cancelSpringLoad() {
         springLoad?.cancel()
         springLoad = nil
+        springDelay = nil
         springScheduled = false
         springPayload = nil
     }

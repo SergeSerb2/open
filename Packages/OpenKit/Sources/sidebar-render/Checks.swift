@@ -1,4 +1,5 @@
 import AppKit
+import Darwin
 import OpenDesign
 import OpenModel
 import OpenSidebar
@@ -15,6 +16,25 @@ enum Checks {
     static func check(_ ok: Bool, _ what: String) {
         if ok { passes += 1 } else { failures += 1 }
         print("  \(ok ? "OK  " : "FAIL") \(what)")
+    }
+
+    /// The 1-minute load average, for timing-check diagnostics.
+    static func loadAverage1() -> Double {
+        var loads = [Double](repeating: 0, count: 3)
+        return getloadavg(&loads, 3) == 3 ? loads[0] : -1
+    }
+
+    /// Pump the main run loop in 5 ms slices until `condition` holds or the
+    /// generous upper bound passes. Use this instead of a fixed sleep followed
+    /// by an assertion: machine load stretches fixed sleeps, not conditions.
+    static func waitFor(timeout: TimeInterval = 5, settle view: NSView? = nil, _ condition: () -> Bool) -> Bool {
+        let deadline = Date().addingTimeInterval(timeout)
+        while true {
+            if let view { OffscreenRenderer.settle(view) }
+            if condition() { return true }
+            if Date() >= deadline { return condition() }
+            RunLoop.main.run(until: Date().addingTimeInterval(0.005))
+        }
     }
 
     /// Display rows the outline should show for the focused Space.
@@ -35,6 +55,10 @@ enum Checks {
     }
 
     static func run(_ args: [String]) throws {
+        // Concurrent runs share the process preferences domain, so preferences
+        // the checks write go to a per-run suite that is removed at the end.
+        let suite = "com.open.sidebar-render-check.\(UUID().uuidString)"
+        SidebarHaptics.defaults = UserDefaults(suiteName: suite)!
         let model = Synthetic.model()
         model.rebuildIndex()
         let undo = UndoManager()
@@ -281,6 +305,7 @@ enum Checks {
         CompletionChecks.run()
         SpaceManagerChecks.run()
         PreviewChecks.run()
+        SidebarHaptics.defaults.removePersistentDomain(forName: suite)
 
         print("\nchecks: \(passes) passed, \(failures) failed")
         host.contentView = nil
