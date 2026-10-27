@@ -255,7 +255,8 @@ final class ThemeLayer: CALayer {
         let gkey = GrainKey(noise: noise, scale: scale, texture: theme.texture)
         if gkey != grainKey {
             grainKey = gkey
-            // Legacy snapshots used exact noise, not the editor's 0.05 bucket.
+            // Legacy snapshots keep exact-noise grain bytes; editor noise
+            // changes only the intrinsic texture layer's opacity.
             grainTile.contents = theme.usesLegacyIntensity
                 ? Grain.tile(noiseFactor: noise, scale: scale)
                 : ThemeTexture.tile(theme.texture, noiseFactor: noise, scale: scale)

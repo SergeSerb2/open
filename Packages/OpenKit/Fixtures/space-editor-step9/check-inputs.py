@@ -61,6 +61,19 @@ r=subprocess.run([str(exe),'compare','--spec','session2-pad','--capture-root',st
 good=r.returncode!=0 and 'unknown or duplicate session2-pad option' in r.stderr
 rows.append({'case':'duplicate-options','passed':good});print('PASS' if good else 'FAIL','duplicate-options',flush=True)
 (frames/'entry-0510').rmdir();dupe=frames/'0027-duplicate';dupe.mkdir();run('duplicate-frame','duplicate capture frame number')
+
+# The verify-all adapter has its own bounded inventory and absent-input SKIP.
+probe=root/'tools/verification/space-pad-compare.py'
+probe_root=work/'probe-captures';probe_root.mkdir()
+for i in range(512):(probe_root/f'entry-{i:04}').mkdir()
+def probe_case(name,source,expected,text):
+ r=subprocess.run([sys.executable,str(probe),'--probe','--capture-root',str(source)],capture_output=True,text=True)
+ good=r.returncode==expected and text in r.stdout+r.stderr
+ rows.append({'case':name,'passed':good});print('PASS' if good else 'FAIL',name,flush=True)
+probe_case('probe-at-inventory-limit',probe_root,77,'required private frame is absent')
+(probe_root/'one-over').mkdir();probe_case('probe-over-inventory-limit',probe_root,1,'exceeds 512 entries')
+probe_case('probe-absent-root',work/'absent',77,'capture root is absent')
+
 (args.out/'results.json').write_text(json.dumps(rows,indent=2));print('BOUNDARY_RESULTS',args.out,flush=True)
 shutil.rmtree(work) # Only this run's synthetic inputs, created with mkdtemp above.
 sys.exit(0 if all(x['passed'] for x in rows) else 1)

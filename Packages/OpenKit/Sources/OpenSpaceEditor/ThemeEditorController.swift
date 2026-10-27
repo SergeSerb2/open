@@ -258,7 +258,8 @@ public final class ThemeEditorController {
     fileprivate func restoreEditor(_ snapshot: EditorUndoSnapshot) {
         guard !isClosed else { return }
         pendingPreview = false; pendingFinish = false; liveGesture = false
-        state = snapshot.state; baselineState = state
+        let page = state.presetPage
+        state = snapshot.state; state.presetPage = page; baselineState = state
         baseline = snapshot.theme; lastWritten = snapshot.theme
         session?.restored(snapshot.theme, publish: false)
         renderState()
@@ -327,7 +328,10 @@ fileprivate struct EditorUndoSnapshot {
     func record(manager: UndoManager, from old: EditorUndoSnapshot, to new: EditorUndoSnapshot) {
         let group = !manager.groupsByEvent && manager.groupingLevel == 0 && !manager.isUndoing && !manager.isRedoing
         if group { manager.beginUndoGrouping() }
-        manager.registerUndo(withTarget: self) { [weak manager] relay in
+        manager.registerUndo(withTarget: self) { [weak manager, self] relay in
+            // Foundation keeps the target unowned. Its closure must retain the
+            // relay after the controller closes; the controller stays weak.
+            _ = self
             MainActor.assumeIsolated {
                 // The draft callback may close or release the editor. Resolve
                 // the weak controller only afterwards; closed editors ignore it.

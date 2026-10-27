@@ -25,7 +25,44 @@ enum EditorChecks {
             check(image.width == Int(382 * scale) && image.height == Int(534 * scale), "E1 real panel raster size at \(Int(scale))x")
             scene.controller.close()
         }
-        try drag(); try padCalibration(); try addRemove(); try modes(); try keyboardAndAccessibility(); try reviewedFlows(); try sessionTwoFlows(); try controls(); try reviewedControls(); try roundThreeControls()
+        try drag(); try padCalibration(); try addRemove(); try modes(); try keyboardAndAccessibility(); try reviewedFlows(); try sessionTwoFlows(); try controls(); try reviewedControls(); try roundThreeControls(); try releasedControllerUndo(); compatibilityRange(); try undoKeepsPresetPage()
+    }
+    static func releasedControllerUndo() throws {
+        let model = try RenderCLI.fixtureModel(), undo = UndoManager()
+        undo.groupsByEvent = false; model.undoManager = undo
+        let owner = NSWindow(contentRect: CGRect(x: -20000, y: -20000, width: 900, height: 700),
+                             styleMask: .borderless, backing: .buffered, defer: false)
+        owner.isReleasedWhenClosed = false
+        defer { owner.close() }
+        let original = model.spaces[0].theme
+        var controller: ThemeEditorController? = ThemeEditorController(model: model, spaceID: model.spaces[0].id,
+            window: owner, anchor: .sidebarTrailingEdge(sidebarFrameInWindow: CGRect(x: 0, y: 0, width: 228, height: 700)))
+        controller?.apply(.selectPreset(index: 4))
+        let edited = model.spaces[0].theme
+        weak let released = controller
+        controller?.close(); controller = nil
+        check(released == nil && original != edited, "S9 lifetime: commit, close, and release the editor controller")
+        // Normal allocation churn makes an unowned, freed undo target observable.
+        let churn = (0..<128).map { NSMutableSet(object: $0) }
+        withExtendedLifetime(churn) { undo.undo() }
+        check(model.spaces[0].theme == original && !undo.canUndo,
+              "S9 lifetime: undo after controller release restores the full theme without a crash")
+        undo.redo()
+        check(model.spaces[0].theme == edited, "S9 lifetime: redo after controller release restores the edited theme")
+    }
+    static func undoKeepsPresetPage() throws {
+        let scene = try EditorScene()
+        scene.controller.apply(.selectPreset(index: 4))
+        scene.controller.apply(.setPresetPage(3))
+        scene.undo.undo(); scene.controller.prepareForSnapshot()
+        check(scene.controller.state.presetPage == 3, "S9 undo keeps preset navigation on the current page")
+        scene.undo.redo(); scene.controller.prepareForSnapshot()
+        check(scene.controller.state.presetPage == 3, "S9 redo keeps preset navigation on the current page")
+        scene.controller.close()
+    }
+    static func compatibilityRange() {
+        check(ThemeColorMath.lightnessRange(.automatic) == 0.01...0.97,
+              "S9 compatibility: public Automatic range remains the empty-editor default without trapping")
     }
     static func padCalibration() throws {
         let scene = try EditorScene(style: SpaceStylePresets.all[7].style)

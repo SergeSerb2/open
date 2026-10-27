@@ -16,8 +16,11 @@ enum SessionTwoPadCompare {
         var delta: Double?
         var position: Double?
         var spread: Double?
+        var spatialError: Double?
+        var spatialLimit: Double = 0
+        var isGate = true
         var note: String
-        var passed: Bool { (delta ?? 0) <= 2 && (position ?? 0) <= 1 && (spread ?? 0) <= 0.3 }
+        var passed: Bool { !isGate || ((delta ?? 0) <= 2 && (position ?? 0) <= 1 && (spread ?? 0) <= 0.3 && (spatialError ?? 0) <= spatialLimit) }
     }
     @MainActor struct Captures {
         let folders: [URL]
@@ -134,6 +137,7 @@ enum SessionTwoPadCompare {
                                 (39, 42), (41, 42), (43, 43), (45, 44), (65, 7)] {
             let scene = try EditorScene(style: nil)
             scene.controller.apply(.selectPreset(index: preset))
+            scene.controller.apply(.setPresetPage(preset / 9))
             let ownURL = out.appendingPathComponent("preset-\(frame).png")
             OffscreenRenderer.writePNG(scene.snapshot(), to: ownURL)
             let predicted = try ringCenter(Bitmap(path: ownURL.path, colorSpace: p3))
@@ -187,6 +191,14 @@ enum SessionTwoPadCompare {
             let a = stats(arc), o = stats(own)
             rows.append(Row(name: "Texture \(texture.rawValue)", delta: delta(a.mean, o.mean), spread: abs(o.sd - target),
                 note: String(format: "L* sd capture %.3f; Open %.3f; target %.2f ±0.3", a.sd, o.sd, target)))
+            let captured = TexturePatternMetrics(arc, region: sidebar), rendered = TexturePatternMetrics(own, region: sidebar)
+            let gated = texture == .grain || texture == .tweed
+            rows.append(Row(name: "Pattern scale \(texture.rawValue)",
+                spatialError: TexturePatternMetrics.error(captured.boxRatios, rendered.boxRatios), spatialLimit: 0.1, isGate: gated,
+                note: "Box-2/4/8 sd ratios: capture \(TexturePatternMetrics.text(captured.boxRatios)); Open \(TexturePatternMetrics.text(rendered.boxRatios)); tolerance ±0.1"))
+            rows.append(Row(name: "Pattern direction \(texture.rawValue)",
+                spatialError: TexturePatternMetrics.error(captured.directionSD, rendered.directionSD), spatialLimit: 0.15, isGate: gated,
+                note: "Column/row/diagonal mean L* sd: capture \(TexturePatternMetrics.text(captured.directionSD)); Open \(TexturePatternMetrics.text(rendered.directionSD)); tolerance ±0.15. Lag-1 H/V/D1/D2 capture \(TexturePatternMetrics.text(captured.correlation)); Open \(TexturePatternMetrics.text(rendered.correlation)); skew \(String(format: "%.3f/%.3f", captured.skew, rendered.skew))"))
         }
         var mode = ThemeEditorState(style: SpaceStylePresets.all[7].style)
         // Independent decoded Brand-8 range; do not derive the expectation
@@ -205,9 +217,9 @@ enum SessionTwoPadCompare {
         let firstKey = ThemeColorMath.toP3(EditorScene.capturedStyle.keyColor)
         let firstKnob = ThemeColorMath.knob(for: firstKey, range: empty.range)
         rows.append(Row(name: "Empty first color F0137", position: abs(hypot(firstKnob.x, firstKnob.y) * 170 - 45.26), note: "Captured ring radius 45.26 pt; empty-open range"))
-        let heading = "| Gate | ΔE00 | Position pt | L* sd error | Result | Evidence |\n|---|---|---|---|---|---|\n"
+        let heading = "| Gate | ΔE00 | Position pt | L* sd error | Spatial error | Result | Evidence |\n|---|---|---|---|---|---|---|\n"
         func number(_ value: Double?) -> String { value.map { String(format: "%.3f", $0) } ?? "—" }
-        let table = heading + rows.map { "| \($0.name) | \(number($0.delta)) | \(number($0.position)) | \(number($0.spread)) | \($0.passed ? "PASS" : "FAIL") | \($0.note) |" }.joined(separator: "\n") + "\n"
+        let table = heading + rows.map { "| \($0.name) | \(number($0.delta)) | \(number($0.position)) | \(number($0.spread)) | \(number($0.spatialError)) | \($0.isGate ? ($0.passed ? "PASS" : "FAIL") : "INFO") | \($0.note) |" }.joined(separator: "\n") + "\n"
         try table.write(to: out.appendingPathComponent("table.md"), atomically: true, encoding: .utf8)
         print(table)
         if rows.contains(where: { !$0.passed }) { throw CLIError(description: "session2-pad gate failed") }

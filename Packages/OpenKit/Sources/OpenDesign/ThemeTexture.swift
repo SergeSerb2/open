@@ -9,7 +9,7 @@ public enum ThemeTexture {
         public var meanAlpha: Double
         public var standardDeviation: Double
     }
-    private struct Key: Hashable { var texture: SpaceStyleTexture; var noiseBucket: Int; var scale: CGFloat }
+    private struct Key: Hashable { var texture: SpaceStyleTexture; var scale: CGFloat }
     private struct Tile { var image: CGImage; var metrics: Metrics }
     private static var cache: [Key: Tile] = [:]
     private static var order: [Key] = []
@@ -107,9 +107,9 @@ public enum ThemeTexture {
 
     private static func cached(_ t: SpaceStyleTexture, noise: Double, scale: CGFloat) -> Tile? {
         guard noise.isFinite, noise > 0, scale > 0, scale.isFinite else { return nil }
-        // §17.3: noise affects layer opacity only. Canonicalize the bucket so
-        // all positive noise values share one tile per texture and scale.
-        let key = Key(texture: t, noiseBucket: 0, scale: scale)
+        // §17.3: noise affects layer opacity only. One intrinsic tile per
+        // texture and scale; there is no noise bucket in the cache key.
+        let key = Key(texture: t, scale: scale)
         if let tile = cache[key] { return tile }
         let n = max(1, Int((period(t) * scale).rounded()))
         var marks = [Double](repeating: 0, count: n * n)
@@ -147,17 +147,20 @@ public enum ThemeTexture {
             } }
             denimGenerationCount += 1
         case .tweed:
-            // Original, seamless value-noise mottle. No sharp woven dashes.
+            // Own fine grain plus a weak, seamless low-frequency term. The
+            // capture's low total contrast does not imply a large cloudy tile.
             let cells = 32
             func smooth(_ u: Double, _ v: Double) -> Double {
                 let gx = Int(floor(u)), gy = Int(floor(v)), fx = u - floor(u), fy = v - floor(v)
                 let sx = fx * fx * (3 - 2 * fx), sy = fy * fy * (3 - 2 * fy)
-                func at(_ x: Int, _ y: Int) -> Double { random(x % cells, y % cells, 91) }
+                func at(_ x: Int, _ y: Int) -> Double { random(x % cells, y % cells, 91) - 0.5 }
                 let a = at(gx, gy), b = at(gx + 1, gy), c = at(gx, gy + 1), d = at(gx + 1, gy + 1)
                 return (a + (b - a) * sx) * (1 - sy) + (c + (d - c) * sx) * sy
             }
+            func fine(_ x: Int, _ y: Int) -> Double { random((x + n) % n, (y + n) % n, 92) - 0.5 }
             for y in 0..<n { for x in 0..<n {
-                marks[y * n + x] = smooth(Double(x) * Double(cells) / Double(n), Double(y) * Double(cells) / Double(n))
+                marks[y * n + x] = fine(x, y) + 0.18 * fine(x - 1, y) + 0.38 * fine(x, y - 1)
+                    + 0.65 * smooth(Double(x) * Double(cells) / Double(n), Double(y) * Double(cells) / Double(n))
             } }
         }
         let mean = marks.reduce(0, +) / Double(marks.count)

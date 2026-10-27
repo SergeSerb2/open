@@ -4,8 +4,8 @@ import OpenModel
 
 /// Computes the Space background color at any point of the window.
 ///
-/// The math follows what we measured from Arc's theme shader and captures
-/// (docs/design.md, "Theme rendering"):
+/// Gradient geometry retains the capture fit (docs/design.md, "Theme
+/// rendering"). Editor opacity, wash, and final blend follow plan §17.2:
 ///
 /// 1. Two linear gradients in window uv space (0…1, y down): the base gradient
 ///    and an overlay gradient. Each gets a start and end point. The projection is
@@ -20,8 +20,9 @@ import OpenModel
 ///    underlay is darker while the window is key/active and lighter when it is not.
 ///    Editor styles mix in encoded Display P3; legacy styles retain sRGB.
 ///
-/// The CPU-side numbers (angles, alpha, underlay grays) are fitted to captures;
-/// they reproduce three captured Spaces at ≈1.3–1.6 / 255 RMS.
+/// Legacy snapshots keep the original 0.64/sRGB fit byte for byte. Editor
+/// styles use 0.2 + 0.55·intensity and encoded Display P3; F0139
+/// remains a documented 1.89 ΔE00 regression versus the older 0.84 fit.
 public enum ThemeField {
     /// Decoded §17.2 opacity. At intensity 0.8 it retains the fitted 0.64.
     public static func layerAlpha(intensity: Double) -> Double {
@@ -80,10 +81,11 @@ public enum ThemeField {
         let alpha: Double
         let underlay: Double
         let legacy: Bool
-        let solidKey: P3?
+        let solidColor: (Double, Double, Double)?
 
         public init(style: SpaceThemeStyle, windowSize: CGSize, isActive: Bool) {
             legacy = style.usesLegacyIntensity
+            let solidKey: P3?
             switch style.fill {
             case .blended(let b, let o):
                 solidKey = !legacy && b.count == 1 && o.isEmpty ? ThemeColorMath.toP3(b[0].modelColor) : nil
@@ -111,6 +113,10 @@ public enum ThemeField {
                 ? fitted * (1 - ThemeTuning.darkWashAlpha * min(alpha, ThemeTuning.washOpacityCap))
                     / (1 - ThemeTuning.darkWashAlpha * ThemeTuning.washOpacityCap)
                 : fitted
+            if let key = solidKey {
+                let u0 = underlay * (1 - alpha)
+                solidColor = P3Transfer.toSRGB(P3(key.r * alpha + u0, key.g * alpha + u0, key.b * alpha + u0))
+            } else { solidColor = nil }
         }
 
         /// Final color (extended, gamma-encoded sRGB) at window uv.
@@ -119,7 +125,7 @@ public enum ThemeField {
                 let u0 = underlay * (1 - alpha)
                 return P3Transfer.toSRGB(P3(color.r * alpha + u0, color.g * alpha + u0, color.b * alpha + u0))
             }
-            if let solidKey { return mixP3(solidKey, alpha: alpha) }
+            if let solidColor { return solidColor }
             if !corners.isEmpty {
                 let c = corners
                 func lerp(_ a: Double, _ b: Double, _ t: Double) -> Double { a + (b - a) * t }
@@ -187,25 +193,27 @@ public enum ThemeField {
 /// Cache ColorSync's two linear primary matrices once. Transfer curves are
 /// shared by sRGB and Display P3. No per-pixel CGColor/profile allocation.
 private enum P3Transfer {
-    private static func matrix(from: CFString, to: CFString) -> [[Double]] {
+    private struct Matrix: Sendable {
+        let red, green, blue: SIMD3<Double>
+        func apply(_ r: Double, _ g: Double, _ b: Double) -> SIMD3<Double> { red * r + green * g + blue * b }
+    }
+    private static func matrix(from: CFString, to: CFString) -> Matrix {
         let source = CGColorSpace(name: from)!, destination = CGColorSpace(name: to)!
-        return (0..<3).map { column in
+        func primary(_ column: Int) -> SIMD3<Double> {
             var values = [CGFloat](repeating: 0, count: 4); values[column] = 1; values[3] = 1
-            return CGColor(colorSpace: source, components: values)!.converted(to: destination, intent: .relativeColorimetric, options: nil)!
-                .components!.prefix(3).map(Double.init)
+            let c = CGColor(colorSpace: source, components: values)!.converted(to: destination, intent: .relativeColorimetric, options: nil)!.components!
+            return SIMD3(Double(c[0]), Double(c[1]), Double(c[2]))
         }
+        return Matrix(red: primary(0), green: primary(1), blue: primary(2))
     }
     private static let p3 = matrix(from: CGColorSpace.extendedLinearSRGB, to: CGColorSpace.extendedLinearDisplayP3)
     private static let srgb = matrix(from: CGColorSpace.extendedLinearDisplayP3, to: CGColorSpace.extendedLinearSRGB)
-    private static func apply(_ m: [[Double]], _ r: Double, _ g: Double, _ b: Double) -> [Double] {
-        (0..<3).map { m[0][$0] * r + m[1][$0] * g + m[2][$0] * b }
-    }
     static func fromLinearSRGB(_ r: Double, _ g: Double, _ b: Double) -> P3 {
-        let c = apply(p3, r, g, b).map { min(1, max(0, OKLab.encode($0))) }
-        return P3(c[0], c[1], c[2])
+        let c = p3.apply(r, g, b)
+        return P3(min(1, max(0, OKLab.encode(c.x))), min(1, max(0, OKLab.encode(c.y))), min(1, max(0, OKLab.encode(c.z))))
     }
     static func toSRGB(_ c: P3) -> (Double, Double, Double) {
-        let c = apply(srgb, OKLab.decode(c.r), OKLab.decode(c.g), OKLab.decode(c.b)).map(OKLab.encode)
-        return (c[0], c[1], c[2])
+        let c = srgb.apply(OKLab.decode(c.r), OKLab.decode(c.g), OKLab.decode(c.b))
+        return (OKLab.encode(c.x), OKLab.encode(c.y), OKLab.encode(c.z))
     }
 }
