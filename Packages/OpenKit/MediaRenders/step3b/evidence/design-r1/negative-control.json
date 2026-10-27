@@ -1,0 +1,21 @@
+{
+  "old_production_commit": "85fd3613a66f66c6399511074110e95f667081a4",
+  "harness_files_identical": true,
+  "motion_harness_sha256": "946403bf4109feb1247ae9caed064e45dfd977d23b82b89ca6e265e2e45528f4",
+  "old_result": {
+    "passed": 13,
+    "failed": 36
+  },
+  "fixed_result": {
+    "passed": 49,
+    "failed": 0
+  },
+  "old_renderer_sha256": "8a3ff1f758609f8cb95a1e3a009be77c55cec6e10dc044ffa1c9799fcf1c095a",
+  "fixed_renderer_sha256": "5edbe747bfeb342899e7453726aac50ec198e3e717d42b95a66230d254fab19f",
+  "final_renderer_sha256": "1736fbdebbec9a80357d3a8f65c2648f9aa70b2af59178945663381b8880006b",
+  "final_main_ref": "d92a695bb12feaf38a06c7c99891a491cd7ca711",
+  "full_sidebar_result": {
+    "passed": 525,
+    "failed": 0
+  }
+}
