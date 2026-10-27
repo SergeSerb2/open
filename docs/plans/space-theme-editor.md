@@ -1642,3 +1642,12 @@ The fixed P3 blend stays: F0139 0.84 → 1.89 ΔE00 is accepted by the lead
 under the ≤2 gate and filed in `docs/followups.md`. Imported/stops migration,
 display-space composition on both Macs, and the denim/sand art follow-ups
 are not implemented in this review response.
+
+
+Review r1 focused receipt: `space-editor` **178/178**; `session2-pad`
+**33 gate rows PASS, 4 INFO rows**. Tweed box-2/4/8 sd ratios are
+**0.666/0.430/0.263** versus capture **0.661/0.413/0.267** (largest error
+0.017, limit 0.1). Column/row/diagonal mean L* sd maximum error is **0.042**
+(limit 0.15); diagonals include only runs at least 85 px long. Restoring the
+old cloudy tile fails the new scale gate with error **0.384**. Restoring
+old page restoration fails both page-navigation undo and redo checks.
