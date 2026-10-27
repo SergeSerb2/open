@@ -5,14 +5,15 @@ import OpenSiteControl
 /// Capture pixels and comparison sheets remain in the private .re directory.
 @MainActor
 enum EditorCompare {
-    enum Kind { case text,ink,fill(CGRect),box(CGRect) }
+    enum Kind { case text,ink,blue,fill(CGRect),box(CGRect) }
     struct Element { let name: String,rect: CGRect,kind: Kind }
     static func run(_ args: [String]) throws {
         guard let path = CLI.value(args,"--arc"),let out = CLI.value(args,"--out") else { throw CLIError(description: "editor compare requires --arc --out (.re only)") }
         let directory = URL(fileURLWithPath: out).standardizedFileURL.resolvingSymlinksInPath()
         guard directory.pathComponents.contains(".re") else { throw CLIError(description: "private comparisons must stay in .re") }
         let state = CLI.value(args,"--state") ?? "editor-no-color",arc = try Bitmap(path: path),stage = EditorStage(state: state)
-        let ours = Bitmap(image: stage.editorImage())
+        let image = stage.editorImage(),ours = Bitmap(image: image)
+        let p3 = CGColorSpace(name: CGColorSpace.displayP3)!,arcP3 = try Bitmap(path: path,space: p3),openP3 = Bitmap(image: image,space: p3)
         guard arc.width == 183,arc.height == 588 else { throw CLIError(description: "editor capture must be the complete 183x588 window") }
         var elements: [Element] = []
         func text(_ name: String,_ r: CGRect) { elements.append(.init(name: name,rect: r,kind: .text)) }
@@ -21,11 +22,11 @@ enum EditorCompare {
         func box(_ name: String,_ r: CGRect,_ sample: CGRect) { elements.append(.init(name: name,rect: r,kind: .box(sample))) }
         if state == "editor-first-run" {
             fill("top dim",CGRect(x: 5,y: 100,width: 6,height: 10));fill("card",CGRect(x: 5,y: 400,width: 5,height: 10))
-            ink("own brush badge box",CGRect(x: 44,y: 233,width: 95,height: 94))
+            elements.append(.init(name: "own badge saturated-blue ink box",rect: CGRect(x: 40,y: 230,width: 105,height: 94),kind: .blue))
             for (i,y) in [347,370,393].enumerated() { text("title line \(i+1)",CGRect(x: 8,y: y-22,width: 167,height: 24)) }
             // The host line contains personal data; only its fixed companion line
             // is compared in the public synthetic fixture. The capture stays private.
-            text("body your own",CGRect(x: 12,y: 424,width: 159,height: 18))
+            text("body your own",CGRect(x: 20,y: 428,width: 143,height: 17))
             for x in [7,24,41,58,75,92,109,126,143,160] { fill("wave crest x\(x)",CGRect(x: x,y: 464,width: 1,height: 1)) }
             text("Make a Boost",CGRect(x: 20,y: 500,width: 143,height: 24));text("Maybe Later",CGRect(x: 43,y: 545,width: 97,height: 22))
             for (name,y) in [("top",495),("middle",502),("bottom",528)] { fill("Make button gradient "+name,CGRect(x: 20,y: y,width: 4,height: 1)) }
@@ -65,6 +66,9 @@ enum EditorCompare {
         for e in elements {
             let a: CGRect?,o: CGRect?,ac: [Double]?,oc: [Double]?,position: Bool,color: Bool
             switch e.kind {
+            case .blue:
+                func blue(_ bitmap: Bitmap) -> CGRect? { var box: CGRect?;let (x0,y0,x1,y1) = bitmap.clamp(e.rect);for y in y0..<y1 { for x in x0..<x1 { let p = bitmap.pixel(x,y);if p[2]>160 && p[2]-max(p[0],p[1])>80 { box = (box ?? CGRect(x: x,y: y,width: 0,height: 0)).union(CGRect(x: x,y: y,width: 1,height: 1)) } } };return box }
+                a = blue(arcP3);o = blue(openP3);ac = nil;oc = nil;position = true;color = false
             case .text: (a,ac) = arc.ink(e.rect);(o,oc) = ours.ink(e.rect);position = true;color = false
             case .ink: (a,ac) = arc.ink(e.rect);(o,oc) = ours.ink(e.rect);position = true;color = true
             case .fill(let r):a = nil;o = nil;ac = arc.mean(r);oc = ours.mean(r);position = false;color = true

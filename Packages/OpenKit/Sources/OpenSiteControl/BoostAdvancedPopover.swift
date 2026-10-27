@@ -116,7 +116,7 @@ private final class AdvancedLabels: NSView {
 final class EditorSlider: NSControl {
     let session: BoostEditorSession,component: Int
     private let owner = BoostEditorInteractionOwner()
-    private var value: Double = 50,dragging = false,keyboardFocus = false
+    private var value: Double = 50,dragging = false,keyboardFocus = false,pointerFocus = false
     private var end: DispatchWorkItem?
     override var isFlipped: Bool { true }
     override var acceptsFirstResponder: Bool { isEnabled }
@@ -136,11 +136,11 @@ final class EditorSlider: NSControl {
         _ = session.editWheel(owner: owner) { wheel in let mapped = component == 2 ? doubleValue/50 : 0.5+doubleValue/100;switch component { case 0:wheel.brightness = mapped;case 1:wheel.contrast = mapped;default:wheel.originalSaturation = mapped } }
     }
     private func point(_ event: NSEvent) { change(Double(min(1,max(0,convert(event.locationInWindow,from: nil).x/bounds.width)))*100) }
-    override func mouseDown(with event: NSEvent) { guard isEnabled else { return };finish();keyboardFocus = false;window?.makeFirstResponder(self);session.beginInteractive(owner: owner);dragging = true;point(event) }
+    override func mouseDown(with event: NSEvent) { guard isEnabled else { return };finish();keyboardFocus = false;pointerFocus = true;window?.makeFirstResponder(self);pointerFocus = false;session.beginInteractive(owner: owner);dragging = true;point(event) }
     override func mouseDragged(with event: NSEvent) { if dragging { point(event) } }
     override func mouseUp(with event: NSEvent) { if dragging { point(event);dragging = false;finish() } }
     override func keyDown(with event: NSEvent) { if [123,124,125,126].contains(event.keyCode) { step([124,126].contains(event.keyCode) ? 1 : -1) } else { finish();super.keyDown(with: event) } }
-    override func becomeFirstResponder() -> Bool { keyboardFocus = true;needsDisplay = true;return true }
+    override func becomeFirstResponder() -> Bool { keyboardFocus = !pointerFocus;needsDisplay = true;return true }
     override func resignFirstResponder() -> Bool { finish();keyboardFocus = false;needsDisplay = true;return true }
     override func setAccessibilityFocused(_ value: Bool) { if !value { finish() };super.setAccessibilityFocused(value) }
     override func accessibilityValue() -> Any? { value }

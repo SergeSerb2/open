@@ -9,6 +9,7 @@ enum EditorFlows {
     static func run() -> [Flows.Check] {
         var checks: [Flows.Check] = []
         func check(_ name: String,_ pass: Bool) { checks.append(.init(name: name,pass: pass)) }
+        checks += padAndWindowFlows()
         let stage = EditorStage(), store = stage.host.boostStore
         let id = stage.session.boost.id
         let initial = stage.session.boost
@@ -115,7 +116,6 @@ enum EditorFlows {
         check("F14 Reset restores CSS, JS and Zaps together", rich.session.boost.css == richBefore.css && rich.session.boost.js == richBefore.js && rich.session.boost.zaps == richBefore.zaps)
         checks += scopeFlows()
         checks += reviewFlows()
-        checks += padAndWindowFlows()
         let axStage = EditorStage(); let ax = Flows.accessibilityDump(axStage.view)
         let labels = ["Done","My Boost","Undo","Color","Hue","Intensity","Invert lightness","Advanced color controls","Reset to original colors","System","Zap","Code","Change text size","Change text case"]
         check("F21 real editor AX hierarchy labels all controls", labels.allSatisfy { ax.contains("label="+$0+"\n") } && ax.contains("AXGroup label=Color\n"))
@@ -233,25 +233,8 @@ enum EditorFlows {
         relative.mouse(.leftMouseDown,point: offset,in: relative.view.pad);relative.mouse(.leftMouseDragged,point: end,in: relative.view.pad);relative.mouse(.leftMouseUp,point: end,in: relative.view.pad)
         let center = relative.view.pad.primaryKnobCenter!
         check("F10 knob drag retains its pointer offset",hypot(center.x-start.x-6,center.y-start.y-8)<0.01)
-        let previousPolicy = NSApp.activationPolicy();NSApp.setActivationPolicy(.accessory);NSApp.activate()
-        defer { NSApp.setActivationPolicy(previousPolicy) }
-        let p = EditorStage(onScreen: true);p.parent.makeKeyAndOrderFront(nil)
-        let activeDeadline = Date().addingTimeInterval(3)
-        while !NSApp.isActive && Date()<activeDeadline { p.settle(0.01) }
-        p.parent.makeKey();p.settle();let browserWasKey = p.parent.isKeyWindow && !p.panel.isKeyWindow
-        p.drag();p.tap("editor.font.0");p.tap("editor.tool.case")
-        print("F25 native keys: browserBefore=\(browserWasKey), browserAfter=\(p.parent.isKeyWindow), editorAfter=\(p.panel.isKeyWindow)")
-        check("F25 pointer pad/buttons/font cells keep the browser key",browserWasKey && p.parent.isKeyWindow && !p.panel.isKeyWindow)
-        p.panel.makeKey();p.settle()
-        check("F25 native floating-window key entry focuses Done",p.panel.isKeyWindow && p.panel.firstResponder === p.view.control(id: "editor.done"))
-        p.key(48,"\t");check("F25 Tab follows Done with the name menu",p.panel.firstResponder === p.view.control(id: "editor.name"))
-        p.tap("editor.color.advanced");let popup = p.view.advancedPopover!,r = p.panel.convertFromScreen(popup.panel.frame)
-        check("F24 advanced window frame is (-34,258,250,232)",abs(r.minX+34)<0.01 && abs(588-r.maxY-258)<0.01 && r.size == CGSize(width: 250,height: 232))
-        p.key(53,"\u{1b}",window: popup.panel);p.settle(0.25)
-        check("F24 Esc closes only the advanced popover",!p.view.advanced && p.controller.panel != nil)
-        p.tap("editor.color.advanced");p.mouse(.leftMouseDown,point: CGPoint(x: 400,y: 300),in: p.backdrop);p.mouse(.leftMouseUp,point: CGPoint(x: 400,y: 300),in: p.backdrop);p.settle(0.25)
-        check("F24 native outside click closes the advanced popover",!p.view.advanced)
-        p.tap("editor.done");p.settle(0.2);check("F25 Done returns key to the browser",p.controller.panel == nil && p.parent.isKeyWindow)
+        s.controller.close();relative.controller.close()
+        checks += EditorNativeKey.run()
         return checks
     }
     static func renders() -> [Flows.Check] {
@@ -266,6 +249,7 @@ enum EditorFlows {
             if state == "editor-no-color" {
                 let pad = stage.view.pad,center = pad.primaryKnobCenter!,x = center.x+pad.frame.minX,y = center.y+pad.frame.minY
                 let top = CLI.pixel(body,x: Int(x*scale),y: Int((y-8)*scale)),mid = CLI.pixel(body,x: Int(x*scale),y: Int(y*scale)),bottom = CLI.pixel(body,x: Int(x*scale),y: Int((y+8)*scale))
+                print("knob gradient @\(scale)x top=\(top) mid=\(mid) bottom=\(bottom)")
                 checks.append(.init(name: "knob-gradient probe \(Int(scale))x top darker / bottom lighter",pass: Int(top[0])+5<Int(mid[0]) && Int(mid[0])+5<Int(bottom[0])))
             }
             let dump = Flows.accessibilityDump(stage.view)

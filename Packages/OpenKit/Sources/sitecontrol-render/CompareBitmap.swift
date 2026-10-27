@@ -14,7 +14,7 @@ struct Bitmap {
     }
 
     /// Loads a PNG and converts it to sRGB through its embedded color profile.
-    init(path: String) throws {
+    init(path: String,space: CGColorSpace = CGColorSpace(name: CGColorSpace.sRGB)!) throws {
         guard let src = CGImageSourceCreateWithURL(URL(fileURLWithPath: path) as CFURL, nil),
               let img = CGImageSourceCreateImageAtIndex(src, 0, nil) else { throw CLIError(description: "cannot read \(path)") }
         width = img.width; height = img.height
@@ -22,18 +22,18 @@ struct Bitmap {
         let w = width, h = height
         data.withUnsafeMutableBytes { buf in
             let ctx = CGContext(data: buf.baseAddress, width: w, height: h, bitsPerComponent: 8, bytesPerRow: w * 4,
-                                space: CGColorSpace(name: CGColorSpace.sRGB)!, bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue)!
+                                space: space, bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue)!
             ctx.setFillColor(CGColor(gray: 1, alpha: 1))
             ctx.fill(CGRect(x: 0, y: 0, width: w, height: h))
             ctx.draw(img, in: CGRect(x: 0, y: 0, width: w, height: h))
         }
     }
 
-    init(image: CGImage) {
+    init(image: CGImage,space: CGColorSpace = CGColorSpace(name: CGColorSpace.sRGB)!) {
         width = image.width; height = image.height; data = [UInt8](repeating: 0,count: width*height*4)
         let w = width,h = height
         data.withUnsafeMutableBytes { bytes in
-            let c = CGContext(data: bytes.baseAddress,width: w,height: h,bitsPerComponent: 8,bytesPerRow: w*4,space: CGColorSpace(name: CGColorSpace.sRGB)!,bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue)!
+            let c = CGContext(data: bytes.baseAddress,width: w,height: h,bitsPerComponent: 8,bytesPerRow: w*4,space: space,bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue)!
             c.draw(image,in: CGRect(x: 0,y: 0,width: w,height: h))
         }
     }

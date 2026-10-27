@@ -231,7 +231,7 @@ open class ColorPadView: NSView {
             if let top = value.topFill,let bottom = value.bottomFill {
                 let gradient = knob.gradient ?? CAGradientLayer()
                 if knob.gradient == nil { knob.inner.addSublayer(gradient); gradient.mask = knob.gradientMask; knob.gradient = gradient }
-                gradient.frame = knob.inner.bounds; knob.gradientMask.frame = gradient.bounds; knob.gradientMask.path = knob.inner.path
+                gradient.frame = knob.outer.bounds.insetBy(dx: ring,dy: ring); knob.gradientMask.frame = gradient.bounds; knob.gradientMask.path = CGPath(ellipseIn: gradient.bounds,transform: nil)
                 gradient.colors = [top,value.fill,bottom]; gradient.locations = [0,0.5,1]; gradient.startPoint = CGPoint(x: 0.5,y: 0); gradient.endPoint = CGPoint(x: 0.5,y: 1)
             } else { knob.gradient?.removeFromSuperlayer(); knob.gradient = nil }
             knob.rim.path = CGPath(ellipseIn: knob.outer.bounds.insetBy(dx: 0.5,dy: 0.5),transform: nil)

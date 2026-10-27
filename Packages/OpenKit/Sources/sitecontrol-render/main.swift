@@ -5,6 +5,7 @@ import CryptoKit
 MainActor.assumeIsolated {
     _ = NSApplication.shared
     NSApp.setActivationPolicy(.prohibited)
+    NSApp.finishLaunching()
     do { try CLI.run(Array(CommandLine.arguments.dropFirst())) }
     catch { FileHandle.standardError.write(Data("sitecontrol-render: \(error)\n".utf8)); exit(1) }
 }
@@ -30,6 +31,8 @@ enum CLI {
         let appearanceName = value(args, "--appearance") ?? "dark"
         guard let appearance = ContentAppearance(rawValue: appearanceName) else { throw CLIError(description: "appearance must be light or dark") }
         switch command {
+        case "editor-native-key":
+            guard let out = value(args,"--out") else { throw CLIError(description:"native key flow requires --out") };try EditorNativeKey.runHere(out:out)
         case "render":
             guard let out = value(args, "--out") else { throw CLIError(description: "render requires --out") }
             let image = render(state,scale: scale,appearance: appearance)
@@ -42,7 +45,9 @@ enum CLI {
         case "cold-measure":
             guard args == ["cold-measure","--thread-instructions"] else { throw CLIError(description: "usage: sitecontrol-render cold-measure --thread-instructions") }
             try Bench.measureThreadInstructions()
+        case "native-key-check": report(EditorNativeKey.run())
         case "bench":
+            if value(args,"--group") == "editor" { report(EditorBench.run());return }
             let fixture: Bench.Fixture?
             if let raw = value(args,"--fixture") {
                 guard let selected = Bench.Fixture(rawValue: raw) else { throw CLIError(description: "bench fixture must be skeleton or cold") }

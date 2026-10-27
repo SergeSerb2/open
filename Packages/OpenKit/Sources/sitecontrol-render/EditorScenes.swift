@@ -95,7 +95,7 @@ final class EditorStage {
         if state == "editor-zap-count" { seed.zaps = [ZappedElement(selector: ".ad")] }
         initialID = seed.id;if !isNew { _ = host.boostStore.upsert(seed) }
         backdrop.appearance = appearance.nsAppearance
-        parent = EditorParentWindow(contentRect: CGRect(x: -20000,y: -20000,width: 1000,height: 760),styleMask: [.borderless],backing: .buffered,defer: false)
+        parent = EditorParentWindow(contentRect: CGRect(x: -20000,y: -20000,width: 1000,height: 760),styleMask: onScreen ? [.titled] : [.borderless],backing: .buffered,defer: false)
         if onScreen,let screen = NSScreen.screens.first { parent.setFrameOrigin(CGPoint(x: screen.visibleFrame.minX+40,y: screen.visibleFrame.minY+20)) }
         parent.scale = scale;parent.isReleasedWhenClosed = false;parent.colorSpace = .sRGB;parent.contentView = backdrop;parent.makeKeyAndOrderFront(nil)
         controller = BoostEditorController(host: host,defaults: defaults,makePanel: { let p = EditorScaledPanel(contentRect: CGRect(origin: .zero,size: BoostEditorMetrics.window),styleMask: [.borderless,.nonactivatingPanel],backing: .buffered,defer: false);p.scale = scale;return p })
@@ -106,6 +106,7 @@ final class EditorStage {
         let deadline = Date().addingTimeInterval(3)
         while waitForColors && !session.colorsReady && Date()<deadline { RunLoop.main.run(until: Date().addingTimeInterval(0.001)) }
         settle(waitForColors ? 0.2 : 0)
+        if state == "editor-color",let button = view.control(id: "editor.color.advanced") { mouse(.leftMouseDown,point: CGPoint(x: button.bounds.midX,y: button.bounds.midY),in: button);settle() }
         if state == "editor-advanced" { tap("editor.color.advanced");configureAdvancedFallback();settle(0.35) }
         if state == "editor-dragging" { mouse(.leftMouseDown,point: view.pad.primaryKnobCenter ?? CGPoint(x: 90,y: 74),in: view.pad);mouse(.leftMouseDragged,point: CGPoint(x: 55,y: 26),in: view.pad);settle(0.3) }
         if state == "editor-delete-alert" { menu("Delete this Boost");settle(0.3) }
@@ -153,7 +154,10 @@ final class EditorStage {
     func render() -> CGImage {
         if ["editor-name-menu","editor-scope-menu"].contains(state),!overlay.hasImage {
             controller.onMenu = { [weak self] menu in guard let self else { return };self.overlay.captureMenu(menu,excluding: self.parent,scale: self.scale) }
-            tap("editor.name");controller.onMenu = nil
+            if state == "editor-scope-menu" {
+                let menu = view.scopeMenu();overlay.captureMenu(menu,excluding: parent,scale: scale)
+                menu.popUp(positioning: menu.items.first { $0.state == .on },at: CGPoint(x: 0,y: 24),in: view.control(id: "editor.name"))
+            } else { tap("editor.name") };controller.onMenu = nil
         }
         let canvas = EditorCanvas(frame: CGRect(x: 0,y: 0,width: 1200,height: 900));canvas.wantsLayer = true
         let host = OffscreenRenderer.host(canvas,scale: scale);defer { host.contentView = nil;host.close() }
@@ -179,6 +183,7 @@ final class EditorStage {
     var scale: CGFloat = 1
     override var backingScaleFactor: CGFloat { scale }
     override var canBecomeKey: Bool { true }
+    override var canBecomeMain: Bool { true }
 }
 @MainActor private final class EditorScaledPanel: BoostEditorPanel {
     var scale: CGFloat = 1

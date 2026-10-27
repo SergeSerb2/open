@@ -602,13 +602,21 @@ vertical padding, 11 pt Medium #252526 text on `BoostEditorColors.warning` (`#FF
 | Plate fill | #FAFAFA; after a color, a faint tint of the ring: the ring image blurred (σ 12) at 4 % over the plate (guess fit to #FBFFFA near green, #FDFAF6 near orange) | S2 10/0030, 0041 |
 | Dot grid | 1 pt round dots, pitch 4.0, aligned to the plate origin, black 0.075. Our own cached `CGImage` tile per scale (as `ColorPadView.DotGrid`). | S2 10/0030 |
 | Hue ring (color chosen) | Conic gradient centered on the pad center, angle 0 at 3 o'clock, increasing clockwise on screen. Stops (sRGB): 0° #EB4838 · 30° #EB7636 · 60° #F4BA49 · 90° #D4FD58 · 120° #90FC74 · 150° #80FCAD · 180° #7CF8F1 · 210° #356FF6 · 240° #392EF4 · 270° #8237F5 · 300° #DD31BF · 330° #DF3470 · 360° = 0°. Clipped to the 7 pt band. | IS §20.15 |
-| Hue ring (no color) | The same stops converted to grey by Rec. 709 luma (for example 90° #EAEAEA, 225° #454545). | IS §20.15 (within ≈ 10 levels) |
+| Hue ring (no color) | **Measured** neutral stops at 0°, 30° … 330°: 113, 141, 191, 233, 226, 227, 227, 117, 72, 92, 110, 107 (each repeated on R/G/B; 360° repeats 113). | editor child-window capture only, S2 10/0030–0031; parent capture omits child-window content |
 | Ring vs knob hue | The ring's own hue leads or lags the angle by up to ≈ 20° (for example 90° reads HSL hue 75°), while each knob's fill hue equals its angle within 1.5°. Compute knob fills from θ (§4.4.2); never sample the ring. | IS §20.15 |
 | Primary knob | 30 pt disc + 2 pt white ring (34 outside) + shadow black 0.10 radius 1.5 y 0.5 (guess). On mouse down the disc grows 30 → 38 (scale 1.27) with `Motion.knobRelease`; on mouse up it springs back to 30 with the same token. | S2 10/0039 (38 while dragging), 0040 (32, returning), 0041 (30) |
 | Secondary knob | 19 pt disc + 2 pt white ring + 1 pt outline #C8C2CA (23 + 2 outside). Not draggable (guess: only the primary was dragged in the capture). | S2 10/0041 |
 | Knob fill gradient | Each disc fill is a vertical linear gradient: the §4.4.2 color at the center, ≈ 14 levels darker at the top (HSB brightness −0.055) and ≈ 12 levels lighter at the bottom. This is Boost-only; do not put it in the shared `ColorPadStyle` default (the theme pad gets it only if its captures show it). | S2 10/0041 primary top #4A2ABE / center #5C3CC8 / bottom #694CCB; secondary #321533 / #3D203C / #533953; S2 10/0030 no-color primary #636363 / #717171 / #7D7D7D, secondary #252525 / #333333 / #414141 |
 | Drag guide | While dragging: a 2 pt circle, black 0.06, centered on the pad center, through the primary knob's center. Removed on mouse up. | S2 10/0038–0040 |
 | Knob z-order | Knobs draw above the ring and are not clipped by the plate (Open choice; the measured knobs stayed inside the plate). | guess |
+
+Calibration (lead rulings 2026-10-26 23:35 / 23:37): ImageCms converts the embedded AW2726DM
+profile to Display P3 before fitting. The complete ring and font regions in the editor child-window
+captures 0030 and 0031 agree exactly (maximum channel difference 0; no pixel differs by more than
+1). The grey stops are the neutral channel values at the 12 square-ring midline intersections.
+The rendered comparisons retain position ≤1 pt and ΔE00 ≤2; the 12 grey-stop residuals are
+0.72, 0.68, 0.89, 0.51, 0.54, 0.51, 0.58, 0.40, 1.05, 0.75, 0.00, 0.00 (maximum 1.05).
+The color ring stops and the runtime law are unchanged.
 
 #### 4.4.2 Interim mapping (Open's law until Arc's math is decoded)
 
@@ -770,10 +778,26 @@ Drag previews live; one undo step per drag. Esc, a click outside, or the button 
 |---|---|---|
 | Card | `[18, 273, 147, 120]`, white, corner 11, shadow black 0.06 radius 8 y 1 (fit to the 7–9 pt fades) | S2 10/0041 |
 | Grid | 5 columns at x 23, 51, 79, 106, 134 (pitch ≈ 27.75); 4 rows at y 281, 307, 333, 359; cells 26 × 26 | AX S2 10/0018 |
-| Cell | "Aa" ≈ 14 pt in the cell's family, #999999, centered | S2 10/0030 |
+| Cell | "Aa" **12 pt measured** in the cell's family, #999999, centered | editor child-window capture only, S2 10/0030–0031; parent capture omits child-window content |
 | Selected | A 26 pt circle #D9D9D9 behind the cell; glyph #8C8C8C. No cell is selected for "Original". | S2 10/0046 |
 | Hover / pressed | Circle #ECECEC / #D9D9D9 (guess). The selected circle cross-fades over 0.12 s (`Motion.selectionFade`). | guess |
 | Focus ring | A 30 pt circle around the cell, keyboard focus only | Open choice |
+
+Final ink metrics (lead ruling 2026-10-26 23:50, **measured**): the one named
+`BoostEditorMetrics.fontBaselineOffsets` table contains Courier −2, Hoefler Text −2,
+SignPainter −2, Papyrus −3 pt; other families use 0. This keeps all 26 pt cell frames and the
+12 pt glyph size. At the existing position limit, every installed cell's four ink edges are within
+1 pt of stable editor child-window captures S2 10/0030–0031. The "Make a Boost" label alone uses
+`BoostEditorMetrics.makeLabelKern = −0.25` pt at 14 pt Medium; its four edges are within 1 pt of
+stable S2 10/0018–0019. No other label gets that kern. The name chevron core in stable 0030–0031
+is Display P3 (141,141,142), after ImageCms conversion from the embedded display profile. Its
+Regular SF raster uses fitted input #7C7C7D; the current comparison residual is ΔE00 2.30
+(**FAIL**, limit 2), with maximum edge error 1 pt. It is reported, not hidden by a wider threshold.
+Font ink metrics were fitted on macOS 27.2 build 26B5112a and must be checked again after OS updates.
+
+The cell size fit uses the ink widths of all installed families at the existing 26 pt cell frames,
+not the frame size or PNG length. At 12 pt, each measured ink width is within 1 pt of S2 10/0030.
+The 0030/0031 stability check and profile conversion are recorded in §4.4.1 (lead ruling 2026-10-26).
 
 Fonts, row by row (the 18 named faces in the binary's string order; cells 1 and 6 are visual guesses,
 IS §20.15): System (`system-ui, -apple-system, sans-serif`), Helvetica Neue, Avenir, Futura, DIN
@@ -883,7 +907,7 @@ Shown the first time an editor opens (`open.boosts.hasDismissedInterstitial` fal
 |---|---|---|
 | Dim | The whole window above the card is dimmed with black 0.30 (controls stay drawn under it, inactive). | S2 10/0018 |
 | Card | White, from y 271 to the bottom, with a soft top shadow (black 0.25 fading over 9 pt). | S2 10/0018 |
-| Icon | Open's own 70 pt rounded-square badge: brand blue #4848FF, a 3 pt white border, and Open's outlined brush (`BoostGlyph.outline`, 34 pt) with two Open-drawn sparkles in white. Rotated 12° counter-clockwise on screen (its top edge rises to the right; write the angle for the layer's flip state, since "−12°" flips on a non-flipped AppKit layer). Centered at x 91.5, overlapping the card top (bounding box ≈ `[49, 238, 86, 86]`). Not Arc's asset. | position S2 10/0018 AX `InterstitialIcon`; border and tilt direction measured (design review r1, work file `badge.png`); art Open's |
+| Icon | Open's own art in an unchanged 70 pt canvas: brand blue #4848FF, a 3 pt white border, and Open's outlined brush (`BoostGlyph.outline`, 34 pt before art scaling) with two Open-drawn sparkles in white. The art scales to 0.71 inside the canvas; border width stays 3 pt. Rotated 12° counter-clockwise on screen (its top edge rises to the right; write the angle for the layer's flip state, since "−12°" flips on a non-flipped AppKit layer). The canvas stays centered at x 91.5 over the card; the internal art offset is (−1, +2) pt. **Measured** saturated-blue box `[64, 256, 53, 54]` (each edge ±1 pt), using B >160 and B−max(R,G) >80 after conversion to Display P3. The same region in editor child-window captures S2 10/0018–0019 agrees exactly (maximum channel difference 0); parent capture omits child-window content. Lead ruling 2026-10-26. Not Arc's asset. | position S2 10/0018 AX `InterstitialIcon`; border and tilt direction measured (design review r1, work file `badge.png`); art Open's |
 | Title | "Edit the Internet with Boosts", 22 pt Bold, default design (SF Pro, flat terminals; not Rounded), #3139FF, centered, three lines with cap tops at y 332, 355, 378 and baselines at 347, 370, 393 (pitch 23) | S2 10/0018: ink widths 78 / 131 / 69 vs SF Pro 22 Bold advances 78.3 / 130.8 / 71.3 (20 Bold: 71.9 / 120.3 / 65.3); cap height ≈ 15 |
 | Body | "Make <host> your own!" with the host in Semibold, 13 pt, #95939F, centered, two lines from y 411 (ink 107). A long host truncates in the middle so the body keeps two lines. | S2 10/0018; truncation Open choice |
 | Footer | #CEDBFC from the wavy edge to the bottom. Wavy edge: our own sine path, crest line y 463, peak-to-trough 3.9 (amplitude 1.95), period 17, first crest at x 7. | S2 10/0018 edge profile x 0–59: crests y 463.06 at x 7, 24, 41, 58; troughs y 466.98 |

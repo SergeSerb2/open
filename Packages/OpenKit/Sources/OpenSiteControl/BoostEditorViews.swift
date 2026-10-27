@@ -32,8 +32,9 @@ enum EditorRaster {
     }
     static func glyph(_ name: String,in rect: CGRect,size: CGFloat,color: NSColor,weight: NSFont.Weight = .regular) {
         let c = NSGraphicsContext.current!.cgContext,scale = hypot(c.ctm.a,c.ctm.b)
-        guard let value = SiteControlGlyphRenderer.symbol(name,size: size,weight: weight,color: color,sparkles: .none,scale: scale) else { return }
-        let frame = CGRect(x: rect.midX-value.ink.width/2-value.ink.minX,y: rect.midY-value.ink.height/2-value.ink.minY,width: value.size.width,height: value.size.height)
+        let fits: [String: CGSize] = ["lightbulb": CGSize(width: 9,height: 16),"lightbulb.fill": CGSize(width: 9,height: 16),"slider.horizontal.3": CGSize(width: 14,height: 12),"nosign": CGSize(width: 14,height: 14),"arrow.counterclockwise": CGSize(width: 13,height: 16),"chevron.down": CGSize(width: 11,height: 6)]
+        guard let value = SiteControlGlyphRenderer.symbol(name,size: size,weight: weight,color: color,sparkles: .none,scale: scale,fit: fits[name]) else { return }
+        let frame = CGRect(x: floor((rect.midX-value.ink.width/2-value.ink.minX)*scale)/scale,y: floor((rect.midY-value.ink.height/2-value.ink.minY)*scale)/scale+(["lightbulb","lightbulb.fill","nosign","arrow.counterclockwise","chevron.down"].contains(name) ? 1 : 0),width: value.size.width,height: value.size.height)
         NSImage(cgImage: value.image,size: value.size).draw(in: frame,from: .zero,operation: .sourceOver,fraction: 1,respectFlipped: true,hints: nil)
     }
 }
@@ -91,23 +92,28 @@ final class EditorButton: SiteControlButton {
             }
         }
         if kind == .font {
-            let font = fontFamily.flatMap { NSFont(name: $0,size: 14) ?? NSFontManager.shared.font(withFamily: $0,traits: [],weight: 5,size: 14) } ?? .systemFont(ofSize: 14)
-            SiteControlDrawing.text("Aa",x: 0,baseline: 18,width: bounds.width,font: font,color: color,alignment: .center); return
+            let font = fontFamily.flatMap { NSFont(name: $0,size: Typography.editorFontCell.size) ?? NSFontManager.shared.font(withFamily: $0,traits: [],weight: 5,size: Typography.editorFontCell.size) } ?? Typography.editorFontCell.font
+            SiteControlDrawing.text("Aa",x: 0,baseline: 18+(fontFamily.flatMap { BoostEditorMetrics.fontBaselineOffsets[$0] } ?? 0),width: bounds.width,font: font,color: color,alignment: .center); return
         }
         if kind == .name {
             let font = Typography.editorName.font,chevron: CGFloat = 11,gap: CGFloat = caption.isEmpty ? 0 : 11
             let width = min(max(0,bounds.width-chevron-gap),(caption as NSString).size(withAttributes: [.font: font]).width)
-            let x = (bounds.width-width-gap-chevron)/2
-            SiteControlDrawing.text(caption,x: x,baseline: 16,width: width,font: font,color: color)
+            let x = floor((bounds.width-width-gap-chevron)/2)-0.5
+            SiteControlDrawing.text(caption,x: x,baseline: 17,width: width,font: font,color: color)
             EditorRaster.glyph("chevron.down",in: CGRect(x: x+width+gap,y: 0,width: chevron,height: bounds.height),size: 12,color: m.chevron.nsColor); return
         }
         if kind == .row {
-            SiteControlDrawing.text(caption,x: 12,baseline: 24,width: bounds.width-48,font: Typography.editorButton.font,color: color)
+            SiteControlDrawing.text(caption,x: 12,baseline: 25,width: bounds.width-48,font: Typography.editorButton.font,color: color)
             if controlID == "editor.tool.zap",let count = accessibilityValue() as? Int,count>0 { SiteControlDrawing.text(String(count),x: bounds.width-43,baseline: 24,width: 28,font: Typography.editorButton.font,color: color,alignment: .right) }
             else { EditorRaster.glyph(symbol,in: CGRect(x: bounds.width-36,y: 0,width: 21,height: bounds.height),size: 15,color: color) }; return
         }
         if !symbol.isEmpty { EditorRaster.glyph(symbol,in: bounds,size: controlID == "editor.done" ? 16 : 17,color: color) }
-        else { let font = kind == .secondary ? Typography.firstRunSecondary.font : Typography.editorButton.font; SiteControlDrawing.text(caption,x: 0,baseline: (bounds.height+font.capHeight)/2,width: bounds.width,font: font,color: color,alignment: .center) }
+        else if kind == .primary {
+            let line = CTLineCreateWithAttributedString(NSAttributedString(string: caption,attributes: [.font: Typography.firstRunPrimary.font,.foregroundColor: color,.kern: BoostEditorMetrics.makeLabelKern]))
+            let c = NSGraphicsContext.current!.cgContext,w = CTLineGetTypographicBounds(line,nil,nil,nil)
+            c.saveGState();c.textMatrix = CGAffineTransform(scaleX: 1,y: -1);c.textPosition = CGPoint(x: (bounds.width-w)/2,y: (bounds.height+Typography.firstRunPrimary.font.capHeight)/2+1);CTLineDraw(line,c);c.restoreGState()
+        }
+        else { let font = kind == .secondary ? Typography.firstRunSecondary.font : Typography.editorButton.font; SiteControlDrawing.text(caption,x: 0,baseline: (bounds.height+font.capHeight)/2+1,width: bounds.width,font: font,color: color,alignment: .center) }
     }
 }
 
@@ -286,18 +292,19 @@ private final class EditorInterstitial: NSView {
         let wave = NSBezierPath();wave.move(to: CGPoint(x: 0,y: 465))
         for x in stride(from: CGFloat(0),through: bounds.width,by: 0.25) { wave.line(to: CGPoint(x: x,y: 464.95-1.95*cos((x-7)*2 * .pi/17))) }
         wave.line(to: CGPoint(x: bounds.maxX,y: bounds.maxY));wave.line(to: CGPoint(x: 0,y: bounds.maxY));wave.close();BoostEditorColors.firstRunFooter.nsColor.setFill();wave.fill()
-        c.saveGState();c.translateBy(x: 91.5,y: 281);c.rotate(by: -12 * .pi/180) // Negative in this flipped context: the top edge rises to the right.
+        c.saveGState();c.translateBy(x: 90.5,y: 283);c.rotate(by: -12 * .pi/180) // Negative in this flipped context: the top edge rises to the right.
+        c.scaleBy(x: 0.71,y: 0.71) // measured visible art inside the unchanged 70 pt canvas
         let badge = NSBezierPath(roundedRect: CGRect(x: -35,y: -35,width: 70,height: 70),xRadius: 14,yRadius: 14)
-        NSColor(srgbRed: 72/255,green: 72/255,blue: 1,alpha: 1).setFill();badge.fill();NSColor.white.setStroke();badge.lineWidth = 3;badge.stroke()
+        NSColor(srgbRed: 72/255,green: 72/255,blue: 1,alpha: 1).setFill();badge.fill();NSColor.white.setStroke();badge.lineWidth = 3/0.71;badge.stroke()
         EditorRaster.glyph(BoostGlyph.outline,in: CGRect(x: -25,y: -25,width: 50,height: 50),size: 34,color: .white)
         c.setFillColor(NSColor.white.cgColor);SiteControlGlyphRenderer.sparkle(c,at: CGPoint(x: -22,y: -16),size: 6,alpha: 1);SiteControlGlyphRenderer.sparkle(c,at: CGPoint(x: 22,y: 18),size: 5,alpha: 1);c.restoreGState()
-        for (line,y) in zip(["Edit the","Internet with","Boosts"],m.titleBaselines) { SiteControlDrawing.text(line,x: 10,baseline: y,width: 163,font: Typography.firstRunTitle.font,color: BoostEditorColors.firstRunTitle.nsColor,alignment: .center) }
+        for (line,y) in zip(["Edit the","Internet with","Boosts"],m.titleBaselines) { SiteControlDrawing.text(line,x: 10,baseline: y+1,width: 163,font: Typography.firstRunTitle.font,color: BoostEditorColors.firstRunTitle.nsColor,alignment: .center) }
         var displayHost = host
         while ("Make "+displayHost as NSString).size(withAttributes: [.font: NSFont.systemFont(ofSize: 13,weight: .semibold)]).width>153 && displayHost.count>6 { let count = displayHost.count;displayHost = String(displayHost.prefix(count/2-1))+"…"+String(displayHost.suffix(count/2-1)) }
         let body = NSMutableAttributedString(string: "Make ",attributes: [.font: NSFont.systemFont(ofSize: 13),.foregroundColor: BoostEditorColors.firstRunBody.nsColor])
         body.append(NSAttributedString(string: displayHost,attributes: [.font: NSFont.systemFont(ofSize: 13,weight: .semibold),.foregroundColor: BoostEditorColors.firstRunBody.nsColor]))
         body.draw(at: CGPoint(x: (183-body.size().width)/2,y: 421-NSFont.systemFont(ofSize: 13).ascender))
-        SiteControlDrawing.text("your own!",x: 14,baseline: 437,width: 155,font: .systemFont(ofSize: 13),color: BoostEditorColors.firstRunBody.nsColor,alignment: .center)
+        SiteControlDrawing.text("your own!",x: 14,baseline: 440,width: 155,font: .systemFont(ofSize: 13),color: BoostEditorColors.firstRunBody.nsColor,alignment: .center)
     }
 }
 

@@ -76,6 +76,8 @@ public enum BoostEditorMetrics {           // §4, editor-window points; AX S2 1
     public static let size = CGRect(x: 18, y: 408, width: 70, height: 38), textCase = CGRect(x: 96, y: 408, width: 69, height: 38)
     public static let zap = CGRect(x: 18, y: 461, width: 147, height: 38), code = CGRect(x: 18, y: 514, width: 147, height: 38)
     public static let rowLabelInset: CGFloat = 12, rowGlyphTrailingInset: CGFloat = 15                 // m (ink)
+    public static let fontBaselineOffsets: [String: CGFloat] = ["Courier": -2,"Hoefler Text": -2,"SignPainter": -2,"Papyrus": -3]
+    public static let makeLabelKern: CGFloat = -0.25
     public static let nameChevronGap: CGFloat = 11, nameChevron: CGFloat = 12                          // m (ink)
     public static let advancedWindow = CGRect(x: -34, y: 258, width: 250, height: 232), advancedSlider = CGSize(width: 186, height: 16)
     public static let advancedLabelY: [CGFloat] = [299, 361, 423], advancedSliderY: [CGFloat] = [318, 380, 442]
@@ -94,7 +96,7 @@ public enum BoostEditorColors {            // light only; IS §20.15 and §20.6
     public static let header = RGBA(hex: 0xF5F5F7), hairline = RGBA(hex: 0xE9E9EB), background = RGBA(hex: 0xFDFDFF)
     public static let button = RGBA(hex: 0xEBEBED), buttonPressed = RGBA(hex: 0xDFDFE0), buttonOn = RGBA(hex: 0x333333)
     public static let advancedOn = RGBA(hex: 0x474747), label = RGBA(hex: 0x3A3A3B), title = RGBA(hex: 0x252526)
-    public static let headerGlyph = RGBA(hex: 0xACACAD), chevron = RGBA(hex: 0x949495), disabledGlyph = RGBA(hex: 0xBDBDBF)
+    public static let headerGlyph = RGBA(hex: 0xACACAD), chevron = RGBA(hex: 0x7C7C7D), disabledGlyph = RGBA(hex: 0xBDBDBF)
     public static let fontGlyph = RGBA(hex: 0x999999), fontSelected = RGBA(hex: 0xD9D9D9), fontSelectedGlyph = RGBA(hex: 0x8C8C8C)
     public static let plate = RGBA(hex: 0xFAFAFA), dot = RGBA.black(0.075), guide = RGBA.black(0.06)
     public static let secondaryOutline = RGBA(hex: 0xC8C2CA)
@@ -102,6 +104,7 @@ public enum BoostEditorColors {            // light only; IS §20.15 and §20.6
         (120, 0x90FC74), (150, 0x80FCAD), (180, 0x7CF8F1), (210, 0x356FF6), (240, 0x392EF4), (270, 0x8237F5), (300, 0xDD31BF), (330, 0xDF3470), (360, 0xEB4838)]
     public static let noColorKnobs = (primary: RGBA(hex: 0x717171), secondary: RGBA(hex: 0x333333))
     public static let warning = RGBA(hex: 0xFF5A5F)                                   // BO-22; banners
+    public static let greyRingStops: [Double] = [113,141,191,233,226,227,227,117,72,92,110,107,113] // measured P3-neutral S2 10/0030–0031
     public static let firstRunDim = RGBA.black(0.30), firstRunTitle = RGBA(hex: 0x3139FF), firstRunBody = RGBA(hex: 0x95939F)
     public static let makeABoost = (top: RGBA(hex: 0x4E4FFF), bottom: RGBA(hex: 0x333AFF)), firstRunFooter = RGBA(hex: 0xCEDBFC) // m (vertical)
     public static let maybeLater = RGBA(hex: 0x7F819E)
@@ -137,6 +140,7 @@ extension Typography {
     public static let siteControlLabel = FontToken(14, .semibold), siteControlRowTitle = FontToken(14, .semibold)
     public static let siteControlRowSubtitle = FontToken(13, .regular), siteControlPill = FontToken(14, .medium)
     public static let siteControlSecondary = FontToken(13, .regular)
+    public static let editorFontCell = FontToken(12,.regular) // measured S2 10/0030–0031
     public static let editorName = FontToken(13,.medium),editorButton = FontToken(14,.medium),editorSlider = FontToken(13,.regular)
     public static let firstRunTitle = FontToken(22,.bold),firstRunPrimary = FontToken(14,.medium),firstRunSecondary = FontToken(12,.medium)
 }

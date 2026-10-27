@@ -90,9 +90,8 @@ public final class BoostColorPadView: OpenDesign.ColorPadView {
         super.apply(BoostPadLaw.State(wheel: wheel,showsValues: hasValues),law: BoostPadLaw(),gestureInProgress: isDragging) { [weak self] value in self?.edit(value.point,relative: value.relative) }
         let coloredRing = session.boost.colorWheel != nil
         if ringChanged {
-        let colors = BoostEditorColors.ringStops.map { stop -> CGColor in
-            let c = RGBA(hex: stop.color)
-            return coloredRing ? c.cgColor : RGBA(0.2126*c.red+0.7152*c.green+0.0722*c.blue,0.2126*c.red+0.7152*c.green+0.0722*c.blue,0.2126*c.red+0.7152*c.green+0.0722*c.blue).cgColor
+        let colors = BoostEditorColors.ringStops.enumerated().map { index,stop -> CGColor in
+            coloredRing ? RGBA(hex: stop.color).cgColor : RGBA(BoostEditorColors.greyRingStops[index]/255,BoostEditorColors.greyRingStops[index]/255,BoostEditorColors.greyRingStops[index]/255).cgColor
         }
         CATransaction.begin(); CATransaction.setDisableActions(true)
         if animatedReset,let old = ring.colors { let fade = CABasicAnimation(keyPath: "colors"); fade.fromValue = old; fade.toValue = colors; fade.duration = 0.22; ring.add(fade,forKey: "reset") }
