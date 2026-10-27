@@ -839,8 +839,9 @@ The shell helper ships the fixture page first (§12 S3): `tools/e2e/fixtures/boo
 — one static page with labeled swatches: grey ramp (L = 0, .1, …, 1), saturated hues (H = 0, 30, …,
 330 at S = 1, L = .25/.5/.75/.92), a semi-transparent black and white overlay pair (50% alpha over a
 known background, review m9), a black→white two-stop gradient and a multi-stop gradient, box-shadow
-and text-shadow samples, a wavy underline, an SVG gradient icon, inline SVG rects with a marker, an
-SVG `<img>`, a raster `<img>`, a luminance-mask sample, a canvas rect, a `<video>` with poster, form
+and text-shadow samples, a wavy underline, an SVG gradient icon, inline SVG rects with a marker, the
+"unremapped in v1" rows of §5.3b (an SVG `<pattern>` fill, an `feImage`, a `-webkit-box-reflect`
+box, a CSS `drop-shadow()`, an `feFlood`), an SVG `<img>`, a raster `<img>`, a luminance-mask sample, a canvas rect, a `<video>` with poster, form
 controls (button/input/select/checkbox), selected text, a same-origin iframe, and a `srcdoc` iframe
 (both with the grey ramp). The user opens this exact file in Arc (agents never launch Arc, rule 4)
 and screenshots it at:
