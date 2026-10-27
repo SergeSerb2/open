@@ -951,8 +951,9 @@ stays (it now describes pages whose dominant colors are images, which still do n
 
 ## 10. Patch and overlay layout
 
-Series numbering: `00xx` ad-block, `01xx` tab sleeping, `03xx` extensions/P1 are taken
-(`docs/engine-patches.md`). Boost color takes **`04xx`**. New CEF API follows the standing rules
+Series numbering: `03xx` is taken (extensions/P1 `0301`–`0304`, ad-block `0310`/`0314` in the
+CEF series as of 2026-10-26), `01xx` tab sleeping per `docs/engine-patches.md`. Boost color
+takes **`04xx`** — recheck both `series` files before creating the patches. New CEF API follows the standing rules
 (experimental guard, generated C API, `Engine/fork/scripts/engine-apply` runs the version manager
 when overlay headers under `cef/include/` change — `docs/engine-fork.md`, P1 section).
 
