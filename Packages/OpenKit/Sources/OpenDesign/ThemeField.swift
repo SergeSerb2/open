@@ -18,12 +18,12 @@ import OpenModel
 ///    base in linear light, the result is encoded to sRGB (sign-preserving).
 /// 4. The gradient is drawn with `layerAlpha` over a neutral underlay. The
 ///    underlay is darker while the window is key/active and lighter when it is not.
+///    Editor styles mix in encoded Display P3; legacy styles retain sRGB.
 ///
 /// The CPU-side numbers (angles, alpha, underlay grays) are fitted to captures;
 /// they reproduce three captured Spaces at ≈1.3–1.6 / 255 RMS.
 public enum ThemeField {
-    /// Gradient opacity over the underlay. Fitted 0.62–0.645 on two Spaces with
-    /// `intensityFactor` 0.8.
+    /// Decoded §17.2 opacity. At intensity 0.8 it retains the fitted 0.64.
     public static func layerAlpha(intensity: Double) -> Double {
         ThemeTuning.intensityAlphaFloor + ThemeTuning.intensityAlphaSlope * min(1, max(0, intensity.isFinite ? intensity : 0))
     }

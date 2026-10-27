@@ -376,7 +376,7 @@ struct SpecLayout {
     }
 }
 
-/// An sRGB RGBA8 bitmap with the few operations the comparison needs.
+/// RGBA8 pixels: sRGB by default, or Display P3 for the §17 capture corpus.
 @MainActor
 struct Bitmap {
     let width: Int, height: Int
@@ -387,7 +387,7 @@ struct Bitmap {
         data = [UInt8](repeating: fill, count: width * height * 4)
     }
 
-    /// Loads a PNG and converts it to sRGB through its embedded color profile.
+    /// Loads a PNG through its embedded profile into the requested color space.
     init(path: String, colorSpace: CGColorSpace = CGColorSpace(name: CGColorSpace.sRGB)!) throws {
         guard let src = CGImageSourceCreateWithURL(URL(fileURLWithPath: path) as CFURL, nil),
               let img = CGImageSourceCreateImageAtIndex(src, 0, nil) else { throw CLIError(description: "cannot read \(path)") }

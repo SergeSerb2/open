@@ -120,10 +120,11 @@ enum SessionTwoPadCompare {
             guard ["--spec", "--capture-root", "--out"].contains(args[index]), flags.insert(args[index]).inserted,
                   !args[index + 1].isEmpty else { throw CLIError(description: "unknown or duplicate session2-pad option") }
         }
-        guard let root = RenderCLI.value(args, "--capture-root"), let output = RenderCLI.value(args, "--out"), output.contains("/.re/") else {
+        guard let root = RenderCLI.value(args, "--capture-root"), let output = RenderCLI.value(args, "--out") else {
             throw CLIError(description: "compare --spec session2-pad --capture-root SESSION17 --out .re/DIR")
         }
-        let out = URL(fileURLWithPath: output)
+        let out = URL(fileURLWithPath: output).standardizedFileURL
+        guard out.path.contains("/.re/") else { throw CLIError(description: "session2-pad output must stay under .re") }
         try FileManager.default.createDirectory(at: out, withIntermediateDirectories: true)
         let captures = try Captures(root: URL(fileURLWithPath: root))
         var rows: [Row] = []

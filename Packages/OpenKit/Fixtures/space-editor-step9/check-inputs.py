@@ -50,7 +50,16 @@ path.write_bytes(png(depth=17,size=None));run('unsupported-depth','capture PNG m
 path.write_bytes(png(size=None)+b'X');run('trailing-byte','capture PNG has trailing data after IEND')
 path.write_bytes(base);run('unknown-arguments','session2-pad requires exactly',('--unknown','1'))
 path.write_bytes(b'');run('empty-image','capture PNG is empty')
-saved=frames;frames=work/'empty-captures';frames.mkdir();run('empty-root','missing session-2 gate frame 27');frames=saved
+saved=frames;frames=work/'empty-captures';frames.mkdir();run('empty-root','missing session-2 gate frame 27')
+relative=Path('.re/step9/input-relative')/str(uuid.uuid4())
+r=subprocess.run([str(exe),'compare','--spec','session2-pad','--capture-root',str(frames),'--out',str(relative)],cwd=root,text=True,capture_output=True)
+log=r.stdout+r.stderr;(args.out/'relative-output.log').write_text(log)
+good=r.returncode!=0 and 'missing session-2 gate frame 27' in log
+rows.append({'case':'relative-output','passed':good});print('PASS' if good else 'FAIL','relative-output',flush=True)
+shutil.rmtree(root/relative);frames=saved
+r=subprocess.run([str(exe),'compare','--spec','session2-pad','--capture-root',str(frames),'--capture-root',str(args.out)],text=True,capture_output=True)
+good=r.returncode!=0 and 'unknown or duplicate session2-pad option' in r.stderr
+rows.append({'case':'duplicate-options','passed':good});print('PASS' if good else 'FAIL','duplicate-options',flush=True)
 (frames/'entry-0510').rmdir();dupe=frames/'0027-duplicate';dupe.mkdir();run('duplicate-frame','duplicate capture frame number')
 (args.out/'results.json').write_text(json.dumps(rows,indent=2));print('BOUNDARY_RESULTS',args.out,flush=True)
 shutil.rmtree(work) # Only this run's synthetic inputs, created with mkdtemp above.

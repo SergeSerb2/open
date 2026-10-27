@@ -53,7 +53,7 @@ public enum ThemeTexture {
         let sample = context.data!.assumingMemoryBound(to: UInt8.self)
         var marks = (0..<(px * px)).map { Double(sample[$0 * 4 + 3]) / 255 }
         if t == .tweed {
-            // Own soft mottle, not the Space tile's sharply woven marks.
+            // Own disc-sized mottle, normalized separately from the Space tile.
             func smoothNoise(_ x: Double, _ y: Double, cell: Double) -> Double {
                 let u = x / cell, v = y / cell, gx = Int(floor(u)), gy = Int(floor(v))
                 let fx = u - floor(u), fy = v - floor(v)
