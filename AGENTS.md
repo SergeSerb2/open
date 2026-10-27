@@ -40,7 +40,7 @@ Reference build: Arc 1.170.0 (build 89123) at `/Applications/Arc.app`. Its engin
 | M5 Pro (18 cores, 48 GB), the main machine | Engine builds (the only Chromium tree), reverse engineering (Arc.app and the shared Ghidra snapshots), everything else | — |
 | M1 Pro (8 cores, 16 GB, built-in 2x display), the second machine | App and OpenKit work, `tools/verify-all.sh`, on-screen e2e suites, real-window snapshots at 2x | Chromium builds or patches, reverse engineering of Arc |
 
-The M1 builds the App against a copy of the M5's recorded engine distribution (the lead copies it after each engine distribution change). Each machine has its own heavy slots and its own on-screen lock. Both machines push to the same GitHub repo; never work on one branch from both machines at once.
+The M1 builds the App against a copy of the M5's recorded engine distribution (the lead copies it after each engine distribution change). Each machine has its own heavy slots and its own on-screen lock. Both machines push to the same GitHub repo; never work on one branch from both machines at once. Until the verify gates are portable (`docs/followups.md`, "Verification (portability)"), four checks fail on the M1 for machine reasons only: `space-legacy`, `space-editor` (P1 byte-identical PNGs), `sidebar-compare` (3 color gates), and `suggest-check` #31 (real-time budget). On the M1, report those four as "M1 baseline" and run the full gate that counts for merge on the M5.
 
 ## Reverse-engineering tools
 
