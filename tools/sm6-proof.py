@@ -5,7 +5,6 @@ Never builds or kills processes by name. Measurement hosts never order front.
 """
 
 import argparse
-from datetime import datetime, timezone
 import hashlib
 import json
 import os
@@ -49,27 +48,18 @@ def main():
     parser.add_argument("--load", choices=("low", "high"), required=True)
     parser.add_argument("--case", choices=("measure", "early-failure", "check"), default="measure")
     parser.add_argument("--runs", type=bounded_integer, default=5)
-    parser.add_argument("--thread-probe", action="store_true",
-                        help="M1 single probe campaign; hard stop 2026-10-27T04:35:40Z, including prior work")
     parser.add_argument("--calibration", action="store_true",
                         help="Lead-authorized fixed calibration: one discarded process, then five fresh processes")
     args = parser.parse_args()
-    if args.calibration and (args.thread_probe or args.case != "measure" or args.runs != 5):
-        parser.error("--calibration requires five measure runs and cannot reopen --thread-probe")
-    if args.thread_probe and args.case != "measure":
-        parser.error("--thread-probe requires --case measure")
+    if args.calibration and (args.case != "measure" or args.runs != 5):
+        parser.error("--calibration requires five measure runs")
     binary = args.binary.resolve(strict=True)
-    # Convert the binding absolute deadline once; clock changes cannot extend it.
-    probe_seconds = (datetime(2026, 10, 27, 4, 35, 40, tzinfo=timezone.utc) - datetime.now(timezone.utc)).total_seconds()
-    probe_end = time.monotonic() + min(45 * 60, probe_seconds) - 15 if args.thread_probe else float("inf")
-    operation_end = min(probe_end, time.monotonic() + 600 if args.calibration else float("inf"))
+    operation_end = time.monotonic() + 600 if args.calibration else float("inf")
 
     def remaining():
         value = operation_end - time.monotonic()
         if value <= 0:
-            if args.calibration:
-                raise RuntimeError("fixed calibration timeout; retain structural fallback; do not repeat")
-            raise RuntimeError("thread-instruction probe deadline reached; stop probing, structural-only gate")
+            raise RuntimeError("fixed calibration timeout; retain structural fallback; do not repeat")
         return value
 
     remaining()
@@ -80,12 +70,10 @@ def main():
     receipt["binary_sha256"] = hashlib.sha256(binary.read_bytes()).hexdigest()
     receipt["repository_head"] = subprocess.check_output(
         ["git", "rev-parse", "HEAD"], cwd=Path(__file__).resolve().parents[1], text=True, timeout=5).strip()
-    receipt["thread_probe"] = args.thread_probe
     receipt["fixed_calibration"] = args.calibration
     receipt["discarded_warmup_processes"] = 1 if args.calibration else 0
     receipt["machine"] = {key: subprocess.check_output(["/usr/sbin/sysctl", "-n", name], text=True, timeout=5).strip()
                           for key, name in (("cpuBrand", "machdep.cpu.brand_string"), ("osBuild", "kern.osversion"))}
-    receipt["probe_remaining_seconds_at_start"] = remaining() if args.thread_probe else None
 
     # Catch termination as an exception so the same finally path cleans up.
     def interrupted(number, _frame):
@@ -130,7 +118,7 @@ def main():
                 env = dict(os.environ, TMPDIR=str(root / "tmp") + "/",
                            CFFIXED_USER_HOME=str(root / "home"))
                 command = [str(binary), "sm6-measure"]
-                if args.thread_probe or args.calibration:
+                if args.calibration:
                     command.append("--thread-instructions")
                 expected = 0
                 if args.case == "early-failure":
@@ -169,10 +157,10 @@ def main():
                     if len(lines) != 1:
                         raise RuntimeError("missing single SM6_JSON result")
                     sample = json.loads(lines[0])
-                    metric = sample.get("mainThreadInstructions") if args.thread_probe or args.calibration else sample.get("instructions")
+                    metric = sample.get("mainThreadInstructions") if args.calibration else sample.get("instructions")
                     if not sample["cleanup"] or not metric or metric <= 0:
-                        if args.thread_probe or args.calibration:
-                            raise RuntimeError(f"thread instructions {sample.get('mainThreadStatus', 'unavailable')}; fixed calibration invalid" if args.calibration else f"thread instructions {sample.get('mainThreadStatus', 'unavailable')}; stop probing, structural-only gate")
+                        if args.calibration:
+                            raise RuntimeError(f"thread instructions {sample.get('mainThreadStatus', 'unavailable')}; fixed calibration invalid")
                         raise RuntimeError("missing cleanup or positive counter evidence")
                     if args.calibration and index == 0:
                         receipt["discarded_warmup"] = sample
@@ -189,7 +177,7 @@ def main():
                 print("instructions " + json.dumps(receipt["instructions"]), flush=True)
             else:
                 receipt["instructions"] = {"status": "unavailable; diagnostic only"}
-            if args.thread_probe or args.calibration:
+            if args.calibration:
                 values = [sample["mainThreadInstructions"] for sample in samples]
                 median = statistics.median(values)
                 receipt["main_thread_instructions"] = {"min": min(values), "median": median, "max": max(values),

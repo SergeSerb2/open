@@ -77,152 +77,52 @@ Performance budgets are never retried or relaxed by the runner.
 
 ### SM6 structural and machine-specific cost gates
 
-`sidebar-render sm6-measure` runs only the real 10-Space × 100-row Library
-construction and first layout in a fresh process. It shares its fixture and
-measured body with SM6 in `check`: `SidebarContext`, `SpaceManagerView`, a
-900×700 frame, and `OffscreenRenderer.host(scale: 1)` with three synchronous
-settle passes. Fixture creation precedes the counters. Scroll-in and property
-reload checks run after measurement. The host stays at −20000,−20000, is never
-ordered front, and closes in `defer`, including `--fail-after-host` (expected
-exit 1). Unknown or extra arguments fail before host creation.
+SM6 constructs the real 10-Space × 100-row Library and lays it out at 900×700,
+scale 1, with three synchronous settle passes. It requires page builds to equal
+built visible columns (1…4), exactly one full outline reload per built page,
+zero incremental outline item updates during first layout, and model-matching
+row counts. Existing scroll-builds-once and rename-no-reload checks remain.
+Production diagnostics use plain main-actor integer increments without locks,
+allocation or logging. AppKit layout callback counts remain unpinned.
 
-Both `check` and `sm6-measure` gate page builds equal to the 1–4 built visible
-columns, exactly one full outline reload per built page, and each built outline's
-actual row count equal to the model. Existing scroll-builds-once and rename-no-
-reload checks remain. Manager/page/row layout callback counts are printed but
-unpinned until all samples on both Macs/loads agree exactly. The three new
-production hook sites each execute one main-actor integer increment, with no
-lock, allocation, or logging.
+The default `sidebar-render check` also runs `sm6-cost`: one discarded warm-up
+process, then five fresh `sm6-measure --thread-instructions` processes. Each child
+has isolated home/tmp/preferences, a 15-second timeout, a 65,536-byte output cap
+and owned-PID cleanup. Known CPU-brand/macOS-build keys enforce
+`median <= ceil(acceptedMedian × 1.10)` from the versioned resource
+`sidebar-render/Resources/sm6-cost-baselines.json`. Fixture updates need lead
+approval. Unknown keys report the measured count as INFO, never cost PASS.
+Invalid or unavailable known-machine counters fail without fallback.
 
-`SM6_JSON` retains raw counters, work deltas, per-outline rows, wall/main-thread
-CPU/load diagnostics, and Mach thread censuses. Wall lateness versus 120 ms is
-informational. Unavailable/zero/backward cost counters are explicitly reported;
-they never become a CPU fallback. Known-machine counter failures fail the separate
-cost check. Drawing/GPU/CA completion and deferred work remain unbounded; see
-`docs/followups.md`. No other check's gate or tolerance changes.
+Only the harness binary resolves `thread_selfcounts` through `dlsym`; no App or
+OpenKit library uses it. Wall time, lateness versus 120 ms, thread CPU, process
+instructions, load and the wider thread census are diagnostics. Raw output and
+cleanup state are retained in `SM6_JSON`. Instructions do not guarantee latency:
+the 120 ms product budget is checked separately in a quiet M5 window. Helper
+threads, draw/GPU completion and deferred work remain gaps; see
+`docs/followups.md`.
 
-Build before sampling, through the machine's heavy wrapper.
-On M1, wrap each build, proof, or validation job once with
-`/usr/bin/lockf /tmp/open-m1-validation.lock` to exclude other M1 validation
-work; keep the heavy and on-screen locks inside it. Do not acquire it recursively.
-For example:
-
-```sh
-~/Library/Caches/OpenRE/scripts/heavy.sh tools/verify-all.sh --only build
-python3 tools/sm6-proof.py --binary Packages/OpenKit/.build/release/sidebar-render \
-  --out /tmp/sm6-low-UNIQUE --load low --runs 5
-python3 tools/sm6-proof.py --binary Packages/OpenKit/.build/release/sidebar-render \
-  --out /tmp/sm6-high-UNIQUE --load high --runs 5
-python3 tools/sm6-proof.py --binary Packages/OpenKit/.build/release/sidebar-render \
-  --out /tmp/sm6-cleanup-UNIQUE --load low --case early-failure --runs 1
-```
-
-Output directories must be new. Runs are bounded to 1…5. Each invocation gets
-a temporary working/data directory, `TMPDIR`, `CFFIXED_USER_HOME`, and preferences
-suite. The high-load driver starts exactly twice the active CPU count of owned
-`/usr/bin/yes` children. It waits at most 120 seconds for load1 ≥15, then fails
-if unmet. The low-load target is ≤2; if unmet after 120 seconds it reports the
-actual load and samples without claiming low-load acceptance. `finally` checks
-burner commands, terminates/reaps only recorded children, and verifies PIDs gone.
-The full default suite can be recorded with `--case check --runs 1`; wrap that
-driver invocation in `/usr/bin/lockf /tmp/open-onscreen-e2e.lock`, without a
-concurrent build. Its timeout is 300 seconds; standalone runs allow 90 seconds.
-
-The census is outside the counter window and spans a slightly wider interval.
-It identifies threads by Mach thread ID and reports CPU deltas and names,
-including newly observed threads. Exited threads have no final CPU sample;
-threads born and exited between censuses can be missed. CPU is evidence about
-contamination, not per-thread instructions. Report any helper over ~1 ms and
-any low/high median instruction shift over 5% to the lead. A separate process
-alone does not prove clean counts. Cold process caches can also change this
-workload from the original suite's cached SM6 section.
-
-The initial M1 run measured a −12.56% median process-instruction shift under burners,
-with busy helper threads even in the standalone process. The lead rejected a
-process-wide instruction budget on that evidence. These counters stay diagnostic.
-M5 subsequently approved the structural gate above and one bounded main-thread
-instruction probe, confined to sidebar-render. `sm6-measure --thread-instructions`
-resolves `thread_selfcounts` from libSystem with `dlsym`; missing/unsupported
-symbols print `unavailable`. The ABI comes from Apple's pinned
-[XNU resource_private.h](https://github.com/apple-oss-distributions/xnu/blob/xnu-12377.1.9/bsd/sys/resource_private.h#L36-L108):
-`THSC_CPI=1`, two UInt64 fields (instructions, cycles), and an int return from
-`thread_selfcounts(uint32_t, void *, size_t)`. There is no private symbol lookup
-in App or an OpenKit library.
-
-The M1 driver's sole `--thread-probe` campaign stops at 2026-10-27 04:35:40 UTC,
-including research/build/wait time. It converts remaining absolute time to a
-monotonic deadline once per job and reserves cleanup time. Five low and five
-burner samples used the original acceptance rule: valid positive monotonic
-thread counters and combined `(max-min)/median ≤0.03`. Failure or expiration ended
-the probe; there is no replacement probe or padding. The sole M1 campaign
-completed with ten valid positive monotonic samples but failed the range limit:
-637,692,002 / 655,362,864 / 661,030,831 instructions (min/median/max), spread
-3.5612%. Low/high medians were 657,614,454 / 641,516,335 (−2.4480%). The two groups
-used byte-identical release binary SHA-256
-`777284c2416419257340410449ea36e3dab955678918e7d1b9af91dd338e0fce`;
-Swift sources are in `ccf0b31`, with later engine/docs-only main merge `4a5b9d3`.
-All samples had page builds/reloads 4/4, manager/page/row layouts 1/4/60 and four
-model-matching 105-row outlines. That probe stopped and failed its original rule.
-No callback constant is pinned. The later policy below does not relabel that result.
-The later M5 ruling expressly authorizes versioned per-machine cost fixtures.
-`sidebar-render sm6-cost` (also called by the default `check`) declares one
-separate discarded warm-up process, then takes the median of five **fresh CLI
-processes**, each running `sm6-measure --thread-instructions`. It never reuses a
-manager or compares an in-process warmed span with fresh-process fixtures.
-Each child has a fresh home/tmp/preferences root, a 15-second timeout, a 65,536-
-byte output limit, and owned-PID terminate/kill/wait cleanup. The parent retains
-all six raw outputs. `--fail-child-after-host` exercises the real child failure
-and cleanup path. No on-screen window or dialog is opened by these commands.
-
-The fixture resource `sidebar-render/Resources/sm6-cost-baselines.json` is keyed
-by exact CPU brand and macOS build. Version 1 fixes the 10×100, 900×700, scale-1,
-three-settle span. Updates require lead approval in a PR. Known keys enforce
-`median <= ceil(acceptedMedian × 1.10)`; invalid/missing known-machine counters
-fail without fallback. Unknown keys print the measured median and INFO, and
-never claim cost PASS. No automatic calibration or fixture update occurs.
-
-| CPU / OS build | Discarded process | Five measured fresh-process counts | Accepted median / limit |
-|---|---:|---|---:|
-| Apple M5 Pro / 26B5112a | 682990080 | 694796165, 674645279, 672852510, 677429195, 683766007 | 677429195 / 745172115 |
-| Apple M1 Pro / 26A434 | 663641860 | 657636745, 657154236, 657462453, 657058841, 656898616 | 657154236 / 722869660 |
-
-M5 expressly accepted its 3.24% full range/median and the earlier M1 high-group
-2.5368% variation under the new 10% policy. M1's new fixed calibration had
-0.1123% spread, load1 1.99. It was declared before execution, used all five
-measured samples, and did not reopen the closed discovery probe. Both references
-use the original `4a5b9d3` construction span; binary hashes and approval records
-are in the fixture. M1 calibration receipt: `.re/sm6-cost/m1-fixed-calibration`.
-The repository head at execution was `9fe359e`, using the preserved reference
-binary, not the newly merged Theme Step 9 build. Later code is checked against
-the accepted reference rather than automatically recalibrated.
-
-Run the cost cross-check after the release build:
+Build before running. On M1, wrap each build or validation job once with
+`/usr/bin/lockf /tmp/open-m1-validation.lock`; never acquire it recursively.
 
 ```sh
 /usr/bin/lockf /tmp/open-m1-validation.lock \
+  ~/Library/Caches/OpenRE/scripts/heavy.sh tools/verify-all.sh --only build
+/usr/bin/lockf /tmp/open-m1-validation.lock \
+  Packages/OpenKit/.build/release/sidebar-render sm6-measure --thread-instructions
+/usr/bin/lockf /tmp/open-m1-validation.lock \
   Packages/OpenKit/.build/release/sidebar-render sm6-cost
+/usr/bin/lockf /tmp/open-m1-validation.lock \
+  python3 tools/sm6-proof.py --binary Packages/OpenKit/.build/release/sidebar-render \
+  --out /tmp/sm6-cleanup-UNIQUE --load low --case early-failure --runs 1
 ```
 
-Real negative proofs on M1: an added native `outline.reloadData()` produced
-8 full reloads for 4 page builds and failed at load1 1.94 and 15.68. After its
-restoration, focused `sidebar-render` passed. A separate temporary 64-pass loop
-inside the measured span visited the real model tabs and sized each title with
-`NSString.size(withAttributes:)` and the real system font. All six processes
-kept the structural 4-build/4-reload result, but the five-process instruction
-median was 8,965,841,854 >722,869,660 and the cost command exited 1. All children
-were reaped and the source was restored before focused verification (558 checks,
-0 failures; cost median 657,086,884 <=722,869,660). These
-negative edits are not committed. Raw receipts are in
-`.re/sm6-work/negative-receipt.json` and `.re/sm6-cost/negative-cost-receipt.json`.
-
-The absolute 120 ms product budget remains a separate M5 check in a quiet
-window. Historical same-section M5 wall time was 59.7…87.2 ms (median ≈70 ms),
-which is not the earlier 33.7…36 ms Library-build number. The instruction gate
-bounds synchronous main-thread computation on accepted keys; helper-thread,
-drawing/GPU and deferred work remain gaps. Structural checks still apply on
-all machines. No other check or tolerance changes.
-Instructions measure work; later timeout gates must still assert schedules and
-behavior because waiting alone retires little work.
+`sm6-measure --fail-after-host` and `sm6-cost --fail-child-after-host` intentionally
+fail and must clean all owned hosts/processes. Proof output directories must be
+new. The proof tool bounds runs to 1…5, reaps only its recorded children and
+records cleanup in `receipt.json`. Its `--load high` mode starts owned burners;
+use it only for an explicitly authorized load proof. A full `--case check` run
+also needs `/usr/bin/lockf /tmp/open-onscreen-e2e.lock`, with no concurrent build.
 
 ## Logs and privacy
 
