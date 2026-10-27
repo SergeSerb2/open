@@ -2,9 +2,9 @@
   "actions": {
     "action_image_cache": {
       "first": {
-        "bytes": 279,
-        "hash": -5413176373887871345,
-        "object": 1003482868525504210,
+        "bytes": 5120,
+        "hash": "562998a981ed6661a9258dd52c9bf0c615933f170c986853f8bf429eaf1cff6c",
+        "object": -5756685694632923857,
         "pixels": [
           [
             16,
@@ -19,9 +19,9 @@
       },
       "ok": true,
       "tab_b": {
-        "bytes": 279,
-        "hash": -5413176373887871345,
-        "object": 1003482868525504210,
+        "bytes": 5120,
+        "hash": "562998a981ed6661a9258dd52c9bf0c615933f170c986853f8bf429eaf1cff6c",
+        "object": -5756685694632923857,
         "pixels": [
           [
             16,
@@ -50,7 +50,15 @@
         },
         "Remove from": {
           "dialog": [
-            "NativeWidgetMacNSWindow"
+            {
+              "class": "NativeWidgetMacNSWindow",
+              "text": [
+                "Cancel",
+                "Remove",
+                "Remove \"Open action probe\"?"
+              ],
+              "title": "Remove \"Open action probe\"?"
+            }
           ],
           "dismissed": [
             "window:NativeWidgetMacNSWindow"
@@ -82,9 +90,9 @@
         "enabled": true,
         "hasPopup": true,
         "icon": {
-          "bytes": 279,
-          "hash": -5413176373887871345,
-          "object": 7678011885870776715,
+          "bytes": 5120,
+          "hash": "562998a981ed6661a9258dd52c9bf0c615933f170c986853f8bf429eaf1cff6c",
+          "object": 1359576433273512143,
           "pixels": [
             [
               16,
@@ -106,9 +114,9 @@
         "siteAccess": 0,
         "title": "Action probe",
         "toolbarImage": {
-          "bytes": 384,
-          "hash": 4970769887197729846,
-          "object": -1709981756824026447,
+          "bytes": 15680,
+          "hash": "c4ede19eb9ae69945177729de707be016351e6351aa582ae9d848ec71f097243",
+          "object": -1448426495241194140,
           "pixels": [
             [
               28,
@@ -154,7 +162,7 @@
           "content": 0,
           "extension": "jihnllejimhgcmfmcnchbekapeajboik",
           "tab": "",
-          "time": 1793047675.027277,
+          "time": 1793071438.568993,
           "type": "extensionMenuRequest"
         }
       ]
@@ -193,9 +201,9 @@
         "enabled": true,
         "hasPopup": true,
         "icon": {
-          "bytes": 1689,
-          "hash": 2819455305332755805,
-          "object": -2733864730757984953,
+          "bytes": 5120,
+          "hash": "7d646905a308a8e5b9980dfc80bd46121f3e499467c0e735cb5d1356aff5b950",
+          "object": -3581155946469968497,
           "pixels": [
             [
               16,
@@ -217,9 +225,9 @@
         "siteAccess": 0,
         "title": "Bitwarden",
         "toolbarImage": {
-          "bytes": 4895,
-          "hash": -4766810185910770839,
-          "object": 4981110020381508879,
+          "bytes": 15680,
+          "hash": "20aa85807abe2fed5aa5a6379ef514a083f80c9b9f7a0a43120ac5b8ab4a6e5c",
+          "object": 3336997553507925616,
           "pixels": [
             [
               28,
@@ -237,6 +245,8 @@
       },
       "live_again": true,
       "not_ready": true,
+      "notified_back": true,
+      "notified_gone": true,
       "ok": true,
       "popup": false,
       "ran": false
@@ -247,7 +257,7 @@
       "popup_opened": false,
       "storage": {
         "clicks": 1,
-        "lastClickTab": 926603843
+        "lastClickTab": 483073726
       }
     },
     "open_popup_api": {
@@ -295,6 +305,107 @@
         "nngceckbapebfimnlniiiahkandclblb"
       ],
       "ok": true
+    },
+    "popup_callback_close": {
+      "ok": true,
+      "rows": {
+        "open close": {
+          "alive": true,
+          "callbacks": [
+            {
+              "content": 18,
+              "phase": "open",
+              "stillOpenInsideCallback": true,
+              "tab": "",
+              "time": 1793071445.0918899,
+              "toggle": false,
+              "type": "popupCallbackClose"
+            }
+          ],
+          "closed": true,
+          "ok": true
+        },
+        "open toggle": {
+          "alive": true,
+          "callbacks": [
+            {
+              "content": 19,
+              "phase": "open",
+              "stillOpenInsideCallback": true,
+              "tab": "",
+              "time": 1793071445.1609101,
+              "toggle": true,
+              "type": "popupCallbackClose"
+            }
+          ],
+          "closed": true,
+          "ok": true
+        },
+        "ready close": {
+          "alive": true,
+          "callbacks": [
+            {
+              "content": 22,
+              "phase": "ready",
+              "stillOpenInsideCallback": true,
+              "tab": "",
+              "time": 1793071446.421756,
+              "toggle": false,
+              "type": "popupCallbackClose"
+            }
+          ],
+          "closed": true,
+          "ok": true
+        },
+        "ready toggle": {
+          "alive": true,
+          "callbacks": [
+            {
+              "content": 23,
+              "phase": "ready",
+              "stillOpenInsideCallback": true,
+              "tab": "",
+              "time": 1793071446.991296,
+              "toggle": true,
+              "type": "popupCallbackClose"
+            }
+          ],
+          "closed": true,
+          "ok": true
+        },
+        "resize close": {
+          "alive": true,
+          "callbacks": [
+            {
+              "content": 20,
+              "phase": "resize",
+              "stillOpenInsideCallback": true,
+              "tab": "",
+              "time": 1793071445.274895,
+              "toggle": false,
+              "type": "popupCallbackClose"
+            }
+          ],
+          "closed": true,
+          "ok": true
+        },
+        "resize toggle": {
+          "alive": true,
+          "callbacks": [
+            {
+              "content": 21,
+              "phase": "resize",
+              "stillOpenInsideCallback": true,
+              "tab": "",
+              "time": 1793071445.852756,
+              "toggle": true,
+              "type": "popupCallbackClose"
+            }
+          ],
+          "closed": true,
+          "ok": true
+        }
+      }
     },
     "popup_is_chrome_popup": {
       "current_tab": "https://example.com/?a",
@@ -351,17 +462,101 @@
     "run_again_closes_popup": {
       "ok": true
     },
+    "split_pane_action_and_menu": {
+      "expected_tab": 483073728,
+      "menu_action_title": "Split right",
+      "ok": true,
+      "popup_stayed_open": true,
+      "popup_tab": 483073728
+    },
     "tab_switch_closes_popup": {
       "ok": true
     },
     "window_close_with_popup": {
-      "alive": true,
-      "new_window_popup": false,
       "ok": true,
-      "opened": true,
-      "popup_page_gone": true,
-      "windows_after_close": true
+      "rows": {
+        "close": {
+          "alive": true,
+          "new_window_popup": false,
+          "ok": true,
+          "opened": true,
+          "popup_page_gone": true,
+          "released_without_close": null,
+          "windows_after_close": true
+        },
+        "dealloc": {
+          "alive": true,
+          "new_window_popup": false,
+          "ok": true,
+          "opened": true,
+          "popup_page_gone": true,
+          "released_without_close": {
+            "hadPopup": true,
+            "released": 1,
+            "remaining": 0
+          },
+          "windows_after_close": true
+        }
+      }
     }
+  },
+  "cleanup": {
+    "ok": true,
+    "processes": [
+      {
+        "forced": false,
+        "ok": true,
+        "owned_pids": [
+          59038,
+          59055,
+          59056,
+          59057,
+          59068,
+          59069,
+          59071,
+          59072,
+          59077,
+          59107,
+          59108,
+          59109,
+          59113,
+          59126,
+          59149,
+          59179,
+          59223,
+          59232,
+          59242,
+          59244,
+          59331,
+          59333,
+          59335,
+          59338,
+          59340,
+          59342,
+          59417,
+          59423,
+          59431,
+          59462,
+          59665,
+          59669,
+          59688,
+          59691,
+          59694,
+          59746,
+          59753,
+          59755,
+          59759,
+          59764
+        ],
+        "remaining_processes": [],
+        "reply": true,
+        "windows_after_quit": {
+          "count": 0,
+          "windows": []
+        },
+        "windows_before_quit": 2
+      }
+    ]
   },
   "config": "Release",
   "engine": {
@@ -370,13 +565,14 @@
     "source": "fork",
     "stamp": "fork /Users/serge/Developer/open-engine/chromium_git/chromium/src/cef/binary_distrib/cef_binary_156.0.14+g4fa4ab5+chromium-156.0.8078.48_macosarm64_minimal 1793036548"
   },
+  "interrupted_attempts": [],
   "ping": {
     "cef": "156.0.14+g4fa4ab5+chromium-156.0.8078.48",
     "chromium": "156.0.8078.48",
-    "pid": 8228,
-    "root": "/Users/serge/Library/Application Support/Open-E2E-actions-chrome",
-    "userData": "/Users/serge/Library/Application Support/Open-E2E-actions-chrome/Profiles"
+    "pid": 59038,
+    "root": "/Users/serge/Library/Application Support/Open-E2E-actions-chrome-59021-d39440a0",
+    "userData": "/Users/serge/Library/Application Support/Open-E2E-actions-chrome-59021-d39440a0/Engine"
   },
-  "started": "2026-10-26 13:47:47",
+  "started": "2026-10-26 20:23:46",
   "style": "chrome"
 }

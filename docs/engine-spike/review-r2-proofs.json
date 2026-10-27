@@ -1,0 +1,267 @@
+{
+  "callback_close": {
+    "crash_report": "Open-2026-10-26-201707.ips",
+    "fixed": {
+      "ok": true,
+      "rows": {
+        "open close": {
+          "alive": true,
+          "callbacks": [
+            {
+              "content": 18,
+              "phase": "open",
+              "stillOpenInsideCallback": true,
+              "tab": "",
+              "time": 1793070686.3946738,
+              "toggle": false,
+              "type": "popupCallbackClose"
+            }
+          ],
+          "closed": true,
+          "ok": true
+        },
+        "open toggle": {
+          "alive": true,
+          "callbacks": [
+            {
+              "content": 19,
+              "phase": "open",
+              "stillOpenInsideCallback": true,
+              "tab": "",
+              "time": 1793070686.470052,
+              "toggle": true,
+              "type": "popupCallbackClose"
+            }
+          ],
+          "closed": true,
+          "ok": true
+        },
+        "ready close": {
+          "alive": true,
+          "callbacks": [
+            {
+              "content": 22,
+              "phase": "ready",
+              "stillOpenInsideCallback": true,
+              "tab": "",
+              "time": 1793070687.713439,
+              "toggle": false,
+              "type": "popupCallbackClose"
+            }
+          ],
+          "closed": true,
+          "ok": true
+        },
+        "ready toggle": {
+          "alive": true,
+          "callbacks": [
+            {
+              "content": 23,
+              "phase": "ready",
+              "stillOpenInsideCallback": true,
+              "tab": "",
+              "time": 1793070688.2680821,
+              "toggle": true,
+              "type": "popupCallbackClose"
+            }
+          ],
+          "closed": true,
+          "ok": true
+        },
+        "resize close": {
+          "alive": true,
+          "callbacks": [
+            {
+              "content": 20,
+              "phase": "resize",
+              "stillOpenInsideCallback": true,
+              "tab": "",
+              "time": 1793070686.590304,
+              "toggle": false,
+              "type": "popupCallbackClose"
+            }
+          ],
+          "closed": true,
+          "ok": true
+        },
+        "resize toggle": {
+          "alive": true,
+          "callbacks": [
+            {
+              "content": 21,
+              "phase": "resize",
+              "stillOpenInsideCallback": true,
+              "tab": "",
+              "time": 1793070687.133768,
+              "toggle": true,
+              "type": "popupCallbackClose"
+            }
+          ],
+          "closed": true,
+          "ok": true
+        }
+      }
+    },
+    "mutation": "Build with OEBrowser.mm from bb4eec2 (before callback deferral and pending-sync flush).",
+    "old_cleanup": {
+      "ok": true,
+      "on_screen_windows": 0,
+      "remaining_processes": 0
+    },
+    "old_flow": "Real Chrome extension action, closeExtensionPopup called inside didOpenExtensionPopup.",
+    "old_result": "FAIL: EXC_BAD_ACCESS in extensions::ExtensionHost::CreateRendererSoon() -> open_engine::OpenExtensionPopup::Start()",
+    "old_source_sha256": "0dc457f284458d0635cfeae22bb596244430530abc2568df2833be4ad654ce54"
+  },
+  "cmd_w": {
+    "fixed": {
+      "closed": true,
+      "ctrl_d_stages": [
+        "beforePage",
+        "unconsumed"
+      ],
+      "ok": true,
+      "opened": true,
+      "still_open": true,
+      "tabs_kept": true
+    },
+    "fixed_cleanup": {
+      "attempts": 3,
+      "ok": true,
+      "on_screen_windows": [
+        0,
+        0,
+        0
+      ],
+      "remaining_processes": [
+        0,
+        0,
+        0
+      ]
+    },
+    "mutation": "Remove the focused-popup guard from closeTab; keep real route=app in popup_keys.",
+    "old": {
+      "closed": true,
+      "ctrl_d_stages": [
+        "beforePage",
+        "unconsumed"
+      ],
+      "ok": false,
+      "opened": true,
+      "still_open": true,
+      "tabs_kept": false
+    },
+    "old_cleanup": {
+      "attempts": 1,
+      "ok": true,
+      "on_screen_windows": [
+        0
+      ],
+      "remaining_processes": [
+        0
+      ]
+    }
+  },
+  "date": "2026-10-26 America/Vancouver",
+  "engine_uuid": "4C4C4432-5555-3144-A144-B678285BC5F4",
+  "split_pane_sync": {
+    "fixed": {
+      "expected_tab": 1372129401,
+      "menu_action_title": "Split right",
+      "ok": true,
+      "popup_stayed_open": true,
+      "popup_tab": 1372129401
+    },
+    "later_tagged_attempts": "INTERRUPTED by foreground loss; not counted as a logical FAIL proof.",
+    "mutation": "Same old OEBrowser.mm; focus the other Split View pane and execute within one socket turn.",
+    "old_cleanup": {
+      "attempts": 1,
+      "ok": true,
+      "on_screen_windows": [
+        0
+      ],
+      "remaining_processes": [
+        0
+      ]
+    },
+    "old_result": {
+      "error": "eval: The operation couldn\u2019t be completed. (app.open.engine error 4.)",
+      "ok": false
+    },
+    "tagged_attempt_count": 3
+  },
+  "uninstall_failure_cleanup": {
+    "cleanup": {
+      "attempts": 3,
+      "ok": true,
+      "on_screen_windows": [
+        0,
+        0,
+        0
+      ],
+      "remaining_processes": [
+        0,
+        0,
+        0
+      ]
+    },
+    "injection": "OPEN_E2E_FAIL_UNINSTALL=1; raises after the specific confirmation class/name/Cancel/Remove match.",
+    "result": {
+      "dialog_seen": true,
+      "ok": false
+    },
+    "suite_error": "forced early failure in uninstall confirmation case"
+  },
+  "window_release": {
+    "fix": "OEBrowser close/dealloc detach the host with SetHostView(nullptr) before popup/strip close; no Engine/fork change.",
+    "fixed": {
+      "ok": true,
+      "rows": {
+        "close": {
+          "alive": true,
+          "new_window_popup": false,
+          "ok": true,
+          "opened": true,
+          "popup_page_gone": true,
+          "released_without_close": null,
+          "windows_after_close": true
+        },
+        "dealloc": {
+          "alive": true,
+          "new_window_popup": false,
+          "ok": true,
+          "opened": true,
+          "popup_page_gone": true,
+          "released_without_close": {
+            "hadPopup": true,
+            "released": 1,
+            "remaining": 0
+          },
+          "windows_after_close": true
+        }
+      }
+    },
+    "fixed_cleanup": {
+      "ok": true,
+      "on_screen_windows": [
+        0
+      ],
+      "remaining_processes": [
+        0
+      ]
+    },
+    "flow": "Close the window with an open popup, then repeat after releasing mirror browsers without OEBrowser.close.",
+    "old_result": "FAIL twice: GlobalBrowserCollection CHECK at global_browser_collection.cc:70 (it != browsers_activation_order_.end()).",
+    "rerun_cleanup": {
+      "attempts": 2,
+      "ok": true,
+      "on_screen_windows": [
+        0,
+        0
+      ],
+      "remaining_processes": [
+        0,
+        0
+      ]
+    }
+  }
+}
