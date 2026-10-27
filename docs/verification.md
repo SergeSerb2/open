@@ -162,6 +162,18 @@ records cleanup in `receipt.json`. Its `--load high` mode starts owned burners;
 use it only for an explicitly authorized load proof. A full `--case check` run
 also needs `/usr/bin/lockf /tmp/open-onscreen-e2e.lock`, with no concurrent build.
 
+M5 review r2 (section 1, 2026-10-27, M5 Pro / 26B5112a, built-in 2x panel as the
+main display, load1 4.5–5.2). The sampler is stable: three `sm6-cost` runs gave
+medians 680,241,245 / 680,144,454 / 683,041,525 (within-run range/median 0.6–0.8 %),
+0.4–0.8 % above the accepted 677,429,195, so the accepted M5 fixture stands. Wall time
+stayed diagnostic at 61.7–67.8 ms. Negative proof: one temporary O(n) pass in
+`SpaceManagerView.layout` that sizes every row title once with the real system font
+(1,000 rows) kept every structural check at 4 builds / 4 reloads / 0 item updates but
+raised the median to 785,999,099 > 745,172,115, and `sm6-cost` exited 1. The source was
+restored and the gate passed again at 680,827,395. `sm6-proof.py --case early-failure`
+and `sm6-cost --fail-child-after-host` both reaped their children (`cleanup: True`,
+hosts 0, visible 0).
+
 ## Logs and privacy
 
 The default directory is `$TMPDIR/open-verify-<local timestamp>.<unique suffix>/`
