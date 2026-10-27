@@ -49,8 +49,9 @@ import OpenWeb
                 windowNumber: host.windowNumber, context: nil, eventNumber: 0, clickCount: 1, pressure: type == .leftMouseDown ? 1 : 0)!
         }
         func tooltip(_ button: NSView, _ text: String) {
-            button.mouseEntered(with: event(.mouseMoved, button)); pump(0.24)
-            Checks.check(TooltipController.shared.visibleTooltip?.title == text && button.accessibilityHelp() == text,
+            button.mouseEntered(with: event(.mouseMoved, button))
+            let shown = Checks.waitFor(settle: scene) { TooltipController.shared.visibleTooltip?.title == text }
+            Checks.check(shown && button.accessibilityHelp() == text,
                          "RI tooltip and help are exact: \(text)")
             button.mouseExited(with: event(.mouseMoved, button)); pump(0.05)
         }
@@ -58,7 +59,8 @@ import OpenWeb
         pump()
         Checks.check(speaker() == nil, "RI1 silent unmuted row builds no speaker")
         Checks.check(host.frame.maxX < 0 && !host.isKeyWindow, "RI animation window stays offscreen and non-key (visible \(host.isVisible), occlusion \(host.occlusionState.rawValue))")
-        tab.live.isAudible = true; pump(0.12)
+        tab.live.isAudible = true
+        _ = Checks.waitFor(settle: scene) { speaker() != nil }
         guard let button = speaker() else { Checks.check(false, "RI1 audible speaker exists"); return }
         let symbol = descendants(button).compactMap { $0 as? NSImageView }.first
         Checks.check(button.frame.size == CGSize(width: 20, height: 20) && button.frame.minY == 10 && symbol?.image === Glyph.audioPlaying.image && button.accessibilityLabel() == "Mute tab", "RI1 audible unmuted frame and symbol")
@@ -197,8 +199,9 @@ extension MediaChecks {
         mediaHost.mediaState.actions = state.actions; mediaHost.publish(); pump()
         Checks.check(["previous","next"].allSatisfy { first.control(named:$0)?.view.isAccessibilityEnabled() == true }, "MC3 track actions enable both controls")
         if let play = first.control(named:"play")?.view {
-            play.mouseEntered(with:event(.mouseMoved,play)); pump(0.6)
-            Checks.check(TooltipController.shared.visibleTooltip?.title == "Pause", "MC3 actual delayed tooltip")
+            play.mouseEntered(with:event(.mouseMoved,play))
+            let shown = Checks.waitFor(settle: scene) { TooltipController.shared.visibleTooltip?.title == "Pause" }
+            Checks.check(shown, "MC3 actual delayed tooltip")
             play.mouseExited(with:event(.mouseMoved,play)); pump(0.2)
         }
         controls.mouseEntered(with:event(.mouseMoved,controls)); pump(0.01)
@@ -226,8 +229,8 @@ extension MediaChecks {
             _ = slider.accessibilityPerformIncrement(); pump()
             Checks.check(abs((mediaHost.mediaState.volume ?? -1)-0.45) < 0.001, "MC13 slider AX uses 0.05 steps")
         }
-        controls.mouseExited(with:event(.mouseMoved,controls)); pump(0.15)
-        Checks.check(controls.isExpanded && controls.pendingCollapseCount == 1, "MC4 exit has exactly one pending collapse after 0.15s")
+        controls.mouseExited(with:event(.mouseMoved,controls))
+        Checks.check(controls.isExpanded && controls.pendingCollapseCount == 1 && controls.pendingCollapseDelay == 0.3, "MC4 exit schedules exactly one collapse at 0.3 s")
         pump(0.6)
         Checks.check(first.cardHeight == 33 && controls.requiredHeight == 41 && !first.drawerIsOpen && context.mediaDrawers.isEmpty && named(first,"media.titleRow")?.isHidden == true,
                      "MC4/MC13 collapse closes drawer and hides title hit targets")
@@ -262,8 +265,10 @@ extension MediaChecks {
         windowHost.scale = 2; for c in controls.cards { c.needsLayout = true }; pump()
         controls.mouseEntered(with:event(.mouseMoved,controls)); pump(0.8)
         Checks.check(controls.requiredHeight == 216 && controls.cards.enumerated().allSatisfy { i,c in c.frame == CGRect(x:8,y:150-71*CGFloat(i),width:212,height:66) && c.alphaValue == 1 && c.control(named:"close")?.view.isHiddenOrHasHiddenAncestor == false }, "MC6 expanded stack C=216, 5 pt gaps, all Close buttons")
-        controls.mouseExited(with:event(.mouseMoved,controls)); pump(0.8)
-        Checks.check(!controls.isExpanded && controls.requiredHeight == 55, "MC6 exit collapses after 0.3 s")
+        controls.mouseExited(with:event(.mouseMoved,controls))
+        Checks.check(controls.isExpanded && controls.pendingCollapseCount == 1 && controls.pendingCollapseDelay == 0.3, "MC6 exit schedules exactly one collapse at 0.3 s")
+        let collapsed = Checks.waitFor(settle: scene) { !controls.isExpanded && controls.pendingCollapseCount == 0 }
+        Checks.check(collapsed && controls.requiredHeight == 55, "MC6 real delayed work collapses to C=55")
         store.remove(tabID:extra1.id); store.remove(tabID:extra2.id); pump(0.8)
         tab.title = "A deliberately long media title whose last words must be truncated at the end"; mediaHost.perform(.play)
         controls.mouseEntered(with:event(.mouseMoved,controls)); pump(0.8)

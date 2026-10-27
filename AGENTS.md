@@ -24,7 +24,23 @@ Reference build: Arc 1.170.0 (build 89123) at `/Applications/Arc.app`. Its engin
 7. Cite evidence in every reverse-engineering finding: the rea command, symbol, string, or file that proves it. Mark guesses as guesses.
 8. Do not spawn subagents or delegate tasks yourself. The lead agent controls how many agents run at once.
 9. Start long-running jobs (engine builds, syncs) in their own session (for example `python3 -c 'import os,sys; os.setsid(); os.execvp(sys.argv[1], sys.argv[1:])' <cmd>`), so an app restart does not kill them.
-10. Before you open or update a PR: merge `origin/main` into your branch, then run `tools/verify-all.sh` (all checks PASS; SKIP only for targets that do not exist yet). Paste its summary table into the PR. For `Package.swift` merge conflicts, keep both sides (each PR adds targets); never leave two definitions of one target.
+10. Before you open a PR, and again when you report it ready to merge: merge `origin/main` into your branch, then run the full `tools/verify-all.sh` (all checks PASS; SKIP only for targets that do not exist yet). Paste its summary table into the PR. For intermediate pushes (review fixes, work in progress), run only the checks for the code you touched (`tools/verify-all.sh --only NAME[,NAME]` and the e2e suites you touched), and list them with their results in the PR. For `Package.swift` merge conflicts, keep both sides (each PR adds targets); never leave two definitions of one target.
+11. Shared machine resources. Run every `tools/verify-all.sh`, `tools/build.sh`, and `swift build` as `~/Library/Caches/OpenRE/scripts/heavy.sh <command>`. It waits for one of the machine's heavy slots. Run every command that opens Open windows on screen (e2e suites, real-window snapshots, real-window benches) as `/usr/bin/lockf /tmp/open-onscreen-e2e.lock <command>`, one suite per invocation, never while you build. Never end your turn while a check you depend on is still running: wait for it in the foreground.
+
+## Working process
+
+- Before you open a PR, run [docs/review-checklist.md](docs/review-checklist.md) on your change and put the result table in the PR body. A PR gets at most two review rounds; after that, the lead handles small leftovers.
+- The engine agent owns the Chromium tree at `~/Developer/open-engine/chromium_git`. Only it edits, patches, or builds that tree. Other agents may work on engine PR branches for Swift, e2e, and docs changes that do not need a tree build.
+- Report a PR ready as soon as it is green. The lead merges green PRs at once, bottom-up for stacked PRs, with merge commits.
+
+### Machines
+
+| Machine | Use it for | Do not use it for |
+|---|---|---|
+| M5 Pro (18 cores, 48 GB), the main machine | Engine builds (the only Chromium tree), reverse engineering (Arc.app and the shared Ghidra snapshots), everything else | — |
+| M1 Pro (8 cores, 16 GB, built-in 2x display), the second machine | App and OpenKit work, `tools/verify-all.sh`, on-screen e2e suites, real-window snapshots at 2x | Chromium builds or patches, reverse engineering of Arc |
+
+The M1 builds the App against a copy of the M5's recorded engine distribution (the lead copies it after each engine distribution change). Each machine has its own heavy slots and its own on-screen lock. Both machines push to the same GitHub repo; never work on one branch from both machines at once. Until the verify gates are portable (`docs/followups.md`, "Verification (portability)"), four checks fail on the M1 for machine reasons only: `space-legacy`, `space-editor` (P1 byte-identical PNGs), `sidebar-compare` (3 color gates), and `suggest-check` #31 (real-time budget). On the M1, report those four as "M1 baseline" and run the full gate that counts for merge on the M5.
 
 ## Reverse-engineering tools
 

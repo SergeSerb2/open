@@ -109,8 +109,8 @@ import OpenWeb
             Checks.check(fit, "MC16 C2 400→228 drag ends at exact inset widths in model and presentation (expanded \(expanded), Reduce Motion \(reduced))")
             if expanded { leave(); wait(0.8) }
         }
-        enter(); wait(0.8); leave(); wait(0.1)
-        Checks.check(controls.isExpanded && controls.pendingCollapseCount == 1, "MC16 C4 collapse is pending before hiding the sidebar")
+        enter(); wait(0.8); leave()
+        Checks.check(controls.isExpanded && controls.pendingCollapseCount == 1 && controls.pendingCollapseDelay == 0.3, "MC16 C4 collapse is scheduled at 0.3 s before hiding the sidebar")
         scene.sidebar.isHidden = true; wait(0.02)
         Checks.check(!controls.isExpanded && controls.pendingCollapseCount == 0 && controls.requiredHeight == 55,
             "MC16 C4 hiding cancels work and resets to collapsed C=55")

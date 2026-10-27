@@ -10,6 +10,7 @@ import OpenModel
     private var observation: ObservationLoop?
     private var tracking: NSTrackingArea?
     private var collapseWork: DispatchWorkItem?
+    private var collapseDelay: TimeInterval?
     private var windowCloseObservation: NSObjectProtocol?
     private var byID: [ItemID: MiniPlayerCardView] = [:]
     private var retiring: [ObjectIdentifier: MiniPlayerCardView] = [:]
@@ -26,6 +27,8 @@ import OpenModel
     public var requiredHeight: CGFloat { stackHeight == 0 ? 0 : MiniPlayerMetrics.gapAbove + stackHeight }
     public var cards: [MiniPlayerCardView] { ordered.compactMap { byID[$0] } }
     public var pendingCollapseCount: Int { collapseWork == nil ? 0 : 1 }
+    /// Delay the pending collapse was scheduled with, nil when none is pending.
+    public var pendingCollapseDelay: TimeInterval? { collapseWork == nil ? nil : collapseDelay }
 
     public init(context: SidebarContext) {
         self.context = context
@@ -157,7 +160,7 @@ import OpenModel
         let area = NSTrackingArea(rect: hoverRect, options: [.mouseEnteredAndExited, .activeInActiveApp], owner: self)
         addTrackingArea(area); tracking = area
     }
-    private func cancelCollapse() { collapseWork?.cancel(); collapseWork = nil }
+    private func cancelCollapse() { collapseWork?.cancel(); collapseWork = nil; collapseDelay = nil }
     public override func mouseEntered(with event: NSEvent) {
         cancelCollapse()
         if !ordered.isEmpty { isExpanded = true; measure(.stack) }
@@ -165,11 +168,12 @@ import OpenModel
     public override func mouseExited(with event: NSEvent) {
         cancelCollapse()
         guard isExpanded, context.forcedMediaHover == nil else { return }
+        let delay = MiniPlayerMetrics.collapseDelay
         let work = DispatchWorkItem { [weak self] in MainActor.assumeIsolated {
-            self?.collapseWork = nil; self?.isExpanded = false; self?.measure(.stack)
+            self?.collapseWork = nil; self?.collapseDelay = nil; self?.isExpanded = false; self?.measure(.stack)
         } }
-        collapseWork = work
-        DispatchQueue.main.asyncAfter(deadline: .now() + MiniPlayerMetrics.collapseDelay, execute: work)
+        collapseWork = work; collapseDelay = delay
+        DispatchQueue.main.asyncAfter(deadline: .now() + delay, execute: work)
     }
     public override func viewDidHide() {
         super.viewDidHide(); cancelCollapse()
