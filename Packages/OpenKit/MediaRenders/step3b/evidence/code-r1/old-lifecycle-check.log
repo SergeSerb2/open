@@ -1,0 +1,33 @@
+MC16 code-review regressions: reduced-motion cross-fade, direct width drag, lifecycle
+  OK   MC16 C3 expanded add gives two titled cards and C=145 (Reduce Motion false)
+  OK   MC16 C3 expanded removal returns to one card and C=74 (Reduce Motion false)
+  FAIL MC16 C2 width drag attaches no animations (expanded false, Reduce Motion false)
+  FAIL MC16 C2 400→228 drag ends at exact inset widths in model and presentation (expanded false, Reduce Motion false)
+  FAIL MC16 C2 width drag attaches no animations (expanded true, Reduce Motion false)
+  FAIL MC16 C2 400→228 drag ends at exact inset widths in model and presentation (expanded true, Reduce Motion false)
+  OK   MC16 C4 collapse is pending before hiding the sidebar
+  FAIL MC16 C4 hiding cancels work and resets to collapsed C=55
+  FAIL MC16 C4 shown sidebar stays at rest without another pointer event
+  OK   MC16 lifecycle finishes without animation keys
+  FAIL MC16 C1 hover in: no view opacity animation starts at zero
+  FAIL MC16 C1 hover in: one container cross-fade and no pager animation
+  FAIL MC16 C1 hover in: pager/container retain full presentation opacity at +16ms
+  OK   MC16 C3 expanded add gives two titled cards and C=145 (Reduce Motion true)
+  OK   MC16 C3 expanded removal returns to one card and C=74 (Reduce Motion true)
+  FAIL MC16 C1 hover out: no view opacity animation starts at zero
+  FAIL MC16 C1 hover out: one container cross-fade and no pager animation
+  FAIL MC16 C1 hover out: pager/container retain full presentation opacity at +16ms
+  FAIL MC16 C1 fourth source, unchanged height: no view opacity animation starts at zero
+  FAIL MC16 C1 fourth source, unchanged height: one container cross-fade and no pager animation
+  OK   MC16 C1 fourth source, unchanged height: pager/container retain full presentation opacity at +16ms
+  OK   MC16 C1 fourth source keeps C=55
+  FAIL MC16 C2 width drag attaches no animations (expanded false, Reduce Motion true)
+  OK   MC16 C2 400→228 drag ends at exact inset widths in model and presentation (expanded false, Reduce Motion true)
+  FAIL MC16 C2 width drag attaches no animations (expanded true, Reduce Motion true)
+  OK   MC16 C2 400→228 drag ends at exact inset widths in model and presentation (expanded true, Reduce Motion true)
+  OK   MC16 C4 collapse is pending before hiding the sidebar
+  FAIL MC16 C4 hiding cancels work and resets to collapsed C=55
+  FAIL MC16 C4 shown sidebar stays at rest without another pointer event
+  OK   MC16 lifecycle finishes without animation keys
+
+checks: 12 passed, 18 failed

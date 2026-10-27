@@ -17,6 +17,7 @@ enum RenderCLI {
         case "tooltip": try tooltip(rest)
         case "space-manager": try spaceManager(rest)
         case "compare": try Compare.run(rest)
+        case "compare-media": try MediaCompare.run(rest)
         case "bench": try Bench.run(rest)
         case "check": try Checks.run(rest)
         case "divider-check": try DividerChecks.run(rest)
@@ -33,8 +34,8 @@ enum RenderCLI {
                             [--banner auto-archive] [--preview folder:N]
                             [--clear-today] [--collapse-folders] [--no-lights] [--page] [--crop X,Y,W,H]
           --media "today:0=audible,today:1=muted,today:2=recording" [--media-depth N] [--media-theme default|red] [--reduce-motion] [--crop-media] [--crop-media-controls]
-          --media-hover card:N|title:N|stack --media-drawer N
-          --media-button-hover NAME [--media-button-pressed] [--media-tooltip] [--media-increase-contrast]
+          --media-hover expanded|title:N --media-drawer N [--media-title-from-ax PATH]
+          --media-button-hover NAME[:N] [--media-button-pressed] [--media-tooltip] [--media-increase-contrast]
           ROW: pinned:N | today:N | favorite:N | folder:N/M (child M of the N-th pinned folder)
           TARGET: ROW | newtab | divider | header | url | home | plus | switcher:N | toolbar:back|forward|reload|toggle
           --switch-to N --at SECONDS: start an animated switch to Space N and capture that moment
@@ -42,7 +43,8 @@ enum RenderCLI {
       sidebar-render space-manager --out FILE.png [--snapshot DIR] [--size WxH] [--scale 1|2] [--profiles 2] [--columns N --rows N --scroll-x X]
       sidebar-render synth --out DIR [--rows N]
       sidebar-render compare --arc FILE.png --ours FILE.png --spec NAME --out DIR [--scale S]
-      sidebar-render bench [--rows N] [--selection] [--bulk N] [--expand-all N] [--row-media mixed] [--media-card]
+      sidebar-render bench [--rows N] [--selection] [--bulk N] [--expand-all N] [--row-media mixed] [--media-card|--media-stack]
+      sidebar-render compare-media --arc FILE.png --ours FILE.png --out DIR --state rest|expanded|stack|stack-expanded
       sidebar-render check
     """
 
@@ -173,6 +175,10 @@ enum RenderCLI {
 
     static func render(_ args: [String]) throws {
         guard let dir = value(args, "--snapshot"), let out = value(args, "--out") else { throw CLIError(description: usage) }
+        if value(args, "--media-title-from-ax") != nil,
+           !URL(fileURLWithPath: out).standardizedFileURL.pathComponents.contains(".re") {
+            throw CLIError(description: "AX-title renders must stay under .re; use synthetic titles for committed images")
+        }
         let model = try loadModel(dir)
         let context = try makeContext(args, model: model)
         var options = RenderScene.Options()
