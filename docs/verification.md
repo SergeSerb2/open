@@ -3,11 +3,16 @@
 Run from any directory on macOS with Swift and Python 3 installed:
 
 ```sh
-tools/verify-all.sh
-tools/verify-all.sh --quick
-tools/verify-all.sh --only route,favicons
-tools/verify-all.sh --with-arc-data --keep-logs
+~/Library/Caches/OpenRE/scripts/heavy.sh tools/verify-all.sh
+~/Library/Caches/OpenRE/scripts/heavy.sh tools/verify-all.sh --quick
+~/Library/Caches/OpenRE/scripts/heavy.sh tools/verify-all.sh --only route,favicons
+~/Library/Caches/OpenRE/scripts/heavy.sh tools/verify-all.sh --with-arc-data --keep-logs
 ```
+
+The Site Control check opens native menus and acquires
+`/tmp/open-onscreen-e2e.lock` around that suite. Do not hold this lock around the
+whole runner: the release build needs no on-screen lock. Standalone native-menu
+harness commands still need the lock, per AGENTS.md rule 11.
 
 The runner uses `/bin/bash` 3.2. It builds `Packages/OpenKit` exactly once with
 `nice -n 10 swift build -c release -j "${VERIFY_JOBS:-6}"`. The build runs in its

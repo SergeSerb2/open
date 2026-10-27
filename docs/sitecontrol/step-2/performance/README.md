@@ -18,7 +18,7 @@ Median of the five run medians: **125,480,554 → 95,035,968 instructions**, a *
 
 Changes: cache the shared panel path; avoid duplicate initial row application; construct row drawing layers only when first exposed by the scroll clip; skip clipped display work; give Boost circles only their glyph and focus layers. Rows remain in the native hierarchy. A real keyboard/scroll flow also checks newly exposed Settings title pixels.
 
-The 8 ms main-thread CPU gate is unchanged. These instruction measurements are diagnostic evidence of work reduction, not a replacement timing gate. Every after CPU p95 above still exceeds 8 ms under load 19–20. The pre-pause 11 ms result also failed that gate. No wall-clock limit was added.
+These A/B logs predate the lead’s instruction-gate ruling below. Every after CPU p95 above exceeds the 8 ms product target under load 19–20. The pre-pause 11 ms result also failed the former CPU gate. No wall-clock limit was added.
 
 
 ## Time Profiler attribution
