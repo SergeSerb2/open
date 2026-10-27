@@ -1,0 +1,10 @@
+
+NAME                   RESULT SECONDS
+build                  PASS   79
+media-demo             PASS   0
+profiles               PASS   0
+settings-preview       PASS   79
+sidebar-render         PASS   105
+sidebar-compare        FAIL   135
+
+Logs: /Users/m1-dev/.t3/worktrees/open/t3-802603f2/.re/s5b/focused-fixed/

@@ -71,7 +71,7 @@ public extension AutoArchiveInterval {
     public static let values: [String: Any] = [
         "open.settings.lastPane": "general", "open.general.automaticallyUpdate": true,
         "open.general.warnBeforeQuitting": true, "open.general.previewsEnabled": true,
-        "open.general.previewsFolders": true, "open.general.previewsPages": true, "open.general.previewsDelaySeconds": 0.5,
+        "open.general.previewsFolders": true, "open.general.previewsPages": true,
         "open.general.searchSuggestNoticeDismissed": false,
         "open.links.externalInLittleOpen": true, "open.links.littleOpenHotkeyEnabled": true,
         "open.links.optionCommandClickLittleOpen": true, "open.links.openPeekOtherSites": true,

@@ -45,7 +45,7 @@ Packages/OpenKit/.build/release/settings-preview render --out /tmp/settings-pane
 
 ## Verification
 
-No unit tests or desktop automation. All 32 `settings-preview check` flows pass ([receipt](first-run/checks.txt)). They exercise the real view-model entry points, files, importer, SQLite readers and action boundaries. The first-run logger is intentionally a preview adapter, with a canned outcome derived from an actual synthetic import report; this is not app launch acceptance.
+No unit tests or desktop automation. All 37 `settings-preview check` flows pass ([receipt](first-run/checks.txt), regenerated from the same S5b acceptance command as `settings/checks.txt`, with no preview-delay default). They exercise the real view-model entry points, files, importer, SQLite readers and action boundaries. The first-run logger is intentionally a preview adapter, with a canned outcome derived from an actual synthetic import report; this is not app launch acceptance.
 
 | Check | Proof |
 |---|---|

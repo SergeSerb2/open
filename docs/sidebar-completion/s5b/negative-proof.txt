@@ -1,0 +1,7 @@
+OLD CODE EXIT 1
+  FAIL HP1 stored delay 7.0 is ignored: scheduled delay equals armDelay and deadline equals arm time + armDelay
+  FAIL HP1 stored delay 0 is ignored: scheduled delay equals armDelay and deadline equals arm time + armDelay
+RESTORED EXIT 0
+  OK   HP1 stored delay 7.0 is ignored: scheduled delay equals armDelay and deadline equals arm time + armDelay
+  OK   HP1 stored delay 0 is ignored: scheduled delay equals armDelay and deadline equals arm time + armDelay
+checks: 561 passed, 0 failed

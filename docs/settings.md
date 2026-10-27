@@ -106,7 +106,7 @@ The import fixture contains two Spaces, three tabs, one skipped easel, and two c
 | Downloads progress, Retry/Reveal IDs, missing-file guard | PASS |
 | Captures thumbnail/Save As/delete file+index; profile History search/open | PASS |
 | Four Library empty states: native hosted AX labels and valid PNGs | PASS |
-| `settings-preview check` | PASS — 30 checks, 0 failed ([current receipt](first-run/checks.txt)); the original 28 Settings/Library flows are retained |
+| `settings-preview check` | PASS — 37 checks, 0 failed ([current receipt](settings/checks.txt)); the original 28 Settings/Library flows are retained |
 | Renders | 86 PNGs: all panes/sections at both scales, General/Profiles in both appearances, distinct long-pane details, every requested sheet, import Choose/Review/Passwords/Report and engine-ready Passwords copy, Library empty states, shortcut states, suggestion notice, engine editor, and invalid rule |
 | `dump-keys` | PASS — synthetic-root guard; sorted persisted values |
 

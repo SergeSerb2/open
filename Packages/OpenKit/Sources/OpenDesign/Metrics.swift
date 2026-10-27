@@ -1,4 +1,5 @@
 import CoreGraphics
+import Foundation
 
 // Layout metrics in points. Frames are `[x, y, w, h]` from the window's top-left
 // corner (y grows down), measured on Arc 1.170.0 at sidebar width 228
@@ -323,6 +324,8 @@ public enum SpaceManagerMetrics {
 
 /// Hover preview geometry (completion §3.6; guesses pending capture C4).
 public enum HoverPreviewMetrics {
+    /// Open choice (§3.6): fixed 0.5 s; one Arc sample ≈0.42 s, with no delay setting (S2 02/0050).
+    public static let armDelay: TimeInterval = 0.5
     public static let pageWidth: CGFloat = 420
     public static let pageMaxHeight: CGFloat = 560
     public static let windowInset: CGFloat = 10
