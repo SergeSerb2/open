@@ -2,6 +2,7 @@
 
 Small items found during review and verification. Each line: area — issue — where found.
 
+- Site Control (performance) — the cold-open absolute target (main-thread CPU p95 < 8 ms, plan §8) is not yet proven on a quiet M5. With #96 (2b8ea5c) at load 8 the CPU p95 was 10.2 ms and 8.9 ms (diagnostic). The hard gate is the main-thread instruction budget (94.7–94.9 M against a 104,539,565 ceiling; #96 cut the work by 24 %). Re-measure on an idle M5 (`sitecontrol-render bench --fixture cold`, load1 < 3); if p95 is still over 8 ms, optimize the first native display and section/row build (the top profile costs). App-shell Step I owns the quiet-machine budget pass. — lead, #96 merge, 2026-10-26
 - Media Step 3b (#110, code review C5) — manual pointer check pending: expand two mini-player cards, click the top title (Back to Tab) or Close, then move over the tab list; the remaining card must collapse. No tracking-area fix was made without a real-pointer result. Agents must not drive the desktop. `docs/plans/media-pip.md` §8.5. — 2026-10-26
 - Media Step 6/App integration — capture real-window mini-player rest, hover and expanded snapshots and compare them with Arc under design §7. Step 3b verifies the composed sidebar offscreen with synthetic hosts; that evidence does not clear the App/engine integration or real-window snapshot gate. `docs/plans/media-pip.md` §9, Step 6. — 2026-10-26
 
