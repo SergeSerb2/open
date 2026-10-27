@@ -154,9 +154,16 @@ including research/build/wait time. It converts remaining absolute time to a
 monotonic deadline once per job and reserves cleanup time. Five low and five
 burner samples must all have valid positive monotonic thread counters, with
 combined `(max-min)/median ≤0.03`. Failure, unavailability, or expiration ends
-the probe; there is no replacement probe or padding. M5 must verify the same
-command before any instruction budget exists. No callback constant is pinned
-and the runtime cost gap stays open pending that evidence.
+the probe; there is no replacement probe or padding. The sole M1 campaign
+completed with ten valid positive monotonic samples but failed the range limit:
+637,692,002 / 655,362,864 / 661,030,831 instructions (min/median/max), spread
+3.5612%. Low/high medians were 657,614,454 / 641,516,335 (−2.4480%). The two groups
+used byte-identical release binary SHA-256
+`777284c2416419257340410449ea36e3dab955678918e7d1b9af91dd338e0fce`;
+Swift sources are in `ccf0b31`, with later engine/docs-only main merge `4a5b9d3`.
+All samples had page builds/reloads 4/4, manager/page/row layouts 1/4/60 and four
+model-matching 105-row outlines. Probing stopped; no instruction budget exists.
+No callback constant is pinned and the runtime cost gap stays open.
 The historical 15-run same-section M5 wall range was 59.7…87.2 ms (median ≈70 ms),
 which must not be confused with the earlier 33.7…36 ms Library-build number.
 No instruction threshold or negative threshold crossing is claimed here.
