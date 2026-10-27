@@ -129,6 +129,9 @@ class Open:
         self.config, self.style = config, style
         self.sock = os.path.join(user_data, "automation.sock")
         app = os.path.join(ROOT, "build", config, "Open.app", "Contents", "MacOS", "Open")
+        latest_source=max(Path(ROOT,'App').rglob('*.swift'),key=lambda p:p.stat().st_mtime)
+        if latest_source.stat().st_mtime>os.path.getmtime(app):
+            raise RuntimeError('Refused stale App build; newer source: '+str(latest_source.relative_to(ROOT)))
         self.executable = app
         self.bundle = os.path.dirname(os.path.dirname(os.path.dirname(app)))
         activator_source = os.path.join(ROOT, "tools", "e2e", "activate-own-app.swift")

@@ -16,6 +16,7 @@ final class PageDialogPresenter {
     init(page: OEWebContent, dialog: OEJavaScriptDialog, held: Bool) {
       self.page = page; self.dialog = dialog; self.held = held; super.init()
     }
+    @available(*, unavailable) required init?(coder: NSCoder) { fatalError() }
     override var acceptsFirstResponder: Bool { true }
     override func keyDown(with event: NSEvent) {
       // A one-button NSAlert has no Cancel key equivalent. Keep Escape on
