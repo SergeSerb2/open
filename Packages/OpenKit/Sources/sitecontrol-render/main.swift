@@ -5,7 +5,7 @@ import CryptoKit
 MainActor.assumeIsolated {
     _ = NSApplication.shared
     NSApp.setActivationPolicy(CommandLine.arguments.contains("editor-native-key") ? .regular : .prohibited)
-    NSApp.finishLaunching()
+    if CommandLine.arguments.contains("editor-native-key") { NSApp.finishLaunching() }
     do { try CLI.run(Array(CommandLine.arguments.dropFirst())) }
     catch { FileHandle.standardError.write(Data("sitecontrol-render: \(error)\n".utf8)); exit(1) }
 }

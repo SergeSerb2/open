@@ -151,7 +151,7 @@ open class ColorPadView: NSView {
     open override func keyDown(with event: NSEvent) {
         if [123, 124, 125, 126].contains(event.keyCode) {
             guard interactionEnabled else { return }; showsKeyboardFocus = true
-            if !keyboardActive { keyboardActive = true; onInput?(.beginKeyboardGesture) }
+            if !keyboardActive { onInput?(.beginKeyboardGesture); keyboardActive = true }
             arrowKeys.insert(event.keyCode)
             if style.keyboardEndDelay>0 { scheduleKeyboardEnd() }
         }
@@ -176,7 +176,7 @@ open class ColorPadView: NSView {
     open override func accessibilityPerformDecrement() -> Bool { onInput?(.keyboardHue(-5)); return !values.isEmpty }
     public func accessibilityStep(hue: Double? = nil,radius: Double? = nil) -> Bool {
         guard interactionEnabled else { return false }
-        if !keyboardActive { keyboardActive = true; onInput?(.beginKeyboardGesture) }
+        if !keyboardActive { onInput?(.beginKeyboardGesture); keyboardActive = true }
         if let hue { onInput?(.keyboardHue(hue)) }; if let radius { onInput?(.keyboardRadius(radius)) }
         if style.keyboardEndDelay>0 { scheduleKeyboardEnd() } else { finishKeyboardGesture() }; return true
     }

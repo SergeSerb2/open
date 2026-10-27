@@ -507,7 +507,8 @@ enum SiteControlGlyphRenderer {
     }
     static func sparkle(_ c: CGContext,at p: CGPoint,size: CGFloat,alpha: CGFloat) { let path = CGMutablePath(); path.move(to: CGPoint(x: p.x,y: p.y-size/2)); path.addQuadCurve(to: CGPoint(x: p.x+size/2,y: p.y),control: p); path.addQuadCurve(to: CGPoint(x: p.x,y: p.y+size/2),control: p); path.addQuadCurve(to: CGPoint(x: p.x-size/2,y: p.y),control: p); path.addQuadCurve(to: CGPoint(x: p.x,y: p.y-size/2),control: p); c.setAlpha(alpha); c.addPath(path); c.fillPath(); c.setAlpha(1) }
     static func symbol(_ name: String,size: CGFloat,weight: NSFont.Weight,color: NSColor,sparkles: SiteControlSparkles,scale: CGFloat,fit: CGSize? = nil,phase: CGPoint = .zero,symbolScale: NSImage.SymbolScale? = nil) -> Image? {
-        let key = "\(name)|\(size)|\(weight.rawValue)|\(color)|\(sparkles)|\(scale)|\(String(describing: fit))|\(phase)|\(String(describing: symbolScale))"
+        let baseKey = "\(name)|\(size)|\(weight.rawValue)|\(color)|\(sparkles)|\(scale)|\(String(describing: fit))|\(phase)"
+        let key = symbolScale.map { baseKey+"|\($0.rawValue)" } ?? baseKey
         if let cached = symbols[key] { return cached }
         let configuration = symbolScale.map { NSImage.SymbolConfiguration(pointSize: size,weight: weight,scale: $0) } ?? .init(pointSize: size,weight: weight)
         guard let source = NSImage(systemSymbolName: name,accessibilityDescription: nil)?.withSymbolConfiguration(configuration) else { return nil }
