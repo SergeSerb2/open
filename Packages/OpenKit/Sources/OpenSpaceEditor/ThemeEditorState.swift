@@ -20,14 +20,19 @@ public struct ThemeEditorState: Equatable, Sendable {
     public var style: SpaceStyle?
     public var presetPage: Int = 0
     public var isGestureInProgress = false
+    public private(set) var range: ClosedRange<Double>
+    public private(set) var saturation: Double
     private var emptyAppearance: SpaceStyleAppearance = .automatic
     private var startKnob: CGPoint?
     private var startPointer: CGPoint?
 
-    public init(style: SpaceStyle? = nil) { self.style = style }
+    public init(style: SpaceStyle? = nil) {
+        self.style = style
+        let key = style.map { ThemeColorMath.toP3($0.keyColor) }
+        range = ThemeColorMath.editorRange(key: key, mode: style?.appearance ?? .automatic)
+        saturation = key.map { max(0.01, ThemeColorMath.hsl($0).s) } ?? 1
+    }
     public var appearance: SpaceStyleAppearance { style?.appearance ?? emptyAppearance }
-    public var range: ClosedRange<Double> { ThemeColorMath.lightnessRange(appearance) }
-    public var saturation: Double { style.map { max(ThemeColorMath.hsl(ThemeColorMath.toP3($0.keyColor)).s, 0.01) } ?? 0.8 }
     public var knob: CGPoint? { style.map { ThemeColorMath.knob(for: ThemeColorMath.toP3($0.keyColor), range: range) } }
 
     public mutating func apply(_ action: ThemeEditorAction) {
@@ -54,22 +59,31 @@ public struct ThemeEditorState: Equatable, Sendable {
             }
         case .removeColor:
             if let value = style {
-                if value.colorCount == 1 { style = nil; emptyAppearance = .automatic }
+                if value.colorCount == 1 { style = nil; emptyAppearance = .automatic; range = 0.01...0.97; saturation = 1 }
                 else { style?.colorCount -= 1 }
             }
         case .setAppearance(let mode):
             guard mode != appearance else { return }
-            if let value = style, let position = knob {
-                var result = value
-                result.keyColor = ThemeColorMath.toExtendedSRGB(ThemeColorMath.color(at: position, saturation: saturation,
-                                                                                    range: ThemeColorMath.lightnessRange(mode)))
-                result.appearance = mode; style = result
-            } else { emptyAppearance = mode }
+            if mode != .automatic {
+                let next = ThemeColorMath.forcedRange(mode)
+                if var value = style {
+                    let key = ThemeColorMath.hsl(ThemeColorMath.toP3(value.keyColor))
+                    let t = min(1, max(0, (key.l - range.lowerBound) / (range.upperBound - range.lowerBound)))
+                    value.keyColor = ThemeColorMath.toExtendedSRGB(ThemeColorMath.rgb(h: key.h, s: key.s,
+                        l: next.lowerBound + t * (next.upperBound - next.lowerBound)))
+                    style = value
+                }
+                range = next
+            }
+            if style != nil { style?.appearance = mode } else { emptyAppearance = mode }
         case .selectPreset(let index):
             guard SpaceStylePresets.all.indices.contains(index) else { return }
             let preset = SpaceStylePresets.all[index].style
             var result = style ?? SpaceStyle(keyColor: preset.keyColor, appearance: appearance)
             result.keyColor = preset.keyColor; result.colorCount = preset.colorCount; result.wheel = preset.wheel
+            let key = ThemeColorMath.toP3(preset.keyColor)
+            if appearance == .automatic { range = ThemeColorMath.autoRange(lightness: ThemeColorMath.hsl(key).l) }
+            saturation = max(0.01, ThemeColorMath.hsl(key).s)
             style = result
         case .setPresetPage(let page): presetPage = min(4, max(0, page))
         case .setIntensity(let value, let final):
