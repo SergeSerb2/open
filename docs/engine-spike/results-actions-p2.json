@@ -4,7 +4,7 @@
       "first": {
         "bytes": 5120,
         "hash": "562998a981ed6661a9258dd52c9bf0c615933f170c986853f8bf429eaf1cff6c",
-        "object": -6521548396694226634,
+        "object": 609122544288107094,
         "pixels": [
           [
             16,
@@ -21,7 +21,7 @@
       "tab_b": {
         "bytes": 5120,
         "hash": "562998a981ed6661a9258dd52c9bf0c615933f170c986853f8bf429eaf1cff6c",
-        "object": -6521548396694226634,
+        "object": 609122544288107094,
         "pixels": [
           [
             16,
@@ -92,7 +92,7 @@
         "icon": {
           "bytes": 5120,
           "hash": "562998a981ed6661a9258dd52c9bf0c615933f170c986853f8bf429eaf1cff6c",
-          "object": 6863168434738917349,
+          "object": 1015951338876875090,
           "pixels": [
             [
               16,
@@ -116,7 +116,7 @@
         "toolbarImage": {
           "bytes": 15680,
           "hash": "c4ede19eb9ae69945177729de707be016351e6351aa582ae9d848ec71f097243",
-          "object": 6616950469291048930,
+          "object": -3840494411454011860,
           "pixels": [
             [
               28,
@@ -162,7 +162,7 @@
           "content": 0,
           "extension": "jihnllejimhgcmfmcnchbekapeajboik",
           "tab": "",
-          "time": 1793072083.74206,
+          "time": 1793078275.615746,
           "type": "extensionMenuRequest"
         }
       ]
@@ -203,7 +203,7 @@
         "icon": {
           "bytes": 5120,
           "hash": "7d646905a308a8e5b9980dfc80bd46121f3e499467c0e735cb5d1356aff5b950",
-          "object": -588808500196232491,
+          "object": 3852934191552206580,
           "pixels": [
             [
               16,
@@ -227,7 +227,7 @@
         "toolbarImage": {
           "bytes": 15680,
           "hash": "20aa85807abe2fed5aa5a6379ef514a083f80c9b9f7a0a43120ac5b8ab4a6e5c",
-          "object": 430068381324783262,
+          "object": 3463182269738938123,
           "pixels": [
             [
               28,
@@ -257,7 +257,7 @@
       "popup_opened": false,
       "storage": {
         "clicks": 1,
-        "lastClickTab": 311135649
+        "lastClickTab": 1391089822
       }
     },
     "open_popup_api": {
@@ -317,7 +317,7 @@
               "phase": "open",
               "stillOpenInsideCallback": true,
               "tab": "",
-              "time": 1793072090.387424,
+              "time": 1793078282.2459579,
               "toggle": false,
               "type": "popupCallbackClose"
             }
@@ -333,7 +333,7 @@
               "phase": "open",
               "stillOpenInsideCallback": true,
               "tab": "",
-              "time": 1793072090.477397,
+              "time": 1793078282.3199692,
               "toggle": true,
               "type": "popupCallbackClose"
             }
@@ -349,7 +349,7 @@
               "phase": "ready",
               "stillOpenInsideCallback": true,
               "tab": "",
-              "time": 1793072091.68538,
+              "time": 1793078283.569711,
               "toggle": false,
               "type": "popupCallbackClose"
             }
@@ -365,7 +365,7 @@
               "phase": "ready",
               "stillOpenInsideCallback": true,
               "tab": "",
-              "time": 1793072092.255042,
+              "time": 1793078284.153744,
               "toggle": true,
               "type": "popupCallbackClose"
             }
@@ -381,7 +381,7 @@
               "phase": "resize",
               "stillOpenInsideCallback": true,
               "tab": "",
-              "time": 1793072090.574867,
+              "time": 1793078282.444972,
               "toggle": false,
               "type": "popupCallbackClose"
             }
@@ -397,7 +397,7 @@
               "phase": "resize",
               "stillOpenInsideCallback": true,
               "tab": "",
-              "time": 1793072091.132355,
+              "time": 1793078283.00733,
               "toggle": true,
               "type": "popupCallbackClose"
             }
@@ -463,11 +463,11 @@
       "ok": true
     },
     "split_pane_action_and_menu": {
-      "expected_tab": 311135651,
+      "expected_tab": 1391089824,
       "menu_action_title": "Split right",
       "ok": true,
       "popup_stayed_open": true,
-      "popup_tab": 311135651
+      "popup_tab": 1391089824
     },
     "tab_switch_closes_popup": {
       "ok": true
@@ -507,78 +507,47 @@
         "forced": false,
         "ok": true,
         "owned_pids": [
-          17182,
-          17204,
-          17205,
-          17206,
-          17223,
-          17225,
-          17229,
-          17230,
-          17238,
-          17240,
-          17241,
-          17242,
-          17246,
-          17273,
-          17275,
-          17280,
-          17287,
-          17339,
-          17395
-        ],
-        "remaining_processes": [],
-        "reply": true,
-        "windows_after_quit": {
-          "count": 0,
-          "windows": []
-        },
-        "windows_before_quit": 1
-      },
-      {
-        "forced": false,
-        "ok": true,
-        "owned_pids": [
-          17576,
-          17597,
-          17598,
-          17601,
-          17607,
-          17608,
-          17610,
-          17611,
-          17648,
-          17862,
-          17864,
-          17868,
-          17893,
-          17896,
-          17898,
-          17901,
-          17903,
-          18553,
-          20286,
-          20442,
-          21198,
-          21228,
-          21252,
-          21451,
-          21611,
-          21654,
-          21674,
-          21682,
-          21687,
-          21825,
-          23516,
-          23565,
-          23747,
-          23786,
-          24017,
-          24431,
-          24999,
-          25012,
-          25037,
-          25584
+          46735,
+          46740,
+          46741,
+          46745,
+          46792,
+          46793,
+          46802,
+          46810,
+          46843,
+          46932,
+          46933,
+          46934,
+          46937,
+          46941,
+          46957,
+          46967,
+          46971,
+          46986,
+          47110,
+          47112,
+          47132,
+          47144,
+          47146,
+          47148,
+          47171,
+          47217,
+          47219,
+          47278,
+          47282,
+          47284,
+          47379,
+          47502,
+          47733,
+          48274,
+          48424,
+          48639,
+          49279,
+          49445,
+          49454,
+          49487,
+          49798
         ],
         "remaining_processes": [],
         "reply": true,
@@ -592,181 +561,17 @@
   },
   "config": "Release",
   "engine": {
-    "distributionUUID": "4C4C4432-5555-3144-A144-B678285BC5F4",
-    "embeddedUUID": "4C4C4432-5555-3144-A144-B678285BC5F4",
+    "distributionCodeSHA256": "35b37ba3a72d079ed4e76fc7932bfe76e49b57c3456eda06f7fea9d928b901ae",
+    "distributionSHA256": "61c9ab17b6b08525af836cca93bba67819bfa1544f04abe5eae3baf4b57b98a8",
+    "distributionUUID": "4C4C44C8-5555-3144-A168-35B709BBDA3A",
+    "embeddedCodeSHA256": "35b37ba3a72d079ed4e76fc7932bfe76e49b57c3456eda06f7fea9d928b901ae",
+    "embeddedSHA256": "3e246c99539902496c44c4c6ed2533f3f4fd4a85f03b4f5e6dcaaf49f75f28d2",
+    "embeddedUUID": "4C4C44C8-5555-3144-A168-35B709BBDA3A",
+    "requiredSHA256": "61c9ab17b6b08525af836cca93bba67819bfa1544f04abe5eae3baf4b57b98a8",
     "source": "fork",
-    "stamp": "fork /Users/serge/Developer/open-engine/chromium_git/chromium/src/cef/binary_distrib/cef_binary_156.0.14+g4fa4ab5+chromium-156.0.8078.48_macosarm64_minimal 1793036548"
+    "stamp": "fork /Users/serge/Developer/open-engine/chromium_git/chromium/src/cef/binary_distrib/cef_binary_156.0.14+g4fa4ab5+chromium-156.0.8078.48_macosarm64_minimal 1793075034"
   },
-  "interrupted_attempts": [
-    {
-      "attempt": 1,
-      "checks": {
-        "action_image_cache": {
-          "first": {
-            "bytes": 5120,
-            "hash": "562998a981ed6661a9258dd52c9bf0c615933f170c986853f8bf429eaf1cff6c",
-            "object": 1516685882019578915,
-            "pixels": [
-              [
-                16,
-                16
-              ],
-              [
-                32,
-                32
-              ]
-            ],
-            "width": 16
-          },
-          "ok": true,
-          "tab_b": {
-            "bytes": 5120,
-            "hash": "562998a981ed6661a9258dd52c9bf0c615933f170c986853f8bf429eaf1cff6c",
-            "object": 1516685882019578915,
-            "pixels": [
-              [
-                16,
-                16
-              ],
-              [
-                32,
-                32
-              ]
-            ],
-            "width": 16
-          }
-        },
-        "actions_list": {
-          "ids": [
-            "jihnllejimhgcmfmcnchbekapeajboik",
-            "nngceckbapebfimnlniiiahkandclblb"
-          ],
-          "ok": true,
-          "probe": {
-            "accessibleName": "Action probe",
-            "badge": "",
-            "badgeColor": null,
-            "badgeTextColor": null,
-            "enabled": true,
-            "hasPopup": true,
-            "icon": {
-              "bytes": 5120,
-              "hash": "562998a981ed6661a9258dd52c9bf0c615933f170c986853f8bf429eaf1cff6c",
-              "object": -4817090256992164707,
-              "pixels": [
-                [
-                  16,
-                  16
-                ],
-                [
-                  32,
-                  32
-                ]
-              ],
-              "width": 16
-            },
-            "id": "jihnllejimhgcmfmcnchbekapeajboik",
-            "live": true,
-            "name": "Open action probe",
-            "pinned": false,
-            "pinnedIndex": -1,
-            "showingPopup": false,
-            "siteAccess": 0,
-            "title": "Action probe",
-            "toolbarImage": {
-              "bytes": 15680,
-              "hash": "c4ede19eb9ae69945177729de707be016351e6351aa582ae9d848ec71f097243",
-              "object": 5623719575409878885,
-              "pixels": [
-                [
-                  28,
-                  28
-                ],
-                [
-                  56,
-                  56
-                ]
-              ],
-              "width": 28
-            },
-            "tooltip": "Action probe",
-            "wantsToRun": false
-          }
-        },
-        "disabled_action_requests_menu": {
-          "ok": true,
-          "ran": true,
-          "requests": [
-            {
-              "content": 0,
-              "extension": "jihnllejimhgcmfmcnchbekapeajboik",
-              "tab": "",
-              "time": 1793072066.644105,
-              "type": "extensionMenuRequest"
-            }
-          ]
-        },
-        "on_clicked": {
-          "ok": true,
-          "popup_less_on_tab": true,
-          "popup_opened": false,
-          "storage": {
-            "clicks": 1,
-            "lastClickTab": 1308234101
-          }
-        },
-        "per_tab_state": {
-          "ok": true,
-          "tab_a": {
-            "badge": "7",
-            "badgeColor": "#ff0000ff",
-            "enabled": true,
-            "title": "Probe A"
-          },
-          "tab_b": {
-            "badge": "",
-            "enabled": false,
-            "title": "Action probe"
-          }
-        },
-        "popup_is_chrome_popup": {
-          "current_tab": "https://example.com/?a",
-          "document_size": [
-            320,
-            253
-          ],
-          "last_size": [
-            320,
-            253
-          ],
-          "ok": true,
-          "opened": true,
-          "popup_views": 1,
-          "ready": true,
-          "showing_popup": true,
-          "source": "user"
-        },
-        "split_pane_action_and_menu": {
-          "expected_tab": 1308234103,
-          "menu_action_title": "Split right",
-          "ok": true,
-          "popup_stayed_open": true,
-          "popup_tab": 1308234103
-        }
-      },
-      "focus": [
-        {
-          "active": false,
-          "frontmostApp": "UserNotificationCenter",
-          "frontmostPID": 1624,
-          "keyWindow": 0,
-          "uptime": 160632.51384250002
-        }
-      ],
-      "reason": "window-focus: key focus not ready: active=false target=156942 targetIsKey=false key=0 keySameObject=false frontmost=UserNotificationCenter frontmostPID=1624",
-      "status": "INTERRUPTED"
-    }
-  ],
+  "interrupted_attempts": [],
   "ping": {
     "cef": "156.0.14+g4fa4ab5+chromium-156.0.8078.48",
     "chromium": "156.0.8078.48",
@@ -780,17 +585,10 @@
       "AttributeGraph",
       "AttributeGraph graph data"
     ],
-    "pid": 17576,
-    "root": "/Users/serge/Library/Application Support/Open-E2E-actions-chrome-17178-c1dbaf3b",
-    "userData": "/Users/serge/Library/Application Support/Open-E2E-actions-chrome-17178-c1dbaf3b/Engine"
+    "pid": 46735,
+    "root": "/Users/serge/Library/Application Support/Open-E2E-actions-chrome-46514-b6be8d44",
+    "userData": "/Users/serge/Library/Application Support/Open-E2E-actions-chrome-46514-b6be8d44/Engine"
   },
-  "runtime_validation": {
-    "accepted": false,
-    "reason": "Engine lead confirmed the recorded distribution is stale: missing PR 93 r1 popup-key forwarding, main tab-strip code and main ad-block code. Runtime results on it do not prove this branch. Rebuild at Engine/fork state 338c920 is pending.",
-    "reported_at": "2026-10-26 21:18 America/Vancouver",
-    "required_engine_ref": "338c920"
-  },
-  "started": "2026-10-26 20:34:15",
-  "status": "INVALID_STALE_ENGINE",
+  "started": "2026-10-26 22:17:46",
   "style": "chrome"
 }

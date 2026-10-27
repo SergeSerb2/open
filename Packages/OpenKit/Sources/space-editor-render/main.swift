@@ -16,9 +16,10 @@ enum RenderCLI {
                                [--pressed CONTROL] [--focus CONTROL]
     space-editor-render window --out FILE.png --snapshot DIR|--synthetic [--space N] [--style JSON]
                                [--size 2216x1394] [--width 228] [--scale 1|2] [--appearance dark|light]
-                               [--provisional-import-intensity]
+                               [--calibrated-import-intensity]
     space-editor-render compare --arc CAPTURE.png --ours RENDER.png --spec editor|window|theme-window|session2-editor --out DIR
                                 [--noise 0|0.45] [--state empty|light|dark]
+    space-editor-render compare --spec session2-pad --capture-root SESSION17 --out .re/DIR
     space-editor-render fit-light-glyphs --capture-root SESSIONS --out .re/DIR [--inspect]
     space-editor-render check
     """
@@ -59,7 +60,7 @@ enum RenderCLI {
         options.size = size
         let context = try context(model, args: args)
         let scene = RenderScene(context: context, options: options, delegate: RecordingDelegate())
-        if args.contains("--provisional-import-intensity"), let focused = context.focusedSpace {
+        if (args.contains("--calibrated-import-intensity") || args.contains("--provisional-import-intensity")), let focused = context.focusedSpace {
             var style = SpaceThemeStyle(theme: focused.theme, system: context.systemAppearance)
             style.usesLegacyIntensity = false
             scene.background.style = style
@@ -96,10 +97,13 @@ enum RenderCLI {
         case "fit-light-glyphs": try LightGlyphFit.run(rest)
         case "math": try Checks.math(rest)
         case "check": try Checks.run()
+        case "lifetime-check": try EditorChecks.releasedControllerUndo()
+        case "compat-range-check": EditorChecks.compatibilityRange()
         case "window": try window(rest)
         case "editor": try EditorScene.render(rest)
         case "compare":
-            if value(rest, "--spec") == "session2-editor" { try SessionTwoCompare.run(rest) }
+            if value(rest, "--spec") == "session2-pad" { try SessionTwoPadCompare.run(rest) }
+            else if value(rest, "--spec") == "session2-editor" { try SessionTwoCompare.run(rest) }
             else if value(rest, "--spec") == "editor" { try EditorCompare.run(rest) }
             else if ["window", "theme-window"].contains(value(rest, "--spec") ?? "") { try Compare.run(rest) }
             else { throw CLIError(description: usage) }

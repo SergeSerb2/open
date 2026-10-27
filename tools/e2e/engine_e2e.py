@@ -3539,25 +3539,7 @@ def _actions_checks(app, results):
     # window's CEF delegate) and, when the page does not consume them, after
     # it (the engine forwards them). Ctrl+D: both stages. Cmd+W: this shell
     # closes the popup before the page (plan F2), and the tab stays.
-    tabs_before = len(app.call("tabs"))
-    state = open_popup(ACTION_PROBE)
-    keys = {"opened": bool(state)}
-    if state:
-        app.call("focus", tab=state["page"]["identifier"])
-        app.call("events")
-        app.call("key", key="d", modifiers=["ctrl"], window="popup", route="window")
-        stages = wait_until(lambda: (lambda e: e if {"beforePage", "unconsumed"} <= {x.get("phase") for x in e} else None)(
-            [x for x in app.call("events") if x["type"] == "popupKey"]), timeout=5)
-        keys["ctrl_d_stages"] = sorted({x.get("phase") for x in stages or []})
-        keys["still_open"] = bool(app.call("ext-popup").get("open"))
-        app.call("key", key="w", modifiers=["cmd"], window="popup", route="app")
-        keys["closed"] = bool(wait_until(lambda: not app.call("ext-popup").get("open"), timeout=5))
-        keys["tabs_kept"] = len(app.call("tabs")) == tabs_before
-        if not keys["closed"]:
-            close_popup()
-    results["popup_keys"] = {
-        "ok": keys["opened"] and keys.get("ctrl_d_stages") == ["beforePage", "unconsumed"] and keys.get("still_open")
-              and keys.get("closed") and keys.get("tabs_kept"), **keys}
+    popup_key_checks(app, results, open_popup, close_popup)
 
     # A delegate closes (twice), or toggles the action, from each engine
     # callback. The popup must remain alive INSIDE that callback and close
@@ -3659,8 +3641,41 @@ def _actions_checks(app, results):
     # and View Web Permissions open Chrome's pages as Open tabs; Remove shows
     # Chrome's uninstall dialog (Open's own prompts are P3), which is
     # dismissed, so the extension stays.
+    action_menu_command_checks(app, results, action)
+    popup_teardown_checks(app, results, actions, action, popup_eval, open_popup, close_popup, first)
+
+
+def popup_key_checks(app, results, open_popup, close_popup):
+    """Real app-level Cmd+W; shared with the focused break/revert flow."""
+    try:
+        tabs_before = len(app.call("tabs"))
+        state = open_popup(ACTION_PROBE)
+        keys = {"opened": bool(state)}
+        if state:
+            app.call("focus", tab=state["page"]["identifier"])
+            app.call("events")
+            app.call("key", key="d", modifiers=["ctrl"], window="popup", route="window")
+            stages = wait_until(lambda: (lambda e: e if {"beforePage", "unconsumed"} <= {x.get("phase") for x in e} else None)(
+                [x for x in app.call("events") if x["type"] == "popupKey"]), timeout=5)
+            keys["ctrl_d_stages"] = sorted({x.get("phase") for x in stages or []})
+            keys["still_open"] = bool(app.call("ext-popup").get("open"))
+            app.call("key", key="w", modifiers=["cmd"], window="popup", route="app")
+            keys["closed"] = bool(wait_until(lambda: not app.call("ext-popup").get("open"), timeout=5))
+            keys["tabs_kept"] = len(app.call("tabs")) == tabs_before
+            if not keys["closed"]:
+                close_popup()
+        results["popup_keys"] = {
+            "ok": keys["opened"] and keys.get("ctrl_d_stages") == ["beforePage", "unconsumed"] and keys.get("still_open")
+                  and keys.get("closed") and keys.get("tabs_kept"), **keys}
+    finally:
+        app.cleanup_surfaces()
+
+
+def action_menu_command_checks(app, results, action,
+                              prefixes=("Pin", "Manage Extension", "View Web Permissions", "Remove from")):
+    """Real Chrome menu commands; each opened surface closes on failure too."""
     ran = {}
-    for prefix in ("Pin", "Manage Extension", "View Web Permissions", "Remove from"):
+    for prefix in prefixes:
         try:
             items = [x for x in app.call("ext-menu", extension=ACTION_PROBE)
                      if not x["separator"] and x["title"].startswith(prefix) and not x["title"].startswith("Pinned")]
@@ -3682,7 +3697,7 @@ def _actions_checks(app, results):
                     and "Open action probe" in " ".join([w["title"]] + w.get("text", []))
                     and {"Cancel", "Remove"} <= set(w.get("text", []))], timeout=10)
                 if os.environ.get("OPEN_E2E_FAIL_UNINSTALL") == "1" and r["dialog"]:
-                    results["forced_uninstall_failure"] = {"ok": False, "dialog_seen": True}
+                    results["forced_uninstall_failure"] = {"ok": False, "dialog_seen": True, "dialog": r["dialog"]}
                     raise RuntimeError("forced early failure in uninstall confirmation case")
                 r["dismissed"] = app.call("dismiss")
                 time.sleep(1)
@@ -3700,7 +3715,6 @@ def _actions_checks(app, results):
         finally:
             app.cleanup_surfaces()
     results["action_menu_commands"] = {"ok": all(v["ok"] for v in ran.values()), "commands": ran}
-    popup_teardown_checks(app, results, actions, action, popup_eval, open_popup, close_popup, first)
 
 
 def popup_teardown_checks(app, results, actions, action, popup_eval, open_popup, close_popup, tab):
@@ -4615,13 +4629,18 @@ def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--style", default="alloy", choices=["alloy", "chrome"])
     ap.add_argument("--config", default="Debug")
+    ap.add_argument("--engine-sha256", help="require this Vendor framework SHA-256 and matching embedded code before app launch")
+    ap.add_argument("--engine-fingerprint-only", action="store_true", help="verify built engine artifacts and exit without launching Open")
     ap.add_argument("--extensions", default=os.path.join(ROOT, ".re", "ext", "unpacked"))
     ap.add_argument("--only", choices=["shell", "extensions", "features", "measure", "tabstrip", "window", "sidebar", "peek",
-                                       "commandbar", "app-actions", "actions", "profiles"],
-                    required=True)
+                                       "commandbar", "app-actions", "actions", "profiles"])
     ap.add_argument("--keep", action="store_true",
                     help="keep this run's data root, cache root and scratch folder (paths printed at the end)")
     opts = ap.parse_args()
+    if opts.only is None and not opts.engine_fingerprint_only:
+        ap.error("--only is required unless --engine-fingerprint-only is set")
+    if opts.engine_sha256 and not re.fullmatch(r"[0-9a-f]{64}", opts.engine_sha256):
+        ap.error("--engine-sha256 must be 64 lowercase hexadecimal characters")
 
     os.makedirs(OUT, exist_ok=True)
     # Every run is isolated: several agents run this harness at once, and two
@@ -4696,12 +4715,73 @@ def main():
         proc = subprocess.run(['dwarfdump', '--uuid', path], capture_output=True, text=True)
         match = re.search(r'UUID: ([0-9A-F-]+)', proc.stdout)
         return match.group(1) if match else ''
+    def framework_sha256(path):
+        if not os.path.isfile(path):
+            return ''
+        digest = hashlib.sha256()
+        # Largest Python read buffer: 8 MiB; never load the whole framework.
+        with open(path, 'rb') as stream:
+            for chunk in iter(lambda: stream.read(8 * 1024 * 1024), b''):
+                digest.update(chunk)
+        return digest.hexdigest()
+
     framework = 'Chromium Embedded Framework.framework/Chromium Embedded Framework'
     embedded = framework_uuid(os.path.join(ROOT, 'build', opts.config, 'Open.app/Contents/Frameworks', framework))
     vendor = framework_uuid(os.path.join(ROOT, 'Vendor/cef/Release', framework))
     stamp_path = os.path.join(ROOT, 'Vendor/cef/.open-source')
     stamp = Path(stamp_path).read_text().strip() if os.path.exists(stamp_path) else ''
-    results['engine'] = {'source': 'fork' if stamp.startswith('fork ') and embedded and embedded == vendor else 'unconfirmed', 'embeddedUUID': embedded, 'distributionUUID': vendor, 'stamp': stamp}
+    def framework_code_sha256(path):
+        # Xcode re-signs the copied framework. Compare every byte after
+        # removing signatures from private APFS clones and normalizing only
+        # __LINKEDIT sizes (codesign can retain signature storage in vmsize).
+        with tempfile.TemporaryDirectory(prefix='open-engine-fingerprint-') as folder:
+            clone = os.path.join(folder, 'framework')
+            subprocess.run(['cp', '-c', path, clone], check=True)
+            subprocess.run(['codesign', '--remove-signature', clone], check=True, capture_output=True)
+            with open(clone, 'r+b') as stream:
+                header = stream.read(32)
+                magic, _, _, _, count, size, _, _ = struct.unpack('<8I', header)
+                if magic != 0xfeedfacf or count > 4096 or size > 1024 * 1024:
+                    raise RuntimeError('unsupported engine Mach-O load commands')
+                commands = bytearray(stream.read(size))
+                offset, found = 0, False
+                for _ in range(count):
+                    if offset + 8 > len(commands):
+                        raise RuntimeError('truncated engine load command')
+                    command, length = struct.unpack_from('<II', commands, offset)
+                    if length < 8 or offset + length > len(commands):
+                        raise RuntimeError('invalid engine load command length')
+                    if command == 0x19 and length >= 72 and bytes(commands[offset + 8:offset + 24]).rstrip(b'\0') == b'__LINKEDIT':
+                        file_offset = struct.unpack_from('<Q', commands, offset + 40)[0]
+                        payload = os.path.getsize(clone) - file_offset
+                        if payload < 0 or found:
+                            raise RuntimeError('invalid engine linkedit range')
+                        struct.pack_into('<Q', commands, offset + 32, (payload + 16383) & ~16383)
+                        struct.pack_into('<Q', commands, offset + 48, payload)
+                        found = True
+                    offset += length
+                if not found or offset != len(commands):
+                    raise RuntimeError('incomplete engine load commands')
+                stream.seek(32)
+                stream.write(commands)
+            return framework_sha256(clone)
+
+    embedded_sha = framework_sha256(os.path.join(ROOT, 'build', opts.config, 'Open.app/Contents/Frameworks', framework))
+    vendor_sha = framework_sha256(os.path.join(ROOT, 'Vendor/cef/Release', framework))
+    embedded_code_sha = framework_code_sha256(os.path.join(ROOT, 'build', opts.config, 'Open.app/Contents/Frameworks', framework))
+    vendor_code_sha = framework_code_sha256(os.path.join(ROOT, 'Vendor/cef/Release', framework))
+    results['engine'] = {'source': 'fork' if stamp.startswith('fork ') and embedded_code_sha == vendor_code_sha else 'unconfirmed',
+                         'embeddedUUID': embedded, 'distributionUUID': vendor, 'stamp': stamp,
+                         'embeddedSHA256': embedded_sha, 'distributionSHA256': vendor_sha,
+                         'requiredSHA256': opts.engine_sha256 or '',
+                         'embeddedCodeSHA256': embedded_code_sha, 'distributionCodeSHA256': vendor_code_sha}
+    if embedded_code_sha != vendor_code_sha or (opts.engine_sha256 and vendor_sha != opts.engine_sha256):
+        sys.exit('ENGINE_FINGERPRINT_MISMATCH before app launch: expectedVendor=%s vendor=%s embeddedCode=%s vendorCode=%s' %
+                 (opts.engine_sha256, vendor_sha, embedded_code_sha, vendor_code_sha))
+    print('engine_fingerprint      PASS vendor=%s code=%s' % (vendor_sha, embedded_code_sha), flush=True)
+    if opts.engine_fingerprint_only:
+        print(json.dumps(results['engine'], sort_keys=True), flush=True)
+        return
     def execute():
         if opts.only == "shell":
             results["shell"] = CheckedResults(tracker)
@@ -4733,6 +4813,10 @@ def main():
                 if opts.only == "extensions":
                     extension_checks(app, opts.style, results["extensions"])
                 elif opts.only == "tabstrip":
+                    # LaunchServices can answer the socket before granting
+                    # foreground focus. Establish the real window precondition
+                    # through the same exact-PID activation path as native keys.
+                    app.call("window-focus", id=app.call("window-state")["id"], activate=True)
                     tabstrip_checks(app, results["tabstrip"])
                 elif opts.only == "actions":
                     actions_checks(app, results["actions"])

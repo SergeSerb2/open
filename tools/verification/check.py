@@ -449,6 +449,9 @@ def main():
         space_icon_import(cli)
     elif name == "space-editor":
         all_passed(run(str(root / "Packages/OpenKit/.build/release/space-editor-render"), "check"))
+    elif name == "space-pad-compare":
+        text = run(sys.executable, str(root / "tools/verification/space-pad-compare.py"))
+        matches(r"session2-pad: [1-9]\d* gate rows PASS", text)
     elif name == "roundtrip":
         data = seed_snapshot(cli, seed)
         shutil.copytree(seed, "data")

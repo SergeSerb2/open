@@ -377,3 +377,12 @@ child's raw command id and requires both the engine refusal log and no extension
 click event. These use the same real context-menu policy/selection path as the
 existing hidden-native-command check. Live refusal logs are read from the
 LaunchServices stderr file before app quit.
+
+For a revision-specific engine gate, pass `--engine-sha256 <64 lowercase hex>`.
+The runner requires the complete Vendor framework to match that exact digest.
+Xcode re-signs the embedded copy, so it also compares every byte of both binaries
+after removing signatures on private APFS clones and normalizing only the
+signature-storage `__LINKEDIT.vmsize` and `filesize` fields. It refuses to launch if the code
+fingerprints differ. Receipts record raw and code fingerprints, the required
+Vendor hash, UUIDs and source stamp. UUID equality alone does not identify an
+engine revision. Real app/Vendor bundles are never modified by the comparison.
