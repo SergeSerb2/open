@@ -1,0 +1,5 @@
+cold open: 2x; 30 samples, 5 warmups; CPU p95 10.712 ms; wall p95 11.615 ms; load1 17.51; CPU target lateness 2.712 ms (diagnostic; product target <8 ms)
+| Result | Check |
+|---|---|
+| INFO | cold open main-thread median 94888857 instructions; Apple M5 Pro / 26B5112a: no accepted machine/build baseline |
+1 INFO (no acceptance result for these entries)

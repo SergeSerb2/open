@@ -48,3 +48,28 @@ Quiet-machine command from the repo root, after a release build:
 ```sh
 ~/Library/Caches/OpenRE/scripts/heavy.sh Packages/OpenKit/.build/release/sitecontrol-render bench --fixture cold
 ```
+
+
+## Gate failure proof
+
+An intentional second native section/row construction pass was inserted inside
+the measured span, before `afterPresent`:
+
+```swift
+let redundant = SiteControlController(source: stage.source,actions: stage.source)
+redundant.view.panel.apply(stage.source.value!)
+withExtendedLifetime(redundant) {}
+```
+
+`apply` performs another O(n) pass through the 20 Boost / 12 Settings rows. The
+real CLI then **FAILED** at 140,209,910 median main-thread instructions against
+the unchanged 104,539,565 ceiling (load1 15.20). After restoring the source and
+rebuilding, the same command **PASSED** at 94,997,086 (load1 14.55). The temporary
+code is absent from the committed source. Both builds ran through `heavy.sh`.
+See `gate-negative.txt` and `gate-restored.txt`.
+
+For the missing-baseline flow, the copied release resource was temporarily given
+an empty machine list, then restored in a `finally` block. The real CLI reported
+94,888,857 instructions, the missing-machine reason, and **INFO** with no PASS.
+See `gate-unknown-machine.txt`. The source fixture was unchanged. The initial
+accepted run passed at 95,372,047; see `gate-accepted.txt`.
