@@ -1612,9 +1612,7 @@ The final two lines always print, including for `.noSpaces`
 ## 12. Phase B acceptance checks (with the real app)
 
 Run these only in Steps 5–7, against the built `Open.app`. Substitute the
-real bundle id / app path (§2.3). Do not drive the user's desktop; every
-check below is a shell command, an `open` invocation, or an `osascript`
-query — state reads, plus link deliveries the test itself causes.
+real bundle id / app path (§2.3). Do not drive the user's desktop; agent-run checks use the automation socket, shell commands, or `open` deliveries; no check drives the desktop — state reads, plus link deliveries the test itself causes.
 
 Setup (once per build under test):
 
@@ -1631,7 +1629,7 @@ quit open first: osascript -e "tell application id \"$BID\" to quit" || true
 | B2 | Set as default | In Open: Open menu → Set as Default Browser; accept the **system** dialog. Then `open https://example.com/default-check` from Terminal. | The link opens in Open (per rules). Declining the system dialog leaves the previous browser default and Open's Links status reads not-default (§8.4). |
 | B3 | Source detection | `open -a "$APP" https://example.com/from-terminal` (sender: Terminal/`open`), then trigger the same URL from another app (for example a Mail draft link) if available. | Decision log (§6, surfaced by whatever debug UI the App exposes; at minimum the unified log via `log show --last 5m --predicate 'subsystem == "app.open"'` if the App logs there) shows the Terminal run's source bundle id and `unknown` for any `application(_:open:)` delivery. A rule with that source (§4.2, created in Settings data) matches only the known-source delivery. |
 | B4 | Little Open lifecycle | Agent path, through the automation socket only (2026-10-26, F11): `menu-perform id=new-little-open-window`; `key window=<number> text=example.com\r` (synthetic key events sent inside the app); then deliver one external URL twice with `open -a "$APP" <url>` (a delivery the test causes). User-run only: a real ⌥⌘N press from another app (agents never drive the desktop; `hotkey-state` shows the global hotkey registered). | Fresh Little Open with the field focused; page loads; the second delivery resurfaces the same window (`little-open-state` session count unchanged). |
-| B5 | Open in Space | In that window: press ⌘O (the pill's Space); in a second Little Open page window, open the chevron picker, type part of another Space's title, press Return. | Main window appears (created if it was closed), focused on the chosen Space (the pill's Space for ⌘O, the picked Space for the picker), page present as the top Today tab and selected; Little Open window closed; no archive row created for it (`openkit archive-list` on the data dir shows no new row). |
+| B5 | Open in Space | Through the socket or user-run: In that window: press ⌘O (the pill's Space); in a second Little Open page window, open the chevron picker, type part of another Space's title, press Return. | Main window appears (created if it was closed), focused on the chosen Space (the pill's Space for ⌘O, the picked Space for the picker), page present as the top Today tab and selected; Little Open window closed; no archive row created for it (`openkit archive-list` on the data dir shows no new row). |
 | B6 | No-main-window matrix | Quit Open. `open -a "$APP" <URL-that-routes-to-Little-Open>`: only a Little Open window. Close all main windows, leave Little Open open: app stays running. Then Open in Space: main window is created. | Each row of §9.7's table holds. |
 | B7 | Auto-archive | Step 7 adds a debug-only menu item "Archive Expired Little Open Windows Now" (Help → Troubleshooting pattern). It calls the same `archiveExpired(now:)` the Timer calls, with `now` advanced by 31 days so a 1-hour-threshold window counts as expired without waiting. Set the threshold to 1 hour, open a Little Open page, run the item. Then set Never, reopen the page, run the item again. | First run: window closes; `openkit archive-list` shows the page; restoring it lands in the focused Space's Today (§9.6). Second run: window stays. The debug item is the only clock shortcut; production code never advances `now`. |
 | B9 | Frames (LA-S2-1…3) | Through Open's automation socket only; no desktop input and no System Events (AGENTS.md rule 4). `menu-perform id=new-little-open-window` (the window-scope twin of the global hotkey) → `little-open-state` (new automation command, Step 6: per session the id, window number, screen frame, state `bar` / `page`, and the screen's `visibleFrame`) → read 1. `key window=<that number> text=example.com\r` (synthetic key events sent with `NSWindow.sendEvent` inside the app), `wait` until `little-open-state` reports `page` → read 2. `menu-perform id=new-little-open-window` again → read 3. The Carbon global hotkey is not pressed: `hotkey-state` must report `registered: true`. | First read: one Little Open window 490 × 329 whose right edge is 20 pt left of the screen's visible right edge and whose top is 20 pt below the menu bar. Second: the same window 1185 × 832 with the same top-right corner. Third: a second window 490 × 329 at the first frame; the first window is unchanged. |
@@ -1738,7 +1736,8 @@ Files (2026-10-26, F7: the first three already exist in `OpenFeatures`;
 Step 6 wires them, it does not recreate them): `OpenFeatures/LittleOpenSession.swift`,
 `OpenFeatures/LittleOpenCoordinator.swift`,
 `OpenFeatures/LittleOpenWindowController.swift`,
-`App/LittleOpen/LittleOpenWebContent.swift` (E-adapter, §7, the only App file),
+`App/LittleOpen/LittleOpenWebContent.swift` (E-adapter, §7),
+`App/Automation/AutomationController.swift` (new `little-open-state` command, §12 B9),
 hotkey + entry-point wiring (§9.5), executor's Little Open half (real now).
 
 Acceptance: §12 B4, B5, B6, B9, B10. Plus: with no main window open, the global

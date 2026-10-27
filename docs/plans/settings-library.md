@@ -122,7 +122,7 @@ except where a section says Save.
 | `open.general.previewsEnabled` | Bool | `true` | General; hover Previews |
 | `open.general.previewsFolders` | Bool | `true` | Previews sheet; folders (sidebar completion lead Q3); seeded once from stored previewsOnHover when absent |
 | `open.general.previewsPages` | Bool | `true` | Previews sheet; pinned tabs and Favorites (lead Q3); seeded once from stored previewsOnHover when absent |
-| ~~`open.general.previewsDelaySeconds`~~ | — | — | **Removed (lead ruling 2026-10-26)** to match Arc, which has no delay setting. The hover delay is fixed at 0.5 s (`HoverPreviewMetrics.armDelay`, sidebar-completion §3.6). A stored value is ignored, not migrated. Removal: sidebar-completion Step S5b. |
+| ~~`open.general.previewsDelaySeconds`~~ | — | — | **Removed (lead ruling 2026-10-26)** to match Arc, which has no delay setting. The hover delay is fixed at 0.5 s (Open choice; one Arc sample ≈ 0.42 s) (`HoverPreviewMetrics.armDelay`, sidebar-completion §3.6). A stored value is ignored, not migrated. Removal: sidebar-completion Step S5b. |
 | `open.sidebar.hideHintShown` | Bool | `false` | First-hide hint (sidebar completion §2.4) |
 | `open.sidebar.autoArchiveBannerDismissed` | Bool | `false` | Auto-archive education dismissal |
 | `open.sidebar.autoArchiveBannerEligible` | Bool | `true` | Auto-archive education eligibility |

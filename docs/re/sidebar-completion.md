@@ -159,5 +159,5 @@ Measured in `interaction-states.md` §20 (frames in `.re/runtime/sessions/202610
 | Folder row hover | White 0.10 fill and a "—" glyph at the right (no AX element). | S2 08/0090 |
 | Favorites empty state | Dashed card "Drag to add Favorites" with a dismiss button. | S2 07/0001 (§20.3) |
 | Auto-archive banner (C6, Q12) | Not captured: the Profile's "Archive tabs after" offers 12 hours, 24 hours, 7 days, and 30 days only, so it could not trigger within the session. | S2 02/0034; notes 10:07:27 |
-| Previews (C4, Q3) | The 7-source sheet above. The folder preview card was not captured. | S2 02/0050 |
+| Previews (C4, Q3) | The 7-source sheet above. The folder card was seen once in the video (positions only, `interaction-states.md` §20.4); its colors were not captured. | S2 02/0050 |
 
