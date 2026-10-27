@@ -35,6 +35,12 @@ enum Checks {
     }
 
     static func run(_ args: [String]) throws {
+        if args == ["--media-lifecycle-only"] {
+            MediaLifecycleChecks.run()
+            print("\nchecks: \(passes) passed, \(failures) failed")
+            if failures > 0 { exit(1) }
+            return
+        }
         if args == ["--media-motion-only"] {
             MediaMotionChecks.run()
             print("\nchecks: \(passes) passed, \(failures) failed")
@@ -283,6 +289,7 @@ enum Checks {
         MediaChecks.runRowIndicators()
         MediaChecks.runMiniPlayers()
         MediaMotionChecks.run()
+        MediaLifecycleChecks.run()
         ReviewChecks.run()
         VisualFinishChecks.run()
         CompletionChecks.run()

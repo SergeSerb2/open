@@ -263,6 +263,7 @@ extension MediaChecks {
         controls.mouseEntered(with:event(.mouseMoved,controls)); pump(0.8)
         Checks.check(controls.requiredHeight == 216 && controls.cards.enumerated().allSatisfy { i,c in c.frame == CGRect(x:8,y:150-71*CGFloat(i),width:212,height:66) && c.alphaValue == 1 && c.control(named:"close")?.view.isHiddenOrHasHiddenAncestor == false }, "MC6 expanded stack C=216, 5 pt gaps, all Close buttons")
         controls.mouseExited(with:event(.mouseMoved,controls)); pump(0.8)
+        Checks.check(!controls.isExpanded && controls.requiredHeight == 55, "MC6 exit collapses after 0.3 s")
         store.remove(tabID:extra1.id); store.remove(tabID:extra2.id); pump(0.8)
         tab.title = "A deliberately long media title whose last words must be truncated at the end"; mediaHost.perform(.play)
         controls.mouseEntered(with:event(.mouseMoved,controls)); pump(0.8)
@@ -282,7 +283,7 @@ extension MediaChecks {
         context.forcedMediaHover = .title(tab.id); pump(0.3)
         Checks.check(named(first,"media.titleRow")?.isHidden == false && animationKeys(label?.layer).isEmpty, "MC7 title hover cross-fade ends")
         context.forcedMediaHover = nil; controls.mouseExited(with:event(.mouseMoved,controls)); pump(1.5)
-        Checks.check(animationKeys(scene.layer).isEmpty && controls.pendingCollapseCount == 0 && store.pendingWorkItemCount == 1, "MC8 paused at rest: zero layer keys, zero collapse work, one store expiry")
+        Checks.check(!controls.isExpanded && first.cardHeight == 33 && animationKeys(scene.layer).isEmpty && controls.pendingCollapseCount == 0 && store.pendingWorkItemCount == 1, "MC8 paused at rest: collapsed 33 pt, zero layer keys, zero collapse work, one store expiry")
         func cpuSeconds() -> Double { var t = timespec(); clock_gettime(CLOCK_PROCESS_CPUTIME_ID,&t); return Double(t.tv_sec)+Double(t.tv_nsec)/1_000_000_000 }
         let cpu = cpuSeconds(), wall = CACurrentMediaTime()
         RunLoop.main.run(until:Date().addingTimeInterval(2))
@@ -291,6 +292,7 @@ extension MediaChecks {
         context.shownPeek = SidebarShownPeek(sourceNodeID:tab.id,url:URL(string:"https://peek.example.test/")!); pump(0.15)
         Checks.check(controls.alphaValue == SidebarRole.peekBottomBarOpacity,"MC10 Peek dims controls with bottom bar")
         context.shownPeek = nil; pump()
+        Checks.check(controls.alphaValue == 1, "MC10 closing Peek restores opacity")
         func rgba(_ c: CGColor?) -> [CGFloat] { guard let c, let n = NSColor(cgColor:c)?.usingColorSpace(.sRGB) else { return [] }; return [n.redComponent,n.greenComponent,n.blueComponent,n.alphaComponent] }
         func same(_ c: CGColor?, _ expected: RGBA) -> Bool {
             let a=rgba(c),b=rgba(expected.cgColor); return a.count == 4 && zip(a,b).allSatisfy { abs($0-$1) <= 0.002 }
@@ -323,7 +325,11 @@ extension MediaChecks {
         controls.mouseEntered(with:event(.mouseMoved,controls)); pump(0.005)
         func animations(_ l:CALayer?) -> [CAAnimation] { guard let l else {return []}; return (l.animationKeys() ?? []).compactMap {l.animation(forKey:$0)} + (l.sublayers ?? []).flatMap(animations) }
         let reduced = animations(controls.layer)+animations(pager()?.layer)
-        Checks.check(!reduced.isEmpty && reduced.allSatisfy { ($0 as? CAPropertyAnimation)?.keyPath == "opacity" && abs($0.duration-0.1)<0.001 },"MC15 Reduce Motion has only 0.1s opacity animations")
+        Checks.check(animations(pager()?.layer).isEmpty && reduced.count == 1 && (reduced.first as? CATransition)?.type == .fade && abs((reduced.first?.duration ?? 0)-0.1)<0.001,
+                     "MC15 Reduce Motion has one 0.1s container cross-fade and no pager or child animation")
+        pump(0.016)
+        Checks.check((pager()?.layer?.presentation()?.opacity ?? 0) >= 0.99 && (controls.layer?.presentation()?.opacity ?? 0) >= 0.99,
+                     "MC15 Reduce Motion keeps pager and container fully opaque at +16ms")
         pump(0.8); Checks.check(animationKeys(scene.layer).isEmpty,"MC15 Reduce Motion leaves no keys")
         SidebarDiagnostics.mediaReduceMotionOverride = false
         if let b=first.control(named:"pip")?.view {click(b,"PiP")}

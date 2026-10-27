@@ -1233,7 +1233,7 @@ PASS/FAIL per row; exits non-zero on failure. Add to `verify-all.sh`.
 
 New flags: `--media "SPEC"` where SPEC is a comma list of
 `row=state[:video][:muted][:recording][:paused-min=N]` (rows use the
-existing `today:N`/`pinned:N` syntax), `--media-hover card:N|title:N|stack`,
+existing `today:N`/`pinned:N` syntax), `--media-hover expanded|title:N` (§13.8.4),
 `--media-drawer N`, `--reduce-motion`. Fake `WebMediaHost`s record the
 actions they get.
 
@@ -1361,6 +1361,10 @@ need Open's controls are `blocked: EM-4`). Phase 2 reruns them all.
    artwork; its buttons work.
 3. With music playing in Open and in another app, the media keys go to
    the app that played last (system rule).
+4. Expand two mini-player cards. Click the top card’s title (Back to Tab) or
+   Close, then move the pointer over the tab list. The remaining card must
+   collapse. Code review C5 needs this real-pointer check; agents must not
+   attempt it or change tracking behavior without its result.
 
 ## 9. Implementation order (small PRs; each step: files, then acceptance)
 
@@ -1818,7 +1822,7 @@ waits on a timer while the card is at rest (D-11, MC8, MC9).
 | A 4th source | the oldest card leaves and the new one enters in the same transaction | as above | guess |
 | Play ↔ pause glyph | `.replace` symbol transition | system | kept |
 | Volume drawer opens or closes | the card grows 66 ↔ 99 (the top edge moves) | `Motion.miniPlayerResize` (0.2 s ease-in-out) | guess |
-| Reduce Motion | every change above becomes a cross-fade without movement | `Motion.reducedMedia` (0.1 s) | kept |
+| Reduce Motion | one container cross-fade covers the whole card subtree; the pager applies its final frame immediately, with no animation. No card/row/button opacity fades or geometry animations. | `Motion.reducedMedia` (0.1 s) | kept |
 
 For context only: capture session 2 measured faster sidebar motion than
 our tokens (Space switch spring 0.20 s, folder expand 0.20 s ease-out;
@@ -1840,6 +1844,16 @@ on-screen place while the content clip reveals them:
 `titleRow.y = bounds.height - cardHeight(expanded: true, drawer: drawerIsOpen)`;
 `drawerRow.y = bounds.height - 2 * rowHeight`. The row frame changes use the same
 spring as the card; their final expanded positions remain 0 and 33.
+
+Only real media changes (expand, collapse, source add/remove/replacement, or
+drawer resize) set a pending transition. The container consumes it once and
+passes the animation flag to each card’s next layout. Sidebar width changes
+apply frames immediately with implicit actions disabled, and cancel in-flight
+media animations in the pager/container/card subtree. Under Reduce Motion,
+use one `CATransition(.fade, 0.1 s)` on the container, including source changes
+that keep the same height. Never fade a persistent view in from opacity zero.
+Hiding the sidebar cancels pending collapse work and resets an unforced stack
+to collapsed without animation; showing it does not restore stale expansion.
 
 ### 13.7 Open items (provisional designs, to capture later)
 
@@ -1885,7 +1899,7 @@ and MC9. Run heavy jobs through
 | `OpenSidebar/SidebarContext.swift` | `SidebarMediaHover` becomes `case expanded, title(ItemID)` (remove `stack` and `card`). |
 | `OpenSidebar/SidebarView.swift` | Keep geometry driven by `requiredHeight`. Anchor-correct animation starts and presentation-based retargeting for pager/container height changes; retain the `.stack` spring path. |
 | `sidebar-render/MediaScene.swift` | The flags in §13.8.4. |
-| `sidebar-render/MediaChecks.swift`, `MediaMotionChecks.swift`, `Checks.swift` | MC1–MC15 (§13.8.5), including native offscreen motion regression gates and a focused `--media-motion-only` run. RI checks are unchanged. |
+| `sidebar-render/MediaChecks.swift`, `MediaMotionChecks.swift`, `MediaLifecycleChecks.swift`, `Checks.swift` | MC1–MC16 (§13.8.5), including native offscreen motion/lifecycle gates and focused `--media-motion-only` and `--media-lifecycle-only` runs. RI checks are unchanged. |
 | `sidebar-render/MediaCompare.swift` (new), `RenderCLI.swift` | `compare-media` (§13.8.6). |
 | `sidebar-render/OffscreenRenderer.swift` | Preserve `allowsGroupOpacity` when cloning layers, so back cards composite as one image (§13.8.2). |
 | `sidebar-render/Bench.swift` | The `--media-card` log line reports the new height (`container 41.0 pt`). |
@@ -2065,7 +2079,8 @@ Frames are ± 0.5 pt.
 | MC12 | Corner and shadow: the content layer has `cornerRadius` 10, `cornerCurve` `.continuous`, and `masksToBounds`. The shadow layer has an opaque black `shadowColor` (alpha 1), `shadowOpacity` 0.21, `shadowRadius` 4, `shadowOffset` zero, and a `shadowPath` equal to the rounded rect of the card bounds after every frame change. |
 | MC13 | Drawer (a fake host with volume): a click on volume while expanded gives a 99 pt card, `C = 107`, and a drawer row `[0, 33, cardW, 33]` laid out per O2. Collapse closes it (`C = 41`) and removes its ID from `context.mediaDrawers`; re-expansion does not reopen it. |
 | MC14 | Recording source: slots 0/1/2 hold the favicon, the microphone, and the camera; there is no Play, Previous, Next, or Volume. |
-| MC15 | Motion regressions in the composed sidebar: the height-animation start equals the current on-screen position for non-centered anchors; at +16 ms the pager stays at its model x/y. Re-enter 50 ms into a real delayed collapse: the container, pager, card, content, title opacity and shadow start from presentation values; at +16 ms the visible card/container height has no backward jump. Title/drawer rows never overlap the controls during motion. Run one- and three-card cases and the drawer. With Reduce Motion OFF, native play/pause image replacement and live AppKit ink are checked. `check --media-motion-only` runs this same focused flow. Transitions run and end: on hover in, the cards, the pager, and the title rows carry animation keys; 0.8 s later no key remains. With Reduce Motion there are only `opacity` keys, of 0.1 s. |
+| MC15 | Motion regressions in the composed sidebar: the height-animation start equals the current on-screen position for non-centered anchors; at +16 ms the pager stays at its model x/y. Re-enter 50 ms into a real delayed collapse: the container, pager, card, content, title opacity and shadow start from presentation values; at +16 ms the visible card/container height has no backward jump. Title/drawer rows never overlap the controls during motion. Run one- and three-card cases and the drawer. With Reduce Motion OFF, native play/pause image replacement and live AppKit ink are checked. `check --media-motion-only` runs this same focused flow. Transitions run and end: on hover in, the cards, the pager, and the title rows carry animation keys; 0.8 s later no key remains. With Reduce Motion there is one container `CATransition(.fade, 0.1 s)`, no pager animation, and no descendant opacity animation starting at zero. At +16 ms the pager and container remain fully opaque. |
+| MC16 | `check --media-lifecycle-only`: hover in/out and a fourth source at unchanged height use one container cross-fade, no opacity-from-zero on any view, and full pager/container opacity at +16 ms. Width drags in both motion modes (400 → 228 pt) fit model and presentation widths immediately with no attached animation keys. Add/remove while expanded gives C=145 → 74 with titles. Hide/show during the collapse delay restores collapsed C=55 with no pending work. |
 
 #### 13.8.6 Comparison with Arc (`docs/design.md` §7 method)
 

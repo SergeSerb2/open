@@ -35,6 +35,8 @@ public struct MiniPlayerTitleState {
     private var titleRowTransition = 0
     private var resizingDrawer = false
     private var lastDrawerOpen = false
+    private var lastLayoutWidth: CGFloat = 0
+    var animatesNextLayout = false
     public var isRetiring = false
     public private(set) var isExpanded = false
     public private(set) var level = 0
@@ -121,8 +123,7 @@ public struct MiniPlayerTitleState {
     public override var isFlipped: Bool { true }
     public override func hitTest(_ point: NSPoint) -> NSView? {
         guard !isRetiring, isExpanded || level == 0 else { return nil }
-        let hit = super.hitTest(point)
-        return hit === contentView ? self : hit
+        return super.hitTest(point)
     }
     private var tab: Tab? { source.tabID.flatMap { context.model.tab(id: $0) } }
     private func send(_ intent: (ItemID) -> MediaIntent) { if let id = source.tabID { context.send(.media(intent(id))) } }
@@ -131,27 +132,29 @@ public struct MiniPlayerTitleState {
         guard let button = buttons[id] else { return nil }
         return (button, button.displayedGlyph, button.tooltip?())
     }
-    func configure(expanded: Bool, level: Int) {
+    @discardableResult func configure(expanded: Bool, level: Int) -> Bool {
+        let changedLevel = self.level != level
         self.level = level
-        guard expanded != isExpanded else { return }
+        guard expanded != isExpanded else { return changedLevel }
         isExpanded = expanded
         if !expanded, let id = source.tabID { context.mediaDrawers.remove(id) }
         let start = MediaAnimationStart(layer: titleRow.layer, frame: titleRow.frame)
         titleRowTransition += 1
         let transition = titleRowTransition
         titleRow.isHidden = false; titleRow.alphaValue = expanded ? 1 : 0
-        if animatesMediaChanges {
+        if animatesMediaChanges && !SidebarDiagnostics.mediaReducesMotion {
             CATransaction.begin()
             CATransaction.setCompletionBlock { [weak self] in Task { @MainActor in
                 guard let self, self.titleRowTransition == transition, !self.isExpanded else { return }; self.titleRow.isHidden = true
             } }
             let fade = CABasicAnimation(keyPath: "opacity"); fade.fromValue = start.opacity; fade.toValue = titleRow.alphaValue
-            fade.duration = SidebarDiagnostics.mediaReducesMotion ? Motion.reducedMedia : (expanded ? Motion.miniPlayerReveal : Motion.miniPlayerDisappear)
+            fade.duration = expanded ? Motion.miniPlayerReveal : Motion.miniPlayerDisappear
             fade.timingFunction = expanded ? Motion.easeOut : CAMediaTimingFunction(name: .easeIn)
             titleRow.layer?.add(fade, forKey: "media.titleRowOpacity")
             CATransaction.commit()
         } else { titleRow.isHidden = !expanded }
         sync(); resizingDrawer = false
+        return true
     }
     private func makeButton(_ id: String, glyph: Glyph?, title: String, row: NSView, action: @escaping @MainActor () -> Void) {
         let button = MediaControlButton(glyph: glyph); button.context = context
@@ -181,7 +184,7 @@ public struct MiniPlayerTitleState {
             buttons["microphone"]?.setGlyph(source.microphoneOn == false ? .mediaMicrophoneMuted : .mediaMicrophone)
             buttons["camera"]?.setGlyph(source.cameraOn == false ? .mediaCameraOff : .mediaCamera)
         }
-        if drawerIsOpen != lastDrawerOpen { resizingDrawer = true; lastDrawerOpen = drawerIsOpen }
+        if drawerIsOpen != lastDrawerOpen { resizingDrawer = true; animatesNextLayout = true; lastDrawerOpen = drawerIsOpen }
         drawerRow.isHidden = !drawerIsOpen
         if drawerIsOpen { slider.value = source.volume ?? 1 }
         let nextTitle = isTitleHovered ? "Back to Tab" : (tab?.displayTitle ?? "")
@@ -213,6 +216,11 @@ public struct MiniPlayerTitleState {
     public override func layout() {
         super.layout()
         let m = MiniPlayerMetrics.self, w = bounds.width
+        let widthChanged = lastLayoutWidth > 0 && lastLayoutWidth != w
+        lastLayoutWidth = w
+        let animate = animatesNextLayout && animatesMediaChanges
+        if widthChanged && !animate { removeMediaAnimations(layer) }
+        animatesNextLayout = false
         let views = [contentView, titleRow, drawerRow, controlsRow, titleLabel, slider] + Array(buttons.values)
         let previous = views.map { $0.frame }
         let starts = views.map { MediaAnimationStart(layer: $0.layer, frame: $0.frame) }
@@ -238,9 +246,9 @@ public struct MiniPlayerTitleState {
         shadowLayer.shadowPath = CGPath(roundedRect: bounds, cornerWidth: m.cornerRadius, cornerHeight: m.cornerRadius, transform: nil)
         CATransaction.commit()
         for (index, view) in views.enumerated() where previous[index] != .zero && previous[index] != view.frame {
-            animateMediaFrame(view.layer, from: starts[index], to: view.frame, enabled: animatesMediaChanges, drawer: resizingDrawer)
+            animateMediaFrame(view.layer, from: starts[index], to: view.frame, enabled: animate, drawer: resizingDrawer)
         }
-        if animatesMediaChanges && !SidebarDiagnostics.mediaReducesMotion, let oldShadow, oldShadow != shadowLayer.shadowPath {
+        if animate && !SidebarDiagnostics.mediaReducesMotion, let oldShadow, oldShadow != shadowLayer.shadowPath {
             let a: CABasicAnimation = resizingDrawer ? CABasicAnimation(keyPath: "shadowPath") : Motion.miniPlayerStack.animation(keyPath: "shadowPath")
             if resizingDrawer { a.duration = Motion.miniPlayerResize; a.timingFunction = Motion.easeInOut }
             a.fromValue = oldShadow; a.toValue = shadowLayer.shadowPath
@@ -298,18 +306,20 @@ public struct MiniPlayerTitleState {
 }
 
 @MainActor func animateMediaFrame(_ layer: CALayer?, from start: MediaAnimationStart, to target: CGRect, enabled: Bool, drawer: Bool = false) {
-    guard enabled else { return }
-    if SidebarDiagnostics.mediaReducesMotion {
-        let a = CABasicAnimation(keyPath: "opacity"); a.fromValue = start.wasAnimating ? start.opacity : 0; a.toValue = 1; a.duration = Motion.reducedMedia
-        layer?.add(a, forKey: "media.frameFade")
-    } else {
-        let move: CABasicAnimation = drawer ? CABasicAnimation(keyPath: "position") : Motion.miniPlayerStack.animation(keyPath: "position")
-        move.fromValue = start.position; move.toValue = layer?.position
-        let size: CABasicAnimation = drawer ? CABasicAnimation(keyPath: "bounds.size") : Motion.miniPlayerStack.animation(keyPath: "bounds.size")
-        if drawer { for a in [move, size] { a.duration = Motion.miniPlayerResize; a.timingFunction = Motion.easeInOut } }
-        size.fromValue = start.size; size.toValue = target.size
-        layer?.add(move, forKey: "media.position"); layer?.add(size, forKey: "media.size")
-    }
+    guard enabled, !SidebarDiagnostics.mediaReducesMotion else { return }
+    let move: CABasicAnimation = drawer ? CABasicAnimation(keyPath: "position") : Motion.miniPlayerStack.animation(keyPath: "position")
+    move.fromValue = start.position; move.toValue = layer?.position
+    let size: CABasicAnimation = drawer ? CABasicAnimation(keyPath: "bounds.size") : Motion.miniPlayerStack.animation(keyPath: "bounds.size")
+    if drawer { for a in [move, size] { a.duration = Motion.miniPlayerResize; a.timingFunction = Motion.easeInOut } }
+    size.fromValue = start.size; size.toValue = target.size
+    layer?.add(move, forKey: "media.position"); layer?.add(size, forKey: "media.size")
+}
+
+/// A width drag owns geometry immediately, even if a media transition was in flight.
+@MainActor func removeMediaAnimations(_ layer: CALayer?) {
+    guard let layer else { return }
+    for key in layer.animationKeys() ?? [] where key.hasPrefix("media.") { layer.removeAnimation(forKey: key) }
+    for child in layer.sublayers ?? [] { removeMediaAnimations(child) }
 }
 
 @MainActor private final class MiniPlayerTitleHitView: NSView {

@@ -15,6 +15,10 @@ import OpenModel
     private var retiring: [ObjectIdentifier: MiniPlayerCardView] = [:]
     private var ordered: [ItemID] = []
     private var holdingLastHeight: CGFloat = 0
+    private var pendingTransition = false
+    private var reducedCrossFadeAdded = false
+    private var lastLayoutWidth: CGFloat = 0
+    var hasPendingTransition: Bool { pendingTransition }
     private(set) var heightTransition = HeightTransition.structure
     public private(set) var isExpanded = false
     public private(set) var stackHeight: CGFloat = 0
@@ -44,9 +48,10 @@ import OpenModel
         context.mediaDrawers.formIntersection(ids)
         let changed = ids != ordered || sources.contains { s in s.tabID.map { byID[$0]?.source !== s } ?? false }
         if changed {
+            pendingTransition = true
             let previous = byID
             if !ids.isEmpty { holdingLastHeight = 0 }
-            if ids.isEmpty && !ordered.isEmpty && animatesMediaChanges { holdingLastHeight = stackHeight }
+            if ids.isEmpty && !ordered.isEmpty && animatesMediaChanges && !SidebarDiagnostics.mediaReducesMotion { holdingLastHeight = stackHeight }
             for (id, card) in previous where !sources.contains(where: { $0.tabID == id && $0 === card.source }) {
                 context.mediaDrawers.remove(id)
                 byID.removeValue(forKey: id); retire(card)
@@ -56,9 +61,9 @@ import OpenModel
                 let card = MiniPlayerCardView(source: source, context: context)
                 card.onHeightChange = { [weak self] in self?.measure(.drawer) }
                 byID[id] = card; addSubview(card)
-                if animatesMediaChanges {
+                if animatesMediaChanges && !SidebarDiagnostics.mediaReducesMotion {
                     let a = CABasicAnimation(keyPath: "opacity"); a.fromValue = 0; a.toValue = 1
-                    a.duration = SidebarDiagnostics.mediaReducesMotion ? Motion.reducedMedia : Motion.miniPlayerReveal
+                    a.duration = Motion.miniPlayerReveal
                     a.beginTime = CACurrentMediaTime() + (wasEmpty ? Motion.miniPlayerAppearDelay : 0); a.fillMode = .backwards
                     card.layer?.add(a, forKey: "media.appear")
                 }
@@ -73,7 +78,7 @@ import OpenModel
     private func retire(_ card: MiniPlayerCardView) {
         card.isRetiring = true
         let identity = ObjectIdentifier(card)
-        guard animatesMediaChanges else { card.removeFromSuperview(); return }
+        guard animatesMediaChanges && !SidebarDiagnostics.mediaReducesMotion else { card.removeFromSuperview(); return }
         retiring[identity] = card
         let start = MediaAnimationStart(layer: card.layer, frame: card.frame)
         CATransaction.begin()
@@ -86,22 +91,37 @@ import OpenModel
             }
         }
         let fade = CABasicAnimation(keyPath: "opacity"); fade.fromValue = start.opacity; fade.toValue = 0
-        fade.duration = SidebarDiagnostics.mediaReducesMotion ? Motion.reducedMedia : Motion.miniPlayerDisappear
+        fade.duration = Motion.miniPlayerDisappear
         card.layer?.opacity = 0; card.layer?.add(fade, forKey: "media.disappear")
         CATransaction.commit()
     }
     private func measure(_ transition: HeightTransition) {
         let current = cards
-        for (i, card) in current.enumerated() { card.configure(expanded: isExpanded, level: i) }
+        for (i, card) in current.enumerated() {
+            if card.configure(expanded: isExpanded, level: i) { pendingTransition = true }
+        }
         let height: CGFloat
         if current.isEmpty { height = holdingLastHeight }
         else if isExpanded { height = current.reduce(0) { $0 + $1.cardHeight } + CGFloat(current.count - 1) * MiniPlayerMetrics.expandedGap }
         else { height = (current.first?.cardHeight ?? 0) + CGFloat(current.count - 1) * MiniPlayerMetrics.stackOffset }
-        if height != stackHeight { heightTransition = transition; stackHeight = height; onUpdateHeight?() }
+        if height != stackHeight { pendingTransition = true; heightTransition = transition; stackHeight = height; onUpdateHeight?() }
         needsLayout = true
+    }
+    /// One cross-fade owns the whole subtree, including source changes at the same height.
+    func crossFadeReducedTransition() {
+        guard pendingTransition, !reducedCrossFadeAdded else { return }
+        let fade = CATransition(); fade.type = .fade; fade.duration = Motion.reducedMedia
+        layer?.add(fade, forKey: "media.reducedHeight")
+        reducedCrossFadeAdded = true
     }
     public override func layout() {
         super.layout()
+        let widthChanged = lastLayoutWidth > 0 && lastLayoutWidth != bounds.width
+        lastLayoutWidth = bounds.width
+        if widthChanged { removeMediaAnimations(layer) }
+        let animate = pendingTransition && animatesMediaChanges && !widthChanged
+        if animate && SidebarDiagnostics.mediaReducesMotion { crossFadeReducedTransition() }
+        pendingTransition = false; reducedCrossFadeAdded = false
         let current = cards, m = MiniPlayerMetrics.self
         var accumulated: CGFloat = 0
         for (i, card) in current.enumerated() {
@@ -113,16 +133,16 @@ import OpenModel
             let previous = card.frame, oldOpacity = card.alphaValue
             let start = MediaAnimationStart(layer: card.layer, frame: previous)
             let opacity = isExpanded ? CGFloat(1) : 1 - CGFloat(i) * m.stackOpacityStep
+            card.animatesNextLayout = animate
             CATransaction.begin(); CATransaction.setDisableActions(true)
             card.frame = target; card.alphaValue = opacity
             CATransaction.commit()
             if previous != .zero && previous != target {
-                animateMediaFrame(card.layer, from: start, to: target, enabled: animatesMediaChanges, drawer: heightTransition == .drawer)
+                animateMediaFrame(card.layer, from: start, to: target, enabled: animate, drawer: heightTransition == .drawer)
             }
-            if oldOpacity != opacity && animatesMediaChanges {
-                let fade: CABasicAnimation = SidebarDiagnostics.mediaReducesMotion ? CABasicAnimation(keyPath: "opacity") : Motion.miniPlayerStack.animation(keyPath: "opacity")
+            if oldOpacity != opacity && animate && !SidebarDiagnostics.mediaReducesMotion {
+                let fade = Motion.miniPlayerStack.animation(keyPath: "opacity")
                 fade.fromValue = start.opacity; fade.toValue = opacity
-                if SidebarDiagnostics.mediaReducesMotion { fade.duration = Motion.reducedMedia }
                 card.layer?.add(fade, forKey: "media.stackOpacity")
             }
         }
@@ -151,7 +171,13 @@ import OpenModel
         collapseWork = work
         DispatchQueue.main.asyncAfter(deadline: .now() + MiniPlayerMetrics.collapseDelay, execute: work)
     }
-    public override func viewDidHide() { super.viewDidHide(); cancelCollapse() }
+    public override func viewDidHide() {
+        super.viewDidHide(); cancelCollapse()
+        if isExpanded && context.forcedMediaHover == nil { isExpanded = false; measure(.stack) }
+        pendingTransition = false; reducedCrossFadeAdded = false
+        for card in cards { card.animatesNextLayout = false }
+        removeMediaAnimations(layer)
+    }
     public override func viewWillMove(toWindow newWindow: NSWindow?) {
         if let windowCloseObservation { NotificationCenter.default.removeObserver(windowCloseObservation); self.windowCloseObservation = nil }
         if newWindow == nil { cancelCollapse() }
