@@ -54,7 +54,8 @@ struct AdBlockStatus {
   // The last failure: an operation and a file name, never page data.
   std::string last_error;
   // Cosmetic output v1 does not apply, summed over every CosmeticResources()
-  // call since the service started (adblock-fork §5.2, lead ruling 6).
+  // and HiddenSelectors() call since the service started (adblock-fork §5.2,
+  // lead ruling 6, review R3-4).
   uint64_t cosmetic_dropped_procedural = 0;
   uint64_t cosmetic_dropped_unsafe = 0;
   uint64_t cosmetic_dropped_style = 0;

@@ -237,15 +237,19 @@ OpenAdBlockService::BuildResult BuildOnBackground(base::FilePath root,
     if (std::optional<std::string> dat = ReadMatchingDat(*generation)) {
       auto engine = open_adblock::open_adblock_create_empty();
       // No resources before Step 7.
-      if (open_adblock::open_adblock_deserialize(
-              *engine,
-              rust::Slice<const uint8_t>(
-                  reinterpret_cast<const uint8_t*>(dat->data()), dat->size()),
-              rust::Str())) {
+      const rust::Slice<const uint8_t> bytes(
+          reinterpret_cast<const uint8_t*>(dat->data()), dat->size());
+      if (open_adblock::open_adblock_deserialize(*engine, bytes, rust::Str())) {
         result.engine = std::make_unique<OpenAdBlockService::EngineHolder>(
             std::move(engine));
         result.from_dat = true;
         result.dat_size_bytes = dat->size();
+      } else {
+        // A cache problem next to the text build below (review 98-5): the
+        // walk's reason, or "decode" when the crate refused it.
+        const std::string reason(open_adblock::open_adblock_dat_check(bytes));
+        result.error =
+            "engine.dat refused: " + (reason.empty() ? "decode" : reason);
       }
     }
   }
@@ -253,7 +257,16 @@ OpenAdBlockService::BuildResult BuildOnBackground(base::FilePath root,
     auto engine = BuildFromText(*generation);
     // The texts are no longer needed: free them before serializing.
     generation->texts = {};
-    result.lossless = open_adblock::open_adblock_build_report(*engine).lossless;
+    const open_adblock::OpenBuildReport report =
+        open_adblock::open_adblock_build_report(*engine);
+    if (!report.refused.empty()) {
+      // Over the shim's per-build limits (review R3-2): nothing was parsed.
+      // The load fails and the old engine stays.
+      result.error = "lists refused: " + std::string(report.refused);
+      result.build_ms = timer.Elapsed().InMilliseconds();
+      return result;
+    }
+    result.lossless = report.lossless;
     if (!result.lossless) {
       // A DAT would drop rules (F-31): no cache, and an old DAT of this
       // generation is never read (its receipt would not match).
@@ -601,15 +614,22 @@ std::vector<std::string> OpenAdBlockService::HiddenSelectors(
   rust::Vec<rust::String> rust_classes = to_rust(classes);
   rust::Vec<rust::String> rust_ids = to_rust(ids);
   rust::Vec<rust::String> rust_exceptions = to_rust(exceptions);
-  rust::Vec<rust::String> selectors = open_adblock::open_adblock_hidden_selectors(
-      *holder->engine,
-      rust::Slice<const rust::String>(rust_classes.data(), rust_classes.size()),
-      rust::Slice<const rust::String>(rust_ids.data(), rust_ids.size()),
-      rust::Slice<const rust::String>(rust_exceptions.data(),
-                                      rust_exceptions.size()));
+  open_adblock::OpenHiddenSelectors hidden =
+      open_adblock::open_adblock_hidden_selectors(
+          *holder->engine,
+          rust::Slice<const rust::String>(rust_classes.data(),
+                                          rust_classes.size()),
+          rust::Slice<const rust::String>(rust_ids.data(), rust_ids.size()),
+          rust::Slice<const rust::String>(rust_exceptions.data(),
+                                          rust_exceptions.size()));
+  // The same counters as CosmeticResources() (review R3-4).
+  constexpr auto kRelaxed = std::memory_order_relaxed;
+  cosmetic_dropped_procedural_.fetch_add(hidden.dropped_procedural, kRelaxed);
+  cosmetic_dropped_unsafe_.fetch_add(hidden.dropped_unsafe, kRelaxed);
+  cosmetic_dropped_over_cap_.fetch_add(hidden.dropped_over_cap, kRelaxed);
   std::vector<std::string> out;
-  out.reserve(selectors.size());
-  for (const rust::String& selector : selectors) {
+  out.reserve(hidden.selectors.size());
+  for (const rust::String& selector : hidden.selectors) {
     out.emplace_back(selector);
   }
   return out;

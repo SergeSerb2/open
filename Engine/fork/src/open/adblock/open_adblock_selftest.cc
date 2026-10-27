@@ -72,7 +72,7 @@ std::vector<uint8_t> Dat(std::vector<uint8_t> body, uint8_t version = 0) {
 }
 
 // Review R2-1: crafted DATs whose MessagePack claims more than the DAT holds.
-// The first is the reviewer's probe: 15 bytes, a str32 header that claims
+// The first is the reviewer's probe: 14 bytes, a str32 header that claims
 // 512 MiB; before the shim's walk, rmp-serde allocated it (RSS 2,816 KiB to
 // 527,184 KiB) and then failed. Each must be refused with resident memory
 // flat and no abort.
@@ -110,6 +110,121 @@ bool CheckCraftedDats() {
        " KiB");
   ok &= Expect(grew_kib < 16 * 1024,
                "crafted DATs allocate nothing (resident memory flat)");
+  return ok;
+}
+
+// Review R3-6: the walk at its limits. 32 levels and 2^24 values are
+// accepted; 33 levels, 2^24 + 1 values (review R3-1) and a byte after the
+// root value (review R3-5) are refused.
+bool CheckDatBoundaries() {
+  auto verdict = [](const std::vector<uint8_t>& dat) {
+    return std::string(open_adblock::open_adblock_dat_check(
+        rust::Slice<const uint8_t>(dat.data(), dat.size())));
+  };
+  auto nested = [](size_t levels) {
+    std::vector<uint8_t> body(levels, 0x91);  // fixarray of one
+    body.push_back(0xc0);
+    return Dat(std::move(body));
+  };
+  // One array32 of n fixints: 1 + n values.
+  auto fixints = [](uint32_t n) {
+    std::vector<uint8_t> body = {0xdd, static_cast<uint8_t>(n >> 24),
+                                 static_cast<uint8_t>(n >> 16),
+                                 static_cast<uint8_t>(n >> 8),
+                                 static_cast<uint8_t>(n)};
+    body.resize(body.size() + n, 0x00);
+    return Dat(std::move(body));
+  };
+  constexpr uint32_t kMaxValues = 1u << 24;
+  const std::vector<uint8_t> at_limit = fixints(kMaxValues - 1);
+  const std::vector<uint8_t> over_limit = fixints(kMaxValues);
+  bool ok = true;
+  ok &= Expect(verdict(nested(32)).empty() && verdict(nested(33)) == "depth",
+               "DAT walk: 32 levels accepted, 33 refused");
+  ok &= Expect(verdict(at_limit).empty() && verdict(over_limit) == "values",
+               "DAT walk: 2^24 values accepted, 2^24 + 1 refused");
+  ok &= Expect(!Deserialize(over_limit), "a DAT of 2^24 + 1 values is refused");
+  ok &= Expect(verdict(Dat({0x90})).empty() &&
+                   verdict(Dat({0x90, 0x00})) == "trailing",
+               "DAT walk: a byte after the root value is refused");
+  return ok;
+}
+
+// Review R3-2: a build over the per-build limits is refused before the crate
+// parses anything, with resident memory flat; a build at the limits runs.
+bool CheckBuildLimits() {
+  auto texts_of = [](std::string text) {
+    rust::Vec<rust::String> texts;
+    texts.push_back(rust::String::lossy(text));
+    return texts;
+  };
+  // Builds |texts| and returns the refusal ("" when it built), and the
+  // resident memory growth during the build in KiB.
+  auto build = [](const rust::Vec<rust::String>& texts) {
+    const uint64_t before = ResidentBytes();
+    auto engine = open_adblock::open_adblock_build(
+        rust::Slice<const rust::String>(texts.data(), texts.size()),
+        rust::Str());
+    const int64_t grew_kib = (static_cast<int64_t>(ResidentBytes()) -
+                              static_cast<int64_t>(before)) /
+                             1024;
+    return std::make_pair(
+        std::string(open_adblock::open_adblock_build_report(*engine).refused),
+        grew_kib);
+  };
+  bool ok = true;
+
+  // The reviewer's 16 MiB list of 5,592,405 two-character rules (it aborted
+  // the dev build at 2.68 GB).
+  std::string many;
+  many.reserve(5592405 * 3);
+  for (int i = 0; i < 5592405; ++i) {
+    many += "ab\n";
+  }
+  const auto [many_refused, many_grew] = build(texts_of(std::move(many)));
+  Line("16 MiB two-character list: refused=\"" + many_refused +
+       "\" resident_grew_kib=" + std::to_string(many_grew));
+  ok &= Expect(!many_refused.empty() && many_grew < 16 * 1024,
+               "a 5.59 million line list is refused, memory flat");
+
+  // At the line limit: 2^21 comment lines build; one more is refused.
+  std::string comments;
+  for (int i = 0; i < (1 << 21); ++i) {
+    comments += "!\n";
+  }
+  const std::string at_lines = build(texts_of(comments)).first;
+  comments += "!\n";
+  const std::string over_lines = build(texts_of(std::move(comments))).first;
+  ok &= Expect(at_lines.empty() && !over_lines.empty(),
+               "2^21 list lines build, 2^21 + 1 are refused");
+
+  // The reviewer's cosmetic line: 10,000 hostnames, a 50,001-byte selector
+  // (it cost 478 MiB of copies).
+  std::string hosts;
+  for (int i = 0; i < 10000; ++i) {
+    hosts += (i ? ",h" : "h") + std::to_string(i) + ".com";
+  }
+  const auto [wide_refused, wide_grew] =
+      build(texts_of(hosts + "##." + std::string(50000, 'a')));
+  Line("10,000-hostname cosmetic line: refused=\"" + wide_refused +
+       "\" resident_grew_kib=" + std::to_string(wide_grew));
+  ok &= Expect(!wide_refused.empty() && wide_grew < 16 * 1024,
+               "a 10,000-hostname cosmetic line is refused, memory flat");
+
+  // At the copy limit: 1,024 hostnames × a 65,536-byte selector = 64 MiB
+  // builds; 1,025 hostnames are refused.
+  auto copies_line = [](int hostnames) {
+    std::string line;
+    for (int i = 0; i < hostnames; ++i) {
+      line += (i ? ",c" : "c") + std::to_string(i) + ".com";
+    }
+    return line + "##." + std::string(65535, 'a');
+  };
+  const std::string at_copies = build(texts_of(copies_line(1024))).first;
+  const std::string over_copies = build(texts_of(copies_line(1025))).first;
+  ok &= Expect(at_copies.empty() && !over_copies.empty(),
+               "64 MiB of selector copies build, one hostname more is "
+               "refused");
   return ok;
 }
 
@@ -337,6 +452,40 @@ bool CheckShim() {
                "counted");
 
   ok &= CheckCraftedDats();
+  ok &= CheckDatBoundaries();
+  ok &= CheckBuildLimits();
+
+  // Review R3-3: every style rule counts, also next to :remove() rules on
+  // the same or other selectors (the reviewer's 4-rule probe).
+  auto styles = BuildLines({"example.com##.y:remove()",
+                            "example.com##.z:style(color: red)",
+                            "example.com##.z:remove()",
+                            "example.com##.s:style(color: blue)"});
+  const open_adblock::OpenCosmeticResources style_counts =
+      open_adblock::open_adblock_cosmetic(*styles, "https://example.com/");
+  ok &= Expect(style_counts.dropped_style == 2 &&
+                   style_counts.dropped_remove == 2,
+               "two :style() and two :remove() rules counted (R3-3)");
+
+  // Review R3-4: generic selectors for a page's tokens are sanitized and the
+  // drops counted.
+  auto generic = BuildLines({"##.adx:has-text(Sponsored)", "##.ady"});
+  rust::Vec<rust::String> tokens;
+  tokens.push_back(rust::String("adx"));
+  tokens.push_back(rust::String("ady"));
+  const open_adblock::OpenHiddenSelectors hidden =
+      open_adblock::open_adblock_hidden_selectors(
+          *generic, rust::Slice<const rust::String>(tokens.data(), tokens.size()),
+          rust::Slice<const rust::String>(), rust::Slice<const rust::String>());
+  std::string kept;
+  for (const rust::String& selector : hidden.selectors) {
+    kept += std::string(selector) + " ";
+  }
+  Line("hidden selectors kept=" + kept + "dropped_procedural=" +
+       std::to_string(hidden.dropped_procedural));
+  ok &= Expect(hidden.selectors.size() == 1 && hidden.dropped_procedural == 1,
+               "hidden selectors: the procedural one dropped and counted "
+               "(R3-4)");
 
   auto lossy = BuildLines({"||example.com^$removeparam=test", "||ads.test^"});
   open_adblock::OpenBuildReport report =
