@@ -139,7 +139,10 @@ public final class BrowserWindowState {
     public nonisolated static let minimumSidebarWidth = 164.0
     public let id: WindowID
     public var focusedSpaceID: SpaceID
-    /// Selected node per Space.
+    /// A retained closed-window state is not showing content. Snapshot decoding
+    /// defaults to true because restored windows are about to be composed.
+    public internal(set) var isShowingContent = true
+    /// Selected node per Space; only focusedSpaceID is on screen.
     public var selectedNodeBySpace: [SpaceID: ItemID]
     public var sidebarWidth: Double
     public var sidebarMode: SidebarMode

@@ -503,7 +503,10 @@ its document/API injection. Foreground-interruption checks stay enabled in both 
 
 The App owns one `ExpirySweeper`. It sweeps at launch, on the registered
 `NSWorkspace.didWakeNotification`, and on a non-repeating timer at the next
-Today expiry. Model activity, ancestry, Profile settings, and undo re-arm that
+Today expiry. Tabs shown in any window, including every selected split pane,
+have neither an expiry nor an armed timer for that tab. Activity starts at the
+last deselection, Space switch, or window close. Model activity, ancestry, window
+selection/visibility, Profile settings, and undo re-arm that
 same timer. Never has no deadline. The production clock is wall time; automation
 uses a nonpersistent offset that continues to advance with wall time. These
 commands are available without an open browser, except the banner commands.

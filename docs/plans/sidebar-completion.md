@@ -1378,12 +1378,13 @@ per event, and triggers the existing education view only after a shown-Space
 archive. Settings/undo, tab activity, and ancestry changes re-arm it. The clock
 and automation commands are documented in `docs/automation.md`.
 
-`features-render` AA1–AA12 pass through snapshots, Profile SQLite stores, the
+`features-render` AA1–AA12 and both AA-visible checks (300/300 total) pass through snapshots, Profile SQLite stores, the
 production services, real sidebar/banner views, and the declared fake web host.
 Dates in SQLite assertions use the stored Unix-seconds representation. The real
 App suite retains all 64 baseline checks and adds five E16 and seven AA_APP
 checks: 76/76 pass, including the natural Timer callback without a manual sweep.
-The receipt is `docs/engine-spike/results-sidebar-completion-debug.json`.
+Current local receipts are under `.re/auto-archive-visible/`; generated
+`docs/engine-spike/*-debug.json` files are restored to the pre-item-6 versions.
 
 Idle proof: with the App running, all Profiles at Never, no browser windows, and
 no live pages, `archive-state` reports `running:true`, `timerArmed:false`,
@@ -1397,3 +1398,17 @@ Section 9 must combine Today and Little Open deadline/sweep closures into this
 same scheduler and remove the existing Little Open 60 s poll. No Little Open
 behavior changed here. Banner geometry remains unmeasured against Arc. A wake
 notification was tested; a physical machine sleep/wake was not required.
+
+
+Item 6 parent-review correction: both model expiry and next-deadline queries now
+exclude the focused Space's selected tab in every showing window, including all
+panes of a selected split. Remembered selections in inactive Spaces do not count
+as shown. When the final window stops showing a tab (selection, Space switch,
+or close), the existing command stamps activity and adds no undo step. A retained
+closed window uses a nonpersisted visibility flag; reopen restores protection.
+`AA-visible` proves that a selected expired Today tab survives with no timer or
+sweep-count growth over 0.2 s, then receives a fresh deadline on deselection.
+`AA-visible-split` covers multiple windows, all panes, Space switching, close,
+and reopen. The pre-fix FAIL on `6d60371e` is retained at
+`.re/auto-archive-visible/before-features-render.log`. E16 now keeps a selected
+Today tab while archiving an unselected expired peer at the same fake time.

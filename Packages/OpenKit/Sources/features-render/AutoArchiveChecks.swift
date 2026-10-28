@@ -85,6 +85,70 @@ enum AutoArchiveChecks {
 
     static func run(_ check: (Bool, String) -> Void) async throws {
         do {
+            let p = Profile(), visible = tab("visible", age: 13*3600), pin = tab("pin")
+            let space = Space(profileID: p.id, pinned: [.tab(pin)], today: [.tab(visible)])
+            let window = BrowserWindowState(focusedSpaceID: space.id, selectedNodeBySpace: [space.id: visible.id])
+            let s = try Scene(profiles: [p], spaces: [space], windows: [window]); defer { s.close() }
+            let loaded = s.model.tab(id: visible.id)!
+            s.start(); s.openWindows()
+            let count = s.scheduler.state.sweepCount
+            try await Task.sleep(for: .milliseconds(200))
+            let rows = await s.rows()
+            let protected = s.model.tab(id: visible.id) != nil && rows.isEmpty
+                && s.model.nextAutoArchiveExpiry() == nil && !s.scheduler.state.timerArmed
+                && s.scheduler.state.sweepCount == count
+            s.undo.removeAllActions()
+            let before = Date()
+            _ = s.controllers[0].sidebar(s.controllers[0].sidebar, didRequest: .select(nodeID: pin.id, space: space.id))
+            let after = Date()
+            try await settle()
+            let fresh = loaded.lastActiveAt >= before && loaded.lastActiveAt <= after
+                && s.scheduler.state.nextExpiry == loaded.lastActiveAt.addingTimeInterval(12*3600)
+            s.undo.undo()
+            let oneUndo = s.model.windows[0].selectedNodeBySpace[space.id] == visible.id && !s.undo.canUndo
+            print("AA-visible receipt protected=\(protected) freshDeadline=\(fresh) oneUndo=\(oneUndo) sweepCount=\(count)->\(s.scheduler.state.sweepCount)")
+            check(protected && fresh && oneUndo, "AA-visible selected Today survives; no busy loop; deselection starts threshold in one undo step")
+        }
+        do {
+            let p = Profile(), a = tab("split-visible-a", age: 13*3600), b = tab("split-visible-b", age: 14*3600), pin = tab("pin")
+            let split = Split(panes: [a,b]), space = Space(profileID: p.id, pinned: [.tab(pin)], today: [.split(split)])
+            let states = (0..<2).map { _ in BrowserWindowState(focusedSpaceID: space.id, selectedNodeBySpace: [space.id: split.id]) }
+            let s = try Scene(profiles: [p], spaces: [space], windows: states); defer { s.close() }
+            let panes = s.model.node(id: split.id)!.split!.panes, dates = panes.map(\.lastActiveAt)
+            s.start(); s.openWindows()
+            let initiallyProtected = s.model.nextAutoArchiveExpiry() == nil && s.model.node(id: split.id)?.split?.panes.count == 2
+            _ = s.controllers[0].sidebar(s.controllers[0].sidebar, didRequest: .select(nodeID: pin.id, space: space.id))
+            try await settle()
+            let stillShown = panes.map(\.lastActiveAt) == dates && s.model.nextAutoArchiveExpiry() == nil
+            let beforeClose = Date(), second = s.controllers.removeLast()
+            s.today.detach(windowID: second.windowID); s.model.closeWindow(windowID: second.windowID)
+            second.container.closeAll(); second.window?.close()
+            let afterClose = Date(); try await settle()
+            let closed = panes.allSatisfy { $0.lastActiveAt >= beforeClose && $0.lastActiveAt <= afterClose }
+                && s.scheduler.state.nextExpiry == panes[0].lastActiveAt.addingTimeInterval(12*3600)
+            let controller = s.controllers[0], windowID = controller.windowID
+            _ = controller.sidebar(controller.sidebar, didRequest: .select(nodeID: split.id, space: space.id))
+            s.undo.removeAllActions()
+            let beforeRetain = Date()
+            s.model.setWindowContentVisible(windowID: windowID, visible: false)
+            let afterRetain = Date(); try await settle()
+            let retained = !s.model.windows[0].isShowingContent && !s.undo.canUndo && s.scheduler.state.timerArmed
+                && panes.allSatisfy { $0.lastActiveAt >= beforeRetain && $0.lastActiveAt <= afterRetain }
+            try s.snapshot.saveNow(model: s.model)
+            let restoredShows = try s.snapshot.load()!.windows[0].isShowingContent
+            s.model.setWindowContentVisible(windowID: windowID, visible: true); try await settle()
+            let reopened = s.model.nextAutoArchiveExpiry() == nil && !s.scheduler.state.timerArmed && !s.undo.canUndo
+            let other = s.model.createSpace(title: "Other", profileID: p.id)
+            _ = s.model.newTab(in: other.id, url: URL(string: "https://other.example.com")!)
+            let beforeSwitch = Date()
+            _ = controller.sidebar(controller.sidebar, didRequest: .switchSpace(other.id))
+            let afterSwitch = Date(); try await settle()
+            let switched = panes.allSatisfy { $0.lastActiveAt >= beforeSwitch && $0.lastActiveAt <= afterSwitch }
+            let rows = await s.rows()
+            check(initiallyProtected && stillShown && closed && retained && restoredShows && reopened && switched && rows.isEmpty,
+                  "AA-visible-split all panes and windows; last deselection, Space switch, close and reopen")
+        }
+        do {
             let s = try scene(); defer { s.close() }
             let old = s.model.spaces[0].today[0].id, space = s.model.spaces[0], profile = s.model.profiles[0]
             s.start(); s.start(); s.openWindows()
@@ -162,13 +226,14 @@ enum AutoArchiveChecks {
         }
         do {
             let s = try scene(age: 2*3600); defer { s.close() }; s.start(); s.openWindows()
-            let space = s.model.spaces[0], tab = space.today[0].tab!, previous = s.scheduler.state.nextExpiry!
+            let space = s.model.spaces[0], tab = space.today[0].tab!, control = space.pinned[0].id
             let c = s.controllers[0]
             _ = c.sidebar(c.sidebar, didRequest: .select(nodeID: tab.id, space: space.id)); try await settle()
-            let selected = s.scheduler.state.nextExpiry! > previous
+            let selected = s.scheduler.state.nextExpiry == nil && !s.scheduler.state.timerArmed
             _ = c.sidebar(c.sidebar, didRequest: .pin(tabID: tab.id)); try await settle()
             let pinned = !s.scheduler.state.timerArmed
-            s.model.unpinTab(id: tab.id); try await settle()
+            s.model.unpinTab(id: tab.id)
+            _ = c.sidebar(c.sidebar, didRequest: .select(nodeID: control, space: space.id)); try await settle()
             let p2 = s.model.createProfile(name: "Six")!, target = s.model.createSpace(title: "Target", profileID: p2.id)
             var settings = p2.settings; settings.autoArchiveAfter = .sixHours; s.model.updateProfileSettings(id: p2.id, settings: settings)
             _ = s.model.moveNodes(ids: [tab.id], to: .spaceToday(target.id)); try await settle()

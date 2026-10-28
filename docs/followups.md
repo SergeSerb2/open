@@ -100,3 +100,12 @@ Small items found during review and verification. Each line: area — issue — 
   `docs/plans/routing-little-open.md` §9.6 is superseded. Keep `littleOpen:` archive
   locations and trigger Today education only from the Today report. This branch
   does not change Little Open. — Sidebar item 6, 2026-10-28
+
+- Section 9 activity rule — reuse the model's shown-tab protection in both expiry
+  and next-deadline queries. A focused Space's selected tab, or every pane of its
+  selected split, stays protected while any window shows it. The last deselection,
+  Space switch, or window close stamps `lastActiveAt` without a new undo step.
+  A retained closed `BrowserWindowState` uses nonpersisted `isShowingContent=false`;
+  call `setWindowContentVisible` on shell close/reopen, as the standard App now
+  does. Keep the deadline and sweep predicates identical to prevent 1 ms timer
+  loops. — sidebar item 6 parent review, 2026-10-28

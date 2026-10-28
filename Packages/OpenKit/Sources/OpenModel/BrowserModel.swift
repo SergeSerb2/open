@@ -2084,20 +2084,42 @@ public final class BrowserModel {
         let now: Date
         let spaceID: SpaceID
         let profileID: ProfileID
+        let shownTabIDs: Set<ItemID>
         var entries: [ArchiveEntry] = []
         var changed: [NodeParent] = []
     }
 
+    /// The focused Space's selected tab, or every pane of its selected split,
+    /// is on screen. Remembered selections in other Spaces are not on screen.
+    /// A closed last window can retain its state for reopen without showing it.
+    private func tabsShownInWindows() -> [ItemID: Tab] {
+        var shown: [ItemID: Tab] = [:]
+        for window in windows where window.isShowingContent {
+            guard let id = window.selectedNodeBySpace[window.focusedSpaceID], let node = index[id] else { continue }
+            for tab in node.split?.panes ?? node.tab.map({ [$0] }) ?? [] { shown[tab.id] = tab }
+        }
+        return shown
+    }
+
+    /// Start the inactivity interval when the final window stops showing a tab.
+    /// This is activity bookkeeping inside the selection command, never an undo step.
+    private func stampTabsNoLongerShown(_ before: [ItemID: Tab], now: Date = Date()) {
+        let after = tabsShownInWindows()
+        for (id, tab) in before where after[id] == nil { tab.lastActiveAt = now }
+    }
+
     /// Earliest Today activity deadline across all Profiles. Pinned and Favorites
-    /// are excluded by ancestry. Read all inputs for Observation, including Never.
+    /// are excluded by ancestry; tabs shown in any window are excluded by the
+    /// same visibility rule as the sweep. Read all inputs for Observation.
     public func nextAutoArchiveExpiry() -> Date? {
+        let shown = tabsShownInWindows()
         let thresholds = Dictionary(uniqueKeysWithValues: profiles.map { ($0.id, $0.settings.autoArchiveAfter.seconds) })
         var earliest: Date?
         for space in spaces {
             let threshold = thresholds[space.profileID] ?? nil
             for tab in space.today.flatMap({ tabs(under: $0) }) {
                 let activity = tab.lastActiveAt
-                guard let threshold else { continue }
+                guard let threshold, shown[tab.id] == nil else { continue }
                 let deadline = activity.addingTimeInterval(threshold)
                 earliest = earliest.map { min($0, deadline) } ?? deadline
             }
@@ -2106,15 +2128,17 @@ public final class BrowserModel {
     }
 
     /// Archives expired Today tabs in one pass: top-level tabs, split panes, and tabs inside
-    /// Today folders. Pinned tabs and favorites never expire. One sink call for all tabs, and
+    /// Today folders. Pinned tabs, favorites, and tabs shown in any window never
+    /// expire. One sink call for all tabs, and
     /// one `.reload` per parent whose list changed. No undo: the archive is the history.
     @discardableResult
     public func archiveExpiredTabs(now: Date) -> Int {
+        let shown = Set(tabsShownInWindows().keys)
         var entries: [ArchiveEntry] = []
         var changed: [NodeParent] = []
         for space in spaces {
             guard let threshold = profile(id: space.profileID)?.settings.autoArchiveAfter.seconds else { continue }
-            var sweep = ExpirySweep(cutoff: now.addingTimeInterval(-threshold), now: now, spaceID: space.id, profileID: space.profileID)
+            var sweep = ExpirySweep(cutoff: now.addingTimeInterval(-threshold), now: now, spaceID: space.id, profileID: space.profileID, shownTabIDs: shown)
             if let kept = sweepExpired(space.today, in: .spaceToday(space.id), &sweep) { space.today = kept }
             entries += sweep.entries
             changed += sweep.changed
@@ -2132,7 +2156,7 @@ public final class BrowserModel {
         for node in list {
             switch node {
             case .tab(let tab):
-                if tab.lastActiveAt < sweep.cutoff {
+                if !sweep.shownTabIDs.contains(tab.id), tab.lastActiveAt < sweep.cutoff {
                     expire(tab, from: parent, &sweep)
                     listChanged = true
                 } else {
@@ -2143,9 +2167,9 @@ public final class BrowserModel {
                 kept.append(node)
             case .split(let split):
                 let cutoff = sweep.cutoff
-                let live = split.panes.filter { $0.lastActiveAt >= cutoff }
+                let live = split.panes.filter { sweep.shownTabIDs.contains($0.id) || $0.lastActiveAt >= cutoff }
                 guard live.count < split.panes.count else { kept.append(node); continue }
-                for tab in split.panes where tab.lastActiveAt < cutoff { expire(tab, from: .splitPane(split.id), &sweep) }
+                for tab in split.panes where !sweep.shownTabIDs.contains(tab.id) && tab.lastActiveAt < cutoff { expire(tab, from: .splitPane(split.id), &sweep) }
                 split.panes = live
                 if let focused = split.focusedPaneID, !live.contains(where: { $0.id == focused }) { split.focusedPaneID = live.first?.id }
                 if live.count >= 2 {
@@ -2182,16 +2206,32 @@ public final class BrowserModel {
         guard space(id: focusedSpaceID) != nil else { return nil }
         let state = BrowserWindowState(focusedSpaceID: focusedSpaceID)
         windows.append(state)
-        registerChange(undo: { [weak self] in self?.windows.removeAll { $0.id == state.id } },
+        registerChange(undo: { [weak self] in _ = self?.removeWindowState(windowID: state.id) },
                        redo: { [weak self] in self?.windows.append(state) })
         return state
     }
 
+    private func removeWindowState(windowID: WindowID) -> BrowserWindowState? {
+        guard let index = windows.firstIndex(where: { $0.id == windowID }) else { return nil }
+        let shown = tabsShownInWindows(), state = windows.remove(at: index)
+        stampTabsNoLongerShown(shown)
+        return state
+    }
+
     public func closeWindow(windowID: WindowID) {
-        guard let index = windows.firstIndex(where: { $0.id == windowID }) else { return }
-        let state = windows.remove(at: index)
+        guard let index = windows.firstIndex(where: { $0.id == windowID }),
+              let state = removeWindowState(windowID: windowID) else { return }
         registerChange(undo: { [weak self] in guard let self else { return }; self.windows.insert(state, at: min(index, self.windows.count)) },
-                       redo: { [weak self] in self?.windows.removeAll { $0.id == windowID } })
+                       redo: { [weak self] in _ = self?.removeWindowState(windowID: windowID) })
+    }
+
+    /// Shell lifetime only. The retained last-window snapshot is not on screen.
+    /// Transient visibility is not persisted and does not register an undo action.
+    public func setWindowContentVisible(windowID: WindowID, visible: Bool) {
+        guard let state = windows.first(where: { $0.id == windowID }), state.isShowingContent != visible else { return }
+        let shown = tabsShownInWindows()
+        state.isShowingContent = visible
+        stampTabsNoLongerShown(shown)
     }
 
     public func setSidebarWidth(windowID: WindowID, width: Double) {
@@ -2210,8 +2250,15 @@ public final class BrowserModel {
     public func focusSpace(windowID: WindowID, spaceID: SpaceID) {
         guard let window = windows.first(where: { $0.id == windowID }) else { return }
         let old = window.focusedSpaceID
-        window.focusedSpaceID = spaceID
-        registerChange(undo: { window.focusedSpaceID = old }, redo: { window.focusedSpaceID = spaceID })
+        setFocusedSpace(spaceID, in: window)
+        registerChange(undo: { [weak self] in self?.setFocusedSpace(old, in: window) },
+                       redo: { [weak self] in self?.setFocusedSpace(spaceID, in: window) })
+    }
+
+    private func setFocusedSpace(_ id: SpaceID, in window: BrowserWindowState) {
+        let shown = tabsShownInWindows()
+        window.focusedSpaceID = id
+        stampTabsNoLongerShown(shown)
     }
 
     /// Every pane is visible when a split is selected or its keyboard focus changes.
@@ -2230,11 +2277,15 @@ public final class BrowserModel {
     public func selectNode(windowID: WindowID, spaceID: SpaceID, nodeID: ItemID?) {
         guard let window = windows.first(where: { $0.id == windowID }) else { return }
         let old = window.selectedNodeBySpace[spaceID]
-        window.selectedNodeBySpace[spaceID] = nodeID
-        if let nodeID, let node = index[nodeID] {
-            stampVisibleTabs(in: node)
-        }
-        registerChange(undo: { window.selectedNodeBySpace[spaceID] = old },
-                       redo: { window.selectedNodeBySpace[spaceID] = nodeID })
+        setSelection(nodeID, in: spaceID, window: window)
+        registerChange(undo: { [weak self] in self?.setSelection(old, in: spaceID, window: window) },
+                       redo: { [weak self] in self?.setSelection(nodeID, in: spaceID, window: window) })
+    }
+
+    private func setSelection(_ id: ItemID?, in spaceID: SpaceID, window: BrowserWindowState) {
+        let shown = tabsShownInWindows()
+        window.selectedNodeBySpace[spaceID] = id
+        stampTabsNoLongerShown(shown)
+        if let id, let node = index[id] { stampVisibleTabs(in: node) }
     }
 }

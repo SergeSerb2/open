@@ -5296,18 +5296,21 @@ def sidebar_completion_archive_checks(app, launch, results, require, evidence, t
     pin = create('Auto Archive Pinned', background=False); app.call('pin', tab=pin)
     favorite = create('Auto Archive Favorite')
     app.call('favorite', tab=favorite)
-    # Keep a pinned tab selected. Activity timestamps stay real throughout the fake-clock flow.
-    app.call('select', tab=pin)
-    before = rows(profile)['count']; activity = app.tab(old)['lastActiveAt']
+    # The selected Today tab and an unselected Today tab are both past threshold.
+    # Only the unselected tab may archive. Pinned/Favorite controls also survive.
+    visible = create('Auto Archive Visible Today', background=False)
+    before = rows(profile)['count']; activity = max(app.tab(old)['lastActiveAt'], app.tab(visible)['lastActiveAt'])
     sweep = app.call('archive-sweep', now=iso(activity + 13*3600))
     archived = rows(profile)
     exact = [r for r in archived['rows'] if r['id'] == old]
     again = app.call('archive-sweep')
-    require('E16_fake_clock_sweep_archives_today', not contains(old) and contains(pin) and contains(favorite)
+    require('E16_fake_clock_sweep_archives_today', not contains(old) and contains(visible) and contains(pin) and contains(favorite)
+            and app.call('window-state')['selected'] == visible and sweep['armedTimerCount'] == 0 and sweep['nextExpiry'] is None
             and archived['count'] == before + 1 and len(exact) == 1 and exact[0]['reason'] == 'autoArchived'
             and exact[0]['profile'] == profile and exact[0]['space'] == space and rows(profile)['count'] == archived['count']
             and sweep['lastReason'] == 'automation' and sweep['lastSweep']['affectedSpaces'] == [space]
-            and again['lastSweep']['archivedCount'] == 0, state=sweep, archive=archived)
+            and again['lastSweep']['archivedCount'] == 0 and all(r['id'] != visible for r in archived['rows']),
+            state=sweep, archive=archived, selectedToday=app.tab(visible))
     banner = app.call('archive-banner-state')
     png = os.path.join(evidence, 'e16-autoarchive-banner.png'); app.call('snapshot', path=png)
     require('E16_auto_archive_banner_visible', banner['visible'] and banner['title'] == 'We cleaned up!'
