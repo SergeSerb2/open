@@ -1330,7 +1330,7 @@ Each lane records its results in its own doc (§7). The lead fills this table wi
 | S5b | [#123](https://github.com/SergeSerb2/open/pull/123) | Fixed 0.5 s arm delay, no delay setting; HP1 stored-delay proofs; real-App Previews flow PASS (M5 gate: display-only rows as on main) |
 | S6 | | |
 | A1 | [#126](https://github.com/SergeSerb2/open/pull/126) | DA1–DA5, HT1–HT3, GH1–GH5, CT1–CT3 PASS; e2e E7, E8, E17, E19; hint vs A0440 worst 1 pt / ΔE00 1.17; compact toolbar vs S2 06/0029 worst 1 pt / ΔE00 0.80; floor 164 |
-| A2 | A2_PR | HP3 measured folder card, HP7–HP10, SP5–SP6 PASS; e2e E11–E14 PASS (E14: same engine page and probe after Separate); banner trigger moves to the item-6 sweeper |
+| A2 | [#127](https://github.com/SergeSerb2/open/pull/127) | HP3 measured folder card, HP7–HP10, SP5–SP6 PASS; e2e E11–E14 PASS (E14: same engine page and probe after Separate); banner trigger moves to the item-6 sweeper |
 | A3 | | |
 | C | | |
 
