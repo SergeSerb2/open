@@ -66,20 +66,43 @@ public final class Tab {
 
 // MARK: - Folder
 
+public enum FolderExpansion: Equatable, Sendable {
+    case expanded, collapsed, peeked(ItemID)
+}
+
 @MainActor
 @Observable
 public final class Folder {
     public let id: ItemID
     public var title: String
     public var isExpanded: Bool
+    public var peekedChildID: ItemID?
+
+    public var expansion: FolderExpansion {
+        if isExpanded { return .expanded }
+        return peekedChildID.map { .peeked($0) } ?? .collapsed
+    }
+
+    /// Normalizes stale persisted/undo values without inventing a child.
+    public func applyExpansion(_ value: FolderExpansion) {
+        switch value {
+        case .expanded: isExpanded = true; peekedChildID = nil
+        case .collapsed: isExpanded = false; peekedChildID = nil
+        case .peeked(let id):
+            isExpanded = false
+            peekedChildID = children.contains { $0.id == id && $0.folder == nil } ? id : nil
+        }
+    }
     public var customIcon: String?
     public var iconOverride: SpaceIcon?
     public var children: [SidebarNode]
 
-    public init(id: ItemID = ItemID(), title: String = "Folder", isExpanded: Bool = true, customIcon: String? = nil, iconOverride: SpaceIcon? = nil, children: [SidebarNode] = []) {
+    public init(id: ItemID = ItemID(), title: String = "Folder", isExpanded: Bool = true, customIcon: String? = nil, iconOverride: SpaceIcon? = nil, children: [SidebarNode] = [], peekedChildID: ItemID? = nil) {
         self.id = id; self.title = title; self.isExpanded = isExpanded
         self.customIcon = customIcon; self.children = children
         self.iconOverride = iconOverride
+        self.peekedChildID = nil
+        applyExpansion(isExpanded ? .expanded : peekedChildID.map { .peeked($0) } ?? .collapsed)
     }
 }
 

@@ -122,6 +122,7 @@ public struct TabDTO: Codable, Sendable {
 }
 
 public struct FolderDTO: Codable, Sendable {
+    public var peekedChildID: String? = nil
     public var id: String
     public var title: String
     public var isExpanded: Bool
@@ -343,15 +344,23 @@ public enum SnapshotMapper {
     static func nodeDTO(_ node: SidebarNode) -> NodeDTO {
         switch node {
         case .tab(let t): return .tab(tabDTO(t))
-        case .folder(let f): return .folder(FolderDTO(id: f.id.rawValue.uuidString, title: f.title, isExpanded: f.isExpanded, customIcon: f.customIcon, iconOverride: iconDTO(f.iconOverride), children: f.children.map { nodeDTO($0) }))
+        case .folder(let f): return .folder(FolderDTO(peekedChildID: f.peekedChildID?.description, id: f.id.rawValue.uuidString, title: f.title, isExpanded: f.isExpanded, customIcon: f.customIcon, iconOverride: iconDTO(f.iconOverride), children: f.children.map { nodeDTO($0) }))
         case .split(let s): return .split(SplitDTO(id: s.id.rawValue.uuidString, orientation: s.orientation.rawValue, fractions: s.fractions, panes: s.panes.map { tabDTO($0) }, focusedPaneID: s.focusedPaneID?.rawValue.uuidString))
         }
+    }
+
+    /// Archive payloads deliberately omit live-tree peek metadata at every depth.
+    static func archivedNodeDTO(_ node: SidebarNode) -> NodeDTO {
+        guard case .folder(let folder) = node else { return nodeDTO(node) }
+        return .folder(FolderDTO(id: folder.id.description, title: folder.title, isExpanded: folder.isExpanded,
+                                 customIcon: folder.customIcon, iconOverride: iconDTO(folder.iconOverride),
+                                 children: folder.children.map { archivedNodeDTO($0) }))
     }
 
     static func node(from dto: NodeDTO) -> SidebarNode {
         switch dto {
         case .tab(let t): return .tab(tab(from: t))
-        case .folder(let f): return .folder(Folder(id: ItemID(uuidString: f.id), title: f.title, isExpanded: f.isExpanded, customIcon: f.customIcon, iconOverride: icon(from: f.iconOverride), children: f.children.map { node(from: $0) }))
+        case .folder(let f): return .folder(Folder(id: ItemID(uuidString: f.id), title: f.title, isExpanded: f.isExpanded, customIcon: f.customIcon, iconOverride: icon(from: f.iconOverride), children: f.children.map { node(from: $0) }, peekedChildID: f.peekedChildID.flatMap { UUID(uuidString: $0) }.map { ItemID(rawValue: $0) }))
         case .split(let s): return .split(Split(id: ItemID(uuidString: s.id), orientation: SplitOrientation(rawValue: s.orientation) ?? .horizontal, fractions: s.fractions, panes: s.panes.map { tab(from: $0) }, focusedPaneID: s.focusedPaneID.map { ItemID(uuidString: $0) }))
         }
     }

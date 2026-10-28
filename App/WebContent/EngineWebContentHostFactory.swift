@@ -347,6 +347,25 @@ final class EngineWebContentHostFactory: NSResponder, WebContentHostFactory {
     case .newTab: newTab(nil); return true
     case .close(let id), .unloadTab(let id):
       guard model.tab(id: id) != nil else { return nil }; closeTab(id: id); return true
+    case .unloadFolder(let id):
+      guard let folder = model.node(id: id)?.folder, controller?.context.isPinnedFolder(id) == true else { return false }
+      func collect(_ nodes: [SidebarNode]) -> [ItemID] {
+        nodes.flatMap { node in
+          switch node {
+          case .tab(let tab): [tab.id]
+          case .split(let split): split.panes.map(\.id)
+          case .folder(let folder): collect(folder.children)
+          }
+        }
+      }
+      let ids = Set(collect(folder.children))
+      let loaded = ids.filter { hosts[$0] != nil || controller?.container.host(for: $0) != nil }
+      guard !loaded.isEmpty else { return true }
+      for id in loaded { controller?.container.closeHost(for: id); hosts[id]?.close() }
+      if let selected = selectedTab?.id, ids.contains(selected) {
+        select(nodeID: orderedTabs.first { !ids.contains($0.id) }?.id)
+      } else { controller?.refresh(); mirror.sync(); app.scheduleSave() }
+      return true
     case .goBack: guard let page = selectedContent, page.canGoBack else { return false }; page.goBack(); return true
     case .goForward: guard let page = selectedContent, page.canGoForward else { return false }; page.goForward(); return true
     case .reload: guard let page = selectedContent else { return false }; page.reload(); return true

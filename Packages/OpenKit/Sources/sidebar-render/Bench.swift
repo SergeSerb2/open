@@ -17,6 +17,7 @@ enum Bench {
     }
 
     static func run(_ args: [String]) throws {
+        if let count = RenderCLI.value(args, "--folder-peek").flatMap(Int.init) { try FolderPeekBench.run(args, folders: count); return }
         if let count = RenderCLI.value(args, "--expand-all").flatMap(Int.init) { try expandAll(count: count); return }
         let rows = RenderCLI.value(args, "--rows").flatMap(Int.init) ?? 1000
         let scale = CGFloat(Double(RenderCLI.value(args, "--scale") ?? "2") ?? 2)

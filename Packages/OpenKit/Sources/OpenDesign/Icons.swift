@@ -164,6 +164,46 @@ public enum CustomIcon {
         }
     }
 
+    // Fixed, reusable vector paths avoid allocating four paths for every recycled row.
+    @MainActor private static let peekFolderBody: NSBezierPath = {
+        let r = CGRect(x: 0.5, y: 1.5, width: 17, height: 15)
+        let tabW = r.width * 0.4, tabH: CGFloat = 2.4, c: CGFloat = 1.6
+        let path = NSBezierPath()
+        path.move(to: NSPoint(x: r.minX + c, y: r.minY))
+        path.line(to: NSPoint(x: r.minX + tabW - 1, y: r.minY))
+        path.line(to: NSPoint(x: r.minX + tabW + 1.4, y: r.minY + tabH))
+        path.line(to: NSPoint(x: r.maxX - c, y: r.minY + tabH))
+        path.appendArc(withCenter: NSPoint(x: r.maxX - c, y: r.minY + tabH + c), radius: c, startAngle: 270, endAngle: 0)
+        path.line(to: NSPoint(x: r.maxX, y: r.maxY - c))
+        path.appendArc(withCenter: NSPoint(x: r.maxX - c, y: r.maxY - c), radius: c, startAngle: 0, endAngle: 90)
+        path.line(to: NSPoint(x: r.minX + c, y: r.maxY))
+        path.appendArc(withCenter: NSPoint(x: r.minX + c, y: r.maxY - c), radius: c, startAngle: 90, endAngle: 180)
+        path.line(to: NSPoint(x: r.minX, y: r.minY + c))
+        path.appendArc(withCenter: NSPoint(x: r.minX + c, y: r.minY + c), radius: c, startAngle: 180, endAngle: 270)
+        path.close(); return path
+    }()
+    @MainActor private static let peekFolderDots: NSBezierPath = {
+        let path = NSBezierPath(), m = SpaceListMetrics.self, d = m.folderPeekDotDiameter
+        for i in 0..<3 {
+            let center = NSPoint(x: m.folderPeekDotFirstX + CGFloat(i) * m.folderPeekDotPitch + 0.5, y: m.folderPeekDotY + 0.5)
+            path.appendOval(in: CGRect(x: center.x - d/2, y: center.y - d/2, width: d, height: d))
+        }
+        return path
+    }()
+
+    /// Open's own closed-folder vector; nominal frame reconciles the existing 20 pt host.
+    @MainActor public static func folderPeek(in frame: CGRect, color: NSColor, dotsColor: NSColor) {
+        guard let context = NSGraphicsContext.current?.cgContext else { return }
+        context.saveGState()
+        context.translateBy(x: frame.minX, y: frame.minY)
+        context.scaleBy(x: frame.width / 18, y: frame.height / 18)
+        color.setFill(); peekFolderBody.fill()
+        NSColor.white.withAlphaComponent(0.25).setFill()
+        CGRect(x: 0.5, y: 5.1, width: 17, height: 0.8).fill()
+        dotsColor.setFill(); peekFolderDots.fill()
+        context.restoreGState()
+    }
+
     @MainActor private static var templates: [String: NSImage] = [:]
 
     /// A template image drawn once by `draw` in a flipped context.

@@ -58,7 +58,9 @@ public struct ModelSidebarActions {
         case .exportSpaceIntoFolder(let space, let destination):
             return model.turnSpaceIntoFolder(id: space, destination: destination) != nil
         case .setExpanded(let id, let expanded):
-            model.setExpanded(folderID: id, expanded: expanded)
+            model.setFolderExpansion(folderID: id, context.folderExpansion(folderID: id, expanded: expanded))
+        case .setFolderExpansion(let id, let expansion):
+            model.setFolderExpansion(folderID: id, expansion)
         case .setPinnedCollapsed(let space, let collapsed):
             model.setPinnedSectionCollapsed(spaceID: space, collapsed: collapsed)
         case .pin(let id):

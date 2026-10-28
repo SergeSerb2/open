@@ -48,7 +48,10 @@ enum Checks {
         func walk(_ nodes: [SidebarNode]) {
             for n in nodes {
                 r.append(n.id.description)
-                if case .folder(let f) = n, f.isExpanded { walk(f.children) }
+                if case .folder(let f) = n {
+                    if f.isExpanded { walk(f.children) }
+                    else if let id = f.peekedChildID, let child = f.children.first(where: { $0.id == id }) { walk([child]) }
+                }
             }
         }
         if !space.isPinnedCollapsed { walk(space.pinned) }
@@ -171,7 +174,7 @@ enum Checks {
         check(window.selectedNodeBySpace[space.id] == second.id, "the model selected it")
         delegate.log.removeAll()
         if let p = center(of: folder.id) { click(p) }
-        check(delegate.log.contains(.setExpanded(folderID: folder.id, expanded: false)), "click on a folder row toggles it")
+        check(delegate.log.contains(.setFolderExpansion(folderID: folder.id, expansion: .collapsed)), "click on a folder row toggles it")
         OffscreenRenderer.settle(scene, runLoop: 0.15); rowsMatch("folder collapsed by click")
         delegate.log.removeAll()
         if let r = sidebar.displayedRows.firstIndex(of: "newTab"), let outline = sidebar.focusedOutline {
@@ -319,6 +322,7 @@ enum Checks {
         MediaLifecycleChecks.run()
         ReviewChecks.run()
         VisualFinishChecks.run()
+        FolderPeekChecks.run()
         CompletionChecks.run()
         CompactToolbarChecks.run()
         SpaceManagerChecks.run()

@@ -16,7 +16,9 @@ enum RenderCLI {
         case "synth": try synth(rest)
         case "tooltip": try tooltip(rest)
         case "space-manager": try spaceManager(rest)
-        case "compare": try Compare.run(rest)
+        case "compare":
+            if value(rest, "--spec") == "folder-peek" { try FolderPeekCompare.run(rest) }
+            else { try Compare.run(rest) }
         case "compare-media": try MediaCompare.run(rest)
         case "bench": try Bench.run(rest)
         case "check": try Checks.run(rest)
@@ -45,7 +47,7 @@ enum RenderCLI {
       sidebar-render space-manager --out FILE.png [--snapshot DIR] [--size WxH] [--scale 1|2] [--profiles 2] [--columns N --rows N --scroll-x X]
       sidebar-render synth --out DIR [--rows N]
       sidebar-render compare --arc FILE.png --ours FILE.png --spec NAME --out DIR [--scale S]
-      sidebar-render bench [--rows N] [--selection] [--bulk N] [--expand-all N] [--row-media mixed] [--media-card|--media-stack]
+      sidebar-render bench [--rows N] [--selection] [--bulk N] [--expand-all N] [--folder-peek N [--negative-proof]] [--row-media mixed] [--media-card|--media-stack]
       sidebar-render compare-media --arc FILE.png --ours FILE.png --out DIR --state rest|expanded|stack|stack-expanded
       sidebar-render check
       sidebar-render sm6-measure [--fail-after-host] [--thread-instructions]
@@ -143,7 +145,7 @@ enum RenderCLI {
             s.today = Array(s.today.dropFirst(n)); model.rebuildIndex()
         }
         if args.contains("--collapse-folders") {
-            func walk(_ nodes: [SidebarNode]) { for case .folder(let f) in nodes { f.isExpanded = false; walk(f.children) } }
+            func walk(_ nodes: [SidebarNode]) { for case .folder(let f) in nodes { f.applyExpansion(.collapsed); walk(f.children) } }
             for s in model.spaces { walk(s.pinned); walk(s.today) }
         }
         if let sel = value(args, "--select") {
@@ -212,6 +214,16 @@ enum RenderCLI {
             image = OffscreenRenderer().snapshot(scene, scale: scale, presentation: true)
             host.contentView = nil
             host.close()
+        } else if args.contains("--folder-peek") {
+            let host = OffscreenRenderer.host(scene, scale: scale)
+            guard let folder = context.focusedSpace?.pinned.first?.folder,
+                  let frame = scene.sidebar.rowFrame(nodeID: folder.id), frame.minY == 239 else {
+                host.contentView = nil; host.close()
+                throw CLIError(description: "FP6 fixture folder row must actually start at y239")
+            }
+            print("FP6 actual folder row=\(frame), child=\(scene.sidebar.rowFrame(nodeID: folder.peekedChildID!)!)")
+            image = OffscreenRenderer().snapshot(scene, scale: scale)
+            host.contentView = nil; host.close()
         } else if value(args, "--media-button-hover") != nil || args.contains("--media-tooltip") {
             image = try MediaScene.captureInteraction(scene, args: args, scale: scale)
         } else {
@@ -312,6 +324,14 @@ enum RenderCLI {
     static func synth(_ args: [String]) throws {
         guard let out = value(args, "--out") else { throw CLIError(description: usage) }
         let model = Synthetic.model(bulkRows: value(args, "--rows").flatMap(Int.init))
+        if args.contains("--folder-peek") {
+            let space = model.spaces[2], folder = space.pinned[0].folder!
+            let tabs = (0..<3).map { Tab(url: Synthetic.url("peek-\($0)"), title: "Synthetic child \($0)") }
+            folder.children = tabs.map { .tab($0) }; folder.applyExpansion(.peeked(tabs[1].id))
+            space.pinned = [.folder(folder)]
+            space.today = [.tab(Tab(url: Synthetic.url("peek-today"), title: "Synthetic Today"))]
+            model.windows[0].focusedSpaceID = space.id
+        }
         try Synthetic.write(model, to: URL(fileURLWithPath: out))
         print("wrote synthetic snapshot to \(out): \(model.spaces.count) Spaces, \(model.index.count) nodes")
     }

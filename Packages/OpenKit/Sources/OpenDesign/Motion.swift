@@ -53,6 +53,11 @@ public enum Motion {
     public static let selectionFade: CFTimeInterval = 0.12
     /// Folder expand and collapse, row insert and remove (< 0.5 s measured).
     public static let rowStructure: CFTimeInterval = 0.22
+    /// S2 folder motion fit: RE interaction-states §20.12 (not general row edits).
+    public static let folderExpand: CFTimeInterval = 0.20
+    public static let folderCollapse: CFTimeInterval = 0.25
+    public static var folderExpandTiming: CAMediaTimingFunction { easeOut }
+    public static var folderCollapseTiming: CAMediaTimingFunction { CAMediaTimingFunction(name: .default) }
     /// Tooltip fade in and out.
     public static let tooltipFade: CFTimeInterval = 0.12
     /// Sidebar hide and show (Cmd+S) slide.

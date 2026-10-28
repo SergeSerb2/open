@@ -28,6 +28,8 @@ public final class HoverPreviewTracker {
     private var observers: [NSObjectProtocol] = []
     private var eventMonitor: Any?
     private var focusLoop: ObservationLoop?
+    private var expansionLoop: ObservationLoop?
+    public private(set) var dismissesImmediately = false
     private var modelObserver: UUID?
     public var hasInstalledWork: Bool { !observers.isEmpty || eventMonitor != nil || showTask != nil || hideTask != nil }
     public private(set) var request: SidebarHoverPreviewRequest?
@@ -46,7 +48,7 @@ public final class HoverPreviewTracker {
         showTask?.cancel(); hideTask?.cancel()
         observers.forEach(NotificationCenter.default.removeObserver)
         if let eventMonitor { NSEvent.removeMonitor(eventMonitor) }
-        focusLoop?.cancel()
+        focusLoop?.cancel(); expansionLoop?.cancel()
         if let modelObserver { model.removeObserver(modelObserver) }
     }
     private var preferences: UserDefaults { context.previewPreferences }
@@ -61,8 +63,8 @@ public final class HoverPreviewTracker {
         guard context.currentTab?.id != nodeID, let node = context.model.node(id: nodeID) else { leaveTarget(); return false }
         let kind: SidebarHoverPreviewRequest.Kind
         switch node {
-        case .folder:
-            guard enabled("open.general.previewsFolders") else { leaveTarget(); return false }
+        case .folder(let folder):
+            guard !folder.isExpanded, enabled("open.general.previewsFolders") else { leaveTarget(); return false }
             kind = .folder(nodeID)
         case .tab:
             guard enabled("open.general.previewsPages"), context.model.isPinned(tabID: nodeID) || {
@@ -76,6 +78,13 @@ public final class HoverPreviewTracker {
         let next = SidebarHoverPreviewRequest(kind: kind, anchorInWindow: anchorInWindow)
         if candidate?.kind == kind { candidate = next; return suppressesTooltips }
         candidate = next
+        expansionLoop?.cancel(); expansionLoop = nil
+        if case .folder(let id) = kind, let folder = context.model.node(id: id)?.folder {
+            expansionLoop = ObservationLoop(read: { _ = folder.isExpanded; _ = folder.peekedChildID }) { [weak self] in
+                guard let self else { return }
+                if let target = self.candidate ?? self.request, !self.valid(target) { self.dismiss(immediate: true) }
+            }
+        }
         showTask?.cancel(); showTask = nil; scheduledShowDelay = nil; scheduledShowDeadline = nil
         TooltipController.shared.cancel(for: nil)
         let now = ProcessInfo.processInfo.systemUptime
@@ -95,7 +104,7 @@ public final class HoverPreviewTracker {
     private func valid(_ next: SidebarHoverPreviewRequest) -> Bool {
         guard context.canStartHoverPreview else { return false }
         switch next.kind {
-        case .folder(let id): return enabled("open.general.previewsFolders") && context.model.node(id: id)?.folder != nil
+        case .folder(let id): return enabled("open.general.previewsFolders") && context.model.node(id: id)?.folder?.isExpanded == false
         case .page(let id):
             guard enabled("open.general.previewsPages"), context.model.tab(id: id) != nil, context.currentTab?.id != id else { return false }
             if case .favorites = context.model.parent(of: id) { return true }
@@ -128,13 +137,16 @@ public final class HoverPreviewTracker {
     public func setSuppressed(_ reason: Suppression, _ value: Bool) {
         if value { suppressed.insert(reason); dismiss() } else { suppressed.remove(reason) }
     }
-    public func dismiss() {
+    public func dismiss(immediate: Bool = false) {
+        expansionLoop?.cancel(); expansionLoop = nil
         showTask?.cancel(); showTask = nil; hideTask?.cancel(); hideTask = nil
         scheduledShowDelay = nil; scheduledShowDeadline = nil; scheduledHideDelay = nil
         candidate = nil; insideCard = false
         guard request != nil else { return }
         request = nil; shownWindow = nil; lastHidden = ProcessInfo.processInfo.systemUptime
+        dismissesImmediately = immediate
         context.send(.hoverPreview(nil))
+        dismissesImmediately = false
     }
     private func installObservers() {
         guard observers.isEmpty else { return }

@@ -331,6 +331,17 @@ public enum SidebarDiagnostics {
     public internal(set) static var compactToolbarSwaps = 0
     /// Native incremental outline update calls. One plain main-actor increment per call.
     public internal(set) static var outlineItemUpdates = 0
+    public internal(set) static var outlineItemsInserted = 0
+    public internal(set) static var outlineItemsRemoved = 0
+    public internal(set) static var folderTransitionDuration: TimeInterval = 0
+    public internal(set) static var folderTransitionExpanding = false
+    /// Enabled only by the CLI bench. No clocks, delays or allocations at rest.
+    public static var measuresFolderTransitions = false
+    public internal(set) static var folderReconcileSeconds: Double = 0
+    public internal(set) static var folderReconcileCount = 0
+    /// CLI-only negative control. Nil in the App; no extra work in normal scrolling.
+    public static var folderBenchFullRowWindowID: WindowID?
+    public internal(set) static var folderRowLayouts = 0
     /// One plain main-actor integer increment per page build or layout callback.
     /// No lock, allocation, or logging occurs at these diagnostic hook sites.
     public internal(set) static var spacePageBuilds = 0

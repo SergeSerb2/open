@@ -900,7 +900,7 @@ its own glyph.
 | Right arrow on a focused peeked folder | Expanded. | **guess** (keyboard not captured) |
 | Select another tab anywhere | No change: the peek stays. | measured (V 46.3 s: peeking while a Today tab is selected) |
 | Select the peeked row | Normal selection; no change. | Open rule |
-| Select a hidden child by other means (keyboard next/previous tab, command bar, routing) | Unchanged existing rule (the model expands the folder chain). | not captured; Q17 |
+| Select a hidden child by other means (keyboard next/previous tab, command bar, routing) | Unchanged existing rule (the App command path expands the folder chain). | not captured; Q17 |
 | The peeked child is closed, archived, moved out of the folder (also by drag), or turned into a split pane elsewhere | Collapsed. | Open rule |
 | Expand All Folders / Collapse All Folders (§3.4) | Every folder becomes expanded / collapsed; Collapse All never peeks. | **guess** |
 | Delete or archive the folder | As today; the archive record keeps `isExpanded` false and drops the peek. | Open rule |
@@ -909,12 +909,27 @@ its own glyph.
 level), fills, hover, close button, context menu, drag, multi-selection, and
 unread dot as when the folder is expanded. Folder glyph (`CustomIcon.folderPeek`,
 18 pt frame like the other folder glyphs): Open's closed-folder vector in the
-Space accent with three round dots in `SidebarRole.folderPeekDots` = white
-a 0.65 over the accent. Measured on S2 08/0090 and 0100 (folder row top
+Space accent with three round dots in `SidebarRole.folderPeekDots` = solid
+sRGB `#B5AFFF` (the former white alpha 0.65 fit is superseded below). Measured on S2 08/0090 and 0100 (folder row top
 y 239): each dot is 3 px wide at 1x, centers at x 22 / 26 / 30 (pitch 4 pt)
 on y 260 = row y + 21 (rows 259–261), body `#202AFF`, dot center pixels
-`#B8B3FF`, `#B6B1FF`, `#B0AAFF`; the 0.65 alpha is fitted to those centers
-(fill, not the footprint mean). AX: the folder row reports
+`#B8B3FF`, `#B6B1FF`, `#B0AAFF`; white alpha 0.65 was an initial fitted guess
+for those centers (fill, not the footprint mean). **2026-10-28 implementation fit / lead ruling:**
+the measured capture takes precedence over that fitted guess. The initial white
+alpha 0.65 render missed the third center by ΔE00 3.268; even its best white-opacity
+fit missed by 2.209. One solid dot token now minimizes the worst of the three
+center errors: exhaustive integer sRGB search over R170…192, G162…186, B248…255,
+with maximum ΔE00 as the objective and summed ΔE00 as the tie-break, chose
+`#B5AFFF`. Both inputs were converted through their embedded ICC profile into
+Display P3, then identically into sRGB for Lab D65 / CIEDE2000. Converted capture
+centers are `#B9B4FF`, `#B6B2FF`, `#B0AAFF`; the actual render uses `#B5AFFF` at
+all three centers, giving ΔE00 **1.434 / 0.837 / 1.511**. The default peek body
+uses calibrated sRGB `#202AFF` (ΔE00 **0.000**); themed folders keep their Space
+accent. Pixel-center alignment gives three 3×3 px footprints at x21/25/29,
+y259, with 4 pt pitch. No per-dot colors are used. Existing open/closed glyph
+colors and baseline images are unchanged. The hover dash is 12×2 px at (196,258),
+0 pt error and ΔE00 0.15. Receipt: `docs/plans/sidebar-s6-receipt.md`.
+AX: the folder row reports
 `isAccessibilityExpanded` false and the value "1 tab shown" (**Open choice**;
 Arc's AX value is not known). Folder row hover (S2 08/0090): fill white 0.10
 on the row frame (existing hover) and, on folders in Pinned, a "—" button
@@ -1328,7 +1343,7 @@ Each lane records its results in its own doc (§7). The lead fills this table wi
 | M5 | | |
 | S5 | | |
 | S5b | [#123](https://github.com/SergeSerb2/open/pull/123) | Fixed 0.5 s arm delay, no delay setting; HP1 stored-delay proofs; real-App Previews flow PASS (M5 gate: display-only rows as on main) |
-| S6 | | |
+| S6 | Local `t3/sidebar-s6-folder-peek` (parent stacks; no PR) | FP1–FP9 and FP11 PASS; E20 80/80; 13/13 baseline tables identical. FP10 **PENDING** quiet parent run; unchanged 2 ms / 8.33 ms limits and fast O(n) negative proof. [Receipt](sidebar-s6-receipt.md). |
 | A1 | [#126](https://github.com/SergeSerb2/open/pull/126) | DA1–DA5, HT1–HT3, GH1–GH5, CT1–CT3 PASS; e2e E7, E8, E17, E19; hint vs A0440 worst 1 pt / ΔE00 1.17; compact toolbar vs S2 06/0029 worst 1 pt / ΔE00 0.80; floor 164 |
 | A2 | | |
 | A3 | | |

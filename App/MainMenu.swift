@@ -59,7 +59,7 @@ extension EngineWebContentHostFactory {
       // Enabled when the focused Space has a folder in the other state (completion §2.5).
       let wantsExpanded = id == "collapse-all-folders"
       func any(_ nodes: [SidebarNode]) -> Bool {
-        nodes.contains { node in node.folder.map { $0.isExpanded == wantsExpanded || any($0.children) } ?? false }
+        nodes.contains { node in node.folder.map { $0.isExpanded == wantsExpanded || (wantsExpanded && $0.peekedChildID != nil) || any($0.children) } ?? false }
       }
       return focusedSpace.map { any($0.pinned) || any($0.today) } ?? false
     }

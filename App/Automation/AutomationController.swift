@@ -303,7 +303,93 @@
         guard let space = w.focusedSpace else { throw Failure(message: "no space") }
         return ["pinned": space.pinned.map(describeNode), "today": space.today.map(describeNode)]
       case "tabs":
-        return w.orderedTabs.map { describe($0, in: w) }
+        let tabs = w.orderedTabs.map { describe($0, in: w) }
+        guard a["sidebar"] as? Bool == true, let sidebar = w.controller?.sidebar, let outline = sidebar.focusedOutline,
+              let space = w.focusedSpace else { return tabs }
+        w.controller?.contentView.layoutSubtreeIfNeeded()
+        let rows = sidebar.displayedRows
+        var folders: [[String: Any]] = []
+        func collect(_ nodes: [SidebarNode]) {
+          for node in nodes {
+            guard let folder = node.folder else { continue }
+            let visible = (0..<outline.numberOfRows).compactMap { row -> String? in
+              guard let item = outline.item(atRow: row), outline.parent(forItem: item) as? Folder === folder else { return nil }
+              if let tab = item as? Tab { return tab.id.description }
+              if let split = item as? Split { return split.id.description }
+              if let nested = item as? Folder { return nested.id.description }
+              return nil
+            }
+            folders.append(["id": folder.id.description, "expanded": folder.isExpanded,
+              "peekedChildID": folder.peekedChildID?.description ?? "", "visibleChildren": visible])
+            collect(folder.children)
+          }
+        }
+        collect(space.pinned); collect(space.today)
+        return ["tabs": tabs, "rows": rows, "folders": folders] as [String: Any]
+      case "sidebar-click":
+        guard let sidebar = w.controller?.sidebar, let target = w.window,
+              let id = (a["node"] as? String).flatMap(UUID.init(uuidString:)).map({ ItemID(rawValue: $0) }),
+              let node = app.model.node(id: id), let outline = sidebar.focusedOutline else { throw Failure(message: "missing sidebar node") }
+        let object: AnyObject
+        switch node { case .tab(let tab): object = tab; case .folder(let folder): object = folder; case .split(let split): object = split }
+        let row = outline.row(forItem: object)
+        guard row >= 0 else { throw Failure(message: "sidebar node is hidden") }
+        outline.scrollRowToVisible(row); target.layoutIfNeeded(); w.controller?.contentView.layoutSubtreeIfNeeded()
+        guard let frame = sidebar.rowFrame(nodeID: id) else { throw Failure(message: "no visible sidebar frame") }
+        let point = sidebar.convert(NSPoint(x: min(100, frame.maxX - 45), y: frame.midY), to: nil)
+        var flags: NSEvent.ModifierFlags = []
+        for value in a["modifiers"] as? [String] ?? [] {
+          switch value { case "cmd", "command": flags.insert(.command); case "shift": flags.insert(.shift)
+          case "alt", "option": flags.insert(.option); case "ctrl", "control": flags.insert(.control); default: break }
+        }
+        let capturesMotion = a["motion"] as? Bool == true
+        let previousReduceMotion = Motion.reduceMotionOverride
+        if capturesMotion { Motion.reduceMotionOverride = false }
+        defer { if capturesMotion { Motion.reduceMotionOverride = previousReduceMotion } }
+        BrowserWindowController.automationPointer = (target.windowNumber, point)
+        let eventStarted = CACurrentMediaTime()
+        func click(_ type: NSEvent.EventType) -> NSEvent? {
+          NSEvent.mouseEvent(with: type, location: point, modifierFlags: flags, timestamp: ProcessInfo.processInfo.systemUptime,
+            windowNumber: target.windowNumber, context: nil, eventNumber: 0, clickCount: 1, pressure: type == .leftMouseDown ? 1 : 0)
+        }
+        if let up = click(.leftMouseUp) { NSApp.postEvent(up, atStart: false) }
+        if let down = click(.leftMouseDown) { NSApp.sendEvent(down) }
+        await Task.yield()
+        var result: [String: Any] = ["accepted": true, "expanded": node.folder?.isExpanded ?? false,
+          "peekedChildID": node.folder?.peekedChildID?.description ?? ""]
+        if a["motion"] as? Bool == true {
+          let started = eventStarted
+          var samples: [[String: Any]] = [], animations: [[String: Any]] = []
+          func inspect(_ layer: CALayer) {
+            for key in layer.animationKeys() ?? [] {
+              guard let animation = layer.animation(forKey: key) else { continue }
+              let path = (animation as? CAPropertyAnimation)?.keyPath ?? key
+              var points: [Float] = []
+              if let curve = animation.timingFunction {
+                for index in 0..<4 { var p: [Float] = [0,0]; curve.getControlPoint(at: index, values: &p); points += p }
+              }
+              animations.append(["path": path, "duration": animation.duration, "curve": points])
+            }
+            for child in layer.sublayers ?? [] { inspect(child) }
+          }
+          for _ in 0..<8 {
+            var positions: [String: Double] = [:]
+            for index in 0..<outline.numberOfRows {
+              guard let item = outline.item(atRow: index), let view = outline.rowView(atRow: index, makeIfNecessary: false) else { continue }
+              let id: String
+              if let tab = item as? Tab { id = tab.id.description }
+              else if let folder = item as? Folder { id = folder.id.description }
+              else { continue }
+              positions[id] = Double(view.layer?.presentation()?.frame.minY ?? view.frame.minY)
+              if samples.isEmpty, let layer = view.layer { inspect(layer) }
+            }
+            samples.append(["time": CACurrentMediaTime() - started, "rows": positions])
+            try await Task.sleep(for: .milliseconds(45))
+          }
+          result["motion"] = ["appliedDuration": SidebarDiagnostics.folderTransitionDuration,
+            "expanding": SidebarDiagnostics.folderTransitionExpanding, "animations": animations, "samples": samples]
+        }
+        return result
       case "tab-state":
         return describe(try modelTab(a, w), in: w)
       case "tab-strip":

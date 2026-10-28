@@ -23,6 +23,11 @@ final class SpacePageView: NSView, NSOutlineViewDataSource, NSOutlineViewDelegat
     /// Child lists as the outline currently knows them.
     private var rootItems: [AnyObject] = []
     private var folderChildren: [ObjectIdentifier: [AnyObject]] = [:]
+    private var displayedExpansion: [ObjectIdentifier: FolderExpansion] = [:]
+    private var displayedChildCounts: [ObjectIdentifier: Int] = [:]
+    private var rootPinnedCount = 0
+    private var rootTodayCount = 0
+    private var rootPinnedCollapsed = false
     private var loops: [ObservationLoop] = []
     private var mirroringSelection = false
     private var draggingIDs: Set<ItemID> = []
@@ -42,11 +47,12 @@ final class SpacePageView: NSView, NSOutlineViewDataSource, NSOutlineViewDelegat
         header.page = self
         addSubview(header)
         rootItems = computeRoot()
+        rememberRootShape()
         configureOutline()
         scroll.documentView = outline
         addSubview(scroll)
         applyAppearance()
-        syncExpansion(animated: false)
+        syncExpansion(animated: false, initial: true)
         observe()
     }
 
@@ -135,11 +141,13 @@ final class SpacePageView: NSView, NSOutlineViewDataSource, NSOutlineViewDelegat
             _ = self.space.isPinnedCollapsed
             _ = self.space.pinned.count
             _ = self.space.today.count
-            self.forEachLoadedFolder { _ = $0.isExpanded; _ = $0.children.count }
+            self.forEachLoadedFolder { _ = $0.isExpanded; _ = $0.peekedChildID; _ = $0.children.count }
         }) { [weak self] in
             guard let self else { return }
             guard self.context.manager?.deferHiddenUpdates() != true else { return }
-            self.syncRoot()
+            if self.rootPinnedCount != self.space.pinned.count || self.rootTodayCount != self.space.today.count || self.rootPinnedCollapsed != self.space.isPinnedCollapsed {
+                self.syncRoot()
+            }
             self.syncExpansion(animated: self.animatesSidebarChanges)
         })
         // Theme and appearance.
@@ -296,11 +304,13 @@ final class SpacePageView: NSView, NSOutlineViewDataSource, NSOutlineViewDelegat
         guard expected.map(ObjectIdentifier.init) == dstNew.map(ObjectIdentifier.init) else { return false }
         var src = srcList
         src.remove(at: fromIndex)
+        guard src.map(ObjectIdentifier.init) == target(for: from).map(ObjectIdentifier.init) else { return false }
         setList(src, for: from)
         setList(dstNew, for: to)
         outline.beginUpdates()
         outline.moveItem(at: fromIndex, inParent: parentItem(from), to: toIndex, inParent: parentItem(to))
         outline.endUpdates()
+        syncExpansion(animated: animatesSidebarChanges)
         updateRowStates(animated: false)
         return true
     }
@@ -309,8 +319,18 @@ final class SpacePageView: NSView, NSOutlineViewDataSource, NSOutlineViewDelegat
         switch d { case .root: rootItems; case .folder(let f): folderChildren[ObjectIdentifier(f)] ?? [] }
     }
 
+    private func displayedChildren(of folder: Folder) -> [AnyObject] {
+        switch folder.expansion {
+        case .expanded: return folder.children.map(\.object)
+        case .collapsed: return []
+        case .peeked(let id):
+            guard context.model.parent(of: id) == .folder(folder.id), let node = context.model.node(id: id), node.folder == nil else { return [] }
+            return [node.object]
+        }
+    }
+
     private func target(for d: Displayed) -> [AnyObject] {
-        switch d { case .root: computeRoot(); case .folder(let f): f.children.map(\.object) }
+        switch d { case .root: computeRoot(); case .folder(let f): displayedChildren(of: f) }
     }
 
     private func setList(_ l: [AnyObject], for d: Displayed) {
@@ -321,11 +341,15 @@ final class SpacePageView: NSView, NSOutlineViewDataSource, NSOutlineViewDelegat
         switch d { case .root: nil; case .folder(let f): f }
     }
 
-    func syncRoot() { apply(target: computeRoot(), in: .root) }
+    private func rememberRootShape() {
+        rootPinnedCount = space.pinned.count; rootTodayCount = space.today.count; rootPinnedCollapsed = space.isPinnedCollapsed
+    }
+
+    func syncRoot() { apply(target: computeRoot(), in: .root); rememberRootShape() }
 
     private func syncFolder(_ folder: Folder) {
         guard folderChildren[ObjectIdentifier(folder)] != nil else { return }
-        apply(target: folder.children.map(\.object), in: .folder(folder))
+        syncExpansion(animated: animatesSidebarChanges, changedFolder: folder.id)
     }
 
     /// Edits a cached child list in place (no copy of a 1,000-item list per step).
@@ -339,12 +363,12 @@ final class SpacePageView: NSView, NSOutlineViewDataSource, NSOutlineViewDelegat
     /// Applies the sequential diff between the cached list and `new` to the
     /// outline. The cache changes step by step with the outline, so data source
     /// calls during an update always see the outline's current state.
-    private func apply(target new: [AnyObject], in d: Displayed) {
+    private func apply(target new: [AnyObject], in d: Displayed, animated: Bool? = nil) {
         let steps = ListDiff.steps(old: list(for: d).map(ObjectIdentifier.init), new: new.map(ObjectIdentifier.init))
         guard !steps.isEmpty else { return }
-        let animate = animatesSidebarChanges
+        let animate = animated ?? animatesSidebarChanges
         let parent = parentItem(d)
-        outline.beginUpdates()
+        if !syncingExpansion && !applyingBulk { outline.beginUpdates() }
         for step in steps {
             switch step {
             case .remove(let i):
@@ -360,46 +384,86 @@ final class SpacePageView: NSView, NSOutlineViewDataSource, NSOutlineViewDelegat
                 outline.moveItem(at: k, inParent: parent, to: j, inParent: parent)
             }
         }
-        outline.endUpdates()
-        if !applyingBulk {
+        if !syncingExpansion && !applyingBulk { outline.endUpdates() }
+        if !applyingBulk && !syncingExpansion {
             syncExpansion(animated: animate)
             updateRowStates(animated: false)
         }
     }
 
     private func dropCache(_ folder: Folder) {
+        displayedExpansion[ObjectIdentifier(folder)] = nil
+        displayedChildCounts[ObjectIdentifier(folder)] = nil
         guard let kids = folderChildren.removeValue(forKey: ObjectIdentifier(folder)) else { return }
         for case let f as Folder in kids { dropCache(f) }
     }
 
-    /// Makes the outline's expanded state match `Folder.isExpanded`.
-    func syncExpansion(animated: Bool) {
+    /// Logical peek is collapsed for AX, but expanded natively with exactly one real child.
+    func syncExpansion(animated: Bool, initial: Bool = false, changedFolder: ItemID? = nil) {
         guard !syncingExpansion else { return }
         syncingExpansion = true
+        let measuring = SidebarDiagnostics.measuresFolderTransitions
+        let started = measuring ? CACurrentMediaTime() : 0
+        defer {
+            syncingExpansion = false
+            if measuring {
+                SidebarDiagnostics.folderReconcileSeconds += CACurrentMediaTime() - started
+                SidebarDiagnostics.folderReconcileCount += 1
+            }
+        }
+        let animate = animated && !Motion.reducesMotion
         let firstRow = outline.row(at: NSPoint(x: 0, y: scroll.contentView.bounds.minY))
         let firstItem = firstRow >= 0 ? outline.item(atRow: firstRow) : nil
         let offset = firstRow >= 0 ? scroll.contentView.bounds.minY - outline.rect(ofRow: firstRow).minY : 0
-        var began = false
-        func beginIfNeeded() { if !began { outline.beginUpdates(); began = true } }
+        var changed = false
         func walk(_ items: [AnyObject]) {
-            for case let f as Folder in items {
-                let expanded = outline.isItemExpanded(f)
-                if f.isExpanded, !expanded {
-                    beginIfNeeded()
-                    if animated { outline.animator().expandItem(f) } else { outline.expandItem(f) }
-                } else if !f.isExpanded, expanded {
-                    beginIfNeeded()
-                    if animated { outline.animator().collapseItem(f) } else { outline.collapseItem(f) }
+            for case let folder as Folder in items {
+                let key = ObjectIdentifier(folder), state = folder.expansion
+                let old = displayedExpansion[key] ?? .collapsed
+                let native = outline.isItemExpanded(folder)
+                // Unchanged folders keep their cached list. Do not rebuild unrelated arrays
+                // for one folder toggle; structural events explicitly name their affected parent.
+                if !initial, old == state, native == (state != .collapsed),
+                   displayedChildCounts[key] == folder.children.count, changedFolder != folder.id {
+                    if state != .collapsed, let kids = folderChildren[key] { walk(kids) }
+                    continue
                 }
-                if f.isExpanded, let kids = folderChildren[ObjectIdentifier(f)] { walk(kids) }
+                let target = displayedChildren(of: folder)
+                let previous = folderChildren[key] ?? []
+                if old != state || native != (state != .collapsed) || previous.map(ObjectIdentifier.init) != target.map(ObjectIdentifier.init) {
+                    let expanding = state == .expanded
+                    let transition = old != state
+                    let duration = transition ? (expanding ? Motion.folderExpand : Motion.folderCollapse) : Motion.rowStructure
+                    NSAnimationContext.runAnimationGroup { group in
+                        group.duration = animate ? duration : 0
+                        group.timingFunction = transition ? (expanding ? Motion.folderExpandTiming : Motion.folderCollapseTiming) : nil
+                        if transition {
+                            SidebarDiagnostics.folderTransitionDuration = group.duration
+                            SidebarDiagnostics.folderTransitionExpanding = expanding
+                        }
+                        outline.beginUpdates()
+                        if initial {
+                            // Initial children belong to the data-source load, not an edit transaction.
+                            folderChildren[key] = target
+                        } else {
+                            if folderChildren[key] == nil { folderChildren[key] = [] }
+                            apply(target: target, in: .folder(folder), animated: animate)
+                        }
+                        if state != .collapsed, !native {
+                            if animate { outline.animator().expandItem(folder) } else { outline.expandItem(folder) }
+                        } else if state == .collapsed, native {
+                            if animate { outline.animator().collapseItem(folder) } else { outline.collapseItem(folder) }
+                        }
+                        outline.endUpdates()
+                    }
+                    displayedExpansion[key] = state
+                    changed = true
+                }
+                displayedChildCounts[key] = folder.children.count
+                if state != .collapsed, let kids = folderChildren[key] { walk(kids) }
             }
         }
-        NSAnimationContext.runAnimationGroup { group in
-            group.duration = animated ? Motion.rowStructure : 0
-            walk(rootItems)
-            if began { outline.endUpdates() }
-        }
-        syncingExpansion = false
+        walk(rootItems)
         if let firstItem {
             let row = outline.row(forItem: firstItem)
             if row >= 0 {
@@ -407,8 +471,12 @@ final class SpacePageView: NSView, NSOutlineViewDataSource, NSOutlineViewDelegat
                 if y != scroll.contentView.bounds.minY { scroll.contentView.scroll(to: NSPoint(x: 0, y: y)); scroll.reflectScrolledClipView(scroll.contentView) }
             }
         }
-        if began { updateRowStates(animated: false) }
+        if changed { updateRowStates(animated: false) }
         pruneSelection()
+        if measuring {
+            // Keep the bench's forced layout/display inside the measured completed callback.
+            layoutSubtreeIfNeeded(); window?.displayIfNeeded(); CATransaction.flush()
+        }
     }
 
     // MARK: Row states
@@ -497,6 +565,16 @@ final class SpacePageView: NSView, NSOutlineViewDataSource, NSOutlineViewDelegat
     }
 
     @objc private func scrolled() {
+        if SidebarDiagnostics.folderBenchFullRowWindowID == context.windowID {
+            // Deliberately bad O(n) scroll work for the CLI negative proof. Exercise real
+            // AppKit cells, not synthetic busy work; the matched baseline has no pass.
+            for row in 0..<outline.numberOfRows {
+                if let cell = outline.view(atColumn: 0, row: row, makeIfNecessary: true) {
+                    cell.needsLayout = true
+                    cell.layoutSubtreeIfNeeded()
+                }
+            }
+        }
         guard let window else { return }
         context.existingHoverPreviews?.dismiss()
         updateHover(at: convert(window.mouseLocationOutsideOfEventStream, from: nil), allowPreview: false)
@@ -559,7 +637,9 @@ final class SpacePageView: NSView, NSOutlineViewDataSource, NSOutlineViewDelegat
         switch item {
         case let t as Tab: return context.send(.select(nodeID: t.id, space: space.id))
         case let s as Split: return context.send(.select(nodeID: s.id, space: space.id))
-        case let f as Folder: return context.send(.setExpanded(folderID: f.id, expanded: !f.isExpanded))
+        case let f as Folder:
+            let expansion = f.expansion == .collapsed ? FolderExpansion.expanded : context.folderExpansion(folderID: f.id, expanded: false)
+            return context.send(.setFolderExpansion(folderID: f.id, expansion: expansion))
         case is NewTabItem: return context.send(.openCommandBar(.newTabRow))
         default: return false
         }
@@ -610,7 +690,7 @@ final class SpacePageView: NSView, NSOutlineViewDataSource, NSOutlineViewDelegat
         guard let folder = item as? Folder else { return rootItems }
         let key = ObjectIdentifier(folder)
         if let c = folderChildren[key] { return c }
-        let c = folder.children.map(\.object)
+        let c = displayedChildren(of: folder)
         folderChildren[key] = c
         return c
     }
@@ -895,11 +975,13 @@ final class SidebarOutlineView: NSOutlineView {
 
     override func insertItems(at indexes: IndexSet, inParent parent: Any?, withAnimation animationOptions: NSTableView.AnimationOptions) {
         SidebarDiagnostics.outlineItemUpdates += 1
+        SidebarDiagnostics.outlineItemsInserted += indexes.count
         super.insertItems(at: indexes, inParent: parent, withAnimation: animationOptions)
     }
 
     override func removeItems(at indexes: IndexSet, inParent parent: Any?, withAnimation animationOptions: NSTableView.AnimationOptions) {
         SidebarDiagnostics.outlineItemUpdates += 1
+        SidebarDiagnostics.outlineItemsRemoved += indexes.count
         super.removeItems(at: indexes, inParent: parent, withAnimation: animationOptions)
     }
 
