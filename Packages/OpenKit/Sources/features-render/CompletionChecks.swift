@@ -10,6 +10,8 @@ import OpenSidebar
 enum CompletionFeatureChecks {
     static func run(_ check: (Bool, String) -> Void) async throws {
         try deleteAlerts(check)
+        try toastUndo(check)
+        try deleteKeyboardFocus(check)
         try await hint(check)
         try gestureHide(check)
     }
@@ -83,6 +85,122 @@ enum CompletionFeatureChecks {
         check(plural && model.node(id: folder.id) == nil && model.node(id: untitled.id) == nil && c.lastToastTitle == "Folders deleted",
               "DA5 two folders: one \"Are you sure?\" alert and the toast \"Folders deleted\"")
         model.undoManager = nil
+    }
+
+    // MARK: DA6–DA7
+
+    private static func toastUndo(_ check: (Bool, String) -> Void) throws {
+        let model = FeatureCLI.synthetic(), undo = UndoManager(); undo.groupsByEvent = false; model.undoManager = undo
+        let space = model.spaces[0], tab = space.today[0].id
+        guard let folder = model.createFolder(in: .spaceToday(space.id), title: "Undo folder", withNodes: [tab]) else {
+            throw CLIError(description: "DA6 fixture folder")
+        }
+        let c = controller(model, defaults: FeatureCLI.defaults())
+        defer { if let sheet = c.window?.attachedSheet { c.window?.endSheet(sheet) }; c.container.closeAll(); c.window?.close() }
+        func delete() {
+            _ = c.sidebar(c.sidebar, didRequest: .deleteFolder(folderID: folder.id)); pump(c)
+            c.pendingConfirmation?.buttons.first?.performClick(nil); pump(c)
+        }
+        delete()
+        let first = c.pressToastUndo(); pump(c)
+        let second = c.pressToastUndo(); pump(c)
+        check(first && !second && model.node(id: folder.id)?.folder === folder && model.tab(id: tab) != nil,
+              "DA6 folder toast Undo restores once, dismisses, and a second click cannot undo folder creation")
+        delete()
+        let newer = model.newTab(in: space.id, url: URL(string: "https://newer.example/")!, title: "Newer action")
+        _ = c.pressToastUndo(); pump(c)
+        check(model.node(id: folder.id) == nil && model.tab(id: newer.id) != nil && !c.pressToastUndo(),
+              "DA6 folder toast refuses a newer undo target and dismisses")
+        undo.undo(); undo.undo(); pump(c)
+        delete()
+        undo.undo(); pump(c)
+        _ = c.pressToastUndo(); pump(c)
+        check(model.node(id: folder.id)?.folder === folder && !c.pressToastUndo(),
+              "DA6 a normal Undo invalidates the old deletion toast, protecting the earlier operation")
+        let before = space.today.map(\.id)
+        _ = c.sidebar(c.sidebar, didRequest: .clearToday(space: space.id)); pump(c)
+        let cleared = space.today.isEmpty
+        let clearFirst = c.pressToastUndo(); pump(c)
+        check(cleared && clearFirst && !c.pressToastUndo() && space.today.map(\.id) == before,
+              "DA6 Clear Today toast Undo restores once and dismisses")
+        _ = c.sidebar(c.sidebar, didRequest: .clearToday(space: space.id)); pump(c)
+        let afterClear = model.newTab(in: space.id, url: URL(string: "https://after-clear.example/")!, title: "After Clear")
+        _ = c.pressToastUndo(); pump(c)
+        check(space.today.map(\.id) == [afterClear.id] && !c.pressToastUndo(),
+              "DA6 Clear Today toast refuses a newer undo target and dismisses")
+    }
+
+    private static func deleteKeyboardFocus(_ check: (Bool, String) -> Void) throws {
+        let model = FeatureCLI.synthetic(), space = model.spaces[0]
+        guard let folder = model.createFolder(in: .spaceToday(space.id), at: 0, title: "Focus folder", withNodes: [space.today[0].id]) else {
+            throw CLIError(description: "DA7 fixture folder")
+        }
+        let successor = space.today[1].id
+        let c = controller(model, defaults: FeatureCLI.defaults()), outline = c.sidebar.focusedOutline!
+        defer { if let sheet = c.window?.attachedSheet { c.window?.endSheet(sheet) }; c.container.closeAll(); c.window?.close() }
+        func key(_ code: UInt16, _ flags: NSEvent.ModifierFlags = []) {
+            c.window?.makeFirstResponder(outline)
+            outline.keyDown(with: NSEvent.keyEvent(with: .keyDown, location: .zero, modifierFlags: flags,
+                timestamp: ProcessInfo.processInfo.systemUptime, windowNumber: c.window!.windowNumber, context: nil,
+                characters: "", charactersIgnoringModifiers: "", isARepeat: false, keyCode: code)!)
+            pump(c)
+        }
+        func focusedID() -> ItemID? {
+            for row in 0..<outline.numberOfRows where outline.rowView(atRow: row, makeIfNecessary: true)?.isAccessibilityFocused() == true {
+                if let tab = outline.item(atRow: row) as? Tab { return tab.id }
+                if let folder = outline.item(atRow: row) as? Folder { return folder.id }
+            }
+            return nil
+        }
+        func focus(_ id: ItemID) {
+            for _ in 0..<(outline.numberOfRows + 1) {
+                if focusedID() == id { return }
+                key(125)
+            }
+        }
+        func press(_ title: String) {
+            c.pendingConfirmation?.buttons.first(where: { $0.title == title })?.performClick(nil); pump(c)
+            c.window?.makeFirstResponder(outline); pump(c)
+        }
+        focus(folder.id); key(51)
+        let requested = c.pendingConfirmation != nil && model.node(id: folder.id) != nil
+        press("Cancel")
+        check(requested && focusedID() == folder.id && model.node(id: folder.id) != nil,
+              "DA7 keyboard Delete opens confirmation; Cancel keeps focus on the folder")
+        key(51); press("Delete Folder")
+        let followed = focusedID() == successor && model.node(id: folder.id) == nil
+        key(36)
+        check(followed && model.windows[0].selectedNodeBySpace[space.id] == successor,
+              "DA7 confirmed keyboard folder delete skips its expanded children, focuses the successor, and Return selects it")
+        // Shift selection followed by Delete exercises the asynchronous .deleteFolders path.
+        guard let a = model.createFolder(in: .spaceToday(space.id), at: 0, title: "Batch A"),
+              let b = model.createFolder(in: .spaceToday(space.id), at: 1, title: "Batch B") else {
+            throw CLIError(description: "DA7 batch fixture")
+        }
+        pump(c)
+        // Move up from the surviving tab to the two new rows.
+        key(126); key(126)
+        key(125, .shift); key(51)
+        let batchRequested = c.pendingConfirmation != nil && c.context.selection.ids == [a.id, b.id]
+        press("Cancel")
+        check(batchRequested && focusedID() == b.id && c.context.selection.ids == [a.id, b.id],
+              "DA7 multi-folder Cancel keeps keyboard focus and selection")
+        key(51); press("Delete Folder")
+        check(model.node(id: a.id) == nil && model.node(id: b.id) == nil && focusedID() == successor,
+              "DA7 confirmed multi-folder delete focuses the first surviving successor")
+        // A removal from another path can leave a stale focused object. Return/Delete
+        // must not activate it or request deletion of that missing node.
+        guard let stale = model.createFolder(in: .spaceToday(space.id), at: 0, title: "Stale") else {
+            throw CLIError(description: "DA7 stale fixture")
+        }
+        pump(c); key(126)
+        model.archiveNodes(ids: [stale.id]); pump(c)
+        let expanded = stale.isExpanded
+        var staleRequests = 0
+        c.onSidebarIntent = { _ in staleRequests += 1; return nil }
+        key(36); key(51)
+        check(staleRequests == 0 && stale.isExpanded == expanded && c.pendingConfirmation == nil && model.node(id: successor) != nil,
+              "DA7 Return and Delete ignore an outline item removed by another action")
     }
 
     // MARK: HT1–HT3
