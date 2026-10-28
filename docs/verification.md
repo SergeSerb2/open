@@ -153,16 +153,18 @@ count, with the existing CPU-brand/macOS-build fixture and ×1.10 method.
 Missing/backward counters or an invalid fixture fail. An unknown editor reference
 reports INFO, with no cost PASS. No CPU or wall-time fallback or retry exists.
 CPU p95, wall p95, presentation/settle CPU p95, lateness versus **12 ms**, and
-load1 are printed on every run. GPU completion and deferred work remain outside
+load1 are printed on every run. A separate **INFO** table row prints main-thread
+CPU p95 versus **12 ms**, its lateness and load1. It is excluded from acceptance
+counts, including when p95 exceeds 12 ms. GPU completion and deferred work remain outside
 this existing native-display span.
 
-This adds the **first editor instruction reference**; it does not re-record the
-cold-open or SM6 reference. Three separate processes with the **original product
-sources** produced the following values using the new sampler. The reference is
-the median of their medians, **141,542,712**, and its ceiling is **155,696,984**.
-It was recorded before the font-image optimization, rather than adjusted to
-make optimized runs pass. The `<12 ms` product target is unchanged and still
-needs the parent's quiet-window run.
+The **initial editor instruction reference** in `54b636bc` was recorded before
+the font-image optimization. Three separate processes with the **original product
+sources** produced the values below; the median of their medians was
+**141,542,712**, with a ceiling of **155,696,984**. These values are retained as
+history. Parent review required the accepted reference to describe the optimized
+product that ships on this branch, so the optimized recording below supersedes
+that first reference. The cold-open and SM6 references remain unchanged.
 
 | Process | Original median instructions | CPU p95 ms | Wall p95 ms | Load1 |
 |---|---:|---:|---:|---:|
@@ -182,13 +184,39 @@ With the font cache, the same three-process bench gave:
 The median work fell **3.67%**. These loaded CPU values do not establish quiet
 `<12 ms` acceptance. The parent explicitly prohibited synthetic burners; none were started. All later checks use real shared load.
 
+Parent review re-recorded the accepted reference from the optimized product in
+`54b636bc`, with the explicit INFO row added outside the measured span. Following
+SM6's recording method, discard one fresh process, then take the median of five
+fresh-process medians. Each editor process still discards five opens and measures
+20. The exact command is
+`Packages/OpenKit/.build/release/sitecontrol-render bench --group editor`.
+The recording used the shipping font-image cache without product-source changes;
+`review-reference.json` retains all 20 samples per process, source/binary hashes
+and the raw logs. No process was retried or selected out of the five.
+
+| Process | Optimized median instructions | CPU p95 ms | Wall p95 ms | Load1 |
+|---|---:|---:|---:|---:|
+| Discarded warmup | 136,266,026 | 13.930 | 16.686 | 14.55 |
+| 1 | 136,469,336 | 13.835 | 18.617 | 14.55 |
+| 2 | 136,091,821 | 12.957 | 15.291 | 14.91 |
+| 3 | 135,985,517 | 13.295 | 14.156 | 14.75 |
+| 4 | 136,063,236 | 8.981 | 10.841 | 14.37 |
+| 5 | 135,987,601 | 9.525 | 11.424 | 13.94 |
+
+The accepted optimized reference is **136,063,236**; the ceiling is
+**149,669,560 = ceil(136,063,236 × 1.10)**. This lowers the initial ceiling by
+6,027,424 instructions and limits regressions relative to the optimized product.
+The original **141,542,712** reference above is historical only. Some INFO values
+are below 12 ms, but these are shared-load recordings; the lead's quiet-machine
+acceptance before merge remains required.
+
 The 28 editor render images before/after cover 1x/2x and all editor states.
 All 28 font-card regions are pixel-identical. 23 full images are identical;
 the other five differ at nine pixels outside the font card by at most 1/255,
 within the pre-existing `CLI.stablePixels` 2/255 native redraw tolerance. No
 comparison threshold or saved render baseline changed.
 
-Negative proof: temporarily construct four extra `BoostEditorView` trees inside
+Initial negative proof against the historical ceiling: temporarily construct four extra `BoostEditorView` trees inside
 `BoostEditorController.present`, before constructing the actual view. Each tree
 performs the real O(n) native font/control construction. The unchanged gate
 reported:
@@ -202,6 +230,23 @@ The other five benchmark checks passed (CPU p95 41.261 ms, load1 7.71). The
 extra trees and all debug probes were then removed and the release binary
 rebuilt. This proof adds real work inside the production open path; it does
 not alter the gate or its fixture.
+
+The parent-review negative proof repeated the real four-extra-tree construction
+inside `BoostEditorController.present`, including each extra view's native
+layout, against the **optimized** reference and lower ceiling:
+
+```text
+| INFO | simple editor build/layout/first draw main-thread CPU p95 38.466 ms vs 12 ms; lateness +26.466 ms; load1 17.04 (quiet-machine acceptance by lead) |
+| FAIL | simple editor build/layout/first draw median 396669877 instructions <= 149669560 (ceil(136063236 x1.10)); Apple M5 Pro / 26B5112a |
+5/6 passed
+1 INFO (no acceptance result for these entries)
+```
+
+This run exited 1 as required; all five other acceptance checks passed. The
+extra work was removed in a `finally` path and the release binary rebuilt.
+`BoostEditorPanel.swift` is byte-identical to `54b636bc`. The new INFO row
+therefore stays visible even on failure, without raising the pass count.
+Raw evidence is `review-negative.log` and `review-negative-proof.json`.
 
 F25 native focus also needed an environment classification. Earlier runs
 closed and hid the editor while the app became inactive and its parent was not
@@ -282,7 +327,7 @@ were independently audited in `runner-timeout-proof.json`; no extra 180-second
 fault run was used to replace the recorded result. The invalid-root CLI also
 failed as intended (`0/1 passed`) before launching any app.
 
-Final foreground verification, `verified-1`…`verified-6` (real shared load;
+Initial foreground verification for `54b636bc`, `verified-1`…`verified-6` (real shared load;
 no synthetic burners):
 
 | Run | Editor median instructions | CPU p95 ms | Wall p95 ms | Load1 | Result |
@@ -311,6 +356,28 @@ HP1 fired on its first attempt in 0.502 / 0.504 / 0.500 s, lateness +2 / +4 / +0
 load1 7.94 / 7.41 / 10.18. SM4 and MC6 passed in all three. Main already contains
 `1fe805a3` (PR #115); no sidebar timing code or baseline changed here.
 
+Parent-review verification uses the lower **149,669,560** ceiling and the explicit
+CPU INFO row. Both requested foreground runs of
+`~/Library/Caches/OpenRE/scripts/heavy.sh tools/verify-all.sh --only sitecontrol-render`
+passed **1471/1471**. The INFO rows do not change that acceptance count:
+
+| Run | Editor median instructions | CPU p95 INFO ms | Lateness vs 12 ms | Load1 at INFO row | Result |
+|---|---:|---:|---:|---:|---|
+| 1 | 144,265,719 | 19.254 | +7.254 ms | 18.29 | 1471/1471 PASS; renderer reaped |
+| 2 | 144,230,413 | 16.296 | +4.296 ms | 15.38 | 1471/1471 PASS; renderer reaped |
+
+Run 1 recorded load1 18.02 at command entry and 18.29 at exit; run 2 recorded
+16.78 and 14.55. Each complete CLI report has **2 INFO** entries: the existing
+skeleton diagnostic and the new CPU-target row. The editor-only command has
+**1 INFO** entry. Both native suites passed on attempt 1. Evidence:
+`review-verify-1/`, `review-verify-2/`, `review-verification-results.json`.
+
+The requested review command
+`~/Library/Caches/OpenRE/scripts/heavy.sh tools/verify-all.sh --only sidebar-render,features-render`
+also passed: build **PASS** (no warnings/errors), sidebar **568/568** and features
+**288/288**. It recorded load1 **14.55** at entry and **12.59** at exit, with
+145.261 s total command time (`review-verify-3/`). No synthetic load was started.
+
 Scope: `BoostEditorViews.swift` caches font pixels; `EditorBench.swift`, the new
 `EditorOpenBench.swift`, `InstructionBaseline.swift` and `instruction-baselines.json`
 own the editor cost gate. `EditorNativeKey.swift` owns the F25 activation barrier, wait/retry and
@@ -318,7 +385,8 @@ explicit suite-root contract; `EditorScenes.swift` establishes only the on-scree
 parent activation/main/key precondition, and `EditorFlows.swift` closes the
 competing offscreen parents before native launch. `tools/verification/check.py` owns lock ordering,
 execution deadline, foreground-interruption propagation and child cleanup. No App/engine code, comparison assets,
-sidebar timing logic, CPU-ms target or existing accepted cost value changed.
+sidebar timing logic, CPU-ms target, cold-open reference or SM6 reference changed.
+Parent review lowers only the accepted editor reference to the optimized product.
 
 | Review checklist | Result | Evidence |
 |---|---|---|
@@ -327,7 +395,7 @@ sidebar timing logic, CPU-ms target or existing accepted cost value changed.
 | Real event paths | PASS / N/A | Existing real NSApp native key flow retained; no App key router or command path changed |
 | Checks/proof/isolation | PASS | Old CPU gate red; real added native work red; real 180 s timeout/cleanup red as intended; two-window isolation guard red on old caller; unique suite root and UUID preferences |
 | UI/motion | PASS | 28 exact font-card regions; full images within existing 2/255 tolerance; configured 0.120 s close unchanged |
-| Docs | PASS | First editor reference and raw numeric evidence recorded; quiet `<12 ms` acceptance remains open in followups |
+| Docs | PASS | Optimized accepted editor reference and original history recorded; quiet `<12 ms` lead acceptance remains open in followups |
 
 Reproduction commands from the repo root:
 
@@ -338,6 +406,20 @@ Packages/OpenKit/.build/release/sitecontrol-render bench --group editor
 Packages/OpenKit/.build/release/sidebar-render check
 ~/Library/Caches/OpenRE/scripts/heavy.sh tools/verify-all.sh --only sidebar-render,features-render,settings-preview
 ```
+
+The **lead must run the quiet-machine 12 ms acceptance check before merge**.
+After the heavy build finishes, with other build/encode work idle and the load
+average recorded, run this offscreen command from the repo root:
+
+```sh
+Packages/OpenKit/.build/release/sitecontrol-render bench --group editor
+```
+
+Read the `INFO` row `simple editor build/layout/first draw main-thread CPU p95
+... vs 12 ms; lateness ...; load1 ...`. Quiet-machine acceptance requires CPU
+p95 **<12 ms**; an instruction-gate PASS alone is not latency acceptance. The
+lead records the value and actual load. This shared-machine task does not claim
+that acceptance. The command does not open on-screen windows.
 
 Raw synthetic receipts, all 20 instruction samples per bench, build logs, phase
 probes, binary SHA-256 and before/after render comparisons remain local under

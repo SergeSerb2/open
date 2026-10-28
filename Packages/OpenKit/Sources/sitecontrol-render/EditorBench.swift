@@ -45,7 +45,7 @@ enum EditorBench {
         let idleStable = stage.host.refreshes+stage.host.previews.count == idleCalls
         let refreshMS = stage.host.refreshDurations.max() ?? .infinity
         print(String(format: "Editor idle: %.3f ms main-thread CPU in 2 s, no host work=%@; ten-page refresh max %.3f ms",idleMS,idleStable.description,refreshMS))
-        let openCheck = EditorOpenBench.run(stage)
+        let openChecks = EditorOpenBench.run(stage)
         let sample = Sample(), png = stage.host.snapshots!
         Task.detached(priority: .userInitiated) {
             let start = CACurrentMediaTime(), offMain = pthread_main_np() == 0
@@ -60,8 +60,7 @@ enum EditorBench {
         return [.init(name: "idle editor has no host work and less than 0.5 percent main-thread CPU",pass: idleStable && idleMS < 10),
                 .init(name: "commit refreshes ten real page plans within 100 ms",pass: stage.host.refreshedPlans.count == 10 && refreshMS < 100),
                 .init(name: "pad event to preview queue p95 < 2 ms",pass: p95(events)<2),
-                .init(name: "1 s 120 Hz drag coalesces to at most 61 real planner previews",pass: previewCount > 0 && previewCount <= 61),
-                openCheck,
+                .init(name: "1 s 120 Hz drag coalesces to at most 61 real planner previews",pass: previewCount > 0 && previewCount <= 61)] + openChecks + [
                 .init(name: "2216x1394 PNG dominant hue under 15 ms off the main thread",pass: sample.value.map { $0<15 } == true && sample.offMain && sample.hue != nil)]
     }
 }

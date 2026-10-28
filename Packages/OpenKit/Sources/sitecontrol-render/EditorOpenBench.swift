@@ -6,7 +6,7 @@ import OpenDesign
 /// the <12 ms product target for a quiet-machine latency check.
 @MainActor
 enum EditorOpenBench {
-    static func run(_ stage: EditorStage) -> Flows.Check {
+    static func run(_ stage: EditorStage) -> [Flows.Check] {
         var cpu: [Double] = [], wall: [Double] = [], present: [Double] = [], settle: [Double] = []
         var instructions: [UInt64] = []
         var error: String?
@@ -38,18 +38,20 @@ enum EditorOpenBench {
         _ = getloadavg(&loads,3)
         print(String(format: "Editor open: 2x; 20 samples, 5 warmups; main-thread CPU p95 %.3f ms; wall p95 %.3f ms; present CPU p95 %.3f ms; settle CPU p95 %.3f ms; CPU lateness vs 12 ms %+.3f ms; load1 %.2f (timings diagnostic)",
                      Bench.p95(cpu),Bench.p95(wall),Bench.p95(present),Bench.p95(settle),Bench.p95(cpu)-12,loads[0]))
+        let latency = Flows.Check(name: String(format: "simple editor build/layout/first draw main-thread CPU p95 %.3f ms vs 12 ms; lateness %+.3f ms; load1 %.2f (quiet-machine acceptance by lead)",
+                                               Bench.p95(cpu),Bench.p95(cpu)-12,loads[0]),pass: false,info: true)
         guard error == nil, instructions.count == 20 else {
-            return .init(name: error ?? "incomplete editor main-thread instruction samples",pass: false)
+            return [latency,.init(name: error ?? "incomplete editor main-thread instruction samples",pass: false)]
         }
         let sorted = instructions.sorted(), median = sorted[9]+(sorted[10]-sorted[9]+1)/2
         print("Editor open main-thread instructions: median \(median); min \(sorted.first!); max \(sorted.last!); samples \(instructions)")
         do {
             let baseline = try InstructionBaseline.current()
             guard let accepted = baseline.machine?.simpleEditorOpenInstructions else {
-                return .init(name: "simple editor build/layout/first draw median \(median) instructions; \(baseline.key): no accepted editor baseline",pass: false,info: true)
+                return [latency,.init(name: "simple editor build/layout/first draw median \(median) instructions; \(baseline.key): no accepted editor baseline",pass: false,info: true)]
             }
             let limit = accepted+(accepted+9)/10
-            return .init(name: "simple editor build/layout/first draw median \(median) instructions <= \(limit) (ceil(\(accepted) x1.10)); \(baseline.key)",pass: median <= limit)
-        } catch { return .init(name: "editor instruction gate: \(error)",pass: false) }
+            return [latency,.init(name: "simple editor build/layout/first draw median \(median) instructions <= \(limit) (ceil(\(accepted) x1.10)); \(baseline.key)",pass: median <= limit)]
+        } catch { return [latency,.init(name: "editor instruction gate: \(error)",pass: false)] }
     }
 }
