@@ -80,6 +80,9 @@
     private func run(_ cmd: String, _ a: [String: Any]) async throws -> Any {
       // App lifecycle commands remain available after the final window closes.
       switch cmd {
+      case "archive-sweep", "archive-clock", "archive-state", "archive-wake", "profile-archive-setting", "archive-list", "archive-banner-state", "archive-banner-action":
+        return try await runArchiveCommand(cmd, a)
+      case "metrics": return await metrics(interval: a["interval"] as? Double ?? 1)
       case "ping":
         return [
           "pid": Int(getpid()), "chromium": OEEngine.shared.chromiumVersion, "cef": OEEngine.shared.cefVersion,
@@ -119,7 +122,8 @@
           "error": app.hotkeyError ?? "", "enabled": UserDefaults.standard.object(forKey: "open.links.littleOpenHotkeyEnabled") as? Bool ?? true] as [String: Any]
       case "settings-state":
         let adapter = app.settingsPresenter
-        return ["settings": adapter.settingsPresenter.window?.windowNumber ?? 0,
+        return ["pane": adapter.settings.selectedPane.rawValue, "selectedProfile": adapter.settings.selectedProfileID.description,
+          "settings": adapter.settingsPresenter.window?.windowNumber ?? 0,
           "library": adapter.libraryPresenter?.window?.windowNumber ?? 0,
           "librarySection": adapter.library?.section.rawValue ?? "", "archiveRows": adapter.library?.archiveRows.count ?? 0,
           "historyRows": adapter.library?.historyRows.count ?? 0,
@@ -225,21 +229,6 @@
         controller.contentView.layoutSubtreeIfNeeded()
         let frame = controller.sidebar.clearTodayFrame().map { controller.contentView.convert($0, from: controller.sidebar) }
         return ["visible": controller.sidebar.isClearTodayVisible, "frame": frame.map { [$0.minX, $0.minY, $0.width, $0.height] } ?? []] as [String: Any]
-      case "archive-list":
-        let profile: ProfileID
-        if let raw = a["profile"] as? String {
-          guard let found = app.model.profiles.first(where: { $0.id.description == raw }) else { throw Failure(message: "unknown archive Profile") }
-          profile = found.id
-        } else {
-          guard let found = app.frontWindowController?.context.focusedSpace?.profileID ?? app.model.defaultProfile?.id else { throw Failure(message: "missing archive Profile") }
-          profile = found
-        }
-        guard let limit = (a["limit"] ?? 1000) as? Int, (1...1000).contains(limit) else { throw Failure(message: "invalid archive limit") }
-        let store = app.archiveSink.store(for: profile)
-        let count = await store.count()
-        let rows = await store.recent(limit: limit)
-        let formatter = ISO8601DateFormatter()
-        return ["count": count, "rows": rows.map { ["id": $0.id.description, "kind": $0.kind.rawValue, "profile": $0.profileID?.description ?? "", "space": $0.spaceID?.description ?? "", "reason": $0.reason.rawValue, "archivedAt": formatter.string(from: $0.archivedAt)] as [String: Any] }] as [String: Any]
       case "sidebar-row":
         // A sidebar row's frame and center in the front browser window (top-left origin).
         guard let controller = app.frontWindowController, let raw = a["node"] as? String, let uuid = UUID(uuidString: raw),
@@ -730,6 +719,11 @@
           "sidebarFrame": rect(controller.sidebar.frame), "sidebarLiveWidth": controller.context.sidebarWidth,
           "toolbarFrames": controller.sidebar.toolbarGeometry.mapValues(rect),
           "toolbarButtons": controller.sidebar.toolbarVisibleButtons,
+          "spaceSwitcherFrames": app.model.spaces.reduce(into: [String: [Double]]()) { frames, space in
+            if let view = controller.sidebar.spaceSwitcher(spaceID: space.id) {
+              frames[space.id.description] = rect(root.convert(view.bounds, from: view))
+            }
+          },
           "hint": ["shows": controller.hintShows, "visible": controller.hintToast != nil,
             "frame": controller.hintToast.map { rect($0.frame) } ?? [], "keys": controller.hintToast?.keys ?? "",
             "plate": controller.hintToast.map { rect($0.plateFrame) } ?? []] as [String: Any],
@@ -902,8 +896,6 @@
         }
 
       // Measurements.
-      case "metrics":
-        return await metrics(interval: a["interval"] as? Double ?? 1)
       case "timing":
         return await timing(w)
       case "startup":
@@ -974,6 +966,7 @@
         section = "today"
       }
       var d: [String: Any] = [
+        "createdAt": tab.createdAt.timeIntervalSince1970, "lastActiveAt": tab.lastActiveAt.timeIntervalSince1970,
         "id": tab.id.description, "title": tab.displayTitle, "url": tab.url.absoluteString, "section": section, "unread": tab.isUnread,
         "selected": w.selectedTab?.id == tab.id, "visible": w.visibleTabs.contains { $0.id == tab.id },
         "loading": tab.live.isLoading, "audible": tab.live.isAudible, "crashed": tab.live.isCrashed,
@@ -1159,6 +1152,10 @@
         value["to"] = (basic.toValue as? NSNumber) ?? NSNull()
       }
       if let spring = animation as? CASpringAnimation {
+        value["mass"] = spring.mass
+        value["stiffness"] = spring.stiffness
+        value["physicalDamping"] = spring.damping
+        value["settlingDuration"] = spring.settlingDuration
         value["response"] = 2 * Double.pi / sqrt(spring.stiffness / spring.mass)
         value["damping"] = spring.damping / (2 * sqrt(spring.stiffness * spring.mass))
         value["initialVelocity"] = spring.initialVelocity

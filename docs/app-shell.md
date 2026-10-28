@@ -1170,3 +1170,31 @@ actual last-drawn image's `rowFaviconHash`. FV3–FV6 require the `stored` sourc
 matching pixels, with no live host. A later attempt lost foreground focus in an
 existing Library-key flow and cleaned up; the final complete run has no interruptions.
 Generated `docs/engine-spike/*` results are restored before the local commit.
+
+## Stored favicon branch merged with main — 2026-10-28
+
+Merged main `013cdb45d42678f16b27087616b854b76c32c2c4` (A2 #127, A3 #128,
+#129, and Today auto-archive #130) into the stored-favicon branch. The feature
+harness target keeps both `OpenSidebar` and `OpenSettings` dependencies and both
+check files. Full checks run both favicon and auto-archive flows; the scoped CLI
+routes remain available. The App e2e suite runs A3, favicons and auto-archive.
+
+The automation audit found 140 unique top-level router commands. The eight
+archive commands forward once to `AutomationAutoArchive`, with one implementation
+each. Repeated modifier/argument labels in nested switches are separate scopes.
+Python has no duplicate function definitions within a lexical scope; SwiftPM has
+one definition per target. All table keys from both sides remain in
+`docs/automation.md`, `docs/status.md`, and `docs/app-shell.md`. Follow-ups retain
+the current A3 note, section 9 timer/activity guidance, and the favicon note.
+
+| Command | Result |
+|---|---|
+| `git diff --check` | PASS |
+| `~/Library/Caches/OpenRE/scripts/heavy.sh tools/verify-all.sh --only favicons,features-render,sidebar-render,roundtrip` | 5/5 targets PASS; `features-render` 350/350, `sidebar-render` 564/564; stored-icon scroll p95 1.127 ms at 1000 rows |
+| `~/Library/Caches/OpenRE/scripts/heavy.sh tools/build.sh` | PASS; Debug App, no Swift warnings |
+| `/usr/bin/lockf /tmp/open-onscreen-e2e.lock python3 tools/e2e/engine_e2e.py --style chrome --only sidebar-completion` | 125/125 PASS; all favicon and auto-archive rows; first attempt, zero focus interruptions; cleanup PASS |
+
+Focus interruptions permit at most three attempts, with three minutes between
+attempts. Retry spacing is applied temporarily for this verification and the
+runner's exact source is restored afterward. Generated engine-spike results are
+restored from the merged index before the merge commit.

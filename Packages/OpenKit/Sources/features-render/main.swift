@@ -31,7 +31,18 @@ enum FeatureCLI {
             if failed > 0 { throw CLIError(description: "stored favicon checks failed") }
             return
         }
-        if cmd == "check" { try await FeatureChecks.run(); return }
+        if cmd == "check" {
+            if args == ["check", "--only", "auto-archive"] {
+                var passed = 0, failed = 0
+                try await AutoArchiveChecks.run { condition, label in
+                    if condition { passed += 1 } else { failed += 1 }
+                    print("\(condition ? "PASS" : "FAIL") \(label)")
+                }
+                print("features-render auto-archive check: \(passed) passed, \(failed) failed")
+                if failed > 0 { throw CLIError(description: "\(failed) auto-archive scenarios failed") }
+            } else { try await FeatureChecks.run() }
+            return
+        }
         if cmd == "pip" { try PiPScene.run(args); return }
         if cmd == "compare" { try FeatureCompare.run(args); return }
         if cmd == "hint" {

@@ -215,6 +215,14 @@ public final class SidebarContext {
         return accepted
     }
 
+    /// Save outline focus before an asynchronous delete. Call only after a successful
+    /// removal; Cancel must leave the original focus and selection unchanged.
+    public func keyboardFocusAfterDeletion() -> @MainActor () -> Void {
+        let outline = focusedSpace.flatMap { manager?.outline(spaceID: $0.id) } ?? sidebar?.focusedOutline
+        guard let outline = outline as? SidebarOutlineView else { return {} }
+        return outline.keyboardFocusAfterDeletion()
+    }
+
     /// Existing command IDs only. The App command registry can use this same
     /// path as the focused outline; an empty selection falls through to the App.
     public func isSelectionCommandEnabled(_ commandID: String) -> Bool {

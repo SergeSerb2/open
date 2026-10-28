@@ -9,6 +9,9 @@ import OpenCommands
 /// Owns the model, its stores, and the windows.
 @MainActor
 final class AppDelegate: NSObject, NSApplicationDelegate, OEEngineDelegate, OEBrowserContextDelegate {
+  let archiveClock = AppArchiveClock()
+  var todayAutoArchive: TodayAutoArchiveController?
+  var expirySweeper: ExpirySweeper?
   var options = LaunchOptions(arguments: [])
   private(set) var model: BrowserModel!
   private(set) var snapshotStore: SnapshotStore!
@@ -76,6 +79,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, OEEngineDelegate, OEBr
     terminationRequested = true
     if let commandWindowObserver { NotificationCenter.default.removeObserver(commandWindowObserver) }; commandWindowObserver = nil
     hotkeyService?.unregister(); afterPaintTask?.cancel(); menuRebuildTask?.cancel()
+    stopAutoArchive()
     saveState()
     prepareForEngineShutdown()
     if let icons, !icons.isIdle {
@@ -156,6 +160,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, OEEngineDelegate, OEBr
     model.addObserver { [weak self] _ in self?.scheduleSave(); self?.scheduleMenuRebuild() }
     self.model = model
     self.directories = directories
+    startAutoArchiveIfNeeded()
     LaunchTiming.shared.mark("modelLoaded")
     return directories
   }
@@ -169,6 +174,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, OEEngineDelegate, OEBr
     for state in states.isEmpty ? Array(model.windows.prefix(1)) : states {
       createWindowController(state: state)
     }
+    todayAutoArchive?.finishStartupComposition()
     LaunchTiming.shared.mark("windowShown")
   }
 
@@ -190,6 +196,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, OEEngineDelegate, OEBr
 
   @discardableResult
   private func createWindowController(state: BrowserWindowState) -> BrowserWindowController {
+    model.setWindowContentVisible(windowID: state.id, visible: true)
     let factory = EngineWebContentHostFactory(app: self, state: state)
     hostFactories[state.id] = factory
     let controller = BrowserWindowController(model: model, windowID: state.id, factory: factory, snapshotStore: snapshotStore)
@@ -198,6 +205,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, OEEngineDelegate, OEBr
     windowControllers.append(controller)
     activeWindowID = state.id
     MainMenu.targetWindowCommands(factory)
+    todayAutoArchive?.attach(context: controller.context)
     controller.showWindow(nil)
     if engineReady { factory.engineDidBecomeReady() }
     return controller
@@ -233,8 +241,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate, OEEngineDelegate, OEBr
   }
 
   func windowDidClose(_ id: WindowID) {
+    todayAutoArchive?.detach(windowID: id)
     if model.windows.filter({ $0.style == .standard }).count > 1 {
       withoutWindowUndo { model.closeWindow(windowID: id) }
+    } else {
+      model.setWindowContentVisible(windowID: id, visible: false)
     }
     windowControllers.removeAll { $0.windowID == id }; hostFactories[id] = nil
     if activeWindowID == id { activeWindowID = windowControllers.last?.windowID }
@@ -314,6 +325,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, OEEngineDelegate, OEBr
   /// defensively before CefShutdown if the message loop ends by another path.
   func prepareForEngineShutdown() {
     guard !shutdownPrepared else { return }
+    stopAutoArchive()
     shutdownPrepared = true
     recordShutdownPhase("prepare")
     afterPaintTask?.cancel(); afterPaintTask = nil

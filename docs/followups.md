@@ -86,11 +86,34 @@ Small items found during review and verification. Each line: area — issue — 
 - Automation coverage — PR #122 routes mouse-down through `OEApplication.sendEvent`; the extension suite's Web Store `dialog_click` flow has not been rerun for this routing change. Existing native window/button flows are covered; keep this separate engine flow unproven until its owner runs it. — PR #122 review r1
 - Sidebar resize cancellation — if AppKit never delivers mouse-up (close or modal during a drag), cancel the live resize on window key loss/close and restore its start state so hover reveal cannot remain suppressed. PR #122 review r1 F8; normal down/drag/up cleanup is covered, lost-up path remains unproven.
 - Sidebar drag undo — each live hide/show crossing currently registers a mode undo action. Suppress undo while following the pointer and record at most one final gesture action. PR #122 review r1 F11; width persistence and once-only hidden-gesture notification are already separate.
+- Sidebar #122 value re-check — the normal width/hide/reset and scheduled spring flows are recorded in `docs/sidebar-completion/recheck-122.md`. This does not close the cancellation or undo items above. The exact hide trigger is still a guess: x82 lies within the captured x65–85 band (IS §20.1, S2 06/0035); a tighter threshold needs a denser capture. The measured 0.20 s Space value is spring response, with visual settling ≈ 0.27 s, not a 0.20 s CA lifetime. — section 1 item 13, 2026-10-28
 - Site Control (verification) — `sitecontrol-render check` "simple editor build/layout/first draw p95 < 12 ms" is a wall-clock budget that sits at its edge on the M5: alternating runs of untouched main and the S5b branch gave 11.6–19.6 ms at load1 4.5–6.6 (2026-10-27, built-in display as main). Move it to the instruction-count method of `docs/verification.md` or give it the checklist's bounded-retry rule. — section 1, S5b gate, 2026-10-27
 - Verification (M5 display) — with the M5's built-in 2x panel as the main display (no AW2726DM attached), `space-legacy`, `space-editor` P1 and the three `sidebar-compare` color gates fail on untouched main exactly as on the M1. Until section 16 makes them portable, counted gates need the 1x AW2726DM as the main display. — section 1, 2026-10-27
 - Sidebar delete alerts — AppKit gives a `hasDestructiveAction` button no Return key equivalent, so Delete Space / Delete Folder have no Return default (Esc cancels). Capture C3 shows whether Arc's alert takes Return. — section 1, A1, 2026-10-27
 - Sidebar compact toolbar — the "More options" menu content (Reload This Page / Stop Loading, Hide Sidebar) is a guess: the capture never opened it (C11). — section 1, A1, 2026-10-27
+- Hover preview page card — size 420 × min(560, H − 20) pt and x = sidebar width + 8 are Open values; capture C4 (`previews`: hover a pinned tab and a favorite for 2 s) confirms them. — section 1, A2, 2026-10-28
 
-- Sidebar A3 scope — local `t3/sidebar-a3` completes selection menu/App dispatch, copy and atomic New Space actions, automation helpers, and real-App E1–E15/E17–E19. E16 and `archive-sweep` remain with Part A (Today sweeper, education banner, persistent dismissal); A3 adds only read-only `archive-list` support. E20 and FP checks remain with S6. Native OS selection drag-session hit testing is still unproven: E4 exercises the same production intent as native acceptDrop. The known display-dependent `comparison` row passed this run (worst position 1 pt, ΔE00 1.55); A3 changes no comparison gate. — section 1, A3, 2026-10-28
+- Section 9 — reuse the App's `ExpirySweeper` for Little Open. Supply the minimum of
+  `TodayAutoArchiveController.nextExpiry(now:)` and the Little Open session deadline,
+  and call both domain sweeps from its sweep closure. Keep one App timer. Little Open
+  deadlines use session activity plus each Profile's `littleOpenAutoArchiveAfter`
+  (default 6 h; Never returns nil). Remove `LittleOpenCoordinator`'s existing 60 s
+  poll when that integration lands; the old polling instruction in
+  `docs/plans/routing-little-open.md` §9.6 is superseded. Keep `littleOpen:` archive
+  locations and trigger Today education only from the Today report. This branch
+  does not change Little Open. — Sidebar item 6, 2026-10-28
 
-- Stored sidebar favicons (section 1 item 12, 2026-10-28): URL-only imported rows use Open's stored page icon or the existing placeholder. Arc's hash-named icon cache has no proved item mapping (`docs/re/data-model.md` §2); no Arc icon assets are copied. Automatic fetch for an unvisited imported page is deferred; cache misses do not start network requests. History and AppleScript remain section 11. Selected verifier targets PASS; `sidebar-completion` 111/111 PASS. Commands and limits: `docs/app-shell.md`, "Sidebar stored favicons".
+- Section 9 activity rule — reuse the model's shown-tab protection in both expiry
+  and next-deadline queries. A focused Space's selected tab, or every pane of its
+  selected split, stays protected while any window shows it. The model caches the
+  shown Tab references and reconciles them through its shared mutation commit path,
+  including structural edits and undo/redo. A tab leaving the final window's shown
+  set gets `lastActiveAt = now` without a new undo step. This covers split separation
+  or dissolution, moves out of the shown Space, archive/delete, and window changes.
+  A retained closed `BrowserWindowState` uses nonpersisted `isShowingContent=false`;
+  call `setWindowContentVisible` on shell close/reopen, as the standard App now
+  does. Keep the deadline and sweep predicates identical to prevent 1 ms timer
+  loops. — sidebar item 6 parent review, 2026-10-28
+- Sidebar A3 scope — local `t3/sidebar-a3` completes selection menu/App dispatch, copy and atomic New Space actions, automation helpers, and real-App E1–E15/E17–E19. Part A now supplies E16 and `archive-sweep` (Today sweeper, education banner, persistent dismissal); the combined suite retains these alongside A3 and shares one read-only `archive-list` implementation. E20 and FP checks remain with S6. Native OS selection drag-session hit testing is still unproven: E4 exercises the same production intent as native acceptDrop. The known display-dependent `comparison` row passed this run (worst position 1 pt, ΔE00 1.55); A3 changes no comparison gate. — section 1, A3, 2026-10-28
+
+- Stored sidebar favicons (section 1 item 12, 2026-10-28): URL-only imported rows use Open's stored page icon or the existing placeholder. Arc's hash-named icon cache has no proved item mapping (`docs/re/data-model.md` §2); no Arc icon assets are copied. Automatic fetch for an unvisited imported page is deferred; cache misses do not start network requests. History and AppleScript remain section 11. After merging main `013cdb45`, selected verifier targets PASS; `sidebar-completion` 125/125 PASS, including favicon and auto-archive rows. Commands and limits: `docs/app-shell.md`, "Sidebar stored favicons".
