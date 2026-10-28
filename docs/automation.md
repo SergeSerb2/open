@@ -352,8 +352,8 @@ flag delays scheduling; it does not replace engine responses.
 
 ## Library Space Manager (App lane 1b)
 
-The `sidebar-completion` suite currently covers E5/E6 (menu, App command,
-Space-header menu, and command bar search plus Return), plus the manager's
+The `sidebar-completion` suite covers sidebar selection, menus and commands,
+previews, archive/restore, and E5/E6 (Library entries and native reorder), plus the manager's
 undo, archive/restore, window replacement, and no-browser reopen flows. It uses the
 real built App, real model/stores, native menus, and native mouse/key events.
 It creates a temporary copy of **Open's own** bundle with a unique bundle ID
@@ -363,7 +363,7 @@ no remote debugging port. It never opens or copies Arc.
 
 | Command | Arguments and result |
 |---|---|
-| `library-open` | `entry=command` (default) dispatches App `manage-spaces`; `entry=space-menu` performs the existing Space-header menu's “Manage Spaces…” item. Both use the shared Library presenter on `.spaces`. For the app menu, use existing `menu-perform id=manage-spaces`. Returns manager state. |
+| `library-open` | `entry=command` (default) dispatches App `manage-spaces` when `section` is omitted; `section=spaces|archive|downloads|captures|media|history` opens that section through the shared presenter. Unknown sections fail. `entry=space-menu` performs the Space-header “Manage Spaces…” item and accepts only omitted/Spaces section. Returns manager/Library state, including `section`. |
 | `space-manager-state` | Reads the **attached** native manager, its class/identity/context ID, model and undo identity, isolated/global preview flags, columns, grabber points, up to 200 visible-outline rows per column, browser switcher order from real view positions, real model UndoManager notification count, and this App's window records. Points use the existing `mouse` command's window coordinates. Available after the last browser closes. |
 | `space-manager-drag` | `space=<ID> to=<zero-based index>` drags the real visible grabber through `OEApplication.sendEvent`; the native tracking loop dequeues the drag/up events. Rejects invalid IDs/indices and offscreen grabbers. Returns manager state. |
 | `space-manager-menu` | `space=<ID> item=<title>` performs the existing manager column menu. Add `node=<ID>` to perform that real outline row's context-menu item instead. No new confirmation policy or model implementation. |
@@ -381,7 +381,7 @@ Use existing `key route=app window=<Library number>` for Cmd+Z and other
 Library keys. Undo uses AppKit's nil-target Edit menu action and the Library
 window's real model UndoManager. It has no second key handler.
 Use existing `library-restore` for archive restore and `snapshot window=<number>`
-for full-resolution real-window captures.
+for full-resolution real-window captures (`window=library` also resolves that window).
 
 On M1, hold the outer validation lock once per job, plus the on-screen lock
 for one suite invocation:
@@ -498,3 +498,29 @@ They still capture all six real menu models and run the disabled-child and hidde
 command selections. The regular tabstrip suite keeps the complete command smoke loop.
 The probe popup storage check waits for the extension API, since `isLive` precedes
 its document/API injection. Foreground-interruption checks stay enabled in both flows.
+
+## Sidebar completion A3
+
+These commands use the browser's real outline, native menu, event router, or
+production intent. They do not send system mouse or keyboard input. Input
+commands activate the exact owned window and use the harness's focus tracking.
+
+| Command | Arguments and result |
+|---|---|
+| `command` | `id=<registry ID>` aliases `menu-perform`. Rejects unknown or disabled native menu items. |
+| `sidebar-click` | `node=<visible ID> [modifiers=[cmd,shift,option]] [window=<model UUID>]` scrolls an existing outline row into view and sends native down/up at its center. Rejects missing/collapsed targets. Returns ordered `selection` and active `selected` ID. |
+| `sidebar-key` | `key=<name> [modifiers=[cmd,opt,ctrl,shift]] [window=<model UUID>]` focuses the real outline and sends the App key path. Includes Delete, `forward-delete`, Esc, Shift+Up/Down, Cmd+D, Cmd+Shift+N and Cmd+Z. Use plain `key` to keep a text editor focused. |
+| `selection` | `[window=<model UUID>]` reads ordered multi-selection IDs without changing focus; empty is `[]`. |
+| `hover` | Exactly one `node=<visible ID>` or `favorite=<ID>`, plus `ms=0…5000`. Sends native hover and awaits the duration. `leave=true` with no target leaves for a stable page point. Returns `preview-state`. |
+| `sidebar-drop` | `nodes=[IDs] parent={kind:today|pinned|folder,id:UUID} index=<nonnegative Int>` calls the same `SidebarContext.performNodeDrop` as native outline acceptDrop. Rejects empty/duplicate/missing IDs, invalid destinations, and forbidden moves. This proves intent ordering and undo, not OS drag-session hit testing. |
+| `sidebar-clear-state` | `[window=<model UUID>]` reads the actual divider Clear hit `frame` in root coordinates and hover `visible` state. Use native `mouse action=hover/click` with Option for the Option-Clear flow. |
+| `archive-list` | `[profile=<UUID>] [limit=1…1000]` reads the App's real per-Profile SQLite archive after queued writes. Returns `{count,rows:[{id,kind,reason,space,profile,archivedAt}]}`. Defaults to focused Profile, or default Profile without a browser. |
+
+`sidebar-row` also reads the visible `unreadBadge`. Folder nodes in
+`sidebar-tree` include `expanded`. `tab-strip` includes `pinStates`, read from
+`OEBrowser.isPinned(_:)` for each actual engine web content. Mouse and key
+commands accept `cmd`/`command`, `opt`/`option`, and `ctrl`/`control` aliases.
+`sidebar-menu` rejects malformed node IDs and empty/ambiguous title paths.
+
+A3 leaves `archive-sweep` and E16 to the Today sweeper implementation. It does
+not add a second sweep path or change the education banner.
