@@ -730,6 +730,11 @@
           "sidebarFrame": rect(controller.sidebar.frame), "sidebarLiveWidth": controller.context.sidebarWidth,
           "toolbarFrames": controller.sidebar.toolbarGeometry.mapValues(rect),
           "toolbarButtons": controller.sidebar.toolbarVisibleButtons,
+          "spaceSwitcherFrames": app.model.spaces.reduce(into: [String: [Double]]()) { frames, space in
+            if let view = controller.sidebar.spaceSwitcher(spaceID: space.id) {
+              frames[space.id.description] = rect(root.convert(view.bounds, from: view))
+            }
+          },
           "hint": ["shows": controller.hintShows, "visible": controller.hintToast != nil,
             "frame": controller.hintToast.map { rect($0.frame) } ?? [], "keys": controller.hintToast?.keys ?? "",
             "plate": controller.hintToast.map { rect($0.plateFrame) } ?? []] as [String: Any],
@@ -1143,6 +1148,10 @@
         value["to"] = (basic.toValue as? NSNumber) ?? NSNull()
       }
       if let spring = animation as? CASpringAnimation {
+        value["mass"] = spring.mass
+        value["stiffness"] = spring.stiffness
+        value["physicalDamping"] = spring.damping
+        value["settlingDuration"] = spring.settlingDuration
         value["response"] = 2 * Double.pi / sqrt(spring.stiffness / spring.mass)
         value["damping"] = spring.damping / (2 * sqrt(spring.stiffness * spring.mass))
         value["initialVelocity"] = spring.initialVelocity
