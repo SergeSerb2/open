@@ -5180,6 +5180,10 @@ def sidebar_a1_checks(app, results, require, evidence):
     require('E8_delete_folder_alert_toast_undo', folder_sheet and folder_sheet['title'] == 'Delete your Reading folder?'
             and folder_sheet['buttons'] == ['Delete Folder', 'Cancel'] and gone and toast == 'Folder deleted' and back
             and neighbor not in (None, '', inner) and pressed, sheet=folder_sheet, toast=toast, selectedAfterDelete=neighbor)
+    restored_sidebar = app.call('sidebar-tree')
+    pressed_again = app.call('toast-undo')
+    require('E8_delete_folder_toast_undo_single_use', back and not pressed_again
+            and app.call('sidebar-tree') == restored_sidebar, pressedAgain=pressed_again)
     # Sound wiring (§3.13): the App resolves its own resources; the setting stays off by default.
     sound = app.call('sound-effect', effect='capture')
     require('A1_sound_effect_gated_off', sound['resource'] == 'open-capture.caf' and not sound['played'] and sound['plays'] == 0

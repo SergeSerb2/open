@@ -218,7 +218,7 @@ public final class BrowserWindowController: NSWindowController, NSWindowDelegate
         splitController.onChange = { [weak self] in self?.changed() }
         toast.wantsLayer = true; toast.layer?.cornerRadius = 8; toast.layer?.backgroundColor = NSColor.black.withAlphaComponent(0.85).cgColor
         toastLabel.textColor = .white; toast.addSubview(toastLabel)
-        undoButton = ActionButton(symbol: "arrow.uturn.backward", title: "Undo") { [weak self] in self?.toastUndo?() }
+        undoButton = ActionButton(symbol: "arrow.uturn.backward", title: "Undo") { [weak self] in self?.performToastUndo() }
         undoButton.contentTintColor = .white; toast.addSubview(undoButton); root.addSubview(toast); toast.isHidden = true
         root.onLayout = { [weak self] in self?.layoutContent() }
         root.onDragBackground = { [weak self] event in self?.window?.performDrag(with: event) }
@@ -706,6 +706,28 @@ public final class BrowserWindowController: NSWindowController, NSWindowDelegate
             self?.toast.isHidden = true; self?.toastUndo = nil
         } }
     }
+    private func dismissToast() {
+        toastTask?.cancel(); toastTask = nil
+        toastUndo = nil; toast.isHidden = true; undoButton.isHidden = true
+    }
+
+    private func performToastUndo() {
+        guard !toast.isHidden, let undo = toastUndo else { return }
+        dismissToast()
+        undo()
+    }
+
+    /// Undo belongs to the model step that just completed, never a newer command.
+    public func showModelUndoToast(_ title: String) {
+        guard let manager = model.undoManager, manager.canUndo else { showToast(title, undo: nil); return }
+        let generation = model.undoGeneration
+        showToast(title, undo: { [weak self, weak manager] in
+            guard let self, let manager, self.model.undoManager === manager,
+                  self.model.undoGeneration == generation, manager.canUndo else { return }
+            manager.undo()
+        })
+    }
+
     public var peekBadgeTabIDs: Set<ItemID> { peekStorage?.peekBadgeTabIDs ?? [] }
     /// Shared window-local key path. Focus comes from AppKit's current responder.
     @discardableResult public func handleKeyDown(_ event: NSEvent, unconsumed: Bool = false) -> Bool {
@@ -931,12 +953,15 @@ extension BrowserWindowController {
     /// Delete Space: the alert first; "Delete" archives the Space (one undo step).
     func confirmDeleteSpace(_ id: SpaceID) -> Bool {
         guard let window, pendingConfirmation == nil, let alert = SidebarConfirmations.deleteSpaceAlert(model: model, spaceID: id) else { return false }
+        let restoreKeyboardFocus = context.keyboardFocusAfterDeletion()
         pendingConfirmation = alert
         let shown = SidebarConfirmations.present(alert, on: window) { [weak self] confirmed in
             guard let self else { return }
             self.pendingConfirmation = nil
             guard confirmed, self.model.space(id: id) != nil else { return }
-            if ModelSidebarActions(context: self.context).perform(.deleteSpace(id)) { self.refresh(); self.changed() }
+            if ModelSidebarActions(context: self.context).perform(.deleteSpace(id)) {
+                self.refresh(); restoreKeyboardFocus(); self.changed()
+            }
         }
         if !shown { pendingConfirmation = nil }
         return shown
@@ -947,6 +972,7 @@ extension BrowserWindowController {
     func confirmDeleteFolders(_ ids: [ItemID]) -> Bool {
         guard let window, pendingConfirmation == nil, let alert = SidebarConfirmations.deleteFoldersAlert(model: model, ids: ids) else { return false }
         let folders = ids.filter { model.node(id: $0)?.folder != nil }.count
+        let restoreKeyboardFocus = context.keyboardFocusAfterDeletion()
         pendingConfirmation = alert
         let shown = SidebarConfirmations.present(alert, on: window) { [weak self] confirmed in
             guard let self else { return }
@@ -955,8 +981,8 @@ extension BrowserWindowController {
             var archived = 0
             self.keepingSelection { archived = self.model.archiveNodes(ids: ids) }
             guard archived > 0 else { return }
-            self.refresh(); self.changed()
-            self.showToast(SidebarConfirmations.folderToast(count: folders), undo: { [weak self] in self?.model.undoManager?.undo() })
+            self.refresh(); restoreKeyboardFocus(); self.changed()
+            self.showModelUndoToast(SidebarConfirmations.folderToast(count: folders))
         }
         if !shown { pendingConfirmation = nil }
         return shown
@@ -1018,7 +1044,7 @@ extension BrowserWindowController {
 
     /// "Cleared Tabs" with Undo after any Clear (`FUN_102a68e2c`).
     public func showClearedToast() {
-        showToast("Cleared Tabs", undo: { [weak self] in self?.model.undoManager?.undo() })
+        showModelUndoToast("Cleared Tabs")
     }
 
     /// The first hide by any path shows the hint once; the key is set when it shows.
