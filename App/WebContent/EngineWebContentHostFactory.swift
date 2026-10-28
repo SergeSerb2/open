@@ -315,7 +315,8 @@ final class EngineWebContentHostFactory: NSResponder, WebContentHostFactory {
   @discardableResult
   func openNewTab(url: URL, background: Bool, opener: ItemID? = nil) -> Tab? {
     guard let space = focusedSpace else { return nil }
-    let tab = model.newTab(in: space.id, url: url, at: 0); tab.openerID = opener
+    // Lead Q11: a tab opened in the background is unread until it is selected.
+    let tab = model.newTab(in: space.id, url: url, at: 0, unread: background); tab.openerID = opener
     if !background { select(nodeID: tab.id) }
     app.scheduleSave(); return tab
   }
@@ -786,7 +787,8 @@ extension EngineWebContentHostFactory: OEWebContentDelegate {
       }
       let source = opener.flatMap { space(for: $0) } ?? hosts.values.first { $0.content === webContent }?.spaceID.flatMap { model.space(id: $0) }
       guard let space = source ?? focusedSpace, space.profileID == profile(for: request.context)?.id else { return nil }
-      let tab = model.newTab(in: space.id, url: request.url ?? URL(string: "about:blank")!, at: 0)
+      let tab = model.newTab(in: space.id, url: request.url ?? URL(string: "about:blank")!, at: 0,
+                             unread: request.disposition == .newBackgroundTab)
       tab.openerID = opener
       let content = makeContent(for: tab, url: nil, requestContext: request.context)
       if request.disposition != .newBackgroundTab { focus(space: space); select(nodeID: tab.id) }
@@ -1071,7 +1073,7 @@ extension EngineWebContentHostFactory {
       return
     }
     let url = webContent.url ?? URL(string: "about:blank")!
-    let tab = model.newTab(in: space.id, url: url, at: 0)
+    let tab = model.newTab(in: space.id, url: url, at: 0, unread: !active)
     adopt(webContent, for: tab, profileID: profileID)
     record("open", webContent, ["disposition": "chromium", "active": active, "url": url.absoluteString])
     if active {

@@ -2,7 +2,11 @@ import AppKit
 import OpenDesign
 import OpenModel
 
-/// Native folder card. The App places it in the preview panel; it owns no host.
+/// Native folder card (completion §3.6). The App places it next to the sidebar; it owns no host.
+/// Layout measured once from the session-2 video (V 46.11–46.46 s): 240 wide, a 48 pt header
+/// that is a "Search <folder>…" field with a separator under it (shown even for three tabs),
+/// 45 pt rows with a favicon, the title, and "N minutes ago", the first row highlighted;
+/// height = 48 + 45 × rows + 8. Colors, radius, and type are guesses until lane C.
 @MainActor
 public final class FolderPreviewView: NSView, NSTableViewDataSource, NSTableViewDelegate, NSSearchFieldDelegate {
     public let context: SidebarContext
@@ -10,7 +14,7 @@ public final class FolderPreviewView: NSView, NSTableViewDataSource, NSTableView
     public let searchField = NSSearchField()
     public let tableView = FolderPreviewTable()
     private let headerIcon = FolderIconView()
-    private let title = TextLabel()
+    private let separator = NSView()
     private let emptyLabel = TextLabel()
     private let scroll = NSScrollView()
     private var tabs: [Tab] = []
@@ -22,10 +26,12 @@ public final class FolderPreviewView: NSView, NSTableViewDataSource, NSTableView
         self.context = context; self.folder = folder
         super.init(frame: .zero)
         wantsLayer = true; layer?.cornerRadius = 10; layer?.cornerCurve = .continuous; layer?.masksToBounds = true
-        headerIcon.folder = folder; headerIcon.context = context
-        title.text = { [weak folder] in folder?.title ?? "" }; title.font = .systemFont(ofSize: 13, weight: .semibold); title.baseline = 23
-        searchField.delegate = self; searchField.placeholderString = "Search tabs"; searchField.sendsSearchStringImmediately = true
+        // The measured card has no icon header; the folder's icon stays in its row (Section 1 decision).
+        headerIcon.folder = folder; headerIcon.context = context; headerIcon.isHidden = true
+        searchField.delegate = self; searchField.sendsSearchStringImmediately = true
+        searchField.focusRingType = .none
         searchField.setAccessibilityLabel("Search folder tabs")
+        separator.wantsLayer = true
         let column = NSTableColumn(identifier: .init("folder-preview")); tableView.addTableColumn(column)
         tableView.headerView = nil; tableView.rowHeight = HoverPreviewMetrics.rowHeight; tableView.intercellSpacing = .zero
         tableView.style = .plain; tableView.backgroundColor = .clear; tableView.selectionHighlightStyle = .none
@@ -40,7 +46,7 @@ public final class FolderPreviewView: NSView, NSTableViewDataSource, NSTableView
         emptyLabel.color = { Core.foregroundSecondary.nsColor }
         emptyLabel.text = { [weak self] in self?.searchField.stringValue.isEmpty == false ? "No matching tabs" : "No tabs" }
         emptyLabel.setAccessibilityElement(true); emptyLabel.setAccessibilityRole(.staticText)
-        for view in [headerIcon, title, searchField, scroll, emptyLabel] { addSubview(view) }
+        for view in [headerIcon, searchField, separator, scroll, emptyLabel] { addSubview(view) }
         rebuild()
         loops.append(ObservationLoop(read: { [weak self] in
             guard let self else { return }
@@ -58,7 +64,12 @@ public final class FolderPreviewView: NSView, NSTableViewDataSource, NSTableView
     public override var isFlipped: Bool { true }
     public override var acceptsFirstResponder: Bool { true }
     public override func keyDown(with event: NSEvent) { tableView.keyDown(with: event) }
-    public override var fittingSize: NSSize { CGSize(width: HoverPreviewMetrics.folderWidth, height: HoverPreviewMetrics.headerHeight + (tabs.count > 8 ? 32 : 0) + CGFloat(max(1, min(filtered.count, 10))) * HoverPreviewMetrics.rowHeight + 4) }
+    public override var fittingSize: NSSize {
+        let m = HoverPreviewMetrics.self
+        return CGSize(width: m.folderWidth, height: m.headerHeight + CGFloat(max(1, min(filtered.count, m.maxVisibleRows))) * m.rowHeight + m.bottomPadding)
+    }
+    /// The search field's placeholder: "Search <folder title>…" (measured text form).
+    public var searchPlaceholder: String { searchField.placeholderString ?? "" }
     public var displayedTabIDs: [ItemID] { filtered.map(\.id) }
     public var displayedHeaderIcon: String? { context.folderIconOverrideProvider?(folder) ?? folder.customIcon }
     public var drawnHeaderGlyph: String? { headerIcon.lastDrawnGlyph }
@@ -74,10 +85,14 @@ public final class FolderPreviewView: NSView, NSTableViewDataSource, NSTableView
         tabs = collectTabs()
         let query = searchField.stringValue.trimmingCharacters(in: .whitespacesAndNewlines)
         filtered = query.isEmpty ? tabs : tabs.filter { $0.displayTitle.localizedCaseInsensitiveContains(query) }
-        searchField.isHidden = tabs.count <= 8
+        let name = folder.title.trimmingCharacters(in: .whitespaces)
+        searchField.placeholderString = name.isEmpty ? "Search…" : "Search \(name)…"
+        searchField.isHidden = tabs.isEmpty
         emptyLabel.isHidden = !filtered.isEmpty
         emptyLabel.setAccessibilityLabel(emptyLabel.text())
         tableView.reloadData(); needsLayout = true; invalidateIntrinsicContentSize()
+        // The first row carries the highlight plate (measured); Up / Down move it.
+        if !filtered.isEmpty { tableView.selectRowIndexes(IndexSet(integer: 0), byExtendingSelection: false) }
     }
     private func applyAppearance() {
         let appearance = context.focusedSpace.map(context.appearance(for:)) ?? context.systemAppearance
@@ -86,24 +101,26 @@ public final class FolderPreviewView: NSView, NSTableViewDataSource, NSTableView
         layer?.backgroundColor = PreviewColors.background.cgColor(appearance)
         layer?.borderWidth = appearance == .dark ? 1 : 0
         layer?.borderColor = NSColor.white.withAlphaComponent(0.10).cgColor
-        title.color = { Core.foregroundPrimary.nsColor }
+        separator.layer?.backgroundColor = (appearance == .dark ? NSColor.white : NSColor.black).withAlphaComponent(0.10).cgColor
         headerIcon.needsDisplay = true; tableView.needsDisplay = true
     }
     public override func layout() {
         super.layout()
-        headerIcon.frame = CGRect(x: 10, y: 8, width: 20, height: 20)
-        title.frame = CGRect(x: 36, y: 0, width: max(0, bounds.width - 48), height: 36)
-        searchField.frame = CGRect(x: 12, y: 36, width: max(0, bounds.width - 24), height: 24)
-        let y: CGFloat = searchField.isHidden ? 36 : 68
+        let header = HoverPreviewMetrics.headerHeight
+        headerIcon.frame = CGRect(x: 10, y: 14, width: 20, height: 20)
+        searchField.frame = CGRect(x: 10, y: (header - 24) / 2, width: max(0, bounds.width - 20), height: 24)
+        separator.frame = CGRect(x: 0, y: header - 1, width: bounds.width, height: 1)
+        let y = header
         scroll.frame = CGRect(x: 0, y: y, width: bounds.width, height: max(0, bounds.height - y - 4))
         tableView.tableColumns.first?.width = bounds.width
-        emptyLabel.frame = CGRect(x: 12, y: y, width: max(0, bounds.width - 24), height: 32)
+        emptyLabel.frame = CGRect(x: 12, y: y + 6, width: max(0, bounds.width - 24), height: 32)
     }
     public func numberOfRows(in tableView: NSTableView) -> Int { filtered.count }
     public func tableView(_ tableView: NSTableView, viewFor tableColumn: NSTableColumn?, row: Int) -> NSView? {
         let cell = tableView.makeView(withIdentifier: .init("preview-tab"), owner: self) as? FolderPreviewCell ?? FolderPreviewCell()
         cell.identifier = .init("preview-tab"); cell.favicon.context = context; cell.favicon.tab = filtered[row]
         cell.title.text = { [tab = filtered[row]] in tab.displayTitle }
+        cell.subtitle.text = { [tab = filtered[row]] in FolderPreviewCell.ago(tab.lastActiveAt) }
         return cell
     }
     public func tableView(_ tableView: NSTableView, rowViewForRow row: Int) -> NSTableRowView? { FolderPreviewRow() }
@@ -179,12 +196,25 @@ private final class FolderPreviewRow: NSTableRowView {
 }
 @MainActor
 private final class FolderPreviewCell: NSTableCellView {
-    let favicon = FaviconView(), title = TextLabel()
+    let favicon = FaviconView(), title = TextLabel(), subtitle = TextLabel()
     init() {
-        super.init(frame: .zero); wantsLayer = true; addSubview(favicon); addSubview(title)
-        favicon.inkSize = 16; title.font = .systemFont(ofSize: 13); title.baseline = 21; title.color = { Core.foregroundPrimary.nsColor }
+        super.init(frame: .zero); wantsLayer = true; addSubview(favicon); addSubview(title); addSubview(subtitle)
+        favicon.inkSize = 16
+        title.font = .systemFont(ofSize: 13, weight: .medium); title.baseline = 19; title.color = { Core.foregroundPrimary.nsColor }
+        subtitle.font = .systemFont(ofSize: 11); subtitle.baseline = 15; subtitle.color = { Core.foregroundSecondary.nsColor }
     }
     @available(*, unavailable) required init?(coder: NSCoder) { fatalError() }
     override var isFlipped: Bool { true }
-    override func layout() { super.layout(); favicon.frame = CGRect(x: 12, y: 8, width: 16, height: 16); title.frame = CGRect(x: 36, y: 0, width: max(0, bounds.width - 48), height: 32) }
+    override func layout() {
+        super.layout()
+        favicon.frame = CGRect(x: 12, y: 14, width: 16, height: 16)
+        title.frame = CGRect(x: 38, y: 4, width: max(0, bounds.width - 50), height: 22)
+        subtitle.frame = CGRect(x: 38, y: 23, width: max(0, bounds.width - 50), height: 18)
+    }
+    /// "N minutes ago" since the tab was last active (guess: the measured second line's source).
+    static func ago(_ date: Date?) -> String {
+        guard let date else { return "" }
+        let formatter = RelativeDateTimeFormatter(); formatter.unitsStyle = .full; formatter.dateTimeStyle = .named
+        return formatter.localizedString(for: date, relativeTo: Date())
+    }
 }

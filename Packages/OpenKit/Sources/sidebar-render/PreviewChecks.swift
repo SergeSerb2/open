@@ -208,24 +208,24 @@ enum PreviewChecks {
         let host = OffscreenRenderer.host(card, scale: 1)
         defer { host.contentView = nil; host.close() }
         func pump() { RunLoop.main.run(until: Date().addingTimeInterval(0.01)); OffscreenRenderer.settle(card); OffscreenRenderer.settle(scene) }
-        Checks.check(card.bounds.width == 300 && card.fittingSize.height == 392 && card.tableView.rowHeight == 32 && !card.searchField.isHidden && card.searchField.frame.height == 24,
-                     "HP3 real native folder card is 300 wide, has 32 pt rows, search above eight tabs, and ten visible rows")
-        for icon in [String?.none, "⭐️", "star.fill"] {
-            folder.customIcon = icon; pump()
-            _ = OffscreenRenderer().snapshot(scene, scale: 1); _ = OffscreenRenderer().snapshot(card, scale: 1)
-            Checks.check(card.drawnHeaderGlyph != nil && scene.sidebar.drawnFolderGlyph(nodeID: folder.id) == card.drawnHeaderGlyph, "HP3 actual row/header glyphs match for \(icon ?? "folder glyph")")
-        }
+        // Measured card (V 46.11–46.46 s): 240 wide, 48 pt search header, 45 pt rows, + 8; ten rows show.
+        let placeholder = "Search \(folder.title)…"
+        Checks.check(card.bounds.width == 240 && card.fittingSize.height == 48 + 10 * 45 + 8 && card.tableView.rowHeight == 45
+                     && !card.searchField.isHidden && card.searchField.frame.height == 24 && card.searchPlaceholder == placeholder,
+                     "HP3 real native folder card: 240 wide, \"\(placeholder)\" search header (48 pt), 45 pt rows, ten visible rows")
+        Checks.check(card.tableView.selectedRow == 0, "HP3 the first row carries the highlight plate")
+        // Section 1 decision: Arc's card has no icon header (the search field is the header); the
+        // folder's icon override shows on its sidebar row only.
         context.folderIconOverrideProvider = { _ in "heart.fill" }; folder.customIcon = "⭐️"; pump()
-        Checks.check(card.drawnHeaderGlyph == "heart.fill" && scene.sidebar.drawnFolderGlyph(nodeID: folder.id) == "heart.fill", "HP3 shared iconOverride provider precedes customIcon in row and header")
+        _ = OffscreenRenderer().snapshot(scene, scale: 1)
+        Checks.check(card.headerIconView.isHidden && scene.sidebar.drawnFolderGlyph(nodeID: folder.id) == "heart.fill",
+                     "HP3 no icon header in the card; the row draws the shared iconOverride")
         context.folderIconOverrideProvider = nil; folder.customIcon = nil; pump()
-        model.setExpanded(folderID: folder.id, expanded: true); pump()
-        Checks.check(card.headerIconView.frame == CGRect(x: 10, y: 8, width: 20, height: 20), "HP3 header uses the row's 20 pt icon canvas, centered on the 36 pt header")
-        Checks.check(card.drawnHeaderGlyph == "folder.open" && scene.sidebar.drawnFolderGlyph(nodeID: folder.id) == "folder.open", "HP3 row and header both draw the open folder glyph without customIcon")
-        model.setExpanded(folderID: folder.id, expanded: false); pump()
-        let before = OffscreenRenderer().snapshot(card, scale: 1)
-        folder.customIcon = "⭐️"; pump()
-        let after = OffscreenRenderer().snapshot(card, scale: 1)
-        Checks.check(card.displayedHeaderIcon == "⭐️" && (before.dataProvider!.data! as Data) != (after.dataProvider!.data! as Data), "HP3 custom folder icon changes the actual header pixels")
+        let three = model.createFolder(in: .spacePinned(space.id), title: "Three")!
+        for index in 0..<3 { let tab = model.newTab(in: space.id, url: Synthetic.url("three-\(index)"), title: "Three \(index)"); model.moveNode(id: tab.id, to: .folder(three.id), at: nil) }
+        let threeCard = FolderPreviewView(context: context, folder: three)
+        Checks.check(threeCard.fittingSize == CGSize(width: 240, height: 191) && !threeCard.searchField.isHidden,
+                     "HP3 a three-tab folder card is 240 × 191 with the search field (measured card [232, 163, 240, 191])")
         host.makeFirstResponder(card.searchField)
         let editor = card.searchField.currentEditor() as! NSTextView
         editor.selectAll(nil); editor.insertText("Needle", replacementRange: NSRange(location: 0, length: editor.string.utf16.count)); pump()
@@ -251,7 +251,7 @@ enum PreviewChecks {
         Checks.check(card.displayedTabIDs.isEmpty && context.selectedID(in: space.id) == split.id, "HP3 a no-match search has no activation on Return")
         for width in [228.0, 500.0] {
             context.window?.sidebarWidth = width; card.needsLayout = true; pump()
-            Checks.check(card.fittingSize.width == 300, "HP3 folder card stays 300 pt at sidebar width \(Int(width))")
+            Checks.check(card.fittingSize.width == 240, "HP3 folder card stays 240 pt at sidebar width \(Int(width))")
         }
         let empty = model.createFolder(in: .spacePinned(space.id), title: "Empty preview")!
         let emptyCard = FolderPreviewView(context: context, folder: empty)
