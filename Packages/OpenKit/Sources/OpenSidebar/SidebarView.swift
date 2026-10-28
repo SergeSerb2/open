@@ -338,7 +338,16 @@ public enum SidebarDiagnostics {
     /// Enabled only by the CLI bench. No clocks, delays or allocations at rest.
     public static var measuresFolderTransitions = false
     public internal(set) static var folderReconcileSeconds: Double = 0
+    public internal(set) static var folderReconcileCPUSeconds: Double = 0
+    /// CLI-only 3 ms transition negative control, scoped to its own window.
+    public static var folderBenchBusyWindowID: WindowID?
     public internal(set) static var folderReconcileCount = 0
+    /// CLI-only phase timing; untouched when transition measurement is disabled.
+    public internal(set) static var folderReconcilePhases: [String: Double] = [:]
+    public internal(set) static var folderSyncItemsVisited = 0
+    public internal(set) static var folderStateRowsConfigured = 0
+    public internal(set) static var folderFaviconDraws = 0
+    public internal(set) static var folderTitleDraws = 0
     /// CLI-only negative control. Nil in the App; no extra work in normal scrolling.
     public static var folderBenchFullRowWindowID: WindowID?
     public internal(set) static var folderRowLayouts = 0

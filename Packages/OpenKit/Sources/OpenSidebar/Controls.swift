@@ -52,6 +52,7 @@ final class TextLabel: NSView {
     }
 
     override func draw(_ dirtyRect: NSRect) {
+        if SidebarDiagnostics.measuresFolderTransitions { SidebarDiagnostics.folderTitleDraws += 1 }
         let (string, textColor) = tracked({ (text(), color()) }) { [weak self] in self?.needsDisplay = true }
         lastDrawnText = ""
         guard !string.isEmpty, let ctx = NSGraphicsContext.current?.cgContext else { return }
@@ -152,6 +153,7 @@ final class FaviconView: NSView {
 
     override func draw(_ dirtyRect: NSRect) {
         guard let tab else { return }
+        if SidebarDiagnostics.measuresFolderTransitions { SidebarDiagnostics.folderFaviconDraws += 1 }
         let (override, icon, png, host, tint) = tracked({ (tab.iconOverride, tab.customIcon, tab.live.faviconPNG, tab.displayHost, fallbackTint()) }) { [weak self] in
             self?.needsDisplay = true
         }

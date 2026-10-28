@@ -602,7 +602,7 @@ def main():
                 bench = run(command[0], "bench", "--rows", "1000", "--scale", "2", "--folder-peek", "50")
                 matches(r"^FP10 PASS$", bench)
             else:
-                print("FP10 PENDING (lead deferral under machine load): run sidebar-render bench --rows 1000 --scale 2 --folder-peek 50; set SIDEBAR_FOLDER_PEEK_PERF=1 for this strict dispatcher gate")
+                print("FP10 separate performance gate: run sidebar-render bench --rows 1000 --scale 2 --folder-peek 50; set SIDEBAR_FOLDER_PEEK_PERF=1 for this strict dispatcher gate")
     elif name == "sidebar-compare":
         args = [str(root / "tools/verification/sidebar-compare-states.sh")]
         if os.environ.get("SIDEBAR_CAPTURE_ROOT"):

@@ -47,7 +47,7 @@ enum RenderCLI {
       sidebar-render space-manager --out FILE.png [--snapshot DIR] [--size WxH] [--scale 1|2] [--profiles 2] [--columns N --rows N --scroll-x X]
       sidebar-render synth --out DIR [--rows N]
       sidebar-render compare --arc FILE.png --ours FILE.png --spec NAME --out DIR [--scale S]
-      sidebar-render bench [--rows N] [--selection] [--bulk N] [--expand-all N] [--folder-peek N [--negative-proof]] [--row-media mixed] [--media-card|--media-stack]
+      sidebar-render bench [--rows N] [--selection] [--bulk N] [--expand-all N] [--folder-peek N [--negative-proof|--negative-transition-proof]] [--row-media mixed] [--media-card|--media-stack]
       sidebar-render compare-media --arc FILE.png --ours FILE.png --out DIR --state rest|expanded|stack|stack-expanded
       sidebar-render check
       sidebar-render sm6-measure [--fail-after-host] [--thread-instructions]

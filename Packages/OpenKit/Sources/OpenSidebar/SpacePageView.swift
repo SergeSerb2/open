@@ -29,6 +29,7 @@ final class SpacePageView: NSView, NSOutlineViewDataSource, NSOutlineViewDelegat
     private var rootTodayCount = 0
     private var rootPinnedCollapsed = false
     private var loops: [ObservationLoop] = []
+    private var folderLoops: [ObjectIdentifier: ObservationLoop] = [:]
     private var mirroringSelection = false
     private var draggingIDs: Set<ItemID> = []
     private var applyingBulk = false
@@ -134,14 +135,13 @@ final class SpacePageView: NSView, NSOutlineViewDataSource, NSOutlineViewDelegat
             _ = self.context.forcedHover
             _ = self.context.peekSourceNodeID
         }) { [weak self] in self?.updateRowStates(animated: true) })
-        // Folder expansion and the pinned-collapsed flag. Reading the child lists
-        // too re-arms the loop after structural changes, so new folders are tracked.
+        // Root shape only. Each exposed folder observes its own expansion, so
+        // toggling one folder never reads a 1,000-row root or unrelated folders.
         loops.append(ObservationLoop(read: { [weak self] in
             guard let self else { return }
             _ = self.space.isPinnedCollapsed
             _ = self.space.pinned.count
             _ = self.space.today.count
-            self.forEachLoadedFolder { _ = $0.isExpanded; _ = $0.peekedChildID; _ = $0.children.count }
         }) { [weak self] in
             guard let self else { return }
             guard self.context.manager?.deferHiddenUpdates() != true else { return }
@@ -168,6 +168,7 @@ final class SpacePageView: NSView, NSOutlineViewDataSource, NSOutlineViewDelegat
 
     isolated deinit {
         loops.forEach { $0.cancel() }
+        folderLoops.values.forEach { $0.cancel() }
         NotificationCenter.default.removeObserver(self)
     }
 
@@ -368,6 +369,26 @@ final class SpacePageView: NSView, NSOutlineViewDataSource, NSOutlineViewDelegat
         guard !steps.isEmpty else { return }
         let animate = animated ?? animatesSidebarChanges
         let parent = parentItem(d)
+        if syncingExpansion, case .folder = d {
+            // A folder transition only inserts or removes a subset, preserving
+            // retained row order. One native edit avoids reprocessing the same
+            // trailing row positions for each child in the sequential diff.
+            let old = list(for: d), oldIDs = old.map(ObjectIdentifier.init), newIDs = new.map(ObjectIdentifier.init)
+            let kept = Set(newIDs), prior = Set(oldIDs)
+            if oldIDs.filter({ kept.contains($0) }) == newIDs {
+                let indexes = IndexSet(oldIDs.indices.filter { !kept.contains(oldIDs[$0]) })
+                for i in indexes { if let folder = old[i] as? Folder { dropCache(folder) } }
+                setList(new, for: d)
+                outline.removeItems(at: indexes, inParent: parent, withAnimation: animate ? [.effectFade, .slideUp] : [])
+                return
+            }
+            if newIDs.filter({ prior.contains($0) }) == oldIDs {
+                let indexes = IndexSet(newIDs.indices.filter { !prior.contains(newIDs[$0]) })
+                setList(new, for: d)
+                outline.insertItems(at: indexes, inParent: parent, withAnimation: animate ? [.effectFade, .slideDown] : [])
+                return
+            }
+        }
         if !syncingExpansion && !applyingBulk { outline.beginUpdates() }
         for step in steps {
             switch step {
@@ -391,7 +412,20 @@ final class SpacePageView: NSView, NSOutlineViewDataSource, NSOutlineViewDelegat
         }
     }
 
+    private func observeFolder(_ folder: Folder) {
+        let key = ObjectIdentifier(folder)
+        guard folderLoops[key] == nil else { return }
+        folderLoops[key] = ObservationLoop(read: { [weak folder] in
+            _ = folder?.isExpanded; _ = folder?.peekedChildID; _ = folder?.children.count
+        }) { [weak self, weak folder] in
+            guard let self, let folder, self.folderChildren[key] != nil,
+                  self.context.manager?.deferHiddenUpdates() != true else { return }
+            self.syncExpansion(animated: self.animatesSidebarChanges, changedFolder: folder.id)
+        }
+    }
+
     private func dropCache(_ folder: Folder) {
+        folderLoops.removeValue(forKey: ObjectIdentifier(folder))?.cancel()
         displayedExpansion[ObjectIdentifier(folder)] = nil
         displayedChildCounts[ObjectIdentifier(folder)] = nil
         guard let kids = folderChildren.removeValue(forKey: ObjectIdentifier(folder)) else { return }
@@ -404,12 +438,27 @@ final class SpacePageView: NSView, NSOutlineViewDataSource, NSOutlineViewDelegat
         syncingExpansion = true
         let measuring = SidebarDiagnostics.measuresFolderTransitions
         let started = measuring ? CACurrentMediaTime() : 0
+        let cpuStarted = measuring ? clock_gettime_nsec_np(CLOCK_THREAD_CPUTIME_ID) : 0
+        var phaseStart = started
+        func phase(_ name: String) {
+            guard measuring else { return }
+            let now = CACurrentMediaTime()
+            SidebarDiagnostics.folderReconcilePhases[name, default: 0] += now - phaseStart
+            phaseStart = now
+        }
         defer {
             syncingExpansion = false
             if measuring {
                 SidebarDiagnostics.folderReconcileSeconds += CACurrentMediaTime() - started
+                SidebarDiagnostics.folderReconcileCPUSeconds += Double(clock_gettime_nsec_np(CLOCK_THREAD_CPUTIME_ID) - cpuStarted) / 1e9
                 SidebarDiagnostics.folderReconcileCount += 1
             }
+        }
+        if measuring, SidebarDiagnostics.folderBenchBusyWindowID == context.windowID {
+            // Deliberate real main-thread CPU work, only for the CLI negative proof.
+            let deadline = clock_gettime_nsec_np(CLOCK_THREAD_CPUTIME_ID) + 3_000_000
+            while clock_gettime_nsec_np(CLOCK_THREAD_CPUTIME_ID) < deadline {}
+            phase("negative-busy-wait")
         }
         let animate = animated && !Motion.reducesMotion
         let firstRow = outline.row(at: NSPoint(x: 0, y: scroll.contentView.bounds.minY))
@@ -417,7 +466,9 @@ final class SpacePageView: NSView, NSOutlineViewDataSource, NSOutlineViewDelegat
         let offset = firstRow >= 0 ? scroll.contentView.bounds.minY - outline.rect(ofRow: firstRow).minY : 0
         var changed = false
         func walk(_ items: [AnyObject]) {
+            if measuring { SidebarDiagnostics.folderSyncItemsVisited += items.count }
             for case let folder as Folder in items {
+                observeFolder(folder)
                 let key = ObjectIdentifier(folder), state = folder.expansion
                 let old = displayedExpansion[key] ?? .collapsed
                 let native = outline.isItemExpanded(folder)
@@ -442,8 +493,9 @@ final class SpacePageView: NSView, NSOutlineViewDataSource, NSOutlineViewDelegat
                             SidebarDiagnostics.folderTransitionExpanding = expanding
                         }
                         outline.beginUpdates()
-                        if initial {
-                            // Initial children belong to the data-source load, not an edit transaction.
+                        if initial || !native {
+                            // A collapsed item has no displayed child list to edit.
+                            // The native expand below inserts it once from this cache.
                             folderChildren[key] = target
                         } else {
                             if folderChildren[key] == nil { folderChildren[key] = [] }
@@ -463,7 +515,10 @@ final class SpacePageView: NSView, NSOutlineViewDataSource, NSOutlineViewDelegat
                 if state != .collapsed, let kids = folderChildren[key] { walk(kids) }
             }
         }
-        walk(rootItems)
+        if let changedFolder, let folder = context.model.node(id: changedFolder)?.folder {
+            walk([folder])
+        } else { walk(rootItems) }
+        phase("walk-and-native-edits")
         if let firstItem {
             let row = outline.row(forItem: firstItem)
             if row >= 0 {
@@ -471,12 +526,30 @@ final class SpacePageView: NSView, NSOutlineViewDataSource, NSOutlineViewDelegat
                 if y != scroll.contentView.bounds.minY { scroll.contentView.scroll(to: NSPoint(x: 0, y: y)); scroll.reflectScrolledClipView(scroll.contentView) }
             }
         }
-        if changed { updateRowStates(animated: false) }
+        phase("scroll-anchor")
+        if changed {
+            if let changedFolder, let folder = context.model.node(id: changedFolder)?.folder {
+                // New child rows are configured by didAdd. The retained child has
+                // the same identity/depth/state. Unrelated available rows need
+                // no state assignment or header redraw for a folder transition.
+                let row = outline.row(forItem: folder)
+                if row >= 0, let view = outline.rowView(atRow: row, makeIfNecessary: false) as? SidebarRowView {
+                    configure(view, item: folder, current: currentItem, hover: hoverItem(), animated: false)
+                }
+            } else { updateRowStates(animated: false) }
+        }
+        phase("row-states")
         pruneSelection()
+        phase("selection")
         if measuring {
             // Keep the bench's forced layout/display inside the measured completed callback.
-            layoutSubtreeIfNeeded(); window?.displayIfNeeded(); CATransaction.flush()
+            layoutSubtreeIfNeeded()
+            phase("forced-layout")
+            window?.displayIfNeeded()
+            phase("forced-display")
+            CATransaction.flush()
         }
+        phase("forced-ca-flush")
     }
 
     // MARK: Row states
@@ -551,6 +624,7 @@ final class SpacePageView: NSView, NSOutlineViewDataSource, NSOutlineViewDelegat
     }
 
     private func configure(_ rowView: SidebarRowView, item: AnyObject?, current: AnyObject?, hover: AnyObject?, animated: Bool) {
+        if SidebarDiagnostics.measuresFolderTransitions { SidebarDiagnostics.folderStateRowsConfigured += 1 }
         rowView.page = self
         rowView.representedItem = item
         rowView.isKeyboardFocused = outline.keyboardItem === item && outline.window?.firstResponder === outline

@@ -363,6 +363,11 @@ final class TabCellView: SidebarCellView {
 
     required init(frame: NSRect) {
         super.init(frame: frame)
+        // These two small drawings share the cell's backing context. Buttons and
+        // badges keep their own layers. Avoid two AppKit drawing pipelines per row.
+        canDrawSubviewsIntoLayer = true
+        favicon.wantsLayer = false
+        title.wantsLayer = false
         identifier = Self.identifier
         title.font = Typography.tabTitle.font
         title.baseline = SpaceListMetrics.titleBaselineOffset
