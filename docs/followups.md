@@ -92,5 +92,26 @@ Small items found during review and verification. Each line: area — issue — 
 - Sidebar delete alerts — AppKit gives a `hasDestructiveAction` button no Return key equivalent, so Delete Space / Delete Folder have no Return default (Esc cancels). Capture C3 shows whether Arc's alert takes Return. — section 1, A1, 2026-10-27
 - Sidebar compact toolbar — the "More options" menu content (Reload This Page / Stop Loading, Hide Sidebar) is a guess: the capture never opened it (C11). — section 1, A1, 2026-10-27
 - Hover preview page card — size 420 × min(560, H − 20) pt and x = sidebar width + 8 are Open values; capture C4 (`previews`: hover a pinned tab and a favorite for 2 s) confirms them. — section 1, A2, 2026-10-28
-- Auto-archive education banner trigger — A2 does not trigger the banner; the Today auto-archive sweeper (item 6) shows it after its first sweep that archives a tab. — section 1, A2, 2026-10-28
-- Sidebar A3 scope — local `t3/sidebar-a3` completes selection menu/App dispatch, copy and atomic New Space actions, automation helpers, and real-App E1–E15/E17–E19. E16 and `archive-sweep` remain with Part A (Today sweeper, education banner, persistent dismissal); A3 adds only read-only `archive-list` support. E20 and FP checks remain with S6. Native OS selection drag-session hit testing is still unproven: E4 exercises the same production intent as native acceptDrop. The known display-dependent `comparison` row passed this run (worst position 1 pt, ΔE00 1.55); A3 changes no comparison gate. — section 1, A3, 2026-10-28
+
+- Section 9 — reuse the App's `ExpirySweeper` for Little Open. Supply the minimum of
+  `TodayAutoArchiveController.nextExpiry(now:)` and the Little Open session deadline,
+  and call both domain sweeps from its sweep closure. Keep one App timer. Little Open
+  deadlines use session activity plus each Profile's `littleOpenAutoArchiveAfter`
+  (default 6 h; Never returns nil). Remove `LittleOpenCoordinator`'s existing 60 s
+  poll when that integration lands; the old polling instruction in
+  `docs/plans/routing-little-open.md` §9.6 is superseded. Keep `littleOpen:` archive
+  locations and trigger Today education only from the Today report. This branch
+  does not change Little Open. — Sidebar item 6, 2026-10-28
+
+- Section 9 activity rule — reuse the model's shown-tab protection in both expiry
+  and next-deadline queries. A focused Space's selected tab, or every pane of its
+  selected split, stays protected while any window shows it. The model caches the
+  shown Tab references and reconciles them through its shared mutation commit path,
+  including structural edits and undo/redo. A tab leaving the final window's shown
+  set gets `lastActiveAt = now` without a new undo step. This covers split separation
+  or dissolution, moves out of the shown Space, archive/delete, and window changes.
+  A retained closed `BrowserWindowState` uses nonpersisted `isShowingContent=false`;
+  call `setWindowContentVisible` on shell close/reopen, as the standard App now
+  does. Keep the deadline and sweep predicates identical to prevent 1 ms timer
+  loops. — sidebar item 6 parent review, 2026-10-28
+- Sidebar A3 scope — local `t3/sidebar-a3` completes selection menu/App dispatch, copy and atomic New Space actions, automation helpers, and real-App E1–E15/E17–E19. Part A now supplies E16 and `archive-sweep` (Today sweeper, education banner, persistent dismissal); the combined suite retains these alongside A3 and shares one read-only `archive-list` implementation. E20 and FP checks remain with S6. Native OS selection drag-session hit testing is still unproven: E4 exercises the same production intent as native acceptDrop. The known display-dependent `comparison` row passed this run (worst position 1 pt, ΔE00 1.55); A3 changes no comparison gate. — section 1, A3, 2026-10-28
