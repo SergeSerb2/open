@@ -14,13 +14,13 @@ enum CompletionFeatureChecks {
         try deleteKeyboardFocus(check)
         try await hint(check)
         try gestureHide(check)
-        try previews(check)
+        try await previews(check)
         try separate(check)
     }
 
-    // MARK: HP7–HP10 (page previews through the real container and fake hosts)
+    // MARK: HP7–HP14 (page previews through the real container and fake hosts)
 
-    private static func previews(_ check: (Bool, String) -> Void) throws {
+    private static func previews(_ check: (Bool, String) -> Void) async throws {
         let model = FeatureCLI.synthetic(), factory = FakeWebContentHostFactory(), defaults = FeatureCLI.defaults()
         let space = model.spaces[0], pinned = space.pinned.compactMap(\.tab)
         let c = BrowserWindowController(model: model, windowID: model.windows[0].id, factory: factory,
@@ -62,6 +62,99 @@ enum CompletionFeatureChecks {
         check(frame.minX == c.context.sidebarWidth + 8 && frame.width == 420 && frame.height == height && abs(frame.maxY - (bounds.height - 10)) < 0.5,
               "HP10 page card at x = sidebar + 8, 420 × min(560, H − 20), clamped 10 pt above the window bottom (\(frame))")
         c.hoverPreview.update(nil); pump()
+
+        // Both newly made and cached preview hosts must use the container's metadata bridge.
+        for tab in [pinned[2], pinned[1]] {
+            c.hoverPreview.update(request(tab))
+            guard let host = c.hoverPreview.host as? FakeWebContentHost else { throw CLIError(description: "HP11 no preview host") }
+            let url = URL(string: "https://preview.example.com/redirect/\(tab.id)")!, icon = Data([1, 2, 3])
+            host.load(url); host.simulateTitle("Preview title"); host.simulateFavicon(icon)
+            let forwarded = tab.url == url && tab.title == "Preview title" && tab.live.faviconPNG == icon
+            c.hoverPreview.hide(animated: false)
+            host.simulateTitle("Returned title"); host.simulateFavicon(nil)
+            check(forwarded && tab.title == "Returned title" && tab.live.faviconPNG == nil && c.container.host(for: tab.id) === host,
+                  "HP11 cached preview host forwards URL title and favicon during preview and after hide")
+        }
+        // A previously unloaded tab also emits synchronous load metadata before the card exists.
+        let newTab = model.newTab(in: space.id, url: URL(string: "https://new-preview.example.com")!)
+        model.pinTab(id: newTab.id); newTab.live.sleepPhase = .live
+        c.hoverPreview.update(request(newTab))
+        guard let newHost = c.hoverPreview.host as? FakeWebContentHost else { throw CLIError(description: "HP11 no new host") }
+        let newURL = URL(string: "https://new-preview.example.com/redirect")!
+        newHost.load(newURL); newHost.simulateTitle("New preview title"); newHost.simulateFavicon(Data([4]))
+        let newForwarded = newTab.url == newURL && newTab.title == "New preview title" && newTab.live.faviconPNG == Data([4])
+        c.hoverPreview.hide(animated: false); newHost.simulateTitle("New returned title")
+        check(newForwarded && newTab.title == "New returned title", "HP11 new preview host forwards URL title and favicon during preview and after hide")
+
+        // Engine tab cycling writes the model then synchronously refreshes, bypassing sidebar intents.
+        c.hoverPreview.update(request(pinned[1]))
+        let previewHost = c.hoverPreview.host as? FakeWebContentHost
+        let loadCount = factory.made.reduce(0) { $0 + $1.loadCount }, hostCount = factory.made.count
+        model.selectNode(windowID: model.windows[0].id, spaceID: space.id, nodeID: pinned[1].id)
+        c.refresh() // Check before the asynchronous tracker selection observer can run.
+        check(c.hoverPreview.card == nil && c.container.host(for: pinned[1].id) === previewHost
+              && factory.made.count == hostCount && factory.made.reduce(0) { $0 + $1.loadCount } == loadCount,
+              "HP12 direct selection returns the preview host before refresh with no makeHost or reload")
+        pump(); select(pinned[0])
+
+        let rows = (1...14).map { model.newTab(in: space.id, url: URL(string: "https://folder.example.com/\($0)")!, title: "Folder row \($0)") }
+        guard let folder = model.createFolder(in: .spacePinned(space.id), title: "Scrollable preview", withNodes: rows.map(\.id)),
+              let outline = c.sidebar.focusedOutline, let window = c.window else { throw CLIError(description: "HP13 no folder") }
+        pump()
+        let row = c.sidebar.rowFrame(nodeID: folder.id)!
+        let point = c.sidebar.convert(CGPoint(x: 100, y: row.midY), to: nil)
+        let move = NSEvent.mouseEvent(with: .mouseMoved, location: point, modifierFlags: [], timestamp: 0,
+                                     windowNumber: window.windowNumber, context: nil, eventNumber: 0, clickCount: 0, pressure: 0)!
+        outline.enclosingScrollView!.superview!.mouseMoved(with: move)
+        try await Task.sleep(for: .milliseconds(550)); pump()
+        guard let card = c.hoverPreview.card, let folderView = card.content as? FolderPreviewView,
+              let scroll = folderView.tableView.enclosingScrollView else { throw CLIError(description: "HP13 folder preview did not arm") }
+        let entered = NSEvent.enterExitEvent(with: .mouseEntered, location: .zero, modifierFlags: [], timestamp: 0,
+                                            windowNumber: window.windowNumber, context: nil, eventNumber: 0, trackingNumber: 0, userData: nil)!
+        card.mouseEntered(with: entered)
+        func wheel(at point: CGPoint) throws {
+            // Start from an AppKit event to retain its window-relative coordinates
+            // when converting it to a wheel event, including for offscreen windows.
+            let base = NSEvent.mouseEvent(with: .mouseMoved, location: point, modifierFlags: [], timestamp: 0,
+                                          windowNumber: window.windowNumber, context: nil, eventNumber: 0, clickCount: 0, pressure: 0)!
+            let event = base.cgEvent!
+            event.type = .scrollWheel; event.setIntegerValueField(.scrollWheelEventDeltaAxis1, value: -80)
+            guard let native = NSEvent(cgEvent: event), native.window === window else { throw CLIError(description: "HP13 wheel has no target window") }
+            NSApp.sendEvent(native)
+            // NSApplication runs local monitors offscreen, but does not route a
+            // wheel to the invisible window's views. Use the native scroll view's
+            // event entry point only while the card remains under that location.
+            if card.superview != nil, card.frame.contains(c.contentView.convert(native.locationInWindow, from: nil)) {
+                scroll.scrollWheel(with: native)
+            }
+            pump()
+        }
+        let beforeScroll = scroll.contentView.bounds.origin.y
+        try wheel(at: scroll.convert(CGPoint(x: 50, y: 150), to: nil))
+        let scrolledInside = c.hoverPreview.card === card && c.context.hoverPreviews.request?.kind == .folder(folder.id)
+            && scroll.contentView.bounds.origin.y > beforeScroll
+        // The pointer flag may lag an exit event: use the wheel's actual location as well.
+        try wheel(at: point)
+        check(scrolledInside && c.context.hoverPreviews.request == nil && c.hoverPreview.card == nil,
+              "HP13 wheel inside folder card scrolls without dismissal; wheel outside dismisses")
+
+        c.hoverPreview.hide(animated: false); c.context.hoverPreviews.dismiss()
+        model.windows[0].sidebarWidth = 500
+        window.setContentSize(CGSize(width: 640, height: 480)); c.refresh(); pump()
+        let smallBounds = c.contentView.bounds
+        c.hoverPreview.update(request(pinned[1])); pump()
+        let pageFrame = c.hoverPreview.card?.frame ?? .zero
+        check(pageFrame.width > 0 && pageFrame.height > 0 && smallBounds.contains(pageFrame) && pageFrame.maxX <= smallBounds.maxX - 8,
+              "HP14 page card fits a 640x480 window with a 500 pt sidebar")
+        c.hoverPreview.update(SidebarHoverPreviewRequest(kind: .folder(folder.id), anchorInWindow: CGRect(x: 0, y: 0, width: 500, height: 45))); pump()
+        guard let smallCard = c.hoverPreview.card, let smallFolder = smallCard.content as? FolderPreviewView,
+              let smallScroll = smallFolder.tableView.enclosingScrollView else { throw CLIError(description: "HP14 no small folder card") }
+        let folderFrame = smallCard.frame
+        smallFolder.tableView.scrollRowToVisible(rows.count - 1); pump()
+        check(folderFrame.width > 0 && folderFrame.height > 0 && smallBounds.contains(folderFrame) && folderFrame.maxX <= smallBounds.maxX - 8
+              && smallScroll.contentView.bounds.origin.y > 0 && smallFolder.tableView.rows(in: smallScroll.documentVisibleRect).contains(rows.count - 1),
+              "HP14 folder card fits a 640x480 window with a 500 pt sidebar and scrolls to its last row")
+
     }
 
     // MARK: SP5–SP6 (Separate From Pinned Tab keeps the live host)

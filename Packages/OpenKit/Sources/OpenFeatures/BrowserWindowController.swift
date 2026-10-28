@@ -212,6 +212,9 @@ public final class BrowserWindowController: NSWindowController, NSWindowDelegate
             guard self.model.tab(id: id) != nil, self.model.isPinned(tabID: id) || favorite else { return true }
             return self.peekController.intercept(tabID: id, url: url, flags: flags)
         }
+        container.onReturnPreviewHost = { [weak self] in
+            self?.hoverPreview.hide(animated: false); self?.context.hoverPreviews.dismiss()
+        }
         container.onFocusedMetadata = { [weak self] in self?.window?.title = $0 }
         container.onURLField = { [weak self] in guard let self else { return }; self.onOpenCommandBar?(.urlField, self.context.currentTab?.url) }
         container.onToast = { [weak self] in self?.showToast($0, undo: nil) }
@@ -377,6 +380,7 @@ public final class BrowserWindowController: NSWindowController, NSWindowDelegate
         toast.frame = CGRect(x: root.bounds.midX - 140, y: size.height - 58, width: 280, height: 34)
         toastLabel.frame = CGRect(x: 12, y: 7, width: 210, height: 20); undoButton?.frame = CGRect(x: 238, y: 3, width: 32, height: 28)
         positionTrafficLights()
+        hoverPreview.layout()
         onLayout?()
     }
     private func frameSpring(_ key: String, from: NSValue, to: NSValue) -> CASpringAnimation {

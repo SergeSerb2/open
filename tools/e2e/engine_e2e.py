@@ -5221,6 +5221,18 @@ def sidebar_a2_checks(app, results, require, evidence, tmp):
     selected = wait_until(lambda: state()['selected'] == pin and app.call('preview-state')['kind'] == 'none', timeout=3)
     probe = app.call('eval', tab=pin, js='window.__peekProbe')
     require('E12_preview_host_survives_select', again and selected and probe == 1, probe=probe, state=again)
+    # The non-sidebar Ctrl+Tab route must return the preview host before selection refresh.
+    ordered = [tab['id'] for tab in app.call('tabs')]
+    app.call('select', tab=ordered[(ordered.index(pin) - 1) % len(ordered)])
+    point = row(pin)['point']
+    app.call('mouse', action='hover', x=point[0], y=point[1])
+    cycling = wait_until(lambda: (lambda st: st if st['kind'] == 'page' and st['target'] == pin else None)(app.call('preview-state')), timeout=3)
+    app.call('eval', tab=pin, js='window.__cyclePreviewProbe = 12')
+    app.call('key', key='tab', modifiers=['ctrl'], route='app')
+    cycled = wait_until(lambda: state()['selected'] == pin and app.call('preview-state')['kind'] == 'none', timeout=3)
+    cycle_probe = app.call('eval', tab=pin, js='window.__cyclePreviewProbe')
+    require('E12_preview_host_survives_ctrl_tab', cycling and cycled and cycle_probe == 12,
+            probe=cycle_probe, state=state(), preview=app.call('preview-state'))
     # E13: a background tab is unread until it is selected.
     background = app.call('open', url=page('Background Unread'), background=True)['id']
     unread = app.call('tab-state', tab=background)['unread']
