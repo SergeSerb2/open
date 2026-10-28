@@ -109,7 +109,7 @@ extension AutomationController {
                 guard let found = app.frontWindowController?.context.focusedSpace.flatMap({ app.model.profile(id: $0.profileID) }) ?? app.model.defaultProfile else { throw Failure(message: "no Profile") }
                 profile = found
             }
-            var limit = 100
+            var limit = 1000
             if let raw = args["limit"] {
                 guard let number = raw as? NSNumber, CFGetTypeID(number) != CFBooleanGetTypeID(),
                       let integer = raw as? Int, (1...1000).contains(integer) else { throw Failure(message: "invalid archive limit") }

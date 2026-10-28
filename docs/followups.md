@@ -110,3 +110,4 @@ Small items found during review and verification. Each line: area — issue — 
   call `setWindowContentVisible` on shell close/reopen, as the standard App now
   does. Keep the deadline and sweep predicates identical to prevent 1 ms timer
   loops. — sidebar item 6 parent review, 2026-10-28
+- Sidebar A3 scope — local `t3/sidebar-a3` completes selection menu/App dispatch, copy and atomic New Space actions, automation helpers, and real-App E1–E15/E17–E19. Part A now supplies E16 and `archive-sweep` (Today sweeper, education banner, persistent dismissal); the combined suite retains these alongside A3 and shares one read-only `archive-list` implementation. E20 and FP checks remain with S6. Native OS selection drag-session hit testing is still unproven: E4 exercises the same production intent as native acceptDrop. The known display-dependent `comparison` row passed this run (worst position 1 pt, ΔE00 1.55); A3 changes no comparison gate. — section 1, A3, 2026-10-28
