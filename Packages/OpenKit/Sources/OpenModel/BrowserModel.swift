@@ -151,6 +151,9 @@ public final class BrowserModel {
     /// Injected services. Not persisted, not observed.
     @ObservationIgnored public var archiveSink: (any ArchiveSink)?
     @ObservationIgnored public var undoManager: UndoManager?
+    /// Changes on every registered model action and every undo/redo execution. A UI
+    /// action may use this to refuse an Undo after its original stack target changed.
+    @ObservationIgnored public private(set) var undoGeneration: UInt64 = 0
     #if DEBUG
     /// Debug CLI seam for the rollback code; absent from release builds.
     @ObservationIgnored public var diagnosticRollbackFailureAtMove: Int?
@@ -537,8 +540,12 @@ public final class BrowserModel {
         // loop) registering outside a group is an error, so the model opens one per command.
         let group = !um.groupsByEvent && um.groupingLevel == 0 && !um.isUndoing && !um.isRedoing
         if group { um.beginUndoGrouping() }
+        if um.isUndoRegistrationEnabled { undoGeneration &+= 1 }
         um.registerUndo(withTarget: self) { model in
-            MainActor.assumeIsolated { handler(model) }
+            MainActor.assumeIsolated {
+                model.undoGeneration &+= 1
+                handler(model)
+            }
         }
         if group { um.endUndoGrouping() }
     }
