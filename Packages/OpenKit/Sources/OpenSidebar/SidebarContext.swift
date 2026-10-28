@@ -187,7 +187,7 @@ public final class SidebarContext {
         }
         let batches: Bool
         switch intent {
-        case .moveNodes, .moveNodesToSpace, .archiveNodes, .newFolderFromSelection,
+        case .moveNodes, .moveNodesToSpace, .moveNodesToNewSpace, .archiveNodes, .newFolderFromSelection,
              .setPinned, .duplicateNodes, .duplicate, .exportSpaceIntoFolder: batches = true
         default: batches = false
         }
@@ -214,13 +214,72 @@ public final class SidebarContext {
 
     /// Existing command IDs only. The App command registry can use this same
     /// path as the focused outline; an empty selection falls through to the App.
+    public func isSelectionCommandEnabled(_ commandID: String) -> Bool {
+        let ids = selection.ids
+        guard !ids.isEmpty else { return false }
+        func topLevel(_ id: ItemID) -> Bool {
+            guard model.node(id: id) != nil, let parent = model.parent(of: id) else { return false }
+            if case .splitPane = parent { return false }
+            var ancestor = parent
+            while case .folder(let folder) = ancestor {
+                guard !ids.contains(folder), let next = model.parent(of: folder) else { return false }
+                ancestor = next
+            }
+            return true
+        }
+        switch commandID {
+        case "pin-unpin-tab":
+            return ids.contains { id in
+                guard topLevel(id), model.node(id: id)?.folder == nil, let parent = model.parent(of: id) else { return false }
+                if case .favorites = parent { return false }
+                return true
+            }
+        case "duplicate-tab": return ids.contains(where: topLevel)
+        case "new-folder":
+            guard let first = ids.first, topLevel(first), let parent = model.parent(of: first) else { return false }
+            if case .favorites = parent { return false }
+            return true
+        default: return false
+        }
+    }
+
+    /// Shared by native acceptDrop and automation of the production drop intent.
+    @discardableResult
+    public func performNodeDrop(ids: [ItemID], to parent: NodeParent, index: Int) -> Bool {
+        guard index >= 0, !ids.isEmpty, Set(ids).count == ids.count,
+              ids.allSatisfy({ model.node(id: $0) != nil }),
+              ids.contains(where: { model.canMoveNode(id: $0, to: parent) }) else { return false }
+        return send(.moveNodes(ids: ids, to: parent, index: index))
+    }
+
+    public func canMoveNodesToNewSpace(_ ids: [ItemID]) -> Bool {
+        guard let profile = focusedSpace?.profileID, !ids.isEmpty, Set(ids).count == ids.count else { return false }
+        let selected = Set(ids)
+        return ids.allSatisfy { id in
+            guard model.node(id: id) != nil, var parent = model.parent(of: id) else { return false }
+            if case .splitPane = parent { return false }
+            while case .folder(let ancestor) = parent {
+                guard !selected.contains(ancestor), let next = model.parent(of: ancestor) else { return false }
+                parent = next
+            }
+            switch parent {
+            case .spacePinned(let space), .spaceToday(let space): return model.space(id: space)?.profileID == profile
+            case .favorites(let owner): return owner == profile
+            case .folder, .splitPane: return false
+            }
+        }
+    }
+
     @discardableResult
     public func performSelectionCommand(_ commandID: String) -> Bool {
         let ids = selection.ids
-        guard !ids.isEmpty else { return false }
+        guard isSelectionCommandEnabled(commandID) else { return false }
         switch commandID {
         case "pin-unpin-tab":
-            let pinnable = ids.filter { model.node(id: $0)?.folder == nil }
+            let pinnable = ids.filter { id in
+                guard model.node(id: id)?.folder == nil, let parent = model.parent(of: id) else { return false }
+                switch parent { case .favorites, .splitPane: return false; default: return true }
+            }
             guard !pinnable.isEmpty else { return false }
             return send(.setPinned(ids: ids, pinned: !pinnable.allSatisfy { model.isPinned(tabID: $0) }))
         case "duplicate-tab": return send(.duplicateNodes(ids: ids))

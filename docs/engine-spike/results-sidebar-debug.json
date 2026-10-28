@@ -6,20 +6,20 @@
         "forced": false,
         "ok": true,
         "owned_pids": [
-          75220,
-          75242,
-          75243,
-          75244,
-          75484,
-          75487,
-          75489,
-          75491,
-          75511,
-          75513,
-          75525,
-          75546,
-          75603,
-          75604
+          31853,
+          31857,
+          31858,
+          31859,
+          31917,
+          31919,
+          31921,
+          31923,
+          31925,
+          31928,
+          31930,
+          31932,
+          31951,
+          31952
         ],
         "remaining_processes": [],
         "reply": true,
@@ -33,11 +33,10 @@
         "forced": false,
         "ok": true,
         "owned_pids": [
-          75651,
-          75672,
-          75673,
-          75675,
-          75676
+          32016,
+          32029,
+          32030,
+          32031
         ],
         "remaining_processes": [],
         "reply": true,
@@ -71,7 +70,7 @@
         "crashed": false,
         "favicon": false,
         "hasWebContent": true,
-        "id": "8197CB28-6CF5-4B22-AB80-611990BE3A2A",
+        "id": "76523567-42CD-4D4A-B759-3B775BFA916E",
         "loaded": true,
         "loading": false,
         "page": {
@@ -80,34 +79,40 @@
           "browserIndex": 0,
           "browserPinned": false,
           "canGoBack": false,
-          "chromeTabId": 1464683149,
-          "chromeWindowId": 1464683146,
-          "context": "Profile-86A7D24C",
+          "chromeTabId": 179779681,
+          "chromeWindowId": 179779678,
+          "context": "Profile-57F56D51",
           "crash": 0,
           "extension": "",
           "favicon": false,
           "fullscreen": false,
           "hidden": false,
-          "hostTab": "8197CB28-6CF5-4B22-AB80-611990BE3A2A",
+          "hostTab": "76523567-42CD-4D4A-B759-3B775BFA916E",
           "identifier": 12,
           "kind": "tab",
           "live": true,
           "loading": false,
           "muted": false,
-          "pageBackground": [],
+          "pageBackground": [
+            255,
+            255,
+            255,
+            255
+          ],
           "popup": true,
           "style": "chrome",
           "title": "Background child",
           "url": "about:blank",
           "zoom": 0
         },
-        "profile": "7F1C490A-9A03-428E-84CA-A0DA3CEADB3B",
+        "profile": "6C04FE84-FB44-4747-BF84-6BF1C62E52B9",
         "progress": 1,
         "section": "today",
         "selected": true,
         "sleepPhase": "live",
-        "space": "F09D88A9-D5DB-4AA3-B9EB-FA779C35ADD7",
+        "space": "B6342991-8CDF-47A4-9FDE-0312819154C6",
         "title": "Background child",
+        "unread": false,
         "url": "about:blank",
         "visible": true
       },
@@ -126,127 +131,127 @@
       "capture": "F0001",
       "elements": [
         {
-          "delta_e00": 0.6,
-          "element": "background (sidebar column) (101 points, max \u0394E 0.91)",
+          "delta_e00": 0.57,
+          "element": "background (sidebar column) (101 points, max \u0394E 1.11)",
           "position_pt": null
         },
         {
-          "delta_e00": 0.49,
-          "element": "panel fill (empty state) (11 points, max \u0394E 0.87)",
+          "delta_e00": 0.4,
+          "element": "panel fill (empty state) (11 points, max \u0394E 1.13)",
           "position_pt": null
         },
         {
-          "delta_e00": 2.38,
+          "delta_e00": 0.76,
           "element": "toolbar: sidebar toggle",
-          "position_pt": 0.0
-        },
-        {
-          "delta_e00": 0.39,
-          "element": "toolbar: back",
           "position_pt": 1.0
         },
         {
-          "delta_e00": 0.3,
+          "delta_e00": 0.33,
+          "element": "toolbar: back",
+          "position_pt": 0.0
+        },
+        {
+          "delta_e00": 0.24,
           "element": "toolbar: forward",
           "position_pt": 1.0
         },
         {
-          "delta_e00": 0.34,
+          "delta_e00": 0.18,
           "element": "toolbar: reload",
-          "position_pt": 1.0
+          "position_pt": 0.0
         },
         {
-          "delta_e00": 0.27,
+          "delta_e00": 0.09,
           "element": "URL field fill",
           "position_pt": 0.0
         },
         {
-          "delta_e00": 1.31,
+          "delta_e00": 0.54,
           "element": "URL field magnifier",
-          "position_pt": 1.0
+          "position_pt": 0.0
         },
         {
-          "delta_e00": 0.68,
+          "delta_e00": 0.2,
           "element": "URL field placeholder",
-          "position_pt": 1.0
+          "position_pt": 0.0
         },
         {
-          "delta_e00": 0.31,
+          "delta_e00": 0.11,
           "element": "favorite tile 1",
-          "position_pt": 1.0
+          "position_pt": 0.0
         },
         {
-          "delta_e00": 0.12,
+          "delta_e00": 0.07,
           "element": "favorite tile 2",
-          "position_pt": 1.0
+          "position_pt": 0.0
         },
         {
-          "delta_e00": 0.18,
+          "delta_e00": 0.28,
           "element": "favorite tile 3",
           "position_pt": 0.0
         },
         {
           "delta_e00": 0.18,
           "element": "favorite tile 4",
-          "position_pt": 1.0
+          "position_pt": 0.0
         },
         {
-          "delta_e00": 0.07,
+          "delta_e00": 0.09,
           "element": "favorite tile 5",
-          "position_pt": 1.0
+          "position_pt": 0.0
         },
         {
-          "delta_e00": 0.22,
+          "delta_e00": 0.18,
           "element": "favorite tile 6",
           "position_pt": 0.0
         },
         {
           "delta_e00": null,
-          "element": "Space icon (centroid \u0394 0.1, 0.1 px)",
-          "position_pt": 0.1
+          "element": "Space icon (centroid \u0394 0.1, 0.2 px)",
+          "position_pt": 0.2
         },
         {
-          "delta_e00": 0.88,
+          "delta_e00": 0.15,
           "element": "Space title",
           "position_pt": 0.0
         },
         {
-          "delta_e00": 1.04,
+          "delta_e00": 0.24,
           "element": "row 1 title",
           "position_pt": 0.0
         },
         {
-          "delta_e00": 0.87,
+          "delta_e00": 0.2,
           "element": "row 2 title",
-          "position_pt": 1.0
+          "position_pt": 0.0
         },
         {
-          "delta_e00": 0.36,
+          "delta_e00": 0.05,
           "element": "row 3 title",
           "position_pt": 0.0
         },
         {
-          "delta_e00": 0.17,
+          "delta_e00": 0.14,
           "element": "row 4 title",
           "position_pt": 0.0
         },
         {
-          "delta_e00": 0.81,
+          "delta_e00": 0.26,
           "element": "row 5 title",
-          "position_pt": 1.0
+          "position_pt": 0.0
         },
         {
-          "delta_e00": 0.78,
+          "delta_e00": 0.1,
           "element": "row 6 title",
-          "position_pt": 1.0
+          "position_pt": 0.0
         },
         {
-          "delta_e00": 0.71,
+          "delta_e00": 0.12,
           "element": "row 7 title",
-          "position_pt": 1.0
+          "position_pt": 0.0
         },
         {
-          "delta_e00": 0.28,
+          "delta_e00": 0.16,
           "element": "row 8 title",
           "position_pt": 0.0
         },
@@ -256,35 +261,35 @@
           "position_pt": 0.0
         },
         {
-          "delta_e00": 0.52,
+          "delta_e00": 0.04,
           "element": "row 10 title",
           "position_pt": 0.0
         },
         {
-          "delta_e00": 3.65,
+          "delta_e00": 1.34,
           "element": "New Tab plus",
           "position_pt": 1.0
         },
         {
-          "delta_e00": 0.65,
+          "delta_e00": 0.35,
           "element": "New Tab label",
           "position_pt": 0.0
         },
         {
-          "delta_e00": 1.08,
+          "delta_e00": 0.5,
           "element": "bottom: Home",
           "position_pt": 0.0
         },
         {
-          "delta_e00": 0.4,
+          "delta_e00": 1.55,
           "element": "bottom: plus",
           "position_pt": 0.0
         }
       ],
       "method": "docs/design.md section 7; live Open snapshot converted to 1x; same masks",
-      "ok": false,
+      "ok": true,
       "private_artifacts": ".re/app-shell-comparison-sidebar",
-      "worst_delta_e00": 3.65,
+      "worst_delta_e00": 1.55,
       "worst_position_pt": 1.0
     },
     "drag_reorder_intent": {
@@ -359,16 +364,17 @@
         "crashed": false,
         "favicon": false,
         "hasWebContent": false,
-        "id": "8B96D113-9B48-4BCF-BBC2-1874255EBE2F",
+        "id": "6B0DBCFC-1EF9-43BD-8900-FD36778A96CA",
         "loaded": false,
         "loading": false,
-        "profile": "7F1C490A-9A03-428E-84CA-A0DA3CEADB3B",
+        "profile": "6C04FE84-FB44-4747-BF84-6BF1C62E52B9",
         "progress": 0,
         "section": "today",
         "selected": false,
         "sleepPhase": "placeholder",
-        "space": "F09D88A9-D5DB-4AA3-B9EB-FA779C35ADD7",
+        "space": "B6342991-8CDF-47A4-9FDE-0312819154C6",
         "title": "Profile background",
+        "unread": false,
         "url": "data:text/html,%3Ctitle%3EProfile%20background%3C/title%3E%3Ch1%3EProfile%20background%3C/h1%3E",
         "visible": false
       },
@@ -391,6 +397,6 @@
       "ok": true
     }
   },
-  "started": "2026-10-27 15:08:06",
+  "started": "2026-10-28 12:38:37",
   "style": "chrome"
 }
