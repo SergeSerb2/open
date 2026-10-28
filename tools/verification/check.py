@@ -14,6 +14,7 @@ import struct
 import subprocess
 import sys
 import tempfile
+import time
 import zlib
 
 
@@ -22,7 +23,11 @@ def require(condition, message):
         raise RuntimeError(message)
 
 
-def run(*args, expected=0, env=None, quiet=False, timeout=180):
+class SuiteInterrupted(RuntimeError):
+    pass
+
+
+def run(*args, expected=0, env=None, quiet=False, timeout=180, interrupted_exit=None):
     try:
         result = subprocess.run(args, stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
                                 text=True, env=env, timeout=timeout)
@@ -33,9 +38,85 @@ def run(*args, expected=0, env=None, quiet=False, timeout=180):
         raise RuntimeError(f"command {Path(args[0]).name} timed out after {timeout}s") from None
     if not quiet:
         print(result.stdout, end="", flush=True)
+    if interrupted_exit is not None and result.returncode == interrupted_exit:
+        raise SuiteInterrupted(f"command {Path(args[0]).name}: native foreground lost")
     require(result.returncode == expected,
             f"command {Path(args[0]).name} exited {result.returncode}; expected {expected}")
     return result.stdout
+
+
+def native_suite_apps(directory):
+    """LaunchServices apps escape the renderer's process group; match only our root."""
+    output = subprocess.check_output(["/bin/ps", "-ww", "-axo", "pid=,comm="], text=True)
+    prefix = str(Path(directory).resolve()) + "/open-editor-native-"
+    suffix = "/EditorHarness.app/Contents/MacOS/sitecontrol-render"
+    found = set()
+    for line in output.splitlines():
+        fields = line.strip().split(None, 1)
+        if len(fields) == 2:
+            pid, executable = fields
+            if os.path.realpath(executable).startswith(prefix) and executable.endswith(suffix):
+                found.add(int(pid))
+    return found
+
+
+def stop_native_suite_apps(directory):
+    # Recheck the executable path before every signal, including SIGKILL, so a
+    # recycled PID or another worktree's harness cannot become a cleanup target.
+    found = native_suite_apps(directory)
+    for sig in (signal.SIGTERM, signal.SIGKILL):
+        for pid in native_suite_apps(directory):
+            with contextlib.suppress(ProcessLookupError):
+                os.kill(pid, sig)
+        deadline = time.monotonic() + 2
+        while native_suite_apps(directory) and time.monotonic() < deadline:
+            time.sleep(0.05)
+        if not native_suite_apps(directory):
+            break
+    require(not native_suite_apps(directory), "owned native suite app survived cleanup")
+    return len(found)
+
+
+def onscreen_suite(command):
+    """Called by lockf after acquisition. Keep the existing 180 s suite budget."""
+    with tempfile.TemporaryDirectory(prefix="open-onscreen-suite-") as directory:
+        # Foundation can ignore TMPDIR for NSTemporaryDirectory on macOS. Give
+        # the registered-app launcher an explicit owned root as well.
+        environment = dict(os.environ, TMPDIR=directory + "/", OPEN_VERIFY_SUITE_ROOT=directory)
+        print("On-screen lock acquired; suite deadline=180s", flush=True)
+        with subprocess.Popen(command, stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
+                              text=True, env=environment, start_new_session=True) as job:
+            print(f"On-screen renderer {job.pid}; private temporary root={directory}", flush=True)
+            timed_out = False
+            try:
+                output, _ = job.communicate(timeout=180)
+            except subprocess.TimeoutExpired:
+                timed_out = True
+                # Keep lockf alive while terminating/reaping this process group.
+                # Killing only lockf releases the lock with a renderer still live.
+                with contextlib.suppress(ProcessLookupError):
+                    os.killpg(job.pid, signal.SIGTERM)
+                try:
+                    output, _ = job.communicate(timeout=2)
+                except subprocess.TimeoutExpired:
+                    with contextlib.suppress(ProcessLookupError):
+                        os.killpg(job.pid, signal.SIGKILL)
+                    output, _ = job.communicate(timeout=2)
+            finally:
+                # On exceptions, keep the unreaped leader's PID as ownership
+                # of the group. communicate() may already have reaped it; do
+                # not signal a stale group ID after a long agent pause.
+                if job.returncode is None:
+                    with contextlib.suppress(ProcessLookupError):
+                        os.killpg(job.pid, signal.SIGKILL)
+                job.wait()
+                native_apps = stop_native_suite_apps(directory)
+                print(f"On-screen cleanup: renderer {job.pid} reaped; native apps stopped={native_apps}", flush=True)
+            print(output, end="", flush=True)
+            require(not timed_out, "on-screen suite timed out after 180s (owned children reaped)")
+            if job.returncode == 2:
+                raise SuiteInterrupted("on-screen suite exhausted three foreground-interrupted attempts")
+            require(job.returncode == 0, f"on-screen suite exited {job.returncode}; expected 0")
 
 
 def matches(pattern, text):
@@ -430,6 +511,9 @@ def boosts(root):
 
 
 def main():
+    if sys.argv[1] == "onscreen-suite":
+        onscreen_suite(sys.argv[2:])
+        return
     if sys.argv[1] == "server":
         serve(sys.argv[2], sys.argv[3])
         return
@@ -540,8 +624,13 @@ def main():
         if name == "sitecontrol-render":
             # This CLI opens real native menus. Serialize that suite, while the
             # release build and wholly offscreen checks need no on-screen lock.
-            command = ["/usr/bin/lockf", "/tmp/open-onscreen-e2e.lock", *command]
-        all_passed(run(*command))
+            # Lock queue time is not suite execution time. The inner worker owns
+            # the unchanged deadline and reaps children before lockf can exit.
+            command = ["/usr/bin/lockf", "/tmp/open-onscreen-e2e.lock",
+                       sys.executable, str(Path(__file__).resolve()), "onscreen-suite", *command]
+            all_passed(run(*command, timeout=None, interrupted_exit=2))
+        else:
+            all_passed(run(*command))
     elif name == "sidebar-compare":
         args = [str(root / "tools/verification/sidebar-compare-states.sh")]
         if os.environ.get("SIDEBAR_CAPTURE_ROOT"):
@@ -568,6 +657,9 @@ def main():
 if __name__ == "__main__":
     try:
         main()
+    except SuiteInterrupted as error:
+        print("INTERRUPTED: " + str(error), file=sys.stderr)
+        sys.exit(2)
     except Exception as error:
         # No exception text for private imports: exceptions can contain personal paths/data.
         detail = "private import failed (raw output discarded)" if sys.argv[1] == "import-arc" else str(error)

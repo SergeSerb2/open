@@ -118,6 +118,232 @@ runs. Raw traces stay local; commit only synthetic numeric evidence and hashes.
 The Site Control A/B report is in `docs/sitecontrol/step-2/performance/README.md`.
 This method does not claim that other existing harnesses have already migrated.
 
+### Simple Boost editor open: load-robust gate (2026-10-28)
+
+The old `EditorBench` row already used `CLOCK_THREAD_CPUTIME_ID`, rather than
+wall time. Untouched `origin/main` `64e54195` failed only this row:
+**17.964 ms CPU p95**, load1 **77.35**, **1470/1471** Site Control checks passed.
+The same run's cold fixture printed 11.615 ms CPU / 189.481 ms wall p95 at
+load1 84.21. That wall/CPU gap includes time off the CPU (preemption or blocked native
+calls). Such waits were already excluded from the editor's old CPU gate.
+CPU execution rate still varies under load.
+Core choice, frequency and memory contention were not measured separately.
+
+Temporary thread-CPU splits in `BoostEditorController.present` and the real
+settle path located the cost. At load1 6.28, CPU p95 was 13.336 ms: presentation
+7.432 ms, separate layout 0.069 ms, display 0.181 ms, transaction flush 6.328 ms.
+These are independent p95 values; do not add them. Within presentation, fresh
+view/session/panel construction took about 3.4–4.7 ms in the measured opens.
+The font cells called font lookup and text rasterization on each fresh tree.
+PNG hue sampling runs separately on a worker; it was 7.640 ms in the failing
+stock run and is outside the open span. The temporary probes are removed.
+
+`EditorButton` now caches only the fixed 26×26 font-cell images, keyed by family,
+1x/2x scale, selected/pressed/hovered state and enabled state. The 128-entry cap
+bounds retained images. Core Graphics measured a 224-byte row at 2x: 11,648 bytes
+per bitmap, at most 1.43 MiB for the cache on this M5. Every native control,
+accessibility node, focus layer and selection transition remains live.
+
+`EditorOpenBench` retains the same workload: one real 2x editor panel creation,
+layout, native first display and transaction flush; five discarded warmups and
+20 measured opens. It also requires successful presentation and a native content
+view. The existing harness-only `ThreadInstructions` sampler brackets that span.
+The hard regression gate uses the rounded-up median main-thread instruction
+count, with the existing CPU-brand/macOS-build fixture and ×1.10 method.
+Missing/backward counters or an invalid fixture fail. An unknown editor reference
+reports INFO, with no cost PASS. No CPU or wall-time fallback or retry exists.
+CPU p95, wall p95, presentation/settle CPU p95, lateness versus **12 ms**, and
+load1 are printed on every run. GPU completion and deferred work remain outside
+this existing native-display span.
+
+This adds the **first editor instruction reference**; it does not re-record the
+cold-open or SM6 reference. Three separate processes with the **original product
+sources** produced the following values using the new sampler. The reference is
+the median of their medians, **141,542,712**, and its ceiling is **155,696,984**.
+It was recorded before the font-image optimization, rather than adjusted to
+make optimized runs pass. The `<12 ms` product target is unchanged and still
+needs the parent's quiet-window run.
+
+| Process | Original median instructions | CPU p95 ms | Wall p95 ms | Load1 |
+|---|---:|---:|---:|---:|
+| 1 | 141,176,621 | 14.967 | 17.113 | 11.48 |
+| 2 | 141,865,163 | 15.342 | 22.943 | 8.31 |
+| 3 | 141,542,712 | 17.062 | 20.806 | 8.31 |
+
+The instruction medians have 0.49% full spread, while CPU p95 varies by 14.0%.
+With the font cache, the same three-process bench gave:
+
+| Process | Cached median instructions | CPU p95 ms | Wall p95 ms | Load1 |
+|---|---:|---:|---:|---:|
+| 1 | 136,812,486 | 13.282 | 14.599 | 8.13 |
+| 2 | 136,139,868 | 13.423 | 15.325 | 8.13 |
+| 3 | 136,352,450 | 12.874 | 14.710 | 7.88 |
+
+The median work fell **3.67%**. These loaded CPU values do not establish quiet
+`<12 ms` acceptance. The parent explicitly prohibited synthetic burners; none were started. All later checks use real shared load.
+
+The 28 editor render images before/after cover 1x/2x and all editor states.
+All 28 font-card regions are pixel-identical. 23 full images are identical;
+the other five differ at nine pixels outside the font card by at most 1/255,
+within the pre-existing `CLI.stablePixels` 2/255 native redraw tolerance. No
+comparison threshold or saved render baseline changed.
+
+Negative proof: temporarily construct four extra `BoostEditorView` trees inside
+`BoostEditorController.present`, before constructing the actual view. Each tree
+performs the real O(n) native font/control construction. The unchanged gate
+reported:
+
+```text
+| FAIL | simple editor build/layout/first draw median 372869037 instructions <= 155696984 (ceil(141542712 x1.10)); Apple M5 Pro / 26B5112a |
+5/6 passed
+```
+
+The other five benchmark checks passed (CPU p95 41.261 ms, load1 7.71). The
+extra trees and all debug probes were then removed and the release binary
+rebuilt. This proof adds real work inside the production open path; it does
+not alter the gate or its fixture.
+
+F25 native focus also needed an environment classification. Earlier runs
+closed and hid the editor while the app became inactive and its parent was not
+key. At load1 29.45 all three old attempts lost activation (`green-8/`). The user
+then confirmed active use of this Mac, often with T3 Pretty frontmost, plus other
+agents that may activate apps. External foreground loss is **INTERRUPTED**, not
+an Open failure.
+
+F25 now follows `tools/e2e/engine_e2e.py`: at most three attempts, each from a
+fresh registered app, model and windows. Every attempt records foreground app
+name, bundle ID and PID plus load1; strings are bounded and line/pipe sanitized.
+A focus-dependent assertion outside the owned harness/renderer processes is
+recorded as `INTERRUPTED (foreground lost to <app>)`, even if its local assertion
+was true. Historical interrupted rows remain visible and never count as passes.
+A later complete attempt can PASS; an owned-foreground wrong-key/loss result is
+FAIL without retry. The cached app flag alone is not sufficient. No app is
+activated and no window is made key to repair a tested Done action.
+
+If all three attempts are interrupted, the native CLI, locked worker and
+`verify-all.sh` propagate **INTERRUPTED / exit 2**, not FAIL or PASS. Real failures
+retain exit 1, and available interrupted checks are not relabeled SKIP. The
+native 20 s process bound, 3 s setup/close bounds and configured 0.120 s close
+remain unchanged. Foreground status is collected only from app identity, never
+window titles or URLs.
+
+A separate fixture isolation issue was proved. `padAndWindowFlows` had closed
+two controllers but left their two offscreen `EditorParentWindow` objects ordered
+in the renderer while the registered native suite ran. The new guard failed on
+the old caller:
+
+```text
+| FAIL | F25 native key suite has no competing editor parent windows (found 2) |
+93/94 passed
+```
+
+The other 93 editor flow checks passed. `EditorFlows` now closes both parents
+before native launch, and the zero-competing-parents guard remains. The native
+fixture creates its activating browser parent first, then waits for that window
+to be active, frontmost, main and key before presenting the nonactivating panel.
+This establishes a valid browser precondition without relying on a windowless
+app becoming frontmost. Only the on-screen fixture changes; offscreen render
+and benchmark geometry remain unchanged. Fixture isolation does not claim to
+prevent the external app changes confirmed by the user.
+
+A second runner flake was found before final verification. The old runner
+applied `run(..., timeout=180)` to **lockf plus the renderer**, so lock queue time
+consumed the execution deadline. It failed after 180 s and left renderer PID
+40906 running with PPID 1 after lockf exited. That process had exited before the
+resume audit; no owned renderer or harness app remained.
+
+`check.py` now runs an internal worker **after** `/usr/bin/lockf` acquires the
+shared lock. The outer lock wait has no suite deadline. The worker keeps the
+unchanged **180-second** renderer deadline, owns a fresh process group, and
+terminates the group and reaps its renderer on timeout or exception before
+returning to lockf. Registered
+LaunchServices apps escape that process group, so the worker also owns a private
+suite root and removes only harness apps whose full executable path is under
+that root. Foundation used its system temp directory despite `TMPDIR` in the
+observed CLI; `OPEN_VERIFY_SUITE_ROOT` now explicitly places the registered app
+copy under the owned root. A relative, missing or oversized root is refused.
+The runner checks full paths before each signal and waits for app disappearance.
+
+The real timeout proof held the lock with an explicit release handshake, observed
+2.067 s queue time with no suite startup before release, then paused only its
+renderer and real registered app. The unchanged deadline reported:
+
+```text
+On-screen cleanup: renderer 86332 reaped; native apps stopped=1
+FAIL: on-screen suite timed out after 180s (owned children reaped)
+```
+
+Both PIDs were absent and the private root was removed. The log lifetime was
+182.387 s including the queue and cleanup. The proof controller's final assertion
+incorrectly assumed the shared lock would remain free; another job had acquired
+it (observed lockf PID 90590). That assertion was corrected to check our wrapper's
+exit, not exclude other users. The actual timeout artifacts and process absence
+were independently audited in `runner-timeout-proof.json`; no extra 180-second
+fault run was used to replace the recorded result. The invalid-root CLI also
+failed as intended (`0/1 passed`) before launching any app.
+
+Final foreground verification, `verified-1`…`verified-6` (real shared load;
+no synthetic burners):
+
+| Run | Editor median instructions | CPU p95 ms | Wall p95 ms | Load1 | Result |
+|---|---:|---:|---:|---:|---|
+| 1 | 144,209,011 | 13.374 | 14.888 | 19.56 | 1471/1471 PASS; renderer reaped |
+| 2 | 144,169,435 | 10.983 | 12.800 | 30.52 | 1471/1471 PASS; renderer reaped |
+| 3 | 144,738,612 | 14.213 | 16.421 | 22.37 | 1471/1471 PASS; renderer reaped |
+| 4 | 144,747,754 | 16.770 | 18.063 | 23.71 | 1471/1471 PASS; renderer reaped |
+| 5 | 144,454,806 | 18.684 | 20.127 | 15.73 | 1471/1471 PASS; renderer reaped |
+| 6 | 145,503,985 | 17.520 | 21.647 | 14.54 | 1471/1471 PASS; renderer reaped |
+
+All six final native suites passed on attempt 1; no interruption was needed in
+this series. The foreground app/bundle, PID and load are retained per attempt.
+The full-run receipts recorded real load1 from 16.38 at entry to 14.54 at the
+last exit, peaking at a run boundary of 30.52. These are observed shared-machine
+conditions, not controlled quiet runs. Instruction medians stayed below
+155,696,984 while CPU p95 varied from 10.983 to 18.684 ms. Quiet `<12 ms`
+acceptance remains with the parent as requested.
+
+`~/Library/Caches/OpenRE/scripts/heavy.sh tools/verify-all.sh --only sidebar-render,features-render,settings-preview`
+passed: build (no warnings/errors), sidebar **568/568**, features **288/288**,
+settings **37/37** plus **216** render PNGs/dimension checks. Real load1 was
+14.07 at entry and 8.25 at exit (`verified-7/`). No further flakes appeared in these targets.
+Three earlier separate `sidebar-render check` runs also passed **568/568** each;
+HP1 fired on its first attempt in 0.502 / 0.504 / 0.500 s, lateness +2 / +4 / +0 ms,
+load1 7.94 / 7.41 / 10.18. SM4 and MC6 passed in all three. Main already contains
+`1fe805a3` (PR #115); no sidebar timing code or baseline changed here.
+
+Scope: `BoostEditorViews.swift` caches font pixels; `EditorBench.swift`, the new
+`EditorOpenBench.swift`, `InstructionBaseline.swift` and `instruction-baselines.json`
+own the editor cost gate. `EditorNativeKey.swift` owns the F25 activation barrier, wait/retry and
+explicit suite-root contract; `EditorScenes.swift` establishes only the on-screen
+parent activation/main/key precondition, and `EditorFlows.swift` closes the
+competing offscreen parents before native launch. `tools/verification/check.py` owns lock ordering,
+execution deadline, foreground-interruption propagation and child cleanup. No App/engine code, comparison assets,
+sidebar timing logic, CPU-ms target or existing accepted cost value changed.
+
+| Review checklist | Result | Evidence |
+|---|---|---|
+| Input/memory limits | PASS | 128 fixed font images; bounded reference values/resource; absolute existing suite root capped at 4096 UTF-8 bytes; invalid-root CLI refuses input |
+| Lifetimes/callbacks | PASS | Each fresh native attempt closes its stage; timeout proof reaped renderer and removed registered app before worker exit |
+| Real event paths | PASS / N/A | Existing real NSApp native key flow retained; no App key router or command path changed |
+| Checks/proof/isolation | PASS | Old CPU gate red; real added native work red; real 180 s timeout/cleanup red as intended; two-window isolation guard red on old caller; unique suite root and UUID preferences |
+| UI/motion | PASS | 28 exact font-card regions; full images within existing 2/255 tolerance; configured 0.120 s close unchanged |
+| Docs | PASS | First editor reference and raw numeric evidence recorded; quiet `<12 ms` acceptance remains open in followups |
+
+Reproduction commands from the repo root:
+
+```sh
+~/Library/Caches/OpenRE/scripts/heavy.sh tools/verify-all.sh --only sitecontrol-render
+# The editor-only bench is wholly offscreen: no menus, sheets or on-screen host.
+Packages/OpenKit/.build/release/sitecontrol-render bench --group editor
+Packages/OpenKit/.build/release/sidebar-render check
+~/Library/Caches/OpenRE/scripts/heavy.sh tools/verify-all.sh --only sidebar-render,features-render,settings-preview
+```
+
+Raw synthetic receipts, all 20 instruction samples per bench, build logs, phase
+probes, binary SHA-256 and before/after render comparisons remain local under
+`.re/sidebar-flakes/`. No Arc process, user data, desktop input, engine tree or
+unit tests were used.
+
 ### SM6 structural and machine-specific cost gates
 
 SM6 constructs the real 10-Space × 100-row Library and lays it out at 900×700,

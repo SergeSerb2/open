@@ -23,12 +23,18 @@ enum EditorRaster {
         while start<source.length { let count = max(1,CTTypesetterSuggestLineBreak(typesetter,start,Double(width))); result.append(source.substring(with: NSRange(location: start,length: count)).trimmingCharacters(in: .whitespaces)); start += count }
         return result
     }
-    static func display(_ view: NSView,draw: () -> Void) {
+    static func image(_ view: NSView,draw: () -> Void) -> CGImage? {
         let scale = view.window?.backingScaleFactor ?? 1,size = view.bounds.size
-        guard size.width>0,size.height>0,let context = CGContext(data: nil,width: Int(ceil(size.width*scale)),height: Int(ceil(size.height*scale)),bitsPerComponent: 8,bytesPerRow: 0,space: CGColorSpace(name: CGColorSpace.sRGB)!,bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue) else { return }
+        guard size.width>0,size.height>0,let context = CGContext(data: nil,width: Int(ceil(size.width*scale)),height: Int(ceil(size.height*scale)),bitsPerComponent: 8,bytesPerRow: 0,space: CGColorSpace(name: CGColorSpace.sRGB)!,bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue) else { return nil }
         context.scaleBy(x: scale,y: scale); context.translateBy(x: 0,y: size.height); context.scaleBy(x: 1,y: -1)
         NSGraphicsContext.saveGraphicsState(); NSGraphicsContext.current = NSGraphicsContext(cgContext: context,flipped: true); draw(); NSGraphicsContext.restoreGraphicsState()
-        CATransaction.begin(); CATransaction.setDisableActions(true); view.layer?.contents = context.makeImage(); view.layer?.contentsScale = scale; CATransaction.commit()
+        return context.makeImage()
+    }
+    static func install(_ image: CGImage,on view: NSView) {
+        CATransaction.begin(); CATransaction.setDisableActions(true); view.layer?.contents = image; view.layer?.contentsScale = view.window?.backingScaleFactor ?? 1; CATransaction.commit()
+    }
+    static func display(_ view: NSView,draw: () -> Void) {
+        if let image = image(view,draw: draw) { install(image,on: view) }
     }
     static func glyph(_ name: String,in rect: CGRect,size: CGFloat,color: NSColor,weight: NSFont.Weight = .regular) {
         let c = NSGraphicsContext.current!.cgContext,scale = hypot(c.ctm.a,c.ctm.b)
@@ -41,6 +47,14 @@ enum EditorRaster {
 
 @MainActor
 final class EditorButton: SiteControlButton {
+    private struct FontImageKey: Hashable {
+        let family: String?
+        let scale: CGFloat
+        let selected: Bool,pressed: Bool,hovered: Bool,enabled: Bool
+    }
+    // Only fixed 26 x 26 cells at 1x/2x enter this 128-entry cache. On the M5,
+    // the largest bitmap has a padded 224-byte row: 11,648 bytes / 1.43 MiB total.
+    private static var fontImages: [FontImageKey: CGImage] = [:]
     enum Kind { case header,name,color,font,row,half,primary,secondary }
     var kind = Kind.color
     var selected = false { didSet { if oldValue != selected { fadeSelection = true; needsDisplay = true } } }
@@ -60,7 +74,16 @@ final class EditorButton: SiteControlButton {
     override func rightMouseDown(with event: NSEvent) { if isEnabled { secondaryClick?() } }
     override func updateLayer() {
         let previous = layer?.contents
-        EditorRaster.display(self) { paint() }
+        let scale = window?.backingScaleFactor ?? 1
+        if kind == .font, bounds == CGRect(x: 0,y: 0,width: 26,height: 26), scale == 1 || scale == 2 {
+            let key = FontImageKey(family: fontFamily,scale: scale,selected: selected,pressed: pressed,hovered: hovered,enabled: isEnabled)
+            if let image = Self.fontImages[key] { EditorRaster.install(image,on: self) }
+            else if let image = EditorRaster.image(self,draw: { paint() }) {
+                if Self.fontImages.count >= 128 { Self.fontImages.removeAll(keepingCapacity: true) }
+                Self.fontImages[key] = image
+                EditorRaster.install(image,on: self)
+            }
+        } else { EditorRaster.display(self) { paint() } }
         if fadeSelection,let previous { let a = CABasicAnimation(keyPath: "contents"); a.fromValue = previous; a.toValue = layer?.contents; a.duration = Motion.selectionFade; layer?.add(a,forKey: "selection") }; fadeSelection = false
         if focus.superlayer == nil { layer?.addSublayer(focus) }
         let rect = bounds.insetBy(dx: -2,dy: -2),radius: CGFloat = kind == .font || kind == .header ? rect.height/2 : kind == .name ? 6 : 11
