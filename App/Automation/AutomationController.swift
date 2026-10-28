@@ -192,6 +192,26 @@
         button.performClick(nil)
         await Task.yield()
         return result
+      case "sidebar-row":
+        // A sidebar row's frame and center in the front browser window (top-left origin).
+        guard let controller = app.frontWindowController, let raw = a["node"] as? String, let uuid = UUID(uuidString: raw),
+          let frame = controller.sidebar.rowFrame(nodeID: ItemID(rawValue: uuid)) else { throw Failure(message: "no such sidebar row") }
+        controller.contentView.layoutSubtreeIfNeeded()
+        let inRoot = controller.contentView.convert(frame, from: controller.sidebar)
+        return ["frame": [inRoot.minX, inRoot.minY, inRoot.width, inRoot.height], "point": [inRoot.midX, inRoot.midY]] as [String: Any]
+      case "preview-state":
+        guard let controller = app.frontWindowController else { throw Failure(message: "no browser window") }
+        let preview = controller.hoverPreview
+        var kind = "none", target = ""
+        switch preview.request?.kind {
+        case .page(let id)?: kind = "page"; target = id.description
+        case .folder(let id)?: kind = "folder"; target = id.description
+        case nil: break
+        }
+        return ["kind": kind, "target": target, "card": preview.card.map { [$0.frame.minX, $0.frame.minY, $0.frame.width, $0.frame.height] } ?? [],
+          "host": preview.host.map { String(describing: ObjectIdentifier($0)) } ?? "",
+          "cachedHost": preview.hostTabID.flatMap { controller.container.host(for: $0) }.map { String(describing: ObjectIdentifier($0)) } ?? "",
+          "makeHostCount": preview.makeHostCount, "reusedCachedHost": preview.reusedCachedHost, "shows": preview.shows] as [String: Any]
       case "toast-undo":
         guard let controller = app.frontWindowController else { throw Failure(message: "no browser window") }
         return controller.pressToastUndo()
@@ -1001,7 +1021,7 @@
         section = "today"
       }
       var d: [String: Any] = [
-        "id": tab.id.description, "title": tab.displayTitle, "url": tab.url.absoluteString, "section": section,
+        "id": tab.id.description, "title": tab.displayTitle, "url": tab.url.absoluteString, "section": section, "unread": tab.isUnread,
         "selected": w.selectedTab?.id == tab.id, "visible": w.visibleTabs.contains { $0.id == tab.id },
         "loading": tab.live.isLoading, "audible": tab.live.isAudible, "crashed": tab.live.isCrashed,
         "favicon": tab.live.faviconPNG != nil, "sleepPhase": String(describing: tab.live.sleepPhase),

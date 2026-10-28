@@ -129,6 +129,11 @@ public final class BrowserWindowController: NSWindowController, NSWindowDelegate
     public private(set) var hintAnimations: [String: CAAnimation] = [:]
     /// The hint's one pending deadline (fade-out, then removal); a work item, not a timer.
     private var hintWork: DispatchWorkItem?
+    /// Hover Previews of folders, pinned tabs, and Favorites (completion §3.6, A2).
+    public private(set) lazy var hoverPreview = HoverPreviewController(root: root, container: container, factory: factory, context: context) { [weak self] id in
+        guard let self, let space = self.context.focusedSpace else { return }
+        _ = self.sidebar(self.sidebar, didRequest: .select(nodeID: id, space: space.id))
+    }
     /// The delete confirmation sheet currently shown on this window (completion §3.3).
     public private(set) var pendingConfirmation: NSAlert?
     /// Title of the last toast, for checks.
@@ -782,10 +787,17 @@ public final class BrowserWindowController: NSWindowController, NSWindowDelegate
         return splitController.isCommandEnabled(id, enabledKey: enabledKey)
     }
     public func sidebar(_ sidebar: SidebarView, didRequest intent: SidebarIntent) -> Bool {
+        // Any other intent ends a preview first, so its host is back in the container cache
+        // before a selection shows it (SidebarContext.send does the same for sidebar input).
+        if case .hoverPreview = intent {} else if hoverPreview.card != nil {
+            hoverPreview.hide(animated: false); context.hoverPreviews.dismiss()
+        }
         if let handled = onSidebarIntent?(intent) { return handled }
         switch intent {
         case .toggleSidebar: toggleSidebar(); return true
         case .sidebarHiddenByGesture: noteSidebarHidden(); return true
+        case .hoverPreview(let request): hoverPreview.update(request); return true
+        case .separateFromPinned(let id): return separateFromPinned(id)
         case .deleteSpace(let id): return confirmDeleteSpace(id)
         case .deleteFolder(let id): return confirmDeleteFolders([id])
         case .deleteFolders(let ids): return confirmDeleteFolders(ids)
@@ -810,6 +822,7 @@ public final class BrowserWindowController: NSWindowController, NSWindowDelegate
     }
     public func windowWillClose(_ notification: Notification) {
         saveWindowState(); visibilityOverride = .closed; removeRevealCard(); hintWork?.cancel(); hintWork = nil
+        hoverPreview.hide(animated: false)
         container.closeAll(); onClose?(); onVisibilityChange?()
     }
     public var onTextUndoManager: ((NSWindow) -> UndoManager?)?
@@ -974,6 +987,27 @@ extension BrowserWindowController {
         let undo = model.undoManager
         model.undoManager = nil; defer { model.undoManager = undo }
         _ = sidebar(sidebar, didRequest: .select(nodeID: next, space: space.id))
+    }
+
+    /// Separate From Pinned Tab (completion §3.9): the navigated page becomes a Today tab with
+    /// the same live host (its history intact); the pinned tab goes back to its pinned URL,
+    /// unloaded. A factory that cannot rebind closes the host; the new tab then loads its URL.
+    func separateFromPinned(_ id: ItemID) -> Bool {
+        let live = container.takeHost(for: id)
+        guard let tab = model.separateFromPinnedTab(id: id) else {
+            if let live { container.adopt(live, for: id) }
+            return false
+        }
+        container.resetLiveState(for: id)
+        if let live {
+            live.view.removeFromSuperview()
+            container.adopt(live, for: tab.id)
+        }
+        // Refused (or no live page): the new tab loads its URL when it shows.
+        if live == nil || container.host(for: tab.id) !== live { tab.live.sleepPhase = .live }
+        if let space = context.focusedSpace { _ = sidebar(sidebar, didRequest: .select(nodeID: tab.id, space: space.id)) }
+        refresh(); changed()
+        return true
     }
 
     /// Clicks the shown toast's Undo button (automation and checks use the real button).

@@ -135,6 +135,9 @@ public final class FakePageView: NSView {
 @MainActor
 public final class FakeWebContentHostFactory: WebContentHostFactory {
     public private(set) var made: [FakeWebContentHost] = []
+    /// SP6: a factory that cannot rebind a host to another tab ID (the container closes it).
+    public var refusesAdoption = false
+    public func adoptHost(_ host: any WebContentHost, as tabID: ItemID) -> Bool { !refusesAdoption || host.tabID == tabID }
     public func releaseClosedHosts() { made.removeAll { $0.isClosed } }
     public func makeHost(tabID: ItemID, profileID: ProfileID, url: URL?) -> (any WebContentHost)? {
         let colors: [NSColor] = [.init(srgbRed: 0.87, green: 0.87, blue: 0.98, alpha: 1), .white,

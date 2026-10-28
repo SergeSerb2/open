@@ -12,6 +12,86 @@ enum CompletionFeatureChecks {
         try deleteAlerts(check)
         try await hint(check)
         try gestureHide(check)
+        try previews(check)
+        try separate(check)
+    }
+
+    // MARK: HP7–HP10 (page previews through the real container and fake hosts)
+
+    private static func previews(_ check: (Bool, String) -> Void) throws {
+        let model = FeatureCLI.synthetic(), factory = FakeWebContentHostFactory(), defaults = FeatureCLI.defaults()
+        let space = model.spaces[0], pinned = space.pinned.compactMap(\.tab)
+        let c = BrowserWindowController(model: model, windowID: model.windows[0].id, factory: factory,
+                                        size: CGSize(width: 1728, height: 1084), defaults: defaults)
+        defer { c.hoverPreview.hide(animated: false); c.container.closeAll(); c.window?.close() }
+        func pump() { OffscreenRenderer.settle(c.contentView, runLoop: 0.01) }
+        func select(_ tab: Tab) { _ = c.sidebar(c.sidebar, didRequest: .select(nodeID: tab.id, space: space.id)); pump() }
+        func request(_ tab: Tab) -> SidebarHoverPreviewRequest {
+            let row = c.sidebar.rowFrame(nodeID: tab.id) ?? CGRect(x: 0, y: 200, width: 228, height: 41)
+            return SidebarHoverPreviewRequest(kind: .page(tabID: tab.id), anchorInWindow: c.sidebar.convert(row, to: nil))
+        }
+        pump(); select(pinned[1]); select(pinned[0])
+        let cached = c.container.host(for: pinned[1].id) as? FakeWebContentHost
+        let made = factory.made.count
+        c.hoverPreview.update(request(pinned[1])); pump()
+        check(cached != nil && c.hoverPreview.host === cached && factory.made.count == made && c.hoverPreview.reusedCachedHost
+              && cached?.view.superview != nil && c.container.host(for: pinned[1].id) == nil,
+              "HP7 a pinned tab with a cached hidden host shows that host object in the card (no makeHost call)")
+        c.hoverPreview.update(nil); pump()
+        check(c.hoverPreview.card == nil && c.container.host(for: pinned[1].id) === cached, "HP7 dismiss returns the host to the container cache")
+        c.hoverPreview.update(request(pinned[2])); pump()
+        let fresh = factory.made.last
+        check(factory.made.count == made + 1 && fresh?.tabID == pinned[2].id && c.hoverPreview.host === fresh && fresh?.currentURL == pinned[2].url,
+              "HP8 without a cached host the factory makes exactly one host for the tab's ID and loads its URL")
+        c.hoverPreview.update(nil); pump()
+        check(c.container.host(for: pinned[2].id) === fresh, "HP8 dismiss adopts the made host into the container cache")
+        c.hoverPreview.update(request(pinned[2])); pump()
+        let loads = fresh?.loadCount ?? -1
+        c.hoverPreview.card?.click(); pump()
+        check(c.hoverPreview.card == nil && model.windows[0].selectedNodeBySpace[space.id] == pinned[2].id
+              && c.container.host(for: pinned[2].id) === fresh && fresh?.loadCount == loads && fresh?.view.isHidden == false,
+              "HP9 a click in the card selects the tab; the container shows the same host with no reload")
+        select(pinned[0])
+        let bounds = c.contentView.bounds
+        var low = request(pinned[1]); low.anchorInWindow.origin.y = 0
+        c.hoverPreview.update(low); pump()
+        let frame = c.hoverPreview.card?.frame ?? .zero
+        let height = min(560, bounds.height - 20)
+        check(frame.minX == c.context.sidebarWidth + 8 && frame.width == 420 && frame.height == height && abs(frame.maxY - (bounds.height - 10)) < 0.5,
+              "HP10 page card at x = sidebar + 8, 420 × min(560, H − 20), clamped 10 pt above the window bottom (\(frame))")
+        c.hoverPreview.update(nil); pump()
+    }
+
+    // MARK: SP5–SP6 (Separate From Pinned Tab keeps the live host)
+
+    private static func separate(_ check: (Bool, String) -> Void) throws {
+        let model = FeatureCLI.synthetic(), factory = FakeWebContentHostFactory(), defaults = FeatureCLI.defaults()
+        let space = model.spaces[0], pinned = space.pinned.compactMap(\.tab)
+        for tab in pinned { tab.pinnedURL = tab.url }
+        let c = BrowserWindowController(model: model, windowID: model.windows[0].id, factory: factory,
+                                        size: CGSize(width: 1728, height: 1084), defaults: defaults)
+        defer { c.container.closeAll(); c.window?.close() }
+        func pump() { OffscreenRenderer.settle(c.contentView, runLoop: 0.01) }
+        func select(_ tab: Tab) { _ = c.sidebar(c.sidebar, didRequest: .select(nodeID: tab.id, space: space.id)); pump() }
+        pump(); select(pinned[0])
+        guard let live = c.container.host(for: pinned[0].id) as? FakeWebContentHost else { throw CLIError(description: "SP5 no live host") }
+        live.load(URL(string: "https://elsewhere.example.com/article")!); pump()
+        let today = space.today.count
+        let ok = c.sidebar(c.sidebar, didRequest: .separateFromPinned(tabID: pinned[0].id)); pump()
+        let separated = space.today.first?.tab
+        check(ok && space.today.count == today + 1 && separated?.url.host == "elsewhere.example.com"
+              && separated.map { c.container.host(for: $0.id) === live } == true && c.container.host(for: pinned[0].id) == nil
+              && pinned[0].url == pinned[0].pinnedURL && model.windows[0].selectedNodeBySpace[space.id] == separated?.id && !live.isClosed,
+              "SP5 Separate rekeys the live host to the new Today tab (same object, history kept); the pinned tab has no host and its pinned URL")
+        factory.refusesAdoption = true
+        select(pinned[1])
+        guard let second = c.container.host(for: pinned[1].id) as? FakeWebContentHost else { throw CLIError(description: "SP6 no live host") }
+        second.load(URL(string: "https://other.example.com/page")!); pump()
+        _ = c.sidebar(c.sidebar, didRequest: .separateFromPinned(tabID: pinned[1].id)); pump()
+        let next = space.today.first?.tab
+        let replacement = next.flatMap { c.container.host(for: $0.id) as? FakeWebContentHost }
+        check(second.isClosed && replacement != nil && replacement !== second && replacement?.currentURL == next?.url,
+              "SP6 a host that cannot rebind closes; the new tab loads its URL in a new host")
     }
 
     private static func controller(_ model: BrowserModel, defaults: UserDefaults) -> BrowserWindowController {

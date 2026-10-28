@@ -5186,6 +5186,66 @@ def sidebar_a1_checks(app, results, require, evidence):
             and app.call('defaults', key='open.advanced.playSoundEffects') in (None, False), sound=sound)
 
 
+def sidebar_a2_checks(app, results, require, evidence, tmp):
+    """Sidebar completion A2 in the real App (plan §5.4 E11–E14): page previews through the
+    tab's own host, no reload on select, unread background tabs, Separate From Pinned Tab."""
+    def state(): return app.call('window-state')
+    def page(name):
+        path = Path(tmp) / (name.replace(' ', '-').lower() + '.html')
+        path.write_text('<title>%s</title><h1>%s</h1>' % (name, name)); return path.as_uri()
+    def row(tab): return app.call('sidebar-row', node=tab)
+    app.call('window-focus', id=state()['id'], activate=True)
+    # A pinned tab that is not selected, and a current Today tab.
+    pin = app.call('open', url=page('Preview Pinned'))['id']; app.call('wait', tab=pin); app.call('pin', tab=pin)
+    current = app.call('open', url=page('Preview Current'))['id']; app.call('wait', tab=current)
+    # E11: a real hover on the pinned row arms after 0.5 s and shows the page card.
+    point = row(pin)['point']
+    app.call('mouse', action='hover', x=point[0], y=point[1])
+    shown = wait_until(lambda: (lambda st: st if st['kind'] == 'page' and st['target'] == pin else None)(app.call('preview-state')), timeout=3)
+    require('E11_hover_pinned_shows_page_preview', shown and shown['host'] != '' and shown['card'][0] == state()['sidebarLiveWidth'] + 8,
+            state=shown or app.call('preview-state'))
+    app.call('snapshot', path=os.path.join(evidence, 'a2-page-preview.png'))
+    app.call('mouse', action='hover', x=1200, y=600)
+    gone = wait_until(lambda: app.call('preview-state')['kind'] == 'none', timeout=3)
+    require('E11_leaving_hides_preview', gone, state=app.call('preview-state'))
+    # E12: a page global set while the page shows in the card survives selecting the tab.
+    point = row(pin)['point']
+    app.call('mouse', action='hover', x=point[0], y=point[1])
+    again = wait_until(lambda: (lambda st: st if st['kind'] == 'page' and st['target'] == pin else None)(app.call('preview-state')), timeout=3)
+    app.call('eval', tab=pin, js='window.__peekProbe = 1')
+    app.call('mouse', action='click', x=point[0], y=point[1])
+    selected = wait_until(lambda: state()['selected'] == pin and app.call('preview-state')['kind'] == 'none', timeout=3)
+    probe = app.call('eval', tab=pin, js='window.__peekProbe')
+    require('E12_preview_host_survives_select', again and selected and probe == 1, probe=probe, state=again)
+    # E13: a background tab is unread until it is selected.
+    background = app.call('open', url=page('Background Unread'), background=True)['id']
+    unread = app.call('tab-state', tab=background)['unread']
+    app.call('select', tab=background)
+    read = wait_until(lambda: not app.call('tab-state', tab=background)['unread'], timeout=3)
+    require('E13_background_tab_unread_until_selected', unread is True and read, tab=app.call('tab-state', tab=background))
+    # E14: Separate From Pinned Tab (⌥-click on the reset plate) keeps the live page.
+    sep = app.call('open', url=page('Separate Origin'))['id']; app.call('wait', tab=sep); app.call('pin', tab=sep)
+    pinned_url = app.call('tab-state', tab=sep)['url']
+    app.call('navigate', tab=sep, url=page('Separate Away'))
+    wait_until(lambda: (lambda t: t['url'].endswith('/separate-away.html') and not t['loading'])(app.call('tab-state', tab=sep)), timeout=5)
+    app.call('wait', tab=sep)
+    app.call('eval', tab=sep, js='window.__separateProbe = 7')
+    require('E14_probe_set_on_navigated_page', app.call('eval', tab=sep, js='location.pathname.endsWith("separate-away.html") && window.__separateProbe') == 7)
+    frame = row(sep)['frame']
+    plate = [frame[0] + 26, frame[1] + 20]
+    app.call('mouse', action='hover', x=plate[0], y=plate[1])
+    hosts_before = app.call('host-counts')
+    app.call('mouse', action='click', x=plate[0], y=plate[1], modifiers=['option'])
+    separated = wait_until(lambda: (lambda st: st if st['selected'] not in ('', sep) else None)(state()), timeout=3)
+    new_tab = separated['selected'] if separated else ''
+    moved = app.call('eval', tab=new_tab, js='window.__separateProbe') if new_tab else None
+    old = app.call('tab-state', tab=sep)
+    require('E14_separate_keeps_live_page', separated and moved == 7 and old['section'] == 'pinned' and old['url'] == pinned_url
+            and not old['hasWebContent'] and app.call('tab-state', tab=new_tab)['section'] == 'today',
+            probe=moved, pinned=old, newTab=app.call('tab-state', tab=new_tab) if new_tab else None,
+            hostsBefore=hosts_before, hostsAfter=app.call('host-counts'), pages=[(p.get('url'), p.get('identifier')) for p in app.call('pages')])
+
+
 def space_manager_checks(results, tmp, config, style):
     """E5/E6: real Library injection, native reorder/undo, stores and lifetimes."""
     import plistlib
@@ -5250,6 +5310,7 @@ def space_manager_checks(results, tmp, config, style):
         s2 = app.call('space-create', title='Manager Two')
         s3 = app.call('space-create', title='Manager Three')
         sidebar_a1_checks(app, results, require, evidence)
+        sidebar_a2_checks(app, results, require, evidence, tmp)
         app.call('space', space=s1)
         original = [s1, s2, s3]
         # The rest capture shows the loaded page title, not a title still in flight.
