@@ -31,6 +31,10 @@ final class AppSettingsActions: SettingsActions, LibraryActions, DownloadsProvid
   private(set) var downloadRevision = 0
   private var removedDownloads: Set<String> = []
   func show(pane: PaneID? = nil) { settingsPresenter.show(pane: pane); NSApp.activate(); app.scheduleMenuRebuild() }
+  func showProfileSettings(profileID: ProfileID) {
+    guard app.model.profile(id: profileID) != nil else { return }
+    settings.profiles.select(profileID); show(pane: .profiles)
+  }
   func showLibrary(section: LibrarySection? = nil) {
     guard let captures else { settings.statusText = "Captures could not be opened."; show(); return }
     let archives = Dictionary(uniqueKeysWithValues: app.model.profiles.map { ($0.id, app.archiveSink.store(for: $0.id)) })

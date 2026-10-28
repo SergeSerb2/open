@@ -2088,6 +2088,23 @@ public final class BrowserModel {
         var changed: [NodeParent] = []
     }
 
+    /// Earliest Today activity deadline across all Profiles. Pinned and Favorites
+    /// are excluded by ancestry. Read all inputs for Observation, including Never.
+    public func nextAutoArchiveExpiry() -> Date? {
+        let thresholds = Dictionary(uniqueKeysWithValues: profiles.map { ($0.id, $0.settings.autoArchiveAfter.seconds) })
+        var earliest: Date?
+        for space in spaces {
+            let threshold = thresholds[space.profileID] ?? nil
+            for tab in space.today.flatMap({ tabs(under: $0) }) {
+                let activity = tab.lastActiveAt
+                guard let threshold else { continue }
+                let deadline = activity.addingTimeInterval(threshold)
+                earliest = earliest.map { min($0, deadline) } ?? deadline
+            }
+        }
+        return earliest
+    }
+
     /// Archives expired Today tabs in one pass: top-level tabs, split panes, and tabs inside
     /// Today folders. Pinned tabs and favorites never expire. One sink call for all tabs, and
     /// one `.reload` per parent whose list changed. No undo: the archive is the history.

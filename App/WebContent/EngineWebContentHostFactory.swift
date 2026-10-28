@@ -336,6 +336,10 @@ final class EngineWebContentHostFactory: NSResponder, WebContentHostFactory {
   /// editors return false, so no successful no-op reaches the sidebar.
   func performSidebar(_ intent: SidebarIntent) -> Bool? {
     switch intent {
+    case .dismissAutoArchiveBanner: app.dismissAutoArchiveEducation(); return true
+    case .openProfileSettings(let id):
+      guard model.profile(id: id) != nil else { return false }
+      app.dismissAutoArchiveEducation(); app.settingsPresenter.showProfileSettings(profileID: id); return true
     case .toggleSidebar: controller?.toggleSidebar(); return true
     case .select(let id, let spaceID):
       guard model.space(id: spaceID) != nil, model.node(id: id) != nil else { return false }

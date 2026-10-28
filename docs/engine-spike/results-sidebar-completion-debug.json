@@ -6,14 +6,20 @@
         "forced": false,
         "ok": true,
         "owned_pids": [
-          68514,
-          68817,
-          68818,
-          68819,
-          68820,
-          68822,
-          69268,
-          69269
+          22604,
+          22662,
+          22663,
+          22664,
+          22665,
+          22666,
+          22667,
+          22709,
+          22711,
+          22713,
+          22724,
+          22725,
+          22751,
+          22752
         ],
         "remaining_processes": [],
         "reply": true,
@@ -27,47 +33,23 @@
         "forced": false,
         "ok": true,
         "owned_pids": [
-          70010,
-          70392,
-          70393,
-          70414,
-          70415,
-          70422,
-          70423,
-          70749,
-          70750
-        ],
-        "remaining_processes": [],
-        "reply": true,
-        "windows_after_quit": {
-          "count": 0,
-          "windows": []
-        },
-        "windows_before_quit": 3
-      },
-      {
-        "forced": false,
-        "ok": true,
-        "owned_pids": [
-          71077,
-          71143,
-          71144,
-          71145,
-          71164,
-          71165,
-          71245,
-          71247,
-          71270,
-          71273,
-          71314,
-          71385,
-          71553,
-          71666,
-          71667,
-          71689,
-          71690,
-          71692,
-          71693
+          22767,
+          22775,
+          22776,
+          22778,
+          22782,
+          22783,
+          22848,
+          22849,
+          22852,
+          22854,
+          22857,
+          22862,
+          22868,
+          22873,
+          22874,
+          22886,
+          22887
         ],
         "remaining_processes": [],
         "reply": true,
@@ -76,6 +58,69 @@
           "windows": []
         },
         "windows_before_quit": 2
+      },
+      {
+        "forced": false,
+        "ok": true,
+        "owned_pids": [
+          22897,
+          22925,
+          22926,
+          22927,
+          22941,
+          22949,
+          23009,
+          23010
+        ],
+        "remaining_processes": [],
+        "reply": true,
+        "windows_after_quit": {
+          "count": 0,
+          "windows": []
+        },
+        "windows_before_quit": 2
+      },
+      {
+        "forced": false,
+        "ok": true,
+        "owned_pids": [
+          23021,
+          23040,
+          23041,
+          23042,
+          23043,
+          23044,
+          23045,
+          23047
+        ],
+        "remaining_processes": [],
+        "reply": true,
+        "windows_after_quit": {
+          "count": 0,
+          "windows": []
+        },
+        "windows_before_quit": 2
+      },
+      {
+        "forced": false,
+        "ok": true,
+        "owned_pids": [
+          23056,
+          23089,
+          23090,
+          23091,
+          23092,
+          23094,
+          23095,
+          23096
+        ],
+        "remaining_processes": [],
+        "reply": true,
+        "windows_after_quit": {
+          "count": 0,
+          "windows": []
+        },
+        "windows_before_quit": 0
       }
     ]
   },
@@ -91,490 +136,7 @@
     "source": "fork",
     "stamp": "fork /Users/serge/Developer/open-engine/chromium_git/chromium/src/cef/binary_distrib/cef_binary_156.0.14+g4fa4ab5+chromium-156.0.8078.48_macosarm64_minimal 1793075034"
   },
-  "interrupted_attempts": [
-    {
-      "attempt": 1,
-      "checks": {
-        "A1_sound_effect_gated_off": {
-          "ok": true,
-          "sound": {
-            "loaded": 0,
-            "played": false,
-            "plays": 0,
-            "resource": "open-capture.caf"
-          }
-        },
-        "E17_first_hide_shows_hint": {
-          "hint": {
-            "frame": [
-              1325,
-              4,
-              398,
-              47
-            ],
-            "keys": "\u2318S",
-            "plate": [
-              97,
-              10,
-              37,
-              27
-            ],
-            "shows": 1,
-            "visible": true
-          },
-          "ok": true,
-          "png": "/Users/serge/.t3/projects/open/.re/section1/a1-evidence/run-68164-f27c43f6/a1-hint.png"
-        },
-        "E17_hint_key_starts_false": {
-          "ok": true
-        },
-        "E17_second_hide_shows_nothing": {
-          "hint": {
-            "frame": [
-              1325,
-              4,
-              398,
-              47
-            ],
-            "keys": "\u2318S",
-            "plate": [
-              97,
-              10,
-              37,
-              27
-            ],
-            "shows": 1,
-            "visible": true
-          },
-          "ok": true
-        },
-        "E19_cmd_s_restores_pre_drag_width": {
-          "ok": true
-        },
-        "E19_compact_toolbar_at_200": {
-          "ok": true,
-          "png": "/Users/serge/.t3/projects/open/.re/section1/a1-evidence/run-68164-f27c43f6/a1-compact-200.png",
-          "toolbar": {
-            "back": [
-              110,
-              9,
-              28,
-              28
-            ],
-            "forward": [
-              138,
-              9,
-              28,
-              28
-            ],
-            "more": [
-              166,
-              9,
-              28,
-              28
-            ],
-            "reload": [
-              190,
-              7,
-              32,
-              32
-            ],
-            "toggle": [
-              77,
-              7,
-              32,
-              32
-            ]
-          }
-        },
-        "E19_double_click_resets_228": {
-          "ok": true,
-          "width": 228
-        },
-        "E19_drag_stops_at_164_then_hides_while_pressed": {
-          "at150": [
-            "back",
-            "forward",
-            "more"
-          ],
-          "ok": true,
-          "png": "/Users/serge/.t3/projects/open/.re/section1/a1-evidence/run-68164-f27c43f6/a1-compact-164.png",
-          "width": 164
-        },
-        "E5_menu_real_manager": {
-          "assertion": {
-            "ok": true,
-            "png": "/Users/serge/.t3/projects/open/.re/section1/a1-evidence/run-68164-f27c43f6/manager-rest.png",
-            "preferenceDomain": "io.github.sergeserb2.open.e2e.spacemanager.68164-f27c43f6",
-            "state": {
-              "columns": [
-                {
-                  "column": [
-                    16,
-                    16,
-                    244,
-                    567
-                  ],
-                  "grabber": [
-                    395,
-                    79
-                  ],
-                  "header": {
-                    "grabber": [
-                      186,
-                      10,
-                      24,
-                      24
-                    ],
-                    "icon": [
-                      13,
-                      9,
-                      26,
-                      26
-                    ],
-                    "more": [
-                      212,
-                      10,
-                      24,
-                      24
-                    ],
-                    "title": [
-                      41,
-                      9,
-                      141,
-                      26
-                    ]
-                  },
-                  "id": "D376E6AA-873E-4109-B95B-63453E48223D",
-                  "managerSize": [
-                    779,
-                    599
-                  ],
-                  "rows": [
-                    {
-                      "id": "37203AD7-8599-432A-B55D-C5D517D00C7E",
-                      "point": [
-                        319,
-                        182.5
-                      ]
-                    },
-                    {
-                      "id": "8E53EFF8-0972-4689-8AF8-DBF57B5AA4CA",
-                      "point": [
-                        319,
-                        223.5
-                      ]
-                    },
-                    {
-                      "id": "57C57F89-165C-4CD7-895A-4B6E0421A91F",
-                      "point": [
-                        319,
-                        264.5
-                      ]
-                    }
-                  ]
-                },
-                {
-                  "column": [
-                    272,
-                    16,
-                    244,
-                    567
-                  ],
-                  "grabber": [
-                    651,
-                    79
-                  ],
-                  "header": {
-                    "grabber": [
-                      186,
-                      10,
-                      24,
-                      24
-                    ],
-                    "icon": [
-                      13,
-                      9,
-                      26,
-                      26
-                    ],
-                    "more": [
-                      212,
-                      10,
-                      24,
-                      24
-                    ],
-                    "title": [
-                      41,
-                      9,
-                      141,
-                      26
-                    ]
-                  },
-                  "id": "38F6FA73-33EE-4CCD-977C-434B272EAA06",
-                  "managerSize": [
-                    779,
-                    599
-                  ],
-                  "rows": []
-                },
-                {
-                  "column": [
-                    528,
-                    16,
-                    244,
-                    567
-                  ],
-                  "grabber": [
-                    907,
-                    79
-                  ],
-                  "header": {
-                    "grabber": [
-                      186,
-                      10,
-                      24,
-                      24
-                    ],
-                    "icon": [
-                      13,
-                      9,
-                      26,
-                      26
-                    ],
-                    "more": [
-                      212,
-                      10,
-                      24,
-                      24
-                    ],
-                    "title": [
-                      41,
-                      9,
-                      141,
-                      26
-                    ]
-                  },
-                  "id": "288F6B3E-8085-4F90-BBAC-B141A9238C6A",
-                  "managerSize": [
-                    779,
-                    599
-                  ],
-                  "rows": []
-                }
-              ],
-              "contextValid": true,
-              "contextWindow": "1C568426-E76B-4C61-9C5F-540864CC781E",
-              "globalPreviewsEnabled": true,
-              "hostedManagers": 1,
-              "identity": "ObjectIdentifier(0x0000013401d84500)",
-              "managerClass": "OpenSidebar.SpaceManagerView",
-              "modelUndoCount": 0,
-              "previewsEnabled": false,
-              "sameModel": true,
-              "sameUndoManager": true,
-              "section": "spaces",
-              "switchers": [
-                {
-                  "order": [
-                    "D376E6AA-873E-4109-B95B-63453E48223D",
-                    "38F6FA73-33EE-4CCD-977C-434B272EAA06",
-                    "288F6B3E-8085-4F90-BBAC-B141A9238C6A"
-                  ],
-                  "window": "1C568426-E76B-4C61-9C5F-540864CC781E"
-                }
-              ],
-              "undoEnabled": true,
-              "undoTarget": "OpenSettings.(unknown context at $10356eaac).LibraryNativeWindow",
-              "visible": true,
-              "window": 194930,
-              "windows": [
-                {
-                  "attachedSheet": 0,
-                  "class": "BrowserWindow",
-                  "firstResponder": "RenderWidgetHostViewCocoa",
-                  "frame": "{{40, 40}, {1728, 1084}}",
-                  "key": false,
-                  "level": 0,
-                  "number": 194921,
-                  "parent": 0,
-                  "sheet": false,
-                  "title": "Manager One",
-                  "visible": true
-                },
-                {
-                  "attachedSheet": 0,
-                  "class": "LibraryNativeWindow",
-                  "firstResponder": "NSTableView",
-                  "frame": "{{200, 200}, {960, 640}}",
-                  "key": true,
-                  "level": 0,
-                  "number": 194930,
-                  "parent": 0,
-                  "sheet": false,
-                  "title": "Spaces",
-                  "visible": true
-                }
-              ]
-            }
-          },
-          "focus": [
-            {
-              "event": "frontmostChanged",
-              "frontmostApp": "T3 Code (Nightly)",
-              "frontmostPID": 69203,
-              "openPID": 68514,
-              "uptime": 227401.19867141667
-            },
-            {
-              "active": false,
-              "event": "NSApplicationDidResignActiveNotification",
-              "frontmostApp": "T3 Code (Nightly)",
-              "frontmostPID": 69203,
-              "keyWindow": 0,
-              "openPID": 68514,
-              "uptime": 227401.20296633334
-            }
-          ],
-          "status": "INTERRUPTED"
-        },
-        "E7_delete_space_cancel": {
-          "ok": true,
-          "sheet": {
-            "buttons": [
-              "Delete",
-              "Cancel"
-            ],
-            "text": "This will archive all the tabs and folders inside it.",
-            "title": "Delete your Delete Me Space?"
-          },
-          "texts": {
-            "buttons": [
-              "Cancel",
-              "Delete"
-            ],
-            "texts": [
-              "Delete your Delete Me Space?",
-              "This will archive all the tabs and folders inside it."
-            ],
-            "window": 194921
-          }
-        },
-        "E7_delete_space_confirmed": {
-          "ok": true,
-          "spaces": [
-            {
-              "focused": true,
-              "id": "D376E6AA-873E-4109-B95B-63453E48223D",
-              "pinned": 0,
-              "title": "Space",
-              "today": 1
-            },
-            {
-              "focused": false,
-              "id": "38F6FA73-33EE-4CCD-977C-434B272EAA06",
-              "pinned": 0,
-              "title": "Manager Two",
-              "today": 0
-            },
-            {
-              "focused": false,
-              "id": "288F6B3E-8085-4F90-BBAC-B141A9238C6A",
-              "pinned": 0,
-              "title": "Manager Three",
-              "today": 0
-            }
-          ]
-        },
-        "E8_delete_folder_alert_toast_undo": {
-          "ok": true,
-          "selectedAfterDelete": "37203AD7-8599-432A-B55D-C5D517D00C7E",
-          "sheet": {
-            "buttons": [
-              "Delete Folder",
-              "Cancel"
-            ],
-            "text": "Deleting this folder will archive the tabs inside it.",
-            "title": "Delete your Reading folder?"
-          },
-          "toast": "Folder deleted"
-        },
-        "E8_delete_folder_cancel_keeps_it": {
-          "ok": true
-        },
-        "cleanup_no_owned_windows": {
-          "dialogsAtCleanup": [],
-          "errors": [],
-          "ok": true,
-          "ownedPIDs": [
-            68514,
-            68817,
-            68818,
-            68819,
-            68822,
-            69268,
-            69269
-          ],
-          "preferenceDomain": "io.github.sergeserb2.open.e2e.spacemanager.68164-f27c43f6",
-          "quit": [
-            {
-              "forced": false,
-              "ok": true,
-              "owned_pids": [
-                68514,
-                68817,
-                68818,
-                68819,
-                68820,
-                68822,
-                69268,
-                69269
-              ],
-              "remaining_processes": [],
-              "reply": true,
-              "windows_after_quit": {
-                "count": 0,
-                "windows": []
-              },
-              "windows_before_quit": 2
-            }
-          ],
-          "remainingProcesses": [],
-          "remainingWindows": []
-        },
-        "engine_framework_provenance": {
-          "embeddedSHA256": "3e246c99539902496c44c4c6ed2533f3f4fd4a85f03b4f5e6dcaaf49f75f28d2",
-          "expectedSHA256": "",
-          "ok": true,
-          "recordedAfterEmbedSigningSHA256": "3e246c99539902496c44c4c6ed2533f3f4fd4a85f03b4f5e6dcaaf49f75f28d2",
-          "recordedSHA256": "61c9ab17b6b08525af836cca93bba67819bfa1544f04abe5eae3baf4b57b98a8",
-          "signing": "tools/embed-cef.sh ad-hoc signing reproduced on disposable clone when needed",
-          "stamp": "fork /Users/serge/Developer/open-engine/chromium_git/chromium/src/cef/binary_distrib/cef_binary_156.0.14+g4fa4ab5+chromium-156.0.8078.48_macosarm64_minimal 1793075034",
-          "suppliedProvenance": ""
-        }
-      },
-      "focus": [
-        {
-          "event": "frontmostChanged",
-          "frontmostApp": "T3 Code (Nightly)",
-          "frontmostPID": 69203,
-          "openPID": 68514,
-          "uptime": 227401.19867141667
-        },
-        {
-          "active": false,
-          "event": "NSApplicationDidResignActiveNotification",
-          "frontmostApp": "T3 Code (Nightly)",
-          "frontmostPID": 69203,
-          "keyWindow": 0,
-          "openPID": 68514,
-          "uptime": 227401.20296633334
-        }
-      ],
-      "reason": "foreground lost during E5_menu_real_manager",
-      "status": "INTERRUPTED"
-    }
-  ],
+  "interrupted_attempts": [],
   "sidebar-completion": {
     "A1_sound_effect_gated_off": {
       "ok": true,
@@ -583,6 +145,644 @@
         "played": false,
         "plays": 0,
         "resource": "open-capture.caf"
+      }
+    },
+    "AA_APP_all_profile_scope_rearms": {
+      "farState": {
+        "armedTimerCount": 1,
+        "countsByReason": {
+          "automation": 1,
+          "launch": 1,
+          "timer": 1
+        },
+        "educationRequested": false,
+        "lastReason": "automation",
+        "lastSweep": {
+          "affectedSpaces": [],
+          "archivedCount": 0,
+          "now": "2026-11-28T19:32:51.971Z"
+        },
+        "nextExpiry": "2026-11-27T19:32:33.323Z",
+        "now": "2026-10-28T19:32:51.997Z",
+        "offsetSeconds": 0,
+        "running": true,
+        "sweepCount": 3,
+        "timerArmed": true,
+        "timerGeneration": 14
+      },
+      "ok": true,
+      "profiles": [
+        {
+          "id": "66639C70-0CEC-4365-91F4-6D94CD1B7D6C",
+          "interval": "thirtyDays"
+        },
+        {
+          "id": "214772F9-B49B-4F33-AFB2-10066897B55A",
+          "interval": "thirtyDays"
+        },
+        {
+          "id": "28DF3DB5-42BE-418A-903C-632E2C32F436",
+          "interval": "thirtyDays"
+        }
+      ]
+    },
+    "AA_APP_idle_no_sweep_growth": {
+      "after": {
+        "armedTimerCount": 0,
+        "countsByReason": {
+          "automation": 1,
+          "launch": 1,
+          "timer": 1
+        },
+        "educationRequested": false,
+        "lastReason": "automation",
+        "lastSweep": {
+          "affectedSpaces": [],
+          "archivedCount": 0,
+          "now": "2026-11-28T19:32:51.971Z"
+        },
+        "nextExpiry": null,
+        "now": "2026-10-28T19:32:54.534Z",
+        "offsetSeconds": 0,
+        "running": true,
+        "sweepCount": 3,
+        "timerArmed": false,
+        "timerGeneration": 15
+      },
+      "before": {
+        "armedTimerCount": 0,
+        "countsByReason": {
+          "automation": 1,
+          "launch": 1,
+          "timer": 1
+        },
+        "educationRequested": false,
+        "lastReason": "automation",
+        "lastSweep": {
+          "affectedSpaces": [],
+          "archivedCount": 0,
+          "now": "2026-11-28T19:32:51.971Z"
+        },
+        "nextExpiry": null,
+        "now": "2026-10-28T19:32:53.135Z",
+        "offsetSeconds": 0,
+        "running": true,
+        "sweepCount": 3,
+        "timerArmed": false,
+        "timerGeneration": 15
+      },
+      "metrics": {
+        "livePages": 0,
+        "processes": [
+          {
+            "footprint": 88409936,
+            "name": "Open",
+            "pid": 23056,
+            "rss": 307675136
+          },
+          {
+            "footprint": 29935008,
+            "name": "Open Helper (Renderer)",
+            "pid": 23096,
+            "rss": 126894080
+          },
+          {
+            "footprint": 21431448,
+            "name": "Open Helper",
+            "pid": 23091,
+            "rss": 99008512
+          },
+          {
+            "footprint": 27297016,
+            "name": "Open Helper",
+            "pid": 23090,
+            "rss": 120471552
+          },
+          {
+            "footprint": 42403112,
+            "name": "Open Helper",
+            "pid": 23089,
+            "rss": 143491072
+          }
+        ],
+        "tasks": [
+          {
+            "cpu": 0,
+            "gpu": 0,
+            "kind": 1,
+            "memory": 88409088,
+            "title": "Browser"
+          },
+          {
+            "cpu": 0,
+            "gpu": 0,
+            "kind": 2,
+            "memory": 53953536,
+            "title": "GPU Process"
+          },
+          {
+            "cpu": 0,
+            "gpu": 0,
+            "kind": 5,
+            "memory": 27296768,
+            "title": "Utility: Network Service"
+          },
+          {
+            "cpu": 0,
+            "gpu": 0,
+            "kind": 5,
+            "memory": 21431296,
+            "title": "Utility: Storage Service"
+          },
+          {
+            "cpu": 0,
+            "gpu": 0,
+            "kind": 3,
+            "memory": 29934592,
+            "title": "Spare Renderer"
+          }
+        ],
+        "totalFootprint": 209476520,
+        "totalRSS": 797540352
+      },
+      "ok": true,
+      "snapshotMtimeAfter": 1793215973133838697,
+      "snapshotMtimeBefore": 1793215973133838697
+    },
+    "AA_APP_invalid_clock_refused": {
+      "errors": [
+        "archive-clock: invalid archive date",
+        "archive-clock: expected exactly one archive clock argument",
+        "archive-clock: reset must be true",
+        "archive-clock: invalid archive clock offset",
+        "profile-archive-setting: invalid Profile archive setting"
+      ],
+      "ok": true,
+      "state": {
+        "armedTimerCount": 0,
+        "countsByReason": {
+          "automation": 1,
+          "launch": 1,
+          "timer": 1
+        },
+        "educationRequested": false,
+        "lastReason": "automation",
+        "lastSweep": {
+          "affectedSpaces": [],
+          "archivedCount": 0,
+          "now": "2026-11-28T19:32:51.971Z"
+        },
+        "nextExpiry": null,
+        "now": "2026-11-28T19:32:51.985Z",
+        "offsetSeconds": 2678399.9900979996,
+        "running": true,
+        "sweepCount": 3,
+        "timerArmed": false,
+        "timerGeneration": 12
+      }
+    },
+    "AA_APP_launch_overdue_snapshot": {
+      "ok": true,
+      "rows": [
+        {
+          "archivedAt": "2026-10-28T19:32:50.484Z",
+          "id": "6054F671-4309-4536-A7AF-7560BDA3F7F8",
+          "kind": "tab",
+          "profile": "214772F9-B49B-4F33-AFB2-10066897B55A",
+          "reason": "autoArchived",
+          "space": "C0293575-4192-4043-9DD4-1E9E1B7E0D16"
+        }
+      ],
+      "state": {
+        "armedTimerCount": 0,
+        "countsByReason": {
+          "launch": 1
+        },
+        "educationRequested": false,
+        "lastReason": "launch",
+        "lastSweep": {
+          "affectedSpaces": [
+            "C0293575-4192-4043-9DD4-1E9E1B7E0D16"
+          ],
+          "archivedCount": 1,
+          "now": "2026-10-28T19:32:50.484Z"
+        },
+        "nextExpiry": null,
+        "now": "2026-10-28T19:32:50.808Z",
+        "offsetSeconds": 0,
+        "running": true,
+        "sweepCount": 1,
+        "timerArmed": false,
+        "timerGeneration": 3
+      }
+    },
+    "AA_APP_threshold_change_and_never": {
+      "ok": true,
+      "state": {
+        "armedTimerCount": 0,
+        "countsByReason": {
+          "automation": 1,
+          "launch": 1,
+          "timer": 1
+        },
+        "educationRequested": false,
+        "lastReason": "automation",
+        "lastSweep": {
+          "affectedSpaces": [],
+          "archivedCount": 0,
+          "now": "2026-11-28T19:32:51.971Z"
+        },
+        "nextExpiry": null,
+        "now": "2026-11-28T19:32:51.972Z",
+        "offsetSeconds": 2678399.9900979996,
+        "running": true,
+        "sweepCount": 3,
+        "timerArmed": false,
+        "timerGeneration": 12
+      }
+    },
+    "AA_APP_timer_callback_not_manual_sweep": {
+      "ok": true,
+      "state": {
+        "armedTimerCount": 0,
+        "countsByReason": {
+          "automation": 2,
+          "launch": 1,
+          "timer": 1
+        },
+        "educationRequested": false,
+        "lastReason": "timer",
+        "lastSweep": {
+          "affectedSpaces": [
+            "C0293575-4192-4043-9DD4-1E9E1B7E0D16"
+          ],
+          "archivedCount": 1,
+          "now": "2026-10-29T07:32:49.310Z"
+        },
+        "nextExpiry": null,
+        "now": "2026-10-29T07:32:49.610Z",
+        "offsetSeconds": 43199.791290163994,
+        "running": true,
+        "sweepCount": 4,
+        "timerArmed": false,
+        "timerGeneration": 17
+      }
+    },
+    "AA_APP_wake_notification": {
+      "ok": true,
+      "state": {
+        "armedTimerCount": 0,
+        "countsByReason": {
+          "automation": 2,
+          "launch": 1,
+          "timer": 1,
+          "wake": 1
+        },
+        "educationRequested": false,
+        "lastReason": "wake",
+        "lastSweep": {
+          "affectedSpaces": [
+            "C0293575-4192-4043-9DD4-1E9E1B7E0D16"
+          ],
+          "archivedCount": 1,
+          "now": "2026-10-29T08:32:49.823Z"
+        },
+        "nextExpiry": null,
+        "now": "2026-10-29T08:32:49.825Z",
+        "offsetSeconds": 46799.99248898029,
+        "running": true,
+        "sweepCount": 5,
+        "timerArmed": false,
+        "timerGeneration": 21
+      }
+    },
+    "E11_hover_pinned_shows_page_preview": {
+      "ok": true,
+      "state": {
+        "cachedHost": "",
+        "card": [
+          236,
+          119,
+          420,
+          560
+        ],
+        "host": "ObjectIdentifier(0x0000013c01e41100)",
+        "kind": "page",
+        "makeHostCount": 0,
+        "reusedCachedHost": true,
+        "shows": 1,
+        "target": "8BDF2378-586E-4339-B71D-0C88C319D0B5"
+      }
+    },
+    "E11_leaving_hides_preview": {
+      "ok": true,
+      "state": {
+        "cachedHost": "",
+        "card": [],
+        "host": "",
+        "kind": "none",
+        "makeHostCount": 0,
+        "reusedCachedHost": true,
+        "shows": 1,
+        "target": ""
+      }
+    },
+    "E12_preview_host_survives_select": {
+      "ok": true,
+      "probe": 1,
+      "state": {
+        "cachedHost": "",
+        "card": [
+          236,
+          119,
+          420,
+          560
+        ],
+        "host": "ObjectIdentifier(0x0000013c01e41100)",
+        "kind": "page",
+        "makeHostCount": 0,
+        "reusedCachedHost": true,
+        "shows": 2,
+        "target": "8BDF2378-586E-4339-B71D-0C88C319D0B5"
+      }
+    },
+    "E13_background_tab_unread_until_selected": {
+      "ok": true,
+      "tab": {
+        "audible": false,
+        "canGoBack": false,
+        "canGoForward": false,
+        "crashed": false,
+        "createdAt": 1793215957.064477,
+        "favicon": false,
+        "hasWebContent": true,
+        "id": "4CAB7D74-530C-489F-9CFA-3605A4C4CDDC",
+        "lastActiveAt": 1793215957.0674691,
+        "loaded": true,
+        "loading": true,
+        "page": {
+          "audible": false,
+          "browser": 1,
+          "browserIndex": 1,
+          "browserPinned": false,
+          "canGoBack": false,
+          "chromeTabId": 111232018,
+          "chromeWindowId": 111232010,
+          "context": "Default",
+          "crash": 0,
+          "extension": "",
+          "favicon": false,
+          "fullscreen": false,
+          "hidden": false,
+          "hostTab": "4CAB7D74-530C-489F-9CFA-3605A4C4CDDC",
+          "identifier": 6,
+          "kind": "tab",
+          "live": true,
+          "loading": true,
+          "muted": false,
+          "pageBackground": [],
+          "popup": false,
+          "style": "chrome",
+          "title": "",
+          "url": "",
+          "zoom": 0
+        },
+        "profile": "66639C70-0CEC-4365-91F4-6D94CD1B7D6C",
+        "progress": 0.1,
+        "section": "today",
+        "selected": true,
+        "sleepPhase": "live",
+        "space": "6EB715DE-E2D2-4189-A99D-3DBAB489D2BD",
+        "title": "",
+        "unread": false,
+        "url": "file:///var/folders/s6/_07cr4w13vsg_myjkv9ldpqc0000gn/T/Open-E2E-sidebar-completion-chrome-22495-9b1edd40-scratch-wt8y4qns/background-unread.html",
+        "visible": true
+      }
+    },
+    "E14_probe_set_on_navigated_page": {
+      "ok": true
+    },
+    "E14_separate_keeps_live_page": {
+      "hostsAfter": {
+        "created": 7,
+        "engineContents": 5,
+        "retained": 5
+      },
+      "hostsBefore": {
+        "created": 7,
+        "engineContents": 5,
+        "retained": 5
+      },
+      "newTab": {
+        "audible": false,
+        "canGoBack": true,
+        "canGoForward": false,
+        "crashed": false,
+        "createdAt": 1793215957.950614,
+        "favicon": false,
+        "hasWebContent": true,
+        "id": "01A9E28A-3452-405A-9DCC-1D67FCB56886",
+        "lastActiveAt": 1793215957.954329,
+        "loaded": true,
+        "loading": false,
+        "page": {
+          "audible": false,
+          "browser": 1,
+          "browserIndex": 1,
+          "browserPinned": false,
+          "canGoBack": true,
+          "chromeTabId": 111232019,
+          "chromeWindowId": 111232010,
+          "context": "Default",
+          "crash": 0,
+          "extension": "",
+          "favicon": false,
+          "fullscreen": false,
+          "hidden": false,
+          "hostTab": "01A9E28A-3452-405A-9DCC-1D67FCB56886",
+          "identifier": 7,
+          "kind": "tab",
+          "live": true,
+          "loading": false,
+          "muted": false,
+          "pageBackground": [
+            255,
+            255,
+            255,
+            255
+          ],
+          "popup": false,
+          "style": "chrome",
+          "title": "Separate Away",
+          "url": "file:///var/folders/s6/_07cr4w13vsg_myjkv9ldpqc0000gn/T/Open-E2E-sidebar-completion-chrome-22495-9b1edd40-scratch-wt8y4qns/separate-away.html",
+          "zoom": 0
+        },
+        "profile": "66639C70-0CEC-4365-91F4-6D94CD1B7D6C",
+        "progress": 1,
+        "section": "today",
+        "selected": true,
+        "sleepPhase": "live",
+        "space": "6EB715DE-E2D2-4189-A99D-3DBAB489D2BD",
+        "title": "Separate Away",
+        "unread": false,
+        "url": "file:///var/folders/s6/_07cr4w13vsg_myjkv9ldpqc0000gn/T/Open-E2E-sidebar-completion-chrome-22495-9b1edd40-scratch-wt8y4qns/separate-away.html",
+        "visible": true
+      },
+      "ok": true,
+      "pageBefore": 7,
+      "pages": [
+        [
+          "data:text/html,%3Ctitle%3EManager%20One%3C/title%3E%3Ch1%3EManager%20One%3C/h1%3E",
+          1
+        ],
+        [
+          "file:///var/folders/s6/_07cr4w13vsg_myjkv9ldpqc0000gn/T/Open-E2E-sidebar-completion-chrome-22495-9b1edd40-scratch-wt8y4qns/preview-pinned.html",
+          4
+        ],
+        [
+          "file:///var/folders/s6/_07cr4w13vsg_myjkv9ldpqc0000gn/T/Open-E2E-sidebar-completion-chrome-22495-9b1edd40-scratch-wt8y4qns/preview-current.html",
+          5
+        ],
+        [
+          "file:///var/folders/s6/_07cr4w13vsg_myjkv9ldpqc0000gn/T/Open-E2E-sidebar-completion-chrome-22495-9b1edd40-scratch-wt8y4qns/background-unread.html",
+          6
+        ],
+        [
+          "file:///var/folders/s6/_07cr4w13vsg_myjkv9ldpqc0000gn/T/Open-E2E-sidebar-completion-chrome-22495-9b1edd40-scratch-wt8y4qns/separate-away.html",
+          7
+        ]
+      ],
+      "pinned": {
+        "audible": false,
+        "canGoBack": false,
+        "canGoForward": false,
+        "crashed": false,
+        "createdAt": 1793215957.086904,
+        "favicon": false,
+        "hasWebContent": false,
+        "id": "13C02B07-6AB9-4DCE-B738-6D58E6A34363",
+        "lastActiveAt": 1793215957.9523358,
+        "loaded": false,
+        "loading": false,
+        "profile": "66639C70-0CEC-4365-91F4-6D94CD1B7D6C",
+        "progress": 0,
+        "section": "pinned",
+        "selected": false,
+        "sleepPhase": "placeholder",
+        "space": "6EB715DE-E2D2-4189-A99D-3DBAB489D2BD",
+        "title": "Separate Away",
+        "unread": false,
+        "url": "file:///var/folders/s6/_07cr4w13vsg_myjkv9ldpqc0000gn/T/Open-E2E-sidebar-completion-chrome-22495-9b1edd40-scratch-wt8y4qns/separate-origin.html",
+        "visible": false
+      },
+      "probe": 7
+    },
+    "E16_auto_archive_banner_visible": {
+      "banner": {
+        "dismissed": false,
+        "eligible": true,
+        "frame": [
+          8,
+          604,
+          212,
+          138
+        ],
+        "message": "Open archives tabs that you haven\u2019t used in the past 12 hours. You can adjust this in Settings.",
+        "requested": true,
+        "threshold": "12 hours",
+        "title": "We cleaned up!",
+        "visible": true
+      },
+      "ok": true,
+      "snapshot": "/Users/serge/.t3/worktrees/open/t3-34aa18ed/.re/space-manager/run-22495-b52b3157/e16-autoarchive-banner.png"
+    },
+    "E16_dismissal_survives_relaunch": {
+      "ok": true,
+      "state": {
+        "armedTimerCount": 0,
+        "countsByReason": {
+          "automation": 1,
+          "launch": 1
+        },
+        "educationRequested": false,
+        "lastReason": "automation",
+        "lastSweep": {
+          "affectedSpaces": [
+            "C0293575-4192-4043-9DD4-1E9E1B7E0D16"
+          ],
+          "archivedCount": 1,
+          "now": "2026-10-29T08:32:49.018Z"
+        },
+        "nextExpiry": null,
+        "now": "2026-10-29T08:32:49.025Z",
+        "offsetSeconds": 46799.98559188843,
+        "running": true,
+        "sweepCount": 2,
+        "timerArmed": false,
+        "timerGeneration": 6
+      }
+    },
+    "E16_fake_clock_sweep_archives_today": {
+      "archive": {
+        "count": 1,
+        "rows": [
+          {
+            "archivedAt": "2026-10-29T08:32:47.484Z",
+            "id": "74FBD922-1216-447F-A65A-33B7BED5BF37",
+            "kind": "tab",
+            "profile": "214772F9-B49B-4F33-AFB2-10066897B55A",
+            "reason": "autoArchived",
+            "space": "C0293575-4192-4043-9DD4-1E9E1B7E0D16"
+          }
+        ]
+      },
+      "ok": true,
+      "state": {
+        "affectedSpaces": [
+          "C0293575-4192-4043-9DD4-1E9E1B7E0D16"
+        ],
+        "archivedCount": 1,
+        "armedTimerCount": 0,
+        "countsByReason": {
+          "automation": 1,
+          "launch": 1
+        },
+        "educationRequested": true,
+        "lastReason": "automation",
+        "lastSweep": {
+          "affectedSpaces": [
+            "C0293575-4192-4043-9DD4-1E9E1B7E0D16"
+          ],
+          "archivedCount": 1,
+          "now": "2026-10-29T08:32:47.484Z"
+        },
+        "nextExpiry": null,
+        "now": "2026-10-29T08:32:47.490Z",
+        "offsetSeconds": 46799.92654502392,
+        "running": true,
+        "sweepCount": 2,
+        "timerArmed": false,
+        "timerGeneration": 36
+      }
+    },
+    "E16_got_it_hides_all_windows": {
+      "ok": true
+    },
+    "E16_settings_link_opens_correct_profile": {
+      "ok": true,
+      "settings": {
+        "archive": [],
+        "archiveRows": 0,
+        "external": true,
+        "historyRows": 0,
+        "hotkey": true,
+        "library": 0,
+        "librarySection": "",
+        "pane": "profiles",
+        "sameSnapshot": true,
+        "selectedProfile": "214772F9-B49B-4F33-AFB2-10066897B55A",
+        "settings": 6607,
+        "sharedArchives": false
       }
     },
     "E17_first_hide_shows_hint": {
@@ -604,7 +804,7 @@
         "visible": true
       },
       "ok": true,
-      "png": "/Users/serge/.t3/projects/open/.re/section1/a1-evidence/run-68164-0b51f6c7/a1-hint.png"
+      "png": "/Users/serge/.t3/worktrees/open/t3-34aa18ed/.re/space-manager/run-22495-b52b3157/a1-hint.png"
     },
     "E17_hint_key_starts_false": {
       "ok": true
@@ -634,7 +834,7 @@
     },
     "E19_compact_toolbar_at_200": {
       "ok": true,
-      "png": "/Users/serge/.t3/projects/open/.re/section1/a1-evidence/run-68164-0b51f6c7/a1-compact-200.png",
+      "png": "/Users/serge/.t3/worktrees/open/t3-34aa18ed/.re/space-manager/run-22495-b52b3157/a1-compact-200.png",
       "toolbar": {
         "back": [
           110,
@@ -679,7 +879,7 @@
         "more"
       ],
       "ok": true,
-      "png": "/Users/serge/.t3/projects/open/.re/section1/a1-evidence/run-68164-0b51f6c7/a1-compact-164.png",
+      "png": "/Users/serge/.t3/worktrees/open/t3-34aa18ed/.re/space-manager/run-22495-b52b3157/a1-compact-164.png",
       "width": 164
     },
     "E5_all_entries_one_library": {
@@ -722,31 +922,66 @@
                 26
               ]
             },
-            "id": "9323318C-5947-4F4E-A903-C38D94A6E76A",
+            "id": "6EB715DE-E2D2-4189-A99D-3DBAB489D2BD",
             "managerSize": [
               779,
               599
             ],
             "rows": [
               {
-                "id": "ECCAB61A-B2E1-4768-947E-BB65362A92CA",
+                "id": "8BDF2378-586E-4339-B71D-0C88C319D0B5",
                 "point": [
                   319,
-                  182.5
+                  124.5
                 ]
               },
               {
-                "id": "9391971F-971C-4006-8622-9B97E6EC6DFA",
+                "id": "13C02B07-6AB9-4DCE-B738-6D58E6A34363",
                 "point": [
                   319,
-                  223.5
+                  165.5
                 ]
               },
               {
-                "id": "F6BE84B2-D1C8-465F-912D-AE75101E6B19",
+                "id": "01A9E28A-3452-405A-9DCC-1D67FCB56886",
                 "point": [
                   319,
                   264.5
+                ]
+              },
+              {
+                "id": "4CAB7D74-530C-489F-9CFA-3605A4C4CDDC",
+                "point": [
+                  319,
+                  305.5
+                ]
+              },
+              {
+                "id": "8F32DF47-5783-49A4-B955-8A3D0470DAB2",
+                "point": [
+                  319,
+                  346.5
+                ]
+              },
+              {
+                "id": "19EF1ACF-FA72-4B5C-A2CD-FDDD9058477B",
+                "point": [
+                  319,
+                  387.5
+                ]
+              },
+              {
+                "id": "152D915F-7410-4BDC-81E8-23911142B6FA",
+                "point": [
+                  319,
+                  428.5
+                ]
+              },
+              {
+                "id": "D0471140-A357-4CCD-8693-0067E0E521D9",
+                "point": [
+                  319,
+                  469.5
                 ]
               }
             ]
@@ -788,7 +1023,7 @@
                 26
               ]
             },
-            "id": "268D4E5F-2DA4-40EE-BFEE-900E5D379005",
+            "id": "0EB4110C-F314-4205-8835-F5A0AE56211C",
             "managerSize": [
               779,
               599
@@ -832,7 +1067,7 @@
                 26
               ]
             },
-            "id": "9A59A5D3-8C72-4BB3-9BAE-125393C3F745",
+            "id": "6B53BB13-8C36-4F92-A38C-192EB9571E1A",
             "managerSize": [
               779,
               599
@@ -841,10 +1076,10 @@
           }
         ],
         "contextValid": true,
-        "contextWindow": "24539B7E-C524-4F00-9D28-7D6E9AE3BEE7",
+        "contextWindow": "0CF492C7-13E4-46A0-8543-8623AF4F8C33",
         "globalPreviewsEnabled": true,
         "hostedManagers": 1,
-        "identity": "ObjectIdentifier(0x0000010c01d85d00)",
+        "identity": "ObjectIdentifier(0x0000013c042d3600)",
         "managerClass": "OpenSidebar.SpaceManagerView",
         "modelUndoCount": 0,
         "previewsEnabled": false,
@@ -854,17 +1089,17 @@
         "switchers": [
           {
             "order": [
-              "9323318C-5947-4F4E-A903-C38D94A6E76A",
-              "268D4E5F-2DA4-40EE-BFEE-900E5D379005",
-              "9A59A5D3-8C72-4BB3-9BAE-125393C3F745"
+              "6EB715DE-E2D2-4189-A99D-3DBAB489D2BD",
+              "0EB4110C-F314-4205-8835-F5A0AE56211C",
+              "6B53BB13-8C36-4F92-A38C-192EB9571E1A"
             ],
-            "window": "24539B7E-C524-4F00-9D28-7D6E9AE3BEE7"
+            "window": "0CF492C7-13E4-46A0-8543-8623AF4F8C33"
           }
         ],
         "undoEnabled": true,
-        "undoTarget": "OpenSettings.(unknown context at $10182aaac).LibraryNativeWindow",
+        "undoTarget": "OpenSettings.(unknown context at $1036dd650).LibraryNativeWindow",
         "visible": true,
-        "window": 194953,
+        "window": 6576,
         "windows": [
           {
             "attachedSheet": 0,
@@ -873,10 +1108,10 @@
             "frame": "{{40, 40}, {1728, 1084}}",
             "key": false,
             "level": 0,
-            "number": 194944,
+            "number": 6567,
             "parent": 0,
             "sheet": false,
-            "title": "Manager One",
+            "title": "Separate Away",
             "visible": true
           },
           {
@@ -886,7 +1121,7 @@
             "frame": "{{200, 200}, {960, 640}}",
             "key": true,
             "level": 0,
-            "number": 194953,
+            "number": 6576,
             "parent": 0,
             "sheet": false,
             "title": "Spaces",
@@ -933,31 +1168,66 @@
                 26
               ]
             },
-            "id": "9323318C-5947-4F4E-A903-C38D94A6E76A",
+            "id": "6EB715DE-E2D2-4189-A99D-3DBAB489D2BD",
             "managerSize": [
               779,
               599
             ],
             "rows": [
               {
-                "id": "ECCAB61A-B2E1-4768-947E-BB65362A92CA",
+                "id": "8BDF2378-586E-4339-B71D-0C88C319D0B5",
                 "point": [
                   319,
-                  182.5
+                  124.5
                 ]
               },
               {
-                "id": "9391971F-971C-4006-8622-9B97E6EC6DFA",
+                "id": "13C02B07-6AB9-4DCE-B738-6D58E6A34363",
                 "point": [
                   319,
-                  223.5
+                  165.5
                 ]
               },
               {
-                "id": "F6BE84B2-D1C8-465F-912D-AE75101E6B19",
+                "id": "01A9E28A-3452-405A-9DCC-1D67FCB56886",
                 "point": [
                   319,
                   264.5
+                ]
+              },
+              {
+                "id": "4CAB7D74-530C-489F-9CFA-3605A4C4CDDC",
+                "point": [
+                  319,
+                  305.5
+                ]
+              },
+              {
+                "id": "8F32DF47-5783-49A4-B955-8A3D0470DAB2",
+                "point": [
+                  319,
+                  346.5
+                ]
+              },
+              {
+                "id": "19EF1ACF-FA72-4B5C-A2CD-FDDD9058477B",
+                "point": [
+                  319,
+                  387.5
+                ]
+              },
+              {
+                "id": "152D915F-7410-4BDC-81E8-23911142B6FA",
+                "point": [
+                  319,
+                  428.5
+                ]
+              },
+              {
+                "id": "D0471140-A357-4CCD-8693-0067E0E521D9",
+                "point": [
+                  319,
+                  469.5
                 ]
               }
             ]
@@ -999,7 +1269,7 @@
                 26
               ]
             },
-            "id": "268D4E5F-2DA4-40EE-BFEE-900E5D379005",
+            "id": "0EB4110C-F314-4205-8835-F5A0AE56211C",
             "managerSize": [
               779,
               599
@@ -1043,7 +1313,7 @@
                 26
               ]
             },
-            "id": "9A59A5D3-8C72-4BB3-9BAE-125393C3F745",
+            "id": "6B53BB13-8C36-4F92-A38C-192EB9571E1A",
             "managerSize": [
               779,
               599
@@ -1052,10 +1322,10 @@
           }
         ],
         "contextValid": true,
-        "contextWindow": "24539B7E-C524-4F00-9D28-7D6E9AE3BEE7",
+        "contextWindow": "0CF492C7-13E4-46A0-8543-8623AF4F8C33",
         "globalPreviewsEnabled": true,
         "hostedManagers": 1,
-        "identity": "ObjectIdentifier(0x0000010c01d85d00)",
+        "identity": "ObjectIdentifier(0x0000013c042d3600)",
         "managerClass": "OpenSidebar.SpaceManagerView",
         "modelUndoCount": 0,
         "previewsEnabled": false,
@@ -1065,17 +1335,17 @@
         "switchers": [
           {
             "order": [
-              "9323318C-5947-4F4E-A903-C38D94A6E76A",
-              "268D4E5F-2DA4-40EE-BFEE-900E5D379005",
-              "9A59A5D3-8C72-4BB3-9BAE-125393C3F745"
+              "6EB715DE-E2D2-4189-A99D-3DBAB489D2BD",
+              "0EB4110C-F314-4205-8835-F5A0AE56211C",
+              "6B53BB13-8C36-4F92-A38C-192EB9571E1A"
             ],
-            "window": "24539B7E-C524-4F00-9D28-7D6E9AE3BEE7"
+            "window": "0CF492C7-13E4-46A0-8543-8623AF4F8C33"
           }
         ],
         "undoEnabled": true,
-        "undoTarget": "OpenSettings.(unknown context at $10182aaac).LibraryNativeWindow",
+        "undoTarget": "OpenSettings.(unknown context at $1036dd650).LibraryNativeWindow",
         "visible": true,
-        "window": 194953,
+        "window": 6576,
         "windows": [
           {
             "attachedSheet": 0,
@@ -1084,10 +1354,10 @@
             "frame": "{{40, 40}, {1728, 1084}}",
             "key": false,
             "level": 0,
-            "number": 194944,
+            "number": 6567,
             "parent": 0,
             "sheet": false,
-            "title": "Manager One",
+            "title": "Separate Away",
             "visible": true
           },
           {
@@ -1097,7 +1367,7 @@
             "frame": "{{200, 200}, {960, 640}}",
             "key": true,
             "level": 0,
-            "number": 194953,
+            "number": 6576,
             "parent": 0,
             "sheet": false,
             "title": "Spaces",
@@ -1148,31 +1418,66 @@
                 26
               ]
             },
-            "id": "9323318C-5947-4F4E-A903-C38D94A6E76A",
+            "id": "6EB715DE-E2D2-4189-A99D-3DBAB489D2BD",
             "managerSize": [
               779,
               599
             ],
             "rows": [
               {
-                "id": "ECCAB61A-B2E1-4768-947E-BB65362A92CA",
+                "id": "8BDF2378-586E-4339-B71D-0C88C319D0B5",
                 "point": [
                   319,
-                  182.5
+                  124.5
                 ]
               },
               {
-                "id": "9391971F-971C-4006-8622-9B97E6EC6DFA",
+                "id": "13C02B07-6AB9-4DCE-B738-6D58E6A34363",
                 "point": [
                   319,
-                  223.5
+                  165.5
                 ]
               },
               {
-                "id": "F6BE84B2-D1C8-465F-912D-AE75101E6B19",
+                "id": "01A9E28A-3452-405A-9DCC-1D67FCB56886",
                 "point": [
                   319,
                   264.5
+                ]
+              },
+              {
+                "id": "4CAB7D74-530C-489F-9CFA-3605A4C4CDDC",
+                "point": [
+                  319,
+                  305.5
+                ]
+              },
+              {
+                "id": "8F32DF47-5783-49A4-B955-8A3D0470DAB2",
+                "point": [
+                  319,
+                  346.5
+                ]
+              },
+              {
+                "id": "19EF1ACF-FA72-4B5C-A2CD-FDDD9058477B",
+                "point": [
+                  319,
+                  387.5
+                ]
+              },
+              {
+                "id": "152D915F-7410-4BDC-81E8-23911142B6FA",
+                "point": [
+                  319,
+                  428.5
+                ]
+              },
+              {
+                "id": "D0471140-A357-4CCD-8693-0067E0E521D9",
+                "point": [
+                  319,
+                  469.5
                 ]
               }
             ]
@@ -1214,7 +1519,7 @@
                 26
               ]
             },
-            "id": "268D4E5F-2DA4-40EE-BFEE-900E5D379005",
+            "id": "0EB4110C-F314-4205-8835-F5A0AE56211C",
             "managerSize": [
               779,
               599
@@ -1258,7 +1563,7 @@
                 26
               ]
             },
-            "id": "9A59A5D3-8C72-4BB3-9BAE-125393C3F745",
+            "id": "6B53BB13-8C36-4F92-A38C-192EB9571E1A",
             "managerSize": [
               779,
               599
@@ -1267,10 +1572,10 @@
           }
         ],
         "contextValid": true,
-        "contextWindow": "24539B7E-C524-4F00-9D28-7D6E9AE3BEE7",
+        "contextWindow": "0CF492C7-13E4-46A0-8543-8623AF4F8C33",
         "globalPreviewsEnabled": true,
         "hostedManagers": 1,
-        "identity": "ObjectIdentifier(0x0000010c01d85d00)",
+        "identity": "ObjectIdentifier(0x0000013c042d3600)",
         "managerClass": "OpenSidebar.SpaceManagerView",
         "modelUndoCount": 0,
         "previewsEnabled": false,
@@ -1280,17 +1585,17 @@
         "switchers": [
           {
             "order": [
-              "9323318C-5947-4F4E-A903-C38D94A6E76A",
-              "268D4E5F-2DA4-40EE-BFEE-900E5D379005",
-              "9A59A5D3-8C72-4BB3-9BAE-125393C3F745"
+              "6EB715DE-E2D2-4189-A99D-3DBAB489D2BD",
+              "0EB4110C-F314-4205-8835-F5A0AE56211C",
+              "6B53BB13-8C36-4F92-A38C-192EB9571E1A"
             ],
-            "window": "24539B7E-C524-4F00-9D28-7D6E9AE3BEE7"
+            "window": "0CF492C7-13E4-46A0-8543-8623AF4F8C33"
           }
         ],
         "undoEnabled": true,
-        "undoTarget": "OpenSettings.(unknown context at $10182aaac).LibraryNativeWindow",
+        "undoTarget": "OpenSettings.(unknown context at $1036dd650).LibraryNativeWindow",
         "visible": true,
-        "window": 194953,
+        "window": 6576,
         "windows": [
           {
             "attachedSheet": 0,
@@ -1299,10 +1604,10 @@
             "frame": "{{40, 40}, {1728, 1084}}",
             "key": false,
             "level": 0,
-            "number": 194944,
+            "number": 6567,
             "parent": 0,
             "sheet": false,
-            "title": "Manager One",
+            "title": "Separate Away",
             "visible": true
           },
           {
@@ -1312,7 +1617,7 @@
             "frame": "{{200, 200}, {960, 640}}",
             "key": true,
             "level": 0,
-            "number": 194953,
+            "number": 6576,
             "parent": 0,
             "sheet": false,
             "title": "Spaces",
@@ -1325,7 +1630,7 @@
             "frame": "{{0, 0}, {500, 500}}",
             "key": false,
             "level": 0,
-            "number": 194954,
+            "number": 6577,
             "parent": 0,
             "sheet": false,
             "title": "",
@@ -1353,7 +1658,7 @@
             567
           ],
           "part": "column",
-          "space": "9323318C-5947-4F4E-A903-C38D94A6E76A"
+          "space": "6EB715DE-E2D2-4189-A99D-3DBAB489D2BD"
         },
         {
           "actual": [
@@ -1370,7 +1675,7 @@
             26
           ],
           "part": "icon",
-          "space": "9323318C-5947-4F4E-A903-C38D94A6E76A"
+          "space": "6EB715DE-E2D2-4189-A99D-3DBAB489D2BD"
         },
         {
           "actual": [
@@ -1387,7 +1692,7 @@
             24
           ],
           "part": "grabber",
-          "space": "9323318C-5947-4F4E-A903-C38D94A6E76A"
+          "space": "6EB715DE-E2D2-4189-A99D-3DBAB489D2BD"
         },
         {
           "actual": [
@@ -1404,7 +1709,7 @@
             24
           ],
           "part": "more",
-          "space": "9323318C-5947-4F4E-A903-C38D94A6E76A"
+          "space": "6EB715DE-E2D2-4189-A99D-3DBAB489D2BD"
         },
         {
           "actual": [
@@ -1415,7 +1720,7 @@
             41
           ],
           "part": "title.x",
-          "space": "9323318C-5947-4F4E-A903-C38D94A6E76A"
+          "space": "6EB715DE-E2D2-4189-A99D-3DBAB489D2BD"
         },
         {
           "actual": [
@@ -1432,7 +1737,7 @@
             567
           ],
           "part": "column",
-          "space": "268D4E5F-2DA4-40EE-BFEE-900E5D379005"
+          "space": "0EB4110C-F314-4205-8835-F5A0AE56211C"
         },
         {
           "actual": [
@@ -1449,7 +1754,7 @@
             26
           ],
           "part": "icon",
-          "space": "268D4E5F-2DA4-40EE-BFEE-900E5D379005"
+          "space": "0EB4110C-F314-4205-8835-F5A0AE56211C"
         },
         {
           "actual": [
@@ -1466,7 +1771,7 @@
             24
           ],
           "part": "grabber",
-          "space": "268D4E5F-2DA4-40EE-BFEE-900E5D379005"
+          "space": "0EB4110C-F314-4205-8835-F5A0AE56211C"
         },
         {
           "actual": [
@@ -1483,7 +1788,7 @@
             24
           ],
           "part": "more",
-          "space": "268D4E5F-2DA4-40EE-BFEE-900E5D379005"
+          "space": "0EB4110C-F314-4205-8835-F5A0AE56211C"
         },
         {
           "actual": [
@@ -1494,7 +1799,7 @@
             41
           ],
           "part": "title.x",
-          "space": "268D4E5F-2DA4-40EE-BFEE-900E5D379005"
+          "space": "0EB4110C-F314-4205-8835-F5A0AE56211C"
         },
         {
           "actual": [
@@ -1511,7 +1816,7 @@
             567
           ],
           "part": "column",
-          "space": "9A59A5D3-8C72-4BB3-9BAE-125393C3F745"
+          "space": "6B53BB13-8C36-4F92-A38C-192EB9571E1A"
         },
         {
           "actual": [
@@ -1528,7 +1833,7 @@
             26
           ],
           "part": "icon",
-          "space": "9A59A5D3-8C72-4BB3-9BAE-125393C3F745"
+          "space": "6B53BB13-8C36-4F92-A38C-192EB9571E1A"
         },
         {
           "actual": [
@@ -1545,7 +1850,7 @@
             24
           ],
           "part": "grabber",
-          "space": "9A59A5D3-8C72-4BB3-9BAE-125393C3F745"
+          "space": "6B53BB13-8C36-4F92-A38C-192EB9571E1A"
         },
         {
           "actual": [
@@ -1562,7 +1867,7 @@
             24
           ],
           "part": "more",
-          "space": "9A59A5D3-8C72-4BB3-9BAE-125393C3F745"
+          "space": "6B53BB13-8C36-4F92-A38C-192EB9571E1A"
         },
         {
           "actual": [
@@ -1573,15 +1878,15 @@
             41
           ],
           "part": "title.x",
-          "space": "9A59A5D3-8C72-4BB3-9BAE-125393C3F745"
+          "space": "6B53BB13-8C36-4F92-A38C-192EB9571E1A"
         }
       ],
       "worst": 0
     },
     "E5_menu_real_manager": {
       "ok": true,
-      "png": "/Users/serge/.t3/projects/open/.re/section1/a1-evidence/run-68164-0b51f6c7/manager-rest.png",
-      "preferenceDomain": "io.github.sergeserb2.open.e2e.spacemanager.68164-0b51f6c7",
+      "png": "/Users/serge/.t3/worktrees/open/t3-34aa18ed/.re/space-manager/run-22495-b52b3157/manager-rest.png",
+      "preferenceDomain": "io.github.sergeserb2.open.e2e.spacemanager.22495-b52b3157",
       "state": {
         "columns": [
           {
@@ -1621,31 +1926,66 @@
                 26
               ]
             },
-            "id": "9323318C-5947-4F4E-A903-C38D94A6E76A",
+            "id": "6EB715DE-E2D2-4189-A99D-3DBAB489D2BD",
             "managerSize": [
               779,
               599
             ],
             "rows": [
               {
-                "id": "ECCAB61A-B2E1-4768-947E-BB65362A92CA",
+                "id": "8BDF2378-586E-4339-B71D-0C88C319D0B5",
                 "point": [
                   319,
-                  182.5
+                  124.5
                 ]
               },
               {
-                "id": "9391971F-971C-4006-8622-9B97E6EC6DFA",
+                "id": "13C02B07-6AB9-4DCE-B738-6D58E6A34363",
                 "point": [
                   319,
-                  223.5
+                  165.5
                 ]
               },
               {
-                "id": "F6BE84B2-D1C8-465F-912D-AE75101E6B19",
+                "id": "01A9E28A-3452-405A-9DCC-1D67FCB56886",
                 "point": [
                   319,
                   264.5
+                ]
+              },
+              {
+                "id": "4CAB7D74-530C-489F-9CFA-3605A4C4CDDC",
+                "point": [
+                  319,
+                  305.5
+                ]
+              },
+              {
+                "id": "8F32DF47-5783-49A4-B955-8A3D0470DAB2",
+                "point": [
+                  319,
+                  346.5
+                ]
+              },
+              {
+                "id": "19EF1ACF-FA72-4B5C-A2CD-FDDD9058477B",
+                "point": [
+                  319,
+                  387.5
+                ]
+              },
+              {
+                "id": "152D915F-7410-4BDC-81E8-23911142B6FA",
+                "point": [
+                  319,
+                  428.5
+                ]
+              },
+              {
+                "id": "D0471140-A357-4CCD-8693-0067E0E521D9",
+                "point": [
+                  319,
+                  469.5
                 ]
               }
             ]
@@ -1687,7 +2027,7 @@
                 26
               ]
             },
-            "id": "268D4E5F-2DA4-40EE-BFEE-900E5D379005",
+            "id": "0EB4110C-F314-4205-8835-F5A0AE56211C",
             "managerSize": [
               779,
               599
@@ -1731,7 +2071,7 @@
                 26
               ]
             },
-            "id": "9A59A5D3-8C72-4BB3-9BAE-125393C3F745",
+            "id": "6B53BB13-8C36-4F92-A38C-192EB9571E1A",
             "managerSize": [
               779,
               599
@@ -1740,10 +2080,10 @@
           }
         ],
         "contextValid": true,
-        "contextWindow": "24539B7E-C524-4F00-9D28-7D6E9AE3BEE7",
+        "contextWindow": "0CF492C7-13E4-46A0-8543-8623AF4F8C33",
         "globalPreviewsEnabled": true,
         "hostedManagers": 1,
-        "identity": "ObjectIdentifier(0x0000010c01d85d00)",
+        "identity": "ObjectIdentifier(0x0000013c042d3600)",
         "managerClass": "OpenSidebar.SpaceManagerView",
         "modelUndoCount": 0,
         "previewsEnabled": false,
@@ -1753,17 +2093,17 @@
         "switchers": [
           {
             "order": [
-              "9323318C-5947-4F4E-A903-C38D94A6E76A",
-              "268D4E5F-2DA4-40EE-BFEE-900E5D379005",
-              "9A59A5D3-8C72-4BB3-9BAE-125393C3F745"
+              "6EB715DE-E2D2-4189-A99D-3DBAB489D2BD",
+              "0EB4110C-F314-4205-8835-F5A0AE56211C",
+              "6B53BB13-8C36-4F92-A38C-192EB9571E1A"
             ],
-            "window": "24539B7E-C524-4F00-9D28-7D6E9AE3BEE7"
+            "window": "0CF492C7-13E4-46A0-8543-8623AF4F8C33"
           }
         ],
         "undoEnabled": true,
-        "undoTarget": "OpenSettings.(unknown context at $10182aaac).LibraryNativeWindow",
+        "undoTarget": "OpenSettings.(unknown context at $1036dd650).LibraryNativeWindow",
         "visible": true,
-        "window": 194953,
+        "window": 6576,
         "windows": [
           {
             "attachedSheet": 0,
@@ -1772,10 +2112,10 @@
             "frame": "{{40, 40}, {1728, 1084}}",
             "key": false,
             "level": 0,
-            "number": 194944,
+            "number": 6567,
             "parent": 0,
             "sheet": false,
-            "title": "Manager One",
+            "title": "Separate Away",
             "visible": true
           },
           {
@@ -1785,7 +2125,7 @@
             "frame": "{{200, 200}, {960, 640}}",
             "key": true,
             "level": 0,
-            "number": 194953,
+            "number": 6576,
             "parent": 0,
             "sheet": false,
             "title": "Spaces",
@@ -1797,9 +2137,9 @@
     "E6_native_drag_and_switcher": {
       "eventPath": "OEApplication.sendEvent -> native SpaceGrabber.mouseDown -> tracking loop",
       "expected": [
-        "268D4E5F-2DA4-40EE-BFEE-900E5D379005",
-        "9A59A5D3-8C72-4BB3-9BAE-125393C3F745",
-        "9323318C-5947-4F4E-A903-C38D94A6E76A"
+        "0EB4110C-F314-4205-8835-F5A0AE56211C",
+        "6B53BB13-8C36-4F92-A38C-192EB9571E1A",
+        "6EB715DE-E2D2-4189-A99D-3DBAB489D2BD"
       ],
       "ok": true,
       "state": {
@@ -1841,7 +2181,7 @@
                 26
               ]
             },
-            "id": "268D4E5F-2DA4-40EE-BFEE-900E5D379005",
+            "id": "0EB4110C-F314-4205-8835-F5A0AE56211C",
             "managerSize": [
               779,
               599
@@ -1885,7 +2225,7 @@
                 26
               ]
             },
-            "id": "9A59A5D3-8C72-4BB3-9BAE-125393C3F745",
+            "id": "6B53BB13-8C36-4F92-A38C-192EB9571E1A",
             "managerSize": [
               779,
               599
@@ -1929,41 +2269,76 @@
                 26
               ]
             },
-            "id": "9323318C-5947-4F4E-A903-C38D94A6E76A",
+            "id": "6EB715DE-E2D2-4189-A99D-3DBAB489D2BD",
             "managerSize": [
               779,
               599
             ],
             "rows": [
               {
-                "id": "ECCAB61A-B2E1-4768-947E-BB65362A92CA",
+                "id": "8BDF2378-586E-4339-B71D-0C88C319D0B5",
                 "point": [
                   831,
-                  182.5
+                  124.5
                 ]
               },
               {
-                "id": "9391971F-971C-4006-8622-9B97E6EC6DFA",
+                "id": "13C02B07-6AB9-4DCE-B738-6D58E6A34363",
                 "point": [
                   831,
-                  223.5
+                  165.5
                 ]
               },
               {
-                "id": "F6BE84B2-D1C8-465F-912D-AE75101E6B19",
+                "id": "01A9E28A-3452-405A-9DCC-1D67FCB56886",
                 "point": [
                   831,
                   264.5
+                ]
+              },
+              {
+                "id": "4CAB7D74-530C-489F-9CFA-3605A4C4CDDC",
+                "point": [
+                  831,
+                  305.5
+                ]
+              },
+              {
+                "id": "8F32DF47-5783-49A4-B955-8A3D0470DAB2",
+                "point": [
+                  831,
+                  346.5
+                ]
+              },
+              {
+                "id": "19EF1ACF-FA72-4B5C-A2CD-FDDD9058477B",
+                "point": [
+                  831,
+                  387.5
+                ]
+              },
+              {
+                "id": "152D915F-7410-4BDC-81E8-23911142B6FA",
+                "point": [
+                  831,
+                  428.5
+                ]
+              },
+              {
+                "id": "D0471140-A357-4CCD-8693-0067E0E521D9",
+                "point": [
+                  831,
+                  469.5
                 ]
               }
             ]
           }
         ],
         "contextValid": true,
-        "contextWindow": "24539B7E-C524-4F00-9D28-7D6E9AE3BEE7",
+        "contextWindow": "0CF492C7-13E4-46A0-8543-8623AF4F8C33",
         "globalPreviewsEnabled": true,
         "hostedManagers": 1,
-        "identity": "ObjectIdentifier(0x0000010c01d85d00)",
+        "identity": "ObjectIdentifier(0x0000013c042d3600)",
         "managerClass": "OpenSidebar.SpaceManagerView",
         "modelUndoCount": 0,
         "previewsEnabled": false,
@@ -1973,17 +2348,17 @@
         "switchers": [
           {
             "order": [
-              "268D4E5F-2DA4-40EE-BFEE-900E5D379005",
-              "9A59A5D3-8C72-4BB3-9BAE-125393C3F745",
-              "9323318C-5947-4F4E-A903-C38D94A6E76A"
+              "0EB4110C-F314-4205-8835-F5A0AE56211C",
+              "6B53BB13-8C36-4F92-A38C-192EB9571E1A",
+              "6EB715DE-E2D2-4189-A99D-3DBAB489D2BD"
             ],
-            "window": "24539B7E-C524-4F00-9D28-7D6E9AE3BEE7"
+            "window": "0CF492C7-13E4-46A0-8543-8623AF4F8C33"
           }
         ],
         "undoEnabled": true,
-        "undoTarget": "OpenSettings.(unknown context at $10182aaac).LibraryNativeWindow",
+        "undoTarget": "OpenSettings.(unknown context at $1036dd650).LibraryNativeWindow",
         "visible": true,
-        "window": 194953,
+        "window": 6576,
         "windows": [
           {
             "attachedSheet": 0,
@@ -1992,10 +2367,10 @@
             "frame": "{{40, 40}, {1728, 1084}}",
             "key": false,
             "level": 0,
-            "number": 194944,
+            "number": 6567,
             "parent": 0,
             "sheet": false,
-            "title": "Manager One",
+            "title": "Separate Away",
             "visible": true
           },
           {
@@ -2005,7 +2380,7 @@
             "frame": "{{200, 200}, {960, 640}}",
             "key": true,
             "level": 0,
-            "number": 194953,
+            "number": 6576,
             "parent": 0,
             "sheet": false,
             "title": "Spaces",
@@ -2018,20 +2393,7 @@
             "frame": "{{0, 0}, {500, 500}}",
             "key": false,
             "level": 0,
-            "number": 194954,
-            "parent": 0,
-            "sheet": false,
-            "title": "",
-            "visible": false
-          },
-          {
-            "attachedSheet": 0,
-            "class": "SPRoundedWindow",
-            "firstResponder": "SPRoundedWindow",
-            "frame": "{{560, 488}, {312, 237}}",
-            "key": false,
-            "level": 101,
-            "number": 194958,
+            "number": 6577,
             "parent": 0,
             "sheet": false,
             "title": "",
@@ -2042,9 +2404,9 @@
     },
     "E6_relaunch_preserves_ids": {
       "expected": [
-        "268D4E5F-2DA4-40EE-BFEE-900E5D379005",
-        "9A59A5D3-8C72-4BB3-9BAE-125393C3F745",
-        "9323318C-5947-4F4E-A903-C38D94A6E76A"
+        "0EB4110C-F314-4205-8835-F5A0AE56211C",
+        "6B53BB13-8C36-4F92-A38C-192EB9571E1A",
+        "6EB715DE-E2D2-4189-A99D-3DBAB489D2BD"
       ],
       "ok": true,
       "state": {
@@ -2086,7 +2448,7 @@
                 26
               ]
             },
-            "id": "268D4E5F-2DA4-40EE-BFEE-900E5D379005",
+            "id": "0EB4110C-F314-4205-8835-F5A0AE56211C",
             "managerSize": [
               779,
               599
@@ -2130,7 +2492,7 @@
                 26
               ]
             },
-            "id": "9A59A5D3-8C72-4BB3-9BAE-125393C3F745",
+            "id": "6B53BB13-8C36-4F92-A38C-192EB9571E1A",
             "managerSize": [
               779,
               599
@@ -2174,41 +2536,76 @@
                 26
               ]
             },
-            "id": "9323318C-5947-4F4E-A903-C38D94A6E76A",
+            "id": "6EB715DE-E2D2-4189-A99D-3DBAB489D2BD",
             "managerSize": [
               779,
               599
             ],
             "rows": [
               {
-                "id": "ECCAB61A-B2E1-4768-947E-BB65362A92CA",
+                "id": "8BDF2378-586E-4339-B71D-0C88C319D0B5",
                 "point": [
                   831,
-                  182.5
+                  124.5
                 ]
               },
               {
-                "id": "9391971F-971C-4006-8622-9B97E6EC6DFA",
+                "id": "13C02B07-6AB9-4DCE-B738-6D58E6A34363",
                 "point": [
                   831,
-                  223.5
+                  165.5
                 ]
               },
               {
-                "id": "F6BE84B2-D1C8-465F-912D-AE75101E6B19",
+                "id": "01A9E28A-3452-405A-9DCC-1D67FCB56886",
                 "point": [
                   831,
                   264.5
+                ]
+              },
+              {
+                "id": "4CAB7D74-530C-489F-9CFA-3605A4C4CDDC",
+                "point": [
+                  831,
+                  305.5
+                ]
+              },
+              {
+                "id": "8F32DF47-5783-49A4-B955-8A3D0470DAB2",
+                "point": [
+                  831,
+                  346.5
+                ]
+              },
+              {
+                "id": "19EF1ACF-FA72-4B5C-A2CD-FDDD9058477B",
+                "point": [
+                  831,
+                  387.5
+                ]
+              },
+              {
+                "id": "152D915F-7410-4BDC-81E8-23911142B6FA",
+                "point": [
+                  831,
+                  428.5
+                ]
+              },
+              {
+                "id": "D0471140-A357-4CCD-8693-0067E0E521D9",
+                "point": [
+                  831,
+                  469.5
                 ]
               }
             ]
           }
         ],
         "contextValid": true,
-        "contextWindow": "24539B7E-C524-4F00-9D28-7D6E9AE3BEE7",
+        "contextWindow": "0CF492C7-13E4-46A0-8543-8623AF4F8C33",
         "globalPreviewsEnabled": true,
         "hostedManagers": 1,
-        "identity": "ObjectIdentifier(0x0000012c01e6ab00)",
+        "identity": "ObjectIdentifier(0x0000010c01d3ba00)",
         "managerClass": "OpenSidebar.SpaceManagerView",
         "modelUndoCount": 0,
         "previewsEnabled": false,
@@ -2218,29 +2615,29 @@
         "switchers": [
           {
             "order": [
-              "268D4E5F-2DA4-40EE-BFEE-900E5D379005",
-              "9A59A5D3-8C72-4BB3-9BAE-125393C3F745",
-              "9323318C-5947-4F4E-A903-C38D94A6E76A"
+              "0EB4110C-F314-4205-8835-F5A0AE56211C",
+              "6B53BB13-8C36-4F92-A38C-192EB9571E1A",
+              "6EB715DE-E2D2-4189-A99D-3DBAB489D2BD"
             ],
-            "window": "24539B7E-C524-4F00-9D28-7D6E9AE3BEE7"
+            "window": "0CF492C7-13E4-46A0-8543-8623AF4F8C33"
           }
         ],
         "undoEnabled": false,
-        "undoTarget": "OpenSettings.(unknown context at $103822aac).LibraryNativeWindow",
+        "undoTarget": "OpenSettings.(unknown context at $100d89650).LibraryNativeWindow",
         "visible": true,
-        "window": 194967,
+        "window": 6587,
         "windows": [
           {
             "attachedSheet": 0,
             "class": "BrowserWindow",
             "firstResponder": "FavoritesCollectionView",
-            "frame": "{{0, 0}, {1728, 1084}}",
+            "frame": "{{40, 40}, {1728, 1084}}",
             "key": false,
             "level": 0,
-            "number": 194966,
+            "number": 6586,
             "parent": 0,
             "sheet": false,
-            "title": "Manager One",
+            "title": "Separate Away",
             "visible": true
           },
           {
@@ -2250,7 +2647,7 @@
             "frame": "{{200, 200}, {960, 640}}",
             "key": true,
             "level": 0,
-            "number": 194967,
+            "number": 6587,
             "parent": 0,
             "sheet": false,
             "title": "Spaces",
@@ -2278,7 +2675,7 @@
           "Delete your Delete Me Space?",
           "This will archive all the tabs and folders inside it."
         ],
-        "window": 194944
+        "window": 6567
       }
     },
     "E7_delete_space_confirmed": {
@@ -2286,21 +2683,21 @@
       "spaces": [
         {
           "focused": true,
-          "id": "9323318C-5947-4F4E-A903-C38D94A6E76A",
+          "id": "6EB715DE-E2D2-4189-A99D-3DBAB489D2BD",
           "pinned": 0,
           "title": "Space",
           "today": 1
         },
         {
           "focused": false,
-          "id": "268D4E5F-2DA4-40EE-BFEE-900E5D379005",
+          "id": "0EB4110C-F314-4205-8835-F5A0AE56211C",
           "pinned": 0,
           "title": "Manager Two",
           "today": 0
         },
         {
           "focused": false,
-          "id": "9A59A5D3-8C72-4BB3-9BAE-125393C3F745",
+          "id": "6B53BB13-8C36-4F92-A38C-192EB9571E1A",
           "pinned": 0,
           "title": "Manager Three",
           "today": 0
@@ -2309,7 +2706,7 @@
     },
     "E8_delete_folder_alert_toast_undo": {
       "ok": true,
-      "selectedAfterDelete": "ECCAB61A-B2E1-4768-947E-BB65362A92CA",
+      "selectedAfterDelete": "19EF1ACF-FA72-4B5C-A2CD-FDDD9058477B",
       "sheet": {
         "buttons": [
           "Delete Folder",
@@ -2334,14 +2731,14 @@
       "key": {
         "barPresented": false,
         "firstResponder": "SidebarOutlineView",
-        "keyWindow": 194944,
+        "keyWindow": 6567,
         "sidebarMode": "anchored"
       },
       "ok": true,
       "order": [
-        "9323318C-5947-4F4E-A903-C38D94A6E76A",
-        "268D4E5F-2DA4-40EE-BFEE-900E5D379005",
-        "9A59A5D3-8C72-4BB3-9BAE-125393C3F745"
+        "6EB715DE-E2D2-4189-A99D-3DBAB489D2BD",
+        "0EB4110C-F314-4205-8835-F5A0AE56211C",
+        "6B53BB13-8C36-4F92-A38C-192EB9571E1A"
       ],
       "undoAfter": 2,
       "undoBefore": 1
@@ -2351,63 +2748,36 @@
       "errors": [],
       "ok": true,
       "ownedPIDs": [
-        70010,
-        71077,
-        71143,
-        71144,
-        71145,
-        71689,
-        71690,
-        71692,
-        71693
+        22604,
+        22767,
+        22897,
+        23021,
+        23056,
+        23089,
+        23090,
+        23091,
+        23096
       ],
-      "preferenceDomain": "io.github.sergeserb2.open.e2e.spacemanager.68164-0b51f6c7",
+      "preferenceDomain": "io.github.sergeserb2.open.e2e.spacemanager.22495-b52b3157",
       "quit": [
         {
           "forced": false,
           "ok": true,
           "owned_pids": [
-            70010,
-            70392,
-            70393,
-            70414,
-            70415,
-            70422,
-            70423,
-            70749,
-            70750
-          ],
-          "remaining_processes": [],
-          "reply": true,
-          "windows_after_quit": {
-            "count": 0,
-            "windows": []
-          },
-          "windows_before_quit": 3
-        },
-        {
-          "forced": false,
-          "ok": true,
-          "owned_pids": [
-            71077,
-            71143,
-            71144,
-            71145,
-            71164,
-            71165,
-            71245,
-            71247,
-            71270,
-            71273,
-            71314,
-            71385,
-            71553,
-            71666,
-            71667,
-            71689,
-            71690,
-            71692,
-            71693
+            22604,
+            22662,
+            22663,
+            22664,
+            22665,
+            22666,
+            22667,
+            22709,
+            22711,
+            22713,
+            22724,
+            22725,
+            22751,
+            22752
           ],
           "remaining_processes": [],
           "reply": true,
@@ -2416,6 +2786,99 @@
             "windows": []
           },
           "windows_before_quit": 2
+        },
+        {
+          "forced": false,
+          "ok": true,
+          "owned_pids": [
+            22767,
+            22775,
+            22776,
+            22778,
+            22782,
+            22783,
+            22848,
+            22849,
+            22852,
+            22854,
+            22857,
+            22862,
+            22868,
+            22873,
+            22874,
+            22886,
+            22887
+          ],
+          "remaining_processes": [],
+          "reply": true,
+          "windows_after_quit": {
+            "count": 0,
+            "windows": []
+          },
+          "windows_before_quit": 2
+        },
+        {
+          "forced": false,
+          "ok": true,
+          "owned_pids": [
+            22897,
+            22925,
+            22926,
+            22927,
+            22941,
+            22949,
+            23009,
+            23010
+          ],
+          "remaining_processes": [],
+          "reply": true,
+          "windows_after_quit": {
+            "count": 0,
+            "windows": []
+          },
+          "windows_before_quit": 2
+        },
+        {
+          "forced": false,
+          "ok": true,
+          "owned_pids": [
+            23021,
+            23040,
+            23041,
+            23042,
+            23043,
+            23044,
+            23045,
+            23047
+          ],
+          "remaining_processes": [],
+          "reply": true,
+          "windows_after_quit": {
+            "count": 0,
+            "windows": []
+          },
+          "windows_before_quit": 2
+        },
+        {
+          "forced": false,
+          "ok": true,
+          "owned_pids": [
+            23056,
+            23089,
+            23090,
+            23091,
+            23092,
+            23094,
+            23095,
+            23096
+          ],
+          "remaining_processes": [],
+          "reply": true,
+          "windows_after_quit": {
+            "count": 0,
+            "windows": []
+          },
+          "windows_before_quit": 0
         }
       ],
       "remainingProcesses": [],
@@ -2462,21 +2925,21 @@
                 26
               ]
             },
-            "id": "268D4E5F-2DA4-40EE-BFEE-900E5D379005",
+            "id": "0EB4110C-F314-4205-8835-F5A0AE56211C",
             "managerSize": [
               779,
               599
             ],
             "rows": [
               {
-                "id": "91B7F1A5-3CFD-4C21-AE03-41FF08FFD792",
+                "id": "317B780A-EB83-4C83-BA97-391C9BB98700",
                 "point": [
                   319,
                   182.5
                 ]
               },
               {
-                "id": "F57F5539-D1FD-4D04-B77F-1D4AF4E8DF5A",
+                "id": "D6FE8F66-5015-46C2-95F6-12C923AA7DDE",
                 "point": [
                   319,
                   223.5
@@ -2521,31 +2984,66 @@
                 26
               ]
             },
-            "id": "9323318C-5947-4F4E-A903-C38D94A6E76A",
+            "id": "6EB715DE-E2D2-4189-A99D-3DBAB489D2BD",
             "managerSize": [
               779,
               599
             ],
             "rows": [
               {
-                "id": "ECCAB61A-B2E1-4768-947E-BB65362A92CA",
+                "id": "8BDF2378-586E-4339-B71D-0C88C319D0B5",
                 "point": [
                   575,
-                  182.5
+                  124.5
                 ]
               },
               {
-                "id": "9391971F-971C-4006-8622-9B97E6EC6DFA",
+                "id": "13C02B07-6AB9-4DCE-B738-6D58E6A34363",
                 "point": [
                   575,
-                  223.5
+                  165.5
                 ]
               },
               {
-                "id": "F6BE84B2-D1C8-465F-912D-AE75101E6B19",
+                "id": "01A9E28A-3452-405A-9DCC-1D67FCB56886",
                 "point": [
                   575,
                   264.5
+                ]
+              },
+              {
+                "id": "4CAB7D74-530C-489F-9CFA-3605A4C4CDDC",
+                "point": [
+                  575,
+                  305.5
+                ]
+              },
+              {
+                "id": "8F32DF47-5783-49A4-B955-8A3D0470DAB2",
+                "point": [
+                  575,
+                  346.5
+                ]
+              },
+              {
+                "id": "19EF1ACF-FA72-4B5C-A2CD-FDDD9058477B",
+                "point": [
+                  575,
+                  387.5
+                ]
+              },
+              {
+                "id": "152D915F-7410-4BDC-81E8-23911142B6FA",
+                "point": [
+                  575,
+                  428.5
+                ]
+              },
+              {
+                "id": "D0471140-A357-4CCD-8693-0067E0E521D9",
+                "point": [
+                  575,
+                  469.5
                 ]
               }
             ]
@@ -2587,7 +3085,7 @@
                 26
               ]
             },
-            "id": "9A59A5D3-8C72-4BB3-9BAE-125393C3F745",
+            "id": "6B53BB13-8C36-4F92-A38C-192EB9571E1A",
             "managerSize": [
               779,
               599
@@ -2596,10 +3094,10 @@
           }
         ],
         "contextValid": true,
-        "contextWindow": "76078EA2-C8AF-400F-9CA4-6C6C04929D7B",
+        "contextWindow": "A5E3B69C-8FF7-4890-B3C9-07F6E2017E88",
         "globalPreviewsEnabled": true,
         "hostedManagers": 1,
-        "identity": "ObjectIdentifier(0x0000012c00399f00)",
+        "identity": "ObjectIdentifier(0x0000010c003d9f00)",
         "managerClass": "OpenSidebar.SpaceManagerView",
         "modelUndoCount": 2,
         "previewsEnabled": false,
@@ -2609,26 +3107,26 @@
         "switchers": [
           {
             "order": [
-              "268D4E5F-2DA4-40EE-BFEE-900E5D379005",
-              "9323318C-5947-4F4E-A903-C38D94A6E76A",
-              "9A59A5D3-8C72-4BB3-9BAE-125393C3F745"
+              "0EB4110C-F314-4205-8835-F5A0AE56211C",
+              "6EB715DE-E2D2-4189-A99D-3DBAB489D2BD",
+              "6B53BB13-8C36-4F92-A38C-192EB9571E1A"
             ],
-            "window": "76078EA2-C8AF-400F-9CA4-6C6C04929D7B"
+            "window": "A5E3B69C-8FF7-4890-B3C9-07F6E2017E88"
           }
         ],
         "undoEnabled": true,
-        "undoTarget": "OpenSettings.(unknown context at $103822aac).LibraryNativeWindow",
+        "undoTarget": "OpenSettings.(unknown context at $100d89650).LibraryNativeWindow",
         "visible": true,
-        "window": 194967,
+        "window": 6587,
         "windows": [
           {
             "attachedSheet": 0,
             "class": "BrowserWindow",
             "firstResponder": "BrowserWindow",
-            "frame": "{{0, 0}, {1728, 1084}}",
+            "frame": "{{40, 40}, {1728, 1084}}",
             "key": false,
             "level": 0,
-            "number": 194966,
+            "number": 6586,
             "parent": 0,
             "sheet": false,
             "title": "Archive Neighbor",
@@ -2641,7 +3139,7 @@
             "frame": "{{200, 200}, {960, 640}}",
             "key": true,
             "level": 0,
-            "number": 194967,
+            "number": 6587,
             "parent": 0,
             "sheet": false,
             "title": "Spaces",
@@ -2654,7 +3152,7 @@
             "frame": "{{124, 76}, {1280, 800}}",
             "key": false,
             "level": 0,
-            "number": 194970,
+            "number": 6590,
             "parent": 0,
             "sheet": false,
             "title": "Open",
@@ -2670,12 +3168,12 @@
         "editorCanUndo": true,
         "editorText": "Manage Spaces",
         "final": true,
-        "firstResultsMs": 5.540375000000495,
+        "firstResultsMs": 17.90070833333266,
         "mode": "newTab",
         "newTabHighlighted": true,
-        "openFirstResultsMs": 31.422708333333503,
+        "openFirstResultsMs": 60.5001666666667,
         "presented": true,
-        "profile": "E38DCECF-9D86-4020-8418-8F0EDFC67647",
+        "profile": "66639C70-0CEC-4365-91F4-6D94CD1B7D6C",
         "range": [
           13,
           0
@@ -2701,7 +3199,7 @@
           }
         ],
         "selected": 0,
-        "space": "9323318C-5947-4F4E-A903-C38D94A6E76A",
+        "space": "6EB715DE-E2D2-4189-A99D-3DBAB489D2BD",
         "text": "Manage Spaces",
         "timingScope": "showCommandBar entry to first snapshot applied; excludes preceding key routing, socket transport and frame presentation"
       }
@@ -2713,12 +3211,12 @@
         "editorCanUndo": false,
         "editorText": "",
         "final": true,
-        "firstResultsMs": 27.50524999999834,
+        "firstResultsMs": 29.365208333332703,
         "mode": "newTab",
         "newTabHighlighted": true,
-        "openFirstResultsMs": 31.422708333333503,
+        "openFirstResultsMs": 60.5001666666667,
         "presented": true,
-        "profile": "E38DCECF-9D86-4020-8418-8F0EDFC67647",
+        "profile": "66639C70-0CEC-4365-91F4-6D94CD1B7D6C",
         "range": [
           0,
           0
@@ -2726,16 +3224,52 @@
         "rows": [
           {
             "action": "",
-            "id": "tab:F6BE84B2-D1C8-465F-912D-AE75101E6B19",
+            "id": "tab:4CAB7D74-530C-489F-9CFA-3605A4C4CDDC",
             "kind": "switchToTab",
-            "space": "9323318C-5947-4F4E-A903-C38D94A6E76A",
-            "tab": "F6BE84B2-D1C8-465F-912D-AE75101E6B19",
-            "title": "Folder Child",
-            "url": "data:text/html,%3Ctitle%3EFolder%20Child%3C/title%3E%3Ch1%3EFolder%20Child%3C/h1%3E"
+            "space": "6EB715DE-E2D2-4189-A99D-3DBAB489D2BD",
+            "tab": "4CAB7D74-530C-489F-9CFA-3605A4C4CDDC",
+            "title": "Background Unread",
+            "url": "file:///var/folders/s6/_07cr4w13vsg_myjkv9ldpqc0000gn/T/Open-E2E-sidebar-completion-chrome-22495-9b1edd40-scratch-wt8y4qns/background-unread.html"
+          },
+          {
+            "action": "",
+            "id": "tab:8F32DF47-5783-49A4-B955-8A3D0470DAB2",
+            "kind": "switchToTab",
+            "space": "6EB715DE-E2D2-4189-A99D-3DBAB489D2BD",
+            "tab": "8F32DF47-5783-49A4-B955-8A3D0470DAB2",
+            "title": "Preview Current",
+            "url": "file:///var/folders/s6/_07cr4w13vsg_myjkv9ldpqc0000gn/T/Open-E2E-sidebar-completion-chrome-22495-9b1edd40-scratch-wt8y4qns/preview-current.html"
+          },
+          {
+            "action": "",
+            "id": "tab:19EF1ACF-FA72-4B5C-A2CD-FDDD9058477B",
+            "kind": "switchToTab",
+            "space": "6EB715DE-E2D2-4189-A99D-3DBAB489D2BD",
+            "tab": "19EF1ACF-FA72-4B5C-A2CD-FDDD9058477B",
+            "title": "Manager One",
+            "url": "data:text/html,%3Ctitle%3EManager%20One%3C/title%3E%3Ch1%3EManager%20One%3C/h1%3E"
+          },
+          {
+            "action": "",
+            "id": "tab:13C02B07-6AB9-4DCE-B738-6D58E6A34363",
+            "kind": "switchToTab",
+            "space": "6EB715DE-E2D2-4189-A99D-3DBAB489D2BD",
+            "tab": "13C02B07-6AB9-4DCE-B738-6D58E6A34363",
+            "title": "Separate Origin",
+            "url": "file:///var/folders/s6/_07cr4w13vsg_myjkv9ldpqc0000gn/T/Open-E2E-sidebar-completion-chrome-22495-9b1edd40-scratch-wt8y4qns/separate-origin.html"
+          },
+          {
+            "action": "",
+            "id": "tab:8BDF2378-586E-4339-B71D-0C88C319D0B5",
+            "kind": "switchToTab",
+            "space": "6EB715DE-E2D2-4189-A99D-3DBAB489D2BD",
+            "tab": "8BDF2378-586E-4339-B71D-0C88C319D0B5",
+            "title": "Preview Pinned",
+            "url": "file:///var/folders/s6/_07cr4w13vsg_myjkv9ldpqc0000gn/T/Open-E2E-sidebar-completion-chrome-22495-9b1edd40-scratch-wt8y4qns/preview-pinned.html"
           }
         ],
         "selected": 0,
-        "space": "9323318C-5947-4F4E-A903-C38D94A6E76A",
+        "space": "6EB715DE-E2D2-4189-A99D-3DBAB489D2BD",
         "text": "",
         "timingScope": "showCommandBar entry to first snapshot applied; excludes preceding key routing, socket transport and frame presentation"
       }
@@ -2754,8 +3288,8 @@
       "after": {
         "appAppearance": "",
         "builtColumns": 3,
-        "contextWindow": "24539B7E-C524-4F00-9D28-7D6E9AE3BEE7",
-        "identity": "ObjectIdentifier(0x0000012c01e6ab00)",
+        "contextWindow": "0CF492C7-13E4-46A0-8543-8623AF4F8C33",
+        "identity": "ObjectIdentifier(0x0000010c01d3ba00)",
         "key": false,
         "origin": [
           0,
@@ -2813,8 +3347,8 @@
       "before": {
         "appAppearance": "",
         "builtColumns": 3,
-        "contextWindow": "24539B7E-C524-4F00-9D28-7D6E9AE3BEE7",
-        "identity": "ObjectIdentifier(0x0000012c01e6ab00)",
+        "contextWindow": "0CF492C7-13E4-46A0-8543-8623AF4F8C33",
+        "identity": "ObjectIdentifier(0x0000010c01d3ba00)",
         "key": true,
         "origin": [
           0,
@@ -2912,49 +3446,49 @@
                 26
               ]
             },
-            "id": "268D4E5F-2DA4-40EE-BFEE-900E5D379005",
+            "id": "0EB4110C-F314-4205-8835-F5A0AE56211C",
             "managerSize": [
               779,
               599
             ],
             "rows": [
               {
-                "id": "C99E25D6-D9E6-474A-B5B5-8198752F8300",
+                "id": "3F547BC9-2913-43D2-8EAC-9B20F743AC56",
                 "point": [
                   319,
                   124.5
                 ]
               },
               {
-                "id": "A8CEDA2A-121B-48E4-A007-D821269D5CAB",
+                "id": "D94A9E76-8E25-49FB-B9E3-4847899F828A",
                 "point": [
                   319,
                   223.5
                 ]
               },
               {
-                "id": "5757E8BD-9EB1-460E-9FC3-0E982F9B1E6E",
+                "id": "27EDBCC6-3F13-4AD7-84C4-FD1766F59BE5",
                 "point": [
                   319,
                   264.5
                 ]
               },
               {
-                "id": "FF4F4FE3-801B-41C9-9B34-0339D77FC4BF",
+                "id": "C83E138A-6D16-4501-A693-EF56D5CD03B0",
                 "point": [
                   319,
                   305.5
                 ]
               },
               {
-                "id": "91B7F1A5-3CFD-4C21-AE03-41FF08FFD792",
+                "id": "317B780A-EB83-4C83-BA97-391C9BB98700",
                 "point": [
                   319,
                   346.5
                 ]
               },
               {
-                "id": "F57F5539-D1FD-4D04-B77F-1D4AF4E8DF5A",
+                "id": "D6FE8F66-5015-46C2-95F6-12C923AA7DDE",
                 "point": [
                   319,
                   387.5
@@ -2999,7 +3533,7 @@
                 26
               ]
             },
-            "id": "9A59A5D3-8C72-4BB3-9BAE-125393C3F745",
+            "id": "6B53BB13-8C36-4F92-A38C-192EB9571E1A",
             "managerSize": [
               779,
               599
@@ -3043,41 +3577,76 @@
                 26
               ]
             },
-            "id": "9323318C-5947-4F4E-A903-C38D94A6E76A",
+            "id": "6EB715DE-E2D2-4189-A99D-3DBAB489D2BD",
             "managerSize": [
               779,
               599
             ],
             "rows": [
               {
-                "id": "ECCAB61A-B2E1-4768-947E-BB65362A92CA",
+                "id": "8BDF2378-586E-4339-B71D-0C88C319D0B5",
                 "point": [
                   831,
-                  182.5
+                  124.5
                 ]
               },
               {
-                "id": "9391971F-971C-4006-8622-9B97E6EC6DFA",
+                "id": "13C02B07-6AB9-4DCE-B738-6D58E6A34363",
                 "point": [
                   831,
-                  223.5
+                  165.5
                 ]
               },
               {
-                "id": "F6BE84B2-D1C8-465F-912D-AE75101E6B19",
+                "id": "01A9E28A-3452-405A-9DCC-1D67FCB56886",
                 "point": [
                   831,
                   264.5
+                ]
+              },
+              {
+                "id": "4CAB7D74-530C-489F-9CFA-3605A4C4CDDC",
+                "point": [
+                  831,
+                  305.5
+                ]
+              },
+              {
+                "id": "8F32DF47-5783-49A4-B955-8A3D0470DAB2",
+                "point": [
+                  831,
+                  346.5
+                ]
+              },
+              {
+                "id": "19EF1ACF-FA72-4B5C-A2CD-FDDD9058477B",
+                "point": [
+                  831,
+                  387.5
+                ]
+              },
+              {
+                "id": "152D915F-7410-4BDC-81E8-23911142B6FA",
+                "point": [
+                  831,
+                  428.5
+                ]
+              },
+              {
+                "id": "D0471140-A357-4CCD-8693-0067E0E521D9",
+                "point": [
+                  831,
+                  469.5
                 ]
               }
             ]
           }
         ],
         "contextValid": true,
-        "contextWindow": "76078EA2-C8AF-400F-9CA4-6C6C04929D7B",
+        "contextWindow": "A5E3B69C-8FF7-4890-B3C9-07F6E2017E88",
         "globalPreviewsEnabled": true,
         "hostedManagers": 1,
-        "identity": "ObjectIdentifier(0x0000012c00399f00)",
+        "identity": "ObjectIdentifier(0x0000010c003d9f00)",
         "managerClass": "OpenSidebar.SpaceManagerView",
         "modelUndoCount": 4,
         "previewsEnabled": false,
@@ -3087,26 +3656,26 @@
         "switchers": [
           {
             "order": [
-              "268D4E5F-2DA4-40EE-BFEE-900E5D379005",
-              "9A59A5D3-8C72-4BB3-9BAE-125393C3F745",
-              "9323318C-5947-4F4E-A903-C38D94A6E76A"
+              "0EB4110C-F314-4205-8835-F5A0AE56211C",
+              "6B53BB13-8C36-4F92-A38C-192EB9571E1A",
+              "6EB715DE-E2D2-4189-A99D-3DBAB489D2BD"
             ],
-            "window": "76078EA2-C8AF-400F-9CA4-6C6C04929D7B"
+            "window": "A5E3B69C-8FF7-4890-B3C9-07F6E2017E88"
           }
         ],
         "undoEnabled": true,
-        "undoTarget": "OpenSettings.(unknown context at $103822aac).LibraryNativeWindow",
+        "undoTarget": "OpenSettings.(unknown context at $100d89650).LibraryNativeWindow",
         "visible": true,
-        "window": 194967,
+        "window": 6587,
         "windows": [
           {
             "attachedSheet": 0,
             "class": "BrowserWindow",
             "firstResponder": "BrowserWindow",
-            "frame": "{{0, 0}, {1728, 1084}}",
+            "frame": "{{40, 40}, {1728, 1084}}",
             "key": false,
             "level": 0,
-            "number": 194966,
+            "number": 6586,
             "parent": 0,
             "sheet": false,
             "title": "Archive Neighbor",
@@ -3119,7 +3688,7 @@
             "frame": "{{200, 200}, {960, 640}}",
             "key": true,
             "level": 0,
-            "number": 194967,
+            "number": 6587,
             "parent": 0,
             "sheet": false,
             "title": "Spaces",
@@ -3132,7 +3701,7 @@
             "frame": "{{0, 0}, {500, 500}}",
             "key": false,
             "level": 0,
-            "number": 194971,
+            "number": 6591,
             "parent": 0,
             "sheet": false,
             "title": "",
@@ -3145,7 +3714,7 @@
             "frame": "{{124, 76}, {1280, 800}}",
             "key": false,
             "level": 0,
-            "number": 194975,
+            "number": 6595,
             "parent": 0,
             "sheet": false,
             "title": "Manager Split Source",
@@ -3158,14 +3727,14 @@
       "key": {
         "barPresented": false,
         "firstResponder": "SpaceManagerView",
-        "keyWindow": 194953,
+        "keyWindow": 6576,
         "sidebarMode": "anchored"
       },
       "ok": true,
       "order": [
-        "9323318C-5947-4F4E-A903-C38D94A6E76A",
-        "268D4E5F-2DA4-40EE-BFEE-900E5D379005",
-        "9A59A5D3-8C72-4BB3-9BAE-125393C3F745"
+        "6EB715DE-E2D2-4189-A99D-3DBAB489D2BD",
+        "0EB4110C-F314-4205-8835-F5A0AE56211C",
+        "6B53BB13-8C36-4F92-A38C-192EB9571E1A"
       ],
       "undoAfter": 1,
       "undoBefore": 0
@@ -3176,12 +3745,12 @@
         "editorCanUndo": false,
         "editorText": "",
         "final": true,
-        "firstResultsMs": 23.866208333333816,
+        "firstResultsMs": 16.503458333333583,
         "mode": "newTab",
         "newTabHighlighted": false,
-        "openFirstResultsMs": 41.47837499999969,
+        "openFirstResultsMs": 29.626374999999825,
         "presented": false,
-        "profile": "E38DCECF-9D86-4020-8418-8F0EDFC67647",
+        "profile": "66639C70-0CEC-4365-91F4-6D94CD1B7D6C",
         "range": [
           -1,
           0
@@ -3189,34 +3758,34 @@
         "rows": [
           {
             "action": "",
-            "id": "tab:D5EE5C0A-BEBA-413B-B14D-FB5B979A1DF5",
+            "id": "tab:162B2EC9-2529-4A73-876D-A4AC81442863",
             "kind": "switchToTab",
-            "space": "268D4E5F-2DA4-40EE-BFEE-900E5D379005",
-            "tab": "D5EE5C0A-BEBA-413B-B14D-FB5B979A1DF5",
+            "space": "0EB4110C-F314-4205-8835-F5A0AE56211C",
+            "tab": "162B2EC9-2529-4A73-876D-A4AC81442863",
             "title": "Manager Drop Target",
-            "url": "file:///var/folders/s6/_07cr4w13vsg_myjkv9ldpqc0000gn/T/Open-E2E-sidebar-completion-chrome-68164-2c86bb74-scratch-7i75hj8v/manager-drop-target.html"
+            "url": "file:///var/folders/s6/_07cr4w13vsg_myjkv9ldpqc0000gn/T/Open-E2E-sidebar-completion-chrome-22495-9b1edd40-scratch-wt8y4qns/manager-drop-target.html"
           },
           {
             "action": "",
-            "id": "tab:2A6C98BC-CB88-4572-BD85-2719001F2D62",
+            "id": "tab:73C213BD-CE61-488C-878A-32C027AA8118",
             "kind": "switchToTab",
-            "space": "268D4E5F-2DA4-40EE-BFEE-900E5D379005",
-            "tab": "2A6C98BC-CB88-4572-BD85-2719001F2D62",
+            "space": "0EB4110C-F314-4205-8835-F5A0AE56211C",
+            "tab": "73C213BD-CE61-488C-878A-32C027AA8118",
             "title": "Manager Split Source",
             "url": "data:text/html,%3Ctitle%3EManager%20Split%20Source%3C/title%3E%3Ch1%3EManager%20Split%20Source%3C/h1%3E"
           },
           {
             "action": "",
-            "id": "tab:C99E25D6-D9E6-474A-B5B5-8198752F8300",
+            "id": "tab:3F547BC9-2913-43D2-8EAC-9B20F743AC56",
             "kind": "switchToTab",
-            "space": "268D4E5F-2DA4-40EE-BFEE-900E5D379005",
-            "tab": "C99E25D6-D9E6-474A-B5B5-8198752F8300",
+            "space": "0EB4110C-F314-4205-8835-F5A0AE56211C",
+            "tab": "3F547BC9-2913-43D2-8EAC-9B20F743AC56",
             "title": "Manager Pinned Route",
-            "url": "file:///var/folders/s6/_07cr4w13vsg_myjkv9ldpqc0000gn/T/Open-E2E-sidebar-completion-chrome-68164-2c86bb74-scratch-7i75hj8v/manager-pinned.html"
+            "url": "file:///var/folders/s6/_07cr4w13vsg_myjkv9ldpqc0000gn/T/Open-E2E-sidebar-completion-chrome-22495-9b1edd40-scratch-wt8y4qns/manager-pinned.html"
           }
         ],
         "selected": 0,
-        "space": "268D4E5F-2DA4-40EE-BFEE-900E5D379005",
+        "space": "0EB4110C-F314-4205-8835-F5A0AE56211C",
         "text": "",
         "timingScope": "showCommandBar entry to first snapshot applied; excludes preceding key routing, socket transport and frame presentation"
       },
@@ -3225,9 +3794,11 @@
         "canGoBack": false,
         "canGoForward": false,
         "crashed": false,
+        "createdAt": 1793215963.809331,
         "favicon": false,
         "hasWebContent": true,
-        "id": "FF4F4FE3-801B-41C9-9B34-0339D77FC4BF",
+        "id": "C83E138A-6D16-4501-A693-EF56D5CD03B0",
+        "lastActiveAt": 1793215967.194409,
         "loaded": true,
         "loading": true,
         "page": {
@@ -3236,15 +3807,15 @@
           "browserIndex": 2,
           "browserPinned": false,
           "canGoBack": false,
-          "chromeTabId": 34467575,
-          "chromeWindowId": 34467572,
+          "chromeTabId": 111232121,
+          "chromeWindowId": 111232118,
           "context": "Default",
           "crash": 0,
           "extension": "",
           "favicon": false,
           "fullscreen": false,
           "hidden": false,
-          "hostTab": "FF4F4FE3-801B-41C9-9B34-0339D77FC4BF",
+          "hostTab": "C83E138A-6D16-4501-A693-EF56D5CD03B0",
           "identifier": 15,
           "kind": "tab",
           "live": true,
@@ -3257,13 +3828,14 @@
           "url": "",
           "zoom": 0
         },
-        "profile": "E38DCECF-9D86-4020-8418-8F0EDFC67647",
+        "profile": "66639C70-0CEC-4365-91F4-6D94CD1B7D6C",
         "progress": 0.1,
         "section": "today",
         "selected": true,
         "sleepPhase": "live",
-        "space": "268D4E5F-2DA4-40EE-BFEE-900E5D379005",
+        "space": "0EB4110C-F314-4205-8835-F5A0AE56211C",
         "title": "Surviving Browser Selection",
+        "unread": false,
         "url": "data:text/html,%3Ctitle%3ESurviving%20Browser%20Selection%3C/title%3E%3Ch1%3ESurviving%20Browser%20Selection%3C/h1%3E",
         "visible": true
       },
@@ -3277,8 +3849,8 @@
           "library": {
             "appAppearance": "",
             "builtColumns": 3,
-            "contextWindow": "76078EA2-C8AF-400F-9CA4-6C6C04929D7B",
-            "identity": "ObjectIdentifier(0x0000012c00399f00)",
+            "contextWindow": "A5E3B69C-8FF7-4890-B3C9-07F6E2017E88",
+            "identity": "ObjectIdentifier(0x0000010c003d9f00)",
             "key": true,
             "origin": [
               0,
@@ -3343,8 +3915,8 @@
           "library": {
             "appAppearance": "",
             "builtColumns": 3,
-            "contextWindow": "76078EA2-C8AF-400F-9CA4-6C6C04929D7B",
-            "identity": "ObjectIdentifier(0x0000012c00399f00)",
+            "contextWindow": "A5E3B69C-8FF7-4890-B3C9-07F6E2017E88",
+            "identity": "ObjectIdentifier(0x0000010c003d9f00)",
             "key": true,
             "origin": [
               0,
@@ -3409,8 +3981,8 @@
           "library": {
             "appAppearance": "",
             "builtColumns": 3,
-            "contextWindow": "76078EA2-C8AF-400F-9CA4-6C6C04929D7B",
-            "identity": "ObjectIdentifier(0x0000012c00399f00)",
+            "contextWindow": "A5E3B69C-8FF7-4890-B3C9-07F6E2017E88",
+            "identity": "ObjectIdentifier(0x0000010c003d9f00)",
             "key": true,
             "origin": [
               0,
@@ -3468,7 +4040,7 @@
         }
       ],
       "ok": true,
-      "selectedBeforeClose": "FF4F4FE3-801B-41C9-9B34-0339D77FC4BF",
+      "selectedBeforeClose": "C83E138A-6D16-4501-A693-EF56D5CD03B0",
       "state": {
         "columns": [
           {
@@ -3508,49 +4080,49 @@
                 26
               ]
             },
-            "id": "268D4E5F-2DA4-40EE-BFEE-900E5D379005",
+            "id": "0EB4110C-F314-4205-8835-F5A0AE56211C",
             "managerSize": [
               779,
               599
             ],
             "rows": [
               {
-                "id": "C99E25D6-D9E6-474A-B5B5-8198752F8300",
+                "id": "3F547BC9-2913-43D2-8EAC-9B20F743AC56",
                 "point": [
                   319,
                   124.5
                 ]
               },
               {
-                "id": "A8CEDA2A-121B-48E4-A007-D821269D5CAB",
+                "id": "D94A9E76-8E25-49FB-B9E3-4847899F828A",
                 "point": [
                   319,
                   223.5
                 ]
               },
               {
-                "id": "5757E8BD-9EB1-460E-9FC3-0E982F9B1E6E",
+                "id": "27EDBCC6-3F13-4AD7-84C4-FD1766F59BE5",
                 "point": [
                   319,
                   264.5
                 ]
               },
               {
-                "id": "FF4F4FE3-801B-41C9-9B34-0339D77FC4BF",
+                "id": "C83E138A-6D16-4501-A693-EF56D5CD03B0",
                 "point": [
                   319,
                   305.5
                 ]
               },
               {
-                "id": "91B7F1A5-3CFD-4C21-AE03-41FF08FFD792",
+                "id": "317B780A-EB83-4C83-BA97-391C9BB98700",
                 "point": [
                   319,
                   346.5
                 ]
               },
               {
-                "id": "F57F5539-D1FD-4D04-B77F-1D4AF4E8DF5A",
+                "id": "D6FE8F66-5015-46C2-95F6-12C923AA7DDE",
                 "point": [
                   319,
                   387.5
@@ -3595,7 +4167,7 @@
                 26
               ]
             },
-            "id": "9A59A5D3-8C72-4BB3-9BAE-125393C3F745",
+            "id": "6B53BB13-8C36-4F92-A38C-192EB9571E1A",
             "managerSize": [
               779,
               599
@@ -3639,41 +4211,76 @@
                 26
               ]
             },
-            "id": "9323318C-5947-4F4E-A903-C38D94A6E76A",
+            "id": "6EB715DE-E2D2-4189-A99D-3DBAB489D2BD",
             "managerSize": [
               779,
               599
             ],
             "rows": [
               {
-                "id": "ECCAB61A-B2E1-4768-947E-BB65362A92CA",
+                "id": "8BDF2378-586E-4339-B71D-0C88C319D0B5",
                 "point": [
                   831,
-                  182.5
+                  124.5
                 ]
               },
               {
-                "id": "9391971F-971C-4006-8622-9B97E6EC6DFA",
+                "id": "13C02B07-6AB9-4DCE-B738-6D58E6A34363",
                 "point": [
                   831,
-                  223.5
+                  165.5
                 ]
               },
               {
-                "id": "F6BE84B2-D1C8-465F-912D-AE75101E6B19",
+                "id": "01A9E28A-3452-405A-9DCC-1D67FCB56886",
                 "point": [
                   831,
                   264.5
+                ]
+              },
+              {
+                "id": "4CAB7D74-530C-489F-9CFA-3605A4C4CDDC",
+                "point": [
+                  831,
+                  305.5
+                ]
+              },
+              {
+                "id": "8F32DF47-5783-49A4-B955-8A3D0470DAB2",
+                "point": [
+                  831,
+                  346.5
+                ]
+              },
+              {
+                "id": "19EF1ACF-FA72-4B5C-A2CD-FDDD9058477B",
+                "point": [
+                  831,
+                  387.5
+                ]
+              },
+              {
+                "id": "152D915F-7410-4BDC-81E8-23911142B6FA",
+                "point": [
+                  831,
+                  428.5
+                ]
+              },
+              {
+                "id": "D0471140-A357-4CCD-8693-0067E0E521D9",
+                "point": [
+                  831,
+                  469.5
                 ]
               }
             ]
           }
         ],
         "contextValid": true,
-        "contextWindow": "76078EA2-C8AF-400F-9CA4-6C6C04929D7B",
+        "contextWindow": "A5E3B69C-8FF7-4890-B3C9-07F6E2017E88",
         "globalPreviewsEnabled": true,
         "hostedManagers": 1,
-        "identity": "ObjectIdentifier(0x0000012c00399f00)",
+        "identity": "ObjectIdentifier(0x0000010c003d9f00)",
         "managerClass": "OpenSidebar.SpaceManagerView",
         "modelUndoCount": 4,
         "previewsEnabled": false,
@@ -3683,26 +4290,26 @@
         "switchers": [
           {
             "order": [
-              "268D4E5F-2DA4-40EE-BFEE-900E5D379005",
-              "9A59A5D3-8C72-4BB3-9BAE-125393C3F745",
-              "9323318C-5947-4F4E-A903-C38D94A6E76A"
+              "0EB4110C-F314-4205-8835-F5A0AE56211C",
+              "6B53BB13-8C36-4F92-A38C-192EB9571E1A",
+              "6EB715DE-E2D2-4189-A99D-3DBAB489D2BD"
             ],
-            "window": "76078EA2-C8AF-400F-9CA4-6C6C04929D7B"
+            "window": "A5E3B69C-8FF7-4890-B3C9-07F6E2017E88"
           }
         ],
         "undoEnabled": true,
         "undoTarget": "RenderWidgetHostViewCocoa",
         "visible": false,
-        "window": 194967,
+        "window": 6587,
         "windows": [
           {
             "attachedSheet": 0,
             "class": "BrowserWindow",
             "firstResponder": "BrowserWindow",
-            "frame": "{{0, 0}, {1728, 1084}}",
+            "frame": "{{40, 40}, {1728, 1084}}",
             "key": false,
             "level": 0,
-            "number": 194966,
+            "number": 6586,
             "parent": 0,
             "sheet": false,
             "title": "Archive Neighbor",
@@ -3715,7 +4322,7 @@
             "frame": "{{200, 200}, {960, 640}}",
             "key": false,
             "level": 0,
-            "number": 194967,
+            "number": 6587,
             "parent": 0,
             "sheet": false,
             "title": "Spaces",
@@ -3728,7 +4335,7 @@
             "frame": "{{0, 436}, {64, 64}}",
             "key": false,
             "level": 0,
-            "number": 194971,
+            "number": 6591,
             "parent": 0,
             "sheet": false,
             "title": "",
@@ -3741,7 +4348,7 @@
             "frame": "{{124, 76}, {1280, 800}}",
             "key": true,
             "level": 0,
-            "number": 194975,
+            "number": 6595,
             "parent": 0,
             "sheet": false,
             "title": "Surviving Browser Selection",
@@ -3750,30 +4357,30 @@
         ]
       },
       "tabsAfterClose": [
-        "2A6C98BC-CB88-4572-BD85-2719001F2D62",
-        "5757E8BD-9EB1-460E-9FC3-0E982F9B1E6E",
-        "91B7F1A5-3CFD-4C21-AE03-41FF08FFD792",
-        "C99E25D6-D9E6-474A-B5B5-8198752F8300",
-        "D5EE5C0A-BEBA-413B-B14D-FB5B979A1DF5",
-        "F57F5539-D1FD-4D04-B77F-1D4AF4E8DF5A",
-        "FF4F4FE3-801B-41C9-9B34-0339D77FC4BF"
+        "162B2EC9-2529-4A73-876D-A4AC81442863",
+        "27EDBCC6-3F13-4AD7-84C4-FD1766F59BE5",
+        "317B780A-EB83-4C83-BA97-391C9BB98700",
+        "3F547BC9-2913-43D2-8EAC-9B20F743AC56",
+        "73C213BD-CE61-488C-878A-32C027AA8118",
+        "C83E138A-6D16-4501-A693-EF56D5CD03B0",
+        "D6FE8F66-5015-46C2-95F6-12C923AA7DDE"
       ],
       "tabsBeforeClose": [
-        "2A6C98BC-CB88-4572-BD85-2719001F2D62",
-        "5757E8BD-9EB1-460E-9FC3-0E982F9B1E6E",
-        "91B7F1A5-3CFD-4C21-AE03-41FF08FFD792",
-        "C99E25D6-D9E6-474A-B5B5-8198752F8300",
-        "D5EE5C0A-BEBA-413B-B14D-FB5B979A1DF5",
-        "F57F5539-D1FD-4D04-B77F-1D4AF4E8DF5A",
-        "FF4F4FE3-801B-41C9-9B34-0339D77FC4BF"
+        "162B2EC9-2529-4A73-876D-A4AC81442863",
+        "27EDBCC6-3F13-4AD7-84C4-FD1766F59BE5",
+        "317B780A-EB83-4C83-BA97-391C9BB98700",
+        "3F547BC9-2913-43D2-8EAC-9B20F743AC56",
+        "73C213BD-CE61-488C-878A-32C027AA8118",
+        "C83E138A-6D16-4501-A693-EF56D5CD03B0",
+        "D6FE8F66-5015-46C2-95F6-12C923AA7DDE"
       ]
     },
     "library_section_click_fills_cache": {
       "after": {
         "appAppearance": "",
         "builtColumns": 3,
-        "contextWindow": "24539B7E-C524-4F00-9D28-7D6E9AE3BEE7",
-        "identity": "ObjectIdentifier(0x0000012c01e6ab00)",
+        "contextWindow": "0CF492C7-13E4-46A0-8543-8623AF4F8C33",
+        "identity": "ObjectIdentifier(0x0000010c01d3ba00)",
         "key": true,
         "origin": [
           0,
@@ -3891,30 +4498,30 @@
     },
     "library_undo_after_window_close": {
       "expectedOrder": [
-        "268D4E5F-2DA4-40EE-BFEE-900E5D379005",
-        "9A59A5D3-8C72-4BB3-9BAE-125393C3F745",
-        "9323318C-5947-4F4E-A903-C38D94A6E76A"
+        "0EB4110C-F314-4205-8835-F5A0AE56211C",
+        "6B53BB13-8C36-4F92-A38C-192EB9571E1A",
+        "6EB715DE-E2D2-4189-A99D-3DBAB489D2BD"
       ],
       "ok": true,
       "order": [
-        "268D4E5F-2DA4-40EE-BFEE-900E5D379005",
-        "9A59A5D3-8C72-4BB3-9BAE-125393C3F745",
-        "9323318C-5947-4F4E-A903-C38D94A6E76A"
+        "0EB4110C-F314-4205-8835-F5A0AE56211C",
+        "6B53BB13-8C36-4F92-A38C-192EB9571E1A",
+        "6EB715DE-E2D2-4189-A99D-3DBAB489D2BD"
       ],
       "shellWindows": [
         {
-          "id": "76078EA2-C8AF-400F-9CA4-6C6C04929D7B",
-          "number": 194970
+          "id": "A5E3B69C-8FF7-4890-B3C9-07F6E2017E88",
+          "number": 6590
         }
       ],
       "snapshotWindows": [
         {
-          "focusedSpaceID": "268D4E5F-2DA4-40EE-BFEE-900E5D379005",
+          "focusedSpaceID": "0EB4110C-F314-4205-8835-F5A0AE56211C",
           "frameHeight": 800,
           "frameWidth": 1280,
           "frameX": 124,
           "frameY": 76,
-          "id": "76078EA2-C8AF-400F-9CA4-6C6C04929D7B",
+          "id": "A5E3B69C-8FF7-4890-B3C9-07F6E2017E88",
           "selectedNodeBySpace": {},
           "sidebarMode": "anchored",
           "sidebarWidth": 228,
@@ -3927,38 +4534,38 @@
     },
     "library_undo_after_window_create": {
       "expectedOrder": [
-        "268D4E5F-2DA4-40EE-BFEE-900E5D379005",
-        "9A59A5D3-8C72-4BB3-9BAE-125393C3F745",
-        "9323318C-5947-4F4E-A903-C38D94A6E76A"
+        "0EB4110C-F314-4205-8835-F5A0AE56211C",
+        "6B53BB13-8C36-4F92-A38C-192EB9571E1A",
+        "6EB715DE-E2D2-4189-A99D-3DBAB489D2BD"
       ],
       "ok": true,
       "order": [
-        "268D4E5F-2DA4-40EE-BFEE-900E5D379005",
-        "9A59A5D3-8C72-4BB3-9BAE-125393C3F745",
-        "9323318C-5947-4F4E-A903-C38D94A6E76A"
+        "0EB4110C-F314-4205-8835-F5A0AE56211C",
+        "6B53BB13-8C36-4F92-A38C-192EB9571E1A",
+        "6EB715DE-E2D2-4189-A99D-3DBAB489D2BD"
       ],
       "shellWindows": [
         {
-          "id": "24539B7E-C524-4F00-9D28-7D6E9AE3BEE7",
-          "number": 194966
+          "id": "0CF492C7-13E4-46A0-8543-8623AF4F8C33",
+          "number": 6586
         },
         {
-          "id": "76078EA2-C8AF-400F-9CA4-6C6C04929D7B",
-          "number": 194970
+          "id": "A5E3B69C-8FF7-4890-B3C9-07F6E2017E88",
+          "number": 6590
         }
       ],
       "snapshotWindows": [
         {
-          "focusedSpaceID": "268D4E5F-2DA4-40EE-BFEE-900E5D379005",
+          "focusedSpaceID": "0EB4110C-F314-4205-8835-F5A0AE56211C",
           "frameHeight": 1084,
           "frameWidth": 1728,
-          "frameX": 0,
-          "frameY": 0,
-          "id": "24539B7E-C524-4F00-9D28-7D6E9AE3BEE7",
+          "frameX": 40,
+          "frameY": 40,
+          "id": "0CF492C7-13E4-46A0-8543-8623AF4F8C33",
           "selectedNodeBySpace": {
-            "268D4E5F-2DA4-40EE-BFEE-900E5D379005": "F57F5539-D1FD-4D04-B77F-1D4AF4E8DF5A",
-            "9323318C-5947-4F4E-A903-C38D94A6E76A": "ECCAB61A-B2E1-4768-947E-BB65362A92CA",
-            "DB4BDB4D-E716-456F-9AD8-7117955356A1": "756840CB-97E3-49E8-A52F-DC8385BA9108"
+            "0EB4110C-F314-4205-8835-F5A0AE56211C": "D6FE8F66-5015-46C2-95F6-12C923AA7DDE",
+            "3C6E8D70-2653-4725-8FEB-DC36C52C4CC5": "927CDA2D-6D61-4C5D-8442-D04712A4D94E",
+            "6EB715DE-E2D2-4189-A99D-3DBAB489D2BD": "01A9E28A-3452-405A-9DCC-1D67FCB56886"
           },
           "sidebarMode": "anchored",
           "sidebarWidth": 228,
@@ -3966,12 +4573,12 @@
           "style": "standard"
         },
         {
-          "focusedSpaceID": "268D4E5F-2DA4-40EE-BFEE-900E5D379005",
+          "focusedSpaceID": "0EB4110C-F314-4205-8835-F5A0AE56211C",
           "frameHeight": 800,
           "frameWidth": 1280,
           "frameX": 124,
           "frameY": 76,
-          "id": "76078EA2-C8AF-400F-9CA4-6C6C04929D7B",
+          "id": "A5E3B69C-8FF7-4890-B3C9-07F6E2017E88",
           "selectedNodeBySpace": {},
           "sidebarMode": "anchored",
           "sidebarWidth": 228,
@@ -3987,8 +4594,8 @@
       "state": {
         "appAppearance": "NSAppearanceNameDarkAqua",
         "builtColumns": 3,
-        "contextWindow": "24539B7E-C524-4F00-9D28-7D6E9AE3BEE7",
-        "identity": "ObjectIdentifier(0x0000012c01e6ab00)",
+        "contextWindow": "0CF492C7-13E4-46A0-8543-8623AF4F8C33",
+        "identity": "ObjectIdentifier(0x0000010c01d3ba00)",
         "key": true,
         "origin": [
           0,
@@ -4049,8 +4656,8 @@
       "state": {
         "appAppearance": "NSAppearanceNameAqua",
         "builtColumns": 3,
-        "contextWindow": "24539B7E-C524-4F00-9D28-7D6E9AE3BEE7",
-        "identity": "ObjectIdentifier(0x0000012c01e6ab00)",
+        "contextWindow": "0CF492C7-13E4-46A0-8543-8623AF4F8C33",
+        "identity": "ObjectIdentifier(0x0000010c01d3ba00)",
         "key": true,
         "origin": [
           0,
@@ -4111,8 +4718,8 @@
       "state": {
         "appAppearance": "",
         "builtColumns": 3,
-        "contextWindow": "24539B7E-C524-4F00-9D28-7D6E9AE3BEE7",
-        "identity": "ObjectIdentifier(0x0000012c01e6ab00)",
+        "contextWindow": "0CF492C7-13E4-46A0-8543-8623AF4F8C33",
+        "identity": "ObjectIdentifier(0x0000010c01d3ba00)",
         "key": true,
         "origin": [
           0,
@@ -4170,20 +4777,20 @@
     },
     "manager_archive_real_store": {
       "ok": true,
-      "tab": "91B7F1A5-3CFD-4C21-AE03-41FF08FFD792"
+      "tab": "317B780A-EB83-4C83-BA97-391C9BB98700"
     },
     "manager_archive_restore_original_id": {
       "ok": true,
-      "tab": "91B7F1A5-3CFD-4C21-AE03-41FF08FFD792"
+      "tab": "317B780A-EB83-4C83-BA97-391C9BB98700"
     },
     "manager_captures": {
       "comparison": "no Arc Manager capture exists (C2 pending); geometry compared with the plan spec in E5_manager_spec_geometry",
-      "hovered": "/Users/serge/.t3/projects/open/.re/section1/a1-evidence/run-68164-0b51f6c7/manager-hovered.png",
-      "rest": "/Users/serge/.t3/projects/open/.re/section1/a1-evidence/run-68164-0b51f6c7/manager-rest.png"
+      "hovered": "/Users/serge/.t3/worktrees/open/t3-34aa18ed/.re/space-manager/run-22495-b52b3157/manager-hovered.png",
+      "rest": "/Users/serge/.t3/worktrees/open/t3-34aa18ed/.re/space-manager/run-22495-b52b3157/manager-rest.png"
     },
     "manager_copy_link_pasteboard": {
-      "actual": "file:///var/folders/s6/_07cr4w13vsg_myjkv9ldpqc0000gn/T/Open-E2E-sidebar-completion-chrome-68164-2c86bb74-scratch-7i75hj8v/manager-pinned.html",
-      "expected": "file:///var/folders/s6/_07cr4w13vsg_myjkv9ldpqc0000gn/T/Open-E2E-sidebar-completion-chrome-68164-2c86bb74-scratch-7i75hj8v/manager-pinned.html",
+      "actual": "file:///var/folders/s6/_07cr4w13vsg_myjkv9ldpqc0000gn/T/Open-E2E-sidebar-completion-chrome-22495-9b1edd40-scratch-wt8y4qns/manager-pinned.html",
+      "expected": "file:///var/folders/s6/_07cr4w13vsg_myjkv9ldpqc0000gn/T/Open-E2E-sidebar-completion-chrome-22495-9b1edd40-scratch-wt8y4qns/manager-pinned.html",
       "ok": true
     },
     "manager_delete_space": {
@@ -4196,22 +4803,22 @@
           "Delete your Manager Two Space?",
           "This will archive all the tabs and folders inside it."
         ],
-        "window": 194967
+        "window": 6587
       },
       "ok": true,
       "order": [
-        "9A59A5D3-8C72-4BB3-9BAE-125393C3F745",
-        "9323318C-5947-4F4E-A903-C38D94A6E76A"
+        "6B53BB13-8C36-4F92-A38C-192EB9571E1A",
+        "6EB715DE-E2D2-4189-A99D-3DBAB489D2BD"
       ]
     },
     "manager_delete_space_undo_ids": {
       "ok": true,
       "order": [
-        "268D4E5F-2DA4-40EE-BFEE-900E5D379005",
-        "9A59A5D3-8C72-4BB3-9BAE-125393C3F745",
-        "9323318C-5947-4F4E-A903-C38D94A6E76A"
+        "0EB4110C-F314-4205-8835-F5A0AE56211C",
+        "6B53BB13-8C36-4F92-A38C-192EB9571E1A",
+        "6EB715DE-E2D2-4189-A99D-3DBAB489D2BD"
       ],
-      "tab": "91B7F1A5-3CFD-4C21-AE03-41FF08FFD792"
+      "tab": "317B780A-EB83-4C83-BA97-391C9BB98700"
     },
     "manager_loaded_pin_unloads_host": {
       "ok": true,
@@ -4220,19 +4827,22 @@
         "canGoBack": false,
         "canGoForward": false,
         "crashed": false,
+        "createdAt": 1793215964.1993961,
         "favicon": false,
         "hasWebContent": false,
-        "id": "C99E25D6-D9E6-474A-B5B5-8198752F8300",
+        "id": "3F547BC9-2913-43D2-8EAC-9B20F743AC56",
+        "lastActiveAt": 1793215964.746014,
         "loaded": false,
         "loading": false,
-        "profile": "E38DCECF-9D86-4020-8418-8F0EDFC67647",
+        "profile": "66639C70-0CEC-4365-91F4-6D94CD1B7D6C",
         "progress": 0,
         "section": "pinned",
         "selected": false,
         "sleepPhase": "placeholder",
-        "space": "268D4E5F-2DA4-40EE-BFEE-900E5D379005",
+        "space": "0EB4110C-F314-4205-8835-F5A0AE56211C",
         "title": "Manager Pinned Route",
-        "url": "file:///var/folders/s6/_07cr4w13vsg_myjkv9ldpqc0000gn/T/Open-E2E-sidebar-completion-chrome-68164-2c86bb74-scratch-7i75hj8v/manager-pinned.html",
+        "unread": false,
+        "url": "file:///var/folders/s6/_07cr4w13vsg_myjkv9ldpqc0000gn/T/Open-E2E-sidebar-completion-chrome-22495-9b1edd40-scratch-wt8y4qns/manager-pinned.html",
         "visible": false
       }
     },
@@ -4243,12 +4853,12 @@
         "editorCanUndo": true,
         "editorText": "Mute All Tabs",
         "final": true,
-        "firstResultsMs": 1.956250000000182,
+        "firstResultsMs": 2.2532916666668825,
         "mode": "newTab",
         "newTabHighlighted": true,
-        "openFirstResultsMs": 32.53562499999953,
+        "openFirstResultsMs": 24.392041666666955,
         "presented": true,
-        "profile": "E38DCECF-9D86-4020-8418-8F0EDFC67647",
+        "profile": "66639C70-0CEC-4365-91F4-6D94CD1B7D6C",
         "range": [
           13,
           0
@@ -4283,7 +4893,7 @@
           }
         ],
         "selected": 0,
-        "space": "268D4E5F-2DA4-40EE-BFEE-900E5D379005",
+        "space": "0EB4110C-F314-4205-8835-F5A0AE56211C",
         "text": "Mute All Tabs",
         "timingScope": "showCommandBar entry to first snapshot applied; excludes preceding key routing, socket transport and frame presentation"
       }
@@ -4296,15 +4906,15 @@
         "browserIndex": 0,
         "browserPinned": true,
         "canGoBack": false,
-        "chromeTabId": 34467562,
-        "chromeWindowId": 34467554,
+        "chromeTabId": 111232108,
+        "chromeWindowId": 111232100,
         "context": "Default",
         "crash": 0,
         "extension": "",
         "favicon": false,
         "fullscreen": false,
         "hidden": false,
-        "hostTab": "C99E25D6-D9E6-474A-B5B5-8198752F8300",
+        "hostTab": "3F547BC9-2913-43D2-8EAC-9B20F743AC56",
         "identifier": 10,
         "kind": "tab",
         "live": true,
@@ -4319,40 +4929,43 @@
         "popup": false,
         "style": "chrome",
         "title": "Manager Pinned Route",
-        "url": "file:///var/folders/s6/_07cr4w13vsg_myjkv9ldpqc0000gn/T/Open-E2E-sidebar-completion-chrome-68164-2c86bb74-scratch-7i75hj8v/manager-pinned.html",
+        "url": "file:///var/folders/s6/_07cr4w13vsg_myjkv9ldpqc0000gn/T/Open-E2E-sidebar-completion-chrome-22495-9b1edd40-scratch-wt8y4qns/manager-pinned.html",
         "zoom": 0
       }
     },
     "manager_pinned_delete_retains_pin": {
       "archive": [
         {
-          "id": "756840CB-97E3-49E8-A52F-DC8385BA9108",
+          "id": "927CDA2D-6D61-4C5D-8442-D04712A4D94E",
           "url": "data:text/html,%3Ctitle%3EDoomed%20Space%20Tab%3C/title%3E%3Ch1%3EDoomed%20Space%20Tab%3C/h1%3E"
         }
       ],
-      "expectedNeighbor": "5757E8BD-9EB1-460E-9FC3-0E982F9B1E6E",
+      "expectedNeighbor": "27EDBCC6-3F13-4AD7-84C4-FD1766F59BE5",
       "ok": true,
       "pin": {
         "audible": false,
         "canGoBack": false,
         "canGoForward": false,
         "crashed": false,
+        "createdAt": 1793215964.1993961,
         "favicon": false,
         "hasWebContent": false,
-        "id": "C99E25D6-D9E6-474A-B5B5-8198752F8300",
+        "id": "3F547BC9-2913-43D2-8EAC-9B20F743AC56",
+        "lastActiveAt": 1793215964.562355,
         "loaded": false,
         "loading": false,
-        "profile": "E38DCECF-9D86-4020-8418-8F0EDFC67647",
+        "profile": "66639C70-0CEC-4365-91F4-6D94CD1B7D6C",
         "progress": 0,
         "section": "pinned",
         "selected": false,
         "sleepPhase": "placeholder",
-        "space": "268D4E5F-2DA4-40EE-BFEE-900E5D379005",
+        "space": "0EB4110C-F314-4205-8835-F5A0AE56211C",
         "title": "Manager Pinned Route",
-        "url": "file:///var/folders/s6/_07cr4w13vsg_myjkv9ldpqc0000gn/T/Open-E2E-sidebar-completion-chrome-68164-2c86bb74-scratch-7i75hj8v/manager-pinned.html",
+        "unread": false,
+        "url": "file:///var/folders/s6/_07cr4w13vsg_myjkv9ldpqc0000gn/T/Open-E2E-sidebar-completion-chrome-22495-9b1edd40-scratch-wt8y4qns/manager-pinned.html",
         "visible": false
       },
-      "selected": "5757E8BD-9EB1-460E-9FC3-0E982F9B1E6E"
+      "selected": "27EDBCC6-3F13-4AD7-84C4-FD1766F59BE5"
     },
     "manager_rebind_second_and_first": {
       "first": {
@@ -4394,21 +5007,21 @@
                 26
               ]
             },
-            "id": "268D4E5F-2DA4-40EE-BFEE-900E5D379005",
+            "id": "0EB4110C-F314-4205-8835-F5A0AE56211C",
             "managerSize": [
               779,
               599
             ],
             "rows": [
               {
-                "id": "91B7F1A5-3CFD-4C21-AE03-41FF08FFD792",
+                "id": "317B780A-EB83-4C83-BA97-391C9BB98700",
                 "point": [
                   310,
                   182.5
                 ]
               },
               {
-                "id": "F57F5539-D1FD-4D04-B77F-1D4AF4E8DF5A",
+                "id": "D6FE8F66-5015-46C2-95F6-12C923AA7DDE",
                 "point": [
                   310,
                   223.5
@@ -4453,7 +5066,7 @@
                 26
               ]
             },
-            "id": "9A59A5D3-8C72-4BB3-9BAE-125393C3F745",
+            "id": "6B53BB13-8C36-4F92-A38C-192EB9571E1A",
             "managerSize": [
               779,
               599
@@ -4497,41 +5110,76 @@
                 26
               ]
             },
-            "id": "9323318C-5947-4F4E-A903-C38D94A6E76A",
+            "id": "6EB715DE-E2D2-4189-A99D-3DBAB489D2BD",
             "managerSize": [
               779,
               599
             ],
             "rows": [
               {
-                "id": "ECCAB61A-B2E1-4768-947E-BB65362A92CA",
+                "id": "8BDF2378-586E-4339-B71D-0C88C319D0B5",
                 "point": [
                   822,
-                  182.5
+                  124.5
                 ]
               },
               {
-                "id": "9391971F-971C-4006-8622-9B97E6EC6DFA",
+                "id": "13C02B07-6AB9-4DCE-B738-6D58E6A34363",
                 "point": [
                   822,
-                  223.5
+                  165.5
                 ]
               },
               {
-                "id": "F6BE84B2-D1C8-465F-912D-AE75101E6B19",
+                "id": "01A9E28A-3452-405A-9DCC-1D67FCB56886",
                 "point": [
                   822,
                   264.5
+                ]
+              },
+              {
+                "id": "4CAB7D74-530C-489F-9CFA-3605A4C4CDDC",
+                "point": [
+                  822,
+                  305.5
+                ]
+              },
+              {
+                "id": "8F32DF47-5783-49A4-B955-8A3D0470DAB2",
+                "point": [
+                  822,
+                  346.5
+                ]
+              },
+              {
+                "id": "19EF1ACF-FA72-4B5C-A2CD-FDDD9058477B",
+                "point": [
+                  822,
+                  387.5
+                ]
+              },
+              {
+                "id": "152D915F-7410-4BDC-81E8-23911142B6FA",
+                "point": [
+                  822,
+                  428.5
+                ]
+              },
+              {
+                "id": "D0471140-A357-4CCD-8693-0067E0E521D9",
+                "point": [
+                  822,
+                  469.5
                 ]
               }
             ]
           }
         ],
         "contextValid": true,
-        "contextWindow": "24539B7E-C524-4F00-9D28-7D6E9AE3BEE7",
+        "contextWindow": "0CF492C7-13E4-46A0-8543-8623AF4F8C33",
         "globalPreviewsEnabled": true,
         "hostedManagers": 1,
-        "identity": "ObjectIdentifier(0x0000012c01e6c000)",
+        "identity": "ObjectIdentifier(0x0000010c01d30000)",
         "managerClass": "OpenSidebar.SpaceManagerView",
         "modelUndoCount": 2,
         "previewsEnabled": false,
@@ -4541,34 +5189,34 @@
         "switchers": [
           {
             "order": [
-              "268D4E5F-2DA4-40EE-BFEE-900E5D379005",
-              "9A59A5D3-8C72-4BB3-9BAE-125393C3F745",
-              "9323318C-5947-4F4E-A903-C38D94A6E76A"
+              "0EB4110C-F314-4205-8835-F5A0AE56211C",
+              "6B53BB13-8C36-4F92-A38C-192EB9571E1A",
+              "6EB715DE-E2D2-4189-A99D-3DBAB489D2BD"
             ],
-            "window": "24539B7E-C524-4F00-9D28-7D6E9AE3BEE7"
+            "window": "0CF492C7-13E4-46A0-8543-8623AF4F8C33"
           },
           {
             "order": [
-              "268D4E5F-2DA4-40EE-BFEE-900E5D379005",
-              "9A59A5D3-8C72-4BB3-9BAE-125393C3F745",
-              "9323318C-5947-4F4E-A903-C38D94A6E76A"
+              "0EB4110C-F314-4205-8835-F5A0AE56211C",
+              "6B53BB13-8C36-4F92-A38C-192EB9571E1A",
+              "6EB715DE-E2D2-4189-A99D-3DBAB489D2BD"
             ],
-            "window": "76078EA2-C8AF-400F-9CA4-6C6C04929D7B"
+            "window": "A5E3B69C-8FF7-4890-B3C9-07F6E2017E88"
           }
         ],
         "undoEnabled": true,
-        "undoTarget": "OpenSettings.(unknown context at $103822aac).LibraryNativeWindow",
+        "undoTarget": "OpenSettings.(unknown context at $100d89650).LibraryNativeWindow",
         "visible": true,
-        "window": 194967,
+        "window": 6587,
         "windows": [
           {
             "attachedSheet": 0,
             "class": "BrowserWindow",
             "firstResponder": "BrowserWindow",
-            "frame": "{{0, 0}, {1728, 1084}}",
+            "frame": "{{40, 40}, {1728, 1084}}",
             "key": false,
             "level": 0,
-            "number": 194966,
+            "number": 6586,
             "parent": 0,
             "sheet": false,
             "title": "Archive Neighbor",
@@ -4581,7 +5229,7 @@
             "frame": "{{200, 200}, {960, 640}}",
             "key": true,
             "level": 0,
-            "number": 194967,
+            "number": 6587,
             "parent": 0,
             "sheet": false,
             "title": "Spaces",
@@ -4594,7 +5242,7 @@
             "frame": "{{124, 76}, {1280, 800}}",
             "key": false,
             "level": 0,
-            "number": 194970,
+            "number": 6590,
             "parent": 0,
             "sheet": false,
             "title": "Open",
@@ -4642,21 +5290,21 @@
                 26
               ]
             },
-            "id": "268D4E5F-2DA4-40EE-BFEE-900E5D379005",
+            "id": "0EB4110C-F314-4205-8835-F5A0AE56211C",
             "managerSize": [
               779,
               599
             ],
             "rows": [
               {
-                "id": "91B7F1A5-3CFD-4C21-AE03-41FF08FFD792",
+                "id": "317B780A-EB83-4C83-BA97-391C9BB98700",
                 "point": [
                   319,
                   182.5
                 ]
               },
               {
-                "id": "F57F5539-D1FD-4D04-B77F-1D4AF4E8DF5A",
+                "id": "D6FE8F66-5015-46C2-95F6-12C923AA7DDE",
                 "point": [
                   319,
                   223.5
@@ -4701,31 +5349,66 @@
                 26
               ]
             },
-            "id": "9323318C-5947-4F4E-A903-C38D94A6E76A",
+            "id": "6EB715DE-E2D2-4189-A99D-3DBAB489D2BD",
             "managerSize": [
               779,
               599
             ],
             "rows": [
               {
-                "id": "ECCAB61A-B2E1-4768-947E-BB65362A92CA",
+                "id": "8BDF2378-586E-4339-B71D-0C88C319D0B5",
                 "point": [
                   575,
-                  182.5
+                  124.5
                 ]
               },
               {
-                "id": "9391971F-971C-4006-8622-9B97E6EC6DFA",
+                "id": "13C02B07-6AB9-4DCE-B738-6D58E6A34363",
                 "point": [
                   575,
-                  223.5
+                  165.5
                 ]
               },
               {
-                "id": "F6BE84B2-D1C8-465F-912D-AE75101E6B19",
+                "id": "01A9E28A-3452-405A-9DCC-1D67FCB56886",
                 "point": [
                   575,
                   264.5
+                ]
+              },
+              {
+                "id": "4CAB7D74-530C-489F-9CFA-3605A4C4CDDC",
+                "point": [
+                  575,
+                  305.5
+                ]
+              },
+              {
+                "id": "8F32DF47-5783-49A4-B955-8A3D0470DAB2",
+                "point": [
+                  575,
+                  346.5
+                ]
+              },
+              {
+                "id": "19EF1ACF-FA72-4B5C-A2CD-FDDD9058477B",
+                "point": [
+                  575,
+                  387.5
+                ]
+              },
+              {
+                "id": "152D915F-7410-4BDC-81E8-23911142B6FA",
+                "point": [
+                  575,
+                  428.5
+                ]
+              },
+              {
+                "id": "D0471140-A357-4CCD-8693-0067E0E521D9",
+                "point": [
+                  575,
+                  469.5
                 ]
               }
             ]
@@ -4767,7 +5450,7 @@
                 26
               ]
             },
-            "id": "9A59A5D3-8C72-4BB3-9BAE-125393C3F745",
+            "id": "6B53BB13-8C36-4F92-A38C-192EB9571E1A",
             "managerSize": [
               779,
               599
@@ -4776,10 +5459,10 @@
           }
         ],
         "contextValid": true,
-        "contextWindow": "76078EA2-C8AF-400F-9CA4-6C6C04929D7B",
+        "contextWindow": "A5E3B69C-8FF7-4890-B3C9-07F6E2017E88",
         "globalPreviewsEnabled": true,
         "hostedManagers": 1,
-        "identity": "ObjectIdentifier(0x0000012c01e6c300)",
+        "identity": "ObjectIdentifier(0x0000010c01d36f00)",
         "managerClass": "OpenSidebar.SpaceManagerView",
         "modelUndoCount": 1,
         "previewsEnabled": false,
@@ -4789,34 +5472,34 @@
         "switchers": [
           {
             "order": [
-              "268D4E5F-2DA4-40EE-BFEE-900E5D379005",
-              "9323318C-5947-4F4E-A903-C38D94A6E76A",
-              "9A59A5D3-8C72-4BB3-9BAE-125393C3F745"
+              "0EB4110C-F314-4205-8835-F5A0AE56211C",
+              "6EB715DE-E2D2-4189-A99D-3DBAB489D2BD",
+              "6B53BB13-8C36-4F92-A38C-192EB9571E1A"
             ],
-            "window": "24539B7E-C524-4F00-9D28-7D6E9AE3BEE7"
+            "window": "0CF492C7-13E4-46A0-8543-8623AF4F8C33"
           },
           {
             "order": [
-              "268D4E5F-2DA4-40EE-BFEE-900E5D379005",
-              "9323318C-5947-4F4E-A903-C38D94A6E76A",
-              "9A59A5D3-8C72-4BB3-9BAE-125393C3F745"
+              "0EB4110C-F314-4205-8835-F5A0AE56211C",
+              "6EB715DE-E2D2-4189-A99D-3DBAB489D2BD",
+              "6B53BB13-8C36-4F92-A38C-192EB9571E1A"
             ],
-            "window": "76078EA2-C8AF-400F-9CA4-6C6C04929D7B"
+            "window": "A5E3B69C-8FF7-4890-B3C9-07F6E2017E88"
           }
         ],
         "undoEnabled": true,
-        "undoTarget": "OpenSettings.(unknown context at $103822aac).LibraryNativeWindow",
+        "undoTarget": "OpenSettings.(unknown context at $100d89650).LibraryNativeWindow",
         "visible": true,
-        "window": 194967,
+        "window": 6587,
         "windows": [
           {
             "attachedSheet": 0,
             "class": "BrowserWindow",
             "firstResponder": "BrowserWindow",
-            "frame": "{{0, 0}, {1728, 1084}}",
+            "frame": "{{40, 40}, {1728, 1084}}",
             "key": false,
             "level": 0,
-            "number": 194966,
+            "number": 6586,
             "parent": 0,
             "sheet": false,
             "title": "Archive Neighbor",
@@ -4829,7 +5512,7 @@
             "frame": "{{200, 200}, {960, 640}}",
             "key": true,
             "level": 0,
-            "number": 194967,
+            "number": 6587,
             "parent": 0,
             "sheet": false,
             "title": "Spaces",
@@ -4842,7 +5525,7 @@
             "frame": "{{124, 76}, {1280, 800}}",
             "key": false,
             "level": 0,
-            "number": 194970,
+            "number": 6590,
             "parent": 0,
             "sheet": false,
             "title": "Open",
@@ -4859,15 +5542,15 @@
         "browserIndex": 0,
         "browserPinned": true,
         "canGoBack": true,
-        "chromeTabId": 34467562,
-        "chromeWindowId": 34467554,
+        "chromeTabId": 111232108,
+        "chromeWindowId": 111232100,
         "context": "Default",
         "crash": 0,
         "extension": "",
         "favicon": false,
         "fullscreen": false,
         "hidden": false,
-        "hostTab": "C99E25D6-D9E6-474A-B5B5-8198752F8300",
+        "hostTab": "3F547BC9-2913-43D2-8EAC-9B20F743AC56",
         "identifier": 10,
         "kind": "tab",
         "live": true,
@@ -4882,7 +5565,7 @@
         "popup": false,
         "style": "chrome",
         "title": "Pinned Route Navigated",
-        "url": "file:///var/folders/s6/_07cr4w13vsg_myjkv9ldpqc0000gn/T/Open-E2E-sidebar-completion-chrome-68164-2c86bb74-scratch-7i75hj8v/manager-navigated.html",
+        "url": "file:///var/folders/s6/_07cr4w13vsg_myjkv9ldpqc0000gn/T/Open-E2E-sidebar-completion-chrome-22495-9b1edd40-scratch-wt8y4qns/manager-navigated.html",
         "zoom": 0
       }
     },
@@ -4894,15 +5577,15 @@
         "browserIndex": 0,
         "browserPinned": true,
         "canGoBack": true,
-        "chromeTabId": 34467562,
-        "chromeWindowId": 34467554,
+        "chromeTabId": 111232108,
+        "chromeWindowId": 111232100,
         "context": "Default",
         "crash": 0,
         "extension": "",
         "favicon": false,
         "fullscreen": false,
         "hidden": false,
-        "hostTab": "C99E25D6-D9E6-474A-B5B5-8198752F8300",
+        "hostTab": "3F547BC9-2913-43D2-8EAC-9B20F743AC56",
         "identifier": 10,
         "kind": "tab",
         "live": true,
@@ -4917,7 +5600,7 @@
         "popup": false,
         "style": "chrome",
         "title": "Manager Pinned Route",
-        "url": "file:///var/folders/s6/_07cr4w13vsg_myjkv9ldpqc0000gn/T/Open-E2E-sidebar-completion-chrome-68164-2c86bb74-scratch-7i75hj8v/manager-pinned.html",
+        "url": "file:///var/folders/s6/_07cr4w13vsg_myjkv9ldpqc0000gn/T/Open-E2E-sidebar-completion-chrome-22495-9b1edd40-scratch-wt8y4qns/manager-pinned.html",
         "zoom": 0
       },
       "tab": {
@@ -4925,9 +5608,11 @@
         "canGoBack": true,
         "canGoForward": false,
         "crashed": false,
+        "createdAt": 1793215964.1993961,
         "favicon": false,
         "hasWebContent": true,
-        "id": "C99E25D6-D9E6-474A-B5B5-8198752F8300",
+        "id": "3F547BC9-2913-43D2-8EAC-9B20F743AC56",
+        "lastActiveAt": 1793215965.983335,
         "loaded": true,
         "loading": false,
         "page": {
@@ -4936,15 +5621,15 @@
           "browserIndex": 0,
           "browserPinned": true,
           "canGoBack": true,
-          "chromeTabId": 34467562,
-          "chromeWindowId": 34467554,
+          "chromeTabId": 111232108,
+          "chromeWindowId": 111232100,
           "context": "Default",
           "crash": 0,
           "extension": "",
           "favicon": false,
           "fullscreen": false,
           "hidden": false,
-          "hostTab": "C99E25D6-D9E6-474A-B5B5-8198752F8300",
+          "hostTab": "3F547BC9-2913-43D2-8EAC-9B20F743AC56",
           "identifier": 10,
           "kind": "tab",
           "live": true,
@@ -4959,22 +5644,23 @@
           "popup": false,
           "style": "chrome",
           "title": "Manager Pinned Route",
-          "url": "file:///var/folders/s6/_07cr4w13vsg_myjkv9ldpqc0000gn/T/Open-E2E-sidebar-completion-chrome-68164-2c86bb74-scratch-7i75hj8v/manager-pinned.html",
+          "url": "file:///var/folders/s6/_07cr4w13vsg_myjkv9ldpqc0000gn/T/Open-E2E-sidebar-completion-chrome-22495-9b1edd40-scratch-wt8y4qns/manager-pinned.html",
           "zoom": 0
         },
-        "profile": "E38DCECF-9D86-4020-8418-8F0EDFC67647",
+        "profile": "66639C70-0CEC-4365-91F4-6D94CD1B7D6C",
         "progress": 1,
         "section": "pinned",
         "selected": true,
         "sleepPhase": "live",
-        "space": "268D4E5F-2DA4-40EE-BFEE-900E5D379005",
+        "space": "0EB4110C-F314-4205-8835-F5A0AE56211C",
         "title": "Manager Pinned Route",
-        "url": "file:///var/folders/s6/_07cr4w13vsg_myjkv9ldpqc0000gn/T/Open-E2E-sidebar-completion-chrome-68164-2c86bb74-scratch-7i75hj8v/manager-pinned.html",
+        "unread": false,
+        "url": "file:///var/folders/s6/_07cr4w13vsg_myjkv9ldpqc0000gn/T/Open-E2E-sidebar-completion-chrome-22495-9b1edd40-scratch-wt8y4qns/manager-pinned.html",
         "visible": true
       }
     },
     "manager_split_through_browser": {
-      "focused": "268D4E5F-2DA4-40EE-BFEE-900E5D379005",
+      "focused": "0EB4110C-F314-4205-8835-F5A0AE56211C",
       "ok": true,
       "state": {
         "activationPolicy": 0,
@@ -5033,8 +5719,8 @@
         },
         "confirmation": null,
         "cursor": [
-          1188.09765625,
-          278.4609375
+          2292,
+          -154
         ],
         "engineSelected": 12,
         "engineURL": "data:text/html,%3Ctitle%3EManager%20Split%20Source%3C/title%3E%3Ch1%3EManager%20Split%20Source%3C/h1%3E",
@@ -5056,13 +5742,13 @@
           "shows": 0,
           "visible": false
         },
-        "id": "76078EA2-C8AF-400F-9CA4-6C6C04929D7B",
+        "id": "A5E3B69C-8FF7-4890-B3C9-07F6E2017E88",
         "isKeyWindow": false,
         "key": false,
-        "keyWindow": 194967,
-        "layoutPasses": 868,
+        "keyWindow": 6587,
+        "layoutPasses": 1230,
         "miniaturized": false,
-        "number": 194970,
+        "number": 6590,
         "pageFullscreen": false,
         "paneBackgrounds": [
           {
@@ -5072,7 +5758,7 @@
               255,
               255
             ],
-            "tab": "2A6C98BC-CB88-4572-BD85-2719001F2D62"
+            "tab": "73C213BD-CE61-488C-878A-32C027AA8118"
           },
           {
             "color": [
@@ -5081,7 +5767,7 @@
               255,
               255
             ],
-            "tab": "D5EE5C0A-BEBA-413B-B14D-FB5B979A1DF5"
+            "tab": "162B2EC9-2529-4A73-876D-A4AC81442863"
           }
         ],
         "panel": [
@@ -5110,13 +5796,13 @@
         "screenFrame": [
           0,
           0,
-          1728,
-          1117
+          2560,
+          1440
         ],
-        "selected": "2A6C98BC-CB88-4572-BD85-2719001F2D62",
+        "selected": "73C213BD-CE61-488C-878A-32C027AA8118",
         "shownPages": [
-          "2A6C98BC-CB88-4572-BD85-2719001F2D62",
-          "D5EE5C0A-BEBA-413B-B14D-FB5B979A1DF5"
+          "73C213BD-CE61-488C-878A-32C027AA8118",
+          "162B2EC9-2529-4A73-876D-A4AC81442863"
         ],
         "sidebarClass": "OpenSidebar.SidebarView",
         "sidebarFrame": [
@@ -5133,7 +5819,7 @@
         "sidebarVisible": true,
         "sidebarWidth": 228,
         "sidebarWidthCommits": 0,
-        "space": "268D4E5F-2DA4-40EE-BFEE-900E5D379005",
+        "space": "0EB4110C-F314-4205-8835-F5A0AE56211C",
         "titlebar": [
           0,
           0,
@@ -5240,7 +5926,7 @@
       }
     },
     "manager_today_archive_selects_neighbor": {
-      "expected": "F57F5539-D1FD-4D04-B77F-1D4AF4E8DF5A",
+      "expected": "D6FE8F66-5015-46C2-95F6-12C923AA7DDE",
       "ok": true,
       "state": {
         "activationPolicy": 0,
@@ -5299,15 +5985,15 @@
         },
         "confirmation": null,
         "cursor": [
-          1312.09765625,
-          486.4609375
+          2376,
+          94
         ],
         "engineSelected": 2,
         "engineURL": "data:text/html,%3Ctitle%3EArchive%20Neighbor%3C/title%3E%3Ch1%3EArchive%20Neighbor%3C/h1%3E",
         "firstResponder": "RenderWidgetHostViewCocoa",
         "frame": [
-          0,
-          0,
+          40,
+          40,
           1728,
           1084
         ],
@@ -5322,18 +6008,18 @@
           "shows": 0,
           "visible": false
         },
-        "id": "24539B7E-C524-4F00-9D28-7D6E9AE3BEE7",
+        "id": "0CF492C7-13E4-46A0-8543-8623AF4F8C33",
         "isKeyWindow": false,
         "key": false,
-        "keyWindow": 194967,
-        "layoutPasses": 199,
+        "keyWindow": 6587,
+        "layoutPasses": 282,
         "miniaturized": false,
-        "number": 194966,
+        "number": 6586,
         "pageFullscreen": false,
         "paneBackgrounds": [
           {
             "color": [],
-            "tab": "F57F5539-D1FD-4D04-B77F-1D4AF4E8DF5A"
+            "tab": "D6FE8F66-5015-46C2-95F6-12C923AA7DDE"
           }
         ],
         "panel": [
@@ -5362,12 +6048,12 @@
         "screenFrame": [
           0,
           0,
-          1728,
-          1117
+          2560,
+          1440
         ],
-        "selected": "F57F5539-D1FD-4D04-B77F-1D4AF4E8DF5A",
+        "selected": "D6FE8F66-5015-46C2-95F6-12C923AA7DDE",
         "shownPages": [
-          "F57F5539-D1FD-4D04-B77F-1D4AF4E8DF5A"
+          "D6FE8F66-5015-46C2-95F6-12C923AA7DDE"
         ],
         "sidebarClass": "OpenSidebar.SidebarView",
         "sidebarFrame": [
@@ -5384,7 +6070,7 @@
         "sidebarVisible": true,
         "sidebarWidth": 228,
         "sidebarWidthCommits": 0,
-        "space": "268D4E5F-2DA4-40EE-BFEE-900E5D379005",
+        "space": "0EB4110C-F314-4205-8835-F5A0AE56211C",
         "titlebar": [
           0,
           0,
@@ -5490,7 +6176,7 @@
         ],
         "trafficLightsHovered": false,
         "visible": true,
-        "zoomed": true
+        "zoomed": false
       }
     },
     "manager_turn_into_folder": {
@@ -5501,11 +6187,81 @@
               {
                 "tab": {
                   "_0": {
-                    "createdAt": 1793138852.035376,
-                    "id": "ECCAB61A-B2E1-4768-947E-BB65362A92CA",
+                    "createdAt": 1793215954.786396,
+                    "id": "8BDF2378-586E-4339-B71D-0C88C319D0B5",
                     "isMuted": false,
                     "isUnread": false,
-                    "lastActiveAt": 1793138857.04846,
+                    "lastActiveAt": 1793215957.052485,
+                    "pinnedURL": "file:///var/folders/s6/_07cr4w13vsg_myjkv9ldpqc0000gn/T/Open-E2E-sidebar-completion-chrome-22495-9b1edd40-scratch-wt8y4qns/preview-pinned.html",
+                    "title": "Preview Pinned",
+                    "url": "file:///var/folders/s6/_07cr4w13vsg_myjkv9ldpqc0000gn/T/Open-E2E-sidebar-completion-chrome-22495-9b1edd40-scratch-wt8y4qns/preview-pinned.html"
+                  }
+                }
+              },
+              {
+                "tab": {
+                  "_0": {
+                    "createdAt": 1793215957.086904,
+                    "id": "13C02B07-6AB9-4DCE-B738-6D58E6A34363",
+                    "isMuted": false,
+                    "isUnread": false,
+                    "lastActiveAt": 1793215957.9523358,
+                    "pinnedURL": "file:///var/folders/s6/_07cr4w13vsg_myjkv9ldpqc0000gn/T/Open-E2E-sidebar-completion-chrome-22495-9b1edd40-scratch-wt8y4qns/separate-origin.html",
+                    "title": "Separate Origin",
+                    "url": "file:///var/folders/s6/_07cr4w13vsg_myjkv9ldpqc0000gn/T/Open-E2E-sidebar-completion-chrome-22495-9b1edd40-scratch-wt8y4qns/separate-origin.html"
+                  }
+                }
+              },
+              {
+                "tab": {
+                  "_0": {
+                    "createdAt": 1793215957.950614,
+                    "id": "01A9E28A-3452-405A-9DCC-1D67FCB56886",
+                    "isMuted": false,
+                    "isUnread": false,
+                    "lastActiveAt": 1793215957.954329,
+                    "pinnedURL": "file:///var/folders/s6/_07cr4w13vsg_myjkv9ldpqc0000gn/T/Open-E2E-sidebar-completion-chrome-22495-9b1edd40-scratch-wt8y4qns/separate-away.html",
+                    "title": "Separate Away",
+                    "url": "file:///var/folders/s6/_07cr4w13vsg_myjkv9ldpqc0000gn/T/Open-E2E-sidebar-completion-chrome-22495-9b1edd40-scratch-wt8y4qns/separate-away.html"
+                  }
+                }
+              },
+              {
+                "tab": {
+                  "_0": {
+                    "createdAt": 1793215957.064477,
+                    "id": "4CAB7D74-530C-489F-9CFA-3605A4C4CDDC",
+                    "isMuted": false,
+                    "isUnread": false,
+                    "lastActiveAt": 1793215957.0674691,
+                    "pinnedURL": "file:///var/folders/s6/_07cr4w13vsg_myjkv9ldpqc0000gn/T/Open-E2E-sidebar-completion-chrome-22495-9b1edd40-scratch-wt8y4qns/background-unread.html",
+                    "title": "Background Unread",
+                    "url": "file:///var/folders/s6/_07cr4w13vsg_myjkv9ldpqc0000gn/T/Open-E2E-sidebar-completion-chrome-22495-9b1edd40-scratch-wt8y4qns/background-unread.html"
+                  }
+                }
+              },
+              {
+                "tab": {
+                  "_0": {
+                    "createdAt": 1793215954.960895,
+                    "id": "8F32DF47-5783-49A4-B955-8A3D0470DAB2",
+                    "isMuted": false,
+                    "isUnread": false,
+                    "lastActiveAt": 1793215954.961681,
+                    "pinnedURL": "file:///var/folders/s6/_07cr4w13vsg_myjkv9ldpqc0000gn/T/Open-E2E-sidebar-completion-chrome-22495-9b1edd40-scratch-wt8y4qns/preview-current.html",
+                    "title": "Preview Current",
+                    "url": "file:///var/folders/s6/_07cr4w13vsg_myjkv9ldpqc0000gn/T/Open-E2E-sidebar-completion-chrome-22495-9b1edd40-scratch-wt8y4qns/preview-current.html"
+                  }
+                }
+              },
+              {
+                "tab": {
+                  "_0": {
+                    "createdAt": 1793215949.682582,
+                    "id": "19EF1ACF-FA72-4B5C-A2CD-FDDD9058477B",
+                    "isMuted": false,
+                    "isUnread": false,
+                    "lastActiveAt": 1793215954.375262,
                     "pinnedURL": "data:text/html,%3Ctitle%3EManager%20One%3C/title%3E%3Ch1%3EManager%20One%3C/h1%3E",
                     "title": "Manager One",
                     "url": "data:text/html,%3Ctitle%3EManager%20One%3C/title%3E%3Ch1%3EManager%20One%3C/h1%3E"
@@ -5519,11 +6275,11 @@
                       {
                         "tab": {
                           "_0": {
-                            "createdAt": 1793138855.953886,
-                            "id": "F6BE84B2-D1C8-465F-912D-AE75101E6B19",
+                            "createdAt": 1793215953.3214788,
+                            "id": "D0471140-A357-4CCD-8693-0067E0E521D9",
                             "isMuted": false,
                             "isUnread": false,
-                            "lastActiveAt": 1793138855.955443,
+                            "lastActiveAt": 1793215953.322703,
                             "pinnedURL": "data:text/html,%3Ctitle%3EFolder%20Child%3C/title%3E%3Ch1%3EFolder%20Child%3C/h1%3E",
                             "title": "Folder Child",
                             "url": "data:text/html,%3Ctitle%3EFolder%20Child%3C/title%3E%3Ch1%3EFolder%20Child%3C/h1%3E"
@@ -5531,14 +6287,14 @@
                         }
                       }
                     ],
-                    "id": "9391971F-971C-4006-8622-9B97E6EC6DFA",
+                    "id": "152D915F-7410-4BDC-81E8-23911142B6FA",
                     "isExpanded": true,
                     "title": "Reading"
                   }
                 }
               }
             ],
-            "id": "0B7393F8-5DD4-4EC7-B216-0FDDECE4779D",
+            "id": "DDD1D715-FA19-40C8-ABE2-78A93B2DBB8D",
             "isExpanded": true,
             "title": "Space"
           }
@@ -5546,22 +6302,22 @@
       },
       "ok": true,
       "order": [
-        "268D4E5F-2DA4-40EE-BFEE-900E5D379005",
-        "9A59A5D3-8C72-4BB3-9BAE-125393C3F745"
+        "0EB4110C-F314-4205-8835-F5A0AE56211C",
+        "6B53BB13-8C36-4F92-A38C-192EB9571E1A"
       ],
       "title": "Space"
     },
     "manager_turn_into_folder_undo": {
       "expected": [
-        "268D4E5F-2DA4-40EE-BFEE-900E5D379005",
-        "9A59A5D3-8C72-4BB3-9BAE-125393C3F745",
-        "9323318C-5947-4F4E-A903-C38D94A6E76A"
+        "0EB4110C-F314-4205-8835-F5A0AE56211C",
+        "6B53BB13-8C36-4F92-A38C-192EB9571E1A",
+        "6EB715DE-E2D2-4189-A99D-3DBAB489D2BD"
       ],
       "ok": true,
       "order": [
-        "268D4E5F-2DA4-40EE-BFEE-900E5D379005",
-        "9A59A5D3-8C72-4BB3-9BAE-125393C3F745",
-        "9323318C-5947-4F4E-A903-C38D94A6E76A"
+        "0EB4110C-F314-4205-8835-F5A0AE56211C",
+        "6B53BB13-8C36-4F92-A38C-192EB9571E1A",
+        "6EB715DE-E2D2-4189-A99D-3DBAB489D2BD"
       ]
     },
     "manager_unmute_updates_real_host": {
@@ -5572,15 +6328,15 @@
         "browserIndex": 0,
         "browserPinned": true,
         "canGoBack": false,
-        "chromeTabId": 34467562,
-        "chromeWindowId": 34467554,
+        "chromeTabId": 111232108,
+        "chromeWindowId": 111232100,
         "context": "Default",
         "crash": 0,
         "extension": "",
         "favicon": false,
         "fullscreen": false,
         "hidden": false,
-        "hostTab": "C99E25D6-D9E6-474A-B5B5-8198752F8300",
+        "hostTab": "3F547BC9-2913-43D2-8EAC-9B20F743AC56",
         "identifier": 10,
         "kind": "tab",
         "live": true,
@@ -5595,13 +6351,13 @@
         "popup": false,
         "style": "chrome",
         "title": "Manager Pinned Route",
-        "url": "file:///var/folders/s6/_07cr4w13vsg_myjkv9ldpqc0000gn/T/Open-E2E-sidebar-completion-chrome-68164-2c86bb74-scratch-7i75hj8v/manager-pinned.html",
+        "url": "file:///var/folders/s6/_07cr4w13vsg_myjkv9ldpqc0000gn/T/Open-E2E-sidebar-completion-chrome-22495-9b1edd40-scratch-wt8y4qns/manager-pinned.html",
         "zoom": 0
       }
     },
     "manager_url_drop_other_space": {
-      "expected": "268D4E5F-2DA4-40EE-BFEE-900E5D379005",
-      "focused": "268D4E5F-2DA4-40EE-BFEE-900E5D379005",
+      "expected": "0EB4110C-F314-4205-8835-F5A0AE56211C",
+      "focused": "0EB4110C-F314-4205-8835-F5A0AE56211C",
       "ok": true,
       "tabs": [
         {
@@ -5609,9 +6365,11 @@
           "canGoBack": true,
           "canGoForward": false,
           "crashed": false,
+          "createdAt": 1793215964.1993961,
           "favicon": false,
           "hasWebContent": true,
-          "id": "C99E25D6-D9E6-474A-B5B5-8198752F8300",
+          "id": "3F547BC9-2913-43D2-8EAC-9B20F743AC56",
+          "lastActiveAt": 1793215965.983335,
           "loaded": true,
           "loading": false,
           "page": {
@@ -5620,15 +6378,15 @@
             "browserIndex": 0,
             "browserPinned": true,
             "canGoBack": true,
-            "chromeTabId": 34467562,
-            "chromeWindowId": 34467554,
+            "chromeTabId": 111232108,
+            "chromeWindowId": 111232100,
             "context": "Default",
             "crash": 0,
             "extension": "",
             "favicon": false,
             "fullscreen": false,
             "hidden": true,
-            "hostTab": "C99E25D6-D9E6-474A-B5B5-8198752F8300",
+            "hostTab": "3F547BC9-2913-43D2-8EAC-9B20F743AC56",
             "identifier": 10,
             "kind": "tab",
             "live": true,
@@ -5643,17 +6401,18 @@
             "popup": false,
             "style": "chrome",
             "title": "Manager Pinned Route",
-            "url": "file:///var/folders/s6/_07cr4w13vsg_myjkv9ldpqc0000gn/T/Open-E2E-sidebar-completion-chrome-68164-2c86bb74-scratch-7i75hj8v/manager-pinned.html",
+            "url": "file:///var/folders/s6/_07cr4w13vsg_myjkv9ldpqc0000gn/T/Open-E2E-sidebar-completion-chrome-22495-9b1edd40-scratch-wt8y4qns/manager-pinned.html",
             "zoom": 0
           },
-          "profile": "E38DCECF-9D86-4020-8418-8F0EDFC67647",
+          "profile": "66639C70-0CEC-4365-91F4-6D94CD1B7D6C",
           "progress": 1,
           "section": "pinned",
           "selected": false,
           "sleepPhase": "live",
-          "space": "268D4E5F-2DA4-40EE-BFEE-900E5D379005",
+          "space": "0EB4110C-F314-4205-8835-F5A0AE56211C",
           "title": "Manager Pinned Route",
-          "url": "file:///var/folders/s6/_07cr4w13vsg_myjkv9ldpqc0000gn/T/Open-E2E-sidebar-completion-chrome-68164-2c86bb74-scratch-7i75hj8v/manager-pinned.html",
+          "unread": false,
+          "url": "file:///var/folders/s6/_07cr4w13vsg_myjkv9ldpqc0000gn/T/Open-E2E-sidebar-completion-chrome-22495-9b1edd40-scratch-wt8y4qns/manager-pinned.html",
           "visible": false
         },
         {
@@ -5661,9 +6420,11 @@
           "canGoBack": false,
           "canGoForward": false,
           "crashed": false,
+          "createdAt": 1793215966.550836,
           "favicon": false,
           "hasWebContent": true,
-          "id": "D5EE5C0A-BEBA-413B-B14D-FB5B979A1DF5",
+          "id": "162B2EC9-2529-4A73-876D-A4AC81442863",
+          "lastActiveAt": 1793215966.552674,
           "loaded": true,
           "loading": true,
           "page": {
@@ -5672,15 +6433,15 @@
             "browserIndex": 1,
             "browserPinned": false,
             "canGoBack": false,
-            "chromeTabId": 34467563,
-            "chromeWindowId": 34467554,
+            "chromeTabId": 111232109,
+            "chromeWindowId": 111232100,
             "context": "Default",
             "crash": 0,
             "extension": "",
             "favicon": false,
             "fullscreen": false,
             "hidden": false,
-            "hostTab": "D5EE5C0A-BEBA-413B-B14D-FB5B979A1DF5",
+            "hostTab": "162B2EC9-2529-4A73-876D-A4AC81442863",
             "identifier": 11,
             "kind": "tab",
             "live": true,
@@ -5693,14 +6454,15 @@
             "url": "",
             "zoom": 0
           },
-          "profile": "E38DCECF-9D86-4020-8418-8F0EDFC67647",
+          "profile": "66639C70-0CEC-4365-91F4-6D94CD1B7D6C",
           "progress": 0.1,
           "section": "today",
           "selected": true,
           "sleepPhase": "live",
-          "space": "268D4E5F-2DA4-40EE-BFEE-900E5D379005",
-          "title": "file:///var/folders/s6/_07cr4w13vsg_myjkv9ldpqc0000gn/T/Open-E2E-sidebar-completion-chrome-68164-2c86bb74-scratch-7i75hj8v/manager-drop-target.html",
-          "url": "file:///var/folders/s6/_07cr4w13vsg_myjkv9ldpqc0000gn/T/Open-E2E-sidebar-completion-chrome-68164-2c86bb74-scratch-7i75hj8v/manager-drop-target.html",
+          "space": "0EB4110C-F314-4205-8835-F5A0AE56211C",
+          "title": "file:///var/folders/s6/_07cr4w13vsg_myjkv9ldpqc0000gn/T/Open-E2E-sidebar-completion-chrome-22495-9b1edd40-scratch-wt8y4qns/manager-drop-target.html",
+          "unread": false,
+          "url": "file:///var/folders/s6/_07cr4w13vsg_myjkv9ldpqc0000gn/T/Open-E2E-sidebar-completion-chrome-22495-9b1edd40-scratch-wt8y4qns/manager-drop-target.html",
           "visible": true
         },
         {
@@ -5708,9 +6470,11 @@
           "canGoBack": false,
           "canGoForward": false,
           "crashed": false,
+          "createdAt": 1793215964.385432,
           "favicon": false,
           "hasWebContent": true,
-          "id": "5757E8BD-9EB1-460E-9FC3-0E982F9B1E6E",
+          "id": "27EDBCC6-3F13-4AD7-84C4-FD1766F59BE5",
+          "lastActiveAt": 1793215964.938525,
           "loaded": true,
           "loading": false,
           "page": {
@@ -5719,15 +6483,15 @@
             "browserIndex": 2,
             "browserPinned": false,
             "canGoBack": false,
-            "chromeTabId": 34467558,
-            "chromeWindowId": 34467554,
+            "chromeTabId": 111232104,
+            "chromeWindowId": 111232100,
             "context": "Default",
             "crash": 0,
             "extension": "",
             "favicon": false,
             "fullscreen": false,
             "hidden": true,
-            "hostTab": "5757E8BD-9EB1-460E-9FC3-0E982F9B1E6E",
+            "hostTab": "27EDBCC6-3F13-4AD7-84C4-FD1766F59BE5",
             "identifier": 8,
             "kind": "tab",
             "live": true,
@@ -5745,13 +6509,14 @@
             "url": "data:text/html,%3Ctitle%3EPinned%20Close%20Neighbor%3C/title%3E%3Ch1%3EPinned%20Close%20Neighbor%3C/h1%3E",
             "zoom": 0
           },
-          "profile": "E38DCECF-9D86-4020-8418-8F0EDFC67647",
+          "profile": "66639C70-0CEC-4365-91F4-6D94CD1B7D6C",
           "progress": 1,
           "section": "today",
           "selected": false,
           "sleepPhase": "live",
-          "space": "268D4E5F-2DA4-40EE-BFEE-900E5D379005",
+          "space": "0EB4110C-F314-4205-8835-F5A0AE56211C",
           "title": "Pinned Close Neighbor",
+          "unread": false,
           "url": "data:text/html,%3Ctitle%3EPinned%20Close%20Neighbor%3C/title%3E%3Ch1%3EPinned%20Close%20Neighbor%3C/h1%3E",
           "visible": false
         },
@@ -5760,9 +6525,11 @@
           "canGoBack": false,
           "canGoForward": false,
           "crashed": false,
+          "createdAt": 1793215963.809331,
           "favicon": false,
           "hasWebContent": true,
-          "id": "FF4F4FE3-801B-41C9-9B34-0339D77FC4BF",
+          "id": "C83E138A-6D16-4501-A693-EF56D5CD03B0",
+          "lastActiveAt": 1793215963.811727,
           "loaded": true,
           "loading": false,
           "page": {
@@ -5771,15 +6538,15 @@
             "browserIndex": 3,
             "browserPinned": false,
             "canGoBack": false,
-            "chromeTabId": 34467555,
-            "chromeWindowId": 34467554,
+            "chromeTabId": 111232101,
+            "chromeWindowId": 111232100,
             "context": "Default",
             "crash": 0,
             "extension": "",
             "favicon": false,
             "fullscreen": false,
             "hidden": true,
-            "hostTab": "FF4F4FE3-801B-41C9-9B34-0339D77FC4BF",
+            "hostTab": "C83E138A-6D16-4501-A693-EF56D5CD03B0",
             "identifier": 5,
             "kind": "tab",
             "live": true,
@@ -5797,13 +6564,14 @@
             "url": "data:text/html,%3Ctitle%3ESurviving%20Browser%20Selection%3C/title%3E%3Ch1%3ESurviving%20Browser%20Selection%3C/h1%3E",
             "zoom": 0
           },
-          "profile": "E38DCECF-9D86-4020-8418-8F0EDFC67647",
+          "profile": "66639C70-0CEC-4365-91F4-6D94CD1B7D6C",
           "progress": 1,
           "section": "today",
           "selected": false,
           "sleepPhase": "live",
-          "space": "268D4E5F-2DA4-40EE-BFEE-900E5D379005",
+          "space": "0EB4110C-F314-4205-8835-F5A0AE56211C",
           "title": "Surviving Browser Selection",
+          "unread": false,
           "url": "data:text/html,%3Ctitle%3ESurviving%20Browser%20Selection%3C/title%3E%3Ch1%3ESurviving%20Browser%20Selection%3C/h1%3E",
           "visible": false
         },
@@ -5812,9 +6580,11 @@
           "canGoBack": false,
           "canGoForward": false,
           "crashed": false,
+          "createdAt": 1793215961.7316098,
           "favicon": false,
           "hasWebContent": true,
-          "id": "91B7F1A5-3CFD-4C21-AE03-41FF08FFD792",
+          "id": "317B780A-EB83-4C83-BA97-391C9BB98700",
+          "lastActiveAt": 1793215964.020884,
           "loaded": true,
           "loading": false,
           "page": {
@@ -5823,15 +6593,15 @@
             "browserIndex": 4,
             "browserPinned": false,
             "canGoBack": false,
-            "chromeTabId": 34467556,
-            "chromeWindowId": 34467554,
+            "chromeTabId": 111232102,
+            "chromeWindowId": 111232100,
             "context": "Default",
             "crash": 0,
             "extension": "",
             "favicon": false,
             "fullscreen": false,
             "hidden": true,
-            "hostTab": "91B7F1A5-3CFD-4C21-AE03-41FF08FFD792",
+            "hostTab": "317B780A-EB83-4C83-BA97-391C9BB98700",
             "identifier": 6,
             "kind": "tab",
             "live": true,
@@ -5849,13 +6619,14 @@
             "url": "data:text/html,%3Ctitle%3EManager%20Archive%20Original%20ID%3C/title%3E%3Ch1%3EManager%20Archive%20Original%20ID%3C/h1%3E",
             "zoom": 0
           },
-          "profile": "E38DCECF-9D86-4020-8418-8F0EDFC67647",
+          "profile": "66639C70-0CEC-4365-91F4-6D94CD1B7D6C",
           "progress": 1,
           "section": "today",
           "selected": false,
           "sleepPhase": "live",
-          "space": "268D4E5F-2DA4-40EE-BFEE-900E5D379005",
+          "space": "0EB4110C-F314-4205-8835-F5A0AE56211C",
           "title": "Manager Archive Original ID",
+          "unread": false,
           "url": "data:text/html,%3Ctitle%3EManager%20Archive%20Original%20ID%3C/title%3E%3Ch1%3EManager%20Archive%20Original%20ID%3C/h1%3E",
           "visible": false
         },
@@ -5864,18 +6635,21 @@
           "canGoBack": false,
           "canGoForward": false,
           "crashed": false,
+          "createdAt": 1793215961.547463,
           "favicon": false,
           "hasWebContent": false,
-          "id": "F57F5539-D1FD-4D04-B77F-1D4AF4E8DF5A",
+          "id": "D6FE8F66-5015-46C2-95F6-12C923AA7DDE",
+          "lastActiveAt": 1793215961.916027,
           "loaded": false,
           "loading": false,
-          "profile": "E38DCECF-9D86-4020-8418-8F0EDFC67647",
+          "profile": "66639C70-0CEC-4365-91F4-6D94CD1B7D6C",
           "progress": 0,
           "section": "today",
           "selected": false,
           "sleepPhase": "placeholder",
-          "space": "268D4E5F-2DA4-40EE-BFEE-900E5D379005",
+          "space": "0EB4110C-F314-4205-8835-F5A0AE56211C",
           "title": "Archive Neighbor",
+          "unread": false,
           "url": "data:text/html,%3Ctitle%3EArchive%20Neighbor%3C/title%3E%3Ch1%3EArchive%20Neighbor%3C/h1%3E",
           "visible": false
         }
@@ -5883,7 +6657,7 @@
     },
     "no_browser_copy_link_retains_model_ids": {
       "ok": true,
-      "pasteboard": "file:///var/folders/s6/_07cr4w13vsg_myjkv9ldpqc0000gn/T/Open-E2E-sidebar-completion-chrome-68164-2c86bb74-scratch-7i75hj8v/manager-pinned.html",
+      "pasteboard": "file:///var/folders/s6/_07cr4w13vsg_myjkv9ldpqc0000gn/T/Open-E2E-sidebar-completion-chrome-22495-9b1edd40-scratch-wt8y4qns/manager-pinned.html",
       "snapshot": {
         "defaultDestination": {
           "littleOpen": {}
@@ -5892,7 +6666,7 @@
           {
             "dataDirectoryName": "Default",
             "favorites": [],
-            "id": "E38DCECF-9D86-4020-8418-8F0EDFC67647",
+            "id": "66639C70-0CEC-4365-91F4-6D94CD1B7D6C",
             "name": "Default",
             "settings": {
               "askWhereToSaveEachFile": false,
@@ -5911,25 +6685,25 @@
         "schemaVersion": 1,
         "spaces": [
           {
-            "id": "268D4E5F-2DA4-40EE-BFEE-900E5D379005",
+            "id": "0EB4110C-F314-4205-8835-F5A0AE56211C",
             "isPinnedCollapsed": false,
             "pinned": [
               {
                 "tab": {
                   "_0": {
-                    "createdAt": 1793138863.5821161,
-                    "id": "C99E25D6-D9E6-474A-B5B5-8198752F8300",
+                    "createdAt": 1793215964.1993961,
+                    "id": "3F547BC9-2913-43D2-8EAC-9B20F743AC56",
                     "isMuted": false,
                     "isUnread": false,
-                    "lastActiveAt": 1793138865.479457,
-                    "pinnedURL": "file:///var/folders/s6/_07cr4w13vsg_myjkv9ldpqc0000gn/T/Open-E2E-sidebar-completion-chrome-68164-2c86bb74-scratch-7i75hj8v/manager-pinned.html",
+                    "lastActiveAt": 1793215965.983335,
+                    "pinnedURL": "file:///var/folders/s6/_07cr4w13vsg_myjkv9ldpqc0000gn/T/Open-E2E-sidebar-completion-chrome-22495-9b1edd40-scratch-wt8y4qns/manager-pinned.html",
                     "title": "Manager Pinned Route",
-                    "url": "file:///var/folders/s6/_07cr4w13vsg_myjkv9ldpqc0000gn/T/Open-E2E-sidebar-completion-chrome-68164-2c86bb74-scratch-7i75hj8v/manager-pinned.html"
+                    "url": "file:///var/folders/s6/_07cr4w13vsg_myjkv9ldpqc0000gn/T/Open-E2E-sidebar-completion-chrome-22495-9b1edd40-scratch-wt8y4qns/manager-pinned.html"
                   }
                 }
               }
             ],
-            "profileID": "E38DCECF-9D86-4020-8418-8F0EDFC67647",
+            "profileID": "66639C70-0CEC-4365-91F4-6D94CD1B7D6C",
             "theme": {
               "gradientStopsDark": [],
               "gradientStopsLight": []
@@ -5939,28 +6713,28 @@
               {
                 "split": {
                   "_0": {
-                    "focusedPaneID": "2A6C98BC-CB88-4572-BD85-2719001F2D62",
+                    "focusedPaneID": "73C213BD-CE61-488C-878A-32C027AA8118",
                     "fractions": [],
-                    "id": "A8CEDA2A-121B-48E4-A007-D821269D5CAB",
+                    "id": "D94A9E76-8E25-49FB-B9E3-4847899F828A",
                     "orientation": "horizontal",
                     "panes": [
                       {
-                        "createdAt": 1793138866.121681,
-                        "id": "2A6C98BC-CB88-4572-BD85-2719001F2D62",
+                        "createdAt": 1793215966.5858378,
+                        "id": "73C213BD-CE61-488C-878A-32C027AA8118",
                         "isMuted": false,
                         "isUnread": false,
-                        "lastActiveAt": 1793138866.323131,
+                        "lastActiveAt": 1793215966.797358,
                         "title": "Manager Split Source",
                         "url": "data:text/html,%3Ctitle%3EManager%20Split%20Source%3C/title%3E%3Ch1%3EManager%20Split%20Source%3C/h1%3E"
                       },
                       {
-                        "createdAt": 1793138866.081328,
-                        "id": "D5EE5C0A-BEBA-413B-B14D-FB5B979A1DF5",
+                        "createdAt": 1793215966.550836,
+                        "id": "162B2EC9-2529-4A73-876D-A4AC81442863",
                         "isMuted": false,
                         "isUnread": false,
-                        "lastActiveAt": 1793138866.323131,
+                        "lastActiveAt": 1793215966.797358,
                         "title": "Manager Drop Target",
-                        "url": "file:///var/folders/s6/_07cr4w13vsg_myjkv9ldpqc0000gn/T/Open-E2E-sidebar-completion-chrome-68164-2c86bb74-scratch-7i75hj8v/manager-drop-target.html"
+                        "url": "file:///var/folders/s6/_07cr4w13vsg_myjkv9ldpqc0000gn/T/Open-E2E-sidebar-completion-chrome-22495-9b1edd40-scratch-wt8y4qns/manager-drop-target.html"
                       }
                     ]
                   }
@@ -5969,11 +6743,11 @@
               {
                 "tab": {
                   "_0": {
-                    "createdAt": 1793138863.790471,
-                    "id": "5757E8BD-9EB1-460E-9FC3-0E982F9B1E6E",
+                    "createdAt": 1793215964.385432,
+                    "id": "27EDBCC6-3F13-4AD7-84C4-FD1766F59BE5",
                     "isMuted": true,
                     "isUnread": false,
-                    "lastActiveAt": 1793138864.430587,
+                    "lastActiveAt": 1793215964.938525,
                     "title": "Pinned Close Neighbor",
                     "url": "data:text/html,%3Ctitle%3EPinned%20Close%20Neighbor%3C/title%3E%3Ch1%3EPinned%20Close%20Neighbor%3C/h1%3E"
                   }
@@ -5982,11 +6756,11 @@
               {
                 "tab": {
                   "_0": {
-                    "createdAt": 1793138863.036676,
-                    "id": "FF4F4FE3-801B-41C9-9B34-0339D77FC4BF",
+                    "createdAt": 1793215963.809331,
+                    "id": "C83E138A-6D16-4501-A693-EF56D5CD03B0",
                     "isMuted": true,
                     "isUnread": false,
-                    "lastActiveAt": 1793138863.0382938,
+                    "lastActiveAt": 1793215963.811727,
                     "title": "Surviving Browser Selection",
                     "url": "data:text/html,%3Ctitle%3ESurviving%20Browser%20Selection%3C/title%3E%3Ch1%3ESurviving%20Browser%20Selection%3C/h1%3E"
                   }
@@ -5995,11 +6769,11 @@
               {
                 "tab": {
                   "_0": {
-                    "createdAt": 1793138860.890818,
-                    "id": "91B7F1A5-3CFD-4C21-AE03-41FF08FFD792",
+                    "createdAt": 1793215961.7316098,
+                    "id": "317B780A-EB83-4C83-BA97-391C9BB98700",
                     "isMuted": true,
                     "isUnread": false,
-                    "lastActiveAt": 1793138863.238439,
+                    "lastActiveAt": 1793215964.020884,
                     "title": "Manager Archive Original ID",
                     "url": "data:text/html,%3Ctitle%3EManager%20Archive%20Original%20ID%3C/title%3E%3Ch1%3EManager%20Archive%20Original%20ID%3C/h1%3E"
                   }
@@ -6008,11 +6782,11 @@
               {
                 "tab": {
                   "_0": {
-                    "createdAt": 1793138860.700892,
-                    "id": "F57F5539-D1FD-4D04-B77F-1D4AF4E8DF5A",
+                    "createdAt": 1793215961.547463,
+                    "id": "D6FE8F66-5015-46C2-95F6-12C923AA7DDE",
                     "isMuted": true,
                     "isUnread": false,
-                    "lastActiveAt": 1793138861.091769,
+                    "lastActiveAt": 1793215961.916027,
                     "title": "Archive Neighbor",
                     "url": "data:text/html,%3Ctitle%3EArchive%20Neighbor%3C/title%3E%3Ch1%3EArchive%20Neighbor%3C/h1%3E"
                   }
@@ -6021,10 +6795,10 @@
             ]
           },
           {
-            "id": "9A59A5D3-8C72-4BB3-9BAE-125393C3F745",
+            "id": "6B53BB13-8C36-4F92-A38C-192EB9571E1A",
             "isPinnedCollapsed": false,
             "pinned": [],
-            "profileID": "E38DCECF-9D86-4020-8418-8F0EDFC67647",
+            "profileID": "66639C70-0CEC-4365-91F4-6D94CD1B7D6C",
             "theme": {
               "gradientStopsDark": [],
               "gradientStopsLight": []
@@ -6033,10 +6807,39 @@
             "today": []
           },
           {
-            "id": "9323318C-5947-4F4E-A903-C38D94A6E76A",
+            "id": "6EB715DE-E2D2-4189-A99D-3DBAB489D2BD",
             "isPinnedCollapsed": false,
-            "pinned": [],
-            "profileID": "E38DCECF-9D86-4020-8418-8F0EDFC67647",
+            "pinned": [
+              {
+                "tab": {
+                  "_0": {
+                    "createdAt": 1793215954.786396,
+                    "id": "8BDF2378-586E-4339-B71D-0C88C319D0B5",
+                    "isMuted": false,
+                    "isUnread": false,
+                    "lastActiveAt": 1793215957.052485,
+                    "pinnedURL": "file:///var/folders/s6/_07cr4w13vsg_myjkv9ldpqc0000gn/T/Open-E2E-sidebar-completion-chrome-22495-9b1edd40-scratch-wt8y4qns/preview-pinned.html",
+                    "title": "Preview Pinned",
+                    "url": "file:///var/folders/s6/_07cr4w13vsg_myjkv9ldpqc0000gn/T/Open-E2E-sidebar-completion-chrome-22495-9b1edd40-scratch-wt8y4qns/preview-pinned.html"
+                  }
+                }
+              },
+              {
+                "tab": {
+                  "_0": {
+                    "createdAt": 1793215957.086904,
+                    "id": "13C02B07-6AB9-4DCE-B738-6D58E6A34363",
+                    "isMuted": false,
+                    "isUnread": false,
+                    "lastActiveAt": 1793215957.9523358,
+                    "pinnedURL": "file:///var/folders/s6/_07cr4w13vsg_myjkv9ldpqc0000gn/T/Open-E2E-sidebar-completion-chrome-22495-9b1edd40-scratch-wt8y4qns/separate-origin.html",
+                    "title": "Separate Origin",
+                    "url": "file:///var/folders/s6/_07cr4w13vsg_myjkv9ldpqc0000gn/T/Open-E2E-sidebar-completion-chrome-22495-9b1edd40-scratch-wt8y4qns/separate-origin.html"
+                  }
+                }
+              }
+            ],
+            "profileID": "66639C70-0CEC-4365-91F4-6D94CD1B7D6C",
             "theme": {
               "gradientStopsDark": [],
               "gradientStopsLight": []
@@ -6046,11 +6849,50 @@
               {
                 "tab": {
                   "_0": {
-                    "createdAt": 1793138852.035376,
-                    "id": "ECCAB61A-B2E1-4768-947E-BB65362A92CA",
+                    "createdAt": 1793215957.950614,
+                    "id": "01A9E28A-3452-405A-9DCC-1D67FCB56886",
                     "isMuted": false,
                     "isUnread": false,
-                    "lastActiveAt": 1793138857.04846,
+                    "lastActiveAt": 1793215957.954329,
+                    "title": "Separate Away",
+                    "url": "file:///var/folders/s6/_07cr4w13vsg_myjkv9ldpqc0000gn/T/Open-E2E-sidebar-completion-chrome-22495-9b1edd40-scratch-wt8y4qns/separate-away.html"
+                  }
+                }
+              },
+              {
+                "tab": {
+                  "_0": {
+                    "createdAt": 1793215957.064477,
+                    "id": "4CAB7D74-530C-489F-9CFA-3605A4C4CDDC",
+                    "isMuted": false,
+                    "isUnread": false,
+                    "lastActiveAt": 1793215957.0674691,
+                    "title": "Background Unread",
+                    "url": "file:///var/folders/s6/_07cr4w13vsg_myjkv9ldpqc0000gn/T/Open-E2E-sidebar-completion-chrome-22495-9b1edd40-scratch-wt8y4qns/background-unread.html"
+                  }
+                }
+              },
+              {
+                "tab": {
+                  "_0": {
+                    "createdAt": 1793215954.960895,
+                    "id": "8F32DF47-5783-49A4-B955-8A3D0470DAB2",
+                    "isMuted": false,
+                    "isUnread": false,
+                    "lastActiveAt": 1793215954.961681,
+                    "title": "Preview Current",
+                    "url": "file:///var/folders/s6/_07cr4w13vsg_myjkv9ldpqc0000gn/T/Open-E2E-sidebar-completion-chrome-22495-9b1edd40-scratch-wt8y4qns/preview-current.html"
+                  }
+                }
+              },
+              {
+                "tab": {
+                  "_0": {
+                    "createdAt": 1793215949.682582,
+                    "id": "19EF1ACF-FA72-4B5C-A2CD-FDDD9058477B",
+                    "isMuted": false,
+                    "isUnread": false,
+                    "lastActiveAt": 1793215954.375262,
                     "title": "Manager One",
                     "url": "data:text/html,%3Ctitle%3EManager%20One%3C/title%3E%3Ch1%3EManager%20One%3C/h1%3E"
                   }
@@ -6063,18 +6905,18 @@
                       {
                         "tab": {
                           "_0": {
-                            "createdAt": 1793138855.953886,
-                            "id": "F6BE84B2-D1C8-465F-912D-AE75101E6B19",
+                            "createdAt": 1793215953.3214788,
+                            "id": "D0471140-A357-4CCD-8693-0067E0E521D9",
                             "isMuted": false,
                             "isUnread": false,
-                            "lastActiveAt": 1793138855.955443,
+                            "lastActiveAt": 1793215953.322703,
                             "title": "Folder Child",
                             "url": "data:text/html,%3Ctitle%3EFolder%20Child%3C/title%3E%3Ch1%3EFolder%20Child%3C/h1%3E"
                           }
                         }
                       }
                     ],
-                    "id": "9391971F-971C-4006-8622-9B97E6EC6DFA",
+                    "id": "152D915F-7410-4BDC-81E8-23911142B6FA",
                     "isExpanded": true,
                     "title": "Reading"
                   }
@@ -6085,14 +6927,14 @@
         ],
         "windows": [
           {
-            "focusedSpaceID": "268D4E5F-2DA4-40EE-BFEE-900E5D379005",
+            "focusedSpaceID": "0EB4110C-F314-4205-8835-F5A0AE56211C",
             "frameHeight": 800,
             "frameWidth": 1280,
             "frameX": 124,
             "frameY": 76,
-            "id": "76078EA2-C8AF-400F-9CA4-6C6C04929D7B",
+            "id": "A5E3B69C-8FF7-4890-B3C9-07F6E2017E88",
             "selectedNodeBySpace": {
-              "268D4E5F-2DA4-40EE-BFEE-900E5D379005": "A8CEDA2A-121B-48E4-A007-D821269D5CAB"
+              "0EB4110C-F314-4205-8835-F5A0AE56211C": "D94A9E76-8E25-49FB-B9E3-4847899F828A"
             },
             "sidebarMode": "anchored",
             "sidebarWidth": 228,
@@ -6143,49 +6985,49 @@
                 26
               ]
             },
-            "id": "268D4E5F-2DA4-40EE-BFEE-900E5D379005",
+            "id": "0EB4110C-F314-4205-8835-F5A0AE56211C",
             "managerSize": [
               779,
               599
             ],
             "rows": [
               {
-                "id": "C99E25D6-D9E6-474A-B5B5-8198752F8300",
+                "id": "3F547BC9-2913-43D2-8EAC-9B20F743AC56",
                 "point": [
                   319,
                   124.5
                 ]
               },
               {
-                "id": "A8CEDA2A-121B-48E4-A007-D821269D5CAB",
+                "id": "D94A9E76-8E25-49FB-B9E3-4847899F828A",
                 "point": [
                   319,
                   223.5
                 ]
               },
               {
-                "id": "5757E8BD-9EB1-460E-9FC3-0E982F9B1E6E",
+                "id": "27EDBCC6-3F13-4AD7-84C4-FD1766F59BE5",
                 "point": [
                   319,
                   264.5
                 ]
               },
               {
-                "id": "FF4F4FE3-801B-41C9-9B34-0339D77FC4BF",
+                "id": "C83E138A-6D16-4501-A693-EF56D5CD03B0",
                 "point": [
                   319,
                   305.5
                 ]
               },
               {
-                "id": "91B7F1A5-3CFD-4C21-AE03-41FF08FFD792",
+                "id": "317B780A-EB83-4C83-BA97-391C9BB98700",
                 "point": [
                   319,
                   346.5
                 ]
               },
               {
-                "id": "F57F5539-D1FD-4D04-B77F-1D4AF4E8DF5A",
+                "id": "D6FE8F66-5015-46C2-95F6-12C923AA7DDE",
                 "point": [
                   319,
                   387.5
@@ -6230,7 +7072,7 @@
                 26
               ]
             },
-            "id": "9A59A5D3-8C72-4BB3-9BAE-125393C3F745",
+            "id": "6B53BB13-8C36-4F92-A38C-192EB9571E1A",
             "managerSize": [
               779,
               599
@@ -6274,41 +7116,76 @@
                 26
               ]
             },
-            "id": "9323318C-5947-4F4E-A903-C38D94A6E76A",
+            "id": "6EB715DE-E2D2-4189-A99D-3DBAB489D2BD",
             "managerSize": [
               779,
               599
             ],
             "rows": [
               {
-                "id": "ECCAB61A-B2E1-4768-947E-BB65362A92CA",
+                "id": "8BDF2378-586E-4339-B71D-0C88C319D0B5",
                 "point": [
                   831,
-                  182.5
+                  124.5
                 ]
               },
               {
-                "id": "9391971F-971C-4006-8622-9B97E6EC6DFA",
+                "id": "13C02B07-6AB9-4DCE-B738-6D58E6A34363",
                 "point": [
                   831,
-                  223.5
+                  165.5
                 ]
               },
               {
-                "id": "F6BE84B2-D1C8-465F-912D-AE75101E6B19",
+                "id": "01A9E28A-3452-405A-9DCC-1D67FCB56886",
                 "point": [
                   831,
                   264.5
+                ]
+              },
+              {
+                "id": "4CAB7D74-530C-489F-9CFA-3605A4C4CDDC",
+                "point": [
+                  831,
+                  305.5
+                ]
+              },
+              {
+                "id": "8F32DF47-5783-49A4-B955-8A3D0470DAB2",
+                "point": [
+                  831,
+                  346.5
+                ]
+              },
+              {
+                "id": "19EF1ACF-FA72-4B5C-A2CD-FDDD9058477B",
+                "point": [
+                  831,
+                  387.5
+                ]
+              },
+              {
+                "id": "152D915F-7410-4BDC-81E8-23911142B6FA",
+                "point": [
+                  831,
+                  428.5
+                ]
+              },
+              {
+                "id": "D0471140-A357-4CCD-8693-0067E0E521D9",
+                "point": [
+                  831,
+                  469.5
                 ]
               }
             ]
           }
         ],
         "contextValid": true,
-        "contextWindow": "76078EA2-C8AF-400F-9CA4-6C6C04929D7B",
+        "contextWindow": "A5E3B69C-8FF7-4890-B3C9-07F6E2017E88",
         "globalPreviewsEnabled": true,
         "hostedManagers": 1,
-        "identity": "ObjectIdentifier(0x0000012c00399f00)",
+        "identity": "ObjectIdentifier(0x0000010c003d9f00)",
         "managerClass": "OpenSidebar.SpaceManagerView",
         "modelUndoCount": 4,
         "previewsEnabled": false,
@@ -6317,18 +7194,18 @@
         "section": "spaces",
         "switchers": [],
         "undoEnabled": true,
-        "undoTarget": "OpenSettings.(unknown context at $103822aac).LibraryNativeWindow",
+        "undoTarget": "OpenSettings.(unknown context at $100d89650).LibraryNativeWindow",
         "visible": true,
-        "window": 194967,
+        "window": 6587,
         "windows": [
           {
             "attachedSheet": 0,
             "class": "BrowserWindow",
             "firstResponder": "BrowserWindow",
-            "frame": "{{0, 0}, {1728, 1084}}",
+            "frame": "{{40, 40}, {1728, 1084}}",
             "key": false,
             "level": 0,
-            "number": 194966,
+            "number": 6586,
             "parent": 0,
             "sheet": false,
             "title": "Archive Neighbor",
@@ -6341,7 +7218,7 @@
             "frame": "{{200, 200}, {960, 640}}",
             "key": true,
             "level": 0,
-            "number": 194967,
+            "number": 6587,
             "parent": 0,
             "sheet": false,
             "title": "Spaces",
@@ -6354,7 +7231,7 @@
             "frame": "{{0, 0}, {500, 500}}",
             "key": false,
             "level": 0,
-            "number": 194971,
+            "number": 6591,
             "parent": 0,
             "sheet": false,
             "title": "",
@@ -6424,8 +7301,8 @@
         },
         "confirmation": null,
         "cursor": [
-          1188.09765625,
-          278.4609375
+          2292,
+          -154
         ],
         "engineSelected": 6,
         "engineURL": "",
@@ -6447,18 +7324,18 @@
           "shows": 0,
           "visible": false
         },
-        "id": "76078EA2-C8AF-400F-9CA4-6C6C04929D7B",
+        "id": "A5E3B69C-8FF7-4890-B3C9-07F6E2017E88",
         "isKeyWindow": false,
         "key": false,
-        "keyWindow": 194967,
-        "layoutPasses": 203,
+        "keyWindow": 6587,
+        "layoutPasses": 313,
         "miniaturized": false,
-        "number": 194970,
+        "number": 6590,
         "pageFullscreen": false,
         "paneBackgrounds": [
           {
             "color": [],
-            "tab": "91B7F1A5-3CFD-4C21-AE03-41FF08FFD792"
+            "tab": "317B780A-EB83-4C83-BA97-391C9BB98700"
           }
         ],
         "panel": [
@@ -6487,12 +7364,12 @@
         "screenFrame": [
           0,
           0,
-          1728,
-          1117
+          2560,
+          1440
         ],
-        "selected": "91B7F1A5-3CFD-4C21-AE03-41FF08FFD792",
+        "selected": "317B780A-EB83-4C83-BA97-391C9BB98700",
         "shownPages": [
-          "91B7F1A5-3CFD-4C21-AE03-41FF08FFD792"
+          "317B780A-EB83-4C83-BA97-391C9BB98700"
         ],
         "sidebarClass": "OpenSidebar.SidebarView",
         "sidebarFrame": [
@@ -6509,7 +7386,7 @@
         "sidebarVisible": true,
         "sidebarWidth": 228,
         "sidebarWidthCommits": 0,
-        "space": "268D4E5F-2DA4-40EE-BFEE-900E5D379005",
+        "space": "0EB4110C-F314-4205-8835-F5A0AE56211C",
         "titlebar": [
           0,
           0,
@@ -6674,8 +7551,8 @@
         },
         "confirmation": null,
         "cursor": [
-          1188.09765625,
-          278.4609375
+          2292,
+          -154
         ],
         "engineSelected": 6,
         "engineURL": "",
@@ -6697,18 +7574,18 @@
           "shows": 0,
           "visible": false
         },
-        "id": "76078EA2-C8AF-400F-9CA4-6C6C04929D7B",
+        "id": "A5E3B69C-8FF7-4890-B3C9-07F6E2017E88",
         "isKeyWindow": false,
         "key": false,
-        "keyWindow": 194967,
-        "layoutPasses": 192,
+        "keyWindow": 6587,
+        "layoutPasses": 302,
         "miniaturized": false,
-        "number": 194970,
+        "number": 6590,
         "pageFullscreen": false,
         "paneBackgrounds": [
           {
             "color": [],
-            "tab": "91B7F1A5-3CFD-4C21-AE03-41FF08FFD792"
+            "tab": "317B780A-EB83-4C83-BA97-391C9BB98700"
           }
         ],
         "panel": [
@@ -6737,12 +7614,12 @@
         "screenFrame": [
           0,
           0,
-          1728,
-          1117
+          2560,
+          1440
         ],
-        "selected": "91B7F1A5-3CFD-4C21-AE03-41FF08FFD792",
+        "selected": "317B780A-EB83-4C83-BA97-391C9BB98700",
         "shownPages": [
-          "91B7F1A5-3CFD-4C21-AE03-41FF08FFD792"
+          "317B780A-EB83-4C83-BA97-391C9BB98700"
         ],
         "sidebarClass": "OpenSidebar.SidebarView",
         "sidebarFrame": [
@@ -6759,7 +7636,7 @@
         "sidebarVisible": true,
         "sidebarWidth": 228,
         "sidebarWidthCommits": 0,
-        "space": "268D4E5F-2DA4-40EE-BFEE-900E5D379005",
+        "space": "0EB4110C-F314-4205-8835-F5A0AE56211C",
         "titlebar": [
           0,
           0,
@@ -6906,28 +7783,28 @@
                 26
               ]
             },
-            "id": "268D4E5F-2DA4-40EE-BFEE-900E5D379005",
+            "id": "0EB4110C-F314-4205-8835-F5A0AE56211C",
             "managerSize": [
               779,
               599
             ],
             "rows": [
               {
-                "id": "FF4F4FE3-801B-41C9-9B34-0339D77FC4BF",
+                "id": "C83E138A-6D16-4501-A693-EF56D5CD03B0",
                 "point": [
                   319,
                   182.5
                 ]
               },
               {
-                "id": "91B7F1A5-3CFD-4C21-AE03-41FF08FFD792",
+                "id": "317B780A-EB83-4C83-BA97-391C9BB98700",
                 "point": [
                   319,
                   223.5
                 ]
               },
               {
-                "id": "F57F5539-D1FD-4D04-B77F-1D4AF4E8DF5A",
+                "id": "D6FE8F66-5015-46C2-95F6-12C923AA7DDE",
                 "point": [
                   319,
                   264.5
@@ -6972,7 +7849,7 @@
                 26
               ]
             },
-            "id": "9A59A5D3-8C72-4BB3-9BAE-125393C3F745",
+            "id": "6B53BB13-8C36-4F92-A38C-192EB9571E1A",
             "managerSize": [
               779,
               599
@@ -7016,41 +7893,76 @@
                 26
               ]
             },
-            "id": "9323318C-5947-4F4E-A903-C38D94A6E76A",
+            "id": "6EB715DE-E2D2-4189-A99D-3DBAB489D2BD",
             "managerSize": [
               779,
               599
             ],
             "rows": [
               {
-                "id": "ECCAB61A-B2E1-4768-947E-BB65362A92CA",
+                "id": "8BDF2378-586E-4339-B71D-0C88C319D0B5",
                 "point": [
                   831,
-                  182.5
+                  124.5
                 ]
               },
               {
-                "id": "9391971F-971C-4006-8622-9B97E6EC6DFA",
+                "id": "13C02B07-6AB9-4DCE-B738-6D58E6A34363",
                 "point": [
                   831,
-                  223.5
+                  165.5
                 ]
               },
               {
-                "id": "F6BE84B2-D1C8-465F-912D-AE75101E6B19",
+                "id": "01A9E28A-3452-405A-9DCC-1D67FCB56886",
                 "point": [
                   831,
                   264.5
+                ]
+              },
+              {
+                "id": "4CAB7D74-530C-489F-9CFA-3605A4C4CDDC",
+                "point": [
+                  831,
+                  305.5
+                ]
+              },
+              {
+                "id": "8F32DF47-5783-49A4-B955-8A3D0470DAB2",
+                "point": [
+                  831,
+                  346.5
+                ]
+              },
+              {
+                "id": "19EF1ACF-FA72-4B5C-A2CD-FDDD9058477B",
+                "point": [
+                  831,
+                  387.5
+                ]
+              },
+              {
+                "id": "152D915F-7410-4BDC-81E8-23911142B6FA",
+                "point": [
+                  831,
+                  428.5
+                ]
+              },
+              {
+                "id": "D0471140-A357-4CCD-8693-0067E0E521D9",
+                "point": [
+                  831,
+                  469.5
                 ]
               }
             ]
           }
         ],
         "contextValid": true,
-        "contextWindow": "76078EA2-C8AF-400F-9CA4-6C6C04929D7B",
+        "contextWindow": "A5E3B69C-8FF7-4890-B3C9-07F6E2017E88",
         "globalPreviewsEnabled": true,
         "hostedManagers": 1,
-        "identity": "ObjectIdentifier(0x0000012c00399f00)",
+        "identity": "ObjectIdentifier(0x0000010c003d9f00)",
         "managerClass": "OpenSidebar.SpaceManagerView",
         "modelUndoCount": 3,
         "previewsEnabled": false,
@@ -7060,26 +7972,26 @@
         "switchers": [
           {
             "order": [
-              "268D4E5F-2DA4-40EE-BFEE-900E5D379005",
-              "9A59A5D3-8C72-4BB3-9BAE-125393C3F745",
-              "9323318C-5947-4F4E-A903-C38D94A6E76A"
+              "0EB4110C-F314-4205-8835-F5A0AE56211C",
+              "6B53BB13-8C36-4F92-A38C-192EB9571E1A",
+              "6EB715DE-E2D2-4189-A99D-3DBAB489D2BD"
             ],
-            "window": "76078EA2-C8AF-400F-9CA4-6C6C04929D7B"
+            "window": "A5E3B69C-8FF7-4890-B3C9-07F6E2017E88"
           }
         ],
         "undoEnabled": true,
-        "undoTarget": "OpenSettings.(unknown context at $103822aac).LibraryNativeWindow",
+        "undoTarget": "OpenSettings.(unknown context at $100d89650).LibraryNativeWindow",
         "visible": true,
-        "window": 194967,
+        "window": 6587,
         "windows": [
           {
             "attachedSheet": 0,
             "class": "BrowserWindow",
             "firstResponder": "BrowserWindow",
-            "frame": "{{0, 0}, {1728, 1084}}",
+            "frame": "{{40, 40}, {1728, 1084}}",
             "key": false,
             "level": 0,
-            "number": 194966,
+            "number": 6586,
             "parent": 0,
             "sheet": false,
             "title": "Archive Neighbor",
@@ -7092,7 +8004,7 @@
             "frame": "{{200, 200}, {960, 640}}",
             "key": true,
             "level": 0,
-            "number": 194967,
+            "number": 6587,
             "parent": 0,
             "sheet": false,
             "title": "Spaces",
@@ -7105,7 +8017,7 @@
             "frame": "{{124, 76}, {1280, 800}}",
             "key": false,
             "level": 0,
-            "number": 194970,
+            "number": 6590,
             "parent": 0,
             "sheet": false,
             "title": "Manager Archive Original ID",
@@ -7114,12 +8026,12 @@
         ]
       },
       "ok": true,
-      "png": "/Users/serge/.t3/projects/open/.re/section1/a1-evidence/run-68164-0b51f6c7/manager-rebound-click.png",
+      "png": "/Users/serge/.t3/worktrees/open/t3-34aa18ed/.re/space-manager/run-22495-b52b3157/manager-rebound-click.png",
       "point": [
         319,
         223.5
       ],
-      "tab": "91B7F1A5-3CFD-4C21-AE03-41FF08FFD792"
+      "tab": "317B780A-EB83-4C83-BA97-391C9BB98700"
     },
     "visible_manager_rebind_keeps_horizontal_origin": {
       "after": [
@@ -7133,6 +8045,6 @@
       "ok": true
     }
   },
-  "started": "2026-10-27 15:07:06",
+  "started": "2026-10-28 12:32:21",
   "style": "chrome"
 }

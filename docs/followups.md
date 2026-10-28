@@ -90,3 +90,13 @@ Small items found during review and verification. Each line: area — issue — 
 - Verification (M5 display) — with the M5's built-in 2x panel as the main display (no AW2726DM attached), `space-legacy`, `space-editor` P1 and the three `sidebar-compare` color gates fail on untouched main exactly as on the M1. Until section 16 makes them portable, counted gates need the 1x AW2726DM as the main display. — section 1, 2026-10-27
 - Sidebar delete alerts — AppKit gives a `hasDestructiveAction` button no Return key equivalent, so Delete Space / Delete Folder have no Return default (Esc cancels). Capture C3 shows whether Arc's alert takes Return. — section 1, A1, 2026-10-27
 - Sidebar compact toolbar — the "More options" menu content (Reload This Page / Stop Loading, Hide Sidebar) is a guess: the capture never opened it (C11). — section 1, A1, 2026-10-27
+
+- Section 9 — reuse the App's `ExpirySweeper` for Little Open. Supply the minimum of
+  `TodayAutoArchiveController.nextExpiry(now:)` and the Little Open session deadline,
+  and call both domain sweeps from its sweep closure. Keep one App timer. Little Open
+  deadlines use session activity plus each Profile's `littleOpenAutoArchiveAfter`
+  (default 6 h; Never returns nil). Remove `LittleOpenCoordinator`'s existing 60 s
+  poll when that integration lands; the old polling instruction in
+  `docs/plans/routing-little-open.md` §9.6 is superseded. Keep `littleOpen:` archive
+  locations and trigger Today education only from the Today report. This branch
+  does not change Little Open. — Sidebar item 6, 2026-10-28

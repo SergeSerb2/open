@@ -498,3 +498,47 @@ They still capture all six real menu models and run the disabled-child and hidde
 command selections. The regular tabstrip suite keeps the complete command smoke loop.
 The probe popup storage check waits for the extension API, since `isLive` precedes
 its document/API injection. Foreground-interruption checks stay enabled in both flows.
+
+## Today auto-archive clock and scheduler
+
+The App owns one `ExpirySweeper`. It sweeps at launch, on the registered
+`NSWorkspace.didWakeNotification`, and on a non-repeating timer at the next
+Today expiry. Model activity, ancestry, Profile settings, and undo re-arm that
+same timer. Never has no deadline. The production clock is wall time; automation
+uses a nonpersistent offset that continues to advance with wall time. These
+commands are available without an open browser, except the banner commands.
+
+| Command | Args | Result |
+|---|---|---|
+| `archive-sweep` | Zero or one of `now` (ISO-8601, plain or fractional), `offsetSeconds` (finite number), `reset:true` | Set clock if supplied, then call the shared scheduler with reason `automation`; return archive-state plus this call’s `archivedCount` and `affectedSpaces` |
+| `archive-clock` | Exactly one of the same clock args | Change clock and re-arm only; allows a natural timer callback without a manual sweep |
+| `archive-state` | None | `now`, `offsetSeconds`, `running`, `nextExpiry` (ISO or null), `timerArmed`, `armedTimerCount` (0/1), `timerGeneration`, `sweepCount`, `countsByReason`, `lastReason`, `lastSweep:{now,archivedCount,affectedSpaces}`, `educationRequested` |
+| `archive-wake` | Optional `now` ISO | Post the real workspace wake notification; await its observer and return state |
+| `profile-archive-setting` | `profile` UUID, `interval`, `scope:profile\|all` | Real Settings propose/apply path; return affected `profiles:[{id,interval}]` and scheduler `state` after Observation delivery |
+| `archive-list` | Optional `profile` UUID, `limit` 1…1000 (default 100) | Real Profile SQLite `count` and `rows:[{id,kind,reason,space,profile,archivedAt}]`; no URLs |
+| `archive-banner-state` | Optional model `window` UUID | Actual view visibility, title, message, threshold, request, eligible/dismissed preferences, and frame in that Open window |
+| `archive-banner-action` | `action:got-it\|settings`, optional model `window` UUID | Press the real Got it NSButton or invoke the actual Settings text-link delegate; require a visible card; return post-action state |
+
+Intervals are `never`, `oneHour`, `sixHours`, `twelveHours`, `twentyFourHours`,
+`sevenDays`, and `thirtyDays`. Profile thresholds live only in the snapshot.
+Invalid or conflicting clock arguments and invalid setting values fail before
+mutation. Reset the clock before creating/selecting the next fixture: model
+creation and selection timestamps continue to use real wall time. `tabs` and
+`tab-state` expose `createdAt` and `lastActiveAt` as Unix seconds; `sidebar-tree`
+folders expose `expanded`; `settings-state` exposes `pane` and `selectedProfile`.
+`metrics` also works after the final browser closes.
+
+```json
+{"id":1,"cmd":"archive-clock","args":{"offsetSeconds":43199.8}}
+{"id":2,"cmd":"archive-state","args":{}}
+{"id":3,"cmd":"archive-sweep","args":{"reset":true}}
+{"id":4,"cmd":"profile-archive-setting","args":{"profile":"<Profile UUID>","interval":"never","scope":"profile"}}
+```
+
+Use fixture-derived activity times in checks. `sidebar-completion` includes
+E16 banner/store flows and AA_APP timer, notification, launch snapshot, Settings,
+Never, invalid-clock, all-Profile, and idle checks. `features-render` includes
+AA1–AA12 whole flows with the same scheduler, model, SQLite stores, and banner.
+The scheduling margin of 1 ms preserves the model's strict expiry comparison;
+it is an Open implementation choice. Banner geometry remains unmeasured against
+Arc (no banner capture exists).

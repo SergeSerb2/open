@@ -15,14 +15,14 @@
       "state": {
         "created": true,
         "editorCanUndo": false,
-        "editorText": "http://127.0.0.1:53978/new",
+        "editorText": "http://127.0.0.1:65198/new",
         "final": true,
-        "firstResultsMs": 11.44145833333323,
+        "firstResultsMs": 13.534916666666504,
         "mode": "editCurrentURL",
         "newTabHighlighted": false,
-        "openFirstResultsMs": 11.902041666666719,
+        "openFirstResultsMs": 14.227624999999989,
         "presented": true,
-        "profile": "4B49F856-E42E-4CAD-803A-5BECCC42FF86",
+        "profile": "AB9BD380-F5E9-43AB-9B10-83F42DCE0A27",
         "range": [
           0,
           26
@@ -34,13 +34,13 @@
             "kind": "navigate",
             "space": "",
             "tab": "",
-            "title": "http://127.0.0.1:53978/new",
-            "url": "http://127.0.0.1:53978/new"
+            "title": "http://127.0.0.1:65198/new",
+            "url": "http://127.0.0.1:65198/new"
           }
         ],
         "selected": 0,
-        "space": "914BB327-57D7-4A01-9860-1C03511CF7E0",
-        "text": "http://127.0.0.1:53978/new",
+        "space": "D01AA382-EAFD-46F7-A8D2-55A44844DE23",
+        "text": "http://127.0.0.1:65198/new",
         "timingScope": "showCommandBar entry to first snapshot applied; excludes preceding key routing, socket transport and frame presentation"
       }
     },
@@ -54,19 +54,19 @@
         "editorCanUndo": false,
         "editorText": "",
         "final": true,
-        "firstResultsMs": 37.97841666666682,
+        "firstResultsMs": 38.373833333333096,
         "mode": "newTab",
         "newTabHighlighted": true,
-        "openFirstResultsMs": 43.97566666666671,
+        "openFirstResultsMs": 42.583500000000186,
         "presented": true,
-        "profile": "4B49F856-E42E-4CAD-803A-5BECCC42FF86",
+        "profile": "AB9BD380-F5E9-43AB-9B10-83F42DCE0A27",
         "range": [
           0,
           0
         ],
         "rows": [],
         "selected": -1,
-        "space": "914BB327-57D7-4A01-9860-1C03511CF7E0",
+        "space": "D01AA382-EAFD-46F7-A8D2-55A44844DE23",
         "text": "",
         "timingScope": "showCommandBar entry to first snapshot applied; excludes preceding key routing, socket transport and frame presentation"
       }
@@ -75,7 +75,7 @@
       "ok": true
     },
     "custom_search_engine_navigation": {
-      "expectedURL": "http://127.0.0.1:53978/search?q=local%20custom%20query",
+      "expectedURL": "http://127.0.0.1:65198/search?q=local%20custom%20query",
       "ok": true
     },
     "double_press_shared_router": {
@@ -88,28 +88,30 @@
         {
           "children": [
             {
-              "id": "E770642D-A10F-43A0-A5C5-899D125539A2",
+              "id": "AB90B6EC-A2C0-45A9-8FD8-8C6A7D78AD21",
               "kind": "tab",
               "loaded": true,
               "title": "Shell C /cross",
-              "url": "http://127.0.0.1:53978/cross"
+              "url": "http://127.0.0.1:65198/cross"
             }
           ],
-          "id": "677EDBFC-011B-4EE4-800A-8A1B1611BE5A",
+          "expanded": true,
+          "id": "C5C3783D-4F0F-4DB3-82E3-0E209A549ED7",
           "kind": "folder",
           "title": "Copy subtree"
         },
         {
           "children": [
             {
-              "id": "68F6A8A4-C2AC-4A07-A62E-03E7BA7BA3BE",
+              "id": "99BEEF99-CD10-4C3F-9356-5A9334D2E910",
               "kind": "tab",
               "loaded": false,
               "title": "Shell C /cross",
-              "url": "http://127.0.0.1:53978/cross"
+              "url": "http://127.0.0.1:65198/cross"
             }
           ],
-          "id": "69BC5CE5-33B5-4940-A453-91F3911E54CE",
+          "expanded": true,
+          "id": "B5494DFD-D653-4AE7-A0D9-E07B6B40B2A0",
           "kind": "folder",
           "title": "Copy subtree"
         }
@@ -123,21 +125,21 @@
       "copy": {
         "children": [
           {
-            "id": "F1C4C2D8-BEAB-46A7-8A23-444EC4FF93CB",
+            "id": "52FA2142-E884-40B2-AA7A-FA3BD19293DD",
             "kind": "tab",
             "loaded": false,
             "title": "Shell C /split",
-            "url": "http://127.0.0.1:53978/split"
+            "url": "http://127.0.0.1:65198/split"
           },
           {
-            "id": "0855E7EC-5350-4D6D-9741-0C370A131328",
+            "id": "DB824586-A4C6-48AA-A5FE-A2CB29FC65A8",
             "kind": "tab",
             "loaded": false,
             "title": "Shell C /cross",
-            "url": "http://127.0.0.1:53978/cross"
+            "url": "http://127.0.0.1:65198/cross"
           }
         ],
-        "id": "10DCC59C-0886-441C-85B4-4AFBABE53A29",
+        "id": "44BECD4E-F818-479A-9C05-549CF47E7C09",
         "kind": "split"
       },
       "ok": true
@@ -145,11 +147,11 @@
     "duplicate_tab_lazy": {
       "copies": [
         {
-          "id": "B4B3D219-6A8E-45F0-A44B-86D842835763",
+          "id": "1EDF361D-8D08-4ED8-A8C2-127BDA145FFB",
           "kind": "tab",
           "loaded": false,
           "title": "Shell C /cross",
-          "url": "http://127.0.0.1:53978/cross"
+          "url": "http://127.0.0.1:65198/cross"
         }
       ],
       "ok": true
@@ -169,12 +171,12 @@
       "ok": true
     },
     "first_open_results_budget": {
-      "milliseconds": 43.97566666666671,
+      "milliseconds": 42.583500000000186,
       "ok": true,
       "scope": "showCommandBar entry to first snapshot applied; excludes preceding key routing, socket transport and frame presentation"
     },
     "first_results_budget": {
-      "milliseconds": 28.274875000000065,
+      "milliseconds": 21.592333333333045,
       "ok": true,
       "scope": "showCommandBar entry to first snapshot applied; excludes preceding key routing, socket transport and frame presentation"
     },
@@ -216,12 +218,12 @@
         "editorCanUndo": false,
         "editorText": "",
         "final": true,
-        "firstResultsMs": 5.703375000000051,
+        "firstResultsMs": 2.487500000000182,
         "mode": "newTab",
         "newTabHighlighted": true,
-        "openFirstResultsMs": 14.574208333333445,
+        "openFirstResultsMs": 12.709916666666686,
         "presented": true,
-        "profile": "4B49F856-E42E-4CAD-803A-5BECCC42FF86",
+        "profile": "AB9BD380-F5E9-43AB-9B10-83F42DCE0A27",
         "range": [
           0,
           0
@@ -229,34 +231,34 @@
         "rows": [
           {
             "action": "",
-            "id": "tab:198C31CD-90F5-40EC-8CC1-8D6E09EB562B",
+            "id": "tab:32F5D78E-D0CE-4A48-88C0-BC71BE6A06FC",
             "kind": "switchToTab",
-            "space": "914BB327-57D7-4A01-9860-1C03511CF7E0",
-            "tab": "198C31CD-90F5-40EC-8CC1-8D6E09EB562B",
+            "space": "D01AA382-EAFD-46F7-A8D2-55A44844DE23",
+            "tab": "32F5D78E-D0CE-4A48-88C0-BC71BE6A06FC",
             "title": "Shell C /start",
-            "url": "http://127.0.0.1:53978/start"
+            "url": "http://127.0.0.1:65198/start"
           },
           {
             "action": "",
-            "id": "history:127.0.0.1:53978/edited",
+            "id": "history:127.0.0.1:65198/edited",
             "kind": "history",
             "space": "",
             "tab": "",
             "title": "127.0.0.1",
-            "url": "http://127.0.0.1:53978/edited"
+            "url": "http://127.0.0.1:65198/edited"
           },
           {
             "action": "",
-            "id": "history:127.0.0.1:53978/new",
+            "id": "history:127.0.0.1:65198/new",
             "kind": "history",
             "space": "",
             "tab": "",
             "title": "127.0.0.1",
-            "url": "http://127.0.0.1:53978/new"
+            "url": "http://127.0.0.1:65198/new"
           }
         ],
         "selected": 0,
-        "space": "914BB327-57D7-4A01-9860-1C03511CF7E0",
+        "space": "D01AA382-EAFD-46F7-A8D2-55A44844DE23",
         "text": "",
         "timingScope": "showCommandBar entry to first snapshot applied; excludes preceding key routing, socket transport and frame presentation"
       },
@@ -265,12 +267,12 @@
         "editorCanUndo": true,
         "editorText": "word",
         "final": true,
-        "firstResultsMs": 4.679249999999229,
+        "firstResultsMs": 4.049708333333001,
         "mode": "newTab",
         "newTabHighlighted": true,
-        "openFirstResultsMs": 14.574208333333445,
+        "openFirstResultsMs": 12.709916666666686,
         "presented": true,
-        "profile": "4B49F856-E42E-4CAD-803A-5BECCC42FF86",
+        "profile": "AB9BD380-F5E9-43AB-9B10-83F42DCE0A27",
         "range": [
           4,
           0
@@ -296,7 +298,7 @@
           }
         ],
         "selected": 0,
-        "space": "914BB327-57D7-4A01-9860-1C03511CF7E0",
+        "space": "D01AA382-EAFD-46F7-A8D2-55A44844DE23",
         "text": "word",
         "timingScope": "showCommandBar entry to first snapshot applied; excludes preceding key routing, socket transport and frame presentation"
       },
@@ -304,7 +306,7 @@
       "route": {
         "barPresented": true,
         "firstResponder": "CommandBarFieldEditor",
-        "keyWindow": 194983,
+        "keyWindow": 6339,
         "sidebarMode": "anchored"
       }
     },
@@ -358,14 +360,14 @@
     },
     "save_page_sheet": {
       "last": {
-        "number": 195030,
+        "number": 6386,
         "pending": true,
         "requests": 1,
         "visible": true
       },
       "ok": true,
       "state": {
-        "number": 195030,
+        "number": 6386,
         "pending": true,
         "requests": 1,
         "visible": true
@@ -386,12 +388,12 @@
         "editorCanUndo": false,
         "editorText": "",
         "final": true,
-        "firstResultsMs": 3.755791666667392,
+        "firstResultsMs": 3.3040000000000873,
         "mode": "newTab",
         "newTabHighlighted": false,
-        "openFirstResultsMs": 28.10650000000078,
+        "openFirstResultsMs": 12.42466666666678,
         "presented": false,
-        "profile": "4B49F856-E42E-4CAD-803A-5BECCC42FF86",
+        "profile": "AB9BD380-F5E9-43AB-9B10-83F42DCE0A27",
         "range": [
           -1,
           0
@@ -399,12 +401,12 @@
         "rows": [
           {
             "action": "",
-            "id": "tab:E770642D-A10F-43A0-A5C5-899D125539A2",
+            "id": "tab:AB90B6EC-A2C0-45A9-8FD8-8C6A7D78AD21",
             "kind": "switchToTab",
-            "space": "CB4D5051-CB65-46CF-B5A8-4357F10A590B",
-            "tab": "E770642D-A10F-43A0-A5C5-899D125539A2",
+            "space": "D8DA9691-F00A-40CB-9F36-CA7E3F0F25C5",
+            "tab": "AB90B6EC-A2C0-45A9-8FD8-8C6A7D78AD21",
             "title": "Shell C /cross",
-            "url": "http://127.0.0.1:53978/cross"
+            "url": "http://127.0.0.1:65198/cross"
           },
           {
             "action": "",
@@ -417,28 +419,28 @@
           }
         ],
         "selected": 0,
-        "space": "914BB327-57D7-4A01-9860-1C03511CF7E0",
+        "space": "D01AA382-EAFD-46F7-A8D2-55A44844DE23",
         "text": "Shell C /cross",
         "timingScope": "showCommandBar entry to first snapshot applied; excludes preceding key routing, socket transport and frame presentation"
       },
-      "expectedSpace": "CB4D5051-CB65-46CF-B5A8-4357F10A590B",
-      "expectedTab": "E770642D-A10F-43A0-A5C5-899D125539A2",
+      "expectedSpace": "D8DA9691-F00A-40CB-9F36-CA7E3F0F25C5",
+      "expectedTab": "AB90B6EC-A2C0-45A9-8FD8-8C6A7D78AD21",
       "ok": true,
       "returnRouting": {
         "barPresented": false,
         "firstResponder": "RenderWidgetHostViewCocoa",
-        "keyWindow": 194983,
+        "keyWindow": 6339,
         "sidebarMode": "anchored"
       },
       "rows": [
         {
           "action": "",
-          "id": "tab:E770642D-A10F-43A0-A5C5-899D125539A2",
+          "id": "tab:AB90B6EC-A2C0-45A9-8FD8-8C6A7D78AD21",
           "kind": "switchToTab",
-          "space": "CB4D5051-CB65-46CF-B5A8-4357F10A590B",
-          "tab": "E770642D-A10F-43A0-A5C5-899D125539A2",
+          "space": "D8DA9691-F00A-40CB-9F36-CA7E3F0F25C5",
+          "tab": "AB90B6EC-A2C0-45A9-8FD8-8C6A7D78AD21",
           "title": "Shell C /cross",
-          "url": "http://127.0.0.1:53978/cross"
+          "url": "http://127.0.0.1:65198/cross"
         },
         {
           "action": "",
@@ -507,11 +509,11 @@
         },
         "confirmation": null,
         "cursor": [
-          1212.09765625,
-          302.4609375
+          2316,
+          -130
         ],
         "engineSelected": 4,
-        "engineURL": "http://127.0.0.1:53978/cross",
+        "engineURL": "http://127.0.0.1:65198/cross",
         "firstResponder": "RenderWidgetHostViewCocoa",
         "frame": [
           100,
@@ -530,18 +532,18 @@
           "shows": 0,
           "visible": false
         },
-        "id": "3A0EC3DF-FBD7-4D9E-A1A9-C1FC00F80736",
+        "id": "D0483227-89CC-4B78-B9B7-EC8B2AFE552E",
         "isKeyWindow": true,
         "key": true,
-        "keyWindow": 194983,
-        "layoutPasses": 842,
+        "keyWindow": 6339,
+        "layoutPasses": 1260,
         "miniaturized": false,
-        "number": 194983,
+        "number": 6339,
         "pageFullscreen": false,
         "paneBackgrounds": [
           {
             "color": [],
-            "tab": "E770642D-A10F-43A0-A5C5-899D125539A2"
+            "tab": "AB90B6EC-A2C0-45A9-8FD8-8C6A7D78AD21"
           }
         ],
         "panel": [
@@ -570,12 +572,12 @@
         "screenFrame": [
           0,
           0,
-          1728,
-          1117
+          2560,
+          1440
         ],
-        "selected": "E770642D-A10F-43A0-A5C5-899D125539A2",
+        "selected": "AB90B6EC-A2C0-45A9-8FD8-8C6A7D78AD21",
         "shownPages": [
-          "E770642D-A10F-43A0-A5C5-899D125539A2"
+          "AB90B6EC-A2C0-45A9-8FD8-8C6A7D78AD21"
         ],
         "sidebarClass": "OpenSidebar.SidebarView",
         "sidebarFrame": [
@@ -592,7 +594,7 @@
         "sidebarVisible": true,
         "sidebarWidth": 228,
         "sidebarWidthCommits": 0,
-        "space": "CB4D5051-CB65-46CF-B5A8-4357F10A590B",
+        "space": "D8DA9691-F00A-40CB-9F36-CA7E3F0F25C5",
         "titlebar": [
           0,
           0,
@@ -981,7 +983,7 @@
     },
     "typed_top_today": {
       "ok": true,
-      "tab": "AE4AC25F-0A68-4DD8-A1A0-E23E1A9ABFCE"
+      "tab": "40E83B0F-02D3-4C37-A22D-350D03FA1B98"
     },
     "unsupported_disabled": {
       "ok": true
@@ -994,10 +996,12 @@
         "external": false,
         "historyRows": 3,
         "hotkey": true,
-        "library": 195027,
+        "library": 6383,
         "librarySection": "archive",
+        "pane": "general",
         "sameSnapshot": true,
-        "settings": 195026,
+        "selectedProfile": "AB9BD380-F5E9-43AB-9B10-83F42DCE0A27",
+        "settings": 6382,
         "sharedArchives": true
       }
     },
@@ -1009,10 +1013,12 @@
         "external": false,
         "historyRows": 3,
         "hotkey": true,
-        "library": 195027,
+        "library": 6383,
         "librarySection": "downloads",
+        "pane": "general",
         "sameSnapshot": true,
-        "settings": 195026,
+        "selectedProfile": "AB9BD380-F5E9-43AB-9B10-83F42DCE0A27",
+        "settings": 6382,
         "sharedArchives": true
       }
     },
@@ -1024,10 +1030,12 @@
         "external": false,
         "historyRows": 3,
         "hotkey": true,
-        "library": 195027,
+        "library": 6383,
         "librarySection": "history",
+        "pane": "general",
         "sameSnapshot": true,
-        "settings": 195026,
+        "selectedProfile": "AB9BD380-F5E9-43AB-9B10-83F42DCE0A27",
+        "settings": 6382,
         "sharedArchives": true
       }
     }
@@ -1039,18 +1047,19 @@
         "forced": false,
         "ok": true,
         "owned_pids": [
-          71914,
-          72156,
-          72159,
-          72200,
-          72234,
-          72235,
-          72720,
-          73115,
-          74758,
-          74777,
-          74796,
-          74798
+          19590,
+          19662,
+          19663,
+          19664,
+          19665,
+          19666,
+          19667,
+          19672,
+          19678,
+          19696,
+          19699,
+          19700,
+          19701
         ],
         "remaining_processes": [],
         "reply": true,
@@ -1064,13 +1073,13 @@
         "forced": false,
         "ok": true,
         "owned_pids": [
-          75004,
-          75055,
-          75056,
-          75058,
-          75059,
-          75060,
-          75061
+          19719,
+          19732,
+          19733,
+          19734,
+          19735,
+          19737,
+          19738
         ],
         "remaining_processes": [],
         "reply": true,
@@ -1095,6 +1104,6 @@
     "stamp": "fork /Users/serge/Developer/open-engine/chromium_git/chromium/src/cef/binary_distrib/cef_binary_156.0.14+g4fa4ab5+chromium-156.0.8078.48_macosarm64_minimal 1793075034"
   },
   "interrupted_attempts": [],
-  "started": "2026-10-27 15:07:48",
+  "started": "2026-10-28 12:30:39",
   "style": "chrome"
 }

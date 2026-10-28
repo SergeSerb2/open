@@ -80,6 +80,9 @@
     private func run(_ cmd: String, _ a: [String: Any]) async throws -> Any {
       // App lifecycle commands remain available after the final window closes.
       switch cmd {
+      case "archive-sweep", "archive-clock", "archive-state", "archive-wake", "profile-archive-setting", "archive-list", "archive-banner-state", "archive-banner-action":
+        return try await runArchiveCommand(cmd, a)
+      case "metrics": return await metrics(interval: a["interval"] as? Double ?? 1)
       case "ping":
         return [
           "pid": Int(getpid()), "chromium": OEEngine.shared.chromiumVersion, "cef": OEEngine.shared.cefVersion,
@@ -119,7 +122,8 @@
           "error": app.hotkeyError ?? "", "enabled": UserDefaults.standard.object(forKey: "open.links.littleOpenHotkeyEnabled") as? Bool ?? true] as [String: Any]
       case "settings-state":
         let adapter = app.settingsPresenter
-        return ["settings": adapter.settingsPresenter.window?.windowNumber ?? 0,
+        return ["pane": adapter.settings.selectedPane.rawValue, "selectedProfile": adapter.settings.selectedProfileID.description,
+          "settings": adapter.settingsPresenter.window?.windowNumber ?? 0,
           "library": adapter.libraryPresenter?.window?.windowNumber ?? 0,
           "librarySection": adapter.library?.section.rawValue ?? "", "archiveRows": adapter.library?.archiveRows.count ?? 0,
           "historyRows": adapter.library?.historyRows.count ?? 0,
@@ -949,8 +953,6 @@
         }
 
       // Measurements.
-      case "metrics":
-        return await metrics(interval: a["interval"] as? Double ?? 1)
       case "timing":
         return await timing(w)
       case "startup":
@@ -1021,6 +1023,7 @@
         section = "today"
       }
       var d: [String: Any] = [
+        "createdAt": tab.createdAt.timeIntervalSince1970, "lastActiveAt": tab.lastActiveAt.timeIntervalSince1970,
         "id": tab.id.description, "title": tab.displayTitle, "url": tab.url.absoluteString, "section": section, "unread": tab.isUnread,
         "selected": w.selectedTab?.id == tab.id, "visible": w.visibleTabs.contains { $0.id == tab.id },
         "loading": tab.live.isLoading, "audible": tab.live.isAudible, "crashed": tab.live.isCrashed,
@@ -1309,7 +1312,7 @@
     private func describeNode(_ node: SidebarNode) -> [String: Any] {
       switch node {
       case .tab(let tab): return ["id": tab.id.description, "kind": "tab", "url": tab.url.absoluteString, "title": tab.displayTitle, "loaded": tab.live.hasWebContent]
-      case .folder(let folder): return ["id": folder.id.description, "kind": "folder", "title": folder.title, "children": folder.children.map(describeNode)]
+      case .folder(let folder): return ["id": folder.id.description, "kind": "folder", "title": folder.title, "expanded": folder.isExpanded, "children": folder.children.map(describeNode)]
       case .split(let split): return ["id": split.id.description, "kind": "split", "children": split.panes.map { describeNode(.tab($0)) }]
       }
     }
