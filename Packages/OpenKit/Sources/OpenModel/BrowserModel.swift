@@ -1330,6 +1330,56 @@ public final class BrowserModel {
     }
 
     @discardableResult
+    public func turnFolderIntoSpace(id: ItemID) -> Space? {
+        guard let folder = index[id]?.folder, let parent = parentByID[id],
+              let sourceID = owner(of: parent).space, let source = space(id: sourceID) else { return nil }
+        // Menu evidence: docs/re/sidebar-completion.md §6, FUN_102eb4d38 / F0119.
+        // Children + folder removal in one step: space-theme-editor §8. Today
+        // placement is the Section 1 items 9–10 implementation brief's rule.
+        let created = Space(title: folder.title, profileID: source.profileID)
+        func turn(_ model: BrowserModel) -> Revert? {
+            guard model.index[id]?.folder === folder, model.space(id: sourceID) != nil,
+                  model.space(id: created.id) == nil, let parent = model.parentByID[id],
+                  let position = model.position(of: id, in: parent) else { return nil }
+            let children = folder.children, section = model.section(of: parent)
+            // Observers must see the final ownership, so a live page is not
+            // closed during the brief interval between removal and insertion.
+            model.spaceCreationEvents = []
+            guard model.detach(id) != nil else { model.spaceCreationEvents = nil; return nil }
+            folder.children = []
+            created.today = children
+            let childPrior = children.flatMap { model.applyPinnedRule(to: $0, from: section, to: .spaceToday(created.id)) }
+            model.insertSpace(created, at: model.spaces.count)
+            model.emit(.reload(parent: .spaceToday(created.id)))
+            let events = model.spaceCreationEvents ?? []; model.spaceCreationEvents = nil
+            for event in events { model.emit(event) }
+            return { model in
+                guard model.space(id: created.id) === created, model.index[id] == nil,
+                      model.space(id: sourceID) != nil, created.pinned.isEmpty,
+                      created.today.map(\.id) == children.map(\.id) else { return false }
+                // A Today sweep can remove nodes without an undo entry. Never
+                // resurrect those nodes or detach a Space into a missing parent.
+                if case .folder(let parentID) = parent, model.index[parentID]?.folder == nil { return false }
+                let focused = model.windows.filter { $0.focusedSpaceID == created.id }
+                model.spaceCreationEvents = []
+                model.removeSpace(created.id)
+                created.today = []
+                folder.children = children
+                Self.restore(childPrior)
+                _ = model.attach(.folder(folder), to: parent, at: position)
+                for window in focused { window.focusedSpaceID = sourceID }
+                model.emit(.reload(parent: .spaceToday(created.id)))
+                let events = model.spaceCreationEvents ?? []; model.spaceCreationEvents = nil
+                for event in events { model.emit(event) }
+                return true
+            }
+        }
+        guard let revert = turn(self) else { return nil }
+        registerUndo(revert, reapply: { turn($0) ?? Self.noRevert })
+        return created
+    }
+
+    @discardableResult
     public func turnSpaceIntoFolder(id: SpaceID, destination: SpaceID) -> Folder? {
         guard id != destination, spaces.count > 1, let source = space(id: id), space(id: destination) != nil else { return nil }
         let folder = Folder(title: displayTitle(for: source))
