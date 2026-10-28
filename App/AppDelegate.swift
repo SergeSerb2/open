@@ -23,6 +23,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, OEEngineDelegate, OEBr
   let undoManager: UndoManager = { let manager = UndoManager(); manager.groupsByEvent = false; return manager }()
   private(set) var engineReady = false
   private(set) var terminationRequested = false
+  private var faviconShutdownTask: Task<Void, Never>?
   private(set) var shutdownPrepared = false
   private var lateAsyncEngineCalls = 0
   private var asyncEngineCalls: [String: Int] = [:]
@@ -69,12 +70,23 @@ final class AppDelegate: NSObject, NSApplicationDelegate, OEEngineDelegate, OEBr
   }
 
   func applicationShouldTerminate(_ sender: NSApplication) -> NSApplication.TerminateReply {
+    if faviconShutdownTask != nil { return .terminateCancel }
     let wasEngineReady = engineReady
+    let icons = wasEngineReady ? stores.sidebarFavicons : nil
     terminationRequested = true
     if let commandWindowObserver { NotificationCenter.default.removeObserver(commandWindowObserver) }; commandWindowObserver = nil
     hotkeyService?.unregister(); afterPaintTask?.cancel(); menuRebuildTask?.cancel()
     saveState()
     prepareForEngineShutdown()
+    if let icons, !icons.isIdle {
+      // OEApplication supports terminateCancel, not terminateLater. Close hosts
+      // above, drain accepted cache work, then request shutdown via OpenEngine.
+      faviconShutdownTask = Task { @MainActor in
+        await icons.flush()
+        OEEngine.shared.terminate()
+      }
+      return .terminateCancel
+    }
     if !wasEngineReady { CFRunLoopStop(CFRunLoopGetMain()) }
     return .terminateNow
   }
@@ -181,6 +193,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, OEEngineDelegate, OEBr
     let factory = EngineWebContentHostFactory(app: self, state: state)
     hostFactories[state.id] = factory
     let controller = BrowserWindowController(model: model, windowID: state.id, factory: factory, snapshotStore: snapshotStore)
+    controller.context.storedFavicons = stores.sidebarFavicons
     factory.attach(controller)
     windowControllers.append(controller)
     activeWindowID = state.id

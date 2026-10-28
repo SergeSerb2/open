@@ -982,10 +982,26 @@
         "profile": w.profile(for: tab.id)?.id.description ?? "", "space": w.space(for: tab.id)?.id.description ?? "",
         "hasWebContent": tab.live.hasWebContent, "loaded": w.contents[tab.id] != nil,
       ]
+      d["rowFaviconSource"] = w.controller?.sidebar.drawnFaviconSource(tabID: tab.id) ?? ""
+      d["rowFaviconHash"] = faviconHash(w.controller?.sidebar.drawnFavicon(tabID: tab.id))
+      d["faviconReportsCompleted"] = app.stores.sidebarFavicons?.completedReports ?? 0
+      d["faviconReportsRejected"] = app.stores.sidebarFavicons?.rejectedReports ?? 0
       if let c = w.contents[tab.id] {
         d["page"] = describe(c, in: w)
       }
       return d
+    }
+
+    private func faviconHash(_ image: NSImage?) -> String {
+      guard let source = image?.cgImage(forProposedRect: nil, context: nil, hints: nil),
+        let space = CGColorSpace(name: CGColorSpace.sRGB) else { return "" }
+      var pixels = Data(count: 64 * 64 * 4)
+      let ok = pixels.withUnsafeMutableBytes { bytes -> Bool in
+        guard let context = CGContext(data: bytes.baseAddress, width: 64, height: 64, bitsPerComponent: 8,
+          bytesPerRow: 256, space: space, bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue) else { return false }
+        context.draw(source, in: CGRect(x: 0, y: 0, width: 64, height: 64)); return true
+      }
+      return ok ? SHA256.hash(data: pixels).map { String(format: "%02x", $0) }.joined() : ""
     }
 
     private func describe(_ c: OEWebContent, in w: EngineWebContentHostFactory) -> [String: Any] {

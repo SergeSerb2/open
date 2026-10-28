@@ -3,6 +3,7 @@ import Observation
 import OpenDesign
 import OpenModel
 import OpenMedia
+import OpenStore
 
 /// Shared state for every sidebar view: the model, the window it shows, and
 /// view-only state that is not part of the model (window active, command bar
@@ -89,6 +90,8 @@ public final class SidebarContext {
     /// Theme integration supplies iconOverride here until the model exposes that field.
     /// Shared folder rendering resolves this before Folder.customIcon.
     public var folderIconOverrideProvider: (@MainActor (Folder) -> String?)?
+
+    public var storedFavicons: StoredFaviconCache?
 
     /// Optional favicon override (for example an engine-side cache).
     @ObservationIgnored public var faviconProvider: (@MainActor (Tab) -> NSImage?)?

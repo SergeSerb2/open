@@ -1133,3 +1133,40 @@ record is awaited through engineShutdownEnd; both configurations reject forced
 cleanup and require zero pending work/hosts before shutdown.
 
 [Full review table, verifier rows, timing and retained failures](engine-spike/step-c-review-r1/summary.md).
+
+## Sidebar stored favicons — 2026-10-28
+
+Favicon part of app-shell §4.8 (Step H) only: the App now queues `OpenEngine`
+favicon reports to `StoredFaviconCache` / `FaviconStore`, keyed by canonical origin
+and page path. Store open, image decoding and writes occur on the store actor.
+Unloaded pins, slept rows, URL-only imported rows, Favorites and the Space Manager
+share the bounded decoded cache. Library archive rows already read the store.
+Custom icons and images from live hosts retain priority. Unloaded rows ignore
+retained stale live PNGs; a missing stored icon keeps the
+existing placeholder. A new live report replaces the stored image and invalidates
+that row without a full reload. No Arc favicon assets are imported and cache misses
+do not trigger network traffic. History and AppleScript remain section 11 work.
+
+Limits and end-to-end coverage: `docs/favicons.md`.
+
+| Command | Result |
+|---|---|
+| `~/Library/Caches/OpenRE/scripts/heavy.sh tools/verify-all.sh --only favicons,features-render,sidebar-render,roundtrip` | 5/5 targets PASS including build; `features-render` 311/311, `sidebar-render` 564/564; favicon CLI includes FV11 encoded boundary and FV12 existing-database refusal |
+| `~/Library/Caches/OpenRE/scripts/heavy.sh swift build --package-path Packages/OpenKit -c release -j 6 --product features-render` then `features-render favicon-check` | Restored source: 25/25 PASS; 1000 rows each with a stored icon, scroll p95 2.423 ms at 2x (335 steps; ceiling 8.33 ms). Full gate measured 1.359 ms. Harness measurements only. |
+| Break-and-revert proof | Disable stored-row lookup and add a 5 ms delay to each favicon draw: cold row and replacement checks FAIL; scroll p95 30.880 ms FAIL. Restore byte-identical source (`a77d89965587c01f06e576f251e29abff168ef9933ea6089782f8a1198026002`), rebuild, 25/25 PASS. |
+| `~/Library/Caches/OpenRE/scripts/heavy.sh tools/build.sh` | PASS; Debug real App, no Swift warnings |
+| `/usr/bin/lockf /tmp/open-onscreen-e2e.lock python3 tools/e2e/engine_e2e.py --style chrome --only sidebar-completion` | 111/111 PASS (105 baseline + six favicon flows); zero focus interruptions; cleanup PASS |
+
+Source review: input limits, bounded queues, callback lifetime and read-only automation
+receipts checked. The engine hook queues data and URL before a consumer callback can
+close/rebind its host. Cache revisions reject stale reads/reports. Quit closes engine
+hosts and drains accepted favicon work before the OpenEngine shutdown request.
+There are no new third-party dependencies, unit tests, Arc asset copies or engine-tree
+changes. Raw verification/debug artifacts stay under `.re/` or outside the checkout.
+
+The first App attempt caught retained live PNGs after unload. Rows now select storage
+when `hasWebContent` is false, and automation reports `rowFaviconSource` plus the
+actual last-drawn image's `rowFaviconHash`. FV3–FV6 require the `stored` source and
+matching pixels, with no live host. A later attempt lost foreground focus in an
+existing Library-key flow and cleaned up; the final complete run has no interruptions.
+Generated `docs/engine-spike/*` results are restored before the local commit.

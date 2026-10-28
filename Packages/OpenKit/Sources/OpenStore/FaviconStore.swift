@@ -19,7 +19,7 @@ public struct FaviconStatistics: Sendable {
 }
 
 public enum FaviconStoreError: Error, Sendable {
-    case invalidURL, database, invalidImage
+    case invalidURL, database, databaseTooLarge, invalidImage
 }
 
 /// Canonical network origin, without credentials, path, query, or fragment.
@@ -61,12 +61,20 @@ private final class FaviconStatements: @unchecked Sendable {
         try FileManager.default.createDirectory(at: databaseURL.deletingLastPathComponent(), withIntermediateDirectories: true)
         let connection = try SQLiteDB(path: databaseURL.path)
         db = connection
-        guard connection.exec("PRAGMA busy_timeout=3000;"), connection.exec("""
+        // One actor serializes reads/writes, so this cache does not need WAL.
+        // Cap growth before schema writes. A rollback journal contains at most
+        // one copy of each database page: database + journal stay below 34 MiB.
+        guard connection.exec("PRAGMA busy_timeout=3000; PRAGMA journal_mode=TRUNCATE; PRAGMA page_size=4096; PRAGMA max_page_count=4096; PRAGMA journal_size_limit=0;"),
+              let pageSize = connection.prepare("PRAGMA page_size") else { throw FaviconStoreError.database }
+        let normalPages = sqlite3_step(pageSize) == SQLITE_ROW && connection.columnInt(pageSize, 0) == 4096
+        sqlite3_finalize(pageSize)
+        guard normalPages, connection.exec("""
             CREATE TABLE IF NOT EXISTS favicons(
               origin TEXT NOT NULL, page_key TEXT NOT NULL, icon_url TEXT,
               png32 BLOB, png64 BLOB, fetched_at REAL NOT NULL,
               expires_at REAL NOT NULL, status INTEGER NOT NULL,
               PRIMARY KEY(origin, page_key));
+            CREATE INDEX IF NOT EXISTS favicon_age ON favicons(fetched_at);
             """) else { throw FaviconStoreError.database }
         var prepared: [OpaquePointer] = []
         func prepare(_ sql: String) throws -> OpaquePointer {
@@ -77,7 +85,7 @@ private final class FaviconStatements: @unchecked Sendable {
             prepared.append(stmt)
             return stmt
         }
-        lookup = try prepare("SELECT png32,png64,icon_url FROM favicons WHERE origin=? AND page_key IN (?, '') AND status=0 AND png32 IS NOT NULL ORDER BY length(page_key) DESC LIMIT 1")
+        lookup = try prepare("SELECT png32,png64,icon_url FROM favicons WHERE origin=? AND page_key IN (?, '') AND status=0 AND png32 IS NOT NULL AND length(png32)<=32768 AND coalesce(length(png64),0)<=32768 ORDER BY length(page_key) DESC LIMIT 1")
         freshness = try prepare("SELECT status FROM favicons WHERE origin=? AND page_key='' AND expires_at>?")
         upsert = try prepare("""
             INSERT INTO favicons(origin,page_key,icon_url,png32,png64,fetched_at,expires_at,status)
@@ -97,15 +105,47 @@ private final class FaviconStatements: @unchecked Sendable {
 
 /// Persistent sidebar icons. Decoding, drawing, and SQLite access stay on this actor.
 public actor FaviconStore {
-    private let statements: FaviconStatements
+    public static let maximumInputBytes = 512 * 1024
+    public static let maximumDimension = 1024
+    public static let maximumEntries = 4096
+    public static let maximumStoredBytes = 8 * 1024 * 1024
+    public static let maximumDatabaseBytes = 16 * 1024 * 1024
+    private let databaseURL: URL
+    private var connection: FaviconStatements?
 
+    /// No file access here: callers may construct the actor on the main thread.
     public init(databaseURL: URL) throws {
-        statements = try FaviconStatements(databaseURL: databaseURL)
+        guard databaseURL.isFileURL else { throw FaviconStoreError.invalidURL }
+        self.databaseURL = databaseURL
+    }
+
+    private func open() throws -> FaviconStatements {
+        if let connection { return connection }
+        // Refuse oversized existing input before SQLite opens it. Do not run
+        // VACUUM: its temporary database would escape the cache's disk budget.
+        let size = (try? FileManager.default.attributesOfItem(atPath: databaseURL.path)[.size] as? NSNumber)?.intValue ?? 0
+        guard size <= Self.maximumDatabaseBytes else { throw FaviconStoreError.databaseTooLarge }
+        let opened = try FaviconStatements(databaseURL: databaseURL)
+        try enforceLimits(opened, legacy: true)
+        connection = opened
+        return opened
+    }
+
+    public static func cacheKey(_ url: URL) -> String? {
+        guard url.absoluteString.utf8.count <= 8192, let origin = FaviconOrigin.key(url) else { return nil }
+        return origin + "\n" + FaviconOrigin.pageKey(url)
+    }
+
+    /// ImageIO decoding finishes on this actor. The UI only wraps a 64 px bitmap.
+    public func decodedIcon(for url: URL) -> CGImage? {
+        guard let icon = icon(for: url) else { return nil }
+        let data = icon.png64 ?? icon.png32
+        return try? Self.decode(data)
     }
 
     /// Prefer a page-specific image; keep stale images visible while a refresh is due.
     public func icon(for pageURL: URL) -> FaviconImage? {
-        guard let origin = FaviconOrigin.key(pageURL) else { return nil }
+        guard Self.cacheKey(pageURL) != nil, let origin = FaviconOrigin.key(pageURL), let statements = try? open() else { return nil }
         let stmt = statements.lookup
         defer { reset(stmt) }
         statements.db.bindText(stmt, 1, origin)
@@ -115,8 +155,8 @@ public actor FaviconStore {
     }
 
     public func ingest(imageData: Data, iconURL: URL?, for pageURL: URL, pageSpecific: Bool) throws {
-        guard let origin = FaviconOrigin.key(pageURL) else { throw FaviconStoreError.invalidURL }
-        guard imageData.count <= 512 * 1024 else { throw FaviconStoreError.invalidImage }
+        guard Self.cacheKey(pageURL) != nil, let origin = FaviconOrigin.key(pageURL), (iconURL?.absoluteString.utf8.count ?? 0) <= 8192 else { throw FaviconStoreError.invalidURL }
+        guard imageData.count <= Self.maximumInputBytes else { throw FaviconStoreError.invalidImage }
         let pngs = try autoreleasepool { () throws -> (Data, Data) in
             let image = try Self.decode(imageData)
             return (try Self.png(image, size: 32), try Self.png(image, size: 64))
@@ -136,6 +176,7 @@ public actor FaviconStore {
     }
 
     public func purge(olderThan: Date) -> Int {
+        guard let statements = try? open() else { return 0 }
         let stmt = statements.purge
         defer { reset(stmt) }
         statements.db.bindDouble(stmt, 1, olderThan.timeIntervalSince1970)
@@ -144,12 +185,14 @@ public actor FaviconStore {
     }
 
     public func count() -> Int {
+        guard let statements = try? open() else { return 0 }
         let stmt = statements.count
         defer { reset(stmt) }
         return sqlite3_step(stmt) == SQLITE_ROW ? Int(statements.db.columnInt(stmt, 0)) : 0
     }
 
     public func statistics() -> FaviconStatistics {
+        guard let statements = try? open() else { return FaviconStatistics(ok: 0, missing: 0, failed: 0, totalBytes: 0) }
         let stmt = statements.stats
         defer { reset(stmt) }
         var counts = [0, 0, 0], bytes = 0
@@ -162,7 +205,7 @@ public actor FaviconStore {
     }
 
     func cachedStatus(for pageURL: URL, now: Date = .now) -> Int? {
-        guard let origin = FaviconOrigin.key(pageURL) else { return nil }
+        guard let origin = FaviconOrigin.key(pageURL), let statements = try? open() else { return nil }
         let stmt = statements.freshness
         defer { reset(stmt) }
         statements.db.bindText(stmt, 1, origin)
@@ -177,8 +220,11 @@ public actor FaviconStore {
 
     private func write(origin: String, pageKey: String, iconURL: URL? = nil, png32: Data? = nil,
                        png64: Data? = nil, status: Int, lifetime: TimeInterval) throws {
-        let stmt = statements.upsert, db = statements.db
-        defer { reset(stmt) }
+        guard origin.utf8.count <= 8192, pageKey.utf8.count <= 8192 else { throw FaviconStoreError.invalidURL }
+        let statements = try open(), stmt = statements.upsert, db = statements.db
+        guard db.exec("BEGIN IMMEDIATE") else { throw FaviconStoreError.database }
+        var committed = false
+        defer { reset(stmt); if !committed { db.exec("ROLLBACK") } }
         let now = Date().timeIntervalSince1970
         db.bindText(stmt, 1, origin)
         db.bindText(stmt, 2, pageKey)
@@ -189,6 +235,27 @@ public actor FaviconStore {
         db.bindDouble(stmt, 7, now + lifetime)
         db.bindInt(stmt, 8, Int64(status))
         guard sqlite3_step(stmt) == SQLITE_DONE else { throw FaviconStoreError.database }
+        reset(stmt)
+        try enforceLimits(statements)
+        guard db.exec("COMMIT") else { throw FaviconStoreError.database }
+        committed = true
+    }
+
+    private func enforceLimits(_ statements: FaviconStatements, legacy: Bool = false) throws {
+        let db = statements.db
+        // Cap legacy counts in one SQL operation before the bounded byte loop.
+        if legacy, !db.exec("DELETE FROM favicons WHERE rowid NOT IN (SELECT rowid FROM favicons ORDER BY fetched_at DESC,rowid DESC LIMIT \(Self.maximumEntries))") { throw FaviconStoreError.database }
+        guard let usage = db.prepare("SELECT count(*),coalesce(sum(length(CAST(origin AS BLOB))+length(CAST(page_key AS BLOB))+coalesce(length(CAST(icon_url AS BLOB)),0)+coalesce(length(png32),0)+coalesce(length(png64),0)),0) FROM favicons") else { throw FaviconStoreError.database }
+        defer { sqlite3_finalize(usage) }
+        // At most 4096 iterations, including keys/URLs as UTF-8 bytes.
+        for _ in 0...Self.maximumEntries {
+            guard sqlite3_step(usage) == SQLITE_ROW else { throw FaviconStoreError.database }
+            let count = Int(db.columnInt(usage, 0)), bytes = Int(db.columnInt(usage, 1))
+            reset(usage)
+            if count <= Self.maximumEntries && bytes <= Self.maximumStoredBytes { return }
+            guard db.exec("DELETE FROM favicons WHERE rowid=(SELECT rowid FROM favicons ORDER BY fetched_at,rowid LIMIT 1)") else { throw FaviconStoreError.database }
+        }
+        throw FaviconStoreError.database
     }
 
     private func reset(_ stmt: OpaquePointer) {
@@ -210,7 +277,7 @@ public actor FaviconStore {
 
     private static func decode(_ data: Data) throws -> CGImage {
         if let source = CGImageSourceCreateWithData(data as CFData, [kCGImageSourceShouldCache: false] as CFDictionary),
-           CGImageSourceGetCount(source) > 0 {
+           CGImageSourceGetCount(source) > 0, CGImageSourceGetCount(source) <= 32 {
             var index = 0
             if CGImageSourceGetType(source).map({ UTType($0 as String)?.conforms(to: .ico) == true }) == true {
                 var best = Int.max
@@ -226,7 +293,8 @@ public actor FaviconStore {
             guard let properties = CGImageSourceCopyPropertiesAtIndex(source, index, nil) as? [CFString: Any],
                   let width = properties[kCGImagePropertyPixelWidth] as? NSNumber,
                   let height = properties[kCGImagePropertyPixelHeight] as? NSNumber,
-                  (1...4096).contains(width.doubleValue), (1...4096).contains(height.doubleValue) else {
+                  let depth = properties[kCGImagePropertyDepth] as? NSNumber, (1...8).contains(depth.intValue),
+                  (1...Double(maximumDimension)).contains(width.doubleValue), (1...Double(maximumDimension)).contains(height.doubleValue) else {
                 throw FaviconStoreError.invalidImage
             }
             let options: [CFString: Any] = [kCGImageSourceCreateThumbnailFromImageAlways: true,
@@ -234,15 +302,9 @@ public actor FaviconStore {
                                           kCGImageSourceThumbnailMaxPixelSize: 64]
             if let image = CGImageSourceCreateThumbnailAtIndex(source, index, options as CFDictionary) { return image }
         }
-        // AppKit's SVG decoder is optional. Its objects stay local to this actor call.
-        if let text = String(data: data.prefix(4096), encoding: .utf8), text.range(of: "<svg", options: .caseInsensitive) != nil,
-           let image = NSImage(data: data) {
-            guard image.size.width.isFinite, image.size.height.isFinite,
-                  (0...4096).contains(image.size.width), (0...4096).contains(image.size.height),
-                  image.size.width > 0, image.size.height > 0 else { throw FaviconStoreError.invalidImage }
-            var rect = CGRect(x: 0, y: 0, width: 64, height: 64)
-            if let cgImage = image.cgImage(forProposedRect: &rect, context: nil, hints: nil) { return cgImage }
-        }
+        // Reject unsupported/vector input before AppKit can rasterize it.
+        // Largest accepted source bitmap: 1024 * 1024 * 4 = 4 MiB;
+        // our explicit output allocation is 64 * 64 * 4 = 16 KiB.
         throw FaviconStoreError.invalidImage
     }
 

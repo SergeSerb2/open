@@ -5508,6 +5508,64 @@ def sidebar_completion_a3_checks(app, results, require, evidence, tmp, launch):
     return app
 
 
+def sidebar_favicon_checks(app, require, tmp, launch):
+    """Engine favicon event -> App store -> unloaded real row -> cold relaunch."""
+    import http.server
+    import threading
+    import zlib
+
+    def icon(color):
+        def chunk(kind, body):
+            return struct.pack('>I', len(body)) + kind + body + struct.pack('>I', zlib.crc32(kind + body))
+        return (b'\x89PNG\r\n\x1a\n' + chunk(b'IHDR', struct.pack('>IIBBBBB', 64, 64, 8, 6, 0, 0, 0))
+                + chunk(b'IDAT', zlib.compress((b'\0' + bytes(color) * 64) * 64)) + chunk(b'IEND', b''))
+
+    class Handler(http.server.BaseHTTPRequestHandler):
+        def do_GET(self):
+            if self.path.endswith('.png'):
+                body, mime = icon((20, 80, 220, 255) if 'blue' in self.path else (220, 80, 20, 255)), 'image/png'
+            else:
+                body, mime = b'<title>Stored favicon fixture</title><link rel="icon" href="/red.png"><h1>Stored favicon</h1>', 'text/html'
+            self.send_response(200); self.send_header('Content-Type', mime)
+            self.send_header('Cache-Control', 'no-store'); self.end_headers(); self.wfile.write(body)
+        def log_message(self, *args): pass
+
+    server = http.server.ThreadingHTTPServer(('127.0.0.1', 0), Handler)
+    threading.Thread(target=server.serve_forever, daemon=True).start()
+    origin = 'http://127.0.0.1:%d' % server.server_address[1]
+    try:
+        app.call('library-close')
+        space = app.call('space-create', title='Stored favicons'); app.call('space', space=space)
+        pin = app.call('open', url=origin + '/page')['id']; app.call('wait', tab=pin); app.call('pin', tab=pin)
+        loaded = wait_until(lambda: (lambda t: t if t['favicon'] and t.get('rowFaviconHash') and t.get('faviconReportsCompleted', 0) else None)(app.tab(pin)), timeout=8)
+        require('FV1_engine_report_stored_and_drawn', bool(loaded), tab=app.tab(pin))
+        red = loaded['rowFaviconHash']; count = loaded['faviconReportsCompleted']
+        app.eval(pin, "document.querySelector('link[rel=icon]').href='/blue.png'; true")
+        changed = wait_until(lambda: (lambda t: t if t.get('rowFaviconHash') and t['rowFaviconHash'] != red and t.get('faviconReportsCompleted', 0) > count else None)(app.tab(pin)), timeout=8)
+        require('FV2_engine_report_replaces_stored_icon', bool(changed), tab=app.tab(pin), previousHash=red)
+        blue = changed['rowFaviconHash']
+        # Pin Close follows production unload. It keeps the old live PNG; the row
+        # must select storage when hasWebContent becomes false.
+        neighbor = app.call('open', url=fixture('Stored favicon neighbor'))['id']; app.call('wait', tab=neighbor)
+        app.call('close', tab=pin)
+        unloaded = wait_until(lambda: (lambda t: t if not t['hasWebContent'] and t.get('rowFaviconSource') == 'stored' and t.get('rowFaviconHash') == blue else None)(app.tab(pin)), timeout=5)
+        require('FV3_unloaded_row_draws_stored_pixels', bool(unloaded), tab=app.tab(pin), expectedHash=blue)
+        app.call('save'); app.quit(); app = launch(); app.call('space', space=space)
+        cold = wait_until(lambda: (lambda t: t if not t['hasWebContent'] and t.get('rowFaviconSource') == 'stored' and t.get('rowFaviconHash') == blue else None)(app.tab(pin)), timeout=8)
+        require('FV4_relaunch_unloaded_row_same_pixels', bool(cold), tab=app.tab(pin), expectedHash=blue)
+        # A new URL-only tab has the same shape as an imported pin. It has no host.
+        imported = app.call('open', url=origin + '/page', background=True)['id']
+        app.call('pin', tab=imported)
+        imported_row = wait_until(lambda: (lambda t: t if not t['hasWebContent'] and t.get('rowFaviconSource') == 'stored' and t.get('rowFaviconHash') == blue else None)(app.tab(imported)), timeout=5)
+        require('FV5_url_only_import_shape_uses_stored_icon', bool(imported_row), tab=app.tab(imported), expectedHash=blue)
+        app.call('favorite', tab=imported)
+        favorite = wait_until(lambda: (lambda t: t if t['section'] == 'favorites' and not t['hasWebContent'] and t.get('rowFaviconSource') == 'stored' and t.get('rowFaviconHash') == blue else None)(app.tab(imported)), timeout=5)
+        require('FV6_unloaded_favorite_same_pixels', bool(favorite), tab=app.tab(imported), expectedHash=blue)
+        return app
+    finally:
+        server.shutdown(); server.server_close()
+
+
 def space_manager_checks(results, tmp, config, style):
     """E5/E6: real Library injection, native reorder/undo, stores and lifetimes."""
     import plistlib
@@ -5866,6 +5924,7 @@ def space_manager_checks(results, tmp, config, style):
                 and len(app.call('shell-windows')) == 1 and tabs_before_close == tabs_after_close,
                 keys=key_states, closeFixture=close_fixture, selectedBeforeClose=selected_before_close, barAfterEscape=bar_after_escape, tabsBeforeClose=tabs_before_close, tabsAfterClose=tabs_after_close, state=state(app))
         app = sidebar_completion_a3_checks(app, results, require, evidence, tmp, launch)
+        app = sidebar_favicon_checks(app, require, tmp, launch)
     finally:
         dialogs, cleanup_errors = [], []
         owned_pids.update(space_manager_owned_processes(bundle))

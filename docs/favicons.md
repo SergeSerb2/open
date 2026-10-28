@@ -1,8 +1,9 @@
 # Persistent favicons
 
 `OpenStore` stores normalized icons for unloaded tabs, favorites, and imported tabs.
-The engine can call `ingest` when a loaded page supplies an icon. This change exposes
-that API; it does not change the engine or sidebar consumers.
+The App feeds engine favicon reports into `StoredFaviconCache`, which writes them to
+`FaviconStore`. Sidebar rows and Favorites read its bounded decoded cache when no live
+image is available. The Library already reads the same store for archived rows.
 
 ## API
 
@@ -16,8 +17,8 @@ let fetched = await FaviconFetcher(store: store).fetchOne(pageURL)
 ```
 
 `FaviconStore` is an actor. Its methods serialize SQLite access, decoding, and drawing
-on the actor executor. It has no main-actor methods. Its synchronous throwing initializer
-opens the database, so create it from a background caller in the UI integration.
+on the actor executor. Its synchronous initializer records the database URL only.
+The first actor operation opens SQLite off the main actor.
 
 - `icon(for:) -> FaviconImage?` returns an exact path match first, then the origin icon.
   It skips negative/error rows. Successful expired images remain available until replaced
@@ -27,9 +28,9 @@ opens the database, so create it from a background caller in the UI integration.
   PNG, ICO, JPEG, GIF, WebP, and BMP. ICO uses the frame closest to 64 pixels by maximum
   dimension. Other raster formats use the first frame. Decoding downsamples to 64 pixels.
   Input is limited to 512 KiB even for direct engine ingestion. Before thumbnailing,
-  ImageIO properties must report both dimensions in 1...4096 (the selected ICO frame).
-  SVG is accepted when AppKit's `NSImage(data:)` can produce a CGImage and its intrinsic
-  dimensions are positive, finite, and no greater than 4096. Invalid images throw
+  ImageIO must report both dimensions in 1...1024 and depth in 1...8 bits
+  (the selected ICO frame); at most 32 frames are allowed. Vector images are refused
+  before AppKit rasterization. Invalid images throw
   `FaviconStoreError.invalidImage`; invalid page URLs and failed writes also throw.
 - Rendering uses a high-interpolation sRGB CGContext with transparency. It fits the image
   inside a 32×32 or 64×64 square without changing its aspect ratio, then encodes PNGs.
@@ -56,7 +57,9 @@ true for a successful fresh origin row or a successful fetch, and false otherwis
 
 ## Schema and keys
 
-SQLiteDB enables WAL mode and NORMAL synchronous mode. The store sets a three-second
+SQLiteDB enables NORMAL synchronous mode. This cache selects a truncated rollback
+journal, with a 16 MiB database page cap and a 34 MiB combined transient disk cap
+(see App integration below). The store sets a three-second
 busy timeout and retains prepared statements for lookup, freshness, upsert, purge, count,
 and statistics. Statements are reset and cleared after each use and finalized at teardown.
 
@@ -529,3 +532,47 @@ The implementation uses Apple's [URLSession byte stream API](https://developer.a
 to stop consuming large responses, and ImageIO's
 [thumbnail pixel-size option](https://developer.apple.com/documentation/imageio/kcgimagesourcethumbnailmaxpixelsize)
 to bound raster decoding before final CGContext rendering.
+
+## App integration
+
+`EngineWebContentHost` receives `OpenEngine` favicon events, normalizes each image
+to 64 pixels, updates the live row, and queues a page-specific report through
+`StoredFaviconCache`. The existing canonical origin plus path key excludes query,
+fragment and credentials. A new report replaces that page's stored icon. Quit drains accepted reports after
+closing engine hosts. The shared
+`FaviconView` observes one cache entry, so reads and replacements redraw reused rows
+without a full sidebar reload. Custom icons retain priority. A live image wins while the tab has a live host;
+unloaded rows ignore a retained stale live PNG and use storage.
+Unloaded pins, slept rows, Favorites and the Space Manager use the cache. The Library
+already reads this store for archived rows. A missing icon keeps the existing placeholder;
+cache misses do not start network requests or disk access on the main thread.
+
+Limits:
+
+- 512 KiB encoded image input; 1024 pixels per source edge; 8 bits per component;
+  at most 32 frames. Raster decoding selects one frame. Vector images are refused.
+- 8192 bytes per page/icon URL. The store retains at most 4096 records and 8 MiB
+  of PNG/key/URL payload, evicting the oldest reports.
+- 4096 SQLite pages of 4096 bytes: 16 MiB database, below 34 MiB with the transient
+  rollback journal. The journal truncates after commit. An existing database above 16 MiB
+  is refused before SQLite opens it; no compaction scratch file is created.
+- 1024 decoded cache entries, including misses: at most 16 MiB of 64×64 RGBA pixels.
+  The live cache holds 128 thumbnails (2 MiB decoded). Explicit thumbnail allocation
+  is 16 KiB; maximum accepted 8-bit RGBA source bitmap is 4 MiB.
+- One worker, at most 1024 queued reads and 32 pending reports (16 MiB encoded data),
+  with repeated pending reports for the same page coalesced. Oversized/excess reports
+  are refused. A failed report keeps the previous stored image.
+
+Arc import supplies URLs, with no favicon payload or proved mapping from its hash-named
+PNG caches (`docs/re/data-model.md` §2). URL-only imported rows therefore use an existing
+Open icon for that canonical page, or the placeholder until Open visits it. No Arc
+icon files or personal data are copied.
+
+`features-render check` FV1–FV10 covers report ingestion; cold unloaded, slept and
+Favorite row pixels; replacement and live priority; input refusal; canonical keys;
+cache/queue/disk bounds; and the 8.33 ms p95 scroll budget at 1000 stored-icon rows.
+CLI `favicons` FV11 accepts 512 KiB and refuses one byte more; FV12 refuses an
+existing SQLite database over 16 MiB without writes or sidecars.
+Real-App `sidebar-completion` FV1–FV6 serves a local PNG and compares the actual row's
+pixel hash after report, replacement, pin unload, cold relaunch, URL-only insertion,
+and a move to Favorites. Verification results are recorded in `docs/app-shell.md`.

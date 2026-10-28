@@ -69,7 +69,14 @@ final class EngineWebContentHost: NSObject, WebContentHost, OEWebContentDelegate
     guard !closed, generation == token else { return }
     if changes.contains(.title), !page.title.isEmpty { onTitleChange?(page.title) }
     if changes.contains(.loading) || changes.contains(.live) { onLoadingChange?(page.isLoading) }
-    if changes.contains(.favicon) { onFaviconChange?(page.favicon.flatMap(EngineWebContentHostFactory.pngData)) }
+    guard !closed, generation == token else { return }
+    if changes.contains(.favicon) {
+      let data = page.favicon.flatMap(EngineWebContentHostFactory.pngData)
+      // Capture the URL and queue storage before a consumer callback can close
+      // or rebind this host. The queued work never touches the engine object.
+      if let data, let url = page.url { owner.app.stores.sidebarFavicons?.report(data, for: url) }
+      onFaviconChange?(data)
+    }
     guard !closed, generation == token else { return }
     onLiveStateChange?(liveState)
     if changes.contains(.loading), !page.isLoading { refreshPageBackground() }
