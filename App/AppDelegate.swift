@@ -39,6 +39,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate, OEEngineDelegate, OEBr
   var afterPaintTask: Task<Void, Never>?
   var littleOpenStub: NSWindowController?
   var commandWindowObserver: NSObjectProtocol?
+  var commandDefaultsObserver: NSObjectProtocol?
+  private var numberedShortcutOptions = ""
+  private var currentNumberedShortcutOptions: String {
+    "\(UserDefaults.standard.bool(forKey: "open.shortcuts.includeFavoritesInTabNumbering")):\(UserDefaults.standard.bool(forKey: "open.shortcuts.switchToNinthEnabled"))"
+  }
   private var activeWindowID: WindowID?
   private(set) var startupEvidence: [String: Any] = [:]
   #if OPEN_AUTOMATION
@@ -72,6 +77,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, OEEngineDelegate, OEBr
     let wasEngineReady = engineReady
     terminationRequested = true
     if let commandWindowObserver { NotificationCenter.default.removeObserver(commandWindowObserver) }; commandWindowObserver = nil
+    if let commandDefaultsObserver { NotificationCenter.default.removeObserver(commandDefaultsObserver) }; commandDefaultsObserver = nil
     hotkeyService?.unregister(); afterPaintTask?.cancel(); menuRebuildTask?.cancel()
     saveState()
     prepareForEngineShutdown()
@@ -397,6 +403,15 @@ extension AppDelegate: CommandDispatcher {
     guard !commandServicesPrepared else { return }
     commandServicesPrepared = true
     _ = settingsPresenter.settings
+    numberedShortcutOptions = currentNumberedShortcutOptions
+    commandDefaultsObserver = NotificationCenter.default.addObserver(forName: UserDefaults.didChangeNotification, object: nil, queue: .main) { [weak self] _ in
+      MainActor.assumeIsolated {
+        guard let self else { return }
+        let options = self.currentNumberedShortcutOptions
+        guard options != self.numberedShortcutOptions else { return }
+        self.numberedShortcutOptions = options; self.scheduleMenuRebuild()
+      }
+    }
     commandWindowObserver = NotificationCenter.default.addObserver(forName: NSWindow.didBecomeKeyNotification, object: nil, queue: .main) { [weak self] _ in
       MainActor.assumeIsolated {
         guard let self else { return }

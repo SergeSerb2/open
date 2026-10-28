@@ -55,7 +55,7 @@ enum FeatureCLI {
             OffscreenRenderer.settle(c.contentView, runLoop: 0.01)
             try output(c.contentView, args: args, scale: scale); little.closeAll(); return
         }
-        guard ["split", "peek", "bench"].contains(cmd), let window = model.windows.first else { throw CLIError(description: RenderCLI.usage) }
+        guard ["split", "peek", "bench", "switcher"].contains(cmd), let window = model.windows.first else { throw CLIError(description: RenderCLI.usage) }
         if let n = RenderCLI.value(args, "--space").flatMap(Int.init), model.spaces.indices.contains(n) { window.focusedSpaceID = model.spaces[n].id }
         if args.contains("--sidebar-hidden") { window.sidebarMode = .hidden }
         if args.contains("--untitled") { model.space(id: window.focusedSpaceID)?.title = "" }
@@ -82,7 +82,7 @@ enum FeatureCLI {
         let orientation: SplitOrientation = RenderCLI.value(args, "--orientation") == "vertical" ? .vertical : .horizontal
         let selected: ItemID
         if let raw = RenderCLI.value(args, cmd == "peek" ? "--source-tab" : "--select-node"), let uuid = UUID(uuidString: raw), model.node(id: ItemID(rawValue: uuid)) != nil { selected = ItemID(rawValue: uuid) }
-        else if cmd == "peek" { guard let tab = all.first else { throw CLIError(description: "no source") }; selected = tab.id }
+        else if cmd == "peek" || cmd == "switcher" { guard let tab = all.first else { throw CLIError(description: "no source") }; selected = tab.id }
         else if fractions.count == 1 { guard let tab = all.first else { throw CLIError(description: "no tab") }; selected = tab.id }
         else {
             if let split = (space.pinned + space.today).compactMap(\.split).first { selected = split.id }
@@ -99,6 +99,12 @@ enum FeatureCLI {
         }
         model.selectNode(windowID: window.id, spaceID: space.id, nodeID: selected)
         let c = BrowserWindowController(model: model, windowID: window.id, factory: factory, size: size, defaults: defaults)
+        if cmd == "switcher" {
+            c.tabSwitcher.advance(by: 1, items: all.prefix(5).map {
+                .init(id: $0.id, title: $0.displayTitle, subtitle: $0.url.host ?? "")
+            }, current: selected, in: c.contentView) { _ in }
+            try await Task.sleep(for: .milliseconds(130))
+        }
         if cmd == "peek", let source = c.context.currentTab {
             let depth = max(1, min(5, Int(RenderCLI.value(args, "--depth") ?? "1") ?? 1))
             for _ in 0..<depth { c.peekController.open(url: URL(string: RenderCLI.value(args, "--peek-url") ?? "https://example.org/preview")!, sourceTabID: source.id) }

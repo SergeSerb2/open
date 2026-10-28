@@ -12,8 +12,8 @@ enum MainMenu {
     if let controller = factory?.controller { dispatcher = controller } else { dispatcher = app }
     return MenuBuilder.buildMainMenu(dispatcher: dispatcher,
       spaces: app.model.spaces.map { SpaceMenuEntry(id: $0.id.description, title: app.model.displayTitle(for: $0)) },
-      tabs: (factory?.orderedTabs ?? []).map { TabMenuEntry(id: $0.id.description, title: $0.displayTitle.isEmpty ? $0.url.absoluteString : $0.displayTitle) },
-      overrides: app.keyBindings)
+      tabs: (factory?.numberedTabs ?? []).map { TabMenuEntry(id: $0.id.description, title: $0.displayTitle.isEmpty ? $0.url.absoluteString : $0.displayTitle) },
+      overrides: app.keyBindings, switchToNinth: UserDefaults.standard.bool(forKey: "open.shortcuts.switchToNinthEnabled"))
   }
   static func targetWindowCommands(_ target: EngineWebContentHostFactory?) { NSApp.mainMenu = build(factoryOverride: target) }
   static func performReservedShortcut(_ event: NSEvent) -> Bool {
@@ -71,9 +71,10 @@ extension EngineWebContentHostFactory {
     if AppCommand.featureIDs.contains(id) || id.hasPrefix("focus-split-pane-") {
       return controller?.isCommandEnabled(id, enabledKey: enabledKey ?? EnabledKey.currentTabInSplit) == true
     }
-    guard AppCommand.implemented.contains(id) || id.hasPrefix("go-to-tab-") || id.hasPrefix("go-to-space-") else { return false }
+    guard AppCommand.implemented.contains(id) || id == "go-to-last-tab" || id.hasPrefix("go-to-tab-") || id.hasPrefix("go-to-space-") else { return false }
+    if id == "go-to-last-tab" { return !numberedTabs.isEmpty }
     if id == "focus-space" { return payload.flatMap(UUID.init(uuidString:)).map { model.space(id: SpaceID(rawValue: $0)) != nil } ?? false }
-    if id.hasPrefix("go-to-tab-"), let n = Int(id.split(separator: "-").last ?? "") { return n <= orderedTabs.count }
+    if id.hasPrefix("go-to-tab-"), let n = Int(id.split(separator: "-").last ?? "") { return numberedTab(n) != nil }
     if id.hasPrefix("go-to-space-"), let n = Int(id.split(separator: "-").last ?? "") { return n <= model.spaces.count }
     if id == "pin-tab" { return selectedTab.map { !model.isPinned(tabID: $0.id) } ?? false }
     if id == "expand-all-folders" || id == "collapse-all-folders" {
@@ -117,8 +118,9 @@ extension EngineWebContentHostFactory {
       if let uuid = payload.flatMap(UUID.init(uuidString:)), let space = model.space(id: SpaceID(rawValue: uuid)) { focus(space: space) }
       else { focus(space: model.spaces[n - 1]) }; return true
     }
-    if id.hasPrefix("go-to-tab-"), let n = Int(id.split(separator: "-").last ?? ""), n <= orderedTabs.count {
-      let tabID = payload.flatMap(UUID.init(uuidString:)).map { ItemID(rawValue: $0) } ?? orderedTabs[n - 1].id
+    if id == "go-to-last-tab", let tab = numberedTabs.last { selectTabForCommand(tab.id); return true }
+    if id.hasPrefix("go-to-tab-"), let n = Int(id.split(separator: "-").last ?? ""), let tab = numberedTab(n) {
+      let tabID = payload.flatMap(UUID.init(uuidString:)).map { ItemID(rawValue: $0) } ?? tab.id
       selectTabForCommand(tabID); return true
     }
     switch id {
@@ -156,8 +158,10 @@ extension EngineWebContentHostFactory {
     case "replace-pinned-url": if let tab = selectedTab { model.replacePinnedURL(id: tab.id) }
     case "clear-unpinned-tabs":
       if let space = focusedSpace, !space.today.isEmpty { model.clearToday(space: space.id); controller?.showClearedToast() }
-    case "next-tab", "cycle-tab-forward", "tab-switcher-forward": cycleTab(by: 1)
-    case "previous-tab", "cycle-tab-backward", "tab-switcher-backward": cycleTab(by: -1)
+    case "next-tab", "cycle-tab-forward": cycleTab(by: 1)
+    case "previous-tab", "cycle-tab-backward": cycleTab(by: -1)
+    case "tab-switcher-forward": showTabSwitcher(by: 1)
+    case "tab-switcher-backward": showTabSwitcher(by: -1)
     case "next-space": cycleSpace(by: 1)
     case "previous-space": cycleSpace(by: -1)
     case "focus-space": if let uuid = payload.flatMap(UUID.init(uuidString:)), let space = model.space(id: SpaceID(rawValue: uuid)) { focus(space: space) }

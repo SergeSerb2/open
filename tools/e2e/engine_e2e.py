@@ -5508,6 +5508,87 @@ def sidebar_completion_a3_checks(app, results, require, evidence, tmp, launch):
     return app
 
 
+
+def sidebar_tab_switcher_checks(app, require, tmp):
+    """TS keys enter OEApplication.sendEvent. No desktop input or direct dispatch."""
+    def state(): return app.call('window-state')
+    def switcher(): return app.call('tab-switcher-state')
+    def key(name, mods=()): return app.call('key', key=name, modifiers=list(mods), route='app')
+    def selected(): return state()['selected']
+    def release(): return key('control')
+    def opened(name):
+        path = Path(tmp) / ('ts-' + name + '.html')
+        path.write_text('<title>Switcher %s</title><h1>%s</h1>' % (name, name))
+        node = app.call('open', url=path.as_uri())['id']; app.call('wait', tab=node); return node
+    def tree_ids():
+        def flatten(nodes):
+            return [node['id'] for node in nodes if node['kind'] == 'tab'] + [item for node in nodes for item in flatten(node.get('children', []))]
+        tree = app.call('sidebar-tree')
+        return flatten(tree['pinned']) + flatten(tree['today'])
+    include_key = 'open.shortcuts.includeFavoritesInTabNumbering'
+    ninth_key = 'open.shortcuts.switchToNinthEnabled'
+    old_include = app.call('defaults', key=include_key); old_ninth = app.call('defaults', key=ninth_key)
+    app.call('library-close'); app.call('window-focus', id=state()['id'], activate=True)
+    first_space = app.call('space-create', title='Tab Shortcuts A', profile='Tab Shortcuts')
+    key('9', ['cmd']); key('tab', ['ctrl']); release()
+    require('TS_empty_window_keys_are_safe', selected() == '' and not switcher()['active'], switcher=switcher())
+    favorite = opened('favorite'); app.call('favorite', tab=favorite)
+    pin = opened('pin'); app.call('pin', tab=pin)
+    today = [opened('today%d' % i) for i in range(3)]
+    app.call('defaults', key=ninth_key, value=False)
+    app.call('defaults', key=include_key, value=True)
+    key('1', ['cmd'])
+    require('TS_cmd1_include_favorites_on', selected() == favorite, selected=selected(), expected=favorite)
+    app.call('defaults', key=include_key, value=False); key('1', ['cmd'])
+    require('TS_cmd1_include_favorites_off', selected() == pin, selected=selected(), expected=pin)
+    last = tree_ids()[-1]; key('9', ['cmd'])
+    require('TS_cmd9_last_with_fewer_than_nine', selected() == last, selected=selected(), expected=last)
+    more = [opened('more%d' % i) for i in range(7)]
+    ids = tree_ids(); key('9', ['cmd'])
+    require('TS_cmd9_last_after_ninth', len(ids) > 9 and selected() == ids[-1], selected=selected(), expected=ids[-1])
+    app.call('defaults', key=ninth_key, value=True); key('9', ['cmd'])
+    require('TS_cmd9_ninth_option', selected() == ids[8], selected=selected(), expected=ids[8])
+    app.call('defaults', key=ninth_key, value=False)
+    app.call('command', id='go-to-last-tab')
+    require('TS_last_menu_dispatch', selected() == ids[-1], selected=selected(), expected=ids[-1])
+    second_space = app.call('space-create', title='Tab Shortcuts B', profile='Tab Shortcuts')
+    key('tab', ['ctrl']); empty_space = switcher(); release()
+    require('TS_empty_space_starts_with_most_recent', empty_space['selected'] == ids[-1] and selected() == ids[-1], switcher=empty_space, state=state())
+    app.call('space', space=second_space)
+    other = opened('other-space')
+    app.call('space', space=first_space)
+    for node in (favorite, pin, today[0]): app.call('select', tab=node)
+    current = selected(); hosts_before = app.call('host-counts'); key('tab', ['ctrl']); first = wait_until(lambda: (lambda s: s if s['presented'] else None)(switcher()), timeout=3)
+    require('TS_ctrl_tab_mru_includes_pinned_favorites_other_space', first['presented'] and first['items'][:4] == [current, pin, favorite, other]
+            and len(first['items']) == 5 and first['selected'] == pin and selected() == current,
+            switcher=first, selected=selected(), expected=[current, pin, favorite, other])
+    hosts_after = app.call('host-counts')
+    image_path = str(Path(ROOT) / '.re' / 'tab-switcher' / 'real-switcher.png')
+    app.call('snapshot', path=image_path)
+    require('TS_highlight_does_not_create_hosts', hosts_before == hosts_after, before=hosts_before, after=hosts_after, png=image_path)
+    key('tab', ['ctrl']); second = switcher()
+    require('TS_hold_ctrl_tab_twice_defers_commit', second['selected'] == favorite and selected() == current and second['items'] == first['items'], switcher=second)
+    release()
+    require('TS_release_control_commits', selected() == favorite and not switcher()['presented'], selected=selected(), switcher=switcher())
+    key('tab', ['ctrl']); key('escape'); release()
+    require('TS_escape_cancels', selected() == favorite and not switcher()['presented'], selected=selected(), switcher=switcher())
+    key('tab', ['ctrl', 'shift']); reverse = switcher()
+    require('TS_reverse_uses_frozen_mru', reverse['selected'] == reverse['items'][-1] and selected() == favorite, switcher=reverse)
+    key('escape'); release()
+    # Visit the other Space last, then return: committing the second recent tab
+    # restores its Space as well as the real page's selected tab.
+    app.call('space', space=second_space); app.call('select', tab=other)
+    app.call('space', space=first_space); app.call('select', tab=today[0])
+    key('tab', ['ctrl']); cross = switcher(); release()
+    require('TS_commit_other_space', cross['selected'] == other and selected() == other and state()['space'] == second_space,
+            switcher=cross, state=state(), expected=other)
+    app.call('space', space=first_space)
+    key('tab', ['ctrl']); bounded = switcher()
+    require('TS_visible_view_count_bounded', bounded['viewCount'] == 1 and len(bounded['visible']) <= 5, switcher=bounded)
+    key('escape'); release()
+    app.call('defaults', key=include_key, value=old_include); app.call('defaults', key=ninth_key, value=old_ninth)
+
+
 def space_manager_checks(results, tmp, config, style):
     """E5/E6: real Library injection, native reorder/undo, stores and lifetimes."""
     import plistlib
@@ -5866,6 +5947,7 @@ def space_manager_checks(results, tmp, config, style):
                 and len(app.call('shell-windows')) == 1 and tabs_before_close == tabs_after_close,
                 keys=key_states, closeFixture=close_fixture, selectedBeforeClose=selected_before_close, barAfterEscape=bar_after_escape, tabsBeforeClose=tabs_before_close, tabsAfterClose=tabs_after_close, state=state(app))
         app = sidebar_completion_a3_checks(app, results, require, evidence, tmp, launch)
+        sidebar_tab_switcher_checks(app, require, tmp)
     finally:
         dialogs, cleanup_errors = [], []
         owned_pids.update(space_manager_owned_processes(bundle))

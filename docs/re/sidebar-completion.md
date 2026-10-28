@@ -161,3 +161,111 @@ Measured in `interaction-states.md` §20 (frames in `.re/runtime/sessions/202610
 | Auto-archive banner (C6, Q12) | Not captured: the Profile's "Archive tabs after" offers 12 hours, 24 hours, 7 days, and 30 days only, so it could not trigger within the session. | S2 02/0034; notes 10:07:27 |
 | Previews (C4, Q3) | The 7-source sheet above. The folder card was seen once in the video (positions only, `interaction-states.md` §20.4); its colors were not captured. | S2 02/0050 |
 
+
+## 13. Numbered shortcuts and recent-tab switcher (2026-10-28)
+
+Target: Arc 1.170.0 (89123), verified with `plutil` on the installed Info.plist.
+`dwarfdump --uuid` matches the installed arm64 slice and shared analysis input:
+`BE2EB88A-675C-357B-8143-840A9196E154`. This investigation did not launch Arc or read personal
+browser state. Raw output is in the local `.re/tab-switcher/` folder. The saved
+`ArcMain` project was queried with `-process Arc-arm64 -noanalysis -readOnly`.
+`tools/rea-env.sh` names an old Ghidra installation; these queries used installed
+Ghidra 12.2 and JDK 25. The snapshot's missing Swift compiler spec falls back to
+the default spec; Swift argument names and some register data flow are uncertain.
+No re-import or analysis ran.
+
+| ID | Finding | Evidence | Confidence |
+|---|---|---|---|
+| TS-R1 | Numbered navigation can start with Favorites or after Favorites. The stored Arc preference is inverted. | `strings -a /Applications/Arc.app/Contents/MacOS/Arc`: `excludeFavoritesInSwitchToNthTab`, `Include Favorites in ordering.`, description prefixes `starting with your Favorites at the top.` / `after your Favorites at the top.`; shared `ArcMain` `0x1005a4098` registers the preference key. | Fact. Arc's default remains unknown. |
+| TS-R2 | Item nine has two meanings: ninth item or the last sidebar item. | Same string dump: `switchToNinthSidebarItemEnabled`, `Switch to ninth tab.`, `Jumps to the ninth item`, `Jumps to the last item at the bottom of your Sidebar.`; `menus-and-hotkeys.md`, code-only shortcut table. | Fact for semantics; the literal default Cmd+9 binding was previously marked a static-analysis guess. Open uses the requested Cmd+9. |
+| TS-R3 | Ctrl+Tab / Ctrl+Shift+Tab are recent-tab commands, distinct from sidebar-order navigation. | `menus-and-hotkeys.md`, Tabs nib rows (`cycleToNextRecentTab:` / `cycleToPreviousRecentTab:`). Binary strings describe forward/backward recent tabs like Command+Tab. `0x10295ba78` builds and sorts candidate IDs using comparator `0x10295ebb4` → `0x10295bf18`; the comparator reads activity-date maps with a stored-date fallback and uses `Swift.Comparable.>` on `Foundation.Date`. | Fact: descending dates, not sidebar order. Exact tie order is not decoded. |
+| TS-R4 | The normal recent-items path has a visual overlay with a focused item and horizontal cards. | Binary types `ModalItemSwitcherView`, `ItemView`, `ModalItemSwitcherWindowController`; fields `focusedItemID`, `snapshot`, `components`, `layoutOrientation`, `horizontal`, `icon`, `snapshotStyle`, `_scrollViewWidth`, `_itemRects`. `0x102994b24` constructs items and localizes `Recent Items` with comment `Title for the recent tabs overlay`. | Fact for overlay, title and supported horizontal layout. Exact card layout remains a guess. |
+| TS-R5 | Presentation waits until 0.1 s after the request. A quick switch need not show the overlay. | `0x1024b69e8` subtracts elapsed request time from `0.1`, then shows via `0x1024b6c24` or schedules a non-repeating timer for the remainder. `0x1024b788c` invalidates that timer on completion/cancel paths. | Fact. |
+| TS-R6 | The switcher watches key-down and modifier changes. Releasing the initiating modifier completes; cancellation sends no selected item. | `0x1024b7520` installs local-event mask `0x1400` (keyDown + flagsChanged); `0x1024b788c` handles event types 10/12, compares shortcut modifiers, invalidates the presentation timer, and sends its completion action. The same handler has a separate nil-item cancellation path. | Derived: Ctrl-release commit and Escape cancel. The two key-constant getters need a runtime capture to confirm their exact mapping. |
+| TS-R7 | A separate linear-switcher mode exists in this binary. | Strings `linear-tab-switcher-enabled`, `linearTabSwitcherEnabled`, `LinearTabSwitcherState`, `LinearTabSwitcherSpaceState`; shared `ArcMain` getters `0x1013d9028` / `0x1013daa30` reference the feature-flag key. | Fact: feature flag. No public user setting, label, default, or enabled state was established. |
+| TS-R8 | The recent switcher is described as five recent tabs. | Arc Help Center's indexed article, [How Do You Switch Between Tabs Quickly on Arc Desktop?](https://resources.arc.net/hc/en-us/articles/25619402657303-How-Do-You-Switch-Between-Tabs-Quickly-on-Arc-Desktop), says five most recently visited tabs. The direct page returned 404 during this investigation; this is supplementary historical help text. Binary presentation state also has `includesCurrentTab` and `maxNumberOfItemsToDisplay`. | Historical primary-source evidence for five; not a fresh runtime observation. |
+
+Query receipts: `strings -a` and `nm -a` on the installed executable;
+`otool -ov ~/Library/Caches/OpenRE/bin/Arc-arm64`; shared-project scripts
+`AdrpBatch.java` (strings), `DecompAt.java` (addresses above), and
+`SwitchTrace.java` (callers of `0x102994b24` and the existing modal-window functions).
+Their output files are `arc-strings.txt`, `arc-nm.txt`, `objc.txt`, `decomp.txt`,
+`candidates.txt`, `controller.txt`, `events.txt`, and the corresponding logs,
+all under `.re/tab-switcher/`.
+
+### Open implementation and limits
+
+Open defaults to including Favorites, with Cmd+9 selecting the last tab. The
+existing `Switch to ninth tab.` preference restores the ninth-item meaning.
+Both keys and the native Tabs menu use the same candidate list. These defaults
+are Open choices, not recovered Arc defaults. Next/Previous Tab and Cycle Tab
+keep their existing sidebar order.
+
+The recent switcher freezes the five most recent candidates for one held-Control
+session, with the current tab first. Open includes Favorites and Pinned tabs,
+including collapsed-folder children and split panes, across Spaces in the current
+Profile. **Guess:** those exact candidate boundaries match Arc. The snapshot
+filters item types and an identity pair (`0x102995fd4`), but this investigation did
+not decode that pair far enough to prove cross-Space and cross-Profile scope.
+Open keeps the Profile boundary explicit and restores the destination Space on
+commit. From an empty Space, forward cycling starts with the most recent
+candidate instead of skipping it. No highlighting changes selection, activity
+timestamps, or page focus.
+
+The 100 ms delay is anchored to the request with a monotonic deadline. The
+offscreen harness waits for visible readiness before its rendering assertions;
+a fixed 130 ms sleep raced queued main-actor work in the composed suite. This
+readiness wait is not a performance gate or a change to the 100 ms app delay.
+
+The App uses its existing `OEApplication.sendEvent` → `MainMenu` →
+`BrowserWindowController.handleKeyDown` → `KeyboardRouter` command path. Modifier
+release and Escape go through AppKit's local event path. A single AppKit drawing
+view renders at most five cards. Only already-existing hosts can supply preview
+images, after the presentation delay; no preview loads a tab. Ending a session
+cancels pending work and releases the drawing view, images and callbacks. Hidden
+state has no repeating timer or polling job.
+
+**Visual guesses:** centered placement; 180 × 140 pt cards; 8 pt gaps; 16 pt
+insets/corner; 28 pt title area; 13/12/11 pt type; `Core.popoverBackground`,
+`Core.foregroundPrimary`, `Core.foregroundSecondary` and `Core.baseQuaternary`.
+The image/label split and thumbnail crop are guesses too. No switcher AX record
+or frame was found in the runtime session text/AX search, and sessions 1/2 do not
+list it. Thus no ≤1 pt / ΔE00 ≤2 Arc comparison is claimed. Render receipts use
+`features-render switcher --out FILE --size 1280x800 --scale 1|2`. Capture TS-C1 in
+`docs/followups.md` must calibrate this surface; S2 input PNGs must first be
+converted from AW2726DM ICC to Display P3 for color measurement.
+
+
+### Local verification receipts (2026-10-28)
+
+All checks ran in foreground jobs. Build commands held a heavy slot; the two
+on-screen suites each held the machine on-screen lock, after builds finished.
+The branch starts at local A3 `e6454aba`. No PR, merge acceptance, or Arc pixel
+parity is claimed by these receipts.
+
+| Command | Final result |
+|---|---|
+| `~/Library/Caches/OpenRE/scripts/heavy.sh tools/verify-all.sh --only features-render,sidebar-render,commands-demo` | PASS: warning-free release build; commands-demo 232/232, sidebar-render 564/564, features-render 296/296 (TS1–TS10). |
+| `~/Library/Caches/OpenRE/scripts/heavy.sh tools/build.sh` | PASS: Debug Open.app, recorded fork distribution; no Chromium tree build. |
+| `/usr/bin/lockf /tmp/open-onscreen-e2e.lock python3 tools/e2e/engine_e2e.py --style chrome --only sidebar-completion` | PASS: 121/121 suite rows, including 16 TS rows. Engine fingerprint and owned-process cleanup also PASS. |
+| `/usr/bin/lockf /tmp/open-onscreen-e2e.lock python3 tools/e2e/engine_e2e.py --style chrome --only app-actions` | PASS: 47/47 action rows, plus engine fingerprint and cleanup (49 checks total). |
+| `Packages/OpenKit/.build/release/features-render switcher --out .re/tab-switcher/switcher-1x.png --size 1280x800 --scale 1` | PASS: inspected 1280 × 800 render. |
+| Same renderer with `--out .re/tab-switcher/switcher-2x.png --scale 2` | PASS: 2560 × 1600 render. No matching Arc frame exists for comparison. |
+
+Each final on-screen suite first had one **INTERRUPTED** attempt due to lost
+foreground (`library_section_click_fills_cache` and `command_return_background`).
+The existing runner's subsequent complete attempts passed. Interrupted attempts
+are retained separately in the JSON receipts, not counted as passes.
+
+The first build found an omitted explicit Package.swift source entry. Initial
+TS1–TS6 failures found a missing harness command-validation hook; TS3 then exposed
+the fixed-sleep readiness race described above. These intermediate failures are
+retained in `.re/tab-switcher/`; the final pass does not relabel them.
+
+Final logs: `.re/tab-switcher/verify-final-head.log`,
+`app-build-final-head.log`, `e2e-sidebar-completion-final.log`,
+`e2e-app-actions-final.log`. JSON receipts:
+`sidebar-completion-results-final.json`, `app-actions-results-final.json`.
+The real overlay snapshot is `real-switcher.png`; the two offscreen renders are
+`switcher-1x.png` and `switcher-2x.png`. All these local artifacts are git-ignored.
+Generated `docs/engine-spike` result/debug files were restored before commit.
