@@ -20,10 +20,13 @@ final class SidebarRowView: NSTableRowView {
     static let identifier = NSUserInterfaceItemIdentifier("sidebarRow")
     private let fill = CALayer()
     private var animatesSelectionChange = false
+    private var fillNeedsUpdate = true
+    private var laidOutFillBounds: CGRect?
+    private var laidOutFillIndent: CGFloat = -1
     private var keyboardRing: CAShapeLayer?
     private var selectionState: SidebarRowSelectionState?
     weak var representedItem: AnyObject? {
-        didSet { if representedItem !== oldValue { selectionState = nil; needsDisplay = true } }
+        didSet { if representedItem !== oldValue { selectionState = nil; invalidateFill() } }
     }
     var isKeyboardFocused = false {
         didSet {
@@ -35,6 +38,7 @@ final class SidebarRowView: NSTableRowView {
                 ring.lineWidth = 2
                 layer?.addSublayer(ring)
                 keyboardRing = ring
+                laidOutFillBounds = nil
                 needsLayout = true
             }
             keyboardRing?.isHidden = !isKeyboardFocused
@@ -54,6 +58,7 @@ final class SidebarRowView: NSTableRowView {
     override init(frame: NSRect) {
         super.init(frame: frame)
         identifier = Self.identifier
+        SidebarDiagnostics.countFolderWork("row-allocations")
         wantsLayer = true
         fill.name = "sidebar-row-fill"
         fill.cornerCurve = .continuous
@@ -64,6 +69,21 @@ final class SidebarRowView: NSTableRowView {
     @available(*, unavailable) required init?(coder: NSCoder) { fatalError() }
 
     override var wantsUpdateLayer: Bool { true }
+    override var needsDisplay: Bool {
+        get { super.needsDisplay }
+        set {
+            // AppKit invalidates every available row when child rows move. This
+            // container has no raster background; fill/ring geometry is managed
+            // by layers. Only our content/selection observation dirties its ink.
+            if newValue, !fillNeedsUpdate {
+                SidebarDiagnostics.countFolderWork("clean-row-invalidations-skipped")
+                SidebarDiagnostics.traceFolderView(self, "clean native invalidation skipped")
+                return
+            }
+            if newValue { SidebarDiagnostics.traceFolderView(self, "needsDisplay") }
+            super.needsDisplay = newValue
+        }
+    }
     override func drawBackground(in dirtyRect: NSRect) {}
     override func drawSelection(in dirtyRect: NSRect) {}
     override func drawSeparator(in dirtyRect: NSRect) {}
@@ -71,6 +91,13 @@ final class SidebarRowView: NSTableRowView {
 
     override func layout() {
         super.layout()
+        SidebarDiagnostics.countFolderWork("row-layouts")
+        SidebarDiagnostics.traceFolderView(self, "layout")
+        // Native row moves schedule layout on every available row. Its fill
+        // geometry depends on bounds/indent, not the row's position in the list.
+        guard laidOutFillBounds != bounds || laidOutFillIndent != fillIndent else { return }
+        laidOutFillBounds = bounds; laidOutFillIndent = fillIndent
+        SidebarDiagnostics.countFolderWork("row-layer-geometry-updates")
         CATransaction.begin()
         CATransaction.setDisableActions(true)
         let m = SpaceListMetrics.self
@@ -86,7 +113,11 @@ final class SidebarRowView: NSTableRowView {
         CATransaction.commit()
     }
 
+    private func invalidateFill() { fillNeedsUpdate = true; needsDisplay = true }
+
     override func updateLayer() {
+        SidebarDiagnostics.traceFolderView(self, "updateLayer")
+        fillNeedsUpdate = false
         let animated = animatesSelectionChange
         animatesSelectionChange = false
         updateFill(animated: animated)
@@ -110,7 +141,7 @@ final class SidebarRowView: NSTableRowView {
             return state.isSelected
         }) { [weak self] in
             self?.animatesSelectionChange = true
-            self?.needsDisplay = true
+            self?.invalidateFill()
         }
         CATransaction.begin()
         CATransaction.setDisableActions(!animated)
@@ -512,6 +543,7 @@ final class TabCellView: SidebarCellView {
     override func layout() {
         super.layout()
         SidebarDiagnostics.tabRowLayouts += 1
+        SidebarDiagnostics.traceFolderView(self, "layout")
         rowStateChanged()
         let m = SpaceListMetrics.self
         let x0 = indent
@@ -690,6 +722,7 @@ final class FolderCellView: SidebarCellView {
     override func layout() {
         super.layout()
         SidebarDiagnostics.folderRowLayouts += 1
+        SidebarDiagnostics.traceFolderView(self, "layout")
         let m = SpaceListMetrics.self
         let shown = tracked({
             guard let folder, !folder.isExpanded else { return false }
@@ -767,8 +800,21 @@ final class FolderIconView: NSView {
     override var isFlipped: Bool { true }
     override func hitTest(_ point: NSPoint) -> NSView? { nil }
 
-    override func draw(_ dirtyRect: NSRect) {
-        guard let folder else { return }
+    override func viewDidChangeBackingProperties() { super.viewDidChangeBackingProperties(); needsDisplay = true }
+
+    private struct ArtKey: Hashable {
+        let expanded: Bool, peeked: Bool, defaultAccent: Bool
+        let width: Int, height: Int, scale: CGFloat
+        let red: CGFloat, green: CGFloat, blue: CGFloat, alpha: CGFloat
+    }
+    // Small shared cache of our vector art, never per-node content. Maximum
+    // 64 RGBA glyphs, at most 64x64 pixels each (1 MiB total). A one-off
+    // larger/custom render is capped at 256x256x4 = 262,144 bytes.
+    private static var art: [ArtKey: CGImage] = [:]
+    override var wantsUpdateLayer: Bool { true }
+    override func updateLayer() {
+        SidebarDiagnostics.traceFolderView(self, "updateLayer")
+        guard let folder, bounds.width > 0, bounds.height > 0 else { layer?.contents = nil; return }
         let context = context ?? cell?.context
         let (expansion, icon, override, accent, usesDefaultAccent) = tracked({
             let space = cell?.page?.space ?? context?.focusedSpace
@@ -778,6 +824,35 @@ final class FolderIconView: NSView {
             return (folder.expansion, context?.folderIconOverrideProvider?(folder) ?? folder.customIcon, folder.iconOverride, accent,
                     style?.accent == nil)
         }) { [weak self] in self?.needsDisplay = true }
+        let peeked = expansion != .expanded && expansion != .collapsed
+        lastDrawnGlyph = icon ?? (expansion == .expanded ? "folder.open" : peeked ? "folder.peek" : "folder.closed")
+        let scale = window?.backingScaleFactor ?? 2
+        let rgb = accent.usingColorSpace(.sRGB) ?? accent
+        let key = ArtKey(expanded: expansion == .expanded, peeked: peeked, defaultAccent: usesDefaultAccent,
+                         width: Int(bounds.width * scale), height: Int(bounds.height * scale), scale: scale,
+                         red: rgb.redComponent, green: rgb.greenComponent, blue: rgb.blueComponent, alpha: rgb.alphaComponent)
+        let cacheable = icon == nil && override == nil && key.width <= 64 && key.height <= 64
+        layer?.contentsScale = scale
+        if cacheable, let image = Self.art[key] { layer?.contents = image; return }
+        guard key.width > 0, key.height > 0, key.width <= 256, key.height <= 256,
+              let bitmap = CGContext(data: nil, width: key.width, height: key.height, bitsPerComponent: 8,
+                                     bytesPerRow: key.width * 4, space: CGColorSpace(name: CGColorSpace.sRGB)!,
+                                     bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue) else { return }
+        bitmap.scaleBy(x: scale, y: scale)
+        bitmap.translateBy(x: 0, y: bounds.height); bitmap.scaleBy(x: 1, y: -1)
+        NSGraphicsContext.saveGraphicsState()
+        NSGraphicsContext.current = NSGraphicsContext(cgContext: bitmap, flipped: true)
+        drawArt(expansion: expansion, icon: icon, override: override, accent: accent, usesDefaultAccent: usesDefaultAccent)
+        NSGraphicsContext.restoreGraphicsState()
+        let image = bitmap.makeImage()
+        if cacheable, let image {
+            if Self.art.count >= 64 { Self.art.removeAll(keepingCapacity: true) }
+            Self.art[key] = image
+        }
+        layer?.contentsScale = scale
+        layer?.contents = image
+    }
+    private func drawArt(expansion: FolderExpansion, icon: String?, override: SpaceIcon?, accent: NSColor, usesDefaultAccent: Bool) {
         // Main's typed override takes precedence; keep the shared row/header
         // renderer and its existing legacy/custom-icon appearance.
         if let override {
@@ -791,12 +866,12 @@ final class FolderIconView: NSView {
             return
         }
         let ink = bounds.insetBy(dx: 1.5, dy: 2.5)
-        lastDrawnGlyph = icon ?? (expansion == .expanded ? "folder.open" : folder.peekedChildID != nil ? "folder.peek" : "folder.closed")
+        lastDrawnGlyph = icon ?? (expansion == .expanded ? "folder.open" : expansion != .expanded && expansion != .collapsed ? "folder.peek" : "folder.closed")
         if let icon {
             if let symbol = NSImage(systemSymbolName: icon, accessibilityDescription: nil)?.withSymbolConfiguration(.init(pointSize: 14, weight: .medium)) {
                 symbol.drawTinted(in: ink, color: accent)
             } else { EmojiRenderer.draw(icon, in: bounds) }
-        } else if folder.peekedChildID != nil {
+        } else if expansion != .expanded && expansion != .collapsed {
             CustomIcon.folderPeek(in: bounds.insetBy(dx: 1, dy: 1), color: usesDefaultAccent ? SidebarRole.folderPeekDefaultAccent.light.nsColor : accent,
                                   dotsColor: SidebarRole.folderPeekDots.light.nsColor)
         } else { CustomIcon.folder(open: expansion == .expanded, in: ink, color: accent) }

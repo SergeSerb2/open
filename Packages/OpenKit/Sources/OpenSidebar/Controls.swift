@@ -52,6 +52,7 @@ final class TextLabel: NSView {
     }
 
     override func draw(_ dirtyRect: NSRect) {
+        SidebarDiagnostics.traceFolderView(self, "draw", rect: dirtyRect)
         if SidebarDiagnostics.measuresFolderTransitions { SidebarDiagnostics.folderTitleDraws += 1 }
         let (string, textColor) = tracked({ (text(), color()) }) { [weak self] in self?.needsDisplay = true }
         lastDrawnText = ""
@@ -102,6 +103,7 @@ final class GlyphView: NSView {
     override func hitTest(_ point: NSPoint) -> NSView? { nil }
 
     override func draw(_ dirtyRect: NSRect) {
+        SidebarDiagnostics.traceFolderView(self, "draw", rect: dirtyRect)
         let (img, color) = tracked({ (glyph?.image ?? image(), tint()) }) { [weak self] in self?.needsDisplay = true }
         guard let img else { return }
         let size = img.size

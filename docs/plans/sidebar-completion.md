@@ -946,22 +946,38 @@ between states edits that list with `removeItems` / `insertItems` inside one
 removes the child and collapses the item; collapsed → expanded expands with
 all children). No `reloadData` (`SidebarDiagnostics.fullReloads` unchanged).
 
-**FP10 gate definition (parent decision, 2026-10-28).** Transition cost is
-main-thread **wall-time p95 ≤ 2.00 ms**, including input, completed observed
-reconciliation, forced layout/display and Core Animation commit. Max is reported
-but is not the gate. Use up to three fresh matched attempts, stopping on a pass;
-print load1 for every attempt and metric. Scroll must meet all three conditions:
-maximum native row layouts/frame in the peek fixture ≤ the matched baseline,
-peek p95 ≤ 8.33 ms, and peek p95 ≤ baseline p95 × 1.10 + 0.05 ms. Each attempt
-alternates measurement order along the same scroll path. The previous max-time
-interpretation and near-zero clock-overhead tolerance were implementation guesses.
-The parent replaced them because shared-machine scheduling adds timing noise;
-the deterministic native-work count still detects extra per-frame work. Keep
-both negative controls: `--negative-proof` adds an actual O(n) native layout pass
-per scroll frame; `--negative-transition-proof` spins for 3 ms inside the actual
-transition callback. Each runs once and must return nonzero on its intended gate.
-Thread CPU time and phase splits are diagnostics, never substitutes for the wall
-gate. See [implementation/profile receipt](sidebar-s6-receipt.md).
+**FP10 gate definition (parent decisions, 2026-10-28).** Transition cost is
+main-thread wall time for input + completed observed reconciliation + forced
+layout/display and Core Animation commit. Exclude queued wait and animation wall
+time. Report median/p95/max. In each paired attempt, rotate the measurement order
+of plain expand/collapse on pinned `2d51f14a`, the same plain toggle on the branch,
+and the three-state peek cycle. All use 1,000 rows, scale 2 and the same window
+geometry. Use three attempts and print load1 for each metric. The parent build
+receives timing hooks and the identical plain-toggle driver only; it retains the
+parent's production outline/rendering code.
+
+If the pinned parent's plain-toggle p95 is ≤2.00 ms, peek must also be ≤2.00 ms.
+If that parent plain p95 is >2.00 ms, the attempt's peek limit is
+**max(2.00 ms, matched branch plain-toggle p95 ×1.10 +0.05 ms)**. Print parent,
+branch plain, peek and the computed limit together. This is the parent's explicit
+rule: a cost already paid by every folder toggle is an outline-wide rendering
+item, rather than peek overhead. The <1 ms median remains an optimization target,
+not a replacement gate. A run without a pinned parent never receives an exemption.
+
+Scroll must meet all three conditions: maximum native row layouts/frame peek
+≤ matched baseline; peek p95 ≤8.33 ms; peek p95 ≤baseline p95 ×1.10 +0.05 ms.
+Alternate the two scroll fixtures on the same path. The parent replaced the old
+max-time and near-zero clock-overhead guesses because a shared machine adds
+scheduling noise; native work counts still detect extra per-frame work. Keep both
+real negative controls: `--negative-proof` adds an O(n) native layout pass per
+frame; `--negative-transition-proof` spins for 3 ms inside reconciliation. Each
+runs once and must fail its intended computed gate. Thread CPU and phase clocks
+remain diagnostics. One reproducible command (builds/caches the instrumented
+pinned parent and current CLI):
+`~/Library/Caches/OpenRE/scripts/heavy.sh tools/verification/folder-peek-bench.py`.
+Add `--trace-transition` for a bounded draw/dirty-rect trace, or `--visible-rows 10`
+and `--visible-rows 30` for the visible-height comparison. All windows stay
+offscreen. See [implementation/profile receipt](sidebar-s6-receipt.md).
 
 **Model** (`OpenModel`). Add `Folder.peekedChildID: ItemID?` (nil unless
 `isExpanded` is false; always a direct child) and a computed
@@ -1133,7 +1149,7 @@ data dir, socket only, no desktop input. Checks E1–E19 in §5.4. Results go to
 | FP7 | Click on the peeked folder row → collapsed (1 row removed); click again → expanded (3 rows); click again with a Today tab selected → collapsed (3 rows removed), no peek |
 | FP8 | Selecting a Today tab keeps the peek; closing the peeked tab collapses the folder; dragging the peeked row out of the folder collapses it |
 | FP9 | The peeked row keeps its hover, close button, context menu, and multi-select fill; AX: folder expanded false, value "1 tab shown" |
-| FP10 | Bench: transition main-thread wall p95 ≤ 2.00 ms, up to 3 attempts with load1 printed. Matched 50 peeked folders / 1,000 displayed rows: native row layouts/frame peek ≤ baseline; scroll p95 ≤ 8.33 ms and ≤ baseline p95 × 1.10 + 0.05 ms. Real O(n) scroll and 3 ms transition busy-wait controls must FAIL (§3.17 parent definition). |
+| FP10 | Bench: transition wall p95 ≤2.00 ms; if pinned parent plain p95 >2.00 ms, ≤max(2.00 ms, matched branch plain p95 ×1.10 +0.05 ms). Three rotating parent/plain/peek attempts, load1 printed. Matched 50 peeked folders / 1,000 displayed rows: native row layouts/frame peek ≤ baseline; scroll p95 ≤ 8.33 ms and ≤ baseline p95 × 1.10 + 0.05 ms. Real O(n) scroll and 3 ms transition busy-wait controls must FAIL (§3.17 parent definition). |
 
 ### 5.2 `features-render check`
 
@@ -1360,7 +1376,7 @@ Each lane records its results in its own doc (§7). The lead fills this table wi
 | M5 | | |
 | S5 | | |
 | S5b | [#123](https://github.com/SergeSerb2/open/pull/123) | Fixed 0.5 s arm delay, no delay setting; HP1 stored-delay proofs; real-App Previews flow PASS (M5 gate: display-only rows as on main) |
-| S6 | Local `t3/sidebar-s6-folder-peek` (parent stacks; no PR) | FP1–FP9 and FP11 PASS; E20 80/80 on c095ca1d; follow-up native suite INTERRUPTED before E20 after 3 focus attempts; follow-up baseline 13/13 PASS (position/ink identical, max color drift ΔE00 0.13). FP10 **PENDING**, revised p95 gate still fails after targeted reconciliation; O(n) and 3 ms CPU-spin controls fail as intended. [Receipt](sidebar-s6-receipt.md). |
+| S6 | Local `t3/sidebar-s6-folder-peek` (parent stacks; no PR) | FP1–FP9 and FP11 PASS; current App E20 suite 80/80 PASS, 0 interruptions, cleanup PASS. Paired FP10 **3/3 PASS** under the parent's conditional matched-plain gate; pinned parent plain p95 already >2 ms. Both negative controls fail their intended gates. The <1 ms median remains an outline-wide rendering follow-up. Current visual receipts are in the [receipt](sidebar-s6-receipt.md); no baseline image or visual threshold changed. |
 | A1 | [#126](https://github.com/SergeSerb2/open/pull/126) | DA1–DA5, HT1–HT3, GH1–GH5, CT1–CT3 PASS; e2e E7, E8, E17, E19; hint vs A0440 worst 1 pt / ΔE00 1.17; compact toolbar vs S2 06/0029 worst 1 pt / ΔE00 0.80; floor 164 |
 | A2 | | |
 | A3 | | |

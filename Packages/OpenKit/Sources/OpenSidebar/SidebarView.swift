@@ -348,6 +348,20 @@ public enum SidebarDiagnostics {
     public internal(set) static var folderStateRowsConfigured = 0
     public internal(set) static var folderFaviconDraws = 0
     public internal(set) static var folderTitleDraws = 0
+    /// Opt-in bounded redraw trace. Never installed by the App.
+    public static var folderTrace: (@MainActor (String) -> Void)?
+    public internal(set) static var folderBenchCounters: [String: Int] = [:]
+    static func countFolderWork(_ key: String) {
+        if measuresFolderTransitions { folderBenchCounters[key, default: 0] += 1 }
+    }
+    static func traceFolderView(_ view: NSView, _ event: String, rect: CGRect? = nil) {
+        guard let folderTrace else { return }
+        var ancestor: NSView? = view
+        while let v = ancestor, !(v is SidebarRowView) { ancestor = v.superview }
+        let row = ancestor as? SidebarRowView
+        let ordinal = row.flatMap { row in row.page.map { $0.outline.row(for: row) } } ?? -1
+        folderTrace("\(type(of: view)) \(event) row=\(ordinal) rect=\(rect.map { NSStringFromRect($0) } ?? "-")")
+    }
     /// CLI-only negative control. Nil in the App; no extra work in normal scrolling.
     public static var folderBenchFullRowWindowID: WindowID?
     public internal(set) static var folderRowLayouts = 0

@@ -776,7 +776,8 @@ final class SpacePageView: NSView, NSOutlineViewDataSource, NSOutlineViewDelegat
     // MARK: Delegate
 
     func outlineView(_ outlineView: NSOutlineView, heightOfRowByItem item: Any) -> CGFloat {
-        switch item {
+        SidebarDiagnostics.countFolderWork("height-queries")
+        return switch item {
         case is SpacerItem: SpaceListMetrics.spacerRowHeight
         case is DividerItem: SpaceListMetrics.dividerRowHeight
         default: SpaceListMetrics.rowHeight
@@ -798,7 +799,9 @@ final class SpacePageView: NSView, NSOutlineViewDataSource, NSOutlineViewDelegat
     func outlineView(_ outlineView: NSOutlineView, viewFor tableColumn: NSTableColumn?, item: Any) -> NSView? {
         let depth = outlineView.level(forItem: item)
         func make<T: SidebarCellView>(_ type: T.Type, _ id: NSUserInterfaceItemIdentifier) -> T {
-            let v = outlineView.makeView(withIdentifier: id, owner: nil) as? T ?? T(frame: .zero)
+            let cached = outlineView.makeView(withIdentifier: id, owner: nil) as? T
+            SidebarDiagnostics.countFolderWork(cached == nil ? "cell-allocations" : "cell-reuses")
+            let v = cached ?? T(frame: .zero)
             v.page = self
             v.depth = depth
             return v
@@ -910,6 +913,11 @@ final class SidebarOutlineView: NSOutlineView {
     var dragWasStarted = false
     var trackingMouseDown = false
 
+    override func noteHeightOfRows(withIndexesChanged indexes: IndexSet) {
+        SidebarDiagnostics.countFolderWork("note-height-calls")
+        if SidebarDiagnostics.measuresFolderTransitions { SidebarDiagnostics.folderBenchCounters["noted-heights", default: 0] += indexes.count }
+        super.noteHeightOfRows(withIndexesChanged: indexes)
+    }
     override var acceptsFirstResponder: Bool { true }
 
     override func becomeFirstResponder() -> Bool {
