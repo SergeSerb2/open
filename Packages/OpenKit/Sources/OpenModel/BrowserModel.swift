@@ -144,7 +144,7 @@ public enum ProfileDeleteBlock: Sendable, Equatable {
 public final class BrowserModel {
     public var profiles: [Profile]
     public var spaces: [Space]
-    public var windows: [BrowserWindowState]
+    public var windows: [BrowserWindowState] { didSet { commitMutation() } }
     public var routingRules: [RoutingRule]
     public var defaultDestination: DefaultDestination
 
@@ -168,6 +168,9 @@ public final class BrowserModel {
     @ObservationIgnored public private(set) var index: [ItemID: SidebarNode] = [:]
     @ObservationIgnored public private(set) var parentByID: [ItemID: NodeParent] = [:]
 
+    /// Strong references preserve the last shown set even after a structural edit
+    /// removes its nodes from the index. At most four tabs per showing window.
+    @ObservationIgnored private var shownTabs: [ItemID: Tab] = [:]
     @ObservationIgnored private var observers: [UUID: @MainActor (TreeChange) -> Void] = [:]
     @ObservationIgnored private var spaceByIDCache: [SpaceID: Space] = [:]
     @ObservationIgnored private var profileByIDCache: [ProfileID: Profile] = [:]
@@ -198,6 +201,7 @@ public final class BrowserModel {
     private func emit(_ change: TreeChange) {
         if spaceCreationEvents != nil { spaceCreationEvents?.append(change); return }
         treeRevision &+= 1
+        commitMutation()
         for handler in observers.values { handler(change) }
     }
 
@@ -229,6 +233,7 @@ public final class BrowserModel {
             for node in space.pinned { register(node, under: .spacePinned(space.id)) }
             for node in space.today { register(node, under: .spaceToday(space.id)) }
         }
+        commitMutation()
     }
 
     private func register(_ node: SidebarNode, under parent: NodeParent) {
@@ -533,6 +538,9 @@ public final class BrowserModel {
     }
 
     private func recordUndo(_ handler: @escaping @MainActor (BrowserModel) -> Void) {
+        // Property-only commands share the structural emission commit path,
+        // including callers with no UndoManager or disabled registration.
+        commitMutation()
         guard let um = undoManager else { return }
         // Each command registers one action. Grouping follows the undo manager: with
         // per-event grouping (the AppKit default) every command of one event forms one step,
@@ -544,6 +552,7 @@ public final class BrowserModel {
         um.registerUndo(withTarget: self) { model in
             MainActor.assumeIsolated {
                 model.undoGeneration &+= 1
+                defer { model.commitMutation() }
                 handler(model)
             }
         }
@@ -1646,6 +1655,7 @@ public final class BrowserModel {
     public func previewSpaceTheme(id: SpaceID, theme: SpaceTheme) {
         guard let space = space(id: id), space.theme != theme else { return }
         space.theme = theme
+        commitMutation()
     }
 
     @discardableResult
@@ -2103,17 +2113,34 @@ public final class BrowserModel {
     private func tabsShownInWindows() -> [ItemID: Tab] {
         var shown: [ItemID: Tab] = [:]
         for window in windows where window.isShowingContent {
-            guard let id = window.selectedNodeBySpace[window.focusedSpaceID], let node = index[id] else { continue }
+            guard let space = space(id: window.focusedSpaceID),
+                  let id = window.selectedNodeBySpace[space.id], let node = index[id],
+                  let parent = parentByID[id] else { continue }
+            // A remembered ID moved to another Space/Profile is no longer shown
+            // here. Resolve only this selected node's indexed ancestor chain;
+            // never flatten the Space's tabs or a selected folder's children.
+            switch section(of: parent) {
+            case .spacePinned(let owner)?, .spaceToday(let owner)?: guard owner == space.id else { continue }
+            case .favorites(let profile)?: guard profile == space.profileID else { continue }
+            default: continue
+            }
             for tab in node.split?.panes ?? node.tab.map({ [$0] }) ?? [] { shown[tab.id] = tab }
         }
         return shown
     }
 
-    /// Start the inactivity interval when the final window stops showing a tab.
-    /// This is activity bookkeeping inside the selection command, never an undo step.
-    private func stampTabsNoLongerShown(_ before: [ItemID: Tab], now: Date = Date()) {
-        let after = tabsShownInWindows()
-        for (id, tab) in before where after[id] == nil { tab.lastActiveAt = now }
+    /// The sole visibility transition policy. Structural emissions run it before
+    /// observers or archive writers; the common command/undo path covers changes
+    /// without tree events. Compare cached Tab references, not the already-mutated
+    /// tree, so dissolved or detached panes still receive their departure time.
+    /// The shown-set work visits windows and at most four panes per window.
+    private func commitMutation() {
+        let current = tabsShownInWindows()
+        let departed = shownTabs.filter { current[$0.key] == nil }
+        shownTabs = current
+        guard !departed.isEmpty else { return }
+        let now = Date()
+        for tab in departed.values { tab.lastActiveAt = now }
     }
 
     /// Earliest Today activity deadline across all Profiles. Pinned and Favorites
@@ -2221,9 +2248,7 @@ public final class BrowserModel {
 
     private func removeWindowState(windowID: WindowID) -> BrowserWindowState? {
         guard let index = windows.firstIndex(where: { $0.id == windowID }) else { return nil }
-        let shown = tabsShownInWindows(), state = windows.remove(at: index)
-        stampTabsNoLongerShown(shown)
-        return state
+        return windows.remove(at: index)
     }
 
     public func closeWindow(windowID: WindowID) {
@@ -2237,9 +2262,8 @@ public final class BrowserModel {
     /// Transient visibility is not persisted and does not register an undo action.
     public func setWindowContentVisible(windowID: WindowID, visible: Bool) {
         guard let state = windows.first(where: { $0.id == windowID }), state.isShowingContent != visible else { return }
-        let shown = tabsShownInWindows()
         state.isShowingContent = visible
-        stampTabsNoLongerShown(shown)
+        commitMutation()
     }
 
     public func setSidebarWidth(windowID: WindowID, width: Double) {
@@ -2258,15 +2282,8 @@ public final class BrowserModel {
     public func focusSpace(windowID: WindowID, spaceID: SpaceID) {
         guard let window = windows.first(where: { $0.id == windowID }) else { return }
         let old = window.focusedSpaceID
-        setFocusedSpace(spaceID, in: window)
-        registerChange(undo: { [weak self] in self?.setFocusedSpace(old, in: window) },
-                       redo: { [weak self] in self?.setFocusedSpace(spaceID, in: window) })
-    }
-
-    private func setFocusedSpace(_ id: SpaceID, in window: BrowserWindowState) {
-        let shown = tabsShownInWindows()
-        window.focusedSpaceID = id
-        stampTabsNoLongerShown(shown)
+        window.focusedSpaceID = spaceID
+        registerChange(undo: { window.focusedSpaceID = old }, redo: { window.focusedSpaceID = spaceID })
     }
 
     /// Every pane is visible when a split is selected or its keyboard focus changes.
@@ -2280,6 +2297,7 @@ public final class BrowserModel {
         guard let split = index[splitID]?.split, split.panes.contains(where: { $0.id == tabID }) else { return }
         split.focusedPaneID = tabID
         stampVisibleTabs(in: .split(split))
+        commitMutation()
     }
 
     public func selectNode(windowID: WindowID, spaceID: SpaceID, nodeID: ItemID?) {
@@ -2291,9 +2309,7 @@ public final class BrowserModel {
     }
 
     private func setSelection(_ id: ItemID?, in spaceID: SpaceID, window: BrowserWindowState) {
-        let shown = tabsShownInWindows()
         window.selectedNodeBySpace[spaceID] = id
-        stampTabsNoLongerShown(shown)
         if let id, let node = index[id] { stampVisibleTabs(in: node) }
     }
 }

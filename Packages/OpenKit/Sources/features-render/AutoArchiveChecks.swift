@@ -83,7 +83,112 @@ enum AutoArchiveChecks {
     }
     private static func settle() async throws { try await Task.sleep(for: .milliseconds(60)) }
 
+    private static func structuralVisibility(_ check: (Bool, String) -> Void) async throws {
+        for dissolve in [false, true] {
+            let p = Profile(), a = tab("structural-a", age: 13*3600), b = tab("structural-b", age: 13*3600), pin = tab("pin")
+            let split = Split(panes: [a,b], focusedPaneID: a.id)
+            let space = Space(profileID: p.id, pinned: [.tab(pin)], today: [.split(split)])
+            let window = BrowserWindowState(focusedSpaceID: space.id, selectedNodeBySpace: [space.id: split.id])
+            let s = try Scene(profiles: [p], spaces: [space], windows: [window]); defer { s.close() }
+            let panes = [s.model.tab(id: a.id)!, s.model.tab(id: b.id)!]
+            s.start(); s.openWindows(); s.undo.removeAllActions()
+            let generation = s.model.undoGeneration, before = Date(), c = s.controllers[0]
+            c.splitController.close(a.id, separate: !dissolve, option: dissolve)
+            let structuralActions = s.model.undoGeneration - generation
+            s.undo.disableUndoRegistration()
+            _ = c.sidebar(c.sidebar, didRequest: .select(nodeID: pin.id, space: space.id))
+            s.undo.enableUndoRegistration()
+            let after = Date()
+            try await settle()
+            let fresh = panes.allSatisfy { $0.lastActiveAt >= before && $0.lastActiveAt <= after }
+            let deadlines = panes.map { $0.lastActiveAt.addingTimeInterval(12*3600) }
+            let nextMatches = s.scheduler.state.nextExpiry == deadlines.min()
+            let noExtraUndo = s.model.undoGeneration == generation + structuralActions && structuralActions == (dissolve ? 2 : 1)
+            s.clock.value = Date(); s.scheduler.fire(reason: .automation)
+            let rows = await s.rows()
+            let survived = panes.allSatisfy { s.model.tab(id: $0.id) != nil } && rows.isEmpty
+            let name = dissolve ? "AA-visible-dissolve" : "AA-visible-takePane"
+            print("\(name) receipt freshBoth=\(fresh) nextMatches=\(nextMatches) survived=\(survived) noExtraUndo=\(noExtraUndo) rows=\(rows.count)")
+            check(fresh && nextMatches && survived && noExtraUndo,
+                  "\(name) previously shown panes start fresh inactivity after structural separation")
+        }
+        for moveFolder in [false, true] {
+            let p = Profile(), a = tab("moved-visible", age: 13*3600), pin = tab("pin")
+            let folder = Folder(children: [.tab(a)])
+            let source = Space(profileID: p.id, pinned: [.tab(pin)], today: [moveFolder ? .folder(folder) : .tab(a)])
+            let target = Space(profileID: p.id)
+            let window = BrowserWindowState(focusedSpaceID: source.id, selectedNodeBySpace: [source.id: a.id])
+            let s = try Scene(profiles: [p], spaces: [source,target], windows: [window]); defer { s.close() }
+            let loaded = s.model.tab(id: a.id)!
+            s.start(); s.openWindows(); s.undo.removeAllActions()
+            let before = Date(), generation = s.model.undoGeneration
+            let moved = s.model.moveNode(id: moveFolder ? folder.id : a.id, to: .spaceToday(target.id), at: 0)
+            let after = Date(); try await settle()
+            let fresh = loaded.lastActiveAt >= before && loaded.lastActiveAt <= after
+            let deadline = s.scheduler.state.nextExpiry == loaded.lastActiveAt.addingTimeInterval(12*3600)
+            let noExtraUndo = s.model.undoGeneration == generation + 1
+            s.clock.value = Date(); s.scheduler.fire(reason: .automation)
+            let rows = await s.rows()
+            s.undo.undo(); let oneUndo = !s.undo.canUndo
+            loaded.lastActiveAt = Date().addingTimeInterval(-13*3600)
+            let beforeRedo = Date(); s.undo.redo(); let afterRedo = Date(); try await settle()
+            let redoFresh = loaded.lastActiveAt >= beforeRedo && loaded.lastActiveAt <= afterRedo
+                && s.scheduler.state.nextExpiry == loaded.lastActiveAt.addingTimeInterval(12*3600)
+            let name = moveFolder ? "AA-visible-move-folder" : "AA-visible-move-space"
+            print("\(name) receipt moved=\(moved) fresh=\(fresh) deadline=\(deadline) redoFresh=\(redoFresh) rows=\(rows.count) noExtraUndo=\(noExtraUndo && oneUndo)")
+            check(moved && fresh && deadline && redoFresh && noExtraUndo && oneUndo && rows.isEmpty && s.model.tab(id: a.id) != nil,
+                  "\(name) selected tab or ancestor moved out of the shown Space gets a fresh deadline, including redo")
+        }
+        for undoCreation in [true, false] {
+            let p = Profile(), a = tab("undo-pane-a"), b = tab("undo-pane-b"), pin = tab("pin")
+            let space = Space(profileID: p.id, pinned: [.tab(pin)], today: [.tab(a), .tab(b)])
+            let s = try Scene(profiles: [p], spaces: [space]); defer { s.close() }
+            s.start(); s.openWindows(); s.undo.removeAllActions()
+            let split = s.model.makeSplit(tabIDs: [a.id,b.id])!, c = s.controllers[0]
+            s.undo.disableUndoRegistration()
+            _ = c.sidebar(c.sidebar, didRequest: .select(nodeID: split.id, space: space.id))
+            s.undo.enableUndoRegistration()
+            let panes = split.panes
+            if !undoCreation {
+                s.undo.removeAllActions(); s.model.unsplit(splitID: split.id); s.undo.undo()
+            }
+            for tab in panes { tab.lastActiveAt = Date().addingTimeInterval(-13*3600) }
+            let before = Date()
+            if undoCreation { s.undo.undo() } else { s.undo.redo() }
+            s.undo.disableUndoRegistration()
+            _ = c.sidebar(c.sidebar, didRequest: .select(nodeID: pin.id, space: space.id))
+            s.undo.enableUndoRegistration()
+            let after = Date(); try await settle()
+            let fresh = panes.allSatisfy { $0.lastActiveAt >= before && $0.lastActiveAt <= after }
+            let deadline = s.scheduler.state.nextExpiry == panes.map { $0.lastActiveAt.addingTimeInterval(12*3600) }.min()
+            s.clock.value = Date(); s.scheduler.fire(reason: .automation)
+            let rows = await s.rows()
+            check(fresh && deadline && rows.isEmpty && panes.allSatisfy { s.model.tab(id: $0.id) != nil },
+                  undoCreation ? "AA-visible-undo-split undoing split creation stamps all formerly shown panes" : "AA-visible-redo-dissolve redoing dissolution stamps formerly shown panes")
+        }
+        for deleteSpace in [false, true] {
+            let p = Profile(), a = tab("deleted-visible", age: 13*3600)
+            let source = Space(profileID: p.id, today: [.tab(a)]), fallback = Space(profileID: p.id)
+            let window = BrowserWindowState(focusedSpaceID: source.id, selectedNodeBySpace: [source.id: a.id])
+            let s = try Scene(profiles: [p], spaces: [source,fallback], windows: [window]); defer { s.close() }
+            s.start(); s.openWindows(); s.undo.removeAllActions()
+            let loaded = s.model.tab(id: a.id)!, before = Date(), generation = s.model.undoGeneration
+            if deleteSpace { s.model.deleteSpace(id: source.id) } else { _ = s.model.archiveNodes(ids: [a.id]) }
+            let after = Date()
+            let fresh = loaded.lastActiveAt >= before && loaded.lastActiveAt <= after
+            let oneAction = s.model.undoGeneration == generation + 1
+            s.undo.undo(); let oneUndo = !s.undo.canUndo
+            loaded.lastActiveAt = Date().addingTimeInterval(-13*3600)
+            let beforeRedo = Date(); s.undo.redo(); let afterRedo = Date()
+            let redoFresh = loaded.lastActiveAt >= beforeRedo && loaded.lastActiveAt <= afterRedo
+            let rows = await s.rows()
+            check(fresh && redoFresh && oneAction && oneUndo && rows.count == 1 && rows[0].id == a.id && rows[0].reason == .closed,
+                  deleteSpace ? "AA-visible-delete-space Space deletion and redo stamp removed shown tabs" : "AA-visible-archive archiving and redo stamp removed shown tabs")
+        }
+    }
+
     static func run(_ check: (Bool, String) -> Void) async throws {
+        try await structuralVisibility(check)
         do {
             let p = Profile(), visible = tab("visible", age: 13*3600), pin = tab("pin")
             let space = Space(profileID: p.id, pinned: [.tab(pin)], today: [.tab(visible)])

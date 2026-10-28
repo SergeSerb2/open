@@ -104,8 +104,11 @@ Small items found during review and verification. Each line: area — issue — 
 
 - Section 9 activity rule — reuse the model's shown-tab protection in both expiry
   and next-deadline queries. A focused Space's selected tab, or every pane of its
-  selected split, stays protected while any window shows it. The last deselection,
-  Space switch, or window close stamps `lastActiveAt` without a new undo step.
+  selected split, stays protected while any window shows it. The model caches the
+  shown Tab references and reconciles them through its shared mutation commit path,
+  including structural edits and undo/redo. A tab leaving the final window's shown
+  set gets `lastActiveAt = now` without a new undo step. This covers split separation
+  or dissolution, moves out of the shown Space, archive/delete, and window changes.
   A retained closed `BrowserWindowState` uses nonpersisted `isShowingContent=false`;
   call `setWindowContentVisible` on shell close/reopen, as the standard App now
   does. Keep the deadline and sweep predicates identical to prevent 1 ms timer
