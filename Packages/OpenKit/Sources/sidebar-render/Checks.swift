@@ -320,6 +320,7 @@ enum Checks {
         ReviewChecks.run()
         VisualFinishChecks.run()
         CompletionChecks.run()
+        CompactToolbarChecks.run()
         SpaceManagerChecks.run()
         PreviewChecks.run()
         SidebarHaptics.defaults.removePersistentDomain(forName: suite)

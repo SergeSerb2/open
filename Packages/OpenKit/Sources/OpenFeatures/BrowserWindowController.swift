@@ -119,6 +119,20 @@ public final class BrowserWindowController: NSWindowController, NSWindowDelegate
     private let toastLabel = NSTextField(labelWithString: "")
     private var undoButton: ActionButton!
     private var toastUndo: (() -> Void)?
+    /// First-hide hint (completion §3.12); `open.sidebar.hideHintShown` records that it showed.
+    public static let hideHintShownKey = "open.sidebar.hideHintShown"
+    public private(set) var hintToast: HintToastView?
+    public private(set) var hintShows = 0
+    /// Scheduled fade-out time of the shown hint (CACurrentMediaTime), for checks.
+    public private(set) var hintFadeDeadline: CFTimeInterval?
+    public private(set) var hintShownAt: CFTimeInterval?
+    public private(set) var hintAnimations: [String: CAAnimation] = [:]
+    /// The hint's one pending deadline (fade-out, then removal); a work item, not a timer.
+    private var hintWork: DispatchWorkItem?
+    /// The delete confirmation sheet currently shown on this window (completion §3.3).
+    public private(set) var pendingConfirmation: NSAlert?
+    /// Title of the last toast, for checks.
+    public private(set) var lastToastTitle = ""
     public init(model: BrowserModel, windowID: WindowID, factory: any WebContentHostFactory, size: CGSize? = nil, defaults: UserDefaults = .standard, snapshotStore: SnapshotStore? = nil) {
         self.model = model; self.windowID = windowID; self.snapshotStore = snapshotStore
         self.factory = factory; self.defaults = defaults
@@ -199,7 +213,7 @@ public final class BrowserWindowController: NSWindowController, NSWindowDelegate
         splitController.onChange = { [weak self] in self?.changed() }
         toast.wantsLayer = true; toast.layer?.cornerRadius = 8; toast.layer?.backgroundColor = NSColor.black.withAlphaComponent(0.85).cgColor
         toastLabel.textColor = .white; toast.addSubview(toastLabel)
-        undoButton = ActionButton(symbol: "arrow.uturn.backward", title: "Undo") { [weak self] in self?.toastUndo?() }
+        undoButton = ActionButton(symbol: "arrow.uturn.backward", title: "Undo") { [weak self] in self?.performToastUndo() }
         undoButton.contentTintColor = .white; toast.addSubview(undoButton); root.addSubview(toast); toast.isHidden = true
         root.onLayout = { [weak self] in self?.layoutContent() }
         root.onDragBackground = { [weak self] event in self?.window?.performDrag(with: event) }
@@ -211,7 +225,7 @@ public final class BrowserWindowController: NSWindowController, NSWindowDelegate
         refresh()
     }
     @available(*, unavailable) required init?(coder: NSCoder) { fatalError() }
-    isolated deinit { observing = false; if let treeObserver { model.removeObserver(treeObserver) }; if let keyMonitor { NSEvent.removeMonitor(keyMonitor) }; container.closeAll(); reveal.reset(); cardSampleTask?.cancel(); toastTask?.cancel(); if let pointerMonitor { NSEvent.removeMonitor(pointerMonitor) }; trafficLightObservers.forEach(NotificationCenter.default.removeObserver) }
+    isolated deinit { hintWork?.cancel(); observing = false; if let treeObserver { model.removeObserver(treeObserver) }; if let keyMonitor { NSEvent.removeMonitor(keyMonitor) }; container.closeAll(); reveal.reset(); cardSampleTask?.cancel(); toastTask?.cancel(); if let pointerMonitor { NSEvent.removeMonitor(pointerMonitor) }; trafficLightObservers.forEach(NotificationCenter.default.removeObserver) }
     private func scheduleRefresh() {
         guard !refreshPending else { return }; refreshPending = true
         DispatchQueue.main.async { [weak self] in guard let self, self.observing else { return }; self.refreshPending = false; self.refresh() }
@@ -259,6 +273,10 @@ public final class BrowserWindowController: NSWindowController, NSWindowDelegate
         let width = context.sidebarWidth
         let panelFrame = isPageFullscreen ? root.bounds : PanelMetrics.frame(windowSize: size, sidebarWidth: width, sidebarHidden: hidden)
         if background.frame != root.bounds { background.frame = root.bounds }
+        if let hint = hintToast {
+            let w = hint.frame.width
+            hint.setFrameOrigin(CGPoint(x: size.width - HintToastMetrics.trailingInset - w, y: HintToastMetrics.topInset))
+        }
         if emptyPanelHost.frame != root.bounds { emptyPanelHost.frame = root.bounds }
         emptyPanelHost.isHidden = !container.isHidden
         let animate = animated && window?.isVisible == true && !Motion.reducesMotion
@@ -618,6 +636,8 @@ public final class BrowserWindowController: NSWindowController, NSWindowDelegate
         removeRevealCard()
         model.setSidebarMode(windowID: windowID, mode: state.sidebarMode == .hidden ? .anchored : .hidden)
         layoutContent(animated: true); changed()
+        // Toolbar button, Cmd+S, View ▸ Hide Sidebar, and "More options" all land here.
+        if state.sidebarMode == .hidden { noteSidebarHidden() }
     }
     private func beginSidebarResize() {
         guard dragStartWidth == nil else { return }
@@ -673,6 +693,7 @@ public final class BrowserWindowController: NSWindowController, NSWindowDelegate
     }
     private func changed() { snapshotStore?.scheduleSave(model: model); peekStorage?.refresh(); syncPeekSidebar(); onStateChange?(); onVisibilityChange?() }
     public func showToast(_ title: String, undo: (() -> Void)?) {
+        lastToastTitle = title
         toastTask?.cancel(); toastUndo = undo; toastLabel.stringValue = title
         undoButton.isHidden = undo == nil; toast.isHidden = title.isEmpty
         if !title.isEmpty { toastTask = Task { @MainActor [weak self] in
@@ -680,6 +701,28 @@ public final class BrowserWindowController: NSWindowController, NSWindowDelegate
             self?.toast.isHidden = true; self?.toastUndo = nil
         } }
     }
+    private func dismissToast() {
+        toastTask?.cancel(); toastTask = nil
+        toastUndo = nil; toast.isHidden = true; undoButton.isHidden = true
+    }
+
+    private func performToastUndo() {
+        guard !toast.isHidden, let undo = toastUndo else { return }
+        dismissToast()
+        undo()
+    }
+
+    /// Undo belongs to the model step that just completed, never a newer command.
+    public func showModelUndoToast(_ title: String) {
+        guard let manager = model.undoManager, manager.canUndo else { showToast(title, undo: nil); return }
+        let generation = model.undoGeneration
+        showToast(title, undo: { [weak self, weak manager] in
+            guard let self, let manager, self.model.undoManager === manager,
+                  self.model.undoGeneration == generation, manager.canUndo else { return }
+            manager.undo()
+        })
+    }
+
     public var peekBadgeTabIDs: Set<ItemID> { peekStorage?.peekBadgeTabIDs ?? [] }
     /// Shared window-local key path. Focus comes from AppKit's current responder.
     @discardableResult public func handleKeyDown(_ event: NSEvent, unconsumed: Bool = false) -> Bool {
@@ -764,7 +807,14 @@ public final class BrowserWindowController: NSWindowController, NSWindowDelegate
         if let handled = onSidebarIntent?(intent) { return handled }
         switch intent {
         case .toggleSidebar: toggleSidebar(); return true
-        case .sidebarHiddenByGesture: return true
+        case .sidebarHiddenByGesture: noteSidebarHidden(); return true
+        case .deleteSpace(let id): return confirmDeleteSpace(id)
+        case .deleteFolder(let id): return confirmDeleteFolders([id])
+        case .deleteFolders(let ids): return confirmDeleteFolders(ids)
+        case .clearToday(let space), .clearTodayKeeping(let space, _):
+            let before = model.space(id: space)?.today.count ?? 0
+            guard ModelSidebarActions(context: context).perform(intent) else { return false }
+            if (model.space(id: space)?.today.count ?? 0) < before { showClearedToast() }
         case .openCommandBar(let source): dismissSidebarReveal(); onOpenCommandBar?(source, context.currentTab?.url); return onOpenCommandBar != nil
         case .newSplitView: splitController.addEmptyPane()
         case .addTabToSplit(let id):
@@ -780,7 +830,10 @@ public final class BrowserWindowController: NSWindowController, NSWindowDelegate
         }
         refresh(); changed(); return true
     }
-    public func windowWillClose(_ notification: Notification) { saveWindowState(); visibilityOverride = .closed; removeRevealCard(); container.closeAll(); onClose?(); onVisibilityChange?() }
+    public func windowWillClose(_ notification: Notification) {
+        saveWindowState(); visibilityOverride = .closed; removeRevealCard(); hintWork?.cancel(); hintWork = nil
+        container.closeAll(); onClose?(); onVisibilityChange?()
+    }
     public var onTextUndoManager: ((NSWindow) -> UndoManager?)?
     private lazy var nativeTextUndoManager = UndoManager()
     public func windowWillReturnUndoManager(_ window: NSWindow) -> UndoManager? {
@@ -878,5 +931,142 @@ final class SidebarResizeHandle: NSView {
         guard dragging, let root = window?.contentView else { return }
         if ended { dragging = false }
         onResize?(root.convert(event.locationInWindow, from: nil).x, ended)
+    }
+}
+
+// MARK: Sidebar completion A1: confirmations, toasts, first-hide hint
+
+extension BrowserWindowController {
+    /// Delete Space: the alert first; "Delete" archives the Space (one undo step).
+    func confirmDeleteSpace(_ id: SpaceID) -> Bool {
+        guard let window, pendingConfirmation == nil, let alert = SidebarConfirmations.deleteSpaceAlert(model: model, spaceID: id) else { return false }
+        let restoreKeyboardFocus = context.keyboardFocusAfterDeletion()
+        pendingConfirmation = alert
+        let shown = SidebarConfirmations.present(alert, on: window) { [weak self] confirmed in
+            guard let self else { return }
+            self.pendingConfirmation = nil
+            guard confirmed, self.model.space(id: id) != nil else { return }
+            if ModelSidebarActions(context: self.context).perform(.deleteSpace(id)) {
+                self.refresh(); restoreKeyboardFocus(); self.changed()
+            }
+        }
+        if !shown { pendingConfirmation = nil }
+        return shown
+    }
+
+    /// Delete folder(s): the alert first; "Delete Folder" archives the selection (folders as
+    /// folder records) in one undo step, then the toast with Undo.
+    func confirmDeleteFolders(_ ids: [ItemID]) -> Bool {
+        guard let window, pendingConfirmation == nil, let alert = SidebarConfirmations.deleteFoldersAlert(model: model, ids: ids) else { return false }
+        let folders = ids.filter { model.node(id: $0)?.folder != nil }.count
+        let restoreKeyboardFocus = context.keyboardFocusAfterDeletion()
+        pendingConfirmation = alert
+        let shown = SidebarConfirmations.present(alert, on: window) { [weak self] confirmed in
+            guard let self else { return }
+            self.pendingConfirmation = nil
+            guard confirmed else { return }
+            var archived = 0
+            self.keepingSelection { archived = self.model.archiveNodes(ids: ids) }
+            guard archived > 0 else { return }
+            self.refresh(); restoreKeyboardFocus(); self.changed()
+            self.showModelUndoToast(SidebarConfirmations.folderToast(count: folders))
+        }
+        if !shown { pendingConfirmation = nil }
+        return shown
+    }
+
+    /// Runs a removal; when it took the window's current tab, selects the tab that now holds
+    /// its place in the Space (the next one, else the previous), as Cmd+W does.
+    public func keepingSelection(_ removal: () -> Void) {
+        guard let space = context.focusedSpace, let state = context.window else { removal(); return }
+        func tabs() -> [ItemID] {
+            func walk(_ nodes: [SidebarNode]) -> [ItemID] {
+                nodes.flatMap { node -> [ItemID] in
+                    switch node { case .tab(let tab): [tab.id]; case .folder(let folder): walk(folder.children); case .split(let split): [split.id] }
+                }
+            }
+            return walk(space.pinned) + walk(space.today)
+        }
+        let before = tabs(), selected = state.selectedNodeBySpace[space.id]
+        let index = selected.flatMap { before.firstIndex(of: $0) }
+        removal()
+        guard let selected, model.node(id: selected) == nil, let index else { return }
+        let remaining = Set(tabs())
+        guard !remaining.isEmpty else { return }
+        let next = before.suffix(from: index).first(where: remaining.contains) ?? before.prefix(index).last(where: remaining.contains)
+        guard let next else { return }
+        // The removal is the undo step; moving the selection is not. Detach the manager:
+        // disabled registration would still leave an empty per-command group on top.
+        let undo = model.undoManager
+        model.undoManager = nil; defer { model.undoManager = undo }
+        _ = sidebar(sidebar, didRequest: .select(nodeID: next, space: space.id))
+    }
+
+    /// Clicks the shown toast's Undo button (automation and checks use the real button).
+    @discardableResult public func pressToastUndo() -> Bool {
+        guard !toast.isHidden, !undoButton.isHidden else { return false }
+        undoButton.performClick(nil)
+        return true
+    }
+
+    /// "Cleared Tabs" with Undo after any Clear (`FUN_102a68e2c`).
+    public func showClearedToast() {
+        showModelUndoToast("Cleared Tabs")
+    }
+
+    /// The first hide by any path shows the hint once; the key is set when it shows.
+    func noteSidebarHidden() {
+        guard context.window?.sidebarMode == .hidden, defaults.object(forKey: Self.hideHintShownKey) as? Bool != true else { return }
+        defaults.set(true, forKey: Self.hideHintShownKey)
+        showHintToast()
+    }
+
+    private func showHintToast() {
+        hintWork?.cancel(); hintToast?.removeFromSuperview(); hintAnimations = [:]
+        let command = CommandRegistry.byID["toggle-sidebar"]
+        let keys = command.flatMap { keyBindingOverrides.effectiveShortcuts(for: $0).first?.symbolDisplay } ?? "⌘S"
+        let style = context.focusedSpace.map(context.style(for:)) ?? .defaultTheme(system: context.systemAppearance)
+        let hint = HintToastView(keys: keys, style: style)
+        root.addSubview(hint, positioned: .below, relativeTo: toast)
+        hintToast = hint; hintShows += 1
+        layoutContent()
+        let m = HintToastMetrics.self
+        if let layer = hint.layer, !Motion.reducesMotion, window?.isVisible == true || SidebarDiagnostics.forceAnimations {
+            let w = hint.bounds.width / 2, h = hint.bounds.height / 2
+            var start = CATransform3DMakeTranslation(-w, -h, 0)
+            start = CATransform3DConcat(start, CATransform3DMakeScale(m.inScale, m.inScale, 1))
+            start = CATransform3DConcat(start, CATransform3DMakeTranslation(w, h, 0))
+            let scale = CABasicAnimation(keyPath: "transform"); scale.fromValue = start; scale.toValue = CATransform3DIdentity
+            let fade = CABasicAnimation(keyPath: "opacity"); fade.fromValue = 0; fade.toValue = 1
+            let group = CAAnimationGroup(); group.animations = [scale, fade]
+            group.duration = m.inDuration; group.timingFunction = CAMediaTimingFunction(name: .easeOut)
+            layer.add(group, forKey: "hintIn"); hintAnimations["in"] = layer.animation(forKey: "hintIn")
+        }
+        let shownAt = CACurrentMediaTime()
+        hintShownAt = shownAt; hintFadeDeadline = shownAt + m.lifetime
+        let work = DispatchWorkItem { [weak self] in MainActor.assumeIsolated { self?.expireHintToast() } }
+        hintWork = work
+        DispatchQueue.main.asyncAfter(deadline: .now() + m.lifetime, execute: work)
+    }
+
+    /// Fades the hint out now (its lifetime ended, or a check drives the clock).
+    public func expireHintToast() {
+        hintWork?.cancel(); hintWork = nil; hintFadeDeadline = nil
+        guard let hint = hintToast else { return }
+        let animates = !Motion.reducesMotion && (window?.isVisible == true || SidebarDiagnostics.forceAnimations)
+        guard animates, let layer = hint.layer else { hint.removeFromSuperview(); hintToast = nil; return }
+        let fade = CABasicAnimation(keyPath: "opacity"); fade.fromValue = 1; fade.toValue = 0
+        fade.duration = HintToastMetrics.outDuration; fade.timingFunction = CAMediaTimingFunction(name: .easeIn)
+        layer.opacity = 0
+        layer.add(fade, forKey: "hintOut"); hintAnimations["out"] = layer.animation(forKey: "hintOut")
+        // Remove on a scheduled deadline, not a render callback (an occluded window may not render).
+        let work = DispatchWorkItem { [weak self, weak hint] in
+            MainActor.assumeIsolated {
+                hint?.removeFromSuperview()
+                if let self, self.hintToast === hint { self.hintToast = nil }
+            }
+        }
+        hintWork = work
+        DispatchQueue.main.asyncAfter(deadline: .now() + HintToastMetrics.outDuration, execute: work)
     }
 }

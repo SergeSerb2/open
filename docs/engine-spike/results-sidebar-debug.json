@@ -1,11 +1,67 @@
 {
+  "cleanup": {
+    "ok": true,
+    "processes": [
+      {
+        "forced": false,
+        "ok": true,
+        "owned_pids": [
+          75220,
+          75242,
+          75243,
+          75244,
+          75484,
+          75487,
+          75489,
+          75491,
+          75511,
+          75513,
+          75525,
+          75546,
+          75603,
+          75604
+        ],
+        "remaining_processes": [],
+        "reply": true,
+        "windows_after_quit": {
+          "count": 0,
+          "windows": []
+        },
+        "windows_before_quit": 1
+      },
+      {
+        "forced": false,
+        "ok": true,
+        "owned_pids": [
+          75651,
+          75672,
+          75673,
+          75675,
+          75676
+        ],
+        "remaining_processes": [],
+        "reply": true,
+        "windows_after_quit": {
+          "count": 0,
+          "windows": []
+        },
+        "windows_before_quit": 1
+      }
+    ]
+  },
   "config": "Debug",
   "engine": {
-    "distributionUUID": "4C4C44FE-5555-3144-A175-7398C5A1D4B4",
-    "embeddedUUID": "4C4C44FE-5555-3144-A175-7398C5A1D4B4",
+    "distributionCodeSHA256": "35b37ba3a72d079ed4e76fc7932bfe76e49b57c3456eda06f7fea9d928b901ae",
+    "distributionSHA256": "61c9ab17b6b08525af836cca93bba67819bfa1544f04abe5eae3baf4b57b98a8",
+    "distributionUUID": "4C4C44C8-5555-3144-A168-35B709BBDA3A",
+    "embeddedCodeSHA256": "35b37ba3a72d079ed4e76fc7932bfe76e49b57c3456eda06f7fea9d928b901ae",
+    "embeddedSHA256": "3e246c99539902496c44c4c6ed2533f3f4fd4a85f03b4f5e6dcaaf49f75f28d2",
+    "embeddedUUID": "4C4C44C8-5555-3144-A168-35B709BBDA3A",
+    "requiredSHA256": "",
     "source": "fork",
-    "stamp": "fork /Users/serge/Developer/open-engine/chromium_git/chromium/src/cef/binary_distrib/cef_binary_156.0.14+g4fa4ab5+chromium-156.0.8078.48_macosarm64_minimal 1792989125"
+    "stamp": "fork /Users/serge/Developer/open-engine/chromium_git/chromium/src/cef/binary_distrib/cef_binary_156.0.14+g4fa4ab5+chromium-156.0.8078.48_macosarm64_minimal 1793075034"
   },
+  "interrupted_attempts": [],
   "sidebar": {
     "background_space_window_open": {
       "child": {
@@ -15,7 +71,7 @@
         "crashed": false,
         "favicon": false,
         "hasWebContent": true,
-        "id": "01FD9314-CE7A-4681-876A-E07C9C067783",
+        "id": "8197CB28-6CF5-4B22-AB80-611990BE3A2A",
         "loaded": true,
         "loading": false,
         "page": {
@@ -24,13 +80,15 @@
           "browserIndex": 0,
           "browserPinned": false,
           "canGoBack": false,
-          "context": "Profile-C9F735F2",
+          "chromeTabId": 1464683149,
+          "chromeWindowId": 1464683146,
+          "context": "Profile-86A7D24C",
           "crash": 0,
           "extension": "",
           "favicon": false,
           "fullscreen": false,
           "hidden": false,
-          "hostTab": "01FD9314-CE7A-4681-876A-E07C9C067783",
+          "hostTab": "8197CB28-6CF5-4B22-AB80-611990BE3A2A",
           "identifier": 12,
           "kind": "tab",
           "live": true,
@@ -38,17 +96,17 @@
           "muted": false,
           "pageBackground": [],
           "popup": true,
-          "style": "alloy",
+          "style": "chrome",
           "title": "Background child",
           "url": "about:blank",
           "zoom": 0
         },
-        "profile": "15E28247-AA7C-498F-913B-CA319E6F23A5",
+        "profile": "7F1C490A-9A03-428E-84CA-A0DA3CEADB3B",
         "progress": 1,
         "section": "today",
         "selected": true,
         "sleepPhase": "live",
-        "space": "4EDAF0D9-5C7C-405E-9D73-DFA3F77BBE3C",
+        "space": "F09D88A9-D5DB-4AA3-B9EB-FA779C35ADD7",
         "title": "Background child",
         "url": "about:blank",
         "visible": true
@@ -68,173 +126,173 @@
       "capture": "F0001",
       "elements": [
         {
-          "delta_e00": 0.57,
-          "element": "background (sidebar column) (101 points, max \u0394E 0.85)",
+          "delta_e00": 0.6,
+          "element": "background (sidebar column) (101 points, max \u0394E 0.91)",
           "position_pt": null
         },
         {
-          "delta_e00": 0.42,
-          "element": "panel fill (empty state) (11 points, max \u0394E 1.05)",
+          "delta_e00": 0.49,
+          "element": "panel fill (empty state) (11 points, max \u0394E 0.87)",
           "position_pt": null
         },
         {
-          "delta_e00": 0.86,
+          "delta_e00": 2.38,
           "element": "toolbar: sidebar toggle",
-          "position_pt": 1.0
-        },
-        {
-          "delta_e00": 0.29,
-          "element": "toolbar: back",
           "position_pt": 0.0
         },
         {
-          "delta_e00": 0.25,
+          "delta_e00": 0.39,
+          "element": "toolbar: back",
+          "position_pt": 1.0
+        },
+        {
+          "delta_e00": 0.3,
           "element": "toolbar: forward",
           "position_pt": 1.0
         },
         {
-          "delta_e00": 0.26,
+          "delta_e00": 0.34,
           "element": "toolbar: reload",
-          "position_pt": 0.0
+          "position_pt": 1.0
         },
         {
-          "delta_e00": 0.14,
+          "delta_e00": 0.27,
           "element": "URL field fill",
           "position_pt": 0.0
         },
         {
-          "delta_e00": 0.51,
+          "delta_e00": 1.31,
           "element": "URL field magnifier",
-          "position_pt": 0.0
+          "position_pt": 1.0
         },
         {
-          "delta_e00": 0.03,
+          "delta_e00": 0.68,
           "element": "URL field placeholder",
-          "position_pt": 0.0
+          "position_pt": 1.0
         },
         {
-          "delta_e00": 0.08,
+          "delta_e00": 0.31,
           "element": "favorite tile 1",
-          "position_pt": 0.0
+          "position_pt": 1.0
         },
         {
-          "delta_e00": 0.2,
+          "delta_e00": 0.12,
           "element": "favorite tile 2",
-          "position_pt": 0.0
+          "position_pt": 1.0
         },
         {
-          "delta_e00": 0.14,
+          "delta_e00": 0.18,
           "element": "favorite tile 3",
           "position_pt": 0.0
         },
         {
-          "delta_e00": 0.15,
+          "delta_e00": 0.18,
           "element": "favorite tile 4",
-          "position_pt": 0.0
+          "position_pt": 1.0
         },
         {
-          "delta_e00": 0.26,
+          "delta_e00": 0.07,
           "element": "favorite tile 5",
-          "position_pt": 0.0
+          "position_pt": 1.0
         },
         {
-          "delta_e00": 0.27,
+          "delta_e00": 0.22,
           "element": "favorite tile 6",
           "position_pt": 0.0
         },
         {
           "delta_e00": null,
-          "element": "Space icon (centroid \u0394 0.1, 0.2 px)",
-          "position_pt": 0.2
+          "element": "Space icon (centroid \u0394 0.1, 0.1 px)",
+          "position_pt": 0.1
         },
         {
-          "delta_e00": 0.19,
+          "delta_e00": 0.88,
           "element": "Space title",
           "position_pt": 0.0
         },
         {
-          "delta_e00": 0.03,
+          "delta_e00": 1.04,
           "element": "row 1 title",
           "position_pt": 0.0
         },
         {
-          "delta_e00": 0.04,
+          "delta_e00": 0.87,
           "element": "row 2 title",
-          "position_pt": 0.0
-        },
-        {
-          "delta_e00": 0.1,
-          "element": "row 3 title",
-          "position_pt": 0.0
-        },
-        {
-          "delta_e00": 0.12,
-          "element": "row 4 title",
-          "position_pt": 0.0
-        },
-        {
-          "delta_e00": 0.12,
-          "element": "row 5 title",
-          "position_pt": 0.0
-        },
-        {
-          "delta_e00": 0.06,
-          "element": "row 6 title",
-          "position_pt": 0.0
-        },
-        {
-          "delta_e00": 0.09,
-          "element": "row 7 title",
-          "position_pt": 0.0
-        },
-        {
-          "delta_e00": 0.04,
-          "element": "row 8 title",
-          "position_pt": 0.0
-        },
-        {
-          "delta_e00": 0.03,
-          "element": "row 9 title",
-          "position_pt": 0.0
-        },
-        {
-          "delta_e00": 0.05,
-          "element": "row 10 title",
-          "position_pt": 0.0
-        },
-        {
-          "delta_e00": 1.39,
-          "element": "New Tab plus",
           "position_pt": 1.0
         },
         {
           "delta_e00": 0.36,
+          "element": "row 3 title",
+          "position_pt": 0.0
+        },
+        {
+          "delta_e00": 0.17,
+          "element": "row 4 title",
+          "position_pt": 0.0
+        },
+        {
+          "delta_e00": 0.81,
+          "element": "row 5 title",
+          "position_pt": 1.0
+        },
+        {
+          "delta_e00": 0.78,
+          "element": "row 6 title",
+          "position_pt": 1.0
+        },
+        {
+          "delta_e00": 0.71,
+          "element": "row 7 title",
+          "position_pt": 1.0
+        },
+        {
+          "delta_e00": 0.28,
+          "element": "row 8 title",
+          "position_pt": 0.0
+        },
+        {
+          "delta_e00": 0.11,
+          "element": "row 9 title",
+          "position_pt": 0.0
+        },
+        {
+          "delta_e00": 0.52,
+          "element": "row 10 title",
+          "position_pt": 0.0
+        },
+        {
+          "delta_e00": 3.65,
+          "element": "New Tab plus",
+          "position_pt": 1.0
+        },
+        {
+          "delta_e00": 0.65,
           "element": "New Tab label",
           "position_pt": 0.0
         },
         {
-          "delta_e00": 0.46,
+          "delta_e00": 1.08,
           "element": "bottom: Home",
           "position_pt": 0.0
         },
         {
-          "delta_e00": 1.61,
+          "delta_e00": 0.4,
           "element": "bottom: plus",
           "position_pt": 0.0
         }
       ],
       "method": "docs/design.md section 7; live Open snapshot converted to 1x; same masks",
-      "ok": true,
+      "ok": false,
       "private_artifacts": ".re/app-shell-comparison-sidebar",
-      "worst_delta_e00": 1.61,
+      "worst_delta_e00": 3.65,
       "worst_position_pt": 1.0
     },
     "drag_reorder_intent": {
       "ok": true
     },
     "durable_profile_storage": {
-      "reason": "CEF root_cache_path non-default profile storage; docs/followups.md. Wrapper/page switching is not durable-storage proof.",
-      "status": "BLOCKED"
+      "reason": "covered by --only profiles (durable_second_profile: a cookie survives a relaunch)",
+      "status": "SKIP"
     },
     "empty": {
       "ok": true
@@ -301,15 +359,15 @@
         "crashed": false,
         "favicon": false,
         "hasWebContent": false,
-        "id": "E46D7C9F-AEDF-4B8B-93E8-BBE4FDB159D4",
+        "id": "8B96D113-9B48-4BCF-BBC2-1874255EBE2F",
         "loaded": false,
         "loading": false,
-        "profile": "15E28247-AA7C-498F-913B-CA319E6F23A5",
+        "profile": "7F1C490A-9A03-428E-84CA-A0DA3CEADB3B",
         "progress": 0,
         "section": "today",
         "selected": false,
         "sleepPhase": "placeholder",
-        "space": "4EDAF0D9-5C7C-405E-9D73-DFA3F77BBE3C",
+        "space": "F09D88A9-D5DB-4AA3-B9EB-FA779C35ADD7",
         "title": "Profile background",
         "url": "data:text/html,%3Ctitle%3EProfile%20background%3C/title%3E%3Ch1%3EProfile%20background%3C/h1%3E",
         "visible": false
@@ -333,6 +391,6 @@
       "ok": true
     }
   },
-  "started": "2026-10-25 23:27:57",
-  "style": "alloy"
+  "started": "2026-10-27 15:08:06",
+  "style": "chrome"
 }

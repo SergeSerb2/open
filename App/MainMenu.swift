@@ -55,6 +55,18 @@ extension EngineWebContentHostFactory {
     if id.hasPrefix("go-to-tab-"), let n = Int(id.split(separator: "-").last ?? "") { return n <= orderedTabs.count }
     if id.hasPrefix("go-to-space-"), let n = Int(id.split(separator: "-").last ?? "") { return n <= model.spaces.count }
     if id == "pin-tab" { return selectedTab.map { !model.isPinned(tabID: $0.id) } ?? false }
+    if id == "expand-all-folders" || id == "collapse-all-folders" {
+      // Enabled when the focused Space has a folder in the other state (completion §2.5).
+      let wantsExpanded = id == "collapse-all-folders"
+      func any(_ nodes: [SidebarNode]) -> Bool {
+        nodes.contains { node in node.folder.map { $0.isExpanded == wantsExpanded || any($0.children) } ?? false }
+      }
+      return focusedSpace.map { any($0.pinned) || any($0.today) } ?? false
+    }
+    if id == "reset-all-tabs-in-space" {
+      return focusedSpace.map { space in flattened(space.pinned).contains { tab in
+        tab.pinnedURL.map { tab.url.host != $0.host || tab.url.path != $0.path } ?? false } } ?? false
+    }
     if id == "unpin-tab" { return selectedTab.map { model.isPinned(tabID: $0.id) } ?? false }
     let key = enabledKey ?? CommandRegistry.byID[id]?.enabledKey ?? EnabledKey.always
     switch key {
@@ -120,7 +132,8 @@ extension EngineWebContentHostFactory {
       }
     case "reset-tab": if let tab = selectedTab, let url = tab.pinnedURL { model.resetPinnedTab(id: tab.id); hosts[tab.id]?.load(url) }
     case "replace-pinned-url": if let tab = selectedTab { model.replacePinnedURL(id: tab.id) }
-    case "clear-unpinned-tabs": if let space = focusedSpace { model.clearToday(space: space.id) }
+    case "clear-unpinned-tabs":
+      if let space = focusedSpace, !space.today.isEmpty { model.clearToday(space: space.id); controller?.showClearedToast() }
     case "next-tab", "cycle-tab-forward", "tab-switcher-forward": cycleTab(by: 1)
     case "previous-tab", "cycle-tab-backward", "tab-switcher-backward": cycleTab(by: -1)
     case "next-space": cycleSpace(by: 1)
@@ -150,12 +163,17 @@ extension EngineWebContentHostFactory {
     case "expand-pinned-section", "collapse-pinned-section": if let space = focusedSpace { model.setPinnedSectionCollapsed(spaceID: space.id, collapsed: id == "collapse-pinned-section") }
     case "manage-extensions", "add-extension": openExtensionsPage(nil)
     case "expand-all-folders", "collapse-all-folders":
-      let ids = model.index.values.compactMap(\.folder).map(\.id)
-      for folder in ids { model.setExpanded(folderID: folder, expanded: id == "expand-all-folders") }
+      // The key window's focused Space only; one undo step (completion §3.4).
+      if let space = focusedSpace { _ = model.setAllFoldersExpanded(spaceID: space.id, expanded: id == "expand-all-folders") }
     case "add-to-favorites": if let tab = selectedTab, let profile = focusedProfile { _ = model.addFavorite(tabID: tab.id, to: profile.id) }
     case "remove-from-favorites": if let tab = selectedTab { _ = model.removeFavorite(tabID: tab.id, into: focusedSpace?.id) }
     case "mute-all-tabs", "unmute-all-tabs": for tab in orderedTabs { model.setMuted(tabID: tab.id, muted: id == "mute-all-tabs"); hosts[tab.id]?.content.isMuted = tab.isMuted }
-    case "reset-all-tabs-in-space": for tab in orderedTabs { if let url = tab.pinnedURL { model.resetPinnedTab(id: tab.id); hosts[tab.id]?.load(url) } }
+    case "reset-all-tabs-in-space":
+      // Pinned tabs of the focused Space that left their pinned URL (folders and splits
+      // included, Favorites excluded); one undo step. Live pages navigate back.
+      if let space = focusedSpace {
+        for tabID in model.resetPinnedTabs(spaceID: space.id) { if let url = model.tab(id: tabID)?.pinnedURL { hosts[tabID]?.load(url) } }
+      }
     default: app.performCommand(id)
     }
     app.scheduleSave(); app.scheduleMenuRebuild(); return true

@@ -24,6 +24,19 @@ enum FeatureCLI {
         if cmd == "check" { try await FeatureChecks.run(); return }
         if cmd == "pip" { try PiPScene.run(args); return }
         if cmd == "compare" { try FeatureCompare.run(args); return }
+        if cmd == "hint" {
+            // The first-hide hint at rest over a hidden sidebar (A0440's state), default dark theme.
+            let size = (RenderCLI.value(args, "--size") ?? "2216x1394").split(separator: "x").compactMap { Double($0) }
+            guard size.count == 2 else { throw CLIError(description: "invalid size") }
+            let model = synthetic(), scale = Double(RenderCLI.value(args, "--scale") ?? "1") ?? 1
+            let c = BrowserWindowController(model: model, windowID: model.windows[0].id, factory: FakeWebContentHostFactory(),
+                                            size: CGSize(width: size[0], height: size[1]), defaults: defaults())
+            if RenderCLI.value(args, "--appearance") != "light" { NSApp.appearance = NSAppearance(named: .darkAqua) }
+            c.toggleSidebar(); OffscreenRenderer.settle(c.contentView, runLoop: 0.05)
+            guard let hint = c.hintToast else { throw CLIError(description: "hint did not show") }
+            print("hint frame \(hint.frame) plate \(hint.plateFrame)")
+            try output(c.contentView, args: args, scale: scale); c.container.closeAll(); return
+        }
         let sizeParts = (RenderCLI.value(args, "--size") ?? (cmd == "little" ? "720x540" : "2216x1394")).split(separator: "x").compactMap { Double($0) }
         guard sizeParts.count == 2, sizeParts.allSatisfy({ $0 > 0 && $0 <= 8192 }) else { throw CLIError(description: "invalid size") }
         let size = CGSize(width: sizeParts[0], height: sizeParts[1]), scale = Double(RenderCLI.value(args, "--scale") ?? "1") ?? 1

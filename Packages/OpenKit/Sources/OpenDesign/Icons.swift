@@ -4,7 +4,7 @@ import AppKit
 /// weight tuned so the 1x ink box matches Arc's measured ink box, or to a vector
 /// drawn in code (`CustomIcon`). We never ship Arc's images.
 public enum Glyph: String, CaseIterable, Sendable {
-    case sidebarToggle, back, forward, reload, stopLoading
+    case sidebarToggle, back, forward, reload, stopLoading, compactBack, compactForward
     case magnifier, copyLink, siteControls
     case newTabPlus, rowClose, rowUnload
     case disclosureDown, disclosureRight, clearArrow
@@ -32,6 +32,8 @@ public enum Glyph: String, CaseIterable, Sendable {
         case .sidebarToggle: Spec(symbol: "sidebar.left", pointSize: 16, weight: .regular, arcInk: CGSize(width: 19, height: 15), note: "toolbar; rounded rect with a lined left pane")
         case .back: Spec(symbol: "arrow.left", pointSize: 16, weight: .regular, arcInk: CGSize(width: 15, height: 12), note: "toolbar", offset: CGSize(width: 0, height: 1))
         case .forward: Spec(symbol: "arrow.right", pointSize: 16, weight: .regular, arcInk: CGSize(width: 15, height: 12), note: "toolbar", offset: CGSize(width: 0, height: 1))
+        case .compactBack: Spec(symbol: "arrow.left", pointSize: 14, weight: .regular, arcInk: CGSize(width: 13, height: 10), note: "compact toolbar (S2 06/0029 ink [82, 19, 95, 29])", offset: CGSize(width: 0, height: 1))
+        case .compactForward: Spec(symbol: "arrow.right", pointSize: 14, weight: .regular, arcInk: CGSize(width: 13, height: 10), note: "compact toolbar (S2 06/0029 ink [110, 19, 123, 29])", offset: CGSize(width: 0, height: 1))
         case .reload: Spec(symbol: "arrow.clockwise", pointSize: 16, weight: .regular, arcInk: CGSize(width: 14, height: 17), note: "toolbar", offset: CGSize(width: 0, height: 1))
         case .stopLoading: Spec(symbol: "xmark", pointSize: 13, weight: .regular, arcInk: nil, note: "toolbar, while loading")
         case .magnifier: Spec(symbol: "magnifyingglass", pointSize: 12.5, weight: .regular, arcInk: CGSize(width: 12, height: 12), note: "URL field, no page")

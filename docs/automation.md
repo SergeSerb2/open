@@ -368,6 +368,13 @@ no remote debugging port. It never opens or copies Arc.
 | `space-manager-drag` | `space=<ID> to=<zero-based index>` drags the real visible grabber through `OEApplication.sendEvent`; the native tracking loop dequeues the drag/up events. Rejects invalid IDs/indices and offscreen grabbers. Returns manager state. |
 | `space-manager-menu` | `space=<ID> item=<title>` performs the existing manager column menu. Add `node=<ID>` to perform that real outline row's context-menu item instead. No new confirmation policy or model implementation. |
 | `space-manager-intent` | `kind=openURL space=<ID> url=<URL> [section=pinned]` sends the production intent that a URL drop on that Manager column sends (index 0 of Today, or Pinned). The native drop mapping itself is checked offscreen by `sidebar-render`. |
+| `sidebar-menu` | `item=<A/B path> [node=<ID>] [alternate=true]` builds the same `NSMenu` a right-click shows on that row (no `node`: the Space menu) in the front browser window and performs the item. |
+| `alert` | `[window=library] [button=<title>]` reads the texts and buttons of the alert sheet attached to a browser (or the Library) window; with `button`, clicks it. |
+| `toast-undo` | Clicks the shown toast's Undo button in the front browser window. |
+| `defaults` | `key=open.… [value=…]` reads (and writes) one Open preference in the app's own domain (run suites on a cloned bundle ID). |
+| `sound-effect` | `effect=capture|event` calls `SoundEffects.shared.play`; reports `played`, the resource name, and counts. Call it only with `open.advanced.playSoundEffects` off: it plays audio otherwise. |
+
+`window-state` also reports `toolbarButtons` (visible toolbar buttons in order), `hint` (shows, visible, frame, keys, plate), `toast` (last toast title), and `confirmation` (the pending delete alert's title, text, buttons).
 | `library-close` | Closes the shared Library window, cancelling any attached sheet first. Reports `closed` and the sheet window numbers it cancelled. Available with no browser window. |
 
 Use existing `key route=app window=<Library number>` for Cmd+Z and other

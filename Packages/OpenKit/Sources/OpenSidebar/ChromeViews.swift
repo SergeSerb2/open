@@ -11,6 +11,8 @@ final class ToolbarView: NSView {
     let back = PlateButton(glyph: .back)
     let forward = PlateButton(glyph: .forward)
     let reload = PlateButton(glyph: .reload)
+    /// Compact toolbar only (width < 219): a menu with Reload / Stop Loading and Hide Sidebar.
+    let more = PlateButton(glyph: .spaceMore)
 
     init(context: SidebarContext) {
         self.context = context
@@ -51,7 +53,28 @@ final class ToolbarView: NSView {
             }
         }
         toggle.glyphTint = { _ in SidebarRole.toolbarGlyph.nsColor }
+        setup(more, .more) { Tooltip(title: "More options", style: style()) }
+        more.glyphTint = { _ in SidebarRole.toolbarGlyph.nsColor }
+        more.menuProvider = { [weak self] in self?.makeMoreMenu() }
+        more.isHidden = true
     }
+
+    /// "More options" (guess: the menu was not opened in the capture; plan §3.16).
+    func makeMoreMenu() -> NSMenu {
+        let menu = NSMenu(); menu.autoenablesItems = false
+        let loading = context.pageIsLoading
+        let reload = ClosureMenuItem(loading ? "Stop Loading" : "Reload This Page", enabled: context.hasPage) { [unowned context] in
+            context.send(context.pageIsLoading ? .stopLoading : .reload)
+        }
+        reload.keyEquivalent = loading ? "." : "r"; reload.keyEquivalentModifierMask = .command
+        let hide = ClosureMenuItem("Hide Sidebar") { [unowned context] in context.send(.toggleSidebar) }
+        hide.keyEquivalent = "s"; hide.keyEquivalentModifierMask = .command
+        menu.addItem(reload); menu.addItem(hide)
+        return menu
+    }
+
+    /// True while the toolbar shows Back, Forward, and "More options" only.
+    var isCompact: Bool { ChromeMetrics.isCompact(sidebarWidth: bounds.width) }
 
     @available(*, unavailable) required init?(coder: NSCoder) { fatalError() }
     override var isFlipped: Bool { true }
@@ -59,17 +82,34 @@ final class ToolbarView: NSView {
     override func layout() {
         super.layout()
         let w = bounds.width, y = ChromeMetrics.toolbarButtonY, s = ChromeMetrics.toolbarButtonSize
-        toggle.frame = CGRect(origin: CGPoint(x: ChromeMetrics.sidebarToggleX, y: y), size: s)
-        back.frame = CGRect(origin: CGPoint(x: ChromeMetrics.backX(sidebarWidth: w), y: y), size: s)
-        forward.frame = CGRect(origin: CGPoint(x: ChromeMetrics.forwardX(sidebarWidth: w), y: y), size: s)
-        reload.frame = CGRect(origin: CGPoint(x: ChromeMetrics.reloadX(sidebarWidth: w), y: y), size: s)
         let loading = tracked({ context.pageIsLoading }) { [weak self] in self?.needsLayout = true }
         reload.glyphView.glyph = loading ? .stopLoading : .reload
         // A selected split moves back, forward, and reload into each pane's bar: the
         // sidebar toolbar keeps only the toggle (F0081, F0082: AX and pixels).
         let split = tracked({ context.isSplitSelected }) { [weak self] in self?.needsLayout = true }
-        for b in [back, forward, reload] { b.isHidden = split }
+        let compact = isCompact
+        if compact != lastCompact { lastCompact = compact; SidebarDiagnostics.compactToolbarSwaps += 1 }
+        if compact {
+            // Measured: no toggle and no Reload; "More options" holds both (S2 06/0025–0029).
+            let c = CompactToolbarMetrics.self, size = CGSize(width: c.buttonSize, height: c.buttonSize)
+            back.frame = CGRect(origin: CGPoint(x: c.backX(sidebarWidth: w), y: c.y), size: size)
+            forward.frame = CGRect(origin: CGPoint(x: c.forwardX(sidebarWidth: w), y: c.y), size: size)
+            more.frame = CGRect(origin: CGPoint(x: c.moreX(sidebarWidth: w), y: c.y), size: size)
+            // Arc's compact arrows are smaller than the full toolbar's (ink 13 × 10 vs 15 × 12).
+            back.glyphView.glyph = .compactBack; forward.glyphView.glyph = .compactForward
+            toggle.isHidden = true; reload.isHidden = true; more.isHidden = false
+            for b in [back, forward] { b.isHidden = split }
+        } else {
+            toggle.frame = CGRect(origin: CGPoint(x: ChromeMetrics.sidebarToggleX, y: y), size: s)
+            back.frame = CGRect(origin: CGPoint(x: ChromeMetrics.backX(sidebarWidth: w), y: y), size: s)
+            forward.frame = CGRect(origin: CGPoint(x: ChromeMetrics.forwardX(sidebarWidth: w), y: y), size: s)
+            reload.frame = CGRect(origin: CGPoint(x: ChromeMetrics.reloadX(sidebarWidth: w), y: y), size: s)
+            back.glyphView.glyph = .back; forward.glyphView.glyph = .forward
+            toggle.isHidden = false; more.isHidden = true
+            for b in [back, forward, reload] { b.isHidden = split }
+        }
     }
+    private var lastCompact: Bool?
 }
 
 /// The sidebar URL field: placeholder with a magnifier, or the current host.

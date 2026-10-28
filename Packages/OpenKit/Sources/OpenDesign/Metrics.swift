@@ -36,6 +36,8 @@ public enum ChromeMetrics {
     public static let reloadGlyph = CGSize(width: 14, height: 17)
 
     public static func backX(sidebarWidth w: CGFloat) -> CGFloat { w - reloadTrailingInset - 32 - 2 * navButtonPitch }
+    /// Below `CompactToolbarMetrics.switchWidth` the toolbar is compact.
+    public static func isCompact(sidebarWidth w: CGFloat) -> Bool { w < CompactToolbarMetrics.switchWidth }
     public static func forwardX(sidebarWidth w: CGFloat) -> CGFloat { w - reloadTrailingInset - 32 - navButtonPitch }
     public static func reloadX(sidebarWidth w: CGFloat) -> CGFloat { w - reloadTrailingInset - 32 }
 }
@@ -238,13 +240,30 @@ public enum PanelMetrics {
 }
 
 /// Window-level values.
+/// Compact sidebar toolbar (completion §3.16): Back, Forward, and "More options", 28 × 28 at
+/// y 9 with pitch 28, the last button's right edge 6 pt inside the sidebar (`[W − 90 / W − 62 /
+/// W − 34, 9, 28, 28]`). Measured at widths 207…164 (S2 06/0025–0029, AX frames); 228 is still
+/// the full toolbar (S2 06/0009).
+public enum CompactToolbarMetrics {
+    /// guess inside the measured 207–228 band: below 219 the full toolbar's Back would come
+    /// within 4 pt of the toggle (77 + 32 + 4 > W − 106).
+    public static let switchWidth: CGFloat = 219
+    public static let buttonSize: CGFloat = 28
+    public static let y: CGFloat = 9
+    public static let pitch: CGFloat = 28
+    public static let trailingInset: CGFloat = 6
+    public static func moreX(sidebarWidth w: CGFloat) -> CGFloat { w - trailingInset - buttonSize }
+    public static func forwardX(sidebarWidth w: CGFloat) -> CGFloat { moreX(sidebarWidth: w) - pitch }
+    public static func backX(sidebarWidth w: CGFloat) -> CGFloat { moreX(sidebarWidth: w) - 2 * pitch }
+}
+
 public enum WindowMetrics {
     public static let defaultSidebarWidth: CGFloat = 228
     /// Measured right stop: S2 06/0072 (interaction-states §20.1).
     public static let maxSidebarWidth: CGFloat = 500
-    /// Temporary floor: full-toolbar plates retain 3 pt clearances at 218; compact toolbar is lane A1.
+    /// Measured left stop: S2 06/0029 (164 pt). Below 219 the toolbar is compact.
     public static let minSidebarWidth = CGFloat(BrowserWindowState.minimumSidebarWidth)
-    /// Measured left stop: S2 06/0029. Requires lane A1's compact toolbar.
+    /// Arc's measured minimum; equal to the live floor now that the compact toolbar exists.
     public static let targetMinSidebarWidth: CGFloat = 164
     /// Guess inside the captured 65–85 pt band, S2 06/0035; app-shell §3.3.
     public static let sidebarDragHidePoint: CGFloat = 82
