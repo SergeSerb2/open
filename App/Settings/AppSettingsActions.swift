@@ -127,6 +127,7 @@ final class AppSettingsActions: SettingsActions, LibraryActions, DownloadsProvid
     }
     guard let alert else { return false }
     let folders = ids.filter { model.node(id: $0)?.folder != nil }.count
+    let restoreKeyboardFocus = context.keyboardFocusAfterDeletion()
     return SidebarConfirmations.present(alert, on: window) { [weak self, weak context] confirmed in
       guard let self, let context, confirmed else { return }
       let accepted: Bool
@@ -138,10 +139,10 @@ final class AppSettingsActions: SettingsActions, LibraryActions, DownloadsProvid
         accepted = archived > 0
       }
       guard accepted else { return }
+      restoreKeyboardFocus()
       self.app.scheduleSave(); self.app.scheduleMenuRebuild()
       if folders > 0 {
-        self.app.hostFactories[context.windowID]?.controller?.showToast(SidebarConfirmations.folderToast(count: folders),
-          undo: { [weak model] in model?.undoManager?.undo() })
+        self.app.hostFactories[context.windowID]?.controller?.showModelUndoToast(SidebarConfirmations.folderToast(count: folders))
       }
     }
   }
