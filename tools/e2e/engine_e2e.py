@@ -2877,6 +2877,29 @@ def chrome_capture_comparison(snapshots):
             {"ok":all(r["delta_e00"]<=1 for r in rings),"band":"6.5 <= r < 7.5 pt", "rows":rings, "non_gating_stroke_profile":profiles, "scale_scope":"1x proven; 2x M1 unproven (followups: Verification portability)"})
 
 
+def scheduled_spring(a, response, damping, path=None, relative_to_group=False):
+    """Check the spring read back from the real layer, including its scheduled lifetime.
+
+    S2 §20.12 fits response R, not CA's settlingDuration: Space R=0.20 s,
+    visually settled at about 0.27 s (21-motion.mov 35.05 / 43.63 s).
+    """
+    mass, stiffness, friction = (a.get(k, 0) for k in ("mass", "stiffness", "physicalDamping"))
+    if mass <= 0 or stiffness <= 0:
+        return False
+    # CAAnimationGroup children use a relative beginTime; the group owns the
+    # absolute requestedAt/scheduledDelay pair checked by the caller.
+    delay = a.get("beginTime", -1) if relative_to_group else a.get("scheduledDelay", -1)
+    return (a.get("type") == "CASpringAnimation"
+            and abs(2 * math.pi / math.sqrt(stiffness / mass) - response) < 1e-6
+            and abs(friction / (2 * math.sqrt(stiffness * mass)) - damping) < 1e-6
+            and abs(a.get("response", 0) - response) < 1e-6
+            and abs(a.get("damping", 0) - damping) < 1e-6 and a.get("initialVelocity") == 0
+            and a.get("settlingDuration", 0) > 0
+            and abs(a.get("duration", 0) - a["settlingDuration"]) < 1e-6
+            and 0 <= delay <= 1/60
+            and (path is None or a.get("keyPath") == path))
+
+
 def window_chrome_followup_checks(factory, results, tmp):
     """App-shell §3.3. All input enters OEApplication.sendEvent, including held drags."""
     private = tempfile.mkdtemp(prefix="window-chrome-104-", dir=tmp)
@@ -2900,10 +2923,8 @@ def window_chrome_followup_checks(factory, results, tmp):
         return state()
     def settled():
         return wait_until(lambda: not app.call("window-motion")["active"]["sidebar"], timeout=3, step=.01)
-    def spring(a, response, damping, path=None):
-        return (a.get("type") == "CASpringAnimation" and abs(a.get("response", 0) - response) < 1e-6
-                and abs(a.get("damping", 0) - damping) < 1e-6 and 0 <= a.get("scheduledDelay", a.get("beginTime", -1)) <= 1/60
-                and (path is None or a.get("keyPath") == path))
+    def spring(a, response, damping, path=None, relative_to_group=False):
+        return scheduled_spring(a, response, damping, path, relative_to_group)
     def snap(name):
         path = os.path.join(private, name + ".png")
         receipt = app.call("snapshot", path=path)
@@ -2995,7 +3016,7 @@ def window_chrome_followup_checks(factory, results, tmp):
         settled(); key(); toggle_show = app.call("window-motion")
         motions = [hide_motion, show_motion, toggle_hide, toggle_show]
         results["motion_sidebar_toggle"] = {"ok": all(spring(m["sidebar"].get("sidebar", {}), .1, .95, "transform.translation.x")
-            and all(spring(a, .1, .95) for a in m["sidebar"].get("panel", {}).get("children", []))
+            and all(spring(a, .1, .95, relative_to_group=True) for a in m["sidebar"].get("panel", {}).get("children", []))
             and len(m["sidebar"].get("panel", {}).get("children", [])) == 2
             and 0<=m["sidebar"].get("panel",{}).get("scheduledDelay",-1)<=1/60
             and m["tokens"]["sidebarToggle"] == {"response": .1, "damping": .95} for m in motions),
@@ -3409,10 +3430,27 @@ def sidebar_checks(factory, results, tmp):
         app.call("space", space=s1)
         app.call("select", tab=a)
         first_page = check_page(app, a, "Sidebar A")
-        app.call("space", space=s2)
+        # Click the real switcher through OEApplication.sendEvent; no direct intent dispatch.
+        app.call("window-motion", reduced=False)
+        frame = app.call("window-state")["spaceSwitcherFrames"][s2]
+        app.call("mouse", action="click", x=frame[0]+frame[2]/2, y=frame[1]+frame[3]/2)
+        # mouse-click queues mouse-up; wait for that real action before reading
+        # its layer animation (otherwise the receipt can belong to the prior switch).
+        after_click = state_when(app, lambda st: st["space"] == s2 and st["selected"] == e) or app.call("window-state")
+        switched = app.call("window-motion")["space"]
         second_page = check_page(app, e, "Sidebar E")
         results["space_switch_wrapper"] = {"ok": first_page and second_page and context != "Default"
                                                 and app.page(e)["context"] == context}
+        # Closed-form critical response from the installed mass/stiffness, not elapsed time.
+        omega = math.sqrt(switched.get("stiffness", 0) / switched.get("mass", 1))
+        remainder = 228 * (1 + omega * .27) * math.exp(-omega * .27)
+        travel = abs(switched.get("to", 0) - switched.get("from", 0))
+        results["space_switch_click_spring"] = {"ok": after_click["space"] == s2
+            and after_click["selected"] == e and after_click["shownPages"] == [e]
+            and scheduled_spring(switched, .20, 1, "position.x") and remainder <= .5 and travel > .5,
+            "scheduled": switched, "remaining_at_270ms_pt": remainder, "switcher_frame": frame,
+            "travel_pt": travel,
+            "selected_after_click": after_click["selected"], "shown_after_click": after_click["shownPages"]}
         results["durable_profile_storage"] = {"status": "SKIP", "reason": "covered by --only profiles (durable_second_profile: a cookie survives a relaunch)"}
         background = new_tab(app, fixture("Profile background"))
         app.call("select", tab=e)
