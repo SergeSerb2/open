@@ -736,8 +736,7 @@ final class SpacePageView: NSView, NSOutlineViewDataSource, NSOutlineViewDelegat
         defer { context.suppressPreviews(.drag, false) }
         guard let dest = dropDestination(item: item, childIndex: index) else { return false }
         if let ids = SidebarPasteboard.nodeIDs(from: info.draggingPasteboard) {
-            guard !ids.isEmpty else { return false }
-            let accepted = context.send(.moveNodes(ids: ids, to: dest.parent, index: dest.index))
+            let accepted = context.performNodeDrop(ids: ids, to: dest.parent, index: dest.index)
             context.haptics.dropped(accepted)
             return accepted
         }

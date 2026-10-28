@@ -933,6 +933,7 @@ final class DividerCellView: SidebarCellView {
     }
 
     private var clearRect: NSRect { clearArrow.frame.union(clearLabel.frame).insetBy(dx: -2, dy: 0) }
+    var clearHitRect: NSRect { clearRect }
 
     func trackPointer(at point: NSPoint) {
         lastPointerLocation = point

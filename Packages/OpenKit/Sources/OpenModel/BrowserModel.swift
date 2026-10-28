@@ -1405,6 +1405,7 @@ public final class BrowserModel {
             registerChange(undo: { tab.customTitle = old }, redo: { tab.customTitle = new })
         } else if let folder = index[id]?.folder {
             let old = folder.title
+            guard title != old else { return }
             folder.title = title
             registerChange(undo: { folder.title = old }, redo: { folder.title = title })
         }
