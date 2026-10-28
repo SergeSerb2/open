@@ -993,11 +993,10 @@ extension BrowserWindowController {
     /// the same live host (its history intact); the pinned tab goes back to its pinned URL,
     /// unloaded. A factory that cannot rebind closes the host; the new tab then loads its URL.
     func separateFromPinned(_ id: ItemID) -> Bool {
+        // The model emits synchronously. Keep the host cached while observers refresh
+        // the still-selected pinned tab, so they cannot reacquire and reload its page.
+        guard let tab = model.separateFromPinnedTab(id: id) else { return false }
         let live = container.takeHost(for: id)
-        guard let tab = model.separateFromPinnedTab(id: id) else {
-            if let live { container.adopt(live, for: id) }
-            return false
-        }
         container.resetLiveState(for: id)
         if let live {
             live.view.removeFromSuperview()

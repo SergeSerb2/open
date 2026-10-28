@@ -5226,7 +5226,8 @@ def sidebar_a2_checks(app, results, require, evidence, tmp):
     # E14: Separate From Pinned Tab (⌥-click on the reset plate) keeps the live page.
     sep = app.call('open', url=page('Separate Origin'))['id']; app.call('wait', tab=sep); app.call('pin', tab=sep)
     pinned_url = app.call('tab-state', tab=sep)['url']
-    app.call('navigate', tab=sep, url=page('Separate Away'))
+    away_url = page('Separate Away')
+    app.call('navigate', tab=sep, url=away_url)
     wait_until(lambda: (lambda t: t['url'].endswith('/separate-away.html') and not t['loading'])(app.call('tab-state', tab=sep)), timeout=5)
     app.call('wait', tab=sep)
     app.call('eval', tab=sep, js='window.__separateProbe = 7')
@@ -5234,15 +5235,18 @@ def sidebar_a2_checks(app, results, require, evidence, tmp):
     frame = row(sep)['frame']
     plate = [frame[0] + 26, frame[1] + 20]
     app.call('mouse', action='hover', x=plate[0], y=plate[1])
+    page_before = app.call('tab-state', tab=sep)['page']
     hosts_before = app.call('host-counts')
     app.call('mouse', action='click', x=plate[0], y=plate[1], modifiers=['option'])
     separated = wait_until(lambda: (lambda st: st if st['selected'] not in ('', sep) else None)(state()), timeout=3)
     new_tab = separated['selected'] if separated else ''
     moved = app.call('eval', tab=new_tab, js='window.__separateProbe') if new_tab else None
     old = app.call('tab-state', tab=sep)
+    new = app.call('tab-state', tab=new_tab) if new_tab else None
     require('E14_separate_keeps_live_page', separated and moved == 7 and old['section'] == 'pinned' and old['url'] == pinned_url
-            and not old['hasWebContent'] and app.call('tab-state', tab=new_tab)['section'] == 'today',
-            probe=moved, pinned=old, newTab=app.call('tab-state', tab=new_tab) if new_tab else None,
+            and not old['hasWebContent'] and new['section'] == 'today' and new['selected'] and new['url'] == away_url
+            and new['page']['url'] == away_url and new['page']['identifier'] == page_before['identifier'],
+            probe=moved, pinned=old, newTab=new, pageBefore=page_before['identifier'],
             hostsBefore=hosts_before, hostsAfter=app.call('host-counts'), pages=[(p.get('url'), p.get('identifier')) for p in app.call('pages')])
 
 
