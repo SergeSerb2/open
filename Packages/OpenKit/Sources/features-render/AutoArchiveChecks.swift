@@ -159,26 +159,86 @@ enum AutoArchiveChecks {
                 "AA1_launch_archives_real_store")
         }
         do {
-            let base = Date(), profiles = AutoArchiveInterval.allCases.enumerated().map { i, interval in
-                Profile(name: interval.rawValue, settings: ProfileSettings(autoArchiveAfter: interval), dataDirectoryName: "Profile\(i)")
+            // Snapshots store Unix-seconds Doubles. A source Date can move one
+            // reference-time ULP on reload. Exercise both rounding directions
+            // and an exact value; expiry boundaries must use the loaded activity.
+            let referenceSecond = Date().timeIntervalSinceReferenceDate.rounded(.down)
+            let phases = [("roundsDown", referenceSecond.nextUp), ("exact", referenceSecond), ("roundsUp", referenceSecond.nextDown)]
+            var phaseResults: [Bool] = []
+            func receipt(_ kind: String, _ report: [String: Any]) throws {
+                let data = try JSONSerialization.data(withJSONObject: report, options: [.sortedKeys])
+                // One short record per Profile, on stderr, so CLI failure output
+                // cannot splice itself into a buffered multi-Profile JSON line.
+                FileHandle.standardError.write(Data(("AA2 \(kind) receipt " + String(decoding: data, as: UTF8.self) + "\n").utf8))
             }
-            let spaces = profiles.map { Space(profileID: $0.id, today: [.tab(tab($0.name, base: base))]) }
-            let s = try Scene(profiles: profiles, spaces: spaces); defer { s.close() }
-            s.clock.value = base; s.start(); s.openWindows()
-            var ok = ProfileSettings().autoArchiveAfter == .twelveHours
-            for p in s.model.profiles where p.settings.autoArchiveAfter != .never {
-                let interval = p.settings.autoArchiveAfter.seconds!, id = s.model.spaces.first { $0.profileID == p.id }!.today[0].id
-                s.clock.value = base.addingTimeInterval(interval); s.scheduler.fire(reason: .automation)
-                ok = ok && s.model.tab(id: id) != nil
-                s.clock.value = base.addingTimeInterval(interval + 0.001); s.scheduler.fire(reason: .automation)
-                let rows = await s.rows(p.id)
-                ok = ok && rows.count == 1 && rows[0].id == id && rows[0].profileID == p.id
+            for (phase, reference) in phases {
+                let sourceBase = Date(timeIntervalSinceReferenceDate: reference)
+                let profiles = AutoArchiveInterval.allCases.enumerated().map { i, interval in
+                    Profile(name: interval.rawValue, settings: ProfileSettings(autoArchiveAfter: interval), dataDirectoryName: "Profile\(i)")
+                }
+                let spaces = profiles.map { Space(profileID: $0.id, today: [.tab(tab($0.name, base: sourceBase))]) }
+                let s = try Scene(profiles: profiles, spaces: spaces); defer { s.close() }
+                s.clock.value = sourceBase; s.start(); s.openWindows()
+                let defaultIsTwelveHours = ProfileSettings().autoArchiveAfter == .twelveHours
+                var profileResults: [Bool] = [], receipts: [[String: Any]] = []
+                func schedulerReceipt() -> [String: Any] {
+                    let state = s.scheduler.state
+                    return ["sweepCount": state.sweepCount, "countsByReason": state.countsByReason,
+                            "timerArmed": state.timerArmed, "timerGeneration": state.timerGeneration,
+                            "lastCount": state.lastCount, "lastReason": state.lastReason?.rawValue ?? "none"]
+                }
+                for p in s.model.profiles where p.settings.autoArchiveAfter != .never {
+                    let interval = p.settings.autoArchiveAfter.seconds!, space = s.model.spaces.first { $0.profileID == p.id }!
+                    guard let candidate = space.today.first?.tab else {
+                        let rows = await s.rows(p.id)
+                        profileResults.append(false)
+                        receipts.append(["phase": phase, "interval": p.settings.autoArchiveAfter.rawValue,
+                                         "candidateMissingBeforeBoundary": true, "rowsCount": rows.count,
+                                         "rowsIDs": rows.map { $0.id.description }, "rowsProfiles": rows.map { $0.profileID?.description ?? "none" },
+                                         "scheduler": schedulerReceipt()])
+                        continue
+                    }
+                    let id = candidate.id, activity = candidate.lastActiveAt
+                    let boundary = activity.addingTimeInterval(interval), cutoff = boundary.addingTimeInterval(-interval)
+                    let stateBefore = schedulerReceipt()
+                    s.clock.value = boundary; s.scheduler.fire(reason: .automation)
+                    let keptAtBoundary = s.model.tab(id: id) != nil
+                    s.clock.value = boundary.addingTimeInterval(0.001); s.scheduler.fire(reason: .automation)
+                    let archivedAfterMargin = s.model.tab(id: id) == nil
+                    let stateBeforeRead = schedulerReceipt()
+                    let rows = await s.rows(p.id)
+                    let oneRow = rows.count == 1, correctID = rows.first?.id == id, correctProfile = rows.first?.profileID == p.id
+                    profileResults.append(keptAtBoundary && archivedAfterMargin && oneRow && correctID && correctProfile)
+                    receipts.append(["phase": phase, "interval": p.settings.autoArchiveAfter.rawValue, "keptAtBoundary": keptAtBoundary,
+                                     "archivedAfterPlus001": archivedAfterMargin, "rowsCount": rows.count,
+                                     "rowsIDMatches": correctID, "rowsProfileMatches": correctProfile,
+                                     "expectedID": id.description, "expectedProfile": p.id.description,
+                                     "rowsIDs": rows.map { $0.id.description }, "rowsProfiles": rows.map { $0.profileID?.description ?? "none" },
+                                     "sourceBaseReferenceSeconds": sourceBase.timeIntervalSinceReferenceDate,
+                                     "activityReferenceSeconds": activity.timeIntervalSinceReferenceDate,
+                                     "cutoffReferenceSeconds": cutoff.timeIntervalSinceReferenceDate,
+                                     "activityMinusSource": activity.timeIntervalSince(sourceBase), "activityMinusCutoff": activity.timeIntervalSince(cutoff),
+                                     "sourceBaseBits": String(sourceBase.timeIntervalSinceReferenceDate.bitPattern, radix: 16),
+                                     "activityBits": String(activity.timeIntervalSinceReferenceDate.bitPattern, radix: 16),
+                                     "schedulerBefore": stateBefore, "schedulerBeforeRead": stateBeforeRead,
+                                     "schedulerAfterRead": schedulerReceipt(),
+                                     "shown": s.model.windows.contains { $0.isShowingContent && $0.selectedNodeBySpace[$0.focusedSpaceID] == id }])
+                }
+                s.clock.value = sourceBase.addingTimeInterval(31*86400); s.scheduler.fire(reason: .automation)
+                let never = s.model.profiles.first { $0.settings.autoArchiveAfter == .never }!
+                let neverRows = await s.rows(never.id), neverTodayCount = s.model.spaces.first { $0.profileID == never.id }!.today.count
+                let timerArmed = s.scheduler.state.timerArmed
+                let ok = defaultIsTwelveHours && profileResults.allSatisfy { $0 } && neverRows.isEmpty && neverTodayCount == 1 && !timerArmed
+                phaseResults.append(ok)
+                if !ok {
+                    for report in receipts { try receipt("profile", report) }
+                    try receipt("summary", ["phase": phase, "defaultTwelveHours": defaultIsTwelveHours,
+                        "order": s.model.profiles.map { $0.settings.autoArchiveAfter.rawValue }, "neverRowsCount": neverRows.count,
+                        "neverRowsIDs": neverRows.map { $0.id.description }, "neverTodayCount": neverTodayCount,
+                        "timerArmed": timerArmed, "scheduler": schedulerReceipt()])
+                }
             }
-            s.clock.value = base.addingTimeInterval(31*86400); s.scheduler.fire(reason: .automation)
-            let never = s.model.profiles.first { $0.settings.autoArchiveAfter == .never }!
-            let neverRows = await s.rows(never.id)
-            check(ok && neverRows.isEmpty && s.model.spaces.first { $0.profileID == never.id }!.today.count == 1
-                && !s.scheduler.state.timerArmed, "AA2_profile_thresholds_and_never")
+            check(phaseResults.allSatisfy { $0 }, "AA2_profile_thresholds_and_never")
         }
         do {
             let p = Profile(), base = Date(), a = tab("pane-a", age: 14*3600), b = tab("pane-b", age: 13*3600), live = tab("live")
