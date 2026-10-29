@@ -117,7 +117,7 @@ Arguments are `key=value`; values that parse as JSON are sent as JSON.
 | `appearance` | `name` (`light`, `dark`, or anything else for the system's) | Open's own appearance (`NSApp.appearance`); the system setting is untouched |
 | `window-close` | — | Native close for the current standard window; model tabs stay |
 | `window-reopen` | — | Real application reopen handler, including after the last window closes |
-| `window-fullscreen` | — | Native full-screen toggle; wait for completed transition count before testing the result |
+| `window-fullscreen` | `observeReadiness` (optional bool) | Native full-screen toggle; wait for completed transition count before testing the result. With `observeReadiness:true`, atomically returns the native input readiness predicate and its state after the toggle (`status:observed`), or `status:SKIP` with a reason if AppKit did not report an in-progress transition in that main-actor turn. |
 | `window-deminiaturize` | — | Restores a minimized window, as a click on its Dock tile does; wait for `miniaturized` false |
 | `sidebar-move` | `tab`, `section` or `folder`, `index` | Production SidebarDelegate move intent; model and engine strip share the resulting order |
 | `folder-create` / `folder-toggle` | `title` / `folder` | Create fixture folder through the model; production sidebar expand/collapse intent |
@@ -273,6 +273,11 @@ for both the page's native responder and `document.hasFocus()`. `window-state`
 reports those native flags and screen bounds, plus key-window object identity,
 active-Space membership, key eligibility, sheets, and child windows. Native input
 also waits for the requested browser window's full-screen transition to end.
+The window suite samples the negative predicate inside the App with
+`window-fullscreen observeReadiness=true`. It does not require the transition
+to outlast later Python RPCs. If that request cannot observe an in-progress
+transition, only the negative sample is SKIP with a reason; the positive
+readiness wait still runs.
 `ensure_key` retries only `window-focus: key focus not ready:` until its own
 15-second deadline. Each native wait uses at most the remaining deadline budget.
 It logs each attempt's predicates and load average, then returns the last state

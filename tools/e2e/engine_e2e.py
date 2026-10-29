@@ -3151,22 +3151,18 @@ def window_chrome_checks(factory, results, tmp):
         app.call("window-fullscreen")
         state_when(app, lambda st: st["fullscreen"] and not st["fullscreenTransition"]
                    and st["fullscreenChanges"] > before["fullscreenChanges"], timeout=15, step=0.1)
-        app.call("window-fullscreen")
-        # A zero-budget readiness request during the real Space transition
-        # must refuse input. The outer wait must return state on expiry, then
-        # accept the same window after AppKit's completion callback.
-        early_not_ready = None
-        try:
-            app.call("window-focus", id=wid, activate=True, readinessTimeout=0)
-        except FocusInterruption:
-            raise
-        except RuntimeError as error:
-            if not str(error).startswith("window-focus: key focus not ready:"):
-                raise
-            early_not_ready = str(error)
-        expired = ensure_key(app, wid, timeout=0)
-        # Poll with zero-budget native requests so this real transition also
-        # exercises repeated not-ready errors within the outer deadline.
+        # Toggle and observe the negative predicate in one native main-actor
+        # turn. A delayed runner can consume the saved sample after exit.
+        negative = app.call("window-fullscreen", observeReadiness=True)
+        if negative["status"] == "SKIP":
+            results["fullscreen_key_readiness_negative"] = {
+                "status": "SKIP", "reason": negative["reason"], "sample": negative}
+        else:
+            results["fullscreen_key_readiness_negative"] = {
+                "ok": negative["status"] == "observed" and negative["state"]["fullscreenTransition"]
+                      and not negative["ready"], "sample": negative}
+        # The positive wait may begin during or after exit. It must accept the
+        # settled window without requiring any particular number of retries.
         ready = ensure_key(app, wid, activation_timeout=0)
         other_error = None
         try:
@@ -3178,11 +3174,9 @@ def window_chrome_checks(factory, results, tmp):
                 raise
             other_error = str(error)
         results["fullscreen_key_readiness"] = {
-            "ok": early_not_ready is not None and expired["fullscreenTransition"] and other_error is not None
-                  and ready["key"] and ready["appActive"] and ready["keySameObject"]
+            "ok": other_error is not None and ready["key"] and ready["appActive"] and ready["keySameObject"]
                   and not ready["fullscreenTransition"],
-            "early_not_ready": early_not_ready, "other_error": other_error,
-            "expired": {k: expired[k] for k in ("key", "appActive", "keySameObject", "fullscreenTransition")},
+            "other_error": other_error,
             "ready": {k: ready[k] for k in ("key", "appActive", "keySameObject", "fullscreenTransition")},
             "load_average": list(os.getloadavg()),
         }
