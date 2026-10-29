@@ -503,6 +503,51 @@ The command waited 180 s for a heavy slot; total command time was 688.137 s.
 Generated `docs/engine-spike/` files were restored before the merge commit.
 Raw summary and logs: `.re/sidebar-flakes/merge-full-013cdb45/`.
 
+Final merged-main verification includes `dee105e6` (items 9–10, PR #132) on top
+of the tested `013cdb45` merge. The full command
+`~/Library/Caches/OpenRE/scripts/heavy.sh tools/verify-all.sh` ran once on this
+updated tree: **22/22 PASS**, no FAIL, INTERRUPTED or SKIP.
+
+| Check | Result | Seconds |
+|---|---|---:|
+| build | PASS | 59 |
+| commands-demo | PASS | 1 |
+| roundtrip | PASS | 0 |
+| space-legacy | PASS | 1 |
+| space-editor | PASS | 3 |
+| space-pad-compare | PASS | 2 |
+| suggest-check | PASS | 13 |
+| commands-dump | PASS | 1 |
+| route | PASS | 0 |
+| favicons | PASS | 1 |
+| media-demo | PASS | 0 |
+| sleep-demo | PASS | 1 |
+| adblock-perf | PASS | 0 |
+| adblock-catalog | PASS | 0 |
+| profiles | PASS | 1 |
+| settings-preview | PASS | 78 |
+| sidebar-render | PASS | 106 |
+| sidebar-compare | PASS | 88 |
+| commandbar-render | PASS | 15 |
+| features-render | PASS | 42 |
+| sitecontrol-render | PASS | 52 |
+| boosts | PASS | 6 |
+
+Editor median **135,491,848** versus reference **135,203,676**
+(**+0.213%**), ceiling **148,724,044**. The native window list remained
+**5 → 5**. No reference was re-recorded because the difference is below 2%.
+CPU p95 INFO was **10.012 ms**, lateness versus 12 ms **-1.988 ms**, load1
+**17.28**. The 12 ms target remains unchanged; lead quiet-machine acceptance
+is still required before merge. The command recorded load1
+**20.87 → 19.46**, waited 50 s for a heavy slot, and
+completed in **521.831 s** including the wait.
+
+The editor renderer was reaped, its private native-app root was removed, and
+no owned Open/renderer process remained. `docs/engine-spike/` was restored to
+the tested merge tree before the evidence commit. Raw summary and logs:
+`.re/sidebar-flakes/merge-full-dee105e6/`; receipt:
+`.re/sidebar-flakes/merge-dee-handoff-receipt.json`. No PR was opened.
+
 Scope: `BoostEditorViews.swift` caches font pixels; `EditorBench.swift`, the new
 `EditorOpenBench.swift`, `InstructionBaseline.swift` and `instruction-baselines.json`
 own the editor cost gate. `main.swift` drains completed suites and is the sole
