@@ -147,6 +147,17 @@ enum FaviconChecks {
         try await idle(evicted); try await Task.sleep(for: .milliseconds(10)); display()
         check(pixels(c.sidebar.drawnFavicon(tabID: copiedTab.id)) == replacement,
               "FV16 late empty report preserves newer engine pixels")
+        // FV17: a stale revocation queued behind a pending ordinary report (same
+        // main-actor turn, so the worker has not run) must not discard that write.
+        let queuedURL = URL(string: "https://queued.example.invalid/page")!, queuedToken = UUID()
+        let queuedTab = model.newTab(in: space.id, url: queuedURL, title: "Queued revocation")
+        _ = evicted.report(red, for: queuedURL, iconURL: iconURL, copyToken: queuedToken)
+        try await idle(evicted)
+        _ = evicted.report(blue, for: queuedURL, iconURL: iconURL)
+        _ = evicted.removeCopy(for: queuedURL, token: queuedToken)
+        try await idle(evicted); try await Task.sleep(for: .milliseconds(10)); display()
+        check(await store.icon(for: queuedURL) != nil && pixels(c.sidebar.drawnFavicon(tabID: queuedTab.id)) == replacement,
+              "FV17 queued revocation keeps the pending ordinary report")
 
         let prefix = "https://key.example.invalid/"
         let boundaryURL = URL(string: prefix + String(repeating: "x", count: 8192 - prefix.utf8.count))!

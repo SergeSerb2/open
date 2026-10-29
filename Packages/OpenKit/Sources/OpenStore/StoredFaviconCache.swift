@@ -64,7 +64,19 @@ public final class StoredFaviconCache {
         guard let key = FaviconStore.cacheKey(url) else {
             rejectedReports += 1; return false
         }
-        let existing = reports.firstIndex { $0.key == key }
+        // Coalesce only when the newer operation fully supersedes the pending one;
+        // otherwise both run in arrival order. A revocation replaces only the
+        // unwritten copy it revokes (an ordinary write clears the copy token, so a
+        // later revocation is a no-op). A copy never replaces an ordinary report.
+        var existing: Int?
+        if let index = reports.lastIndex(where: { $0.key == key }) {
+            switch (reports[index].operation, operation) {
+            case (.image(_, _, let pending), .image(_, _, let new)) where new == nil || pending != nil: existing = index
+            case (.image(_, _, let pending), .removeCopy(let token)) where pending == token: existing = index
+            case (.removeCopy(let pending), .removeCopy(let token)) where pending == token: existing = index
+            default: break
+            }
+        }
         guard existing != nil || reports.count < Self.maximumPendingReports else {
             rejectedReports += 1; return false
         }
