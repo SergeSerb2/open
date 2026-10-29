@@ -5320,6 +5320,155 @@ def sidebar_a2_checks(app, results, require, evidence, tmp):
             hostsBefore=hosts_before, hostsAfter=app.call('host-counts'), pages=[(p.get('url'), p.get('identifier')) for p in app.call('pages')])
 
 
+def folder_peek_checks(factory, results, tmp):
+    """E20: own-window real input, actual outline rows, save, same-root relaunch."""
+    app = None
+    def require(name, ok, **detail):
+        results[name] = dict(detail, ok=bool(ok))
+        if not ok:
+            raise AssertionError(name)
+    def motion_result(name, response, duration, curve):
+        motion = response.get("motion", {})
+        native = any(animation.get("path") == "position" and abs(animation.get("duration", 0) - duration) < .001
+                     and len(animation.get("curve", [])) == 8
+                     and all(abs(a-b) < .001 for a,b in zip(animation["curve"][2:6], curve))
+                     for animation in motion.get("animations", []))
+        samples = motion.get("samples", [])
+        common = set.intersection(*(set(sample["rows"]) for sample in samples)) if samples else set()
+        trajectories = [[sample["rows"][row] for sample in samples] for row in common]
+        moving = any(max(values)-min(values) > 1 and abs(values[-1]-values[-2]) < .1 for values in trajectories)
+        require(name, abs(motion.get("appliedDuration", 0)-duration) < .001 and native and moving, motion=motion)
+    def state(folder):
+        value = app.call("tabs", sidebar=True)
+        row = next((f for f in value["folders"] if f["id"] == folder), {})
+        return value, row
+    def expected(folder, expanded, child, children):
+        value, row = state(folder)
+        visible = row.get("visibleChildren")
+        ids = value["rows"]
+        ok = (row.get("expanded") == expanded and row.get("peekedChildID") == child
+              and visible == children and folder in ids)
+        if children:
+            i = ids.index(folder)
+            ok = ok and ids[i+1:i+1+len(children)] == children
+        return value if ok else None
+    try:
+        app = factory(urls=(), fresh=True)
+        tabs = [app.call("open", url=fixture("Folder peek " + title), background=True)["id"] for title in ("A", "B", "C", "Today")]
+        a, b, c, today = tabs
+        folder = app.call("folder", tabs=[a, b, c], title="Folder peek E20", section="pinned")
+        app.call("select", tab=b)
+        require("E20_fixture_expanded", bool(wait_until(lambda: expected(folder, True, "", [a, b, c]), timeout=5, step=.02)))
+        motion = app.call("sidebar-click", node=folder, motion=True)
+        motion_result("E20_collapse_motion_receipt", motion, .25, [.25,.1,.25,1])
+        value = wait_until(lambda: expected(folder, False, b, [b]), timeout=5, step=.02)
+        require("E20_collapse_keeps_selected_child", bool(value) and any(t["id"] == b and t["selected"] for t in value["tabs"])
+                and a not in value["rows"] and c not in value["rows"] and set(tabs) <= {t["id"] for t in value["tabs"]}
+                and check_page(app, b, "Folder peek B"))
+        app.call("select", tab=today)
+        value = wait_until(lambda: expected(folder, False, b, [b]), timeout=5, step=.02)
+        require("E20_other_selection_keeps_peek", bool(value) and any(t["id"] == today and t["selected"] for t in value["tabs"])
+                and check_page(app, today, "Folder peek Today"))
+        frame = app.call("sidebar-row", node=folder)["frame"]
+        app.call("mouse", action="hover", x=frame[0] + frame[2] - 26, y=frame[1] + 20)
+        before_unload = app.call("tabs", sidebar=True)  # settle the real hover accessory layout
+        require("E20_Q18_loaded_fixture", any(tab["id"] == b and tab["loaded"] for tab in before_unload["tabs"]))
+        app.call("mouse", action="click", x=frame[0] + frame[2] - 26, y=frame[1] + 20)
+        unloaded = wait_until(lambda: (lambda v: v if all(not tab["loaded"] for tab in v["tabs"] if tab["id"] in [a,b,c]) else None)(app.call("tabs", sidebar=True)), timeout=5, step=.02)
+        require("E20_Q18_pinned_folder_unloads", bool(unloaded) and bool(expected(folder, False, b, [b]))
+                and set(tabs) <= {t["id"] for t in unloaded["tabs"]})
+        results["E20_real_window_snapshot"] = {"ok": True, "file": shot(app, "E20-folder-peek.png", max_px=1728)}
+        saved = json.load(open(app.call("save")))
+        def find(value):
+            if isinstance(value, dict):
+                if value.get("id") == folder and "children" in value: return value
+                for v in value.values():
+                    found = find(v)
+                    if found: return found
+            if isinstance(value, list):
+                for v in value:
+                    found = find(v)
+                    if found: return found
+            return None
+        record = find(saved)
+        require("E20_snapshot_persists_peek", record is not None and record["isExpanded"] is False and record.get("peekedChildID") == b)
+        app.quit()
+        app = factory(urls=(), fresh=False)
+        value = wait_until(lambda: expected(folder, False, b, [b]), timeout=8, step=.02)
+        require("E20_relaunch_keeps_peek", bool(value) and set(tabs) <= {t["id"] for t in value["tabs"]}
+                and any(t["id"] == today and t["selected"] for t in value["tabs"]))
+        collapse = app.call("sidebar-click", node=folder, motion=True)
+        motion_result("E20_full_collapse_motion_receipt", collapse, .25, [.25,.1,.25,1])
+        value = wait_until(lambda: expected(folder, False, "", []), timeout=5, step=.02)
+        require("E20_click_peek_fully_collapses", bool(value) and set(tabs) <= {t["id"] for t in value["tabs"]})
+        expand = app.call("sidebar-click", node=folder, motion=True)
+        motion_result("E20_expand_motion_receipt", expand, .20, [0,0,.58,1])
+        require("E20_reexpand_all_children", bool(wait_until(lambda: expected(folder, True, "", [a, b, c]), timeout=5, step=.02)))
+        app.call("sidebar-click", node=folder)
+        require("E20_collapse_elsewhere_no_peek", bool(wait_until(lambda: expected(folder, False, "", []), timeout=5, step=.02)))
+        empty = app.call("folder", tabs=[], title="Empty peek E20", section="pinned")
+        app.call("sidebar-click", node=empty)
+        require("E20_empty_folder_collapses", bool(wait_until(lambda: expected(empty, False, "", []), timeout=5, step=.02)))
+        app.call("sidebar-click", node=empty)
+        require("E20_empty_folder_reexpands", bool(wait_until(lambda: expected(empty, True, "", []), timeout=5, step=.02)))
+        # Q18 must select the sidebar split node, rather than its first flattened
+        # tab. Exercise the engine-backed hover button as well as the feature flow.
+        first_outside = next(tab["id"] for tab in app.call("tabs") if tab["id"] not in [a,b,c])
+        app.call("select", tab=first_outside)
+        outside = app.call("split")
+        pane_ids = {tab["id"] for tab in outside}
+        tree = app.call("sidebar-tree")
+        split = next(node for node in tree["pinned"] + tree["today"] if node["kind"] == "split"
+                     and {child["id"] for child in node["children"]} == pane_ids)
+        app.call("select", tab=b)
+        app.call("wait", tab=b)
+        for _ in range(3):
+            if state(folder)[1]["expanded"]:
+                break
+            app.call("sidebar-click", node=folder)
+        app.call("sidebar-click", node=folder)
+        fixture_value = wait_until(lambda: expected(folder, False, b, [b]), timeout=5, step=.02)
+        require("E20_Q18_split_fallback_fixture", len(pane_ids) == 2 and first_outside in pane_ids
+                and bool(fixture_value) and fixture_value["selectedNode"] == b
+                and any(tab["id"] == b and tab["loaded"] for tab in fixture_value["tabs"]))
+        frame = app.call("sidebar-row", node=folder)["frame"]
+        app.call("mouse", action="hover", x=frame[0] + frame[2] - 26, y=frame[1] + 20)
+        app.call("tabs", sidebar=True)
+        app.call("mouse", action="click", x=frame[0] + frame[2] - 26, y=frame[1] + 20)
+        last_fallback = {}
+        def split_fallback_ready():
+            nonlocal last_fallback
+            value = app.call("tabs", sidebar=True)
+            row = app.call("sidebar-row", node=split["id"])
+            enabled = next((item["enabled"] for item in app.call("menu-state") if item["id"] == "expand-current-split"), False)
+            visible = {tab["id"] for tab in value["tabs"] if tab["visible"]}
+            unloaded = all(not tab["loaded"] for tab in value["tabs"] if tab["id"] in [a,b,c])
+            last_fallback = dict(selected=value["selectedNode"], visible=sorted(visible),
+                                 current=row["current"], splitCommand=enabled, unloaded=unloaded)
+            return last_fallback if (value["selectedNode"] == split["id"] and visible == pane_ids
+                                    and row["current"] and enabled and unloaded) else None
+        fallback = wait_until(split_fallback_ready, timeout=5, step=.02)
+        require("E20_Q18_unload_fallback_to_split", bool(fallback), split=split["id"], state=last_fallback)
+        # Persist fully collapsed state, then use only a real click after relaunch.
+        # A structural edit or explicit folder-child query could mask a missing cache.
+        app.call("sidebar-click", node=folder)
+        require("E20_collapsed_load_saved_fixture", bool(wait_until(lambda: expected(folder, False, "", []), timeout=5, step=.02)))
+        app.call("save")
+        app.quit()
+        app = factory(urls=(), fresh=False)
+        require("E20_collapsed_load_relaunch_fixture", bool(wait_until(lambda: expected(folder, False, "", []), timeout=8, step=.02)))
+        click_result = app.call("sidebar-click", node=folder)
+        expanded = wait_until(lambda: expected(folder, True, "", [a,b,c]), timeout=5, step=.02)
+        actual, row = state(folder)
+        require("E20_collapsed_load_real_click_expands", bool(expanded), click=click_result,
+                folder=row, rows=actual["rows"], expectedChildren=[a,b,c])
+
+
+    finally:
+        if app:
+            app.quit()
+
+
 def sidebar_completion_archive_checks(app, launch, results, require, evidence, tmp):
     """E16/AA_APP: real scheduler, advancing fake clock, Settings, and SQLite."""
     import datetime
@@ -5534,6 +5683,9 @@ def sidebar_completion_a3_checks(app, results, require, evidence, tmp, launch):
     pins = [opened('Pinned %d' % i, True) for i in range(2)]
     hidden = opened('Collapsed Child')
     collapsed = app.call('folder', tabs=[hidden], title='Collapsed', section='pinned')
+    # A selected direct child now produces a persistent peek. This range fixture
+    # needs a fully collapsed folder, so select an outside tab before collapsing.
+    app.call('select', tab=pins[0])
     app.call('folder-toggle', folder=collapsed)
     control = opened('Unselected Control')
     for i in range(3): opened('Selection %d' % i)
@@ -5915,6 +6067,7 @@ def sidebar_tab_switcher_checks(app, require, tmp):
             switcher=first, selected=selected(), expected=[current, pin, favorite, other])
     hosts_after = app.call('host-counts')
     image_path = str(Path(ROOT) / '.re' / 'tab-switcher' / 'real-switcher.png')
+    Path(image_path).parent.mkdir(parents=True, exist_ok=True)
     app.call('snapshot', path=image_path)
     require('TS_highlight_does_not_create_hosts', hosts_before == hosts_after, before=hosts_before, after=hosts_after, png=image_path)
     key('tab', ['ctrl']); second = switcher()
@@ -6156,7 +6309,8 @@ def space_manager_checks(results, tmp, config, style):
         return [row['id'] for row in app.call('spaces')]
 
     def manager_ready(app):
-        return wait_until(lambda: (lambda s: s if s['visible'] and s['hostedManagers'] == 1 else None)(state(app)), timeout=5)
+        return wait_until(lambda: (lambda s: s if s['visible'] and s['section'] == 'spaces'
+                         and s['identity'] and s['hostedManagers'] == 1 else None)(state(app)), timeout=5)
 
     def library_key(app, key, modifiers=()):
         return app.call('key', key=key, modifiers=list(modifiers), route='app', window=state(app)['window'])
@@ -6280,12 +6434,32 @@ def space_manager_checks(results, tmp, config, style):
         app.call('library-close'); app.quit()
         app = launch()
         app.call('menu-perform', id='view-archive')
-        uncached = app.call('space-manager-lifecycle')
-        section = next(r for r in uncached['sectionRows'] if r['section'] == 'spaces')
-        app.call('mouse', action='click', window=state(app)['window'], x=section['point'][0], y=section['point'][1])
-        reopened = manager_ready(app)
-        require('library_section_click_fills_cache', uncached['identity'] == '' and reopened and reopened['hostedManagers'] == 1,
-                before=uncached, after=app.call('space-manager-lifecycle'))
+        # A menu action returning is not a Library composition/layout barrier.
+        # Settle the actual window before reading coordinates, then poll the
+        # cache-empty Archive state. Never accept an eagerly created cache.
+        library_window = 0
+        last_uncached = {}
+        def archive_ready():
+            nonlocal last_uncached, library_window
+            # state() lays out the current Library window. Sample its row points
+            # afterwards, in the same deadline poll, rather than before layout.
+            library_window = state(app)['window']
+            last_uncached = app.call('space-manager-lifecycle')
+            has_row = any(r['section'] == 'spaces' for r in last_uncached['sectionRows'])
+            return last_uncached if library_window and has_row and last_uncached['visible'] and last_uncached['section'] == 'archive' and last_uncached['identity'] == '' else None
+        uncached = wait_until(archive_ready, timeout=5)
+        if uncached:
+            section = next(r for r in uncached['sectionRows'] if r['section'] == 'spaces')
+            app.call('mouse', action='click', window=library_window, x=section['point'][0], y=section['point'][1])
+        reopened = manager_ready(app) if uncached else None
+        cache_ok = bool(uncached and reopened and reopened['hostedManagers'] == 1)
+        if not cache_ok:
+            # Keep the actual timeout state as well as the failed ready result.
+            # A None from wait_until otherwise hides the reason it never settled.
+            print('library_section_click_fills_cache FAIL ' + json.dumps(dict(
+                uncached=last_uncached, reopened=state(app), ready=reopened), sort_keys=True), flush=True)
+        require('library_section_click_fills_cache', cache_ok,
+                uncached=last_uncached, reopened=reopened, after=app.call('space-manager-lifecycle'))
         require('E6_relaunch_preserves_ids', order(app) == reordered and [row['id'] for row in saved['spaces']] == reordered
                 and reopened and [c['id'] for c in reopened['columns']] == reordered, expected=reordered, state=state(app))
         # The manager's real tab menu archives into the App's existing store.
@@ -6558,7 +6732,9 @@ def main():
     # data root stays under Application Support so Chromium's cache rule
     # applies as for users (~/Library/Caches/<root name>, docs/plans/profiles.md);
     # its name is unique per run, so the cache root is too.
-    run_name = "Open-E2E-%s-%s-%d-%s" % (opts.only, opts.style, os.getpid(), os.urandom(4).hex())
+    # Keep AF_UNIX's 104-byte sun_path limit with this suite's longer name.
+    root_kind = "sidebarc" if opts.only == "sidebar-completion" else opts.only
+    run_name = "Open-E2E-%s-%s-%d-%s" % (root_kind, opts.style, os.getpid(), os.urandom(4).hex())
     sweep_stale_runs()
     user_data = os.path.expanduser("~/Library/Application Support/" + run_name)
     # Chromium keeps profile caches in ~/Library/Caches/<root name>.
@@ -6702,6 +6878,7 @@ def main():
         elif opts.only == "sidebar-completion":
             results[opts.only] = CheckedResults(tracker)
             space_manager_checks(results[opts.only], tmp, opts.config, opts.style)
+            folder_peek_checks(factory, results[opts.only], tmp)
         elif opts.only == "window":
             results["window"] = CheckedResults(tracker)
             window_checks(factory, results["window"], tmp, opts.config, chrome_only=opts.window_chrome_only)

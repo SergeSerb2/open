@@ -20,10 +20,13 @@ final class SidebarRowView: NSTableRowView {
     static let identifier = NSUserInterfaceItemIdentifier("sidebarRow")
     private let fill = CALayer()
     private var animatesSelectionChange = false
+    private var fillNeedsUpdate = true
+    private var laidOutFillBounds: CGRect?
+    private var laidOutFillIndent: CGFloat = -1
     private var keyboardRing: CAShapeLayer?
     private var selectionState: SidebarRowSelectionState?
     weak var representedItem: AnyObject? {
-        didSet { if representedItem !== oldValue { selectionState = nil; needsDisplay = true } }
+        didSet { if representedItem !== oldValue { selectionState = nil; invalidateFill() } }
     }
     var isKeyboardFocused = false {
         didSet {
@@ -35,6 +38,7 @@ final class SidebarRowView: NSTableRowView {
                 ring.lineWidth = 2
                 layer?.addSublayer(ring)
                 keyboardRing = ring
+                laidOutFillBounds = nil
                 needsLayout = true
             }
             keyboardRing?.isHidden = !isKeyboardFocused
@@ -54,6 +58,7 @@ final class SidebarRowView: NSTableRowView {
     override init(frame: NSRect) {
         super.init(frame: frame)
         identifier = Self.identifier
+        SidebarDiagnostics.countFolderWork("row-allocations")
         wantsLayer = true
         fill.name = "sidebar-row-fill"
         fill.cornerCurve = .continuous
@@ -64,6 +69,21 @@ final class SidebarRowView: NSTableRowView {
     @available(*, unavailable) required init?(coder: NSCoder) { fatalError() }
 
     override var wantsUpdateLayer: Bool { true }
+    override var needsDisplay: Bool {
+        get { super.needsDisplay }
+        set {
+            // AppKit invalidates every available row when child rows move. This
+            // container has no raster background; fill/ring geometry is managed
+            // by layers. Only our content/selection observation dirties its ink.
+            if newValue, !fillNeedsUpdate {
+                SidebarDiagnostics.countFolderWork("clean-row-invalidations-skipped")
+                SidebarDiagnostics.traceFolderView(self, "clean native invalidation skipped")
+                return
+            }
+            if newValue { SidebarDiagnostics.traceFolderView(self, "needsDisplay") }
+            super.needsDisplay = newValue
+        }
+    }
     override func drawBackground(in dirtyRect: NSRect) {}
     override func drawSelection(in dirtyRect: NSRect) {}
     override func drawSeparator(in dirtyRect: NSRect) {}
@@ -71,6 +91,13 @@ final class SidebarRowView: NSTableRowView {
 
     override func layout() {
         super.layout()
+        SidebarDiagnostics.countFolderWork("row-layouts")
+        SidebarDiagnostics.traceFolderView(self, "layout")
+        // Native row moves schedule layout on every available row. Its fill
+        // geometry depends on bounds/indent, not the row's position in the list.
+        guard laidOutFillBounds != bounds || laidOutFillIndent != fillIndent else { return }
+        laidOutFillBounds = bounds; laidOutFillIndent = fillIndent
+        SidebarDiagnostics.countFolderWork("row-layer-geometry-updates")
         CATransaction.begin()
         CATransaction.setDisableActions(true)
         let m = SpaceListMetrics.self
@@ -86,7 +113,11 @@ final class SidebarRowView: NSTableRowView {
         CATransaction.commit()
     }
 
+    private func invalidateFill() { fillNeedsUpdate = true; needsDisplay = true }
+
     override func updateLayer() {
+        SidebarDiagnostics.traceFolderView(self, "updateLayer")
+        fillNeedsUpdate = false
         let animated = animatesSelectionChange
         animatesSelectionChange = false
         updateFill(animated: animated)
@@ -110,7 +141,7 @@ final class SidebarRowView: NSTableRowView {
             return state.isSelected
         }) { [weak self] in
             self?.animatesSelectionChange = true
-            self?.needsDisplay = true
+            self?.invalidateFill()
         }
         CATransaction.begin()
         CATransaction.setDisableActions(!animated)
@@ -160,7 +191,12 @@ final class SidebarRowView: NSTableRowView {
     @available(macOS, deprecated: 10.10)
     override func accessibilityAttributeValue(_ attribute: NSAccessibility.Attribute) -> Any? {
         if attribute == .selected { return MainActor.assumeIsolated { isAccessibilitySelected() } }
+        if attribute == .value { return MainActor.assumeIsolated { accessibilityValue() as? String } }
+        if attribute == .expanded { return MainActor.assumeIsolated { isAccessibilityExpanded() } }
         return super.accessibilityAttributeValue(attribute)
+    }
+    override func accessibilityValue() -> Any? {
+        (representedItem as? Folder)?.peekedChildID != nil ? "1 tab shown" : nil
     }
     override func isAccessibilityExpanded() -> Bool { (representedItem as? Folder)?.isExpanded ?? false }
     override func accessibilityPerformPress() -> Bool {
@@ -358,6 +394,8 @@ final class TabCellView: SidebarCellView {
 
     required init(frame: NSRect) {
         super.init(frame: frame)
+        // Keep title/favicon backing contexts independent: flattening changes
+        // Core Text edge pixels in the frozen schema-1 window fixtures.
         identifier = Self.identifier
         title.font = Typography.tabTitle.font
         title.baseline = SpaceListMetrics.titleBaselineOffset
@@ -502,6 +540,7 @@ final class TabCellView: SidebarCellView {
     override func layout() {
         super.layout()
         SidebarDiagnostics.tabRowLayouts += 1
+        SidebarDiagnostics.traceFolderView(self, "layout")
         rowStateChanged()
         let m = SpaceListMetrics.self
         let x0 = indent
@@ -644,6 +683,7 @@ final class FolderCellView: SidebarCellView {
     let icon = FolderIconView()
     let title = TextLabel()
     private var unread: SidebarUnreadDot?
+    private var unload: FolderUnloadButton?
     weak var folder: Folder? { didSet { bind() } }
 
     required init(frame: NSRect) {
@@ -678,6 +718,8 @@ final class FolderCellView: SidebarCellView {
 
     override func layout() {
         super.layout()
+        SidebarDiagnostics.folderRowLayouts += 1
+        SidebarDiagnostics.traceFolderView(self, "layout")
         let m = SpaceListMetrics.self
         let shown = tracked({
             guard let folder, !folder.isExpanded else { return false }
@@ -689,7 +731,21 @@ final class FolderCellView: SidebarCellView {
             unread = dot
             dot.update(shown: shown, cell: self)
         }
-        let right = shown ? bounds.width - m.unreadDotTrailingCenter - m.unreadDotSize / 2 - 6 : bounds.width - m.titleTrailingInset
+        let actionShown = (rowView?.isHovered ?? false) && folder.map { context?.isPinnedFolder($0.id) == true } == true
+        if actionShown || unload != nil {
+            let button = unload ?? FolderUnloadButton(glyph: nil)
+            if unload == nil { addSubview(button); unload = button }
+            button.context = context
+            button.glyphTint = { [weak self] _ in SidebarRole.rowAccessory.resolved(self?.contentAppearance ?? .light).nsColor }
+            button.plateColor = { _ in SidebarRole.rowPressed }
+            button.action = { [weak self] in
+                guard let self, let folder = self.folder else { return }
+                self.context?.send(.unloadFolder(folderID: folder.id))
+            }
+            button.frame = CGRect(x: bounds.width - m.accessoryTrailingInset - m.accessorySize, y: m.accessoryY, width: m.accessorySize, height: m.accessorySize)
+            button.isHidden = !actionShown
+        }
+        let right = actionShown ? bounds.width - m.accessoryTrailingInset - m.accessorySize : shown ? bounds.width - m.unreadDotTrailingCenter - m.unreadDotSize / 2 - 6 : bounds.width - m.titleTrailingInset
         title.frame = CGRect(x: m.titleX + indent, y: 0, width: max(0, right - m.titleX - indent), height: m.rowHeight)
     }
 
@@ -700,6 +756,26 @@ final class FolderCellView: SidebarCellView {
             self?.context?.send(.rename(nodeID: id, title: value))
         }
     }
+}
+
+/// Q18 visual accessory. A non-AX element, matching the captured folder row.
+@MainActor
+final class FolderUnloadButton: PlateButton {
+    private let ink = CALayer()
+    override init(glyph: Glyph?) {
+        super.init(glyph: nil)
+        layer?.addSublayer(ink)
+    }
+    @available(*, unavailable) required init?(coder: NSCoder) { fatalError() }
+    override func isAccessibilityElement() -> Bool { false }
+    override func layout() {
+        super.layout()
+        let size = SpaceListMetrics.folderUnloadInk
+        CATransaction.begin(); CATransaction.setDisableActions(true)
+        ink.frame = CGRect(x: bounds.midX - size.width / 2, y: bounds.midY - size.height / 2, width: size.width, height: size.height)
+        CATransaction.commit()
+    }
+    override func updateLayer() { super.updateLayer(); ink.backgroundColor = glyphTint(true).cgColor }
 }
 
 /// Our own folder art, drawn in code: a closed folder (filled) or an open folder
@@ -721,14 +797,19 @@ final class FolderIconView: NSView {
     override var isFlipped: Bool { true }
     override func hitTest(_ point: NSPoint) -> NSView? { nil }
 
+    // AppKit's backing context preserves the legacy folder's edge pixels.
+    // A manually rasterized CGImage changes them, even at the same scale.
     override func draw(_ dirtyRect: NSRect) {
+        SidebarDiagnostics.traceFolderView(self, "draw", rect: dirtyRect)
         guard let folder else { return }
         let context = context ?? cell?.context
-        let (open, icon, override, accent) = tracked({
+        let (expansion, icon, override, accent, usesDefaultAccent) = tracked({
             let space = cell?.page?.space ?? context?.focusedSpace
             let appearance = space.flatMap { context?.appearance(for: $0) } ?? contentAppearance
-            let accent = space.flatMap { context?.style(for: $0).accentColor(appearance).nsColor } ?? Core.brandBlue.resolved(appearance).nsColor
-            return (folder.isExpanded, context?.folderIconOverrideProvider?(folder) ?? folder.customIcon, folder.iconOverride, accent)
+            let style = space.flatMap { context?.style(for: $0) }
+            let accent = style?.accentColor(appearance).nsColor ?? Core.brandBlue.resolved(appearance).nsColor
+            return (folder.expansion, context?.folderIconOverrideProvider?(folder) ?? folder.customIcon, folder.iconOverride, accent,
+                    style?.accent == nil)
         }) { [weak self] in self?.needsDisplay = true }
         // Main's typed override takes precedence; keep the shared row/header
         // renderer and its existing legacy/custom-icon appearance.
@@ -743,12 +824,15 @@ final class FolderIconView: NSView {
             return
         }
         let ink = bounds.insetBy(dx: 1.5, dy: 2.5)
-        lastDrawnGlyph = icon ?? (open ? "folder.open" : "folder.closed")
+        lastDrawnGlyph = icon ?? (expansion == .expanded ? "folder.open" : folder.peekedChildID != nil ? "folder.peek" : "folder.closed")
         if let icon {
             if let symbol = NSImage(systemSymbolName: icon, accessibilityDescription: nil)?.withSymbolConfiguration(.init(pointSize: 14, weight: .medium)) {
                 symbol.drawTinted(in: ink, color: accent)
             } else { EmojiRenderer.draw(icon, in: bounds) }
-        } else { CustomIcon.folder(open: open, in: ink, color: accent) }
+        } else if folder.peekedChildID != nil {
+            CustomIcon.folderPeek(in: bounds.insetBy(dx: 1, dy: 1), color: usesDefaultAccent ? SidebarRole.folderPeekDefaultAccent.light.nsColor : accent,
+                                  dotsColor: SidebarRole.folderPeekDots.light.nsColor)
+        } else { CustomIcon.folder(open: expansion == .expanded, in: ink, color: accent) }
     }
 }
 

@@ -121,6 +121,36 @@ public final class SidebarContext {
 
     public func selectedID(in space: SpaceID) -> ItemID? { window?.selectedNodeBySpace[space] }
 
+    public func isPinnedFolder(_ id: ItemID) -> Bool {
+        var parent = model.parent(of: id)
+        while let current = parent {
+            switch current {
+            case .folder(let folder): parent = model.parent(of: folder)
+            case .spacePinned: return true
+            default: return false
+            }
+        }
+        return false
+    }
+
+    /// Only the acting window chooses the retained direct row. The model API remains exact.
+    public func folderExpansion(folderID: ItemID, expanded: Bool) -> FolderExpansion {
+        guard !expanded else { return .expanded }
+        guard let folder = model.node(id: folderID)?.folder, folder.isExpanded else { return .collapsed }
+        var parent = model.parent(of: folderID)
+        while let current = parent {
+            switch current {
+            case .folder(let id): parent = model.parent(of: id)
+            case .spacePinned(let id), .spaceToday(let id):
+                guard let selected = selectedID(in: id), model.parent(of: selected) == .folder(folderID),
+                      let node = model.node(id: selected), node.folder == nil else { return .collapsed }
+                return .peeked(selected)
+            case .favorites, .splitPane: return .collapsed
+            }
+        }
+        return .collapsed
+    }
+
     /// The selected tab of the focused Space (a favorite, a tab, or a split's focused pane).
     public var currentTab: Tab? {
         guard let space = focusedSpace, let id = selectedID(in: space.id), let node = model.node(id: id) else { return nil }
@@ -167,7 +197,7 @@ public final class SidebarContext {
     func send(_ intent: SidebarIntent) -> Bool {
         switch intent {
         case .hoverPreview: break
-        default: existingHoverPreviews?.dismiss()
+        default: existingHoverPreviews?.dismiss(immediate: true)
         }
         switch intent {
         case .select, .selectFavorite: selection.clear()

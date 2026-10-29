@@ -161,6 +161,12 @@ public enum SpaceListMetrics {
     public static let accessoryTrailingInset: CGFloat = 13
     /// Folder child indent per level (F0079: child icon x 33, title x 59).
     public static let indentPerLevel: CGFloat = 16
+    /// S2 08/0090: 18 pt nominal frame, centers x22/26/30 and row y+21.
+    public static let folderPeekDotDiameter: CGFloat = 3
+    public static let folderPeekDotPitch: CGFloat = 4
+    public static let folderPeekDotFirstX: CGFloat = 5
+    public static let folderPeekDotY: CGFloat = 10
+    public static let folderUnloadInk = CGSize(width: 12, height: 2)
     /// Split row cell pitch at width 228 (icons x 33 / 129 in a depth-1 row). guess for other widths: equal halves.
     public static let splitDividerWidth: CGFloat = 1
     /// Selected split row (F0081): the selected fill is a card, and each pane gets

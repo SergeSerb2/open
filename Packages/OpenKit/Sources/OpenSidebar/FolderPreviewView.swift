@@ -146,10 +146,27 @@ public final class FolderPreviewView: NSView, NSTableViewDataSource, NSTableView
     }
     private func open(_ tab: Tab) {
         context.existingHoverPreviews?.dismiss()
+        let rowID: ItemID
+        if case .splitPane(let id) = context.model.parent(of: tab.id) { rowID = id } else { rowID = tab.id }
+        let visible: Bool = {
+            if context.sidebar?.displayedRows.contains(rowID.description) == true { return true }
+            guard let manager = context.manager, let node = context.model.node(id: rowID) else { return false }
+            var parent = context.model.parent(of: rowID)
+            while let current = parent {
+                switch current {
+                case .folder(let id): parent = context.model.parent(of: id)
+                case .spacePinned(let id), .spaceToday(let id): return (manager.outline(spaceID: id)?.row(forItem: node.object) ?? -1) >= 0
+                default: return false
+                }
+            }
+            return false
+        }()
         var parent = context.model.parent(of: tab.id)
         while let current = parent {
             switch current {
-            case .folder(let id): context.send(.setExpanded(folderID: id, expanded: true)); parent = context.model.parent(of: id)
+            case .folder(let id):
+                if !visible { context.send(.setExpanded(folderID: id, expanded: true)) }
+                parent = context.model.parent(of: id)
             case .splitPane(let id): parent = context.model.parent(of: id)
             case .spacePinned(let id), .spaceToday(let id): context.send(.select(nodeID: tab.id, space: id)); onSelect?(tab.id); return
             case .favorites: return

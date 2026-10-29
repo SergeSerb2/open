@@ -844,6 +844,24 @@ public final class BrowserWindowController: NSWindowController, NSWindowDelegate
         case .toggleSidebar: toggleSidebar(); return true
         case .sidebarHiddenByGesture: noteSidebarHidden(); return true
         case .hoverPreview(let request): hoverPreview.update(request); return true
+        case .unloadFolder(let id):
+            guard context.isPinnedFolder(id), let folder = model.node(id: id)?.folder else { return false }
+            func tabs(_ nodes: [SidebarNode]) -> [Tab] {
+                nodes.flatMap { node in
+                    switch node { case .tab(let tab): [tab]; case .split(let split): split.panes; case .folder(let f): tabs(f.children) }
+                }
+            }
+            let ids = Set(tabs(folder.children).map(\.id))
+            let loaded = ids.filter { container.host(for: $0) != nil }
+            guard !loaded.isEmpty else { return true }
+            for id in loaded { container.closeHost(for: id) }
+            if let selected = context.currentTab?.id, ids.contains(selected) {
+                if let space = context.focusedSpace {
+                    let next = tabs(space.pinned + space.today).first { !ids.contains($0.id) }
+                    model.selectNode(windowID: windowID, spaceID: space.id, nodeID: model.sidebarSelectionID(for: next?.id))
+                }
+            }
+            refresh(); return true
         case .separateFromPinned(let id): return separateFromPinned(id)
         case .deleteSpace(let id): return confirmDeleteSpace(id)
         case .deleteFolder(let id): return confirmDeleteFolders([id])

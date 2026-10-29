@@ -11,6 +11,7 @@ public struct ImportReport: Sendable {
     public var pinnedTabs: Int = 0
     public var todayTabs: Int = 0
     public var favorites: Int = 0
+    public var collapsedFolders: Int = 0
     public var folders: Int = 0
     public var splits: Int = 0
     public var routingRules: Int = 0
@@ -699,7 +700,30 @@ public struct ArcImporter {
         if let winData = try? Data(contentsOf: arcDirectory.appendingPathComponent("StorableWindows.json")),
            let winRoot = try? JSONSerialization.jsonObject(with: winData) as? [String: Any],
            let winArr = winRoot["windows"] as? [[String: Any]] {
-            let collapsed = Set((winArr.first?["spacesWithCollapsedPinnedSections"] as? [String]) ?? [])
+            let front = winArr.first { window in
+                let style = window["style"] as? [String: Any] ?? [:]
+                return style["little"] == nil && style["littleArc"] == nil
+            }
+            let collapsed = Set((front?["spacesWithCollapsedPinnedSections"] as? [String]) ?? [])
+            if let front {
+                let pairs = front["expandedItems"] as? [Any] ?? []
+                var expansions: [String: [String: Any]] = [:]
+                for i in stride(from: 0, to: max(0, pairs.count - 1), by: 2) {
+                    if let id = pairs[i] as? String, let value = pairs[i + 1] as? [String: Any] { expansions[id] = value }
+                }
+                for (arcID, node) in nodeByArcID {
+                    guard let folder = node.folder else { continue }
+                    let value = expansions[arcID] ?? [:]
+                    if value["expanded"] != nil { folder.applyExpansion(.expanded) }
+                    else {
+                        let direct = Set(folder.children.filter { $0.folder == nil }.map(\.id))
+                        let ids = (value["peeked"] as? [String: Any])?["_0"] as? [String] ?? []
+                        let child = ids.lazy.compactMap { nodeByArcID[$0]?.id }.first { direct.contains($0) }
+                        folder.applyExpansion(child.map { .peeked($0) } ?? .collapsed)
+                        report.collapsedFolders += 1
+                    }
+                }
+            }
             for space in spaces {
                 // Collapsed state is per Arc space id; map back.
                 if let arcID = spacesRaw.first(where: { arcSpaceIDToOpen[$0.id] == space.id })?.id, collapsed.contains(arcID) {
@@ -710,7 +734,7 @@ public struct ArcImporter {
                 let focusedArc = w["focusedSpaceID"] as? String
                 let focused = focusedArc.flatMap { arcSpaceIDToOpen[$0] } ?? spaces[0].id
                 let style: WindowStyle
-                if let styleDict = w["style"] as? [String: Any], styleDict.keys.contains("littleArc") { style = .littleOpen } else { style = .standard }
+                if let styleDict = w["style"] as? [String: Any], (styleDict.keys.contains("littleArc") || styleDict.keys.contains("little")) { style = .littleOpen } else { style = .standard }
                 let arcWindowID = w["id"] as? String
                 let windowID = arcWindowID.map { WindowID(rawValue: Self.deterministicUUID(for: $0, namespace: "window")) } ?? WindowID()
                 let window = BrowserWindowState(
@@ -934,7 +958,7 @@ public struct ArcImporter {
             if let s = spaceDict["_0"] as? String, let openID = arcSpaceIDToOpen[s] { return .space(openID) }
             return .mostRecentSpace
         }
-        if dict["littleArc"] != nil { return .littleOpen }
+        if dict["littleArc"] != nil || dict["little"] != nil { return .littleOpen }
         return nil
     }
 }

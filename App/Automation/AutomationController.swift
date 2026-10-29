@@ -242,7 +242,7 @@
           let frame = controller.sidebar.rowFrame(nodeID: ItemID(rawValue: uuid)) else { throw Failure(message: "no such sidebar row") }
         controller.contentView.layoutSubtreeIfNeeded()
         let inRoot = controller.contentView.convert(frame, from: controller.sidebar)
-        return ["frame": [inRoot.minX, inRoot.minY, inRoot.width, inRoot.height], "point": [inRoot.midX, inRoot.midY], "unreadBadge": controller.sidebar.unreadDotFrame(nodeID: ItemID(rawValue: uuid)) != nil] as [String: Any]
+        return ["frame": [inRoot.minX, inRoot.minY, inRoot.width, inRoot.height], "point": [inRoot.midX, inRoot.midY], "unreadBadge": controller.sidebar.unreadDotFrame(nodeID: ItemID(rawValue: uuid)) != nil, "current": controller.sidebar.isCurrentRow(nodeID: ItemID(rawValue: uuid))] as [String: Any]
       case "preview-state":
         return try previewState(a)
       case "toast-undo":
@@ -379,7 +379,29 @@
         guard let space = w.focusedSpace else { throw Failure(message: "no space") }
         return ["pinned": space.pinned.map(describeNode), "today": space.today.map(describeNode)]
       case "tabs":
-        return w.orderedTabs.map { describe($0, in: w) }
+        let tabs = w.orderedTabs.map { describe($0, in: w) }
+        guard a["sidebar"] as? Bool == true, let sidebar = w.controller?.sidebar, let outline = sidebar.focusedOutline,
+              let space = w.focusedSpace else { return tabs }
+        w.controller?.contentView.layoutSubtreeIfNeeded()
+        let rows = sidebar.displayedRows
+        var folders: [[String: Any]] = []
+        func collect(_ nodes: [SidebarNode]) {
+          for node in nodes {
+            guard let folder = node.folder else { continue }
+            let visible = (0..<outline.numberOfRows).compactMap { row -> String? in
+              guard let item = outline.item(atRow: row), outline.parent(forItem: item) as? Folder === folder else { return nil }
+              if let tab = item as? Tab { return tab.id.description }
+              if let split = item as? Split { return split.id.description }
+              if let nested = item as? Folder { return nested.id.description }
+              return nil
+            }
+            folders.append(["id": folder.id.description, "expanded": folder.isExpanded,
+              "peekedChildID": folder.peekedChildID?.description ?? "", "visibleChildren": visible])
+            collect(folder.children)
+          }
+        }
+        collect(space.pinned); collect(space.today)
+        return ["tabs": tabs, "rows": rows, "folders": folders, "selectedNode": w.selectedNodeID?.description ?? ""] as [String: Any]
       case "tab-state":
         return describe(try modelTab(a, w), in: w)
       case "tab-strip":
@@ -1317,7 +1339,7 @@
     private func describeNode(_ node: SidebarNode) -> [String: Any] {
       switch node {
       case .tab(let tab): return ["id": tab.id.description, "kind": "tab", "url": tab.url.absoluteString, "title": tab.displayTitle, "loaded": tab.live.hasWebContent]
-      case .folder(let folder): return ["id": folder.id.description, "kind": "folder", "title": folder.title, "expanded": folder.isExpanded, "children": folder.children.map(describeNode)]
+      case .folder(let folder): return ["id": folder.id.description, "kind": "folder", "title": folder.title, "expanded": folder.isExpanded, "peekedChildID": folder.peekedChildID?.description ?? "", "children": folder.children.map(describeNode)]
       case .split(let split): return ["id": split.id.description, "kind": "split", "children": split.panes.map { describeNode(.tab($0)) }]
       }
     }
@@ -1346,7 +1368,7 @@
     }
 
     private func normalizedModifier(_ name: String) -> String {
-      switch name { case "cmd": return "command"; case "opt": return "option"; case "ctrl": return "control"; default: return name }
+      switch name { case "cmd": return "command"; case "opt", "alt": return "option"; case "ctrl": return "control"; default: return name }
     }
 
     private func sidebarController(_ args: [String: Any]) throws -> BrowserWindowController {
@@ -1375,11 +1397,54 @@
     private func sidebarClick(_ args: [String: Any]) async throws -> Any {
       let controller = try sidebarController(args)
       let point = try sidebarPoint(args, controller: controller)
-      guard let target = controller.window, let factory = app.hostFactories[controller.windowID] else { throw Failure(message: "no browser window") }
+      guard let target = controller.window, let factory = app.hostFactories[controller.windowID],
+        let outline = controller.sidebar.focusedOutline,
+        let id = (args["node"] as? String).flatMap(UUID.init(uuidString:)).map({ ItemID(rawValue: $0) }),
+        let node = app.model.node(id: id) else { throw Failure(message: "no browser sidebar node") }
       try await activateForInput(target)
+      let capturesMotion = args["motion"] as? Bool == true
+      let previousReduceMotion = Motion.reduceMotionOverride
+      if capturesMotion { Motion.reduceMotionOverride = false }
+      defer { if capturesMotion { Motion.reduceMotionOverride = previousReduceMotion } }
+      let eventStarted = CACurrentMediaTime()
       _ = try await mouse(["action": "click", "window": target.windowNumber, "x": Double(point.x), "y": Double(point.y), "modifiers": args["modifiers"] as? [String] ?? []], factory)
       await Task.yield()
-      return ["selection": controller.context.selection.ids.map(\.description), "selected": factory.selectedNodeID?.description ?? ""] as [String: Any]
+      var result: [String: Any] = ["selection": controller.context.selection.ids.map(\.description),
+        "selected": factory.selectedNodeID?.description ?? "", "accepted": true,
+        "expanded": node.folder?.isExpanded ?? false, "peekedChildID": node.folder?.peekedChildID?.description ?? ""]
+      if args["motion"] as? Bool == true {
+        let started = eventStarted
+        var samples: [[String: Any]] = [], animations: [[String: Any]] = []
+        func inspect(_ layer: CALayer) {
+          for key in layer.animationKeys() ?? [] {
+            guard let animation = layer.animation(forKey: key) else { continue }
+            let path = (animation as? CAPropertyAnimation)?.keyPath ?? key
+            var points: [Float] = []
+            if let curve = animation.timingFunction {
+              for index in 0..<4 { var p: [Float] = [0,0]; curve.getControlPoint(at: index, values: &p); points += p }
+            }
+            animations.append(["path": path, "duration": animation.duration, "curve": points])
+          }
+          for child in layer.sublayers ?? [] { inspect(child) }
+        }
+        for _ in 0..<8 {
+          var positions: [String: Double] = [:]
+          for index in 0..<outline.numberOfRows {
+            guard let item = outline.item(atRow: index), let view = outline.rowView(atRow: index, makeIfNecessary: false) else { continue }
+            let id: String
+            if let tab = item as? Tab { id = tab.id.description }
+            else if let folder = item as? Folder { id = folder.id.description }
+            else { continue }
+            positions[id] = Double(view.layer?.presentation()?.frame.minY ?? view.frame.minY)
+            if samples.isEmpty, let layer = view.layer { inspect(layer) }
+          }
+          samples.append(["time": CACurrentMediaTime() - started, "rows": positions])
+          try await Task.sleep(for: .milliseconds(45))
+        }
+        result["motion"] = ["appliedDuration": SidebarDiagnostics.folderTransitionDuration,
+          "expanding": SidebarDiagnostics.folderTransitionExpanding, "animations": animations, "samples": samples]
+      }
+      return result
     }
 
     private func sidebarKey(_ args: [String: Any]) async throws -> Any {

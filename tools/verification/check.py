@@ -329,6 +329,60 @@ def space_icon_import(cli):
     print("tab icon import PASS: empty emoji omitted, typed icons retained, known/unknown named counters checked")
 
 
+def folder_peek_import(cli):
+    """FP11: real CLI import/roundtrip, only made-up Arc-shaped data."""
+    import uuid
+    def mapped(value):
+        try:
+            return str(uuid.UUID(value)).upper()
+        except ValueError:
+            seed = 'item:' + value
+            def fnv(text, offset):
+                for byte in text.encode(): offset = ((offset ^ byte) * 1099511628211) & ((1 << 64) - 1)
+                return offset
+            raw = bytearray(fnv(seed, 14695981039346656037).to_bytes(8, 'little') + fnv(seed[::-1], 1469598103934665603).to_bytes(8, 'little'))
+            raw[6] = (raw[6] & 15) | 64; raw[8] = (raw[8] & 63) | 128
+            return str(uuid.UUID(bytes=bytes(raw))).upper()
+    ids = {k: str(uuid.uuid5(uuid.NAMESPACE_URL, 'synthetic-open-peek-' + k)).upper() for k in ('A','B','C','D','E','a','b1','b2','c','d','e')}
+    ids['A'] = 'folder-peek-sentinel'
+    items = []
+    for name, children in [('A',['a']), ('B',['b1','b2']), ('C',['c']), ('D',['d']), ('E',['e'])]:
+        items += [ids[name], {'id': ids[name], 'parentID': 'pinned-container', 'title': 'Synthetic ' + name,
+                             'childrenIds': [ids[c] for c in children], 'data': {'list': {}}}]
+        for child in children:
+            items += [ids[child], {'id': ids[child], 'parentID': ids[name], 'childrenIds': [], 'createdAt': 0,
+                                  'data': {'tab': {'savedURL': 'https://example.invalid/', 'savedTitle': 'Synthetic peek'}}}]
+    items += ['pinned-container', {'id': 'pinned-container', 'childrenIds': [ids[c] for c in 'ABCDE'], 'data': {'itemContainer': {}}}]
+    source = {'version': 1, 'sidebar': {'containers': [{'global': {}}, {'items': items,
+              'spaces': ['peek-space', {'id': 'peek-space', 'title': 'Synthetic peek', 'profile': {'default': True},
+                         'containerIDs': ['pinned', 'pinned-container'], 'customInfo': {}}], 'topAppsContainerIDs': []}]}}
+    expansion = [ids['A'], {'peeked': {'_0': [ids['a']]}}, ids['B'], {'peeked': {'_0': [ids['e'],ids['b1'],ids['b2']]}},
+                 ids['C'], {'peeked': {'_0': []}}, ids['D'], {'expanded': {}}]
+    for variant in ('little', 'littleArc', 'no-standard', 'missing', 'unknown', 'invalid-direct'):
+        directory = Path('peek-import-' + variant).resolve(); directory.mkdir()
+        (directory / 'StorableSidebar.json').write_text(json.dumps(source))
+        little = {'style': {variant if variant == 'littleArc' else 'little': {}}, 'expandedItems': [ids['D'], {'peeked': {'_0': [ids['d']]}}], 'spacesWithCollapsedPinnedSections': ['peek-space']}
+        standard = {'style': {'standard': {}}, 'expandedItems': list(expansion), 'spacesWithCollapsedPinnedSections': []}
+        if variant == 'unknown': standard['expandedItems'][1] = {'future': {}}
+        if variant == 'invalid-direct': standard['expandedItems'][1] = {'peeked': {'_0': [ids['e'],'missing']}}
+        if variant != 'missing':
+            (directory / 'StorableWindows.json').write_text(json.dumps({'windows': [little] + ([] if variant == 'no-standard' else [standard])}))
+        output = Path('peek-output-' + variant).resolve()
+        report = run(cli, 'import-arc', '--arc-dir', str(directory), '--out', str(output), '--counts-only')
+        data = json.loads((output / 'State/browser.json').read_text())
+        folders = [node['folder']['_0'] for node in data['spaces'][0]['pinned']]
+        require([f['id'] for f in folders] == [mapped(ids[k]) for k in 'ABCDE'], 'FP11 deterministic folder IDs')
+        default = variant in ('missing','no-standard')
+        for name, folder in zip('ABCDE', folders):
+            expanded = default or name == 'D'
+            peek = None if default or name not in 'AB' or (name == 'A' and variant in ('unknown','invalid-direct')) else mapped(ids['a' if name == 'A' else 'b1'])
+            require(folder['isExpanded'] == expanded and folder.get('peekedChildID') == peek, 'FP11 ' + variant + ' folder ' + name)
+        require(not data['spaces'][0]['isPinnedCollapsed'], 'FP11 Pinned state must also ignore first Little window')
+        matches(r'collapsedFolders=' + ('0' if default else '4') + r'\b', report)
+        matches(r'^roundtrip OK$', run(cli, 'roundtrip', str(output)))
+    print('FP11 folder peek import PASS: 6 synthetic variants, standard window, direct-child map, deterministic IDs and roundtrip')
+
+
 def route(cli, root, seed):
     for name in ("route-check.sh", "verify-routing.sh", "verify-route.sh"):
         runner = root / "tools" / name
@@ -658,6 +712,7 @@ def main():
         matches(r"commands-demo OK: [1-9]\d* checks passed, 0 failed", text)
         shutil.copytree(directory, seed, dirs_exist_ok=True)
         archive_migration(cli)
+        folder_peek_import(cli)
     elif name == "space-legacy":
         legacy_space_fixture(cli, root)
         space_icon_import(cli)
@@ -762,6 +817,12 @@ def main():
             all_passed(run(*command, timeout=None, interrupted_exit=2))
         else:
             all_passed(run(*command))
+        if name == "sidebar-render":
+            if os.environ.get("SIDEBAR_FOLDER_PEEK_PERF") == "1":
+                bench = run(str(root / "tools/verification/folder-peek-bench.py"))
+                matches(r"^FP10 PASS$", bench)
+            else:
+                print("FP10 separate performance gate: run heavy.sh tools/verification/folder-peek-bench.py; set SIDEBAR_FOLDER_PEEK_PERF=1 for this strict dispatcher gate")
     elif name == "sidebar-compare":
         args = [str(root / "tools/verification/sidebar-compare-states.sh")]
         if os.environ.get("SIDEBAR_CAPTURE_ROOT"):

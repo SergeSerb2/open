@@ -94,7 +94,7 @@ public final class ArchiveStore: ArchiveSink {
                        payload: .folder(FolderArchiveDTO(id: entry.folder.id.description, title: entry.folder.title,
                            isExpanded: entry.folder.isExpanded, customIcon: entry.folder.customIcon,
                            iconOverride: SnapshotMapper.iconDTO(entry.folder.iconOverride),
-                           children: entry.folder.children.map { SnapshotMapper.nodeDTO($0) }, originalSection: entry.originalSection)))
+                           children: entry.folder.children.map { SnapshotMapper.archivedNodeDTO($0) }, originalSection: entry.originalSection)))
         }
         guard !rows.isEmpty else { return }
         queue.async { [weak self] in

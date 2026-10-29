@@ -32,7 +32,7 @@ public final class HoverPreviewController {
 
     /// The tracker's request: show, swap, or hide (nil).
     public func update(_ next: SidebarHoverPreviewRequest?) {
-        guard let next else { hide(animated: true); return }
+        guard let next else { hide(animated: !context.hoverPreviews.dismissesImmediately); return }
         if request?.kind == next.kind, card != nil { request = next; layout(); return }
         let swapping = card != nil
         hide(animated: false)

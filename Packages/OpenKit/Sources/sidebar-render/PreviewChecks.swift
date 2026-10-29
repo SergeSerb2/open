@@ -53,6 +53,7 @@ enum PreviewChecks {
         }
         let pinned = space.pinned[0].tab!, today = space.today[0].tab!
         let folder = model.createFolder(in: .spacePinned(space.id), title: "Preview folder")!
+        model.setExpanded(folderID: folder.id, expanded: false)
         pump()
         hover(pinned.id)
         check(!context.hoverPreviews.hasInstalledWork && context.hoverPreviews.scheduledShowCount == 0,
@@ -121,6 +122,13 @@ enum PreviewChecks {
         let folderDelivered = Checks.waitFor(settle: scene) { context.hoverPreviews.request?.kind == .folder(folder.id) }
         check(folderDelay == 0.5 && folderDelivered && recorder.events.contains { if case .hoverPreview(.some) = $0.0 { true } else { false } },
               "HP1 folder row emits its request at the configured deadline")
+        model.setExpanded(folderID: folder.id, expanded: true); pump()
+        check(context.hoverPreviews.request == nil && !context.hoverPreviews.isArmed,
+              "FP expanded folder invalidates an already shown/armed hover card")
+        hover(folder.id)
+        check(context.hoverPreviews.request == nil && !context.hoverPreviews.isArmed,
+              "FP expanded folder hover is ineligible at arm time")
+        model.setExpanded(folderID: folder.id, expanded: false); pump()
         escape(); pump(1.01)
         let tile = sidebar.favoritesCollection.item(at: IndexPath(item: 0, section: 0))!.view
         let favoriteID = model.profiles[0].favorites[0].id

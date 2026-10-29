@@ -367,10 +367,19 @@ struct Bitmap {
     }
 
     /// Loads a PNG and converts it to sRGB through its embedded color profile.
-    init(path: String) throws {
+    init(path: String, viaDisplayP3: Bool = false) throws {
         guard let src = CGImageSourceCreateWithURL(URL(fileURLWithPath: path) as CFURL, nil),
               let img = CGImageSourceCreateImageAtIndex(src, 0, nil) else { throw CLIError(description: "cannot read \(path)") }
         width = img.width; height = img.height
+        let input: CGImage
+        if viaDisplayP3 {
+            // Draw through the embedded profile into P3, then convert that image to sRGB/Lab.
+            guard let context = CGContext(data: nil, width: img.width, height: img.height, bitsPerComponent: 8,
+                bytesPerRow: img.width * 4, space: CGColorSpace(name: CGColorSpace.displayP3)!,
+                bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue) else { throw CLIError(description: "P3 context failed") }
+            context.draw(img, in: CGRect(x: 0, y: 0, width: img.width, height: img.height))
+            input = context.makeImage()!
+        } else { input = img }
         data = [UInt8](repeating: 0, count: width * height * 4)
         let w = width, h = height
         data.withUnsafeMutableBytes { buf in
@@ -378,7 +387,7 @@ struct Bitmap {
                                 space: CGColorSpace(name: CGColorSpace.sRGB)!, bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue)!
             ctx.setFillColor(CGColor(gray: 1, alpha: 1))
             ctx.fill(CGRect(x: 0, y: 0, width: w, height: h))
-            ctx.draw(img, in: CGRect(x: 0, y: 0, width: w, height: h))
+            ctx.draw(input, in: CGRect(x: 0, y: 0, width: w, height: h))
         }
     }
 

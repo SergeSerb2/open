@@ -15,6 +15,8 @@ enum CompletionFeatureChecks {
         try await hint(check)
         try gestureHide(check)
         try await previews(check)
+        try await folderPeek(check)
+        try await folderUnloadFallback(check)
         try separate(check)
     }
 
@@ -100,6 +102,7 @@ enum CompletionFeatureChecks {
         let rows = (1...14).map { model.newTab(in: space.id, url: URL(string: "https://folder.example.com/\($0)")!, title: "Folder row \($0)") }
         guard let folder = model.createFolder(in: .spacePinned(space.id), title: "Scrollable preview", withNodes: rows.map(\.id)),
               let outline = c.sidebar.focusedOutline, let window = c.window else { throw CLIError(description: "HP13 no folder") }
+        model.setExpanded(folderID: folder.id, expanded: false)
         pump()
         let row = c.sidebar.rowFrame(nodeID: folder.id)!
         let point = c.sidebar.convert(CGPoint(x: 100, y: row.midY), to: nil)
@@ -155,6 +158,74 @@ enum CompletionFeatureChecks {
               && smallScroll.contentView.bounds.origin.y > 0 && smallFolder.tableView.rows(in: smallScroll.documentVisibleRect).contains(rows.count - 1),
               "HP14 folder card fits a 640x480 window with a 500 pt sidebar and scrolls to its last row")
 
+    }
+
+    private static func folderPeek(_ check: (Bool, String) -> Void) async throws {
+        let model = FeatureCLI.synthetic(), factory = FakeWebContentHostFactory()
+        let space = model.spaces[0], window = model.windows[0]
+        let a = model.newTab(in: space.id, url: URL(string: "https://example.invalid/peek-a")!, title: "Peek A")
+        let b = model.newTab(in: space.id, url: URL(string: "https://example.invalid/peek-b")!, title: "Peek B")
+        let folder = model.createFolder(in: .spacePinned(space.id), title: "Peek integration", withNodes: [a.id, b.id])!
+        let c = BrowserWindowController(model: model, windowID: window.id, factory: factory,
+                                        size: CGSize(width: 1000, height: 900), defaults: FeatureCLI.defaults())
+        defer { c.hoverPreview.hide(animated: false); c.container.closeAll(); c.window?.close() }
+        func pump() async { try? await Task.sleep(for: .milliseconds(20)); OffscreenRenderer.settle(c.contentView) }
+        _ = c.sidebar(c.sidebar, didRequest: .select(nodeID: b.id, space: space.id)); await pump()
+        _ = c.sidebar(c.sidebar, didRequest: .setExpanded(folderID: folder.id, expanded: false)); await pump()
+        check(folder.expansion == .peeked(b.id) && c.sidebar.displayedRows.contains(b.id.description), "FP preview fixture uses selected direct child")
+        let made = factory.made.count
+        let row = c.sidebar.rowFrame(nodeID: folder.id)!
+        c.hoverPreview.update(SidebarHoverPreviewRequest(kind: .folder(folder.id), anchorInWindow: c.sidebar.convert(row, to: nil))); await pump()
+        check(c.hoverPreview.card != nil && c.hoverPreview.host == nil && factory.made.count == made,
+              "FP folder card is native and allocates no web host while peeked")
+        let card = c.hoverPreview.card?.content as? FolderPreviewView
+        check(card?.displayedTabIDs == [a.id, b.id], "FP folder card contains hidden siblings as well as peek child")
+        func choose(_ card: FolderPreviewView?, row: Int) {
+            card?.tableView.selectRowIndexes(IndexSet(integer: row), byExtendingSelection: false)
+            let event = NSEvent.keyEvent(with: .keyDown, location: .zero, modifierFlags: [], timestamp: 0,
+                windowNumber: c.window!.windowNumber, context: nil, characters: "\r", charactersIgnoringModifiers: "\r", isARepeat: false, keyCode: 36)!
+            card?.tableView.keyDown(with: event)
+        }
+        choose(card, row: 1); await pump()
+        check(folder.expansion == .peeked(b.id) && window.selectedNodeBySpace[space.id] == b.id,
+              "FP choosing exposed peek child from real folder results keeps peek")
+        c.hoverPreview.update(SidebarHoverPreviewRequest(kind: .folder(folder.id), anchorInWindow: c.sidebar.convert(row, to: nil))); await pump()
+        choose(c.hoverPreview.card?.content as? FolderPreviewView, row: 0); await pump()
+        check(folder.expansion == .expanded && window.selectedNodeBySpace[space.id] == a.id,
+              "FP Q17 hidden folder result expands ancestor chain")
+        model.setFolderExpansion(folderID: folder.id, .peeked(b.id)); await pump()
+        let beforeUnload = factory.made.count
+        _ = c.sidebar(c.sidebar, didRequest: .unloadFolder(folderID: folder.id)); await pump()
+        check(c.container.host(for: b.id) == nil && model.tab(id: b.id) === b && folder.expansion == .peeked(b.id)
+              && factory.made.dropFirst(beforeUnload).allSatisfy { ![a.id, b.id].contains($0.tabID) }, "FP Q18 unload closes loaded folder hosts, keeps entries/peek, and creates no child host")
+        check(c.hoverPreview.card == nil, "FP folder action dismisses card before row interaction")
+    }
+
+    private static func folderUnloadFallback(_ check: (Bool, String) -> Void) async throws {
+        let profile = Profile(name: "Unload split")
+        let inside = Tab(url: URL(string: "https://example.invalid/unload-inside")!, title: "Inside")
+        let panes = (0..<2).map { Tab(url: URL(string: "https://example.invalid/unload-outside/\($0)")!, title: "Outside \($0)") }
+        for tab in [inside] + panes { tab.live.sleepPhase = .live }
+        let folder = Folder(title: "Unload", children: [.tab(inside)])
+        let space = Space(title: "Unload", profileID: profile.id, pinned: [.folder(folder)], today: panes.map { .tab($0) })
+        let window = BrowserWindowState(focusedSpaceID: space.id, selectedNodeBySpace: [space.id: inside.id])
+        let model = BrowserModel(profiles: [profile], spaces: [space], windows: [window])
+        let split = model.makeSplit(tabIDs: panes.map(\.id))!
+        model.setFolderExpansion(folderID: folder.id, .peeked(inside.id))
+        let c = BrowserWindowController(model: model, windowID: window.id, factory: FakeWebContentHostFactory(),
+            size: CGSize(width: 1000, height: 900), defaults: FeatureCLI.defaults())
+        defer { c.container.closeAll(); c.window?.close() }
+        func pump() async { try? await Task.sleep(for: .milliseconds(20)); OffscreenRenderer.settle(c.contentView) }
+        await pump()
+        let loaded = c.container.host(for: inside.id) != nil
+        let accepted = c.sidebar(c.sidebar, didRequest: .unloadFolder(folderID: folder.id))
+        await pump()
+        print("FP-unload receipt loaded=\(loaded) accepted=\(accepted) selectedSplit=\(window.selectedNodeBySpace[space.id] == split.id) visiblePanes=\(c.container.slots.count) splitCommand=\(c.isCommandEnabled("next-split-pane", enabledKey: ""))")
+        check(loaded && accepted && c.container.host(for: inside.id) == nil && folder.expansion == .peeked(inside.id)
+            && window.selectedNodeBySpace[space.id] == split.id && c.splitController.split === split
+            && c.container.slots.map(\.tabID) == panes.map(\.id) && c.sidebar.isCurrentRow(nodeID: split.id)
+            && c.isCommandEnabled("next-split-pane", enabledKey: ""),
+            "FP-unload fallback selects containing split, shows both panes and enables split commands")
     }
 
     // MARK: SP5–SP6 (Separate From Pinned Tab keeps the live host)

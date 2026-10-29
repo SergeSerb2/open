@@ -171,6 +171,10 @@ public enum SidebarRole {
     /// "Clear" label and arrow: measured black ≈ 0.3 → `SidebarForeground`.
     public static let dividerLabel = SidebarColors.foreground
     public static let dividerLabelHover = SidebarColors.foregroundDarker
+    /// S2 08/0090 body, color-managed into sRGB; keep older open/closed art frozen.
+    public static let folderPeekDefaultAccent = DesignColor(RGBA(hex: 0x202AFF))
+    /// Single solid sRGB minimax fit to S2 08/0090's three centers; see plan §3.17.
+    public static let folderPeekDots = DesignColor(RGBA(hex: 0xB5AFFF))
     /// Close (×) and unload (−) glyphs on a hovered or selected row: core pixels
     /// black ≈ 0.56 (F0013, F0015) → `GrayA11`.
     public static let rowAccessory = GrayScale.a(11)

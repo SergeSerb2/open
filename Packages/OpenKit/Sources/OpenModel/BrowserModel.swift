@@ -213,6 +213,14 @@ public final class BrowserModel {
     public func tab(id: ItemID) -> Tab? { index[id]?.tab }
     public func parent(of id: ItemID) -> NodeParent? { parentByID[id] }
 
+    /// Resolve a flattened tab traversal result to its selectable sidebar node.
+    /// Selecting a split pane as a plain tab would hide the other panes.
+    public func sidebarSelectionID(for id: ItemID?) -> ItemID? {
+        guard let id else { return nil }
+        if case .splitPane(let splitID)? = parent(of: id) { return splitID }
+        return id
+    }
+
     /// True when the tab's ancestor chain reaches a Space's pinned section,
     /// including tabs inside folders and splits there.
     public func isPinned(tabID: ItemID) -> Bool {
@@ -453,25 +461,45 @@ public final class BrowserModel {
     /// Inserts a node and indexes its subtree. Emits `.insert`.
     /// Refuses a node that is already in the tree, so a stale undo step cannot duplicate it.
     @discardableResult
-    private func attach(_ node: SidebarNode, to parent: NodeParent, at position: Int?) -> Int? {
+    private func attach(_ node: SidebarNode, to parent: NodeParent, at position: Int?, restoringPeek: ClearedFolderPeek? = nil) -> Int? {
         guard index[node.id] == nil, let i = insertChild(node, into: parent, at: position) else { return nil }
         register(node, under: parent)
+        restorePeek(restoringPeek)
         emit(.insert(parent: parent, index: i, nodeID: node.id))
         return i
     }
 
+    private struct ClearedFolderPeek {
+        let folderID: ItemID
+        let childID: ItemID
+    }
+
+    private func clearPeek(in parent: NodeParent, removing id: ItemID) -> ClearedFolderPeek? {
+        guard case .folder(let folderID) = parent, let folder = index[folderID]?.folder,
+              folder.peekedChildID == id else { return nil }
+        folder.peekedChildID = nil
+        return ClearedFolderPeek(folderID: folderID, childID: id)
+    }
+
+    private func restorePeek(_ cleared: ClearedFolderPeek?) {
+        guard let cleared, let folder = index[cleared.folderID]?.folder, !folder.isExpanded,
+              parentByID[cleared.childID] == .folder(folder.id), index[cleared.childID]?.folder == nil else { return }
+        folder.peekedChildID = cleared.childID
+    }
+
     /// Removes a node and drops its subtree from the index. Emits `.remove`.
     @discardableResult
-    private func detach(_ id: ItemID, at knownPosition: Int? = nil) -> (node: SidebarNode, parent: NodeParent, index: Int)? {
+    private func detach(_ id: ItemID, at knownPosition: Int? = nil) -> (node: SidebarNode, parent: NodeParent, index: Int, clearedPeek: ClearedFolderPeek?)? {
         guard let parent = parentByID[id], let removed = removeChild(id, from: parent, at: knownPosition) else { return nil }
+        let cleared = clearPeek(in: parent, removing: id)
         unregister(removed.node)
         emit(.remove(parent: parent, index: removed.index, nodeID: id))
-        return (removed.node, parent, removed.index)
+        return (removed.node, parent, removed.index, cleared)
     }
 
     /// Moves a node. The index changes in O(1): only the node's own parent entry moves.
     /// Applies the pinned-URL rule and emits `.move`. Returns the closure that moves it back.
-    private func relocate(_ id: ItemID, to destination: NodeParent, at position: Int?, fromIndex knownPosition: Int? = nil) -> Revert? {
+    private func relocate(_ id: ItemID, to destination: NodeParent, at position: Int?, fromIndex knownPosition: Int? = nil, restoringPeek: ClearedFolderPeek? = nil) -> Revert? {
         guard let source = parentByID[id] else { return nil }
         let fromSection = section(of: source)
         let toSection = section(of: destination)
@@ -480,12 +508,14 @@ public final class BrowserModel {
             _ = insertChild(removed.node, into: source, at: removed.index)
             return nil
         }
+        let cleared = source == destination ? nil : clearPeek(in: source, removing: id)
         parentByID[id] = destination
         let prior = applyPinnedRule(to: removed.node, from: fromSection, to: toSection)
+        restorePeek(restoringPeek)
         emit(.move(fromParent: source, fromIndex: removed.index, toParent: destination, toIndex: toIndex, nodeID: id))
         let fromIndex = removed.index
         return { model in
-            guard model.relocate(id, to: source, at: fromIndex) != nil else { return false }
+            guard model.relocate(id, to: source, at: fromIndex, restoringPeek: cleared) != nil else { return false }
             Self.restore(prior)
             return true
         }
@@ -575,8 +605,10 @@ public final class BrowserModel {
             switch node {
             case .tab(let tab): return .tab(copyTab(tab))
             case .folder(let folder):
+                let children = folder.children.map(copyNode)
+                let peek = folder.children.firstIndex { $0.id == folder.peekedChildID }.map { children[$0].id }
                 return .folder(Folder(title: folder.title, isExpanded: folder.isExpanded,
-                    customIcon: folder.customIcon, children: folder.children.map(copyNode)))
+                    customIcon: folder.customIcon, iconOverride: folder.iconOverride, children: children, peekedChildID: peek))
             case .split(let split):
                 let panes = split.panes.map(copyTab)
                 let focused = split.panes.firstIndex { $0.id == split.focusedPaneID }.map { panes[$0].id }
@@ -659,7 +691,7 @@ public final class BrowserModel {
         archive(entries)
         let ids = entries.map { $0.tab.id }
         return { model in
-            guard model.attach(removed.node, to: removed.parent, at: removed.index) != nil else { return false }
+            guard model.attach(removed.node, to: removed.parent, at: removed.index, restoringPeek: removed.clearedPeek) != nil else { return false }
             model.archiveSink?.discardArchived(ids: ids)
             return true
         }
@@ -846,7 +878,7 @@ public final class BrowserModel {
         guard let removed = detach(id) else { return nil }
         archiveSink?.archiveFolder(entry)
         return { model in
-            guard model.attach(removed.node, to: removed.parent, at: removed.index) != nil else { return false }
+            guard model.attach(removed.node, to: removed.parent, at: removed.index, restoringPeek: removed.clearedPeek) != nil else { return false }
             model.archiveSink?.discardArchived(ids: [id])
             return true
         }
@@ -1190,7 +1222,10 @@ public final class BrowserModel {
             else {
                 let slot = sources[id].flatMap { parent in parentByID[id] == parent ? positions[parent]?[id] : nil }
                 if let removed = detach(id, at: slot) {
-                    revert = { model in model.attach(removed.node, to: removed.parent, at: removed.index) != nil }
+                    revert = { model in
+                        guard model.attach(removed.node, to: removed.parent, at: removed.index, restoringPeek: removed.clearedPeek) != nil else { return false }
+                        return true
+                    }
                 } else { revert = nil }
             }
             guard let revert else { continue }
@@ -1279,8 +1314,10 @@ public final class BrowserModel {
         switch node {
         case .tab(let tab): return .tab(copyTab(tab))
         case .folder(let folder):
+            let children = folder.children.map { copyNode($0) }
+            let peek = folder.children.firstIndex { $0.id == folder.peekedChildID }.map { children[$0].id }
             return .folder(Folder(title: folder.title, isExpanded: folder.isExpanded, customIcon: folder.customIcon,
-                                  iconOverride: folder.iconOverride, children: folder.children.map { copyNode($0) }))
+                                  iconOverride: folder.iconOverride, children: children, peekedChildID: peek))
         case .split(let split):
             let panes = split.panes.map(copyTab)
             let focus = split.panes.firstIndex { $0.id == split.focusedPaneID }.map { panes[$0].id }
@@ -1291,19 +1328,20 @@ public final class BrowserModel {
     @discardableResult
     public func setAllFoldersExpanded(spaceID: SpaceID, expanded: Bool) -> Int {
         guard let space = space(id: spaceID) else { return 0 }
-        var changed: [Folder] = []
+        var changed: [(Folder, FolderExpansion)] = []
+        let target: FolderExpansion = expanded ? .expanded : .collapsed
         func visit(_ nodes: [SidebarNode]) {
             for node in nodes {
                 guard let folder = node.folder else { continue }
-                if folder.isExpanded != expanded { changed.append(folder) }
+                if folder.expansion != target { changed.append((folder, folder.expansion)) }
                 visit(folder.children)
             }
         }
         visit(space.pinned); visit(space.today)
         guard !changed.isEmpty else { return 0 }
-        for folder in changed { folder.isExpanded = expanded }
-        registerChange(undo: { for folder in changed { folder.isExpanded = !expanded } },
-                       redo: { for folder in changed { folder.isExpanded = expanded } })
+        for (folder, _) in changed { folder.applyExpansion(target) }
+        registerChange(undo: { for (folder, old) in changed { folder.applyExpansion(old) } },
+                       redo: { for (folder, _) in changed { folder.applyExpansion(target) } })
         return changed.count
     }
 
@@ -1471,10 +1509,20 @@ public final class BrowserModel {
     }
 
     public func setExpanded(folderID: ItemID, expanded: Bool) {
-        guard let folder = index[folderID]?.folder, folder.isExpanded != expanded else { return }
-        let old = folder.isExpanded
-        folder.isExpanded = expanded
-        registerChange(undo: { folder.isExpanded = old }, redo: { folder.isExpanded = expanded })
+        setFolderExpansion(folderID: folderID, expanded ? .expanded : .collapsed)
+    }
+
+    public func setFolderExpansion(folderID: ItemID, _ expansion: FolderExpansion) {
+        guard let folder = index[folderID]?.folder else { return }
+        if case .peeked(let child) = expansion {
+            guard parentByID[child] == .folder(folderID), let node = index[child], node.folder == nil else { return }
+        }
+        let old = folder.expansion
+        guard old != expansion else { return }
+        folder.applyExpansion(expansion)
+        // registerChange reaches commitMutation even without undo registration;
+        // a selected peek child remains in the window's shown-tab set.
+        registerChange(undo: { folder.applyExpansion(old) }, redo: { folder.applyExpansion(expansion) })
     }
 
     // MARK: Profiles
@@ -1860,8 +1908,10 @@ public final class BrowserModel {
         let homeSection = section(of: home)
         var moved: [(tab: Tab, parent: NodeParent, index: Int, pinned: PinnedURLs)] = []
         var changed: [NodeParent] = [home]
+        var clearedPeeks: [ClearedFolderPeek] = []
         for id in tabIDs {
             guard let parent = parentByID[id], let removed = removeChild(id, from: parent), let tab = removed.node.tab else { continue }
+            if let cleared = clearPeek(in: parent, removing: id) { clearedPeeks.append(cleared) }
             let pinned = applyPinnedRule(to: removed.node, from: section(of: parent), to: homeSection)
             split.panes.append(tab)
             parentByID[id] = .splitPane(split.id)
@@ -1871,6 +1921,7 @@ public final class BrowserModel {
         for parent in changed { emit(.reload(parent: parent)) }
         let origins = moved
         let parents = changed
+        let peeks = clearedPeeks
         return { model in
             // Auto-archive dissolved the split meanwhile: its survivors stay where they are.
             guard model.index[split.id] != nil else { return false }
@@ -1884,6 +1935,7 @@ public final class BrowserModel {
             if let at = model.parentByID[split.id] { _ = model.removeChild(split.id, from: at) }
             model.index[split.id] = nil
             model.parentByID[split.id] = nil
+            for peek in peeks { model.restorePeek(peek) }
             for parent in parents { model.emit(.reload(parent: parent)) }
             return true
         }
@@ -1904,6 +1956,7 @@ public final class BrowserModel {
         switch source { case .favorites, .splitPane: return nil; default: break }
         let oldFractions = split.fractions, oldFocus = split.focusedPaneID
         guard let removed = removeChild(tabID, from: source) else { return nil }
+        let cleared = clearPeek(in: source, removing: tabID)
         let pinned = applyPinnedRule(to: .tab(tab), from: section(of: source), to: section(of: home))
         split.panes.insert(tab, at: max(0, min(at ?? split.panes.count, split.panes.count)))
         parentByID[tabID] = .splitPane(splitID)
@@ -1918,6 +1971,7 @@ public final class BrowserModel {
             model.parentByID[tabID] = source
             split.fractions = oldFractions; split.focusedPaneID = oldFocus
             Self.restore(pinned)
+            model.restorePeek(cleared)
             for parent in changed { model.emit(.reload(parent: parent)) }
             return true
         }
@@ -1950,6 +2004,7 @@ public final class BrowserModel {
     private func dissolve(_ splitID: ItemID) -> Revert? {
         guard let split = index[splitID]?.split, let parent = parentByID[splitID],
               let removed = removeChild(splitID, from: parent) else { return nil }
+        let cleared = clearPeek(in: parent, removing: splitID)
         index[splitID] = nil
         parentByID[splitID] = nil
         let panes = split.panes
@@ -1972,6 +2027,7 @@ public final class BrowserModel {
             model.index[splitID] = .split(split)
             model.parentByID[splitID] = parent
             for pane in present { model.parentByID[pane.id] = .splitPane(splitID) }
+            model.restorePeek(cleared)
             if let survivor { model.restoreSelection(reselected, from: survivor.id, to: splitID) }
             model.emit(.reload(parent: parent))
             return true
@@ -2034,6 +2090,7 @@ public final class BrowserModel {
                 model.parentByID[split.id] = parent
                 model.parentByID[remaining.id] = .splitPane(split.id)
                 model.restoreSelection(collapsed.reselected, from: remaining.id, to: split.id)
+                model.restorePeek(collapsed.clearedPeek)
                 model.emit(.reload(parent: parent))
             }
             guard model.attach(removed.node, to: .splitPane(split.id), at: paneIndex) != nil else { return false }
@@ -2045,15 +2102,16 @@ public final class BrowserModel {
 
     /// Swaps a one-pane split for its tab. Returns the parent it collapsed in and the
     /// window selections that moved from the split to the remaining tab.
-    private func collapseIfSinglePane(_ split: Split) -> (parent: NodeParent, reselected: [SelectionSlot])? {
+    private func collapseIfSinglePane(_ split: Split) -> (parent: NodeParent, reselected: [SelectionSlot], clearedPeek: ClearedFolderPeek?)? {
         guard split.panes.count == 1, let remaining = split.panes.first, let parent = parentByID[split.id],
               replaceChild(split.id, in: parent, with: .tab(remaining)) != nil else { return nil }
+        let cleared = clearPeek(in: parent, removing: split.id)
         index[split.id] = nil
         parentByID[split.id] = nil
         parentByID[remaining.id] = parent
         let reselected = retargetSelection(from: split.id, to: remaining.id)
         emit(.reload(parent: parent))
-        return (parent, reselected)
+        return (parent, reselected, cleared)
     }
 
     /// One window's selection in one Space.
@@ -2248,7 +2306,10 @@ public final class BrowserModel {
                     kept.append(node)
                 }
             case .folder(let folder):
-                if let children = sweepExpired(folder.children, in: .folder(folder.id), &sweep) { folder.children = children }
+                if let children = sweepExpired(folder.children, in: .folder(folder.id), &sweep) {
+                    folder.children = children
+                    folder.applyExpansion(folder.expansion)
+                }
                 kept.append(node)
             case .split(let split):
                 let cutoff = sweep.cutoff
