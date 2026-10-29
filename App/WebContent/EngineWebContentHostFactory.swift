@@ -48,6 +48,17 @@ final class EngineWebContentHostFactory: NSResponder, WebContentHostFactory {
   private var findSelectionTask: Task<Void, Never>?
   var hasFindSelectionTask: Bool { findSelectionTask != nil }
   var pendingRenameAlert: NSAlert?
+  var sidebarSharePicker: NSSharingServicePicker?
+  var spaceProfileMenu: NSMenu?
+  #if OPEN_AUTOMATION
+  var dismissSidebarShareForAutomation = false
+  var sidebarShareRequest: [String: Any] = [:]
+  var sidebarShareDismissTimerForAutomation: Timer?
+  var sidebarShareDismissAttemptsForAutomation = 0
+  var profileMenuResponseForAutomation: String?
+  var profileMenuRequest: [String: Any] = [:]
+  var sidebarMenuTrackingObserverForAutomation: NSObjectProtocol?
+  #endif
   private(set) var navigationFocusDecisions = 0
   private(set) var lastNavigationFocusRestored = false
   func showCommandBar(_ mode: CommandBarMode) {
@@ -392,13 +403,23 @@ final class EngineWebContentHostFactory: NSResponder, WebContentHostFactory {
     case .copyLinks(let ids, let markdown): return copyLinks(ids: ids, markdown: markdown)
     case .copyAllLinks(let id, let markdown): return copyLinks(ids: [id], markdown: markdown)
     case .moveNodesToNewSpace(let ids): return moveSelectionToNewSpace(ids: ids)
+    case .moveToNewSpace(let id): return moveSelectionToNewSpace(ids: [id])
+    case .turnFolderIntoSpace(let id):
+      // The App disables event grouping. Name the action while this explicit
+      // group is open, before the model's one-step registration is closed.
+      app.undoManager.beginUndoGrouping()
+      defer { app.undoManager.endUndoGrouping() }
+      guard let space = model.turnFolderIntoSpace(id: id) else { return false }
+      let actionName: String = "New Space"
+      app.undoManager.setActionName(actionName)
+      focus(space: space); app.scheduleSave(); app.scheduleMenuRebuild(); return true
+    case .share(let id): return shareSidebarTab(id)
     case .duplicate(let id): return model.duplicateNode(id: id) != nil
     case .showLibrary: app.settingsPresenter.showLibrary(); return true
     case .manageSpaces:
       app.settingsPresenter.showLibrary(section: .spaces); return true
     case .showSiteControls, .changeSpaceIcon, .editSpaceTheme, .newProfile, .shareSpace,
-         .editPinnedURL, .share, .changeIcon, .customizePage,
-         .turnFolderIntoSpace, .moveToNewSpace:
+         .editPinnedURL, .changeIcon, .customizePage:
       return false // Explicitly deferred UI entries; see docs/app-shell.md Step B.
     default: return nil
     }
@@ -469,6 +490,12 @@ final class EngineWebContentHostFactory: NSResponder, WebContentHostFactory {
     pendingSavePanel = nil
     if let sheet = pendingRenameAlert?.window { window?.endSheet(sheet, returnCode: .cancel); sheet.orderOut(nil) }
     pendingRenameAlert = nil
+    sidebarSharePicker?.close(); sidebarSharePicker = nil
+    spaceProfileMenu?.cancelTrackingWithoutAnimation(); spaceProfileMenu = nil
+    #if OPEN_AUTOMATION
+    stopShareDismissalForAutomation()
+    stopObservingSidebarMenusForAutomation()
+    #endif
     commandBarNavigationFocus.removeAll()
     commandBarSession?.dismiss()
     controller?.container.closeAll(); for host in Array(hosts.values) { host.close() }

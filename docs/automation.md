@@ -369,6 +369,9 @@ no remote debugging port. It never opens or copies Arc.
 | `space-manager-menu` | `space=<ID> item=<title>` performs the existing manager column menu. Add `node=<ID>` to perform that real outline row's context-menu item instead. No new confirmation policy or model implementation. |
 | `space-manager-intent` | `kind=openURL space=<ID> url=<URL> [section=pinned]` sends the production intent that a URL drop on that Manager column sends (index 0 of Today, or Pinned). The native drop mapping itself is checked offscreen by `sidebar-render`. |
 | `sidebar-menu` | `item=<A/B path> [node=<ID>] [alternate=true]` builds the same `NSMenu` a right-click shows on that row (no `node`: the Space menu) in the front browser window and performs the item. |
+| `sidebar-menu-state` | Same `item=<A/B path> [node=<ID>] [alternate=true]` lookup as `sidebar-menu`, without performing an action. Reports title, enabled state and key, including disabled entries such as Share Space. |
+| `sidebar-share` | `[dismiss=true|false] [close=true] [waitClosed=true]` controls the automation-only cancel policy and reads the actual `NSSharingServicePicker` request: URL, node, row anchor, service-query callback, close callback and pending state. The menu action calls the real picker; `dismiss=true` closes it without choosing a service. Always close/reset in `finally`. |
+| `profile-menu` | `[response=cancel|<existing Profile name>] [close=true] [waitClosed=true]` controls an automation-only response for the actual Set Profile menu opened by `menu-perform id=change-profile`. Reports menu-open callback, native tracking, checked choices, chosen Profile, closure and pending state. A choice performs the existing menu item after ending tracking. Always close in `finally`. |
 | `alert` | `[window=library] [button=<title>]` reads the texts and buttons of the alert sheet attached to a browser (or the Library) window; with `button`, clicks it. |
 | `toast-undo` | Clicks the shown toast's Undo button in the front browser window. |
 | `defaults` | `key=open.… [value=…]` reads (and writes) one Open preference in the app's own domain (run suites on a cloned bundle ID). |
@@ -518,7 +521,7 @@ commands are available without an open browser, except the banner commands.
 | `archive-state` | None | `now`, `offsetSeconds`, `running`, `nextExpiry` (ISO or null), `timerArmed`, `armedTimerCount` (0/1), `timerGeneration`, `sweepCount`, `countsByReason`, `lastReason`, `lastSweep:{now,archivedCount,affectedSpaces}`, `educationRequested` |
 | `archive-wake` | Optional `now` ISO | Post the real workspace wake notification; await its observer and return state |
 | `profile-archive-setting` | `profile` UUID, `interval`, `scope:profile\|all` | Real Settings propose/apply path; return affected `profiles:[{id,interval}]` and scheduler `state` after Observation delivery |
-| `archive-list` | Optional `profile` UUID, `limit` 1…1000 (default 1000) | Real Profile SQLite `count` and `rows:[{id,kind,reason,space,profile,archivedAt}]`; no URLs |
+| `archive-list` | Optional `profile` UUID, `limit` 1…1000 (default 1000) | Real Profile SQLite `count` and `rows:[{id,kind,reason,space,profile,archivedAt}]` after queued writes; no URLs. Defaults to the focused Profile, or the default Profile without a browser. |
 | `archive-banner-state` | Optional model `window` UUID | Actual view visibility, title, message, threshold, request, eligible/dismissed preferences, and frame in that Open window |
 | `archive-banner-action` | `action:got-it\|settings`, optional model `window` UUID | Press the real Got it NSButton or invoke the actual Settings text-link delegate; require a visible card; return post-action state |
 
@@ -573,3 +576,39 @@ commands accept `cmd`/`command`, `opt`/`option`, and `ctrl`/`control` aliases.
 The A3 flows and Today sweeper flows share the read-only `archive-list` command
 listed above. `sidebar-completion` runs both sets of checks, including E16 and
 the scheduler checks, through one definition of each helper.
+
+Section 1 items 9–10 add `I9_*` and `I10_*` rows to `sidebar-completion`.
+They perform folder conversion (nested folders, split panes, empty folder,
+Undo/Redo), single-item Move to New Space, recursive plain/Markdown folder
+copy, the tab Share picker, disabled Share Space, and the four Spaces/Archive
+menu entries through `sidebar-menu` / `menu-perform`. Rename commits and
+cancels through the real editor; Change Profile opens the shared checked
+menu; Clear Archive reads and answers the Library’s actual confirmation
+with Cancel and Clear Archive. Every new picker/dialog is closed in a
+`finally` path. `spaces` also reports each Space’s Profile ID for ownership
+checks; tab descriptions include `pinnedURL` (empty when unpinned). These flows retain the unique disposable app bundle, data root and
+preference domain of the existing suite.
+
+For a focused items 9–10 diagnostic run, set `OPEN_SIDEBAR_INTENTS_ONLY=1`
+on the same locked `--only sidebar-completion` command. It uses the same
+cloned real app, engine provenance check, disposable roots and final cleanup;
+it skips the earlier A1/A2/Manager/A3 rows. The default full suite still runs
+all earlier rows, all items 9–10 rows, and main’s E16/AA_APP scheduler rows.
+The combined suite runs the items 9–10 flows before the scheduler’s final
+no-browser idle check.
+
+`waitClosed=true` waits up to 5 s inside the automation command for the
+picker/menu callback to finish. These checks verify a request and its
+cancellation without sending keys; they do not open a Python timed focus
+interval. Native rename and other keyboard checks retain the normal focus
+guard.
+
+The Set Profile automation policy observes AppKit’s
+`NSMenu.didBeginTrackingNotification` and cancels on the tracking run loop’s
+next turn. The Share policy retries `close()` on a bounded 50 ms run-loop
+timer after the service query, until the close callback or 100 attempts.
+The timer is automation-only and is invalidated on callback/window close.
+This avoids queuing cancellation on GCD
+behind a nested tracking loop. The Profile observer is removed when the menu
+or browser window closes. The share check verifies the picker’s own query
+and close callbacks; it chooses no service.

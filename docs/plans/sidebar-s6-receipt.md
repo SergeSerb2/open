@@ -3,6 +3,51 @@
 Original S6 base: 2d51f14a1207c00157edb90f51459d97b7b1096b (A2 over A1).
 Branch: t3/sidebar-s6-folder-peek. Parent owns the PR/stack.
 
+## Final integration with origin/main dee105e6 (2026-10-28)
+
+The user added #132 while the first merge was ready. Checkpoint merge
+`e6b431c36e2e5f2d64c30afc1f77bd635a4ecaf9` contains the resolved/tested 013cdb45
+integration below. The final merge adds `dee105e602e66a4fbc4edd8e16a2ab932695e8a1`
+(items 9–10) and repeats every requested check on that combined source.
+
+The second merge conflicts only in status rows: retain main's completed menu/share,
+Spaces/Archive and copy/link facts, S6's measured motion/peek rows, and A3's merged
+status. Keep `App/SidebarMenuActions.swift`, `Turn Folder into Space`, system share
+and Profile menu flows, menu-state automation, and all I9/I10 helpers/calls. The
+S6 motion extension remains in the single `sidebar-click` implementation. The
+repeated dispatch-label/Python-AST audits report zero duplicate definitions.
+Model shown-tab bookkeeping, the six combined peek/expiry checks, incremental
+outline behavior, Motion/Metrics and the original merge resolutions remain intact.
+
+| Final command | Result |
+|---|---|
+| `git diff --check` | PASS |
+| `~/Library/Caches/OpenRE/scripts/heavy.sh tools/verify-all.sh --only sidebar-render,features-render,commands-demo,roundtrip --keep-logs` | PASS: sidebar-render **595/595** (inherited SW1–SW4 skips), features-render **332/332**, commands-demo **307/307** (six FP-AA checks included), roundtrip PASS. Build 53 s; checks 109/43/1/1 s. |
+| `~/Library/Caches/OpenRE/scripts/heavy.sh tools/verification/folder-peek-bench.py` | **3/3 PASS**, unchanged parent-approved conditional gate; loads and all p95 values below. |
+| `~/Library/Caches/OpenRE/scripts/heavy.sh tools/build.sh` | **PASS**, rebuilt App with #132 and S6 automation. |
+| `/usr/bin/lockf /tmp/open-onscreen-e2e.lock tools/e2e/engine_e2e.py --style chrome --only sidebar-completion` | **164/164 PASS**, including I9/I10 **29/29**, E20 **16/16** and all main auto-archive rows. First final-source invocation; zero focus interruptions; cleanup PASS. |
+| `/usr/bin/lockf /tmp/open-onscreen-e2e.lock tools/e2e/engine_e2e.py --style chrome --only sidebar` | **19/19 PASS**, including comparison; existing durable-profile-storage SKIP belongs to the profiles suite. First invocation; zero focus interruptions; cleanup PASS. |
+
+FP10 times in ms. All three native scroll work comparisons remain **18/18**;
+absolute 8.33 ms and same-run relative scroll limits pass.
+
+| Attempt | Load1 start / transition | Parent plain p95 | Branch plain p95 | Peek median / p95 | Computed transition limit | Baseline / peek scroll p95 |
+|---|---|---:|---:|---|---:|---|
+| 1 | 21.82 / 22.47 | 2.940 | 2.289 | 1.61 / 2.271 | 2.567 | 1.77 / 1.69 |
+| 2 | 22.47 / 23.71 | 3.668 | 3.116 | 1.82 / 3.057 | 3.477 | 2.01 / 2.19 |
+| 3 | 23.71 / 24.38 | 3.655 | 3.208 | 1.80 / 3.087 | 3.578 | 2.12 / 1.80 |
+
+The sub-1-ms median goal and C11 capture choices remain open; no visual threshold
+or baseline image changed. No negative-control result is relabelled as a new-head
+run: those ff26852f measurements remain below. All dependent checks completed in
+the foreground. Generated `docs/engine-spike/*` output is restored before commit.
+Private final artifacts: `.re/s6/dee-verify.log`, `dee-fp10.log`,
+`dee-app-build.log`, `dee-e2e-completion-1.log`, `dee-e2e-sidebar-1.log`,
+`dee-results-completion-final.json`, `dee-results-sidebar-final.json`,
+`dee-E20-folder-peek.png`, `dee-sidebar-window.png`, `dee-comparison-sidebar.md`.
+Harness logs: `/var/folders/s6/_07cr4w13vsg_myjkv9ldpqc0000gn/T/open-verify-20261028-172221.qOnpXB/`.
+No PR is opened; the parent owns the stack/PR.
+
 ## Integration with origin/main 013cdb45 (2026-10-28)
 
 Merged `013cdb45d42678f16b27087616b854b76c32c2c4` into the S6 head
