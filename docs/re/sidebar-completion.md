@@ -269,3 +269,59 @@ Final logs: `.re/tab-switcher/verify-final-head.log`,
 The real overlay snapshot is `real-switcher.png`; the two offscreen renders are
 `switcher-1x.png` and `switcher-2x.png`. All these local artifacts are git-ignored.
 Generated `docs/engine-spike` result/debug files were restored before commit.
+
+### Integration with main #127–#130 (2026-10-28, afternoon)
+
+The integration merge starts from `69ab7471` and takes main at `013cdb45`.
+It retains A2's shared preview-host ownership handoff, A3's reviewed handlers,
+#129's fidelity changes, and #130's auto-archive scheduler and selection policy.
+The `features-render` target has one definition, retains `OpenSettings`, and runs
+both `TabSwitcherChecks` and `AutoArchiveChecks`. The sidebar-completion suite
+runs the A3, TS, and archive helpers once each, keeping the relaunched App returned
+by the archive helper. Python definitions and outer automation command cases were
+audited for duplicates; `archive-list` uses main's single archive implementation.
+
+Ctrl+Tab still uses the MRU switcher. Its commit calls `selectTabForCommand`, then
+refreshes through `WebContentContainer.show`. Main's `onReturnPreviewHost` callback
+returns any borrowed page before the container binds the selected page. E12 now
+visits the pinned tab before the current tab, highlights through the real Ctrl+Tab
+route, then releases Control through the real modifier event. It checks that the
+page's JavaScript marker survives and that no new host was created. The pending
+highlight must leave the current selection unchanged.
+
+The model's #130 shown-tab/departure bookkeeping is unchanged. The cross-Space TS
+fixture now remembers its intended current tab before visiting the other Space;
+returning does not introduce an intervening selection departure into MRU order.
+The e2e runner has an optional `--focus-retry-delay-seconds` argument (default 0,
+range 0–600). These merge-validation runs use 180 seconds between environment
+interruptions, with the existing maximum of three fresh workflow attempts.
+
+
+Merge-validation commands and results (same worktree, foreground):
+
+| Command | Result |
+|---|---|
+| `git diff --check` | PASS |
+| `~/Library/Caches/OpenRE/scripts/heavy.sh tools/verify-all.sh --only features-render,sidebar-render,commands-demo` | PASS: zero build warnings/errors; commands-demo 232/232, sidebar-render 564/564, features-render 335/335. |
+| `~/Library/Caches/OpenRE/scripts/heavy.sh tools/build.sh` | PASS: Debug Open.app. |
+| `/usr/bin/lockf /tmp/open-onscreen-e2e.lock python3 tools/e2e/engine_e2e.py --style chrome --only sidebar-completion --focus-retry-delay-seconds 180` | PASS: 135/135 suite rows, plus fingerprint and cleanup (137 total). Both E12 rows, all 16 TS rows, and E16/AA_APP passed. |
+| `/usr/bin/lockf /tmp/open-onscreen-e2e.lock python3 tools/e2e/engine_e2e.py --style chrome --only app-actions --focus-retry-delay-seconds 180` | FAIL: 46/47 action rows on each of three runs. Fingerprint and cleanup passed on all runs. The only failed row is the unchanged 50 ms `first_open_results_budget`. |
+
+App-actions cold-open results: **113.94 ms**, **57.45 ms**, **52.55 ms** against
+50 ms. Runs two and three began after gaps of at least three minutes. The second start's load
+averages were 11.78/11.04/11.55; the third's were 16.42/13.76/12.69. All other
+functional action rows passed each time. Both suites had zero foreground
+interruptions; these timing failures are not relabeled as environment
+interruptions or accepted passes. No threshold, native event route, or
+command-bar source was changed to clear the check. The cause remains unproven.
+Stored older cold-open receipts are 43.98 ms on `013cdb45` and 18.84 ms on
+`69ab7471`; they are not live baseline runs under this validation's conditions.
+The branch is not green on the full app-actions suite.
+
+Static audits found no duplicate Python definitions in the same scope, no
+duplicate outer automation command cases, and no duplicate package targets.
+Python compilation and the runner's `--help` path passed. Receipts are in
+`.re/tab-switcher-merge/`: `verify.log`, `build.log`, `sidebar-completion.log`,
+`sidebar-completion-results.json`, and `app-actions-attempt-{1,2,3}*` logs/JSON.
+Generated `docs/engine-spike` changes were restored to the imported main version;
+that directory has no merge-resolution differences from `013cdb45`.

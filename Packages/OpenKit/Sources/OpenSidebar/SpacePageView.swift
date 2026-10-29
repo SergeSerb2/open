@@ -824,18 +824,52 @@ final class SidebarOutlineView: NSOutlineView {
         super.draggingExited(sender)
     }
 
+    /// Capture rows before removal, including all neighbors so expanded children and
+    /// other members of a batch delete can be skipped once the delete completes.
+    func keyboardFocusAfterDeletion() -> @MainActor () -> Void {
+        guard let focused = keyboardItem, keyboardItemIsAvailable(focused) else { return {} }
+        let current = row(forItem: focused)
+        let rows = Array((current + 1)..<numberOfRows) + Array((0..<current).reversed())
+        let candidates = rows.compactMap { item(atRow: $0) as AnyObject? }
+        return { [weak self, weak focused] in
+            guard let self, let focused, self.keyboardItem === focused,
+                  !self.keyboardItemIsAvailable(focused) else { return }
+            self.keyboardItem = candidates.first(where: self.keyboardItemIsAvailable)
+            if let next = self.keyboardItem { self.scrollRowToVisible(self.row(forItem: next)) }
+            self.page?.updateRowStates(animated: false)
+        }
+    }
+
+    private func keyboardItemIsAvailable(_ item: AnyObject) -> Bool {
+        guard let page, page.context.model.space(id: page.space.id) === page.space,
+              row(forItem: item) >= 0 else { return false }
+        if let id = itemID(of: item) { return page.context.model.node(id: id)?.object === item }
+        return item is NewTabItem
+    }
+
     override func keyDown(with event: NSEvent) {
-        if event.keyCode == 53 { page?.context.existingHoverPreviews?.dismiss() }
-        if let page { page.context.manager?.activate(page.space) }
-        if let page, !page.context.selection.isEmpty, event.modifierFlags.intersection([.control, .option]).isEmpty {
+        guard let page, page.context.model.space(id: page.space.id) === page.space else { keyboardItem = nil; return }
+        if let item = keyboardItem, !keyboardItemIsAvailable(item) {
+            keyboardItem = nil
+            if [36, 49, 76, 51, 117, 123, 124].contains(event.keyCode) {
+                page.updateRowStates(animated: false)
+                return
+            }
+        }
+        if event.keyCode == 53 { page.context.existingHoverPreviews?.dismiss() }
+        page.context.manager?.activate(page.space)
+        if !page.context.selection.isEmpty, event.modifierFlags.intersection([.control, .option]).isEmpty {
             if event.modifierFlags.contains(.command) {
                 if event.keyCode == 2, !event.modifierFlags.contains(.shift) { _ = page.context.performSelectionCommand("pin-unpin-tab"); return }
                 if event.keyCode == 45, event.modifierFlags.contains(.shift) { _ = page.context.performSelectionCommand("new-folder"); return }
             } else if event.keyCode == 51 || event.keyCode == 117 {
-                _ = page.context.deleteSelection(); return
+                let restoreKeyboardFocus = keyboardFocusAfterDeletion()
+                _ = page.context.deleteSelection()
+                restoreKeyboardFocus()
+                return
             }
         }
-        guard let page, event.modifierFlags.intersection([.command, .control, .option]).isEmpty else { super.keyDown(with: event); return }
+        guard event.modifierFlags.intersection([.command, .control, .option]).isEmpty else { super.keyDown(with: event); return }
         let rows = (0..<numberOfRows).filter { itemID(of: item(atRow: $0)) != nil || item(atRow: $0) is NewTabItem }
         let current = keyboardItem.map { row(forItem: $0) } ?? -1
         switch event.keyCode {
@@ -863,10 +897,9 @@ final class SidebarOutlineView: NSOutlineView {
             }
         case 51, 117: // Delete, forward Delete: archive a focused tab.
             if let id = itemID(of: keyboardItem) {
-                let next = rows.first(where: { $0 > current }).flatMap { item(atRow: $0) as AnyObject? }
-                    ?? rows.last(where: { $0 < current }).flatMap { item(atRow: $0) as AnyObject? }
+                let restoreKeyboardFocus = keyboardFocusAfterDeletion()
                 page.context.send(keyboardItem is Folder ? .deleteFolder(folderID: id) : .close(nodeID: id))
-                if page.context.model.node(id: id) == nil { keyboardItem = next }
+                restoreKeyboardFocus()
             }
         default: super.keyDown(with: event); return
         }

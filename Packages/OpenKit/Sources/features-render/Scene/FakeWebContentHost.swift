@@ -86,6 +86,14 @@ public final class FakeWebContentHost: WebContentHost {
         guard !isClosed else { return }
         surface.layer?.backgroundColor = color.cgColor; onPageBackgroundChange?(color)
     }
+    /// A late document title, independent of an explicit navigation.
+    public func simulateTitle(_ value: String) {
+        guard !isClosed else { return }
+        title = value; surface.label.stringValue = value; onTitleChange?(value)
+    }
+    public func simulateFavicon(_ data: Data?) {
+        guard !isClosed else { return }; onFaviconChange?(data)
+    }
     @discardableResult public func simulateLinkClick(_ url: URL, modifiers: NSEvent.ModifierFlags = []) -> Bool {
         guard !isClosed else { return false }
         if shouldNavigate?(url, modifiers) ?? true { load(url); return true }

@@ -348,6 +348,10 @@ final class EngineWebContentHostFactory: NSResponder, WebContentHostFactory {
   /// editors return false, so no successful no-op reaches the sidebar.
   func performSidebar(_ intent: SidebarIntent) -> Bool? {
     switch intent {
+    case .dismissAutoArchiveBanner: app.dismissAutoArchiveEducation(); return true
+    case .openProfileSettings(let id):
+      guard model.profile(id: id) != nil else { return false }
+      app.dismissAutoArchiveEducation(); app.settingsPresenter.showProfileSettings(profileID: id); return true
     case .toggleSidebar: controller?.toggleSidebar(); return true
     case .select(let id, let spaceID):
       guard model.space(id: spaceID) != nil, model.node(id: id) != nil else { return false }
@@ -731,6 +735,8 @@ extension EngineWebContentHostFactory {
             subtitle: $0.url.host ?? "")
     }, current: current, in: controller.contentView) { [weak self] id in
       guard let self, !self.isClosing, self.profile(for: id)?.id == profile.id else { return }
+      // Keep the shared selection path: Container.show returns any preview host
+      // before it binds the selected page (A2's ownership handoff).
       self.selectTabForCommand(id)
     }
   }
