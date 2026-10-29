@@ -242,7 +242,7 @@
           let frame = controller.sidebar.rowFrame(nodeID: ItemID(rawValue: uuid)) else { throw Failure(message: "no such sidebar row") }
         controller.contentView.layoutSubtreeIfNeeded()
         let inRoot = controller.contentView.convert(frame, from: controller.sidebar)
-        return ["frame": [inRoot.minX, inRoot.minY, inRoot.width, inRoot.height], "point": [inRoot.midX, inRoot.midY], "unreadBadge": controller.sidebar.unreadDotFrame(nodeID: ItemID(rawValue: uuid)) != nil] as [String: Any]
+        return ["frame": [inRoot.minX, inRoot.minY, inRoot.width, inRoot.height], "point": [inRoot.midX, inRoot.midY], "unreadBadge": controller.sidebar.unreadDotFrame(nodeID: ItemID(rawValue: uuid)) != nil, "current": controller.sidebar.isCurrentRow(nodeID: ItemID(rawValue: uuid))] as [String: Any]
       case "preview-state":
         return try previewState(a)
       case "toast-undo":
@@ -401,7 +401,7 @@
           }
         }
         collect(space.pinned); collect(space.today)
-        return ["tabs": tabs, "rows": rows, "folders": folders] as [String: Any]
+        return ["tabs": tabs, "rows": rows, "folders": folders, "selectedNode": w.selectedNodeID?.description ?? ""] as [String: Any]
       case "tab-state":
         return describe(try modelTab(a, w), in: w)
       case "tab-strip":

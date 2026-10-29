@@ -5411,6 +5411,45 @@ def folder_peek_checks(factory, results, tmp):
         require("E20_empty_folder_collapses", bool(wait_until(lambda: expected(empty, False, "", []), timeout=5, step=.02)))
         app.call("sidebar-click", node=empty)
         require("E20_empty_folder_reexpands", bool(wait_until(lambda: expected(empty, True, "", []), timeout=5, step=.02)))
+        # Q18 must select the sidebar split node, rather than its first flattened
+        # tab. Exercise the engine-backed hover button as well as the feature flow.
+        first_outside = next(tab["id"] for tab in app.call("tabs") if tab["id"] not in [a,b,c])
+        app.call("select", tab=first_outside)
+        outside = app.call("split")
+        pane_ids = {tab["id"] for tab in outside}
+        tree = app.call("sidebar-tree")
+        split = next(node for node in tree["pinned"] + tree["today"] if node["kind"] == "split"
+                     and {child["id"] for child in node["children"]} == pane_ids)
+        app.call("select", tab=b)
+        app.call("wait", tab=b)
+        for _ in range(3):
+            if state(folder)[1]["expanded"]:
+                break
+            app.call("sidebar-click", node=folder)
+        app.call("sidebar-click", node=folder)
+        fixture_value = wait_until(lambda: expected(folder, False, b, [b]), timeout=5, step=.02)
+        require("E20_Q18_split_fallback_fixture", len(pane_ids) == 2 and first_outside in pane_ids
+                and bool(fixture_value) and fixture_value["selectedNode"] == b
+                and any(tab["id"] == b and tab["loaded"] for tab in fixture_value["tabs"]))
+        frame = app.call("sidebar-row", node=folder)["frame"]
+        app.call("mouse", action="hover", x=frame[0] + frame[2] - 26, y=frame[1] + 20)
+        app.call("tabs", sidebar=True)
+        app.call("mouse", action="click", x=frame[0] + frame[2] - 26, y=frame[1] + 20)
+        last_fallback = {}
+        def split_fallback_ready():
+            nonlocal last_fallback
+            value = app.call("tabs", sidebar=True)
+            row = app.call("sidebar-row", node=split["id"])
+            enabled = next((item["enabled"] for item in app.call("menu-state") if item["id"] == "expand-current-split"), False)
+            visible = {tab["id"] for tab in value["tabs"] if tab["visible"]}
+            unloaded = all(not tab["loaded"] for tab in value["tabs"] if tab["id"] in [a,b,c])
+            last_fallback = dict(selected=value["selectedNode"], visible=sorted(visible),
+                                 current=row["current"], splitCommand=enabled, unloaded=unloaded)
+            return last_fallback if (value["selectedNode"] == split["id"] and visible == pane_ids
+                                    and row["current"] and enabled and unloaded) else None
+        fallback = wait_until(split_fallback_ready, timeout=5, step=.02)
+        require("E20_Q18_unload_fallback_to_split", bool(fallback), split=split["id"], state=last_fallback)
+
     finally:
         if app:
             app.quit()
@@ -6014,6 +6053,7 @@ def sidebar_tab_switcher_checks(app, require, tmp):
             switcher=first, selected=selected(), expected=[current, pin, favorite, other])
     hosts_after = app.call('host-counts')
     image_path = str(Path(ROOT) / '.re' / 'tab-switcher' / 'real-switcher.png')
+    Path(image_path).parent.mkdir(parents=True, exist_ok=True)
     app.call('snapshot', path=image_path)
     require('TS_highlight_does_not_create_hosts', hosts_before == hosts_after, before=hosts_before, after=hosts_after, png=image_path)
     key('tab', ['ctrl']); second = switcher()

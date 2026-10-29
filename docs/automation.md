@@ -71,7 +71,7 @@ Arguments are `key=value`; values that parse as JSON are sent as JSON.
 | Command | Args | Result |
 |---|---|---|
 | `ping` | — | pid, Chromium and CEF versions, engine root (`Profiles/`) and data root |
-| `tabs` | optional `sidebar:true` | Plain response is an array; `sidebar:true` adds `{tabs,rows,folders}` native row/state readback. Sidebar tabs of the focused Space in row order: id, title, url, section (`favorites`/`pinned`/`today`), selected, visible, loaded, loading, audible, crashed, favicon, and `page` (engine state, below) when loaded |
+| `tabs` | optional `sidebar:true` | Plain response is an array; `sidebar:true` adds `{tabs,rows,folders,selectedNode}` native row/state readback. Sidebar tabs of the focused Space in row order: id, title, url, section (`favorites`/`pinned`/`today`), selected, visible, loaded, loading, audible, crashed, favicon, and `page` (engine state, below) when loaded |
 | `tab-state` | `tab` | Model/live state of one tab, including an inactive Space's tab |
 | `tab-strip` | — | Actual engine strips: all-Spaces model IDs, content IDs, active model tab, membership |
 | `frame-save-counters` | — | Actual snapshot captures, dirty schedules, factory tree changes and mirror syncs |
@@ -568,9 +568,9 @@ commands activate the exact owned window and use the harness's focus tracking.
 | `sidebar-drop` | `nodes=[IDs] parent={kind:today|pinned|folder,id:UUID} index=<nonnegative Int>` calls the same `SidebarContext.performNodeDrop` as native outline acceptDrop. Rejects empty/duplicate/missing IDs, invalid destinations, and forbidden moves. This proves intent ordering and undo, not OS drag-session hit testing. |
 | `sidebar-clear-state` | `[window=<model UUID>]` reads the actual divider Clear hit `frame` in root coordinates and hover `visible` state. Use native `mouse action=hover/click` with Option for the Option-Clear flow. |
 
-`sidebar-row` also reads the visible `unreadBadge`. Folder nodes in
+`sidebar-row` also reads the visible `unreadBadge` and the actual `current` row highlight, without creating an offscreen row. `tabs sidebar:true` reports the selected sidebar node as `selectedNode` (a split ID for split content). Folder nodes in
 `sidebar-tree` include `expanded` and `peekedChildID`. `tabs sidebar:true` returns
-`{tabs,rows,folders}` with actual native row IDs and each folder's logical state
+`{tabs,rows,folders,selectedNode}` with actual native row IDs and each folder's logical state
 and visible direct children; plain `tabs` keeps its array response. `tab-strip` includes `pinStates`, read from
 `OEBrowser.isPinned(_:)` for each actual engine web content. Mouse and key
 commands accept `cmd`/`command`, `opt`/`option`, and `ctrl`/`control` aliases.

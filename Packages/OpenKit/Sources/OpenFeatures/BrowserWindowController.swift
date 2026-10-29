@@ -858,7 +858,7 @@ public final class BrowserWindowController: NSWindowController, NSWindowDelegate
             if let selected = context.currentTab?.id, ids.contains(selected) {
                 if let space = context.focusedSpace {
                     let next = tabs(space.pinned + space.today).first { !ids.contains($0.id) }
-                    model.selectNode(windowID: windowID, spaceID: space.id, nodeID: next?.id)
+                    model.selectNode(windowID: windowID, spaceID: space.id, nodeID: model.sidebarSelectionID(for: next?.id))
                 }
             }
             refresh(); return true

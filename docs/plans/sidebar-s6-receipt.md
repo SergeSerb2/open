@@ -3,6 +3,200 @@
 Original S6 base: 2d51f14a1207c00157edb90f51459d97b7b1096b (A2 over A1).
 Branch: t3/sidebar-s6-folder-peek. Parent owns the PR/stack.
 
+## PR #135 P2 fixes over d88c839d and main 3130eafa (2026-10-28)
+
+Review comments: [4408016684](https://github.com/SergeSerb2/open/pull/135#discussion_r4408016684)
+(unload fallback), [4408016687](https://github.com/SergeSerb2/open/pull/135#discussion_r4408016687)
+(peeked drop indices). Original reviewed head:
+`d88c839d516da08c46e1d08ddad51fc2cb77cf8e`.
+
+### Reproduction against the reviewed head
+
+The first run adds only the real harness flows to d88c839d. Checkpoint
+`5b023d89` preserves those initial flows; its name marks a reproduction checkpoint.
+The six drop failures below are valid. The initial unload fixture was later found
+to be a placeholder rather than a loaded tab, so its first failure is **invalid as
+unload regression proof**. The corrected loaded-tab baseline run is recorded
+below; do not use the first feature failure as evidence of the product bug.
+Initial command:
+
+```sh
+~/Library/Caches/OpenRE/scripts/heavy.sh tools/verify-all.sh --only sidebar-render,features-render --keep-logs
+```
+
+Build PASS. Sidebar-render **597 passed, 6 failed**; features-render **365 passed,
+1 failed**. The six exact drop failure messages are `FP-drop node above C`,
+`FP-drop node below C`, `FP-drop node on C`, and the corresponding three `URL`
+rows, each ending `maps peeked C in [A,B,C] to model order`. Both `on folder`
+controls PASS. The initial feature failure (fixture error, not valid product proof) is:
+
+```text
+FAIL FP-unload fallback selects containing split, shows both panes and enables split commands
+```
+
+The drop flows invoke the native outline's `validateDrop` and `acceptDrop`, the actual
+sidebar delegate/model commands, and the real BrowserWindowController/container
+flow. They do not call an isolated mapping helper. The existing feature harness
+uses its existing web-content factory; the native E20 extension separately covers
+the real engine-backed App's hover action. No unit tests were added.
+
+Private initial log: `.re/s6/review-135/before.log`; detailed logs:
+`/var/folders/s6/_07cr4w13vsg_myjkv9ldpqc0000gn/T/open-verify-20261028-191319.OnKznF/`.
+
+### Corrected loaded-tab baseline proof
+
+Raw `Tab` fixtures start in `.placeholder`. The new fixture must explicitly mark
+its tabs `.live`, as the existing feature fixture does, so the controller actually
+creates and unloads a host. The earlier first full run fails this invalid fixture;
+it is not a product failure or a final green receipt. The corrected fixture also
+prints the loaded, accepted, selected-split, pane-count and command states.
+
+Export `git archive d88c839d` to `.re/s6/review-135/baseline-d88`; overlay only the
+feature harness flow with live tabs and its state receipt. BrowserWindowController,
+SplitViewController and BrowserModel are byte-verified against that exact commit.
+No baseline product code or new row-readback API is overlaid. From that export:
+
+```sh
+~/Library/Caches/OpenRE/scripts/heavy.sh tools/verify-all.sh --only features-render --keep-logs
+```
+
+**Expected FAIL, 365 passed / 1 failed; build PASS.** Exact diagnostic and failure:
+
+```text
+FP-unload receipt loaded=true accepted=true selectedSplit=false visiblePanes=1 splitCommand=false
+FAIL FP-unload fallback selects containing split, shows both panes and enables split commands
+```
+
+Baseline log: `.re/s6/review-135/baseline-feature-red.log`; detailed logs:
+`/var/folders/s6/_07cr4w13vsg_myjkv9ldpqc0000gn/T/open-verify-20261028-193338.HKjNr4/`.
+Export provenance is `baseline-d88/REPRO-PROVENANCE.txt`. The same corrected fixture
+on the fixed merged source reports `loaded=true accepted=true selectedSplit=true
+visiblePanes=2 splitCommand=true`, and **380/380 PASS**, including actual row
+highlight readback. Intermediate fixed-source log: `features-valid-fixture.log`;
+its first launch used the current worktree rather than the export and is recorded
+as a green current-source run, never a baseline failure. The separate baseline
+command above runs from the exported directory and supplies the valid red proof.
+
+
+
+### Merge and fixes
+
+Merged `3130eafaef8bf3e160b10d2d83023ac8e5b388f7` as `2bd8040b` before the final
+checks. Retain main's Cmd+9, Include Favorites, Ctrl+Tab switcher, selection and
+cycle paths, commands, automation, harnesses and docs. Conflicts are docs-only:
+combine all S6 and TS-C1 followups; use main's refreshed status rows while retaining
+S6's implemented peek/motion rows. No code path was dropped. Final audits find
+no duplicate top-level Python definitions and no duplicate automation labels
+(144 command labels).
+
+- `BrowserModel.sidebarSelectionID(for:)` is a shared O(1) lookup which promotes
+  a flattened pane candidate to its containing split. Both unload fallbacks use
+  it before selection. Plain tabs and nil retain their prior behavior; selecting
+  the split keeps both panes, split commands, row highlighting and shown-tab
+  bookkeeping correct. It adds no model mutation or undo step.
+- `SpacePageView.dropDestination` maps a peeked folder's displayed 0/1 boundary to
+  the retained child's model index / index + 1. Both node and URL acceptance use
+  this destination. The ON-child validation retarget remains in displayed outline
+  coordinates, avoiding a second translation. Drop ON the folder itself still
+  appends at the full model child count. Stale out-of-range peek positions reject.
+- Eight FP-drop flows cover above C, below C, ON C and ON the folder for both node
+  moves and URLs. The unload feature flow also checks the actual split row highlight.
+  E20 uses the native hover dash with a loaded selected folder child and an outside
+  split, then polls selected split ID, both visible panes, actual row highlight,
+  split menu enablement and unloaded folder hosts.
+- Read-only diagnostics: `sidebar-row.current` reads an existing row without
+  creating an offscreen row; `tabs sidebar:true` adds `selectedNode`. Plain `tabs`
+  keeps its array response. `docs/automation.md` records both fields.
+
+No frozen PNG, visual threshold, folder motion token or engine source changes.
+
+### Final merged-source verification
+
+```sh
+~/Library/Caches/OpenRE/scripts/heavy.sh tools/verify-all.sh --keep-logs
+~/Library/Caches/OpenRE/scripts/heavy.sh tools/build.sh
+```
+
+Final full gate: **22/22 PASS, exit 0**. Sidebar-render **603/603**, including all
+eight FP-drop flows (inherited SW1–SW4 skips); features-render **380/380**, including
+the corrected loaded-tab split fallback and real row highlight. Commands-demo
+307/307, Site Control 1471/1471. All original frozen-image/comparison checks PASS.
+The earlier full invocation's only failure was the invalid placeholder fixture;
+it remains recorded in `verify-full.log`, not relabelled as a product failure or
+an accepted full gate. The corrected final run is `verify-full-final.log`.
+
+| Full gate row | Result | Seconds |
+|---|---|---:|
+| build | PASS | 3 |
+| commands-demo | PASS | 1 |
+| roundtrip | PASS | 1 |
+| space-legacy | PASS | 0 |
+| space-editor | PASS | 3 |
+| space-pad-compare | PASS | 2 |
+| suggest-check | PASS | 12 |
+| commands-dump | PASS | 0 |
+| route | PASS | 0 |
+| favicons | PASS | 1 |
+| media-demo | PASS | 0 |
+| sleep-demo | PASS | 1 |
+| adblock-perf | PASS | 0 |
+| adblock-catalog | PASS | 0 |
+| profiles | PASS | 1 |
+| settings-preview | PASS | 79 |
+| sidebar-render | PASS | 108 |
+| sidebar-compare | PASS | 97 |
+| commandbar-render | PASS | 14 |
+| features-render | PASS | 49 |
+| sitecontrol-render | PASS | 49 |
+| boosts | PASS | 7 |
+
+Full logs: `.re/s6/review-135/verify-full-final.log` and
+`/var/folders/s6/_07cr4w13vsg_myjkv9ldpqc0000gn/T/open-verify-20261028-193631.uTHAMb/`.
+App rebuild: **BUILD SUCCEEDED** (`.re/s6/review-135/app-build.log`).
+
+Native commands, each in its own lock invocation after the rebuilt App:
+
+```sh
+/usr/bin/lockf /tmp/open-onscreen-e2e.lock tools/e2e/engine_e2e.py --style chrome --only sidebar-completion
+/usr/bin/lockf /tmp/open-onscreen-e2e.lock tools/e2e/engine_e2e.py --style chrome --only sidebar
+/usr/bin/lockf /tmp/open-onscreen-e2e.lock tools/e2e/engine_e2e.py --style chrome --only window
+```
+
+| Native suite | Final result | Focus / cleanup |
+|---|---|---|
+| sidebar-completion | **190/190 PASS** | 0 interruptions; PASS |
+| sidebar | **19/19 PASS**, comparison included | 0 interruptions; PASS |
+| window | **74/74 PASS**, all comparison/traffic-light rows included | 0 interruptions; PASS |
+
+`E20_Q18_unload_fallback_to_split` reads the selected split ID, two visible panes,
+`current:true`, `splitCommand:true`, `unloaded:true`; its fixture first proves a
+loaded selected child and that the first outside candidate belongs to the split.
+The feature fallback path and the engine-backed hover action are both covered.
+
+The first native completion invocation stopped in main's new Tab Switcher helper:
+its `.re/tab-switcher` output directory did not exist. Add `mkdir(parents=True,
+exist_ok=True)` at that harness call site. Keep the stored path a string. A trial
+edit stored a Path object and could not serialize the second run's JSON; its
+partial artifact is not accepted. That second run also queried a hotkey-only
+`next-split-pane` ID through `menu-state`. This ID is not in the installed menu;
+read `expand-current-split`, which uses the actual split command validator.
+The core second-run state already showed the correct split ID, two visible panes,
+row highlight and unloaded hosts. Final corrected run 3 passes all 190 rows.
+No product behavior or limit was changed to accommodate these harness errors.
+The feature flow separately checks the next-pane dispatcher itself.
+
+Private evidence: `.re/s6/review-135/e2e-completion.log` (missing directory),
+`e2e-completion-2.log` / `completion-2-state.json` (invalid harness receipts),
+`e2e-completion-3.log`, `completion-final.json`, `e2e-sidebar.log`,
+`sidebar-final.json`, `e2e-window.log`, `window-final.json`, and
+`E20-folder-peek-final.png`. The partial `completion-2.json` remains explicitly
+unaccepted. All jobs completed in the foreground. No owned Open/renderer process
+remains. `git diff --check` passes. Generated `docs/engine-spike/*` is restored
+before commit. No existing baseline image or visual threshold changed.
+
+
+
+
 ## Final integration with origin/main 61ae275a / #133 (2026-10-28)
 
 Regression fix `c128a3a2` is preserved, including native raster contexts and the

@@ -946,6 +946,13 @@ between states edits that list with `removeItems` / `insertItems` inside one
 `beginUpdates` block (expanded → peeked removes the others; peeked → collapsed
 removes the child and collapses the item; collapsed → expanded expands with
 all children). No `reloadData` (`SidebarDiagnostics.fullReloads` unchanged).
+Drop boundaries in a peeked folder map from outline indices 0/1 to the retained
+child's model index / index + 1, for both node and URL drops. Validation retargets
+ON-child proposals using outline indices; acceptance performs the same mapping.
+Drop ON the folder row still appends to the full model list. Folder unload
+fallbacks in the App and feature controller share `BrowserModel.sidebarSelectionID`:
+a candidate pane selects its containing split, retaining every pane and row highlight.
+
 Keep native title backing contexts and folder `draw(_:)`: flattening tab text
 changed Core Text edge pixels; a cached glyph bitmap changed 192 legacy pixels.
 Both optimizations were rejected. All six schema-1 PNGs remain byte-identical;
@@ -1389,7 +1396,7 @@ Each lane records its results in its own doc (§7). The lead fills this table wi
 | M5 | | |
 | S5 | | |
 | S5b | [#123](https://github.com/SergeSerb2/open/pull/123) | Fixed 0.5 s arm delay, no delay setting; HP1 stored-delay proofs; real-App Previews flow PASS (M5 gate: display-only rows as on main) |
-| S6 | `t3/sidebar-s6-folder-peek` (main 61ae275a integrated; parent owns PR) | FP1–FP9 and FP11 PASS; merged harnesses sidebar 595/595, features 332/332, commands 307/307 and roundtrip PASS. App sidebar-completion 164/164 PASS including I9/I10 29/29, E20 16/16 and main auto-archive rows; sidebar 19/19 PASS including comparison, cleanup PASS. Regression fix: all six legacy PNGs byte-identical; rebuilt completion passes 164/164 on three runs. After main 61ae275a integration, the full gate passes 22/22 in one invocation. Paired FP10 3/3 PASS under the parent's conditional gate; sub-1-ms median remains outline-wide follow-up work. Pixel causes, Library readiness diagnostics and negative controls are in the receipt. [Integration and prior receipts](sidebar-s6-receipt.md). |
+| S6 | [#135](https://github.com/SergeSerb2/open/pull/135) (main 3130eafa integrated) | FP1–FP9 and FP11 PASS; merged harnesses sidebar 595/595, features 332/332, commands 307/307 and roundtrip PASS. App sidebar-completion 164/164 PASS including I9/I10 29/29, E20 16/16 and main auto-archive rows; sidebar 19/19 PASS including comparison, cleanup PASS. Regression fix: all six legacy PNGs byte-identical; rebuilt completion passes 164/164 on three runs. PR #135 P2 fixes add eight native-outline drop flows and both unload-to-split paths. After main 3130eafa integration, the full gate passes 22/22 (sidebar 603/603, features 380/380), and native completion passes 190/190, sidebar 19/19 and window 74/74. Prior paired FP10 3/3 PASS under the parent's conditional gate; sub-1-ms median remains outline-wide follow-up work. Pixel causes, Library readiness diagnostics and negative controls are in the receipt. [Integration and prior receipts](sidebar-s6-receipt.md). |
 | A1 | [#126](https://github.com/SergeSerb2/open/pull/126) | DA1–DA5, HT1–HT3, GH1–GH5, CT1–CT3 PASS; e2e E7, E8, E17, E19; hint vs A0440 worst 1 pt / ΔE00 1.17; compact toolbar vs S2 06/0029 worst 1 pt / ΔE00 0.80; floor 164 |
 | A2 | [#127](https://github.com/SergeSerb2/open/pull/127) | HP3 measured folder card, HP7–HP10, SP5–SP6 PASS; e2e E11–E14 PASS (E14: same engine page and probe after Separate); banner trigger moves to the item-6 sweeper |
 | A3 | [#128](https://github.com/SergeSerb2/open/pull/128) | Selection-aware menu/App-key handlers, copy/atomic New Space actions, native automation helpers, and 105/105 real-App checks. E1–E15 and E17–E19 PASS. E16/`archive-sweep` belong to Part A; E20/FP belong to S6. See the scoped receipt below. |

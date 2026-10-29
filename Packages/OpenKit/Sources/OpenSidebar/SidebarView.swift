@@ -324,6 +324,14 @@ public final class SidebarView: NSView {
         guard row >= 0 else { return nil }
         return convert(page.outline.rect(ofRow: row), from: page.outline)
     }
+
+    /// Actual current-row highlight state, without creating an offscreen row.
+    public func isCurrentRow(nodeID: ItemID) -> Bool {
+        guard let page = pager.currentPage, let obj = context.model.node(id: nodeID)?.object else { return false }
+        let row = page.outline.row(forItem: obj)
+        guard row >= 0 else { return false }
+        return (page.outline.rowView(atRow: row, makeIfNecessary: false) as? SidebarRowView)?.isCurrent == true
+    }
 }
 
 @MainActor

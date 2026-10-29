@@ -205,6 +205,7 @@ enum CompletionFeatureChecks {
         let profile = Profile(name: "Unload split")
         let inside = Tab(url: URL(string: "https://example.invalid/unload-inside")!, title: "Inside")
         let panes = (0..<2).map { Tab(url: URL(string: "https://example.invalid/unload-outside/\($0)")!, title: "Outside \($0)") }
+        for tab in [inside] + panes { tab.live.sleepPhase = .live }
         let folder = Folder(title: "Unload", children: [.tab(inside)])
         let space = Space(title: "Unload", profileID: profile.id, pinned: [.folder(folder)], today: panes.map { .tab($0) })
         let window = BrowserWindowState(focusedSpaceID: space.id, selectedNodeBySpace: [space.id: inside.id])
@@ -219,9 +220,10 @@ enum CompletionFeatureChecks {
         let loaded = c.container.host(for: inside.id) != nil
         let accepted = c.sidebar(c.sidebar, didRequest: .unloadFolder(folderID: folder.id))
         await pump()
+        print("FP-unload receipt loaded=\(loaded) accepted=\(accepted) selectedSplit=\(window.selectedNodeBySpace[space.id] == split.id) visiblePanes=\(c.container.slots.count) splitCommand=\(c.isCommandEnabled("next-split-pane", enabledKey: ""))")
         check(loaded && accepted && c.container.host(for: inside.id) == nil && folder.expansion == .peeked(inside.id)
             && window.selectedNodeBySpace[space.id] == split.id && c.splitController.split === split
-            && c.container.slots.map(\.tabID) == panes.map(\.id)
+            && c.container.slots.map(\.tabID) == panes.map(\.id) && c.sidebar.isCurrentRow(nodeID: split.id)
             && c.isCommandEnabled("next-split-pane", enabledKey: ""),
             "FP-unload fallback selects containing split, shows both panes and enables split commands")
     }

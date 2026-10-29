@@ -390,7 +390,7 @@ final class EngineWebContentHostFactory: NSResponder, WebContentHostFactory {
       guard !loaded.isEmpty else { return true }
       for id in loaded { controller?.container.closeHost(for: id); hosts[id]?.close() }
       if let selected = selectedTab?.id, ids.contains(selected) {
-        select(nodeID: orderedTabs.first { !ids.contains($0.id) }?.id)
+        select(nodeID: model.sidebarSelectionID(for: orderedTabs.first { !ids.contains($0.id) }?.id))
       } else { controller?.refresh(); mirror.sync(); app.scheduleSave() }
       return true
     case .goBack: guard let page = selectedContent, page.canGoBack else { return false }; page.goBack(); return true

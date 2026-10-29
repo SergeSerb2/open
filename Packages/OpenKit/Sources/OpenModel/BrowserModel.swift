@@ -213,6 +213,14 @@ public final class BrowserModel {
     public func tab(id: ItemID) -> Tab? { index[id]?.tab }
     public func parent(of id: ItemID) -> NodeParent? { parentByID[id] }
 
+    /// Resolve a flattened tab traversal result to its selectable sidebar node.
+    /// Selecting a split pane as a plain tab would hide the other panes.
+    public func sidebarSelectionID(for id: ItemID?) -> ItemID? {
+        guard let id else { return nil }
+        if case .splitPane(let splitID)? = parent(of: id) { return splitID }
+        return id
+    }
+
     /// True when the tab's ancestor chain reaches a Space's pinned section,
     /// including tabs inside folders and splits there.
     public func isPinned(tabID: ItemID) -> Bool {

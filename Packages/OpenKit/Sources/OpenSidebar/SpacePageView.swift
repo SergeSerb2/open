@@ -854,8 +854,14 @@ final class SpacePageView: NSView, NSOutlineViewDataSource, NSOutlineViewDelegat
     func dropDestination(item: Any?, childIndex: Int) -> (parent: NodeParent, index: Int, retarget: (Any?, Int)?)? {
         switch item {
         case let f as Folder:
-            let i = childIndex == NSOutlineViewDropOnItemIndex ? f.children.count : childIndex
-            return (.folder(f.id), i, nil)
+            // Drop ON the folder appends to its full model list. Boundaries
+            // around the one exposed peek row belong to the filtered outline.
+            if childIndex == NSOutlineViewDropOnItemIndex { return (.folder(f.id), f.children.count, nil) }
+            if case .peeked(let id) = f.expansion {
+                guard (0...1).contains(childIndex), let index = f.children.firstIndex(where: { $0.id == id }) else { return nil }
+                return (.folder(f.id), index + childIndex, nil)
+            }
+            return (.folder(f.id), childIndex, nil)
         case nil:
             let pinnedCount = space.isPinnedCollapsed ? 0 : space.pinned.count
             let pinnedEnd = 1 + pinnedCount
