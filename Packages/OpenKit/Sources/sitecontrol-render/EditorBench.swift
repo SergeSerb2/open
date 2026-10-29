@@ -6,7 +6,7 @@ import OpenDesign
 @MainActor
 enum EditorBench {
     @MainActor final class Sample { var value: Double?; var offMain = false; var hue: Double? }
-    static func run() -> [Flows.Check] {
+    static func run(acceptInstructionCost: Bool = false) -> [Flows.Check] {
         func p95(_ values: [Double]) -> Double { values.sorted()[Int(ceil(Double(values.count)*0.95))-1] }
         let stage = EditorStage(scale: 2), wheel = stage.view.pad
         var events: [Double] = []
@@ -45,7 +45,7 @@ enum EditorBench {
         let idleStable = stage.host.refreshes+stage.host.previews.count == idleCalls
         let refreshMS = stage.host.refreshDurations.max() ?? .infinity
         print(String(format: "Editor idle: %.3f ms main-thread CPU in 2 s, no host work=%@; ten-page refresh max %.3f ms",idleMS,idleStable.description,refreshMS))
-        let openChecks = EditorOpenBench.run(stage)
+        let openChecks = EditorOpenBench.run(stage,acceptInstructionCost: acceptInstructionCost)
         let sample = Sample(), png = stage.host.snapshots!
         Task.detached(priority: .userInitiated) {
             let start = CACurrentMediaTime(), offMain = pthread_main_np() == 0
