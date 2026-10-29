@@ -312,6 +312,9 @@ close a second tab or apply an edit twice. Interrupted attempts never enter the
 accepted pass count. Exhausting attempts prints `INTERRUPTED` and exits 2;
 an ordinary failed assertion still prints FAIL and exits 1. No check, tolerance,
 timing budget or native event route is replaced by a successful no-op.
+Use `--focus-retry-delay-seconds 180` when a run requires three-minute spacing
+between interrupted attempts. The option accepts 0–600 seconds and defaults to
+0 for existing invocations; the three-attempt limit stays unchanged.
 
 A lead-requested display hold is enforced by `.re/hold-on-screen`. While it exists,
 the harness refuses new Open launches. The file must be removed only after an
@@ -574,6 +577,13 @@ commands accept `cmd`/`command`, `opt`/`option`, and `ctrl`/`control` aliases.
 The A3 flows and Today sweeper flows share the read-only `archive-list` command
 listed above. `sidebar-completion` runs both sets of checks, including E16 and
 the scheduler checks, through one definition of each helper.
+
+
+`tab-switcher-state` reports `created` and `monitoringModifiers` as well as the
+active/presented state, selected/item/visible IDs and drawing-view count. Reading
+it never constructs the controller. `app-actions` checks that both cold launch
+and the first real Cmd+T leave it uncreated. TS rows also check that an empty
+Ctrl+Tab creates nothing, and that Control release/Esc remove the modifier monitor.
 
 Section 1 items 9–10 add `I9_*` and `I10_*` rows to `sidebar-completion`.
 They perform folder conversion (nested folders, split panes, empty folder,

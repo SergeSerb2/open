@@ -161,6 +161,16 @@ final class EngineWebContentHostFactory: NSResponder, WebContentHostFactory {
   var orderedTabs: [Tab] {
     (focusedProfile?.favorites ?? []) + (focusedSpace.map { flattened($0.pinned) + flattened($0.today) } ?? [])
   }
+  var numberedTabs: [Tab] {
+    let include = UserDefaults.standard.object(forKey: "open.shortcuts.includeFavoritesInTabNumbering") as? Bool ?? true
+    return (include ? focusedProfile?.favorites ?? [] : [])
+      + (focusedSpace.map { flattened($0.pinned) + flattened($0.today) } ?? [])
+  }
+  func numberedTab(_ number: Int) -> Tab? {
+    let tabs = numberedTabs
+    if number == 9, !UserDefaults.standard.bool(forKey: "open.shortcuts.switchToNinthEnabled") { return tabs.last }
+    return tabs.indices.contains(number - 1) ? tabs[number - 1] : nil
+  }
   func flattened(_ nodes: [SidebarNode]) -> [Tab] {
     nodes.flatMap { node in
       switch node { case .tab(let tab): [tab]; case .folder(let folder): flattened(folder.children); case .split(let split): split.panes }
@@ -318,6 +328,7 @@ final class EngineWebContentHostFactory: NSResponder, WebContentHostFactory {
     layoutViews()
   }
   func select(nodeID: ItemID?, focus: Bool = true) {
+    controller?.existingTabSwitcher?.cancel()
     guard let space = focusedSpace else { return }
     withoutUndo { model.selectNode(windowID: windowState.id, spaceID: space.id, nodeID: nodeID) }
     controller?.dismissSidebarReveal()
@@ -339,6 +350,7 @@ final class EngineWebContentHostFactory: NSResponder, WebContentHostFactory {
     let content = makeContent(for: tab, url: nil, requestContext: request.context); focus(space: space); select(nodeID: tab.id); return content
   }
   func focus(space: Space) {
+    controller?.existingTabSwitcher?.cancel()
     withoutUndo { model.focusSpace(windowID: windowState.id, spaceID: space.id) }
     controller?.dismissSidebarReveal(); showSelection(); app.scheduleSave()
   }
@@ -463,6 +475,7 @@ final class EngineWebContentHostFactory: NSResponder, WebContentHostFactory {
   func closeAll() {
     guard !isClosing else { return }
     isClosing = true
+    controller?.existingTabSwitcher?.cancel()
     for task in saveCaptureTasks.values { task.cancel() }
     saveCaptureTasks.removeAll()
     findSelectionTask?.cancel(); findSelectionTask = nil
@@ -715,6 +728,45 @@ extension EngineWebContentHostFactory {
     guard !ids.isEmpty else { return }
     let current = selectedTab.flatMap { ids.firstIndex(of: $0.id) } ?? -delta
     select(nodeID: ids[(current + delta + ids.count) % ids.count])
+  }
+
+  func showTabSwitcher(by delta: Int) {
+    guard let controller, let profile = focusedProfile else { return }
+    // Freeze MRU for the whole hold-Control session. Highlighting never calls
+    // selectNode, stamps lastActiveAt, loads web content, or changes Space.
+    if let switcher = controller.existingTabSwitcher, switcher.isActive {
+      switcher.advance(by: delta, items: [], current: nil, in: controller.contentView, event: controller.tabSwitcherKeyEvent) { _ in }
+      return
+    }
+    let current = selectedTab?.id
+    let candidates = tabs(in: profile.id).enumerated().sorted { a, b in
+      if a.element.id == current { return b.element.id != current }
+      if b.element.id == current { return false }
+      if a.element.lastActiveAt != b.element.lastActiveAt { return a.element.lastActiveAt > b.element.lastActiveAt }
+      return a.offset < b.offset
+    }.prefix(5).map(\.element)
+    guard candidates.count > 1 else { return }
+    controller.tabSwitcher.icon = { [weak self] id in
+      self?.model.tab(id: id)?.live.faviconPNG.flatMap(NSImage.init(data:))
+    }
+    controller.tabSwitcher.snapshot = { [weak self] id in
+      guard let self, !self.isClosing, let host = self.hosts[id], !host.closed,
+        let data = try? await host.content.snapshotPNG(), !Task.isCancelled,
+        let image = NSImage(data: data) else { return nil }
+      let thumbnail = NSImage(size: NSSize(width: 328, height: 136))
+      thumbnail.lockFocus(); image.draw(in: NSRect(origin: .zero, size: thumbnail.size)); thumbnail.unlockFocus()
+      return thumbnail
+    }
+    controller.tabSwitcher.advance(by: delta, items: candidates.map {
+      .init(id: $0.id, title: $0.displayTitle.isEmpty ? ($0.url.host ?? "Tab") : $0.displayTitle,
+            subtitle: $0.url.host ?? "")
+    }, current: current, in: controller.contentView, event: controller.tabSwitcherKeyEvent,
+       ownsWindow: { [weak controller] in controller?.ownsAdditionalKeyWindow?($0) == true }) { [weak self] id in
+      guard let self, !self.isClosing, self.profile(for: id)?.id == profile.id else { return }
+      // Keep the shared selection path: Container.show returns any preview host
+      // before it binds the selected page (A2's ownership handoff).
+      self.selectTabForCommand(id)
+    }
   }
 
   @objc func nextSpace(_ sender: Any?) { cycleSpace(by: 1) }

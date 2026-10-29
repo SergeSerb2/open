@@ -83,7 +83,11 @@ public final class SuggestEngine {
 
     // MARK: Query
 
-    public func query(_ text: String, context: SuggestContext) -> AsyncStream<SuggestionSnapshot> {
+    /// A UI can apply the ready local snapshot in this call, before cold field-editor or
+    /// animation work. When supplied, the stream contains only subsequent updates.
+    /// Existing callers receive the initial snapshot buffered in the stream as before.
+    public func query(_ text: String, context: SuggestContext,
+                      receiveInitialSnapshot: ((SuggestionSnapshot) -> Void)? = nil) -> AsyncStream<SuggestionSnapshot> {
         activeTask?.cancel()
         activeTask = nil
         let run = QueryRun(text: text, input: makeInput(text, context: context), maxResults: maxResults)
@@ -97,9 +101,11 @@ public final class SuggestEngine {
         run.pending = operations.map(\.id)
 
         let (stream, continuation) = AsyncStream.makeStream(of: SuggestionSnapshot.self, bufferingPolicy: .unbounded)
-        continuation.yield(run.snapshot())
+        let initial = run.snapshot()
+        if receiveInitialSnapshot == nil { continuation.yield(initial) }
         guard !operations.isEmpty else {
             continuation.finish()
+            receiveInitialSnapshot?(initial)
             return stream
         }
         let task = Task { @MainActor in
@@ -122,6 +128,7 @@ public final class SuggestEngine {
         }
         activeTask = task
         continuation.onTermination = { _ in task.cancel() }
+        receiveInitialSnapshot?(initial)
         return stream
     }
 

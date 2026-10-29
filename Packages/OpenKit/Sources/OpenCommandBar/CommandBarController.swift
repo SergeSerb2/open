@@ -112,7 +112,7 @@ public final class CommandBarController: NSObject {
         view.isHidden = false
         applyBackdrop()
         selectAllOnFocus = request.mode == .editCurrentURL
-        runQuery(text)
+        runQuery(text, applyInitialImmediately: true)
         view.layoutSubtreeIfNeeded()
         focusInput()
         if !wasPresented { view.container.animateIn(animated: animated) }
@@ -203,9 +203,10 @@ public final class CommandBarController: NSObject {
                               searchEngineID: r.searchEngineID, siteSearchID: siteScope?.id)
     }
 
-    /// Text changed: a new query. Its first snapshot is buffered when `query` returns and
-    /// is applied on the next main-actor turn, before the frame is drawn.
-    func runQuery(_ text: String) {
+    /// Opening applies ready local rows before cold focus/animation work. Text edits
+    /// retain the next-turn boundary so a queued Return can still be cancelled by
+    /// another edit, presentation or dismissal. Later providers use the stream.
+    func runQuery(_ text: String, applyInitialImmediately: Bool = false) {
         pendingReturn = nil
         guard !panel.input.editor.hasMarkedText(), !panel.input.editor.isUpdatingComposition else { return }
         generation += 1
@@ -216,8 +217,16 @@ public final class CommandBarController: NSObject {
         queriedText = text
         updateSiteHint(text)
         streamTask?.cancel()
-        let stream = engine.query(text, context: context())
         onQueryStarted?(text)
+        var receiveInitial: ((SuggestionSnapshot) -> Void)?
+        if applyInitialImmediately {
+            receiveInitial = { [weak self] snapshot in
+                guard let self, self.generation == gen, self.isPresented else { return }
+                self.apply(snapshot)
+            }
+        }
+        let stream = engine.query(text, context: context(), receiveInitialSnapshot: receiveInitial)
+        guard generation == gen, isPresented else { return }
         streamTask = Task { @MainActor [weak self] in
             for await snapshot in stream {
                 guard let self, self.generation == gen, self.isPresented else { return }

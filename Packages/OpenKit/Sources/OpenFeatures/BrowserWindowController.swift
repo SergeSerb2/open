@@ -45,9 +45,19 @@ public final class BrowserWindowController: NSWindowController, NSWindowDelegate
     public var isApplicationActive: (() -> Bool)?
     public var isCommandBarPresented = false
     public var keyBindingOverrides = KeyBindingStore.empty
+    /// The actual key only while dispatching a switcher command; menu actions have none.
+    public private(set) var tabSwitcherKeyEvent: NSEvent?
     private var lastKeyRoute: (window: Int, code: UInt16, flags: UInt, timestamp: TimeInterval, handled: Bool)?
     public var onStateChange: (() -> Void)?
     public var onClose: (() -> Void)?
+    /// Ordinary keys, selection and window layout never create switcher state.
+    public private(set) var existingTabSwitcher: TabSwitcherController?
+    public var tabSwitcher: TabSwitcherController {
+        if let existingTabSwitcher { return existingTabSwitcher }
+        let switcher = TabSwitcherController()
+        existingTabSwitcher = switcher
+        return switcher
+    }
     public var onFocus: (() -> Void)?
     public var onLayout: (() -> Void)?
     private var fullscreenTransition = false
@@ -227,7 +237,10 @@ public final class BrowserWindowController: NSWindowController, NSWindowDelegate
         root.onDragBackground = { [weak self] event in self?.window?.performDrag(with: event) }
         treeObserver = model.addObserver { [weak self] _ in self?.scheduleRefresh() }
         keyMonitor = NSEvent.addLocalMonitorForEvents(matching: .keyDown) { [weak self] event in
-            let consumed = MainActor.assumeIsolated { self?.handleKeyDown(event) ?? false }
+            let consumed = MainActor.assumeIsolated {
+                guard let self else { return false }
+                return self.handleKeyDown(event)
+            }
             return consumed ? nil : event
         }
         refresh()
@@ -736,7 +749,9 @@ public final class BrowserWindowController: NSWindowController, NSWindowDelegate
     /// Shared window-local key path. Focus comes from AppKit's current responder.
     @discardableResult public func handleKeyDown(_ event: NSEvent, unconsumed: Bool = false) -> Bool {
         guard let eventWindow = event.window,
-              eventWindow === window || ownsAdditionalKeyWindow?(eventWindow) == true else { return false }
+              eventWindow === window || ownsAdditionalKeyWindow?(eventWindow) == true
+                || existingTabSwitcher?.acceptsEventWindow(eventWindow) == true else { return false }
+        if existingTabSwitcher?.handle(event) == true { return true }
         let flags = event.modifierFlags.rawValue
         if let last = lastKeyRoute, last.window == eventWindow.windowNumber, last.code == event.keyCode,
            last.flags == flags, unconsumed || (event.timestamp > 0 && last.timestamp == event.timestamp) { return last.handled }
@@ -784,12 +799,18 @@ public final class BrowserWindowController: NSWindowController, NSWindowDelegate
         // These bindings have window scope in the registry; restrict them to the
         // page here so sidebar controls and AppKit field editors retain their keys.
         if id.hasPrefix("focus-split-pane-"), !webFocused { return false }
-        performCommand(id)
+        if id == "tab-switcher-forward" || id == "tab-switcher-backward" {
+            let previous = tabSwitcherKeyEvent
+            tabSwitcherKeyEvent = event
+            defer { tabSwitcherKeyEvent = previous }
+            performCommand(id)
+        } else { performCommand(id) }
         lastKeyRoute = (eventWindow.windowNumber, event.keyCode, flags, event.timestamp, true)
         return true
     }
     private func handles(_ id: String) -> Bool { ["add-split-view", "close-split-pane", "expand-current-split", "separate-from-split-view", "next-split-pane", "previous-split-pane", "open-in-current-space", "go-back", "go-forward"].contains(id) || id.hasPrefix("focus-split-pane-") }
     public func performCommand(_ id: String) {
+        if id != "tab-switcher-forward", id != "tab-switcher-backward" { existingTabSwitcher?.cancel() }
         if onCommand?(id) == true { return }
         if id == "open-in-current-space", peekStorage?.isShown == true {
             let menu = NSMenu(title: "Open in Space")
@@ -847,6 +868,7 @@ public final class BrowserWindowController: NSWindowController, NSWindowDelegate
         refresh(); changed(); return true
     }
     public func windowWillClose(_ notification: Notification) {
+        existingTabSwitcher?.cancel()
         saveWindowState(); visibilityOverride = .closed; removeRevealCard(); hintWork?.cancel(); hintWork = nil
         hoverPreview.hide(animated: false)
         container.closeAll(); onClose?(); onVisibilityChange?()
@@ -858,7 +880,7 @@ public final class BrowserWindowController: NSWindowController, NSWindowDelegate
         if window.firstResponder is NSTextView || window.firstResponder is NSTextField { return nativeTextUndoManager }
         return model.undoManager
     }
-    public func windowDidResize(_ notification: Notification) { layoutContent() }
+    public func windowDidResize(_ notification: Notification) { layoutContent(); existingTabSwitcher?.layout() }
     public func windowDidMove(_ notification: Notification) { saveWindowState(); snapshotStore?.scheduleSave(model: model) }
     public func windowDidEndLiveResize(_ notification: Notification) { saveWindowState(); snapshotStore?.scheduleSave(model: model) }
     public func windowWillEnterFullScreen(_ notification: Notification) { saveWindowState(); fullscreenTransition = true; applyTrafficLightDim(animated: false); dimmedLights.isHidden = true }
@@ -874,7 +896,7 @@ public final class BrowserWindowController: NSWindowController, NSWindowDelegate
         // Back from another app or a hide (Cmd+H): the pointer may have left the buttons meanwhile.
         dimmedLights.syncWithPointer()
     }
-    public func windowDidResignKey(_ notification: Notification) { context.isWindowActive = false; background.isWindowActive = false; positionTrafficLights() }
+    public func windowDidResignKey(_ notification: Notification) { existingTabSwitcher?.cancel(); context.isWindowActive = false; background.isWindowActive = false; positionTrafficLights() }
     public func windowDidChangeBackingProperties(_ notification: Notification) { positionTrafficLights() }
     public func windowDidBecomeMain(_ notification: Notification) { context.isWindowActive = true }
     public func windowDidResignMain(_ notification: Notification) { context.isWindowActive = window?.isKeyWindow == true }
