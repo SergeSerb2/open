@@ -297,6 +297,16 @@ public final class SidebarView: NSView {
         pager.currentPage?.beginRename(nodeID: nodeID)
     }
 
+    /// The same Profile choices as the Space context menu's Set Profile submenu.
+    public func profileMenu() -> NSMenu? {
+        guard let space = context.focusedSpace else { return nil }
+        return SidebarMenus(context: context).profile(space)
+    }
+
+    public var spaceHeaderFrame: NSRect? {
+        pager.currentPage.map { convert($0.header.bounds, from: $0.header) }
+    }
+
     /// Scrolls the focused page so the node's row is visible.
     public func reveal(nodeID: ItemID) {
         guard let page = pager.currentPage, let obj = context.model.node(id: nodeID)?.object else { return }

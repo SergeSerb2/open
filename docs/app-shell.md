@@ -1211,5 +1211,19 @@ FV14_same_icon_new_path_unloaded FAIL
 ```
 
 FV13/FV15 then passed in the scoped harness (27/27; database 8515584 bytes,
-1200 writes, zero refusals; scroll p95 1.148 ms). Final merge verification follows.
+1200 writes, zero refusals; scroll p95 1.148 ms). The fixes are also merged with main `dee105e602e66a4fbc4edd8e16a2ab932695e8a1` (#132). Both the new intents/menu helper and the favicon helper run before auto-archive checks. The merge retains 143 unique router commands, with no duplicate Python helpers. Main's updated Share row and both sides' follow-up notes are preserved.
 The fixes and bounds are described in `docs/favicons.md`, "PR #131 corrections".
+
+| PR #131 merged-tree check | Result |
+|---|---|
+| `git diff --check` and duplicate audits | PASS |
+| `~/Library/Caches/OpenRE/scripts/heavy.sh tools/verify-all.sh --only favicons,features-render,sidebar-render,roundtrip` | 5/5 targets PASS; features 352/352, sidebar 564/564; FV13/FV15 PASS; scroll p95 1.027 ms |
+| `~/Library/Caches/OpenRE/scripts/heavy.sh tools/build.sh` | PASS; Debug App, no Swift warnings |
+| `/usr/bin/lockf /tmp/open-onscreen-e2e.lock python3 tools/e2e/engine_e2e.py --style chrome --only sidebar-completion` | 155/155 PASS; FV14, intents/menu and auto-archive rows; no focus interruptions; cleanup PASS |
+
+The first final App run stopped at the existing E14 Option-click check before
+any favicon report (created/retained host counts unchanged, no new Today tab).
+An unchanged rerun passed the full suite. Cause remains unconfirmed; no input
+route, wait tolerance or product workaround was added. The failed receipt is
+retained under `.re/pr131/first-final-e2e-results.json`. Generated engine-spike
+outputs and the temporary retry-spacing change are restored before committing.
