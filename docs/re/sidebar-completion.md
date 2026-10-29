@@ -201,7 +201,7 @@ Both keys and the native Tabs menu use the same candidate list. These defaults
 are Open choices, not recovered Arc defaults. Next/Previous Tab and Cycle Tab
 keep their existing sidebar order.
 
-The recent switcher freezes the five most recent candidates for one held-Control
+The recent switcher freezes the five most recent candidates for one held shortcut
 session, with the current tab first. Open includes Favorites and Pinned tabs,
 including collapsed-folder children and split panes, across Spaces in the current
 Profile. **Guess:** those exact candidate boundaries match Arc. The snapshot
@@ -463,3 +463,94 @@ Both e2e runs had zero foreground interruptions and passed cleanup. Raw receipts
 are under `.re/tab-switcher-menu-parity/`: `verify.log`, `verify-details/`,
 `build.log`, both suite logs and their `-results.json` files. Generated
 `docs/engine-spike` artifacts were restored before committing.
+
+
+### PR #134: rebound modifiers and auxiliary-window lifetime (2026-10-28)
+
+This is Open routing evidence, not a new Arc behavior or visual claim. Review
+comments 4407760174 and 4407760178 identified two gaps in custom shortcut and
+auxiliary-window handling. The baseline product was `d6eeb860`; only
+`features-render/TabSwitcherChecks.swift` changed for the red run. The normal
+release harness exercised the real BrowserWindowController key router, model,
+AppKit windows/local event monitor and lifecycle notification path. The baseline
+had 335 passing rows and these four failures:
+
+| Row | Baseline failure |
+|---|---|
+| TS11 | Bare F6 opened a session instead of selecting the next recent tab immediately. |
+| TS12 | A Cmd+Option binding committed after the first modifier release. |
+| TS13 | Control release delivered through NSApplication from an owned auxiliary panel did not commit. |
+| TS14 | App-deactivation notification left the session and its pending work active. |
+
+Evidence: `heavy.sh tools/verify-all.sh --only features-render`, raw
+`.re/tab-switcher-review/before-verify.log` / `before-details/features-render.log`;
+`before-product-head.txt` pins the baseline and `before-harness.patch` records the
+only baseline change. The new rows extend the existing full-window harness,
+not an isolated controller test. No unit tests were added.
+
+The key router now exposes the initiating NSEvent only during dispatch of a
+switcher command. The App factory passes it and the existing
+`ownsAdditionalKeyWindow` predicate into `TabSwitcherController.advance`.
+The first event freezes the held Command/Option/Control/Shift set; function,
+caps-lock and numeric-pad flags do not count. With no held shortcut modifier,
+the next candidate commits through the existing selection/preview-host return
+path without creating a view, timer, monitor or deferred session. Otherwise,
+commit waits until the event's flags intersect none of the initial modifiers.
+Later advances keep the same session context.
+
+Flags and keys accept the parent window, the weak initiating window, or another
+window accepted by the same ownership predicate. Active-only observers cancel
+on app deactivation, owned-window key loss or close. Finish removes those
+observers and the modifier monitor, cancels pending work and releases previews.
+The offscreen switcher renderer now supplies an explicit held-Control event.
+Geometry, candidate scope, the menu-parity fix and cold command-bar work are
+unchanged. The TS-C1 capture request remains open.
+
+
+Final checks ran after merging main `61ae275a2d2bb5c68a7652c8b0f56d547c773253`
+(#133). The merge retained both sides without conflicts, including the new
+verification runner and Site Control gate. The targeted
+`heavy.sh tools/verify-all.sh --only features-render,sidebar-render,commands-dump,commands-demo`
+passes: build 0 warnings/errors, commands 232/232, sidebar 564/564, features
+339/339 (TS11–TS14 now PASS), menu comparison missing/extra/different 0/0/0.
+The merged Debug App build passes. The offscreen `features-render switcher`
+command renders the overlay with an explicit initiating Control event.
+
+The full `heavy.sh tools/verify-all.sh` passes every default check (22/22):
+
+| Check | Result | Seconds |
+|---|---|---:|
+| build | PASS | 2 |
+| commands-demo | PASS | 1 |
+| roundtrip | PASS | 0 |
+| space-legacy | PASS | 1 |
+| space-editor | PASS | 2 |
+| space-pad-compare | PASS | 2 |
+| suggest-check | PASS | 13 |
+| commands-dump | PASS | 0 |
+| route | PASS | 1 |
+| favicons | PASS | 0 |
+| media-demo | PASS | 0 |
+| sleep-demo | PASS | 1 |
+| adblock-perf | PASS | 0 |
+| adblock-catalog | PASS | 0 |
+| profiles | PASS | 1 |
+| settings-preview | PASS | 77 |
+| sidebar-render | PASS | 106 |
+| sidebar-compare | PASS | 80 |
+| commandbar-render | PASS | 14 |
+| features-render | PASS | 42 |
+| sitecontrol-render | PASS | 57 |
+| boosts | PASS | 7 |
+
+Locked real-App sidebar-completion passes 164/164 feature rows, 166 total with
+provenance and cleanup. Locked app-actions passes 48/48 feature rows, 50 total;
+cold command-bar results are 3.3301 ms at the unchanged 50 ms limit.
+Both suites ran separately, with no concurrent build, zero foreground
+interruptions and successful owned-process cleanup. No generated
+`docs/engine-spike` artifacts are committed.
+
+Receipts: `.re/tab-switcher-review/merged-targeted.log`,
+`merged-targeted-details/`, `merged-build.log`, `full-verify.log`, `full-details/`,
+`full-summary.md`, `render.log`, `switcher.png`, the two e2e logs and their
+`-results.json` files. The red run remains in `before-*` separately.

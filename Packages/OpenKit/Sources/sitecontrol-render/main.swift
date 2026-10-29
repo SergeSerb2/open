@@ -32,7 +32,8 @@ enum CLI {
         guard let appearance = ContentAppearance(rawValue: appearanceName) else { throw CLIError(description: "appearance must be light or dark") }
         switch command {
         case "editor-native-key":
-            guard let out = value(args,"--out") else { throw CLIError(description:"native key flow requires --out") };EditorNativeKey.enterAppLoop(out:out)
+            guard let out = value(args,"--out"),let attempt = Int(value(args,"--focus-attempt") ?? "1"),(1...3).contains(attempt) else { throw CLIError(description:"native key flow requires --out and attempt 1...3") }
+            EditorNativeKey.enterAppLoop(out:out,rendererPID: value(args,"--renderer-pid").flatMap(Int32.init),attempt: attempt)
         case "render":
             guard let out = value(args, "--out") else { throw CLIError(description: "render requires --out") }
             let image = render(state,scale: scale,appearance: appearance)
@@ -65,15 +66,22 @@ enum CLI {
             // I_accepted was recorded with cold-measure at process entry. AppKit's
             // process-wide view/font caches change after unrelated UI suites.
             // Keep this same warmup/workload span before those suites run.
-            var checks = Bench.run(only: .cold)
-            checks += Flows.run()+EditorFlows.run()
+            // Drain each completed suite's autoreleased native windows before
+            // the next suite. Otherwise the editor's global transaction flush
+            // includes closed windows retained by earlier flows and renders.
+            var checks = autoreleasepool { Bench.run(only: .cold) }
+            checks += autoreleasepool { Flows.run() }
+            checks += autoreleasepool { EditorFlows.run() }
             for name in sccNames { for appearance in [ContentAppearance.light,.dark] { for scale: CGFloat in [1,2] {
                 autoreleasepool {
                     let stage = Stage(state: name,scale: scale,appearance: appearance)
                     checks += ChromeProbes.run(stage,appearance: appearance)
                 }
             } } }
-            checks += EditorFlows.renders(); checks += try receipts(); checks += Bench.run(only: .skeleton)+EditorBench.run(); report(checks)
+            checks += autoreleasepool { EditorFlows.renders() }
+            checks += try receipts()
+            checks += autoreleasepool { Bench.run(only: .skeleton) }
+            checks += EditorBench.run(acceptInstructionCost: true); report(checks)
         case "screens":
             guard let out = value(args,"--out") else { throw CLIError(description: "screens requires --out") }
             let states = value(args,"--group") == "editor" ? editorNames : names
@@ -144,11 +152,14 @@ enum CLI {
     }
     static func report(_ checks: [Flows.Check]) {
         print("| Result | Check |\n|---|---|")
-        for c in checks { print("| \(c.info ? "INFO" : c.pass ? "PASS" : "FAIL") | \(c.name) |") }
-        let acceptance = checks.filter { !$0.info },passed = acceptance.filter(\.pass).count
+        for c in checks { print("| \(c.interrupted ? "INTERRUPTED" : c.info ? "INFO" : c.pass ? "PASS" : "FAIL") | \(c.name) |") }
+        let acceptance = checks.filter { !$0.info },passed = acceptance.filter { $0.pass && !$0.interrupted }.count
         if !acceptance.isEmpty { print("\n\(passed)/\(acceptance.count) passed") }
-        let informational = checks.count-acceptance.count
+        let informational = checks.filter { $0.info && !$0.interrupted }.count
         if informational>0 { print("\(informational) INFO (no acceptance result for these entries)") }
-        if passed != acceptance.count { exit(1) }
+        let retained = checks.filter { $0.info && $0.interrupted }.count
+        if retained>0 { print("\(retained) prior INTERRUPTED rows retained (not counted as passes)") }
+        if acceptance.contains(where: { !$0.pass && !$0.interrupted }) { exit(1) }
+        if acceptance.contains(where: \.interrupted) { print("INTERRUPTED: native foreground precondition was lost");exit(2) }
     }
 }

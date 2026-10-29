@@ -45,6 +45,8 @@ public final class BrowserWindowController: NSWindowController, NSWindowDelegate
     public var isApplicationActive: (() -> Bool)?
     public var isCommandBarPresented = false
     public var keyBindingOverrides = KeyBindingStore.empty
+    /// The actual key only while dispatching a switcher command; menu actions have none.
+    public private(set) var tabSwitcherKeyEvent: NSEvent?
     private var lastKeyRoute: (window: Int, code: UInt16, flags: UInt, timestamp: TimeInterval, handled: Bool)?
     public var onStateChange: (() -> Void)?
     public var onClose: (() -> Void)?
@@ -747,7 +749,8 @@ public final class BrowserWindowController: NSWindowController, NSWindowDelegate
     /// Shared window-local key path. Focus comes from AppKit's current responder.
     @discardableResult public func handleKeyDown(_ event: NSEvent, unconsumed: Bool = false) -> Bool {
         guard let eventWindow = event.window,
-              eventWindow === window || ownsAdditionalKeyWindow?(eventWindow) == true else { return false }
+              eventWindow === window || ownsAdditionalKeyWindow?(eventWindow) == true
+                || existingTabSwitcher?.acceptsEventWindow(eventWindow) == true else { return false }
         if existingTabSwitcher?.handle(event) == true { return true }
         let flags = event.modifierFlags.rawValue
         if let last = lastKeyRoute, last.window == eventWindow.windowNumber, last.code == event.keyCode,
@@ -796,7 +799,12 @@ public final class BrowserWindowController: NSWindowController, NSWindowDelegate
         // These bindings have window scope in the registry; restrict them to the
         // page here so sidebar controls and AppKit field editors retain their keys.
         if id.hasPrefix("focus-split-pane-"), !webFocused { return false }
-        performCommand(id)
+        if id == "tab-switcher-forward" || id == "tab-switcher-backward" {
+            let previous = tabSwitcherKeyEvent
+            tabSwitcherKeyEvent = event
+            defer { tabSwitcherKeyEvent = previous }
+            performCommand(id)
+        } else { performCommand(id) }
         lastKeyRoute = (eventWindow.windowNumber, event.keyCode, flags, event.timestamp, true)
         return true
     }

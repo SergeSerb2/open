@@ -735,7 +735,7 @@ extension EngineWebContentHostFactory {
     // Freeze MRU for the whole hold-Control session. Highlighting never calls
     // selectNode, stamps lastActiveAt, loads web content, or changes Space.
     if let switcher = controller.existingTabSwitcher, switcher.isActive {
-      switcher.advance(by: delta, items: [], current: nil, in: controller.contentView) { _ in }
+      switcher.advance(by: delta, items: [], current: nil, in: controller.contentView, event: controller.tabSwitcherKeyEvent) { _ in }
       return
     }
     let current = selectedTab?.id
@@ -760,7 +760,8 @@ extension EngineWebContentHostFactory {
     controller.tabSwitcher.advance(by: delta, items: candidates.map {
       .init(id: $0.id, title: $0.displayTitle.isEmpty ? ($0.url.host ?? "Tab") : $0.displayTitle,
             subtitle: $0.url.host ?? "")
-    }, current: current, in: controller.contentView) { [weak self] id in
+    }, current: current, in: controller.contentView, event: controller.tabSwitcherKeyEvent,
+       ownsWindow: { [weak controller] in controller?.ownsAdditionalKeyWindow?($0) == true }) { [weak self] id in
       guard let self, !self.isClosing, self.profile(for: id)?.id == profile.id else { return }
       // Keep the shared selection path: Container.show returns any preview host
       // before it binds the selected page (A2's ownership handoff).

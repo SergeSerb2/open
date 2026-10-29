@@ -2,7 +2,7 @@ import AppKit
 import OpenDesign
 import OpenModel
 
-/// A frozen ordering for one hold-Control session. Only commit changes the model.
+/// A frozen ordering for one held shortcut session. Only commit changes the model.
 /// One drawing view renders the visible slice; there are no per-tab NSViews,
 /// repeating timers or snapshot jobs after a session ends. Presentation uses
 /// one cancellable 100 ms delay. A modifier monitor exists only during a session.
@@ -30,6 +30,10 @@ public final class TabSwitcherController {
     private var snapshotTasks: [ItemID: Task<Void, Never>] = [:]
     private var snapshots: [ItemID: NSImage] = [:]
     private var modifierMonitor: Any?
+    private var lifecycleObservers: [NSObjectProtocol] = []
+    private var heldModifiers: NSEvent.ModifierFlags = []
+    private weak var initiatingWindow: NSWindow?
+    private var ownsWindow: ((NSWindow) -> Bool)?
     public var isMonitoringModifiers: Bool { modifierMonitor != nil }
     private var generation = 0
     private var presentationTask: Task<Void, Never>?
@@ -42,20 +46,48 @@ public final class TabSwitcherController {
         return start..<(start + count)
     }
     public init() {}
-    isolated deinit { if let modifierMonitor { NSEvent.removeMonitor(modifierMonitor) } }
+    isolated deinit {
+        if let modifierMonitor { NSEvent.removeMonitor(modifierMonitor) }
+        lifecycleObservers.forEach(NotificationCenter.default.removeObserver)
+        presentationTask?.cancel()
+        snapshotTasks.values.forEach { $0.cancel() }
+    }
 
     public func advance(by delta: Int, items: [Item], current: ItemID?, in parent: NSView,
+                        event: NSEvent? = nil, ownsWindow: ((NSWindow) -> Bool)? = nil,
                         commit: @escaping (ItemID) -> Void) {
         if !isActive {
             guard items.count > 1 else { return }
-            self.items = items; selectedIndex = items.firstIndex { $0.id == current } ?? -delta
+            // Function/caps-lock/numeric-pad flags are not held shortcut modifiers.
+            let modifiers = event?.modifierFlags.intersection([.command, .option, .control, .shift]) ?? []
+            let start = items.firstIndex { $0.id == current } ?? -delta
+            if modifiers.isEmpty {
+                let index = (start + delta % items.count + items.count) % items.count
+                icon = nil; snapshot = nil
+                commit(items[index].id)
+                return
+            }
+            self.items = items; selectedIndex = start
             self.parent = parent; onCommit = commit
+            heldModifiers = modifiers; initiatingWindow = event?.window; self.ownsWindow = ownsWindow
             modifierMonitor = NSEvent.addLocalMonitorForEvents(matching: .flagsChanged) { [weak self] event in
                 MainActor.assumeIsolated {
-                    guard let self, event.window === self.parent?.window else { return }
+                    guard let self else { return }
                     self.handle(event)
                 }
                 return event
+            }
+            lifecycleObservers.append(NotificationCenter.default.addObserver(forName: NSApplication.didResignActiveNotification, object: nil, queue: .main) { [weak self] _ in
+                MainActor.assumeIsolated { self?.cancel() }
+            })
+            for name in [NSWindow.didResignKeyNotification, NSWindow.willCloseNotification] {
+                lifecycleObservers.append(NotificationCenter.default.addObserver(forName: name, object: nil, queue: .main) { [weak self] note in
+                    guard let window = note.object as? NSWindow else { return }
+                    MainActor.assumeIsolated {
+                        guard let self, self.acceptsEventWindow(window) else { return }
+                        self.cancel()
+                    }
+                })
             }
             generation += 1
             let surface = TabSwitcherView(); surface.owner = self; surface.isHidden = true
@@ -95,10 +127,14 @@ public final class TabSwitcherController {
         view.frame = CGRect(x: (parent.bounds.width - width) / 2, y: (parent.bounds.height - height) / 2,
                             width: width, height: height)
     }
+    public func acceptsEventWindow(_ window: NSWindow) -> Bool {
+        isActive && (window === parent?.window || window === initiatingWindow || ownsWindow?(window) == true)
+    }
     @discardableResult public func handle(_ event: NSEvent) -> Bool {
         guard isActive else { return false }
+        guard let window = event.window ?? NSApp.keyWindow, acceptsEventWindow(window) else { return false }
         if event.type == .flagsChanged {
-            if !event.modifierFlags.contains(.control) { finish(commit: true) }
+            if event.modifierFlags.intersection(heldModifiers).isEmpty { finish(commit: true) }
             return false
         }
         guard event.type == .keyDown else { return false }
@@ -112,6 +148,8 @@ public final class TabSwitcherController {
     private func finish(commit: Bool) {
         let id = selectedID, action = onCommit
         if let modifierMonitor { NSEvent.removeMonitor(modifierMonitor) }; modifierMonitor = nil
+        lifecycleObservers.forEach(NotificationCenter.default.removeObserver); lifecycleObservers.removeAll()
+        heldModifiers = []; initiatingWindow = nil; ownsWindow = nil
         generation += 1
         presentationTask?.cancel(); presentationTask = nil
         for task in snapshotTasks.values { task.cancel() }; snapshotTasks.removeAll()

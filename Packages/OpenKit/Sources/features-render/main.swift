@@ -111,9 +111,12 @@ enum FeatureCLI {
         model.selectNode(windowID: window.id, spaceID: space.id, nodeID: selected)
         let c = BrowserWindowController(model: model, windowID: window.id, factory: factory, size: size, defaults: defaults)
         if cmd == "switcher" {
+            let event = NSEvent.keyEvent(with: .keyDown, location: .zero, modifierFlags: .control, timestamp: 0,
+                windowNumber: c.window!.windowNumber, context: nil, characters: "\t", charactersIgnoringModifiers: "\t",
+                isARepeat: false, keyCode: 48)!
             c.tabSwitcher.advance(by: 1, items: all.prefix(5).map {
                 .init(id: $0.id, title: $0.displayTitle, subtitle: $0.url.host ?? "")
-            }, current: selected, in: c.contentView) { _ in }
+            }, current: selected, in: c.contentView, event: event) { _ in }
             try await Task.sleep(for: .milliseconds(130))
         }
         if cmd == "peek", let source = c.context.currentTab {

@@ -7,6 +7,7 @@ enum InstructionBaseline {
         let cpuBrand: String
         let osBuild: String
         let coldOpenInstructions: UInt64
+        let simpleEditorOpenInstructions: UInt64?
         var limit: UInt64 { coldOpenInstructions + (coldOpenInstructions+9)/10 }
     }
     private struct Fixture: Decodable {
@@ -27,7 +28,10 @@ enum InstructionBaseline {
         guard data.count<=16_384 else { throw CLIError(description: "instruction baseline fixture exceeds 16 KiB") }
         let fixture = try JSONDecoder().decode(Fixture.self,from: data)
         guard fixture.version==1,fixture.machines.count<=32,
-              fixture.machines.allSatisfy({ $0.coldOpenInstructions>0 && $0.coldOpenInstructions<UInt64.max/2 }),
+              fixture.machines.allSatisfy({ machine in
+                  machine.coldOpenInstructions>0 && machine.coldOpenInstructions<UInt64.max/2 &&
+                  (machine.simpleEditorOpenInstructions.map { $0>0 && $0<UInt64.max/2 } ?? true)
+              }),
               Set(fixture.machines.map { $0.cpuBrand+"|"+$0.osBuild }).count==fixture.machines.count else {
             throw CLIError(description: "invalid instruction baseline fixture")
         }
