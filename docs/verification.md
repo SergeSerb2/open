@@ -90,13 +90,13 @@ C10's exact drag-hide threshold refinement also remains open.
 
 | Final-main check | Result |
 |---|---|
-| verify-all (final main 52212f17) | PENDING (lead) |
-| sidebar-render check x3 | PENDING (lead) |
-| e2e sidebar x3 | PENDING (lead) |
-| e2e sidebar-completion x3 | PENDING (lead) |
-| e2e app-actions x3 | PENDING (lead) |
-| e2e window x3 | PENDING (lead) |
-| crash reports | PENDING (lead) |
+| verify-all (final main 52212f17) | **PASS 22/22** (2026-10-28 20:46 PDT) |
+| sidebar-render check x3 | **PASS** 608/608 ×3 |
+| e2e sidebar x3 | **PASS** 21/21 ×3 |
+| e2e sidebar-completion x3 | **PASS** 195/195 ×3 (run 1 had one foreground interruption that the suite retried and passed) |
+| e2e app-actions x3 | **PASS** 50/50 ×3 (run 2 had one foreground interruption, retried and passed) |
+| e2e window x3 | On 52212f17: 76/76, 76/76, then run 3 **FAIL** (`window-focus: key focus not ready: active=true … targetIsKey=false keySameObject=true frontmost=Open`; `ensure_key()` did not retry the not-ready error and the suite aborted after `traffic_light_actions`). Fixed in `be6ea83f` (readiness waits for full-screen completion; `ensure_key()` retries only the native not-ready error within its 15 s deadline). On `be6ea83f`: **PASS** 76/76 ×3 consecutive. |
+| crash reports | **None**: no new Open report in `~/Library/Logs/DiagnosticReports/` during the soak |
 
 Speed receipts already recorded in the merged PRs:
 
