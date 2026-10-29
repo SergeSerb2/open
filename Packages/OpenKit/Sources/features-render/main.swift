@@ -21,6 +21,16 @@ enum FeatureCLI {
     }
     static func run(_ args: [String]) async throws {
         guard let cmd = args.first else { throw CLIError(description: RenderCLI.usage) }
+        if cmd == "favicon-check" {
+            var passed = 0, failed = 0
+            try await FaviconChecks.run { ok, label in
+                print("\(ok ? "PASS" : "FAIL") \(label)")
+                if ok { passed += 1 } else { failed += 1 }
+            }
+            print("favicon check: \(passed) passed, \(failed) failed")
+            if failed > 0 { throw CLIError(description: "stored favicon checks failed") }
+            return
+        }
         if cmd == "check" {
             if args == ["check", "--only", "auto-archive"] {
                 var passed = 0, failed = 0

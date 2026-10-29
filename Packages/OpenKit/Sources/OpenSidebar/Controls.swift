@@ -1,6 +1,7 @@
 import AppKit
 import OpenDesign
 import OpenModel
+import ImageIO
 
 /// One-line text drawn with Core Text at an exact baseline, with tail
 /// truncation. Content and color come from closures read inside `draw(_:)`
@@ -137,7 +138,9 @@ extension NSImage {
 /// letter fallback. Reads model state in `draw` under Observation tracking.
 @MainActor
 final class FaviconView: NSView {
-    weak var tab: Tab? { didSet { if tab !== oldValue { needsDisplay = true } } }
+    private(set) var lastDrawnImage: NSImage?
+    private(set) var lastDrawnSource = "placeholder"
+    weak var tab: Tab? { didSet { if tab !== oldValue { lastDrawnImage = nil; needsDisplay = true } } }
     weak var context: SidebarContext?
     var inkSize: CGFloat = SpaceListMetrics.faviconInk
     var fallbackTint: @MainActor () -> NSColor = { SidebarRole.secondaryText.nsColor }
@@ -153,19 +156,35 @@ final class FaviconView: NSView {
     override var isFlipped: Bool { true }
     override func hitTest(_ point: NSPoint) -> NSView? { nil }
 
+    private func resolvedImage(for tab: Tab) -> (NSImage?, String) {
+        // Unload keeps the old live PNG in the model. Once the host is gone,
+        // resolve from storage so another page/report can replace that old icon.
+        if (tab.live.hasWebContent || context?.storedFavicons == nil), let image = FaviconCache.image(for: tab.live.faviconPNG) {
+            return (image, "live")
+        }
+        if let image = context?.faviconProvider?(tab) { return (image, "provider") }
+        if let image = context?.storedFavicons?.image(for: tab.url) { return (image, "stored") }
+        return (nil, "placeholder")
+    }
+
     override func draw(_ dirtyRect: NSRect) {
+        lastDrawnImage = nil; lastDrawnSource = "placeholder"
         guard let tab else { return }
         if SidebarDiagnostics.measuresFolderTransitions { SidebarDiagnostics.folderFaviconDraws += 1 }
-        let (override, icon, png, host, tint) = tracked({ (tab.iconOverride, tab.customIcon, tab.live.faviconPNG, tab.displayHost, fallbackTint()) }) { [weak self] in
+        let (override, icon, resolved, host, tint) = tracked({
+            (tab.iconOverride, tab.customIcon, resolvedImage(for: tab), tab.displayHost, fallbackTint())
+        }) { [weak self] in
             self?.needsDisplay = true
         }
         let ink = backingAlignedRect(NSRect(x: (bounds.width - inkSize) / 2, y: (bounds.height - inkSize) / 2, width: inkSize, height: inkSize),
                                      options: .alignAllEdgesNearest)
         if let override {
+            lastDrawnSource = "custom"
             NodeIconRenderer.draw(override, in: ink, tint: tint)
             return
         }
         if let icon, !icon.isEmpty {
+            lastDrawnSource = "custom"
             if let symbol = NSImage(systemSymbolName: icon, accessibilityDescription: nil) {
                 let img = symbol.withSymbolConfiguration(.init(pointSize: inkSize - 3, weight: .medium)) ?? symbol
                 let s = img.size
@@ -175,7 +194,8 @@ final class FaviconView: NSView {
             }
             return
         }
-        if let image = context?.faviconProvider?(tab) ?? FaviconCache.image(for: png) {
+        if let image = resolved.0 {
+            lastDrawnImage = image; lastDrawnSource = resolved.1
             image.draw(in: ink, from: .zero, operation: .sourceOver, fraction: 1, respectFlipped: true, hints: nil)
             return
         }
@@ -250,18 +270,26 @@ enum EmojiRenderer {
     }
 }
 
-/// Decoded favicons by PNG bytes. Favicons are tiny; decoding on the main
-/// thread costs microseconds and keeps redraws synchronous.
+/// Live PNG cache; refuses large data/dimensions and decodes only 64 px.
+/// Stored icons use StoredFaviconCache and decode on the store actor.
 @MainActor
 enum FaviconCache {
     private static var cache: [Data: NSImage] = [:]
     static func image(for data: Data?) -> NSImage? {
-        guard let data, !data.isEmpty else { return nil }
+        guard let data, !data.isEmpty, data.count <= 512 * 1024 else { return nil }
         if let i = cache[data] { return i }
-        guard let i = NSImage(data: data) else { return nil }
-        if cache.count > 512 { cache.removeAll() }
-        cache[data] = i
-        return i
+        guard let source = CGImageSourceCreateWithData(data as CFData, [kCGImageSourceShouldCache: false] as CFDictionary),
+              CGImageSourceGetCount(source) <= 32,
+              let props = CGImageSourceCopyPropertiesAtIndex(source, 0, nil) as? [CFString: Any],
+              let width = props[kCGImagePropertyPixelWidth] as? Int, let height = props[kCGImagePropertyPixelHeight] as? Int,
+              (1...1024).contains(width), (1...1024).contains(height),
+              let bitmap = CGImageSourceCreateThumbnailAtIndex(source, 0, [kCGImageSourceCreateThumbnailFromImageAlways: true,
+                  kCGImageSourceThumbnailMaxPixelSize: 64, kCGImageSourceShouldCacheImmediately: true] as CFDictionary) else { return nil }
+        let image = NSImage(cgImage: bitmap, size: NSSize(width: 16, height: 16))
+        // 128 decoded images <= 2 MiB. Engine reports are normalized to 64 px.
+        if cache.count >= 128 { cache.removeAll(keepingCapacity: true) }
+        cache[data] = image
+        return image
     }
 }
 

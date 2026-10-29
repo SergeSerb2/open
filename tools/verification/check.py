@@ -527,6 +527,33 @@ def favicons(cli, seed):
         matches(r"requested=1 alreadyCached=0 fetched=0 missing=1 failed=0",
                 run(cli, "favicons", "fetch", "--snapshot", directory, "--db", "missing.sqlite3"))
         matches(r"^absent$", run(cli, "favicons", "get", origin, "--db", "missing.sqlite3", "--out", "absent.png", expected=1))
+    # Valid PNG ancillary data reaches the encoded boundary without trailing junk.
+    base = png()
+    for size, expected in ((512 * 1024, 0), (512 * 1024 + 1, 1)):
+        body = b"pad\0" + b"x" * (size - len(base) - 16)
+        chunk = b"tEXt" + body
+        image = base[:-12] + struct.pack(">I", len(body)) + chunk + struct.pack(">I", zlib.crc32(chunk)) + base[-12:]
+        require(len(image) == size, "encoded boundary fixture size")
+        Path("boundary.png").write_bytes(image)
+        run(cli, "favicons", "ingest", "https://boundary.invalid/page", "--db", "boundary.sqlite3",
+            "--file", "boundary.png", "--page-specific", "true", expected=expected, env=env)
+    matches(r"ok=1 missing=0 failed=0 count=1", run(cli, "favicons", "stats", "--db", "boundary.sqlite3"))
+    print("FV11 encoded input: accept 512 KiB, refuse 512 KiB + 1; stored image retained")
+    # A valid SQLite file above the physical cap must be refused before open,
+    # without a migration/VACUUM allocating temporary databases or a journal.
+    oversized = Path("oversize.sqlite3")
+    with sqlite3.connect(str(oversized)) as db:
+        db.execute("CREATE TABLE padding(data BLOB)")
+        db.execute("INSERT INTO padding VALUES(zeroblob(?))", (16 * 1024 * 1024,))
+    db.close()
+    original_size = oversized.stat().st_size
+    require(original_size > 16 * 1024 * 1024, "database boundary fixture")
+    Path("valid.png").write_bytes(png())
+    run(cli, "favicons", "ingest", "https://boundary.invalid/page", "--db", str(oversized),
+        "--file", "valid.png", expected=1, env=env)
+    require(oversized.stat().st_size == original_size, "oversize database was changed")
+    require(not list(Path('.').glob('oversize.sqlite3-*')), "oversize database created sidecars")
+    print("FV12 existing database above 16 MiB refused without writes or sidecars")
     print("favicons local fetch, cache, readback, and missing flow passed")
 
 

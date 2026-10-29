@@ -14,6 +14,7 @@ final class AppStores {
   private var currentSuggest: SuggestEngine?
   lazy var adBlock = try? AdBlockStore(root: app.directories.root)
   lazy var favicons = try? FaviconStore(databaseURL: app.directories.root.appendingPathComponent("State/favicons.sqlite3"))
+  lazy var sidebarFavicons = favicons.map { StoredFaviconCache(store: $0) }
   init(app: AppDelegate) { self.app = app }
 
   func history(for profileID: ProfileID?) -> HistoryStore? {
