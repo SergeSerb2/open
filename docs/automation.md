@@ -112,7 +112,7 @@ Arguments are `key=value`; values that parse as JSON are sent as JSON.
 | `windows` | — | Open's windows: number, class, frame, key, first responder |
 | `shell-windows` | — | Standard controller IDs and native window numbers |
 | `window-state` | `id` (optional: another standard window, not made key) | Frame, sidebar mode/width/reveal, panel frame, traffic-light centers, frames, and visibility, the title bar frame, the hardware pointer in window coordinates (read only), hover-reveal state (`reveal`: phase, show/hide counts, last dwell, zone, the card's frame and on-screen offset), chrome geometry (`chrome`: URL field, favorites section, Space header band, title frame and baseline, hover states), window buttons (`trafficLightsDimmed`, `trafficLightsHovered`, per button alpha and action, the window's AX button attributes `axWindowButtons` with role and subrole), the automation pointer (`automationPointer`, window coordinates, or null when it is in another window or never moved), `key`, `appActive`, `miniaturized`, `zoomed`, selection, shown page IDs, engine URL/active ID, native and HTML full-screen state, transition state and completed transition count. Runs the window's pending layout first |
-| `window-focus` | `id`, `activate` | Make that own window key; optional own-app activation |
+| `window-focus` | `id`, `activate`, `readinessTimeout` | Make that own window key; optional own-app activation. Native readiness timeout: 0–5 seconds, default 5. |
 | `window-motion` | `reduced` (optional bool), `sampleCard` (optional bool) | Motion tokens and actual animations read back from the sidebar, panel, card, shadow, and Space-pager layers when scheduled; retained after completion. Response and damping come from the scheduled spring's physical values; `mass`, `stiffness`, `physicalDamping`, and `settlingDuration` expose those values and the CA settling estimate. The scheduled `duration` must equal `settlingDuration`; response is not the animation lifetime (Space response 0.20 s, visibly settled ≈ 0.27 s in S2 §20.12). `scheduledDelay` is the scheduled begin time minus its explicit scheduling reference in the layer's clock. `cardCurve` evaluates `Motion.springProgress` in the app. `sampleCard` records the real visible card's presentation offset every 4 ms for 0.32 s; it is off by default. `reduced` overrides only this process, without changing macOS settings. `window-state` also reports the live/model widths, resize-active state, width-commit and gesture-notification counts, geometry changes, and `spaceSwitcherFrames` in root coordinates for native switcher clicks. |
 | `appearance` | `name` (`light`, `dark`, or anything else for the system's) | Open's own appearance (`NSApp.appearance`); the system setting is untouched |
 | `window-close` | — | Native close for the current standard window; model tabs stay |
@@ -270,7 +270,15 @@ grant on macOS 26. `NSApp.activate()` is a request, not a synchronous grant.
 Key and page-focus commands require the real application and requested
 window to become active/key; they fail before sending events if readiness times out. `focus` waits
 for both the page's native responder and `document.hasFocus()`. `window-state`
-reports those native flags and screen bounds. Tests poll the resulting UI state
+reports those native flags and screen bounds, plus key-window object identity,
+active-Space membership, key eligibility, sheets, and child windows. Native input
+also waits for the requested browser window's full-screen transition to end.
+`ensure_key` retries only `window-focus: key focus not ready:` until its own
+15-second deadline. Each native wait uses at most the remaining deadline budget.
+It logs each attempt's predicates and load average, then returns the last state
+on expiry so the caller's assertion decides the result. Foreground interruption
+and other errors still abort. This is a readiness wait, not a retry of the
+caller's behavior check. Tests poll the resulting UI state
 instead of treating the key response as proof that the UI has finished changing.
 `activation-events` returns a bounded list of this app's native activation and
 resignation notifications, with monotonic uptime and its key-window number.
