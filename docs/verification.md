@@ -80,6 +80,34 @@ takes 1–3 seconds. Host load, cold compiler caches, npm, and list downloads ca
 increase these estimates. The final table and each log give actual times/results.
 Performance budgets are never retried or relaxed by the runner.
 
+## Section 1 completion (2026-10-28)
+
+Sidebar implementation PRs #123–#135 are merged through main `52212f17`.
+The lead will fill the final-main results below. Saved PR receipts do not close
+this soak, the user capture list (calibration C, C1–C11 except completed C10,
+TS-C1 and `favorites-hover`), or quiet-machine absolute latency acceptance.
+C10's exact drag-hide threshold refinement also remains open.
+
+| Final-main check | Result |
+|---|---|
+| verify-all (final main 52212f17) | PENDING (lead) |
+| sidebar-render check x3 | PENDING (lead) |
+| e2e sidebar x3 | PENDING (lead) |
+| e2e sidebar-completion x3 | PENDING (lead) |
+| e2e app-actions x3 | PENDING (lead) |
+| e2e window x3 | PENDING (lead) |
+| crash reports | PENDING (lead) |
+
+Speed receipts already recorded in the merged PRs:
+
+| Gate / scope | Saved receipt | Source |
+|---|---|---|
+| SM6 main-thread instruction gate | 679,842,406 ≤ 745,172,115; added O(n) title-sizing pass FAIL at 785,999,099; restored PASS at 680,827,395. | [#125](https://github.com/SergeSerb2/open/pull/125) |
+| Stored-icon scroll, 1,000 rows | p95 0.86 ms; delayed-draw negative proof FAIL at 30.88 ms. | [#131](https://github.com/SergeSerb2/open/pull/131) |
+| FP10 paired folder-peek gate | 3/3 PASS; peek p95 2.663/2.766/2.812 ms (2.66–2.81 ms), native scroll layouts/frame 18/18; O(n) layout and added 3 ms spin controls FAIL. This uses the parent-approved matched-plain rule; the <1 ms median goal stays open. | [#135](https://github.com/SergeSerb2/open/pull/135), [receipt](plans/sidebar-s6-receipt.md) |
+| Site Control simple editor instruction gate | Reference 135,203,676; ceiling 148,724,044; added O(n) construction FAIL at 365,893,368. The <12 ms CPU p95 target still needs quiet-machine acceptance. | [#133](https://github.com/SergeSerb2/open/pull/133) |
+| Cold command bar, App Debug entry to first results applied to views | Earlier three runs 3.35/3.42/3.28 ms; final PR run 4.78 ms (rounded range 3.3–4.8 ms), versus the unchanged 50 ms budget. This excludes key routing, transport and presented-frame latency. | [#134](https://github.com/SergeSerb2/open/pull/134), [earlier receipts](re/sidebar-completion.md#13-numbered-shortcuts-and-recent-tab-switcher-2026-10-28) |
+
 ## Performance gates for offscreen harnesses
 
 Offscreen performance regression gates use **main-thread retired instructions**
