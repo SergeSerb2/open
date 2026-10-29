@@ -421,3 +421,45 @@ Final receipts are `final-verify.log`, `final-verify-details/`, `final-build.log
 before committing. Exact switcher visual values and Profile-wide candidate scope
 remain guesses as documented in TS-R8/TS-C1; this performance fix claims no new Arc
 capture or visual proof.
+
+
+### Cmd+9 native menu parity correction (2026-10-28, evening)
+
+The committed Arc menu reference `docs/re/menus-and-hotkeys.md`, “Tabs (23
+items)”, has no Go to Last Tab / Last / Ninth item and no static Cmd+9 row.
+Its “Shortcuts that live in code, not in the nib” table instead lists sidebar
+items 1–9 and the last-item Cmd+9 variant. The following paragraph cites
+`switchToNinthSidebarItemEnabled` and the ninth/last-item description strings.
+Those facts support the shortcut behavior, not a new native menu entry.
+
+Evidence: `commands-dump/main.swift` loads that committed reference through
+`OpenCommands/ExpectedMenu.swift` and `MenuComparator`. The parent full gate on
+`52839435` reported `extra: Tabs > Go to Last Tab []` with missing=0, extra=1.
+`rg -n 'Last|Ninth|Cmd\+9' docs/re/menus-and-hotkeys.md` plus its Tabs table
+confirms the distinction. No Arc app was launched or new Arc extraction made.
+
+Open removes only the extra static native menu entry. Cmd+9 keeps its
+`go-to-tab-9` keyboard route and `numberedTab(9)` preference-dependent target;
+existing dynamic tab menu rows retain the Cmd+9 equivalent on the last or ninth
+tab. The pre-existing code-only registry action remains available to command
+routing. No comparison reference or allowed-extra rule changes. The TS real-App
+row now performs the dynamic last-tab menu item by its identifier and asserts
+that no separate Go to Last Tab row exists. The empty, fewer-than-nine,
+more-than-nine, Include Favorites and ninth-option key flows remain in the suite.
+
+
+Validation for this correction (same real build and event paths, separate locked
+suite invocations, no build concurrent with the on-screen suites):
+
+| Check | Result |
+|---|---|
+| `heavy.sh tools/verify-all.sh --only commands-dump,commands-demo,features-render` | PASS; build 0 warnings/errors, commands-demo 232/232, features-render 335/335. |
+| `commands-dump` reference comparison | PASS: missing=0, extra=0, different=0; the existing 11 out-of-scope allowed-missing rows are unchanged. |
+| `heavy.sh tools/build.sh` | PASS, real Debug app. |
+| Locked Chrome `--only sidebar-completion` | PASS 164/164 feature rows + provenance/cleanup = 166/166; all 16 TS rows including dynamic Cmd+9 menu dispatch. |
+| Locked Chrome `--only app-actions` | PASS 48/48 feature rows + provenance/cleanup = 50/50; cold first results 3.6755 ms against the unchanged 50 ms budget. |
+
+Both e2e runs had zero foreground interruptions and passed cleanup. Raw receipts
+are under `.re/tab-switcher-menu-parity/`: `verify.log`, `verify-details/`,
+`build.log`, both suite logs and their `-results.json` files. Generated
+`docs/engine-spike` artifacts were restored before committing.

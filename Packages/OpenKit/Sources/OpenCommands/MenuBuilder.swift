@@ -297,7 +297,6 @@ public enum MenuBuilder {
         add(menu, ["pin-unpin-tab", "duplicate-tab", "rename-tab", "reveal-tab-in-sidebar", "reset-tab", "reset-all-tabs-in-space"], target: target, overrides: overrides)
         menu.addItem(.separator())
         add(menu, ["next-tab", "previous-tab", "cycle-tab-forward", "cycle-tab-backward", "tab-switcher-forward", "tab-switcher-backward"], target: target, overrides: overrides)
-        add(menu, ["go-to-last-tab"], target: target, overrides: overrides)
         menu.addItem(.separator())
         add(menu, ["new-folder", "expand-all-folders", "collapse-all-folders", "clear-unpinned-tabs"], target: target, overrides: overrides)
         menu.addItem(.separator())

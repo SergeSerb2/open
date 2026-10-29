@@ -5786,8 +5786,16 @@ def sidebar_tab_switcher_checks(app, require, tmp):
     app.call('defaults', key=ninth_key, value=True); key('9', ['cmd'])
     require('TS_cmd9_ninth_option', selected() == ids[8], selected=selected(), expected=ids[8])
     app.call('defaults', key=ninth_key, value=False)
-    app.call('command', id='go-to-last-tab')
-    require('TS_last_menu_dispatch', selected() == ids[-1], selected=selected(), expected=ids[-1])
+    # Arc's committed Tabs table has no separate Go to Last Tab item. Dispatch
+    # the real tab row carrying Cmd+9, after the preference-driven menu rebuild.
+    last_menu = wait_until(lambda: next((r for r in app.call('menu-state')
+        if r['id'] == 'dynamic-tab-' + ids[-1] and r['key'] == '9'), None), timeout=3)
+    assert last_menu, 'last tab did not acquire the Cmd+9 menu equivalent'
+    app.call('menu-perform', id=last_menu['id'])
+    menu_rows = app.call('menu-state')
+    require('TS_last_menu_dispatch', selected() == ids[-1]
+            and all(r['id'] != 'go-to-last-tab' and r['title'] != 'Go to Last Tab' for r in menu_rows),
+            selected=selected(), expected=ids[-1], item=last_menu)
     second_space = app.call('space-create', title='Tab Shortcuts B', profile='Tab Shortcuts')
     key('tab', ['ctrl']); empty_space = switcher(); release()
     require('TS_empty_space_starts_with_most_recent', empty_space['selected'] == ids[-1] and selected() == ids[-1], switcher=empty_space, state=state())
