@@ -574,3 +574,10 @@ commands accept `cmd`/`command`, `opt`/`option`, and `ctrl`/`control` aliases.
 The A3 flows and Today sweeper flows share the read-only `archive-list` command
 listed above. `sidebar-completion` runs both sets of checks, including E16 and
 the scheduler checks, through one definition of each helper.
+
+
+`tab-switcher-state` reports `created` and `monitoringModifiers` as well as the
+active/presented state, selected/item/visible IDs and drawing-view count. Reading
+it never constructs the controller. `app-actions` checks that both cold launch
+and the first real Cmd+T leave it uncreated. TS rows also check that an empty
+Ctrl+Tab creates nothing, and that Control release/Esc remove the modifier monitor.

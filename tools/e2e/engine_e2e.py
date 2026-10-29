@@ -4726,10 +4726,13 @@ def commandbar_checks(factory, results, tmp, config):
         app.call('suggest-remote', enabled=False)
         assert wait_until(lambda: app.call('hotkey-state')['prepared'], timeout=5, step=.02), 'post-paint command preparation did not run'
         results['lazy_commandbar'] = {'ok': state().get('created') is False}
+        switcher_before = app.call('tab-switcher-state')
         app.call('focus', tab=tab)
         opened = bar('t', 'window')
         first_open = wait_until(lambda: state() if state().get('openFirstResultsMs',-1) >= 0 else None, step=.02)
         results['first_open_results_budget'] = {'ok': bool(first_open) and first_open['openFirstResultsMs'] <= 50, 'milliseconds': first_open.get('openFirstResultsMs') if first_open else None, 'scope': 'showCommandBar entry to first snapshot applied; excludes preceding key routing, socket transport and frame presentation'}
+        switcher_after = app.call('tab-switcher-state')
+        results['lazy_tab_switcher'] = {'ok': switcher_before['created'] is False and switcher_after['created'] is False and not switcher_after['monitoringModifiers'], 'before': switcher_before, 'after': switcher_after}
         results['cmd_t_mode'] = {'ok': opened['mode'] == 'newTab' and opened['newTabHighlighted'], 'state': opened}
         typed = type_query(origin.removeprefix('http://') + '/new')
         press('return')
@@ -5764,7 +5767,7 @@ def sidebar_tab_switcher_checks(app, require, tmp):
     app.call('library-close'); app.call('window-focus', id=state()['id'], activate=True)
     first_space = app.call('space-create', title='Tab Shortcuts A', profile='Tab Shortcuts')
     key('9', ['cmd']); key('tab', ['ctrl']); release()
-    require('TS_empty_window_keys_are_safe', selected() == '' and not switcher()['active'], switcher=switcher())
+    require('TS_empty_window_keys_are_safe', selected() == '' and not switcher()['active'] and not switcher()['created'] and not switcher()['monitoringModifiers'], switcher=switcher())
     favorite = opened('favorite'); app.call('favorite', tab=favorite)
     pin = opened('pin'); app.call('pin', tab=pin)
     today = [opened('today%d' % i) for i in range(3)]
@@ -5792,7 +5795,7 @@ def sidebar_tab_switcher_checks(app, require, tmp):
     app.call('space', space=first_space)
     for node in (favorite, pin, today[0]): app.call('select', tab=node)
     current = selected(); hosts_before = app.call('host-counts'); key('tab', ['ctrl']); first = wait_until(lambda: (lambda s: s if s['presented'] else None)(switcher()), timeout=3)
-    require('TS_ctrl_tab_mru_includes_pinned_favorites_other_space', first['presented'] and first['items'][:4] == [current, pin, favorite, other]
+    require('TS_ctrl_tab_mru_includes_pinned_favorites_other_space', first['presented'] and first['monitoringModifiers'] and first['items'][:4] == [current, pin, favorite, other]
             and len(first['items']) == 5 and first['selected'] == pin and selected() == current,
             switcher=first, selected=selected(), expected=[current, pin, favorite, other])
     hosts_after = app.call('host-counts')
@@ -5802,9 +5805,9 @@ def sidebar_tab_switcher_checks(app, require, tmp):
     key('tab', ['ctrl']); second = switcher()
     require('TS_hold_ctrl_tab_twice_defers_commit', second['selected'] == favorite and selected() == current and second['items'] == first['items'], switcher=second)
     release()
-    require('TS_release_control_commits', selected() == favorite and not switcher()['presented'], selected=selected(), switcher=switcher())
+    require('TS_release_control_commits', selected() == favorite and not switcher()['presented'] and not switcher()['monitoringModifiers'], selected=selected(), switcher=switcher())
     key('tab', ['ctrl']); key('escape'); release()
-    require('TS_escape_cancels', selected() == favorite and not switcher()['presented'], selected=selected(), switcher=switcher())
+    require('TS_escape_cancels', selected() == favorite and not switcher()['presented'] and not switcher()['monitoringModifiers'], selected=selected(), switcher=switcher())
     key('tab', ['ctrl', 'shift']); reverse = switcher()
     require('TS_reverse_uses_frozen_mru', reverse['selected'] == reverse['items'][-1] and selected() == favorite, switcher=reverse)
     key('escape'); release()

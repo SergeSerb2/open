@@ -203,8 +203,9 @@ public final class CommandBarController: NSObject {
                               searchEngineID: r.searchEngineID, siteSearchID: siteScope?.id)
     }
 
-    /// Text changed: a new query. Its first snapshot is buffered when `query` returns and
-    /// is applied on the next main-actor turn, before the frame is drawn.
+    /// Apply ready local rows in this turn. Cold field-editor initialization, animations
+    /// and queued menu rebuilds must not hold an already computed result off the view.
+    /// Later providers still update through the cancellable stream.
     func runQuery(_ text: String) {
         pendingReturn = nil
         guard !panel.input.editor.hasMarkedText(), !panel.input.editor.isUpdatingComposition else { return }
@@ -216,8 +217,11 @@ public final class CommandBarController: NSObject {
         queriedText = text
         updateSiteHint(text)
         streamTask?.cancel()
-        let stream = engine.query(text, context: context())
         onQueryStarted?(text)
+        let stream = engine.query(text, context: context(), receiveInitialSnapshot: { [weak self] snapshot in
+            guard let self, self.generation == gen, self.isPresented else { return }
+            self.apply(snapshot)
+        })
         streamTask = Task { @MainActor [weak self] in
             for await snapshot in stream {
                 guard let self, self.generation == gen, self.isPresented else { return }

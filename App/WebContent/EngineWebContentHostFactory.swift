@@ -317,7 +317,7 @@ final class EngineWebContentHostFactory: NSResponder, WebContentHostFactory {
     layoutViews()
   }
   func select(nodeID: ItemID?, focus: Bool = true) {
-    controller?.tabSwitcher.cancel()
+    controller?.existingTabSwitcher?.cancel()
     guard let space = focusedSpace else { return }
     withoutUndo { model.selectNode(windowID: windowState.id, spaceID: space.id, nodeID: nodeID) }
     controller?.dismissSidebarReveal()
@@ -339,7 +339,7 @@ final class EngineWebContentHostFactory: NSResponder, WebContentHostFactory {
     let content = makeContent(for: tab, url: nil, requestContext: request.context); focus(space: space); select(nodeID: tab.id); return content
   }
   func focus(space: Space) {
-    controller?.tabSwitcher.cancel()
+    controller?.existingTabSwitcher?.cancel()
     withoutUndo { model.focusSpace(windowID: windowState.id, spaceID: space.id) }
     controller?.dismissSidebarReveal(); showSelection(); app.scheduleSave()
   }
@@ -454,7 +454,7 @@ final class EngineWebContentHostFactory: NSResponder, WebContentHostFactory {
   func closeAll() {
     guard !isClosing else { return }
     isClosing = true
-    controller?.tabSwitcher.cancel()
+    controller?.existingTabSwitcher?.cancel()
     for task in saveCaptureTasks.values { task.cancel() }
     saveCaptureTasks.removeAll()
     findSelectionTask?.cancel(); findSelectionTask = nil
@@ -707,8 +707,8 @@ extension EngineWebContentHostFactory {
     guard let controller, let profile = focusedProfile else { return }
     // Freeze MRU for the whole hold-Control session. Highlighting never calls
     // selectNode, stamps lastActiveAt, loads web content, or changes Space.
-    if controller.tabSwitcher.isActive {
-      controller.tabSwitcher.advance(by: delta, items: [], current: nil, in: controller.contentView) { _ in }
+    if let switcher = controller.existingTabSwitcher, switcher.isActive {
+      switcher.advance(by: delta, items: [], current: nil, in: controller.contentView) { _ in }
       return
     }
     let current = selectedTab?.id

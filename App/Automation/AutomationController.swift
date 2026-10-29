@@ -180,8 +180,10 @@
         if let value = a["value"] { UserDefaults.standard.set(value is NSNull ? nil : value, forKey: key); app.scheduleMenuRebuild() }
         return UserDefaults.standard.object(forKey: key) ?? NSNull()
       case "tab-switcher-state":
-        let switcher = try window.controller!.tabSwitcher
-        return ["presented": switcher.isPresented, "active": switcher.isActive, "selected": switcher.selectedID?.description ?? "",
+        guard let switcher = try window.controller!.existingTabSwitcher else {
+          return ["created": false, "presented": false, "active": false, "selected": "", "items": [], "visible": [], "viewCount": 0, "monitoringModifiers": false] as [String: Any]
+        }
+        return ["created": true, "monitoringModifiers": switcher.isMonitoringModifiers, "presented": switcher.isPresented, "active": switcher.isActive, "selected": switcher.selectedID?.description ?? "",
           "items": switcher.items.map { $0.id.description }, "visible": switcher.visibleIDs.map(\.description),
           "viewCount": switcher.view == nil ? 0 : 1] as [String: Any]
       case "sound-effect":

@@ -5,7 +5,7 @@ import OpenModel
 /// A frozen ordering for one hold-Control session. Only commit changes the model.
 /// One drawing view renders the visible slice; there are no per-tab NSViews,
 /// repeating timers or snapshot jobs after a session ends. Presentation uses
-/// one cancellable 100 ms delay; the window owns the existing key monitor.
+/// one cancellable 100 ms delay. A modifier monitor exists only during a session.
 @MainActor
 public final class TabSwitcherController {
     public struct Item {
@@ -29,6 +29,8 @@ public final class TabSwitcherController {
     public var pendingSnapshotCount: Int { snapshotTasks.count }
     private var snapshotTasks: [ItemID: Task<Void, Never>] = [:]
     private var snapshots: [ItemID: NSImage] = [:]
+    private var modifierMonitor: Any?
+    public var isMonitoringModifiers: Bool { modifierMonitor != nil }
     private var generation = 0
     private var presentationTask: Task<Void, Never>?
     private var snapshotAttempts: Set<ItemID> = []
@@ -40,6 +42,7 @@ public final class TabSwitcherController {
         return start..<(start + count)
     }
     public init() {}
+    isolated deinit { if let modifierMonitor { NSEvent.removeMonitor(modifierMonitor) } }
 
     public func advance(by delta: Int, items: [Item], current: ItemID?, in parent: NSView,
                         commit: @escaping (ItemID) -> Void) {
@@ -47,6 +50,13 @@ public final class TabSwitcherController {
             guard items.count > 1 else { return }
             self.items = items; selectedIndex = items.firstIndex { $0.id == current } ?? -delta
             self.parent = parent; onCommit = commit
+            modifierMonitor = NSEvent.addLocalMonitorForEvents(matching: .flagsChanged) { [weak self] event in
+                MainActor.assumeIsolated {
+                    guard let self, event.window === self.parent?.window else { return }
+                    self.handle(event)
+                }
+                return event
+            }
             generation += 1
             let surface = TabSwitcherView(); surface.owner = self; surface.isHidden = true
             view = surface; parent.addSubview(surface, positioned: .above, relativeTo: nil)
@@ -98,9 +108,10 @@ public final class TabSwitcherController {
         default: return false
         }
     }
-    public func cancel() { finish(commit: false) }
+    public func cancel() { if isActive { finish(commit: false) } }
     private func finish(commit: Bool) {
         let id = selectedID, action = onCommit
+        if let modifierMonitor { NSEvent.removeMonitor(modifierMonitor) }; modifierMonitor = nil
         generation += 1
         presentationTask?.cancel(); presentationTask = nil
         for task in snapshotTasks.values { task.cancel() }; snapshotTasks.removeAll()

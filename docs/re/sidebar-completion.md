@@ -325,3 +325,63 @@ Python compilation and the runner's `--help` path passed. Receipts are in
 `sidebar-completion-results.json`, and `app-actions-attempt-{1,2,3}*` logs/JSON.
 Generated `docs/engine-spike` changes were restored to the imported main version;
 that directory has no merge-resolution differences from `013cdb45`.
+
+
+### Cold command-bar investigation (2026-10-28, evening)
+
+This is Open runtime evidence, not an Arc reverse-engineering claim. The 50 ms
+`first_open_results_budget` remains unchanged. The timing still starts at
+`EngineWebContentHostFactory.showCommandBar` entry and ends after the first
+snapshot is applied to the actual command-bar views; it excludes key routing,
+socket transport and frame presentation.
+
+Both comparison apps were built with `heavy.sh tools/build.sh`, in detached
+verification worktrees, from the same recorded engine distribution. Runs used
+fresh app profiles, the same `engine_e2e.py` runner, local Shell C page, native
+window-key route, no computer use, and the shared on-screen lock. Full app-actions
+runs were back to back:
+
+| Build | Cold first results | Suite rows |
+|---|---:|---:|
+| main `013cdb45` | 55.96 ms (FAIL) | 46/47 |
+| branch `b7953e3d`, immediately afterward | 24.59 ms | 47/47 |
+| main `dee105e6` | 21.81 ms | 47/47 |
+| branch `b7953e3d`, immediately afterward | 33.59 ms | 47/47 |
+
+The tight real-app cold flow also reproduced a 55.58 ms branch failure. In a later
+interleaved run, main `dee105e6` measured 44.47 and 54.63 ms; the instrumented branch
+measured 38.89, 32.14 and 46.91 ms. No timing row had foreground loss. One earlier
+phase-probe attempt lost focus to UserNotificationCenter before the cold key; it
+has no timing result and was retried after three minutes.
+
+The phase probe found that local query work completed in 0.33–0.39 ms, while first
+application waited 28.28–43.18 ms. `CommandBarController.present` called `runQuery`,
+then synchronous layout, text-field focus, animation and its delegate. `runQuery`
+consumed its already buffered initial snapshot only in a new main-actor Task.
+Cold focus alone took 8.58–9.94 ms in these runs. `/usr/bin/sample <pid> 4 1 -file
+<.re output>` captured `CommandBarController.present → focusInput →
+NSWindow._realMakeFirstResponder → NSTextField.selectText → NSTextInputContext`
+and cold TextInputUIMacHelper/InputAnalytics setup. Both sampled builds show this
+path. Sampling perturbed timings; those timings are not acceptance measurements.
+
+The branch defaults observer fired once per launch in the phase probe. No
+TabSwitcher/snapshotPNG stack appeared in the samples. Source inspection confines
+MRU sorting and host preview capture to `showTabSwitcher`/its delayed session;
+`BrowserModel` selection bookkeeping remains main's implementation. The evidence
+does not establish a branch-only cause. It does identify a removable wait for
+results that are ready before AppKit focus and unrelated queued main-thread work.
+
+The product now applies the initial local snapshot in the query call, after
+provider work and action validation, before focus/animation. Later async provider
+updates retain their cancellable stream. Other SuggestEngine callers still get
+the initial snapshot buffered in their stream. No result is fabricated or timed
+before it reaches the actual views. The cold bar remains lazy. The switcher is
+also now lazy; selection/layout/ordinary commands use optional existing state,
+inactive cancel is a no-op, and its modifier monitor exists only while active.
+`tab-switcher-state` reads lifecycle state without constructing a switcher.
+
+After this change, the same interleaved cold flow measured main `dee105e6` at
+17.86 and 17.08 ms, and the fixed branch at 3.34, 3.12 and 3.30 ms. No foreground
+loss occurred. Raw full-suite receipts, minimized real-flow runner/results,
+phase-probe results and samples are under `.re/tab-switcher-cold-open/`.
+Final post-merge full-suite checks are recorded below when complete.
