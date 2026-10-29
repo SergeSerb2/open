@@ -323,6 +323,7 @@ enum Checks {
         ReviewChecks.run()
         VisualFinishChecks.run()
         FolderPeekChecks.run()
+        FolderPeekChecks.drops()
         CompletionChecks.run()
         CompactToolbarChecks.run()
         SpaceManagerChecks.run()

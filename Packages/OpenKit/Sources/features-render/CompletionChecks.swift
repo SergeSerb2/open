@@ -16,6 +16,7 @@ enum CompletionFeatureChecks {
         try gestureHide(check)
         try await previews(check)
         try await folderPeek(check)
+        try await folderUnloadFallback(check)
         try separate(check)
     }
 
@@ -198,6 +199,31 @@ enum CompletionFeatureChecks {
         check(c.container.host(for: b.id) == nil && model.tab(id: b.id) === b && folder.expansion == .peeked(b.id)
               && factory.made.dropFirst(beforeUnload).allSatisfy { ![a.id, b.id].contains($0.tabID) }, "FP Q18 unload closes loaded folder hosts, keeps entries/peek, and creates no child host")
         check(c.hoverPreview.card == nil, "FP folder action dismisses card before row interaction")
+    }
+
+    private static func folderUnloadFallback(_ check: (Bool, String) -> Void) async throws {
+        let profile = Profile(name: "Unload split")
+        let inside = Tab(url: URL(string: "https://example.invalid/unload-inside")!, title: "Inside")
+        let panes = (0..<2).map { Tab(url: URL(string: "https://example.invalid/unload-outside/\($0)")!, title: "Outside \($0)") }
+        let folder = Folder(title: "Unload", children: [.tab(inside)])
+        let space = Space(title: "Unload", profileID: profile.id, pinned: [.folder(folder)], today: panes.map { .tab($0) })
+        let window = BrowserWindowState(focusedSpaceID: space.id, selectedNodeBySpace: [space.id: inside.id])
+        let model = BrowserModel(profiles: [profile], spaces: [space], windows: [window])
+        let split = model.makeSplit(tabIDs: panes.map(\.id))!
+        model.setFolderExpansion(folderID: folder.id, .peeked(inside.id))
+        let c = BrowserWindowController(model: model, windowID: window.id, factory: FakeWebContentHostFactory(),
+            size: CGSize(width: 1000, height: 900), defaults: FeatureCLI.defaults())
+        defer { c.container.closeAll(); c.window?.close() }
+        func pump() async { try? await Task.sleep(for: .milliseconds(20)); OffscreenRenderer.settle(c.contentView) }
+        await pump()
+        let loaded = c.container.host(for: inside.id) != nil
+        let accepted = c.sidebar(c.sidebar, didRequest: .unloadFolder(folderID: folder.id))
+        await pump()
+        check(loaded && accepted && c.container.host(for: inside.id) == nil && folder.expansion == .peeked(inside.id)
+            && window.selectedNodeBySpace[space.id] == split.id && c.splitController.split === split
+            && c.container.slots.map(\.tabID) == panes.map(\.id)
+            && c.isCommandEnabled("next-split-pane", enabledKey: ""),
+            "FP-unload fallback selects containing split, shows both panes and enables split commands")
     }
 
     // MARK: SP5–SP6 (Separate From Pinned Tab keeps the live host)

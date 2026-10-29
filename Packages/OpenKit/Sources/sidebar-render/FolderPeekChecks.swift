@@ -135,4 +135,42 @@ enum FolderPeekChecks {
               "FP8 one ordinary close undo restores Today child and peek")
         check(SidebarDiagnostics.fullReloads == reloads, "FP5–FP9 all transitions remain incremental")
     }
+
+    /// Exercise the real outline validation/acceptance and model mutation together.
+    static func drops() {
+        for urlDrop in [false, true] {
+            for target in ["above C", "below C", "on C", "on folder"] {
+                let profile = Profile(name: "FP drop")
+                let tabs = (0..<4).map { Tab(url: URL(string: "https://example.invalid/drop/\($0)")!, title: "Drop \($0)") }
+                let folder = Folder(title: "Drop ABC", children: tabs.prefix(3).map { .tab($0) })
+                let space = Space(title: "Drop", profileID: profile.id, pinned: [.folder(folder)], today: [.tab(tabs[3])])
+                let window = BrowserWindowState(focusedSpaceID: space.id, selectedNodeBySpace: [space.id: tabs[2].id])
+                let model = BrowserModel(profiles: [profile], spaces: [space], windows: [window])
+                model.setFolderExpansion(folderID: folder.id, .peeked(tabs[2].id))
+                let context = SidebarContext(model: model, windowID: window.id), delegate = RecordingDelegate()
+                let scene = RenderScene(context: context, options: RenderScene.Options(), delegate: delegate)
+                let host = OffscreenRenderer.host(scene, scale: 1)
+                defer { host.contentView = nil; host.close() }
+                OffscreenRenderer.settle(scene)
+                let outline = scene.sidebar.focusedOutline!, data = outline.dataSource!
+                let event = SidebarDragEvent(ids: urlDrop ? [] : [tabs[3].id], window: host)
+                let url = URL(string: "https://example.invalid/dropped-url")!
+                if urlDrop { event.draggingPasteboard.clearContents(); event.draggingPasteboard.writeObjects([url as NSURL]) }
+                let item: Any = target == "on C" ? tabs[2] : folder
+                let index = target == "above C" ? 0 : target == "below C" ? 1 : NSOutlineViewDropOnItemIndex
+                let validated = data.outlineView?(outline, validateDrop: event, proposedItem: item, proposedChildIndex: index)
+                // AppKit uses the displayed parent/index retargeted by validateDrop
+                // when the proposal is ON the exposed child. Never feed model index 2
+                // back into an outline which has only one displayed child.
+                let accepted = data.outlineView?(outline, acceptDrop: event,
+                    item: target == "on C" ? folder : item, childIndex: target == "on C" ? 0 : index) == true
+                OffscreenRenderer.settle(scene)
+                var expected = tabs.prefix(3).map { $0.url }
+                expected.insert(urlDrop ? url : tabs[3].url, at: target == "above C" || target == "on C" ? 2 : 3)
+                Checks.check(validated == (urlDrop ? .copy : .move) && accepted && folder.children.compactMap(\.tab).map(\.url) == expected,
+                    "FP-drop \(urlDrop ? "URL" : "node") \(target) maps peeked C in [A,B,C] to model order")
+            }
+        }
+    }
+
 }
