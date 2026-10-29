@@ -339,6 +339,7 @@ enum FeatureChecks {
         try await PiPChecks.run { condition, label in check(condition, label) }
         try SoundChecks.run { check($0, $1) }
         try await CompletionFeatureChecks.run { check($0, $1) }
+        try await TabSwitcherChecks.run { check($0, $1) }
         try await FaviconChecks.run { check($0, $1) }
         try await AutoArchiveChecks.run { check($0, $1) }
         print("features-render check: \(passed) passed, \(failed) failed")

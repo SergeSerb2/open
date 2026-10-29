@@ -4726,10 +4726,13 @@ def commandbar_checks(factory, results, tmp, config):
         app.call('suggest-remote', enabled=False)
         assert wait_until(lambda: app.call('hotkey-state')['prepared'], timeout=5, step=.02), 'post-paint command preparation did not run'
         results['lazy_commandbar'] = {'ok': state().get('created') is False}
+        switcher_before = app.call('tab-switcher-state')
         app.call('focus', tab=tab)
         opened = bar('t', 'window')
         first_open = wait_until(lambda: state() if state().get('openFirstResultsMs',-1) >= 0 else None, step=.02)
         results['first_open_results_budget'] = {'ok': bool(first_open) and first_open['openFirstResultsMs'] <= 50, 'milliseconds': first_open.get('openFirstResultsMs') if first_open else None, 'scope': 'showCommandBar entry to first snapshot applied; excludes preceding key routing, socket transport and frame presentation'}
+        switcher_after = app.call('tab-switcher-state')
+        results['lazy_tab_switcher'] = {'ok': switcher_before['created'] is False and switcher_after['created'] is False and not switcher_after['monitoringModifiers'], 'before': switcher_before, 'after': switcher_after}
         results['cmd_t_mode'] = {'ok': opened['mode'] == 'newTab' and opened['newTabHighlighted'], 'state': opened}
         typed = type_query(origin.removeprefix('http://') + '/new')
         press('return')
@@ -5265,17 +5268,25 @@ def sidebar_a2_checks(app, results, require, evidence, tmp):
     probe = app.call('eval', tab=pin, js='window.__peekProbe')
     require('E12_preview_host_survives_select', again and selected and probe == 1, probe=probe, state=again)
     # The non-sidebar Ctrl+Tab route must return the preview host before selection refresh.
-    ordered = [tab['id'] for tab in app.call('tabs')]
-    app.call('select', tab=ordered[(ordered.index(pin) - 1) % len(ordered)])
+    # MRU visits: pin was selected above, so current -> Ctrl+Tab targets pin.
+    app.call('select', tab=current)
     point = row(pin)['point']
     app.call('mouse', action='hover', x=point[0], y=point[1])
     cycling = wait_until(lambda: (lambda st: st if st['kind'] == 'page' and st['target'] == pin else None)(app.call('preview-state')), timeout=3)
     app.call('eval', tab=pin, js='window.__cyclePreviewProbe = 12')
+    hosts_before_cycle = app.call('host-counts')
     app.call('key', key='tab', modifiers=['ctrl'], route='app')
+    pending_cycle = app.call('tab-switcher-state')
+    pending_selection = state()['selected']
+    app.call('key', key='control', modifiers=[], route='app')
     cycled = wait_until(lambda: state()['selected'] == pin and app.call('preview-state')['kind'] == 'none', timeout=3)
     cycle_probe = app.call('eval', tab=pin, js='window.__cyclePreviewProbe')
-    require('E12_preview_host_survives_ctrl_tab', cycling and cycled and cycle_probe == 12,
-            probe=cycle_probe, state=state(), preview=app.call('preview-state'))
+    hosts_after_cycle = app.call('host-counts')
+    require('E12_preview_host_survives_ctrl_tab', cycling and cycled and cycle_probe == 12
+            and pending_cycle['active'] and pending_cycle['selected'] == pin and pending_selection == current
+            and hosts_after_cycle['created'] == hosts_before_cycle['created'],
+            probe=cycle_probe, state=state(), preview=app.call('preview-state'), pending=pending_cycle,
+            hostsBefore=hosts_before_cycle, hostsAfter=hosts_after_cycle)
     # E13: a background tab is unread until it is selected.
     background = app.call('open', url=page('Background Unread'), background=True)['id']
     unread = app.call('tab-state', tab=background)['unread']
@@ -5939,6 +5950,96 @@ def sidebar_favicon_checks(app, require, tmp, launch):
 
 
 
+def sidebar_tab_switcher_checks(app, require, tmp):
+    """TS keys enter OEApplication.sendEvent. No desktop input or direct dispatch."""
+    def state(): return app.call('window-state')
+    def switcher(): return app.call('tab-switcher-state')
+    def key(name, mods=()): return app.call('key', key=name, modifiers=list(mods), route='app')
+    def selected(): return state()['selected']
+    def release(): return key('control')
+    def opened(name):
+        path = Path(tmp) / ('ts-' + name + '.html')
+        path.write_text('<title>Switcher %s</title><h1>%s</h1>' % (name, name))
+        node = app.call('open', url=path.as_uri())['id']; app.call('wait', tab=node); return node
+    def tree_ids():
+        def flatten(nodes):
+            return [node['id'] for node in nodes if node['kind'] == 'tab'] + [item for node in nodes for item in flatten(node.get('children', []))]
+        tree = app.call('sidebar-tree')
+        return flatten(tree['pinned']) + flatten(tree['today'])
+    include_key = 'open.shortcuts.includeFavoritesInTabNumbering'
+    ninth_key = 'open.shortcuts.switchToNinthEnabled'
+    old_include = app.call('defaults', key=include_key); old_ninth = app.call('defaults', key=ninth_key)
+    app.call('library-close'); app.call('window-focus', id=state()['id'], activate=True)
+    first_space = app.call('space-create', title='Tab Shortcuts A', profile='Tab Shortcuts')
+    created_before_empty = switcher()['created']
+    key('9', ['cmd']); key('tab', ['ctrl']); release()
+    require('TS_empty_window_keys_are_safe', selected() == '' and not switcher()['active'] and switcher()['created'] == created_before_empty and not switcher()['monitoringModifiers'], switcher=switcher())
+    favorite = opened('favorite'); app.call('favorite', tab=favorite)
+    pin = opened('pin'); app.call('pin', tab=pin)
+    today = [opened('today%d' % i) for i in range(3)]
+    app.call('defaults', key=ninth_key, value=False)
+    app.call('defaults', key=include_key, value=True)
+    key('1', ['cmd'])
+    require('TS_cmd1_include_favorites_on', selected() == favorite, selected=selected(), expected=favorite)
+    app.call('defaults', key=include_key, value=False); key('1', ['cmd'])
+    require('TS_cmd1_include_favorites_off', selected() == pin, selected=selected(), expected=pin)
+    last = tree_ids()[-1]; key('9', ['cmd'])
+    require('TS_cmd9_last_with_fewer_than_nine', selected() == last, selected=selected(), expected=last)
+    more = [opened('more%d' % i) for i in range(7)]
+    ids = tree_ids(); key('9', ['cmd'])
+    require('TS_cmd9_last_after_ninth', len(ids) > 9 and selected() == ids[-1], selected=selected(), expected=ids[-1])
+    app.call('defaults', key=ninth_key, value=True); key('9', ['cmd'])
+    require('TS_cmd9_ninth_option', selected() == ids[8], selected=selected(), expected=ids[8])
+    app.call('defaults', key=ninth_key, value=False)
+    # Arc's committed Tabs table has no separate Go to Last Tab item. Dispatch
+    # the real tab row carrying Cmd+9, after the preference-driven menu rebuild.
+    last_menu = wait_until(lambda: next((r for r in app.call('menu-state')
+        if r['id'] == 'dynamic-tab-' + ids[-1] and r['key'] == '9'), None), timeout=3)
+    assert last_menu, 'last tab did not acquire the Cmd+9 menu equivalent'
+    app.call('menu-perform', id=last_menu['id'])
+    menu_rows = app.call('menu-state')
+    require('TS_last_menu_dispatch', selected() == ids[-1]
+            and all(r['id'] != 'go-to-last-tab' and r['title'] != 'Go to Last Tab' for r in menu_rows),
+            selected=selected(), expected=ids[-1], item=last_menu)
+    second_space = app.call('space-create', title='Tab Shortcuts B', profile='Tab Shortcuts')
+    key('tab', ['ctrl']); empty_space = switcher(); release()
+    require('TS_empty_space_starts_with_most_recent', empty_space['selected'] == ids[-1] and selected() == ids[-1], switcher=empty_space, state=state())
+    app.call('space', space=second_space)
+    other = opened('other-space')
+    app.call('space', space=first_space)
+    for node in (favorite, pin, today[0]): app.call('select', tab=node)
+    current = selected(); hosts_before = app.call('host-counts'); key('tab', ['ctrl']); first = wait_until(lambda: (lambda s: s if s['presented'] else None)(switcher()), timeout=3)
+    require('TS_ctrl_tab_mru_includes_pinned_favorites_other_space', first['presented'] and first['monitoringModifiers'] and first['items'][:4] == [current, pin, favorite, other]
+            and len(first['items']) == 5 and first['selected'] == pin and selected() == current,
+            switcher=first, selected=selected(), expected=[current, pin, favorite, other])
+    hosts_after = app.call('host-counts')
+    image_path = str(Path(ROOT) / '.re' / 'tab-switcher' / 'real-switcher.png')
+    app.call('snapshot', path=image_path)
+    require('TS_highlight_does_not_create_hosts', hosts_before == hosts_after, before=hosts_before, after=hosts_after, png=image_path)
+    key('tab', ['ctrl']); second = switcher()
+    require('TS_hold_ctrl_tab_twice_defers_commit', second['selected'] == favorite and selected() == current and second['items'] == first['items'], switcher=second)
+    release()
+    require('TS_release_control_commits', selected() == favorite and not switcher()['presented'] and not switcher()['monitoringModifiers'], selected=selected(), switcher=switcher())
+    key('tab', ['ctrl']); key('escape'); release()
+    require('TS_escape_cancels', selected() == favorite and not switcher()['presented'] and not switcher()['monitoringModifiers'], selected=selected(), switcher=switcher())
+    key('tab', ['ctrl', 'shift']); reverse = switcher()
+    require('TS_reverse_uses_frozen_mru', reverse['selected'] == reverse['items'][-1] and selected() == favorite, switcher=reverse)
+    key('escape'); release()
+    # Visit the other Space last, then return: committing the second recent tab
+    # restores its Space as well as the real page's selected tab. Keep the
+    # destination's remembered selection current: #130 stamps departures too.
+    app.call('select', tab=today[0])
+    app.call('space', space=second_space); app.call('select', tab=other)
+    app.call('space', space=first_space); app.call('select', tab=today[0])
+    key('tab', ['ctrl']); cross = switcher(); release()
+    require('TS_commit_other_space', cross['selected'] == other and selected() == other and state()['space'] == second_space,
+            switcher=cross, state=state(), expected=other)
+    app.call('space', space=first_space)
+    key('tab', ['ctrl']); bounded = switcher()
+    require('TS_visible_view_count_bounded', bounded['viewCount'] == 1 and len(bounded['visible']) <= 5, switcher=bounded)
+    key('escape'); release()
+    app.call('defaults', key=include_key, value=old_include); app.call('defaults', key=ninth_key, value=old_ninth)
+
 def sidebar_intents_menu_checks(app, results, require, tmp):
     """Section 1 items 9–10: use real NSMenu actions; always cancel native UI."""
     def state(): return app.call('window-state')
@@ -6503,6 +6604,8 @@ def space_manager_checks(results, tmp, config, style):
                 and len(app.call('shell-windows')) == 1 and tabs_before_close == tabs_after_close,
                 keys=key_states, closeFixture=close_fixture, selectedBeforeClose=selected_before_close, barAfterEscape=bar_after_escape, tabsBeforeClose=tabs_before_close, tabsAfterClose=tabs_after_close, state=state(app))
         app = sidebar_completion_a3_checks(app, results, require, evidence, tmp, launch)
+        sidebar_tab_switcher_checks(app, require, tmp)
+
         app = sidebar_favicon_checks(app, require, tmp, launch)
         sidebar_intents_menu_checks(app, results, require, tmp)
         app = sidebar_completion_archive_checks(app, launch, results, require, evidence, tmp)
@@ -6559,7 +6662,11 @@ def main():
     ap.add_argument("--window-chrome-only", action="store_true", help="run only the window-chrome follow-up flows in the window suite")
     ap.add_argument("--keep", action="store_true",
                     help="keep this run's data root, cache root and scratch folder (paths printed at the end)")
+    ap.add_argument("--focus-retry-delay-seconds", type=int, default=0,
+                    help="wait between interrupted foreground attempts (0–600 seconds)")
     opts = ap.parse_args()
+    if not 0 <= opts.focus_retry_delay_seconds <= 600:
+        ap.error("--focus-retry-delay-seconds must be between 0 and 600")
     if opts.only is None and not opts.engine_fingerprint_only:
         ap.error("--only is required unless --engine-fingerprint-only is set")
     if opts.engine_sha256 and not re.fullmatch(r"[0-9a-f]{64}", opts.engine_sha256):
@@ -6785,6 +6892,12 @@ def main():
         if attempt == 3:
             dict.__setitem__(results.setdefault(opts.only, {}), "suite", {
                 "status": "INTERRUPTED", "reason": interruption["reason"], "focus": interruption["focus"], "attempts": 3})
+        elif opts.focus_retry_delay_seconds:
+            print("retrying interrupted foreground flow in %ds" % opts.focus_retry_delay_seconds, flush=True)
+            remaining = opts.focus_retry_delay_seconds
+            while remaining:
+                delay = min(30, remaining)
+                time.sleep(delay); remaining -= delay
     results["interrupted_attempts"] = interrupted_attempts
     results["cleanup"] = {"ok": all(instance.quit_report.get("ok") for instance in _OWNED_APPS),
                           "processes": [instance.quit_report for instance in _OWNED_APPS]}

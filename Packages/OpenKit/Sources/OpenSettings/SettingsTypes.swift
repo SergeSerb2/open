@@ -87,7 +87,7 @@ public extension AutoArchiveInterval {
         "open.sidebar.hideHintShown": false, "open.sidebar.autoArchiveBannerDismissed": false,
         "open.sidebar.autoArchiveBannerEligible": true,
         "open.library.lastSection": "archive", "open.shortcuts.defaultPriority": "browser",
-        "open.shortcuts.includeFavoritesInTabNumbering": true, "open.shortcuts.switchToNinthEnabled": true,
+        "open.shortcuts.includeFavoritesInTabNumbering": true, "open.shortcuts.switchToNinthEnabled": false,
     ]
     public static func register(in defaults: UserDefaults) {
         // Registration fallbacks can already exist from another Settings or

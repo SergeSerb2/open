@@ -177,8 +177,15 @@
       case "defaults":
         // Reads (and with `value`, writes) one Open preference in this app's own domain.
         guard let key = a["key"] as? String, key.hasPrefix("open.") else { throw Failure(message: "defaults key must start with open.") }
-        if let value = a["value"] { UserDefaults.standard.set(value is NSNull ? nil : value, forKey: key) }
+        if let value = a["value"] { UserDefaults.standard.set(value is NSNull ? nil : value, forKey: key); app.scheduleMenuRebuild() }
         return UserDefaults.standard.object(forKey: key) ?? NSNull()
+      case "tab-switcher-state":
+        guard let switcher = try window.controller!.existingTabSwitcher else {
+          return ["created": false, "presented": false, "active": false, "selected": "", "items": [], "visible": [], "viewCount": 0, "monitoringModifiers": false] as [String: Any]
+        }
+        return ["created": true, "monitoringModifiers": switcher.isMonitoringModifiers, "presented": switcher.isPresented, "active": switcher.isActive, "selected": switcher.selectedID?.description ?? "",
+          "items": switcher.items.map { $0.id.description }, "visible": switcher.visibleIDs.map(\.description),
+          "viewCount": switcher.view == nil ? 0 : 1] as [String: Any]
       case "sound-effect":
         // The App's SoundEffects path: plays only with open.advanced.playSoundEffects on.
         guard let raw = a["effect"] as? String, let effect = SoundEffects.Effect(rawValue: raw) else { throw Failure(message: "unknown sound effect") }
@@ -1631,7 +1638,8 @@
         "return": ("\r", 36), "escape": ("\u{1b}", 53), "tab": ("\t", 48), "space": (" ", 49),
         "delete": ("\u{7f}", 51), "forward-delete": (String(Character(UnicodeScalar(NSDeleteFunctionKey)!)), 117),
         "o": ("o", 31), ",": (",", 43), "z": ("z", 6), "n": ("n", 45), "t": ("t", 17), "w": ("w", 13), "l": ("l", 37), "f": ("f", 3), "s": ("s", 1), "a": ("a", 0),
-        "v": ("v", 9), "x": ("x", 7), "c": ("c", 8), "d": ("d", 2), "1": ("1", 18), "2": ("2", 19), "=": ("=", 24),
+        "v": ("v", 9), "x": ("x", 7), "c": ("c", 8), "d": ("d", 2), "1": ("1", 18), "2": ("2", 19), "9": ("9", 25), "=": ("=", 24),
+        "control": ("", 59),
         "down": (String(Character(UnicodeScalar(NSDownArrowFunctionKey)!)), 125),
         "up": (String(Character(UnicodeScalar(NSUpArrowFunctionKey)!)), 126),
       ]
@@ -1648,7 +1656,8 @@
       }
       if code >= 123 { mods.insert([.function, .numericPad]) }
       let route = a["route"] as? String ?? "app"
-      for type in [NSEvent.EventType.keyDown, .keyUp] {
+      let types: [NSEvent.EventType] = code == 59 ? [.flagsChanged] : [.keyDown, .keyUp]
+      for type in types {
         guard
           let event = NSEvent.keyEvent(
             with: type, location: .zero, modifierFlags: mods, timestamp: ProcessInfo.processInfo.systemUptime,

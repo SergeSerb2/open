@@ -75,7 +75,8 @@ public enum MenuBuilder {
         dispatcher: any CommandDispatcher,
         spaces: [SpaceMenuEntry] = [],
         tabs: [TabMenuEntry] = [],
-        overrides: KeyBindingStore = .empty
+        overrides: KeyBindingStore = .empty,
+        switchToNinth: Bool = false
     ) -> NSMenu {
         let target = MenuCommandTarget()
         target.dispatcher = dispatcher
@@ -87,7 +88,7 @@ public enum MenuBuilder {
             buildEditMenu(target: target, overrides: overrides),
             buildViewMenu(target: target, overrides: overrides),
             buildSpacesMenu(target: target, spaces: spaces, overrides: overrides),
-            buildTabsMenu(target: target, tabs: tabs, overrides: overrides),
+            buildTabsMenu(target: target, tabs: tabs, overrides: overrides, switchToNinth: switchToNinth),
             buildArchiveMenu(target: target, overrides: overrides),
             buildExtensionsMenu(target: target, overrides: overrides),
             buildWindowMenu(target: target, overrides: overrides),
@@ -287,7 +288,7 @@ public enum MenuBuilder {
         return menu
     }
 
-    private static func buildTabsMenu(target: MenuCommandTarget, tabs: [TabMenuEntry], overrides: KeyBindingStore) -> NSMenu {
+    private static func buildTabsMenu(target: MenuCommandTarget, tabs: [TabMenuEntry], overrides: KeyBindingStore, switchToNinth: Bool) -> NSMenu {
         let menu = NSMenu(title: "Tabs")
         // new-tab lives in File; Tabs shows the same command (Arc lists it in both).
         menu.addItem(item("new-tab", target: target, overrides: overrides))
@@ -307,8 +308,9 @@ public enum MenuBuilder {
                 let dynamic = NSMenuItem(
                     title: tab.title,
                     action: #selector(MenuCommandTarget.openCommandAction(_:)),
-                    keyEquivalent: number <= 9 ? String(number) : ""
+                    keyEquivalent: number <= 8 ? String(number) : ""
                 )
+                if switchToNinth ? number == 9 : index == tabs.count - 1 { dynamic.keyEquivalent = "9" }
                 dynamic.target = target
                 dynamic.keyEquivalentModifierMask = [.command]
                 dynamic.representedObject = ["command": "go-to-tab-\(min(number, 9))", "payload": tab.id]
