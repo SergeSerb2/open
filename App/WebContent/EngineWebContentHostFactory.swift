@@ -315,7 +315,8 @@ final class EngineWebContentHostFactory: NSResponder, WebContentHostFactory {
   @discardableResult
   func openNewTab(url: URL, background: Bool, opener: ItemID? = nil) -> Tab? {
     guard let space = focusedSpace else { return nil }
-    let tab = model.newTab(in: space.id, url: url, at: 0); tab.openerID = opener
+    // Lead Q11: a tab opened in the background is unread until it is selected.
+    let tab = model.newTab(in: space.id, url: url, at: 0, unread: background); tab.openerID = opener
     if !background { select(nodeID: tab.id) }
     app.scheduleSave(); return tab
   }
@@ -335,6 +336,10 @@ final class EngineWebContentHostFactory: NSResponder, WebContentHostFactory {
   /// editors return false, so no successful no-op reaches the sidebar.
   func performSidebar(_ intent: SidebarIntent) -> Bool? {
     switch intent {
+    case .dismissAutoArchiveBanner: app.dismissAutoArchiveEducation(); return true
+    case .openProfileSettings(let id):
+      guard model.profile(id: id) != nil else { return false }
+      app.dismissAutoArchiveEducation(); app.settingsPresenter.showProfileSettings(profileID: id); return true
     case .toggleSidebar: controller?.toggleSidebar(); return true
     case .select(let id, let spaceID):
       guard model.space(id: spaceID) != nil, model.node(id: id) != nil else { return false }
@@ -364,18 +369,57 @@ final class EngineWebContentHostFactory: NSResponder, WebContentHostFactory {
         let tab = model.index.values.compactMap(\.tab).first(where: { !before.contains($0.id) }) else { return false }
       select(nodeID: tab.id); return true
     case .copyLink(let id, let markdown):
-      guard let tab = model.tab(id: id) else { return false }; NSPasteboard.general.clearContents()
-      NSPasteboard.general.setString(markdown ? "[\(tab.displayTitle)](\(tab.url.absoluteString))" : tab.url.absoluteString, forType: .string); return true
+      return copyLinks(ids: [id], markdown: markdown)
+    case .copyLinks(let ids, let markdown): return copyLinks(ids: ids, markdown: markdown)
+    case .copyAllLinks(let id, let markdown): return copyLinks(ids: [id], markdown: markdown)
+    case .moveNodesToNewSpace(let ids): return moveSelectionToNewSpace(ids: ids)
     case .duplicate(let id): return model.duplicateNode(id: id) != nil
     case .showLibrary: app.settingsPresenter.showLibrary(); return true
     case .manageSpaces:
       app.settingsPresenter.showLibrary(section: .spaces); return true
     case .showSiteControls, .changeSpaceIcon, .editSpaceTheme, .newProfile, .shareSpace,
          .editPinnedURL, .share, .changeIcon, .customizePage,
-         .copyAllLinks, .turnFolderIntoSpace, .moveToNewSpace:
+         .turnFolderIntoSpace, .moveToNewSpace:
       return false // Explicitly deferred UI entries; see docs/app-shell.md Step B.
     default: return nil
     }
+  }
+
+  private func copyLinks(ids: [ItemID], markdown: Bool) -> Bool {
+    var seen = Set<ItemID>(), lines: [String] = []
+    func append(_ node: SidebarNode) {
+      guard seen.insert(node.id).inserted else { return }
+      switch node {
+      case .tab(let tab): lines.append(markdown ? "[\(tab.displayTitle)](\(tab.url.absoluteString))" : tab.url.absoluteString)
+      case .folder(let folder): folder.children.forEach(append)
+      case .split(let split): split.panes.forEach { append(.tab($0)) }
+      }
+    }
+    // Selected containers cover their descendants, even if a child also appears
+    // earlier in the payload. Preserve the displayed order of top-level nodes.
+    let selected = Set(ids)
+    for id in ids {
+      var parent = model.parent(of: id), covered = false
+      while let current = parent {
+        switch current {
+        case .folder(let ancestor), .splitPane(let ancestor):
+          if selected.contains(ancestor) { covered = true }
+          parent = model.parent(of: ancestor)
+        default: parent = nil
+        }
+      }
+      if !covered, let node = model.node(id: id) { append(node) }
+    }
+    guard !lines.isEmpty else { return false }
+    NSPasteboard.general.clearContents()
+    return NSPasteboard.general.setString(lines.joined(separator: "\n"), forType: .string)
+  }
+
+  private func moveSelectionToNewSpace(ids: [ItemID]) -> Bool {
+    guard let profile = focusedProfile, controller?.context.canMoveNodesToNewSpace(ids) == true,
+      let space = model.createSpace(title: "Space", profileID: profile.id, icon: nil, theme: SpaceTheme(), at: nil, moving: ids)
+    else { return false }
+    focus(space: space); app.scheduleSave(); app.scheduleMenuRebuild(); return true
   }
 
   /// One close rule for Cmd-W, the sidebar, window.close() and
@@ -786,7 +830,8 @@ extension EngineWebContentHostFactory: OEWebContentDelegate {
       }
       let source = opener.flatMap { space(for: $0) } ?? hosts.values.first { $0.content === webContent }?.spaceID.flatMap { model.space(id: $0) }
       guard let space = source ?? focusedSpace, space.profileID == profile(for: request.context)?.id else { return nil }
-      let tab = model.newTab(in: space.id, url: request.url ?? URL(string: "about:blank")!, at: 0)
+      let tab = model.newTab(in: space.id, url: request.url ?? URL(string: "about:blank")!, at: 0,
+                             unread: request.disposition == .newBackgroundTab)
       tab.openerID = opener
       let content = makeContent(for: tab, url: nil, requestContext: request.context)
       if request.disposition != .newBackgroundTab { focus(space: space); select(nodeID: tab.id) }
@@ -1071,7 +1116,7 @@ extension EngineWebContentHostFactory {
       return
     }
     let url = webContent.url ?? URL(string: "about:blank")!
-    let tab = model.newTab(in: space.id, url: url, at: 0)
+    let tab = model.newTab(in: space.id, url: url, at: 0, unread: !active)
     adopt(webContent, for: tab, profileID: profileID)
     record("open", webContent, ["disposition": "chromium", "active": active, "url": url.absoluteString])
     if active {

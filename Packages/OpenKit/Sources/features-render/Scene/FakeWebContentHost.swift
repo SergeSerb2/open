@@ -86,6 +86,14 @@ public final class FakeWebContentHost: WebContentHost {
         guard !isClosed else { return }
         surface.layer?.backgroundColor = color.cgColor; onPageBackgroundChange?(color)
     }
+    /// A late document title, independent of an explicit navigation.
+    public func simulateTitle(_ value: String) {
+        guard !isClosed else { return }
+        title = value; surface.label.stringValue = value; onTitleChange?(value)
+    }
+    public func simulateFavicon(_ data: Data?) {
+        guard !isClosed else { return }; onFaviconChange?(data)
+    }
     @discardableResult public func simulateLinkClick(_ url: URL, modifiers: NSEvent.ModifierFlags = []) -> Bool {
         guard !isClosed else { return false }
         if shouldNavigate?(url, modifiers) ?? true { load(url); return true }
@@ -135,6 +143,9 @@ public final class FakePageView: NSView {
 @MainActor
 public final class FakeWebContentHostFactory: WebContentHostFactory {
     public private(set) var made: [FakeWebContentHost] = []
+    /// SP6: a factory that cannot rebind a host to another tab ID (the container closes it).
+    public var refusesAdoption = false
+    public func adoptHost(_ host: any WebContentHost, as tabID: ItemID) -> Bool { !refusesAdoption || host.tabID == tabID }
     public func releaseClosedHosts() { made.removeAll { $0.isClosed } }
     public func makeHost(tabID: ItemID, profileID: ProfileID, url: URL?) -> (any WebContentHost)? {
         let colors: [NSColor] = [.init(srgbRed: 0.87, green: 0.87, blue: 0.98, alpha: 1), .white,

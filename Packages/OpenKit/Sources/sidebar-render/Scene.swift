@@ -76,8 +76,10 @@ final class RenderScene: NSView {
         if let folderPreview {
             sidebar.layoutSubtreeIfNeeded()
             let height = min(folderPreview.fittingSize.height, bounds.height - 20)
-            let anchor = sidebar.rowFrame(nodeID: folderPreview.folder.id)?.minY ?? 100
-            folderPreview.frame = CGRect(x: w + HoverPreviewMetrics.sidebarGap, y: min(max(10, anchor - 10), bounds.height - 10 - height), width: HoverPreviewMetrics.folderWidth, height: height)
+            // As the App's HoverPreviewController: 4 pt right of the sidebar, centered on the row.
+            let row = sidebar.rowFrame(nodeID: folderPreview.folder.id) ?? CGRect(x: 0, y: 100, width: w, height: 41)
+            folderPreview.frame = CGRect(x: w + HoverPreviewMetrics.folderSidebarGap, y: min(max(10, row.midY - height / 2), bounds.height - 10 - height),
+                                         width: HoverPreviewMetrics.folderWidth, height: height)
         }
 
     }

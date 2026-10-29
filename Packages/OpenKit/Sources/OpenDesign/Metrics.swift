@@ -346,17 +346,27 @@ public enum SpaceManagerMetrics {
     public static let pitch = columnWidth + gap
 }
 
-/// Hover preview geometry (completion §3.6; guesses pending capture C4).
+/// Hover preview geometry (completion §3.6). Page card: guesses pending capture C4. Folder card:
+/// positions measured from one video sample (V 46.11–46.46 s: card `[232, 163, 240, 191]` next to a
+/// 228 pt sidebar, centered on the row, a 48 pt search header, 45 pt rows); radius, shadow, fill and
+/// type are guesses until lane C.
 public enum HoverPreviewMetrics {
     /// Open choice (§3.6): fixed 0.5 s; one Arc sample ≈0.42 s, with no delay setting (S2 02/0050).
     public static let armDelay: TimeInterval = 0.5
     public static let pageWidth: CGFloat = 420
     public static let pageMaxHeight: CGFloat = 560
     public static let windowInset: CGFloat = 10
-    public static let folderWidth: CGFloat = 300
-    public static let rowHeight: CGFloat = 32
-    public static let headerHeight: CGFloat = 36
+    /// Page card: 8 pt right of the sidebar (guess).
     public static let sidebarGap: CGFloat = 8
+    /// Folder card: 4 pt right of the sidebar, 240 wide, header 48, rows 45 (measured once).
+    public static let folderSidebarGap: CGFloat = 4
+    public static let folderWidth: CGFloat = 240
+    public static let rowHeight: CGFloat = 45
+    public static let headerHeight: CGFloat = 48
+    /// Bottom padding after the last row: 191 = 48 + 3 × 45 + 8 for three rows (measured).
+    public static let bottomPadding: CGFloat = 8
+    /// At most this many rows show; more scroll (guess).
+    public static let maxVisibleRows = 10
     public static let radius: CGFloat = 10
     public static let shadowOpacity: Float = 0.25
     public static let shadowRadius: CGFloat = 12

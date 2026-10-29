@@ -494,6 +494,15 @@ row explicitly requires `sitecontrol-render check` for cost acceptance; it has
 no instruction-budget PASS. This verifies the CLI cannot silently compare the
 standalone procedure with the full gate reference (`procedure-standalone.log`).
 
+Merged-main verification at `013cdb45` ran the full command
+`~/Library/Caches/OpenRE/scripts/heavy.sh tools/verify-all.sh`: **22/22 PASS**,
+no FAIL or SKIP. Editor median **135,900,397** versus reference **135,203,676**
+(**+0.515%**), CPU p95 11.314 ms at load1 17.19, native window list
+**5 → 5**. The reference remains unchanged because the difference is below 2%.
+The command waited 180 s for a heavy slot; total command time was 688.137 s.
+Generated `docs/engine-spike/` files were restored before the merge commit.
+Raw summary and logs: `.re/sidebar-flakes/merge-full-013cdb45/`.
+
 Scope: `BoostEditorViews.swift` caches font pixels; `EditorBench.swift`, the new
 `EditorOpenBench.swift`, `InstructionBaseline.swift` and `instruction-baselines.json`
 own the editor cost gate. `main.swift` drains completed suites and is the sole

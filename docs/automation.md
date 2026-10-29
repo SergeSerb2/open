@@ -113,7 +113,7 @@ Arguments are `key=value`; values that parse as JSON are sent as JSON.
 | `shell-windows` | — | Standard controller IDs and native window numbers |
 | `window-state` | `id` (optional: another standard window, not made key) | Frame, sidebar mode/width/reveal, panel frame, traffic-light centers, frames, and visibility, the title bar frame, the hardware pointer in window coordinates (read only), hover-reveal state (`reveal`: phase, show/hide counts, last dwell, zone, the card's frame and on-screen offset), chrome geometry (`chrome`: URL field, favorites section, Space header band, title frame and baseline, hover states), window buttons (`trafficLightsDimmed`, `trafficLightsHovered`, per button alpha and action, the window's AX button attributes `axWindowButtons` with role and subrole), the automation pointer (`automationPointer`, window coordinates, or null when it is in another window or never moved), `key`, `appActive`, `miniaturized`, `zoomed`, selection, shown page IDs, engine URL/active ID, native and HTML full-screen state, transition state and completed transition count. Runs the window's pending layout first |
 | `window-focus` | `id`, `activate` | Make that own window key; optional own-app activation |
-| `window-motion` | `reduced` (optional bool), `sampleCard` (optional bool) | Motion tokens and actual animations read back from the sidebar, panel, card, shadow, and Space-pager layers when scheduled; retained after completion. Response and damping come from the scheduled spring's physical values. `scheduledDelay` is the scheduled begin time minus its explicit scheduling reference in the layer's clock. `cardCurve` evaluates `Motion.springProgress` in the app. `sampleCard` records the real visible card's presentation offset every 4 ms for 0.32 s; it is off by default. `reduced` overrides only this process, without changing macOS settings. `window-state` also reports the live/model widths, resize-active state, width-commit and gesture-notification counts, and geometry changes. |
+| `window-motion` | `reduced` (optional bool), `sampleCard` (optional bool) | Motion tokens and actual animations read back from the sidebar, panel, card, shadow, and Space-pager layers when scheduled; retained after completion. Response and damping come from the scheduled spring's physical values; `mass`, `stiffness`, `physicalDamping`, and `settlingDuration` expose those values and the CA settling estimate. The scheduled `duration` must equal `settlingDuration`; response is not the animation lifetime (Space response 0.20 s, visibly settled ≈ 0.27 s in S2 §20.12). `scheduledDelay` is the scheduled begin time minus its explicit scheduling reference in the layer's clock. `cardCurve` evaluates `Motion.springProgress` in the app. `sampleCard` records the real visible card's presentation offset every 4 ms for 0.32 s; it is off by default. `reduced` overrides only this process, without changing macOS settings. `window-state` also reports the live/model widths, resize-active state, width-commit and gesture-notification counts, geometry changes, and `spaceSwitcherFrames` in root coordinates for native switcher clicks. |
 | `appearance` | `name` (`light`, `dark`, or anything else for the system's) | Open's own appearance (`NSApp.appearance`); the system setting is untouched |
 | `window-close` | — | Native close for the current standard window; model tabs stay |
 | `window-reopen` | — | Real application reopen handler, including after the last window closes |
@@ -352,8 +352,8 @@ flag delays scheduling; it does not replace engine responses.
 
 ## Library Space Manager (App lane 1b)
 
-The `sidebar-completion` suite currently covers E5/E6 (menu, App command,
-Space-header menu, and command bar search plus Return), plus the manager's
+The `sidebar-completion` suite covers sidebar selection, menus and commands,
+previews, archive/restore, and E5/E6 (Library entries and native reorder), plus the manager's
 undo, archive/restore, window replacement, and no-browser reopen flows. It uses the
 real built App, real model/stores, native menus, and native mouse/key events.
 It creates a temporary copy of **Open's own** bundle with a unique bundle ID
@@ -363,7 +363,7 @@ no remote debugging port. It never opens or copies Arc.
 
 | Command | Arguments and result |
 |---|---|
-| `library-open` | `entry=command` (default) dispatches App `manage-spaces`; `entry=space-menu` performs the existing Space-header menu's “Manage Spaces…” item. Both use the shared Library presenter on `.spaces`. For the app menu, use existing `menu-perform id=manage-spaces`. Returns manager state. |
+| `library-open` | `entry=command` (default) dispatches App `manage-spaces` when `section` is omitted; `section=spaces|archive|downloads|captures|media|history` opens that section through the shared presenter. Unknown sections fail. `entry=space-menu` performs the Space-header “Manage Spaces…” item and accepts only omitted/Spaces section. Returns manager/Library state, including `section`. |
 | `space-manager-state` | Reads the **attached** native manager, its class/identity/context ID, model and undo identity, isolated/global preview flags, columns, grabber points, up to 200 visible-outline rows per column, browser switcher order from real view positions, real model UndoManager notification count, and this App's window records. Points use the existing `mouse` command's window coordinates. Available after the last browser closes. |
 | `space-manager-drag` | `space=<ID> to=<zero-based index>` drags the real visible grabber through `OEApplication.sendEvent`; the native tracking loop dequeues the drag/up events. Rejects invalid IDs/indices and offscreen grabbers. Returns manager state. |
 | `space-manager-menu` | `space=<ID> item=<title>` performs the existing manager column menu. Add `node=<ID>` to perform that real outline row's context-menu item instead. No new confirmation policy or model implementation. |
@@ -381,7 +381,7 @@ Use existing `key route=app window=<Library number>` for Cmd+Z and other
 Library keys. Undo uses AppKit's nil-target Edit menu action and the Library
 window's real model UndoManager. It has no second key handler.
 Use existing `library-restore` for archive restore and `snapshot window=<number>`
-for full-resolution real-window captures.
+for full-resolution real-window captures (`window=library` also resolves that window).
 
 On M1, hold the outer validation lock once per job, plus the on-screen lock
 for one suite invocation:
@@ -498,3 +498,76 @@ They still capture all six real menu models and run the disabled-child and hidde
 command selections. The regular tabstrip suite keeps the complete command smoke loop.
 The probe popup storage check waits for the extension API, since `isLive` precedes
 its document/API injection. Foreground-interruption checks stay enabled in both flows.
+
+## Today auto-archive clock and scheduler
+
+The App owns one `ExpirySweeper`. It sweeps at launch, on the registered
+`NSWorkspace.didWakeNotification`, and on a non-repeating timer at the next
+Today expiry. Tabs shown in any window, including every selected split pane,
+have neither an expiry nor an armed timer for that tab. Activity starts at the
+last deselection, Space switch, or window close. Model activity, ancestry, window
+selection/visibility, Profile settings, and undo re-arm that
+same timer. Never has no deadline. The production clock is wall time; automation
+uses a nonpersistent offset that continues to advance with wall time. These
+commands are available without an open browser, except the banner commands.
+
+| Command | Args | Result |
+|---|---|---|
+| `archive-sweep` | Zero or one of `now` (ISO-8601, plain or fractional), `offsetSeconds` (finite number), `reset:true` | Set clock if supplied, then call the shared scheduler with reason `automation`; return archive-state plus this call’s `archivedCount` and `affectedSpaces` |
+| `archive-clock` | Exactly one of the same clock args | Change clock and re-arm only; allows a natural timer callback without a manual sweep |
+| `archive-state` | None | `now`, `offsetSeconds`, `running`, `nextExpiry` (ISO or null), `timerArmed`, `armedTimerCount` (0/1), `timerGeneration`, `sweepCount`, `countsByReason`, `lastReason`, `lastSweep:{now,archivedCount,affectedSpaces}`, `educationRequested` |
+| `archive-wake` | Optional `now` ISO | Post the real workspace wake notification; await its observer and return state |
+| `profile-archive-setting` | `profile` UUID, `interval`, `scope:profile\|all` | Real Settings propose/apply path; return affected `profiles:[{id,interval}]` and scheduler `state` after Observation delivery |
+| `archive-list` | Optional `profile` UUID, `limit` 1…1000 (default 1000) | Real Profile SQLite `count` and `rows:[{id,kind,reason,space,profile,archivedAt}]`; no URLs |
+| `archive-banner-state` | Optional model `window` UUID | Actual view visibility, title, message, threshold, request, eligible/dismissed preferences, and frame in that Open window |
+| `archive-banner-action` | `action:got-it\|settings`, optional model `window` UUID | Press the real Got it NSButton or invoke the actual Settings text-link delegate; require a visible card; return post-action state |
+
+Intervals are `never`, `oneHour`, `sixHours`, `twelveHours`, `twentyFourHours`,
+`sevenDays`, and `thirtyDays`. Profile thresholds live only in the snapshot.
+Invalid or conflicting clock arguments and invalid setting values fail before
+mutation. Reset the clock before creating/selecting the next fixture: model
+creation and selection timestamps continue to use real wall time. `tabs` and
+`tab-state` expose `createdAt` and `lastActiveAt` as Unix seconds; `sidebar-tree`
+folders expose `expanded`; `settings-state` exposes `pane` and `selectedProfile`.
+`metrics` also works after the final browser closes.
+
+```json
+{"id":1,"cmd":"archive-clock","args":{"offsetSeconds":43199.8}}
+{"id":2,"cmd":"archive-state","args":{}}
+{"id":3,"cmd":"archive-sweep","args":{"reset":true}}
+{"id":4,"cmd":"profile-archive-setting","args":{"profile":"<Profile UUID>","interval":"never","scope":"profile"}}
+```
+
+Use fixture-derived activity times in checks. `sidebar-completion` includes
+E16 banner/store flows and AA_APP timer, notification, launch snapshot, Settings,
+Never, invalid-clock, all-Profile, and idle checks. `features-render` includes
+AA1–AA12 whole flows with the same scheduler, model, SQLite stores, and banner.
+The scheduling margin of 1 ms preserves the model's strict expiry comparison;
+it is an Open implementation choice. Banner geometry remains unmeasured against
+Arc (no banner capture exists).
+
+## Sidebar completion A3
+
+These commands use the browser's real outline, native menu, event router, or
+production intent. They do not send system mouse or keyboard input. Input
+commands activate the exact owned window and use the harness's focus tracking.
+
+| Command | Arguments and result |
+|---|---|
+| `command` | `id=<registry ID>` aliases `menu-perform`. Rejects unknown or disabled native menu items. |
+| `sidebar-click` | `node=<visible ID> [modifiers=[cmd,shift,option]] [window=<model UUID>]` scrolls an existing outline row into view and sends native down/up at its center. Rejects missing/collapsed targets. Returns ordered `selection` and active `selected` ID. |
+| `sidebar-key` | `key=<name> [modifiers=[cmd,opt,ctrl,shift]] [window=<model UUID>]` focuses the real outline and sends the App key path. Includes Delete, `forward-delete`, Esc, Shift+Up/Down, Cmd+D, Cmd+Shift+N and Cmd+Z. Use plain `key` to keep a text editor focused. |
+| `selection` | `[window=<model UUID>]` reads ordered multi-selection IDs without changing focus; empty is `[]`. |
+| `hover` | Exactly one `node=<visible ID>` or `favorite=<ID>`, plus `ms=0…5000`. Sends native hover and awaits the duration. `leave=true` with no target leaves for a stable page point. Returns `preview-state`. |
+| `sidebar-drop` | `nodes=[IDs] parent={kind:today|pinned|folder,id:UUID} index=<nonnegative Int>` calls the same `SidebarContext.performNodeDrop` as native outline acceptDrop. Rejects empty/duplicate/missing IDs, invalid destinations, and forbidden moves. This proves intent ordering and undo, not OS drag-session hit testing. |
+| `sidebar-clear-state` | `[window=<model UUID>]` reads the actual divider Clear hit `frame` in root coordinates and hover `visible` state. Use native `mouse action=hover/click` with Option for the Option-Clear flow. |
+
+`sidebar-row` also reads the visible `unreadBadge`. Folder nodes in
+`sidebar-tree` include `expanded`. `tab-strip` includes `pinStates`, read from
+`OEBrowser.isPinned(_:)` for each actual engine web content. Mouse and key
+commands accept `cmd`/`command`, `opt`/`option`, and `ctrl`/`control` aliases.
+`sidebar-menu` rejects malformed node IDs and empty/ambiguous title paths.
+
+The A3 flows and Today sweeper flows share the read-only `archive-list` command
+listed above. `sidebar-completion` runs both sets of checks, including E16 and
+the scheduler checks, through one definition of each helper.

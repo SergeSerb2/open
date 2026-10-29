@@ -95,7 +95,8 @@ extension Motion {
     public static let pipPresent = SpringToken(response: 0.3, dampingFraction: 1)
     public static let pipFade: CFTimeInterval = 0.15
     public static let pipControlsHide: CFTimeInterval = 0.3
-    public static let previewIn: CFTimeInterval = 0.15
+    /// Folder card fade in ≈ 0.08 s, out ≈ 0.10 s (V 46.11–46.19, 46.36–46.46 s; one sample).
+    public static let previewIn: CFTimeInterval = 0.08
     public static let previewOut: CFTimeInterval = 0.10
     public static let previewSwap: CFTimeInterval = 0.10
     public static let bannerIn: CFTimeInterval = 0.22

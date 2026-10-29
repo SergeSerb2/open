@@ -182,7 +182,7 @@ class Open:
         if cmd in ("window-close", "popup-close", "quit") or (cmd == "devtools" and args.get("method") == "Page.crash"):
             self.discover_owned_processes()
         foreground_input = cmd in ("key", "focus") or (cmd == "window-focus" and args.get("activate"))
-        if cmd == "space-manager-drag": foreground_input = True
+        if cmd in ("space-manager-drag", "sidebar-click", "sidebar-key", "hover"): foreground_input = True
         if foreground_input and self.pid and not self.call("window-state").get("appActive", False):
             # `NSApp.activate()` is a request, not a grant. Renew the explicit
             # foreground request if another app took focus. Address the exact
@@ -2877,6 +2877,29 @@ def chrome_capture_comparison(snapshots):
             {"ok":all(r["delta_e00"]<=1 for r in rings),"band":"6.5 <= r < 7.5 pt", "rows":rings, "non_gating_stroke_profile":profiles, "scale_scope":"1x proven; 2x M1 unproven (followups: Verification portability)"})
 
 
+def scheduled_spring(a, response, damping, path=None, relative_to_group=False):
+    """Check the spring read back from the real layer, including its scheduled lifetime.
+
+    S2 §20.12 fits response R, not CA's settlingDuration: Space R=0.20 s,
+    visually settled at about 0.27 s (21-motion.mov 35.05 / 43.63 s).
+    """
+    mass, stiffness, friction = (a.get(k, 0) for k in ("mass", "stiffness", "physicalDamping"))
+    if mass <= 0 or stiffness <= 0:
+        return False
+    # CAAnimationGroup children use a relative beginTime; the group owns the
+    # absolute requestedAt/scheduledDelay pair checked by the caller.
+    delay = a.get("beginTime", -1) if relative_to_group else a.get("scheduledDelay", -1)
+    return (a.get("type") == "CASpringAnimation"
+            and abs(2 * math.pi / math.sqrt(stiffness / mass) - response) < 1e-6
+            and abs(friction / (2 * math.sqrt(stiffness * mass)) - damping) < 1e-6
+            and abs(a.get("response", 0) - response) < 1e-6
+            and abs(a.get("damping", 0) - damping) < 1e-6 and a.get("initialVelocity") == 0
+            and a.get("settlingDuration", 0) > 0
+            and abs(a.get("duration", 0) - a["settlingDuration"]) < 1e-6
+            and 0 <= delay <= 1/60
+            and (path is None or a.get("keyPath") == path))
+
+
 def window_chrome_followup_checks(factory, results, tmp):
     """App-shell §3.3. All input enters OEApplication.sendEvent, including held drags."""
     private = tempfile.mkdtemp(prefix="window-chrome-104-", dir=tmp)
@@ -2900,10 +2923,8 @@ def window_chrome_followup_checks(factory, results, tmp):
         return state()
     def settled():
         return wait_until(lambda: not app.call("window-motion")["active"]["sidebar"], timeout=3, step=.01)
-    def spring(a, response, damping, path=None):
-        return (a.get("type") == "CASpringAnimation" and abs(a.get("response", 0) - response) < 1e-6
-                and abs(a.get("damping", 0) - damping) < 1e-6 and 0 <= a.get("scheduledDelay", a.get("beginTime", -1)) <= 1/60
-                and (path is None or a.get("keyPath") == path))
+    def spring(a, response, damping, path=None, relative_to_group=False):
+        return scheduled_spring(a, response, damping, path, relative_to_group)
     def snap(name):
         path = os.path.join(private, name + ".png")
         receipt = app.call("snapshot", path=path)
@@ -2995,7 +3016,7 @@ def window_chrome_followup_checks(factory, results, tmp):
         settled(); key(); toggle_show = app.call("window-motion")
         motions = [hide_motion, show_motion, toggle_hide, toggle_show]
         results["motion_sidebar_toggle"] = {"ok": all(spring(m["sidebar"].get("sidebar", {}), .1, .95, "transform.translation.x")
-            and all(spring(a, .1, .95) for a in m["sidebar"].get("panel", {}).get("children", []))
+            and all(spring(a, .1, .95, relative_to_group=True) for a in m["sidebar"].get("panel", {}).get("children", []))
             and len(m["sidebar"].get("panel", {}).get("children", [])) == 2
             and 0<=m["sidebar"].get("panel",{}).get("scheduledDelay",-1)<=1/60
             and m["tokens"]["sidebarToggle"] == {"response": .1, "damping": .95} for m in motions),
@@ -3409,10 +3430,27 @@ def sidebar_checks(factory, results, tmp):
         app.call("space", space=s1)
         app.call("select", tab=a)
         first_page = check_page(app, a, "Sidebar A")
-        app.call("space", space=s2)
+        # Click the real switcher through OEApplication.sendEvent; no direct intent dispatch.
+        app.call("window-motion", reduced=False)
+        frame = app.call("window-state")["spaceSwitcherFrames"][s2]
+        app.call("mouse", action="click", x=frame[0]+frame[2]/2, y=frame[1]+frame[3]/2)
+        # mouse-click queues mouse-up; wait for that real action before reading
+        # its layer animation (otherwise the receipt can belong to the prior switch).
+        after_click = state_when(app, lambda st: st["space"] == s2 and st["selected"] == e) or app.call("window-state")
+        switched = app.call("window-motion")["space"]
         second_page = check_page(app, e, "Sidebar E")
         results["space_switch_wrapper"] = {"ok": first_page and second_page and context != "Default"
                                                 and app.page(e)["context"] == context}
+        # Closed-form critical response from the installed mass/stiffness, not elapsed time.
+        omega = math.sqrt(switched.get("stiffness", 0) / switched.get("mass", 1))
+        remainder = 228 * (1 + omega * .27) * math.exp(-omega * .27)
+        travel = abs(switched.get("to", 0) - switched.get("from", 0))
+        results["space_switch_click_spring"] = {"ok": after_click["space"] == s2
+            and after_click["selected"] == e and after_click["shownPages"] == [e]
+            and scheduled_spring(switched, .20, 1, "position.x") and remainder <= .5 and travel > .5,
+            "scheduled": switched, "remaining_at_270ms_pt": remainder, "switcher_frame": frame,
+            "travel_pt": travel,
+            "selected_after_click": after_click["selected"], "shown_after_click": after_click["shownPages"]}
         results["durable_profile_storage"] = {"status": "SKIP", "reason": "covered by --only profiles (durable_second_profile: a cookie survives a relaunch)"}
         background = new_tab(app, fixture("Profile background"))
         app.call("select", tab=e)
@@ -5148,6 +5186,8 @@ def sidebar_a1_checks(app, results, require, evidence):
     doomed = app.call('space-create', title='Delete Me')
     app.call('space', space=doomed)
     doomed_tab = app.call('open', url=fixture('Doomed Space Tab'))['id']; app.call('wait', tab=doomed_tab)
+    profile = app.tab(doomed_tab)['profile']
+    archive_before = app.call('archive-list', profile=profile)['rows']
     spaces_before = [sp['id'] for sp in app.call('spaces')]
     app.call('sidebar-menu', item='Delete Space')
     sheet = wait_until(lambda: state()['confirmation'], timeout=3)
@@ -5155,11 +5195,14 @@ def sidebar_a1_checks(app, results, require, evidence):
     app.call('alert', button='Cancel')
     cancelled = [sp['id'] for sp in app.call('spaces')] == spaces_before and state()['confirmation'] is None
     require('E7_delete_space_cancel', sheet and sheet['title'] == 'Delete your Delete Me Space?' and sheet['buttons'] == ['Delete', 'Cancel']
-            and 'This will archive all the tabs and folders inside it.' in texts['texts'] and cancelled, sheet=sheet, texts=texts)
+            and 'This will archive all the tabs and folders inside it.' in texts['texts'] and cancelled and app.call('archive-list', profile=profile)['rows'] == archive_before, sheet=sheet, texts=texts)
     app.call('sidebar-menu', item='Delete Space'); wait_until(lambda: state()['confirmation'], timeout=3)
     app.call('alert', button='Delete')
     deleted = wait_until(lambda: doomed not in [sp['id'] for sp in app.call('spaces')], timeout=3)
     require('E7_delete_space_confirmed', deleted and state()['confirmation'] is None, spaces=app.call('spaces'))
+    archive_after = app.call('archive-list', profile=profile)['rows']
+    require('E7_delete_space_archives_real_store', len(archive_after) == len(archive_before) + 1
+            and any(r['id'] == doomed_tab and r['profile'] == profile for r in archive_after), archive=archive_after)
     # E8: Delete folder confirms first; the toast reads "Folder deleted"; Cmd+Z restores it.
     first_space = spaces_before[0]
     app.call('space', space=first_space)
@@ -5188,6 +5231,506 @@ def sidebar_a1_checks(app, results, require, evidence):
     sound = app.call('sound-effect', effect='capture')
     require('A1_sound_effect_gated_off', sound['resource'] == 'open-capture.caf' and not sound['played'] and sound['plays'] == 0
             and app.call('defaults', key='open.advanced.playSoundEffects') in (None, False), sound=sound)
+
+
+def sidebar_a2_checks(app, results, require, evidence, tmp):
+    """Sidebar completion A2 in the real App (plan §5.4 E11–E14): page previews through the
+    tab's own host, no reload on select, unread background tabs, Separate From Pinned Tab."""
+    def state(): return app.call('window-state')
+    def page(name):
+        path = Path(tmp) / (name.replace(' ', '-').lower() + '.html')
+        path.write_text('<title>%s</title><h1>%s</h1>' % (name, name)); return path.as_uri()
+    def row(tab): return app.call('sidebar-row', node=tab)
+    app.call('window-focus', id=state()['id'], activate=True)
+    # A pinned tab that is not selected, and a current Today tab.
+    pin = app.call('open', url=page('Preview Pinned'))['id']; app.call('wait', tab=pin); app.call('pin', tab=pin)
+    current = app.call('open', url=page('Preview Current'))['id']; app.call('wait', tab=current)
+    # E11: a real hover on the pinned row arms after 0.5 s and shows the page card.
+    point = row(pin)['point']
+    app.call('hover', node=pin, ms=600)
+    shown = wait_until(lambda: (lambda st: st if st['kind'] == 'page' and st['target'] == pin else None)(app.call('preview-state')), timeout=3)
+    require('E11_hover_pinned_shows_page_preview', shown and shown['host'] != '' and shown['card'][0] == state()['sidebarLiveWidth'] + 8,
+            state=shown or app.call('preview-state'))
+    app.call('snapshot', path=os.path.join(evidence, 'a2-page-preview.png'))
+    app.call('mouse', action='hover', x=1200, y=600)
+    gone = wait_until(lambda: app.call('preview-state')['kind'] == 'none', timeout=3)
+    require('E11_leaving_hides_preview', gone, state=app.call('preview-state'))
+    # E12: a page global set while the page shows in the card survives selecting the tab.
+    point = row(pin)['point']
+    app.call('mouse', action='hover', x=point[0], y=point[1])
+    again = wait_until(lambda: (lambda st: st if st['kind'] == 'page' and st['target'] == pin else None)(app.call('preview-state')), timeout=3)
+    app.call('eval', tab=pin, js='window.__peekProbe = 1')
+    app.call('mouse', action='click', x=point[0], y=point[1])
+    selected = wait_until(lambda: state()['selected'] == pin and app.call('preview-state')['kind'] == 'none', timeout=3)
+    probe = app.call('eval', tab=pin, js='window.__peekProbe')
+    require('E12_preview_host_survives_select', again and selected and probe == 1, probe=probe, state=again)
+    # The non-sidebar Ctrl+Tab route must return the preview host before selection refresh.
+    ordered = [tab['id'] for tab in app.call('tabs')]
+    app.call('select', tab=ordered[(ordered.index(pin) - 1) % len(ordered)])
+    point = row(pin)['point']
+    app.call('mouse', action='hover', x=point[0], y=point[1])
+    cycling = wait_until(lambda: (lambda st: st if st['kind'] == 'page' and st['target'] == pin else None)(app.call('preview-state')), timeout=3)
+    app.call('eval', tab=pin, js='window.__cyclePreviewProbe = 12')
+    app.call('key', key='tab', modifiers=['ctrl'], route='app')
+    cycled = wait_until(lambda: state()['selected'] == pin and app.call('preview-state')['kind'] == 'none', timeout=3)
+    cycle_probe = app.call('eval', tab=pin, js='window.__cyclePreviewProbe')
+    require('E12_preview_host_survives_ctrl_tab', cycling and cycled and cycle_probe == 12,
+            probe=cycle_probe, state=state(), preview=app.call('preview-state'))
+    # E13: a background tab is unread until it is selected.
+    background = app.call('open', url=page('Background Unread'), background=True)['id']
+    unread = app.call('tab-state', tab=background)['unread']
+    app.call('select', tab=background)
+    read = wait_until(lambda: not app.call('tab-state', tab=background)['unread'], timeout=3)
+    require('E13_background_tab_unread_until_selected', unread is True and read, tab=app.call('tab-state', tab=background))
+    # E14: Separate From Pinned Tab (⌥-click on the reset plate) keeps the live page.
+    sep = app.call('open', url=page('Separate Origin'))['id']; app.call('wait', tab=sep); app.call('pin', tab=sep)
+    pinned_url = app.call('tab-state', tab=sep)['url']
+    away_url = page('Separate Away')
+    app.call('navigate', tab=sep, url=away_url)
+    wait_until(lambda: (lambda t: t['url'].endswith('/separate-away.html') and not t['loading'])(app.call('tab-state', tab=sep)), timeout=5)
+    app.call('wait', tab=sep)
+    app.call('eval', tab=sep, js='window.__separateProbe = 7')
+    require('E14_probe_set_on_navigated_page', app.call('eval', tab=sep, js='location.pathname.endsWith("separate-away.html") && window.__separateProbe') == 7)
+    frame = row(sep)['frame']
+    plate = [frame[0] + 26, frame[1] + 20]
+    app.call('mouse', action='hover', x=plate[0], y=plate[1])
+    page_before = app.call('tab-state', tab=sep)['page']
+    hosts_before = app.call('host-counts')
+    app.call('mouse', action='click', x=plate[0], y=plate[1], modifiers=['option'])
+    separated = wait_until(lambda: (lambda st: st if st['selected'] not in ('', sep) else None)(state()), timeout=3)
+    new_tab = separated['selected'] if separated else ''
+    moved = app.call('eval', tab=new_tab, js='window.__separateProbe') if new_tab else None
+    old = app.call('tab-state', tab=sep)
+    new = app.call('tab-state', tab=new_tab) if new_tab else None
+    require('E14_separate_keeps_live_page', separated and moved == 7 and old['section'] == 'pinned' and old['url'] == pinned_url
+            and not old['hasWebContent'] and new['section'] == 'today' and new['selected'] and new['url'] == away_url
+            and new['page']['url'] == away_url and new['page']['identifier'] == page_before['identifier'],
+            probe=moved, pinned=old, newTab=new, pageBefore=page_before['identifier'],
+            hostsBefore=hosts_before, hostsAfter=app.call('host-counts'), pages=[(p.get('url'), p.get('identifier')) for p in app.call('pages')])
+
+
+def sidebar_completion_archive_checks(app, launch, results, require, evidence, tmp):
+    """E16/AA_APP: real scheduler, advancing fake clock, Settings, and SQLite."""
+    import datetime
+
+    def iso(seconds):
+        return datetime.datetime.fromtimestamp(seconds, datetime.timezone.utc).isoformat(timespec='milliseconds').replace('+00:00', 'Z')
+
+    def state(): return app.call('archive-state')
+    def rows(profile): return app.call('archive-list', profile=profile, limit=1000)
+    def contains(tab): return any(t['id'] == tab for t in app.call('tabs'))
+    def setting(profile, interval, scope='profile'):
+        return app.call('profile-archive-setting', profile=profile, interval=interval, scope=scope)
+    def create(name, background=True):
+        return app.call('open', url=fixture(name), background=background)['id']
+    def fixture_profile(space):
+        with open(app.call('save')) as stream: snapshot = json.load(stream)
+        return next(s['profileID'] for s in snapshot['spaces'] if s['id'] == space)
+    def relaunch_aged(tab, age):
+        path = app.call('save'); app.quit()
+        with open(path) as stream: snapshot = json.load(stream)
+        found = []
+        def visit(value):
+            if isinstance(value, dict):
+                if value.get('id') == tab and 'lastActiveAt' in value:
+                    value['lastActiveAt'] = time.time() - age; found.append(tab)
+                for item in value.values(): visit(item)
+            elif isinstance(value, list):
+                for item in value: visit(item)
+        visit(snapshot)
+        if found != [tab]: raise AssertionError('expected one owned fixture TabDTO')
+        with open(path, 'w') as stream: json.dump(snapshot, stream)
+        return launch()
+
+    app.call('library-close')
+    # This suite tests the archive Settings link, not the separate suggestions notice.
+    app.call('defaults', key='open.general.searchSuggestNoticeDismissed', value=True)
+    app.call('archive-clock', reset=True)
+    with open(app.call('save')) as stream: initial = json.load(stream)
+    first_profile = initial['profiles'][0]['id']
+    setting(first_profile, 'never', scope='all')
+    space = app.call('space-create', title='Archive Today', profile='Archive Today')
+    profile = fixture_profile(space)
+    old = create('Auto Archive Old')
+    pin = create('Auto Archive Pinned', background=False); app.call('pin', tab=pin)
+    favorite = create('Auto Archive Favorite')
+    app.call('favorite', tab=favorite)
+    # The selected Today tab and an unselected Today tab are both past threshold.
+    # Only the unselected tab may archive. Pinned/Favorite controls also survive.
+    visible = create('Auto Archive Visible Today', background=False)
+    before = rows(profile)['count']; activity = max(app.tab(old)['lastActiveAt'], app.tab(visible)['lastActiveAt'])
+    sweep = app.call('archive-sweep', now=iso(activity + 13*3600))
+    archived = rows(profile)
+    exact = [r for r in archived['rows'] if r['id'] == old]
+    again = app.call('archive-sweep')
+    require('E16_fake_clock_sweep_archives_today', not contains(old) and contains(visible) and contains(pin) and contains(favorite)
+            and app.call('window-state')['selected'] == visible and sweep['armedTimerCount'] == 0 and sweep['nextExpiry'] is None
+            and archived['count'] == before + 1 and len(exact) == 1 and exact[0]['reason'] == 'autoArchived'
+            and exact[0]['profile'] == profile and exact[0]['space'] == space and rows(profile)['count'] == archived['count']
+            and sweep['lastReason'] == 'automation' and sweep['lastSweep']['affectedSpaces'] == [space]
+            and again['lastSweep']['archivedCount'] == 0 and all(r['id'] != visible for r in archived['rows']),
+            state=sweep, archive=archived, selectedToday=app.tab(visible))
+    banner = app.call('archive-banner-state')
+    png = os.path.join(evidence, 'e16-autoarchive-banner.png'); app.call('snapshot', path=png)
+    require('E16_auto_archive_banner_visible', banner['visible'] and banner['title'] == 'We cleaned up!'
+            and banner['threshold'] == '12 hours' and not banner['dismissed'], banner=banner, snapshot=png)
+    first = app.call('window-state')['id']
+    app.call('menu-perform', id='new-window')
+    second = next(w['id'] for w in app.call('shell-windows') if w['id'] != first)
+    second_banner = app.call('archive-banner-state', window=second)
+    app.call('archive-banner-action', action='got-it', window=first)
+    require('E16_got_it_hides_all_windows', second_banner['visible']
+            and all(not app.call('archive-banner-state', window=w['id'])['visible'] for w in app.call('shell-windows'))
+            and app.call('defaults', key='open.sidebar.autoArchiveBannerDismissed') is True)
+    app.call('archive-clock', reset=True); app.call('save'); app.quit(); app = launch()
+    app.call('space', space=space)
+    fresh = create('Dismissed Relaunch Fixture'); activity = app.tab(fresh)['lastActiveAt']
+    reset_state = state(); app.call('archive-sweep', now=iso(activity + 13*3600))
+    require('E16_dismissal_survives_relaunch', reset_state['offsetSeconds'] == 0 and not contains(fresh)
+            and not app.call('archive-banner-state')['visible']
+            and app.call('defaults', key='open.sidebar.autoArchiveBannerDismissed') is True, state=state())
+
+    # Separate fixture setup for the real Settings link; never reset dismissal inside the relaunch proof.
+    app.call('archive-clock', reset=True)
+    app.call('defaults', key='open.sidebar.autoArchiveBannerDismissed', value=False)
+    setting(first_profile, 'never')  # selects Profile A in the shared Settings model.
+    fresh = create('Settings Link Fixture'); activity = app.tab(fresh)['lastActiveAt']
+    app.call('archive-sweep', now=iso(activity + 13*3600))
+    app.call('archive-banner-action', action='settings')
+    settings = app.call('settings-state')
+    require('E16_settings_link_opens_correct_profile', settings['pane'] == 'profiles' and settings['selectedProfile'] == profile
+            and settings['settings'] > 0 and app.call('defaults', key='open.sidebar.autoArchiveBannerDismissed') is True
+            and all(not app.call('archive-banner-state', window=w['id'])['visible'] for w in app.call('shell-windows')), settings=settings)
+    # Close only the Settings window using Open's own window event path.
+    app.call('key', key='w', modifiers=['cmd'], route='app', window=settings['settings'])
+    app.call('window-focus', id=app.call('window-state')['id'], activate=True)
+    app.call('archive-clock', reset=True)
+    timed = create('Natural Timer Fixture'); activity = app.tab(timed)['lastActiveAt']
+    timer_before = state()['countsByReason'].get('timer', 0)
+    armed = app.call('archive-clock', now=iso(activity + 12*3600 - .2))
+    expired = wait_until(lambda: not contains(timed), timeout=4)
+    timer_state = state(); timer_rows = rows(profile)
+    require('AA_APP_timer_callback_not_manual_sweep', expired and armed['armedTimerCount'] == 1
+            and timer_state['countsByReason'].get('timer', 0) == timer_before + 1 and timer_state['lastReason'] == 'timer'
+            and timer_state['armedTimerCount'] == 0 and any(r['id'] == timed for r in timer_rows['rows']), state=timer_state)
+    app.call('archive-clock', reset=True)
+    wake = create('Wake Fixture'); activity = app.tab(wake)['lastActiveAt']
+    wake_before = state()['countsByReason'].get('wake', 0)
+    woke = app.call('archive-wake', now=iso(activity + 13*3600))
+    require('AA_APP_wake_notification', not contains(wake) and woke['countsByReason'].get('wake', 0) == wake_before + 1
+            and woke['lastReason'] == 'wake' and any(r['id'] == wake for r in rows(profile)['rows']), state=woke)
+    app.call('archive-clock', reset=True)
+    launch_tab = create('Launch Overdue Fixture'); app.call('select', tab=pin)
+    app = relaunch_aged(launch_tab, 13*3600); app.call('space', space=space)
+    launch_state = state(); launch_rows = [r for r in rows(profile)['rows'] if r['id'] == launch_tab]
+    archived_at = datetime.datetime.fromisoformat(launch_rows[0]['archivedAt'].replace('Z', '+00:00')).timestamp() if launch_rows else 0
+    require('AA_APP_launch_overdue_snapshot', not contains(launch_tab) and launch_state['offsetSeconds'] == 0
+            and launch_state['countsByReason'].get('launch') == 1 and len(launch_rows) == 1
+            and abs(archived_at - time.time()) < 30, state=launch_state, rows=launch_rows)
+    change = create('Settings Two Hour Fixture'); app.call('select', tab=pin)
+    app = relaunch_aged(change, 2*3600); app.call('space', space=space)
+    change_before = state(); setting(profile, 'oneHour')
+    changed = wait_until(lambda: not contains(change), timeout=4)
+    never_space = app.call('space-create', title='Never Archive', profile='Never Archive')
+    never_profile = fixture_profile(never_space); setting(never_profile, 'never')
+    never = create('Never Fixture'); never_count = rows(never_profile)['count']
+    setting(profile, 'never')
+    app.call('archive-sweep', now=iso(app.tab(never)['lastActiveAt'] + 31*86400))
+    never_state = state()
+    require('AA_APP_threshold_change_and_never', changed and change_before['armedTimerCount'] == 1
+            and any(r['id'] == change for r in rows(profile)['rows']) and contains(never)
+            and rows(never_profile)['count'] == never_count and never_state['armedTimerCount'] == 0, state=never_state)
+    invalid_before = state(); errors = []
+    for command, args in [('archive-clock', {'now': 'not-a-date'}), ('archive-clock', {'now': iso(time.time()), 'reset': True}),
+                          ('archive-clock', {'reset': False}), ('archive-clock', {'offsetSeconds': True}),
+                          ('profile-archive-setting', {'profile': profile, 'interval': 'invalid', 'scope': 'all'})]:
+        try: app.call(command, **args)
+        except RuntimeError as error: errors.append(str(error))
+    invalid_after = state()
+    require('AA_APP_invalid_clock_refused', len(errors) == 5 and all(invalid_before[k] == invalid_after[k]
+            for k in ['offsetSeconds', 'timerGeneration', 'sweepCount', 'nextExpiry']), errors=errors, state=invalid_after)
+    app.call('archive-clock', reset=True)
+    # Verify all-Profile scope, then restore Never before the idle interval.
+    all_profiles = setting(never_profile, 'thirtyDays', scope='all')
+    all_state = state()
+    all_never = setting(never_profile, 'never', scope='all')
+    require('AA_APP_all_profile_scope_rearms', all(p['interval'] == 'thirtyDays' for p in all_profiles['profiles'])
+            and all_state['armedTimerCount'] == 1 and all_never['state']['armedTimerCount'] == 0,
+            profiles=all_profiles['profiles'], farState=all_state)
+    # No browser page needs to run JavaScript during the idle sample.
+    for window in list(app.call('shell-windows')):
+        app.call('window-focus', id=window['id']); app.call('window-close', releaseBrowsers=True)
+    time.sleep(1)  # Let own-page teardown and the final debounced save finish.
+    snapshot_path = app.call('save')
+    saved_before = os.stat(snapshot_path).st_mtime_ns
+    idle_before = state()
+    metrics = app.call('metrics', interval=1)
+    # archive-state must remain available without opening a browser.
+    time.sleep(.35)
+    idle_after = state()
+    saved_after = os.stat(snapshot_path).st_mtime_ns
+    require('AA_APP_idle_no_sweep_growth', idle_before['armedTimerCount'] == 0 and idle_after['armedTimerCount'] == 0
+            and idle_before['sweepCount'] == idle_after['sweepCount'] and app.call('shell-windows') == []
+            and saved_before == saved_after,
+            before=idle_before, after=idle_after, metrics=metrics,
+            snapshotMtimeBefore=saved_before, snapshotMtimeAfter=saved_after)
+    with open(os.path.join(evidence, 'autoarchive-idle.json'), 'w') as stream:
+        json.dump({'before': idle_before, 'after': idle_after, 'metrics': metrics,
+                   'snapshotMtimeBefore': saved_before, 'snapshotMtimeAfter': saved_after}, stream, indent=2)
+    return app
+
+
+def sidebar_completion_a3_checks(app, results, require, evidence, tmp, launch):
+    """Real sidebar/menu/event flows for Part B. E16 belongs to the sweeper lane.
+    sidebar-drop covers the shared production intent, not an OS drag session."""
+    def state(): return app.call('window-state')
+    def tree(): return app.call('sidebar-tree')
+    def roots(section): return [n['id'] for n in tree()[section]]
+    def walk(nodes):
+        return [value for node in nodes for value in [node] + walk(node.get('children', []))]
+    def shape(nodes):
+        return [(n['id'], n['kind'], shape(n.get('children', []))) for n in nodes]
+    def selection(): return app.call('selection')
+    def click(node, mods=()): return app.call('sidebar-click', node=node, modifiers=list(mods))
+    def key(name, mods=()): return app.call('sidebar-key', key=name, modifiers=list(mods))
+    def undo(): return key('z', ['cmd'])
+    def select(ids):
+        click(ids[0])
+        for node in ids[1:]: click(node, ['cmd'])
+    def page(name):
+        path = Path(tmp) / ('a3-' + name.lower().replace(' ', '-') + '.html')
+        path.write_text('<title>%s</title><h1>%s</h1>' % (name, name)); return path.as_uri()
+    def opened(name, pinned=False):
+        node = app.call('open', url=page(name))['id']; app.call('wait', tab=node)
+        if pinned: app.call('pin', tab=node)
+        return node
+    def fresh(name):
+        space = app.call('space-create', title='A3 ' + name); app.call('space', space=space)
+        return space
+    def menu_enabled(name):
+        return next(row['enabled'] for row in app.call('menu-state') if row['id'] == name)
+    def drop(ids, kind, target, index): return app.call('sidebar-drop', nodes=ids, parent=dict(kind=kind, id=target), index=index)
+    def finish_rename():
+        app.call('key', key='escape', route='app'); key('escape')
+    def refused(cmd, **args):
+        try: app.call(cmd, **args)
+        except RuntimeError: return True
+        return False
+
+    app.call('library-close')
+    app.call('window-focus', id=state()['id'], activate=True)
+    space = fresh('Selection')
+    pins = [opened('Pinned %d' % i, True) for i in range(2)]
+    hidden = opened('Collapsed Child')
+    collapsed = app.call('folder', tabs=[hidden], title='Collapsed', section='pinned')
+    app.call('folder-toggle', folder=collapsed)
+    control = opened('Unselected Control')
+    for i in range(3): opened('Selection %d' % i)
+    abc = [n for n in roots('today') if n != control]; a, b, c = abc
+    first_click = click(a); second_click = click(b, ['cmd'])
+    ordered = selection(); click(b, ['cmd']); toggled = selection()
+    require('E1_cmd_click_order', ordered == [a, b] and toggled == [a], selection=ordered, toggled=toggled, expected=[a, b], clicks=[first_click, second_click])
+    click(a); click(c, ['shift'])
+    require('E1_shift_click_visible_range', selection() == abc and hidden not in selection(), selection=selection(), expected=abc)
+    visible_order = roots('pinned') + roots('today'); click(pins[0]); click(c, ['shift'])
+    require('E1_range_crosses_sections_skips_collapsed_children', selection() == visible_order[visible_order.index(pins[0]):visible_order.index(c) + 1] and hidden not in selection(), selection=selection())
+    click(a); before = state()['selected']; key('down', ['shift']); down = selection(); key('up', ['shift']); key('escape')
+    require('E1_keyboard_extend_and_escape', down == [a, b] and selection() == [] and state()['selected'] == before, down=down)
+    select(abc); click(b)
+    require('E1_plain_click_clears_selection', selection() == [] and state()['selected'] == b)
+    before_invalid = tree()
+    require('A3_input_rejects_missing_targets', refused('sidebar-click', node='invalid') and refused('hover', node=hidden, ms=0)
+            and refused('sidebar-menu', node='invalid', item='Delete') and refused('hover', node=a, ms=5001)
+            and refused('library-open', section='missing') and tree() == before_invalid)
+    require('A3_selection_window_read', app.call('selection', window=state()['id']) == selection())
+    # E2: native selected-row menu and both registry entries group the selection.
+    before = shape(tree()['today']); select(abc)
+    app.call('sidebar-menu', node=b, item='New Folder with 3 Items'); finish_rename()
+    folder = next(n for n in tree()['today'] if n['kind'] == 'folder')
+    require('E2_selection_folder_exact_ids', [n['id'] for n in folder['children']] == abc and selection() == [], folder=folder)
+    app.call('sidebar-menu', node=folder['id'], item='Copy All Links')
+    copied_folder = app.call('pasteboard')
+    click(a); click(folder['id'], ['cmd'])
+    app.call('sidebar-menu', node=a, item='Copy Links'); copied_overlap = app.call('pasteboard')
+    before_refusal = tree(); overlap_selection = selection()
+    expected_copy = '\n'.join(app.tab(n)['url'] for n in abc)
+    ancestor_refused = refused('sidebar-menu', node=a, item='Move to/New Space…')
+    require('A3_copy_folder_deduplicates_descendants', copied_folder == copied_overlap == expected_copy
+            and ancestor_refused and tree() == before_refusal, folderCopy=copied_folder, selectionCopy=copied_overlap,
+            expected=expected_copy, selection=overlap_selection, refused=ancestor_refused, before=before_refusal, after=tree())
+    key('escape'); undo_before = app.call('space-manager-state')['modelUndoCount']; undo_route = undo()
+    require('E2_folder_one_undo', shape(tree()['today']) == before, tree=tree(), expected=before, route=undo_route, focus=app.call('focus-state'), undoBefore=undo_before, undoAfter=app.call('space-manager-state')['modelUndoCount'])
+    variants = []
+    for mode in ('menu', 'key'):
+        select(abc)
+        if mode == 'menu': app.call('command', id='new-folder')
+        else: key('n', ['cmd', 'shift'])
+        finish_rename()
+        grouped = next(n for n in tree()['today'] if n['kind'] == 'folder')
+        variants.append([n['id'] for n in grouped['children']] == abc)
+        undo(); variants.append(shape(tree()['today']) == before)
+    require('E2_menu_and_key_use_selection', all(variants), variants=variants)
+    select(abc); app.call('command', id='rename-tab')
+    editor = wait_until(lambda: (lambda f: f if f['owner'] == 'sidebar' and 'Text' in f['responder'] else None)(app.call('focus-state')), timeout=3)
+    editing_tree = tree(); app.call('key', key='delete', route='app')
+    delete_safe = tree() == editing_tree and state()['confirmation'] is None
+    pinned_before = set(roots('pinned')); app.call('command', id='new-folder')
+    new_empty = [n for n in tree()['pinned'] if n['id'] not in pinned_before]
+    stale_safe = len(new_empty) == 1 and new_empty[0]['kind'] == 'folder' and new_empty[0]['children'] == [] and roots('today') == abc + [control]
+    finish_rename(); undo()
+    require('A3_text_editor_keeps_delete_and_does_not_group_stale_selection', editor and delete_safe and stale_safe, editor=editor)
+    # E3: selection commands traverse the App router, and the real engine strip.
+    select(abc); key('d', ['cmd'])
+    require('E3_cmd_d_pins_entire_selection', all(app.tab(n)['section'] == 'pinned' for n in abc) and app.tab(control)['section'] == 'today', tree=tree())
+    flags = [r for strip in app.call('tab-strip') for r in strip['pinStates']]
+    require('E3_engine_pin_flags_follow', all(any(r['id'] == n and r['pinned'] for r in flags) for n in abc), flags=flags)
+    key('d', ['cmd'])
+    unpinned = all(app.tab(n)['section'] == 'today' for n in abc)
+    before_dup = shape(tree()['today']); ids_before = {n['id'] for n in walk(tree()['today'])}
+    app.call('command', id='duplicate-tab'); ids_after = {n['id'] for n in walk(tree()['today'])}
+    undo()
+    require('E3_unpin_and_menu_duplicate_selection', unpinned and len(ids_after - ids_before) == 3 and shape(tree()['today']) == before_dup,
+            newIDs=sorted(ids_after - ids_before), tree=tree())
+    select(abc); app.call('sidebar-menu', node=a, item='Pin Tabs')
+    menu_pinned = all(app.tab(n)['section'] == 'pinned' for n in abc)
+    app.call('sidebar-menu', node=a, item='Unpin Tabs')
+    before_context_dup = shape(tree()['today']); ids_before = {n['id'] for n in walk(tree()['today'])}
+    app.call('sidebar-menu', node=a, item='Duplicate'); ids_after = {n['id'] for n in walk(tree()['today'])}; undo()
+    require('A3_selection_context_pin_duplicate', menu_pinned and all(app.tab(n)['section'] == 'today' for n in abc)
+            and len(ids_after - ids_before) == 3 and shape(tree()['today']) == before_context_dup)
+    # A refused folder-only pin selection must not toggle the active page.
+    click(a); click(collapsed, ['cmd']); click(a, ['cmd']); pin_before = app.tab(pins[0])['section']
+    require('A3_folder_selection_pin_disabled', not menu_enabled('pin-unpin-tab') and refused('command', id='pin-unpin-tab')
+            and app.tab(pins[0])['section'] == pin_before)
+    # Copy plain/Markdown and both move variants use real selection menus.
+    select(abc)
+    app.call('sidebar-menu', node=a, item='Copy Links'); plain = app.call('pasteboard')
+    app.call('sidebar-menu', node=a, item='Copy links as Markdown'); markdown = app.call('pasteboard')
+    require('A3_selection_copy_links', plain.splitlines() == [app.tab(n)['url'] for n in abc]
+            and markdown.splitlines() == ['[%s](%s)' % (app.tab(n)['title'], app.tab(n)['url']) for n in abc])
+    dest = fresh('Move Destination'); app.call('space', space=space); select(abc)
+    app.call('sidebar-menu', node=a, item='Move to/A3 Move Destination')
+    app.call('space', space=dest)
+    require('A3_move_existing_space_order_unread', roots('today') == abc and all(app.tab(n)['unread'] for n in abc), tree=tree())
+    undo(); app.call('space', space=space); select(abc); spaces_before = len(app.call('spaces'))
+    app.call('sidebar-menu', node=a, item='Move to/New Space…')
+    require('A3_move_new_space_atomic', len(app.call('spaces')) == spaces_before + 1 and roots('pinned') == abc and roots('today') == [] and selection() == [], tree=tree(), selection=selection())
+    undo(); app.call('space', space=space)
+    require('A3_move_new_space_one_undo', len(app.call('spaces')) == spaces_before and roots('today') == abc + [control])
+    # E4: noncontiguous move, same-parent pre-removal index, invalid descendant.
+    move_space = fresh('Drop')
+    for i in range(6): opened('Drop %d' % i)
+    six = roots('today'); moved = six[1::2]
+    target = app.call('folder-create', title='Drop Destination'); before = tree(); select(moved)
+    accepted = drop(moved, 'folder', target, 0); after = tree()
+    require('E4_drop_selection_keeps_order', accepted and roots('today') == six[::2]
+            and [n['id'] for n in next(n for n in after['pinned'] if n['id'] == target)['children']] == moved, tree=after)
+    undo(); restored = shape(tree()['today']) == shape(before['today']) and shape(tree()['pinned']) == shape(before['pinned'])
+    select(moved); accepted = drop(moved, 'today', move_space, len(six))
+    require('E4_same_parent_drop_index', restored and accepted and roots('today') == six[::2] + moved, tree=tree())
+    undo()
+    nested = app.call('folder-create', title='Nested Drop'); drop([nested], 'folder', target, 0)
+    invalid_before = tree(); accepted = drop([target], 'folder', nested, 0)
+    invalid_unchanged = tree() == invalid_before; undo()
+    require('E4_invalid_drop_no_mutation', not accepted and invalid_unchanged and any(n['id'] == nested for n in tree()['pinned']), tree=tree())
+    # E9: recursive folder state and host/path reset, including a split pane.
+    reset_space = fresh('Reset')
+    base = opened('Reset Base', True); partner = opened('Reset Partner', True)
+    folder = app.call('folder', tabs=[base], title='Reset Folder', section='pinned')
+    nested = app.call('folder-create', title='Reset Nested'); drop([nested], 'folder', folder, 0)
+    today_folder = app.call('folder', title='Today Folder')
+    app.call('folder-toggle', folder=nested)
+    can_expand = menu_enabled('expand-all-folders'); app.call('command', id='expand-all-folders')
+    expanded = all(n['expanded'] for n in walk(tree()['pinned'] + tree()['today']) if n['kind'] == 'folder')
+    expand_disabled = not menu_enabled('expand-all-folders'); app.call('command', id='collapse-all-folders')
+    collapsed_all = all(not n['expanded'] for n in walk(tree()['pinned'] + tree()['today']) if n['kind'] == 'folder')
+    require('E9_expand_collapse_recursive_enablement', can_expand and expanded and expand_disabled and collapsed_all and not menu_enabled('collapse-all-folders'))
+    app.call('command', id='expand-all-folders')
+    split_other = opened('Reset Split Other')
+    app.call('select', tab=partner); app.call('sidebar-menu', node=split_other, item='Open in Split View')
+    split_node = next(n for n in tree()['today'] if n['kind'] == 'split')
+    assert drop([split_node['id']], 'pinned', reset_space, 0), 'cannot pin Reset split fixture'
+    favorite = opened('Reset Favorite'); app.call('favorite', tab=favorite)
+    other_space = fresh('Reset Other Space'); other = opened('Reset Untouched', True)
+    other_away = page('Reset Untouched Away'); app.call('navigate', tab=other, url=other_away); app.call('wait', tab=other)
+    app.call('space', space=reset_space)
+    originals = {n: app.tab(n)['url'] for n in (base, partner, split_other)}
+    for n in (*originals, favorite):
+        app.call('select', tab=n); app.call('navigate', tab=n, url=page('Reset Away ' + n)); app.call('wait', tab=n)
+    favorite_away = app.tab(favorite)['url']; reset_enabled = menu_enabled('reset-all-tabs-in-space')
+    app.call('command', id='reset-all-tabs-in-space')
+    for n in originals: app.call('wait', tab=n)
+    reset = all(app.tab(n)['url'] == url and app.tab(n).get('page', {}).get('url') == url for n, url in originals.items())
+    pinned_split = any(n['kind'] == 'split' and {c['id'] for c in n['children']} == {partner, split_other} for n in walk(tree()['pinned']))
+    require('E9_reset_live_pinned_pages', reset_enabled and reset and pinned_split and not menu_enabled('reset-all-tabs-in-space'), tabs=app.call('tabs'), tree=tree())
+    favorite_ok = app.tab(favorite)['url'] == favorite_away
+    app.call('space', space=other_space)
+    require('E9_reset_excludes_favorites_other_spaces', favorite_ok and app.tab(other)['url'] == other_away)
+    # E10: browser Space context export preserves IDs and order in one undo.
+    export = fresh('Export Source'); exp_pin = opened('Export Pinned', True); exp_today = opened('Export Today')
+    source = tree(); spaces_before = [s['id'] for s in app.call('spaces')]
+    app.call('sidebar-menu', item='Export “A3 Export Source” into Folder/A3 Reset Other Space')
+    focused = next(s['id'] for s in app.call('spaces') if s['focused'])
+    app.call('space', space=other_space); exported = tree()['pinned'][0]
+    require('E10_space_export_folder_exact_tree', len(app.call('spaces')) == len(spaces_before) - 1 and focused == other_space
+            and exported['kind'] == 'folder' and shape(exported['children']) == shape(source['pinned'] + source['today']), folder=exported)
+    undo()
+    require('E10_export_one_undo', [s['id'] for s in app.call('spaces')] == spaces_before and next(s['id'] for s in app.call('spaces') if s['focused']) == export
+            and shape(tree()['pinned']) == shape(source['pinned']) and shape(tree()['today']) == shape(source['today']))
+    # E13: the actual command-bar Cmd+Return background open and visible dot.
+    current = app.call('window-state')['selected']; app.call('suggest-remote', enabled=False)
+    app.call('key', key='t', modifiers=['cmd'], route='app'); background_url = page('Command Background')
+    app.call('key', text=background_url)
+    wait_until(lambda: app.call('commandbar-state').get('final'), timeout=5)
+    app.call('key', key='return', modifiers=['cmd'], route='app')
+    background = wait_until(lambda: next((t for t in app.call('tabs') if t['url'] == background_url), None), timeout=5)
+    require('E13_commandbar_cmd_return_unread', background and background['unread'] and state()['selected'] == current
+            and app.call('sidebar-row', node=background['id'])['unreadBadge'], tab=background)
+    click(background['id'])
+    require('E13_sidebar_select_clears_unread', not app.tab(background['id'])['unread'] and not app.call('sidebar-row', node=background['id'])['unreadBadge'])
+    hover_result = app.call('hover', favorite=favorite, ms=600); leave = app.call('hover', leave=True, ms=300)
+    require('A3_favorite_hover_wrapper', hover_result['kind'] == 'page' and hover_result['target'] == favorite and leave['kind'] == 'none', preview=hover_result, leave=leave, expected=favorite)
+    # E15: hit the divider's actual Clear control, with Option and without.
+    clear_space = fresh('Clear'); protected = opened('Clear Pinned', True)
+    for i in range(4): opened('Clear Today %d' % i)
+    today = roots('today'); keep, current = today[:2]; select([keep, current])
+    profile = app.tab(current)['profile']; prior_archive = {r['id'] for r in app.call('archive-list', profile=profile)['rows']}
+    def clear(option):
+        frame = app.call('sidebar-clear-state')['frame']; assert frame, 'missing divider frame'
+        point = [frame[0] + frame[2] / 2, frame[1] + frame[3] / 2]
+        app.call('mouse', action='hover', x=point[0], y=point[1]); visible = app.call('sidebar-clear-state')['visible']
+        app.call('mouse', action='click', x=point[0], y=point[1], modifiers=['option'] if option else [])
+        return visible
+    # select() keeps the page on the first plain-clicked row; both IDs are protected.
+    visible = clear(True); remaining = roots('today')
+    require('E15_option_clear_keeps_current_selection', visible and remaining == today[:2] and app.tab(protected)['section'] == 'pinned' and app.tab(favorite)['section'] == 'favorites', remaining=remaining)
+    archived = [r for r in app.call('archive-list', profile=profile)['rows'] if r['id'] not in prior_archive]
+    toast = state()['toast']; pressed = app.call('toast-undo')
+    require('E15_clear_real_archive_and_undo', {r['id'] for r in archived} == set(today[2:]) and all(r['reason'] == 'clearedToday' for r in archived)
+            and toast == 'Cleared Tabs' and pressed and roots('today') == today, archive=archived, toast=toast)
+    visible = clear(False); archived = app.call('archive-list', profile=profile)['rows']
+    require('E15_plain_clear_archives_all_today', visible and roots('today') == [] and set(today) <= {r['id'] for r in archived})
+    app.call('toast-undo')
+    # E8 keyboard Delete and E18 nested folder archive/Library restore.
+    restore_space = fresh('Folder Restore'); one = opened('Restore One'); two = opened('Restore Two')
+    child = app.call('folder', tabs=[two], title='Nested Restore')
+    folder = app.call('folder', tabs=[one], title='Restore Root')
+    drop([child], 'folder', folder, 1)
+    before = tree(); expected = shape(before['today']); click(one); click(folder, ['cmd']); click(one, ['cmd']); key('delete')
+    sheet = wait_until(lambda: state()['confirmation'], timeout=3); app.call('alert', button='Cancel')
+    require('E8_keyboard_delete_cancel_preserves_tree', sheet and shape(tree()['today']) == expected)
+    key('forward-delete'); wait_until(lambda: state()['confirmation'], timeout=3); app.call('alert', button='Delete Folder')
+    rows = app.call('archive-list', profile=profile)['rows']
+    record = next((r for r in rows if r['id'] == folder), None)
+    require('E18_delete_folder_archive_kind', record and record['kind'] == 'folder' and roots('today') == [], record=record)
+    opened_library = app.call('library-open', section='archive')
+    wait_until(lambda: any(r['id'] == folder for r in app.call('settings-state')['archive']), timeout=5)
+    app.call('library-restore', id=folder)
+    require('E18_library_restore_folder_ids', opened_library['section'] == 'archive' and shape(tree()['today']) == expected
+            and not any(r['id'] == folder for r in app.call('archive-list', profile=profile)['rows']), tree=tree())
+    app.call('library-close'); app.call('save'); app.quit(); app = launch(); app.call('space', space=restore_space)
+    require('E18_folder_restore_survives_relaunch', shape(app.call('sidebar-tree')['today']) == expected, tree=app.call('sidebar-tree'))
+    return app
 
 
 def space_manager_checks(results, tmp, config, style):
@@ -5254,6 +5797,7 @@ def space_manager_checks(results, tmp, config, style):
         s2 = app.call('space-create', title='Manager Two')
         s3 = app.call('space-create', title='Manager Three')
         sidebar_a1_checks(app, results, require, evidence)
+        sidebar_a2_checks(app, results, require, evidence, tmp)
         app.call('space', space=s1)
         original = [s1, s2, s3]
         # The rest capture shows the loaded page title, not a title still in flight.
@@ -5482,6 +6026,13 @@ def space_manager_checks(results, tmp, config, style):
         # (E10 path): the Space becomes a Pinned folder of the destination; Cmd+Z restores it.
         app.call('library-open'); manager_ready(app)
         export_order = order(app)
+        with open(app.call('save')) as stream: before_export = json.load(stream)
+        export_source = next(sp for sp in before_export['spaces'] if sp['id'] == s1)
+        def snapshot_ids(value):
+            if isinstance(value, list): return [ident for child in value for ident in snapshot_ids(child)]
+            if isinstance(value, dict): return ([value['id']] if 'id' in value else []) + [ident for key, child in value.items() if key != 'id' for ident in snapshot_ids(child)]
+            return []
+        source_ids = snapshot_ids(export_source['pinned'] + export_source['today'])
         export_title = next(sp['title'] for sp in app.call('spaces') if sp['id'] == s1) or 'Space'
         export_dest = next(sp for sp in app.call('spaces') if sp['id'] == s3)
         app.call('space-manager-menu', space=s1, item='Turn into Folder/' + (export_dest['title'] or 'Space'))
@@ -5490,6 +6041,7 @@ def space_manager_checks(results, tmp, config, style):
         dest_pinned = next(sp for sp in exported_snapshot['spaces'] if sp['id'] == s3)['pinned']
         first = dest_pinned[0] if dest_pinned else {}
         require('manager_turn_into_folder', exported and 'folder' in first, order=order(app), firstPinned=first, title=export_title)
+        require('E10_manager_turn_into_folder', exported and 'folder' in first and snapshot_ids(first['folder']['_0']['children']) == source_ids, firstPinned=first, expectedIDs=source_ids)
         library_key(app, 'z', ['cmd'])
         require('manager_turn_into_folder_undo', wait_until(lambda: order(app) == export_order, timeout=5), order=order(app), expected=export_order)
         app.call('library-open'); manager_ready(app)
@@ -5538,6 +6090,8 @@ def space_manager_checks(results, tmp, config, style):
                 and not bar_after_escape.get('presented') and not state(app)['visible']
                 and len(app.call('shell-windows')) == 1 and tabs_before_close == tabs_after_close,
                 keys=key_states, closeFixture=close_fixture, selectedBeforeClose=selected_before_close, barAfterEscape=bar_after_escape, tabsBeforeClose=tabs_before_close, tabsAfterClose=tabs_after_close, state=state(app))
+        app = sidebar_completion_a3_checks(app, results, require, evidence, tmp, launch)
+        app = sidebar_completion_archive_checks(app, launch, results, require, evidence, tmp)
     finally:
         dialogs, cleanup_errors = [], []
         owned_pids.update(space_manager_owned_processes(bundle))
