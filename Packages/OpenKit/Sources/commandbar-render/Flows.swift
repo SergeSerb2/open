@@ -23,7 +23,7 @@ enum Flows {
             let stage = Stage(size: CGSize(width: 1440, height: 900), scale: 1, engine: env.engine, backdrop: .darkPage)
             stage.controller.favicons = env.favicons
             stage.controller.theme = Scenes.theme(env)
-            stage.controller.present(Scenes.request(env, mode: mode), animated: false)
+            stage.controller.present(Scenes.request(env, mode: mode))
             stage.settle()
             return stage
         }
@@ -179,7 +179,7 @@ enum Flows {
                 stage.controller.theme = Scenes.theme(env)
                 var r = Scenes.request(env, mode: .newTab)
                 r.allowsRemoteSuggestions = true
-                stage.controller.present(r, animated: false)
+                stage.controller.present(r)
                 stage.settle()
                 return stage
             }
@@ -236,7 +236,9 @@ enum Flows {
             let i = fresh(.newTab)
             let info = CGPoint(x: panel.maxX - CommandBarMetrics.infoButtonTrailing - 13, y: panel.minY + CommandBarMetrics.infoButtonY + 13)
             i.mouse(.leftMouseDown, at: info); i.mouse(.leftMouseUp, at: info); i.settle()
-            check("Click on (i) → .showHelp", i.recorder.intents == [.showHelp], "intents \(i.recorder.intents)")
+            check("Click on (i) shows the privacy footer, no intent and no window (CC-42)",
+                  i.recorder.intents.isEmpty && i.controller.showsPrivacyFooter && i.controller.isPresented && NSApp.windows.filter(\.isVisible).isEmpty,
+                  "intents \(i.recorder.intents), footer \(i.controller.showsPrivacyFooter)")
         }
 
         // 15. Empty Cmd+T selects row 1 with no top hit (F0063); Return switches to it.
@@ -248,6 +250,7 @@ enum Flows {
                   "row 1 \(row?.kind.rawValue ?? "-") \(row?.title ?? "-"); intents \(s.recorder.intents)")
         }
         checks += ReviewFlows.run(env)
+        checks += FooterFlows.run(env)
         return checks
     }
 

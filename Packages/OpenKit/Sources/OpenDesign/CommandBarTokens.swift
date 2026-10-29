@@ -31,18 +31,19 @@ public enum CommandBarMetrics {
     /// The panel top sits where a 5-row panel plus 10 pt would be centered: top = (H − 339) / 2 (528 at H 1394). guess beyond that one window height.
     public static let centeringHeight: CGFloat = 339
 
-    /// Height for `rows` visible rows.
-    public static func panelHeight(rows: Int) -> CGFloat {
-        guard rows > 0 else { return emptyListHeight }
-        return listTop + CGFloat(min(rows, maxVisibleRows)) * rowHeight + bottomPadding
+    /// Height for `rows` visible rows. The privacy footer covers the bottom of the list; panels
+    /// with fewer than `footerGrowthRowLimit` rows grow by its height instead (guess).
+    public static func panelHeight(rows: Int, footer: Bool = false) -> CGFloat {
+        let base = rows > 0 ? listTop + CGFloat(min(rows, maxVisibleRows)) * rowHeight + bottomPadding : emptyListHeight
+        return footer && rows < footerGrowthRowLimit ? base + footerHeight : base
     }
 
     /// Panel frame in a window of `size` (top-left origin).
-    public static func panelFrame(windowSize size: CGSize, rows: Int) -> CGRect {
+    public static func panelFrame(windowSize size: CGSize, rows: Int, footer: Bool = false) -> CGRect {
         let w = min(panelWidth, max(320, size.width - 2 * minimumWindowMargin))
         let x = ((size.width - w) / 2).rounded()
         let y = max(minimumWindowMargin, ((size.height - centeringHeight) / 2).rounded())
-        return CGRect(x: x, y: y, width: w, height: panelHeight(rows: rows))
+        return CGRect(x: x, y: y, width: w, height: panelHeight(rows: rows, footer: footer))
     }
 
     // MARK: Input row
@@ -76,6 +77,32 @@ public enum CommandBarMetrics {
     public static let chipPaddingX: CGFloat = 8
     public static let chipIconSize: CGFloat = 14
     public static let chipToText: CGFloat = 8
+
+    // MARK: Privacy footer (CC-42, S2 18/0044: a 5-row panel 329 pt tall; H = panel height, W = panel width)
+
+    /// Black band `[0, H − 61, W, 61]`, clipped by the panel corner (window y 641…701).
+    public static let footerHeight: CGFloat = 61
+    /// Panels with fewer rows grow by `footerHeight`, so the band never covers the only row. guess.
+    public static let footerGrowthRowLimit = 2
+    /// `info.circle` 13×13 at `[18, H − 37]` (AX).
+    public static let footerIconFrame = CGRect(x: 18, y: 61 - 37, width: 13, height: 13)
+    /// Line 1 AX text `[46, H − 48, 365, 16]`; line 2 at `[46, H − 30]` (band-relative y 13 and 31).
+    public static let footerTextX: CGFloat = 46
+    public static let footerLine1Top: CGFloat = 61 - 48
+    public static let footerLine2Top: CGFloat = 61 - 30
+    /// Baseline below each AX text top. fitted (ink tops at band y 13 and 31).
+    public static let footerTextBaseline: CGFloat = 13
+    /// "Search Settings…" `[W − 223.5, H − 49.5, 132, 37]`, "Dismiss" `[W − 82.5, H − 49.5, 72, 37]` (AX).
+    public static let footerButtonTop: CGFloat = 61 - 49.5
+    public static let footerButtonHeight: CGFloat = 37
+    public static let footerSettingsButtonWidth: CGFloat = 132
+    public static let footerDismissButtonWidth: CGFloat = 72
+    public static let footerDismissTrailing: CGFloat = 10.5
+    public static let footerButtonGap: CGFloat = 9
+    /// Button corner, continuous. fitted (visual).
+    public static let footerButtonRadius: CGFloat = 8
+    /// While the footer shows, the (i) button hides and the field takes its place (AX field 656 → 698 pt).
+    public static let footerFieldGrowth: CGFloat = 42
 
     // MARK: Rows (row-relative)
 
@@ -193,16 +220,21 @@ public enum CommandBarRole {
     public static let defaultInfoFill = RGBA(hex: 0x050627)
     /// Input selection without a theme. guess.
     public static let defaultTextSelection = RGBA(hex: 0x4A4B6E)
-}
 
-extension Motion {
-    /// Command bar open: fade in while scaling up from 0.96. PROVISIONAL: the captures hold
-    /// no mid-animation pixels; AX frames during open/close (F0060, F0064) show a collapsed
-    /// layout, not a scale. Arc's toasts and theme editor scale up (F0144, A0465), so the
-    /// command bar likely does too (guess).
-    public static let commandBarOpen = SpringToken(response: 0.22, dampingFraction: 0.9)
-    public static let commandBarOpenScale: CGFloat = 0.96
-    /// Close: fade out and shrink to 0.98, ease-in. PROVISIONAL guess.
-    public static let commandBarClose: CFTimeInterval = 0.12
-    public static let commandBarCloseScale: CGFloat = 0.98
+    // Privacy footer (S2 18/0044 raw pixels after the display profile; `interaction-states.md` §20.9).
+    /// Band: `#000000` across the band.
+    public static let footerBand = RGBA(hex: 0x000000)
+    /// `info.circle` in the band (ink 13×13, core #767676). fitted.
+    public static let footerIcon = RGBA.white(0.5)
+    /// Line 1, 13 Bold (fitted: ink width 364 px and ink mass match 13 Bold, not Semibold).
+    public static let footerTitle = RGBA.white(0.93)
+    /// Line 2 and its underlined "here", 13 Regular (core #7A7A7A). fitted.
+    public static let footerBody = RGBA.white(0.5)
+    /// "Search Settings…" and "Dismiss": fill and 1 pt edge, title white 13 Regular (fitted on ink widths
+    /// 104 and 45 px). The buttons sit on half points, so the edge covers two pixels at half strength
+    /// each: `#494988` read from one pixel is a mix; the pair solves to `#6362AD`. measured.
+    public static let footerButtonFill = RGBA(hex: 0x302F63)
+    public static let footerButtonEdge = RGBA(hex: 0x6362AD)
+    /// Button titles: cores #E5E5EB over the fill solve to white ≈ 0.9. fitted.
+    public static let footerButtonTitle = RGBA.white(0.9)
 }

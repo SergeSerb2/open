@@ -9,7 +9,9 @@ import OpenSuggest
 /// the real controller, and the real AppKit text path.
 @MainActor
 enum Scenes {
-    static let names = ["empty", "typing-git", "cmd-l", "space-hint", "site-chip", "site-search", "calculator", "actions", "scrolled"]
+    static let names = ["empty", "typing-git", "cmd-l", "space-hint", "site-chip", "site-search", "calculator", "actions", "scrolled", "privacy-footer"]
+    /// Stands in for Open's privacy page in renders (the App has none yet, so its footer hides line 2).
+    static let samplePrivacyURL = URL(string: "https://open.example/privacy")!
 
     struct Env {
         let world: Synthetic.World
@@ -45,37 +47,42 @@ enum Scenes {
         c.theme = theme(env)
         switch name {
         case "empty":
-            c.present(request(env, mode: .newTab), animated: false)
+            c.present(request(env, mode: .newTab))
         case "typing-git":
-            c.present(request(env, mode: .newTab), animated: false)
+            c.present(request(env, mode: .newTab))
             stage.type("git")
         case "cmd-l":
-            c.present(request(env, mode: .editCurrentURL), animated: false)
+            c.present(request(env, mode: .editCurrentURL))
         case "site-search":
-            c.present(request(env, mode: .newTab), animated: false)
+            c.present(request(env, mode: .newTab))
             stage.type("youtube")
             stage.settle()
             stage.key(.tab)
             stage.type("lofi beats")
         case "site-chip":
-            c.present(request(env, mode: .newTab), animated: false)
+            c.present(request(env, mode: .newTab))
             stage.type("youtube")
             stage.settle()
             stage.key(.tab)
         case "space-hint":
-            c.present(request(env, mode: .newTab), animated: false)
+            c.present(request(env, mode: .newTab))
             stage.type("yt")
         case "calculator":
-            c.present(request(env, mode: .newTab), animated: false)
+            c.present(request(env, mode: .newTab))
             stage.type("12*(3+4)")
         case "actions":
-            c.present(request(env, mode: .newTab), animated: false)
+            c.present(request(env, mode: .newTab))
             stage.type("toggle")
         case "scrolled":
-            c.present(request(env, mode: .newTab), animated: false)
+            c.present(request(env, mode: .newTab))
             stage.type("git")
             stage.settle()
             for _ in 0..<6 { stage.key(.down) }
+        case "privacy-footer":
+            c.privacyURL = samplePrivacyURL
+            c.present(request(env, mode: .newTab))
+            stage.settle()
+            stage.key(.info, flags: .command)
         default:
             throw CLIError(description: "unknown state \(name); states: \(names.joined(separator: ", "))")
         }
@@ -119,6 +126,8 @@ struct SceneFile: Decodable {
     var blurBackdrop: Bool?
     var windowWidth: Double?
     var windowHeight: Double?
+    /// Shows the (i) privacy footer (with its "here" line).
+    var footer: Bool?
 
     static func load(_ path: String) throws -> SceneFile {
         try JSONDecoder().decode(SceneFile.self, from: Data(contentsOf: URL(fileURLWithPath: path)))
@@ -152,7 +161,8 @@ struct SceneFile: Decodable {
         let input = CommandBarInput(placeholder: placeholder ?? CommandBarText.placeholder,
                                     leadingIcon: icon(leadingIcon ?? "symbol:magnifyingglass"), trailing: trailingValue)
         return CommandBarPreview(mode: CommandBarMode(rawValue: mode ?? "newTab") ?? .newTab, text: text ?? "",
-                                 selectAllText: selectAll ?? false, input: input, rows: rows, selectedIndex: selected ?? 0)
+                                 selectAllText: selectAll ?? false, input: input, rows: rows, selectedIndex: selected ?? 0,
+                                 showsFooter: footer ?? false)
     }
 
     func loadTheme() throws -> CommandBarTheme {

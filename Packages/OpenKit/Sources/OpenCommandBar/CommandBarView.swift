@@ -30,13 +30,34 @@ public final class CommandBarView: NSView {
 
     /// Visible rows; sets the panel height.
     var visibleRowCount = 0 { didSet { if visibleRowCount != oldValue { needsLayout = true } } }
+    /// The (i) privacy footer (CC-42). It can make a short panel taller.
+    var showsFooter = false {
+        didSet {
+            guard showsFooter != oldValue else { return }
+            panel.showsFooter = showsFooter
+            needsLayout = true
+        }
+    }
 
-    public var panelFrame: CGRect { CommandBarMetrics.panelFrame(windowSize: bounds.size, rows: visibleRowCount) }
+    public var panelFrame: CGRect { CommandBarMetrics.panelFrame(windowSize: bounds.size, rows: visibleRowCount, footer: showsFooter) }
+
+    /// Shows or hides the whole overlay in one frame: Arc's bar appears and goes between two
+    /// video frames, with no scale or fade (CC-44, D12). No implicit layer animation runs.
+    func setShown(_ shown: Bool) {
+        CATransaction.begin()
+        CATransaction.setDisableActions(true)
+        isHidden = !shown
+        CATransaction.commit()
+    }
 
     public override func layout() {
         super.layout()
         let f = panelFrame
-        if container.frame != f { container.frame = f }
+        guard container.frame != f else { return }
+        CATransaction.begin()
+        CATransaction.setDisableActions(true)
+        container.frame = f
+        CATransaction.commit()
     }
 
     public override func hitTest(_ point: NSPoint) -> NSView? {
@@ -65,9 +86,55 @@ public final class CommandBarView: NSView {
     public var debugRowDrawCount: Int { panel.results.rowDrawCount }
     /// True when the input is being edited by the bar's own field editor.
     public var debugUsesOwnFieldEditor: Bool { window?.firstResponder === panel.input.editor }
+    /// True while the (i) privacy footer shows.
+    public var debugShowsFooter: Bool { showsFooter && !panel.footer.isHidden }
+    /// Visible part of the result list (its frame minus what the footer covers), in list points.
+    public var debugVisibleListHeight: CGFloat { panel.results.visibleHeight }
+    public var debugListScrollOffset: CGFloat { panel.results.scrollOffset }
+    /// Text field frame in panel points.
+    public var debugFieldFrame: CGRect { panel.input.field.frame }
+    /// Presses a bar control through its accessibility action, the same path as VoiceOver and
+    /// a click: "info", "searchSettings", "dismiss", or "privacyLink". False when it is not shown.
+    public func debugPress(_ control: String) -> Bool {
+        let target: NSView?
+        switch control {
+        case "info": target = panel.input.infoButton
+        case "searchSettings": target = panel.footer.settingsButton
+        case "dismiss": target = panel.footer.dismissButton
+        case "privacyLink": target = panel.footer.link
+        default: target = nil
+        }
+        guard let target, !target.isHiddenOrHasHiddenAncestor else { return false }
+        return target.accessibilityPerformPress()
+    }
+    /// The panel's on-screen opacity (its presentation layer): 1 at once after `present` (CC-44).
+    public var debugPanelPresentationOpacity: Float {
+        guard let layer = container.layer else { return 0 }
+        return isHidden ? 0 : (layer.presentation() ?? layer).opacity
+    }
+    /// Animation keys on the overlay's layers as "key@owner" (none: the bar never animates, CC-44).
+    /// The text caret (`NSTextInsertionIndicator`) blinks by itself in a key window, as in Arc, so its
+    /// layers are left out.
+    public var debugAnimationKeys: [String] {
+        func keys(_ layer: CALayer) -> [String] {
+            let owner = layer.delegate.map { String(describing: type(of: $0)) } ?? String(describing: type(of: layer))
+            guard !owner.contains("InsertionIndicator") else { return [] }
+            return (layer.animationKeys() ?? []).map { "\($0)@\(owner)" } + (layer.sublayers ?? []).flatMap(keys)
+        }
+        return layer.map(keys) ?? []
+    }
+    /// Every animation key, the caret included (diagnostics).
+    public var debugAllAnimationKeys: [String] {
+        func keys(_ layer: CALayer) -> [String] {
+            let owner = layer.delegate.map { String(describing: type(of: $0)) } ?? String(describing: type(of: layer))
+            return (layer.animationKeys() ?? []).map { "\($0)@\(owner)" } + (layer.sublayers ?? []).flatMap(keys)
+        }
+        return layer.map(keys) ?? []
+    }
 }
 
-/// Holds the shadow and the panel; the open and close animations scale and fade it.
+/// Holds the shadow and the panel. Nothing in it animates: present and dismiss change the
+/// panel in one frame (CC-44, D12).
 @MainActor
 final class PanelContainerView: NSView {
     let panel = PanelView(frame: .zero)
@@ -94,9 +161,9 @@ final class PanelContainerView: NSView {
 
     override func layout() {
         super.layout()
-        panel.frame = bounds
         CATransaction.begin()
         CATransaction.setDisableActions(true)
+        panel.frame = bounds
         // The shadow never darkens what shows through the translucent panel: the mask cuts the panel out
         // (Arc's fill over a white page is uniform up to the edge, A0120).
         let r = CommandBarMetrics.cornerRadius
@@ -111,72 +178,6 @@ final class PanelContainerView: NSView {
         maskPath.addPath(path)
         shadowMask.frame = bounds
         shadowMask.path = maskPath
-        CATransaction.commit()
-        updateScaleTransform()
-    }
-
-    // MARK: Motion (provisional constants in OpenDesign `Motion.commandBar*`)
-
-    /// Current animation scale, applied around the panel center.
-    private var scale: CGFloat = 1
-
-    private func transform(for scale: CGFloat) -> CATransform3D {
-        let c = CGPoint(x: bounds.midX, y: bounds.midY)
-        var t = CATransform3DMakeTranslation(c.x, c.y, 0)
-        t = CATransform3DScale(t, scale, scale, 1)
-        return CATransform3DTranslate(t, -c.x, -c.y, 0)
-    }
-
-    private func updateScaleTransform() {
-        CATransaction.begin()
-        CATransaction.setDisableActions(true)
-        layer?.sublayerTransform = transform(for: scale)
-        CATransaction.commit()
-    }
-
-    func animateIn(animated: Bool) {
-        guard let layer else { return }
-        layer.removeAllAnimations()
-        scale = 1
-        CATransaction.begin()
-        CATransaction.setDisableActions(true)
-        layer.opacity = 1
-        layer.sublayerTransform = transform(for: 1)
-        CATransaction.commit()
-        guard animated else { return }
-        let spring = Motion.commandBarOpen
-        let s = spring.animation(keyPath: "sublayerTransform")
-        s.fromValue = NSValue(caTransform3D: transform(for: Motion.commandBarOpenScale))
-        s.toValue = NSValue(caTransform3D: transform(for: 1))
-        let fade = CABasicAnimation(keyPath: "opacity")
-        fade.fromValue = 0
-        fade.toValue = 1
-        fade.duration = spring.response * 0.6
-        fade.timingFunction = Motion.easeOut
-        layer.add(s, forKey: "open.scale")
-        layer.add(fade, forKey: "open.fade")
-    }
-
-    func animateOut(animated: Bool, completion: @escaping @MainActor () -> Void) {
-        guard let layer, animated else { completion(); return }
-        layer.removeAllAnimations()
-        CATransaction.begin()
-        CATransaction.setCompletionBlock { MainActor.assumeIsolated { completion() } }
-        let d = Motion.commandBarClose
-        let s = CABasicAnimation(keyPath: "sublayerTransform")
-        s.fromValue = NSValue(caTransform3D: transform(for: 1))
-        s.toValue = NSValue(caTransform3D: transform(for: Motion.commandBarCloseScale))
-        s.duration = d
-        s.timingFunction = CAMediaTimingFunction(name: .easeIn)
-        let fade = CABasicAnimation(keyPath: "opacity")
-        fade.fromValue = 1
-        fade.toValue = 0
-        fade.duration = d
-        fade.timingFunction = CAMediaTimingFunction(name: .easeIn)
-        layer.opacity = 0
-        layer.sublayerTransform = transform(for: Motion.commandBarCloseScale)
-        layer.add(s, forKey: "close.scale")
-        layer.add(fade, forKey: "close.fade")
         CATransaction.commit()
     }
 }

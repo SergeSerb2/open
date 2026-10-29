@@ -120,6 +120,11 @@
       case "hotkey-state":
         return ["prepared": app.commandServicesPrepared, "attempts": app.hotkeyAttempts, "registered": app.hotkeyService?.isRegistered ?? false,
           "error": app.hotkeyError ?? "", "enabled": UserDefaults.standard.object(forKey: "open.links.littleOpenHotkeyEnabled") as? Bool ?? true] as [String: Any]
+      case "settings-pane":
+        // Shows Settings on one pane through the real presenter (a fixture step for pane-switch checks).
+        guard let raw = a["pane"] as? String, let pane = PaneID(rawValue: raw) else { throw Failure(message: "unknown pane") }
+        app.settingsPresenter.show(pane: pane)
+        return pane.rawValue
       case "settings-state":
         let adapter = app.settingsPresenter
         return ["pane": adapter.settings.selectedPane.rawValue, "selectedProfile": adapter.settings.selectedProfileID.description,
@@ -368,6 +373,12 @@
         panel.sheetParent?.endSheet(panel, returnCode: .cancel); panel.orderOut(nil)
         choice(URL(fileURLWithPath: path)); return true
       case "commandbar-state": return w.commandBarSession?.stateForAutomation() ?? ["created": false, "presented": false]
+      case "commandbar-press":
+        // AX press of one bar control (info, searchSettings, dismiss, privacyLink): the real control action.
+        guard let session = w.commandBarSession, let bar = session.controller, bar.isPresented else { throw Failure(message: "command bar is not open") }
+        guard let control = a["control"] as? String else { throw Failure(message: "missing control") }
+        let pressed = bar.view.debugPress(control)
+        return ["pressed": pressed, "state": session.stateForAutomation()]
       case "suggest-remote":
         guard let profile = w.focusedProfile else { throw Failure(message: "no profile") }
         var settings = profile.settings; settings.searchSuggestEnabled = a["enabled"] as? Bool ?? false
@@ -1684,7 +1695,7 @@
         "return": ("\r", 36), "escape": ("\u{1b}", 53), "tab": ("\t", 48), "space": (" ", 49),
         "delete": ("\u{7f}", 51), "forward-delete": (String(Character(UnicodeScalar(NSDeleteFunctionKey)!)), 117),
         "o": ("o", 31), ",": (",", 43), "z": ("z", 6), "n": ("n", 45), "t": ("t", 17), "w": ("w", 13), "l": ("l", 37), "f": ("f", 3), "s": ("s", 1), "a": ("a", 0),
-        "v": ("v", 9), "x": ("x", 7), "c": ("c", 8), "d": ("d", 2), "1": ("1", 18), "2": ("2", 19), "9": ("9", 25), "=": ("=", 24),
+        "v": ("v", 9), "x": ("x", 7), "c": ("c", 8), "d": ("d", 2), "i": ("i", 34), "1": ("1", 18), "2": ("2", 19), "9": ("9", 25), "=": ("=", 24),
         "control": ("", 59),
         "down": (String(Character(UnicodeScalar(NSDownArrowFunctionKey)!)), 125),
         "up": (String(Character(UnicodeScalar(NSUpArrowFunctionKey)!)), 126),

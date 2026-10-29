@@ -234,7 +234,9 @@ Additional socket commands:
 
 | Command | Purpose |
 |---|---|
-| `commandbar-state` | Read actual bar mode, text, rows, selection, and monotonic first-result timings. Does not create the bar. |
+| `commandbar-state` | Read actual bar mode, text, rows, selection, and monotonic first-result timings. Also `footer` (the (i) privacy footer shows), `hidden`, `panelOpacity` (the panel's presentation opacity), `animationKeys` (bar layers, the self-blinking caret excluded) and `allAnimationKeys`, `panelFrame` (window points, top-left origin), `fieldWidth`, `allowsRemote`. Does not create the bar. |
+| `settings-pane` | `pane`: a Settings pane id (`general`, `profiles`, `links`, `shortcuts`, `appIcon`, `advanced`). Shows Settings on that pane through the App's presenter (a fixture step before a check that must switch panes). |
+| `commandbar-press` | `control`: `info`, `dismiss`, `searchSettings`, or `privacyLink`. Performs that bar control's AX press action (the control's real action). Returns `pressed` and the new `commandbar-state`. |
 | `menu-state`, `menu-perform id=…` | Read native menu validation or invoke an enabled native menu item. |
 | `reload-keybindings` | Load the actual `State/keybindings.json`, validate conflicts, and rebuild menus and the global registration. |
 | `sidebar-duplicate id=…`, `sidebar-tree` | Send the production SidebarDelegate intent; read fresh subtree IDs and load flags. |

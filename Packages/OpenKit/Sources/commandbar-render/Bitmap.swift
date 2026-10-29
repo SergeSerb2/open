@@ -1,7 +1,9 @@
 import AppKit
 import ImageIO
 
-/// An sRGB RGBA8 bitmap with the few operations the comparison needs.
+/// An RGBA8 bitmap with the few operations the comparison needs. Pixels are sRGB, or Display P3
+/// while `ColorMath.space` is `.displayP3` (session-2 captures carry the AW2726DM profile, whose
+/// gamut exceeds sRGB; P3 keeps those colors unclipped).
 @MainActor
 struct Bitmap {
     let width: Int, height: Int
@@ -12,7 +14,7 @@ struct Bitmap {
         data = [UInt8](repeating: fill, count: width * height * 4)
     }
 
-    /// Loads a PNG and converts it to sRGB through its embedded color profile.
+    /// Loads a PNG and converts it to the working space (`ColorMath.space`) through its embedded color profile.
     init(path: String) throws {
         guard let src = CGImageSourceCreateWithURL(URL(fileURLWithPath: path) as CFURL, nil),
               let img = CGImageSourceCreateImageAtIndex(src, 0, nil) else { throw CLIError(description: "cannot read \(path)") }
@@ -21,7 +23,7 @@ struct Bitmap {
         let w = width, h = height
         data.withUnsafeMutableBytes { buf in
             let ctx = CGContext(data: buf.baseAddress, width: w, height: h, bitsPerComponent: 8, bytesPerRow: w * 4,
-                                space: CGColorSpace(name: CGColorSpace.sRGB)!, bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue)!
+                                space: ColorMath.space.cgSpace, bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue)!
             ctx.setFillColor(CGColor(gray: 1, alpha: 1))
             ctx.fill(CGRect(x: 0, y: 0, width: w, height: h))
             ctx.draw(img, in: CGRect(x: 0, y: 0, width: w, height: h))
@@ -146,13 +148,23 @@ enum ColorMath {
         }
     }
 
-    /// sRGB (0…255) → CIE Lab (D65).
+    enum Space {
+        case sRGB, displayP3
+        var cgSpace: CGColorSpace { CGColorSpace(name: self == .sRGB ? CGColorSpace.sRGB : CGColorSpace.displayP3)! }
+    }
+    /// Working space of loaded bitmaps and of `lab`. `compare --space p3` sets Display P3.
+    nonisolated(unsafe) static var space = Space.sRGB
+
+    /// Working-space RGB (0…255) → CIE Lab (D65). sRGB and Display P3 share the transfer curve.
     static func lab(_ c: [Double]) -> (Double, Double, Double) {
         func lin(_ v: Double) -> Double { let x = v / 255; return x <= 0.04045 ? x / 12.92 : pow((x + 0.055) / 1.055, 2.4) }
         let r = lin(c[0]), g = lin(c[1]), b = lin(c[2])
-        let x = (0.4124564 * r + 0.3575761 * g + 0.1804375 * b) / 0.95047
-        let y = 0.2126729 * r + 0.7151522 * g + 0.0721750 * b
-        let z = (0.0193339 * r + 0.1191920 * g + 0.9503041 * b) / 1.08883
+        let m: [Double] = space == .sRGB
+            ? [0.4124564, 0.3575761, 0.1804375, 0.2126729, 0.7151522, 0.0721750, 0.0193339, 0.1191920, 0.9503041]
+            : [0.4865709, 0.2656677, 0.1982173, 0.2289746, 0.6917385, 0.0792869, 0.0000000, 0.0451134, 1.0439444]
+        let x = (m[0] * r + m[1] * g + m[2] * b) / 0.95047
+        let y = m[3] * r + m[4] * g + m[5] * b
+        let z = (m[6] * r + m[7] * g + m[8] * b) / 1.08883
         func f(_ t: Double) -> Double { t > pow(6.0 / 29, 3) ? cbrt(t) : t / (3 * pow(6.0 / 29, 2)) + 4.0 / 29 }
         return (116 * f(y) - 16, 500 * (f(x) - f(y)), 200 * (f(y) - f(z)))
     }

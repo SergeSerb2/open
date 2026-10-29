@@ -95,8 +95,9 @@ public enum CommandBarIntent: Sendable, Hashable {
     case runAction(id: String, spaceID: SpaceID?)
     /// Calculator row: copy the answer.
     case copy(String)
-    /// The (i) button at the right of the input. guess: Arc opens command bar tips.
-    case showHelp
+    /// "Search Settings…" in the (i) privacy footer (CC-42): the bar closed; show the search
+    /// engine settings of this Profile (the request's Profile; nil when the request had none).
+    case openSearchSettings(profileID: ProfileID?)
     /// The bar closed without a choice.
     case dismissed(CommandBarDismissReason)
 }
@@ -107,10 +108,15 @@ public protocol CommandBarDelegate: AnyObject {
     /// Presentation changed. With `.newTab` the App sets `SidebarContext.isNewTabCommandBarOpen`
     /// (the sidebar "New Tab" row looks selected during Cmd+T, not Cmd+L; F0063 vs F0049).
     func commandBar(_ commandBar: CommandBarController, didChangePresentation isPresented: Bool, mode: CommandBarMode)
+    /// "Dismiss" in the (i) privacy footer. The App records the dismissal
+    /// (`open.general.searchSuggestNoticeDismissed`) and may call
+    /// `setAllowsRemoteSuggestions(_:)`; the bar then re-runs the current query.
+    func commandBarDidDismissPrivacyNotice(_ commandBar: CommandBarController)
 }
 
 extension CommandBarDelegate {
     public func commandBar(_ commandBar: CommandBarController, didChangePresentation isPresented: Bool, mode: CommandBarMode) {}
+    public func commandBarDidDismissPrivacyNotice(_ commandBar: CommandBarController) {}
 }
 
 /// Theme colors the bar takes from the Space (`semanticColorPalette.appearanceBased.dark`).

@@ -29,7 +29,7 @@ final class AppCommandBarSession: CommandBarDelegate {
     windowController.dismissSidebarReveal()
     let engine = factory.app.stores.suggest(for: profile.id)
     if controller?.engine !== engine {
-      controller?.dismiss(reason: .programmatic, animated: false)
+      controller?.dismiss(reason: .programmatic)
       controller?.view.removeFromSuperview()
       let bar = CommandBarController(engine: engine)
       bar.delegate = self
@@ -93,9 +93,19 @@ final class AppCommandBarSession: CommandBarDelegate {
     case .copy(let value):
       NSPasteboard.general.clearContents(); NSPasteboard.general.setString(value, forType: .string)
       factory.controller?.showToast("Copied", undo: nil)
-    case .showHelp: _ = factory.openNewTab(url: AppCommand.helpURL, background: false)
+    case .openSearchSettings(let profile):
+      // Open keeps search engines per Profile: Settings ▸ Profiles for the bar's Profile (CC-42 "Search Settings…").
+      factory.app.performCommand("search-settings", payload: (profile ?? factory.focusedProfile?.id)?.description)
     case .dismissed: break // didChangePresentation runs after the bar releases its editor.
     }
+  }
+  /// The (i) footer's "Dismiss": the same acknowledgement as Settings' notice ("Code 4"), then
+  /// remote suggestions for this query when the Profile allows them (CC-42, D14).
+  func commandBarDidDismissPrivacyNotice(_ commandBar: CommandBarController) {
+    let presenter = factory.app.settingsPresenter
+    presenter.settings.profiles.dismissSuggestNotice()
+    guard let profile = commandBar.request?.profileID.flatMap({ factory.app.model.profile(id: $0) }) else { return }
+    commandBar.setAllowsRemoteSuggestions(profile.settings.searchSuggestEnabled && presenter.prepareForRemoteSuggestions(profileID: profile.id))
   }
   func stateForAutomation() -> [String: Any] {
     guard let bar = controller else { return ["created": false, "presented": false] }
@@ -106,6 +116,11 @@ final class AppCommandBarSession: CommandBarDelegate {
       "firstResultsMs": firstResultsMilliseconds ?? -1, "openFirstResultsMs": openFirstResultsMilliseconds ?? -1,
       "timingScope": "showCommandBar entry to first snapshot applied; excludes preceding key routing, socket transport and frame presentation",
       "final": bar.isSnapshotFinal, "newTabHighlighted": factory.controller?.context.isNewTabCommandBarOpen ?? false,
+      "footer": bar.showsPrivacyFooter, "hidden": bar.view.isHidden, "animationKeys": bar.view.debugAnimationKeys,
+      "panelOpacity": bar.view.debugPanelPresentationOpacity, "allAnimationKeys": bar.view.debugAllAnimationKeys,
+      "panelFrame": { let f = bar.view.convert(bar.view.panelFrame, to: nil); let h = factory.window?.contentView?.bounds.height ?? 0
+        return [f.minX, h - f.maxY, f.width, f.height] }(),
+      "fieldWidth": bar.view.debugFieldFrame.width, "allowsRemote": bar.request?.allowsRemoteSuggestions ?? false,
       "rows": bar.suggestions.map { ["id": $0.id, "kind": $0.kind.rawValue, "title": $0.title,
         "url": $0.url?.absoluteString ?? "", "tab": $0.tabID?.description ?? "",
         "space": $0.spaceID?.description ?? "", "action": $0.actionID ?? ""] }] as [String: Any]

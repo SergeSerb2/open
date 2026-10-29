@@ -501,12 +501,12 @@ Layout, measured on S2 18/0044 (a 5-row panel, height 329, at window `[481, 373]
 | Band | Black, `[0, H − 61, W, 61]`, clipped by the panel corner (window y 641…701; the panel's bottom edge is y 702) | measured (pixels `#000000` across the band) |
 | Panel and list | The panel frame does not change. The list keeps its frame but its visible area ends at the band top, so the last visible row goes behind the band (5 rows → 4 visible); the list still scrolls to every row. Panels shorter than 2 rows grow by 61 pt so the footer never covers the only row (guess) | measured for 5 rows (AX table frame unchanged between 0043 and 0044); short panels guess |
 | (i) button | Hidden while the footer shows; the field gets its 42 pt back (field width 656 → 698) | measured (AX field width; no (i) in the image) |
-| Icon | SF Symbol `info.circle`, 13 × 13 at `[18, H − 37]`, white 0.55 | frame measured (AX `info.circle`); color fitted |
-| Line 1 | "We talk to your search engine to help us suggest results." at `[46, H − 48]`, 13 Semibold, white ≈ 0.93 | text and frame measured (AX 365 × 16); size fitted from the ink width; color from raw pixels (guess within ΔE00 3) |
-| Line 2 | "Learn more about your data on Open " + link "here" + "." at `[46, H − 30]`, 13 Regular, white ≈ 0.45; "here" in the same color, underlined (guess), pointer cursor | text measured (AX); "Arc" becomes "Open" (naming rule); size and color fitted |
+| Icon | SF Symbol `info.circle`, 13 × 13 at `[18, H − 37]`, white 0.5 | frame measured (AX `info.circle`); color fitted (core #767676; Step 0) |
+| Line 1 | "We talk to your search engine to help us suggest results." at `[46, H − 48]`, **13 Bold**, white ≈ 0.93 | text and frame measured (AX 365 × 16); Step 0 fit: ink width 364 px and ink mass match 13 Bold (Semibold is 356 px); color ΔE00 0.09 |
+| Line 2 | "Learn more about your data on Open " + link "here" + "." at `[46, H − 30]`, 13 Regular, white 0.5; "here" in the same color, underlined, pointer cursor | text measured (AX); "Arc" becomes "Open" (naming rule); size and color fitted (core #7A7A7A; Step 0) |
 | "Search Settings…" | Button `[W − 223.5, H − 49.5, 132, 37]` | measured (AX) |
 | "Dismiss" | Button `[W − 82.5, H − 49.5, 72, 37]`: 9 pt after "Search Settings…", 10.5 pt from the panel's right edge | measured (AX) |
-| Button look | Fill `#302F63`, 1 pt edge `#494988`, radius 8 continuous (visual), title 13 Medium white | colors measured (§20.9); radius and type fitted |
+| Button look | Fill `#302F63`, 1 pt edge `#6362AD`, radius 8 continuous (visual), title 13 Regular, white 0.9 | fill measured; Step 0: the buttons sit on half points, so the edge covers two pixels at half strength (one pixel reads `#494988`); the pair solves to `#6362AD`; title fitted on ink widths 104 and 45 px and core color |
 | Light appearance | Not captured. Use the same layout; band `CommandBarColors.bannerBackground` light (`#FDFDFE`), dark text (guess) | guess |
 
 Behavior:
@@ -743,3 +743,19 @@ These supersede the entries above where they conflict. Evidence: `docs/re/comman
 - Q14 (lead ruling): the footer opens **only** on (i) or Cmd+I. It never shows by itself; no capture shows that. Capture request §9 item 9.
 - New (D12): the command bar has **no** open or close animation (CC-44, V 9.70–14.20 s). The open spring and close fade are deleted. This replaces the provisional motion in `docs/commandbar.md` §5.
 - Inline completion and the Site Search chip follow the capture: completed part selected, Backspace removes only it (CC-40); the chip is an orange text-only capsule with the placeholder "Search…" and an orange scoped selection (CC-41). Right and Left arrow rules stay guesses until a frame isolates them.
+
+## Verification (Section 2, 2026-10-29)
+
+The Section 2 agent implements this plan. Each row names the merged PR and its evidence. Load averages are written with every timing receipt (the M5 also runs other projects).
+
+| Step | PR | Evidence | Result |
+|---|---|---|---|
+| 0 | (this PR) | `commandbar-render check` 91/91 (flows 87–90; the 9 existing states render pixel-identical to `main` at 2x, scene path identical too); S2 18/0044 compare in Display P3: 13 footer elements ≤ 1 pt and ΔE00 ≤ 0.62; App build; e2e `commandbar` 54/54 incl. `commandbar_no_open_animation`, `_no_close_animation`, `_info_shows_footer`, `_footer_dismiss`, `_cmd_i_footer`, `_footer_search_settings`; break-and-revert: an added 0.13 s fade fails flow 87 and the App row (panel opacity 0.07 right after Cmd+T), no list occlusion fails flow 88, a footer kept across `present` fails flow 89 | done |
+
+Section 2 decisions (Step 0):
+
+- `present(_:)` and `dismiss(reason:)` lose their `animated:` parameter: with no animation it would mean nothing.
+- "Search Settings…" already opens Settings ▸ Profiles for the bar's Profile in Step 0 (the plan put that in Step 9). The `search-settings` command does the same for the key window's Profile.
+- While Open has no privacy page, line 2 of the footer hides (`privacyURL` nil). Hiding only the word "here" would leave a broken sentence.
+- The panel edge keeps the session-1 luminance rule. Session 2 shows the dark double edge over light pages, against session-1 F0039/F0040/A0120; the rule's input is not known (`docs/followups.md`, capture request).
+- `compare --space p3` measures session-2 captures in Display P3 (their AW2726DM profile exceeds sRGB); session-1 comparisons stay in sRGB.

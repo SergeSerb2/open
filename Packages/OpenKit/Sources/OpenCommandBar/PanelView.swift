@@ -9,6 +9,8 @@ final class PanelView: NSView {
     let material = MaterialView(frame: .zero)
     let input = InputRowView(frame: .zero)
     let results = ResultsView(frame: .zero)
+    /// The (i) privacy footer (CC-42): over the list's bottom, under the edge.
+    let footer = PrivacyFooterView(frame: .zero)
     private let separator = CALayer()
     private let edge = EdgeView(frame: .zero)
 
@@ -21,6 +23,8 @@ final class PanelView: NSView {
         addSubview(material)
         addSubview(input)
         addSubview(results)
+        footer.isHidden = true
+        addSubview(footer)
         addSubview(edge)
         separator.backgroundColor = CommandBarRole.separator.cgColor
         separator.actions = ["position": NSNull(), "bounds": NSNull(), "hidden": NSNull()]
@@ -31,6 +35,14 @@ final class PanelView: NSView {
     override var isFlipped: Bool { true }
 
     var backdropIsDark = true { didSet { if backdropIsDark != oldValue { edge.overDark = backdropIsDark } } }
+    var showsFooter = false {
+        didSet {
+            guard showsFooter != oldValue else { return }
+            footer.isHidden = !showsFooter
+            input.showsFooter = showsFooter
+            needsLayout = true
+        }
+    }
     /// The separator shows only above rows.
     var showsSeparator = false {
         didSet {
@@ -48,13 +60,25 @@ final class PanelView: NSView {
         material.frame = bounds
         edge.frame = bounds
         input.frame = CGRect(x: 0, y: 0, width: bounds.width, height: m.inputRowHeight)
-        let listHeight = max(0, bounds.height - m.listTop - m.bottomPadding)
+        // The list keeps its frame under the footer; only its visible part ends at the band (S2 18/0044:
+        // the AX table frame is the same with and without the footer, and 5 rows show 4).
+        let footerTop = bounds.height - m.footerHeight
+        let listHeight = max(0, bounds.height - m.listTop - m.bottomPadding - (showsFooter ? grownHeight : 0))
         results.frame = CGRect(x: 0, y: m.listTop, width: bounds.width, height: listHeight)
+        results.occludedBottom = showsFooter ? max(0, results.frame.maxY - footerTop) : 0
+        footer.frame = CGRect(x: 0, y: footerTop, width: bounds.width, height: m.footerHeight)
         CATransaction.begin()
         CATransaction.setDisableActions(true)
         separator.isHidden = !showsSeparator
         separator.frame = CGRect(x: 1, y: m.inputRowHeight, width: bounds.width - 2, height: m.separatorHeight)
         CATransaction.commit()
+    }
+
+    /// The height a short panel gained for the footer (`CommandBarMetrics.panelHeight`).
+    private var grownHeight: CGFloat {
+        let m = CommandBarMetrics.self
+        let rows = results.rows.count
+        return rows < m.footerGrowthRowLimit ? m.footerHeight : 0
     }
 }
 
