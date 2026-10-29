@@ -24,6 +24,8 @@ public final class HoverPreviewTracker {
     private var hideTask: DispatchWorkItem?
     private var lastHidden: TimeInterval?
     private var insideCard = false
+    private var previewFrameInWindow: CGRect?
+    public func setPreviewFrameInWindow(_ frame: CGRect?) { previewFrameInWindow = frame }
     private var suppressed: Set<Suppression> = []
     private var observers: [NSObjectProtocol] = []
     private var eventMonitor: Any?
@@ -176,7 +178,12 @@ public final class HoverPreviewTracker {
         })
         eventMonitor = NSEvent.addLocalMonitorForEvents(matching: [.keyDown, .scrollWheel]) { [weak self] event in
             MainActor.assumeIsolated {
-                if let self, event.window === self.owner?.window, event.type == .scrollWheel || event.keyCode == 53 { self.dismiss() }
+                guard let self, event.window === self.owner?.window else { return }
+                if event.type == .scrollWheel {
+                    // Use the event location when available; pointer exit can lag a wheel event.
+                    let inPreview = self.previewFrameInWindow.map { $0.contains(event.locationInWindow) } ?? self.insideCard
+                    if !inPreview { self.dismiss() }
+                } else if event.keyCode == 53 { self.dismiss() }
             }
             return event
         }

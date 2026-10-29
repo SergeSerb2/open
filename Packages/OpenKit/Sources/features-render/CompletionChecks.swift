@@ -10,16 +10,18 @@ import OpenSidebar
 enum CompletionFeatureChecks {
     static func run(_ check: (Bool, String) -> Void) async throws {
         try deleteAlerts(check)
+        try toastUndo(check)
+        try deleteKeyboardFocus(check)
         try await hint(check)
         try gestureHide(check)
-        try previews(check)
+        try await previews(check)
         try await folderPeek(check)
         try separate(check)
     }
 
-    // MARK: HP7–HP10 (page previews through the real container and fake hosts)
+    // MARK: HP7–HP14 (page previews through the real container and fake hosts)
 
-    private static func previews(_ check: (Bool, String) -> Void) throws {
+    private static func previews(_ check: (Bool, String) -> Void) async throws {
         let model = FeatureCLI.synthetic(), factory = FakeWebContentHostFactory(), defaults = FeatureCLI.defaults()
         let space = model.spaces[0], pinned = space.pinned.compactMap(\.tab)
         let c = BrowserWindowController(model: model, windowID: model.windows[0].id, factory: factory,
@@ -61,6 +63,100 @@ enum CompletionFeatureChecks {
         check(frame.minX == c.context.sidebarWidth + 8 && frame.width == 420 && frame.height == height && abs(frame.maxY - (bounds.height - 10)) < 0.5,
               "HP10 page card at x = sidebar + 8, 420 × min(560, H − 20), clamped 10 pt above the window bottom (\(frame))")
         c.hoverPreview.update(nil); pump()
+
+        // Both newly made and cached preview hosts must use the container's metadata bridge.
+        for tab in [pinned[2], pinned[1]] {
+            c.hoverPreview.update(request(tab))
+            guard let host = c.hoverPreview.host as? FakeWebContentHost else { throw CLIError(description: "HP11 no preview host") }
+            let url = URL(string: "https://preview.example.com/redirect/\(tab.id)")!, icon = Data([1, 2, 3])
+            host.load(url); host.simulateTitle("Preview title"); host.simulateFavicon(icon)
+            let forwarded = tab.url == url && tab.title == "Preview title" && tab.live.faviconPNG == icon
+            c.hoverPreview.hide(animated: false)
+            host.simulateTitle("Returned title"); host.simulateFavicon(nil)
+            check(forwarded && tab.title == "Returned title" && tab.live.faviconPNG == nil && c.container.host(for: tab.id) === host,
+                  "HP11 cached preview host forwards URL title and favicon during preview and after hide")
+        }
+        // A previously unloaded tab also emits synchronous load metadata before the card exists.
+        let newTab = model.newTab(in: space.id, url: URL(string: "https://new-preview.example.com")!)
+        model.pinTab(id: newTab.id); newTab.live.sleepPhase = .live
+        c.hoverPreview.update(request(newTab))
+        guard let newHost = c.hoverPreview.host as? FakeWebContentHost else { throw CLIError(description: "HP11 no new host") }
+        let newURL = URL(string: "https://new-preview.example.com/redirect")!
+        newHost.load(newURL); newHost.simulateTitle("New preview title"); newHost.simulateFavicon(Data([4]))
+        let newForwarded = newTab.url == newURL && newTab.title == "New preview title" && newTab.live.faviconPNG == Data([4])
+        c.hoverPreview.hide(animated: false); newHost.simulateTitle("New returned title")
+        check(newForwarded && newTab.title == "New returned title", "HP11 new preview host forwards URL title and favicon during preview and after hide")
+
+        // Engine tab cycling writes the model then synchronously refreshes, bypassing sidebar intents.
+        c.hoverPreview.update(request(pinned[1]))
+        let previewHost = c.hoverPreview.host as? FakeWebContentHost
+        let loadCount = factory.made.reduce(0) { $0 + $1.loadCount }, hostCount = factory.made.count
+        model.selectNode(windowID: model.windows[0].id, spaceID: space.id, nodeID: pinned[1].id)
+        c.refresh() // Check before the asynchronous tracker selection observer can run.
+        check(c.hoverPreview.card == nil && c.container.host(for: pinned[1].id) === previewHost
+              && factory.made.count == hostCount && factory.made.reduce(0) { $0 + $1.loadCount } == loadCount,
+              "HP12 direct selection returns the preview host before refresh with no makeHost or reload")
+        pump(); select(pinned[0])
+
+        let rows = (1...14).map { model.newTab(in: space.id, url: URL(string: "https://folder.example.com/\($0)")!, title: "Folder row \($0)") }
+        guard let folder = model.createFolder(in: .spacePinned(space.id), title: "Scrollable preview", withNodes: rows.map(\.id)),
+              let outline = c.sidebar.focusedOutline, let window = c.window else { throw CLIError(description: "HP13 no folder") }
+        model.setExpanded(folderID: folder.id, expanded: false)
+        pump()
+        let row = c.sidebar.rowFrame(nodeID: folder.id)!
+        let point = c.sidebar.convert(CGPoint(x: 100, y: row.midY), to: nil)
+        let move = NSEvent.mouseEvent(with: .mouseMoved, location: point, modifierFlags: [], timestamp: 0,
+                                     windowNumber: window.windowNumber, context: nil, eventNumber: 0, clickCount: 0, pressure: 0)!
+        outline.enclosingScrollView!.superview!.mouseMoved(with: move)
+        try await Task.sleep(for: .milliseconds(550)); pump()
+        guard let card = c.hoverPreview.card, let folderView = card.content as? FolderPreviewView,
+              let scroll = folderView.tableView.enclosingScrollView else { throw CLIError(description: "HP13 folder preview did not arm") }
+        let entered = NSEvent.enterExitEvent(with: .mouseEntered, location: .zero, modifierFlags: [], timestamp: 0,
+                                            windowNumber: window.windowNumber, context: nil, eventNumber: 0, trackingNumber: 0, userData: nil)!
+        card.mouseEntered(with: entered)
+        func wheel(at point: CGPoint) throws {
+            // Start from an AppKit event to retain its window-relative coordinates
+            // when converting it to a wheel event, including for offscreen windows.
+            let base = NSEvent.mouseEvent(with: .mouseMoved, location: point, modifierFlags: [], timestamp: 0,
+                                          windowNumber: window.windowNumber, context: nil, eventNumber: 0, clickCount: 0, pressure: 0)!
+            let event = base.cgEvent!
+            event.type = .scrollWheel; event.setIntegerValueField(.scrollWheelEventDeltaAxis1, value: -80)
+            guard let native = NSEvent(cgEvent: event), native.window === window else { throw CLIError(description: "HP13 wheel has no target window") }
+            NSApp.sendEvent(native)
+            // NSApplication runs local monitors offscreen, but does not route a
+            // wheel to the invisible window's views. Use the native scroll view's
+            // event entry point only while the card remains under that location.
+            if card.superview != nil, card.frame.contains(c.contentView.convert(native.locationInWindow, from: nil)) {
+                scroll.scrollWheel(with: native)
+            }
+            pump()
+        }
+        let beforeScroll = scroll.contentView.bounds.origin.y
+        try wheel(at: scroll.convert(CGPoint(x: 50, y: 150), to: nil))
+        let scrolledInside = c.hoverPreview.card === card && c.context.hoverPreviews.request?.kind == .folder(folder.id)
+            && scroll.contentView.bounds.origin.y > beforeScroll
+        // The pointer flag may lag an exit event: use the wheel's actual location as well.
+        try wheel(at: point)
+        check(scrolledInside && c.context.hoverPreviews.request == nil && c.hoverPreview.card == nil,
+              "HP13 wheel inside folder card scrolls without dismissal; wheel outside dismisses")
+
+        c.hoverPreview.hide(animated: false); c.context.hoverPreviews.dismiss()
+        model.windows[0].sidebarWidth = 500
+        window.setContentSize(CGSize(width: 640, height: 480)); c.refresh(); pump()
+        let smallBounds = c.contentView.bounds
+        c.hoverPreview.update(request(pinned[1])); pump()
+        let pageFrame = c.hoverPreview.card?.frame ?? .zero
+        check(pageFrame.width > 0 && pageFrame.height > 0 && smallBounds.contains(pageFrame) && pageFrame.maxX <= smallBounds.maxX - 8,
+              "HP14 page card fits a 640x480 window with a 500 pt sidebar")
+        c.hoverPreview.update(SidebarHoverPreviewRequest(kind: .folder(folder.id), anchorInWindow: CGRect(x: 0, y: 0, width: 500, height: 45))); pump()
+        guard let smallCard = c.hoverPreview.card, let smallFolder = smallCard.content as? FolderPreviewView,
+              let smallScroll = smallFolder.tableView.enclosingScrollView else { throw CLIError(description: "HP14 no small folder card") }
+        let folderFrame = smallCard.frame
+        smallFolder.tableView.scrollRowToVisible(rows.count - 1); pump()
+        check(folderFrame.width > 0 && folderFrame.height > 0 && smallBounds.contains(folderFrame) && folderFrame.maxX <= smallBounds.maxX - 8
+              && smallScroll.contentView.bounds.origin.y > 0 && smallFolder.tableView.rows(in: smallScroll.documentVisibleRect).contains(rows.count - 1),
+              "HP14 folder card fits a 640x480 window with a 500 pt sidebar and scrolls to its last row")
+
     }
 
     private static func folderPeek(_ check: (Bool, String) -> Void) async throws {
@@ -205,6 +301,122 @@ enum CompletionFeatureChecks {
         check(plural && model.node(id: folder.id) == nil && model.node(id: untitled.id) == nil && c.lastToastTitle == "Folders deleted",
               "DA5 two folders: one \"Are you sure?\" alert and the toast \"Folders deleted\"")
         model.undoManager = nil
+    }
+
+    // MARK: DA6–DA7
+
+    private static func toastUndo(_ check: (Bool, String) -> Void) throws {
+        let model = FeatureCLI.synthetic(), undo = UndoManager(); undo.groupsByEvent = false; model.undoManager = undo
+        let space = model.spaces[0], tab = space.today[0].id
+        guard let folder = model.createFolder(in: .spaceToday(space.id), title: "Undo folder", withNodes: [tab]) else {
+            throw CLIError(description: "DA6 fixture folder")
+        }
+        let c = controller(model, defaults: FeatureCLI.defaults())
+        defer { if let sheet = c.window?.attachedSheet { c.window?.endSheet(sheet) }; c.container.closeAll(); c.window?.close() }
+        func delete() {
+            _ = c.sidebar(c.sidebar, didRequest: .deleteFolder(folderID: folder.id)); pump(c)
+            c.pendingConfirmation?.buttons.first?.performClick(nil); pump(c)
+        }
+        delete()
+        let first = c.pressToastUndo(); pump(c)
+        let second = c.pressToastUndo(); pump(c)
+        check(first && !second && model.node(id: folder.id)?.folder === folder && model.tab(id: tab) != nil,
+              "DA6 folder toast Undo restores once, dismisses, and a second click cannot undo folder creation")
+        delete()
+        let newer = model.newTab(in: space.id, url: URL(string: "https://newer.example/")!, title: "Newer action")
+        _ = c.pressToastUndo(); pump(c)
+        check(model.node(id: folder.id) == nil && model.tab(id: newer.id) != nil && !c.pressToastUndo(),
+              "DA6 folder toast refuses a newer undo target and dismisses")
+        undo.undo(); undo.undo(); pump(c)
+        delete()
+        undo.undo(); pump(c)
+        _ = c.pressToastUndo(); pump(c)
+        check(model.node(id: folder.id)?.folder === folder && !c.pressToastUndo(),
+              "DA6 a normal Undo invalidates the old deletion toast, protecting the earlier operation")
+        let before = space.today.map(\.id)
+        _ = c.sidebar(c.sidebar, didRequest: .clearToday(space: space.id)); pump(c)
+        let cleared = space.today.isEmpty
+        let clearFirst = c.pressToastUndo(); pump(c)
+        check(cleared && clearFirst && !c.pressToastUndo() && space.today.map(\.id) == before,
+              "DA6 Clear Today toast Undo restores once and dismisses")
+        _ = c.sidebar(c.sidebar, didRequest: .clearToday(space: space.id)); pump(c)
+        let afterClear = model.newTab(in: space.id, url: URL(string: "https://after-clear.example/")!, title: "After Clear")
+        _ = c.pressToastUndo(); pump(c)
+        check(space.today.map(\.id) == [afterClear.id] && !c.pressToastUndo(),
+              "DA6 Clear Today toast refuses a newer undo target and dismisses")
+    }
+
+    private static func deleteKeyboardFocus(_ check: (Bool, String) -> Void) throws {
+        let model = FeatureCLI.synthetic(), space = model.spaces[0]
+        guard let folder = model.createFolder(in: .spaceToday(space.id), at: 0, title: "Focus folder", withNodes: [space.today[0].id]) else {
+            throw CLIError(description: "DA7 fixture folder")
+        }
+        let successor = space.today[1].id
+        let c = controller(model, defaults: FeatureCLI.defaults()), outline = c.sidebar.focusedOutline!
+        defer { if let sheet = c.window?.attachedSheet { c.window?.endSheet(sheet) }; c.container.closeAll(); c.window?.close() }
+        func key(_ code: UInt16, _ flags: NSEvent.ModifierFlags = []) {
+            c.window?.makeFirstResponder(outline)
+            outline.keyDown(with: NSEvent.keyEvent(with: .keyDown, location: .zero, modifierFlags: flags,
+                timestamp: ProcessInfo.processInfo.systemUptime, windowNumber: c.window!.windowNumber, context: nil,
+                characters: "", charactersIgnoringModifiers: "", isARepeat: false, keyCode: code)!)
+            pump(c)
+        }
+        func focusedID() -> ItemID? {
+            for row in 0..<outline.numberOfRows where outline.rowView(atRow: row, makeIfNecessary: true)?.isAccessibilityFocused() == true {
+                if let tab = outline.item(atRow: row) as? Tab { return tab.id }
+                if let folder = outline.item(atRow: row) as? Folder { return folder.id }
+            }
+            return nil
+        }
+        func focus(_ id: ItemID) {
+            for _ in 0..<(outline.numberOfRows + 1) {
+                if focusedID() == id { return }
+                key(125)
+            }
+        }
+        func press(_ title: String) {
+            c.pendingConfirmation?.buttons.first(where: { $0.title == title })?.performClick(nil); pump(c)
+            c.window?.makeFirstResponder(outline); pump(c)
+        }
+        focus(folder.id); key(51)
+        let requested = c.pendingConfirmation != nil && model.node(id: folder.id) != nil
+        press("Cancel")
+        check(requested && focusedID() == folder.id && model.node(id: folder.id) != nil,
+              "DA7 keyboard Delete opens confirmation; Cancel keeps focus on the folder")
+        key(51); press("Delete Folder")
+        let followed = focusedID() == successor && model.node(id: folder.id) == nil
+        key(36)
+        check(followed && model.windows[0].selectedNodeBySpace[space.id] == successor,
+              "DA7 confirmed keyboard folder delete skips its expanded children, focuses the successor, and Return selects it")
+        // Shift selection followed by Delete exercises the asynchronous .deleteFolders path.
+        guard let a = model.createFolder(in: .spaceToday(space.id), at: 0, title: "Batch A"),
+              let b = model.createFolder(in: .spaceToday(space.id), at: 1, title: "Batch B") else {
+            throw CLIError(description: "DA7 batch fixture")
+        }
+        pump(c)
+        // Move up from the surviving tab to the two new rows.
+        key(126); key(126)
+        key(125, .shift); key(51)
+        let batchRequested = c.pendingConfirmation != nil && c.context.selection.ids == [a.id, b.id]
+        press("Cancel")
+        check(batchRequested && focusedID() == b.id && c.context.selection.ids == [a.id, b.id],
+              "DA7 multi-folder Cancel keeps keyboard focus and selection")
+        key(51); press("Delete Folder")
+        check(model.node(id: a.id) == nil && model.node(id: b.id) == nil && focusedID() == successor,
+              "DA7 confirmed multi-folder delete focuses the first surviving successor")
+        // A removal from another path can leave a stale focused object. Return/Delete
+        // must not activate it or request deletion of that missing node.
+        guard let stale = model.createFolder(in: .spaceToday(space.id), at: 0, title: "Stale") else {
+            throw CLIError(description: "DA7 stale fixture")
+        }
+        pump(c); key(126)
+        model.archiveNodes(ids: [stale.id]); pump(c)
+        let expanded = stale.isExpanded
+        var staleRequests = 0
+        c.onSidebarIntent = { _ in staleRequests += 1; return nil }
+        key(36); key(51)
+        check(staleRequests == 0 && stale.isExpanded == expanded && c.pendingConfirmation == nil && model.node(id: successor) != nil,
+              "DA7 Return and Delete ignore an outline item removed by another action")
     }
 
     // MARK: HT1–HT3

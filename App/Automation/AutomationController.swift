@@ -49,7 +49,7 @@
         id = request["id"] ?? NSNull()
         let args = request["args"] as? [String: Any] ?? [:]
         inputCommand = cmd == "key" || cmd == "focus" || (cmd == "window-focus" && args["activate"] as? Bool == true)
-        if cmd == "space-manager-drag" { inputCommand = true }
+        if ["space-manager-drag", "sidebar-click", "sidebar-key", "hover"].contains(cmd) { inputCommand = true }
         if inputCommand { nativeInputStart = 0 }
         let result = try await run(cmd, args)
         response = ["id": id, "ok": true, "result": result]
@@ -80,6 +80,9 @@
     private func run(_ cmd: String, _ a: [String: Any]) async throws -> Any {
       // App lifecycle commands remain available after the final window closes.
       switch cmd {
+      case "archive-sweep", "archive-clock", "archive-state", "archive-wake", "profile-archive-setting", "archive-list", "archive-banner-state", "archive-banner-action":
+        return try await runArchiveCommand(cmd, a)
+      case "metrics": return await metrics(interval: a["interval"] as? Double ?? 1)
       case "ping":
         return [
           "pid": Int(getpid()), "chromium": OEEngine.shared.chromiumVersion, "cef": OEEngine.shared.cefVersion,
@@ -108,7 +111,7 @@
       case "menu-state":
         NSApp.mainMenu?.update()
         return menuRows(NSApp.mainMenu)
-      case "menu-perform":
+      case "menu-perform", "command":
         guard let id = a["id"] as? String, let (menu, index) = findMenuItem(id, in: NSApp.mainMenu) else { throw Failure(message: "unknown menu item") }
         let item = menu.item(at: index)!
         guard menuEnabled(item) else { throw Failure(message: "disabled menu item") }
@@ -119,7 +122,8 @@
           "error": app.hotkeyError ?? "", "enabled": UserDefaults.standard.object(forKey: "open.links.littleOpenHotkeyEnabled") as? Bool ?? true] as [String: Any]
       case "settings-state":
         let adapter = app.settingsPresenter
-        return ["settings": adapter.settingsPresenter.window?.windowNumber ?? 0,
+        return ["pane": adapter.settings.selectedPane.rawValue, "selectedProfile": adapter.settings.selectedProfileID.description,
+          "settings": adapter.settingsPresenter.window?.windowNumber ?? 0,
           "library": adapter.libraryPresenter?.window?.windowNumber ?? 0,
           "librarySection": adapter.library?.section.rawValue ?? "", "archiveRows": adapter.library?.archiveRows.count ?? 0,
           "historyRows": adapter.library?.historyRows.count ?? 0,
@@ -149,9 +153,17 @@
         DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) { NSApp.terminate(nil) }
         return true
       case "library-open":
+        let section: LibrarySection?
+        if let value = a["section"] {
+          guard let raw = value as? String, let parsed = LibrarySection(rawValue: raw) else { throw Failure(message: "unknown Library section") }
+          section = parsed
+        } else { section = nil }
         switch a["entry"] as? String ?? "command" {
-        case "command": app.performCommand("manage-spaces")
+        case "command":
+          if let section { app.settingsPresenter.showLibrary(section: section) }
+          else { app.performCommand("manage-spaces") }
         case "space-menu":
+          guard section == nil || section == .spaces else { throw Failure(message: "Space menu opens Spaces only") }
           let factory = try window
           guard let menu = factory.controller?.sidebar.contextMenu(nodeID: nil),
             let index = menu.items.firstIndex(where: { $0.title == "Manage Spaces…" && $0.isEnabled })
@@ -192,26 +204,40 @@
         button.performClick(nil)
         await Task.yield()
         return result
+      case "sidebar-click": return try await sidebarClick(a)
+      case "sidebar-key": return try await sidebarKey(a)
+      case "hover": return try await sidebarHover(a)
+      case "selection": return try sidebarController(a).context.selection.ids.map(\.description)
+      case "sidebar-drop":
+        let controller = try sidebarController(a)
+        guard let raw = a["nodes"] as? [String], let parent = a["parent"] as? [String: Any],
+          let text = parent["id"] as? String, let uuid = UUID(uuidString: text), let index = a["index"] as? Int, index >= 0 else { throw Failure(message: "invalid sidebar drop") }
+        let ids = try raw.map { text -> ItemID in
+          guard let uuid = UUID(uuidString: text) else { throw Failure(message: "invalid drop node") }
+          return ItemID(rawValue: uuid)
+        }
+        let destination: NodeParent
+        switch parent["kind"] as? String {
+        case "today": destination = .spaceToday(SpaceID(rawValue: uuid))
+        case "pinned": destination = .spacePinned(SpaceID(rawValue: uuid))
+        case "folder": destination = .folder(ItemID(rawValue: uuid))
+        default: throw Failure(message: "invalid drop parent")
+        }
+        return controller.context.performNodeDrop(ids: ids, to: destination, index: index)
+      case "sidebar-clear-state":
+        let controller = try sidebarController(a)
+        controller.contentView.layoutSubtreeIfNeeded()
+        let frame = controller.sidebar.clearTodayFrame().map { controller.contentView.convert($0, from: controller.sidebar) }
+        return ["visible": controller.sidebar.isClearTodayVisible, "frame": frame.map { [$0.minX, $0.minY, $0.width, $0.height] } ?? []] as [String: Any]
       case "sidebar-row":
         // A sidebar row's frame and center in the front browser window (top-left origin).
         guard let controller = app.frontWindowController, let raw = a["node"] as? String, let uuid = UUID(uuidString: raw),
           let frame = controller.sidebar.rowFrame(nodeID: ItemID(rawValue: uuid)) else { throw Failure(message: "no such sidebar row") }
         controller.contentView.layoutSubtreeIfNeeded()
         let inRoot = controller.contentView.convert(frame, from: controller.sidebar)
-        return ["frame": [inRoot.minX, inRoot.minY, inRoot.width, inRoot.height], "point": [inRoot.midX, inRoot.midY]] as [String: Any]
+        return ["frame": [inRoot.minX, inRoot.minY, inRoot.width, inRoot.height], "point": [inRoot.midX, inRoot.midY], "unreadBadge": controller.sidebar.unreadDotFrame(nodeID: ItemID(rawValue: uuid)) != nil] as [String: Any]
       case "preview-state":
-        guard let controller = app.frontWindowController else { throw Failure(message: "no browser window") }
-        let preview = controller.hoverPreview
-        var kind = "none", target = ""
-        switch preview.request?.kind {
-        case .page(let id)?: kind = "page"; target = id.description
-        case .folder(let id)?: kind = "folder"; target = id.description
-        case nil: break
-        }
-        return ["kind": kind, "target": target, "card": preview.card.map { [$0.frame.minX, $0.frame.minY, $0.frame.width, $0.frame.height] } ?? [],
-          "host": preview.host.map { String(describing: ObjectIdentifier($0)) } ?? "",
-          "cachedHost": preview.hostTabID.flatMap { controller.container.host(for: $0) }.map { String(describing: ObjectIdentifier($0)) } ?? "",
-          "makeHostCount": preview.makeHostCount, "reusedCachedHost": preview.reusedCachedHost, "shows": preview.shows] as [String: Any]
+        return try previewState(a)
       case "toast-undo":
         guard let controller = app.frontWindowController else { throw Failure(message: "no browser window") }
         return controller.pressToastUndo()
@@ -219,11 +245,20 @@
         // Builds the same NSMenu a right-click shows (a row, or the Space with no node)
         // and performs the item at a "/" path; `alternate` picks the ⌥ alternate title.
         guard let controller = app.frontWindowController, let path = a["item"] as? String else { throw Failure(message: "missing sidebar menu item") }
-        let node = (a["node"] as? String).flatMap(UUID.init(uuidString:)).map { ItemID(rawValue: $0) }
+        let node: ItemID?
+        if let raw = a["node"] {
+          guard let text = raw as? String, let uuid = UUID(uuidString: text), app.model.node(id: ItemID(rawValue: uuid)) != nil else { throw Failure(message: "invalid sidebar node") }
+          node = ItemID(rawValue: uuid)
+        } else { node = nil }
+        guard !path.isEmpty, !path.split(separator: "/", omittingEmptySubsequences: false).contains(where: { $0.isEmpty }) else { throw Failure(message: "empty sidebar menu path") }
         guard var level = controller.sidebar.contextMenu(nodeID: node) else { throw Failure(message: "no sidebar menu") }
         let parts = path.split(separator: "/").map(String.init)
         for (depth, part) in parts.enumerated() {
-          guard let index = level.items.firstIndex(where: { $0.title == part && $0.isEnabled && ($0.isAlternate == (a["alternate"] as? Bool ?? false) || depth < parts.count - 1) })
+          let matches = level.items.indices.filter { index in
+            let item = level.items[index]
+            return item.title == part && item.isEnabled && (item.isAlternate == (a["alternate"] as? Bool ?? false) || depth < parts.count - 1)
+          }
+          guard matches.count == 1, let index = matches.first
           else { throw Failure(message: "sidebar menu has no enabled item \(part)") }
           if depth == parts.count - 1 { level.performActionForItem(at: index) }
           else if let sub = level.items[index].submenu { level = sub } else { throw Failure(message: "\(part) has no submenu") }
@@ -326,70 +361,6 @@
         }
         collect(space.pinned); collect(space.today)
         return ["tabs": tabs, "rows": rows, "folders": folders] as [String: Any]
-      case "sidebar-click":
-        guard let sidebar = w.controller?.sidebar, let target = w.window,
-              let id = (a["node"] as? String).flatMap(UUID.init(uuidString:)).map({ ItemID(rawValue: $0) }),
-              let node = app.model.node(id: id), let outline = sidebar.focusedOutline else { throw Failure(message: "missing sidebar node") }
-        let object: AnyObject
-        switch node { case .tab(let tab): object = tab; case .folder(let folder): object = folder; case .split(let split): object = split }
-        let row = outline.row(forItem: object)
-        guard row >= 0 else { throw Failure(message: "sidebar node is hidden") }
-        outline.scrollRowToVisible(row); target.layoutIfNeeded(); w.controller?.contentView.layoutSubtreeIfNeeded()
-        guard let frame = sidebar.rowFrame(nodeID: id) else { throw Failure(message: "no visible sidebar frame") }
-        let point = sidebar.convert(NSPoint(x: min(100, frame.maxX - 45), y: frame.midY), to: nil)
-        var flags: NSEvent.ModifierFlags = []
-        for value in a["modifiers"] as? [String] ?? [] {
-          switch value { case "cmd", "command": flags.insert(.command); case "shift": flags.insert(.shift)
-          case "alt", "option": flags.insert(.option); case "ctrl", "control": flags.insert(.control); default: break }
-        }
-        let capturesMotion = a["motion"] as? Bool == true
-        let previousReduceMotion = Motion.reduceMotionOverride
-        if capturesMotion { Motion.reduceMotionOverride = false }
-        defer { if capturesMotion { Motion.reduceMotionOverride = previousReduceMotion } }
-        BrowserWindowController.automationPointer = (target.windowNumber, point)
-        let eventStarted = CACurrentMediaTime()
-        func click(_ type: NSEvent.EventType) -> NSEvent? {
-          NSEvent.mouseEvent(with: type, location: point, modifierFlags: flags, timestamp: ProcessInfo.processInfo.systemUptime,
-            windowNumber: target.windowNumber, context: nil, eventNumber: 0, clickCount: 1, pressure: type == .leftMouseDown ? 1 : 0)
-        }
-        if let up = click(.leftMouseUp) { NSApp.postEvent(up, atStart: false) }
-        if let down = click(.leftMouseDown) { NSApp.sendEvent(down) }
-        await Task.yield()
-        var result: [String: Any] = ["accepted": true, "expanded": node.folder?.isExpanded ?? false,
-          "peekedChildID": node.folder?.peekedChildID?.description ?? ""]
-        if a["motion"] as? Bool == true {
-          let started = eventStarted
-          var samples: [[String: Any]] = [], animations: [[String: Any]] = []
-          func inspect(_ layer: CALayer) {
-            for key in layer.animationKeys() ?? [] {
-              guard let animation = layer.animation(forKey: key) else { continue }
-              let path = (animation as? CAPropertyAnimation)?.keyPath ?? key
-              var points: [Float] = []
-              if let curve = animation.timingFunction {
-                for index in 0..<4 { var p: [Float] = [0,0]; curve.getControlPoint(at: index, values: &p); points += p }
-              }
-              animations.append(["path": path, "duration": animation.duration, "curve": points])
-            }
-            for child in layer.sublayers ?? [] { inspect(child) }
-          }
-          for _ in 0..<8 {
-            var positions: [String: Double] = [:]
-            for index in 0..<outline.numberOfRows {
-              guard let item = outline.item(atRow: index), let view = outline.rowView(atRow: index, makeIfNecessary: false) else { continue }
-              let id: String
-              if let tab = item as? Tab { id = tab.id.description }
-              else if let folder = item as? Folder { id = folder.id.description }
-              else { continue }
-              positions[id] = Double(view.layer?.presentation()?.frame.minY ?? view.frame.minY)
-              if samples.isEmpty, let layer = view.layer { inspect(layer) }
-            }
-            samples.append(["time": CACurrentMediaTime() - started, "rows": positions])
-            try await Task.sleep(for: .milliseconds(45))
-          }
-          result["motion"] = ["appliedDuration": SidebarDiagnostics.folderTransitionDuration,
-            "expanding": SidebarDiagnostics.folderTransitionExpanding, "animations": animations, "samples": samples]
-        }
-        return result
       case "tab-state":
         return describe(try modelTab(a, w), in: w)
       case "tab-strip":
@@ -540,100 +511,7 @@
         }
         throw Failure(message: "page focus not ready")
       case "mouse":
-        let number = a["window"] as? Int ?? w.window?.windowNumber ?? 0
-        guard let target = NSApp.windows.first(where: { $0.windowNumber == number }) else { throw Failure(message: "no window \(number)") }
-        pointerRequestID += 1
-        let motionTag = Self.syntheticPointerTag + pointerRequestID
-        func event(_ type: NSEvent.EventType, _ point: [Double]) -> NSEvent? {
-          NSEvent.mouseEvent(with: type, location: NSPoint(x: point[0], y: target.frame.height - point[1]),
-            modifierFlags: [], timestamp: ProcessInfo.processInfo.systemUptime, windowNumber: number,
-            context: nil, eventNumber: motionTag, clickCount: a["clickCount"] as? Int ?? 1,
-            pressure: type == .leftMouseDown || type == .leftMouseDragged ? 1 : 0)
-        }
-        let action = a["action"] as? String
-        if action == "down" || action == "drag" || action == "up" {
-          let point = [a["x"] as? Double ?? 0, a["y"] as? Double ?? 0]
-          BrowserWindowController.pointerEventFilter = { $0.eventNumber == motionTag }
-          BrowserWindowController.automationPointer = (number, NSPoint(x: point[0], y: target.frame.height - point[1]))
-          target.layoutIfNeeded()
-          let type: NSEvent.EventType = action == "down" ? .leftMouseDown : action == "drag" ? .leftMouseDragged : .leftMouseUp
-          if let e = event(type, point) { NSApp.sendEvent(e) }
-        } else if action == "move" || action == "hover" {
-          // Local event monitors run on AppKit's native dequeue path. Queue
-          // motion just like real input, including after a Space transition.
-          // From the first synthetic move on, pointer-driven window logic (the
-          // sidebar hover reveal) follows only these tagged events, so the
-          // hardware pointer of whoever uses the Mac cannot disturb a check.
-          BrowserWindowController.pointerEventFilter = { $0.eventNumber == motionTag }
-          let point = [a["x"] as? Double ?? 0, a["y"] as? Double ?? 0]
-          let owner = app.windowControllers.first { $0.window === target }
-          let count = owner?.revealState.pointerEvents
-          let delivered = Mutex(false)
-          let monitor = NSEvent.addLocalMonitorForEvents(matching: .mouseMoved) { e in
-            if e.windowNumber == number && e.eventNumber == motionTag { delivered.withLock { $0 = true } }
-            return e
-          }
-          defer { if let monitor { NSEvent.removeMonitor(monitor) } }
-          let location = NSPoint(x: point[0], y: target.frame.height - point[1])
-          if let e = event(.mouseMoved, point) { NSApp.postEvent(e, atStart: false) }
-          // The local monitor consumes motion on native dequeue. A second
-          // queued move must not overtake/coalesce the leave-edge event that
-          // clears reveal suppression. Acknowledge actual delivery, not a delay.
-          let deadline = ContinuousClock.now.advanced(by: .seconds(3))
-          while !delivered.withLock({ $0 }) || (owner != nil && owner!.revealState.pointerEvents <= count!) {
-              guard ContinuousClock.now < deadline else { throw Failure(message: "pointer motion was not dequeued") }
-              try await Task.sleep(for: .milliseconds(5))
-          }
-          // Tracking areas follow the hardware pointer, so `hover` also delivers
-          // enter, move, and exit to the owners of the areas under the point. The automation
-          // pointer moves only afterwards: `hover` first rebuilds every tracking area, and state
-          // that re-reads the pointer then (the window buttons' hover) must still see the old
-          // point, so the enter and exit events drive the change, as real pointer motion does.
-          if action == "hover" {
-            let result = hover(target, at: location)
-            BrowserWindowController.automationPointer = (number, location)
-            return result
-          }
-          // Known at once (the move event is queued), for state that reads where the pointer
-          // is rather than waiting for an event: the window buttons' hover.
-          BrowserWindowController.automationPointer = (number, location)
-          // A move delivers no enter or exit, so the owners `hover` entered before may no longer
-          // hold the pointer; the next `hover` enters the owners under its point again.
-          hoveredOwners = [:]
-        } else if action == "click" {
-          // A click with modifiers (for example Option on the zoom button). Controls that
-          // track the mouse wait for the mouse-up on the event queue, so it goes there first.
-          var flags: NSEvent.ModifierFlags = []
-          for name in a["modifiers"] as? [String] ?? [] {
-            switch name { case "option": flags.insert(.option); case "command": flags.insert(.command)
-            case "shift": flags.insert(.shift); case "control": flags.insert(.control); default: break }
-          }
-          let point = NSPoint(x: a["x"] as? Double ?? 0, y: target.frame.height - (a["y"] as? Double ?? 0))
-          // A click happens where the pointer is.
-          BrowserWindowController.automationPointer = (number, point)
-          func click(_ type: NSEvent.EventType) -> NSEvent? {
-            NSEvent.mouseEvent(with: type, location: point, modifierFlags: flags, timestamp: ProcessInfo.processInfo.systemUptime,
-              windowNumber: number, context: nil, eventNumber: 0, clickCount: a["clickCount"] as? Int ?? 1, pressure: type == .leftMouseDown ? 1 : 0)
-          }
-          // Real input arrives after the display cycle has laid the window out (the window
-          // buttons are placed at its end); run that pass before hit-testing.
-          target.layoutIfNeeded()
-          if let up = click(.leftMouseUp) { NSApp.postEvent(up, atStart: false) }
-          if let down = click(.leftMouseDown) { NSApp.sendEvent(down) }
-        } else if let start = a["from"] as? [Double], let end = a["to"] as? [Double], start.count == 2, end.count == 2 {
-          // The real resize handle consumes these own-window events through
-          // NSWindow.nextEvent. No system cursor or keyboard is touched.
-          BrowserWindowController.pointerEventFilter = { $0.eventNumber == motionTag }
-          for (type, point) in [(NSEvent.EventType.leftMouseDown, start), (.leftMouseDragged, end), (.leftMouseUp, end)] {
-            BrowserWindowController.automationPointer = (number, NSPoint(x: point[0], y: target.frame.height - point[1]))
-            if let e = event(type, point) { NSApp.sendEvent(e) }
-          }
-        } else {
-          for type in [NSEvent.EventType.leftMouseDown, .leftMouseUp] {
-            if let e = event(type, [a["x"] as? Double ?? 0, a["y"] as? Double ?? 0]) { NSApp.sendEvent(e) }
-          }
-        }
-        return true
+        return try await mouse(a, w)
       case "key":
         return try await sendKey(a, w)
       case "events":
@@ -863,6 +741,11 @@
           "sidebarFrame": rect(controller.sidebar.frame), "sidebarLiveWidth": controller.context.sidebarWidth,
           "toolbarFrames": controller.sidebar.toolbarGeometry.mapValues(rect),
           "toolbarButtons": controller.sidebar.toolbarVisibleButtons,
+          "spaceSwitcherFrames": app.model.spaces.reduce(into: [String: [Double]]()) { frames, space in
+            if let view = controller.sidebar.spaceSwitcher(spaceID: space.id) {
+              frames[space.id.description] = rect(root.convert(view.bounds, from: view))
+            }
+          },
           "hint": ["shows": controller.hintShows, "visible": controller.hintToast != nil,
             "frame": controller.hintToast.map { rect($0.frame) } ?? [], "keys": controller.hintToast?.keys ?? "",
             "plate": controller.hintToast.map { rect($0.plateFrame) } ?? []] as [String: Any],
@@ -1035,8 +918,6 @@
         }
 
       // Measurements.
-      case "metrics":
-        return await metrics(interval: a["interval"] as? Double ?? 1)
       case "timing":
         return await timing(w)
       case "startup":
@@ -1107,6 +988,7 @@
         section = "today"
       }
       var d: [String: Any] = [
+        "createdAt": tab.createdAt.timeIntervalSince1970, "lastActiveAt": tab.lastActiveAt.timeIntervalSince1970,
         "id": tab.id.description, "title": tab.displayTitle, "url": tab.url.absoluteString, "section": section, "unread": tab.isUnread,
         "selected": w.selectedTab?.id == tab.id, "visible": w.visibleTabs.contains { $0.id == tab.id },
         "loading": tab.live.isLoading, "audible": tab.live.isAudible, "crashed": tab.live.isCrashed,
@@ -1276,6 +1158,10 @@
         value["to"] = (basic.toValue as? NSNumber) ?? NSNull()
       }
       if let spring = animation as? CASpringAnimation {
+        value["mass"] = spring.mass
+        value["stiffness"] = spring.stiffness
+        value["physicalDamping"] = spring.damping
+        value["settlingDuration"] = spring.settlingDuration
         value["response"] = 2 * Double.pi / sqrt(spring.stiffness / spring.mass)
         value["damping"] = spring.damping / (2 * sqrt(spring.stiffness * spring.mass))
         value["initialVelocity"] = spring.initialVelocity
@@ -1395,7 +1281,7 @@
     private func describeNode(_ node: SidebarNode) -> [String: Any] {
       switch node {
       case .tab(let tab): return ["id": tab.id.description, "kind": "tab", "url": tab.url.absoluteString, "title": tab.displayTitle, "loaded": tab.live.hasWebContent]
-      case .folder(let folder): return ["id": folder.id.description, "kind": "folder", "title": folder.title, "children": folder.children.map(describeNode)]
+      case .folder(let folder): return ["id": folder.id.description, "kind": "folder", "title": folder.title, "expanded": folder.isExpanded, "peekedChildID": folder.peekedChildID?.description ?? "", "children": folder.children.map(describeNode)]
       case .split(let split): return ["id": split.id.description, "kind": "split", "children": split.panes.map { describeNode(.tab($0)) }]
       }
     }
@@ -1421,6 +1307,222 @@
         if let found = findMenuItem(id, in: item.submenu) { return found }
       }
       return nil
+    }
+
+    private func normalizedModifier(_ name: String) -> String {
+      switch name { case "cmd": return "command"; case "opt", "alt": return "option"; case "ctrl": return "control"; default: return name }
+    }
+
+    private func sidebarController(_ args: [String: Any]) throws -> BrowserWindowController {
+      if let raw = args["window"] {
+        guard let id = raw as? String, let controller = app.windowControllers.first(where: { $0.windowID.description == id }) else { throw Failure(message: "unknown browser window") }
+        return controller
+      }
+      guard let controller = app.frontWindowController else { throw Failure(message: "no browser window") }
+      return controller
+    }
+
+    private func sidebarPoint(_ args: [String: Any], controller: BrowserWindowController, favorite: Bool = false) throws -> NSPoint {
+      guard let text = args[favorite ? "favorite" : "node"] as? String, let uuid = UUID(uuidString: text),
+        app.model.node(id: ItemID(rawValue: uuid)) != nil else { throw Failure(message: "invalid sidebar node") }
+      let id = ItemID(rawValue: uuid)
+      controller.contentView.layoutSubtreeIfNeeded()
+      if !favorite { controller.sidebar.reveal(nodeID: id) }
+      controller.contentView.layoutSubtreeIfNeeded()
+      guard let frame = favorite ? controller.sidebar.favoriteFrame(tabID: id) : controller.sidebar.rowFrame(nodeID: id),
+        !controller.sidebar.isHidden, frame.intersects(controller.sidebar.bounds),
+        let outline = controller.sidebar.focusedOutline, favorite || !outline.visibleRect.isEmpty else { throw Failure(message: "no visible sidebar target") }
+      let root = controller.contentView.convert(frame, from: controller.sidebar)
+      return NSPoint(x: root.midX, y: root.midY)
+    }
+
+    private func sidebarClick(_ args: [String: Any]) async throws -> Any {
+      let controller = try sidebarController(args)
+      let point = try sidebarPoint(args, controller: controller)
+      guard let target = controller.window, let factory = app.hostFactories[controller.windowID],
+        let outline = controller.sidebar.focusedOutline,
+        let id = (args["node"] as? String).flatMap(UUID.init(uuidString:)).map({ ItemID(rawValue: $0) }),
+        let node = app.model.node(id: id) else { throw Failure(message: "no browser sidebar node") }
+      try await activateForInput(target)
+      let capturesMotion = args["motion"] as? Bool == true
+      let previousReduceMotion = Motion.reduceMotionOverride
+      if capturesMotion { Motion.reduceMotionOverride = false }
+      defer { if capturesMotion { Motion.reduceMotionOverride = previousReduceMotion } }
+      let eventStarted = CACurrentMediaTime()
+      _ = try await mouse(["action": "click", "window": target.windowNumber, "x": Double(point.x), "y": Double(point.y), "modifiers": args["modifiers"] as? [String] ?? []], factory)
+      await Task.yield()
+      var result: [String: Any] = ["selection": controller.context.selection.ids.map(\.description),
+        "selected": factory.selectedNodeID?.description ?? "", "accepted": true,
+        "expanded": node.folder?.isExpanded ?? false, "peekedChildID": node.folder?.peekedChildID?.description ?? ""]
+      if args["motion"] as? Bool == true {
+        let started = eventStarted
+        var samples: [[String: Any]] = [], animations: [[String: Any]] = []
+        func inspect(_ layer: CALayer) {
+          for key in layer.animationKeys() ?? [] {
+            guard let animation = layer.animation(forKey: key) else { continue }
+            let path = (animation as? CAPropertyAnimation)?.keyPath ?? key
+            var points: [Float] = []
+            if let curve = animation.timingFunction {
+              for index in 0..<4 { var p: [Float] = [0,0]; curve.getControlPoint(at: index, values: &p); points += p }
+            }
+            animations.append(["path": path, "duration": animation.duration, "curve": points])
+          }
+          for child in layer.sublayers ?? [] { inspect(child) }
+        }
+        for _ in 0..<8 {
+          var positions: [String: Double] = [:]
+          for index in 0..<outline.numberOfRows {
+            guard let item = outline.item(atRow: index), let view = outline.rowView(atRow: index, makeIfNecessary: false) else { continue }
+            let id: String
+            if let tab = item as? Tab { id = tab.id.description }
+            else if let folder = item as? Folder { id = folder.id.description }
+            else { continue }
+            positions[id] = Double(view.layer?.presentation()?.frame.minY ?? view.frame.minY)
+            if samples.isEmpty, let layer = view.layer { inspect(layer) }
+          }
+          samples.append(["time": CACurrentMediaTime() - started, "rows": positions])
+          try await Task.sleep(for: .milliseconds(45))
+        }
+        result["motion"] = ["appliedDuration": SidebarDiagnostics.folderTransitionDuration,
+          "expanding": SidebarDiagnostics.folderTransitionExpanding, "animations": animations, "samples": samples]
+      }
+      return result
+    }
+
+    private func sidebarKey(_ args: [String: Any]) async throws -> Any {
+      let controller = try sidebarController(args)
+      guard let target = controller.window, let outline = controller.sidebar.focusedOutline,
+        let factory = app.hostFactories[controller.windowID] else { throw Failure(message: "no sidebar outline") }
+      try await activateForInput(target)
+      guard target.makeFirstResponder(outline) else { throw Failure(message: "sidebar focus refused") }
+      var input = args; input["window"] = target.windowNumber; input["route"] = "app"
+      return try await sendKey(input, factory)
+    }
+
+    private func sidebarHover(_ args: [String: Any]) async throws -> Any {
+      let controller = try sidebarController(args)
+      guard let target = controller.window, let factory = app.hostFactories[controller.windowID],
+        let ms = (args["ms"] ?? 0) as? Int, (0...5000).contains(ms) else { throw Failure(message: "invalid hover duration") }
+      let leave = args["leave"] as? Bool == true
+      let targets = [args["node"], args["favorite"]].compactMap { $0 }.count
+      guard leave ? targets == 0 : targets == 1 else { throw Failure(message: "hover needs one node or favorite, or leave") }
+      let point = try leave ? NSPoint(x: controller.contentView.bounds.maxX - 80, y: controller.contentView.bounds.midY) : sidebarPoint(args, controller: controller, favorite: args["favorite"] != nil)
+      try await activateForInput(target)
+      _ = try await mouse(["action": "hover", "window": target.windowNumber, "x": Double(point.x), "y": Double(point.y)], factory)
+      if ms > 0 { try await Task.sleep(for: .milliseconds(ms)) }
+      return try previewState(args)
+    }
+
+    private func previewState(_ a: [String: Any]) throws -> Any {
+      let controller = try sidebarController(a)
+      let preview = controller.hoverPreview
+      var kind = "none", target = ""
+      switch preview.request?.kind {
+      case .page(let id)?: kind = "page"; target = id.description
+      case .folder(let id)?: kind = "folder"; target = id.description
+      case nil: break
+      }
+      return ["kind": kind, "target": target, "card": preview.card.map { [$0.frame.minX, $0.frame.minY, $0.frame.width, $0.frame.height] } ?? [],
+        "host": preview.host.map { String(describing: ObjectIdentifier($0)) } ?? "",
+        "cachedHost": preview.hostTabID.flatMap { controller.container.host(for: $0) }.map { String(describing: ObjectIdentifier($0)) } ?? "",
+        "makeHostCount": preview.makeHostCount, "reusedCachedHost": preview.reusedCachedHost, "shows": preview.shows] as [String: Any]
+    }
+
+    private func mouse(_ a: [String: Any], _ w: EngineWebContentHostFactory) async throws -> Any {
+      let number = a["window"] as? Int ?? w.window?.windowNumber ?? 0
+      guard let target = NSApp.windows.first(where: { $0.windowNumber == number }) else { throw Failure(message: "no window \(number)") }
+      pointerRequestID += 1
+      let motionTag = Self.syntheticPointerTag + pointerRequestID
+      func event(_ type: NSEvent.EventType, _ point: [Double]) -> NSEvent? {
+        NSEvent.mouseEvent(with: type, location: NSPoint(x: point[0], y: target.frame.height - point[1]),
+          modifierFlags: [], timestamp: ProcessInfo.processInfo.systemUptime, windowNumber: number,
+          context: nil, eventNumber: motionTag, clickCount: a["clickCount"] as? Int ?? 1,
+          pressure: type == .leftMouseDown || type == .leftMouseDragged ? 1 : 0)
+      }
+      let action = a["action"] as? String
+      if action == "down" || action == "drag" || action == "up" {
+        let point = [a["x"] as? Double ?? 0, a["y"] as? Double ?? 0]
+        BrowserWindowController.pointerEventFilter = { $0.eventNumber == motionTag }
+        BrowserWindowController.automationPointer = (number, NSPoint(x: point[0], y: target.frame.height - point[1]))
+        target.layoutIfNeeded()
+        let type: NSEvent.EventType = action == "down" ? .leftMouseDown : action == "drag" ? .leftMouseDragged : .leftMouseUp
+        if let e = event(type, point) { NSApp.sendEvent(e) }
+      } else if action == "move" || action == "hover" {
+        // Local event monitors run on AppKit's native dequeue path. Queue
+        // motion just like real input, including after a Space transition.
+        // From the first synthetic move on, pointer-driven window logic (the
+        // sidebar hover reveal) follows only these tagged events, so the
+        // hardware pointer of whoever uses the Mac cannot disturb a check.
+        BrowserWindowController.pointerEventFilter = { $0.eventNumber == motionTag }
+        let point = [a["x"] as? Double ?? 0, a["y"] as? Double ?? 0]
+        let owner = app.windowControllers.first { $0.window === target }
+        let count = owner?.revealState.pointerEvents
+        let delivered = Mutex(false)
+        let monitor = NSEvent.addLocalMonitorForEvents(matching: .mouseMoved) { e in
+          if e.windowNumber == number && e.eventNumber == motionTag { delivered.withLock { $0 = true } }
+          return e
+        }
+        defer { if let monitor { NSEvent.removeMonitor(monitor) } }
+        let location = NSPoint(x: point[0], y: target.frame.height - point[1])
+        if let e = event(.mouseMoved, point) { NSApp.postEvent(e, atStart: false) }
+        // The local monitor consumes motion on native dequeue. A second
+        // queued move must not overtake/coalesce the leave-edge event that
+        // clears reveal suppression. Acknowledge actual delivery, not a delay.
+        let deadline = ContinuousClock.now.advanced(by: .seconds(3))
+        while !delivered.withLock({ $0 }) || (owner != nil && owner!.revealState.pointerEvents <= count!) {
+            guard ContinuousClock.now < deadline else { throw Failure(message: "pointer motion was not dequeued") }
+            try await Task.sleep(for: .milliseconds(5))
+        }
+        // Tracking areas follow the hardware pointer, so `hover` also delivers
+        // enter, move, and exit to the owners of the areas under the point. The automation
+        // pointer moves only afterwards: `hover` first rebuilds every tracking area, and state
+        // that re-reads the pointer then (the window buttons' hover) must still see the old
+        // point, so the enter and exit events drive the change, as real pointer motion does.
+        if action == "hover" {
+          let result = hover(target, at: location)
+          BrowserWindowController.automationPointer = (number, location)
+          return result
+        }
+        // Known at once (the move event is queued), for state that reads where the pointer
+        // is rather than waiting for an event: the window buttons' hover.
+        BrowserWindowController.automationPointer = (number, location)
+        // A move delivers no enter or exit, so the owners `hover` entered before may no longer
+        // hold the pointer; the next `hover` enters the owners under its point again.
+        hoveredOwners = [:]
+      } else if action == "click" {
+        // A click with modifiers (for example Option on the zoom button). Controls that
+        // track the mouse wait for the mouse-up on the event queue, so it goes there first.
+        var flags: NSEvent.ModifierFlags = []
+        for name in a["modifiers"] as? [String] ?? [] {
+          switch normalizedModifier(name) { case "option": flags.insert(.option); case "command": flags.insert(.command)
+          case "shift": flags.insert(.shift); case "control": flags.insert(.control); default: break }
+        }
+        let point = NSPoint(x: a["x"] as? Double ?? 0, y: target.frame.height - (a["y"] as? Double ?? 0))
+        // A click happens where the pointer is.
+        BrowserWindowController.automationPointer = (number, point)
+        func click(_ type: NSEvent.EventType) -> NSEvent? {
+          NSEvent.mouseEvent(with: type, location: point, modifierFlags: flags, timestamp: ProcessInfo.processInfo.systemUptime,
+            windowNumber: number, context: nil, eventNumber: 0, clickCount: a["clickCount"] as? Int ?? 1, pressure: type == .leftMouseDown ? 1 : 0)
+        }
+        // Real input arrives after the display cycle has laid the window out (the window
+        // buttons are placed at its end); run that pass before hit-testing.
+        target.layoutIfNeeded()
+        if let up = click(.leftMouseUp) { NSApp.postEvent(up, atStart: false) }
+        if let down = click(.leftMouseDown) { NSApp.sendEvent(down) }
+      } else if let start = a["from"] as? [Double], let end = a["to"] as? [Double], start.count == 2, end.count == 2 {
+        // The real resize handle consumes these own-window events through
+        // NSWindow.nextEvent. No system cursor or keyboard is touched.
+        BrowserWindowController.pointerEventFilter = { $0.eventNumber == motionTag }
+        for (type, point) in [(NSEvent.EventType.leftMouseDown, start), (.leftMouseDragged, end), (.leftMouseUp, end)] {
+          BrowserWindowController.automationPointer = (number, NSPoint(x: point[0], y: target.frame.height - point[1]))
+          if let e = event(type, point) { NSApp.sendEvent(e) }
+        }
+      } else {
+        for type in [NSEvent.EventType.leftMouseDown, .leftMouseUp] {
+          if let e = event(type, [a["x"] as? Double ?? 0, a["y"] as? Double ?? 0]) { NSApp.sendEvent(e) }
+        }
+      }
+      return true
     }
 
     private func activateForInput(_ target: NSWindow) async throws {
@@ -1476,7 +1578,7 @@
       }
       let keys: [String: (String, UInt16)] = [
         "return": ("\r", 36), "escape": ("\u{1b}", 53), "tab": ("\t", 48), "space": (" ", 49),
-        "delete": ("\u{7f}", 51),
+        "delete": ("\u{7f}", 51), "forward-delete": (String(Character(UnicodeScalar(NSDeleteFunctionKey)!)), 117),
         "o": ("o", 31), ",": (",", 43), "z": ("z", 6), "n": ("n", 45), "t": ("t", 17), "w": ("w", 13), "l": ("l", 37), "f": ("f", 3), "s": ("s", 1), "a": ("a", 0),
         "v": ("v", 9), "x": ("x", 7), "c": ("c", 8), "d": ("d", 2), "1": ("1", 18), "2": ("2", 19), "=": ("=", 24),
         "down": (String(Character(UnicodeScalar(NSDownArrowFunctionKey)!)), 125),
@@ -1485,11 +1587,11 @@
       guard let (chars, code) = keys[a["key"] as? String ?? "return"] else { throw Failure(message: "unknown key") }
       var mods: NSEvent.ModifierFlags = []
       for m in a["modifiers"] as? [String] ?? [] {
-        switch m {
-        case "cmd": mods.insert(.command)
+        switch normalizedModifier(m) {
+        case "command": mods.insert(.command)
         case "shift": mods.insert(.shift)
-        case "opt": mods.insert(.option)
-        case "ctrl": mods.insert(.control)
+        case "option": mods.insert(.option)
+        case "control": mods.insert(.control)
         default: break
         }
       }
@@ -1520,7 +1622,8 @@
         try await page.snapshotPNG().write(to: url)
         return ["path": path, "method": "devtools"]
       }
-      let number = a["window"] as? Int
+      if a["window"] as? String == "library", app.settingsPresenter.libraryPresenter?.window == nil { throw Failure(message: "no Library window") }
+      let number = a["window"] as? String == "library" ? app.settingsPresenter.libraryPresenter?.window?.windowNumber : a["window"] as? Int
       guard let target = number.flatMap({ n in NSApp.windows.first { $0.windowNumber == n } }) ?? w.window
       else { throw Failure(message: "no window") }
       var keyTime: Double?

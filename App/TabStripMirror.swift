@@ -58,6 +58,7 @@ final class TabStripMirror {
     browsers.map { profile, browser in
       ["profile": profile.description, "context": browser.context.identifier,
        "tabs": browser.webContents.map { owner.tabID(for: $0)?.description ?? "" },
+       "pinStates": browser.webContents.map { ["id": owner.tabID(for: $0)?.description ?? "", "pinned": browser.isPinned($0)] as [String: Any] },
        "contents": browser.webContents.map(\.identifier),
        "active": browser.activeWebContent.flatMap { owner.tabID(for: $0)?.description } ?? "",
        "activeIsMember": browser.activeWebContent.map { active in browser.webContents.contains { $0 === active } } ?? true] as [String: Any]

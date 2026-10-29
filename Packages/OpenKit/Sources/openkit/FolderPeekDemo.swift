@@ -161,4 +161,41 @@ func runFolderPeekDemo(root: URL, check: (Bool, String) -> Void) async throws {
     _ = sweepModel.archiveExpiredTabs(now: Date())
     check(sweepFolder.expansion == .collapsed && sweepModel.tab(id: sweepTabs[1].id) == nil,
           "FP3 auto-archive clears a removed Today peek without substituting a child")
+    // Combined S6 / Today-sweeper flow through public commands and real SQLite.
+    for asSplit in [false, true] {
+        let label = asSplit ? "split" : "tab"
+        let profile = Profile(settings: ProfileSettings(autoArchiveAfter: .oneHour))
+        let panes = (0..<(asSplit ? 2 : 1)).map { Tab(url: URL(string: "https://example.invalid/shown-peek/\($0)")!) }
+        let shown: SidebarNode = asSplit ? .split(Split(panes: panes, focusedPaneID: panes[0].id)) : .tab(panes[0])
+        let pin = Tab(url: URL(string: "https://example.invalid/shown-pin")!)
+        let folder = Folder(children: [shown])
+        let space = Space(profileID: profile.id, pinned: [.tab(pin)], today: [.folder(folder)])
+        let window = BrowserWindowState(focusedSpaceID: space.id)
+        let live = BrowserModel(profiles: [profile], spaces: [space], windows: [window])
+        let manager = UndoManager(); manager.groupsByEvent = false; live.undoManager = manager
+        let archives = ProfileArchiveSink(directories: ProfileDirectories(root: root.appendingPathComponent("shown-peek-" + label))) { _ in profile.dataDirectoryName }
+        live.archiveSink = archives
+        live.selectNode(windowID: window.id, spaceID: space.id, nodeID: shown.id)
+        manager.removeAllActions()
+        live.setFolderExpansion(folderID: folder.id, .peeked(shown.id))
+        manager.undo(); let expandedUndo = folder.expansion == .expanded && !manager.canUndo
+        manager.redo()
+        for tab in panes { tab.lastActiveAt = Date(timeIntervalSince1970: 0) }
+        let protected = live.archiveExpiredTabs(now: Date()) == 0 && live.nextAutoArchiveExpiry() == nil
+        check(expandedUndo && folder.expansion == .peeked(shown.id) && protected && panes.allSatisfy { live.tab(id: $0.id) != nil },
+              "FP-AA \(label) selected peek survives sweep/undo/redo and has no expiry")
+        live.undoManager = nil
+        let before = Date()
+        live.selectNode(windowID: window.id, spaceID: space.id, nodeID: pin.id)
+        let after = Date()
+        let fresh = panes.allSatisfy { $0.lastActiveAt >= before && $0.lastActiveAt <= after }
+        check(fresh && live.nextAutoArchiveExpiry() == panes.map { $0.lastActiveAt.addingTimeInterval(3600) }.min(),
+              "FP-AA \(label) leaving selected peek starts fresh inactivity without an UndoManager")
+        _ = live.archiveExpiredTabs(now: after.addingTimeInterval(3601)); archives.flushAll()
+        let rows = await archives.store(for: profile.id).recent()
+        check(folder.expansion == .collapsed && panes.allSatisfy { live.tab(id: $0.id) == nil }
+              && Set(panes.map(\.id)).isSubset(of: Set(rows.map(\.id))),
+              "FP-AA \(label) unselected Today peek expires through SQLite and clears in the same sweep")
+    }
+
 }

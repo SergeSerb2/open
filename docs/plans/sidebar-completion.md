@@ -90,8 +90,9 @@ behavior, without any full reload of the tab list:
   and Figma, Notion Calendar; S2 02/0050). They are Arc's live-data
   integrations (accounts and site APIs) and are **post-v1** (Q3, lead
   decision 2026-10-26).
-- The Today auto-archive timer itself (status gap 4, app-shell Step G/H). The
-  banner (§3.11) only listens to it.
+- The original Today timer exclusion is superseded by sidebar item 6. The App
+  now composes `ExpirySweeper` and `TodayAutoArchiveController`; §3.11 uses the
+  resulting sweep report. Section 9 will reuse the same timer for Little Open.
 - The Arc toast look (status gap 15). New toasts here use the existing
   OpenFeatures toast; the hint (§3.12) has its own measured view.
 - "Archive Tabs Below" and "Archive Tabs Above" (Q16).
@@ -239,7 +240,7 @@ event, and registers no undo. Undo and redo call primitives only.
 | Reset all | Tabs ▸ Reset all tabs in this Space (`reset-all-tabs-in-space`) | — | none |
 | Clear | Tabs ▸ Clear Unpinned Tabs (`clear-unpinned-tabs`) | Today tab "Archive Item" ⌥ alternate "Archive Other Tabs" | Cmd+Shift+K |
 | Delete | — | Space "Delete Space"; folder "Delete"; selection "Delete" | Delete key on a focused folder row |
-| Archive folder | — | folder "Archive Folder" (above "Delete") | — |
+| Archive folder | — | folder "Delete" stores a restorable folder record (Q1) | — |
 | Turn Space into folder | — | Space "Export “<Space>” into Folder ▸"; Space Manager "…" ▸ "Turn into Folder ▸" | — |
 
 `isCommandEnabled` keys (App, app-shell §4.3): `expand-all-folders` when the
@@ -1058,7 +1059,7 @@ New checks B1–B14, T1–T3, FA1–FA7 in the existing demo, on the real
 |---|---|---|
 | `sidebar-click` | `node`, `modifiers` (`cmd`, `shift`, `option`) | Sends a real mouse-down/up `NSEvent` pair at the row's center through `NSApplication.sendEvent` (window events only, never the desktop) |
 | `sidebar-key` | `key`, `modifiers` | Makes the outline first responder, then sends a real key event |
-| `selection` | — | The window's selection IDs in order |
+| `selection` | optional `window` model UUID | The window's selection IDs in order, without focus changes |
 | `sidebar-menu` | `node`, `item` (title path, e.g. `Move to/Space 2`), `alternate` | Builds the same `NSMenu` the right-click shows and performs the item |
 | `alert` | `button` (title) | Presses a button of the window's attached alert sheet |
 | `hover` | `node` or `favorite`, `ms` | Sends real `mouseMoved` events over the target for `ms` |
@@ -1067,6 +1068,13 @@ New checks B1–B14, T1–T3, FA1–FA7 in the existing demo, on the real
 | `space-manager-drag` | `space`, `to` | Drives the grabber through real mouse events |
 | `archive-sweep` | `now` (ISO date) | Runs the App's sweep path with that date |
 | `defaults` | `key` | Reads a `UserDefaults` value |
+
+A3 also exposes `command` (native menu alias), `sidebar-drop` (the native
+outline's shared production intent), `sidebar-clear-state` (actual Clear hit
+geometry), and per-Profile SQLite `archive-list`. `hover leave=true` leaves the
+preview; Favorite geometry comes from the real collection layout. See
+`docs/automation.md` for validation and result fields. `archive-sweep` and E16
+remain the Part-A sweeper lane's responsibility.
 
 ### 4.5 e2e suite `sidebar-completion`
 
@@ -1235,7 +1243,7 @@ data dir, socket only, no desktop input. Checks E1–E19 in §5.4. Results go to
 | E15 | ⌥-Clear keeps the current tab and archives the rest |
 | E16 | `archive-sweep` with a date 13 h ahead archives a Today tab and shows the banner; "Got it" hides it; relaunch keeps it hidden |
 | E17 | First hide by the toolbar button shows the hint; `defaults key=open.sidebar.hideHintShown` is true; a second hide shows nothing |
-| E18 | Archive Folder → Library restore → the folder returns with its tabs and IDs |
+| E18 | Delete folder → confirm Delete Folder → Library restore → the nested folder returns with its tabs and IDs; relaunch preserves it (Q1) |
 | E19 | Drag the resize handle to pointer x 150: width 164; continue to x 60: hidden before the mouse-up; release; the hint shows (if not shown before); Cmd+S restores the width from before the drag; at width 200 the toolbar is compact (`snapshot`) |
 | E20 | Folder peek: select the 2nd tab of an expanded 3-tab folder, collapse the folder with `sidebar-click`: `tabs` shows the folder collapsed with one visible child; select a Today tab: still one visible child; relaunch: still peeked; `sidebar-click` on the folder: no visible child |
 
@@ -1376,11 +1384,34 @@ Each lane records its results in its own doc (§7). The lead fills this table wi
 | M5 | | |
 | S5 | | |
 | S5b | [#123](https://github.com/SergeSerb2/open/pull/123) | Fixed 0.5 s arm delay, no delay setting; HP1 stored-delay proofs; real-App Previews flow PASS (M5 gate: display-only rows as on main) |
-| S6 | Local `t3/sidebar-s6-folder-peek` (parent stacks; no PR) | FP1–FP9 and FP11 PASS; current App E20 suite 80/80 PASS, 0 interruptions, cleanup PASS. Paired FP10 **3/3 PASS** under the parent's conditional matched-plain gate; pinned parent plain p95 already >2 ms. Both negative controls fail their intended gates. The <1 ms median remains an outline-wide rendering follow-up. Current visual receipts are in the [receipt](sidebar-s6-receipt.md); no baseline image or visual threshold changed. |
+| S6 | `t3/sidebar-s6-folder-peek` (main 013cdb45 integrated; parent owns PR) | FP1–FP9 and FP11 PASS; merged harnesses sidebar 595/595, features 332/332, commands 307/307 and roundtrip PASS. App sidebar-completion 135/135 PASS including E20 16/16 and main auto-archive rows; sidebar 19/19 PASS including comparison, cleanup PASS. Paired FP10 3/3 PASS under the parent's conditional gate. Prior negative controls remain in the receipt; sub-1-ms median is outline-wide follow-up work. [Integration and prior receipts](sidebar-s6-receipt.md). |
 | A1 | [#126](https://github.com/SergeSerb2/open/pull/126) | DA1–DA5, HT1–HT3, GH1–GH5, CT1–CT3 PASS; e2e E7, E8, E17, E19; hint vs A0440 worst 1 pt / ΔE00 1.17; compact toolbar vs S2 06/0029 worst 1 pt / ΔE00 0.80; floor 164 |
-| A2 | | |
-| A3 | | |
+| A2 | [#127](https://github.com/SergeSerb2/open/pull/127) | HP3 measured folder card, HP7–HP10, SP5–SP6 PASS; e2e E11–E14 PASS (E14: same engine page and probe after Separate); banner trigger moves to the item-6 sweeper |
+| A3 | [#128](https://github.com/SergeSerb2/open/pull/128) | Selection-aware menu/App-key handlers, copy/atomic New Space actions, native automation helpers, and 105/105 real-App checks. E1–E15 and E17–E19 PASS. E16/`archive-sweep` belong to Part A; E20/FP belong to S6. See the scoped receipt below. |
 | C | | |
+
+A3 scoped receipt, 2026-10-28 (local branch, stacked on A2 `2d51f14a`):
+
+| Exact command | Result |
+|---|---|
+| `~/Library/Caches/OpenRE/scripts/heavy.sh tools/verify-all.sh --only features-render,sidebar-render,commands-demo` | PASS: package build; commands-demo 232/232; sidebar-render 564 passed, 0 failed, SW1–SW4 skipped by Q5; features-render 286/286 |
+| `~/Library/Caches/OpenRE/scripts/heavy.sh tools/build.sh` | Debug App build PASS |
+| `/usr/bin/lockf /tmp/open-onscreen-e2e.lock tools/e2e/engine_e2e.py --style chrome --only sidebar-completion` | 105/105 suite checks, plus engine fingerprint and owned-process cleanup PASS |
+| `/usr/bin/lockf /tmp/open-onscreen-e2e.lock tools/e2e/engine_e2e.py --style chrome --only app-actions` | 47/47 suite checks plus engine fingerprint and owned-process cleanup: 49/49 reported PASS |
+| `/usr/bin/lockf /tmp/open-onscreen-e2e.lock tools/e2e/engine_e2e.py --style chrome --only sidebar` | 18/18 suite checks plus engine fingerprint and cleanup PASS; durable-profile row retains its existing profiles-suite SKIP. Comparison PASS: worst position 1 pt, ΔE00 1.55 |
+
+Receipts: `docs/engine-spike/results-sidebar-completion-debug.json`,
+`results-app-actions-debug.json`, `results-sidebar-debug.json`, and
+`comparison-sidebar.md`; local gate logs are retained in `.re/a3/verify-final/`.
+The completion run uses a disposable copied Open bundle/preferences domain,
+synthetic data root, the recorded fork distribution, and its existing engine
+fingerprint and owned-window/process cleanup. No Arc launch, desktop input,
+engine-tree build/edit, unit tests, push, or PR. E4 proves the shared production
+drop intent, not OS drag-session hit testing. E16 and `archive-sweep` are left
+out because they depend on the separate Part-A sweeper/banner work. E20/FP
+remain outside A3. Earlier implementation runs caught the coordinate wrapper
+conversion and same-value folder-rename undo entry; both are fixed in the final
+passing run. The full PR gate is not claimed by this scoped, local delivery.
 
 ## Appendix — Lead decisions (2026-10-26)
 
@@ -1414,3 +1445,48 @@ These supersede the entries above where they conflict. Evidence: `docs/re/intera
 - New Step S6: a collapsed folder keeps its last active child visible, the folder glyph shows three dots, and the state round-trips as Arc's `expandedItems` `peeked` (§3.17).
 - Q3: Open v1 keeps two Previews switches, "Folders" and "Pinned tabs and Favorites", as an Open product choice. Arc's other sources (Google Calendar, Google Mail, Outlook Calendar, Outlook Mail, Recent pages on Linear, Notion, and Figma, Notion Calendar) are Arc's live-data integrations and are post-v1.
 - Previews delay: Open's delay setting is removed to match Arc (no delay control in Arc's sheet, S2 02/0050). The hover delay is fixed at 0.5 s (Open choice; one Arc sample ≈ 0.42 s) (`HoverPreviewMetrics.armDelay`). Step S5b.
+
+
+## Item 6 implementation receipt (2026-10-28, local branch)
+
+`t3/sidebar-auto-archive`, based on A2 `2d51f14a`, implements Part A of the
+item 6/7 plan. `ExpirySweeper` owns one non-repeating timer and the workspace
+wake observer. `TodayAutoArchiveController` observes the real model, sweeps once
+per event, and triggers the existing education view only after a shown-Space
+archive. Settings/undo, tab activity, and ancestry changes re-arm it. The clock
+and automation commands are documented in `docs/automation.md`.
+
+`features-render` AA1–AA12 and both AA-visible checks (300/300 total) pass through snapshots, Profile SQLite stores, the
+production services, real sidebar/banner views, and the declared fake web host.
+Dates in SQLite assertions use the stored Unix-seconds representation. The real
+App suite retains all 64 baseline checks and adds five E16 and seven AA_APP
+checks: 76/76 pass, including the natural Timer callback without a manual sweep.
+Current local receipts are under `.re/auto-archive-visible/`; generated
+`docs/engine-spike/*-debug.json` files are restored to the pre-item-6 versions.
+
+Idle proof: with the App running, all Profiles at Never, no browser windows, and
+no live pages, `archive-state` reports `running:true`, `timerArmed:false`,
+`armedTimerCount:0`, `nextExpiry:null`, and sweep count 3 before and after the
+sample. `metrics interval=1` reports 0% CPU for Browser, GPU, both utilities,
+and the spare renderer. Snapshot modification time stays unchanged over the
+idle interval. This bounded sample does not claim every browsing
+workload has zero idle CPU.
+
+Section 9 must combine Today and Little Open deadline/sweep closures into this
+same scheduler and remove the existing Little Open 60 s poll. No Little Open
+behavior changed here. Banner geometry remains unmeasured against Arc. A wake
+notification was tested; a physical machine sleep/wake was not required.
+
+
+Item 6 parent-review correction: both model expiry and next-deadline queries now
+exclude the focused Space's selected tab in every showing window, including all
+panes of a selected split. Remembered selections in inactive Spaces do not count
+as shown. When the final window stops showing a tab (selection, Space switch,
+or close), the existing command stamps activity and adds no undo step. A retained
+closed window uses a nonpersisted visibility flag; reopen restores protection.
+`AA-visible` proves that a selected expired Today tab survives with no timer or
+sweep-count growth over 0.2 s, then receives a fresh deadline on deselection.
+`AA-visible-split` covers multiple windows, all panes, Space switching, close,
+and reopen. The pre-fix FAIL on `6d60371e` is retained at
+`.re/auto-archive-visible/before-features-render.log`. E16 now keeps a selected
+Today tab while archiving an unselected expired peer at the same fake time.

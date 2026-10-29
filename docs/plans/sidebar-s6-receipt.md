@@ -1,7 +1,79 @@
-# Sidebar S6 local handoff
+# Sidebar S6 handoff
 
-Base: 2d51f14a1207c00157edb90f51459d97b7b1096b (A2 over A1).
-Branch: t3/sidebar-s6-folder-peek. Local only; no push or PR.
+Original S6 base: 2d51f14a1207c00157edb90f51459d97b7b1096b (A2 over A1).
+Branch: t3/sidebar-s6-folder-peek. Parent owns the PR/stack.
+
+## Integration with origin/main 013cdb45 (2026-10-28)
+
+Merged `013cdb45d42678f16b27087616b854b76c32c2c4` into the S6 head
+`ff26852f5409d566174f85c02cffeaa53ac5ad1a`. This brings A2 #127 (HP11–HP14),
+A3 #128, #129 spring readbacks, and #130 Today auto-archive into the same branch.
+No rebase, squash, baseline-image update, visual-limit change or PR.
+
+Resolutions and combined behavior:
+
+- `features-render/CompletionChecks.swift`: keep async main previews and S6's
+  async folder flow. HP13 now collapses its fixture before hover, preserving the
+  expanded-folder exclusion while proving the new card-scroll behavior.
+- `tools/e2e/engine_e2e.py`: keep both E20 and main's A3/auto-archive helpers and
+  their calls. One definition of every Python helper, audited via AST. A3's E1
+  fully-collapsed range fixture selects an outside tab before collapse; a selected
+  direct child now correctly creates a peek. The initial assertion failure is
+  retained as a fixture-integration failure, not an environment interruption.
+- `docs/status.md`: keep main's A3 grouping/copy/archive/restore rows and S6's
+  motion/peek rows. §9, followups and automation docs reflect the combined branch.
+- Git silently retained two `sidebar-click` dispatch cases. Remove the obsolete
+  inline case and add its motion capture/result fields to main's existing helper.
+  Preserve exact-window activation, modifier handling (including alt/opt), A3
+  selection results, and S6 native duration/curve/presentation sampling. The final
+  dispatch-label audit has zero duplicates. `tabs sidebar:true` keeps its native
+  row readback; plain `tabs` remains an array for main's sweeper flows.
+- Model property changes use `registerChange → registerUndo → recordUndo →
+  commitMutation`, including no UndoManager/disabled registration; undo/redo also
+  commit. The selected direct tab or all selected split panes remain in the shown
+  set when their folder is logically peeked. A sidebar-only peek does not make an
+  unselected page shown. Expiry clears stale peek in the same sweep. Six new
+  combined public-command/undo/SQLite checks pass in `commands-demo` (tab and split:
+  selected protection, fresh inactivity on leaving without UndoManager, expiry and
+  clearing). No second bookkeeping store or duplicate commit was added.
+- Keep S6's per-folder incremental outline caches/clean layer guards alongside
+  A3's shared drop path and stale keyboard-focus/deletion handling. Keep folder
+  expand 0.20 s easeOut/collapse 0.25 s default, unrelated rowStructure 0.22 s,
+  main's spring readbacks and existing peek geometry/color tokens.
+
+| Requested check | Result |
+|---|---|
+| `git diff --check` | PASS |
+| `~/Library/Caches/OpenRE/scripts/heavy.sh tools/verify-all.sh --only sidebar-render,features-render,commands-demo,roundtrip --keep-logs` | PASS: sidebar-render 595/595 (inherited SW1–SW4 skips), features-render 332/332 including HP11–HP14 and AA flows, commands-demo 307/307 including all six FP-AA checks, roundtrip PASS. Build 82 s; checks 108/42/2/1 s. |
+| `~/Library/Caches/OpenRE/scripts/heavy.sh tools/verification/folder-peek-bench.py` | PASS 3/3 under the parent's unchanged conditional gate; table below. |
+| `~/Library/Caches/OpenRE/scripts/heavy.sh tools/build.sh` | PASS, rebuilt actual Debug App. |
+| `/usr/bin/lockf /tmp/open-onscreen-e2e.lock tools/e2e/engine_e2e.py --style chrome --only sidebar-completion` | Final 135/135 PASS, including E20 16/16 and every main auto-archive row; 0 interruptions, cleanup PASS. Initial invocation failed E1's fixture assumption; corrected fixture invocation passes. |
+
+FP10 times are ms; p95 values use full printed precision. Loads show attempt start
+and transition sample. Every attempt also has equal native scroll layouts/frame
+18/18, peek p95 ≤8.33 ms and ≤baseline×1.10+0.05 ms.
+
+| Attempt | Load1 start / sample | Parent plain p95 | Branch plain p95 | Peek median / p95 | Computed limit | Baseline / peek scroll p95 | Result |
+|---|---|---:|---:|---|---:|---|---|
+| 1 | 10.86 / 10.63 | 5.425 | 4.884 | 2.68 / 4.708 | 5.422 | 6.43 / 6.85 | PASS |
+| 2 | 10.63 / 10.59 | 5.378 | 5.653 | 2.52 / 4.701 | 6.268 | 4.83 / 4.80 | PASS |
+| 3 | 10.59 / 10.62 | 5.145 | 4.542 | 2.38 / 4.205 | 5.046 | 4.10 / 4.04 | PASS |
+
+The sub-1-ms median goal remains open. The prior negative-control measurements
+below belong to ff26852f; this merge reruns the required default paired gate.
+Private evidence: `.re/s6/merge-verify.log`, `merge-fp10.log`, `merge-app-build.log`,
+`merge-e2e-completion-1.log` (fixture failure), `merge-e2e-completion-2.log` (135 pass),
+`merge-completion-failure-1.json`, `merge-results-completion-final.json`. Harness logs:
+`/var/folders/s6/_07cr4w13vsg_myjkv9ldpqc0000gn/T/open-verify-20261028-170844.TGtqBW/`.
+`/usr/bin/lockf /tmp/open-onscreen-e2e.lock tools/e2e/engine_e2e.py --style chrome --only sidebar`
+**PASS 19/19**, including `comparison`, with the existing profile-storage SKIP
+owned by the profiles suite. Zero interruptions; cleanup PASS. Evidence:
+`merge-e2e-sidebar-1.log`, `merge-results-sidebar-final.json`,
+`merge-sidebar-window.png`, `merge-comparison-sidebar.md` and
+`merge-E20-folder-peek.png`. Generated `docs/engine-spike/*` output was restored
+before committing. No focus retries were needed; the A3 fixture correction was
+a functional integration fix. All dependent checks completed in the foreground.
+
 
 ## Matched plain-toggle and rendering round after fffe0395 (2026-10-28)
 

@@ -78,6 +78,10 @@ public final class WebContentContainer: NSView {
     public var style = SpaceThemeStyle.defaultTheme(system: .dark)
     public private(set) var slots: [PaneSlotView] = []
     private var cache: [ItemID: any WebContentHost] = [:]
+    // Preview hosts leave the display cache, but retain the same metadata bridge.
+    private var previewHosts: [ItemID: any WebContentHost] = [:]
+    /// Synchronously returns the preview before selection, host acquisition, or teardown.
+    public var onReturnPreviewHost: (() -> Void)?
     private var generations: [ItemID: Int] = [:]
     private var hiddenLRU: [ItemID] = []
     private var nextGeneration = 0
@@ -113,9 +117,12 @@ public final class WebContentContainer: NSView {
         }
     }
     @available(*, unavailable) required init?(coder: NSCoder) { fatalError() }
-    isolated deinit { if let monitor { NSEvent.removeMonitor(monitor) }; for host in cache.values { host.close() } }
+    isolated deinit { if let monitor { NSEvent.removeMonitor(monitor) }; for host in Array(cache.values) + Array(previewHosts.values) { host.close() } }
     public func show(tabIDs: [ItemID], focusedTabID: ItemID, orientation: SplitOrientation, fractions: [Double], spaceID: SpaceID, profileID: ProfileID) {
         guard (1...4).contains(tabIDs.count), Set(tabIDs).count == tabIDs.count, tabIDs.contains(focusedTabID) else { return }
+        // Selection may come from keyboard cycling, automation, or model observers.
+        // Return the preview before changing slots or refreshing any selected host.
+        if ids != tabIDs || focused != focusedTabID || currentSpace != spaceID || currentProfile != profileID { onReturnPreviewHost?() }
         if let currentProfile, currentProfile != profileID { closeAll() }
         self.currentProfile = profileID; currentSpace = spaceID; showGeneration += 1; let generation = showGeneration
         let old = ids, previousFocus = focused
@@ -138,7 +145,10 @@ public final class WebContentContainer: NSView {
         }
     }
     private func ensureHost(_ id: ItemID) {
-        guard cache[id] == nil, let tab = tabProvider(id), let profile = currentProfile,
+        if previewHosts[id] != nil { onReturnPreviewHost?() }
+        // Every selection/refresh path comes here. Never reacquire and load a host
+        // that is still in the preview, even if its owner cannot return it.
+        guard previewHosts[id] == nil, cache[id] == nil, let tab = tabProvider(id), let profile = currentProfile,
               tab.live.sleepPhase == .live || tab.live.sleepPhase == .frozen else { return }
         guard let host = factory.makeHost(tabID: id, profileID: profile, url: nil) else { return }
         bind(host, as: id); host.load(tab.url)
@@ -147,35 +157,43 @@ public final class WebContentContainer: NSView {
         nextGeneration += 1; let generation = nextGeneration
         cache[id] = host; generations[id] = generation; tabProvider(id)?.live.hasWebContent = true
         host.onURLChange = { [weak self, weak host] url in
-            guard let self, let host, self.generations[id] == generation, self.cache[id] === host else { return }
+            guard let self, let host, self.generations[id] == generation, self.registeredHost(for: id) === host else { return }
             // No engine-to-model bridge exists before the App target; property writes are the bridge.
             self.tabProvider(id)?.url = url; self.onTabURLChanged?(id, url); self.metadataChanged(id)
         }
         host.onTitleChange = { [weak self, weak host] title in
-            guard let self, let host, self.generations[id] == generation, self.cache[id] === host else { return }
+            guard let self, let host, self.generations[id] == generation, self.registeredHost(for: id) === host else { return }
             self.tabProvider(id)?.title = title; self.metadataChanged(id)
         }
         host.onLoadingChange = { [weak self, weak host] loading in
-            guard let self, let host, self.generations[id] == generation, self.cache[id] === host else { return }
+            guard let self, let host, self.generations[id] == generation, self.registeredHost(for: id) === host else { return }
             self.tabProvider(id)?.live.isLoading = loading; self.metadataChanged(id)
         }
         host.onFaviconChange = { [weak self, weak host] data in
-            guard let self, let host, self.generations[id] == generation, self.cache[id] === host else { return }
+            guard let self, let host, self.generations[id] == generation, self.registeredHost(for: id) === host else { return }
             self.tabProvider(id)?.live.faviconPNG = data
         }
         host.onPageBackgroundChange = { [weak self, weak host] _ in
-            guard let self, let host, self.generations[id] == generation, self.cache[id] === host else { return }
+            guard let self, let host, self.generations[id] == generation, self.registeredHost(for: id) === host else { return }
             self.slots.first { $0.tabID == id }?.paneChrome?.update()
         }
         host.onLiveStateChange = { [weak self, weak host] state in
-            guard let self, let host, self.generations[id] == generation, self.cache[id] === host else { return }
+            guard let self, let host, self.generations[id] == generation, self.registeredHost(for: id) === host else { return }
             self.applyLiveState(state, for: id); self.metadataChanged(id)
         }
         host.shouldNavigate = { [weak self, weak host] url, flags in
-            guard let self, let host, self.generations[id] == generation, self.cache[id] === host else { return false }
+            guard let self, let host, self.generations[id] == generation, self.registeredHost(for: id) === host else { return false }
             return self.onLinkClicked?(id, url, flags) ?? true
         }
         applyLiveState(host.liveState, for: id)
+    }
+    private func registeredHost(for id: ItemID) -> (any WebContentHost)? { cache[id] ?? previewHosts[id] }
+    /// Install the normal callbacks before a new preview starts loading, or renew
+    /// them after takeHost invalidated a cached host's generation.
+    public func connectPreviewHost(_ host: any WebContentHost, for id: ItemID) {
+        bind(host, as: id)
+        previewHosts[id] = cache.removeValue(forKey: id)
+        hiddenLRU.removeAll { $0 == id }
     }
     private func applyLiveState(_ state: WebContentLiveState, for id: ItemID) {
         guard let live = tabProvider(id)?.live else { return }
@@ -184,7 +202,7 @@ public final class WebContentContainer: NSView {
         live.isAudible = state.isAudible; live.isCrashed = state.isCrashed
     }
     private func metadataChanged(_ id: ItemID) {
-        if let tab = tabProvider(id), let host = cache[id] {
+        if let tab = tabProvider(id), let host = registeredHost(for: id) {
             tab.live.canGoBack = host.canGoBack; tab.live.canGoForward = host.canGoForward
             if focused == id { onFocusedMetadata?(tab.title) }
         }
@@ -200,6 +218,7 @@ public final class WebContentContainer: NSView {
     }
     public func refreshPlaceholders() { for id in ids { ensureHost(id) }; updateSlots() }
     public func clearSelection() {
+        onReturnPreviewHost?()
         showGeneration += 1
         for id in ids {
             cache[id]?.view.isHidden = true; cache[id]?.view.removeFromSuperview()
@@ -215,6 +234,7 @@ public final class WebContentContainer: NSView {
         generations[id] = nil; hiddenLRU.removeAll { $0 == id }; return cache.removeValue(forKey: id)
     }
     public func adopt(_ host: any WebContentHost, for id: ItemID) {
+        previewHosts[id] = nil
         guard factory.adoptHost(host, as: id) else { host.close(); return }
         if cache[id] !== host { cache[id]?.close(); bind(host, as: id) }
         if !ids.contains(id) {
@@ -224,8 +244,9 @@ public final class WebContentContainer: NSView {
         refreshPlaceholders(); trimCache()
     }
     public func closeHost(for id: ItemID) {
+        if previewHosts[id] != nil { onReturnPreviewHost?() }
         generations[id] = nil
-        let host = cache.removeValue(forKey: id)
+        let host = cache.removeValue(forKey: id) ?? previewHosts.removeValue(forKey: id)
         hiddenLRU.removeAll { $0 == id }
         host?.close()
         if host != nil {
@@ -243,7 +264,10 @@ public final class WebContentContainer: NSView {
         live.devToolsOpen = false; live.lastFormInteractionAt = nil
         if includingFavicon { live.faviconPNG = nil }
     }
-    public func closeAll() { for id in Array(cache.keys) { closeHost(for: id) } }
+    public func closeAll() {
+        if !previewHosts.isEmpty { onReturnPreviewHost?() }
+        for id in Set(cache.keys).union(previewHosts.keys) { closeHost(for: id) }
+    }
     private func trimCache() { while hiddenLRU.count > Self.maxCachedHiddenHosts { closeHost(for: hiddenLRU[0]) } }
     public func focus(tabID: ItemID) {
         guard ids.contains(tabID) else { return }; focused = tabID; updateSlots(); cache[tabID]?.focus(); metadataChanged(tabID)

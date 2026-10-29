@@ -42,10 +42,31 @@ enum AppCommand {
 
 import OpenEngine
 import OpenModel
+import OpenSidebar
 
 extension EngineWebContentHostFactory {
+  private func selectionCommandContext(for id: String) -> SidebarContext? {
+    guard ["pin-unpin-tab", "duplicate-tab", "new-folder"].contains(id),
+      let controller, !controller.context.selection.isEmpty else { return nil }
+    if id == "new-folder" {
+      guard let outline = controller.sidebar.focusedOutline, let responder = window?.firstResponder as? NSView,
+        !(responder is NSTextView), !(responder is NSTextField),
+        responder === outline || responder.isDescendant(of: outline) else { return nil }
+    }
+    return controller.context
+  }
+
+  private func performSelectionAppCommand(_ id: String) -> Bool? {
+    guard let context = selectionCommandContext(for: id) else { return nil }
+    guard context.isSelectionCommandEnabled(id) else { return false }
+    let result = context.performSelectionCommand(id)
+    if result { app.scheduleSave(); app.scheduleMenuRebuild() }
+    return result
+  }
+
   func isAppCommandEnabled(_ original: String, enabledKey: String? = nil, payload: String? = nil) -> Bool {
     let id = AppCommand.canonicalID(original)
+    if let context = selectionCommandContext(for: id) { return context.isSelectionCommandEnabled(id) }
     if SystemCommandActions.selectors[id] != nil { return SystemCommandActions.isEnabled(id) }
     if AppCommand.featureIDs.contains(id) || id.hasPrefix("focus-split-pane-") {
       return controller?.isCommandEnabled(id, enabledKey: enabledKey ?? EnabledKey.currentTabInSplit) == true
@@ -90,6 +111,7 @@ extension EngineWebContentHostFactory {
     let id = AppCommand.canonicalID(original)
     if SystemCommandActions.selectors[id] != nil { return SystemCommandActions.perform(id) }
     if AppCommand.featureIDs.contains(id) || id.hasPrefix("focus-split-pane-") { return false }
+    if let result = performSelectionAppCommand(id) { return result }
     guard isAppCommandEnabled(id, payload: payload) else { return false }
     if id.hasPrefix("go-to-space-"), let n = Int(id.split(separator: "-").last ?? ""), n <= model.spaces.count {
       if let uuid = payload.flatMap(UUID.init(uuidString:)), let space = model.space(id: SpaceID(rawValue: uuid)) { focus(space: space) }

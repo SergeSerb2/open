@@ -464,6 +464,19 @@ extension SidebarView {
     /// The focused page's tab list (checks and benches).
     public var focusedOutline: NSOutlineView? { pager.currentPage?.outline }
 
+    public func favoriteFrame(tabID: ItemID) -> CGRect? {
+        guard let index = favorites.tabs.firstIndex(where: { $0.id == tabID }),
+              let attributes = favorites.collection.collectionViewLayout?.layoutAttributesForItem(at: IndexPath(item: index, section: 0)) else { return nil }
+        return convert(attributes.frame, from: favorites.collection)
+    }
+
+    /// Actual divider hit region; visibility follows the real hover state.
+    public func clearTodayFrame() -> CGRect? {
+        guard let control = clearControl, let cell = control.view as? DividerCellView else { return nil }
+        return convert(cell.clearHitRect, from: cell)
+    }
+    public var isClearTodayVisible: Bool { (clearControl?.view as? DividerCellView)?.showsClear == true }
+
     /// Actual Clear control and its displayed strings, for host diagnostics.
     public var clearControl: (view: NSView, title: String, tooltip: String)? {
         guard let page = pager.currentPage else { return nil }

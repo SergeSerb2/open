@@ -51,7 +51,7 @@ public enum Motion {
     public static let hoverFade: CFTimeInterval = 0.08
     /// Selected fill moving to a new row.
     public static let selectionFade: CFTimeInterval = 0.12
-    /// Folder expand and collapse, row insert and remove (< 0.5 s measured).
+    /// General row insert/remove. Folder expansion has dedicated tokens below.
     public static let rowStructure: CFTimeInterval = 0.22
     /// S2 folder motion fit: RE interaction-states §20.12 (not general row edits).
     public static let folderExpand: CFTimeInterval = 0.20

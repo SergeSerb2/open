@@ -53,12 +53,14 @@ public final class HoverPreviewController {
         guard let tab = context.model.tab(id: id), let profile = context.focusedSpace?.profileID ?? context.model.profiles.first?.id else { return false }
         var page = container.takeHost(for: id)
         reusedCachedHost = page != nil
-        if page == nil {
+        let needsLoad = page == nil
+        if needsLoad {
             page = factory.makeHost(tabID: id, profileID: profile, url: nil)
             makeHostCount += 1
-            page?.load(tab.url)
         }
         guard let page else { return false }
+        container.connectPreviewHost(page, for: id)
+        if needsLoad { page.load(tab.url) }
         let card = PreviewCardView(content: page.view, appearance: appearance)
         card.onClick = { [weak self] in self?.choose(id) }
         card.onPointer = { [weak self] inside in self?.context.hoverPreviews.setPointerInsidePreview(inside) }
@@ -86,19 +88,28 @@ public final class HoverPreviewController {
         guard let card, let request else { return }
         let bounds = root.bounds, anchor = root.convert(request.anchorInWindow, from: nil)
         let m = HoverPreviewMetrics.self
-        let frame: CGRect
+        let preferredWidth: CGFloat, preferredHeight: CGFloat, gap: CGFloat, preferredY: CGFloat
+        let availableHeight = max(0, bounds.height - 2 * m.windowInset)
         switch request.kind {
         case .page:
-            let h = min(m.pageMaxHeight, bounds.height - 2 * m.windowInset)
-            frame = CGRect(x: context.sidebarWidth + m.sidebarGap, y: clamp(anchor.minY - m.windowInset, h, bounds), width: m.pageWidth, height: h)
+            preferredWidth = m.pageWidth; preferredHeight = m.pageMaxHeight; gap = m.sidebarGap
+            preferredY = anchor.minY - m.windowInset
         case .folder:
-            let h = (card.content as? FolderPreviewView)?.fittingSize.height ?? 200
-            frame = CGRect(x: context.sidebarWidth + m.folderSidebarGap, y: clamp(anchor.midY - h / 2, h, bounds), width: m.folderWidth, height: h)
+            preferredWidth = m.folderWidth; preferredHeight = (card.content as? FolderPreviewView)?.fittingSize.height ?? 200
+            gap = m.folderSidebarGap
+            preferredY = anchor.midY - min(preferredHeight, availableHeight) / 2
         }
-        card.frame = frame
-    }
-    private func clamp(_ y: CGFloat, _ h: CGFloat, _ bounds: CGRect) -> CGFloat {
-        min(max(HoverPreviewMetrics.windowInset, y), max(HoverPreviewMetrics.windowInset, bounds.height - HoverPreviewMetrics.windowInset - h))
+        // When the sidebar leaves less than a useful card width, shrink to fit
+        // to its right. Never cross the window's right edge minus 8 pt.
+        let right = max(bounds.minX, bounds.maxX - 8)
+        let x = min(max(bounds.minX, bounds.minX + context.sidebarWidth + gap), right)
+        let width = min(preferredWidth, max(0, right - x))
+        let height = min(preferredHeight, availableHeight)
+        let top = min(bounds.maxY, bounds.minY + m.windowInset)
+        let y = min(max(top, preferredY), max(top, bounds.maxY - m.windowInset - height))
+        let frame = CGRect(x: x, y: y, width: width, height: height)
+        if card.frame != frame { card.frame = frame }
+        context.hoverPreviews.setPreviewFrameInWindow(root.convert(card.frame, to: nil))
     }
 
     /// A click in the page card selects its tab; the container then shows the same host.
@@ -110,6 +121,7 @@ public final class HoverPreviewController {
 
     /// Removes the card. A page host returns to the container's hidden cache (LRU and sleep).
     public func hide(animated: Bool) {
+        context.hoverPreviews.setPreviewFrameInWindow(nil)
         guard let card else { request = nil; return }
         let page = host, id = hostTabID
         self.card = nil; host = nil; hostTabID = nil; request = nil

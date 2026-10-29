@@ -59,7 +59,7 @@ struct SidebarMenus {
             item(context.title(of: space), enabled: current != Set([space.id]), .moveNodesToSpace(ids: ids, space: space.id))
         }
         items.append(.separator())
-        items.append(item("New Space…", .moveNodesToNewSpace(ids: ids)))
+        items.append(item("New Space…", enabled: context.canMoveNodesToNewSpace(ids), .moveNodesToNewSpace(ids: ids)))
         parent.submenu = menu(items)
         return parent
     }
@@ -68,9 +68,17 @@ struct SidebarMenus {
     func selection(_ ids: [ItemID]) -> NSMenu {
         let folders = ids.filter { context.model.node(id: $0)?.folder != nil }
         let tabs = ids.filter { context.model.node(id: $0).map { $0.folder == nil } ?? false }
+        func hasLinks(_ node: SidebarNode) -> Bool {
+            switch node {
+            case .tab: return true
+            case .split(let split): return !split.panes.isEmpty
+            case .folder(let folder): return folder.children.contains(where: hasLinks)
+            }
+        }
+        let canCopy = ids.contains { context.model.node(id: $0).map(hasLinks) ?? false }
         var items: [NSMenuItem] = [
-            item("Copy Links", .copyLinks(ids: ids, markdown: false)),
-            item("Copy links as Markdown", .copyLinks(ids: ids, markdown: true)),
+            item("Copy Links", enabled: canCopy, .copyLinks(ids: ids, markdown: false)),
+            item("Copy links as Markdown", enabled: canCopy, .copyLinks(ids: ids, markdown: true)),
             .separator(),
             item("New Folder with \(ids.count) Items", .newFolderFromSelection(ids: ids)),
             moveTo(ids),
