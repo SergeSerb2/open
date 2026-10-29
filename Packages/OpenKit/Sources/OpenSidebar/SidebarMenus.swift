@@ -102,9 +102,9 @@ struct SidebarMenus {
         }
     }
 
-    /// Share ▸ with the system share menu for the tab's URL.
+    /// Share… asks the App to anchor the system picker at this tab's row.
     private func share(_ tab: Tab) -> NSMenuItem {
-        NSSharingServicePicker(items: [tab.url]).standardShareMenuItem
+        item("Share…", .share(nodeID: tab.id))
     }
 
     /// Today (unpinned) tab: capture session 2, 08-folder-preview frame 0050.
@@ -240,9 +240,8 @@ struct SidebarMenus {
         ])
     }
 
-    /// Space: right-click on the Space title or on empty sidebar space (F0117, A0414).
-    func space(_ space: Space) -> NSMenu {
-        let profile = NSMenuItem(title: "Set Profile", action: nil, keyEquivalent: "")
+    /// Shared Set Profile choices, also opened by Spaces ▸ Change Profile.
+    func profile(_ space: Space) -> NSMenu {
         var profiles: [NSMenuItem] = context.model.profiles.map { p in
             let i = item(p.name, .setSpaceProfile(space: space.id, profile: p.id))
             i.state = p.id == space.profileID ? .on : .off
@@ -250,7 +249,13 @@ struct SidebarMenus {
         }
         profiles.append(.separator())
         profiles.append(item("New Profile…", .newProfile(space: space.id)))
-        profile.submenu = menu(profiles)
+        return menu(profiles)
+    }
+
+    /// Space: right-click on the Space title or on empty sidebar space (F0117, A0414).
+    func space(_ space: Space) -> NSMenu {
+        let profile = NSMenuItem(title: "Set Profile", action: nil, keyEquivalent: "")
+        profile.submenu = self.profile(space)
 
         let export = NSMenuItem(title: "Export “\(context.title(of: space))” into Folder", action: nil, keyEquivalent: "")
         export.submenu = menu(context.model.spaces.map { other in
@@ -265,7 +270,7 @@ struct SidebarMenus {
             .separator(),
             item("New Folder", .newFolder(in: .spacePinned(space.id))),
             .separator(),
-            item("Share Space…", .shareSpace(space.id)),
+            item("Share Space…", enabled: false, .shareSpace(space.id)),
             export,
             .separator(),
             item("Manage Spaces…", .manageSpaces),
