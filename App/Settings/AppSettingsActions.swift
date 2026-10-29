@@ -48,6 +48,11 @@ final class AppSettingsActions: SettingsActions, LibraryActions, DownloadsProvid
     library?.registerStores(archives: archives, histories: histories)
     libraryPresenter?.show(section: section); NSApp.activate(); app.scheduleMenuRebuild()
   }
+  /// Use the Library button's view model and confirmation dialog unchanged.
+  func requestClearArchive() {
+    showLibrary(section: .archive)
+    library?.requestClearArchive()
+  }
   func prepareForRemoteSuggestions(profileID: ProfileID) -> Bool { settingsPresenter.prepareForRemoteSuggestions(profileID: profileID) }
   func refreshDownloads() { downloadRevision += 1 }
   @ObservationIgnored private var spaceManager: SpaceManagerView?

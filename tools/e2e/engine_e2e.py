@@ -5766,8 +5766,9 @@ def sidebar_tab_switcher_checks(app, require, tmp):
     old_include = app.call('defaults', key=include_key); old_ninth = app.call('defaults', key=ninth_key)
     app.call('library-close'); app.call('window-focus', id=state()['id'], activate=True)
     first_space = app.call('space-create', title='Tab Shortcuts A', profile='Tab Shortcuts')
+    created_before_empty = switcher()['created']
     key('9', ['cmd']); key('tab', ['ctrl']); release()
-    require('TS_empty_window_keys_are_safe', selected() == '' and not switcher()['active'] and not switcher()['created'] and not switcher()['monitoringModifiers'], switcher=switcher())
+    require('TS_empty_window_keys_are_safe', selected() == '' and not switcher()['active'] and switcher()['created'] == created_before_empty and not switcher()['monitoringModifiers'], switcher=switcher())
     favorite = opened('favorite'); app.call('favorite', tab=favorite)
     pin = opened('pin'); app.call('pin', tab=pin)
     today = [opened('today%d' % i) for i in range(3)]
@@ -5825,6 +5826,187 @@ def sidebar_tab_switcher_checks(app, require, tmp):
     require('TS_visible_view_count_bounded', bounded['viewCount'] == 1 and len(bounded['visible']) <= 5, switcher=bounded)
     key('escape'); release()
     app.call('defaults', key=include_key, value=old_include); app.call('defaults', key=ninth_key, value=old_ninth)
+
+def sidebar_intents_menu_checks(app, results, require, tmp):
+    """Section 1 items 9–10: use real NSMenu actions; always cancel native UI."""
+    def state(): return app.call('window-state')
+    def tree(): return app.call('sidebar-tree')
+    def structure(value):
+        if isinstance(value, dict): return {k: structure(v) for k, v in value.items() if k != 'loaded'}
+        if isinstance(value, list): return [structure(v) for v in value]
+        return value
+    def spaces(): return app.call('spaces')
+    def roots(section): return [n['id'] for n in tree()[section]]
+    def key(name, mods=()): return app.call('sidebar-key', key=name, modifiers=list(mods))
+    def undo(): return key('z', ['cmd'])
+    def opened(name, pinned=False):
+        path = Path(tmp) / ('intents-' + name.lower().replace(' ', '-') + '.html')
+        path.write_text('<title>%s</title><h1>%s</h1>' % (name, name))
+        node = app.call('open', url=path.as_uri())['id']; app.call('wait', tab=node)
+        if pinned: app.call('pin', tab=node)
+        return node
+    def menu(node, item): return app.call('sidebar-menu', node=node, item=item)
+    def inspect(item, node=None):
+        return app.call('sidebar-menu-state', **dict(item=item, **({'node': node} if node else {})))
+    def current_space(): return next(s for s in spaces() if s['focused'])
+    def alert_state():
+        try: return app.call('alert', window='library')
+        except RuntimeError as error:
+            if 'no attached alert sheet' in str(error): return None
+            raise
+    def cancelled_alert():
+        try: app.call('alert', window='library', button='Cancel')
+        except RuntimeError as error:
+            if 'no attached alert sheet' not in str(error): raise
+    browser = state()['id']
+    try:
+        # Same-profile conversion, with nested descendants, preserved order and live host.
+        source = app.call('space-create', title='Intents Source', profile='Intents Profile')
+        a, b, c = [opened('Convert %s' % name, True) for name in ('A', 'B', 'C')]
+        nested = app.call('folder', tabs=[b, c], title='Nested', section='pinned')
+        folder = app.call('folder', tabs=[a], title='Converted Folder', section='pinned')
+        app.call('sidebar-drop', nodes=[nested], parent=dict(kind='folder', id=folder), index=1)
+        d, e = opened('Convert Split A'), opened('Convert Split B')
+        app.call('select', tab=d); menu(e, 'Open in Split View')
+        split = next(n['id'] for n in tree()['today'] if n['kind'] == 'split')
+        app.call('sidebar-drop', nodes=[split], parent=dict(kind='folder', id=nested), index=2)
+        app.call('select', tab=a)
+        app.call('eval', tab=a, js='window.__convertProbe = 91')
+        before = tree(); count = len(spaces()); profile = current_space()['profile']
+        # The real split menu inserts the clicked pane before the current pane (e, d).
+        for markdown, label in [(False, 'Copy All Links'), (True, 'Copy All Links as Markdown')]:
+            menu(folder, label)
+            expected = ['[%s](%s)' % (app.tab(n)['title'], app.tab(n)['url']) if markdown else app.tab(n)['url'] for n in (a, b, c, e, d)]
+            actual = app.call('pasteboard').splitlines()
+            require('I9_copy_folder_' + ('markdown' if markdown else 'plain'), actual == expected, actual=actual, expected=expected, tree=tree())
+        menu(folder, 'Turn “Converted Folder” into Space')
+        created = current_space()
+        require('I9_folder_into_space_today_same_profile', len(spaces()) == count + 1 and created['title'] == 'Converted Folder'
+                and created['profile'] == profile and roots('pinned') == [] and roots('today') == [a, nested]
+                and all(app.tab(n)['section'] == 'today' and not app.tab(n)['pinnedURL'] for n in (a, b, c, d, e)), space=created, tree=tree())
+        require('I9_folder_conversion_preserves_live_host', app.call('eval', tab=a, js='window.__convertProbe') == 91)
+        undo()
+        require('I9_folder_conversion_one_undo', len(spaces()) == count and current_space()['id'] == source and tree() == before, tree=tree())
+        key('z', ['cmd', 'shift'])
+        require('I9_folder_conversion_redo', len(spaces()) == count + 1 and current_space()['id'] in (source, created['id'])
+                and any(s['id'] == created['id'] for s in spaces()))
+        undo(); app.call('space', space=source)
+        # A folder with no children is also a valid conversion, with one undo.
+        empty = app.call('folder-create', title='Empty Conversion'); before_empty = tree()
+        menu(empty, 'Turn “Empty Conversion” into Space')
+        require('I9_empty_folder_conversion', current_space()['title'] == 'Empty Conversion' and tree() == {'pinned': [], 'today': []})
+        undo(); app.call('space', space=source)
+        require('I9_empty_folder_conversion_undo', tree() == before_empty)
+        # Single-item Move to uses A3's plain New Space helper (Pinned placement).
+        single = opened('Move Single'); before_move = tree(); count = len(spaces())
+        menu(single, 'Move to/New Space…'); moved = current_space()
+        require('I9_move_single_to_new_space', len(spaces()) == count + 1 and moved['title'] == 'Space' and moved['profile'] == profile
+                and roots('pinned') == [single] and roots('today') == [], space=moved)
+        undo(); app.call('space', space=source)
+        # A3's fallback-Space undo can unload background pages; compare the
+        # complete saved structure, not that transient loaded flag.
+        require('I9_move_single_one_undo', len(spaces()) == count and structure(tree()) == structure(before_move), before=before_move, after=tree(), expectedCount=count, actualCount=len(spaces()))
+        # No Copy All Links intent comes from the captured Space menu. Verify its
+        # existing export and Manage entries, rather than add a new uncaptured item.
+        disabled = inspect('Share Space…')
+        try: app.call('sidebar-menu', item='Share Space…'); refused = False
+        except RuntimeError: refused = True
+        require('I9_share_space_disabled', not disabled['enabled'] and disabled['key'] == '' and refused, item=disabled)
+        # Spaces menu commands carry the documented empty key equivalents.
+        rows = {r['id']: r for r in app.call('menu-state')}
+        commands = ('rename-space', 'change-profile', 'clear-archive', 'manage-spaces')
+        require('I10_menu_enablement_and_keys', all(rows[c]['enabled'] and rows[c]['key'] == '' for c in commands),
+                rows={c: rows[c] for c in commands}, evidence='docs/re/menus-and-hotkeys.md Spaces and Archive; docs/commands.md')
+        original = current_space()['title']
+        app.call('menu-perform', id='rename-space')
+        try:
+            app.call('key', text='Renamed Inline')
+            app.call('key', key='return', route='app')
+            require('I10_rename_space_inline', current_space()['title'] == 'Renamed Inline', space=current_space())
+        finally:
+            app.call('key', key='escape', route='app')
+        undo(); require('I10_rename_space_undo', current_space()['title'] == original)
+        # Hidden-sidebar entry still starts the same inline editor, by revealing it.
+        app.call('menu-perform', id='toggle-sidebar'); app.call('menu-perform', id='rename-space')
+        try:
+            require('I10_rename_hidden_sidebar_reveals', state()['sidebarMode'] == 'anchored')
+            app.call('key', text='Cancelled Rename'); app.call('key', key='escape', route='app')
+            require('I10_rename_cancel_unchanged', current_space()['title'] == original)
+        finally:
+            app.call('key', key='escape', route='app')
+        app.call('window-focus', id=browser, activate=True)
+        require('I10_profile_cancel_window_ready', state()['appActive'] and current_space()['title'] == original)
+        app.call('profile-menu', response='cancel')
+        try:
+            app.call('menu-perform', id='change-profile')
+            popup = app.call('profile-menu', waitClosed=True)
+            require('I10_change_profile_opens_set_profile', popup and popup.get('shown') and popup.get('trackingBegan') and popup.get('closed') and not popup['pending'] and any(r['title'] == 'Intents Profile' and r['checked'] for r in popup['items'])
+                    and current_space()['profile'] == profile, menu=popup)
+        finally:
+            app.call('profile-menu', close=True)
+        app.call('window-focus', id=browser, activate=True)
+        require('I10_profile_choice_window_ready', state()['appActive'])
+        app.call('profile-menu', response='Default')
+        try:
+            app.call('menu-perform', id='change-profile')
+            chosen = app.call('profile-menu', waitClosed=True)
+            require('I10_change_profile_choice_dispatches', chosen and chosen.get('chosen') == 'Default' and chosen.get('shown') and chosen.get('trackingBegan') and chosen.get('closed') and not chosen['pending'] and current_space()['profile'] != profile, menu=chosen)
+        finally:
+            app.call('profile-menu', close=True)
+        undo(); require('I10_change_profile_undo', current_space()['profile'] == profile)
+        app.call('menu-perform', id='manage-spaces')
+        require('I10_manage_spaces_menu', wait_until(lambda: app.call('space-manager-state')['visible'], timeout=5)
+                and app.call('settings-state')['librarySection'] == 'spaces')
+        app.call('library-close'); app.call('window-focus', id=browser, activate=True)
+        # Clear Archive must use the Library dialog, including its real Cancel.
+        archived = opened('Clear Archive Fixture'); app.call('menu-perform', id='archive-tab')
+        archive_profiles = sorted({s['profile'] for s in spaces()})
+        before_archives = {p: app.call('archive-list', profile=p)['rows'] for p in archive_profiles}
+        before_archive = before_archives[profile]
+        require('I10_clear_archive_fixture', any(r['id'] == archived for r in before_archive))
+        app.call('menu-perform', id='clear-archive')
+        try:
+            confirmation = wait_until(alert_state, timeout=5)
+            require('I10_clear_archive_library_confirmation', confirmation and "Are you sure you'd like to Clear Archive?" in confirmation['texts']
+                    and 'This deletes every archived tab. This cannot be undone.' in confirmation['texts']
+                    and 'Clear Archive' in confirmation['buttons'], alert=confirmation)
+            app.call('alert', window='library', button='Cancel')
+            require('I10_clear_archive_cancel', {p: app.call('archive-list', profile=p)['rows'] for p in archive_profiles} == before_archives)
+        finally:
+            cancelled_alert()
+        app.call('library-close'); app.call('window-focus', id=browser, activate=True)
+        app.call('menu-perform', id='clear-archive')
+        try:
+            wait_until(alert_state, timeout=5)
+            app.call('alert', window='library', button='Clear Archive')
+            require('I10_clear_archive_confirm', wait_until(lambda: all(app.call('archive-list', profile=p)['rows'] == [] for p in archive_profiles), timeout=5))
+        finally:
+            cancelled_alert()
+        app.call('library-close'); app.call('window-focus', id=browser, activate=True)
+        # The tab's real Share menu item must invoke NSSharingServicePicker with
+        # that row's URL. The automation policy closes it without choosing a service.
+        require('I9_share_window_ready', state()['appActive'])
+        app.call('sidebar-share', dismiss=True)
+        try:
+            menu(a, 'Share…')
+            shared = app.call('sidebar-share', waitClosed=True)
+            require('I9_share_system_picker', shared and shared.get('closed') and not shared['pending'] and shared['requested'] and shared['url'] == app.tab(a)['url']
+                    and shared['servicesRequested'] and shared['anchor'][2] > 0 and not shared.get('choseService'), request=shared)
+        finally:
+            app.call('sidebar-share', close=True, dismiss=False)
+        app.call('window-close')
+        rows = {r['id']: r for r in app.call('menu-state')}
+        require('I10_no_browser_window_disables_commands', not app.call('shell-windows')
+                and all(not rows[c]['enabled'] for c in ('rename-space', 'change-profile', 'clear-archive')), rows={c: rows[c] for c in commands})
+        app.call('window-reopen')
+    finally:
+        # Run even after a failed assertion, so no tracked menu, share picker,
+        # rename field, or confirmation can hold the next suite open.
+        if app.call('shell-windows'):
+            app.call('sidebar-share', close=True, dismiss=False)
+            app.call('profile-menu', close=True)
+            app.call('key', key='escape', route='app')
+        cancelled_alert(); app.call('library-close')
 
 
 def space_manager_checks(results, tmp, config, style):
@@ -5887,6 +6069,9 @@ def space_manager_checks(results, tmp, config, style):
         subprocess.run(['codesign', '--force', '--sign', '-', bundle], check=True, capture_output=True)
         app = launch((fixture('Manager One'),))
         first_window = app.call('shell-windows')[0]['id']
+        if os.environ.get('OPEN_SIDEBAR_INTENTS_ONLY') == '1':
+            sidebar_intents_menu_checks(app, results, require, tmp)
+            return
         s1 = order(app)[0]
         s2 = app.call('space-create', title='Manager Two')
         s3 = app.call('space-create', title='Manager Three')
@@ -6186,6 +6371,8 @@ def space_manager_checks(results, tmp, config, style):
                 keys=key_states, closeFixture=close_fixture, selectedBeforeClose=selected_before_close, barAfterEscape=bar_after_escape, tabsBeforeClose=tabs_before_close, tabsAfterClose=tabs_after_close, state=state(app))
         app = sidebar_completion_a3_checks(app, results, require, evidence, tmp, launch)
         sidebar_tab_switcher_checks(app, require, tmp)
+
+        sidebar_intents_menu_checks(app, results, require, tmp)
         app = sidebar_completion_archive_checks(app, launch, results, require, evidence, tmp)
     finally:
         dialogs, cleanup_errors = [], []

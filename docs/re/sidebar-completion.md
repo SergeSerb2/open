@@ -354,8 +354,9 @@ measured 38.89, 32.14 and 46.91 ms. No timing row had foreground loss. One earli
 phase-probe attempt lost focus to UserNotificationCenter before the cold key; it
 has no timing result and was retried after three minutes.
 
-The phase probe found that local query work completed in 0.33–0.39 ms, while first
-application waited 28.28–43.18 ms. `CommandBarController.present` called `runQuery`,
+The phase probe found that local query work completed by 0.33–0.39 ms after
+presentation entry (0.24–0.30 ms inside `runQuery`), while first application
+waited 28.28–43.18 ms after query submission. `CommandBarController.present` called `runQuery`,
 then synchronous layout, text-field focus, animation and its delegate. `runQuery`
 consumed its already buffered initial snapshot only in a new main-actor Task.
 Cold focus alone took 8.58–9.94 ms in these runs. `/usr/bin/sample <pid> 4 1 -file
@@ -371,9 +372,11 @@ MRU sorting and host preview capture to `showTabSwitcher`/its delayed session;
 does not establish a branch-only cause. It does identify a removable wait for
 results that are ready before AppKit focus and unrelated queued main-thread work.
 
-The product now applies the initial local snapshot in the query call, after
-provider work and action validation, before focus/animation. Later async provider
-updates retain their cancellable stream. Other SuggestEngine callers still get
+The product now applies the initial local snapshot when opening the bar, in the
+query call after provider work and action validation, before focus/animation.
+Text edits retain their existing next-turn boundary, so pending Return can still
+be cancelled by another edit, present or dismiss. Later async provider updates
+retain their cancellable stream. Other SuggestEngine callers still get
 the initial snapshot buffered in their stream. No result is fabricated or timed
 before it reaches the actual views. The cold bar remains lazy. The switcher is
 also now lazy; selection/layout/ordinary commands use optional existing state,
@@ -384,4 +387,37 @@ After this change, the same interleaved cold flow measured main `dee105e6` at
 17.86 and 17.08 ms, and the fixed branch at 3.34, 3.12 and 3.30 ms. No foreground
 loss occurred. Raw full-suite receipts, minimized real-flow runner/results,
 phase-probe results and samples are under `.re/tab-switcher-cold-open/`.
-Final post-merge full-suite checks are recorded below when complete.
+Final validation ran after merging `origin/main` at `dee105e6`. MainMenu keeps
+last-tab/Favorites validation alongside #132's rename/Profile/Archive validation.
+The merge keeps both sidebar helper bodies and invokes TS, items 9–10 and archive
+flows once in the default suite. Ctrl+Tab still commits through
+`selectTabForCommand` and the preview-host return path. The outer automation
+commands (144 names), Python definitions per scope and package targets have no
+duplicates. No new PR was opened.
+
+| Final check, merged code | Result |
+|---|---|
+| `git diff --check` and staged whitespace check | PASS |
+| `heavy.sh tools/verify-all.sh --only features-render,sidebar-render,commands-demo,commandbar-render,suggest-check` | PASS: build 0 warnings/errors, commands 232/232, sidebar 564/564, features 335/335, command bar 78/78, suggest 34/34. |
+| `heavy.sh tools/build.sh` | PASS, Debug real app. |
+| Locked `--only app-actions`, run 1 | PASS 48/48 feature rows + fingerprint/cleanup = 50/50; cold 3.3503 ms. |
+| Locked `--only app-actions`, run 2 | PASS 50/50; cold 3.4163 ms. |
+| Locked `--only app-actions`, run 3 | PASS 50/50; cold 3.2755 ms. |
+| Locked `--only sidebar-completion` | PASS 164/164 feature rows + fingerprint/cleanup = 166/166; E12 2/2, TS 16/16, I9/I10 29/29, AA_APP 7/7. |
+
+Each on-screen suite was a separate lock invocation, with no concurrent build.
+All final runs had zero foreground interruptions and passed owned-process cleanup.
+The new app-actions feature row verifies that launch and the first real Cmd+T
+leave the switcher uncreated, without a view or modifier monitor. TS verifies the
+monitor exists while active and disappears on Control release and Esc. The bar's
+existing pending-Return checks are unchanged and pass. The first broader attempt
+to apply text-edit results synchronously failed three of those checks; the final
+opening-only path preserves their cancellation boundary.
+
+Final receipts are `final-verify.log`, `final-verify-details/`, `final-build.log`,
+`final-app-actions-{1,2,3}.log`, their `-results.json` files, and
+`final-sidebar-completion.log` / `final-sidebar-completion-results.json`, all under
+`.re/tab-switcher-cold-open/`. Generated `docs/engine-spike` artifacts were restored
+before committing. Exact switcher visual values and Profile-wide candidate scope
+remain guesses as documented in TS-R8/TS-C1; this performance fix claims no new Arc
+capture or visual proof.

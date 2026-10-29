@@ -248,7 +248,7 @@
       case "toast-undo":
         guard let controller = app.frontWindowController else { throw Failure(message: "no browser window") }
         return controller.pressToastUndo()
-      case "sidebar-menu":
+      case "sidebar-menu", "sidebar-menu-state":
         // Builds the same NSMenu a right-click shows (a row, or the Space with no node)
         // and performs the item at a "/" path; `alternate` picks the ⌥ alternate title.
         guard let controller = app.frontWindowController, let path = a["item"] as? String else { throw Failure(message: "missing sidebar menu item") }
@@ -263,11 +263,17 @@
         for (depth, part) in parts.enumerated() {
           let matches = level.items.indices.filter { index in
             let item = level.items[index]
-            return item.title == part && item.isEnabled && (item.isAlternate == (a["alternate"] as? Bool ?? false) || depth < parts.count - 1)
+            return item.title == part && (item.isEnabled || cmd == "sidebar-menu-state") && (item.isAlternate == (a["alternate"] as? Bool ?? false) || depth < parts.count - 1)
           }
           guard matches.count == 1, let index = matches.first
           else { throw Failure(message: "sidebar menu has no enabled item \(part)") }
-          if depth == parts.count - 1 { level.performActionForItem(at: index) }
+          if depth == parts.count - 1 {
+            if cmd == "sidebar-menu-state" {
+              let item = level.items[index]
+              return ["title": item.title, "enabled": item.isEnabled, "key": item.keyEquivalent]
+            }
+            level.performActionForItem(at: index)
+          }
           else if let sub = level.items[index].submenu { level = sub } else { throw Failure(message: "\(part) has no submenu") }
         }
         await Task.yield()
@@ -302,6 +308,34 @@
       }
       let w = try window
       switch cmd {
+
+      case "sidebar-share":
+        if let dismiss = a["dismiss"] as? Bool { w.dismissSidebarShareForAutomation = dismiss }
+        if a["close"] as? Bool == true { w.sidebarSharePicker?.close() }
+        if a["waitClosed"] as? Bool == true {
+          // show() has now returned. A close from the service-query delegate
+          // alone can run before AppKit finishes presenting its menu.
+          if w.dismissSidebarShareForAutomation { w.sidebarSharePicker?.close() }
+          for _ in 0..<100 where w.sidebarSharePicker != nil { try await Task.sleep(for: .milliseconds(50)) }
+        }
+        var result = w.sidebarShareRequest
+        result["pending"] = w.sidebarSharePicker != nil
+        return result
+      case "profile-menu":
+        if let response = a["response"] as? String {
+          guard response == "cancel" || app.model.profiles.contains(where: { $0.name == response }) else { throw Failure(message: "unknown Profile response") }
+          w.profileMenuResponseForAutomation = response
+        }
+        if a["close"] as? Bool == true {
+          w.spaceProfileMenu?.cancelTrackingWithoutAnimation()
+          w.profileMenuResponseForAutomation = nil
+        }
+        if a["waitClosed"] as? Bool == true {
+          for _ in 0..<100 where w.spaceProfileMenu != nil { try await Task.sleep(for: .milliseconds(50)) }
+        }
+        var result = w.profileMenuRequest
+        result["pending"] = w.spaceProfileMenu != nil
+        return result
 
       // Model-level tabs (the sidebar).
       case "settings-custom-engine":
@@ -377,7 +411,7 @@
       case "spaces":
         return app.model.spaces.map { space in
           [
-            "id": space.id.description, "title": space.title ?? "", "focused": space.id == w.focusedSpace?.id,
+            "id": space.id.description, "title": space.title ?? "", "profile": space.profileID.description, "focused": space.id == w.focusedSpace?.id,
             "pinned": space.pinned.count, "today": space.today.count,
           ] as [String: Any]
         }
@@ -975,6 +1009,7 @@
       var d: [String: Any] = [
         "createdAt": tab.createdAt.timeIntervalSince1970, "lastActiveAt": tab.lastActiveAt.timeIntervalSince1970,
         "id": tab.id.description, "title": tab.displayTitle, "url": tab.url.absoluteString, "section": section, "unread": tab.isUnread,
+        "pinnedURL": tab.pinnedURL?.absoluteString ?? "",
         "selected": w.selectedTab?.id == tab.id, "visible": w.visibleTabs.contains { $0.id == tab.id },
         "loading": tab.live.isLoading, "audible": tab.live.isAudible, "crashed": tab.live.isCrashed,
         "favicon": tab.live.faviconPNG != nil, "sleepPhase": String(describing: tab.live.sleepPhase),

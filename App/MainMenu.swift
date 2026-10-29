@@ -37,7 +37,7 @@ enum AppCommand {
   static func canonicalID(_ id: String) -> String {
     ["reveal-tab-in-sidebar": "reveal-current-tab", "keyboard-shortcuts": "keyboard-shortcuts-edu"][id] ?? id
   }
-  static let implemented: Set<String> = ["new-tab", "open-command-bar", "search-tabs", "new-window", "blank-window", "archive-tab", "restore-last-closed-tab", "pin-unpin-tab", "pin-tab", "unpin-tab", "duplicate-tab", "rename-tab", "reset-tab", "replace-pinned-url", "clear-unpinned-tabs", "next-tab", "previous-tab", "cycle-tab-forward", "cycle-tab-backward", "tab-switcher-forward", "tab-switcher-backward", "next-space", "previous-space", "new-space", "new-folder", "focus-space", "reload", "force-reload", "stop-loading", "go-back", "go-forward", "zoom-in", "zoom-out", "zoom-actual-size", "print", "save-page-as", "share-page", "copy-url", "copy-url-markdown", "copy-url-quote", "developer-tools", "javascript-console", "view-source", "inspect-elements", "toggle-sidebar", "reveal-current-tab", "expand-pinned-section", "collapse-pinned-section", "settings", "search-settings", "air-traffic-control", "import-from-browser", "set-default-browser", "check-for-updates", "view-archive", "view-history", "view-downloads", "view-library", "view-boosts", "manage-extensions", "add-extension", "new-little-open-window", "little-open-global", "help-center", "keyboard-shortcuts-edu", "show-shortcuts-overlay", "getting-started", "release-notes", "contact-team", "expand-all-folders", "collapse-all-folders", "add-to-favorites", "remove-from-favorites", "mute-all-tabs", "unmute-all-tabs", "reset-all-tabs-in-space", "manage-spaces"]
+  static let implemented: Set<String> = ["new-tab", "open-command-bar", "search-tabs", "new-window", "blank-window", "archive-tab", "restore-last-closed-tab", "pin-unpin-tab", "pin-tab", "unpin-tab", "duplicate-tab", "rename-tab", "reset-tab", "replace-pinned-url", "clear-unpinned-tabs", "next-tab", "previous-tab", "cycle-tab-forward", "cycle-tab-backward", "tab-switcher-forward", "tab-switcher-backward", "next-space", "previous-space", "new-space", "new-folder", "focus-space", "reload", "force-reload", "stop-loading", "go-back", "go-forward", "zoom-in", "zoom-out", "zoom-actual-size", "print", "save-page-as", "share-page", "copy-url", "copy-url-markdown", "copy-url-quote", "developer-tools", "javascript-console", "view-source", "inspect-elements", "toggle-sidebar", "reveal-current-tab", "expand-pinned-section", "collapse-pinned-section", "settings", "search-settings", "air-traffic-control", "import-from-browser", "set-default-browser", "check-for-updates", "view-archive", "view-history", "view-downloads", "view-library", "view-boosts", "manage-extensions", "add-extension", "new-little-open-window", "little-open-global", "help-center", "keyboard-shortcuts-edu", "show-shortcuts-overlay", "getting-started", "release-notes", "contact-team", "expand-all-folders", "collapse-all-folders", "add-to-favorites", "remove-from-favorites", "mute-all-tabs", "unmute-all-tabs", "reset-all-tabs-in-space", "manage-spaces", "rename-space", "change-profile", "clear-archive"]
 }
 
 import OpenEngine
@@ -73,6 +73,10 @@ extension EngineWebContentHostFactory {
     }
     guard AppCommand.implemented.contains(id) || id == "go-to-last-tab" || id.hasPrefix("go-to-tab-") || id.hasPrefix("go-to-space-") else { return false }
     if id == "go-to-last-tab" { return !numberedTabs.isEmpty }
+    if ["rename-space", "change-profile", "clear-archive"].contains(id) {
+      return !isClosing && controller != nil && window?.isVisible == true && window?.attachedSheet == nil
+        && focusedSpace != nil && spaceProfileMenu == nil
+    }
     if id == "focus-space" { return payload.flatMap(UUID.init(uuidString:)).map { model.space(id: SpaceID(rawValue: $0)) != nil } ?? false }
     if id.hasPrefix("go-to-tab-"), let n = Int(id.split(separator: "-").last ?? "") { return numberedTab(n) != nil }
     if id.hasPrefix("go-to-space-"), let n = Int(id.split(separator: "-").last ?? "") { return n <= model.spaces.count }
@@ -165,6 +169,20 @@ extension EngineWebContentHostFactory {
     case "next-space": cycleSpace(by: 1)
     case "previous-space": cycleSpace(by: -1)
     case "focus-space": if let uuid = payload.flatMap(UUID.init(uuidString:)), let space = model.space(id: SpaceID(rawValue: uuid)) { focus(space: space) }
+    // No key equivalents: docs/re/menus-and-hotkeys.md, Spaces / Archive;
+    // docs/commands.md lists all four entries with “—”.
+    case "rename-space":
+      guard let controller else { return false }
+      if windowState.sidebarMode == .hidden { controller.toggleSidebar() }
+      controller.sidebar.layoutSubtreeIfNeeded()
+      controller.sidebar.beginRename(nodeID: nil)
+    case "change-profile":
+      guard let controller else { return false }
+      if windowState.sidebarMode == .hidden { controller.toggleSidebar() }
+      controller.sidebar.layoutSubtreeIfNeeded()
+      return showSpaceProfileMenu()
+    case "clear-archive":
+      app.settingsPresenter.requestClearArchive()
     case "new-space": if let profile = focusedProfile { focus(space: model.createSpace(title: "Space", profileID: profile.id)) }
     case "new-folder": if let space = focusedSpace { _ = model.createFolder(in: .spacePinned(space.id)) }
     case "reload": selectedContent?.reload()

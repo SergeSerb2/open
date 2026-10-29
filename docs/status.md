@@ -70,7 +70,7 @@ Merged since the first audit and now counted on `main`: app shell Steps A–C (#
 ### 0.4 Headline
 
 - The App on `main` is now the real Arc window. App shell Steps A–C merged (#45, #52, #85). The App links `OpenModel`, `OpenStore`, `OpenWeb`, `OpenFeatures`, `OpenSettings`, `OpenCommandBar`, `OpenCommands`, `OpenSuggest`, `OpenSidebar`, and `OpenDesign` (`project.yml`, target `Open`).
-- Step C (#85) wires the command bar, the registry menus, one keyboard router per window, and the Settings and Library presenters in the App (`App/CommandBar/AppCommandBarDelegate.swift`, `App/MainMenu.swift`, `App/Settings/AppSettingsActions.swift`, `App/Stores/AppStores.swift`). `App/` now uses `MenuBuilder`, `CommandBarController`, `SuggestEngine`, `HistoryStore`, `FaviconStore`, `AdBlockStore` (settings only; no blocking yet), and `GlobalHotkeyService` (it opens a Little Open stub). `App/` still does not use `BoostStore`, `SleepController`, `ScriptHost`, or `RoutingEvaluator`. Today auto-archive runs through `App/AutoArchive/` after #130.
+- Step C (#85) wires the command bar, the registry menus, one keyboard router per window, and the Settings and Library presenters in the App (`App/CommandBar/AppCommandBarDelegate.swift`, `App/MainMenu.swift`, `App/Settings/AppSettingsActions.swift`, `App/Stores/AppStores.swift`). `App/` now uses `MenuBuilder`, `CommandBarController`, `SuggestEngine`, `HistoryStore`, `FaviconStore`, `AdBlockStore` (settings only; no blocking yet), and `GlobalHotkeyService` (it opens a Little Open stub). `App/` still does not use `BoostStore`, `SleepController`, `ScriptHost`, or `RoutingEvaluator`. Today auto-archive runs through `TodayAutoArchiveController` and `ExpirySweeper` in `App/AutoArchive/` after #130.
 - The gap is now single features, not the shell. The top open gaps moved from "unplanned" to "planned": passwords and secrets import now have a plan (#72), and system-menu dispatch is closed (#85). Daily use still needs a password manager and a write path for imported secrets. Today auto-archive is now on main in #130 (§3), with shown-tab protection and activity measured from final deselection.
 
 Row count by status (283 rows in §1 after the 2026-10-26 update; a "(partial)" row counts under its base status):
@@ -120,7 +120,7 @@ Columns: feature · RE doc + section · plan · library code · App wiring · ve
 | Unread badge on rows added in the background | FC §1.2 r12 | sidebar-completion (M1, S3) | model field `Tab.isUnread` (`OpenModel/LiveNodes.swift`); dot in `OpenSidebar` | main | `sidebar-render check` unread dot with snapshot roundtrip (#95) | done | Merged in #75 (inputs) and #95 (dot). See §3, gap 21 (closed). |
 | Hover Previews of folder, pinned, and favorite rows | FC §1.2 r13; IS §18 General, §20.13 | sidebar-completion §3.6 (S5, #102; A2) | `OpenSidebar/HoverPreviewTracker.swift`, `FolderPreviewView.swift` (#102); `OpenFeatures/HoverPreviewController.swift` (A2); `OpenSettings` sheet | main (#127) | `sidebar-render check` HP1–HP6 (#102, #115); `features-render` HP7–HP10, SP5–SP6; e2e `sidebar-completion` E11–E14 (A2), including E12 MRU Control-release host reuse after the #127–#130 merge | done (partial) | A2: the App opens the preview panel. Page previews of pinned tabs and Favorites show the live page through the Peek host, 420 × min(560, H − 20) pt at sidebar width + 8; the folder card (240 pt, "Search <folder>…", two-line rows with "N minutes ago") sits at sidebar width + 4. Any other sidebar intent hides the preview. Separate From Pinned Tab (⌥-click on the reset plate) moves the live page into a new Today tab (same engine page, history intact) and puts the pinned tab back to its pinned URL, unloaded. Background opens are unread. No delay setting: fixed 0.5 s, an Open choice (one Arc sample ≈ 0.42 s, V 46.11–46.46 s; Step S5b). Lead decision S2: two Previews sources, "Folders" and "Pinned tabs and Favorites"; Arc's live-data sources are post-v1. The Today auto-archive sweeper (item 6) now triggers the existing education banner after a shown-Space archive. |
 | Rename a row inline (double-click, "Rename…", Return, Esc) | FC §1.3 r15–16 | design.md §5.6 | `SpacePageView.swift` (`doubleAction` → `beginRename`); model `renameNode` | main | `sidebar-render check` (menus); real editor flow in #78 | done | Tabs ▸ Rename Current Item also works (`App/MainMenu.swift` `rename-tab`, #85). |
-| Row context menus: Today tab, pinned tab, favorite, folder, split row, Space, plus | IS §15; MH "Context menus", "Split row menu" | design.md §5.6 | `OpenSidebar/SidebarMenus.swift` | main (partial) | `sidebar-render check` (order for 4 targets) | done (partial) | A3 adds selection Copy Links/Markdown and Move to/New Space, and folder Copy All Links. Space export already uses the package fallback and has E10 browser/Manager proof. Site Control, Space icon/theme, New Profile, Share, Edit Pinned URL, Change Icon, Customize Page, folder → Space and single-row Move to New Space remain in their assigned lanes. Favorite and plus menu appearance remain guesses (design.md §5.6). |
+| Row context menus: Today tab, pinned tab, favorite, folder, split row, Space, plus | IS §15; MH "Context menus", "Split row menu" | design.md §5.6 | `OpenSidebar/SidebarMenus.swift` | main (partial) | `sidebar-render check` (order for 4 targets) | done (partial) | A3 adds selection Copy Links/Markdown and Move to/New Space, and folder Copy All Links. Space export already uses the package fallback and has E10 browser/Manager proof. Main #132 add folder → Space, single-row Move to New Space, tab Share, and a disabled Share Space. Site Control, Space icon/theme, New Profile, Edit Pinned URL, Change Icon and Customize Page remain in their assigned lanes. Favorite and plus menu appearance remain guesses (design.md §5.6). |
 | Multi-select rows (Shift/Cmd click) and New Folder from Selection | FC §1.5 r24; MH "Gestures and mouse" | sidebar-completion (S1, S2) | `OpenSidebar/SidebarSelection.swift`; bulk model commands (#75) | main (#128) | `sidebar-completion` E1–E4; `sidebar-render` and `commands-demo` | done | A3 routes menu and App-key Pin/Unpin, Duplicate, and sidebar-focused New Folder through the ordered selection. Same-title folder rename adds no undo. Real native input, one-step undo, and actual engine pin flags pass; drop proof uses the production intent, not an OS drag session. |
 | Drag and drop: reorder, Today ↔ Pinned (pin/unpin), into folders, Favorites, URLs from other apps, Space icon hover-switch | FC §1.6 r28–32 | design.md §5.5 | `OpenSidebar/DragDrop.swift`; model `canMoveNode` | main | `sidebar-render check` (drop mapping, cross-Space drag, refusals, bulk drags in #91); e2e `sidebar` (reorder through the production intent) | done | No test drives a real macOS drag session (`docs/app-shell.md`). |
 | Haptic feedback when reordering | FC §1.6 r33; IS §18 Advanced | sidebar-completion (S4); settings | `OpenSidebar/SidebarHaptics.swift`; `OpenSettings` switch | main | `sidebar-render check` haptics (#99) | done | Merged in #99. The live preference is read at the interaction point. |
@@ -151,17 +151,17 @@ Columns: feature · RE doc + section · plan · library code · App wiring · ve
 | Go to Space 1–9 (Ctrl+1…9) | MH "Shortcuts that live in code" (keys are a guess) | app-shell §4.3 (Step C) | registry `go-to-space-1…9` | main | `commands-dump` | done | Step C dispatches `go-to-space-*` (`App/MainMenu.swift:82`, #85). Keys are still a guess. |
 | Last active tab per Space | FC §2.4 r13 | — | model `selectedNodeBySpace` | main | e2e `window` (restores selections, #52 merged) | done | |
 | New Space flow: name, icon, theme, profile | FC §2.2 r4 | space-theme-editor (#62) | model `createSpace` (#68: failable overload, no theme by default) | main (no flow) | `space-editor-render` creation gate (#82) | planned | Spot-check: the App still creates a Space titled "Space" with no flow (`App/WebContent/EngineWebContentHostFactory.swift:355`, `App/MainMenu.swift` `new-space`). The form is Steps 5–8 of the space plan. S2 (2026-10-26): a new Space starts with no theme unless a color is picked in the form (C10; space-theme-editor Q2). |
-| Rename Space inline (header double-click, menu) | FC §2.2 r5 | design.md; space-theme-editor | `SpacePageView.swift` header `beginRename`; model `updateSpace` | main | none | done (partial) | Inline rename works. Spaces ▸ Rename Space still has no dispatch (§2). |
+| Rename Space inline (header double-click, menu) | FC §2.2 r5 | design.md; space-theme-editor | `SpacePageView.swift` header `beginRename`; model `updateSpace` | main (#132) | `sidebar-completion` `I10_rename_*` | done | Items 9–10 (#132): Spaces ▸ Rename Space uses the same inline editor, revealing a hidden sidebar. Cancel and model Undo are covered by `I10_rename_*`. |
 | Change Space icon (emoji and symbol picker) | FC §2.3 r9 | space-theme-editor (#62) | model `SpaceIcon`; typed icons (#68) | none | none | planned | Spot-check: library only. The App refuses `changeSpaceIcon` (factory line 366) and does not link `OpenSpaceEditor` (`project.yml`). |
 | Theme rendering: gradient, grain, light/dark content | FC §2.3 r10; DT §6; RO §3.3 | design.md §3; space-theme-editor Step 2 | `OpenDesign/ThemeField.swift`, `Grain.swift`, `SpaceThemeStyle.swift`; theme engine and textures (#82) | main | `sidebar-render check`; design.md §8 per-state ΔE; `space-editor-render` (#82) | done | Rendering is in the App. Pad-law calibration is theme Step 9 (in flight; plan in #114). |
 | Theme editor popover: color pad, presets, intensity, grain, text mode | IS §14 | space-theme-editor Steps 3–4 | `OpenSpaceEditor/ThemeEditorPanel.swift`, `ColorPadView.swift`, `PresetStripView.swift` (#86, #89) | none | `space-editor-render` checks and capture fits (#86, #89) | planned | Spot-check: library only. Steps 1–4 merged (#68, #82, #86, #89), but the App refuses `editSpaceTheme` (factory line 366). No panel opens in the App. Steps 5–8 stay deferred. |
 | Delete Space: archive its tabs, Undo | FC §2.2 r6 | model.md | model `deleteSpace(archiveTabs:)` with undo | main | `openkit commands-demo` | done | |
 | Delete Space confirmation alert | FC §2.2 r6 | sidebar-completion §3.3 (A1) | `OpenFeatures/SidebarConfirmations.swift` | main (#126) | `features-render` DA1–DA3; e2e `sidebar-completion` E7 and the Manager Delete | done | Sheet on the browser window (Library window from the Space Manager). AppKit gives the destructive button no Return key (Section 1 decision; C3 confirms). |
 | Reorder Spaces; Space Manager (Manage Spaces…) | FC §2.2 r8 | sidebar-completion (S4) | `OpenSidebar/SpaceManagerView.swift` (#99); Library host (#87); model `moveSpace(id:to:)` | main (#124) | `sidebar-render` Space Manager checks (#99); e2e `sidebar-completion` (#124: real Library page, grabber drag, undo, relaunch, rebind; spec geometry 0 pt) | done | The App injects the real view through `makeSpaceManagerView()`. Spaces ▸ Manage Spaces…, the Space menu, and the command bar open Library ▸ Spaces. No Arc frame of the Manager exists: geometry is checked against plan §3.2 and the S4 R1 header (`docs/design.md` §20); capture C2 is requested. Delete in the Manager confirms through the A1 alert (see the Delete Space row). See §3, gap 7. |
-| Turn Space into folder; Export Space into folder; Turn folder into Space | FC §2.2 r7; IS §15 | sidebar-completion (M1 Space export); space-theme-editor (folder → Space) | bulk and Space model commands (#75) | main (#128) | `commands-demo`; `sidebar-completion` E10 browser and Manager flows | done (partial) | Browser Export and Manager Turn into Folder preserve exact ordered child IDs, remove one Space, retarget the browser, and undo once. Folder → Space remains for the Space/theme lane. |
+| Turn Space into folder; Export Space into folder; Turn folder into Space | FC §2.2 r7; IS §15 | sidebar-completion (M1 Space export); space-theme-editor (folder → Space) | bulk and Space model commands (#75) | main (#128, #132) | `commands-demo`; `sidebar-completion` E10 and `I9_folder_*` | done | Browser Export and Manager Turn into Folder preserve ordered child IDs and undo once. Folder → Space keeps the Profile and title, moves its children to Today in order, removes the folder, and undoes/redoes once. Empty folders also work. Today placement follows the Section 1 implementation brief; the older theme plan uses Pinned. |
 
 
-| Share Space | FC §2.2 r5 | — | menu item exists in `SidebarMenus.swift` | refused | — | out of scope | Account feature. The menu item is visible. |
+| Share Space | FC §2.2 r5 | — | menu item exists in `SidebarMenus.swift` | disabled (local) | `sidebar-completion` `I9_share_space_disabled` | out of scope | Account feature. The menu item is visible and disabled; menu automation refuses it. |
 | Live Folders | FC §1.5 r27 | — | — | — | — | out of scope | FC marks it not required for v1. |
 
 ### 1.3 Tabs: pinned and Today lifecycle
@@ -189,8 +189,8 @@ Columns: feature · RE doc + section · plan · library code · App wiring · ve
 | Duplicate tab, folder, or split | FC §1.4 r18 | app-shell §4.3; sidebar-completion (M1) | model `duplicateNode(id:)` (`OpenModel/BrowserModel.swift:551`), `duplicateNodes` | main (#128) | `commands-demo`; `sidebar-completion` E3 | done | Menu-bar Duplicate and selection-menu Duplicate use the bulk command for nonempty selection, with one undo. Single-item fallback stays available with no selection. |
 | Next/Previous Tab (Cmd+Opt+↓/↑) | MH Tabs | app-shell §4.3 | — | main | none (code read) | done | |
 | Cycle Tab Forward/Backward (Cmd+Ctrl+→/←) | MH Tabs | app-shell §4.3 | registry | main | `commands-dump` | done (partial) | Step C maps both ids to the same sidebar cycle as Next/Previous Tab (`App/MainMenu.swift:123`, #85). |
-| Tab Switcher (Ctrl+Tab), most-recent order | MH Tabs; sidebar-completion RE §13 TS-R3–R8 | Section 1 item 11 | `OpenFeatures/TabSwitcherController.swift`; App real key router and host snapshots | local tab-switcher branch | `features-render` 335/335 (TS1–TS10); e2e `sidebar-completion` 135/135 suite rows | behavior verified locally; visual/scope parity open | Frozen five-item MRU, reverse, 100 ms overlay delay, Control-release commit, Esc cancel. No tab loads for previews. The merge with #127–#130 keeps the shared preview-host handoff; E12 checks MRU release-to-commit reuse. Exact geometry/colors and Profile-wide candidate scope remain guesses; TS-C1 capture pending. |
-| Go to tab 1–9 and last (Cmd+1…9); "Include Favorites" option | MH code-only table; FC §7.2; sidebar-completion RE §13 TS-R1–R2 | Section 1 item 11 | registry and native Tabs menu; `App/MainMenu.swift`; existing Shortcuts settings | local tab-switcher branch | e2e `sidebar-completion` 135/135 suite rows, including TS numbered-key rows | done (local branch) | Menus and keys share the Favorites preference. Cmd+9 defaults to last, including with fewer than nine tabs; the existing ninth-tab option selects item nine. Explicit Go to Last Tab menu dispatch is wired. Arc defaults remain unknown. |
+| Tab Switcher (Ctrl+Tab), most-recent order | MH Tabs; sidebar-completion RE §13 TS-R3–R8 | Section 1 item 11 | `OpenFeatures/TabSwitcherController.swift`; App real key router and host snapshots | local tab-switcher branch | `features-render` 335/335 (TS1–TS10); e2e `sidebar-completion` 164/164 suite rows | behavior verified locally; visual/scope parity open | Lazy frozen five-item MRU, reverse, 100 ms overlay delay, Control-release commit, Esc cancel; modifier monitor exists only while active. No tab loads for previews. The merge through #132 keeps the shared preview-host handoff; E12 checks MRU release-to-commit reuse. Exact geometry/colors and Profile-wide candidate scope remain guesses; TS-C1 capture pending. |
+| Go to tab 1–9 and last (Cmd+1…9); "Include Favorites" option | MH code-only table; FC §7.2; sidebar-completion RE §13 TS-R1–R2 | Section 1 item 11 | registry and native Tabs menu; `App/MainMenu.swift`; existing Shortcuts settings | local tab-switcher branch | e2e `sidebar-completion` 164/164 suite rows, including TS numbered-key rows | done (local branch) | Menus and keys share the Favorites preference. Cmd+9 defaults to last, including with fewer than nine tabs; the existing ninth-tab option selects item nine. Explicit Go to Last Tab menu dispatch is wired. Arc defaults remain unknown. |
 | Reveal Current Tab (Ctrl+Space) and Reveal Tab in Sidebar | MH View, Tabs | app-shell §4.3 (`reveal-current-tab`) | registry `reveal-current-tab` and `reveal-tab-in-sidebar` (`OpenCommands/CommandRegistry.swift:184`) | main | `commands-dump` | done | Closed in #85: both ids registered, `reveal-tab-in-sidebar` maps to `reveal-current-tab` (`App/MainMenu.swift:38`). See §2.3, §3 gap 41 (closed). |
 | Lazy loading: only the selected tab loads at launch | `docs/architecture.md` tactics | app-shell §5 | `OpenFeatures/WebContentContainer.swift` | main | e2e `shell`, e2e `window` | done | |
 | Placeholder for unloaded and sleeping tabs | `docs/memory-design.md` §2 | app-shell §3.4 | `OpenFeatures/PlaceholderContentView.swift` | main | `features-render check`; e2e `sidebar` | done | |
@@ -218,7 +218,7 @@ Columns: feature · RE doc + section · plan · library code · App wiring · ve
 | Expand and collapse animation | IS §7, §20.12 | design.md §5.7 | `OpenSidebar` | main | `sidebar-render` forced-animation frames | done (partial) | S2 (2026-10-26): expand ≈ 0.20 s ease-out, collapse ≈ 0.25 s (code: 0.22 s both). |
 | Collapsed folder keeps its last active child visible ("peek"; three-dot folder glyph; Arc `expandedItems` `peeked`) | IS §20.4 | sidebar-completion §3.17 (Step S6) | none | none | none | planned | S2 (2026-10-26): new row. |
 | Expand All Folders / Collapse All Folders | FC §1.5 r23 | sidebar-completion (M1); app-shell Step C | model expand/collapse (#75, #95); registry | main (#128) | `sidebar-render`; `sidebar-completion` E9 | done | Real-App recursive Pinned/Today folder state and disabled-after-action enablement pass. |
-| Copy All Links (plain, Markdown) | IS §15 | app-shell §4.1 | intent `copyAllLinks` | local A3 | `sidebar-completion` A3 copy flows | done | Selection Copy Links/Markdown and folder Copy All Links share a depth-first formatter. Selected containers cover selected descendants once, in order. Clipboard content is verified through the real menu. |
+| Copy All Links (plain, Markdown) | IS §15 | app-shell §4.1 | intent `copyAllLinks` | main (#128, #132) | `sidebar-completion` A3 copy flows | done | Selection Copy Links/Markdown and folder Copy All Links share a depth-first formatter. Selected containers cover selected descendants once, in order. Clipboard content is verified through the real menu; `I9_copy_folder_plain/markdown` also covers nested folders and split panes. The captured Space menu emits no Copy All Links intent. |
 | Archive a whole folder; restore it as a folder | FC §1.5 r26 | sidebar-completion (M2, A3) | `ArchiveStore` folder records; Library restore (#77) | main (#128) proof | `commands-demo`; FA1–FA7; real-App E18 Delete → Library restore → relaunch | done | Spot-check: the App Library presenter passes real archive stores (`App/Settings/AppSettingsActions.swift:34`). Restore keeps nested folders, splits, and IDs. See §3, gap 34 (closed). |
 | Change Icon… for folders and pinned tabs | IS §15; FC §1.5 r21 | space-theme-editor (shared picker, Steps 5–8) | typed `iconOverride` (#68); intent only in the App | none | none | planned | The App refuses `changeIcon` (factory line 367). Rows draw a stored override, but no picker opens. |
 
@@ -230,7 +230,7 @@ Columns: feature · RE doc + section · plan · library code · App wiring · ve
 | Archive store per profile (SQLite); reasons closed, auto, cleared, folder deleted | FC §3.6; DM "Archive and session files" | model.md | `OpenStore/ArchiveStore.swift`, `ProfileArchiveSink.swift` | main | verify-all `roundtrip`, `commands-demo` | done | Folder records added in #77. |
 | Library ▸ Archive: search, Space filter, restore with toast and View, delete, Clear Archive with confirmation | FC §3.6 r20–23 | settings §6.2 (App step = app-shell) | `OpenSettings/ArchiveSection.swift`, `LibraryViewModel.swift` | main | `settings-preview check`; Step C presenters (#85) | done | Spot-check: `App/Settings/AppSettingsActions.swift:32` `showLibrary` builds the Library with real per-profile archive stores. Rows show reason and "Little Open"; a filter by close type or Little Open is not confirmed. |
 | View Archive menu command | MH Archive | settings adapter table (`docs/settings.md`) | registry `view-archive` | main | — | done | Dispatched in Step C (`App/AppDelegate.swift` `view-archive`, #85). |
-| Clear Archive menu command | MH Archive | none (the `OpenSettings` Library has the button, not the command) | registry `clear-archive` | none | — | unplanned (partial) | `clear-archive` is not in `AppCommand.implemented`. The Library button works in the App. |
+| Clear Archive menu command | MH Archive | none (the `OpenSettings` Library has the button, not the command) | registry `clear-archive`; shared Library confirmation | main (#132) | `sidebar-completion` `I10_clear_archive_*` | done | Opens Library ▸ Archive and requests the button’s same confirmation. Cancel changes no store; confirm clears all registered Profile archives. Disabled without a browser window. No default shortcut (MH Archive). |
 | Archive empty state | FC §3.6 r23 | settings | `OpenSettings` | main | `settings-preview` (empty-state renders) | done | Shown by the App Library (Step C). |
 
 ### 1.7 Command bar
@@ -453,7 +453,7 @@ Columns: feature · RE doc + section · plan · library code · App wiring · ve
 | Page translation: offer, translate, revert, never translate a site, reset | FA §9.2 TR-1–3 | page-platform (#73: on-device path; Chromium translate needs a Google key) | none | none | none | planned | Was unplanned. The Settings reset button reports that reset is not available. See §3, gap 8. |
 | Capture: area, full page, portrait; Cmd+Shift+2; Cmd+Shift drag | FA §9.1 CA-1–4; MH Gestures | page-platform (#73) | `OpenSettings/CapturesSection.swift` (reader) | main (reader) | `settings-preview` (index) | planned (tool) | The Library reader shows in the App. The capture tool does not exist. See §3, gap 13. |
 | Sound effects | FA §9.7 | sidebar-completion (M4) | `OpenFeatures/SoundEffects.swift` with Open-generated sounds (#80); `OpenSettings` switch | none | `features-render` SE1–SE3 (#80) | planned | Spot-check: library only. Sounds exist and play through `SoundEffects`, but no App or sidebar code calls `play` (grep finds callers only in `features-render`). The switch defaults off. |
-| Share (File ▸ Share…, row Share ▸) | MH File; IS §15 | app-shell §4.1, §4.3 | — | main (menu) | — | done (partial) | File ▸ Share shows the system picker (`App/MainMenu.swift:140`). The row Share intent still returns `false`. |
+| Share (File ▸ Share…, row Share…) | MH File; IS §15 | app-shell §4.1, §4.3 | `App/SidebarMenuActions.swift` | main (#132) | `I9_share_system_picker` | done | File ▸ Share uses the system picker. Items 9–10 (#132) wire the row Share… item through `share` to `NSSharingServicePicker`, anchored at the row; `I9_share_system_picker` checks its URL, service query and cancellation. |
 | Spelling, substitutions, transformations, speech, font menus | MH Edit | app-shell Step C (system dispatch) | registry; `SystemCommandActions` selectors | main | — | done | Closed in #85: 46 system ids keep AppKit selectors (§2). See §3, gap 3 (closed). |
 | Two-finger swipe back/forward on the page; pinch zoom | MH "Gestures" | page-platform (#73) | — | — | not verified | planned | Was unplanned. See §3, gap 9. |
 | Optional toolbar (Show/Hide Toolbar, full URL) | FC §8.2 r6 | commandbar-completion §4.6 (#70) | registry | — | — | planned | The bar is 32 pt and reuses the split pane bar. See §3, gap 26. |
@@ -546,19 +546,73 @@ Hotkeys. Menu keys come from the same rows (78 rows carry a key). Code-only keys
 
 ### 2.4 Missing lists
 
-Menu items with no dispatch on `main` (33). The plan column is in §1. "(UI elsewhere)" means another surface offers the action.
+Menu items with no dispatch (30 after local items 9–10; the earlier `main` snapshot had 33). The plan column is in §1. "(UI elsewhere)" means another surface offers the action.
 
 - File: New Incognito Window, Capture…, Capture Full Page, Capture in Portrait Mode, New Profile (UI elsewhere: Settings sheet), New Boost, Edit Boost, New Legacy Boost, Boost Gallery.
 - View: Show/Hide Toolbar, Clear Cache and Refresh, Clear Cookies and Refresh, Cast…, Exit (Esc as a menu command), Appearance ▸ Automatic, Light, Dark, Developer ▸ Network Inspector, Toggle Developer Mode, Allow JavaScript from Apple Events.
-- Spaces: Rename Space (UI elsewhere: inline rename), Edit Theme…, Change Profile (UI elsewhere: Set Profile).
+- Spaces: Edit Theme….
 - Tabs: Peek Email…, Join Meeting.
-- Archive: Clear Archive (UI elsewhere: Library button).
 - Window: View Media (UI elsewhere: Library section; no `view-media` dispatch).
 - Help ▸ Troubleshooting: Open Task Manager, Record Trace, Cancel Trace, Copy Open Info, Reveal Open Data (the last two work from Settings).
+
+Items 9–10 merged to `main` in #132 (`t3/sidebar-intents-menus`):
+
+| Entry | Dispatch and enablement | Real App evidence |
+|---|---|---|
+| Spaces ▸ Rename Space | Focused Space inline title editor; reveals a hidden sidebar; disabled without a browser window or during a sheet | `I10_rename_space_inline/undo`, `I10_rename_hidden_sidebar_reveals`, `I10_rename_cancel_unchanged` |
+| Spaces ▸ Change Profile | Same Set Profile menu at the Space header; checked current Profile and existing selection intent; disabled without a browser window | `I10_change_profile_opens_set_profile`, `I10_change_profile_choice_dispatches/undo` |
+| Spaces ▸ Manage Spaces… | Existing Library ▸ Spaces presenter, retained with no browser (existing design) | `I10_manage_spaces_menu`; existing E5 entry/reuse rows |
+| Archive ▸ Clear Archive | Existing Library confirmation and stores; Cancel is inert; disabled without a browser window or during a sheet | `I10_clear_archive_library_confirmation/cancel/confirm` |
+
+All four keep empty key equivalents, as recorded in `docs/re/menus-and-hotkeys.md` (Spaces and Archive) and `docs/commands.md`; `I10_menu_enablement_and_keys` checks them. `I10_no_browser_window_disables_commands` checks the three newly wired commands.
+
+Items 9–10 verification before the `013cdb45` main merge (2026-10-28):
+
+| Command / gate | Result |
+|---|---|
+| `heavy.sh tools/verify-all.sh --only features-render,sidebar-render,commands-demo,settings-preview` | PASS: build + 4 checks; 0 FAIL/SKIP. Commands 232/232, settings 37/37, sidebar 564/564, features 286/286. |
+| `heavy.sh tools/build.sh` | PASS (Debug app, Swift 6). |
+| Locked Chrome `--only sidebar-completion` | PASS 134/134 suite rows, including all 29 new items 9–10 rows. Engine fingerprint and owned-process cleanup also PASS. |
+| Locked Chrome `--only app-actions` | PASS 47/47 feature rows + engine fingerprint + owned-process cleanup (49 total, same count as A3). |
+
+The focused items 9–10 run also passes 31/31 (29 new rows plus provenance and cleanup). No owned windows or processes remain. Local receipts are in `.re/sidebar-intents-menus/`; generated `docs/engine-spike/` results are excluded from this change. The full paths for `heavy.sh` and the on-screen lock are the AGENTS.md commands.
+
+Verification after merging `origin/main` at `013cdb45` (2026-10-28):
+
+| Command / gate | Result |
+|---|---|
+| `heavy.sh tools/verify-all.sh --only features-render,sidebar-render,commands-demo,settings-preview` | PASS: build + 4 checks; 0 FAIL/SKIP. Commands 232/232, settings 37/37, sidebar 564/564, features 325/325, including main’s auto-archive flows. |
+| `heavy.sh tools/build.sh` | PASS (Debug app). |
+| Locked Chrome `--only sidebar-completion` | PASS 148/148 suite rows: A1/A2/Manager/A3, items 9–10, and E16/AA_APP. Engine fingerprint and owned-process cleanup also PASS. |
+| Locked Chrome `--only app-actions` | PASS 47/47 feature rows plus fingerprint/cleanup (49 total). |
+
+Both suites completed without foreground interruptions. The merge retains both parents’ e2e helpers and named assertions, with one definition per helper and automation handler. Combined receipts are in `.re/sidebar-intents-menus/merge-main/`. Generated `docs/engine-spike/` outputs are restored to the incoming main versions before the merge commit.
+
+Sidebar intents: `moveToNewSpace` reuses A3’s atomic plain New Space helper (`I9_move_single_*`). `share` for pinned/Favorite tab URLs invokes `NSSharingServicePicker` at the row (`I9_share_system_picker`); automation cancels without choosing a service. Share Folder has no single-tab URL and remains refused; Share Space is disabled as out of scope. The factory still refuses `showSiteControls`, `changeSpaceIcon`, `editSpaceTheme`, `newProfile`, `editPinnedURL`, `changeIcon`, and `customizePage`, as assigned to other sections.
 
 Items that left this list since the first audit: Copy URL as Quote (dispatches, wrong text), Reset all tabs in this Space, Expand and Collapse All Folders, Reveal Tab in Sidebar, and every system item (29). Step C dispatched them (#85).
 
 Menu keys with no dispatch (7): New Incognito Window Cmd+Shift+N, Capture Cmd+Shift+2, Show/Hide Toolbar Cmd+Shift+D, Exit Esc, Toggle Developer Mode Ctrl+D, Peek Email Cmd+Shift+E, Join Meeting Cmd+Ctrl+J. All are planned except Join Meeting, which needs a decision (§5.4).
+
+Final local tab-switcher / cold-command-bar verification after merging main
+`dee105e6` (2026-10-28):
+
+| Check | Result |
+|---|---|
+| Heavy verify: features-render, sidebar-render, commands-demo | PASS 335/335, 564/564, 232/232; 0 build warnings/errors. |
+| Extra command-bar / suggestion checks | PASS 78/78 and 34/34; pending-Return assertions unchanged. |
+| Heavy Debug App build | PASS. |
+| Locked sidebar-completion | PASS 164/164 feature rows, 166 total with provenance/cleanup; includes E12, all TS and I9/I10 rows, E16/AA_APP. |
+| Locked app-actions, 3 runs | PASS 48/48 feature rows, 50 total each; cold 3.35 / 3.42 / 3.28 ms at the unchanged 50 ms limit. |
+| Whitespace / merge audit | PASS; one definition per automation command and Python helper; both parents' docs rows retained. |
+
+All final on-screen runs had zero foreground interruptions and passed cleanup.
+The extra app-actions row checks cold launch / Cmd+T switcher laziness. Opening the
+bar applies ready local results before cold AppKit focus and a main-actor turn;
+text edits keep pending-Return cancellation. Live main/branch comparisons and
+phase/sample evidence are in `docs/re/sidebar-completion.md` §13. Receipts are in
+`.re/tab-switcher-cold-open/final-*`; generated `docs/engine-spike` artifacts were
+restored. TS-C1 visual/candidate-scope capture remains open.
 
 ## 3. Gaps, ranked
 
@@ -589,7 +643,7 @@ Ranking is by user impact for an Arc user who switches to Open. **P0** blocks da
 15. **Open — Copy URL toast and the Arc toast look.** Now planned in page-platform (#73, measured spec). Toasts show today in the old look.
 16. **Open — Zoom level toast.** Now planned in page-platform (#73).
 17. **Closed in PR #85 — Expand / Collapse All Folders; Reset all tabs in this Space.** Both dispatch in the App (`App/MainMenu.swift:151`, `:157`). Nested reconcile in #95. Local A3 E9 verifies recursive enablement and live folder/split resets, with Favorites and other Spaces excluded.
-18. **Space export closed; folder → Space open.** Browser Export and Manager Turn into Folder use the real model fallback. Local A3 E10 verifies exact ordered IDs and one undo. Folder → Space remains in the Space/theme lane.
+18. **Space export closed; folder → Space closed in #132.** Browser Export and Manager Turn into Folder use the real model fallback. A3 E10 verifies exact ordered IDs and one undo. `turnFolderIntoSpace` keeps the owning Profile and moves ordered children into Today with one undo (`I9_turn_folder_*`). The future New Space form remains in the Space/theme lane.
 19. **Behavior closed in #127; capture C4 remains open — Hover Previews.** Tracker, folder card, and switches merged (#80, #102). **A2 (2026-10-28): the App opens the preview panel** for folders, pinned tabs and Favorites, with live pages through the Peek host (sidebar-completion §3.6; E11–E14). Lead decision: two Previews sources ("Folders", "Pinned tabs and Favorites"); Arc's live-data sources are post-v1; no delay setting (fixed 0.5 s, an Open choice; one Arc sample ≈ 0.42 s, V 46.11–46.46 s; Step S5b).
 20. **Closed in PR #78 — Tidy titles.** Open-written rules drive `displayTitle` in rows, search, and the Library. Rename keeps the raw title.
 21. **Closed in PR #95 — Unread badge.** Unread tabs and collapsed folders draw a dot in the App sidebar. Inputs in #75.
@@ -645,7 +699,7 @@ Budgets from `docs/architecture.md` (release build, M5 Pro, idle machine). The f
 | Tab switch to content visible (live tab) | ≤ 16 ms | not measured | — | `features-render bench` measures only fake-host layout (200 four-pane layouts, median 0.008 ms, `docs/m4.md`) | not measured. The P1 A/B rerun is open (`docs/followups.md`). |
 | Sidebar scroll and drag at 120 fps | 8.33 ms per frame | First audit: scroll p95 3.67 ms; moveNode p95 4.84 ms (1,000 rows, offscreen). Later: 50-row bulk guards at p95 2.65/1.99 ms (S5, #102); mini-player pairs at p95 about 2.5 ms (#92) | harness | `sidebar-render bench`; PR #92 and #102 bodies | PASS (harness only). MC9 mean rose 0.463 ms past its 0.3 ms rule and merged as a lead load exception (#92). |
 | Idle CPU (no media) | ≈ 0 % | 1.2 % of one core with 10 pages over 10 s (fork); 1.1 % (#53) | main | `docs/engine-spike.md`; `docs/engine-patches.md` P1 status | not met with 10 pages; empty-window idle not measured |
-| Command bar open to first results | ≤ 50 ms | Library: first snapshot p95 0.570 ms; keystroke to rows, wall p95 4.49 ms; history snapshot p95 16.2 ms (first audit). The App delegate now stamps a timing scope (`App/CommandBar/AppCommandBarDelegate.swift`). No App median in a PR body. | library; App unmeasured | `docs/suggest.md`; `docs/commandbar.md` §6 | library PASS; App value still missing |
+| Command bar open to first results | ≤ 50 ms | Library first-audit snapshot p95 0.570 ms, keystroke-to-rows wall p95 4.49 ms, history snapshot p95 16.2 ms. Local App Debug cold opens: 3.35, 3.42, 3.28 ms (median 3.35), three app-actions runs, unchanged entry-to-first-view-application scope; excludes frame presentation. Live pre-fix comparison: main `dee105e6` 21.81 ms, branch 33.59 ms. | library; local tab-switcher branch merged with `dee105e6` | `docs/re/sidebar-completion.md` §13 evening investigation; `.re/tab-switcher-cold-open/final-app-actions-{1,2,3}-results.json` | PASS (library and local App Debug; no Release/frame-presentation claim) |
 
 No budget, for the record: ad-block matching runs 5.5 µs per real ad-tech URL check, 6.0 µs in the tree (#97). Sleep pass CPU p95 is 0.548 ms at 5,000 tabs (#65). Memory has no budget. Latest named values stay 225–239 MB for 1 page and 947–1,210 MB for 10 pages (`results-measure-*.json`).
 
@@ -886,9 +940,9 @@ This appendix is the first audit's table. It is history. Today's counts and miss
 | Spaces | Previous Space | Cmd+Opt+Left | `previous-space` | Y | Y | app-shell §4.3 |
 | Spaces | New Space… | — | `new-space` | — | — | app-shell §4.3 |
 | Spaces | Manage Spaces… | — | `manage-spaces` | Y | Y | unmerged `t3/inject-space-manager` checkpoint; App Library Spaces |
-| Spaces | Rename Space | — | `rename-space` | — | — | none (sidebar inline rename exists) |
+| Spaces | Rename Space | — | `rename-space` | main (#132) | `I10_rename_*` | sidebar inline rename |
 | Spaces | Edit Theme… | — | `edit-theme` | — | — | none (theme editor plan in progress) |
-| Spaces | Change Profile | — | `change-profile` | — | — | none (sidebar Set Profile menu exists) |
+| Spaces | Change Profile | — | `change-profile` | main (#132) | `I10_change_profile_*` | existing Set Profile menu |
 | Tabs | New Tab… | Cmd+T | `new-tab` | P | P | app-shell §4.3 |
 | Tabs | Pin/Unpin Tab | Cmd+D | `pin-unpin-tab` | Y | Y | app-shell §4.3 |
 | Tabs | Duplicate | — | `duplicate-tab` | Y | Y | local A3 E3; selection-aware |
@@ -913,7 +967,7 @@ This appendix is the first audit's table. It is history. Today's counts and miss
 | Archive | Go Forward | Cmd+] | `go-forward` | Y | Y | app-shell §4.3, OpenFeatures |
 | Archive | View History | Cmd+Y | `view-history` | — | — | settings adapter |
 | Archive | View Archive | — | `view-archive` | — | — | settings adapter |
-| Archive | Clear Archive | — | `clear-archive` | — | — | none (`OpenSettings` Library has Clear) |
+| Archive | Clear Archive | — | `clear-archive` | main (#132) | `I10_clear_archive_*` | Library confirmation, Cancel and Clear |
 | Extensions | Manage Extensions… | — | `manage-extensions` | P | P | app-shell §4.3 |
 | Extensions | Add Extension… | — | `add-extension` | — | — | app-shell §4.3 |
 | Window | Minimize | Cmd+M | `minimize-window` | Y | Y | — |
