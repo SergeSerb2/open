@@ -74,6 +74,7 @@ final class EditorStage {
     let parent: EditorParentWindow
     let backdrop = Backdrop(frame: CGRect(x: 0,y: 0,width: 1000,height: 760))
     let initialID: BoostID,scale: CGFloat,state: String
+    private(set) var nativeParentReady = true
     let overlay = NativeOverlayCapture()
     var session: BoostEditorSession { controller.session! }
     var view: BoostEditorView { controller.view! }
@@ -102,6 +103,21 @@ final class EditorStage {
         let screen = CGRect(x: -20100,y: -20200,width: 1600,height: 1200)
         controller.screens = onScreen ? { NSScreen.screens.map { BoostEditorScreen(frame: $0.frame,visibleFrame: $0.visibleFrame) } } : { [BoostEditorScreen(frame: screen,visibleFrame: screen)] }
         let context = SiteControlContext(tabID: host.tabID,profileID: host.profileID,url: host.url,displayHost: host.url.host!,security: .secure)
+        if onScreen {
+            // The native fixture models an already active browser. An app with
+            // no window need not become frontmost; create the activating parent
+            // first, then finish activation before showing a nonactivating panel.
+            NSApp.activate();parent.makeKeyAndOrderFront(nil);parent.makeMain()
+            let deadline = ProcessInfo.processInfo.systemUptime+3
+            func ready() -> Bool {
+                NSApp.isActive && NSWorkspace.shared.frontmostApplication?.processIdentifier == ProcessInfo.processInfo.processIdentifier && parent.isKeyWindow && parent.isMainWindow
+            }
+            while !ready() && ProcessInfo.processInfo.systemUptime<deadline {
+                RunLoop.main.run(until: Date().addingTimeInterval(0.01))
+            }
+            nativeParentReady = ready()
+            if !nativeParentReady { return }
+        }
         precondition(controller.present(parent: parent,contentRect: backdrop.bounds,context: context,boostID: isNew ? nil : seed.id))
         let deadline = Date().addingTimeInterval(3)
         while waitForColors && !session.colorsReady && Date()<deadline { RunLoop.main.run(until: Date().addingTimeInterval(0.001)) }

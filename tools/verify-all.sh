@@ -77,6 +77,7 @@ SCRATCH=$(mktemp -d "${TEMP_BASE%/}/open-verify-work.XXXXXX") || exit 1
 SEED="$SCRATCH/seed"
 mkdir "$SEED" || exit 1
 FAILURES=0
+INTERRUPTIONS=0
 ACTIVE=
 RESULTS="$LOG_DIR/results.tsv"
 : > "$RESULTS"
@@ -191,7 +192,10 @@ run_check() {
             [ -f "$screenshot" ] || continue
             cp "$screenshot" "$LOG_DIR/$name-$(basename "$screenshot")" || status=1
         done
-        if [ "$status" -eq 0 ]; then result=PASS; else result=FAIL; FAILURES=$((FAILURES + 1)); fi
+        if [ "$status" -eq 0 ]; then result=PASS
+        elif [ "$status" -eq 2 ] && [ "$name" = sitecontrol-render ]; then
+            result=INTERRUPTED; INTERRUPTIONS=$((INTERRUPTIONS + 1))
+        else result=FAIL; FAILURES=$((FAILURES + 1)); fi
     fi
     elapsed=$((SECONDS - start))
     printf '%s\t%s\t%s\n' "$name" "$result" "$elapsed" >> "$RESULTS"
@@ -221,4 +225,6 @@ for name in $NAMES; do
     if selected "$name"; then run_check "$name" || :; fi
 done
 summary
-[ "$FAILURES" -eq 0 ]
+[ "$FAILURES" -eq 0 ] || exit 1
+[ "$INTERRUPTIONS" -eq 0 ] || exit 2
+exit 0

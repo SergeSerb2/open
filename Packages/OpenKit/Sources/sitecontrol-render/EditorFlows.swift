@@ -234,6 +234,9 @@ enum EditorFlows {
         let center = relative.view.pad.primaryKnobCenter!
         check("F10 knob drag retains its pointer offset",hypot(center.x-start.x-6,center.y-start.y-8)<0.01)
         s.controller.close();relative.controller.close()
+        // Closing a controller restores key to its parent. Those offscreen
+        // parents must leave the window server before the activating app runs.
+        s.parent.close();relative.parent.close()
         checks += EditorNativeKey.run()
         return checks
     }

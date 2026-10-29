@@ -8,7 +8,8 @@ enum Flows {
         let name: String
         let pass: Bool
         let info: Bool
-        init(name: String,pass: Bool,info: Bool = false) { self.name = name; self.pass = pass; self.info = info }
+        let interrupted: Bool
+        init(name: String,pass: Bool,info: Bool = false,interrupted: Bool = false) { self.name = name; self.pass = pass; self.info = info;self.interrupted = interrupted }
     }
     static func run() -> [Check] {
         var checks: [Check] = []
