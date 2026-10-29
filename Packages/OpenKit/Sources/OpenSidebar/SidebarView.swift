@@ -466,6 +466,18 @@ extension SidebarView {
         return convert(dot.frame, from: cell)
     }
 
+    private func faviconView(tabID: ItemID) -> FaviconView? {
+        func find(_ view: NSView) -> FaviconView? {
+            if let icon = view as? FaviconView, icon.tab?.id == tabID { return icon }
+            for child in view.subviews { if let icon = find(child) { return icon } }
+            return nil
+        }
+        return find(self)
+    }
+    /// Actual last row/tile draw receipts; read-only and never used on scroll.
+    public func drawnFavicon(tabID: ItemID) -> NSImage? { faviconView(tabID: tabID)?.lastDrawnImage }
+    public func drawnFaviconSource(tabID: ItemID) -> String? { faviconView(tabID: tabID)?.lastDrawnSource }
+
     public func drawnFolderGlyph(nodeID: ItemID) -> String? { (cell(nodeID: nodeID) as? FolderCellView)?.icon.lastDrawnGlyph }
 
     public func folderIconView(nodeID: ItemID) -> NSView? { (cell(nodeID: nodeID) as? FolderCellView)?.icon }

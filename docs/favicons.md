@@ -1,8 +1,9 @@
 # Persistent favicons
 
 `OpenStore` stores normalized icons for unloaded tabs, favorites, and imported tabs.
-The engine can call `ingest` when a loaded page supplies an icon. This change exposes
-that API; it does not change the engine or sidebar consumers.
+The App feeds engine favicon reports into `StoredFaviconCache`, which writes them to
+`FaviconStore`. Sidebar rows and Favorites read its bounded decoded cache when no live
+image is available. The Library already reads the same store for archived rows.
 
 ## API
 
@@ -16,8 +17,8 @@ let fetched = await FaviconFetcher(store: store).fetchOne(pageURL)
 ```
 
 `FaviconStore` is an actor. Its methods serialize SQLite access, decoding, and drawing
-on the actor executor. It has no main-actor methods. Its synchronous throwing initializer
-opens the database, so create it from a background caller in the UI integration.
+on the actor executor. Its synchronous initializer records the database URL only.
+The first actor operation opens SQLite off the main actor.
 
 - `icon(for:) -> FaviconImage?` returns an exact path match first, then the origin icon.
   It skips negative/error rows. Successful expired images remain available until replaced
@@ -27,9 +28,9 @@ opens the database, so create it from a background caller in the UI integration.
   PNG, ICO, JPEG, GIF, WebP, and BMP. ICO uses the frame closest to 64 pixels by maximum
   dimension. Other raster formats use the first frame. Decoding downsamples to 64 pixels.
   Input is limited to 512 KiB even for direct engine ingestion. Before thumbnailing,
-  ImageIO properties must report both dimensions in 1...4096 (the selected ICO frame).
-  SVG is accepted when AppKit's `NSImage(data:)` can produce a CGImage and its intrinsic
-  dimensions are positive, finite, and no greater than 4096. Invalid images throw
+  ImageIO must report both dimensions in 1...1024 and depth in 1...8 bits
+  (the selected ICO frame); at most 32 frames are allowed. Vector images are refused
+  before AppKit rasterization. Invalid images throw
   `FaviconStoreError.invalidImage`; invalid page URLs and failed writes also throw.
 - Rendering uses a high-interpolation sRGB CGContext with transparency. It fits the image
   inside a 32×32 or 64×64 square without changing its aspect ratio, then encodes PNGs.
@@ -56,7 +57,9 @@ true for a successful fresh origin row or a successful fetch, and false otherwis
 
 ## Schema and keys
 
-SQLiteDB enables WAL mode and NORMAL synchronous mode. The store sets a three-second
+SQLiteDB enables NORMAL synchronous mode. This cache selects a truncated rollback
+journal, with a 16 MiB database page cap and a 34 MiB combined transient disk cap
+(see App integration below). The store sets a three-second
 busy timeout and retains prepared statements for lookup, freshness, upsert, purge, count,
 and statistics. Statements are reset and cleared after each use and finalized at teardown.
 
@@ -70,6 +73,7 @@ CREATE TABLE IF NOT EXISTS favicons(
   fetched_at REAL NOT NULL,
   expires_at REAL NOT NULL,
   status INTEGER NOT NULL,
+  copy_token TEXT,
   PRIMARY KEY(origin, page_key)
 );
 ```
@@ -529,3 +533,98 @@ The implementation uses Apple's [URLSession byte stream API](https://developer.a
 to stop consuming large responses, and ImageIO's
 [thumbnail pixel-size option](https://developer.apple.com/documentation/imageio/kcgimagesourcethumbnailmaxpixelsize)
 to bound raster decoding before final CGContext rendering.
+
+## App integration
+
+`EngineWebContentHost` receives `OpenEngine` favicon events, normalizes each image
+to 64 pixels, updates the live row, and queues a page-specific report through
+`StoredFaviconCache`. The existing canonical origin plus path key excludes query,
+fragment and credentials. A new report replaces that page's stored icon. Quit drains accepted reports after
+closing engine hosts. The shared
+`FaviconView` observes one cache entry, so reads and replacements redraw reused rows
+without a full sidebar reload. Custom icons retain priority. A live image wins while the tab has a live host;
+unloaded rows ignore a retained stale live PNG and use storage.
+Unloaded pins, slept rows, Favorites and the Space Manager use the cache. The Library
+already reads this store for archived rows. A missing icon keeps the existing placeholder;
+cache misses do not start network requests or disk access on the main thread.
+
+Limits:
+
+- 512 KiB encoded image input; 1024 pixels per source edge; 8 bits per component;
+  at most 32 frames. Raster decoding selects one frame. Vector images are refused.
+- 8192 bytes per page/icon URL. The store retains at most 4096 records and 8 MiB
+  of accounted storage: PNG bytes, URL bytes, origin/path bytes twice for the
+  primary-key index, and 512 bytes per row for metadata/index overhead. Oldest
+  reports are evicted before insertion, reserving the new row's accounted cost.
+- 4096 SQLite pages of 4096 bytes: 16 MiB database, below 34 MiB with the transient
+  rollback journal. The journal truncates after commit. An existing database above 16 MiB
+  is refused before SQLite opens it; no compaction scratch file is created.
+- 1024 decoded cache entries, including misses: at most 16 MiB of 64×64 RGBA pixels.
+  The live cache holds 128 thumbnails (2 MiB decoded). Explicit thumbnail allocation
+  is 16 KiB; maximum accepted 8-bit RGBA source bitmap is 4 MiB.
+- One worker, at most 1024 queued reads and 32 pending reports (16 MiB encoded data),
+  with repeated pending reports for the same page coalesced. Oversized/excess reports
+  are refused. A failed report keeps the previous stored image.
+
+Arc import supplies URLs, with no favicon payload or proved mapping from its hash-named
+PNG caches (`docs/re/data-model.md` §2). URL-only imported rows therefore use an existing
+Open icon for that canonical page, or the placeholder until Open visits it. No Arc
+icon files or personal data are copied.
+
+`features-render check` FV1–FV10 covers report ingestion; cold unloaded, slept and
+Favorite row pixels; replacement and live priority; input refusal; canonical keys;
+cache/queue/disk bounds; and the 8.33 ms p95 scroll budget at 1000 stored-icon rows.
+CLI `favicons` FV11 accepts 512 KiB and refuses one byte more; FV12 refuses an
+existing SQLite database over 16 MiB without writes or sidecars.
+Real-App `sidebar-completion` FV1–FV6 serves a local PNG and compares the actual row's
+pixel hash after report, replacement, pin unload, cold relaunch, URL-only insertion,
+and a move to Favorites. Verification results are recorded in `docs/app-shell.md`.
+
+### PR #131 corrections
+
+OpenEngine suppresses unchanged-icon-URL events. The host associates those images
+with another page only after the document ownership check below. Each host caches
+the image-to-PNG result and last canonical key/data/icon-URL tuple. The store keeps one bounded normalization memo
+and one bounded decoded-image memo; identical bytes reuse codec work.
+
+Cache entries expose observable residency. FIFO eviction marks the old entry as
+not resident and clears its image, including the nil-image case, so visible rows
+redraw and bind to a replacement entry. The cache remains bounded at 1024 entries.
+
+Storage accounting counts primary-key origin/path bytes twice and includes
+512 bytes of per-row/index overhead. Writes reserve space before the upsert.
+If the upsert still returns `SQLITE_FULL`, its transaction is rolled back, the
+oldest quarter of records is evicted in a separate committed transaction, and the
+write is retried once. The 16 MiB physical database cap remains unchanged.
+
+FV13 ingests 1200 distinct 8 KiB URLs through the real store and checks oldest
+record eviction, newest-record readback, zero rejected writes and database size.
+FV15 displays a real unloaded row, evicts its entry with 1025 keys, reports a new
+image, and checks the row's next draw without forcing a reload. Real-App FV14
+navigates `/a` to `/b` with one declared favicon URL, unloads the tab, and requires
+stored-source pixels for `/b`.
+
+### PR #131 document ownership correction
+
+A URL callback alone cannot associate an image with the new document. OpenEngine's
+public `faviconURL` and `favicon` can both still refer to the previous page at that
+point (`OEWebContent.mm`, `oe_setURL` and `oe_setFaviconURL`, read-only inspection).
+The host now waits for loading to finish, reads the committed document's resolved
+icon link (or default `/favicon.ico`) through OpenEngine's JavaScript API, and
+compares the document URL, icon URL, image identity and navigation revision before
+accepting a report. The engine icon URL is recorded with the stored bytes.
+
+An unchanged image is copied only within the same origin after that confirmation.
+Copies preserve an existing exact-page image or origin fallback. New copies carry
+a UUID in the migrated `copy_token` column. An empty/different favicon event
+revokes only that token; a later ordinary engine report clears the token and
+cannot be removed by a stale revocation. The same bounded worker performs copy
+writes, deletion, decoding and row invalidation off the main thread. Existing
+store, input, decoded-cache and disk limits are unchanged.
+
+Real-App FV16 navigates from an icon page to two pages on another origin: one
+without an icon declaration, one with a 404 icon. It unloads each tab, quits and
+relaunches, then requires placeholder pixels and zero exact-page SQLite records.
+FV14 still covers the unchanged-icon `/a` to `/b` path. The real row harness also
+covers preserving a destination image, copy deletion/redraw, token mismatch and
+an ordinary report surviving a late copy revocation.
