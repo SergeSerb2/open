@@ -46,7 +46,7 @@ enum Bench {
         var partInsert: [Double] = [], partApply: [Double] = [], partDisplay: [Double] = []
         for round in 0..<max(2, rounds) {
             for q in queries {
-                c.present(request, animated: false)
+                c.present(request)
                 stage.settle()
                 for ch in q {
                     guard let editor = stage.window.firstResponder as? NSTextView else { break }
@@ -72,7 +72,7 @@ enum Bench {
                     stage.settle()
                     if round > 0 { later.append(threadCPU() - l0) }
                 }
-                c.dismiss(reason: .programmatic, animated: false)
+                c.dismiss(reason: .programmatic)
             }
         }
         wall.sort(); cpu.sort(); later.sort()

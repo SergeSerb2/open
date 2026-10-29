@@ -78,6 +78,13 @@ public enum CommandBarText {
     public static let or = "or"
     public static let tabKey = "Tab"
     public static let spaceKey = "Space"
+    /// (i) footer (CC-42, S2 18/0044 AX). "Arc" becomes "Open" (naming rule). Line 1 is the same
+    /// text as the Settings notice (features-core §4.5 rule 13).
+    public static let privacyTitle = "We talk to your search engine to help us suggest results."
+    public static let privacyLearnMorePrefix = "Learn more about your data on Open "
+    public static let privacyLinkWord = "here"
+    public static let searchSettings = "Search Settings…"
+    public static let dismissNotice = "Dismiss"
 }
 
 /// Maps `OpenSuggest` rows to drawn rows. Each rule names its evidence.

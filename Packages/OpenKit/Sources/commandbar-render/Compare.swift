@@ -165,7 +165,7 @@ struct BarSpec {
     init(scene: SceneFile) {
         self.scene = scene
         preview = scene.preview
-        panel = CommandBarMetrics.panelFrame(windowSize: scene.size, rows: min(preview.rows.count, CommandBarMetrics.maxVisibleRows))
+        panel = CommandBarMetrics.panelFrame(windowSize: scene.size, rows: min(preview.rows.count, CommandBarMetrics.maxVisibleRows), footer: preview.showsFooter)
     }
 
     var inputRow: CGRect { CGRect(x: panel.minX, y: panel.minY, width: panel.width, height: CommandBarMetrics.inputRowHeight) }
@@ -232,6 +232,8 @@ struct BarSpec {
                        kind: .fill(sample: CGRect(x: p.minX + m.textFieldX + 2, y: p.minY + m.textFieldY + 1, width: tw - 6, height: 2))))
         }
         switch preview.input.trailing {
+        case .info where preview.showsFooter:
+            break // (i) hides while the footer shows (CC-42)
         case .info:
             let b = CGRect(x: p.maxX - m.infoButtonTrailing - m.infoButtonSize, y: p.minY + m.infoButtonY, width: m.infoButtonSize, height: m.infoButtonSize)
             let c = CGPoint(x: b.midX, y: b.midY)
@@ -253,8 +255,11 @@ struct BarSpec {
             break
         }
 
-        // Rows.
-        for i in 0..<visibleRows {
+        if preview.showsFooter { e += footerElements() }
+
+        // Rows (the footer band covers what lies under it).
+        let bandTop = preview.showsFooter ? p.maxY - m.footerHeight : .infinity
+        for i in 0..<visibleRows where rowFrame(i).maxY <= bandTop + 1 {
             let row = preview.rows[i], f = rowFrame(i)
             let selected = i == preview.selectedIndex
             let tag = "row \(i + 1)"
@@ -294,6 +299,38 @@ struct BarSpec {
         return e
     }
 
+    /// The (i) privacy footer (S2 18/0044, plan §4.8): band, icon, both lines, both buttons.
+    func footerElements() -> [Compare.Element] {
+        typealias E = Compare.Element
+        let m = CommandBarMetrics.self
+        let p = panel
+        let band = CGRect(x: p.minX, y: p.maxY - m.footerHeight, width: p.width, height: m.footerHeight)
+        var e: [E] = []
+        e.append(E(name: "footer band top (position)", region: CGRect(x: band.minX + 300, y: band.minY - 3, width: 120, height: 7), kind: .ink, positionOnly: true))
+        e.append(E(name: "footer band fill", region: .zero, kind: .points([CGPoint(x: band.minX + 470, y: band.minY + 8), CGPoint(x: band.minX + 470, y: band.maxY - 8),
+                                                                              CGPoint(x: band.minX + 12, y: band.minY + 8)])))
+        let icon = m.footerIconFrame.offsetBy(dx: band.minX, dy: band.minY)
+        e.append(E(name: "footer icon", region: icon.insetBy(dx: -3, dy: -3), kind: .ink))
+        let bold = FontToken(13, .bold).font, regular = FontToken(13, .regular).font
+        let w1 = textWidth(CommandBarText.privacyTitle, font: bold)
+        e.append(E(name: "footer line 1", region: CGRect(x: band.minX + m.footerTextX - 3, y: band.minY + m.footerLine1Top - 2, width: w1 + 6, height: 18), kind: .ink))
+        // Line 2 differs in one word ("Arc" → "Open"): compare its first words ("Learn more about your data on").
+        let w2 = textWidth("Learn more about your data on", font: regular)
+        e.append(E(name: "footer line 2 (first six words)", region: CGRect(x: band.minX + m.footerTextX - 3, y: band.minY + m.footerLine2Top - 1, width: w2 + 3, height: 19), kind: .ink))
+        let dismiss = CGRect(x: band.maxX - m.footerDismissTrailing - m.footerDismissButtonWidth, y: band.minY + m.footerButtonTop,
+                             width: m.footerDismissButtonWidth, height: m.footerButtonHeight)
+        let settings = CGRect(x: dismiss.minX - m.footerButtonGap - m.footerSettingsButtonWidth, y: dismiss.minY,
+                              width: m.footerSettingsButtonWidth, height: m.footerButtonHeight)
+        for (name, b) in [("Search Settings", settings), ("Dismiss", dismiss)] {
+            e.append(E(name: "footer \(name) button", region: b.insetBy(dx: -3, dy: -3),
+                       kind: .fill(sample: CGRect(x: b.minX + 6, y: b.minY + 4, width: 10, height: 3))))
+            e.append(E(name: "footer \(name) edge", region: .zero,
+                       kind: .pixels([CGPoint(x: b.midX, y: b.minY + 0.5), CGPoint(x: b.midX, y: b.maxY - 0.5), CGPoint(x: b.minX + 0.5, y: b.midY), CGPoint(x: b.maxX - 0.5, y: b.midY)])))
+            e.append(E(name: "footer \(name) title", region: b.insetBy(dx: 6, dy: 6), kind: .ink))
+        }
+        return e
+    }
+
     func keyWidth(_ key: String) -> CGFloat {
         let w = (key as NSString).size(withAttributes: [.font: FontToken(13, .semibold).font]).width
         return max(CommandBarMetrics.keycapHeight, (w + 2 * CommandBarMetrics.keycapPadding).rounded())
@@ -315,7 +352,8 @@ struct BarSpec {
         if !preview.text.isEmpty {
             r.append(CGRect(x: panel.minX + m.textFieldX - 4, y: panel.minY + 14, width: panel.width - 300, height: 36))
         }
-        for i in 0..<visibleRows {
+        let bandTop = preview.showsFooter ? panel.maxY - m.footerHeight : .infinity
+        for i in 0..<visibleRows where rowFrame(i).maxY <= bandTop + 1 {
             let f = rowFrame(i), row = preview.rows[i]
             if case .favicon = row.icon { r.append(m.iconPlateFrame.offsetBy(dx: f.minX, dy: f.minY).insetBy(dx: -2, dy: -2)) }
             r.append(CGRect(x: f.minX + m.titleX - 3, y: f.minY + 8, width: 560, height: 34))

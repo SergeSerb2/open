@@ -494,7 +494,18 @@ extension AppDelegate: CommandDispatcher {
     if ["archive-tab", "close-window"].contains(id) { return NSApp.keyWindow != nil }
     return ["new-window", "blank-window", "new-tab", "settings", "search-settings", "air-traffic-control", "import-from-browser", "set-default-browser", "check-for-updates", "view-archive", "view-history", "view-library", "view-downloads", "view-boosts", "quit-open", "new-little-open-window", "little-open-global", "about-open", "hide-open", "hide-others", "show-all", "help-center", "keyboard-shortcuts-edu", "show-shortcuts-overlay", "getting-started", "release-notes", "contact-team", "manage-spaces"].contains(id)
   }
-  func performCommand(_ id: String, payload: String?) { performCommand(id) }
+  func performCommand(_ id: String, payload: String?) {
+    // Search engines live in Settings ▸ Profiles: open the named Profile, else the front window's.
+    // An action row's payload is a Space ID, which names no Profile, so it falls back too.
+    if id == "search-settings" {
+      let named = payload.flatMap(UUID.init(uuidString:)).map { ProfileID(rawValue: $0) }.flatMap { model.profile(id: $0) == nil ? nil : $0 }
+      let profile = named ?? frontWindowController.flatMap { hostFactories[$0.windowID]?.focusedProfile?.id }
+      if let profile, model.profile(id: profile) != nil { settingsPresenter.showProfileSettings(profileID: profile) }
+      else { settingsPresenter.show(pane: .profiles) }
+      return
+    }
+    performCommand(id)
+  }
   func performCommand(_ id: String) {
     if SystemCommandActions.selectors[id] != nil { _ = SystemCommandActions.perform(id); return }
     switch id {
@@ -503,7 +514,7 @@ extension AppDelegate: CommandDispatcher {
       let controller = frontWindowController ?? makeWindow()
       controller.flatMap { hostFactories[$0.windowID] }?.newTab(nil)
     case "settings": settingsPresenter.show()
-    case "search-settings": settingsPresenter.show(pane: .general)
+    case "search-settings": performCommand(id, payload: nil)
     case "air-traffic-control": settingsPresenter.show(pane: .links)
     case "import-from-browser": settingsPresenter.show(pane: .general); settingsPresenter.settings.showsImport = true
     case "set-default-browser": settingsPresenter.settings.general.setDefault()

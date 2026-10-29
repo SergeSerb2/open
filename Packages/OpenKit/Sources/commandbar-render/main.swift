@@ -19,13 +19,12 @@ enum CLI {
     usage:
       commandbar-render render (--state NAME | --scene FILE.json) --out FILE.png [--scale 1|2] [--size WxH] [--backdrop-color #RRGGBB]
           states: \(Scenes.names.joined(separator: ", "))
-      commandbar-render compare --arc CAPTURE.png --ours RENDER.png --scene FILE.json --out DIR [--title TEXT]
+      commandbar-render compare --arc CAPTURE.png --ours RENDER.png --scene FILE.json --out DIR [--title TEXT] [--space srgb|p3]
       commandbar-render ax [--state NAME]           # dump the rendered overlay accessibility tree
       commandbar-render flows                      # keyboard and mouse flows; exit 1 on failure
       commandbar-render check                      # flows + a render of every state + the keystroke budget (tools/verify-all.sh)
       commandbar-render bench [--tabs 5000] [--history 100000] [--scale 2]
       commandbar-render screens --out DIR [--scale 2]   # every state on synthetic data, for docs
-      commandbar-render motion --out DIR           # frames of the open animation (presentation values)
     """
 
     static func value(_ args: [String], _ name: String) -> String? {
@@ -65,7 +64,6 @@ enum CLI {
             Bench.run(tabs: Int(value(rest, "--tabs") ?? "") ?? 5000, history: Int(value(rest, "--history") ?? "") ?? 100_000,
                       scale: CGFloat(Double(value(rest, "--scale") ?? "2") ?? 2))
         case "screens": try screens(rest)
-        case "motion": try motion(rest)
         default: throw CLIError(description: usage)
         }
     }
@@ -143,6 +141,7 @@ enum CLI {
         let favicons = StaticFaviconSource()
         favicons.placeholder = Synthetic.icon("", color: 0x808080)
         stage.controller.favicons = favicons
+        stage.controller.privacyURL = Scenes.samplePrivacyURL
         stage.controller.presentPreview(scene.preview)
         OffscreenRenderer.settle(stage.root)
         if !stage.controller.view.debugUsesOwnFieldEditor {
@@ -155,6 +154,8 @@ enum CLI {
         guard let arc = value(args, "--arc"), let ours = value(args, "--ours"), let scenePath = value(args, "--scene"),
               let out = value(args, "--out") else { throw CLIError(description: usage) }
         let scene = try SceneFile.load(scenePath)
+        // Session-2 captures (S2) carry the display's profile: measure them in Display P3 (`--space p3`).
+        ColorMath.space = value(args, "--space") == "p3" ? .displayP3 : .sRGB
         _ = try Compare.run(arcPath: arc, oursPath: ours, scene: scene, out: out, title: value(args, "--title") ?? scenePath)
     }
 
@@ -184,24 +185,5 @@ enum CLI {
             OffscreenRenderer.writePNG(cut, to: dir.appendingPathComponent("light-backdrop.png"))
             print("wrote light-backdrop.png")
         }
-    }
-
-    /// Captures the open animation at fixed times through presentation values.
-    static func motion(_ args: [String]) throws {
-        guard let out = value(args, "--out") else { throw CLIError(description: usage) }
-        let env = Scenes.env()
-        let dir = URL(fileURLWithPath: out)
-        try FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
-        for t in [0.0, 0.04, 0.08, 0.15, 0.3] {
-            let stage = Stage(size: CGSize(width: 1100, height: 760), scale: 1, engine: env.engine, backdrop: .darkPage)
-            stage.controller.theme = Scenes.theme(env)
-            stage.controller.present(Scenes.request(env, mode: .newTab), animated: true)
-            stage.settle()
-            let start = Date()
-            spin(until: { Date().timeIntervalSince(start) >= t }, timeout: 2)
-            let image = OffscreenRenderer().snapshot(stage.root, scale: 1, presentation: true)
-            OffscreenRenderer.writePNG(image, to: dir.appendingPathComponent(String(format: "open-%03.0fms.png", t * 1000)))
-        }
-        print("wrote motion frames to \(out)")
     }
 }

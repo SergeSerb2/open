@@ -19,7 +19,7 @@ enum ReviewFlows {
             let s = Stage(size: CGSize(width: 1440, height: 900), scale: 1, engine: engine, backdrop: .darkPage)
             var request = Scenes.request(env, mode: mode)
             request.allowsRemoteSuggestions = remote
-            s.controller.present(request, animated: false)
+            s.controller.present(request)
             s.settle()
             return s
         }
@@ -97,9 +97,11 @@ enum ReviewFlows {
             let h = fresh()
             let info = accessibilityNodes(h.controller.view).first { $0.accessibilityLabel() == "Command Bar Help" }
             let infoPressed = info?.accessibilityRole() == .button && info?.accessibilityPerformPress() == true
+            let shownByPress = h.controller.showsPrivacyFooter
             h.key(.info, flags: .command)
-            check("AX: help is a labeled button and Command-I reaches it", infoPressed && h.recorder.intents == [.showHelp, .showHelp] && h.controller.view.debugUsesOwnFieldEditor,
-                  "intents \(h.recorder.intents)")
+            check("AX: (i) is a labeled button; its press and Command-I toggle the privacy footer", infoPressed && shownByPress && !h.controller.showsPrivacyFooter
+                  && h.recorder.intents.isEmpty && h.controller.view.debugUsesOwnFieldEditor,
+                  "press → footer \(shownByPress), Cmd+I → footer \(h.controller.showsPrivacyFooter), intents \(h.recorder.intents)")
             let focusTarget = NSTextField(string: "Next control")
             focusTarget.frame = CGRect(x: 10, y: 10, width: 120, height: 30)
             h.root.addSubview(focusTarget)
@@ -120,13 +122,13 @@ enum ReviewFlows {
             check("Pending Return is cleared by the next text change", s.controller.isPresented && s.recorder.intents.isEmpty && s.controller.appliedQuery == "12*(3+4)x", "intents \(s.recorder.intents)")
             let p = fresh()
             p.type("12*(3+4)"); p.key(.returnKey)
-            p.controller.present(Scenes.request(env, mode: .newTab), animated: false)
+            p.controller.present(Scenes.request(env, mode: .newTab))
             p.settle()
             check("Pending Return is cleared by present", p.controller.isPresented && p.recorder.intents.isEmpty, "intents \(p.recorder.intents)")
             let d = fresh()
             d.type("12*(3+4)"); d.key(.returnKey)
-            d.controller.dismiss(reason: .programmatic, animated: false)
-            d.controller.present(Scenes.request(env, mode: .newTab), animated: false)
+            d.controller.dismiss(reason: .programmatic)
+            d.controller.present(Scenes.request(env, mode: .newTab))
             d.settle()
             check("Pending Return is cleared by dismiss and reopen", d.controller.isPresented && d.recorder.intents == [.dismissed(.programmatic)], "intents \(d.recorder.intents)")
             let empty = fresh(.searchTabs)
@@ -252,9 +254,9 @@ enum ReviewFlows {
             let editor = s.fieldEditor!
             let hadUndo = editor.undoManager?.canUndo == true
             editor.setMarkedText("にほん", selectedRange: NSRange(location: 3, length: 0), replacementRange: NSRange(location: NSNotFound, length: 0))
-            s.controller.dismiss(reason: .programmatic, animated: false)
+            s.controller.dismiss(reason: .programmatic)
             let cleanDismiss = !editor.hasMarkedText() && editor.undoManager?.canUndo == false
-            s.controller.present(Scenes.request(env, mode: .editCurrentURL), animated: false)
+            s.controller.present(Scenes.request(env, mode: .editCurrentURL))
             s.settle()
             let current = s.controller.text
             editor.undoManager?.undo()
@@ -262,7 +264,7 @@ enum ReviewFlows {
                   "had undo \(hadUndo), clean dismiss \(cleanDismiss), can undo \(editor.undoManager?.canUndo ?? false)")
             s.type("draft")
             editor.setMarkedText("にほん", selectedRange: NSRange(location: 3, length: 0), replacementRange: NSRange(location: NSNotFound, length: 0))
-            s.controller.present(Scenes.request(env, mode: .newTab), animated: false)
+            s.controller.present(Scenes.request(env, mode: .newTab))
             s.settle()
             check("Present while open also clears marked text and undo", !editor.hasMarkedText() && editor.undoManager?.canUndo == false && s.controller.text.isEmpty,
                   "marked \(editor.hasMarkedText()), can undo \(editor.undoManager?.canUndo ?? false)")
@@ -271,7 +273,7 @@ enum ReviewFlows {
         // 10. Present before the overlay gets a window, then attach and immediately type.
         do {
             let s = Stage(size: CGSize(width: 1440, height: 900), scale: 1, engine: env.engine, backdrop: .darkPage) { c in
-                c.present(Scenes.request(env, mode: .editCurrentURL), animated: false)
+                c.present(Scenes.request(env, mode: .editCurrentURL))
             }
             let focused = s.controller.view.debugUsesOwnFieldEditor
             let selected = s.fieldEditor?.selectedRange() == NSRange(location: 0, length: (env.world.current.url.absoluteString as NSString).length)

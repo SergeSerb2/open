@@ -61,8 +61,14 @@ final class ResultsView: NSView {
         }
     }
 
+    /// The bottom part of the list that the privacy footer covers (CC-42). Rows there are not
+    /// visible, cannot be hovered or clicked, and the list scrolls so every row can leave it.
+    var occludedBottom: CGFloat = 0 {
+        didSet { if occludedBottom != oldValue { needsLayout = true } }
+    }
+    var visibleHeight: CGFloat { max(0, bounds.height - occludedBottom) }
     var contentHeight: CGFloat { CGFloat(rows.count) * CommandBarMetrics.rowHeight }
-    var maxScroll: CGFloat { max(0, contentHeight - bounds.height) }
+    var maxScroll: CGFloat { max(0, contentHeight - visibleHeight) }
 
     /// Replaces the rows. Views whose row did not change are not redrawn.
     func setRows(_ newRows: [CommandBarRow], selected: Int?) {
@@ -103,7 +109,9 @@ final class ResultsView: NSView {
     func scrollToVisible(_ i: Int) {
         let h = CommandBarMetrics.rowHeight
         let top = CGFloat(i) * h, bottom = top + h
-        if top < scrollOffset { scrollOffset = top } else if bottom > scrollOffset + bounds.height { scrollOffset = bottom - bounds.height }
+        // Whole rows: a footer that leaves 199 of 200 pt shows 4 rows, not 3 plus a 1 pt scroll.
+        let viewport = max(h, (visibleHeight / h).rounded() * h)
+        if top < scrollOffset { scrollOffset = top } else if bottom > scrollOffset + viewport { scrollOffset = bottom - viewport }
         scrollOffset = min(max(0, scrollOffset), maxScroll)
     }
 
@@ -116,7 +124,7 @@ final class ResultsView: NSView {
     private func layoutRows() {
         let m = CommandBarMetrics.self
         let w = bounds.width - 2 * m.rowInsetX
-        let visible = bounds.insetBy(dx: 0, dy: -1)
+        let visible = CGRect(x: 0, y: 0, width: bounds.width, height: visibleHeight).insetBy(dx: 0, dy: -1)
         for (i, v) in rowViews.enumerated() where i < rows.count {
             let f = CGRect(x: m.rowInsetX, y: CGFloat(i) * m.rowHeight - scrollOffset, width: w, height: m.rowHeight)
             // Rows outside the clip are hidden so AppKit does not draw them.
@@ -158,7 +166,8 @@ final class ResultsView: NSView {
 
     func rowIndex(at point: NSPoint) -> Int? {
         let y = point.y + scrollOffset
-        guard point.x >= CommandBarMetrics.rowInsetX, point.x <= bounds.width - CommandBarMetrics.rowInsetX, y >= 0 else { return nil }
+        guard point.x >= CommandBarMetrics.rowInsetX, point.x <= bounds.width - CommandBarMetrics.rowInsetX, y >= 0,
+              point.y < visibleHeight else { return nil }
         let i = Int(y / CommandBarMetrics.rowHeight)
         return rows.indices.contains(i) ? i : nil
     }

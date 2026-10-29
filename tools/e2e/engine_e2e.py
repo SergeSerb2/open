@@ -4798,6 +4798,7 @@ def commandbar_checks(factory, results, tmp, config):
         type_query(origin + '/edited'); press('return')
         correct = wait_until(lambda: app.eval(new['id'], 'document.title') == 'Shell C /edited', step=.1)
         results['edit_current_tab'] = {'ok': bool(correct) and len(app.call('tabs')) == 2, 'title': app.eval(new['id'], 'document.title')}
+        commandbar_footer_checks(app, results, tmp, bar, press, new['id'])
         app.call('focus', tab=new['id'])
         app.eval(new['id'], "(() => {let r=document.createRange();r.selectNodeContents(document.querySelector('#copy-source'));let s=getSelection();s.removeAllRanges();s.addRange(r)})()")
         app.call('pasteboard-write', text='COPY NOT RUN')
@@ -5003,6 +5004,78 @@ def commandbar_checks(factory, results, tmp, config):
         app.call('settings-toggle', name='external')
     finally:
         app.quit(); server.shutdown(); server.server_close()
+
+
+def commandbar_footer_checks(app, results, tmp, bar, press, tab):
+    """commandbar-completion Step 0: no open or close animation (CC-44) and the (i) privacy
+    footer (CC-42), through real keys, real AX presses and the real Settings writer."""
+    state = lambda: app.call('commandbar-state')
+    notice = 'open.general.searchSuggestNoticeDismissed'
+    app.call('select', tab=tab); app.call('focus', tab=tab)
+    app.call('defaults', key=notice, value=False)
+    app.call('suggest-remote', enabled=True)
+    try:
+        visible = lambda: sorted(w['number'] for w in app.call('windows') if w['visible'])
+        windows_before = visible()
+        # Cmd+T: the window's first snapshot after the key already shows the whole panel.
+        first_png, later_png = os.path.join(tmp, 'bar-first.png'), os.path.join(tmp, 'bar-later.png')
+        app.call('key', key='t', modifiers=['cmd'], route='app')
+        at_key = state()  # next command after the key: an animation of the old 0.13–0.22 s length is still running
+        app.call('snapshot', path=first_png)
+        opened = wait_until(lambda: state() if state().get('presented') and state().get('final') else None, timeout=5, step=.05)
+        time.sleep(.4)  # longer than the deleted 0.22 s spring and 0.13 s fade
+        app.call('snapshot', path=later_png)
+        fx, fy, fw, fh = opened['panelFrame']
+        w1, h1, p1 = read_image(first_png); w2, h2, p2 = read_image(later_png)
+        sx = w1 / max(1, app.call('window-state')['frame'][2])
+        # Panel fill and the empty row area: no caret, no rows changing between the two shots.
+        probes = [(fx + 300, fy + 8), (fx + 600, fy + 56), (fx + fw / 2, fy + fh - 4), (fx + fw - 5, fy + fh / 2)]
+        diff = max(max(abs(a - b) for a, b in zip(p1(x * sx, y * sx), p2(x * sx, y * sx))) for x, y in probes)
+        results['commandbar_no_open_animation'] = {'ok': at_key['presented'] and at_key['animationKeys'] == [] and at_key['panelOpacity'] == 1
+            and (w1, h1) == (w2, h2) and diff <= 2 and not opened['footer'],
+            'atKey': {k: at_key[k] for k in ('presented', 'animationKeys', 'allAnimationKeys', 'panelOpacity')}, 'maxChannelDifference': diff, 'footer': opened['footer']}
+        # (i) through its AX press: footer on, (i) gone (field +42 pt), no window.
+        field_before = opened['fieldWidth']
+        pressed = app.call('commandbar-press', control='info')
+        shown = pressed['state']
+        results['commandbar_info_shows_footer'] = {'ok': pressed['pressed'] and shown['footer'] and shown['presented'] and shown['fieldWidth'] - field_before == 42
+            and visible() == windows_before and app.call('defaults', key=notice) is False, 'state': {k: shown[k] for k in ('footer', 'fieldWidth', 'presented')}}
+        # "Dismiss": footer off, the Settings notice key set, remote suggestions allowed at once.
+        dismissed = app.call('commandbar-press', control='dismiss')['state']
+        results['commandbar_footer_dismiss'] = {'ok': not dismissed['footer'] and dismissed['presented'] and app.call('defaults', key=notice) is True
+            and dismissed['allowsRemote'], 'state': {k: dismissed[k] for k in ('footer', 'allowsRemote', 'presented')}}
+        # Esc: gone in the same turn, no animation key left behind.
+        press('escape')
+        closed = state()  # the next command after the key
+        results['commandbar_no_close_animation'] = {'ok': not closed['presented'] and closed['hidden'] and closed['animationKeys'] == [], 'state': {k: closed[k] for k in ('presented', 'hidden', 'animationKeys')}}
+        # A fresh Cmd+T never shows the footer by itself; Cmd+I (the real key path) does.
+        reopened = bar('t')
+        press('i', modifiers=['cmd'])
+        by_key = wait_until(lambda: state() if state().get('footer') else None, timeout=3, step=.05)
+        results['commandbar_cmd_i_footer'] = {'ok': not reopened['footer'] and bool(by_key) and visible() == windows_before, 'opened': reopened['footer']}
+        # "Search Settings…": the bar closes; Settings ▸ Profiles for the bar's Profile.
+        profile = state()['profile']
+        app.call('commandbar-press', control='searchSettings')
+        settings = wait_until(lambda: (lambda s: s if s['settings'] and s['pane'] == 'profiles' else None)(app.call('settings-state')), timeout=5, step=.05)
+        results['commandbar_footer_search_settings'] = {'ok': bool(settings) and not state()['presented'] and settings['selectedProfile'] == profile,
+            'settings': {k: settings[k] for k in ('pane', 'selectedProfile')} if settings else None, 'profile': profile}
+        # The "Search Settings" action row sends a Space payload: still Profiles for the window's Profile
+        # (main opened the General pane). Leave Profiles first so the row must switch back.
+        app.call('settings-pane', pane='links')
+        assert wait_until(lambda: app.call('settings-state')['pane'] == 'links', timeout=3, step=.05), app.call('settings-state')
+        app.call('window-focus', id=app.call('shell-windows')[0]['id'], activate=True)
+        bar('t')
+        app.call('key', text='Search Settings')
+        row = wait_until(lambda: (lambda s: s if s.get('final') and s['rows'] and s['rows'][0].get('action') == 'search-settings' else None)(state()), timeout=5, step=.05)
+        press('return')
+        via_row = wait_until(lambda: (lambda s: s if s['pane'] == 'profiles' and s['selectedProfile'] == profile and not state()['presented'] else None)(app.call('settings-state')), timeout=5, step=.05)
+        results['commandbar_search_settings_action_row'] = {'ok': bool(row) and bool(via_row), 'row': row['rows'][0] if row else None,
+            'settings': {k: via_row[k] for k in ('pane', 'selectedProfile')} if via_row else app.call('settings-state').get('pane')}
+    finally:
+        app.call('suggest-remote', enabled=False)
+        app.call('defaults', key=notice, value=True)
+        app.call('window-focus', id=app.call('shell-windows')[0]['id'], activate=True)
+        app.call('select', tab=tab); app.call('focus', tab=tab)
 
 
 RUN_NAME = re.compile(r"^Open-E2E-[a-z]+-(?:alloy|chrome)-(\d+)-[0-9a-f]{8}(?:-scratch-.*)?$")

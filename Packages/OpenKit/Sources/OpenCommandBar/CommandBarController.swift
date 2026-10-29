@@ -25,6 +25,10 @@ public final class CommandBarController: NSObject {
     }
     /// What lies behind the panel. Set before `present`.
     public var backdrop = CommandBarBackdrop.darkPage { didSet { applyBackdrop() } }
+    /// Open's privacy page, the target of "here" in the (i) footer. Nil hides that line (no dead link).
+    public var privacyURL: URL? { didSet { panel.footer.showsLearnMore = privacyURL != nil } }
+    /// True while the (i) privacy footer shows (CC-42).
+    public var showsPrivacyFooter: Bool { view.showsFooter }
 
     public private(set) var isPresented = false
     public private(set) var request: CommandBarRequest?
@@ -79,25 +83,26 @@ public final class CommandBarController: NSObject {
             self?.queriedText = nil
             self?.textChanged()
         }
+        // Cmd+I and the (i) button toggle the privacy footer; nothing else shows it (D14).
         panel.input.editor.onHelp = { [weak self] in
             guard let self, self.isPresented else { return false }
-            self.delegate?.commandBar(self, perform: .showHelp)
+            self.togglePrivacyFooter()
             return true
         }
         view.onMoveToWindow = { [weak self] in self?.focusInput() }
-        panel.input.infoButton.action = { [weak self] in
-            guard let self else { return }
-            self.delegate?.commandBar(self, perform: .showHelp)
-        }
+        panel.input.infoButton.action = { [weak self] in self?.togglePrivacyFooter() }
+        panel.footer.settingsButton.action = { [weak self] in self?.openSearchSettings() }
+        panel.footer.dismissButton.action = { [weak self] in self?.dismissPrivacyNotice() }
+        panel.footer.link.action = { [weak self] in self?.openPrivacyPage() }
         panel.results.onHover = { [weak self] i in self?.hover(i) }
         panel.results.onClick = { [weak self] i, flags in self?.choose(i, modifiers: CommandBarModifiers(flags)) }
     }
 
     // MARK: Presentation
 
-    /// Opens the bar (or switches it to another mode while open).
-    public func present(_ request: CommandBarRequest, animated: Bool = true) {
-        let wasPresented = isPresented
+    /// Opens the bar (or switches it to another mode while open). The panel shows in the next
+    /// frame at full size and opacity: Arc's bar has no open animation (CC-44, D12).
+    public func present(_ request: CommandBarRequest) {
         pendingReturn = nil
         panel.input.editor.resetSession()
         self.request = request
@@ -109,13 +114,13 @@ public final class CommandBarController: NSObject {
         panel.input.textDidChange()
         isPresented = true
         view.isActive = true
-        view.isHidden = false
+        view.showsFooter = false // The footer never opens by itself (D14).
+        view.setShown(true)
         applyBackdrop()
         selectAllOnFocus = request.mode == .editCurrentURL
         runQuery(text, applyInitialImmediately: true)
         view.layoutSubtreeIfNeeded()
         focusInput()
-        if !wasPresented { view.container.animateIn(animated: animated) }
         delegate?.commandBar(self, didChangePresentation: true, mode: request.mode)
     }
 
@@ -128,7 +133,8 @@ public final class CommandBarController: NSObject {
         request = CommandBarRequest(mode: preview.mode)
         isPresented = true
         view.isActive = true
-        view.isHidden = false
+        view.showsFooter = preview.showsFooter
+        view.setShown(true)
         applyBackdrop()
         let field = panel.input.field
         field.stringValue = CommandBarFieldEditor.normalized(preview.text)
@@ -147,14 +153,14 @@ public final class CommandBarController: NSObject {
         view.layoutSubtreeIfNeeded()
         selectAllOnFocus = preview.selectAllText
         focusInput()
-        view.container.animateIn(animated: false)
     }
 
     public func editingUndoManager(for responder: NSResponder?) -> UndoManager? {
         responder === panel.input.editor ? panel.input.editor.undoManager : nil
     }
 
-    public func dismiss(reason: CommandBarDismissReason, animated: Bool = true) {
+    /// Closes the bar. The panel goes in the next frame (CC-44, D12).
+    public func dismiss(reason: CommandBarDismissReason) {
         pendingReturn = nil
         panel.input.editor.resetSession()
         guard isPresented else { return }
@@ -167,10 +173,8 @@ public final class CommandBarController: NSObject {
         pendingReturn = nil
         if reason != .selection { delegate?.commandBar(self, perform: .dismissed(reason)) }
         if view.window?.firstResponder === panel.input.field.currentEditor() { view.window?.makeFirstResponder(nil) }
-        view.container.animateOut(animated: animated) { [weak self] in
-            guard let self, !self.isPresented else { return }
-            self.view.isHidden = true
-        }
+        view.showsFooter = false
+        view.setShown(false)
         delegate?.commandBar(self, didChangePresentation: false, mode: mode)
     }
 
@@ -194,6 +198,44 @@ public final class CommandBarController: NSObject {
         }
     }
 
+    // MARK: Privacy footer (CC-42, D14)
+
+    /// (i) or Cmd+I: shows or hides the footer. The panel changes in one frame (D12).
+    public func togglePrivacyFooter() {
+        guard isPresented else { return }
+        view.showsFooter.toggle()
+        view.layoutSubtreeIfNeeded()
+        if let i = selectedIndex { panel.results.select(i) } // keep the highlighted row out from behind the band
+    }
+
+    /// Updates the request's remote-suggestion permission, for example after the App recorded
+    /// the notice dismissal. Takes effect with the next query.
+    public func setAllowsRemoteSuggestions(_ allowed: Bool) {
+        request?.allowsRemoteSuggestions = allowed
+    }
+
+    private func dismissPrivacyNotice() {
+        guard isPresented, view.showsFooter else { return }
+        view.showsFooter = false
+        view.layoutSubtreeIfNeeded()
+        delegate?.commandBarDidDismissPrivacyNotice(self)
+        guard isPresented else { return }
+        runQuery(text) // so remote rows can arrive now
+    }
+
+    private func openSearchSettings() {
+        guard isPresented else { return }
+        let profile = request?.profileID
+        dismiss(reason: .selection)
+        delegate?.commandBar(self, perform: .openSearchSettings(profileID: profile))
+    }
+
+    private func openPrivacyPage() {
+        guard isPresented, let url = privacyURL else { return }
+        dismiss(reason: .selection)
+        delegate?.commandBar(self, perform: .open(url, .newTab, []))
+    }
+
     // MARK: Query
 
     private func context() -> SuggestContext {
@@ -203,7 +245,7 @@ public final class CommandBarController: NSObject {
                               searchEngineID: r.searchEngineID, siteSearchID: siteScope?.id)
     }
 
-    /// Opening applies ready local rows before cold focus/animation work. Text edits
+    /// Opening applies ready local rows before cold focus work. Text edits
     /// retain the next-turn boundary so a queued Return can still be cancelled by
     /// another edit, presentation or dismissal. Later providers use the stream.
     func runQuery(_ text: String, applyInitialImmediately: Bool = false) {
@@ -466,10 +508,12 @@ public struct CommandBarPreview: Sendable {
     public var input: CommandBarInput
     public var rows: [CommandBarRow]
     public var selectedIndex: Int?
+    /// Shows the (i) privacy footer.
+    public var showsFooter: Bool
 
     public init(mode: CommandBarMode = .newTab, text: String = "", selectAllText: Bool = false, input: CommandBarInput,
-                rows: [CommandBarRow], selectedIndex: Int? = 0) {
+                rows: [CommandBarRow], selectedIndex: Int? = 0, showsFooter: Bool = false) {
         self.mode = mode; self.text = text; self.selectAllText = selectAllText; self.input = input
-        self.rows = rows; self.selectedIndex = selectedIndex
+        self.rows = rows; self.selectedIndex = selectedIndex; self.showsFooter = showsFooter
     }
 }

@@ -148,6 +148,9 @@ final class InputRowView: NSView {
         }
     }
     weak var favicons: CommandBarFaviconSource?
+    /// While the privacy footer shows, the (i) button hides and the field takes its place (CC-42).
+    var showsFooter = false { didSet { if showsFooter != oldValue { needsLayout = true } } }
+    private var showsInfoButton: Bool { input.trailing == .info && !showsFooter }
 
     /// Each drawn part is its own small view, so a keystroke redraws only what changed.
     private let iconView = PaintView(frame: .zero)
@@ -220,7 +223,7 @@ final class InputRowView: NSView {
     override func accessibilityRole() -> NSAccessibility.Role? { .group }
     override func accessibilityLabel() -> String? { "Command Bar Input" }
     override func accessibilityChildren() -> [Any]? {
-        input.trailing == .info ? [field, infoButton] : [field]
+        showsInfoButton ? [field, infoButton] : [field]
     }
 
     private func updatePlaceholder() {
@@ -263,7 +266,7 @@ final class InputRowView: NSView {
     var trailingWidth: CGFloat {
         let m = CommandBarMetrics.self
         switch input.trailing {
-        case .info: return m.infoButtonSize + m.infoButtonTrailing
+        case .info: return m.infoButtonSize + m.infoButtonTrailing - (showsFooter ? m.footerFieldGrowth : 0)
         case .siteSearchHint(let name, let space): return Self.hintWidth(name: name, space: space) + m.hintTrailing
         case .none: return m.hintTrailing
         }
@@ -276,7 +279,7 @@ final class InputRowView: NSView {
         if input.chip != nil { x += chipWidth + m.chipToText }
         let right = bounds.width - trailingWidth - m.textFieldTrailingGap
         field.frame = CGRect(x: x + Self.fieldOffset.x, y: m.textFieldY + Self.fieldOffset.y, width: max(20, right - x), height: m.textFieldHeight + 2)
-        infoButton.isHidden = input.trailing != .info
+        infoButton.isHidden = !showsInfoButton
         infoButton.frame = CGRect(x: bounds.width - m.infoButtonTrailing - m.infoButtonSize, y: m.infoButtonY, width: m.infoButtonSize, height: m.infoButtonSize)
         iconView.frame = m.leadingIconFrame
         // Same origin as the field's text: the field's frame plus the text container's 2 pt padding.
@@ -407,7 +410,7 @@ final class InfoButton: NSView {
     override func isAccessibilityElement() -> Bool { true }
     override func accessibilityRole() -> NSAccessibility.Role? { .button }
     override func accessibilityLabel() -> String? { "Command Bar Help" }
-    override func accessibilityHelp() -> String? { "Show command bar tips (Command-I)" }
+    override func accessibilityHelp() -> String? { "Show how search suggestions use your search engine (Command-I)" }
     override func accessibilityPerformPress() -> Bool {
         guard !isHidden, let action else { return false }
         action()

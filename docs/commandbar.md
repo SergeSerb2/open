@@ -9,6 +9,8 @@ Sources: [interaction-states.md](re/interaction-states.md) §9 (captured command
 
 ![States 2](commandbar/states-2.png)
 
+![The (i) privacy footer](commandbar/privacy-footer.png)
+
 The screens above are our renders of synthetic data (`commandbar-render screens`): empty Cmd+T, typing "git", Cmd+L, actions with keycaps, the "Tab or Space" hint, the Site Search chip (empty and with a query), the calculator, a scrolled list, and the edge style over a white page.
 
 ## 1. Modules
@@ -17,12 +19,13 @@ The screens above are our renders of synthetic data (`commandbar-render screens`
 |---|---|
 | `CommandBarController` | Owns the overlay. Sends each text change to `SuggestEngine.query`, applies its snapshots, handles keys and the mouse, and reports choices as `CommandBarIntent`s through `CommandBarDelegate`. No engine code. |
 | `CommandBarView` | The overlay: a transparent view the App puts over the whole window content. It holds the shadow and the panel and catches clicks outside the panel. |
-| `PanelView`, `MaterialView`, `EdgeView` | The panel: translucent material, input row, separator, result list, edge. |
+| `PanelView`, `MaterialView`, `EdgeView` | The panel: translucent material, input row, separator, result list, (i) footer, edge. |
+| `PrivacyFooterView` | The (i) footer: Arc's search-suggestion privacy notice as a black band at the panel's bottom (CC-42). |
 | `InputRowView` | Leading icon, Site Search chip, text field (own field editor), placeholder, (i) button or Site Search hint. |
 | `ResultsView`, `ResultRowView` | Up to 12 rows, 5 visible, one shared selection layer. |
 | `Presentation.swift` | `Suggestion` → drawn row (`CommandBarRow`), input (`CommandBarInput`), copy. |
 | `FaviconStoreSource` | Synchronous favicon lookups over the `FaviconStore` actor (main-actor cache per origin, async fill). |
-| `OpenDesign/CommandBarTokens.swift` | `CommandBarMetrics`, `CommandBarShadow`, `CommandBarMaterial`, `CommandBarRole`, and the provisional `Motion.commandBar*` tokens. |
+| `OpenDesign/CommandBarTokens.swift` | `CommandBarMetrics`, `CommandBarShadow`, `CommandBarMaterial`, `CommandBarRole`. No motion tokens: the bar does not animate (§5). |
 | `commandbar-render` | Renders, comparison with Arc captures, keyboard and mouse flows, the keystroke bench, `check` for `tools/verify-all.sh`. |
 
 ## 2. API
@@ -33,6 +36,7 @@ bar.delegate = self                       // CommandBarDelegate
 bar.favicons = FaviconStoreSource(store: faviconStore)
 bar.theme = CommandBarTheme(style: sidebarContext.style(for: space))
 bar.backdrop = CommandBarBackdrop(color: pageBackground, image: optionalContentSnapshot, imageScale: 2)
+bar.privacyURL = nil                      // Open's privacy page for the (i) footer; nil hides that line
 window.contentView?.addSubview(bar.view)  // above the web content and the sidebar, full size
 bar.view.frame = window.contentView!.bounds; bar.view.autoresizingMask = [.width, .height]
 
@@ -50,8 +54,10 @@ Intents (`CommandBarIntent`):
 | `.switchToTab(id, spaceID:)` | Switch to Tab rows | Switch to `spaceID` first when it is another Space, then select the tab. |
 | `.runAction(id:spaceID:)` | action rows | Run the command with this id (`ActionRegistry` ids, docs/commands.md). `spaceID` is the target of "Focus on \<Space\>". |
 | `.copy(text)` | calculator row | Copy the answer (and show a toast). |
-| `.showHelp` | the (i) button | guess: open command bar tips. **Superseded by capture (2026-10-26):** Arc's (i) shows an inline privacy footer in the bar (`re/commandbar-completion.md` CC-42). `plans/commandbar-completion.md` Step 0 removes this intent and adds the footer and `.openSearchSettings`. |
+| `.openSearchSettings(profileID:)` | "Search Settings…" in the (i) footer | The bar closed. Show Settings ▸ Profiles for that Profile (Open keeps search engines per Profile). |
 | `.dismissed(reason)` | Esc, click outside, programmatic | Return focus to the web content. |
+
+`commandBarDidDismissPrivacyNotice(_:)` reports "Dismiss" in the (i) footer. The App writes `open.general.searchSuggestNoticeDismissed` (the Settings notice key, "Code 4") and calls `setAllowsRemoteSuggestions(_:)`; the bar then re-runs the current query, so remote rows arrive at once.
 
 `commandBar(_:didChangePresentation:mode:)` reports open and close. With `.newTab` the App sets `SidebarContext.isNewTabCommandBarOpen`, so the sidebar "New Tab" row looks selected during Cmd+T and not during Cmd+L (F0063 vs F0049).
 
@@ -118,6 +124,21 @@ All values are points from the panel's outer top-left corner, at 1x (window 2216
 
 The input's leading icon follows the first row: magnifier for searches and an empty field, globe for a typed URL without a favicon, the favicon when known (F0040, F0052, F0061). In Cmd+L it is the page's favicon.
 
+### 3.4 The (i) privacy footer
+
+Measured on S2 18/0044 (window 1728×1084, panel `[481, 373, 766, 329]`, 5 rows); `H` = panel height, `W` = panel width. Tokens: `CommandBarMetrics.footer*`, `CommandBarRole.footer*`.
+
+| Part | Value | Mark, evidence |
+|---|---|---|
+| Band | `#000000`, `[0, H − 61, W, 61]`, clipped by the panel corner; above the list, under the edge | measured (pixels) |
+| List under the band | Same frame; its visible part ends at the band (5 rows → 4). Hover and clicks there never reach rows; the keyboard scrolls a row out from behind it | measured (AX table frame unchanged) |
+| Short panels | Fewer than 2 rows: the panel grows by 61 pt | guess |
+| (i) button | Hidden; the field grows 42 pt (656 → 698) | measured (AX) |
+| Icon | `info.circle` 13 pt, ink 13×13 at `[18, H − 37]`, white 0.5 | measured box; color fitted (core #767676) |
+| Line 1 | "We talk to your search engine to help us suggest results.", 13 **Bold**, white 0.93, ink top at `H − 48` | text measured; font fitted (ink width 364 px and ink mass match 13 Bold, not Semibold) |
+| Line 2 | "Learn more about your data on Open " + "here" (underlined, link) + ".", 13 Regular, white 0.5, ink top at `H − 30`. Hidden while the App has no privacy page | text measured ("Arc" → "Open"); color fitted (core #7A7A7A) |
+| Buttons | "Search Settings…" `[W − 223.5, H − 49.5, 132, 37]`, "Dismiss" `[W − 82.5, H − 49.5, 72, 37]`; fill `#302F63`, 1 pt edge `#6362AD`, radius 8, title 13 Regular white 0.9 | frames measured (AX, 0 pt); fill measured; edge solved from the two half-strength pixels of the half-point edge (one pixel reads `#494988`); title fitted (ink widths 104 / 45 px) |
+
 ## 4. Behavior
 
 | Input | Result | Evidence |
@@ -134,29 +155,23 @@ The input's leading icon follows the first row: magnifier for searches and an em
 | Space | After a site's exact name or keyword ("yt", "youtube"): enters Site Search; the hint then reads "Tab or Space". A prefix ("you") stays text. | F0040 shows "or Space"; exact-match rule guess |
 | Backspace on an empty scoped query | Leaves Site Search | features-core §4.6 rule 16 |
 | Pointer move over a row | Selects it (real moves only; rows sliding under a still pointer do not) | features-core §4.7 rule 17 (guess) |
-| Click a row / outside / (i) | Choose / close (`.clickOutside`) / `.showHelp` | outside click guess. Arc: (i) shows the inline privacy footer (CC-42); changes in `plans/commandbar-completion.md` §4.8 |
-| Cmd+I | Show command bar help while the input is focused; Tab is available for Site Search or normal focus traversal. | implementation; flow 49. After commandbar-completion Step 0 it toggles the privacy footer |
+| Click a row / outside | Choose / close (`.clickOutside`) | outside click guess |
+| Click (i), or Cmd+I in the field | Show the privacy footer (§3.4); Cmd+I again hides it. No intent, no window. Tab stays free for Site Search or focus traversal. | CC-42 (S2 18/0044); Cmd+I is an Open rule; flows 34, 49, 88 |
+| Footer "Dismiss" / "Search Settings…" / "here" | Hide the footer and report the dismissal, then re-run the query / close with `.openSearchSettings` / close with `.open(privacyURL, .newTab, [])` | CC-42; flows 89–90 |
+| Present (any mode) | No footer. Only (i) and Cmd+I show it; it never shows by itself. | lead ruling 2026-10-26 (D14); flow 89 |
 | Cmd / Shift / Option + Return | Reported in the intent's `modifiers`; no other behavior | Arc names `CommandBarSelectionOptions`, but no capture or string proves the keys |
 
 During IME composition, Return, Tab, Esc, Space, and arrows go to the input method. Return commits composition without choosing a result. Each present and dismiss unmarks composition and clears the field editor's own undo stack. Presentation before window attachment focuses the input when its view gets a window.
 
-Rows expose AX buttons with the title as their label, subtitle and accessory as their value, and a press action. Selection changes post `selectedChildrenChanged` and an announcement with the row label. The field's native placeholder matches the drawn placeholder. The (i) control is a labeled AX button and Cmd+I opens its help.
+Rows expose AX buttons with the title as their label, subtitle and accessory as their value, and a press action. Selection changes post `selectedChildrenChanged` and an announcement with the row label. The field's native placeholder matches the drawn placeholder. The (i) control is a labeled AX button; its press and Cmd+I toggle the footer. The footer is an AX group "Search suggestions privacy" with its two lines, the link "here", and the two buttons.
 
 The field editor has spelling, grammar, completion, substitutions, and data detection off: URLs must not be "corrected", and each check costs work per keystroke.
 
 ## 5. Motion
 
-**Arc has no open or close animation.** In capture session 2's video the whole bar appears or goes between two frames (≤ 38 ms apart), 4 of 4 times (`re/commandbar-completion.md` CC-44; `re/interaction-states.md` §20.12, V 9.70, 10.88, 13.02, 14.20 s). The collapsed AX layout during a close (F0060, F0064; S2 18/0029, 0047) is internal state with no visible frame.
+**None.** Arc's bar appears and goes between two video frames (≤ 38 ms apart), 4 of 4 times (`re/commandbar-completion.md` CC-44; `re/interaction-states.md` §20.12, V 9.70, 10.88, 13.02, 14.20 s). Present and dismiss change the panel in one frame: no scale, no fade, no animation key on any bar layer; `CommandBarView.setShown` sets `isHidden` with Core Animation actions off (flow 87; the App e2e `commandbar` suite checks the first window snapshot after Cmd+T). The collapsed AX layout during a close (F0060, F0064; S2 18/0029, 0047) is internal state with no visible frame; Open does not reproduce it. The selection jumps between rows (no animation). The (i) footer also shows and hides in one frame.
 
-The library still has the provisional tokens below. `plans/commandbar-completion.md` Step 0 (§4.9) deletes them and their Core Animation code; after that, present and dismiss change the panel in one frame. Until then the code animates, which differs from Arc.
-
-| Token | Value today (to be deleted) |
-|---|---|
-| `Motion.commandBarOpen` | fade in (0.13 s ease-out) and scale 0.96 → 1, spring response 0.22 s, damping 0.9 |
-| `Motion.commandBarClose` | fade out and scale → 0.98, 0.12 s ease-in |
-| Selection change | none (it jumps); stays |
-
-![Open animation today, 0 / 40 / 80 / 150 / 300 ms (to be removed)](commandbar/open-motion.png)
+The provisional `Motion.commandBarOpen*` and `Motion.commandBarClose*` tokens (a 0.22 s spring from scale 0.96 and a 0.12 s fade) were deleted in commandbar-completion Step 0.
 
 ## 6. Performance
 
@@ -176,15 +191,16 @@ Profiling (`sample`) found three costs, now fixed: a forced panel layout on ever
 
 ```text
 commandbar-render render (--state NAME | --scene FILE.json) --out FILE.png [--scale 1|2] [--size WxH] [--backdrop-color #RRGGBB]
-    states: empty, typing-git, cmd-l, space-hint, site-chip, site-search, calculator, actions, scrolled
-commandbar-render compare --arc CAPTURE.png --ours RENDER.png --scene FILE.json --out DIR [--title TEXT]
+    states: empty, typing-git, cmd-l, space-hint, site-chip, site-search, calculator, actions, scrolled, privacy-footer
+commandbar-render compare --arc CAPTURE.png --ours RENDER.png --scene FILE.json --out DIR [--title TEXT] [--space srgb|p3]
 commandbar-render ax [--state NAME] # dump the rendered overlay AX tree
 commandbar-render flows       # keyboard and mouse flows
 commandbar-render check       # flows + a render of every state + the keystroke budget (tools/verify-all.sh)
 commandbar-render bench [--tabs 5000] [--history 100000] [--scale 2]
 commandbar-render screens --out DIR [--scale 2]
-commandbar-render motion --out DIR
 ```
+
+`--space p3` loads both PNGs into Display P3 and measures ΔE00 there. Session-2 captures (S2) carry the AW2726DM display profile, whose gamut exceeds sRGB; use it for them. The session-1 comparisons in §8.1 stay in sRGB. A scene file can set `"footer": true`; the stage then supplies a stand-in privacy URL so line 2 draws.
 
 States run through the real engine over a synthetic world (neutral titles, public site names, our own theme colors and letter icons). A scene file instead gives fixed rows, a theme JSON, and a backdrop PNG, to match one Arc capture. Scene files that copy a capture's titles hold personal data, so they stay in `.re/` (git-ignored).
 
@@ -208,6 +224,12 @@ Targets: position ≤ 1 pt, ΔE00 ≤ 2.
 | F0055 | typing, 1 row | 19 | 1.0 | 0.17 | 1.73 | 0.44 |
 | A0327 | Space without a theme, Space-name accessory | 37 | 1.0 | 0.10 | 1.67 | 0.42 |
 | A0120 | white page (light edge style), split row | 37 | 6.0 | 0.27 | 2.47 | 0.55 |
+
+Session 2 (Display P3, `--space p3`; window 1728×1084):
+
+| Capture | State | Footer elements | Worst position (pt) | Worst ΔE00 | Other elements |
+|---|---|---|---|---|---|
+| S2 18/0044 | (i) footer on the empty Cmd+T panel, 5 rows | 13 (band top and fill, icon, line 1, line 2's first six words, both buttons' fill, edge, title) | 1.0 (band top) | 0.62 | Panel position 0 pt on all four sides. Two misses are not footer elements: the edge style (§8.3) and row 2's long title (Arc cuts it at ≈ 470 pt; commandbar-completion design-parity work). |
 
 ### 8.2 Per element (F0063)
 
@@ -240,11 +262,13 @@ Other states: text selection fill 0.00 (F0048); selected input text 1.0 pt / 0.6
 | Split View row (A0120 row 3) | title 6 pt left | Arc draws one row per Split with a wider plate holding both pane icons. `OpenSuggest` returns one row per pane; we show the pane's favicon and "Switch to Split View". Needs a split row from the engine. |
 | Shadow below the panel over a white page (A0120) | ΔE 2.47 | No clean frame of that page without the bar exists; the page is not uniform (pink at the sides, blue-gray below) and we use one flat color. |
 | Glyph ink boxes | ≤ 1 pt | SF Symbols are not Arc's art. Sizes are fitted on macOS 27.2 (26B5112a); symbol metrics changed once during this work, so re-fit after OS updates (`compare` shows it at once). |
-| Light macOS appearance, Little Open, the search-suggestion privacy notice, inline autocomplete | not built or not compared | No capture (interaction-states §19). Arc has `CommandBarAutocompleteSuggestion`; nothing shows its look. |
+| Panel edge over a light page in session 2 (S2 18/0044, 0009, 0016, 0018) | ΔE00 ≈ 16 on both edge lines | Session 1 (F0039, F0040, A0120) shows one gray line over a light page; session 2 shows Arc's dark double line over light and blue pages. Open keeps the session-1 luminance rule; the input that switches the style is not known (`docs/followups.md`, capture request). |
+| (i) footer line 2 | one word | Arc says "Arc", Open says "Open" (naming rule). The App hides the line until Open has a privacy page. |
+| Light macOS appearance, Little Open, inline autocomplete | not built or not compared | Light: S2 20/0018 shows the light panel (§11 q3); not built yet. Arc has `CommandBarAutocompleteSuggestion`; commandbar-completion §4.1. |
 
 ## 9. Flows (`commandbar-render flows`)
 
-Real key events go through the window and the bar's field editor; mouse events go to the hit-tested views; the engine is the real `SuggestEngine` over the synthetic world. 68/68 pass, including 33 review regression checks. `check` adds a render of every state at 2x and the keystroke budget: 78/78.
+Real key events go through the window and the bar's field editor; mouse events go to the hit-tested views; the engine is the real `SuggestEngine` over the synthetic world. 80/80 pass, including 33 review regression checks and the 12 Step 0 checks (flows 87–90). `check` adds a render of every state at 2x and the keystroke budget: 91/91.
 
 | # | Flow |
 |---|---|
@@ -268,10 +292,10 @@ Real key events go through the window and the bar's field editor; mouse events g
 | 27 | A tab in another Space shows the Space name |
 | 28–29 | Without a move the selection follows the top hit; after a move a later snapshot keeps the chosen row (a 200 ms local stub stands in for the search engine) |
 | 30 | Return right after typing waits for that query |
-| 31–34 | Hover selects row 3; click row 3 → its intent; click outside → `.clickOutside`; click (i) → `.showHelp` |
+| 31–34 | Hover selects row 3; click row 3 → its intent; click outside → `.clickOutside`; click (i) shows the privacy footer (no intent, no window) |
 | 35 | Empty Cmd+T: row 1 selected, Return acts on it |
 | 36–44 | Japanese IME composition: zero queries while marked, one on unmark/commit; Return only commits; Tab/Esc/Space/arrows stay with the input method |
-| 45–51 | Rendered AX tree: button labels, values, selection, press action, native placeholder, help through AX/Cmd+I, Tab traversal, shortcut values |
+| 45–51 | Rendered AX tree: button labels, values, selection, press action, native placeholder, (i) press and Cmd+I toggle the footer, Tab traversal, shortcut values |
 | 52–55 | Pending Return is cleared by a new query, present, dismiss/reopen, or an empty first snapshot |
 | 56–57 | Return opens the visible highlighted row while providers are pending, or the top row of the current text's first snapshot |
 | 58–59 | Boundary arrows preserve selection; Up at row zero does not set `userMovedSelection` |
@@ -280,6 +304,10 @@ Real key events go through the window and the bar's field editor; mouse events g
 | 64–65 | Multiline Unicode paste is capped at 2,048 characters; further typing preserves visible/query equality |
 | 66–67 | Dismiss/reopen and present while open clear composition and undo |
 | 68 | Present before attachment focuses the field, selects Cmd+L's URL, and accepts replacement typing |
+| 87 | Present: the panel is fully drawn in the first frame (presentation-layer render equals a later render) and no layer has an animation key; dismiss: hidden at once, no animation key, the page shows again (CC-44) |
+| 88 | Click (i): footer on, (i) hidden, field +42 pt, panel frame unchanged; black band; the list's visible part ends at the band; the pointer over the band selects nothing; Down scrolls row 5 out from behind it; Cmd+I hides the footer; a panel without rows grows by the band |
+| 89 | "Dismiss": footer off, the delegate hears it, the query re-runs and remote rows arrive; `present` in every mode shows no footer (fresh, while open, after a close) |
+| 90 | "Search Settings…" (real click) → `.openSearchSettings(Profile)` and the bar closes; "here" is hidden without a privacy URL and opens it with one |
 
 ### 9.1 Review findings
 
@@ -315,12 +343,12 @@ Engine (`OpenSuggest`) gaps seen against Arc:
 1. Empty Cmd+T: Arc lists open tabs ("Switch to Tab") and the help action first (F0063, A0327); `OpenSuggest` ranks top history first.
 2. Split View: Arc shows one row per Split with both panes; `OpenSuggest` returns one row per pane.
 3. Inline autocomplete (`CommandBarAutocompleteSuggestion`): not provided. Planned in `plans/commandbar-completion.md` §4.1.
-4. The one-time search-suggestion privacy notice (features-core §4.5 rule 13): not built in the bar. Arc shows it as the (i) footer (CC-42); planned in `plans/commandbar-completion.md` §4.8.
+4. The search-suggestion privacy notice (features-core §4.5 rule 13): built as Arc's (i) footer (CC-42, commandbar-completion Step 0).
 
 ## 11. Open questions
 
 1. What do Cmd, Shift, and Option + Return do? (Reported as modifiers only.)
 2. Is the edge style chosen by the page's color scheme or by backdrop luminance? (We use luminance.)
 3. Does the panel turn light in light macOS appearance? Answered by session 2: yes, in a default-theme Space the fill is `#F8F8F8`, the selection `#8E95FF`, the placeholder `#7D7D7D`, the separator `#E0E0DF` (`re/interaction-states.md` §20.11, S2 20/0018). Not built; no plan owns it yet (`re/capture-session-2-results.md` §2.7 "new work").
-4. Open and close timing. Answered by session 2: no animation (§5, CC-44).
+4. Open and close timing. Answered by session 2: no animation (§5, CC-44); built in commandbar-completion Step 0.
 5. The Site Search chip's look and the scoped placeholder text. Answered by session 2: an orange text-only capsule (`#FFA000`) and the placeholder "Search…" (CC-41); spec in `plans/commandbar-completion.md` §4.3.6.

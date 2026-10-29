@@ -42,7 +42,14 @@ func blockingThrowing<T: Sendable>(_ op: @escaping @MainActor () async throws ->
 final class IntentRecorder: CommandBarDelegate {
     var intents: [CommandBarIntent] = []
     var presentations: [(Bool, CommandBarMode)] = []
+    var noticeDismissals = 0
+    /// What the delegate grants after a notice dismissal (the App: the Profile's suggestion setting).
+    var allowsRemoteAfterDismissal: Bool?
     func commandBar(_ commandBar: CommandBarController, perform intent: CommandBarIntent) { intents.append(intent) }
+    func commandBarDidDismissPrivacyNotice(_ commandBar: CommandBarController) {
+        noticeDismissals += 1
+        if let allowed = allowsRemoteAfterDismissal { commandBar.setAllowsRemoteSuggestions(allowed) }
+    }
     func commandBar(_ commandBar: CommandBarController, didChangePresentation isPresented: Bool, mode: CommandBarMode) {
         presentations.append((isPresented, mode))
     }
