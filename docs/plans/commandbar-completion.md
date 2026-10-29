@@ -750,7 +750,7 @@ The Section 2 agent implements this plan. Each row names the merged PR and its e
 
 | Step | PR | Evidence | Result |
 |---|---|---|---|
-| 0 | (this PR) | `commandbar-render check` 91/91 (flows 87–90; the 9 existing states render pixel-identical to `main` at 2x, scene path identical too); S2 18/0044 compare in Display P3: 13 footer elements ≤ 1 pt and ΔE00 ≤ 0.62; App build; e2e `commandbar` 54/54 incl. `commandbar_no_open_animation`, `_no_close_animation`, `_info_shows_footer`, `_footer_dismiss`, `_cmd_i_footer`, `_footer_search_settings`; break-and-revert: an added 0.13 s fade fails flow 87 and the App row (panel opacity 0.07 right after Cmd+T), no list occlusion fails flow 88, a footer kept across `present` fails flow 89 | done |
+| 0 | [#137](https://github.com/SergeSerb2/open/pull/137) | `commandbar-render check` 91/91 (flows 87–90; the 9 existing states render pixel-identical to `main` at 2x, scene path identical too); S2 18/0044 compare in Display P3: 13 footer elements ≤ 1 pt and ΔE00 ≤ 0.62; App build; e2e `commandbar` 54/54 incl. `commandbar_no_open_animation`, `_no_close_animation`, `_info_shows_footer`, `_footer_dismiss`, `_cmd_i_footer`, `_footer_search_settings`; break-and-revert: an added 0.13 s fade fails flow 87 and the App row (panel opacity 0.07 right after Cmd+T), no list occlusion fails flow 88, a footer kept across `present` fails flow 89 | done |
 
 Section 2 decisions (Step 0):
 
