@@ -4,7 +4,8 @@
     {
       "cpuBrand": "Apple M5 Pro",
       "osBuild": "26B5112a",
-      "coldOpenInstructions": 95035968
+      "coldOpenInstructions": 95035968,
+      "simpleEditorOpenInstructions": 135203676
     }
   ]
 }

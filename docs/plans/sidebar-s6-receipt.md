@@ -3,6 +3,103 @@
 Original S6 base: 2d51f14a1207c00157edb90f51459d97b7b1096b (A2 over A1).
 Branch: t3/sidebar-s6-folder-peek. Parent owns the PR/stack.
 
+## Final integration with origin/main 61ae275a / #133 (2026-10-28)
+
+Regression fix `c128a3a2` is preserved, including native raster contexts and the
+Library readiness/failure diagnostics. The user then requested main
+`61ae275a2d2bb5c68a7652c8b0f56d547c773253`. Merge it without rewriting either
+history. The only conflict is `tools/verification/check.py`: use main's
+`onscreen-suite` worker, interruption exit 2, queue-time exclusion and owned-child
+cleanup for Site Control; keep S6's FP11 import checks and optional FP10 dispatcher.
+AST audits find no duplicate top-level definitions in the runner or native e2e.
+Keep all main Site Control product/calibration changes and both sets of followups,
+including the peek shown-tab rule. No frozen PNG or visual threshold changes.
+
+The final full command is:
+
+```sh
+~/Library/Caches/OpenRE/scripts/heavy.sh tools/verify-all.sh --keep-logs
+```
+
+**22/22 rows PASS, exit 0, first invocation on the combined source.** This replaces
+the earlier c128a3a2 bounded-retry acceptance as the final full-gate receipt. The
+old failures below remain historical. Both legacy gates and sidebar comparison
+pass. Sidebar-render is 595/595 (inherited SW1–SW4 skips), features-render 332/332,
+commands-demo 307/307, Site Control 1471/1471. Site Control's editor instruction
+median is 134,697,355; CPU p95 is 11.406 ms at load1 15.93. The CPU figure is INFO;
+quiet-machine latency acceptance remains with the lead, as main's docs require.
+Native worker cleanup reports the renderer reaped and the private root removed.
+
+| Full gate row | Result | Seconds |
+|---|---|---:|
+| build | PASS | 21 |
+| commands-demo | PASS | 1 |
+| roundtrip | PASS | 0 |
+| space-legacy | PASS | 1 |
+| space-editor | PASS | 2 |
+| space-pad-compare | PASS | 2 |
+| suggest-check | PASS | 13 |
+| commands-dump | PASS | 0 |
+| route | PASS | 1 |
+| favicons | PASS | 0 |
+| media-demo | PASS | 0 |
+| sleep-demo | PASS | 1 |
+| adblock-perf | PASS | 0 |
+| adblock-catalog | PASS | 0 |
+| profiles | PASS | 1 |
+| settings-preview | PASS | 76 |
+| sidebar-render | PASS | 109 |
+| sidebar-compare | PASS | 87 |
+| commandbar-render | PASS | 13 |
+| features-render | PASS | 42 |
+| sitecontrol-render | PASS | 53 |
+| boosts | PASS | 6 |
+
+Full log: `.re/s6/regressions/verify-full-61ae.log`. Harness directory:
+`/var/folders/s6/_07cr4w13vsg_myjkv9ldpqc0000gn/T/open-verify-20261028-183013.ktGDHj/`.
+
+FP10 rerun after this merge, same paired fixture and unchanged parent-approved
+conditional gate: **3/3 PASS**. Heavy slot wait was 295 s, excluded from timings.
+Times below are ms. Each attempt keeps native layouts/frame **18/18**, scroll
+p95 ≤8.33 ms and ≤baseline×1.10+0.05 ms.
+
+| Attempt | Load1 start / transition | Parent plain median / p95 | Branch plain median / p95 | Peek median / p95 | Computed p95 limit | Scroll baseline / peek p95 (load1) |
+|---|---|---|---|---|---:|---|
+| 1 | 10.88 / 10.57 | 2.45 / 3.731 | 2.43 / 3.566 | 2.15 / 3.378 | 3.972 | 2.04 / 2.22 (10.97) |
+| 2 | 10.57 / 10.20 | 2.22 / 3.284 | 2.12 / 3.391 | 2.00 / 3.167 | 3.780 | 2.53 / 2.50 (10.57) |
+| 3 | 10.20 / 9.79 | 2.28 / 3.252 | 2.21 / 3.432 | 2.03 / 3.313 | 3.825 | 1.54 / 1.62 (10.20) |
+
+```sh
+~/Library/Caches/OpenRE/scripts/heavy.sh tools/verification/folder-peek-bench.py
+```
+
+FP10 log: `.re/s6/regressions/fp10-61ae.log`. Both intended negative failures on
+`c128a3a2` are recorded in the regression-fix section below; this merge changes
+neither the S6 drawing/reconciliation code nor those controls. They are not
+relabelled as another run. The <1 ms median goal remains open. Measurements at
+different shared-machine loads do not establish a controlled percentage speedup.
+
+Final combined-source App build and native check, run sequentially after FP10:
+
+```sh
+~/Library/Caches/OpenRE/scripts/heavy.sh tools/build.sh
+/usr/bin/lockf /tmp/open-onscreen-e2e.lock tools/e2e/engine_e2e.py --style chrome --only sidebar-completion
+```
+
+App: **BUILD SUCCEEDED**. Native completion: **164/164 PASS**, including E20 and
+main's menu/auto-archive rows. Zero focus interruptions; owned-process/window
+cleanup PASS. The Library checkpoint again records Archive identity empty before
+the click, then visible Spaces, a nonempty identity and one hosted manager. The
+three earlier hardened-flow runs below are also retained; this is a fourth
+successful hardened-flow run, on the new main integration. Parent failure remains
+unreproduced, rather than relabelled as an established product cause.
+
+Artifacts: `.re/s6/regressions/app-build-61ae.log`, `native-61ae.log`,
+`native-61ae.json`, `E20-folder-peek-61ae.png`. All dependent jobs are complete,
+`git diff --check` passes, generated `docs/engine-spike/*` is restored before
+committing, and no owned Open/renderer process remains. No PR is opened.
+
+
 ## Regression fixes after 34e67d60 (2026-10-28)
 
 The parent found two frozen-image failures and one Library checkpoint failure on

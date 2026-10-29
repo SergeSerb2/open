@@ -118,6 +118,577 @@ runs. Raw traces stay local; commit only synthetic numeric evidence and hashes.
 The Site Control A/B report is in `docs/sitecontrol/step-2/performance/README.md`.
 This method does not claim that other existing harnesses have already migrated.
 
+### Simple Boost editor open: load-robust gate (2026-10-28)
+
+The old `EditorBench` row already used `CLOCK_THREAD_CPUTIME_ID`, rather than
+wall time. Untouched `origin/main` `64e54195` failed only this row:
+**17.964 ms CPU p95**, load1 **77.35**, **1470/1471** Site Control checks passed.
+The same run's cold fixture printed 11.615 ms CPU / 189.481 ms wall p95 at
+load1 84.21. That wall/CPU gap includes time off the CPU (preemption or blocked native
+calls). Such waits were already excluded from the editor's old CPU gate.
+CPU execution rate still varies under load.
+Core choice, frequency and memory contention were not measured separately.
+
+Temporary thread-CPU splits in `BoostEditorController.present` and the real
+settle path located the cost. At load1 6.28, CPU p95 was 13.336 ms: presentation
+7.432 ms, separate layout 0.069 ms, display 0.181 ms, transaction flush 6.328 ms.
+These are independent p95 values; do not add them. Within presentation, fresh
+view/session/panel construction took about 3.4–4.7 ms in the measured opens.
+The font cells called font lookup and text rasterization on each fresh tree.
+PNG hue sampling runs separately on a worker; it was 7.640 ms in the failing
+stock run and is outside the open span. The temporary probes are removed.
+
+`EditorButton` now caches only the fixed 26×26 font-cell images, keyed by family,
+1x/2x scale, selected/pressed/hovered state and enabled state. The 128-entry cap
+bounds retained images. Core Graphics measured a 224-byte row at 2x: 11,648 bytes
+per bitmap, at most 1.43 MiB for the cache on this M5. Every native control,
+accessibility node, focus layer and selection transition remains live.
+
+`EditorOpenBench` retains the same workload: one real 2x editor panel creation,
+layout, native first display and transaction flush; five discarded warmups and
+20 measured opens. Each open now has its own autorelease pool; panel close and
+pool draining remain outside the measured span. The full `check` path drains
+completed UI suites before starting the next suite. It also requires successful presentation and a native content
+view. The existing harness-only `ThreadInstructions` sampler brackets that span.
+The hard regression gate uses the rounded-up median main-thread instruction
+count, with the existing CPU-brand/macOS-build fixture and ×1.10 method.
+Missing/backward counters or an invalid fixture fail. An unknown editor reference
+reports INFO, with no cost PASS. No CPU or wall-time fallback or retry exists.
+CPU p95, wall p95, presentation/settle CPU p95, lateness versus **12 ms**, and
+load1 are printed on every run. A separate **INFO** table row prints main-thread
+CPU p95 versus **12 ms**, its lateness and load1. It is excluded from acceptance
+counts, including when p95 exceeds 12 ms. GPU completion and deferred work remain outside
+this existing native-display span.
+
+Cost acceptance and reference recording use only the complete
+`sitecontrol-render check` procedure, as invoked by the verification runner.
+Standalone `bench --group editor` prints raw instructions and CPU INFO but has
+no instruction-budget acceptance. Its process history differs from the full
+check. Only `check` passes `acceptInstructionCost: true` to `EditorBench`.
+
+The **initial editor instruction reference** in `54b636bc` was recorded before
+the font-image optimization. Three separate processes with the **original product
+sources** produced the values below; the median of their medians was
+**141,542,712**, with a ceiling of **155,696,984**. These values are retained as
+history. The first parent review re-recorded the optimized product, but used a
+standalone benchmark with different process history. Both references below are
+historical; the current reference uses the corrected full gate procedure,
+described after them. The cold-open and SM6 references remain unchanged.
+
+| Process | Original median instructions | CPU p95 ms | Wall p95 ms | Load1 |
+|---|---:|---:|---:|---:|
+| 1 | 141,176,621 | 14.967 | 17.113 | 11.48 |
+| 2 | 141,865,163 | 15.342 | 22.943 | 8.31 |
+| 3 | 141,542,712 | 17.062 | 20.806 | 8.31 |
+
+The instruction medians have 0.49% full spread, while CPU p95 varies by 14.0%.
+With the font cache, the same three-process bench gave:
+
+| Process | Cached median instructions | CPU p95 ms | Wall p95 ms | Load1 |
+|---|---:|---:|---:|---:|
+| 1 | 136,812,486 | 13.282 | 14.599 | 8.13 |
+| 2 | 136,139,868 | 13.423 | 15.325 | 8.13 |
+| 3 | 136,352,450 | 12.874 | 14.710 | 7.88 |
+
+The median work fell **3.67%**. These loaded CPU values do not establish quiet
+`<12 ms` acceptance. The parent explicitly prohibited synthetic burners; none were started. All later checks use real shared load.
+
+The first parent review (`c3628d9e`) re-recorded a reference from the optimized product in
+`54b636bc`, with the explicit INFO row added outside the measured span. Following
+SM6's recording method, discard one fresh process, then take the median of five
+fresh-process medians. Each editor process still discards five opens and measures
+20. The exact command is
+`Packages/OpenKit/.build/release/sitecontrol-render bench --group editor`.
+The recording used the shipping font-image cache without product-source changes;
+`review-reference.json` retains all 20 samples per process, source/binary hashes
+and the raw logs. No process was retried or selected out of the five.
+
+| Process | Optimized median instructions | CPU p95 ms | Wall p95 ms | Load1 |
+|---|---:|---:|---:|---:|
+| Discarded warmup | 136,266,026 | 13.930 | 16.686 | 14.55 |
+| 1 | 136,469,336 | 13.835 | 18.617 | 14.55 |
+| 2 | 136,091,821 | 12.957 | 15.291 | 14.91 |
+| 3 | 135,985,517 | 13.295 | 14.156 | 14.75 |
+| 4 | 136,063,236 | 8.981 | 10.841 | 14.37 |
+| 5 | 135,987,601 | 9.525 | 11.424 | 13.94 |
+
+That historical optimized reference was **136,063,236**; its ceiling was
+**149,669,560 = ceil(136,063,236 × 1.10)**. It lowered the initial ceiling by
+6,027,424 instructions, but the later review below found mismatched procedures.
+The original **141,542,712** reference above is historical only. Some INFO values
+are below 12 ms, but these are shared-load recordings; the lead's quiet-machine
+acceptance before merge remains required.
+
+The next parent review found a procedure mismatch: `c3628d9e`'s two full gate
+runs measured **144,265,719 / 144,230,413**, or **+6.028% / +6.002%** above its
+standalone reference. Instruction probes located the extra work in the global
+`CATransaction.flush()`. Both paths used scale 2, five warmups and twenty measured
+opens; they had different populations of autoreleased native windows.
+
+| Instrumented procedure | Start/end native window list | Present median instructions | Layout/display median | Flush median | Total median |
+|---|---:|---:|---:|---:|---:|
+| Standalone bench | 2 → 27 | 90,921,755 | 1,225,610 | 44,258,568 | 136,524,128 |
+| Full check, before pool fix | 133 → 158 | 90,896,645 | 1,230,301 | 51,708,916 | 143,835,526 |
+| Full check, drain completed suites | 5 → 30 | 90,115,887 | 1,214,082 | 43,836,864 | 135,037,759 |
+
+Phase medians are independent and need not sum to the total median. The first
+two rows differ by **7,450,348 instructions in flush**, while presentation differs
+by only 25,110. All three rows had **400 font-image cache hits and zero misses**
+in the twenty measured opens. The cache had 20 entries in standalone and 44 in
+the full path, but neither path decoded/rasterized font cells during measurement.
+
+The controlled change was to drain autorelease pools after completed cold,
+flow, editor-flow, render and skeleton suites. This released the earlier suites'
+closed native window objects before the editor's global transaction flush.
+The full gate's start list fell **133 → 5**, and its total work fell
+**143,835,526 → 135,037,759**. This identifies prior-suite window lifetime as the
+cause of the extra work; it is not a scheduler or warm/cold font-cache explanation.
+Raw probes are `procedure-profile-bench.log`, `procedure-profile-check/` and
+`procedure-pool-profile-check/`. All temporary `[DEBUG-procedure]` probes and
+font-cache counters were removed before recording the final reference.
+
+The benchmark also drains a pool after closing each sample's panel. This keeps
+closed windows from accumulating across its own five warmups and twenty samples,
+matching AppKit's usual event-loop pool lifetime. The real open/layout/display/
+flush remains inside the counters; earlier suites and panel teardown are outside.
+Every final run prints its procedure and before/after native-window counts.
+
+The current accepted reference is recorded by **five complete fresh-process gate runs**, using exactly this command each time:
+
+```sh
+~/Library/Caches/OpenRE/scripts/heavy.sh tools/verify-all.sh --only sitecontrol-render
+```
+
+Each invokes the full `check` path, after pooled suites, at 2x with five discarded
+opens and twenty measured opens in a per-open pool. No whole process was discarded
+or retried. The reference is the median of the five process medians.
+
+| Reference process | Median instructions | CPU p95 INFO ms | Load1 | Native window list | Full check |
+|---|---:|---:|---:|---:|---|
+| 1 | 135,418,826 | 14.775 | 8.70 | 5 → 5 | 1471/1471 PASS |
+| 2 | 135,732,992 | 13.486 | 7.60 | 5 → 5 | 1471/1471 PASS |
+| 3 | 135,059,155 | 11.272 | 9.94 | 5 → 5 | 1471/1471 PASS |
+| 4 | 135,203,676 | 14.056 | 8.20 | 5 → 5 | 1471/1471 PASS |
+| 5 | 134,606,189 | 10.124 | 10.00 | 5 → 5 | 1471/1471 PASS |
+
+**Accepted reference: 135,203,676; ceiling: 148,724,044 = ceil(reference × 1.10)**.
+The five medians span **0.833%** of the reference. Source hashes, executable
+hashes, all twenty samples per process, per-command loads and the unchanged
+procedure label are retained in `procedure-reference.json` and
+`procedure-reference-1/`…`procedure-reference-5/`. All five started and ended
+with five entries in the native window list. The fifth command waited 375 s
+for a heavy slot; its on-screen check duration also includes lock queue time,
+which is outside the unchanged 180 s execution deadline.
+
+The 28 editor render images before/after cover 1x/2x and all editor states.
+All 28 font-card regions are pixel-identical. 23 full images are identical;
+the other five differ at nine pixels outside the font card by at most 1/255,
+within the pre-existing `CLI.stablePixels` 2/255 native redraw tolerance. No
+comparison threshold or saved render baseline changed.
+
+Initial negative proof against the historical ceiling: temporarily construct four extra `BoostEditorView` trees inside
+`BoostEditorController.present`, before constructing the actual view. Each tree
+performs the real O(n) native font/control construction. The unchanged gate
+reported:
+
+```text
+| FAIL | simple editor build/layout/first draw median 372869037 instructions <= 155696984 (ceil(141542712 x1.10)); Apple M5 Pro / 26B5112a |
+5/6 passed
+```
+
+The other five benchmark checks passed (CPU p95 41.261 ms, load1 7.71). The
+extra trees and all debug probes were then removed and the release binary
+rebuilt. This proof adds real work inside the production open path; it does
+not alter the gate or its fixture.
+
+At `c3628d9e`, the parent-review negative proof repeated the real four-extra-tree construction
+inside `BoostEditorController.present`, including each extra view's native
+layout, against the **optimized** reference and lower ceiling:
+
+```text
+| INFO | simple editor build/layout/first draw main-thread CPU p95 38.466 ms vs 12 ms; lateness +26.466 ms; load1 17.04 (quiet-machine acceptance by lead) |
+| FAIL | simple editor build/layout/first draw median 396669877 instructions <= 149669560 (ceil(136063236 x1.10)); Apple M5 Pro / 26B5112a |
+5/6 passed
+1 INFO (no acceptance result for these entries)
+```
+
+This run exited 1 as required; all five other acceptance checks passed. The
+extra work was removed in a `finally` path and the release binary rebuilt.
+`BoostEditorPanel.swift` is byte-identical to `54b636bc`. The new INFO row
+therefore stays visible even on failure, without raising the pass count.
+Raw evidence is `review-negative.log` and `review-negative-proof.json`.
+
+The current negative proof uses the **same full gate command as calibration**:
+`~/Library/Caches/OpenRE/scripts/heavy.sh tools/verify-all.sh --only sitecontrol-render`.
+Temporarily construct and lay out four extra real `BoostEditorView` trees inside
+`BoostEditorController.present`, before constructing the actual editor. The
+unused sessions have no interactions and are released without calling the host's
+close action, so the proof adds native construction/layout without changing the
+flow's expected close count or deleting a new empty Boost. Against the current
+reference, the real command reported:
+
+```text
+| INFO | simple editor build/layout/first draw main-thread CPU p95 22.861 ms vs 12 ms; lateness +10.861 ms; load1 11.95 (quiet-machine acceptance by lead) |
+| FAIL | simple editor build/layout/first draw median 365893368 instructions <= 148724044 (ceil(135203676 x1.10)); Apple M5 Pro / 26B5112a |
+1470/1471 passed
+2 INFO (no acceptance result for these entries)
+```
+
+The full verification command exited **1**; only the editor instruction budget
+failed. The renderer was reaped and no native app remained. The temporary trees
+were removed in a `finally` path and the release binary rebuilt before the three
+final gate runs. `BoostEditorPanel.swift` is byte-identical to `c3628d9e`.
+Evidence: `procedure-negative/`, `procedure-negative-proof.json` and the restored
+release-build log. The ×1.10 ceiling and 12 ms product target were unchanged.
+
+F25 native focus also needed an environment classification. Earlier runs
+closed and hid the editor while the app became inactive and its parent was not
+key. At load1 29.45 all three old attempts lost activation (`green-8/`). The user
+then confirmed active use of this Mac, often with T3 Pretty frontmost, plus other
+agents that may activate apps. External foreground loss is **INTERRUPTED**, not
+an Open failure.
+
+F25 now follows `tools/e2e/engine_e2e.py`: at most three attempts, each from a
+fresh registered app, model and windows. Every attempt records foreground app
+name, bundle ID and PID plus load1; strings are bounded and line/pipe sanitized.
+A focus-dependent assertion outside the owned harness/renderer processes is
+recorded as `INTERRUPTED (foreground lost to <app>)`, even if its local assertion
+was true. Historical interrupted rows remain visible and never count as passes.
+A later complete attempt can PASS; an owned-foreground wrong-key/loss result is
+FAIL without retry. The cached app flag alone is not sufficient. No app is
+activated and no window is made key to repair a tested Done action.
+
+If all three attempts are interrupted, the native CLI, locked worker and
+`verify-all.sh` propagate **INTERRUPTED / exit 2**, not FAIL or PASS. Real failures
+retain exit 1, and available interrupted checks are not relabeled SKIP. The
+native 20 s process bound, 3 s setup/close bounds and configured 0.120 s close
+remain unchanged. Foreground status is collected only from app identity, never
+window titles or URLs.
+
+A separate fixture isolation issue was proved. `padAndWindowFlows` had closed
+two controllers but left their two offscreen `EditorParentWindow` objects ordered
+in the renderer while the registered native suite ran. The new guard failed on
+the old caller:
+
+```text
+| FAIL | F25 native key suite has no competing editor parent windows (found 2) |
+93/94 passed
+```
+
+The other 93 editor flow checks passed. `EditorFlows` now closes both parents
+before native launch, and the zero-competing-parents guard remains. The native
+fixture creates its activating browser parent first, then waits for that window
+to be active, frontmost, main and key before presenting the nonactivating panel.
+This establishes a valid browser precondition without relying on a windowless
+app becoming frontmost. Only the on-screen fixture changes; offscreen render
+and benchmark geometry remain unchanged. Fixture isolation does not claim to
+prevent the external app changes confirmed by the user.
+
+A second runner flake was found before final verification. The old runner
+applied `run(..., timeout=180)` to **lockf plus the renderer**, so lock queue time
+consumed the execution deadline. It failed after 180 s and left renderer PID
+40906 running with PPID 1 after lockf exited. That process had exited before the
+resume audit; no owned renderer or harness app remained.
+
+`check.py` now runs an internal worker that **retains the shared lock itself**.
+It opens `/tmp/open-onscreen-e2e.lock` and passes that descriptor to
+`/usr/bin/lockf -s <fd>` using `pass_fds`. FD mode locks the shared open-file
+description, so the worker keeps the lock after the acquisition helper exits.
+It verifies that the locked inode still matches the path, reopening if a default
+lockf user unlinked the previous inode. No renderer or private suite root starts
+before acquisition; lock queue time has no suite deadline. The worker keeps the
+unchanged **180-second** renderer deadline, starts the renderer in a fresh process
+group, and terminates that group and reaps the renderer on timeout, exception or
+cancellation. Registered
+LaunchServices apps escape that process group, so the worker also owns a private
+suite root and removes only harness apps whose full executable path is under
+that root. Foundation used its system temp directory despite `TMPDIR` in the
+observed CLI; `OPEN_VERIFY_SUITE_ROOT` now explicitly places the registered app
+copy under the owned root. A relative, missing or oversized root is refused.
+The runner checks full paths before each signal and waits for app disappearance.
+
+The real timeout proof held the lock with an explicit release handshake, observed
+2.067 s queue time with no suite startup before release, then paused only its
+renderer and real registered app. The unchanged deadline reported:
+
+```text
+On-screen cleanup: renderer 86332 reaped; native apps stopped=1
+FAIL: on-screen suite timed out after 180s (owned children reaped)
+```
+
+Both PIDs were absent and the private root was removed. The log lifetime was
+182.387 s including the queue and cleanup. The proof controller's final assertion
+incorrectly assumed the shared lock would remain free; another job had acquired
+it (observed lockf PID 90590). That assertion was corrected to check our wrapper's
+exit, not exclude other users. The actual timeout artifacts and process absence
+were independently audited in `runner-timeout-proof.json`; no extra 180-second
+fault run was used to replace the recorded result. The invalid-root CLI also
+failed as intended (`0/1 passed`) before launching any app.
+
+PR #133 review comment **4407550548** found an additional cancellation hole on
+`715198ed`. Default SIGTERM exits Python without unwinding `finally`, while the
+detached renderer survives. The end-to-end negative proof ran the old file from
+`git show 715198ed:tools/verification/check.py`, under `lockf` with a private test
+lock and `/bin/sleep 30`. It stopped the owned child and sent SIGTERM to the
+worker/wrapper process group. The first queued contender acquired the lock while
+the child and private root still existed:
+
+```text
+715198ed SIGTERM: lock command exit=-15, expected worker exit=143
+child PID 24049 gone=false; private root removed=false
+lock busy during cleanup=false; cleanup log count=0
+contender: child_gone=false, root_removed=false -> FAIL
+```
+
+The proof controller then killed only that owned child and removed its leaked
+root. This case opened no UI and used no CPU burner. Raw evidence is
+`signal-old-term-sleep.log` and `.json` under `.re/sidebar-flakes/`.
+
+The first handler-only experiment also showed why the worker must own the lock:
+macOS `lockf` kept a separate wrapper (27416) and Python worker (27417), even with
+`-k`. Group cancellation killed the wrapper and unlocked before the worker's
+cleanup completed. FD-mode acquisition fixes that ownership problem; there is
+no long-lived lock wrapper to die before cleanup. The worker is entered directly
+as `python3 tools/verification/check.py onscreen-suite <command>` and acquires
+the machine lock internally. Do not wrap this internal command in another
+`lockf` on the same path.
+
+SIGTERM, SIGINT and SIGHUP handlers record the first signal. They do not raise
+across temporary-root or `Popen` assignment, which could lose a just-created
+child. Bounded 0.25 s communication waits observe cancellation while preserving
+one absolute 180 s execution deadline. One idempotent cleanup function masks
+those signals, reaps a queued lock helper, sends TERM to the unreaped renderer's
+process group, retains the leader PID through the existing 2 s grace, and sends
+KILL if live group members remain. Zombie-only groups need no further signal.
+It reaps the renderer, stops registered apps by their exact owned-root executable
+paths, removes the root, then closes the lock descriptor **last**. Repeated
+cleanup calls are no-ops. Exit is **128 + signum** only after cleanup. A closed
+parent output pipe cannot replace that status with Python's exit-time flush
+error: cancellation uses `_exit` after all owned resources are gone.
+
+Fixed end-to-end proofs use the real internal worker and the real machine lock.
+An independent queued contender checks child/App absence and root removal at its
+first lock acquisition. The first four active-child cases stop the owned children
+before cancellation; the closed-pipe case keeps its child running. No case waits
+for the 30 s command to complete naturally.
+The native case runs the actual `sitecontrol-render native-key-check`, including
+its LaunchServices-registered `EditorHarness.app`; no desktop input was driven.
+
+| Case | Worker | Renderer/child | Registered App | Exit | Lock held during cleanup | State when contender acquired |
+|---|---:|---:|---:|---:|---|---|
+| SIGTERM, then repeated INT/HUP/TERM | 32940 | 32943 | — | 143 | yes | child gone, root removed |
+| SIGINT | 35247 | 41368 | — | 130 | yes | child gone, root removed |
+| SIGHUP | 41470 | 41472 | — | 129 | yes | child gone, root removed |
+| Real renderer/App, SIGTERM and repeats | 41507 | 41510 | 41516 | 143 | yes | renderer and App gone, root removed |
+| Queued SIGTERM | 44317 | never started | — | 143 | original holder retained its lock | helper 44319 reaped; no root created |
+| SIGTERM, running child, parent pipe closed | 44323 | 44325 | — | 143 | yes | child gone, root removed |
+
+The four active-child cases with an open output pipe each printed exactly one
+cleanup line; the queued-cancellation case also printed one.
+The native proof printed:
+
+```text
+On-screen cleanup: renderer 41510 reaped; native apps stopped=1; private root removed
+On-screen cancellation: SIGTERM; owned cleanup complete; exit 143
+contender: child_gone=true, app_gone=true, root_removed=true
+```
+
+The closed-pipe case verifies status and resource state independently of log
+delivery. The queued case verifies cancellation before the renderer/deadline
+starts. Receipts are `signal-fixed-*.json` and matching logs; the proof drivers
+are local under `.re/sidebar-flakes/`. No threshold, instruction reference,
+native focus deadline or suite execution deadline changed.
+
+Requested review verification:
+`~/Library/Caches/OpenRE/scripts/heavy.sh tools/verify-all.sh --only sitecontrol-render,sidebar-render`
+passed: build **PASS** (3 s, no warnings/errors), sidebar **564/564** (106 s),
+Site Control **1471/1471** (81 s including lock queue time). The command recorded
+load1 **17.98 → 11.20**, waited 10 s for a heavy slot, and completed in 200.298 s.
+The editor instruction median was **134,821,383** against unchanged reference
+**135,203,676**; native window list **5 → 5**, CPU p95 INFO **9.255 ms** at load1
+**11.20**. All owned test processes and private roots were gone at the final audit.
+Logs and summary: `.re/sidebar-flakes/signal-review-verify/`.
+
+Initial foreground verification for `54b636bc`, `verified-1`…`verified-6` (real shared load;
+no synthetic burners):
+
+| Run | Editor median instructions | CPU p95 ms | Wall p95 ms | Load1 | Result |
+|---|---:|---:|---:|---:|---|
+| 1 | 144,209,011 | 13.374 | 14.888 | 19.56 | 1471/1471 PASS; renderer reaped |
+| 2 | 144,169,435 | 10.983 | 12.800 | 30.52 | 1471/1471 PASS; renderer reaped |
+| 3 | 144,738,612 | 14.213 | 16.421 | 22.37 | 1471/1471 PASS; renderer reaped |
+| 4 | 144,747,754 | 16.770 | 18.063 | 23.71 | 1471/1471 PASS; renderer reaped |
+| 5 | 144,454,806 | 18.684 | 20.127 | 15.73 | 1471/1471 PASS; renderer reaped |
+| 6 | 145,503,985 | 17.520 | 21.647 | 14.54 | 1471/1471 PASS; renderer reaped |
+
+All six final native suites passed on attempt 1; no interruption was needed in
+this series. The foreground app/bundle, PID and load are retained per attempt.
+The full-run receipts recorded real load1 from 16.38 at entry to 14.54 at the
+last exit, peaking at a run boundary of 30.52. These are observed shared-machine
+conditions, not controlled quiet runs. Instruction medians stayed below
+155,696,984 while CPU p95 varied from 10.983 to 18.684 ms. Quiet `<12 ms`
+acceptance remains with the parent as requested.
+
+`~/Library/Caches/OpenRE/scripts/heavy.sh tools/verify-all.sh --only sidebar-render,features-render,settings-preview`
+passed: build (no warnings/errors), sidebar **568/568**, features **288/288**,
+settings **37/37** plus **216** render PNGs/dimension checks. Real load1 was
+14.07 at entry and 8.25 at exit (`verified-7/`). No further flakes appeared in these targets.
+Three earlier separate `sidebar-render check` runs also passed **568/568** each;
+HP1 fired on its first attempt in 0.502 / 0.504 / 0.500 s, lateness +2 / +4 / +0 ms,
+load1 7.94 / 7.41 / 10.18. SM4 and MC6 passed in all three. Main already contains
+`1fe805a3` (PR #115); no sidebar timing code or baseline changed here.
+
+Verification for `c3628d9e` used its historical **149,669,560** ceiling and the explicit
+CPU INFO row. Both requested foreground runs of
+`~/Library/Caches/OpenRE/scripts/heavy.sh tools/verify-all.sh --only sitecontrol-render`
+passed **1471/1471**. The INFO rows do not change that acceptance count:
+
+| Run | Editor median instructions | CPU p95 INFO ms | Lateness vs 12 ms | Load1 at INFO row | Result |
+|---|---:|---:|---:|---:|---|
+| 1 | 144,265,719 | 19.254 | +7.254 ms | 18.29 | 1471/1471 PASS; renderer reaped |
+| 2 | 144,230,413 | 16.296 | +4.296 ms | 15.38 | 1471/1471 PASS; renderer reaped |
+
+Run 1 recorded load1 18.02 at command entry and 18.29 at exit; run 2 recorded
+16.78 and 14.55. Each complete CLI report has **2 INFO** entries: the existing
+skeleton diagnostic and the new CPU-target row. The editor-only command has
+**1 INFO** entry. Both native suites passed on attempt 1. Evidence:
+`review-verify-1/`, `review-verify-2/`, `review-verification-results.json`.
+
+The requested review command
+`~/Library/Caches/OpenRE/scripts/heavy.sh tools/verify-all.sh --only sidebar-render,features-render`
+also passed: build **PASS** (no warnings/errors), sidebar **568/568** and features
+**288/288**. It recorded load1 **14.55** at entry and **12.59** at exit, with
+145.261 s total command time (`review-verify-3/`). No synthetic load was started.
+
+Current final verification repeats the **same full gate command and procedure**
+as the five reference recordings, after restoring the negative-proof source:
+
+| Gate run | Reference | Measured median instructions | Delta from reference | CPU p95 INFO ms | Load1 | Result |
+|---|---:|---:|---:|---:|---:|---|
+| 1 | 135,203,676 | 135,164,914 | -0.029% | 11.054 | 11.14 | 1471/1471 PASS |
+| 2 | 135,203,676 | 134,538,031 | -0.492% | 10.786 | 9.46 | 1471/1471 PASS |
+| 3 | 135,203,676 | 134,613,556 | -0.436% | 8.770 | 7.93 | 1471/1471 PASS |
+
+All three medians are within **0.50%** of the accepted reference. All three
+started and ended with **5 → 5** native window entries; all twenty samples per
+process and the procedure label are retained in `procedure-verification-results.json`
+and `procedure-verify-1/`…`procedure-verify-3/`. Each renderer was reaped and each
+private suite root removed. No synthetic CPU load was started. The CPU INFO
+values are shared-load diagnostics; quiet-machine acceptance remains with the
+lead before merge.
+
+A real standalone `bench --group editor` invocation also passed **5/5** behavior
+checks with **2 INFO** rows and **2 → 2** native window entries. Its instruction
+row explicitly requires `sitecontrol-render check` for cost acceptance; it has
+no instruction-budget PASS. This verifies the CLI cannot silently compare the
+standalone procedure with the full gate reference (`procedure-standalone.log`).
+
+Merged-main verification at `013cdb45` ran the full command
+`~/Library/Caches/OpenRE/scripts/heavy.sh tools/verify-all.sh`: **22/22 PASS**,
+no FAIL or SKIP. Editor median **135,900,397** versus reference **135,203,676**
+(**+0.515%**), CPU p95 11.314 ms at load1 17.19, native window list
+**5 → 5**. The reference remains unchanged because the difference is below 2%.
+The command waited 180 s for a heavy slot; total command time was 688.137 s.
+Generated `docs/engine-spike/` files were restored before the merge commit.
+Raw summary and logs: `.re/sidebar-flakes/merge-full-013cdb45/`.
+
+Final merged-main verification includes `dee105e6` (items 9–10, PR #132) on top
+of the tested `013cdb45` merge. The full command
+`~/Library/Caches/OpenRE/scripts/heavy.sh tools/verify-all.sh` ran once on this
+updated tree: **22/22 PASS**, no FAIL, INTERRUPTED or SKIP.
+
+| Check | Result | Seconds |
+|---|---|---:|
+| build | PASS | 59 |
+| commands-demo | PASS | 1 |
+| roundtrip | PASS | 0 |
+| space-legacy | PASS | 1 |
+| space-editor | PASS | 3 |
+| space-pad-compare | PASS | 2 |
+| suggest-check | PASS | 13 |
+| commands-dump | PASS | 1 |
+| route | PASS | 0 |
+| favicons | PASS | 1 |
+| media-demo | PASS | 0 |
+| sleep-demo | PASS | 1 |
+| adblock-perf | PASS | 0 |
+| adblock-catalog | PASS | 0 |
+| profiles | PASS | 1 |
+| settings-preview | PASS | 78 |
+| sidebar-render | PASS | 106 |
+| sidebar-compare | PASS | 88 |
+| commandbar-render | PASS | 15 |
+| features-render | PASS | 42 |
+| sitecontrol-render | PASS | 52 |
+| boosts | PASS | 6 |
+
+Editor median **135,491,848** versus reference **135,203,676**
+(**+0.213%**), ceiling **148,724,044**. The native window list remained
+**5 → 5**. No reference was re-recorded because the difference is below 2%.
+CPU p95 INFO was **10.012 ms**, lateness versus 12 ms **-1.988 ms**, load1
+**17.28**. The 12 ms target remains unchanged; lead quiet-machine acceptance
+is still required before merge. The command recorded load1
+**20.87 → 19.46**, waited 50 s for a heavy slot, and
+completed in **521.831 s** including the wait.
+
+The editor renderer was reaped, its private native-app root was removed, and
+no owned Open/renderer process remained. `docs/engine-spike/` was restored to
+the tested merge tree before the evidence commit. Raw summary and logs:
+`.re/sidebar-flakes/merge-full-dee105e6/`; receipt:
+`.re/sidebar-flakes/merge-dee-handoff-receipt.json`. No PR was opened.
+
+Scope: `BoostEditorViews.swift` caches font pixels; `EditorBench.swift`, the new
+`EditorOpenBench.swift`, `InstructionBaseline.swift` and `instruction-baselines.json`
+own the editor cost gate. `main.swift` drains completed suites and is the sole
+caller that enables editor cost acceptance; standalone bench is diagnostic only.
+`EditorNativeKey.swift` owns the F25 activation barrier, wait/retry and
+explicit suite-root contract; `EditorScenes.swift` establishes only the on-screen
+parent activation/main/key precondition, and `EditorFlows.swift` closes the
+competing offscreen parents before native launch. `tools/verification/check.py` owns lock ordering,
+execution deadline, foreground-interruption propagation and child cleanup. No App/engine code, comparison assets,
+sidebar timing logic, CPU-ms target, cold-open reference or SM6 reference changed.
+Parent review lowers only the accepted editor reference to the optimized product.
+
+| Review checklist | Result | Evidence |
+|---|---|---|
+| Input/memory limits | PASS | 128 fixed font images; bounded reference values/resource; absolute existing suite root capped at 4096 UTF-8 bytes; invalid-root CLI refuses input |
+| Lifetimes/callbacks | PASS | Completed-suite and per-open pools keep the final native window list at 5 → 5 in five reference and three gate runs; native attempts and timeout cleanup release their owned processes |
+| Real event paths | PASS / N/A | Existing real NSApp native key flow retained; no App key router or command path changed |
+| Checks/proof/isolation | PASS | Old CPU gate red; real added native work red; real 180 s timeout/cleanup red as intended; two-window isolation guard red on old caller; unique suite root and UUID preferences |
+| UI/motion | PASS | 28 exact font-card regions; full images within existing 2/255 tolerance; configured 0.120 s close unchanged |
+| Docs | PASS | Full-gate reference, procedure mismatch evidence and original history recorded; quiet `<12 ms` lead acceptance remains open in followups |
+
+Reproduction commands from the repo root:
+
+```sh
+~/Library/Caches/OpenRE/scripts/heavy.sh tools/verify-all.sh --only sitecontrol-render
+# Standalone diagnostic only, wholly offscreen; no instruction cost acceptance.
+Packages/OpenKit/.build/release/sitecontrol-render bench --group editor
+Packages/OpenKit/.build/release/sidebar-render check
+~/Library/Caches/OpenRE/scripts/heavy.sh tools/verify-all.sh --only sidebar-render,features-render,settings-preview
+```
+
+The **lead must run the quiet-machine 12 ms acceptance check before merge**.
+With other build/encode work idle and the load average recorded, run the same
+full gate procedure from the repo root:
+
+```sh
+~/Library/Caches/OpenRE/scripts/heavy.sh tools/verify-all.sh --only sitecontrol-render
+```
+
+Read the `INFO` row `simple editor build/layout/first draw main-thread CPU p95
+... vs 12 ms; lateness ...; load1 ...`. Quiet-machine acceptance requires CPU
+p95 **<12 ms**; an instruction-gate PASS alone is not latency acceptance. The
+lead records the value and actual load. This shared-machine task does not claim
+that acceptance. The runner builds first, then serializes the native UI suite
+with the on-screen lock. Standalone `bench --group editor` remains a timing
+diagnostic and cannot replace the full procedure for acceptance or calibration.
+
+Raw synthetic receipts, all 20 instruction samples per bench, build logs, phase
+probes, binary SHA-256 and before/after render comparisons remain local under
+`.re/sidebar-flakes/`. No Arc process, user data, desktop input, engine tree or
+unit tests were used.
+
 ### SM6 structural and machine-specific cost gates
 
 SM6 constructs the real 10-Space × 100-row Library and lays it out at 900×700,
