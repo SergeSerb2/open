@@ -5786,6 +5786,18 @@ def sidebar_favicon_checks(app, require, tmp, launch):
         app.call('favorite', tab=imported)
         favorite = wait_until(lambda: (lambda t: t if t['section'] == 'favorites' and not t['hasWebContent'] and t.get('rowFaviconSource') == 'stored' and t.get('rowFaviconHash') == blue else None)(app.tab(imported)), timeout=5)
         require('FV6_unloaded_favorite_same_pixels', bool(favorite), tab=app.tab(imported), expectedHash=blue)
+        # Same declared icon URL across two committed page paths: OpenEngine emits
+        # no second favicon notification. Only the URL hook can persist /b.
+        route = app.call('open', url=origin + '/a')['id']; app.call('wait', tab=route); app.call('pin', tab=route)
+        same = wait_until(lambda: (lambda t: t if t.get('rowFaviconHash') and t['favicon'] else None)(app.tab(route)), timeout=8)
+        same_hash = same['rowFaviconHash']
+        app.call('navigate', tab=route, url=origin + '/b'); app.call('wait', tab=route)
+        wait_until(lambda: app.tab(route)['url'] == origin + '/b', timeout=5)
+        # Unload via the production pin Close route, then require storage pixels.
+        app.call('open', url=fixture('Unchanged icon neighbor')); app.call('close', tab=route)
+        same_stored = wait_until(lambda: (lambda t: t if not t['hasWebContent'] and t['url'] == origin + '/b' and t.get('rowFaviconSource') == 'stored' and t.get('rowFaviconHash') == same_hash else None)(app.tab(route)), timeout=5)
+        require('FV14_same_icon_new_path_unloaded', bool(same_stored), tab=app.tab(route), expectedHash=same_hash)
+
         return app
     finally:
         server.shutdown(); server.server_close()

@@ -106,6 +106,20 @@ enum FaviconChecks {
         try await Task.sleep(for: .milliseconds(10)); display()
         check(pixels(c.sidebar.drawnFavicon(tabID: pin.id)) == replacement, "FV4 clearing live image restores stored replacement")
 
+        // FV15 exercises the actual row's Observation subscription across FIFO eviction.
+        let evicted = StoredFaviconCache(store: store)
+        c.context.storedFavicons = evicted
+        display(); try await idle(evicted); try await Task.sleep(for: .milliseconds(10)); display()
+        for i in 0..<StoredFaviconCache.capacity {
+            _ = evicted.image(for: URL(string: "https://evict.example.invalid/\(i)")!)
+        }
+        try await idle(evicted)
+        _ = evicted.report(red, for: url)
+        try await idle(evicted); try await Task.sleep(for: .milliseconds(10)); display()
+        check(pixels(c.sidebar.drawnFavicon(tabID: pin.id)) == expected && evicted.cachedCount <= StoredFaviconCache.capacity,
+              "FV15 visible row redraws after its entry is evicted by 1025 keys and reported again")
+        _ = evicted.report(blue, for: url); try await idle(evicted)
+
         let prefix = "https://key.example.invalid/"
         let boundaryURL = URL(string: prefix + String(repeating: "x", count: 8192 - prefix.utf8.count))!
         try await store.ingest(imageData: red, iconURL: nil, for: boundaryURL, pageSpecific: true)
@@ -178,6 +192,23 @@ enum FaviconChecks {
             .reduce(0) { $0 + ((try? $1.resourceValues(forKeys: [.fileSizeKey]).fileSize) ?? 0) }
         check(stats.totalBytes <= FaviconStore.maximumStoredBytes && stats.count < count && bytes <= 34 * 1024 * 1024,
               "FV9 PNG payload <= 8 MiB; SQLite + rollback journal <= 34 MiB (\(bytes) bytes)")
+
+        // FV13 goes through the real persistent ingest path, beyond the old physical cap.
+        let wideFile = root.appendingPathComponent("wide.sqlite3")
+        let wide = try FaviconStore(databaseURL: wideFile)
+        func wideURL(_ i: Int) -> URL {
+            let prefix = "https://wide.example.invalid/\(i)-"
+            return URL(string: prefix + String(repeating: "x", count: 8192 - prefix.utf8.count))!
+        }
+        var written = 0, refused = 0, firstFailure = -1
+        for i in 0..<1200 {
+            do { try await wide.ingest(imageData: red, iconURL: nil, for: wideURL(i), pageSpecific: true); written += 1 }
+            catch { refused += 1; if firstFailure == -1 { firstFailure = i } }
+        }
+        let wideBytes = (try FileManager.default.attributesOfItem(atPath: wideFile.path)[.size] as! NSNumber).intValue
+        let wideOldest = await wide.icon(for: wideURL(0)), wideNewest = await wide.icon(for: wideURL(1199))
+        check(written == 1200 && refused == 0 && wideOldest == nil && wideNewest != nil && wideBytes <= FaviconStore.maximumDatabaseBytes,
+              "FV13 8 KiB URL writes keep succeeding via oldest eviction: written=\(written) refused=\(refused) firstFailure=\(firstFailure) databaseBytes=\(wideBytes)")
 
         try await scroll(root: root, defaults: defaults, check: check)
     }

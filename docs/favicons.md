@@ -552,7 +552,9 @@ Limits:
 - 512 KiB encoded image input; 1024 pixels per source edge; 8 bits per component;
   at most 32 frames. Raster decoding selects one frame. Vector images are refused.
 - 8192 bytes per page/icon URL. The store retains at most 4096 records and 8 MiB
-  of PNG/key/URL payload, evicting the oldest reports.
+  of accounted storage: PNG bytes, URL bytes, origin/path bytes twice for the
+  primary-key index, and 512 bytes per row for metadata/index overhead. Oldest
+  reports are evicted before insertion, reserving the new row's accounted cost.
 - 4096 SQLite pages of 4096 bytes: 16 MiB database, below 34 MiB with the transient
   rollback journal. The journal truncates after commit. An existing database above 16 MiB
   is refused before SQLite opens it; no compaction scratch file is created.
@@ -576,3 +578,27 @@ existing SQLite database over 16 MiB without writes or sidecars.
 Real-App `sidebar-completion` FV1–FV6 serves a local PNG and compares the actual row's
 pixel hash after report, replacement, pin unload, cold relaunch, URL-only insertion,
 and a move to Favorites. Verification results are recorded in `docs/app-shell.md`.
+
+### PR #131 corrections
+
+Committed page URL changes also report the current favicon, even when OpenEngine
+suppresses an unchanged-icon-URL event. Each host caches the image-to-PNG result
+and last canonical key/data pair. The store keeps one bounded normalization memo
+and one bounded decoded-image memo; identical bytes reuse codec work.
+
+Cache entries expose observable residency. FIFO eviction marks the old entry as
+not resident and clears its image, including the nil-image case, so visible rows
+redraw and bind to a replacement entry. The cache remains bounded at 1024 entries.
+
+Storage accounting counts primary-key origin/path bytes twice and includes
+512 bytes of per-row/index overhead. Writes reserve space before the upsert.
+If the upsert still returns `SQLITE_FULL`, its transaction is rolled back, the
+oldest quarter of records is evicted in a separate committed transaction, and the
+write is retried once. The 16 MiB physical database cap remains unchanged.
+
+FV13 ingests 1200 distinct 8 KiB URLs through the real store and checks oldest
+record eviction, newest-record readback, zero rejected writes and database size.
+FV15 displays a real unloaded row, evicts its entry with 1025 keys, reports a new
+image, and checks the row's next draw without forcing a reload. Real-App FV14
+navigates `/a` to `/b` with one declared favicon URL, unloads the tab, and requires
+stored-source pixels for `/b`.

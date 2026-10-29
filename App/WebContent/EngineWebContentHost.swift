@@ -2,6 +2,7 @@ import AppKit
 import OpenEngine
 import OpenFeatures
 import OpenModel
+import OpenStore
 
 /// The sole delegate of a tab page. Closed generations never update the model.
 @MainActor
@@ -21,6 +22,9 @@ final class EngineWebContentHost: NSObject, WebContentHost, OEWebContentDelegate
   private(set) var pageBackgroundColor: NSColor?
   var onPageBackgroundChange: ((NSColor?) -> Void)?
   var onLiveStateChange: ((WebContentLiveState) -> Void)?
+  private var cachedFaviconImage: NSImage?
+  private var cachedFaviconPNG: Data?
+  private var lastReportedFavicon: (key: String, data: Data)?
   private var backgroundGeneration = 0
   private var backgroundTask: Task<Void, Never>?
   var hasBackgroundTask: Bool { backgroundTask != nil }
@@ -56,6 +60,7 @@ final class EngineWebContentHost: NSObject, WebContentHost, OEWebContentDelegate
     cancelBackgroundRead()
     onURLChange = nil; onTitleChange = nil; onLoadingChange = nil; onFaviconChange = nil; shouldNavigate = nil
     onPageBackgroundChange = nil; onLiveStateChange = nil
+    cachedFaviconImage = nil; cachedFaviconPNG = nil; lastReportedFavicon = nil
     content.delegate = nil; content.close(); content.view.removeFromSuperview()
     owner?.hostDidClose(self)
   }
@@ -64,6 +69,9 @@ final class EngineWebContentHost: NSObject, WebContentHost, OEWebContentDelegate
     guard !closed, let owner else { return }
     let token = generation
     if changes.contains(.URL), let url = page.url, url.absoluteString != "about:blank" {
+      // OpenEngine suppresses a favicon event when its URL is unchanged.
+      // Associate the current image with each committed page path as well.
+      _ = reportCurrentFavicon(page, owner: owner)
       onURLChange?(url); cancelBackgroundRead(); pageBackgroundColor = nil; onPageBackgroundChange?(nil)
     }
     guard !closed, generation == token else { return }
@@ -71,10 +79,7 @@ final class EngineWebContentHost: NSObject, WebContentHost, OEWebContentDelegate
     if changes.contains(.loading) || changes.contains(.live) { onLoadingChange?(page.isLoading) }
     guard !closed, generation == token else { return }
     if changes.contains(.favicon) {
-      let data = page.favicon.flatMap(EngineWebContentHostFactory.pngData)
-      // Capture the URL and queue storage before a consumer callback can close
-      // or rebind this host. The queued work never touches the engine object.
-      if let data, let url = page.url { owner.app.stores.sidebarFavicons?.report(data, for: url) }
+      let data = reportCurrentFavicon(page, owner: owner)
       onFaviconChange?(data)
     }
     guard !closed, generation == token else { return }
@@ -82,6 +87,27 @@ final class EngineWebContentHost: NSObject, WebContentHost, OEWebContentDelegate
     if changes.contains(.loading), !page.isLoading { refreshPageBackground() }
     if !changes.isDisjoint(with: [.URL, .title]) { owner.app.scheduleSave() }
     owner.record("change", page, ["changes": changes.rawValue])
+  }
+  /// Cache the conversion per host. A URL-only event reuses the exact bytes;
+  /// canonical-key/data comparison also coalesces combined URL/favicon events.
+  /// Capture everything before a consumer callback can close or rebind the host.
+  private func reportCurrentFavicon(_ page: OEWebContent, owner: EngineWebContentHostFactory) -> Data? {
+    guard let image = page.favicon else {
+      cachedFaviconImage = nil; cachedFaviconPNG = nil
+      return nil
+    }
+    if cachedFaviconImage !== image {
+      cachedFaviconImage = image
+      cachedFaviconPNG = EngineWebContentHostFactory.pngData(image)
+    }
+    guard let data = cachedFaviconPNG else { return nil }
+    if let url = page.url, let key = FaviconStore.cacheKey(url),
+       lastReportedFavicon?.key != key || lastReportedFavicon?.data != data {
+      if owner.app.stores.sidebarFavicons?.report(data, for: url) == true {
+        lastReportedFavicon = (key, data)
+      }
+    }
+    return data
   }
   /// OpenEngine has no page-color event yet. Read the committed page after
   /// loading ends; a late answer cannot cross a close, rebind, or navigation.

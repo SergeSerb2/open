@@ -1198,3 +1198,18 @@ Focus interruptions permit at most three attempts, with three minutes between
 attempts. Retry spacing is applied temporarily for this verification and the
 runner's exact source is restored afterward. Generated engine-spike results are
 restored from the merged index before the merge commit.
+
+## Stored favicon PR #131 review fixes — 2026-10-28
+
+Before fixes, production sources were unchanged at `a5577541`. The new checks
+reported these failures through the real store/sidebar harness and real App:
+
+```text
+FAIL FV13 8 KiB URL writes keep succeeding via oldest eviction: written=954 refused=246 firstFailure=954 databaseBytes=16769024
+FAIL FV15 visible row redraws after its entry is evicted by 1025 keys and reported again
+FV14_same_icon_new_path_unloaded FAIL
+```
+
+FV13/FV15 then passed in the scoped harness (27/27; database 8515584 bytes,
+1200 writes, zero refusals; scroll p95 1.148 ms). Final merge verification follows.
+The fixes and bounds are described in `docs/favicons.md`, "PR #131 corrections".

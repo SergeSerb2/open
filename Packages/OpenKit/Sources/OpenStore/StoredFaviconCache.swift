@@ -9,6 +9,8 @@ public final class StoredFaviconCache {
     public static let maximumPendingReports = 32 // At most 16 MiB encoded input.
     @Observable final class Entry {
         var image: NSImage?
+        var isResident = true
+        var displayedImage: NSImage? { isResident ? image : nil }
         let url: URL
         var revision = 0
         init(_ url: URL) { self.url = url }
@@ -30,13 +32,13 @@ public final class StoredFaviconCache {
 
     public func image(for url: URL) -> NSImage? {
         guard let key = FaviconStore.cacheKey(url) else { return nil }
-        if let entry = entries[key] { return entry.image }
+        if let entry = entries[key] { return entry.displayedImage }
         let entry = entry(for: key, url: url)
         // Evicted queued reads do not retain images or callbacks without a bound.
         reads.removeAll { entries[$0.0] !== $0.1 }
         reads.append((key, entry))
         startWorker()
-        return entry.image
+        return entry.displayedImage
     }
 
     /// Coalesce repeated reports for a page. Refuse oversized or excess input
@@ -60,12 +62,16 @@ public final class StoredFaviconCache {
 
     private func entry(for key: String, url: URL) -> Entry {
         if let entry = entries[key] { return entry }
+        var evicted: Entry?
         if order.count == Self.capacity {
-            entries[order[cursor]] = nil
+            evicted = entries.removeValue(forKey: order[cursor])
             order[cursor] = key
             cursor = (cursor + 1) % Self.capacity
         } else { order.append(key) }
         let entry = Entry(url); entries[key] = entry
+        // Invalidate even a nil-image entry. Its existing observers must redraw
+        // and bind to the replacement mapping; retain no evicted decoded image.
+        evicted?.isResident = false; evicted?.image = nil
         return entry
     }
 

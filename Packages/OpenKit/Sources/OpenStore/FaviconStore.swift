@@ -112,6 +112,11 @@ public actor FaviconStore {
     public static let maximumDatabaseBytes = 16 * 1024 * 1024
     private let databaseURL: URL
     private var connection: FaviconStatements?
+    // Each codec memo has one entry: <=512 KiB encoded input plus 32/64 px
+    // outputs, and one decoded 64 px bitmap (16 KiB). Identical reports for a
+    // new page key reuse normalization and decoded pixels without ImageIO work.
+    private var normalized: (input: Data, png32: Data, png64: Data)?
+    private var decoded: (data: Data, image: CGImage)?
 
     /// No file access here: callers may construct the actor on the main thread.
     public init(databaseURL: URL) throws {
@@ -140,7 +145,10 @@ public actor FaviconStore {
     public func decodedIcon(for url: URL) -> CGImage? {
         guard let icon = icon(for: url) else { return nil }
         let data = icon.png64 ?? icon.png32
-        return try? Self.decode(data)
+        if let decoded, decoded.data == data { return decoded.image }
+        guard let image = try? Self.decode(data) else { return nil }
+        decoded = (data, image)
+        return image
     }
 
     /// Prefer a page-specific image; keep stale images visible while a refresh is due.
@@ -157,9 +165,15 @@ public actor FaviconStore {
     public func ingest(imageData: Data, iconURL: URL?, for pageURL: URL, pageSpecific: Bool) throws {
         guard Self.cacheKey(pageURL) != nil, let origin = FaviconOrigin.key(pageURL), (iconURL?.absoluteString.utf8.count ?? 0) <= 8192 else { throw FaviconStoreError.invalidURL }
         guard imageData.count <= Self.maximumInputBytes else { throw FaviconStoreError.invalidImage }
-        let pngs = try autoreleasepool { () throws -> (Data, Data) in
-            let image = try Self.decode(imageData)
-            return (try Self.png(image, size: 32), try Self.png(image, size: 64))
+        let pngs: (Data, Data)
+        if let normalized, normalized.input == imageData {
+            pngs = (normalized.png32, normalized.png64)
+        } else {
+            pngs = try autoreleasepool { () throws -> (Data, Data) in
+                let image = try Self.decode(imageData)
+                return (try Self.png(image, size: 32), try Self.png(image, size: 64))
+            }
+            normalized = (imageData, pngs.0, pngs.1)
         }
         try write(origin: origin, pageKey: pageSpecific ? FaviconOrigin.pageKey(pageURL) : "",
                   iconURL: iconURL, png32: pngs.0, png64: pngs.1, status: 0, lifetime: 7 * 86400)
@@ -222,37 +236,55 @@ public actor FaviconStore {
                        png64: Data? = nil, status: Int, lifetime: TimeInterval) throws {
         guard origin.utf8.count <= 8192, pageKey.utf8.count <= 8192 else { throw FaviconStoreError.invalidURL }
         let statements = try open(), stmt = statements.upsert, db = statements.db
-        guard db.exec("BEGIN IMMEDIATE") else { throw FaviconStoreError.database }
-        var committed = false
-        defer { reset(stmt); if !committed { db.exec("ROLLBACK") } }
-        let now = Date().timeIntervalSince1970
-        db.bindText(stmt, 1, origin)
-        db.bindText(stmt, 2, pageKey)
-        db.bindText(stmt, 3, iconURL?.absoluteString)
-        bindBlob(stmt, 4, png32)
-        bindBlob(stmt, 5, png64)
-        db.bindDouble(stmt, 6, now)
-        db.bindDouble(stmt, 7, now + lifetime)
-        db.bindInt(stmt, 8, Int64(status))
-        guard sqlite3_step(stmt) == SQLITE_DONE else { throw FaviconStoreError.database }
-        reset(stmt)
-        try enforceLimits(statements)
-        guard db.exec("COMMIT") else { throw FaviconStoreError.database }
-        committed = true
+        let reservedBytes = 2 * (origin.utf8.count + pageKey.utf8.count) +
+            (iconURL?.absoluteString.utf8.count ?? 0) + (png32?.count ?? 0) + (png64?.count ?? 0) + 512
+        func attempt() throws -> Int32 {
+            guard db.exec("BEGIN IMMEDIATE") else { throw FaviconStoreError.database }
+            var committed = false
+            defer { reset(stmt); if !committed { db.exec("ROLLBACK") } }
+            // Reserve both key copies and row/index overhead before SQLite needs
+            // pages for the new record. Conservative reservation also covers updates.
+            try enforceLimits(statements, reservedBytes: reservedBytes, reservedCount: 1)
+            let now = Date().timeIntervalSince1970
+            db.bindText(stmt, 1, origin); db.bindText(stmt, 2, pageKey)
+            db.bindText(stmt, 3, iconURL?.absoluteString)
+            bindBlob(stmt, 4, png32); bindBlob(stmt, 5, png64)
+            db.bindDouble(stmt, 6, now); db.bindDouble(stmt, 7, now + lifetime)
+            db.bindInt(stmt, 8, Int64(status))
+            let result = sqlite3_step(stmt)
+            guard result == SQLITE_DONE else { return result }
+            reset(stmt)
+            guard db.exec("COMMIT") else { throw FaviconStoreError.database }
+            committed = true
+            return SQLITE_DONE
+        }
+        for retry in 0...1 {
+            let result = try attempt()
+            if result == SQLITE_DONE { return }
+            guard (result & 0xff) == SQLITE_FULL, retry == 0 else { throw FaviconStoreError.database }
+            // SQLITE_FULL can roll back the whole transaction, including its
+            // evictions. Commit oldest-record eviction separately before one retry.
+            let batch = max(1, count() / 4)
+            guard db.exec("BEGIN IMMEDIATE; DELETE FROM favicons WHERE rowid IN (SELECT rowid FROM favicons ORDER BY fetched_at,rowid LIMIT \(batch)); COMMIT;") else {
+                db.exec("ROLLBACK"); throw FaviconStoreError.database
+            }
+        }
+        throw FaviconStoreError.database
     }
 
-    private func enforceLimits(_ statements: FaviconStatements, legacy: Bool = false) throws {
+    private func enforceLimits(_ statements: FaviconStatements, legacy: Bool = false, reservedBytes: Int = 0, reservedCount: Int = 0) throws {
         let db = statements.db
         // Cap legacy counts in one SQL operation before the bounded byte loop.
         if legacy, !db.exec("DELETE FROM favicons WHERE rowid NOT IN (SELECT rowid FROM favicons ORDER BY fetched_at DESC,rowid DESC LIMIT \(Self.maximumEntries))") { throw FaviconStoreError.database }
-        guard let usage = db.prepare("SELECT count(*),coalesce(sum(length(CAST(origin AS BLOB))+length(CAST(page_key AS BLOB))+coalesce(length(CAST(icon_url AS BLOB)),0)+coalesce(length(png32),0)+coalesce(length(png64),0)),0) FROM favicons") else { throw FaviconStoreError.database }
+        guard let usage = db.prepare("SELECT count(*),coalesce(sum(2*(length(CAST(origin AS BLOB))+length(CAST(page_key AS BLOB)))+coalesce(length(CAST(icon_url AS BLOB)),0)+coalesce(length(png32),0)+coalesce(length(png64),0)+512),0) FROM favicons") else { throw FaviconStoreError.database }
         defer { sqlite3_finalize(usage) }
-        // At most 4096 iterations, including keys/URLs as UTF-8 bytes.
+        // At most 4096 iterations; count UTF-8 keys twice for the primary-key
+        // index and allow 512 bytes per row for SQLite/age-index overhead.
         for _ in 0...Self.maximumEntries {
             guard sqlite3_step(usage) == SQLITE_ROW else { throw FaviconStoreError.database }
             let count = Int(db.columnInt(usage, 0)), bytes = Int(db.columnInt(usage, 1))
             reset(usage)
-            if count <= Self.maximumEntries && bytes <= Self.maximumStoredBytes { return }
+            if count + reservedCount <= Self.maximumEntries && bytes + reservedBytes <= Self.maximumStoredBytes { return }
             guard db.exec("DELETE FROM favicons WHERE rowid=(SELECT rowid FROM favicons ORDER BY fetched_at,rowid LIMIT 1)") else { throw FaviconStoreError.database }
         }
         throw FaviconStoreError.database
