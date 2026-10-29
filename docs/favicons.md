@@ -73,6 +73,7 @@ CREATE TABLE IF NOT EXISTS favicons(
   fetched_at REAL NOT NULL,
   expires_at REAL NOT NULL,
   status INTEGER NOT NULL,
+  copy_token TEXT,
   PRIMARY KEY(origin, page_key)
 );
 ```
@@ -581,9 +582,9 @@ and a move to Favorites. Verification results are recorded in `docs/app-shell.md
 
 ### PR #131 corrections
 
-Committed page URL changes also report the current favicon, even when OpenEngine
-suppresses an unchanged-icon-URL event. Each host caches the image-to-PNG result
-and last canonical key/data pair. The store keeps one bounded normalization memo
+OpenEngine suppresses unchanged-icon-URL events. The host associates those images
+with another page only after the document ownership check below. Each host caches
+the image-to-PNG result and last canonical key/data/icon-URL tuple. The store keeps one bounded normalization memo
 and one bounded decoded-image memo; identical bytes reuse codec work.
 
 Cache entries expose observable residency. FIFO eviction marks the old entry as
@@ -602,3 +603,28 @@ FV15 displays a real unloaded row, evicts its entry with 1025 keys, reports a ne
 image, and checks the row's next draw without forcing a reload. Real-App FV14
 navigates `/a` to `/b` with one declared favicon URL, unloads the tab, and requires
 stored-source pixels for `/b`.
+
+### PR #131 document ownership correction
+
+A URL callback alone cannot associate an image with the new document. OpenEngine's
+public `faviconURL` and `favicon` can both still refer to the previous page at that
+point (`OEWebContent.mm`, `oe_setURL` and `oe_setFaviconURL`, read-only inspection).
+The host now waits for loading to finish, reads the committed document's resolved
+icon link (or default `/favicon.ico`) through OpenEngine's JavaScript API, and
+compares the document URL, icon URL, image identity and navigation revision before
+accepting a report. The engine icon URL is recorded with the stored bytes.
+
+An unchanged image is copied only within the same origin after that confirmation.
+Copies preserve an existing exact-page image or origin fallback. New copies carry
+a UUID in the migrated `copy_token` column. An empty/different favicon event
+revokes only that token; a later ordinary engine report clears the token and
+cannot be removed by a stale revocation. The same bounded worker performs copy
+writes, deletion, decoding and row invalidation off the main thread. Existing
+store, input, decoded-cache and disk limits are unchanged.
+
+Real-App FV16 navigates from an icon page to two pages on another origin: one
+without an icon declaration, one with a 404 icon. It unloads each tab, quits and
+relaunches, then requires placeholder pixels and zero exact-page SQLite records.
+FV14 still covers the unchanged-icon `/a` to `/b` path. The real row harness also
+covers preserving a destination image, copy deletion/redraw, token mismatch and
+an ordinary report surviving a late copy revocation.

@@ -5755,6 +5755,19 @@ def sidebar_favicon_checks(app, require, tmp, launch):
             self.send_header('Cache-Control', 'no-store'); self.end_headers(); self.wfile.write(body)
         def log_message(self, *args): pass
 
+    class MissingHandler(http.server.BaseHTTPRequestHandler):
+        def do_GET(self):
+            if self.path in ('/favicon.ico', '/missing.png'):
+                self.send_error(404); return
+            body = (b'<title>No favicon fixture</title><h1>No icon</h1>' +
+                    (b'<link rel="icon" href="/missing.png">' if self.path == '/broken' else b''))
+            self.send_response(200); self.send_header('Content-Type', 'text/html')
+            self.send_header('Cache-Control', 'no-store'); self.end_headers(); self.wfile.write(body)
+        def log_message(self, *args): pass
+
+    missing_server = http.server.ThreadingHTTPServer(('127.0.0.1', 0), MissingHandler)
+    threading.Thread(target=missing_server.serve_forever, daemon=True).start()
+    missing_origin = 'http://127.0.0.1:%d' % missing_server.server_address[1]
     server = http.server.ThreadingHTTPServer(('127.0.0.1', 0), Handler)
     threading.Thread(target=server.serve_forever, daemon=True).start()
     origin = 'http://127.0.0.1:%d' % server.server_address[1]
@@ -5798,9 +5811,32 @@ def sidebar_favicon_checks(app, require, tmp, launch):
         same_stored = wait_until(lambda: (lambda t: t if not t['hasWebContent'] and t['url'] == origin + '/b' and t.get('rowFaviconSource') == 'stored' and t.get('rowFaviconHash') == same_hash else None)(app.tab(route)), timeout=5)
         require('FV14_same_icon_new_path_unloaded', bool(same_stored), tab=app.tab(route), expectedHash=same_hash)
 
+        # A URL commit still exposes the previous document's NSImage. Both an
+        # absent declaration and a failed download must leave no destination row.
+        import sqlite3
+        missing_results = []
+        for path in ('/absent', '/broken'):
+            candidate = app.call('open', url=origin + '/source' + path)['id']
+            app.call('wait', tab=candidate); app.call('pin', tab=candidate)
+            wait_until(lambda: app.tab(candidate)['favicon'], timeout=8)
+            destination = missing_origin + path
+            app.call('navigate', tab=candidate, url=destination); app.call('wait', tab=candidate)
+            wait_until(lambda: app.tab(candidate)['url'] == destination, timeout=5)
+            app.call('open', url=fixture('Missing icon neighbor')); app.call('close', tab=candidate)
+            wait_until(lambda: not app.tab(candidate)['hasWebContent'], timeout=5)
+            # Drain the real cache worker by orderly quit before read-only SQL.
+            app.call('save'); app.quit(); app = launch(); app.call('space', space=space)
+            row = wait_until(lambda: (lambda t: t if t.get('rowFaviconSource') else None)(app.tab(candidate)), timeout=5)
+            with sqlite3.connect('file:' + os.path.join(app.user_data, 'State', 'favicons.sqlite3') + '?mode=ro', uri=True) as database:
+                records = database.execute('SELECT count(*) FROM favicons WHERE origin=? AND page_key=?', (missing_origin, path)).fetchone()[0]
+            missing_results.append(dict(path=path, row=row, records=records,
+                ok=not row['hasWebContent'] and row['rowFaviconSource'] == 'placeholder' and not row['rowFaviconHash'] and records == 0))
+        require('FV16_cross_origin_missing_and_404_leave_no_stored_icon', all(r['ok'] for r in missing_results), cases=missing_results)
+
         return app
     finally:
         server.shutdown(); server.server_close()
+        missing_server.shutdown(); missing_server.server_close()
 
 
 

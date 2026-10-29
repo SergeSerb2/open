@@ -15,7 +15,11 @@ public final class StoredFaviconCache {
         var revision = 0
         init(_ url: URL) { self.url = url }
     }
-    private struct Report { let key: String; let url: URL; let data: Data; let revision: Int; let entry: Entry }
+    private enum Operation {
+        case image(Data, URL?, UUID?)
+        case removeCopy(UUID)
+    }
+    private struct Report { let key: String; let url: URL; let operation: Operation; let revision: Int; let entry: Entry }
     private let store: FaviconStore
     private var entries: [String: Entry] = [:]
     private var order: [String] = []
@@ -44,8 +48,20 @@ public final class StoredFaviconCache {
     /// Coalesce repeated reports for a page. Refuse oversized or excess input
     /// before retaining it; callers keep the existing placeholder on failure.
     @discardableResult
-    public func report(_ data: Data, for url: URL) -> Bool {
-        guard data.count <= FaviconStore.maximumInputBytes, let key = FaviconStore.cacheKey(url) else {
+    public func report(_ data: Data, for url: URL, iconURL: URL? = nil, copyToken: UUID? = nil) -> Bool {
+        guard data.count <= FaviconStore.maximumInputBytes, (iconURL?.absoluteString.utf8.count ?? 0) <= 8192 else {
+            rejectedReports += 1; return false
+        }
+        return enqueue(.image(data, iconURL, copyToken), for: url)
+    }
+
+    @discardableResult
+    public func removeCopy(for url: URL, token: UUID) -> Bool {
+        enqueue(.removeCopy(token), for: url)
+    }
+
+    private func enqueue(_ operation: Operation, for url: URL) -> Bool {
+        guard let key = FaviconStore.cacheKey(url) else {
             rejectedReports += 1; return false
         }
         let existing = reports.firstIndex { $0.key == key }
@@ -54,7 +70,7 @@ public final class StoredFaviconCache {
         }
         let entry = entry(for: key, url: url)
         entry.revision += 1
-        let report = Report(key: key, url: url, data: data, revision: entry.revision, entry: entry)
+        let report = Report(key: key, url: url, operation: operation, revision: entry.revision, entry: entry)
         if let existing { reports[existing] = report } else { reports.append(report) }
         startWorker()
         return true
@@ -87,7 +103,12 @@ public final class StoredFaviconCache {
                 if !self.reports.isEmpty {
                     let report = self.reports.removeFirst()
                     do {
-                        try await self.store.ingest(imageData: report.data, iconURL: nil, for: report.url, pageSpecific: true)
+                        switch report.operation {
+                        case let .image(data, iconURL, token):
+                            try await self.store.ingest(imageData: data, iconURL: iconURL, for: report.url, pageSpecific: true, copyToken: token)
+                        case let .removeCopy(token):
+                            try await self.store.removeCopy(for: report.url, token: token)
+                        }
                         let bitmap = await self.store.decodedIcon(for: report.url)
                         if let entry = self.entries[report.key], entry === report.entry, entry.revision == report.revision {
                             entry.image = bitmap.map { NSImage(cgImage: $0, size: NSSize(width: 16, height: 16)) }

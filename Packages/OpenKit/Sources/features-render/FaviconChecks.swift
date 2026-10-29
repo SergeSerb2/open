@@ -120,6 +120,34 @@ enum FaviconChecks {
               "FV15 visible row redraws after its entry is evicted by 1025 keys and reported again")
         _ = evicted.report(blue, for: url); try await idle(evicted)
 
+        // Exercise copy provenance through the same async worker and drawn row.
+        let copyToken = UUID(), iconURL = URL(string: "https://stored.example.invalid/icon.png")!
+        _ = evicted.report(red, for: url, iconURL: iconURL, copyToken: copyToken)
+        try await idle(evicted); try await Task.sleep(for: .milliseconds(10)); display()
+        check(pixels(c.sidebar.drawnFavicon(tabID: pin.id)) == replacement,
+              "FV16 confirmed copy preserves existing destination pixels")
+        let copiedURL = URL(string: "https://copied.example.invalid/page")!
+        let copiedTab = model.newTab(in: space.id, url: copiedURL, title: "Confirmed copy")
+        _ = evicted.report(red, for: copiedURL, iconURL: iconURL, copyToken: copyToken)
+        try await idle(evicted); try await Task.sleep(for: .milliseconds(10)); display()
+        check(pixels(c.sidebar.drawnFavicon(tabID: copiedTab.id)) == expected,
+              "FV16 confirmed copy draws stored pixels")
+        _ = evicted.removeCopy(for: copiedURL, token: UUID())
+        try await idle(evicted)
+        check(await store.icon(for: copiedURL) != nil, "FV16 unrelated provenance cannot remove destination record")
+        _ = evicted.removeCopy(for: copiedURL, token: copyToken)
+        try await idle(evicted); try await Task.sleep(for: .milliseconds(10)); display()
+        check(await store.icon(for: copiedURL) == nil && c.sidebar.drawnFaviconSource(tabID: copiedTab.id) == "placeholder",
+              "FV16 empty report revokes only its copied record and redraws placeholder")
+        _ = evicted.report(red, for: copiedURL, iconURL: iconURL, copyToken: copyToken)
+        try await idle(evicted)
+        _ = evicted.report(blue, for: copiedURL, iconURL: iconURL)
+        try await idle(evicted)
+        _ = evicted.removeCopy(for: copiedURL, token: copyToken)
+        try await idle(evicted); try await Task.sleep(for: .milliseconds(10)); display()
+        check(pixels(c.sidebar.drawnFavicon(tabID: copiedTab.id)) == replacement,
+              "FV16 late empty report preserves newer engine pixels")
+
         let prefix = "https://key.example.invalid/"
         let boundaryURL = URL(string: prefix + String(repeating: "x", count: 8192 - prefix.utf8.count))!
         try await store.ingest(imageData: red, iconURL: nil, for: boundaryURL, pageSpecific: true)

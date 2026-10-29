@@ -1227,3 +1227,46 @@ An unchanged rerun passed the full suite. Cause remains unconfirmed; no input
 route, wait tolerance or product workaround was added. The failed receipt is
 retained under `.re/pr131/first-final-e2e-results.json`. Generated engine-spike
 outputs and the temporary retry-spacing change are restored before committing.
+
+## Stored favicon PR #131 document ownership — 2026-10-28
+
+The new FV16 check failed against the reviewed App at `5fdaa84f`:
+
+```text
+FV16_cross_origin_missing_and_404_leave_no_stored_icon FAIL
+```
+
+Both the absent-icon page and the 404-icon page retained one exact-page record
+and drew the previous origin's stored icon after unload and relaunch. FV14 passed
+in that same baseline run; cleanup passed with no focus interruption.
+
+A URL callback now invalidates the old document's probe without storing its image.
+After loading, a bounded OpenEngine JavaScript result identifies the document URL
+and resolved icon URL. The host compares them with its image/icon-URL pair and
+navigation generation before reporting. An unchanged image may cover another
+path only on the same origin. New copy records have a UUID provenance tag; copies
+preserve an existing destination icon, and a later empty/different report can
+remove only its own tag. A newer ordinary report clears the tag. Disk access,
+decoding, deletion and row invalidation use the existing bounded async worker.
+See `docs/favicons.md`, "PR #131 document ownership correction".
+
+The real row harness adds five FV16 checks: preserve an existing destination;
+draw a confirmed copy; refuse deletion with another tag; delete/redraw after a
+matching revocation; and preserve a newer live report after a late revocation.
+The real-App FV16 covers both cross-origin missing/404 destinations after restart.
+
+| Round 2 check | Result |
+|---|---|
+| `git diff --check`; Python helper scope audit | PASS; no automation commands changed |
+| `~/Library/Caches/OpenRE/scripts/heavy.sh tools/verify-all.sh --only favicons,features-render,sidebar-render,roundtrip` | 5/5 targets PASS; features 357/357, sidebar 564/564; FV13, FV15 and all five row-level FV16 checks PASS; 1000-row scroll p95 1.060 ms |
+| `~/Library/Caches/OpenRE/scripts/heavy.sh tools/verify-all.sh` | 22/22 default targets PASS; no failures or skips; features 357/357; stored-icon scroll p95 0.863 ms |
+| `~/Library/Caches/OpenRE/scripts/heavy.sh tools/build.sh` | PASS after final host change; Debug App, no Swift warnings |
+| `/usr/bin/lockf /tmp/open-onscreen-e2e.lock python3 tools/e2e/engine_e2e.py --style chrome --only sidebar-completion` | 156/156 PASS; FV14 and FV16 PASS; both FV16 destinations have zero records and placeholder source/empty image hash after relaunch; first attempt, no focus interruption; cleanup PASS |
+
+Source review: input/decoded/disk bounds remain unchanged; the ownership probe
+returns two bounded URL strings, not document contents. Close and navigation
+cancel probes, and callback generations reject stale answers. Image conversion
+is still memoized by identity and store codecs by identical bytes. No engine
+source changes, dependencies, unit tests or Arc data are added. The failed FV16
+run also passed cleanup. Generated engine-spike outputs and temporary retry
+spacing are restored before committing.

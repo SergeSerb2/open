@@ -76,6 +76,14 @@ private final class FaviconStatements: @unchecked Sendable {
               PRIMARY KEY(origin, page_key));
             CREATE INDEX IF NOT EXISTS favicon_age ON favicons(fetched_at);
             """) else { throw FaviconStoreError.database }
+        // A copy owns only its own row. Ordinary engine reports clear this tag.
+        guard let columns = connection.prepare("PRAGMA table_info(favicons)") else { throw FaviconStoreError.database }
+        var hasCopyToken = false
+        while sqlite3_step(columns) == SQLITE_ROW {
+            if connection.columnText(columns, 1) == "copy_token" { hasCopyToken = true }
+        }
+        sqlite3_finalize(columns)
+        guard hasCopyToken || connection.exec("ALTER TABLE favicons ADD COLUMN copy_token TEXT") else { throw FaviconStoreError.database }
         var prepared: [OpaquePointer] = []
         func prepare(_ sql: String) throws -> OpaquePointer {
             guard let stmt = connection.prepare(sql) else {
@@ -88,10 +96,10 @@ private final class FaviconStatements: @unchecked Sendable {
         lookup = try prepare("SELECT png32,png64,icon_url FROM favicons WHERE origin=? AND page_key IN (?, '') AND status=0 AND png32 IS NOT NULL AND length(png32)<=32768 AND coalesce(length(png64),0)<=32768 ORDER BY length(page_key) DESC LIMIT 1")
         freshness = try prepare("SELECT status FROM favicons WHERE origin=? AND page_key='' AND expires_at>?")
         upsert = try prepare("""
-            INSERT INTO favicons(origin,page_key,icon_url,png32,png64,fetched_at,expires_at,status)
-            VALUES(?,?,?,?,?,?,?,?) ON CONFLICT(origin,page_key) DO UPDATE SET
+            INSERT INTO favicons(origin,page_key,icon_url,png32,png64,fetched_at,expires_at,status,copy_token)
+            VALUES(?,?,?,?,?,?,?,?,?) ON CONFLICT(origin,page_key) DO UPDATE SET
             icon_url=excluded.icon_url,png32=excluded.png32,png64=excluded.png64,
-            fetched_at=excluded.fetched_at,expires_at=excluded.expires_at,status=excluded.status
+            fetched_at=excluded.fetched_at,expires_at=excluded.expires_at,status=excluded.status,copy_token=excluded.copy_token
             """)
         purge = try prepare("DELETE FROM favicons WHERE fetched_at<?")
         count = try prepare("SELECT count(*) FROM favicons")
@@ -162,9 +170,12 @@ public actor FaviconStore {
         return FaviconImage(png32: png32, png64: blob(stmt, 1), iconURL: statements.db.columnText(stmt, 2).flatMap(URL.init(string:)))
     }
 
-    public func ingest(imageData: Data, iconURL: URL?, for pageURL: URL, pageSpecific: Bool) throws {
+    public func ingest(imageData: Data, iconURL: URL?, for pageURL: URL, pageSpecific: Bool, copyToken: UUID? = nil) throws {
         guard Self.cacheKey(pageURL) != nil, let origin = FaviconOrigin.key(pageURL), (iconURL?.absoluteString.utf8.count ?? 0) <= 8192 else { throw FaviconStoreError.invalidURL }
         guard imageData.count <= Self.maximumInputBytes else { throw FaviconStoreError.invalidImage }
+        // Actor isolation makes this check and the write indivisible. Preserve
+        // both exact-page records and an existing origin fallback.
+        if copyToken != nil, icon(for: pageURL) != nil { return }
         let pngs: (Data, Data)
         if let normalized, normalized.input == imageData {
             pngs = (normalized.png32, normalized.png64)
@@ -176,7 +187,20 @@ public actor FaviconStore {
             normalized = (imageData, pngs.0, pngs.1)
         }
         try write(origin: origin, pageKey: pageSpecific ? FaviconOrigin.pageKey(pageURL) : "",
-                  iconURL: iconURL, png32: pngs.0, png64: pngs.1, status: 0, lifetime: 7 * 86400)
+                  iconURL: iconURL, png32: pngs.0, png64: pngs.1, status: 0, lifetime: 7 * 86400, copyToken: copyToken)
+    }
+
+    /// A delayed empty/different engine report may revoke only this copy. A
+    /// newer ordinary report (or another copy) has a different/null token.
+    public func removeCopy(for pageURL: URL, token: UUID) throws {
+        guard Self.cacheKey(pageURL) != nil, let origin = FaviconOrigin.key(pageURL) else { throw FaviconStoreError.invalidURL }
+        let statements = try open()
+        guard let stmt = statements.db.prepare("DELETE FROM favicons WHERE origin=? AND page_key=? AND copy_token=?") else { throw FaviconStoreError.database }
+        defer { sqlite3_finalize(stmt) }
+        statements.db.bindText(stmt, 1, origin)
+        statements.db.bindText(stmt, 2, FaviconOrigin.pageKey(pageURL))
+        statements.db.bindText(stmt, 3, token.uuidString)
+        guard sqlite3_step(stmt) == SQLITE_DONE else { throw FaviconStoreError.database }
     }
 
     public func markMissing(for pageURL: URL) {
@@ -233,7 +257,7 @@ public actor FaviconStore {
     }
 
     private func write(origin: String, pageKey: String, iconURL: URL? = nil, png32: Data? = nil,
-                       png64: Data? = nil, status: Int, lifetime: TimeInterval) throws {
+                       png64: Data? = nil, status: Int, lifetime: TimeInterval, copyToken: UUID? = nil) throws {
         guard origin.utf8.count <= 8192, pageKey.utf8.count <= 8192 else { throw FaviconStoreError.invalidURL }
         let statements = try open(), stmt = statements.upsert, db = statements.db
         let reservedBytes = 2 * (origin.utf8.count + pageKey.utf8.count) +
@@ -251,6 +275,7 @@ public actor FaviconStore {
             bindBlob(stmt, 4, png32); bindBlob(stmt, 5, png64)
             db.bindDouble(stmt, 6, now); db.bindDouble(stmt, 7, now + lifetime)
             db.bindInt(stmt, 8, Int64(status))
+            db.bindText(stmt, 9, copyToken?.uuidString)
             let result = sqlite3_step(stmt)
             guard result == SQLITE_DONE else { return result }
             reset(stmt)

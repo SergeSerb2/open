@@ -24,7 +24,13 @@ final class EngineWebContentHost: NSObject, WebContentHost, OEWebContentDelegate
   var onLiveStateChange: ((WebContentLiveState) -> Void)?
   private var cachedFaviconImage: NSImage?
   private var cachedFaviconPNG: Data?
-  private var lastReportedFavicon: (key: String, data: Data)?
+  private var lastReportedFavicon: (key: String, data: Data, iconURL: URL)?
+  private var faviconImagePageURL: URL?
+  private var cachedFaviconURL: URL?
+  private var faviconDocumentRevision = 0
+  private var faviconEventForDocument = false
+  private var faviconProbe: Task<Void, Never>?
+  private var copiedFavicon: (url: URL, token: UUID)?
   private var backgroundGeneration = 0
   private var backgroundTask: Task<Void, Never>?
   var hasBackgroundTask: Bool { backgroundTask != nil }
@@ -57,10 +63,10 @@ final class EngineWebContentHost: NSObject, WebContentHost, OEWebContentDelegate
   }
   func close() {
     guard !closed else { return }; closed = true; generation += 1
-    cancelBackgroundRead()
+    cancelBackgroundRead(); faviconProbe?.cancel(); faviconProbe = nil
     onURLChange = nil; onTitleChange = nil; onLoadingChange = nil; onFaviconChange = nil; shouldNavigate = nil
     onPageBackgroundChange = nil; onLiveStateChange = nil
-    cachedFaviconImage = nil; cachedFaviconPNG = nil; lastReportedFavicon = nil
+    cachedFaviconImage = nil; cachedFaviconPNG = nil; cachedFaviconURL = nil; faviconImagePageURL = nil; lastReportedFavicon = nil
     content.delegate = nil; content.close(); content.view.removeFromSuperview()
     owner?.hostDidClose(self)
   }
@@ -69,9 +75,10 @@ final class EngineWebContentHost: NSObject, WebContentHost, OEWebContentDelegate
     guard !closed, let owner else { return }
     let token = generation
     if changes.contains(.URL), let url = page.url, url.absoluteString != "about:blank" {
-      // OpenEngine suppresses a favicon event when its URL is unchanged.
-      // Associate the current image with each committed page path as well.
-      _ = reportCurrentFavicon(page, owner: owner)
+      // OEWebContent still exposes the previous document's favicon here.
+      // A committed URL alone never proves ownership of those pixels.
+      faviconDocumentRevision += 1; faviconEventForDocument = false
+      faviconProbe?.cancel(); faviconProbe = nil; copiedFavicon = nil
       onURLChange?(url); cancelBackgroundRead(); pageBackgroundColor = nil; onPageBackgroundChange?(nil)
     }
     guard !closed, generation == token else { return }
@@ -79,35 +86,92 @@ final class EngineWebContentHost: NSObject, WebContentHost, OEWebContentDelegate
     if changes.contains(.loading) || changes.contains(.live) { onLoadingChange?(page.isLoading) }
     guard !closed, generation == token else { return }
     if changes.contains(.favicon) {
-      let data = reportCurrentFavicon(page, owner: owner)
+      faviconDocumentRevision += 1; faviconEventForDocument = true
+      lastReportedFavicon = nil
+      faviconProbe?.cancel(); faviconProbe = nil
+      revokeCopiedFavicon(owner: owner)
+      let data = currentFaviconData(page)
       onFaviconChange?(data)
+      confirmFaviconForDocument(page, owner: owner)
     }
     guard !closed, generation == token else { return }
     onLiveStateChange?(liveState)
     if changes.contains(.loading), !page.isLoading { refreshPageBackground() }
+    // Same-document History API path changes do not emit another load finish.
+    if !page.isLoading, !changes.isDisjoint(with: [.URL, .loading]) { confirmFaviconForDocument(page, owner: owner) }
     if !changes.isDisjoint(with: [.URL, .title]) { owner.app.scheduleSave() }
     owner.record("change", page, ["changes": changes.rawValue])
   }
-  /// Cache the conversion per host. A URL-only event reuses the exact bytes;
-  /// canonical-key/data comparison also coalesces combined URL/favicon events.
-  /// Capture everything before a consumer callback can close or rebind the host.
-  private func reportCurrentFavicon(_ page: OEWebContent, owner: EngineWebContentHostFactory) -> Data? {
+  /// Cache conversion by image identity, independent of the page key.
+  private func currentFaviconData(_ page: OEWebContent) -> Data? {
     guard let image = page.favicon else {
-      cachedFaviconImage = nil; cachedFaviconPNG = nil
+      cachedFaviconImage = nil; cachedFaviconPNG = nil; cachedFaviconURL = nil; faviconImagePageURL = nil
       return nil
     }
     if cachedFaviconImage !== image {
       cachedFaviconImage = image
+      cachedFaviconURL = page.faviconURL; faviconImagePageURL = page.url
       cachedFaviconPNG = EngineWebContentHostFactory.pngData(image)
     }
-    guard let data = cachedFaviconPNG else { return nil }
-    if let url = page.url, let key = FaviconStore.cacheKey(url),
-       lastReportedFavicon?.key != key || lastReportedFavicon?.data != data {
-      if owner.app.stores.sidebarFavicons?.report(data, for: url) == true {
-        lastReportedFavicon = (key, data)
+    return cachedFaviconPNG
+  }
+
+  private func revokeCopiedFavicon(owner: EngineWebContentHostFactory) {
+    guard let copied = copiedFavicon, let cache = owner.app.stores.sidebarFavicons else { return }
+    copiedFavicon = nil
+    if cache.removeCopy(for: copied.url, token: copied.token) { return }
+    // Backpressure keeps the report queue bounded even during a burst of nil
+    // notifications. Capture no host or image while waiting for the worker.
+    Task { @MainActor in
+      while !cache.removeCopy(for: copied.url, token: copied.token) { await cache.flush() }
+    }
+  }
+
+  /// The engine's faviconURL can also lag the URL callback. After loading, ask
+  /// the committed document which icon it declares, then compare that URL with
+  /// the engine image's URL. A changed/empty event invalidates this whole probe.
+  private func confirmFaviconForDocument(_ page: OEWebContent, owner: EngineWebContentHostFactory) {
+    guard !closed, !page.isLoading, owner.app.engineReady, !owner.app.terminationRequested,
+          let url = page.url, let key = FaviconStore.cacheKey(url), let iconURL = page.faviconURL,
+          let image = page.favicon, let data = currentFaviconData(page), cachedFaviconURL == iconURL else { return }
+    let isReport = faviconEventForDocument
+    if !isReport {
+      // Suppressed same-icon events may cover another path, but never infer
+      // ownership across origins. The DOM check below also rejects no-icon pages.
+      guard let source = faviconImagePageURL, Self.sameOrigin(source, url) else { return }
+    }
+    if lastReportedFavicon?.key == key, lastReportedFavicon?.data == data,
+       lastReportedFavicon?.iconURL == iconURL { return }
+    faviconProbe?.cancel()
+    let revision = faviconDocumentRevision, token = generation
+    faviconProbe = Task { @MainActor [weak self, weak owner] in
+      guard let self, let owner else { return }
+      defer { if self.faviconDocumentRevision == revision { self.faviconProbe = nil } }
+      let script = """
+      (() => { const link=document.querySelector('link[rel~="icon" i]');
+        const icon=link ? link.href : new URL('/favicon.ico', location.href).href;
+        return [location.href.slice(0,8193), icon.length <= 8192 ? icon : '']; })()
+      """
+      await owner.app.deferAsyncEngineWorkForAutomation()
+      guard !Task.isCancelled, !self.closed, !owner.app.terminationRequested else { return }
+      owner.app.noteAsyncEngineCall("faviconOwnership")
+      let document = try? await page.evaluateJavaScript(script) as? [String]
+      guard !Task.isCancelled, !self.closed, self.generation == token,
+            self.faviconDocumentRevision == revision, page.url == url,
+            page.favicon === image, page.faviconURL == iconURL,
+            let document, document.count == 2, URL(string: document[0]) == url,
+            URL(string: document[1]) == iconURL, let cache = owner.app.stores.sidebarFavicons else { return }
+      let copyToken = isReport ? nil : UUID()
+      if cache.report(data, for: url, iconURL: iconURL, copyToken: copyToken) {
+        self.lastReportedFavicon = (key, data, iconURL)
+        if let copyToken { self.copiedFavicon = (url, copyToken) }
       }
     }
-    return data
+  }
+
+  private static func sameOrigin(_ a: URL, _ b: URL) -> Bool {
+    guard let first = FaviconStore.cacheKey(a), let second = FaviconStore.cacheKey(b) else { return false }
+    return first.split(separator: "\n", maxSplits: 1).first == second.split(separator: "\n", maxSplits: 1).first
   }
   /// OpenEngine has no page-color event yet. Read the committed page after
   /// loading ends; a late answer cannot cross a close, rebind, or navigation.
@@ -168,7 +232,7 @@ final class EngineWebContentHost: NSObject, WebContentHost, OEWebContentDelegate
   }
   func webContent(_ page: OEWebContent, didUpdateFindResult result: OEFindResult) { if !closed { owner?.webContent(page, didUpdateFindResult: result) } }
   func webContent(_ page: OEWebContent, didRequestFullscreen fullscreen: Bool) { if !closed { owner?.webContent(page, didRequestFullscreen: fullscreen) } }
-  func webContent(_ page: OEWebContent, didFinishLoadWithStatus status: Int) { if !closed { refreshPageBackground(); owner?.webContent(page, didFinishLoadWithStatus: status) } }
+  func webContent(_ page: OEWebContent, didFinishLoadWithStatus status: Int) { if !closed { refreshPageBackground(); if let owner { confirmFaviconForDocument(page, owner: owner) }; owner?.webContent(page, didFinishLoadWithStatus: status) } }
   func webContent(_ page: OEWebContent, didFailLoadWithError error: any Error) { if !closed { owner?.webContent(page, didFailLoadWithError: error) } }
   func webContent(_ page: OEWebContent, didReceiveDevToolsEvent method: String, parameters: [String: Any]) { if !closed { owner?.webContent(page, didReceiveDevToolsEvent: method, parameters: parameters) } }
   func webContent(_ page: OEWebContent, didLogConsoleMessage message: String, level: Int, source: String, line: Int) { if !closed { owner?.webContent(page, didLogConsoleMessage: message, level: level, source: source, line: line) } }
