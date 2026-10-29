@@ -78,45 +78,148 @@ def stop_native_suite_apps(directory):
 
 
 def onscreen_suite(command):
-    """Called by lockf after acquisition. Keep the existing 180 s suite budget."""
-    with tempfile.TemporaryDirectory(prefix="open-onscreen-suite-") as directory:
-        # Foundation can ignore TMPDIR for NSTemporaryDirectory on macOS. Give
-        # the registered-app launcher an explicit owned root as well.
-        environment = dict(os.environ, TMPDIR=directory + "/", OPEN_VERIFY_SUITE_ROOT=directory)
-        print("On-screen lock acquired; suite deadline=180s", flush=True)
-        with subprocess.Popen(command, stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
-                              text=True, env=environment, start_new_session=True) as job:
-            print(f"On-screen renderer {job.pid}; private temporary root={directory}", flush=True)
-            timed_out = False
-            try:
-                output, _ = job.communicate(timeout=180)
-            except subprocess.TimeoutExpired:
-                timed_out = True
-                # Keep lockf alive while terminating/reaping this process group.
-                # Killing only lockf releases the lock with a renderer still live.
-                with contextlib.suppress(ProcessLookupError):
-                    os.killpg(job.pid, signal.SIGTERM)
-                try:
-                    output, _ = job.communicate(timeout=2)
-                except subprocess.TimeoutExpired:
-                    with contextlib.suppress(ProcessLookupError):
-                        os.killpg(job.pid, signal.SIGKILL)
-                    output, _ = job.communicate(timeout=2)
-            finally:
-                # On exceptions, keep the unreaped leader's PID as ownership
-                # of the group. communicate() may already have reaped it; do
-                # not signal a stale group ID after a long agent pause.
+    """Own lockf's shared FD; keep the 180 s execution budget after acquisition."""
+    termination_signals = (signal.SIGTERM, signal.SIGINT, signal.SIGHUP)
+    cancelled = None
+    directory = job = lock_file = lock_job = None
+    cleanup_complete = False
+    output = ""
+
+    def cleanup():
+        nonlocal cleanup_complete, output
+        if cleanup_complete:
+            return
+        # Repeated process-group signals must not interrupt cleanup, including
+        # the short-lived ps children used to identify our registered app.
+        previous_mask = signal.pthread_sigmask(signal.SIG_BLOCK, termination_signals)
+        try:
+            if lock_job is not None:
+                if lock_job.poll() is None:
+                    lock_job.terminate()
+                    try:
+                        lock_job.wait(timeout=2)
+                    except subprocess.TimeoutExpired:
+                        lock_job.kill()
+                lock_job.wait()
+            if job is not None:
                 if job.returncode is None:
                     with contextlib.suppress(ProcessLookupError):
-                        os.killpg(job.pid, signal.SIGKILL)
+                        os.killpg(job.pid, signal.SIGTERM)
+                    # Keep the leader unreaped through the TERM grace. Its PID
+                    # cannot be reused before KILL reaches remaining group members.
+                    time.sleep(2)
+                    groups = subprocess.check_output(["/bin/ps", "-axo", "pgid=,stat="], text=True)
+                    if any(fields[0] == str(job.pid) and not fields[1].startswith("Z")
+                           for line in groups.splitlines() if len(fields := line.split()) == 2):
+                        with contextlib.suppress(ProcessLookupError):
+                            os.killpg(job.pid, signal.SIGKILL)
+                    output, _ = job.communicate(timeout=2)
                 job.wait()
-                native_apps = stop_native_suite_apps(directory)
-                print(f"On-screen cleanup: renderer {job.pid} reaped; native apps stopped={native_apps}", flush=True)
-            print(output, end="", flush=True)
-            require(not timed_out, "on-screen suite timed out after 180s (owned children reaped)")
-            if job.returncode == 2:
-                raise SuiteInterrupted("on-screen suite exhausted three foreground-interrupted attempts")
-            require(job.returncode == 0, f"on-screen suite exited {job.returncode}; expected 0")
+            native_apps = stop_native_suite_apps(directory.name) if directory is not None else 0
+            if directory is not None:
+                directory.cleanup()
+            renderer = f"renderer {job.pid} reaped" if job is not None else "no renderer started"
+            with contextlib.suppress(BrokenPipeError):
+                print(f"On-screen cleanup: {renderer}; native apps stopped={native_apps}; private root removed", flush=True)
+            # FD-mode lockf locks this shared open-file description. Reap all
+            # helpers and remove the root before releasing our last descriptor.
+            if lock_file is not None:
+                lock_file.close()
+            cleanup_complete = True
+        finally:
+            signal.pthread_sigmask(signal.SIG_SETMASK, previous_mask)
+
+    def exit_cancelled():
+        # This internal worker owns its signal policy until process exit. Cleanup
+        # may already have run in finally, or a late handler may enter here.
+        signal.pthread_sigmask(signal.SIG_BLOCK, termination_signals)
+        cleanup()
+        code = 128 + cancelled
+        with contextlib.suppress(BrokenPipeError):
+            print(f"On-screen cancellation: {signal.Signals(cancelled).name}; owned cleanup complete; exit {code}", flush=True)
+        # The parent may have died in the same group signal and closed stdout.
+        # All owned resources are gone; avoid a failing Python exit-time pipe
+        # flush replacing the required cancellation status with exit 120.
+        os._exit(code)
+
+    def terminate(signum, _frame):
+        nonlocal cancelled
+        if cancelled is None:
+            cancelled = signum
+        if cleanup_complete:
+            exit_cancelled()
+        # Do not raise asynchronously across TemporaryDirectory/Popen assignment:
+        # a spawned child must be recorded before cancellation can unwind setup.
+
+    for signum in termination_signals:
+        signal.signal(signum, terminate)
+
+    timed_out = False
+    failure = None
+    try:
+        lock_path = "/tmp/open-onscreen-e2e.lock"
+        while cancelled is None:
+            lock_file = open(lock_path, "a+")
+            lock_job = subprocess.Popen(["/usr/bin/lockf", "-s", str(lock_file.fileno())],
+                                        pass_fds=(lock_file.fileno(),),
+                                        stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+            while cancelled is None:
+                try:
+                    lock_job.wait(timeout=0.25)
+                    break
+                except subprocess.TimeoutExpired:
+                    pass
+            if cancelled is not None:
+                break
+            require(lock_job.returncode == 0, "cannot acquire the on-screen lock")
+            # Another default-mode lockf user may unlink the path at release.
+            # Never start a suite on a locked inode that is no longer current.
+            held = os.fstat(lock_file.fileno())
+            try:
+                current = os.stat(lock_path)
+            except FileNotFoundError:
+                current = None
+            if current is not None and (held.st_dev, held.st_ino) == (current.st_dev, current.st_ino):
+                break
+            lock_file.close()
+            lock_file = None
+        if cancelled is not None:
+            exit_cancelled()
+        directory = tempfile.TemporaryDirectory(prefix="open-onscreen-suite-")
+        # Foundation can ignore TMPDIR for NSTemporaryDirectory on macOS. Give
+        # the registered-app launcher an explicit owned root as well.
+        environment = dict(os.environ, TMPDIR=directory.name + "/", OPEN_VERIFY_SUITE_ROOT=directory.name)
+        print(f"On-screen lock acquired; suite deadline=180s; worker {os.getpid()}", flush=True)
+        if cancelled is None:
+            job = subprocess.Popen(command, stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
+                                   text=True, env=environment, start_new_session=True)
+            print(f"On-screen renderer {job.pid}; private temporary root={directory.name}", flush=True)
+            deadline = time.monotonic() + 180
+            while cancelled is None:
+                remaining = deadline - time.monotonic()
+                if remaining <= 0:
+                    timed_out = True
+                    break
+                try:
+                    # A non-raising signal handler leaves setup and communicate
+                    # consistent; this bounded wait observes cancellation promptly.
+                    output, _ = job.communicate(timeout=min(0.25, remaining))
+                    break
+                except subprocess.TimeoutExpired:
+                    pass
+    except BaseException as error:
+        failure = error
+    finally:
+        cleanup()
+    if cancelled is not None:
+        exit_cancelled()
+    if failure is not None:
+        raise failure
+    print(output, end="", flush=True)
+    require(not timed_out, "on-screen suite timed out after 180s (owned children reaped)")
+    if job.returncode == 2:
+        raise SuiteInterrupted("on-screen suite exhausted three foreground-interrupted attempts")
+    require(job.returncode == 0, f"on-screen suite exited {job.returncode}; expected 0")
 
 
 def matches(pattern, text):
@@ -625,9 +728,10 @@ def main():
             # This CLI opens real native menus. Serialize that suite, while the
             # release build and wholly offscreen checks need no on-screen lock.
             # Lock queue time is not suite execution time. The inner worker owns
-            # the unchanged deadline and reaps children before lockf can exit.
-            command = ["/usr/bin/lockf", "/tmp/open-onscreen-e2e.lock",
-                       sys.executable, str(Path(__file__).resolve()), "onscreen-suite", *command]
+            # the unchanged deadline and releases its lock after reaping children.
+            # The worker acquires lockf's FD-mode lock itself. A group signal
+            # cannot kill a separate lock wrapper and unlock before cleanup.
+            command = [sys.executable, str(Path(__file__).resolve()), "onscreen-suite", *command]
             all_passed(run(*command, timeout=None, interrupted_exit=2))
         else:
             all_passed(run(*command))

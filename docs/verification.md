@@ -390,11 +390,16 @@ consumed the execution deadline. It failed after 180 s and left renderer PID
 40906 running with PPID 1 after lockf exited. That process had exited before the
 resume audit; no owned renderer or harness app remained.
 
-`check.py` now runs an internal worker **after** `/usr/bin/lockf` acquires the
-shared lock. The outer lock wait has no suite deadline. The worker keeps the
-unchanged **180-second** renderer deadline, owns a fresh process group, and
-terminates the group and reaps its renderer on timeout or exception before
-returning to lockf. Registered
+`check.py` now runs an internal worker that **retains the shared lock itself**.
+It opens `/tmp/open-onscreen-e2e.lock` and passes that descriptor to
+`/usr/bin/lockf -s <fd>` using `pass_fds`. FD mode locks the shared open-file
+description, so the worker keeps the lock after the acquisition helper exits.
+It verifies that the locked inode still matches the path, reopening if a default
+lockf user unlinked the previous inode. No renderer or private suite root starts
+before acquisition; lock queue time has no suite deadline. The worker keeps the
+unchanged **180-second** renderer deadline, starts the renderer in a fresh process
+group, and terminates that group and reaps the renderer on timeout, exception or
+cancellation. Registered
 LaunchServices apps escape that process group, so the worker also owns a private
 suite root and removes only harness apps whose full executable path is under
 that root. Foundation used its system temp directory despite `TMPDIR` in the
@@ -419,6 +424,90 @@ exit, not exclude other users. The actual timeout artifacts and process absence
 were independently audited in `runner-timeout-proof.json`; no extra 180-second
 fault run was used to replace the recorded result. The invalid-root CLI also
 failed as intended (`0/1 passed`) before launching any app.
+
+PR #133 review comment **4407550548** found an additional cancellation hole on
+`715198ed`. Default SIGTERM exits Python without unwinding `finally`, while the
+detached renderer survives. The end-to-end negative proof ran the old file from
+`git show 715198ed:tools/verification/check.py`, under `lockf` with a private test
+lock and `/bin/sleep 30`. It stopped the owned child and sent SIGTERM to the
+worker/wrapper process group. The first queued contender acquired the lock while
+the child and private root still existed:
+
+```text
+715198ed SIGTERM: lock command exit=-15, expected worker exit=143
+child PID 24049 gone=false; private root removed=false
+lock busy during cleanup=false; cleanup log count=0
+contender: child_gone=false, root_removed=false -> FAIL
+```
+
+The proof controller then killed only that owned child and removed its leaked
+root. This case opened no UI and used no CPU burner. Raw evidence is
+`signal-old-term-sleep.log` and `.json` under `.re/sidebar-flakes/`.
+
+The first handler-only experiment also showed why the worker must own the lock:
+macOS `lockf` kept a separate wrapper (27416) and Python worker (27417), even with
+`-k`. Group cancellation killed the wrapper and unlocked before the worker's
+cleanup completed. FD-mode acquisition fixes that ownership problem; there is
+no long-lived lock wrapper to die before cleanup. The worker is entered directly
+as `python3 tools/verification/check.py onscreen-suite <command>` and acquires
+the machine lock internally. Do not wrap this internal command in another
+`lockf` on the same path.
+
+SIGTERM, SIGINT and SIGHUP handlers record the first signal. They do not raise
+across temporary-root or `Popen` assignment, which could lose a just-created
+child. Bounded 0.25 s communication waits observe cancellation while preserving
+one absolute 180 s execution deadline. One idempotent cleanup function masks
+those signals, reaps a queued lock helper, sends TERM to the unreaped renderer's
+process group, retains the leader PID through the existing 2 s grace, and sends
+KILL if live group members remain. Zombie-only groups need no further signal.
+It reaps the renderer, stops registered apps by their exact owned-root executable
+paths, removes the root, then closes the lock descriptor **last**. Repeated
+cleanup calls are no-ops. Exit is **128 + signum** only after cleanup. A closed
+parent output pipe cannot replace that status with Python's exit-time flush
+error: cancellation uses `_exit` after all owned resources are gone.
+
+Fixed end-to-end proofs use the real internal worker and the real machine lock.
+An independent queued contender checks child/App absence and root removal at its
+first lock acquisition. The first four active-child cases stop the owned children
+before cancellation; the closed-pipe case keeps its child running. No case waits
+for the 30 s command to complete naturally.
+The native case runs the actual `sitecontrol-render native-key-check`, including
+its LaunchServices-registered `EditorHarness.app`; no desktop input was driven.
+
+| Case | Worker | Renderer/child | Registered App | Exit | Lock held during cleanup | State when contender acquired |
+|---|---:|---:|---:|---:|---|---|
+| SIGTERM, then repeated INT/HUP/TERM | 32940 | 32943 | — | 143 | yes | child gone, root removed |
+| SIGINT | 35247 | 41368 | — | 130 | yes | child gone, root removed |
+| SIGHUP | 41470 | 41472 | — | 129 | yes | child gone, root removed |
+| Real renderer/App, SIGTERM and repeats | 41507 | 41510 | 41516 | 143 | yes | renderer and App gone, root removed |
+| Queued SIGTERM | 44317 | never started | — | 143 | original holder retained its lock | helper 44319 reaped; no root created |
+| SIGTERM, running child, parent pipe closed | 44323 | 44325 | — | 143 | yes | child gone, root removed |
+
+The four active-child cases with an open output pipe each printed exactly one
+cleanup line; the queued-cancellation case also printed one.
+The native proof printed:
+
+```text
+On-screen cleanup: renderer 41510 reaped; native apps stopped=1; private root removed
+On-screen cancellation: SIGTERM; owned cleanup complete; exit 143
+contender: child_gone=true, app_gone=true, root_removed=true
+```
+
+The closed-pipe case verifies status and resource state independently of log
+delivery. The queued case verifies cancellation before the renderer/deadline
+starts. Receipts are `signal-fixed-*.json` and matching logs; the proof drivers
+are local under `.re/sidebar-flakes/`. No threshold, instruction reference,
+native focus deadline or suite execution deadline changed.
+
+Requested review verification:
+`~/Library/Caches/OpenRE/scripts/heavy.sh tools/verify-all.sh --only sitecontrol-render,sidebar-render`
+passed: build **PASS** (3 s, no warnings/errors), sidebar **564/564** (106 s),
+Site Control **1471/1471** (81 s including lock queue time). The command recorded
+load1 **17.98 → 11.20**, waited 10 s for a heavy slot, and completed in 200.298 s.
+The editor instruction median was **134,821,383** against unchanged reference
+**135,203,676**; native window list **5 → 5**, CPU p95 INFO **9.255 ms** at load1
+**11.20**. All owned test processes and private roots were gone at the final audit.
+Logs and summary: `.re/sidebar-flakes/signal-review-verify/`.
 
 Initial foreground verification for `54b636bc`, `verified-1`…`verified-6` (real shared load;
 no synthetic burners):
