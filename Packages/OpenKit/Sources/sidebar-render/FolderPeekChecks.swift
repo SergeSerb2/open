@@ -173,4 +173,68 @@ enum FolderPeekChecks {
         }
     }
 
+
+    /// Start with collapsed DTO-like state before the real sidebar is constructed.
+    static func collapsedLoads() {
+        for scenario in ["root", "nested", "exposed child", "peek"] {
+            let profile = Profile(name: "Collapsed load")
+            let leaves = (0..<2).map { Tab(url: URL(string: "https://example.invalid/collapsed/\($0)")!, title: "Leaf \($0)") }
+            let outside = Tab(url: URL(string: "https://example.invalid/outside")!, title: "Outside")
+            let child = Folder(title: "Child", isExpanded: false, children: leaves.map { .tab($0) })
+            let nested = scenario == "nested" || scenario == "exposed child"
+            let folder = Folder(title: "Loaded", isExpanded: scenario == "exposed child",
+                children: nested ? [.folder(child)] : leaves.map { .tab($0) })
+            let space = Space(title: "Collapsed load", profileID: profile.id, pinned: [.folder(folder)], today: [.tab(outside)])
+            let state = BrowserWindowState(focusedSpaceID: space.id, selectedNodeBySpace: [space.id: outside.id])
+            let model = BrowserModel(profiles: [profile], spaces: [space], windows: [state])
+            let context = SidebarContext(model: model, windowID: state.id), delegate = RecordingDelegate()
+            let scene = RenderScene(context: context, options: RenderScene.Options(), delegate: delegate)
+            let host = OffscreenRenderer.host(scene, scale: 1)
+            defer { host.contentView = nil; host.close() }
+            let sidebar = scene.sidebar
+            let reloads = SidebarDiagnostics.fullReloads
+            func pump() { OffscreenRenderer.settle(scene, runLoop: 0.02) }
+            func click(_ id: ItemID) -> Bool {
+                guard let frame = sidebar.rowFrame(nodeID: id) else { return false }
+                let point = sidebar.convert(NSPoint(x: 95, y: frame.midY), to: nil)
+                let now = ProcessInfo.processInfo.systemUptime
+                let down = NSEvent.mouseEvent(with: .leftMouseDown, location: point, modifierFlags: [], timestamp: now,
+                    windowNumber: host.windowNumber, context: nil, eventNumber: 0, clickCount: 1, pressure: 1)!
+                let up = NSEvent.mouseEvent(with: .leftMouseUp, location: point, modifierFlags: [], timestamp: now + 0.01,
+                    windowNumber: host.windowNumber, context: nil, eventNumber: 0, clickCount: 1, pressure: 0)!
+                guard let target = host.contentView?.hitTest(point) else { return false }
+                NSApp.postEvent(up, atStart: true); target.mouseDown(with: down)
+                if let event = NSApp.nextEvent(matching: .leftMouseUp, until: Date(), inMode: .default, dequeue: true) { target.mouseUp(with: event) }
+                pump(); return true
+            }
+            func shows(_ ids: [ItemID]) -> Bool {
+                Checks.waitFor({ ids.allSatisfy { sidebar.displayedRows.contains($0.description) } })
+            }
+            pump()
+            switch scenario {
+            case "root":
+                let clicked = click(folder.id)
+                Checks.check(clicked && folder.isExpanded && shows(leaves.map(\.id)) && SidebarDiagnostics.fullReloads == reloads,
+                    "FP-collapsed-load root click immediately exposes both real children without reload")
+            case "nested":
+                let clicked = click(folder.id), exposed = shows([child.id])
+                Checks.check(clicked && folder.isExpanded && exposed,
+                    "FP-collapsed-load collapsed parent click immediately exposes collapsed nested folder")
+                let opened = click(child.id)
+                Checks.check(opened && child.isExpanded && shows(leaves.map(\.id)) && SidebarDiagnostics.fullReloads == reloads,
+                    "FP-collapsed-load newly exposed nested folder click immediately exposes children")
+            case "exposed child":
+                let clicked = click(child.id)
+                Checks.check(clicked && child.isExpanded && shows(leaves.map(\.id)) && SidebarDiagnostics.fullReloads == reloads,
+                    "FP-collapsed-load collapsed child under initially expanded parent opens on first click")
+            default:
+                let accepted = ModelSidebarActions(context: context).perform(.setFolderExpansion(folderID: folder.id, expansion: .peeked(leaves[1].id)))
+                pump()
+                Checks.check(accepted && folder.expansion == .peeked(leaves[1].id) && shows([leaves[1].id])
+                    && !sidebar.displayedRows.contains(leaves[0].id.description) && SidebarDiagnostics.fullReloads == reloads,
+                    "FP-collapsed-load peek command immediately exposes exactly one real child")
+            }
+        }
+    }
+
 }

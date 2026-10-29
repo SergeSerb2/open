@@ -3,6 +3,152 @@
 Original S6 base: 2d51f14a1207c00157edb90f51459d97b7b1096b (A2 over A1).
 Branch: t3/sidebar-s6-folder-peek. Parent owns the PR/stack.
 
+## PR #135 final review: collapsed-load cache registration (2026-10-28)
+
+Review [4408288219](https://github.com/SergeSerb2/open/pull/135#discussion_r4408288219),
+reviewed head `ab938111452e3f1089efb70674f94d2290968620`. This is the last review
+round; reply and resolve this thread after the fix, with no new Codex review request.
+
+### Valid failure proof on ab938111
+
+Only the sidebar-render and native e2e flows were added before running the proof.
+`SpacePageView.swift` remained byte-identical to ab938111; its SHA-256 and source
+provenance are in `.re/s6/review-135-r2/baseline-provenance.txt`.
+
+```sh
+~/Library/Caches/OpenRE/scripts/heavy.sh tools/verify-all.sh --only sidebar-render --keep-logs
+~/Library/Caches/OpenRE/scripts/heavy.sh tools/build.sh
+/usr/bin/lockf /tmp/open-onscreen-e2e.lock tools/e2e/engine_e2e.py --style chrome --only sidebar-completion
+```
+
+Valid sidebar proof: build PASS, **603 passed / 5 failed**, exit 1. Exact lines:
+
+```text
+FAIL FP-collapsed-load root click immediately exposes both real children without reload
+FAIL FP-collapsed-load collapsed parent click immediately exposes collapsed nested folder
+FAIL FP-collapsed-load newly exposed nested folder click immediately exposes children
+FAIL FP-collapsed-load collapsed child under initially expanded parent opens on first click
+FAIL FP-collapsed-load peek command immediately exposes exactly one real child
+```
+
+The real App's saved-collapsed and relaunched-collapsed fixture rows both PASS.
+`E20_collapsed_load_real_click_expands` then FAILs: the native click reports
+`accepted:true, expanded:true, peekedChildID:""`; the folder readback reports
+`expanded:true, visibleChildren:[]`, while three actual children are expected.
+No structural edits or explicit folder-child data-source queries occur between
+relaunch and this real click. Native cleanup PASS; zero focus interruptions.
+
+Two initial sidebar build attempts stopped on the new harness's call to internal
+`SidebarContext.send`. The runner sends SIGTERM after the first compiler diagnostic;
+those were compilation failures, not environment interruptions or regression proof.
+The diagnostic build identifies the access error; use the public `ModelSidebarActions`
+entry point instead. The valid proof above runs after that harness correction.
+
+Private baseline logs: `.re/s6/review-135-r2/before-sidebar-valid.log`,
+`before-app-build.log`, `before-e2e-completion.log`, `before-completion.json`.
+Detailed valid sidebar logs:
+`/var/folders/s6/_07cr4w13vsg_myjkv9ldpqc0000gn/T/open-verify-20261028-201455.1iggCj/`.
+The two compilation attempts and `before-build-diagnostic.log` remain unaccepted
+as behavioral proof.
+
+### Root fix and coverage
+
+`SpacePageView.observeFolder` initializes `folderChildren[key]` to `[]` when the
+folder is first registered, before installing its observation loop. This covers
+fully collapsed rows even if AppKit never requests their children, and collapsed
+nested rows when their parent first exposes them. Preserve an already populated
+cache. The existing-observer guard precedes the initialization, so warm transitions
+add no cache query; hidden-update deferral, removal/cancellation guards and per-folder
+incremental reconciliation stay intact. No full-tree walk or reload is added.
+
+Five real sidebar flows cover root expansion, collapsed parent then child,
+an initially exposed collapsed child, and collapsed → peeked. Native E20 saves a
+fully collapsed folder, quits/relaunches, verifies the loaded state, and expands
+it by a real click. It checks native child-row membership, not just model/icon state.
+The sidebar flows assert the existing full-reload counter does not change.
+No model/undo/persistence rule, visual token, baseline PNG or threshold changes.
+
+### Final full gate and FP10
+
+```sh
+~/Library/Caches/OpenRE/scripts/heavy.sh tools/verify-all.sh --keep-logs
+~/Library/Caches/OpenRE/scripts/heavy.sh tools/verification/folder-peek-bench.py
+```
+
+Full gate **22/22 PASS, exit 0**; sidebar-render **608/608**, including all five
+new collapsed-load flows (inherited SW1–SW4 skips); features-render **380/380**,
+commands-demo 307/307, Site Control 1471/1471. All original frozen-image and
+sidebar comparison gates PASS without image or threshold changes.
+
+| Full gate row | Result | Seconds |
+|---|---|---:|
+| build | PASS | 13 |
+| commands-demo | PASS | 1 |
+| roundtrip | PASS | 0 |
+| space-legacy | PASS | 1 |
+| space-editor | PASS | 2 |
+| space-pad-compare | PASS | 2 |
+| suggest-check | PASS | 10 |
+| commands-dump | PASS | 0 |
+| route | PASS | 1 |
+| favicons | PASS | 1 |
+| media-demo | PASS | 0 |
+| sleep-demo | PASS | 0 |
+| adblock-perf | PASS | 1 |
+| adblock-catalog | PASS | 0 |
+| profiles | PASS | 0 |
+| settings-preview | PASS | 85 |
+| sidebar-render | PASS | 109 |
+| sidebar-compare | PASS | 78 |
+| commandbar-render | PASS | 14 |
+| features-render | PASS | 47 |
+| sitecontrol-render | PASS | 50 |
+| boosts | PASS | 6 |
+
+Full logs: `.re/s6/review-135-r2/verify-full.log` and
+`/var/folders/s6/_07cr4w13vsg_myjkv9ldpqc0000gn/T/open-verify-20261028-202336.euywg7/`.
+
+FP10 **3/3 PASS**, same parent-approved definition, fixture and pinned parent.
+Times in ms; all native scroll layouts/frame remain **18/18**, with peek scroll
+p95 below both 8.33 ms and baseline ×1.10+0.05 ms. First-observation cache setup
+is outside the warm transition fast path; no loop/cache lookup was added after
+the existing-observer early return.
+
+| Attempt | Load1 start / transition | Parent plain median / p95 | Branch plain median / p95 | Peek median / p95 | Computed p95 limit | Scroll baseline / peek p95 (load1) |
+|---|---|---|---|---|---:|---|
+| 1 | 5.65 / 5.76 | 2.10 / 2.944 | 1.90 / 2.461 | 1.63 / 2.663 | 2.757 | 1.31 / 1.31 (5.65) |
+| 2 | 5.76 / 5.86 | 2.22 / 3.298 | 2.03 / 3.130 | 1.77 / 2.766 | 3.493 | 1.42 / 1.40 (5.76) |
+| 3 | 5.86 / 5.71 | 2.18 / 2.827 | 2.05 / 3.214 | 1.77 / 2.812 | 3.585 | 1.31 / 1.33 (5.86) |
+
+FP10 log: `.re/s6/review-135-r2/fp10.log`. Existing negative controls are unchanged;
+prior negative failures are not relabelled as new-head runs. The <1 ms median
+optimization goal remains open, as recorded in followups.
+
+### Rebuilt App and final native flows
+
+```sh
+~/Library/Caches/OpenRE/scripts/heavy.sh tools/build.sh
+/usr/bin/lockf /tmp/open-onscreen-e2e.lock tools/e2e/engine_e2e.py --style chrome --only sidebar-completion
+/usr/bin/lockf /tmp/open-onscreen-e2e.lock tools/e2e/engine_e2e.py --style chrome --only sidebar
+```
+
+App: **BUILD SUCCEEDED**. Sidebar-completion **193/193 PASS**; sidebar **19/19
+PASS**, comparison included. Zero focus interruptions; owned-process/window cleanup
+PASS for both. E20's saved-collapsed and relaunched-collapsed fixtures PASS; the
+same real click which exposed **0/3** native children before the fix now exposes
+**3/3**, with `expanded:true`. No unrelated structural operation was used to make
+those rows appear. The native checks both pass on their first fixed-source invocation.
+
+Artifacts: `.re/s6/review-135-r2/app-build.log`, `e2e-completion.log`,
+`completion-final.json`, `e2e-sidebar.log`, `sidebar-final.json`,
+`E20-folder-peek-final.png`. All dependent jobs completed in the foreground.
+Generated `docs/engine-spike/*` is restored before commit; `git diff --check`
+passes; no owned Open/renderer process remains. Reply with the fix SHA and resolve
+the last review thread. Do not post a further Codex review request; the lead verifies.
+
+
+
+
 ## PR #135 P2 fixes over d88c839d and main 3130eafa (2026-10-28)
 
 Review comments: [4408016684](https://github.com/SergeSerb2/open/pull/135#discussion_r4408016684)

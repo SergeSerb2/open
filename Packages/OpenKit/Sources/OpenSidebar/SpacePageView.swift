@@ -415,6 +415,9 @@ final class SpacePageView: NSView, NSOutlineViewDataSource, NSOutlineViewDelegat
     private func observeFolder(_ folder: Folder) {
         let key = ObjectIdentifier(folder)
         guard folderLoops[key] == nil else { return }
+        // AppKit need not request children for a collapsed row. Register its
+        // empty list before observing, so the first expand/peek can reconcile.
+        if folderChildren[key] == nil { folderChildren[key] = [] }
         folderLoops[key] = ObservationLoop(read: { [weak folder] in
             _ = folder?.isExpanded; _ = folder?.peekedChildID; _ = folder?.children.count
         }) { [weak self, weak folder] in

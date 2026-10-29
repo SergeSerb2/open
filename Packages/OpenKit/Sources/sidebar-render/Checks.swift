@@ -324,6 +324,7 @@ enum Checks {
         VisualFinishChecks.run()
         FolderPeekChecks.run()
         FolderPeekChecks.drops()
+        FolderPeekChecks.collapsedLoads()
         CompletionChecks.run()
         CompactToolbarChecks.run()
         SpaceManagerChecks.run()

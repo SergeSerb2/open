@@ -5449,6 +5449,20 @@ def folder_peek_checks(factory, results, tmp):
                                     and row["current"] and enabled and unloaded) else None
         fallback = wait_until(split_fallback_ready, timeout=5, step=.02)
         require("E20_Q18_unload_fallback_to_split", bool(fallback), split=split["id"], state=last_fallback)
+        # Persist fully collapsed state, then use only a real click after relaunch.
+        # A structural edit or explicit folder-child query could mask a missing cache.
+        app.call("sidebar-click", node=folder)
+        require("E20_collapsed_load_saved_fixture", bool(wait_until(lambda: expected(folder, False, "", []), timeout=5, step=.02)))
+        app.call("save")
+        app.quit()
+        app = factory(urls=(), fresh=False)
+        require("E20_collapsed_load_relaunch_fixture", bool(wait_until(lambda: expected(folder, False, "", []), timeout=8, step=.02)))
+        click_result = app.call("sidebar-click", node=folder)
+        expanded = wait_until(lambda: expected(folder, True, "", [a,b,c]), timeout=5, step=.02)
+        actual, row = state(folder)
+        require("E20_collapsed_load_real_click_expands", bool(expanded), click=click_result,
+                folder=row, rows=actual["rows"], expectedChildren=[a,b,c])
+
 
     finally:
         if app:
