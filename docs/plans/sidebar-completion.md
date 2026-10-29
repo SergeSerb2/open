@@ -1386,7 +1386,7 @@ Run the recorder from `docs/re/runtime-observations.md` §7 (`capture-loop.sh
 
 ## 9. Verification log
 
-Each lane records its results in its own doc (§7). The lead fills this table with the PR links.
+Section 1 rows below cite the merged PR bodies (`gh pr view N -R SergeSerb2/open --json body`). Counts belong to those PR revisions, not the final-main soak. Older M/S rows outside this reconciliation and calibration C stay blank.
 
 | Step | PR | Result |
 |---|---|---|
@@ -1397,17 +1397,18 @@ Each lane records its results in its own doc (§7). The lead fills this table wi
 | M3 | | |
 | S3 | | |
 | M4 | | |
-| S4 | | |
+| S4 | [#124](https://github.com/SergeSerb2/open/pull/124) | Merged App integration: final completion 48/48 twice, app-actions 49/49; Library spec geometry 0 pt. Full gate 18/22 PASS, 4 environment FAIL (3 display rows and Site Control editor timing); C2/calibration C remain open. |
+| SM6 | [#125](https://github.com/SergeSerb2/open/pull/125) | Merged structure/instruction gate: 10 × 100 rows; full-gate median 679,842,406 ≤ 745,172,115; added O(n) title-sizing FAIL 785,999,099, restored PASS 680,827,395. Full gate 18/22 PASS, same 4 environment FAIL; quiet absolute latency remains separate. |
 | M5 | | |
 | S5 | | |
-| S5b | [#123](https://github.com/SergeSerb2/open/pull/123) | Fixed 0.5 s arm delay, no delay setting; HP1 stored-delay proofs; real-App Previews flow PASS (M5 gate: display-only rows as on main) |
-| S6 | [#135](https://github.com/SergeSerb2/open/pull/135) (main 3130eafa integrated) | FP1–FP9 and FP11 PASS; latest full gate 22/22 PASS (sidebar 608/608 with inherited SW1–SW4 skips, features 380/380, commands 307/307, roundtrip and all frozen-image gates PASS). Peek drop positions and both unload-to-split paths have regression proof. Final-round fix initializes every observed folder cache, including collapsed-loaded and newly exposed nested folders; five sidebar flows and a real save/relaunch/click flow fail on ab938111 and pass after the fix without full reloads. Native completion 193/193 and sidebar 19/19 PASS, cleanup PASS. FP10 paired 3/3 PASS under the unchanged parent definition; <1 ms median remains open. [Current and historical receipts](sidebar-s6-receipt.md). |
-| A1 | [#126](https://github.com/SergeSerb2/open/pull/126) | DA1–DA5, HT1–HT3, GH1–GH5, CT1–CT3 PASS; e2e E7, E8, E17, E19; hint vs A0440 worst 1 pt / ΔE00 1.17; compact toolbar vs S2 06/0029 worst 1 pt / ΔE00 0.80; floor 164 |
-| A2 | [#127](https://github.com/SergeSerb2/open/pull/127) | HP3 measured folder card, HP7–HP10, SP5–SP6 PASS; e2e E11–E14 PASS (E14: same engine page and probe after Separate); banner trigger moves to the item-6 sweeper |
-| A3 | [#128](https://github.com/SergeSerb2/open/pull/128) | Selection-aware menu/App-key handlers, copy/atomic New Space actions, native automation helpers, and 105/105 real-App checks. E1–E15 and E17–E19 PASS. E16/`archive-sweep` belong to Part A; E20/FP belong to S6. See the scoped receipt below. |
+| S5b | [#123](https://github.com/SergeSerb2/open/pull/123) | Merged fixed 0.5 s delay/no setting: both HP1 stored-delay negative proofs FAIL on old code, restored sidebar 561/561; real-App Previews PASS, forced failure exits 1 with 0 windows/processes. Full gate 18/22 PASS, 4 environment FAIL (3 display rows and Site Control editor timing). |
+| S6 | [#135](https://github.com/SergeSerb2/open/pull/135) | Merged FP1–FP9/FP11 and E20; final gate 22/22 PASS: sidebar 608/608 (inherited SW1–SW4 skips), features 380/380, commands 307/307, Site Control 1471/1471; native completion 193/193, sidebar 19/19, lead app-actions 50/50 and window 76/76. Five collapsed-load checks and real save/relaunch/click fail before the fix, pass after; paired FP10 3/3, p95 2.663/2.766/2.812 ms, layouts 18/18; frozen gates unchanged. C11 and <1 ms median remain open; [receipt](sidebar-s6-receipt.md). |
+| A1 | [#126](https://github.com/SergeSerb2/open/pull/126) | Merged DA1–DA7, HT1–HT3, GH1–GH5, CT1–CT3: review-fix features 288/288, sidebar 568/568; completion 61/61, app-actions 49/49; hint ≤1 pt/ΔE00 1.17, compact ≤1 pt/ΔE00 0.80, floor 164. Ready gate 21/22 PASS, Site Control editor FAIL; initial 4 environment FAIL remain historical. C3/C11/C9 stay open. |
+| A2 | [#127](https://github.com/SergeSerb2/open/pull/127) | Merged HP7–HP14/SP5–SP6: features 303/303; final completion 68/68, sidebar 20/20; E14 probe null before → 7 after Separate with the same page; E12 host return via Ctrl+Tab. Ready gate 21/22 PASS, Site Control editor FAIL; C4 remains open; banner trigger merged in #130. |
+| A3 | [#128](https://github.com/SergeSerb2/open/pull/128) | Merged selection/command/automation flows: completion 109/109, app-actions 49/49, sidebar 20/20 (≤1 pt/ΔE00 1.55), window 76/76. Full gate 21/22 PASS with Site Control lock-timeout FAIL, separate rerun PASS. E1–E15/E17–E19 pass here; E16 merged in #130 (completion 121/121), E20 in #135; E4 proves the production drop intent, not OS drag-session hit testing. |
 | C | | |
 
-A3 scoped receipt, 2026-10-28 (local branch, stacked on A2 `2d51f14a`):
+A3 earlier scoped receipt, 2026-10-28 (before merged #128; based on A2 `2d51f14a`):
 
 | Exact command | Result |
 |---|---|
@@ -1464,9 +1465,11 @@ These supersede the entries above where they conflict. Evidence: `docs/re/intera
 - Previews delay: Open's delay setting is removed to match Arc (no delay control in Arc's sheet, S2 02/0050). The hover delay is fixed at 0.5 s (Open choice; one Arc sample ≈ 0.42 s) (`HoverPreviewMetrics.armDelay`). Step S5b.
 
 
-## Item 6 implementation receipt (2026-10-28, local branch)
+## Item 6 implementation receipt (2026-10-28, merged #130)
 
-`t3/sidebar-auto-archive`, based on A2 `2d51f14a`, implements Part A of the
+The earlier receipt below was based on A2 `2d51f14a`; its counts remain historical. PR [#130](https://github.com/SergeSerb2/open/pull/130) records the final ready gate: 21/22 PASS (Site Control editor FAIL), completion 121/121, app-actions 49/49, sidebar 21/21 and window 76/76. Banner capture C6 remains open.
+
+The implementation, merged in #130, supplies Part A of the
 item 6/7 plan. `ExpirySweeper` owns one non-repeating timer and the workspace
 wake observer. `TodayAutoArchiveController` observes the real model, sweeps once
 per event, and triggers the existing education view only after a shown-Space

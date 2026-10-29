@@ -774,6 +774,10 @@
         return ["id": w.windowState.id.description, "number": win.windowNumber,
           "appActive": NSApp.isActive, "keyWindow": NSApp.keyWindow?.windowNumber ?? 0,
           "isKeyWindow": win.isKeyWindow, "visible": win.isVisible,
+          "keySameObject": NSApp.keyWindow === win, "onActiveSpace": win.isOnActiveSpace,
+          "canBecomeKey": win.canBecomeKey, "windowClass": String(reflecting: type(of: win)),
+          "attachedSheet": win.attachedSheet?.windowNumber ?? 0,
+          "childWindows": win.childWindows?.map(\.windowNumber) ?? [],
           "firstResponder": win.firstResponder.map { String(describing: type(of: $0)) } ?? "none",
           "activationPolicy": NSApp.activationPolicy().rawValue,
           "screenFrame": win.screen.map { rect($0.frame) } ?? [],
@@ -851,15 +855,32 @@
         return NSApp.effectiveAppearance.name.rawValue
       case "window-focus":
         guard let id = a["id"] as? String, let controller = app.windowControllers.first(where: { $0.windowID.description == id }) else { throw Failure(message: "unknown window") }
+        let readinessTimeout = a["readinessTimeout"] as? Double ?? 5
+        guard readinessTimeout.isFinite, (0...5).contains(readinessTimeout) else {
+          throw Failure(message: "readinessTimeout must be between 0 and 5 seconds")
+        }
         app.focusWindow(controller.windowID, activate: a["activate"] as? Bool == true)
-        if a["activate"] as? Bool == true, let target = controller.window { try await activateForInput(target) }
+        if a["activate"] as? Bool == true, let target = controller.window { try await activateForInput(target, timeout: readinessTimeout) }
         return true
       case "window-close":
         let released = a["releaseBrowsers"] as? Bool == true ? w.releaseBrowsersForAutomation() : [:]
         w.window?.performClose(nil)
         return released.isEmpty ? true : released as Any
       case "window-fullscreen":
-        w.window?.toggleFullScreen(nil); return true
+        guard a["observeReadiness"] as? Bool == true else {
+          w.window?.toggleFullScreen(nil); return true
+        }
+        guard let target = w.window else { throw Failure(message: "no window") }
+        target.toggleFullScreen(nil)
+        // No suspension or second RPC between the native toggle, transition
+        // flag and zero-wait readiness predicate. The caller may resume after
+        // the transition ends; this immutable sample still describes this turn.
+        let readiness = inputReadiness(target)
+        if !readiness.fullscreenTransition {
+          return ["status": "SKIP", "reason": "AppKit did not report an in-progress full-screen transition after the toggle",
+            "ready": readiness.ready, "state": readiness.state] as [String: Any]
+        }
+        return ["status": "observed", "ready": readiness.ready, "state": readiness.state] as [String: Any]
       case "window-deminiaturize":
         // What a click on the window's Dock tile does.
         w.window?.deminiaturize(nil); return true
@@ -1583,26 +1604,51 @@
       return true
     }
 
-    private func activateForInput(_ target: NSWindow) async throws {
+    private struct InputReadiness {
+      let active: Bool
+      let targetIsKey: Bool
+      let keyWindowNumber: Int
+      let keySameObject: Bool
+      let fullscreenTransition: Bool
+
+      // AppKit can retain the key flag while moving the window between
+      // full-screen Spaces. Only the native completion callback makes that
+      // key flag an input-readiness grant again.
+      var ready: Bool { active && targetIsKey && keySameObject && !fullscreenTransition }
+      var state: [String: Any] {
+        ["appActive": active, "key": targetIsKey, "keyWindow": keyWindowNumber,
+          "keySameObject": keySameObject, "fullscreenTransition": fullscreenTransition]
+      }
+    }
+
+    /// Synchronous so the full-screen negative sample and native input use
+    /// exactly the same predicate without yielding between its observations.
+    private func inputReadiness(_ target: NSWindow) -> InputReadiness {
+      let active = NSApp.isActive, targetIsKey = target.isKeyWindow
+      let keyWindow = NSApp.keyWindow
+      return InputReadiness(active: active, targetIsKey: targetIsKey,
+        keyWindowNumber: keyWindow?.windowNumber ?? 0, keySameObject: keyWindow === target,
+        fullscreenTransition: app.windowControllers.first { $0.window === target }?.isChangingFullScreen ?? false)
+    }
+
+    private func activateForInput(_ target: NSWindow, timeout: Double = 5) async throws {
       // Activation is asynchronous. Never inject into an inactive app after a
       // fixed grace period: its production router correctly declines the key.
       // Make the requested window key again once activation has completed.
       target.makeKeyAndOrderFront(nil); NSApp.activate()
-      let deadline = ContinuousClock.now.advanced(by: .seconds(5))
+      let deadline = ContinuousClock.now.advanced(by: .seconds(timeout))
       while true {
-        // Log the same predicate values that refused input. Re-reading only
-        // NSApp.keyWindow in the error can hide a changing native key flag.
-        let active = NSApp.isActive, targetIsKey = target.isKeyWindow
-        let keyWindow = NSApp.keyWindow
-        if active && targetIsKey {
+        // Retain the same predicate values for the grant and any refusal.
+        let readiness = inputReadiness(target)
+        if readiness.ready {
           nativeInputStart = ProcessInfo.processInfo.systemUptime
           return
         }
         guard ContinuousClock.now < deadline else {
           let foreground = NSWorkspace.shared.frontmostApplication
-          throw Failure(message: "key focus not ready: active=\(active) target=\(target.windowNumber) targetIsKey=\(targetIsKey) key=\(keyWindow?.windowNumber ?? 0) keySameObject=\(keyWindow === target) frontmost=\(foreground?.localizedName ?? "unknown") frontmostPID=\(foreground?.processIdentifier ?? 0)")
+          throw Failure(message: "key focus not ready: active=\(readiness.active) target=\(target.windowNumber) targetIsKey=\(readiness.targetIsKey) key=\(readiness.keyWindowNumber) keySameObject=\(readiness.keySameObject) fullscreenTransition=\(readiness.fullscreenTransition) onActiveSpace=\(target.isOnActiveSpace) canBecomeKey=\(target.canBecomeKey) class=\(String(reflecting: type(of: target))) attachedSheet=\(target.attachedSheet?.windowNumber ?? 0) childWindows=\(target.childWindows?.map(\.windowNumber) ?? []) frontmost=\(foreground?.localizedName ?? "unknown") frontmostPID=\(foreground?.processIdentifier ?? 0)")
         }
-        if active { target.makeKeyAndOrderFront(nil) }
+        if readiness.active && !readiness.fullscreenTransition { target.makeKeyAndOrderFront(nil) }
         try await Task.sleep(for: .milliseconds(10))
       }
     }

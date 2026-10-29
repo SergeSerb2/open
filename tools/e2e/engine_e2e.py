@@ -2580,17 +2580,42 @@ def colored_look(png, scale, centers):
     return ok, rows
 
 
-def ensure_key(app, wid, timeout=15):
-    """Makes the window key; macOS refuses to activate an app while someone uses another one,
-    so this asks again until it holds. Returns the state, key or not."""
+def ensure_key(app, wid, timeout=15, *, activation_timeout=5):
+    """Wait for native key readiness until the deadline; return the last state even on expiry.
+
+    This is a readiness wait, not another attempt at the caller's behavior check.
+    Foreground interruptions and errors other than native not-ready still abort.
+    """
     app.begin_timing("key-window readiness")
-    deadline = time.monotonic() + timeout
+    started = time.monotonic()
+    deadline = started + timeout
+    attempt = 0
     while True:
-        app.call("window-focus", id=wid, activate=True)
-        time.sleep(0.25)
+        attempt += 1
+        not_ready = None
+        try:
+            # Bound the native wait by the remaining outer budget, including
+            # the last attempt. The native default remains five seconds.
+            app.call("window-focus", id=wid, activate=True,
+                     readinessTimeout=min(5, activation_timeout, max(0, deadline - time.monotonic())))
+        except FocusInterruption:
+            raise
+        except RuntimeError as error:
+            if not str(error).startswith("window-focus: key focus not ready:"):
+                raise
+            not_ready = str(error)
         st = app.call("window-state", id=wid)
-        if (st["key"] and st["appActive"]) or time.monotonic() > deadline:
+        now = time.monotonic()
+        print("key-window readiness " + json.dumps({
+            "attempt": attempt, "elapsed_s": now - started, "remaining_s": max(0, deadline - now),
+            "state": {key: st.get(key) for key in (
+                "appActive", "key", "keyWindow", "number", "keySameObject", "fullscreenTransition",
+                "onActiveSpace", "canBecomeKey", "attachedSheet", "childWindows", "windowClass")},
+            "not_ready": not_ready, "load_average": list(os.getloadavg()),
+        }, sort_keys=True), flush=True)
+        if (st["key"] and st["appActive"] and st["keySameObject"] and not st["fullscreenTransition"]) or now >= deadline:
             return st
+        time.sleep(min(0.25, deadline - now))
 
 
 def traffic_light_look_checks(app, results, private, scale, wid):
@@ -3126,7 +3151,35 @@ def window_chrome_checks(factory, results, tmp):
         app.call("window-fullscreen")
         state_when(app, lambda st: st["fullscreen"] and not st["fullscreenTransition"]
                    and st["fullscreenChanges"] > before["fullscreenChanges"], timeout=15, step=0.1)
-        app.call("window-fullscreen")
+        # Toggle and observe the negative predicate in one native main-actor
+        # turn. A delayed runner can consume the saved sample after exit.
+        negative = app.call("window-fullscreen", observeReadiness=True)
+        if negative["status"] == "SKIP":
+            results["fullscreen_key_readiness_negative"] = {
+                "status": "SKIP", "reason": negative["reason"], "sample": negative}
+        else:
+            results["fullscreen_key_readiness_negative"] = {
+                "ok": negative["status"] == "observed" and negative["state"]["fullscreenTransition"]
+                      and not negative["ready"], "sample": negative}
+        # The positive wait may begin during or after exit. It must accept the
+        # settled window without requiring any particular number of retries.
+        ready = ensure_key(app, wid, activation_timeout=0)
+        other_error = None
+        try:
+            ensure_key(app, "missing-readiness-window", timeout=0)
+        except FocusInterruption:
+            raise
+        except RuntimeError as error:
+            if str(error) != "window-focus: unknown window":
+                raise
+            other_error = str(error)
+        results["fullscreen_key_readiness"] = {
+            "ok": other_error is not None and ready["key"] and ready["appActive"] and ready["keySameObject"]
+                  and not ready["fullscreenTransition"],
+            "other_error": other_error,
+            "ready": {k: ready[k] for k in ("key", "appActive", "keySameObject", "fullscreenTransition")},
+            "load_average": list(os.getloadavg()),
+        }
         exited = state_when(app, lambda st: not st["fullscreen"] and not st["fullscreenTransition"]
                             and st["fullscreenChanges"] > before["fullscreenChanges"] + 1, timeout=15, step=0.1)
         exited_ok, exited_c = light_centers(exited or app.call("window-state"))
