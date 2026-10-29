@@ -394,11 +394,8 @@ final class TabCellView: SidebarCellView {
 
     required init(frame: NSRect) {
         super.init(frame: frame)
-        // These two small drawings share the cell's backing context. Buttons and
-        // badges keep their own layers. Avoid two AppKit drawing pipelines per row.
-        canDrawSubviewsIntoLayer = true
-        favicon.wantsLayer = false
-        title.wantsLayer = false
+        // Keep title/favicon backing contexts independent: flattening changes
+        // Core Text edge pixels in the frozen schema-1 window fixtures.
         identifier = Self.identifier
         title.font = Typography.tabTitle.font
         title.baseline = SpaceListMetrics.titleBaselineOffset
@@ -800,21 +797,11 @@ final class FolderIconView: NSView {
     override var isFlipped: Bool { true }
     override func hitTest(_ point: NSPoint) -> NSView? { nil }
 
-    override func viewDidChangeBackingProperties() { super.viewDidChangeBackingProperties(); needsDisplay = true }
-
-    private struct ArtKey: Hashable {
-        let expanded: Bool, peeked: Bool, defaultAccent: Bool
-        let width: Int, height: Int, scale: CGFloat
-        let red: CGFloat, green: CGFloat, blue: CGFloat, alpha: CGFloat
-    }
-    // Small shared cache of our vector art, never per-node content. Maximum
-    // 64 RGBA glyphs, at most 64x64 pixels each (1 MiB total). A one-off
-    // larger/custom render is capped at 256x256x4 = 262,144 bytes.
-    private static var art: [ArtKey: CGImage] = [:]
-    override var wantsUpdateLayer: Bool { true }
-    override func updateLayer() {
-        SidebarDiagnostics.traceFolderView(self, "updateLayer")
-        guard let folder, bounds.width > 0, bounds.height > 0 else { layer?.contents = nil; return }
+    // AppKit's backing context preserves the legacy folder's edge pixels.
+    // A manually rasterized CGImage changes them, even at the same scale.
+    override func draw(_ dirtyRect: NSRect) {
+        SidebarDiagnostics.traceFolderView(self, "draw", rect: dirtyRect)
+        guard let folder else { return }
         let context = context ?? cell?.context
         let (expansion, icon, override, accent, usesDefaultAccent) = tracked({
             let space = cell?.page?.space ?? context?.focusedSpace
@@ -824,35 +811,6 @@ final class FolderIconView: NSView {
             return (folder.expansion, context?.folderIconOverrideProvider?(folder) ?? folder.customIcon, folder.iconOverride, accent,
                     style?.accent == nil)
         }) { [weak self] in self?.needsDisplay = true }
-        let peeked = expansion != .expanded && expansion != .collapsed
-        lastDrawnGlyph = icon ?? (expansion == .expanded ? "folder.open" : peeked ? "folder.peek" : "folder.closed")
-        let scale = window?.backingScaleFactor ?? 2
-        let rgb = accent.usingColorSpace(.sRGB) ?? accent
-        let key = ArtKey(expanded: expansion == .expanded, peeked: peeked, defaultAccent: usesDefaultAccent,
-                         width: Int(bounds.width * scale), height: Int(bounds.height * scale), scale: scale,
-                         red: rgb.redComponent, green: rgb.greenComponent, blue: rgb.blueComponent, alpha: rgb.alphaComponent)
-        let cacheable = icon == nil && override == nil && key.width <= 64 && key.height <= 64
-        layer?.contentsScale = scale
-        if cacheable, let image = Self.art[key] { layer?.contents = image; return }
-        guard key.width > 0, key.height > 0, key.width <= 256, key.height <= 256,
-              let bitmap = CGContext(data: nil, width: key.width, height: key.height, bitsPerComponent: 8,
-                                     bytesPerRow: key.width * 4, space: CGColorSpace(name: CGColorSpace.sRGB)!,
-                                     bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue) else { return }
-        bitmap.scaleBy(x: scale, y: scale)
-        bitmap.translateBy(x: 0, y: bounds.height); bitmap.scaleBy(x: 1, y: -1)
-        NSGraphicsContext.saveGraphicsState()
-        NSGraphicsContext.current = NSGraphicsContext(cgContext: bitmap, flipped: true)
-        drawArt(expansion: expansion, icon: icon, override: override, accent: accent, usesDefaultAccent: usesDefaultAccent)
-        NSGraphicsContext.restoreGraphicsState()
-        let image = bitmap.makeImage()
-        if cacheable, let image {
-            if Self.art.count >= 64 { Self.art.removeAll(keepingCapacity: true) }
-            Self.art[key] = image
-        }
-        layer?.contentsScale = scale
-        layer?.contents = image
-    }
-    private func drawArt(expansion: FolderExpansion, icon: String?, override: SpaceIcon?, accent: NSColor, usesDefaultAccent: Bool) {
         // Main's typed override takes precedence; keep the shared row/header
         // renderer and its existing legacy/custom-icon appearance.
         if let override {
@@ -866,12 +824,12 @@ final class FolderIconView: NSView {
             return
         }
         let ink = bounds.insetBy(dx: 1.5, dy: 2.5)
-        lastDrawnGlyph = icon ?? (expansion == .expanded ? "folder.open" : expansion != .expanded && expansion != .collapsed ? "folder.peek" : "folder.closed")
+        lastDrawnGlyph = icon ?? (expansion == .expanded ? "folder.open" : folder.peekedChildID != nil ? "folder.peek" : "folder.closed")
         if let icon {
             if let symbol = NSImage(systemSymbolName: icon, accessibilityDescription: nil)?.withSymbolConfiguration(.init(pointSize: 14, weight: .medium)) {
                 symbol.drawTinted(in: ink, color: accent)
             } else { EmojiRenderer.draw(icon, in: bounds) }
-        } else if expansion != .expanded && expansion != .collapsed {
+        } else if folder.peekedChildID != nil {
             CustomIcon.folderPeek(in: bounds.insetBy(dx: 1, dy: 1), color: usesDefaultAccent ? SidebarRole.folderPeekDefaultAccent.light.nsColor : accent,
                                   dotsColor: SidebarRole.folderPeekDots.light.nsColor)
         } else { CustomIcon.folder(open: expansion == .expanded, in: ink, color: accent) }

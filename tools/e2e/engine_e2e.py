@@ -6048,7 +6048,8 @@ def space_manager_checks(results, tmp, config, style):
         return [row['id'] for row in app.call('spaces')]
 
     def manager_ready(app):
-        return wait_until(lambda: (lambda s: s if s['visible'] and s['hostedManagers'] == 1 else None)(state(app)), timeout=5)
+        return wait_until(lambda: (lambda s: s if s['visible'] and s['section'] == 'spaces'
+                         and s['identity'] and s['hostedManagers'] == 1 else None)(state(app)), timeout=5)
 
     def library_key(app, key, modifiers=()):
         return app.call('key', key=key, modifiers=list(modifiers), route='app', window=state(app)['window'])
@@ -6172,12 +6173,32 @@ def space_manager_checks(results, tmp, config, style):
         app.call('library-close'); app.quit()
         app = launch()
         app.call('menu-perform', id='view-archive')
-        uncached = app.call('space-manager-lifecycle')
-        section = next(r for r in uncached['sectionRows'] if r['section'] == 'spaces')
-        app.call('mouse', action='click', window=state(app)['window'], x=section['point'][0], y=section['point'][1])
-        reopened = manager_ready(app)
-        require('library_section_click_fills_cache', uncached['identity'] == '' and reopened and reopened['hostedManagers'] == 1,
-                before=uncached, after=app.call('space-manager-lifecycle'))
+        # A menu action returning is not a Library composition/layout barrier.
+        # Settle the actual window before reading coordinates, then poll the
+        # cache-empty Archive state. Never accept an eagerly created cache.
+        library_window = 0
+        last_uncached = {}
+        def archive_ready():
+            nonlocal last_uncached, library_window
+            # state() lays out the current Library window. Sample its row points
+            # afterwards, in the same deadline poll, rather than before layout.
+            library_window = state(app)['window']
+            last_uncached = app.call('space-manager-lifecycle')
+            has_row = any(r['section'] == 'spaces' for r in last_uncached['sectionRows'])
+            return last_uncached if library_window and has_row and last_uncached['visible'] and last_uncached['section'] == 'archive' and last_uncached['identity'] == '' else None
+        uncached = wait_until(archive_ready, timeout=5)
+        if uncached:
+            section = next(r for r in uncached['sectionRows'] if r['section'] == 'spaces')
+            app.call('mouse', action='click', window=library_window, x=section['point'][0], y=section['point'][1])
+        reopened = manager_ready(app) if uncached else None
+        cache_ok = bool(uncached and reopened and reopened['hostedManagers'] == 1)
+        if not cache_ok:
+            # Keep the actual timeout state as well as the failed ready result.
+            # A None from wait_until otherwise hides the reason it never settled.
+            print('library_section_click_fills_cache FAIL ' + json.dumps(dict(
+                uncached=last_uncached, reopened=state(app), ready=reopened), sort_keys=True), flush=True)
+        require('library_section_click_fills_cache', cache_ok,
+                uncached=last_uncached, reopened=reopened, after=app.call('space-manager-lifecycle'))
         require('E6_relaunch_preserves_ids', order(app) == reordered and [row['id'] for row in saved['spaces']] == reordered
                 and reopened and [c['id'] for c in reopened['columns']] == reordered, expected=reordered, state=state(app))
         # The manager's real tab menu archives into the App's existing store.

@@ -3,6 +3,191 @@
 Original S6 base: 2d51f14a1207c00157edb90f51459d97b7b1096b (A2 over A1).
 Branch: t3/sidebar-s6-folder-peek. Parent owns the PR/stack.
 
+## Regression fixes after 34e67d60 (2026-10-28)
+
+The parent found two frozen-image failures and one Library checkpoint failure on
+`34e67d6032d7e17f26ce5f3c9153209ba7f97a18`. This round changes product drawing and
+the native harness's readiness/diagnostics. It changes no baseline PNG, visual
+threshold, Motion/Metrics token, Library product code or FP10 gate.
+
+### Exact legacy pixel diagnosis
+
+Actual CLI renders use the schema-1 fixture, 900×700 at scale 1. Compare each
+renderer to **its own** committed reference: `Fixtures/space-schema1/window-N.png`
+for `sidebar-render`; `Sources/space-editor-render/Resources/space-schema1/window-N.png`
+for `space-editor-render`, both under `Packages/OpenKit`. These two reference sets
+have intentionally different window chrome; comparing one set to the other would
+produce a false header difference.
+
+Both products had the same changed pixels. Rectangles below are `(x,y,width,height)`
+in output pixels, covering each separate horizontal band of differing pixels.
+
+| Window | Different pixels before → after | Exact differing rectangles before the fix | Largest channel delta before |
+|---|---:|---|---:|
+| 0 | 4,002 → 0 | (45,253,91,14), (45,294,92,14), (45,335,92,14), (45,376,92,14), (45,417,98,14), (45,458,97,14), (44,557,84,14), (44,598,87,14), (44,639,87,11) | 2 |
+| 1 | 930 → 0 | (45,253,74,14), (45,294,43,14), (45,335,63,12) | 2 |
+| 2 | 1,019 → 0 | folder (17,251,19,16); titles (60,294,60,12), (61,335,94,14), (45,417,65,12) | 57 |
+
+Controlled product changes isolate both causes in `OpenSidebar/SidebarRows.swift`:
+
+1. Flattening the title/favicon into the tab cell's backing context changed Core
+   Text antialiased edge pixels. Restoring their independent backing contexts
+   alone makes windows 0/1 byte-identical in **both** renderers. Window 2 then has
+   exactly 192 differing folder pixels, all within (17,251,19,16).
+2. The manually rasterized cached `CGImage` for the folder glyph changes native
+   edge pixels. Restore AppKit `draw(_:)` using the existing own vector paths and
+   colors. All **six** final PNGs are now byte-identical to their own committed
+   references, not just within a perceptual tolerance.
+
+Per-folder incremental reconciliation, cached vector paths, clean-row invalidation
+and unchanged-geometry guards remain. They were not the source of these pixel
+failures. The earlier receipt's cached glyph bitmap and flattened title claims
+are historical and **superseded** by this fix. The strict legacy raster contract
+has precedence over these two attempted optimizations.
+
+Private pixel evidence: `.re/s6/regressions/pixels-before-correct.jsonl`,
+`pixels-labels-correct.jsonl`, `pixels-fixed.jsonl`, the corresponding PNG/diff
+files, and `pixels.py`. The first two files record the original and title-only
+controlled product renders; the third records six byte-equal results. Both
+`space-legacy` and `space-editor` also pass their original checks in the full gate.
+
+FP6 was rerendered after the native drawing restoration. It still passes: one
+solid `SidebarRole.folderPeekDots` **#B5AFFF** for all three dots; ΔE00
+**1.434 / 0.837 / 1.511**, body 0.000, dots 3×3 px, pitch 4 pt, position error 0,
+hover dash ΔE00 0.15. The capture-authoritative minimax fit still replaces the
+rejected white-at-0.65-alpha guess; no per-dot colors or threshold edits.
+`fp6-final/table.md` retains the final comparison to the cited Arc capture.
+
+### Library checkpoint: not reproduced; remove the readiness assumption
+
+The failed parent's JSON is unavailable. Its only retained evidence is
+`/tmp/s1-gate-s6-e2e-sidebar-completion.log`, assertion after 35 passes. This round
+cannot establish that run's exact cache or hosting state. Do not label its root
+cause as reproduced or as a known product regression.
+
+The unchanged old App first passed the full suite **164/164**, including the
+checkpoint (`library-before.json`). LibraryWindow, LibraryViewModel,
+LibrarySpacesSection and AppSettingsActions product source is unchanged from
+`dee105e6`. No Library product fix is made.
+
+A concrete harness timing assumption remains: it sampled passive
+`space-manager-lifecycle` section coordinates **before** calling
+`space-manager-state`, which forces current-window layout. The subsequent layout
+can invalidate the earlier coordinates. Returning from `menu-perform` is not a
+composition/layout barrier. The old ready predicate also accepted a visible
+window with one hosted manager without checking the Spaces section/cache identity.
+
+The check now polls the real condition with a 5 s deadline. It first lays out the
+current window, then samples row coordinates and requires visible Archive, an empty
+cache identity and the Spaces row. After the real click, it waits for visible
+Spaces, a nonempty cache identity and exactly one hosted manager. It does not add
+a fixed sleep or accept an eagerly filled Archive cache. On failure, stdout prints
+`uncached` and the actual `reopened` state, plus the readiness result; the JSON
+receipt retains the states too. This keeps evidence when generated JSON is restored.
+
+All three hardened-flow runs pass **164/164** with zero interruptions and cleanup
+PASS (`native-1.json`, `native-2.json`, `native-3.json`). Each records empty Archive
+cache before the click and a Spaces cache with one hosted manager afterwards.
+The parent's original failure remains unconfirmed; future failures now expose the
+states instead of only the assertion name.
+
+### Full gate and rebuilt App
+
+Exact commands, all awaited in the foreground:
+
+```sh
+~/Library/Caches/OpenRE/scripts/heavy.sh tools/verify-all.sh --keep-logs
+~/Library/Caches/OpenRE/scripts/heavy.sh tools/verify-all.sh --only sitecontrol-render --keep-logs
+~/Library/Caches/OpenRE/scripts/heavy.sh tools/verify-all.sh --only sitecontrol-render --keep-logs
+~/Library/Caches/OpenRE/scripts/heavy.sh tools/build.sh
+/usr/bin/lockf /tmp/open-onscreen-e2e.lock tools/e2e/engine_e2e.py --style chrome --only sidebar-completion
+/usr/bin/lockf /tmp/open-onscreen-e2e.lock tools/e2e/engine_e2e.py --style chrome --only sidebar-completion
+/usr/bin/lockf /tmp/open-onscreen-e2e.lock tools/e2e/engine_e2e.py --style chrome --only sidebar-completion
+~/Library/Caches/OpenRE/scripts/heavy.sh tools/verification/folder-peek-bench.py
+```
+
+The **full invocation exits 1** for Site Control's documented timing flake; its
+other 21 rows pass. Bounded retries leave all rows accepted, with no limit/code
+change to Site Control. Its CPU p95 is 18.600 ms at load1 10.91 (full run),
+12.102 ms at load1 7.29 (retry 2), then **11.898 ms at load1 8.38** (retry 3,
+**1471/1471 PASS**, 12 ms limit). SiteControl/Boosts/Web code is unchanged from
+`dee105e6`; `sitecontrol-render` has no OpenSidebar dependency. The failed full
+invocation is retained, not rewritten as an exit-0 full run.
+
+| Full gate row | Initial full invocation | Accepted result |
+|---|---|---|
+| build | PASS | PASS |
+| commands-demo | PASS, 307/307 | PASS |
+| roundtrip | PASS | PASS |
+| space-legacy | PASS | PASS, original frozen PNGs |
+| space-editor | PASS | PASS, P1 windows 0/1/2 byte-identical |
+| space-pad-compare | PASS | PASS |
+| suggest-check | PASS | PASS |
+| commands-dump | PASS | PASS |
+| route | PASS | PASS |
+| favicons | PASS | PASS |
+| media-demo | PASS | PASS |
+| sleep-demo | PASS | PASS |
+| adblock-perf | PASS | PASS |
+| adblock-catalog | PASS | PASS |
+| profiles | PASS | PASS |
+| settings-preview | PASS | PASS |
+| sidebar-render | PASS, 595/595; inherited SW1–SW4 skips | PASS |
+| sidebar-compare | PASS | PASS |
+| commandbar-render | PASS | PASS |
+| features-render | PASS, 332/332 | PASS |
+| sitecontrol-render | FAIL, 1470/1471 | PASS, 1471/1471 on attempt 3 |
+| boosts | PASS | PASS |
+
+App build: **BUILD SUCCEEDED**. Three rebuilt-App completion suites:
+**164/164 + 164/164 + 164/164 PASS**, including E20 and the main auto-archive/menu
+rows; zero focus interruptions, owned-process/window cleanup PASS each time.
+
+Full logs: `.re/s6/regressions/verify-full.log`, `sitecontrol-retry-2.log`,
+`sitecontrol-retry-3.log`, `app-build.log`, `native-1.log`, `native-2.log`,
+`native-3.log`. Full harness directory:
+`/var/folders/s6/_07cr4w13vsg_myjkv9ldpqc0000gn/T/open-verify-20261028-180226.YI61BL/`.
+
+### FP10 after restoring native raster contexts
+
+The parent-approved conditional gate is unchanged. The original strict 2 ms gate
+is not relabelled as met. All attempts use the same pinned parent, 1,000 rows,
+scale 2, paired/rotating native paths and 1,280×900 window. Times are ms.
+
+| Attempt | Load1 start / transition | Parent plain median / p95 | Branch plain median / p95 | Peek median / p95 | Computed p95 limit | Scroll baseline / peek p95 (load1) |
+|---|---|---|---|---|---:|---|
+| 1 | 16.17 / 16.08 | 2.01 / 2.482 | 1.81 / 2.179 | 1.58 / 2.250 | 2.447 | 1.54 / 1.54 (16.17) |
+| 2 | 16.08 / 15.83 | 2.03 / 2.488 | 1.94 / 2.432 | 1.62 / 2.285 | 2.725 | 1.57 / 1.58 (15.83) |
+| 3 | 15.83 / 15.51 | 1.84 / 2.453 | 1.74 / 2.229 | 1.55 / 2.288 | 2.501 | 1.60 / 1.62 (16.25) |
+
+**3/3 PASS**. Native layouts/frame remain **18/18** on every attempt. Scroll is
+below both 8.33 ms and the same-run relative limit. Native row/cell allocations
+remain zero after warm-up; no bulk height notification or full reload. CA-flush
+median on attempt 3 is 0.86 ms, reconcile/display 1.45 ms. The <1 ms median goal
+remains open as outline-wide AppKit/backing-layer work. These shared-machine runs
+do not establish a controlled percentage speedup over earlier runs.
+
+Both negative controls were rerun on this final drawing code. They must return
+exit 1 and did so on their intended gates, not on an unrelated setup failure:
+
+| Final negative control | Load1 start / sample | Matched measurement | Result |
+|---|---|---|---|
+| O(n) added native layout pass per frame | 16.49 / 15.97 | baseline/peek p95 2.24/265.27 ms; layouts/frame 3/1,000 | Intended work gate FAIL, exit 1 |
+| 3 ms busy wait inside reconciliation | 15.14 / 14.73 | busy phase median/p95 3.00/3.00 ms; parent plain p95 1.914, branch plain 1.828, peek 4.953 ms; computed limit 2.000 ms | Intended transition gate FAIL, exit 1 |
+
+```sh
+~/Library/Caches/OpenRE/scripts/heavy.sh tools/verification/folder-peek-bench.py --negative-proof
+~/Library/Caches/OpenRE/scripts/heavy.sh tools/verification/folder-peek-bench.py --negative-transition-proof
+```
+
+FP10 artifacts: `.re/s6/regressions/fp10-final.log`,
+`fp10-negative-scroll-final.log`, `fp10-negative-transition-final.log`.
+All dependent jobs completed in the foreground. `git diff --check` passes;
+generated `docs/engine-spike/*` output is restored before commit. No committed
+baseline PNG or threshold changed. No Open/renderer process from this worktree
+is left running. The branch is pushed with a new fix commit; no PR is opened.
+
+
 ## Final integration with origin/main dee105e6 (2026-10-28)
 
 The user added #132 while the first merge was ready. Checkpoint merge
@@ -162,7 +347,7 @@ that floor. The earlier parent-run c095ca1d figure was peek median/p95/max
 Remaining outline/AppKit/backing-layer rendering work is tracked in followups;
 the paired gate measures added peek cost without relabelling that goal as met.
 
-### Rendering evidence and retained changes
+### Historical rendering evidence (bitmap/title changes superseded above)
 
 - Before this round, the one-transition trace shows AppKit asking every available
   row for display and then calling their `updateLayer`. The folder glyph uses
@@ -174,7 +359,7 @@ the paired gate measures added peek cost without relabelling that goal as met.
   explicitly marks the fill dirty. Hover/current/appearance updates retain their
   direct layer path. The trace after the change shows only the entering/reused row
   background update; unchanged neighbors receive no effective display request.
-- The folder glyph now uses `wantsUpdateLayer` and cached CGImage layer contents
+- At this earlier revision the folder glyph uses `wantsUpdateLayer` and cached CGImage layer contents
   rendered from Open's own existing vectors. The cache holds at most 64 images
   of ≤64×64 RGBA pixels (1 MiB); larger/custom one-off images cap at 256×256
   (262,144 bytes). Typed/legacy/emoji overrides keep their precedence; scale and
