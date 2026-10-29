@@ -507,7 +507,7 @@ Geometry, candidate scope, the menu-parity fix and cold command-bar work are
 unchanged. The TS-C1 capture request remains open.
 
 
-Final checks ran after merging main `61ae275a2d2bb5c68a7652c8b0f56d547c773253`
+First integration checks ran after merging main `61ae275a2d2bb5c68a7652c8b0f56d547c773253`
 (#133). The merge retained both sides without conflicts, including the new
 verification runner and Site Control gate. The targeted
 `heavy.sh tools/verify-all.sh --only features-render,sidebar-render,commands-dump,commands-demo`
@@ -554,3 +554,60 @@ Receipts: `.re/tab-switcher-review/merged-targeted.log`,
 `merged-targeted-details/`, `merged-build.log`, `full-verify.log`, `full-details/`,
 `full-summary.md`, `render.log`, `switcher.png`, the two e2e logs and their
 `-results.json` files. The red run remains in `before-*` separately.
+
+
+#### Final integration with stored favicons, main `786b19ad`
+
+After the green `61ae275a` run above, main advanced to
+`786b19ad067197f18713397b4cbd07e5f2d927a1` (#131). The second merge retains
+one features-render target with OpenSidebar/OpenSettings and both
+TabSwitcherChecks/FaviconChecks sources. Both run once before AutoArchiveChecks.
+The default e2e sequence runs TS, then assigns the relaunched App returned by
+`sidebar_favicon_checks`, then keeps items 9–10 and archive flows. The duplicate
+shared items 9–10 followup was retained once; the new favicon notes and all
+switcher notes remain. Factory favicon handling and the initiating-event/preview
+return path both remain. Audits found 144 unique outer automation command names,
+no duplicate Python definitions per scope, no duplicate package targets and one
+definition of each TS/FV/intents/archive helper.
+
+The FULL `heavy.sh tools/verify-all.sh` passes again on this merged result,
+22/22, including all TS11–TS14 and stored-favicon checks (features 372/372):
+
+| Check | Result | Seconds |
+|---|---|---:|
+| build | PASS | 66 |
+| commands-demo | PASS | 0 |
+| roundtrip | PASS | 1 |
+| space-legacy | PASS | 1 |
+| space-editor | PASS | 2 |
+| space-pad-compare | PASS | 2 |
+| suggest-check | PASS | 14 |
+| commands-dump | PASS | 0 |
+| route | PASS | 1 |
+| favicons | PASS | 1 |
+| media-demo | PASS | 0 |
+| sleep-demo | PASS | 1 |
+| adblock-perf | PASS | 0 |
+| adblock-catalog | PASS | 0 |
+| profiles | PASS | 1 |
+| settings-preview | PASS | 79 |
+| sidebar-render | PASS | 107 |
+| sidebar-compare | PASS | 145 |
+| commandbar-render | PASS | 20 |
+| features-render | PASS | 62 |
+| sitecontrol-render | PASS | 112 |
+| boosts | PASS | 7 |
+
+The merged Debug App build passes. Locked sidebar-completion passes 172/172
+feature rows plus provenance/cleanup (174 total), including all 16 TS rows and
+all 8 FV rows. Locked app-actions passes 48/48 feature rows plus provenance/cleanup
+(50 total); cold command-bar results 4.7755 ms at the unchanged 50 ms limit.
+Both final suites had zero foreground interruptions and passed cleanup. Each
+suite had its own lock invocation, after all builds and full verification ended.
+Generated engine-spike artifacts were restored before commit.
+
+Final receipts are `.re/tab-switcher-review/final-full-verify.log`,
+`final-full-details/`, `final-full-summary.md`, `final-build.log`,
+`final-sidebar-completion.log` / `final-sidebar-completion-results.json`, and
+`final-app-actions.log` / `final-app-actions-results.json`. The earlier red and
+`61ae275a` green receipts remain separately named.

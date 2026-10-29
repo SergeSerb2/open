@@ -1133,3 +1133,140 @@ record is awaited through engineShutdownEnd; both configurations reject forced
 cleanup and require zero pending work/hosts before shutdown.
 
 [Full review table, verifier rows, timing and retained failures](engine-spike/step-c-review-r1/summary.md).
+
+## Sidebar stored favicons — 2026-10-28
+
+Favicon part of app-shell §4.8 (Step H) only: the App now queues `OpenEngine`
+favicon reports to `StoredFaviconCache` / `FaviconStore`, keyed by canonical origin
+and page path. Store open, image decoding and writes occur on the store actor.
+Unloaded pins, slept rows, URL-only imported rows, Favorites and the Space Manager
+share the bounded decoded cache. Library archive rows already read the store.
+Custom icons and images from live hosts retain priority. Unloaded rows ignore
+retained stale live PNGs; a missing stored icon keeps the
+existing placeholder. A new live report replaces the stored image and invalidates
+that row without a full reload. No Arc favicon assets are imported and cache misses
+do not trigger network traffic. History and AppleScript remain section 11 work.
+
+Limits and end-to-end coverage: `docs/favicons.md`.
+
+| Command | Result |
+|---|---|
+| `~/Library/Caches/OpenRE/scripts/heavy.sh tools/verify-all.sh --only favicons,features-render,sidebar-render,roundtrip` | 5/5 targets PASS including build; `features-render` 311/311, `sidebar-render` 564/564; favicon CLI includes FV11 encoded boundary and FV12 existing-database refusal |
+| `~/Library/Caches/OpenRE/scripts/heavy.sh swift build --package-path Packages/OpenKit -c release -j 6 --product features-render` then `features-render favicon-check` | Restored source: 25/25 PASS; 1000 rows each with a stored icon, scroll p95 2.423 ms at 2x (335 steps; ceiling 8.33 ms). Full gate measured 1.359 ms. Harness measurements only. |
+| Break-and-revert proof | Disable stored-row lookup and add a 5 ms delay to each favicon draw: cold row and replacement checks FAIL; scroll p95 30.880 ms FAIL. Restore byte-identical source (`a77d89965587c01f06e576f251e29abff168ef9933ea6089782f8a1198026002`), rebuild, 25/25 PASS. |
+| `~/Library/Caches/OpenRE/scripts/heavy.sh tools/build.sh` | PASS; Debug real App, no Swift warnings |
+| `/usr/bin/lockf /tmp/open-onscreen-e2e.lock python3 tools/e2e/engine_e2e.py --style chrome --only sidebar-completion` | 111/111 PASS (105 baseline + six favicon flows); zero focus interruptions; cleanup PASS |
+
+Source review: input limits, bounded queues, callback lifetime and read-only automation
+receipts checked. The engine hook queues data and URL before a consumer callback can
+close/rebind its host. Cache revisions reject stale reads/reports. Quit closes engine
+hosts and drains accepted favicon work before the OpenEngine shutdown request.
+There are no new third-party dependencies, unit tests, Arc asset copies or engine-tree
+changes. Raw verification/debug artifacts stay under `.re/` or outside the checkout.
+
+The first App attempt caught retained live PNGs after unload. Rows now select storage
+when `hasWebContent` is false, and automation reports `rowFaviconSource` plus the
+actual last-drawn image's `rowFaviconHash`. FV3–FV6 require the `stored` source and
+matching pixels, with no live host. A later attempt lost foreground focus in an
+existing Library-key flow and cleaned up; the final complete run has no interruptions.
+Generated `docs/engine-spike/*` results are restored before the local commit.
+
+## Stored favicon branch merged with main — 2026-10-28
+
+Merged main `013cdb45d42678f16b27087616b854b76c32c2c4` (A2 #127, A3 #128,
+#129, and Today auto-archive #130) into the stored-favicon branch. The feature
+harness target keeps both `OpenSidebar` and `OpenSettings` dependencies and both
+check files. Full checks run both favicon and auto-archive flows; the scoped CLI
+routes remain available. The App e2e suite runs A3, favicons and auto-archive.
+
+The automation audit found 140 unique top-level router commands. The eight
+archive commands forward once to `AutomationAutoArchive`, with one implementation
+each. Repeated modifier/argument labels in nested switches are separate scopes.
+Python has no duplicate function definitions within a lexical scope; SwiftPM has
+one definition per target. All table keys from both sides remain in
+`docs/automation.md`, `docs/status.md`, and `docs/app-shell.md`. Follow-ups retain
+the current A3 note, section 9 timer/activity guidance, and the favicon note.
+
+| Command | Result |
+|---|---|
+| `git diff --check` | PASS |
+| `~/Library/Caches/OpenRE/scripts/heavy.sh tools/verify-all.sh --only favicons,features-render,sidebar-render,roundtrip` | 5/5 targets PASS; `features-render` 350/350, `sidebar-render` 564/564; stored-icon scroll p95 1.127 ms at 1000 rows |
+| `~/Library/Caches/OpenRE/scripts/heavy.sh tools/build.sh` | PASS; Debug App, no Swift warnings |
+| `/usr/bin/lockf /tmp/open-onscreen-e2e.lock python3 tools/e2e/engine_e2e.py --style chrome --only sidebar-completion` | 125/125 PASS; all favicon and auto-archive rows; first attempt, zero focus interruptions; cleanup PASS |
+
+Focus interruptions permit at most three attempts, with three minutes between
+attempts. Retry spacing is applied temporarily for this verification and the
+runner's exact source is restored afterward. Generated engine-spike results are
+restored from the merged index before the merge commit.
+
+## Stored favicon PR #131 review fixes — 2026-10-28
+
+Before fixes, production sources were unchanged at `a5577541`. The new checks
+reported these failures through the real store/sidebar harness and real App:
+
+```text
+FAIL FV13 8 KiB URL writes keep succeeding via oldest eviction: written=954 refused=246 firstFailure=954 databaseBytes=16769024
+FAIL FV15 visible row redraws after its entry is evicted by 1025 keys and reported again
+FV14_same_icon_new_path_unloaded FAIL
+```
+
+FV13/FV15 then passed in the scoped harness (27/27; database 8515584 bytes,
+1200 writes, zero refusals; scroll p95 1.148 ms). The fixes are also merged with main `dee105e602e66a4fbc4edd8e16a2ab932695e8a1` (#132). Both the new intents/menu helper and the favicon helper run before auto-archive checks. The merge retains 143 unique router commands, with no duplicate Python helpers. Main's updated Share row and both sides' follow-up notes are preserved.
+The fixes and bounds are described in `docs/favicons.md`, "PR #131 corrections".
+
+| PR #131 merged-tree check | Result |
+|---|---|
+| `git diff --check` and duplicate audits | PASS |
+| `~/Library/Caches/OpenRE/scripts/heavy.sh tools/verify-all.sh --only favicons,features-render,sidebar-render,roundtrip` | 5/5 targets PASS; features 352/352, sidebar 564/564; FV13/FV15 PASS; scroll p95 1.027 ms |
+| `~/Library/Caches/OpenRE/scripts/heavy.sh tools/build.sh` | PASS; Debug App, no Swift warnings |
+| `/usr/bin/lockf /tmp/open-onscreen-e2e.lock python3 tools/e2e/engine_e2e.py --style chrome --only sidebar-completion` | 155/155 PASS; FV14, intents/menu and auto-archive rows; no focus interruptions; cleanup PASS |
+
+The first final App run stopped at the existing E14 Option-click check before
+any favicon report (created/retained host counts unchanged, no new Today tab).
+An unchanged rerun passed the full suite. Cause remains unconfirmed; no input
+route, wait tolerance or product workaround was added. The failed receipt is
+retained under `.re/pr131/first-final-e2e-results.json`. Generated engine-spike
+outputs and the temporary retry-spacing change are restored before committing.
+
+## Stored favicon PR #131 document ownership — 2026-10-28
+
+The new FV16 check failed against the reviewed App at `5fdaa84f`:
+
+```text
+FV16_cross_origin_missing_and_404_leave_no_stored_icon FAIL
+```
+
+Both the absent-icon page and the 404-icon page retained one exact-page record
+and drew the previous origin's stored icon after unload and relaunch. FV14 passed
+in that same baseline run; cleanup passed with no focus interruption.
+
+A URL callback now invalidates the old document's probe without storing its image.
+After loading, a bounded OpenEngine JavaScript result identifies the document URL
+and resolved icon URL. The host compares them with its image/icon-URL pair and
+navigation generation before reporting. An unchanged image may cover another
+path only on the same origin. New copy records have a UUID provenance tag; copies
+preserve an existing destination icon, and a later empty/different report can
+remove only its own tag. A newer ordinary report clears the tag. Disk access,
+decoding, deletion and row invalidation use the existing bounded async worker.
+See `docs/favicons.md`, "PR #131 document ownership correction".
+
+The real row harness adds five FV16 checks: preserve an existing destination;
+draw a confirmed copy; refuse deletion with another tag; delete/redraw after a
+matching revocation; and preserve a newer live report after a late revocation.
+The real-App FV16 covers both cross-origin missing/404 destinations after restart.
+
+| Round 2 check | Result |
+|---|---|
+| `git diff --check`; Python helper scope audit | PASS; no automation commands changed |
+| `~/Library/Caches/OpenRE/scripts/heavy.sh tools/verify-all.sh --only favicons,features-render,sidebar-render,roundtrip` | 5/5 targets PASS; features 357/357, sidebar 564/564; FV13, FV15 and all five row-level FV16 checks PASS; 1000-row scroll p95 1.060 ms |
+| `~/Library/Caches/OpenRE/scripts/heavy.sh tools/verify-all.sh` | 22/22 default targets PASS; no failures or skips; features 357/357; stored-icon scroll p95 0.863 ms |
+| `~/Library/Caches/OpenRE/scripts/heavy.sh tools/build.sh` | PASS after final host change; Debug App, no Swift warnings |
+| `/usr/bin/lockf /tmp/open-onscreen-e2e.lock python3 tools/e2e/engine_e2e.py --style chrome --only sidebar-completion` | 156/156 PASS; FV14 and FV16 PASS; both FV16 destinations have zero records and placeholder source/empty image hash after relaunch; first attempt, no focus interruption; cleanup PASS |
+
+Source review: input/decoded/disk bounds remain unchanged; the ownership probe
+returns two bounded URL strings, not document contents. Close and navigation
+cancel probes, and callback generations reject stale answers. Image conversion
+is still memoized by identity and store codecs by identical bytes. No engine
+source changes, dependencies, unit tests or Arc data are added. The failed FV16
+run also passed cleanup. Generated engine-spike outputs and temporary retry
+spacing are restored before committing.

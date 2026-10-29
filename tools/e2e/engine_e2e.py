@@ -5744,6 +5744,112 @@ def sidebar_completion_a3_checks(app, results, require, evidence, tmp, launch):
     return app
 
 
+def sidebar_favicon_checks(app, require, tmp, launch):
+    """Engine favicon event -> App store -> unloaded real row -> cold relaunch."""
+    import http.server
+    import threading
+    import zlib
+
+    def icon(color):
+        def chunk(kind, body):
+            return struct.pack('>I', len(body)) + kind + body + struct.pack('>I', zlib.crc32(kind + body))
+        return (b'\x89PNG\r\n\x1a\n' + chunk(b'IHDR', struct.pack('>IIBBBBB', 64, 64, 8, 6, 0, 0, 0))
+                + chunk(b'IDAT', zlib.compress((b'\0' + bytes(color) * 64) * 64)) + chunk(b'IEND', b''))
+
+    class Handler(http.server.BaseHTTPRequestHandler):
+        def do_GET(self):
+            if self.path.endswith('.png'):
+                body, mime = icon((20, 80, 220, 255) if 'blue' in self.path else (220, 80, 20, 255)), 'image/png'
+            else:
+                body, mime = b'<title>Stored favicon fixture</title><link rel="icon" href="/red.png"><h1>Stored favicon</h1>', 'text/html'
+            self.send_response(200); self.send_header('Content-Type', mime)
+            self.send_header('Cache-Control', 'no-store'); self.end_headers(); self.wfile.write(body)
+        def log_message(self, *args): pass
+
+    class MissingHandler(http.server.BaseHTTPRequestHandler):
+        def do_GET(self):
+            if self.path in ('/favicon.ico', '/missing.png'):
+                self.send_error(404); return
+            body = (b'<title>No favicon fixture</title><h1>No icon</h1>' +
+                    (b'<link rel="icon" href="/missing.png">' if self.path == '/broken' else b''))
+            self.send_response(200); self.send_header('Content-Type', 'text/html')
+            self.send_header('Cache-Control', 'no-store'); self.end_headers(); self.wfile.write(body)
+        def log_message(self, *args): pass
+
+    missing_server = http.server.ThreadingHTTPServer(('127.0.0.1', 0), MissingHandler)
+    threading.Thread(target=missing_server.serve_forever, daemon=True).start()
+    missing_origin = 'http://127.0.0.1:%d' % missing_server.server_address[1]
+    server = http.server.ThreadingHTTPServer(('127.0.0.1', 0), Handler)
+    threading.Thread(target=server.serve_forever, daemon=True).start()
+    origin = 'http://127.0.0.1:%d' % server.server_address[1]
+    try:
+        app.call('library-close')
+        space = app.call('space-create', title='Stored favicons'); app.call('space', space=space)
+        pin = app.call('open', url=origin + '/page')['id']; app.call('wait', tab=pin); app.call('pin', tab=pin)
+        loaded = wait_until(lambda: (lambda t: t if t['favicon'] and t.get('rowFaviconHash') and t.get('faviconReportsCompleted', 0) else None)(app.tab(pin)), timeout=8)
+        require('FV1_engine_report_stored_and_drawn', bool(loaded), tab=app.tab(pin))
+        red = loaded['rowFaviconHash']; count = loaded['faviconReportsCompleted']
+        app.eval(pin, "document.querySelector('link[rel=icon]').href='/blue.png'; true")
+        changed = wait_until(lambda: (lambda t: t if t.get('rowFaviconHash') and t['rowFaviconHash'] != red and t.get('faviconReportsCompleted', 0) > count else None)(app.tab(pin)), timeout=8)
+        require('FV2_engine_report_replaces_stored_icon', bool(changed), tab=app.tab(pin), previousHash=red)
+        blue = changed['rowFaviconHash']
+        # Pin Close follows production unload. It keeps the old live PNG; the row
+        # must select storage when hasWebContent becomes false.
+        neighbor = app.call('open', url=fixture('Stored favicon neighbor'))['id']; app.call('wait', tab=neighbor)
+        app.call('close', tab=pin)
+        unloaded = wait_until(lambda: (lambda t: t if not t['hasWebContent'] and t.get('rowFaviconSource') == 'stored' and t.get('rowFaviconHash') == blue else None)(app.tab(pin)), timeout=5)
+        require('FV3_unloaded_row_draws_stored_pixels', bool(unloaded), tab=app.tab(pin), expectedHash=blue)
+        app.call('save'); app.quit(); app = launch(); app.call('space', space=space)
+        cold = wait_until(lambda: (lambda t: t if not t['hasWebContent'] and t.get('rowFaviconSource') == 'stored' and t.get('rowFaviconHash') == blue else None)(app.tab(pin)), timeout=8)
+        require('FV4_relaunch_unloaded_row_same_pixels', bool(cold), tab=app.tab(pin), expectedHash=blue)
+        # A new URL-only tab has the same shape as an imported pin. It has no host.
+        imported = app.call('open', url=origin + '/page', background=True)['id']
+        app.call('pin', tab=imported)
+        imported_row = wait_until(lambda: (lambda t: t if not t['hasWebContent'] and t.get('rowFaviconSource') == 'stored' and t.get('rowFaviconHash') == blue else None)(app.tab(imported)), timeout=5)
+        require('FV5_url_only_import_shape_uses_stored_icon', bool(imported_row), tab=app.tab(imported), expectedHash=blue)
+        app.call('favorite', tab=imported)
+        favorite = wait_until(lambda: (lambda t: t if t['section'] == 'favorites' and not t['hasWebContent'] and t.get('rowFaviconSource') == 'stored' and t.get('rowFaviconHash') == blue else None)(app.tab(imported)), timeout=5)
+        require('FV6_unloaded_favorite_same_pixels', bool(favorite), tab=app.tab(imported), expectedHash=blue)
+        # Same declared icon URL across two committed page paths: OpenEngine emits
+        # no second favicon notification. Only the URL hook can persist /b.
+        route = app.call('open', url=origin + '/a')['id']; app.call('wait', tab=route); app.call('pin', tab=route)
+        same = wait_until(lambda: (lambda t: t if t.get('rowFaviconHash') and t['favicon'] else None)(app.tab(route)), timeout=8)
+        same_hash = same['rowFaviconHash']
+        app.call('navigate', tab=route, url=origin + '/b'); app.call('wait', tab=route)
+        wait_until(lambda: app.tab(route)['url'] == origin + '/b', timeout=5)
+        # Unload via the production pin Close route, then require storage pixels.
+        app.call('open', url=fixture('Unchanged icon neighbor')); app.call('close', tab=route)
+        same_stored = wait_until(lambda: (lambda t: t if not t['hasWebContent'] and t['url'] == origin + '/b' and t.get('rowFaviconSource') == 'stored' and t.get('rowFaviconHash') == same_hash else None)(app.tab(route)), timeout=5)
+        require('FV14_same_icon_new_path_unloaded', bool(same_stored), tab=app.tab(route), expectedHash=same_hash)
+
+        # A URL commit still exposes the previous document's NSImage. Both an
+        # absent declaration and a failed download must leave no destination row.
+        import sqlite3
+        missing_results = []
+        for path in ('/absent', '/broken'):
+            candidate = app.call('open', url=origin + '/source' + path)['id']
+            app.call('wait', tab=candidate); app.call('pin', tab=candidate)
+            wait_until(lambda: app.tab(candidate)['favicon'], timeout=8)
+            destination = missing_origin + path
+            app.call('navigate', tab=candidate, url=destination); app.call('wait', tab=candidate)
+            wait_until(lambda: app.tab(candidate)['url'] == destination, timeout=5)
+            app.call('open', url=fixture('Missing icon neighbor')); app.call('close', tab=candidate)
+            wait_until(lambda: not app.tab(candidate)['hasWebContent'], timeout=5)
+            # Drain the real cache worker by orderly quit before read-only SQL.
+            app.call('save'); app.quit(); app = launch(); app.call('space', space=space)
+            row = wait_until(lambda: (lambda t: t if t.get('rowFaviconSource') else None)(app.tab(candidate)), timeout=5)
+            with sqlite3.connect('file:' + os.path.join(app.user_data, 'State', 'favicons.sqlite3') + '?mode=ro', uri=True) as database:
+                records = database.execute('SELECT count(*) FROM favicons WHERE origin=? AND page_key=?', (missing_origin, path)).fetchone()[0]
+            missing_results.append(dict(path=path, row=row, records=records,
+                ok=not row['hasWebContent'] and row['rowFaviconSource'] == 'placeholder' and not row['rowFaviconHash'] and records == 0))
+        require('FV16_cross_origin_missing_and_404_leave_no_stored_icon', all(r['ok'] for r in missing_results), cases=missing_results)
+
+        return app
+    finally:
+        server.shutdown(); server.server_close()
+        missing_server.shutdown(); missing_server.server_close()
+
+
 
 def sidebar_tab_switcher_checks(app, require, tmp):
     """TS keys enter OEApplication.sendEvent. No desktop input or direct dispatch."""
@@ -6380,6 +6486,7 @@ def space_manager_checks(results, tmp, config, style):
         app = sidebar_completion_a3_checks(app, results, require, evidence, tmp, launch)
         sidebar_tab_switcher_checks(app, require, tmp)
 
+        app = sidebar_favicon_checks(app, require, tmp, launch)
         sidebar_intents_menu_checks(app, results, require, tmp)
         app = sidebar_completion_archive_checks(app, launch, results, require, evidence, tmp)
     finally:

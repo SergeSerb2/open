@@ -857,8 +857,20 @@ extension EngineWebContentHostFactory: OEWebContentDelegate {
   }
 
   static func pngData(_ image: NSImage) -> Data? {
-    guard let tiff = image.tiffRepresentation, let rep = NSBitmapImageRep(data: tiff) else { return nil }
-    return rep.representation(using: .png, properties: [:])
+    // Refuse oversized engine images before asking AppKit to rasterize them.
+    // Explicit allocation: 64 * 64 * 4 = 16 KiB, independent of source size.
+    guard !image.representations.isEmpty, image.representations.count <= 32,
+      image.representations.allSatisfy({ (1...1024).contains($0.pixelsWide) && (1...1024).contains($0.pixelsHigh) }),
+      let source = image.cgImage(forProposedRect: nil, context: nil, hints: nil),
+      let color = CGColorSpace(name: CGColorSpace.sRGB),
+      let context = CGContext(data: nil, width: 64, height: 64, bitsPerComponent: 8, bytesPerRow: 256,
+        space: color, bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue) else { return nil }
+    let scale = min(64 / CGFloat(source.width), 64 / CGFloat(source.height))
+    let size = CGSize(width: CGFloat(source.width) * scale, height: CGFloat(source.height) * scale)
+    context.interpolationQuality = .high
+    context.draw(source, in: CGRect(x: (64 - size.width) / 2, y: (64 - size.height) / 2, width: size.width, height: size.height))
+    guard let bitmap = context.makeImage() else { return nil }
+    return NSBitmapImageRep(cgImage: bitmap).representation(using: .png, properties: [:])
   }
 
   func webContent(_ webContent: OEWebContent, createWebContentFor request: OEOpenRequest) -> OEWebContent? {
