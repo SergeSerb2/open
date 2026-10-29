@@ -144,13 +144,16 @@ public enum ProfileDeleteBlock: Sendable, Equatable {
 public final class BrowserModel {
     public var profiles: [Profile]
     public var spaces: [Space]
-    public var windows: [BrowserWindowState]
+    public var windows: [BrowserWindowState] { didSet { commitMutation() } }
     public var routingRules: [RoutingRule]
     public var defaultDestination: DefaultDestination
 
     /// Injected services. Not persisted, not observed.
     @ObservationIgnored public var archiveSink: (any ArchiveSink)?
     @ObservationIgnored public var undoManager: UndoManager?
+    /// Changes on every registered model action and every undo/redo execution. A UI
+    /// action may use this to refuse an Undo after its original stack target changed.
+    @ObservationIgnored public private(set) var undoGeneration: UInt64 = 0
     #if DEBUG
     /// Debug CLI seam for the rollback code; absent from release builds.
     @ObservationIgnored public var diagnosticRollbackFailureAtMove: Int?
@@ -165,6 +168,9 @@ public final class BrowserModel {
     @ObservationIgnored public private(set) var index: [ItemID: SidebarNode] = [:]
     @ObservationIgnored public private(set) var parentByID: [ItemID: NodeParent] = [:]
 
+    /// Strong references preserve the last shown set even after a structural edit
+    /// removes its nodes from the index. At most four tabs per showing window.
+    @ObservationIgnored private var shownTabs: [ItemID: Tab] = [:]
     @ObservationIgnored private var observers: [UUID: @MainActor (TreeChange) -> Void] = [:]
     @ObservationIgnored private var spaceByIDCache: [SpaceID: Space] = [:]
     @ObservationIgnored private var profileByIDCache: [ProfileID: Profile] = [:]
@@ -195,6 +201,7 @@ public final class BrowserModel {
     private func emit(_ change: TreeChange) {
         if spaceCreationEvents != nil { spaceCreationEvents?.append(change); return }
         treeRevision &+= 1
+        commitMutation()
         for handler in observers.values { handler(change) }
     }
 
@@ -226,6 +233,7 @@ public final class BrowserModel {
             for node in space.pinned { register(node, under: .spacePinned(space.id)) }
             for node in space.today { register(node, under: .spaceToday(space.id)) }
         }
+        commitMutation()
     }
 
     private func register(_ node: SidebarNode, under parent: NodeParent) {
@@ -530,6 +538,9 @@ public final class BrowserModel {
     }
 
     private func recordUndo(_ handler: @escaping @MainActor (BrowserModel) -> Void) {
+        // Property-only commands share the structural emission commit path,
+        // including callers with no UndoManager or disabled registration.
+        commitMutation()
         guard let um = undoManager else { return }
         // Each command registers one action. Grouping follows the undo manager: with
         // per-event grouping (the AppKit default) every command of one event forms one step,
@@ -537,8 +548,13 @@ public final class BrowserModel {
         // loop) registering outside a group is an error, so the model opens one per command.
         let group = !um.groupsByEvent && um.groupingLevel == 0 && !um.isUndoing && !um.isRedoing
         if group { um.beginUndoGrouping() }
+        if um.isUndoRegistrationEnabled { undoGeneration &+= 1 }
         um.registerUndo(withTarget: self) { model in
-            MainActor.assumeIsolated { handler(model) }
+            MainActor.assumeIsolated {
+                model.undoGeneration &+= 1
+                defer { model.commitMutation() }
+                handler(model)
+            }
         }
         if group { um.endUndoGrouping() }
     }
@@ -1689,6 +1705,7 @@ public final class BrowserModel {
     public func previewSpaceTheme(id: SpaceID, theme: SpaceTheme) {
         guard let space = space(id: id), space.theme != theme else { return }
         space.theme = theme
+        commitMutation()
     }
 
     @discardableResult
@@ -2135,20 +2152,78 @@ public final class BrowserModel {
         let now: Date
         let spaceID: SpaceID
         let profileID: ProfileID
+        let shownTabIDs: Set<ItemID>
         var entries: [ArchiveEntry] = []
         var changed: [NodeParent] = []
     }
 
+    /// The focused Space's selected tab, or every pane of its selected split,
+    /// is on screen. Remembered selections in other Spaces are not on screen.
+    /// A closed last window can retain its state for reopen without showing it.
+    private func tabsShownInWindows() -> [ItemID: Tab] {
+        var shown: [ItemID: Tab] = [:]
+        for window in windows where window.isShowingContent {
+            guard let space = space(id: window.focusedSpaceID),
+                  let id = window.selectedNodeBySpace[space.id], let node = index[id],
+                  let parent = parentByID[id] else { continue }
+            // A remembered ID moved to another Space/Profile is no longer shown
+            // here. Resolve only this selected node's indexed ancestor chain;
+            // never flatten the Space's tabs or a selected folder's children.
+            switch section(of: parent) {
+            case .spacePinned(let owner)?, .spaceToday(let owner)?: guard owner == space.id else { continue }
+            case .favorites(let profile)?: guard profile == space.profileID else { continue }
+            default: continue
+            }
+            for tab in node.split?.panes ?? node.tab.map({ [$0] }) ?? [] { shown[tab.id] = tab }
+        }
+        return shown
+    }
+
+    /// The sole visibility transition policy. Structural emissions run it before
+    /// observers or archive writers; the common command/undo path covers changes
+    /// without tree events. Compare cached Tab references, not the already-mutated
+    /// tree, so dissolved or detached panes still receive their departure time.
+    /// The shown-set work visits windows and at most four panes per window.
+    private func commitMutation() {
+        let current = tabsShownInWindows()
+        let departed = shownTabs.filter { current[$0.key] == nil }
+        shownTabs = current
+        guard !departed.isEmpty else { return }
+        let now = Date()
+        for tab in departed.values { tab.lastActiveAt = now }
+    }
+
+    /// Earliest Today activity deadline across all Profiles. Pinned and Favorites
+    /// are excluded by ancestry; tabs shown in any window are excluded by the
+    /// same visibility rule as the sweep. Read all inputs for Observation.
+    public func nextAutoArchiveExpiry() -> Date? {
+        let shown = tabsShownInWindows()
+        let thresholds = Dictionary(uniqueKeysWithValues: profiles.map { ($0.id, $0.settings.autoArchiveAfter.seconds) })
+        var earliest: Date?
+        for space in spaces {
+            let threshold = thresholds[space.profileID] ?? nil
+            for tab in space.today.flatMap({ tabs(under: $0) }) {
+                let activity = tab.lastActiveAt
+                guard let threshold, shown[tab.id] == nil else { continue }
+                let deadline = activity.addingTimeInterval(threshold)
+                earliest = earliest.map { min($0, deadline) } ?? deadline
+            }
+        }
+        return earliest
+    }
+
     /// Archives expired Today tabs in one pass: top-level tabs, split panes, and tabs inside
-    /// Today folders. Pinned tabs and favorites never expire. One sink call for all tabs, and
+    /// Today folders. Pinned tabs, favorites, and tabs shown in any window never
+    /// expire. One sink call for all tabs, and
     /// one `.reload` per parent whose list changed. No undo: the archive is the history.
     @discardableResult
     public func archiveExpiredTabs(now: Date) -> Int {
+        let shown = Set(tabsShownInWindows().keys)
         var entries: [ArchiveEntry] = []
         var changed: [NodeParent] = []
         for space in spaces {
             guard let threshold = profile(id: space.profileID)?.settings.autoArchiveAfter.seconds else { continue }
-            var sweep = ExpirySweep(cutoff: now.addingTimeInterval(-threshold), now: now, spaceID: space.id, profileID: space.profileID)
+            var sweep = ExpirySweep(cutoff: now.addingTimeInterval(-threshold), now: now, spaceID: space.id, profileID: space.profileID, shownTabIDs: shown)
             if let kept = sweepExpired(space.today, in: .spaceToday(space.id), &sweep) { space.today = kept }
             entries += sweep.entries
             changed += sweep.changed
@@ -2166,7 +2241,7 @@ public final class BrowserModel {
         for node in list {
             switch node {
             case .tab(let tab):
-                if tab.lastActiveAt < sweep.cutoff {
+                if !sweep.shownTabIDs.contains(tab.id), tab.lastActiveAt < sweep.cutoff {
                     expire(tab, from: parent, &sweep)
                     listChanged = true
                 } else {
@@ -2177,9 +2252,9 @@ public final class BrowserModel {
                 kept.append(node)
             case .split(let split):
                 let cutoff = sweep.cutoff
-                let live = split.panes.filter { $0.lastActiveAt >= cutoff }
+                let live = split.panes.filter { sweep.shownTabIDs.contains($0.id) || $0.lastActiveAt >= cutoff }
                 guard live.count < split.panes.count else { kept.append(node); continue }
-                for tab in split.panes where tab.lastActiveAt < cutoff { expire(tab, from: .splitPane(split.id), &sweep) }
+                for tab in split.panes where !sweep.shownTabIDs.contains(tab.id) && tab.lastActiveAt < cutoff { expire(tab, from: .splitPane(split.id), &sweep) }
                 split.panes = live
                 if let focused = split.focusedPaneID, !live.contains(where: { $0.id == focused }) { split.focusedPaneID = live.first?.id }
                 if live.count >= 2 {
@@ -2216,16 +2291,29 @@ public final class BrowserModel {
         guard space(id: focusedSpaceID) != nil else { return nil }
         let state = BrowserWindowState(focusedSpaceID: focusedSpaceID)
         windows.append(state)
-        registerChange(undo: { [weak self] in self?.windows.removeAll { $0.id == state.id } },
+        registerChange(undo: { [weak self] in _ = self?.removeWindowState(windowID: state.id) },
                        redo: { [weak self] in self?.windows.append(state) })
         return state
     }
 
+    private func removeWindowState(windowID: WindowID) -> BrowserWindowState? {
+        guard let index = windows.firstIndex(where: { $0.id == windowID }) else { return nil }
+        return windows.remove(at: index)
+    }
+
     public func closeWindow(windowID: WindowID) {
-        guard let index = windows.firstIndex(where: { $0.id == windowID }) else { return }
-        let state = windows.remove(at: index)
+        guard let index = windows.firstIndex(where: { $0.id == windowID }),
+              let state = removeWindowState(windowID: windowID) else { return }
         registerChange(undo: { [weak self] in guard let self else { return }; self.windows.insert(state, at: min(index, self.windows.count)) },
-                       redo: { [weak self] in self?.windows.removeAll { $0.id == windowID } })
+                       redo: { [weak self] in _ = self?.removeWindowState(windowID: windowID) })
+    }
+
+    /// Shell lifetime only. The retained last-window snapshot is not on screen.
+    /// Transient visibility is not persisted and does not register an undo action.
+    public func setWindowContentVisible(windowID: WindowID, visible: Bool) {
+        guard let state = windows.first(where: { $0.id == windowID }), state.isShowingContent != visible else { return }
+        state.isShowingContent = visible
+        commitMutation()
     }
 
     public func setSidebarWidth(windowID: WindowID, width: Double) {
@@ -2259,16 +2347,19 @@ public final class BrowserModel {
         guard let split = index[splitID]?.split, split.panes.contains(where: { $0.id == tabID }) else { return }
         split.focusedPaneID = tabID
         stampVisibleTabs(in: .split(split))
+        commitMutation()
     }
 
     public func selectNode(windowID: WindowID, spaceID: SpaceID, nodeID: ItemID?) {
         guard let window = windows.first(where: { $0.id == windowID }) else { return }
         let old = window.selectedNodeBySpace[spaceID]
-        window.selectedNodeBySpace[spaceID] = nodeID
-        if let nodeID, let node = index[nodeID] {
-            stampVisibleTabs(in: node)
-        }
-        registerChange(undo: { window.selectedNodeBySpace[spaceID] = old },
-                       redo: { window.selectedNodeBySpace[spaceID] = nodeID })
+        setSelection(nodeID, in: spaceID, window: window)
+        registerChange(undo: { [weak self] in self?.setSelection(old, in: spaceID, window: window) },
+                       redo: { [weak self] in self?.setSelection(nodeID, in: spaceID, window: window) })
+    }
+
+    private func setSelection(_ id: ItemID?, in spaceID: SpaceID, window: BrowserWindowState) {
+        window.selectedNodeBySpace[spaceID] = id
+        if let id, let node = index[id] { stampVisibleTabs(in: node) }
     }
 }
