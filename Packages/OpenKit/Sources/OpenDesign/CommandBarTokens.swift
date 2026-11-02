@@ -71,12 +71,24 @@ public enum CommandBarMetrics {
     /// "Search Google" to its first keycap; keycap to "or" (F0040).
     public static let hintLabelGap: CGFloat = 10
     public static let hintKeyGap: CGFloat = 8
-    /// Site Search chip in the input row. guess: no capture of the scoped state.
+    /// Scope chip (CC-41, S2 18/0016: pixel bounds x 535…615, y 393…416 in a panel at [481, 373]):
+    /// a capsule at x 54, y 20, 24 tall; text advance + 2 × 10 wide (81 for "Wikipedia"). measured.
+    /// The field's AX frame starts 11 pt after the chip (146), but its text ink starts at 149 in both
+    /// S2 18/0016 and 0018; with our field insets that takes 13 pt. fitted.
+    public static let chipX: CGFloat = 54
     public static let chipHeight: CGFloat = 24
-    public static let chipRadius: CGFloat = 6
-    public static let chipPaddingX: CGFloat = 8
-    public static let chipIconSize: CGFloat = 14
-    public static let chipToText: CGFloat = 8
+    public static let chipRadius: CGFloat = 12
+    public static let chipPaddingX: CGFloat = 10
+    public static let chipToText: CGFloat = 13
+    /// Outer glow in the chip color: a shadow of the capsule, no offset, blur 16 (Gaussian σ ≈ 8) at alpha
+    /// 0.32. fitted on S2 18/0016: left of the chip the red channel falls 56, 51, 49 … 33, 32, 30 over
+    /// 13 pt toward the panel's 27 (a blurred edge with σ 8).
+    public static let chipGlowBlur: CGFloat = 16
+    public static let chipGlowAlpha: CGFloat = 0.32
+    /// Hovered chip: an 11 pt `xmark.circle.fill` at the chip's left padding; the text moves right by
+    /// 15 and the chip grows by 15. guess (no capture; CC-19 names a close accessory).
+    public static let chipCloseSize: CGFloat = 11
+    public static let chipCloseGrowth: CGFloat = 15
 
     // MARK: Privacy footer (CC-42, S2 18/0044: a 5-row panel 329 pt tall; H = panel height, W = panel width)
 
@@ -230,6 +242,10 @@ public enum CommandBarRole {
     public static let rowGlyphSelected = RGBA.white(1)
     /// Plates: arrow plate, keycaps, action icon plate: `CommandBarAccessoryBackgroundColor` white 0.05.
     public static let plate = CommandBarColors.accessoryBackground.dark
+    /// Scope chip fill, its glow, and the selected row inside a scope: Display P3 `#FFA500` (S2 18/0016
+    /// and 0018 read P3 #FFA501 through the capture's display profile; sRGB clips it to #FFA000, CC-41).
+    /// guess: one color for every site and scope.
+    public static let scopeChip = RGBA(hex: 0xFFA500, .displayP3)
     /// The rule between a Split View row's pane titles: value 67 over a 49 panel (A0120). fitted.
     public static let splitTitleRule = RGBA.white(0.17)
     /// Arrow on an unselected row: `CommandBarAccessoryForegroundColor` white 0.66.

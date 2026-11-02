@@ -65,7 +65,7 @@ public struct WhatYouTypedProvider: SuggestProvider {
     public nonisolated static let searchRowID = "typed:search"
 
     public func localSuggestions(for input: SuggestInput) -> [Suggestion] {
-        guard input.context.mode != .searchTabs, input.siteSearch == nil else { return [] }
+        guard !input.context.mode.isScoped, input.siteSearch == nil else { return [] }
         switch input.typed {
         case .empty:
             return []
@@ -106,6 +106,7 @@ public struct TabsProvider: SuggestProvider {
     public init() {}
 
     public func localSuggestions(for input: SuggestInput) -> [Suggestion] {
+        guard input.context.mode != .searchActions else { return [] }
         let index = input.tabs
         // Edit mode never offers the current tab; Cmd+T does (F0063, F0043: the page behind the bar is a
         // Switch to Tab row, and F0043's completion comes from it; commandbar-completion §4.1.3).
@@ -284,7 +285,7 @@ public struct CalculatorProvider: SuggestProvider {
     public init() {}
 
     public func localSuggestions(for input: SuggestInput) -> [Suggestion] {
-        guard input.context.mode != .searchTabs, input.siteSearch == nil, case .text(let text) = input.typed,
+        guard !input.context.mode.isScoped, input.siteSearch == nil, case .text(let text) = input.typed,
               let value = Calculator.evaluate(text) else { return [] }
         let answer = Calculator.format(value)
         // No URL: the typed search row below already searches the expression, and a shared URL
@@ -303,6 +304,8 @@ public struct CalculatorProvider: SuggestProvider {
 public struct ActionsProvider: SuggestProvider {
     public let id = "actions"
     public var maxRows = 3
+    /// Rows in the Actions scope (the panel shows 5 and scrolls).
+    public var scopeRows = 12
     let matcher: ActionMatcher
 
     public init(registry: ActionRegistry = .arcDefaults) {
@@ -310,7 +313,8 @@ public struct ActionsProvider: SuggestProvider {
     }
 
     public func localSuggestions(for input: SuggestInput) -> [Suggestion] {
-        guard input.context.mode != .searchTabs, input.siteSearch == nil, case .text = input.typed,
+        if input.context.mode == .searchActions { return scoped(input) }
+        guard !input.context.mode.isScoped, input.siteSearch == nil, case .text = input.typed,
               input.query.bytes.count >= 2 else { return [] }
         var rows: [Suggestion] = []
         for entry in matcher.entries where Self.isAvailable(entry.action.requirement, input) {
@@ -330,6 +334,45 @@ public struct ActionsProvider: SuggestProvider {
         }
         rows.sort(by: Ranking.order)
         return Array(rows.prefix(maxRows))
+    }
+
+    /// The Actions scope (§4.3.3): any text, no length minimum; the empty query lists the available
+    /// actions in registry seed order (guess: Arc ranks by recent use). Requirements still hide actions.
+    private func scoped(_ input: SuggestInput) -> [Suggestion] {
+        var rows: [Suggestion] = []
+        if input.query.isEmpty {
+            for entry in matcher.entries where Self.isAvailable(entry.action.requirement, input) {
+                rows.append(row(entry.action, quality: 0, input: input, space: nil))
+                if rows.count == scopeRows { break }
+            }
+            // Seed order: a falling score keeps it through ranking's sort.
+            for i in rows.indices { rows[i].scoreDetail.boost = Double(rows.count - i); rows[i].score = rows[i].scoreDetail.total }
+            return rows
+        }
+        for entry in matcher.entries where Self.isAvailable(entry.action.requirement, input) {
+            let q = ActionMatcher.quality(input.query, entry, minimumBytes: 1)
+            guard q > 0 else { continue }
+            rows.append(row(entry.action, quality: q, input: input, space: nil))
+        }
+        let focus = BrowserAction(id: ActionRegistry.focusSpaceActionID, title: "", symbol: "rectangle.on.rectangle")
+        for space in input.tabs.spaces
+        where (input.profileOrdinal == nil || space.profileOrdinal == input.profileOrdinal) && space.id != input.context.spaceID {
+            let q = TextMatching.rowQuality(input.query, fields: [(space.foldedTitle, 1), (space.foldedFocusTitle, 1)])
+            guard q > 0 else { continue }
+            var action = focus
+            action.title = "Focus on \(space.title)"
+            rows.append(row(action, quality: q, input: input, space: space))
+        }
+        // Equal matches: the title the query covers more of goes first ("side" → Show/Hide Sidebar before
+        // Reveal Tab in Sidebar). Open rule; Arc ranks this scope by recent use (CC-16), which Open does not keep.
+        let n = Double(input.query.bytes.count)
+        for i in rows.indices {
+            rows[i].scoreDetail.boost += min(1, n / Double(max(1, rows[i].title.utf8.count)))
+            rows[i].score = rows[i].scoreDetail.total
+            rows[i].canBeTopHit = rows[i].scoreDetail.quality > 0
+        }
+        rows.sort(by: Ranking.order)
+        return Array(rows.prefix(scopeRows))
     }
 
     private func row(_ action: BrowserAction, quality: Double, input: SuggestInput, space: TabIndex.SpaceSummary?) -> Suggestion {
@@ -370,7 +413,7 @@ public struct SiteSearchProvider: SuggestProvider {
     }
 
     public func localSuggestions(for input: SuggestInput) -> [Suggestion] {
-        guard input.context.mode != .searchTabs else { return [] }
+        guard !input.context.mode.isScoped else { return [] }
         if let site = input.siteSearch {
             guard !input.text.isEmpty, let url = site.searchURL(for: input.text) else { return [] }
             var row = searchRow(site, query: input.text, url: url, quality: MatchQuality.exact)
@@ -379,7 +422,7 @@ public struct SiteSearchProvider: SuggestProvider {
             return [row]
         }
         var rows: [Suggestion] = []
-        if let (site, rest) = index.spaceTrigger(for: input.text), let url = site.searchURL(for: rest) {
+        if let (site, rest) = index.spaceTrigger(for: input.text), !site.isScope, let url = site.searchURL(for: rest) {
             rows.append(searchRow(site, query: rest, url: url, quality: MatchQuality.exact))
         }
         if let site = index.tabTrigger(for: input.query.bytes) {
@@ -420,7 +463,7 @@ public struct HistoryProvider: SuggestProvider {
     /// The history snapshot replaces them. Without it a history completion would vanish for a frame
     /// on every keystroke. Same rule as the remote carry-over (docs/suggest.md §4).
     public func localSuggestions(for input: SuggestInput) -> [Suggestion] {
-        guard input.context.mode != .searchTabs, !input.query.isEmpty else { return [] }
+        guard !input.context.mode.isScoped, !input.query.isEmpty else { return [] }
         let q = input.matchQuery
         let matches = carry.matches(profile: input.profileID, extending: q.bytes)
         guard !matches.isEmpty else { return [] }
@@ -432,7 +475,7 @@ public struct HistoryProvider: SuggestProvider {
     }
 
     public func asyncOperation(for input: SuggestInput) -> (@Sendable () async -> [Suggestion]?)? {
-        guard input.context.mode != .searchTabs, let store = store(input.profileID) else { return nil }
+        guard !input.context.mode.isScoped, let store = store(input.profileID) else { return nil }
         if input.query.isEmpty && input.siteSearch != nil { return nil }
         let text = input.matchQuery.text, query = input.matchQuery, now = input.now, site = input.siteSearch
         let limit = input.query.isEmpty ? emptyQueryRows : limit

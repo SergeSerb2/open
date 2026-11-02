@@ -756,6 +756,8 @@ The Section 2 agent implements this plan. Each row names the merged PR and its e
 
 | 3–4 | [#139](https://github.com/SergeSerb2/open/pull/139) | `suggest-check` 45/45 (scenario 41; 44 now with 500 two-pane splits: completion first snapshot p95 0.444 ms, plain 0.513, load 11); `commandbar-render check` 119/119 (flow 81, 5 checks); A0120 compare: split plate cells 0.0 pt / 1.04, gap 1.05, title parts 0.0 / ≤ 0.09, rule 1.0 / 0.59, worst over the scene 1.0 pt and 2.11 (left shadow); pixel diff of 13 states × 2 scales against `main`: only `empty` and `privacy-footer` change (the split row), plus two `main` renders with a black lower band (item 13); App build; e2e `commandbar` 56/56 incl. new `commandbar_split_one_row`; break-and-revert: pane rows instead of split rows fail `suggest-check` 41, no cell gap and a joined-title AX label fail flow 81 ×2 | done |
 
+| 5 | this PR | `suggest-check` 47/47 (42–43); `commandbar-render check` 132/132 (flows 82–85, 91: 8 checks; states `actions-scope`, `actions-scope-empty`, `tabs-scope`, `scope-chip-hover`, `site-chip-query`); S2 18/0016 and 0018 in Display P3: chip, chip text, placeholder and field text ≤ 1 pt, text ΔE00 ≤ 1.05, chip fill ΔE00 6.0 (the harness clips P3 to sRGB); `commands-dump` 0/0/0, same 11 allowed missing; App build; e2e `commandbar` 57/57 incl. new `commandbar_actions_scope`; break-and-revert: no text restore fails flows 82, 84, 91; no scope row color fails 91; prefix scope keywords fail `suggest-check` 43 | done |
+
 Section 2 decisions (Step 0):
 
 - `present(_:)` and `dismiss(reason:)` lose their `animated:` parameter: with no animation it would mean nothing.
@@ -763,6 +765,14 @@ Section 2 decisions (Step 0):
 - While Open has no privacy page, line 2 of the footer hides (`privacyURL` nil). Hiding only the word "here" would leave a broken sentence.
 - The panel edge keeps the session-1 luminance rule. Session 2 shows the dark double edge over light pages, against session-1 F0039/F0040/A0120; the rule's input is not known (`docs/followups.md`, capture request).
 - `compare --space p3` measures session-2 captures in Display P3 (their AW2726DM profile exceeds sRGB); session-1 comparisons stay in sRGB.
+
+Section 2 decisions (Step 5):
+
+- The chip fill is Display P3 #FFA500: the captures read P3 #FFA501, which sRGB cannot hold (the plan's #FFA000 is its sRGB clip). `commandbar-render` renders into sRGB, so its compares read ΔE00 6 on the chip and the scoped row; positions match.
+- Fitted against the plan's guesses: the chip title is 13 Medium (not Semibold), the glow blur 16 / alpha 0.32 (not 6 / 0.35), the field text inside a scope 18 Regular (two ink widths), and the field starts at chip + 13 (its AX frame stays at chip + 11 = 146).
+- No (i) inside a scope, and the scoped Site Search row shows only the query: both measured on S2 18/0016 and 0018 (the plan did not say).
+- Actions scope ranking: equal matches go by how much of the title the query covers ("side" → Show/Hide Sidebar before Reveal Tab in Sidebar). The registry seed order would put Reveal first; Arc's real order (recent use) is not kept by Open.
+- The App's `search-actions` command and the `commandbar-state` `scope` field come with this step (one line each); Step 9 keeps the rest.
 
 Section 2 decisions (Steps 3–4):
 

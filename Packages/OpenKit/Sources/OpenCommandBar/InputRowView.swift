@@ -207,7 +207,10 @@ final class InputRowView: NSView {
         didSet {
             guard input != oldValue else { return }
             if input.leadingIcon != oldValue.leadingIcon { iconView.needsDisplay = true }
-            if input.chip != oldValue.chip { chipView.needsDisplay = true }
+            if input.chip != oldValue.chip {
+                chipView.needsDisplay = true
+                if (input.chip == nil) != (oldValue.chip == nil) { applyFieldFont() }
+            }
             if input.trailing != oldValue.trailing { hintView.needsDisplay = true }
             if input.placeholder != oldValue.placeholder { placeholderView.needsDisplay = true }
             updatePlaceholder()
@@ -230,6 +233,7 @@ final class InputRowView: NSView {
     /// Each drawn part is its own small view, so a keystroke redraws only what changed.
     private let iconView = PaintView(frame: .zero)
     private let chipView = PaintView(frame: .zero)
+    let chipHit = ChipHitView(frame: .zero)
     private let hintView = PaintView(frame: .zero)
     /// The placeholder is ours, not the field's: the field editor keeps the placeholder it had
     /// when editing began, so a Site Search placeholder would not show.
@@ -239,11 +243,15 @@ final class InputRowView: NSView {
         super.init(frame: frame)
         wantsLayer = true
         for v in [iconView, chipView, hintView, placeholderView] { addSubview(v) }
+        addSubview(chipHit)
+        chipHit.onHover = { [weak self] on in self?.chipHovered = on }
+        chipHit.onClose = { [weak self] in self?.onChipClose?() }
         placeholderView.paint = { [weak self] ctx in
             guard let self else { return }
-            let line = TextLine(self.input.placeholder, font: BarFont.input, color: CommandBarRole.placeholder.cgColor)
+            let font = self.fieldFont
+            let line = TextLine(self.input.placeholder, font: font, color: CommandBarRole.placeholder.cgColor)
             let f = self.placeholderView.frame
-            line.truncated(to: f.width, font: BarFont.input, color: CommandBarRole.placeholder.cgColor)
+            line.truncated(to: f.width, font: font, color: CommandBarRole.placeholder.cgColor)
                 .draw(at: f.minX, baseline: f.minY + Self.placeholderBaseline, in: ctx)
         }
         iconView.paint = { [weak self] ctx in self?.drawLeadingIcon(in: ctx) }
@@ -337,10 +345,21 @@ final class InputRowView: NSView {
     /// Text field origin inside the AX frame. fitted: AppKit insets the text 2 pt in a borderless field.
     static let fieldOffset = CGPoint(x: -2, y: 1)
 
+    /// 18 Medium, or 18 Regular inside a scope (CC-41 captures).
+    var fieldFont: NSFont { input.chip == nil ? BarFont.input : BarFont.inputScoped }
+
+    private func applyFieldFont() {
+        field.font = fieldFont
+        editor.font = fieldFont
+        editor.typingAttributes[.font] = fieldFont
+        placeholderView.needsDisplay = true
+    }
+
     var chipWidth: CGFloat {
         guard let chip = input.chip else { return 0 }
         let m = CommandBarMetrics.self
-        return ceil(TextLine(chip.name, font: BarFont.chip, color: CGColor(gray: 1, alpha: 1)).width) + 2 * m.chipPaddingX + m.chipIconSize + 6
+        return (TextLine(chip.name, font: BarFont.chip, color: CGColor(gray: 1, alpha: 1)).width).rounded() + 2 * m.chipPaddingX
+            + (chipHovered ? m.chipCloseGrowth : 0)
     }
 
     var trailingWidth: CGFloat {
@@ -356,7 +375,7 @@ final class InputRowView: NSView {
         super.layout()
         let m = CommandBarMetrics.self
         var x = m.textFieldX
-        if input.chip != nil { x += chipWidth + m.chipToText }
+        if input.chip != nil { x = chipRect.maxX + m.chipToText }
         let right = bounds.width - trailingWidth - m.textFieldTrailingGap
         field.frame = CGRect(x: x + Self.fieldOffset.x, y: m.textFieldY + Self.fieldOffset.y, width: max(20, right - x), height: m.textFieldHeight + 2)
         infoButton.isHidden = !showsInfoButton
@@ -366,7 +385,12 @@ final class InputRowView: NSView {
         placeholderView.frame = CGRect(x: field.frame.minX + 2, y: m.textFieldY - 2, width: max(0, field.frame.width - 4), height: m.textFieldHeight + 6)
         textDidChange()
         chipView.isHidden = input.chip == nil
-        chipView.frame = chipRect
+        // The view also holds the glow around the capsule.
+        chipView.frame = chipRect.insetBy(dx: -2 * m.chipGlowBlur, dy: -2 * m.chipGlowBlur)
+        chipHit.isHidden = input.chip == nil
+        chipHit.frame = chipRect
+        chipHit.title = input.chip?.name ?? ""
+        if input.chip == nil, chipHovered { chipHovered = false }
         if case .siteSearchHint(let name, let space) = input.trailing {
             let w = ceil(Self.hintWidth(name: name, space: space))
             hintView.isHidden = false
@@ -378,7 +402,7 @@ final class InputRowView: NSView {
 
     var chipRect: CGRect {
         let m = CommandBarMetrics.self
-        return CGRect(x: m.textFieldX, y: m.textFieldY + (m.textFieldHeight - m.chipHeight) / 2, width: chipWidth, height: m.chipHeight)
+        return CGRect(x: m.chipX, y: m.textFieldY, width: chipWidth, height: m.chipHeight)
     }
 
     // MARK: Drawing (row coordinates; each part view translates to its frame)
@@ -410,30 +434,31 @@ final class InputRowView: NSView {
                                      width: s.width, height: s.height))
     }
 
-    /// Site Search chip: the Space's focus color with the site's icon and name. guess (no capture).
+    /// The scope chip (CC-41): an orange capsule with a soft glow and the white title, no icon. Hovered,
+    /// an `xmark.circle.fill` takes the left padding and the title moves right (guess).
     private func drawChip(_ chip: CommandBarInput.SiteChip, in ctx: CGContext) {
         let m = CommandBarMetrics.self
         let rect = chipRect
-        ctx.setFillColor(theme.focus.cgColor)
-        ctx.addPath(CGPath(roundedRect: rect, cornerWidth: m.chipRadius, cornerHeight: m.chipRadius, transform: nil))
+        let path = CGPath(roundedRect: rect, cornerWidth: m.chipRadius, cornerHeight: m.chipRadius, transform: nil)
+        ctx.saveGState()
+        ctx.setShadow(offset: .zero, blur: m.chipGlowBlur, color: CommandBarRole.scopeChip.withAlpha(m.chipGlowAlpha).cgColor)
+        ctx.setFillColor(CommandBarRole.scopeChip.cgColor)
+        ctx.addPath(path)
         ctx.fillPath()
-        let iconRect = CGRect(x: rect.minX + m.chipPaddingX, y: rect.midY - m.chipIconSize / 2, width: m.chipIconSize, height: m.chipIconSize)
-        switch chip.icon {
-        case .favicon(let url, let fallback):
-            if let image = favicons?.favicon(for: url, loaded: { [weak self] _ in self?.chipView.needsDisplay = true }) {
-                image.drawFlipped(in: iconRect)
-            } else if let s = SymbolCache.image(fallback, size: 11, weight: .semibold, color: .white(1)) {
-                s.drawFlipped(in: CGRect(x: iconRect.midX - s.size.width / 2, y: iconRect.midY - s.size.height / 2, width: s.size.width, height: s.size.height))
-            }
-        case .symbol(let name, _):
-            if let s = SymbolCache.image(name, size: 11, weight: .semibold, color: .white(1)) {
-                s.drawFlipped(in: CGRect(x: iconRect.midX - s.size.width / 2, y: iconRect.midY - s.size.height / 2, width: s.size.width, height: s.size.height))
-            }
-        case .emoji, .split: break
+        ctx.restoreGState()
+        var textX = rect.minX + m.chipPaddingX
+        if chipHovered, let x = SymbolCache.image("xmark.circle.fill", size: m.chipCloseSize, weight: .semibold, color: .white(1)) {
+            let s = x.size
+            x.drawFlipped(in: CGRect(x: (textX + (m.chipCloseSize - s.width) / 2).rounded(), y: (rect.midY - s.height / 2).rounded(), width: s.width, height: s.height))
+            textX += m.chipCloseGrowth
         }
         let line = TextLine(chip.name, font: BarFont.chip, color: CGColor(gray: 1, alpha: 1))
-        line.draw(at: iconRect.maxX + 6, baseline: (rect.midY + BarFont.chip.capHeight / 2).rounded(), in: ctx)
+        line.draw(at: textX, baseline: (rect.midY + BarFont.chip.capHeight / 2).rounded(), in: ctx)
     }
+
+    /// The pointer is over the chip: it shows the close glyph; a click leaves the scope.
+    var chipHovered = false { didSet { if chipHovered != oldValue { chipView.needsDisplay = true; needsLayout = true } } }
+    var onChipClose: (() -> Void)?
 
     // MARK: Site Search hint
 
@@ -515,6 +540,34 @@ final class InfoButton: NSView {
         if bounds.contains(convert(event.locationInWindow, from: nil)) { action?() }
     }
     override func mouseDown(with event: NSEvent) {}
+}
+
+/// The scope chip's pointer target: hover shows the close glyph, a click leaves the scope (§4.3.4).
+@MainActor
+final class ChipHitView: NSView {
+    var onHover: ((Bool) -> Void)?
+    var onClose: (() -> Void)?
+    var title = ""
+
+    override var isFlipped: Bool { true }
+    override func updateTrackingAreas() {
+        super.updateTrackingAreas()
+        trackingAreas.forEach(removeTrackingArea)
+        addTrackingArea(NSTrackingArea(rect: .zero, options: [.mouseEnteredAndExited, .mouseMoved, .activeAlways, .inVisibleRect], owner: self))
+    }
+    override func mouseEntered(with event: NSEvent) { onHover?(true) }
+    override func mouseMoved(with event: NSEvent) { onHover?(true) }
+    override func mouseExited(with event: NSEvent) { onHover?(false) }
+    override func mouseDown(with event: NSEvent) {}
+    override func mouseUp(with event: NSEvent) {
+        if bounds.contains(convert(event.locationInWindow, from: nil)) { onClose?() }
+    }
+
+    override func isAccessibilityElement() -> Bool { !isHidden }
+    override func accessibilityRole() -> NSAccessibility.Role? { .button }
+    override func accessibilityLabel() -> String? { title }
+    override func accessibilityHelp() -> String? { "Leaves the scope" }
+    override func accessibilityPerformPress() -> Bool { onClose?(); return true }
 }
 
 /// A view that paints with a closure in its superview's coordinates (flipped).

@@ -117,12 +117,18 @@ enum BarGlyph {
 /// Fonts. Input 18 Medium, rows 13 Medium (interaction-states §9.2); hint and keycaps fitted.
 enum BarFont {
     @MainActor static var input: NSFont { Typography.commandBarInput.font }
+    /// The field inside a scope: 18 Regular (fitted on two ink widths: "Search…" 68 px in S2 18/0016,
+    /// "bird" 28 px in 0018; 18 Medium gives 70 and 30).
+    @MainActor static var inputScoped: NSFont { FontToken(18, .regular).font }
     @MainActor static var row: NSFont { Typography.commandBarRow.font }
     /// Hint label: 12.75 Medium, fitted on two ink widths ("Search Google" 88 px in F0061, "Search Wikipedia"
     /// 105 px in S2 18/0009); 12.75 Regular was 2 px narrow on the longer one.
     @MainActor static var hint: NSFont { FontToken(12.75, .medium).font }
     @MainActor static var keycap: NSFont { FontToken(13, .semibold).font }
-    @MainActor static var chip: NSFont { FontToken(14, .semibold).font }
+    /// Scope chip text: 13 Medium, white. fitted on S2 18/0016 "Wikipedia": ink 59 px and chip 81 px
+    /// (advance 60.8 + 2 × 10); 12.75 Semibold fits the widths too but has 16% more ink than Arc's
+    /// (13 Medium: 7%).
+    @MainActor static var chip: NSFont { FontToken(13, .medium).font }
 }
 
 /// Keycaps: a white 5 % plate with the key label (F0061 "Tab": plate 31×24, radius ≈ 5).

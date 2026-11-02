@@ -36,6 +36,7 @@ public enum Ranking {
     public static func cap(_ kind: SuggestionKind, mode: SuggestMode) -> Int {
         switch kind {
         case .switchToTab: return mode == .searchTabs ? .max : 6
+        case .action where mode == .searchActions: return .max
         case .history: return 6
         case .searchSuggestion: return 5
         case .navigate: return 3
@@ -190,6 +191,9 @@ public enum Ranking {
         } else if mode == .searchTabs {
             topIndex = input.query.isEmpty ? nil : rows.firstIndex { $0.kind == .switchToTab }
             rule = topIndex == nil ? .none : .bestTab
+        } else if mode == .searchActions {
+            topIndex = input.query.isEmpty ? nil : rows.firstIndex { $0.kind == .action }
+            rule = topIndex == nil ? .none : .bestAction
         } else if input.query.isEmpty {
             rule = .none
         } else if let (i, completion) = inlineCompletionTopHit(rows, input: input) {

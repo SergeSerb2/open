@@ -10,7 +10,8 @@ import OpenSuggest
 @MainActor
 enum Scenes {
     static let names = ["empty", "typing-git", "cmd-l", "space-hint", "site-chip", "site-search", "calculator", "actions", "scrolled", "privacy-footer",
-                        "completion", "completion-case", "completion-accepted", "split-row", "split-row-selected"]
+                        "completion", "completion-case", "completion-accepted", "split-row", "split-row-selected",
+                        "actions-scope", "actions-scope-empty", "tabs-scope", "scope-chip-hover", "site-chip-query"]
     /// Stands in for Open's privacy page in renders (the App has none yet, so its footer hides line 2).
     static let samplePrivacyURL = URL(string: "https://open.example/privacy")!
 
@@ -60,6 +61,37 @@ enum Scenes {
             stage.settle()
             stage.key(.tab)
             stage.type("lofi beats")
+        case "site-chip-query": // "wikipedia" + Tab + "bird": the S2 18/0018 shape
+            c.present(request(env, mode: .newTab))
+            stage.type("wikipedia")
+            stage.settle()
+            stage.key(.tab)
+            stage.type("bird")
+        case "actions-scope-empty": // "actions" + Tab: the Actions chip and the seed list
+            c.present(request(env, mode: .newTab))
+            stage.type("actions")
+            stage.settle()
+            stage.key(.tab)
+        case "actions-scope": // the Actions scope with a query
+            c.present(request(env, mode: .newTab))
+            stage.type("actions")
+            stage.settle()
+            stage.key(.tab)
+            stage.type("side")
+        case "tabs-scope": // "tabs" + Tab + "review": tab rows only, the split as one row
+            c.present(request(env, mode: .newTab))
+            stage.type("tabs")
+            stage.settle()
+            stage.key(.tab)
+            stage.type("review")
+        case "scope-chip-hover": // the pointer on the chip: the close glyph (guess)
+            c.present(request(env, mode: .newTab))
+            stage.type("wikipedia")
+            stage.settle()
+            stage.key(.tab)
+            stage.settle()
+            let chip = c.view.debugChipFrame, p = c.view.panelFrame
+            stage.mouse(.mouseMoved, at: CGPoint(x: p.minX + chip.midX, y: p.minY + chip.midY))
         case "site-chip":
             c.present(request(env, mode: .newTab))
             stage.type("youtube")
@@ -151,6 +183,8 @@ struct SceneFile: Decodable {
     var footer: Bool?
     /// Field selection `[location, length]` in UTF-16 units: an inline completion's tail, or `[n, 0]` for a caret.
     var selection: [Int]?
+    /// A scope chip's title ("Wikipedia", "Actions"); the placeholder becomes "Search…".
+    var chip: String?
 
     static func load(_ path: String) throws -> SceneFile {
         try JSONDecoder().decode(SceneFile.self, from: Data(contentsOf: URL(fileURLWithPath: path)))
@@ -182,8 +216,8 @@ struct SceneFile: Decodable {
             else if t.hasPrefix("hint:") { trailingValue = .siteSearchHint(name: String(t.dropFirst(5)), space: false) }
             else if t == "none" { trailingValue = .none }
         }
-        let input = CommandBarInput(placeholder: placeholder ?? CommandBarText.placeholder,
-                                    leadingIcon: icon(leadingIcon ?? "symbol:magnifyingglass"), trailing: trailingValue)
+        let input = CommandBarInput(placeholder: placeholder ?? (chip == nil ? CommandBarText.placeholder : CommandBarText.scopePlaceholder),
+                                    leadingIcon: icon(leadingIcon ?? "symbol:magnifyingglass"), chip: chip.map { .init(name: $0) }, trailing: trailingValue)
         return CommandBarPreview(mode: CommandBarMode(rawValue: mode ?? "newTab") ?? .newTab, text: text ?? "",
                                  selectAllText: selectAll ?? false, input: input, rows: rows, selectedIndex: selected ?? 0,
                                  showsFooter: footer ?? false,

@@ -21,7 +21,7 @@ public final class CommandBarController: NSObject {
         didSet { panel.results.favicons = favicons; panel.input.favicons = favicons }
     }
     public var theme = CommandBarTheme.default {
-        didSet { panel.results.theme = theme; panel.input.theme = theme }
+        didSet { applyScopeTheme(); panel.input.theme = theme }
     }
     /// What lies behind the panel. Set before `present`.
     public var backdrop = CommandBarBackdrop.darkPage { didSet { applyBackdrop() } }
@@ -41,8 +41,12 @@ public final class CommandBarController: NSObject {
     public var inlineCompletion: InlineCompletion? { completion.shown }
     /// Inline completion on (Arc has no setting for it). The keystroke bench turns it off for its A/B run.
     public var allowsInlineCompletion = true
-    /// Site Search scope, while the chip shows.
-    public private(set) var siteScope: SiteSearch?
+    /// The scope while its chip shows: a Site Search, Actions, or Tabs (§4.3).
+    public private(set) var scope: CommandBarScope?
+    /// The Site Search of the current scope, if it is one.
+    public var siteScope: SiteSearch? { if case .site(let s)? = scope { return s } else { return nil } }
+    /// The field text before the scope started; Backspace on an empty field restores it (CC-19, CC-41).
+    private var queryBeforeEnteringScope: String?
     /// Drawn rows and the suggestions behind them (same order).
     public private(set) var rows: [CommandBarRow] = []
     public private(set) var suggestions: [Suggestion] = []
@@ -103,6 +107,7 @@ public final class CommandBarController: NSObject {
         }
         view.onMoveToWindow = { [weak self] in self?.focusInput() }
         panel.input.infoButton.action = { [weak self] in self?.togglePrivacyFooter() }
+        panel.input.onChipClose = { [weak self] in self?.exitSiteSearch() }
         panel.footer.settingsButton.action = { [weak self] in self?.openSearchSettings() }
         panel.footer.dismissButton.action = { [weak self] in self?.dismissPrivacyNotice() }
         panel.footer.link.action = { [weak self] in self?.openPrivacyPage() }
@@ -126,7 +131,14 @@ public final class CommandBarController: NSObject {
         pendingReturn = nil
         panel.input.editor.resetSession()
         self.request = request
-        siteScope = nil
+        // Scope modes open with their scope; leaving it gives an empty Cmd+T bar.
+        switch request.mode {
+        case .searchTabs: scope = .tabs
+        case .searchActions: scope = .actions
+        default: scope = nil
+        }
+        queryBeforeEnteringScope = nil
+        applyScopeTheme()
         engine.prewarm()
         let field = panel.input.field
         let initial = request.mode == .editCurrentURL ? (request.currentTabURL?.absoluteString ?? "") : ""
@@ -164,6 +176,10 @@ public final class CommandBarController: NSObject {
         suggestions = []
         rows = preview.rows
         panel.input.input = preview.input
+        // A previewed scope chip gives the selected row the chip color, as a live scope does.
+        var previewTheme = theme
+        if preview.input.chip != nil { previewTheme.focus = CommandBarRole.scopeChip }
+        panel.results.theme = previewTheme
         panel.results.resetScroll()
         panel.results.setRows(preview.rows, selected: preview.selectedIndex)
         view.visibleRowCount = min(preview.rows.count, CommandBarMetrics.maxVisibleRows)
@@ -264,7 +280,13 @@ public final class CommandBarController: NSObject {
 
     private func context() -> SuggestContext {
         let r = request ?? CommandBarRequest(mode: .newTab)
-        return SuggestContext(mode: r.mode.suggestMode, profileID: r.profileID, spaceID: r.spaceID, currentTabID: r.currentTabID,
+        var mode = r.mode.suggestMode
+        switch scope {
+        case .actions?: mode = .searchActions
+        case .tabs?: mode = .searchTabs
+        case .site?, nil: if mode.isScoped { mode = .newTab }
+        }
+        return SuggestContext(mode: mode, profileID: r.profileID, spaceID: r.spaceID, currentTabID: r.currentTabID,
                               currentTabURL: r.currentTabURL, allowsRemoteSuggestions: r.allowsRemoteSuggestions,
                               searchEngineID: r.searchEngineID, siteSearchID: siteScope?.id, allowsInlineCompletion: queryAllowsCompletion)
     }
@@ -363,9 +385,11 @@ public final class CommandBarController: NSObject {
         siteHint = nil
         hintText = text
         hintAllowsSpace = false
-        guard siteScope == nil, request?.mode != .searchTabs, !trimmed.isEmpty, !trimmed.contains(" ") else { return }
+        guard scope == nil, !trimmed.isEmpty, !trimmed.contains(" ") else { return }
         if let site = engine.siteSearchTrigger(for: trimmed) {
             siteHint = site
+            // Scope keywords offer Tab only: Space types a space ("tabs vs spaces", §4.3.2).
+            if site.isScope { return }
             // Space enters the scope only when the text is the site's name or keyword exactly, so
             // typing words that merely start a site name keeps working. guess (F0040 shows "or Space").
             let folded = TextMatching.fold(trimmed)
@@ -376,13 +400,12 @@ public final class CommandBarController: NSObject {
     private func updateInputPresentation() {
         let r = request
         var input = CommandBarInput(placeholder: CommandBarText.placeholder, leadingIcon: .symbol("magnifyingglass", plate: false))
-        if r?.mode == .searchTabs { input.placeholder = CommandBarText.searchTabsPlaceholder }
-        if let site = siteScope {
-            input.placeholder = CommandBarText.siteSearchPlaceholder(site.name)
-            input.chip = .init(name: site.name, icon: siteIcon(site))
+        if let scope {
+            input.placeholder = CommandBarText.scopePlaceholder
+            input.chip = .init(name: scope.title)
         }
         let typed = text
-        if typed.isEmpty || siteScope != nil {
+        if typed.isEmpty || scope != nil {
             input.leadingIcon = .symbol("magnifyingglass", plate: false)
         } else if r?.mode == .editCurrentURL, let current = r?.currentTabURL, typed == current.absoluteString {
             input.leadingIcon = .favicon(current, fallback: "globe") // Cmd+L shows the page favicon (F0048)
@@ -402,35 +425,56 @@ public final class CommandBarController: NSObject {
         if let site = siteHint {
             // Never "or Space" while a completion shows (CC-5, CC-40).
             input.trailing = .siteSearchHint(name: site.name, space: hintAllowsSpace && completion.shown == nil)
+        } else if scope != nil {
+            input.trailing = .none // no (i) inside a scope (S2 18/0016, 0018)
         } else {
             input.trailing = .info
         }
         panel.input.input = input
     }
 
-    private func siteIcon(_ site: SiteSearch) -> CommandBarIcon {
-        let host = site.host.split(separator: "/").first.map(String.init) ?? site.host
-        if let u = URL(string: "https://\(host)/") { return .favicon(u, fallback: "magnifyingglass") }
-        return .symbol("magnifyingglass", plate: false)
+    /// Enters Site Search for `site` (or the Actions or Tabs scope for their trigger entries). The trigger
+    /// word becomes the chip; text after it stays the query.
+    public func enterSiteSearch(_ site: SiteSearch, remainder: String = "") {
+        let s: CommandBarScope = site.id == SiteSearch.actionsScopeID ? .actions : site.id == SiteSearch.tabsScopeID ? .tabs : .site(site)
+        enterScope(s, remainder: remainder)
     }
 
-    /// Enters Site Search for `site`. The trigger word becomes the chip; text after it stays the query.
-    public func enterSiteSearch(_ site: SiteSearch, remainder: String = "") {
+    /// Enters `scope`; the field before it is kept for Backspace on empty (CC-19). `restoring` is that text.
+    public func enterScope(_ scope: CommandBarScope, remainder: String = "", restoring: String? = nil) {
         // The scope takes the typed text, never the completion (§4.1.5 Tab).
+        let before = restoring ?? text
         if let editor = activeEditor { completion.hide(in: editor) }
         completion.reset()
-        siteScope = site
+        self.scope = scope
+        queryBeforeEnteringScope = before
         panel.input.setText(remainder)
         panel.input.needsLayout = true
+        applyScopeTheme()
         runQuery(text)
     }
 
-    /// Leaves Site Search (Backspace on an empty query, features-core §4.6 rule 16).
+    /// Leaves the scope (Backspace on an empty field, or a click on the chip's close glyph): the field
+    /// gets back the text from before the scope, caret at the end (CC-19, CC-41 S2 18/0021). A scope
+    /// opened by command leaves an empty Cmd+T bar.
     public func exitSiteSearch() {
-        guard siteScope != nil else { return }
-        siteScope = nil
+        guard scope != nil else { return }
+        scope = nil
+        let restored = queryBeforeEnteringScope ?? ""
+        queryBeforeEnteringScope = nil
+        if let r = request, r.mode == .searchTabs || r.mode == .searchActions { request?.mode = .newTab }
+        panel.input.setText(restored)
+        if let editor = activeEditor { editor.setSelectedRange(NSRange(location: (restored as NSString).length, length: 0)) }
         panel.input.needsLayout = true
+        applyScopeTheme()
         runQuery(text)
+    }
+
+    /// Inside a scope the selected row takes the chip color (S2 18/0018); otherwise the Space's focus.
+    private func applyScopeTheme() {
+        var t = theme
+        if scope != nil { t.focus = CommandBarRole.scopeChip }
+        panel.results.theme = t
     }
 
     // MARK: Selection
@@ -505,7 +549,7 @@ public final class CommandBarController: NSObject {
         case #selector(NSResponder.insertBacktab(_:)):
             return false
         case #selector(NSResponder.deleteBackward(_:)):
-            if siteScope != nil, text.isEmpty { exitSiteSearch(); return true }
+            if scope != nil, text.isEmpty { exitSiteSearch(); return true }
             return removeCompletionByDeletion()
         case #selector(NSResponder.deleteForward(_:)), #selector(NSResponder.deleteWordBackward(_:)),
              #selector(NSResponder.deleteToBeginningOfLine(_:)), #selector(NSResponder.deleteBackwardByDecomposingPreviousCharacter(_:)),
@@ -636,8 +680,8 @@ public final class CommandBarController: NSObject {
         guard queriedText != t else { return } // Commit can notify through both AppKit and unmarkText.
         // Space right after a site name or keyword enters Site Search ("youtube" + Space), but not while a
         // completion showed: then Space only types a space (CC-5).
-        if siteScope == nil, let site = siteHint, hintAllowsSpace, hidden == nil, t == hintText + " " {
-            enterSiteSearch(site)
+        if scope == nil, let site = siteHint, hintAllowsSpace, hidden == nil, t == hintText + " " {
+            enterScope(.site(site), restoring: hintText)
             return
         }
         // A character that continues the completion keeps it on screen until the new snapshot (§4.1.5).

@@ -121,6 +121,7 @@ final class AppCommandBarSession: CommandBarDelegate {
       "panelFrame": { let f = bar.view.convert(bar.view.panelFrame, to: nil); let h = factory.window?.contentView?.bounds.height ?? 0
         return [f.minX, h - f.maxY, f.width, f.height] }(),
       "fieldWidth": bar.view.debugFieldFrame.width, "allowsRemote": bar.request?.allowsRemoteSuggestions ?? false,
+      "scope": bar.scope?.title ?? "", "fieldText": bar.fieldText,
       "rows": bar.suggestions.map { ["id": $0.id, "kind": $0.kind.rawValue, "title": $0.title,
         "url": $0.url?.absoluteString ?? "", "tab": $0.tabID?.description ?? "",
         "space": $0.spaceID?.description ?? "", "action": $0.actionID ?? ""] }] as [String: Any]

@@ -95,6 +95,9 @@ public final class CommandBarView: NSView {
     public var debugPanelLayoutCount: Int { panel.layoutCount }
     /// Text field frame in panel points.
     public var debugFieldFrame: CGRect { panel.input.field.frame }
+    /// The scope chip's capsule in input-row points (zero without a chip), and whether it is hovered.
+    public var debugChipFrame: CGRect { panel.input.input.chip == nil ? .zero : panel.input.chipRect }
+    public var debugChipHovered: Bool { panel.input.chipHovered }
     /// Presses a bar control through its accessibility action, the same path as VoiceOver and
     /// a click: "info", "searchSettings", "dismiss", or "privacyLink". False when it is not shown.
     public func debugPress(_ control: String) -> Bool {

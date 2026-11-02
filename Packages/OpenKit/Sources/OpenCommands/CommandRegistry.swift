@@ -383,6 +383,9 @@ public enum CommandRegistry {
         CommandDefinition(id: "replace-pinned-url", title: "Replace Pinned URL with Current Site",
                           enabledKey: EnabledKey.currentTabHasPinnedURL,
                           aliases: ["Replace Pinned Tab", "Update Pinned URL"]),
+        // Open the command bar in a scope (commandbar-completion §4.3.2). No default keys; customizable.
+        CommandDefinition(id: "search-actions", title: "Search Actions", isCustomizable: true, aliases: ["Actions", "Commands"]),
+        CommandDefinition(id: "search-tabs", title: "Search Tabs", isCustomizable: true, aliases: ["Tabs"]),
         CommandDefinition(id: "mute-all-tabs", title: "Mute All Tabs", aliases: ["Mute"]),
         CommandDefinition(id: "unmute-all-tabs", title: "Unmute All Tabs", aliases: ["Unmute"]),
         CommandDefinition(id: "air-traffic-control", title: "Air Traffic Control", aliases: ["Link Routing"]),

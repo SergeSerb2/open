@@ -223,10 +223,21 @@ struct BarSpec {
             e.append(E(name: "input leading icon", region: icon.insetBy(dx: -2, dy: -2), kind: .ink))
         }
         let inputFont = Typography.commandBarInput.font
+        // With a scope chip the field starts after it (CC-41).
+        var fieldX = m.textFieldX
+        if let chip = preview.input.chip {
+            let cw = textWidth(chip.name, font: FontToken(13, .medium).font).rounded() + 2 * m.chipPaddingX
+            let c = CGRect(x: p.minX + m.chipX, y: p.minY + m.textFieldY, width: cw, height: m.chipHeight)
+            fieldX = m.chipX + cw + m.chipToText
+            e.append(E(name: "scope chip", region: c.insetBy(dx: -3, dy: -3), kind: .fill(sample: CGRect(x: c.midX - 10, y: c.minY + 2, width: 20, height: 2))))
+            e.append(E(name: "scope chip text", region: c.insetBy(dx: 6, dy: 4), kind: .ink))
+            e.append(E(name: "scope chip glow 4 pt", region: .zero, kind: .points([CGPoint(x: c.minX - 4, y: c.midY), CGPoint(x: c.maxX + 4, y: c.midY), CGPoint(x: c.midX, y: c.minY - 4)])))
+            e.append(E(name: "scope chip glow 8 pt", region: .zero, kind: .points([CGPoint(x: c.minX - 8, y: c.midY), CGPoint(x: c.maxX + 8, y: c.midY), CGPoint(x: c.midX, y: c.minY - 8)])))
+        }
         let shown = preview.text.isEmpty ? preview.input.placeholder : preview.text
         let tw = textWidth(shown, font: inputFont)
         let textName = preview.text.isEmpty ? "input placeholder" : (preview.selectAllText ? "input text (selected)" : "input text")
-        e.append(E(name: textName, region: CGRect(x: p.minX + m.textFieldX + 1, y: p.minY + 15, width: tw + 3, height: 32), kind: .ink))
+        e.append(E(name: textName, region: CGRect(x: p.minX + fieldX + 1, y: p.minY + 15, width: tw + 3, height: 32), kind: .ink))
         if let r = preview.selectedRange, r.length > 0, r.location > 0 {
             // Inline completion (CC-2): the typed part, the selection box over the completed part, its text.
             let typed = (preview.text as NSString).substring(to: r.location)

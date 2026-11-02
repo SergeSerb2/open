@@ -59,10 +59,10 @@ public struct CommandBarInput: Sendable, Hashable {
     public var chip: SiteChip?
     public var trailing: CommandBarTrailing
 
+    /// The scope chip: its title only, no icon (CC-41).
     public struct SiteChip: Sendable, Hashable {
         public var name: String
-        public var icon: CommandBarIcon
-        public init(name: String, icon: CommandBarIcon) { self.name = name; self.icon = icon }
+        public init(name: String) { self.name = name }
     }
 
     public init(placeholder: String, leadingIcon: CommandBarIcon, chip: SiteChip? = nil, trailing: CommandBarTrailing = .info) {
@@ -73,10 +73,11 @@ public struct CommandBarInput: Sendable, Hashable {
 /// Copy, written for Open. "Search or Enter URL…" is measured (F0063, one ellipsis character).
 public enum CommandBarText {
     public static let placeholder = "Search or Enter URL…"
-    /// guess: Arc's string "Site Search placeholder where the wildcard is the name of the site".
-    public static func siteSearchPlaceholder(_ site: String) -> String { "Search \(site)…" }
-    /// guess.
-    public static let searchTabsPlaceholder = "Search Tabs…"
+    /// The placeholder inside every scope (CC-18, CC-41: S2 18/0016 shows "Search…" with a Site Search chip).
+    public static let scopePlaceholder = "Search…"
+    /// Scope chip titles: "Actions" is Arc's (CC-17); "Tabs" is a guess.
+    public static let actionsScope = "Actions"
+    public static let tabsScope = "Tabs"
     public static let switchToTab = "Switch to Tab"
     public static let switchToSplit = "Switch to Split View"
     public static func searchSite(_ name: String) -> String { "Search \(name)" }
@@ -131,7 +132,9 @@ enum RowPresentation {
         case .search, .searchSuggestion:
             return CommandBarRow(id: s.id, kind: s.kind, title: s.title, icon: icon)
         case .siteSearch:
-            return CommandBarRow(id: s.id, kind: s.kind, title: s.title, subtitle: s.subtitle, icon: icon)
+            // Inside the scope the row is the query alone (S2 18/0018 "bird"); a "yt cats" row outside
+            // keeps "— Search <Site>" (guess).
+            return CommandBarRow(id: s.id, kind: s.kind, title: s.title, subtitle: s.isWhatYouTyped ? "" : s.subtitle, icon: icon)
         case .calculator:
             // Title is the answer; OpenSuggest's subtitle is "<expression> =". guess layout.
             return CommandBarRow(id: s.id, kind: s.kind, title: s.title, subtitle: s.subtitle, icon: icon)

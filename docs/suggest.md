@@ -110,6 +110,7 @@ The app acts on the top hit or the selected row:
 | `newTab` | All. The current tab is offered like any open tab (F0043, F0063: the page behind the bar is a Switch to Tab row). | Rules T1-T8. |
 | `editCurrentURL` | All. The current tab is not offered as Switch to Tab. The typed URL row never merges into a tab row. | Rules T1-T8. |
 | `searchTabs` | Tabs only. History and remote do not run. | Best tab (T2). Empty query gives no top hit. |
+| `searchActions` | Actions only (commandbar-completion §4.3.3). Any text, no 2-character minimum. The empty query lists the available actions in registry seed order (up to 12). Equal matches: the title the query covers more of first (Open rule; Arc ranks by recent use). | Best action (T2a). Empty query gives no top hit. |
 
 Results respect the current Profile.
 Open tabs come from every Space of that Profile, not only the current Space.
@@ -383,6 +384,8 @@ Rules:
 
 ### 7. Site Search
 
+Scope keywords (commandbar-completion §4.3.2): two built-in trigger entries, `scope-actions` ("actions", "action", "commands") and `scope-tabs` ("tabs", "tab"), with no URL template. They match exact words only, never a prefix and never as a Space trigger, and a scope wins over a site with the same word. `siteSearchTrigger(for:)` returns them; the command bar maps them to its scopes.
+
 Typing a known site name or keyword, then Tab, scopes the query to that site.
 This matches Arc §4.6 rule 15.
 
@@ -571,6 +574,7 @@ The top hit is what Return does with no selection change.
 | T0 | Empty query, or no rule below applies and no typed row exists | none |
 | T1 | Site Search scope is active | the scoped `siteSearch` row |
 | T2 | Search-tabs mode, query not empty | the best tab row |
+| T2a | Search-actions mode, query not empty | the best action row |
 | T3a | `allowsInlineCompletion`, no scope, new-tab or edit mode, text without whitespace, no calculator row, no exact tab title or host (T5) | the highest-ranked row that may be top hit (a tab also when only its URL matched, 2+ bytes typed: "localhost:30") and that the text completes; sets `inlineCompletion` |
 | T3 | Input is a URL | the what-you-typed row (after merge, this may be the open tab that has that URL, in new-tab mode) |
 | T4 | Input is arithmetic | the calculator row |
@@ -685,7 +689,7 @@ zero warnings, zero errors (Swift 6.4, strict concurrency).
 
 ### suggest-check
 
-45/45 passed (2026-11-02, commandbar-completion Steps 3–4, load average 9–11 on 18 cores). The table is the real output shape. Rows 34–44 are the plan's scenarios 32–41 and 44 (§5.1).
+47/47 passed (2026-11-02, commandbar-completion Step 5, load average 10–12 on 18 cores). The table is the real output shape. Rows 34–46 are the plan's scenarios 32–43 and 44 (§5.1).
 
 | # | Result | Scenario |
 |---|---|---|
@@ -732,8 +736,10 @@ zero warnings, zero errors (Swift 6.4, strict concurrency).
 | 41 | PASS | 39: current tab offered in new-tab mode (also for an empty query), absent in edit mode |
 | 42 | PASS | 40: "gi" → "git": snapshot 0 carries the history row over and already completes "github.com" |
 | 43 | PASS | 41: split → one row (either pane matches, targets it); exact pane title → T5; pane history folds in; empty query → focused pane; edit mode leaves out the current split |
-| 44 | PASS | 44: first snapshot with inline completion p95 < 5 ms CPU (5,000 tabs incl. 500 two-pane splits); completion check p95 ≤ 0.05 ms |
-| 45 | PASS | first snapshot p95 < 5 ms main-thread CPU (1,000 random queries, 5,000 tabs, 100k history) |
+| 44 | PASS | 42: Actions scope: empty → available actions in seed order, no top hit; "side" → Show/Hide Sidebar (T2a); requirements still hide; only action rows |
+| 45 | PASS | 43: scope keywords: "actions"/"action"/"commands" and "tabs"/"tab" give scope hints; "act" and "tab vs" do not; a site keyword keeps its hint |
+| 46 | PASS | 44: first snapshot with inline completion p95 < 5 ms CPU (5,000 tabs incl. 500 two-pane splits); completion check p95 ≤ 0.05 ms |
+| 47 | PASS | first snapshot p95 < 5 ms main-thread CPU (1,000 random queries, 5,000 tabs, 100k history) |
 
 Rows 26–33 use a local stub fetcher, so no network runs in the check.
 
