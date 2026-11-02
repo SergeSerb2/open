@@ -33,6 +33,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, OEEngineDelegate, OEBr
   private var asyncEngineCalls: [String: Int] = [:]
   private var shutdownTrace: [[String: Any]] = []
   lazy var stores = AppStores(app: self)
+  /// Mini players, auto-PiP and the media sleep feed (media-pip §7.2).
+  lazy var media = MediaCoordinator(app: self, rulesURL: options.pipSiteRules)
   lazy var settingsPresenter = AppSettingsActions(app: self)
   var keyBindings = KeyBindingStore.empty
   let fallbackKeyboard = KeyboardRouter()
@@ -210,6 +212,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, OEEngineDelegate, OEBr
     controller.context.storedFavicons = stores.sidebarFavicons
     factory.attach(controller)
     windowControllers.append(controller)
+    media.attach(factory)
     activeWindowID = state.id
     MainMenu.targetWindowCommands(factory)
     todayAutoArchive?.attach(context: controller.context)
@@ -274,6 +277,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, OEEngineDelegate, OEBr
       model.setWindowContentVisible(windowID: id, visible: false)
     }
     windowControllers.removeAll { $0.windowID == id }; hostFactories[id] = nil
+    media.windowClosed(id)
     if activeWindowID == id { activeWindowID = windowControllers.last?.windowID }
     MainMenu.targetWindowCommands(frontWindowController.flatMap { hostFactories[$0.windowID] })
     scheduleSave()

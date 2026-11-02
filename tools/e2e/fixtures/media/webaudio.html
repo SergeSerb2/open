@@ -1,0 +1,6 @@
+<!doctype html><meta charset="utf-8"><title>Media Web Audio</title>
+<body style="background:#fff">Web Audio only
+<script>
+window.start = () => { const ctx = new AudioContext(), o = ctx.createOscillator(), g = ctx.createGain();
+  g.gain.value = 0.05; o.connect(g); g.connect(ctx.destination); o.start(); window.__ctx = ctx; return ctx.resume().then(() => true); };
+</script>

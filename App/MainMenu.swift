@@ -225,7 +225,7 @@ extension EngineWebContentHostFactory {
       if let space = focusedSpace { _ = model.setAllFoldersExpanded(spaceID: space.id, expanded: id == "expand-all-folders") }
     case "add-to-favorites": if let tab = selectedTab, let profile = focusedProfile { _ = model.addFavorite(tabID: tab.id, to: profile.id) }
     case "remove-from-favorites": if let tab = selectedTab { _ = model.removeFavorite(tabID: tab.id, into: focusedSpace?.id) }
-    case "mute-all-tabs", "unmute-all-tabs": for tab in orderedTabs { model.setMuted(tabID: tab.id, muted: id == "mute-all-tabs"); hosts[tab.id]?.content.isMuted = tab.isMuted }
+    case "mute-all-tabs", "unmute-all-tabs": app.media.muteAll(id == "mute-all-tabs")
     case "reset-all-tabs-in-space":
       // Pinned tabs of the focused Space that left their pinned URL (folders and splits
       // included, Favorites excluded); one undo step. Live pages navigate back.
