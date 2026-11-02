@@ -1,0 +1,294 @@
+{
+  "cleanup": {
+    "ok": true,
+    "processes": [
+      {
+        "forced": false,
+        "ok": true,
+        "owned_pids": [
+          26499,
+          26523,
+          26524,
+          26525,
+          26526,
+          26529,
+          26530,
+          26532,
+          26820,
+          26937,
+          26939,
+          26942,
+          26943,
+          26945,
+          26947,
+          26949,
+          26954,
+          26995,
+          26996,
+          27128,
+          27137,
+          27146,
+          27159
+        ],
+        "remaining_processes": [],
+        "reply": true,
+        "windows_after_quit": {
+          "count": 0,
+          "windows": []
+        },
+        "windows_before_quit": 1
+      },
+      {
+        "forced": false,
+        "ok": true,
+        "owned_pids": [
+          27171,
+          27177,
+          27178,
+          27179,
+          27180,
+          27181,
+          27182,
+          27183
+        ],
+        "remaining_processes": [],
+        "reply": true,
+        "windows_after_quit": {
+          "count": 0,
+          "windows": []
+        },
+        "windows_before_quit": 1
+      }
+    ]
+  },
+  "config": "Debug",
+  "engine": {
+    "distributionCodeSHA256": "35b37ba3a72d079ed4e76fc7932bfe76e49b57c3456eda06f7fea9d928b901ae",
+    "distributionSHA256": "61c9ab17b6b08525af836cca93bba67819bfa1544f04abe5eae3baf4b57b98a8",
+    "distributionUUID": "4C4C44C8-5555-3144-A168-35B709BBDA3A",
+    "embeddedCodeSHA256": "35b37ba3a72d079ed4e76fc7932bfe76e49b57c3456eda06f7fea9d928b901ae",
+    "embeddedSHA256": "3e246c99539902496c44c4c6ed2533f3f4fd4a85f03b4f5e6dcaaf49f75f28d2",
+    "embeddedUUID": "4C4C44C8-5555-3144-A168-35B709BBDA3A",
+    "requiredSHA256": "",
+    "source": "fork",
+    "stamp": "fork /Users/serge/Developer/open-engine-s8-main/chromium_git/chromium/src/cef/binary_distrib/cef_binary_156.0.14+g4fa4ab5+chromium-156.0.8078.48_macosarm64_minimal 1793075034"
+  },
+  "interrupted_attempts": [],
+  "sleep": {
+    "sleep_battery_saver": {
+      "ok": true,
+      "phaseAt120s": "sleeping",
+      "toastOff": "Battery Saver Mode Deactivated",
+      "toastOn": "Battery Saver Mode Activated"
+    },
+    "sleep_f0_switches": {
+      "reason": "P-MEM-07: the fork's sleep switches are not in the engine yet (engine PR E1)",
+      "status": "BLOCKED"
+    },
+    "sleep_f1_renderers": {
+      "nineSleeping": {
+        "count": 3,
+        "rssKB": 431328
+      },
+      "note": "stock discard closes the page (P-MEM-03 replaces it with discard in place)",
+      "ok": true,
+      "oneTab": {
+        "count": 3,
+        "rssKB": 430160
+      },
+      "refused": [],
+      "tenTabsLoaded": {
+        "count": 11,
+        "rssKB": 1785232
+      }
+    },
+    "sleep_f2_history_scroll_form": {
+      "reason": "P-MEM-04: stock CEF cannot capture or restore navigation history, scroll or form state; a woken tab reloads its URL with no Back list",
+      "status": "BLOCKED"
+    },
+    "sleep_f3_audio": {
+      "after600s": "live",
+      "at301sAfterStop": "sleeping",
+      "at59sAfterStop": "live",
+      "at61sAfterStop": "frozen",
+      "debugSleepRefusedBy": "visible",
+      "ok": true
+    },
+    "sleep_f3_capture": {
+      "reason": "unverified: no capture fixture without a camera or microphone grant (memory-fork \u00a711 F3 records capture as unverified, not passed)",
+      "status": "BLOCKED"
+    },
+    "sleep_f4_corrupt_fallback": {
+      "reason": "P-MEM-04: stock wake never reads the stored container, so a corrupt one cannot be exercised",
+      "status": "BLOCKED"
+    },
+    "sleep_f4_history_restore": {
+      "reason": "P-MEM-04/05: waking a relaunched tab loads its URL; the Back list needs history restore",
+      "status": "BLOCKED"
+    },
+    "sleep_f4_quit_capture": {
+      "hostedAfterRelaunch": 1,
+      "load": [
+        8.23779296875,
+        8.55517578125,
+        10.1416015625
+      ],
+      "ok": true,
+      "phasesBeforeQuit": {
+        "119B6F5D-9180-4621-B9A1-C89AE35940D2": "frozen",
+        "535AD28B-E68A-41E6-A61A-51EA6A48D60C": "live",
+        "A1A3C6D0-BBF1-4A71-BCE4-DF6BA7472238": "sleeping",
+        "ABF70CAB-5BEE-4042-B652-516670B2B802": "placeholder"
+      },
+      "quitCaptureMs": [
+        1.1330842971801758
+      ],
+      "quitSeconds": 0.37,
+      "renderersAfterRelaunch": {
+        "count": 3,
+        "rssKB": 430800
+      },
+      "storedRows": 23
+    },
+    "sleep_f5_discard_wake": {
+      "cache": "warm (same fixture page each wake)",
+      "destroyed": {
+        "n": 10,
+        "p50ms": 9.449005126953125,
+        "p95ms": 14.14799690246582
+      },
+      "load": [
+        8.43310546875,
+        8.5986328125,
+        10.166015625
+      ],
+      "n": 20,
+      "note": "stock recreate + load; budget 700 ms first paint on a cached page",
+      "ok": true,
+      "p50ms": 16.456007957458496,
+      "p95ms": 19.82104778289795
+    },
+    "sleep_f5_unfreeze": {
+      "reason": "P-MEM-02: stock CEF has no renderer freeze, so an unfreeze has no wake to time",
+      "status": "BLOCKED"
+    },
+    "sleep_idle_parked": {
+      "load": [
+        9.04736328125,
+        8.716796875,
+        10.23486328125
+      ],
+      "ok": true,
+      "passesAfter": 1,
+      "passesBefore": 1,
+      "scheduled": false
+    },
+    "sleep_keep_alive": {
+      "debugSleepRefusedBy": "keepAlive",
+      "gate": "keepAlive",
+      "gmail48h": "live",
+      "ok": true,
+      "outsideMail48h": "sleeping"
+    },
+    "sleep_media_protection": {
+      "miniPlayer": {
+        "listed": true,
+        "phase": "live",
+        "refusedBy": "visible"
+      },
+      "ok": true,
+      "pip": {
+        "inFeed": true,
+        "phase": "live",
+        "refusedBy": "visible"
+      }
+    },
+    "sleep_modes": {
+      "modes": {
+        "aggressive": {
+          "at": "sleeping",
+          "before": "frozen",
+          "ok": true
+        },
+        "conservative": {
+          "at": "sleeping",
+          "before": "frozen",
+          "ok": true
+        },
+        "off": {
+          "after48h": "frozen",
+          "ok": true
+        }
+      },
+      "ok": true
+    },
+    "sleep_n5_notifications": {
+      "after1000s": "live",
+      "allowedRefusedBy": "notifications",
+      "blockedThen": "sleeping",
+      "ok": true
+    },
+    "sleep_started_after_paint": {
+      "firstContentfulPaint": 2971,
+      "ok": true,
+      "sidebarDrawn": 393,
+      "sleepStarted": 3082
+    },
+    "sleep_tabs_discard": {
+      "background": {
+        "ok": {
+          "id": 1609421829
+        }
+      },
+      "backgroundSlept": true,
+      "ok": true,
+      "visible": {
+        "error": "Cannot discard tab with id: 1609421728."
+      }
+    },
+    "sleep_timed_ladder": {
+      "after": {
+        "audible": false,
+        "capturing": false,
+        "content": true,
+        "devTools": false,
+        "discardGate": null,
+        "discarded": true,
+        "downloading": false,
+        "freezeGate": null,
+        "hiddenAt": 1793663125.943944,
+        "hosts": 0,
+        "id": "EBD2660B-664E-4D3E-AB16-3120E8E48406",
+        "lastFormInteractionAt": null,
+        "notificationsAllowed": false,
+        "phase": "sleeping",
+        "retryAfter": null,
+        "sleptAt": 1793663425.9687052,
+        "title": "Open freeze ticker",
+        "url": "http://t1.localhost:62287/ticker.html"
+      },
+      "ok": true,
+      "phases": [
+        "live",
+        "frozen",
+        "frozen",
+        "sleeping"
+      ],
+      "scheduledWhileFrozen": true
+    },
+    "sleep_wake_recreates": {
+      "ok": true,
+      "row": {
+        "loaded": true,
+        "sleepPhase": "live",
+        "title": "Open freeze ticker",
+        "url": "http://t1.localhost:62287/ticker.html"
+      },
+      "wakeLog": [
+        "sleep-wake discard EBD2660B ms=13.370990753173828"
+      ]
+    }
+  },
+  "started": "2026-11-02 16:45:02",
+  "style": "chrome"
+}

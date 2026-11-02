@@ -167,6 +167,7 @@ Arguments are `key=value`; values that parse as JSON are sent as JSON.
 /usr/bin/lockf /tmp/open-onscreen-e2e.lock python3 tools/e2e/engine_e2e.py --only tabstrip --style chrome     # fork patch P1: chrome.tabs sees Open's tabs
 /usr/bin/lockf /tmp/open-onscreen-e2e.lock python3 tools/e2e/engine_e2e.py --only actions --style chrome      # fork patch P2: toolbar actions and popups
 /usr/bin/lockf /tmp/open-onscreen-e2e.lock python3 tools/e2e/engine_e2e.py --only media --style chrome        # media-pip §8.4: mini players, auto-PiP, Now Playing, sleep feed
+/usr/bin/lockf /tmp/open-onscreen-e2e.lock python3 tools/e2e/engine_e2e.py --only sleep --style chrome        # app-shell Step G: tab sleep, memory-fork §11 F0–F5
 OPEN_AUTOMATION=1 ~/Library/Caches/OpenRE/scripts/heavy.sh nice -n 10 tools/build.sh Release
 /usr/bin/lockf /tmp/open-onscreen-e2e.lock python3 tools/e2e/engine_e2e.py --only measure --config Release    # launch, memory, idle CPU
 ```
@@ -385,6 +386,23 @@ Commands in `App/Automation/AutomationMedia.swift`. `tab` is a tab UUID.
 | `sleep-visibility` | — | The media sleep feed (§4.10): `pictureInPicture`, `mediaControls`, the resulting `visible` set and window states, from `MediaCoordinator.visibility`. |
 
 The App accepts `--pip-site-rules=FILE` in Debug and automation builds; the `media` suite writes a rules file that disallows `blocked.localhost` and gives `inaudible.localhost` `activatesWhenInaudible` (Chromium maps `*.localhost` to the loopback server).
+
+## Tab sleep (app-shell Step G)
+
+Commands in `App/Automation/AutomationSleep.swift`, automation builds only. `tab` is a tab UUID. The clock offset, the explicit pass and the low-power override do not exist in a user build.
+
+| Command | Args | Result |
+|---|---|---|
+| `sleep-state` | `tab` (optional) | `prepared`, `started` (T5), `scheduled` and `scheduledDelay` (the controller's next timer pass; false/null while parked), `nextPassDelay` (null: only an event can change a hidden tab), `passes`, `lowPowerMode`, `clockOffset`, the `visible` set and the media feed (`pictureInPicture`, `mediaControls`), `criticalCloses`, the last 200 controller `log` lines (`sleep-wake <kind> <id> ms=`, `sleep-capture-failed`, …), `batteryToasts`, and per tab: `phase`, `content` (controller), `hosts` (pages in all windows), `discarded`, `freezeGate`/`discardGate` (first never-sleep gate, or null), `hiddenAt`, `sleptAt`, `retryAfter`, and the live inputs (`audible`, `capturing`, `devTools`, `notificationsAllowed`, `downloading`, `lastFormInteractionAt`). |
+| `sleep-now` | `tab` | OpenSleep's debug sleep (freeze + discard now, every gate honored). Returns `refusedBy` (the gate, or null) and the tab's state after. |
+| `sleep-tick` | `pressure` (optional: `warning`, `critical`) | Waits for a running pass, then runs one controller pass (or a memory-pressure pass) now. Returns `sleep-state`. |
+| `sleep-clock` | `advance` (seconds, 0…604800) and/or `reset` | Moves the controller's clock (hide times, grace periods, delays). Returns `offset`. |
+| `sleep-mode` | `mode` (`off`, `conservative`, `balanced`, `aggressive`; optional) | Writes every Profile's `sleepMode` as Settings ▸ Advanced does. Returns the mode per Profile. |
+| `sleep-power` | `lowPower` (`true`, `false`, or `null` to follow macOS) | Battery Saver override. Returns `lowPowerMode`, `override`, `system`, `toasts`, `lastToast` (front window). |
+| `sleep-start` | — | Starts the controller as T5 does (for flows that never paint). |
+| `sleep-store` | — | Every row of every Profile's `sleep.sqlite3`: `tab`, `url`, `title`, `entries`, `pageState`, `tag`, `file`. |
+
+`permission` (kind 8, notifications) also refreshes `notificationsAllowed` on the Profile's pages. The suite's fixture server serves `Engine/fork/verification/fixtures` at `/` and `tools/e2e/fixtures/media` at `/media/`; `*.localhost` names give each page its own site (renderer), and `mail.google.localhost/mail/…` matches the built-in keep-alive table. With `--style chrome` the suite loads `tools/e2e/fixtures/tabs-probe` for the `chrome.tabs.discard` row. It resets the media defaults keys it relies on at start and in `finally`.
 
 ## Library Space Manager (App lane 1b)
 

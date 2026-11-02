@@ -35,6 +35,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate, OEEngineDelegate, OEBr
   lazy var stores = AppStores(app: self)
   /// Mini players, auto-PiP and the media sleep feed (media-pip §7.2).
   lazy var media = MediaCoordinator(app: self, rulesURL: options.pipSiteRules)
+  /// Tab sleep (app-shell §4.7, Step G): one SleepController, started after first paint.
+  lazy var tabSleep = AppSleepCoordinator(app: self)
+  /// Quit order step 1 (app-shell §5.3) runs once, before the snapshot save.
+  private var sleepQuitTask: Task<Void, Never>?
+  private var sleepQuitCaptured = false
   lazy var settingsPresenter = AppSettingsActions(app: self)
   var keyBindings = KeyBindingStore.empty
   let fallbackKeyboard = KeyboardRouter()
@@ -81,7 +86,18 @@ final class AppDelegate: NSObject, NSApplicationDelegate, OEEngineDelegate, OEBr
   }
 
   func applicationShouldTerminate(_ sender: NSApplication) -> NSApplication.TerminateReply {
-    if faviconShutdownTask != nil { return .terminateCancel }
+    if faviconShutdownTask != nil || sleepQuitTask != nil { return .terminateCancel }
+    if !sleepQuitCaptured, engineReady, !shutdownPrepared, tabSleep.controller != nil {
+      // OEApplication has no terminateLater: capture sleep history first (bounded at 3 s),
+      // then ask again. The snapshot save and engine shutdown follow below.
+      sleepQuitTask = Task { @MainActor [weak self] in
+        guard let self else { return }
+        await self.tabSleep.captureForQuit()
+        self.sleepQuitCaptured = true; self.sleepQuitTask = nil
+        NSApp.terminate(nil)
+      }
+      return .terminateCancel
+    }
     let wasEngineReady = engineReady
     let icons = wasEngineReady ? stores.sidebarFavicons : nil
     terminationRequested = true
@@ -213,6 +229,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, OEEngineDelegate, OEBr
     factory.attach(controller)
     windowControllers.append(controller)
     media.attach(factory)
+    tabSleep.attach(factory)
     activeWindowID = state.id
     MainMenu.targetWindowCommands(factory)
     todayAutoArchive?.attach(context: controller.context)
@@ -278,6 +295,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, OEEngineDelegate, OEBr
     }
     windowControllers.removeAll { $0.windowID == id }; hostFactories[id] = nil
     media.windowClosed(id)
+    tabSleep.visibilityChanged()
     if activeWindowID == id { activeWindowID = windowControllers.last?.windowID }
     MainMenu.targetWindowCommands(frontWindowController.flatMap { hostFactories[$0.windowID] })
     scheduleSave()
@@ -324,6 +342,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, OEEngineDelegate, OEBr
     engineReady = true
     showWindowsIfNeeded()
     for factory in hostFactories.values { factory.engineDidBecomeReady() }
+    EngineWebProfile.onPermissionChange = { [weak self] context in self?.tabSleep.permissionsChanged(context: context) }
     scheduleMenuRebuild()
     #if OPEN_AUTOMATION
       let socket =
@@ -356,6 +375,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, OEEngineDelegate, OEBr
   func prepareForEngineShutdown() {
     guard !shutdownPrepared else { return }
     stopAutoArchive()
+    tabSleep.stop()
     shutdownPrepared = true
     recordShutdownPhase("prepare")
     afterPaintTask?.cancel(); afterPaintTask = nil
@@ -432,7 +452,7 @@ extension AppDelegate: CommandDispatcher {
   /// No suggestion index, history, hotkey or settings work before first paint.
   func prepareCommandsAfterPaint(_ page: OEWebContent) {
     guard engineReady, !shutdownPrepared, !terminationRequested,
-          !commandServicesPrepared, afterPaintTask == nil else { return }
+          !commandServicesPrepared || !tabSleep.isStarted, afterPaintTask == nil else { return }
     afterPaintTask = Task { @MainActor [weak self, weak page] in
       defer { self?.afterPaintTask = nil }
       for _ in 0..<40 {
@@ -440,12 +460,19 @@ extension AppDelegate: CommandDispatcher {
               !self.terminationRequested, !Task.isCancelled else { return }
         let painted = (try? await page.evaluateJavaScript("performance.getEntriesByType('paint').length > 0")) as? Bool
         if painted == true {
-          self.prepareCommandServices()
-          if let id = self.frontWindowController?.windowID, let profile = self.hostFactories[id]?.focusedProfile { self.stores.prewarm(profileID: profile.id) }
+          if !self.commandServicesPrepared {
+            self.prepareCommandServices()
+            if let id = self.frontWindowController?.windowID, let profile = self.hostFactories[id]?.focusedProfile { self.stores.prewarm(profileID: profile.id) }
+          }
+          // Startup T5: the sleep controller starts after first paint, never before.
+          self.tabSleep.start()
           return
         }
         try? await Task.sleep(for: .milliseconds(50))
       }
+      // A page that never reports a paint (about:blank): start sleep after the same 2 s budget.
+      guard let self, self.engineReady, !self.shutdownPrepared, !self.terminationRequested, !Task.isCancelled else { return }
+      self.tabSleep.start()
     }
   }
   func prepareCommandServices() {

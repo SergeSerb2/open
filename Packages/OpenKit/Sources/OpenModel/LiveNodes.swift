@@ -14,6 +14,9 @@ public final class TabLiveState {
     public var isCapturing: Bool = false
     public var devToolsOpen: Bool = false
     public var lastFormInteractionAt: Date?
+    /// The tab's origin has notification permission Allow in its profile (page-platform §4.5.6).
+    /// The App refreshes it on every commit and permission change. Blocks freeze and timer discard.
+    public var notificationsAllowed: Bool = false
     public var isLoading: Bool = false
     public var progress: Double = 0
     public var isAudible: Bool = false
