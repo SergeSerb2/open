@@ -1,94 +1,19 @@
 {
-  "cleanup": {
-    "ok": true,
-    "processes": [
-      {
-        "forced": false,
-        "ok": true,
-        "owned_pids": [
-          37914,
-          37919,
-          37920,
-          37921,
-          37922,
-          37932,
-          37933,
-          37947,
-          38000,
-          38054
-        ],
-        "remaining_processes": [],
-        "reply": true,
-        "windows_after_quit": {
-          "count": 0,
-          "windows": []
-        },
-        "windows_before_quit": 1
-      },
-      {
-        "forced": false,
-        "ok": true,
-        "owned_pids": [
-          38133,
-          38151,
-          38152,
-          38154,
-          38155,
-          38156,
-          38157
-        ],
-        "remaining_processes": [],
-        "reply": true,
-        "windows_after_quit": {
-          "count": 0,
-          "windows": []
-        },
-        "windows_before_quit": 1
-      },
-      {
-        "forced": false,
-        "ok": true,
-        "owned_pids": [
-          38192,
-          38206,
-          38207,
-          38208,
-          38209,
-          38210,
-          38211
-        ],
-        "remaining_processes": [],
-        "reply": true,
-        "windows_after_quit": {
-          "count": 0,
-          "windows": []
-        },
-        "windows_before_quit": 1
-      }
-    ]
-  },
   "config": "Debug",
   "engine": {
-    "distributionCodeSHA256": "35b37ba3a72d079ed4e76fc7932bfe76e49b57c3456eda06f7fea9d928b901ae",
-    "distributionSHA256": "61c9ab17b6b08525af836cca93bba67819bfa1544f04abe5eae3baf4b57b98a8",
-    "distributionUUID": "4C4C44C8-5555-3144-A168-35B709BBDA3A",
-    "embeddedCodeSHA256": "35b37ba3a72d079ed4e76fc7932bfe76e49b57c3456eda06f7fea9d928b901ae",
-    "embeddedSHA256": "3e246c99539902496c44c4c6ed2533f3f4fd4a85f03b4f5e6dcaaf49f75f28d2",
-    "embeddedUUID": "4C4C44C8-5555-3144-A168-35B709BBDA3A",
-    "requiredSHA256": "",
+    "distributionUUID": "4C4C44FE-5555-3144-A175-7398C5A1D4B4",
+    "embeddedUUID": "4C4C44FE-5555-3144-A175-7398C5A1D4B4",
     "source": "fork",
-    "stamp": "fork /Users/serge/Developer/open-engine/chromium_git/chromium/src/cef/binary_distrib/cef_binary_156.0.14+g4fa4ab5+chromium-156.0.8078.48_macosarm64_minimal 1793075034"
+    "stamp": "fork /Users/serge/Developer/open-engine/chromium_git/chromium/src/cef/binary_distrib/cef_binary_156.0.14+g4fa4ab5+chromium-156.0.8078.48_macosarm64_minimal 1792989125"
   },
-  "interrupted_attempts": [],
   "shell": {
     "fresh_model": {
       "ok": true,
       "spaces": [
         {
           "focused": true,
-          "id": "66F81F47-E911-41B7-8B33-BCF6226D36D6",
+          "id": "4A5ABB3F-7DAB-4E18-8DB5-E38EF223A642",
           "pinned": 0,
-          "profile": "8BC583A9-A278-4787-B3E8-72EF66AD706C",
           "title": "Space",
           "today": 0
         }
@@ -99,8 +24,8 @@
       "ok": true,
       "restored_same_id": true,
       "routes": {
-        "cmd_l_window": "CommandBarFieldEditor",
-        "cmd_t_app": "CommandBarFieldEditor"
+        "cmd_l_window": "NSTextView",
+        "cmd_t_app": "NSTextView"
       },
       "tabs": [
         3,
@@ -115,83 +40,6 @@
       "ok": true,
       "snapshot": "State/browser.json",
       "tabs": 4
-    },
-    "quit_order_owned_work": {
-      "ok": true,
-      "pendingBeforeQuit": {
-        "background": 1,
-        "captures": 1
-      },
-      "quit": {
-        "forced": false,
-        "ok": true,
-        "owned_pids": [
-          38192,
-          38206,
-          38207,
-          38208,
-          38209,
-          38210,
-          38211
-        ],
-        "remaining_processes": [],
-        "reply": true,
-        "windows_after_quit": {
-          "count": 0,
-          "windows": []
-        },
-        "windows_before_quit": 1
-      },
-      "trace": [
-        {
-          "asyncEngineCalls": {},
-          "backgroundTasks": 1,
-          "captureTasks": 1,
-          "closedFactories": 0,
-          "factories": 1,
-          "hosts": 1,
-          "lateAsyncEngineCalls": 0,
-          "phase": "prepare",
-          "selectionTasks": 0,
-          "uptime": 504095.70063845837
-        },
-        {
-          "asyncEngineCalls": {},
-          "backgroundTasks": 0,
-          "captureTasks": 0,
-          "closedFactories": 1,
-          "factories": 1,
-          "hosts": 0,
-          "lateAsyncEngineCalls": 0,
-          "phase": "hostsClosed",
-          "selectionTasks": 0,
-          "uptime": 504095.70617170836
-        },
-        {
-          "asyncEngineCalls": {},
-          "backgroundTasks": 0,
-          "captureTasks": 0,
-          "closedFactories": 1,
-          "factories": 1,
-          "hosts": 0,
-          "lateAsyncEngineCalls": 0,
-          "phase": "engineShutdownBegin",
-          "selectionTasks": 0,
-          "uptime": 504095.72040108335
-        },
-        {
-          "asyncEngineCalls": {},
-          "backgroundTasks": 0,
-          "captureTasks": 0,
-          "closedFactories": 1,
-          "factories": 1,
-          "hosts": 0,
-          "lateAsyncEngineCalls": 0,
-          "phase": "engineShutdownEnd",
-          "selectionTasks": 0,
-          "uptime": 504095.7778977917
-        }
-      ]
     },
     "split_view": {
       "ok": true,
@@ -220,15 +68,15 @@
       "strip": [
         [
           0,
-          "0EBD7EB9-52CE-47CF-89E1-7C260D3FBCFA"
+          "92763B7E-7A11-40A3-A65A-2F6DC696FDEC"
         ],
         [
           1,
-          "EE95132A-10DF-47E2-B9AD-2221E737D91B"
+          "91F94C6E-4D68-4F55-B751-8C44C89C2156"
         ],
         [
           2,
-          "1E3888B0-BD3C-42BF-97C6-88E344BBA407"
+          "6C1A9DDF-BB22-4311-8922-128D225B2EC9"
         ]
       ]
     },
@@ -238,6 +86,6 @@
       "ok": true
     }
   },
-  "started": "2026-11-02 15:40:41",
-  "style": "chrome"
+  "started": "2026-10-25 23:28:09",
+  "style": "alloy"
 }

@@ -13,31 +13,16 @@
     "cmd_l_selection": {
       "ok": true,
       "state": {
-        "allAnimationKeys": [],
-        "allowsRemote": false,
-        "animationKeys": [],
         "created": true,
         "editorCanUndo": false,
-        "editorText": "http://127.0.0.1:61317/new",
-        "fieldText": "http://127.0.0.1:61317/new",
-        "fieldWidth": 656,
+        "editorText": "http://127.0.0.1:53978/new",
         "final": true,
-        "firstResultsMs": 0.2946666666666715,
-        "footer": false,
-        "hidden": false,
+        "firstResultsMs": 11.44145833333323,
         "mode": "editCurrentURL",
         "newTabHighlighted": false,
-        "openFirstResultsMs": 0.6822500000000673,
-        "panelFrame": [
-          257,
-          231,
-          766,
-          129
-        ],
-        "panelOpacity": 1,
-        "pinnedEdit": "",
+        "openFirstResultsMs": 11.902041666666719,
         "presented": true,
-        "profile": "F6CF140B-3207-434F-B316-939D866A05BF",
+        "profile": "4B49F856-E42E-4CAD-803A-5BECCC42FF86",
         "range": [
           0,
           26
@@ -49,14 +34,13 @@
             "kind": "navigate",
             "space": "",
             "tab": "",
-            "title": "http://127.0.0.1:61317/new",
-            "url": "http://127.0.0.1:61317/new"
+            "title": "http://127.0.0.1:53978/new",
+            "url": "http://127.0.0.1:53978/new"
           }
         ],
-        "scope": "",
         "selected": 0,
-        "space": "14A53511-8BE3-4543-83B8-629B90AFB373",
-        "text": "http://127.0.0.1:61317/new",
+        "space": "914BB327-57D7-4A01-9860-1C03511CF7E0",
+        "text": "http://127.0.0.1:53978/new",
         "timingScope": "showCommandBar entry to first snapshot applied; excludes preceding key routing, socket transport and frame presentation"
       }
     },
@@ -66,60 +50,23 @@
     "cmd_t_mode": {
       "ok": true,
       "state": {
-        "allAnimationKeys": [
-          "opacity@CALayer"
-        ],
-        "allowsRemote": false,
-        "animationKeys": [],
         "created": true,
         "editorCanUndo": false,
         "editorText": "",
-        "fieldText": "",
-        "fieldWidth": 656,
         "final": true,
-        "firstResultsMs": 1.6704166666668243,
-        "footer": false,
-        "hidden": false,
+        "firstResultsMs": 37.97841666666682,
         "mode": "newTab",
         "newTabHighlighted": true,
-        "openFirstResultsMs": 9.077666666666573,
-        "panelFrame": [
-          257,
-          231,
-          766,
-          179
-        ],
-        "panelOpacity": 1,
-        "pinnedEdit": "",
+        "openFirstResultsMs": 43.97566666666671,
         "presented": true,
-        "profile": "F6CF140B-3207-434F-B316-939D866A05BF",
+        "profile": "4B49F856-E42E-4CAD-803A-5BECCC42FF86",
         "range": [
           0,
           0
         ],
-        "rows": [
-          {
-            "action": "",
-            "id": "tab:505851DC-0EB4-4909-B7FE-4B0B84067B93",
-            "kind": "switchToTab",
-            "space": "14A53511-8BE3-4543-83B8-629B90AFB373",
-            "tab": "505851DC-0EB4-4909-B7FE-4B0B84067B93",
-            "title": "Shell C /start",
-            "url": "http://127.0.0.1:61317/start"
-          },
-          {
-            "action": "contact-team",
-            "id": "action:contact-team",
-            "kind": "action",
-            "space": "",
-            "tab": "",
-            "title": "Contact the Team",
-            "url": ""
-          }
-        ],
-        "scope": "",
-        "selected": 0,
-        "space": "14A53511-8BE3-4543-83B8-629B90AFB373",
+        "rows": [],
+        "selected": -1,
+        "space": "914BB327-57D7-4A01-9860-1C03511CF7E0",
         "text": "",
         "timingScope": "showCommandBar entry to first snapshot applied; excludes preceding key routing, socket transport and frame presentation"
       }
@@ -127,130 +74,8 @@
     "command_return_background": {
       "ok": true
     },
-    "commandbar_actions_scope": {
-      "hint_rows": 1,
-      "ok": true,
-      "scope": "Actions",
-      "top": "toggle-sidebar"
-    },
-    "commandbar_cmd_i_footer": {
-      "ok": true,
-      "opened": false
-    },
-    "commandbar_footer_dismiss": {
-      "ok": true,
-      "state": {
-        "allowsRemote": true,
-        "footer": false,
-        "presented": true
-      }
-    },
-    "commandbar_footer_search_settings": {
-      "ok": true,
-      "profile": "F6CF140B-3207-434F-B316-939D866A05BF",
-      "settings": {
-        "pane": "profiles",
-        "selectedProfile": "F6CF140B-3207-434F-B316-939D866A05BF"
-      }
-    },
-    "commandbar_info_shows_footer": {
-      "ok": true,
-      "state": {
-        "fieldWidth": 698,
-        "footer": true,
-        "presented": true
-      }
-    },
-    "commandbar_inline_completion": {
-      "afterBackspace": {
-        "fieldText": "localh",
-        "range": [
-          6,
-          0
-        ],
-        "text": "localh"
-      },
-      "completed": {
-        "fieldText": "localhost:61317",
-        "range": [
-          6,
-          9
-        ],
-        "text": "localh"
-      },
-      "ok": true,
-      "switched": true
-    },
-    "commandbar_no_close_animation": {
-      "ok": true,
-      "state": {
-        "animationKeys": [],
-        "hidden": true,
-        "presented": false
-      }
-    },
-    "commandbar_no_open_animation": {
-      "atKey": {
-        "allAnimationKeys": [
-          "opacity@CALayer"
-        ],
-        "animationKeys": [],
-        "panelOpacity": 1,
-        "presented": true
-      },
-      "footer": false,
-      "maxChannelDifference": 0,
-      "ok": true
-    },
-    "commandbar_search_settings_action_row": {
-      "ok": true,
-      "row": {
-        "action": "search-settings",
-        "id": "action:search-settings",
-        "kind": "action",
-        "space": "",
-        "tab": "",
-        "title": "Search Settings",
-        "url": ""
-      },
-      "settings": {
-        "pane": "profiles",
-        "selectedProfile": "F6CF140B-3207-434F-B316-939D866A05BF"
-      }
-    },
-    "commandbar_split_one_row": {
-      "ok": true,
-      "panes": [
-        "6DFBA642-A19B-4289-B66A-4BFEB5B35260",
-        "68F62D65-0990-440B-A3EB-EC4FFA627D5F"
-      ],
-      "rows": [
-        [
-          "split:",
-          "Shell C /split | Shell C /cross",
-          true
-        ],
-        [
-          "typed:",
-          "Shell C /split",
-          false
-        ]
-      ],
-      "visible": [
-        "68F62D65-0990-440B-A3EB-EC4FFA627D5F",
-        "6DFBA642-A19B-4289-B66A-4BFEB5B35260"
-      ]
-    },
-    "copy_url_without_trackers": {
-      "ok": true,
-      "pasteboard": "http://127.0.0.1:61317/plain",
-      "toasts": [
-        "Copied a clean link without trackers",
-        "Copied Current URL"
-      ]
-    },
     "custom_search_engine_navigation": {
-      "expectedURL": "http://127.0.0.1:61317/search?q=local%20custom%20query",
+      "expectedURL": "http://127.0.0.1:53978/search?q=local%20custom%20query",
       "ok": true
     },
     "double_press_shared_router": {
@@ -263,33 +88,29 @@
         {
           "children": [
             {
-              "id": "68F62D65-0990-440B-A3EB-EC4FFA627D5F",
+              "id": "E770642D-A10F-43A0-A5C5-899D125539A2",
               "kind": "tab",
               "loaded": true,
               "title": "Shell C /cross",
-              "url": "http://127.0.0.1:61317/cross"
+              "url": "http://127.0.0.1:53978/cross"
             }
           ],
-          "expanded": true,
-          "id": "123509A6-F175-42B7-9693-1465C217C5D0",
+          "id": "677EDBFC-011B-4EE4-800A-8A1B1611BE5A",
           "kind": "folder",
-          "peekedChildID": "",
           "title": "Copy subtree"
         },
         {
           "children": [
             {
-              "id": "7A04CAA8-1F6D-4B46-92D0-9648677E772E",
+              "id": "68F6A8A4-C2AC-4A07-A62E-03E7BA7BA3BE",
               "kind": "tab",
               "loaded": false,
               "title": "Shell C /cross",
-              "url": "http://127.0.0.1:61317/cross"
+              "url": "http://127.0.0.1:53978/cross"
             }
           ],
-          "expanded": true,
-          "id": "7C9C6132-0240-4A2A-BF31-13357169C322",
+          "id": "69BC5CE5-33B5-4940-A453-91F3911E54CE",
           "kind": "folder",
-          "peekedChildID": "",
           "title": "Copy subtree"
         }
       ],
@@ -302,21 +123,21 @@
       "copy": {
         "children": [
           {
-            "id": "2EBE9832-6A3B-433A-A836-3DEA9DED44DA",
+            "id": "F1C4C2D8-BEAB-46A7-8A23-444EC4FF93CB",
             "kind": "tab",
             "loaded": false,
             "title": "Shell C /split",
-            "url": "http://127.0.0.1:61317/split"
+            "url": "http://127.0.0.1:53978/split"
           },
           {
-            "id": "EB2C9ADE-992A-4D33-A7EA-CC8FE2CAACB9",
+            "id": "0855E7EC-5350-4D6D-9741-0C370A131328",
             "kind": "tab",
             "loaded": false,
             "title": "Shell C /cross",
-            "url": "http://127.0.0.1:61317/cross"
+            "url": "http://127.0.0.1:53978/cross"
           }
         ],
-        "id": "4A3C86CD-B48B-4332-8A9A-24862B749BCF",
+        "id": "10DCC59C-0886-441C-85B4-4AFBABE53A29",
         "kind": "split"
       },
       "ok": true
@@ -324,45 +145,22 @@
     "duplicate_tab_lazy": {
       "copies": [
         {
-          "id": "056E5D84-924F-45A1-9BE7-281BAE18A1C1",
+          "id": "B4B3D219-6A8E-45F0-A44B-86D842835763",
           "kind": "tab",
           "loaded": false,
           "title": "Shell C /cross",
-          "url": "http://127.0.0.1:61317/cross"
+          "url": "http://127.0.0.1:53978/cross"
         }
       ],
       "ok": true
     },
     "dynamic_menus": {
-      "entries": 170,
+      "entries": 169,
       "ok": true
     },
     "edit_current_tab": {
       "ok": true,
       "title": "Shell C /edited"
-    },
-    "edit_pinned_url": {
-      "editing": {
-        "mode": "editCurrentURL",
-        "pinnedEdit": "D11131B2-4973-4297-942A-AB84AFD5641D",
-        "range": [
-          0,
-          29
-        ],
-        "text": "http://127.0.0.1:61317/pinned"
-      },
-      "ok": true,
-      "pinnedURL": "http://127.0.0.1:61317/pinned-new"
-    },
-    "empty_cmd_t_order": {
-      "actions": [
-        "contact-team"
-      ],
-      "kinds": [
-        "switchToTab",
-        "action"
-      ],
-      "ok": true
     },
     "escape_then_page": {
       "keys": [
@@ -370,33 +168,13 @@
       ],
       "ok": true
     },
-    "essential_shortcuts_window": {
-      "ok": true,
-      "tabs": [
-        2,
-        2
-      ],
-      "window": {
-        "attachedSheet": 0,
-        "class": "EssentialShortcutsPanel",
-        "firstResponder": "EssentialShortcutsPanel",
-        "frame": "{{1060, 513}, {440, 384}}",
-        "key": true,
-        "level": 3,
-        "number": 146499,
-        "parent": 0,
-        "sheet": false,
-        "title": "Essential Keyboard Shortcuts",
-        "visible": true
-      }
-    },
     "first_open_results_budget": {
-      "milliseconds": 9.077666666666573,
+      "milliseconds": 43.97566666666671,
       "ok": true,
       "scope": "showCommandBar entry to first snapshot applied; excludes preceding key routing, socket transport and frame presentation"
     },
     "first_results_budget": {
-      "milliseconds": 0.6029583333338451,
+      "milliseconds": 28.274875000000065,
       "ok": true,
       "scope": "showCommandBar entry to first snapshot applied; excludes preceding key routing, socket transport and frame presentation"
     },
@@ -423,29 +201,6 @@
     "lazy_commandbar": {
       "ok": true
     },
-    "lazy_tab_switcher": {
-      "after": {
-        "active": false,
-        "created": false,
-        "items": [],
-        "monitoringModifiers": false,
-        "presented": false,
-        "selected": "",
-        "viewCount": 0,
-        "visible": []
-      },
-      "before": {
-        "active": false,
-        "created": false,
-        "items": [],
-        "monitoringModifiers": false,
-        "presented": false,
-        "selected": "",
-        "viewCount": 0,
-        "visible": []
-      },
-      "ok": true
-    },
     "library_archive_restore": {
       "ok": true
     },
@@ -457,33 +212,16 @@
     },
     "native_field_undo_preserves_model": {
       "after": {
-        "allAnimationKeys": [
-          "opacity@CALayer"
-        ],
-        "allowsRemote": false,
-        "animationKeys": [],
         "created": true,
         "editorCanUndo": false,
         "editorText": "",
-        "fieldText": "",
-        "fieldWidth": 656,
         "final": true,
-        "firstResultsMs": 4.995249999999942,
-        "footer": false,
-        "hidden": false,
+        "firstResultsMs": 5.703375000000051,
         "mode": "newTab",
         "newTabHighlighted": true,
-        "openFirstResultsMs": 0.5971666666664532,
-        "panelFrame": [
-          257,
-          231,
-          766,
-          229
-        ],
-        "panelOpacity": 1,
-        "pinnedEdit": "",
+        "openFirstResultsMs": 14.574208333333445,
         "presented": true,
-        "profile": "F6CF140B-3207-434F-B316-939D866A05BF",
+        "profile": "4B49F856-E42E-4CAD-803A-5BECCC42FF86",
         "range": [
           0,
           0
@@ -491,66 +229,48 @@
         "rows": [
           {
             "action": "",
-            "id": "tab:851A23D2-C38B-46F4-B541-FC33635E290A",
+            "id": "tab:198C31CD-90F5-40EC-8CC1-8D6E09EB562B",
             "kind": "switchToTab",
-            "space": "14A53511-8BE3-4543-83B8-629B90AFB373",
-            "tab": "851A23D2-C38B-46F4-B541-FC33635E290A",
-            "title": "Renamed through menu",
-            "url": "http://127.0.0.1:61317/edited"
+            "space": "914BB327-57D7-4A01-9860-1C03511CF7E0",
+            "tab": "198C31CD-90F5-40EC-8CC1-8D6E09EB562B",
+            "title": "Shell C /start",
+            "url": "http://127.0.0.1:53978/start"
           },
           {
             "action": "",
-            "id": "tab:505851DC-0EB4-4909-B7FE-4B0B84067B93",
-            "kind": "switchToTab",
-            "space": "14A53511-8BE3-4543-83B8-629B90AFB373",
-            "tab": "505851DC-0EB4-4909-B7FE-4B0B84067B93",
-            "title": "Shell C /start",
-            "url": "http://127.0.0.1:61317/start"
-          },
-          {
-            "action": "contact-team",
-            "id": "action:contact-team",
-            "kind": "action",
+            "id": "history:127.0.0.1:53978/edited",
+            "kind": "history",
             "space": "",
             "tab": "",
-            "title": "Contact the Team",
-            "url": ""
+            "title": "127.0.0.1",
+            "url": "http://127.0.0.1:53978/edited"
+          },
+          {
+            "action": "",
+            "id": "history:127.0.0.1:53978/new",
+            "kind": "history",
+            "space": "",
+            "tab": "",
+            "title": "127.0.0.1",
+            "url": "http://127.0.0.1:53978/new"
           }
         ],
-        "scope": "",
         "selected": 0,
-        "space": "14A53511-8BE3-4543-83B8-629B90AFB373",
+        "space": "914BB327-57D7-4A01-9860-1C03511CF7E0",
         "text": "",
         "timingScope": "showCommandBar entry to first snapshot applied; excludes preceding key routing, socket transport and frame presentation"
       },
       "before": {
-        "allAnimationKeys": [
-          "opacity@CALayer"
-        ],
-        "allowsRemote": false,
-        "animationKeys": [],
         "created": true,
         "editorCanUndo": true,
         "editorText": "word",
-        "fieldText": "word",
-        "fieldWidth": 656,
         "final": true,
-        "firstResultsMs": 9.936749999999847,
-        "footer": false,
-        "hidden": false,
+        "firstResultsMs": 4.679249999999229,
         "mode": "newTab",
         "newTabHighlighted": true,
-        "openFirstResultsMs": 0.5971666666664532,
-        "panelFrame": [
-          257,
-          231,
-          766,
-          179
-        ],
-        "panelOpacity": 1,
-        "pinnedEdit": "",
+        "openFirstResultsMs": 14.574208333333445,
         "presented": true,
-        "profile": "F6CF140B-3207-434F-B316-939D866A05BF",
+        "profile": "4B49F856-E42E-4CAD-803A-5BECCC42FF86",
         "range": [
           4,
           0
@@ -575,9 +295,8 @@
             "url": ""
           }
         ],
-        "scope": "",
         "selected": 0,
-        "space": "14A53511-8BE3-4543-83B8-629B90AFB373",
+        "space": "914BB327-57D7-4A01-9860-1C03511CF7E0",
         "text": "word",
         "timingScope": "showCommandBar entry to first snapshot applied; excludes preceding key routing, socket transport and frame presentation"
       },
@@ -585,7 +304,7 @@
       "route": {
         "barPresented": true,
         "firstResponder": "CommandBarFieldEditor",
-        "keyWindow": 146445,
+        "keyWindow": 194983,
         "sidebarMode": "anchored"
       }
     },
@@ -599,14 +318,6 @@
         "window": true
       },
       "ok": true
-    },
-    "new_window_opens_command_bar": {
-      "ok": true,
-      "state": {
-        "mode": "newTab",
-        "newTabHighlighted": true,
-        "presented": true
-      }
     },
     "override_menu_and_router": {
       "ok": true
@@ -647,14 +358,14 @@
     },
     "save_page_sheet": {
       "last": {
-        "number": 146509,
+        "number": 195030,
         "pending": true,
         "requests": 1,
         "visible": true
       },
       "ok": true,
       "state": {
-        "number": 146509,
+        "number": 195030,
         "pending": true,
         "requests": 1,
         "visible": true
@@ -671,31 +382,16 @@
     },
     "switch_tab_across_spaces": {
       "barAfterReturn": {
-        "allAnimationKeys": [],
-        "allowsRemote": false,
-        "animationKeys": [],
         "created": true,
         "editorCanUndo": false,
         "editorText": "",
-        "fieldText": "Shell C /cross",
-        "fieldWidth": 656,
         "final": true,
-        "firstResultsMs": 8.85424999999941,
-        "footer": false,
-        "hidden": true,
+        "firstResultsMs": 3.755791666667392,
         "mode": "newTab",
         "newTabHighlighted": false,
-        "openFirstResultsMs": 0.7671250000003056,
-        "panelFrame": [
-          257,
-          231,
-          766,
-          179
-        ],
-        "panelOpacity": 0,
-        "pinnedEdit": "",
+        "openFirstResultsMs": 28.10650000000078,
         "presented": false,
-        "profile": "F6CF140B-3207-434F-B316-939D866A05BF",
+        "profile": "4B49F856-E42E-4CAD-803A-5BECCC42FF86",
         "range": [
           -1,
           0
@@ -703,12 +399,12 @@
         "rows": [
           {
             "action": "",
-            "id": "tab:68F62D65-0990-440B-A3EB-EC4FFA627D5F",
+            "id": "tab:E770642D-A10F-43A0-A5C5-899D125539A2",
             "kind": "switchToTab",
-            "space": "7C9D6A72-0430-411C-8B86-1DF1F57C7EED",
-            "tab": "68F62D65-0990-440B-A3EB-EC4FFA627D5F",
+            "space": "CB4D5051-CB65-46CF-B5A8-4357F10A590B",
+            "tab": "E770642D-A10F-43A0-A5C5-899D125539A2",
             "title": "Shell C /cross",
-            "url": "http://127.0.0.1:61317/cross"
+            "url": "http://127.0.0.1:53978/cross"
           },
           {
             "action": "",
@@ -720,30 +416,29 @@
             "url": "https://www.google.com/search?q=Shell%20C%20%2Fcross"
           }
         ],
-        "scope": "",
         "selected": 0,
-        "space": "14A53511-8BE3-4543-83B8-629B90AFB373",
+        "space": "914BB327-57D7-4A01-9860-1C03511CF7E0",
         "text": "Shell C /cross",
         "timingScope": "showCommandBar entry to first snapshot applied; excludes preceding key routing, socket transport and frame presentation"
       },
-      "expectedSpace": "7C9D6A72-0430-411C-8B86-1DF1F57C7EED",
-      "expectedTab": "68F62D65-0990-440B-A3EB-EC4FFA627D5F",
+      "expectedSpace": "CB4D5051-CB65-46CF-B5A8-4357F10A590B",
+      "expectedTab": "E770642D-A10F-43A0-A5C5-899D125539A2",
       "ok": true,
       "returnRouting": {
         "barPresented": false,
         "firstResponder": "RenderWidgetHostViewCocoa",
-        "keyWindow": 146445,
+        "keyWindow": 194983,
         "sidebarMode": "anchored"
       },
       "rows": [
         {
           "action": "",
-          "id": "tab:68F62D65-0990-440B-A3EB-EC4FFA627D5F",
+          "id": "tab:E770642D-A10F-43A0-A5C5-899D125539A2",
           "kind": "switchToTab",
-          "space": "7C9D6A72-0430-411C-8B86-1DF1F57C7EED",
-          "tab": "68F62D65-0990-440B-A3EB-EC4FFA627D5F",
+          "space": "CB4D5051-CB65-46CF-B5A8-4357F10A590B",
+          "tab": "E770642D-A10F-43A0-A5C5-899D125539A2",
           "title": "Shell C /cross",
-          "url": "http://127.0.0.1:61317/cross"
+          "url": "http://127.0.0.1:53978/cross"
         },
         {
           "action": "",
@@ -758,7 +453,6 @@
       "state": {
         "activationPolicy": 0,
         "appActive": true,
-        "attachedSheet": 0,
         "automationPointer": null,
         "axWindowButtons": [
           {
@@ -782,8 +476,6 @@
             "subrole": "AXFullScreenButton"
           }
         ],
-        "canBecomeKey": true,
-        "childWindows": [],
         "chrome": {
           "favorites": [
             0,
@@ -815,11 +507,11 @@
         },
         "confirmation": null,
         "cursor": [
-          2438,
-          897
+          1212.09765625,
+          302.4609375
         ],
         "engineSelected": 4,
-        "engineURL": "http://127.0.0.1:61317/cross",
+        "engineURL": "http://127.0.0.1:53978/cross",
         "firstResponder": "RenderWidgetHostViewCocoa",
         "frame": [
           100,
@@ -838,24 +530,18 @@
           "shows": 0,
           "visible": false
         },
-        "id": "6B2B6D92-87E0-4FFD-BDE8-EB6A2B70B056",
+        "id": "3A0EC3DF-FBD7-4D9E-A1A9-C1FC00F80736",
         "isKeyWindow": true,
         "key": true,
-        "keySameObject": true,
-        "keyWindow": 146445,
-        "layoutPasses": 1304,
-        "menuTitles": {
-          "toggle-sidebar": "Hide Sidebar",
-          "toggle-toolbar": "Show Toolbar"
-        },
+        "keyWindow": 194983,
+        "layoutPasses": 842,
         "miniaturized": false,
-        "number": 146445,
-        "onActiveSpace": true,
+        "number": 194983,
         "pageFullscreen": false,
         "paneBackgrounds": [
           {
             "color": [],
-            "tab": "68F62D65-0990-440B-A3EB-EC4FFA627D5F"
+            "tab": "E770642D-A10F-43A0-A5C5-899D125539A2"
           }
         ],
         "panel": [
@@ -884,12 +570,12 @@
         "screenFrame": [
           0,
           0,
-          2560,
-          1440
+          1728,
+          1117
         ],
-        "selected": "68F62D65-0990-440B-A3EB-EC4FFA627D5F",
+        "selected": "E770642D-A10F-43A0-A5C5-899D125539A2",
         "shownPages": [
-          "68F62D65-0990-440B-A3EB-EC4FFA627D5F"
+          "E770642D-A10F-43A0-A5C5-899D125539A2"
         ],
         "sidebarClass": "OpenSidebar.SidebarView",
         "sidebarFrame": [
@@ -906,21 +592,7 @@
         "sidebarVisible": true,
         "sidebarWidth": 228,
         "sidebarWidthCommits": 0,
-        "space": "7C9D6A72-0430-411C-8B86-1DF1F57C7EED",
-        "spaceSwitcherFrames": {
-          "14A53511-8BE3-4543-83B8-629B90AFB373": [
-            79,
-            758,
-            36,
-            34
-          ],
-          "7C9D6A72-0430-411C-8B86-1DF1F57C7EED": [
-            113,
-            758,
-            36,
-            34
-          ]
-        },
+        "space": "CB4D5051-CB65-46CF-B5A8-4357F10A590B",
         "titlebar": [
           0,
           0,
@@ -929,20 +601,6 @@
         ],
         "titled": true,
         "toast": "Copied",
-        "toolbar": {
-          "controls": [],
-          "drawn": false,
-          "frame": [],
-          "menu": [],
-          "page": [
-            0,
-            0,
-            1042,
-            780
-          ],
-          "shown": false,
-          "text": ""
-        },
         "toolbarButtons": [
           "toggle",
           "back",
@@ -1039,9 +697,7 @@
           false
         ],
         "trafficLightsHovered": false,
-        "urlFieldVisible": true,
         "visible": true,
-        "windowClass": "OpenFeatures.BrowserWindow",
         "zoomed": false
       }
     },
@@ -1325,7 +981,7 @@
     },
     "typed_top_today": {
       "ok": true,
-      "tab": "851A23D2-C38B-46F4-B541-FC33635E290A"
+      "tab": "AE4AC25F-0A68-4DD8-A1A0-E23E1A9ABFCE"
     },
     "unsupported_disabled": {
       "ok": true
@@ -1336,14 +992,12 @@
         "archive": [],
         "archiveRows": 0,
         "external": false,
-        "historyRows": 0,
+        "historyRows": 3,
         "hotkey": true,
-        "library": 146506,
+        "library": 195027,
         "librarySection": "archive",
-        "pane": "profiles",
         "sameSnapshot": true,
-        "selectedProfile": "F6CF140B-3207-434F-B316-939D866A05BF",
-        "settings": 146458,
+        "settings": 195026,
         "sharedArchives": true
       }
     },
@@ -1353,14 +1007,12 @@
         "archive": [],
         "archiveRows": 0,
         "external": false,
-        "historyRows": 0,
+        "historyRows": 3,
         "hotkey": true,
-        "library": 146506,
+        "library": 195027,
         "librarySection": "downloads",
-        "pane": "profiles",
         "sameSnapshot": true,
-        "selectedProfile": "F6CF140B-3207-434F-B316-939D866A05BF",
-        "settings": 146458,
+        "settings": 195026,
         "sharedArchives": true
       }
     },
@@ -1372,12 +1024,10 @@
         "external": false,
         "historyRows": 3,
         "hotkey": true,
-        "library": 146506,
+        "library": 195027,
         "librarySection": "history",
-        "pane": "profiles",
         "sameSnapshot": true,
-        "selectedProfile": "F6CF140B-3207-434F-B316-939D866A05BF",
-        "settings": 146458,
+        "settings": 195026,
         "sharedArchives": true
       }
     }
@@ -1389,19 +1039,18 @@
         "forced": false,
         "ok": true,
         "owned_pids": [
-          39218,
-          39226,
-          39227,
-          39228,
-          39229,
-          39231,
-          39232,
-          39280,
-          39363,
-          39366,
-          39370,
-          39413,
-          39416
+          71914,
+          72156,
+          72159,
+          72200,
+          72234,
+          72235,
+          72720,
+          73115,
+          74758,
+          74777,
+          74796,
+          74798
         ],
         "remaining_processes": [],
         "reply": true,
@@ -1415,12 +1064,13 @@
         "forced": false,
         "ok": true,
         "owned_pids": [
-          39429,
-          39439,
-          39440,
-          39441,
-          39443,
-          39444
+          75004,
+          75055,
+          75056,
+          75058,
+          75059,
+          75060,
+          75061
         ],
         "remaining_processes": [],
         "reply": true,
@@ -1445,6 +1095,6 @@
     "stamp": "fork /Users/serge/Developer/open-engine/chromium_git/chromium/src/cef/binary_distrib/cef_binary_156.0.14+g4fa4ab5+chromium-156.0.8078.48_macosarm64_minimal 1793075034"
   },
   "interrupted_attempts": [],
-  "started": "2026-11-02 15:41:45",
+  "started": "2026-10-27 15:07:48",
   "style": "chrome"
 }
