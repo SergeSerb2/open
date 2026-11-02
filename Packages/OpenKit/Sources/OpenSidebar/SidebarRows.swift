@@ -441,7 +441,10 @@ final class TabCellView: SidebarCellView {
         b.accessibleTitle = { [weak self] in self?.tab?.isMuted == true ? "Unmute tab" : "Mute tab" }
         b.tooltip = { [weak self] in
             guard let self, let context = self.context, let space = context.focusedSpace else { return nil }
-            return Tooltip(title: self.tab?.isMuted == true ? "Unmute tab" : "Mute tab", placement: .beside, style: context.style(for: space))
+            // Arc's exact tooltip keys (TabCellState lazy globals, small-string immediates at
+            // 0x1002b4f24 / 0x1002b4fd8, shown as is: the bundle has no Localizable table;
+            // docs/re/features-advanced.md §8 PP-23). The AX label stays "Mute tab"/"Unmute tab".
+            return Tooltip(title: self.tab?.isMuted == true ? "Unmute this tab" : "Mute this tab", placement: .beside, style: context.style(for: space))
         }
         b.setAccessibilityIdentifier("sidebarTabCellMuteButton")  // Arc's AX id (S2 12/0022)
         // guess: the hover plate copies the close button (plate = button frame, radius 6,
@@ -1173,7 +1176,7 @@ extension SidebarDiagnostics {
     private func removeAnimations(_ layer: CALayer?) {
         layer?.removeAllAnimations(); layer?.sublayers?.forEach { removeAnimations($0) }
     }
-    override func accessibilityHelp() -> String? { accessibleTitle?() }
+    override func accessibilityHelp() -> String? { tooltip?()?.title ?? accessibleTitle?() }
 }
 
 /// Lazy, static recording indicator (PP-19). Its tooltip is an exact Arc string.

@@ -79,7 +79,7 @@ import OpenWeb
                      button.accessibilityLabel() == "Mute tab" && button.accessibilityIdentifier() == "sidebarTabCellMuteButton",
                      "RI1 audible unmuted: leading [41, 7, 26, 26], outline speaker.wave.3, AX id (\(button.frame))")
         Checks.check(titleFrame(button)?.minX == 69, "RI1 title frame moves to x 69 (text origin 70): \(String(describing: titleFrame(button)))")
-        tooltip(button, "Mute tab")
+        tooltip(button, "Mute this tab")
         button.mouseEntered(with: event(.mouseMoved, button)); pump(0.3)
         let plate = button.layer?.sublayers?.first { $0.cornerRadius == 6 }
         Checks.check(plate?.frame == button.bounds && plate?.opacity == 1 && plate?.cornerCurve == .continuous,
@@ -103,7 +103,7 @@ import OpenWeb
         Checks.check(symbol?.image === Glyph.audioMuted.image && Glyph.audioMuted.spec.symbol == "speaker.slash" && button.frame == CGRect(x: 41, y: 7, width: 26, height: 26),
                      "RI1 muted audible: outline speaker.slash in the same leading frame")
         Checks.check(symbol?.imageAlignment == .alignCenter && symbol?.frame == button.bounds, "RI speaker image view is one fixed frame equal to the button, centered")
-        tooltip(button, "Unmute tab")
+        tooltip(button, "Unmute this tab")
         let selection = window.selectedNodeBySpace
         let center = button.convert(CGPoint(x: 13, y: 13), to: nil)
         Checks.check(host.contentView?.hitTest(center) === button, "RI2 window hitTest resolves speaker button")

@@ -243,7 +243,7 @@ Keep the existing slot logic in `TabCellView.layout()` (the button sits
 |---|---|
 | Speaker button | 20×20 at `x = titleX + min(textWidth, available) + 2`, y 10 (unchanged). Glyph: `NSImageView` with SF `speaker.wave.2.fill` (audible, not muted) or `speaker.slash.fill` (muted) at 11 pt Regular (`docs/design.md` §4). Tint: keep `SidebarRole.rowAccessory` (today's value). Arc passes a `foregroundTintColor` (features-core rule 10); its value is not known, so S9 decides. Hover plate: none (unchanged). |
 | Mute change animation | `NSImageView.setSymbolImage(_:contentTransition: .replace.magic(fallback: .replace))`, system duration (≈ 0.25 s). Reduce Motion: no transition. No looping effect while audio plays (D-11). Arc animates slash and waves on change (`SpeakerIcon{slashStart, waveIncrement, waveReappearStart}`); this is the closest system effect. |
-| Tooltip | "Mute tab" / "Unmute tab" (guess: Arc's text is a short inline string; its comments are "Tooltip; mutes the tab." / "Tooltip; unmutes the tab."). Placement beside the pointer, as row tooltips (interaction-states §5). Delay `TooltipMetrics.showDelay`. |
+| Tooltip | "Mute this tab" / "Unmute this tab" (**fact**, Media D8: Arc's `TabCellState` keys, `docs/re/features-advanced.md` PP-23). The AX label stays "Mute tab" / "Unmute tab"; AX help is the tooltip text. Placement beside the pointer, as row tooltips (interaction-states §5). Delay `TooltipMetrics.showDelay`. |
 | Click | `.toggleMute(tabID:)` (exists). The App sets `OEWebContent.muted` from `tab.isMuted` on every change (§7.2). The row does not select the tab. |
 | Recording indicator | Shown when `tab.live.isCapturing` (camera or microphone). 14×20 slot placed directly before the speaker slot (or at the speaker position when no speaker shows). Glyph: a 7 pt filled circle drawn in `SidebarRole.recordingIndicator` (new: light `#F53714`, dark `#F25E6B`, the `CommandBarColors.lockInsecure` pair; guess). Static; no pulse. Tooltip "This tab is using your camera or microphone" (Arc string, PP-19). No click action. |
 | Build on demand | Both views are created only when first shown (keep the scroll budget, `docs/design.md` §11). |
@@ -266,7 +266,7 @@ These rows replace the "Speaker button" row above and the trailing slot logic:
 | Tint | White ≈ 0.65 on the selected row (peak `#B8B8BE`), i.e. the row accessory tone; keep `SidebarRole.rowAccessory` and check it against the peak. | measured (S2 12/0022) |
 | When | From the first frame with audio. | measured (S2 12/0013) |
 | Hover plate | Like the close button: plate = button frame, radius 6, the row hover plate tone. | **guess** (the pointer did not trigger hover feedback) |
-| Tooltip | Unchanged ("Mute tab" / "Unmute tab", guess): the speaker tooltip did not show for the synthetic pointer. | not captured |
+| Tooltip | "Mute this tab" / "Unmute this tab" (fact, PP-23; the synthetic pointer did not show it in S2 12). | code (Media D8) |
 | Recording dot | Not captured (the microphone steps were skipped). Keep it in the one placement function; default now **leading** too: a 14 pt slot directly after the favicon, before the speaker, and the title moves right by the slot width as well (**guess**: Arc names `hasLeadingRecordingIndicator`). | guess |
 | Click, mute transition, build on demand | Unchanged (§4.1 rows above). | — |
 
@@ -299,12 +299,28 @@ a left pinned URL stays just before the title (guess). The speaker has AX id
 radius 6, `rowPressed`; **guess**). `RowMediaMetrics` holds the listed values
 plus `recordingSlotHeight 20` (the 14 × 20 slot, centered on the button).
 
-Glyph fit (deviation from the table above): Arc's audible glyph has **three**
-arcs, and `speaker.wave.2` cannot reach the 19 pt ink width within 1 pt of the
-height at any size, so Open uses **`speaker.wave.3` Regular 14 pt** and
-**`speaker.slash` Regular 15.5 pt** (15 pt matched the box but drew too thin:
-core ΔE00 4.00). Both are centered in one 26 × 26 image-view frame (static
-Reduce Motion view: the same centered rect).
+Glyph fit (deviation from the table above): Arc draws SF "speaker" at 14 pt
+Medium plus **three** waves and a slash of its own (`SpeakerIcon`,
+`docs/re/features-advanced.md` PP-23); Open does not copy that drawing. Real
+1x renders through `compare-media` (row-relative ink box edge error; core /
+peak ΔE00):
+
+| Candidate | Audible vs `[44, 15, 19, 11]` | Muted candidate | Muted vs `[47, 13, 14, 14]` |
+|---|---|---|---|
+| `speaker.wave.2` Regular 13 | `[47, 15, 14, 11]` 3.0 pt FAIL; 1.85 / 0.74 | `speaker.slash` Regular 13 | `[48, 14, 12, 12]` 1.0 pt; 4.35 / 2.54 FAIL |
+| `speaker.wave.2` Medium 14 | `[46, 14, 16, 12]` 2.0 pt FAIL; 1.15 / 1.25 | `speaker.slash` Medium 14 | `[48, 14, 13, 13]` 1.0 pt; 1.62 / 1.24 |
+| `speaker.wave.3` Medium 14 | `[44, 13, 19, 14]` 2.0 pt FAIL; 0.88 / 1.25 | `speaker.slash` Medium 14.5 | `[47, 14, 13, 13]` 1.0 pt; 1.23 / 1.49 |
+| **`speaker.wave.3` Regular 14** | `[45, 14, 18, 12]` **1.0 pt**; 1.38 / 1.00 | `speaker.slash` Regular 15 | `[47, 13, 14, 14]` 0.0 pt; 4.00 / 2.52 FAIL |
+| | | **`speaker.slash` Regular 15.5** | `[47, 13, 14, 14]` **0.0 pt**; 1.91 / 1.49 |
+
+No `speaker.wave.2` size or weight meets the 1 pt box gate (SF's two waves
+are too narrow for Arc's three), so Open uses **`speaker.wave.3` Regular 14**
+and **`speaker.slash` Regular 15.5**: the best box for each state. Medium
+14 / 14.5 for muted pass too, with lower color error but a 1 pt box error.
+Both glyphs are centered in one 26 × 26 image-view frame (static Reduce Motion
+view: the same centered rect). Arc's own mute animation is a set of springs
+(response 0.3, damping 0.6, delays 0–0.12 s; PP-23); Open keeps the native
+`.replace` transition, as decided above.
 
 RI5 compare (`compare-media --state row-audible|row-muted`, design.md §7 ink
 method, row-relative; colors through the embedded ICC into extended linear

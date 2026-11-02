@@ -46,7 +46,7 @@ public enum Glyph: String, CaseIterable, Sendable {
         case .disclosureRight: Spec(symbol: "chevron.right", pointSize: 12, weight: .bold, arcInk: nil, note: "Space header on hover (pinned collapsed)")
         case .clearArrow: Spec(symbol: "arrow.down", pointSize: 9, weight: .semibold, arcInk: nil, note: "Today divider \"Clear\" (AX frame 12×9)")
         case .spaceMore: Spec(symbol: "ellipsis", pointSize: 13, weight: .bold, arcInk: nil, note: "Space header on hover")
-        case .audioPlaying: Spec(symbol: "speaker.wave.3", pointSize: 14, weight: .regular, arcInk: CGSize(width: 19, height: 11), note: "leading row speaker, outline; Arc draws three arcs; size fitted to the 50 % ink box (media plan §4.1 Step 2b; S2 12/0022)")
+        case .audioPlaying: Spec(symbol: "speaker.wave.3", pointSize: 14, weight: .regular, arcInk: CGSize(width: 19, height: 11), note: "leading row speaker, outline; Arc draws SF speaker 14 Medium plus three waves of its own (SpeakerIcon), so Open uses wave.3; size and weight fitted to the 50 % ink box (media plan §4.1 Step 2b; S2 12/0022)")
         case .audioMuted: Spec(symbol: "speaker.slash", pointSize: 15.5, weight: .regular, arcInk: CGSize(width: 14, height: 14), note: "leading row speaker, outline; size fitted to the 50 % ink box (media plan §4.1 Step 2b; S2 12/0027)")
         case .library: Spec(symbol: "archivebox.fill", pointSize: 15, weight: .regular, arcInk: CGSize(width: 14, height: 16), note: "bottom-bar Home / Library; drawn by CustomIcon.library, the symbol is a fallback")
         case .bottomPlus: Spec(symbol: "plus", pointSize: 17, weight: .medium, arcInk: CGSize(width: 14, height: 14), note: "bottom-bar plus")
