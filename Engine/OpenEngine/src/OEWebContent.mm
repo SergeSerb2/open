@@ -1027,10 +1027,11 @@ static NSData* OEStitchTiles(NSArray<NSData*>* tiles, NSError** error) {
                          userInfo:nil]);
     return;
   }
-  // The widget's device scale: the window's backing scale (the page view is
-  // in a window while it is captured), else the main screen's.
-  CGFloat scale = self.view.window.backingScaleFactor
-                      ?: NSScreen.mainScreen.backingScaleFactor ?: 2;
+  // Fallback device scale: the window's backing scale, else the main
+  // screen's. The page's own scale (below) wins: it also covers DevTools
+  // device emulation, which the screenshot output follows.
+  CGFloat fallbackScale = self.view.window.backingScaleFactor
+                              ?: NSScreen.mainScreen.backingScaleFactor ?: 2;
   __weak OEWebContent* weakSelf = self;
   [self sendDevToolsMethod:@"Page.getLayoutMetrics"
                 parameters:nil
@@ -1046,6 +1047,18 @@ static NSData* OEStitchTiles(NSArray<NSData*>* tiles, NSError** error) {
                                       @"The page has no size to capture."));
                     return;
                   }
+                  // `contentSize` is physical pixels: CSS × device scale ×
+                  // page zoom (`LocalFrameView` contents size,
+                  // inspector_page_agent.cc GetLayoutMetrics). Screenshot
+                  // pixels are clip × device scale, without page zoom.
+                  double physicalHeight =
+                      [metrics[@"contentSize"][@"height"] doubleValue];
+                  double zoom = pow(1.2, strongSelf.zoomLevel);
+                  double measured = physicalHeight / contentHeight / zoom;
+                  double scale = isfinite(measured) && measured >= 0.5 &&
+                                         measured <= 8
+                                     ? round(measured * 100) / 100
+                                     : fallbackScale;
                   double tile = floor(kOECaptureTilePixels / scale);
                   double width = MIN(ceil(contentWidth), tile);
                   double cap = floor(MAX(maxDevicePixels, 1) / scale);

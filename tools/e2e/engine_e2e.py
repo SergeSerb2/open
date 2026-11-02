@@ -5083,6 +5083,7 @@ def capture_checks(factory, results, tmp):
     # The App writes these in the shared preferences domain: start from defaults, restore after.
     capture_keys = ('open.capture.shortcutHintLastShown', 'open.capture.dragToCaptureEnabled', 'open.capture.portraitBackground')
     saved_keys = {}
+    emulated = [False]
     try:
         for key in capture_keys:
             saved_keys[key] = app.call('defaults', key=key)
@@ -5208,6 +5209,47 @@ def capture_checks(factory, results, tmp):
             and 'Capture' in shown and 'Capture Full Page' in shown and shown.index('Capture') + 1 == shown.index('Capture Full Page')
             and shown.index('Capture Full Page') < inspect, 'shown': shown}
 
+        # 2x: no 2x display is attached to this Mac, so the scale path runs under DevTools device
+        # emulation (deviceScaleFactor 2): the screenshot output and the layout metrics follow it.
+        app.call('navigate', tab=tab, url=origin + '/long.html'); app.call('wait', tab=tab)
+        app.call('devtools', tab=tab, method='Emulation.setDeviceMetricsOverride',
+                 params={'width': 0, 'height': 0, 'deviceScaleFactor': 2, 'mobile': False})
+        emulated[0] = True
+        dpr = wait_until(lambda: (lambda d: d if d == 2 else None)(app.eval(tab, 'devicePixelRatio')), timeout=5, step=.1)
+        css_width = app.eval(tab, 'document.documentElement.scrollWidth')
+        app.call('capture', mode='area', rect=[100, 100, 300, 200])
+        row = rows()[-1]
+        close_card()
+        results['capture_2x_c1_area'] = {'ok': dpr == 2 and row['kind'] == 'area' and row['width'] == 600 and row['height'] == 400,
+                                         'devicePixelRatio': dpr, 'row': row}
+        r = app.call('capture', mode='fullPage', timeout=120)
+        row = rows()[-1]
+        probe = app.call('captures', probe=[[20, (k * 1000 + 500) * 2] for k in range(12)])['probe'] if row['kind'] == 'fullPage' else []
+        bands = [nearest(p) if p else -1 for p in probe]
+        results['capture_2x_c2_full_page'] = {'ok': row['kind'] == 'fullPage' and row['height'] == 24000 and row['width'] == css_width * 2
+            and bands == list(range(12)) and r['state']['result']['truncated'] is False,
+            'row': row, 'cssWidth': css_width, 'bands': bands, 'probe': probe}
+        close_card()
+        # The 32,768 device-pixel cap counts device pixels: a 20,000 CSS px page at 2x is cut there.
+        app.call('navigate', tab=tab, url=origin + '/tall.html'); app.call('wait', tab=tab)
+        r = app.call('capture', mode='fullPage', timeout=120)
+        row = rows()[-1] if r['state'].get('result', {}).get('kind') == 'fullPage' else {}
+        probe = app.call('captures', probe=[[20, (k * 1000 + 500) * 2] for k in range(16)])['probe'] if row else []
+        bands = [nearest(p) if p else -1 for p in probe]
+        results['capture_2x_full_page_cap'] = {'ok': row.get('height') == 32768 and row.get('width') == css_width * 2
+            and r['state']['result']['truncated'] is True and r['state'].get('card', {}).get('note') == 'Page cut at 32,768 px.'
+            and bands == [k % 12 for k in range(16)], 'row': row, 'bands': bands, 'error': r['state'].get('error'), 'state': r['state']}
+        close_card()
+        app.call('navigate', tab=tab, url=origin + '/long.html'); app.call('wait', tab=tab)
+        app.call('capture', mode='portrait')
+        row = rows()[-1]
+        view = app.eval(tab, '[innerWidth, innerHeight]')
+        results['capture_2x_c3_portrait'] = {'ok': row['kind'] == 'portrait' and abs(row['width'] / row['height'] - 0.8) < 0.002
+            and abs(row['width'] - round(view[0] * 2 / 0.86)) <= 2, 'row': row, 'view': view}
+        close_card()
+        app.call('devtools', tab=tab, method='Emulation.clearDeviceMetricsOverride', params={})
+        emulated[0] = False
+
         # C7 needs incognito windows (app-shell 4.8, not built yet); features-render C3/C7 covers the ephemeral path.
         results['capture_c7_incognito'] = {'status': 'BLOCKED', 'reason': 'no incognito window in Open yet (app-shell 4.8); the ephemeral-context path is covered offscreen (features-render C3/C7)'}
         results['capture_shortcut_hint_once'] = {'ok': state()['hintShows'] == 1, 'hintShows': state()['hintShows']}
@@ -5220,6 +5262,11 @@ def capture_checks(factory, results, tmp):
         for key in capture_keys:
             try:
                 app.call('defaults', key=key, value=saved_keys.get(key))
+            except Exception:
+                pass
+        if emulated[0]:
+            try:
+                app.call('devtools', tab=tab, method='Emulation.clearDeviceMetricsOverride', params={}, timeout=3)
             except Exception:
                 pass
         app.quit(); server.shutdown(); server.server_close()
