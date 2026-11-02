@@ -295,8 +295,9 @@ public final class CaptureController {
 
     /// Closes the card (Esc, its lifetime, a new capture, Delete).
     public func closeCard() {
+        // End a Save… sheet first: its completion may reschedule the lifetime.
+        if let panel = pendingSave { pendingSave = nil; panel.cancel(nil) }
         cardWork?.cancel(); cardWork = nil; cardDeadline = nil
-        pendingSave?.cancel(nil)
         guard let view = card else { return }
         card = nil; phase = .idle
         view.onAction = nil; view.onHover = nil
@@ -404,7 +405,7 @@ public final class CaptureController {
             return true
         case .leftMouseDragged:
             guard var press = held else { return false }
-            guard let view = press.view else { held = nil; return false }
+            guard let view = press.view, event.window === view.window else { held = nil; return false }
             let point = view.convert(event.locationInWindow, from: nil)
             if press.dragging { overlay?.drag(to: point); return true }
             press.events.append(event)
@@ -418,6 +419,7 @@ public final class CaptureController {
         case .leftMouseUp:
             guard let press = held else { return false }
             held = nil
+            guard event.window === press.view?.window else { return false }
             if press.dragging {
                 if let view = press.view { overlay?.drag(to: view.convert(event.locationInWindow, from: nil)) }
                 overlay?.end(); return true

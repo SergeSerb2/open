@@ -264,10 +264,11 @@ public final class BrowserWindowController: NSWindowController, NSWindowDelegate
         captureMonitor = NSEvent.addLocalMonitorForEvents(matching: [.leftMouseDown, .leftMouseDragged, .leftMouseUp]) { [weak self] event in
             let consumed = MainActor.assumeIsolated { () -> Bool in
                 guard let self else { return false }
-                if event.type == .leftMouseDown {
-                    guard event.modifierFlags.intersection([.command, .shift, .option, .control]) == [.command, .shift],
-                          event.window === self.window else { return false }
-                } else if self.captureStorage?.isHoldingPress != true { return false }
+                // A plain press also ends a held one whose mouse-up never came (another app took it).
+                if self.captureStorage?.isHoldingPress != true {
+                    guard event.type == .leftMouseDown, event.window === self.window,
+                          event.modifierFlags.intersection([.command, .shift, .option, .control]) == [.command, .shift] else { return false }
+                }
                 return self.capture.handleMouse(event)
             }
             return consumed ? nil : event

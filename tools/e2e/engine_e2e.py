@@ -4842,14 +4842,14 @@ def capture_checks(factory, results, tmp):
         closed = wait_until(lambda: (lambda s: s if not s.get('card') and s['phase'] == 'idle' else None)(state()), timeout=3, step=.05)
         results['capture_card_copy_save_escape'] = {'ok': bool(sheet) and bool(gone) and bool(closed), 'sheet': sheet}
 
-        # C4: Esc during the overlay: no row.
+        # C4: Cmd+Shift+2 on the real key path shows the overlay; Esc during it: no row.
         count, cancelled = len(rows()), state()['cancelled']
-        r = app.call('capture', mode='area')
-        shown = r['state'].get('overlay')
+        app.call('key', key='2', modifiers=['cmd', 'shift'])
+        shown = wait_until(lambda: state().get('overlay'), timeout=3, step=.05)
         app.call('snapshot', path=os.path.join(ROOT, '.re', 'page-capture', 'overlay-window.png'))
         app.call('key', key='escape')
         after_esc = wait_until(lambda: (lambda s: s if not s['overlayActive'] else None)(state()), timeout=3, step=.05) or state()
-        results['capture_c4_escape'] = {'ok': bool(shown) and not after_esc['overlayActive'] and after_esc['cancelled'] == cancelled + 1
+        results['capture_c4_escape'] = {'ok': bool(shown) and shown.get('firstResponder') is True and not after_esc['overlayActive'] and after_esc['cancelled'] == cancelled + 1
             and len(rows()) == count, 'overlay': shown, 'state': after_esc}
 
         # C3: portrait -> a 4:5 PNG.
