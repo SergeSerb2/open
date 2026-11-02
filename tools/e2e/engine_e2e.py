@@ -4838,7 +4838,7 @@ def media_checks(factory, results, tmp):
             and card is not None and set(["favicon", "previous", "play", "next", "volume"]) <= set(card["buttons"]),
             "appearMs": round(appear_ms, 1), "card": card}
 
-        # E-M4: the card's controls reach the page (interim probe: the page's own action handlers).
+        # E-M4: the card's controls reach the page (Chromium's media session; next/previous route to the page's handlers).
         select(home)
         wait_until(lambda: audio in ids(), timeout=2, step=.01)
         app.call("media-click", tab=audio, target="play")
@@ -5014,12 +5014,82 @@ def media_checks(factory, results, tmp):
         unmuted = not any(m(t)["modelMuted"] or m(t)["muted"] for t in (a1, a2))
         results["media_mute_all"] = {"ok": all_muted and bool(undone) and unmuted, "allMuted": all_muted,
             "undoneInOneStep": bool(undone), "unmuted": unmuted, "states": [m(t) for t in (a1, a2)]}
-        # E-M2: Web Audio only. The interim probe sees media elements only; patch P6 (EM-3) fixes it.
-        wa = open_tab(base + "webaudio.html"); app.eval(wa, "start()")
-        heard = wait_until(lambda: next((t for t in app.call("tabs") if t["id"] == wa and t["audible"]), None), timeout=3, step=.1)
-        results["media_web_audio"] = {"status": "BLOCKED", "reason": "P6 (EM-3): Web Audio is not audible before the fork patch",
-                                      "audible": bool(heard)}
+        # E-M2 / P6 (EM-3): audible is Chromium's own signal, so Web Audio counts, in a background tab too
+        # (OpenSleep's contract: an audio event for every change).
+        def audible(tab): return next((t for t in app.call("tabs") if t["id"] == tab), {}).get("audible") is True
+        def elapsed_ms(t0): return round((time.monotonic() - t0) * 1000, 1)
+        wa = open_tab(base + "webaudio.html")
+        t0 = time.monotonic(); app.eval(wa, "start()")
+        heard = wait_until(lambda: audible(wa), timeout=1, step=.02); heard_ms = elapsed_ms(t0)
+        t0 = time.monotonic(); app.eval(wa, "__ctx.suspend().then(() => true)")
+        quiet_suspend = wait_until(lambda: not audible(wa), timeout=3, step=.05); suspend_ms = elapsed_ms(t0)
+        select(home)
+        t0 = time.monotonic(); app.eval(wa, "__ctx.resume().then(() => true)")
+        heard_background = wait_until(lambda: audible(wa), timeout=1, step=.02); background_ms = elapsed_ms(t0)
+        t0 = time.monotonic(); app.eval(wa, "__ctx.close().then(() => true)")
+        quiet_close = wait_until(lambda: not audible(wa), timeout=3, step=.05); close_ms = elapsed_ms(t0)
+        wa_media = m(wa)
+        results["media_web_audio"] = {"ok": bool(heard) and heard_ms <= 1000 and bool(quiet_suspend) and bool(heard_background)
+            and background_ms <= 1000 and bool(quiet_close) and not wa_media["session"],
+            "audibleMs": heard_ms, "inaudibleAfterSuspendMs": suspend_ms, "audibleInBackgroundMs": background_ms,
+            "inaudibleAfterCloseMs": close_ms, "session": wa_media["session"]}
         close_tab(wa)
+
+        # EM-2: tab volume. The engine scales the page's players (MediaSessionImpl); the page's own
+        # element volume stays 1 and the page keeps playing. Read back through the session snapshot.
+        vt = open_tab(base + "audio.html?volume=1"); start(vt)
+        before = m(vt)
+        app.call("media-action", tab=vt, action="volume", value=0.3)
+        after = wait_until(lambda: (lambda x: x if x["volume"] is not None and abs(x["volume"] - 0.3) < 1e-9 else None)(m(vt)), timeout=2, step=.02) or m(vt)
+        time.sleep(.5)
+        vt_playing = app.eval(vt, "!document.getElementById('tone').paused && document.getElementById('tone').currentTime > 0")
+        vt_element = app.eval(vt, "document.getElementById('tone').volume")
+        app.call("media-action", tab=vt, action="volume", value=1)
+        reset = wait_until(lambda: (lambda x: x if x["volume"] == 1 else None)(m(vt)), timeout=2, step=.02) or m(vt)
+        results["media_tab_volume"] = {"ok": before["volume"] == 1 and after["volume"] is not None and abs(after["volume"] - 0.3) < 1e-9
+            and abs(after["pageVolume"] - 0.3) < 1e-9 and after["playback"] == "playing" and vt_playing is True and vt_element == 1
+            and reset["volume"] == 1, "before": before["volume"], "after": after["volume"], "pageVolume": after["pageVolume"],
+            "playback": after["playback"], "pagePlaying": vt_playing, "elementVolume": vt_element, "reset": reset["volume"]}
+        close_tab(vt)
+
+        # EM-5: PiP from the browser needs no user gesture, and the browser enforces disablePictureInPicture
+        # (Blink's browser-initiated path skips that check). Page reads go through Runtime.evaluate without
+        # a gesture, so they do not grant one.
+        def quiet_eval(tab, js):
+            r = app.call("devtools", tab=tab, method="Runtime.evaluate",
+                         params={"expression": js, "userGesture": False, "returnByValue": True, "awaitPromise": True})
+            return (r or {}).get("result", {}).get("value")
+        ng = open_tab(base + "video.html"); start(ng)
+        expired = wait_until(lambda: quiet_eval(ng, "navigator.userActivation.isActive") is False, timeout=10, step=.25)
+        page_attempt = quiet_eval(ng, "document.getElementById('main').requestPictureInPicture().then(() => 'entered', e => e.name)")
+        if page_attempt == "entered":
+            quiet_eval(ng, "document.exitPictureInPicture().then(() => true)")
+        app.call("media-action", tab=ng, action="pip")
+        entered = wait_pip("active", timeout=3)
+        ng_p = pip()
+        ng_latency = (ng_p.get("enteredAt") or 0) - (ng_p.get("requestedAt") or 0) if ng_p.get("enteredAt") else None
+        ng_element = quiet_eval(ng, "document.pictureInPictureElement && document.pictureInPictureElement.id")
+        ng_active = quiet_eval(ng, "navigator.userActivation.isActive")
+        app.call("media-action", tab=ng, action="exit-pip")
+        ng_closed = wait_until(lambda: not m(ng)["pictureInPicture"], timeout=2, step=.02)
+        ng_still = quiet_eval(ng, "!document.getElementById('main').paused")
+        results["media_pip_no_gesture"] = {"ok": bool(expired) and page_attempt == "NotAllowedError" and entered["state"] == "active"
+            and ng_element == "main" and ng_active is False and ng_latency is not None and ng_latency <= 0.5 and bool(ng_closed) and ng_still is True,
+            "activationExpired": bool(expired), "pageRequestWithoutGesture": page_attempt, "pip": ng_p, "requestToEnterSeconds": ng_latency,
+            "pipElement": ng_element, "activationAfter": ng_active, "closed": bool(ng_closed), "playingAfterExit": ng_still}
+        close_tab(ng)
+        nd = open_tab(base + "video-nopip.html"); start(nd)
+        nd_state = m(nd)
+        nd_requests = pip()["requests"]
+        app.call("media-action", tab=nd, action="pip")
+        nd_result = wait_until(lambda: (lambda p: p if p["requests"] > nd_requests and p.get("tab") == nd
+                                        and p["state"] in ("closed", "active") else None)(pip()), timeout=3, step=.02) or pip()
+        nd_element = quiet_eval(nd, "document.pictureInPictureElement && document.pictureInPictureElement.id")
+        results["media_pip_disabled_engine"] = {"ok": nd_state["pictureInPictureDisabled"] is True
+            and "enterPictureInPicture" not in nd_state["actions"] and nd_result["state"] == "closed"
+            and nd_result.get("reason") == "failed" and nd_element is None and not m(nd)["pictureInPicture"],
+            "state": {k: nd_state[k] for k in ("pictureInPictureDisabled", "actions", "playback")}, "pip": nd_result, "pipElement": nd_element}
+        close_tab(nd)
         results["media_pip_minimize"] = {"status": "BLOCKED", "reason": "EM-4: phase 1 uses Chromium's PiP window, which has no Minimize"}
         results["media_pip_keep_on_top"] = {"status": "BLOCKED", "reason": "EM-4: the Keep Window on Top menu is in Open's own PiP window"}
         results["media_document_pip"] = {"status": "BLOCKED", "reason": "EM-7: Document PiP disposition"}

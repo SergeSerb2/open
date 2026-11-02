@@ -5,3 +5,5 @@ _cef_shutdown
 _cef_version_info
 # Open fork API (P1, cef/include/cef_tab_strip.h)
 _cef_tab_strip_create
+# Open fork API (media-pip EM-1b/EM-2/EM-3/EM-5, cef/include/cef_media_controller.h)
+_cef_media_controller_get_for_browser

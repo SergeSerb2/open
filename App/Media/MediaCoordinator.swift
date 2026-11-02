@@ -180,9 +180,9 @@ final class MediaCoordinator {
       app.model.setMuted(tabID: id, muted: !tab.isMuted)
       if let host = host(id) { host.content.isMuted = tab.isMuted; sync(host) }
       store.noteInteraction(tabID: id); app.scheduleSave()
-    case .setVolume:
-      // Tab volume needs the fork's EM-2; until then the volume button toggles mute (Q8).
-      return false
+    case .setVolume(let id, let volume):
+      guard let content = page(id) else { return false }
+      content.mediaVolume = volume; store.noteInteraction(tabID: id)
     case .toggleVolumeDrawer: return true
     case .openPictureInPicture(let id):
       guard let content = page(id) else { return false }
@@ -257,7 +257,7 @@ final class MediaCoordinator {
       largestVideoArea: Double(size.width * size.height), actions: actions, isPictureInPicture: media.isPictureInPicture,
       microphoneMuted: actions.contains(.toggleMicrophone) ? media.microphoneMuted : nil,
       cameraOn: actions.contains(.toggleCamera) ? media.cameraOn : nil,
-      volume: nil, duration: media.position?.duration)
+      volume: media.volume, duration: media.position?.duration)
   }
 
   /// Media-pip §4.10. PiP sources and the tabs of shown mini players (plus controllable-less

@@ -1,9 +1,12 @@
-// OEMediaSession over the per-frame media probe (media-pip EM-1a, EM-5
-// interim). The renderer half is kMediaProbe in OEApp.mm. Every value comes
-// from page-reachable state, so it drives UI only. The fork's media session
-// (EM-1b) replaces the source of these values; the API stays.
+// OEMediaSession over the fork's CefMediaController (media-pip EM-1b, EM-2,
+// EM-3 = patch P6, EM-5; cef/include/cef_media_controller.h). The engine side
+// is open/browser/media/open_media_controller.cc in Engine/fork/src: it
+// observes Chromium's media session, players and audible state per page and
+// reports a state dictionary at most once per real change.
 
 #import "OEInternal.h"
+
+#include <cmath>
 
 namespace {
 
@@ -11,31 +14,47 @@ OEMediaActions OEMediaActionBit(NSString* name) {
   static NSDictionary<NSString*, NSNumber*>* map = @{
     @"play" : @(OEMediaActionPlay),
     @"pause" : @(OEMediaActionPause),
-    @"previoustrack" : @(OEMediaActionPreviousTrack),
-    @"nexttrack" : @(OEMediaActionNextTrack),
-    @"seekbackward" : @(OEMediaActionSeekBackward),
-    @"seekforward" : @(OEMediaActionSeekForward),
-    @"seekto" : @(OEMediaActionSeekTo),
-    @"skipad" : @(OEMediaActionSkipAd),
+    @"previousTrack" : @(OEMediaActionPreviousTrack),
+    @"nextTrack" : @(OEMediaActionNextTrack),
+    @"seekBackward" : @(OEMediaActionSeekBackward),
+    @"seekForward" : @(OEMediaActionSeekForward),
+    @"seekTo" : @(OEMediaActionSeekTo),
+    @"skipAd" : @(OEMediaActionSkipAd),
     @"stop" : @(OEMediaActionStop),
-    @"pip" : @(OEMediaActionEnterPictureInPicture),
-    @"enterpictureinpicture" : @(OEMediaActionEnterAutoPictureInPicture),
-    @"togglemicrophone" : @(OEMediaActionToggleMicrophone),
-    @"togglecamera" : @(OEMediaActionToggleCamera),
-    @"hangup" : @(OEMediaActionHangUp),
-    @"previousslide" : @(OEMediaActionPreviousSlide),
-    @"nextslide" : @(OEMediaActionNextSlide),
+    @"enterPictureInPicture" : @(OEMediaActionEnterPictureInPicture),
+    @"exitPictureInPicture" : @(OEMediaActionExitPictureInPicture),
+    @"enterAutoPictureInPicture" : @(OEMediaActionEnterAutoPictureInPicture),
+    @"toggleMicrophone" : @(OEMediaActionToggleMicrophone),
+    @"toggleCamera" : @(OEMediaActionToggleCamera),
+    @"hangUp" : @(OEMediaActionHangUp),
+    @"previousSlide" : @(OEMediaActionPreviousSlide),
+    @"nextSlide" : @(OEMediaActionNextSlide),
   };
   return (OEMediaActions)map[name].unsignedIntegerValue;
 }
 
-double OENumber(id value, double fallback) {
-  return [value isKindOfClass:NSNumber.class] ? [value doubleValue] : fallback;
+NSString* _Nullable OENonEmpty(CefRefPtr<CefDictionaryValue> dict,
+                               const char* key) {
+  NSString* text = OEString(dict->GetString(key));
+  return text.length ? text : nil;
 }
 
-NSString* _Nullable OEText(id value) {
-  return [value isKindOfClass:NSString.class] ? value : nil;
-}
+// Pages keep their mini player and their PiP request through this handler;
+// it holds the web content weakly (the content owns the controller).
+class OEMediaHandler : public CefMediaControllerHandler {
+ public:
+  explicit OEMediaHandler(OEWebContent* content) : content_(content) {}
+  void OnAudibleChanged(CefRefPtr<CefBrowser> browser, bool audible) override {
+    [content_ oe_setAudible:audible];
+  }
+  void OnMediaStateChanged(CefRefPtr<CefBrowser> browser) override {
+    [content_ oe_mediaStateChanged];
+  }
+
+ private:
+  __weak OEWebContent* content_;
+  IMPLEMENT_REFCOUNTING(OEMediaHandler);
+};
 
 }  // namespace
 
@@ -43,40 +62,40 @@ NSString* _Nullable OEText(id value) {
 
 @implementation OEMediaPosition
 
-- (instancetype)initOEWithDuration:(NSTimeInterval)duration
-                          position:(NSTimeInterval)position
-                              rate:(double)rate
-                             ended:(BOOL)ended {
+- (instancetype)initOEWithDictionary:(CefRefPtr<CefDictionaryValue>)position {
   if ((self = [super init])) {
-    _duration = duration;
-    _position = position;
-    _playbackRate = rate;
-    _endOfMedia = ended;
-    _lastUpdated = [NSDate date];
+    _duration = position->GetBool("live") ? INFINITY
+                                          : position->GetDouble("duration");
+    _position = position->GetDouble("position");
+    _playbackRate = position->GetDouble("rate");
+    _endOfMedia = position->GetBool("ended");
+    _lastUpdated = [NSDate
+        dateWithTimeIntervalSince1970:position->GetDouble("lastUpdated")];
   }
   return self;
 }
 
 @end
 
-#pragma mark - Frame store
+#pragma mark - Media state of one web content
 
 typedef void (^OEPiPCompletion)(BOOL);
 
-@interface OEMediaFrames : NSObject
-@property(nonatomic, strong)
-    NSMutableDictionary<NSString*, NSDictionary*>* states;
-@property(nonatomic, strong)
-    NSMutableDictionary<NSNumber*, OEPiPCompletion>* pipCallbacks;
-@property(nonatomic) int nextRequest;
+@interface OEMediaState : NSObject
 @property(nonatomic, strong, nullable) OEMediaSession* session;
+@property(nonatomic, strong) NSMutableArray<OEPiPCompletion>* pipCallbacks;
+@property(nonatomic) double volume;
 @end
 
-@implementation OEMediaFrames
+@implementation OEMediaState {
+ @public
+  CefRefPtr<CefMediaController> _controller;
+  CefRefPtr<OEMediaHandler> _handler;
+}
 - (instancetype)init {
   if ((self = [super init])) {
-    _states = [NSMutableDictionary dictionary];
-    _pipCallbacks = [NSMutableDictionary dictionary];
+    _pipCallbacks = [NSMutableArray array];
+    _volume = 1;
   }
   return self;
 }
@@ -84,140 +103,71 @@ typedef void (^OEPiPCompletion)(BOOL);
 
 #pragma mark - OEMediaSession
 
-@implementation OEMediaSession {
-  NSDictionary<NSString*, NSDictionary*>* _frames;
-}
+@implementation OEMediaSession
 
 - (instancetype)initOEWithWebContent:(OEWebContent*)webContent
-                              frames:(NSDictionary<NSString*, NSDictionary*>*)frames {
+                               state:(CefRefPtr<CefDictionaryValue>)state {
   if ((self = [super init])) {
     _webContent = webContent;
-    _frames = [frames copy];
-    BOOL playing = NO, paused = NO;
-    double bestArea = -1, latest = -1;
-    NSDictionary* largest = nil;
-    NSDictionary* recent = nil;
-    for (NSDictionary* f in frames.allValues) {
-      NSString* playback = OEText(f[@"playback"]);
-      playing |= [playback isEqualToString:@"playing"];
-      paused |= [playback isEqualToString:@"paused"];
-      _controllable |= [f[@"controllable"] boolValue];
-      _hasVideo |= [f[@"video"] boolValue];
-      _hasAudio |= [f[@"audio"] boolValue];
-      _pictureInPicture |= [f[@"pip"] boolValue];
-      for (id action in f[@"actions"]) {
-        if ([action isKindOfClass:NSString.class]) {
-          _actions |= OEMediaActionBit(action);
-        }
-      }
-      if ([f[@"micMuted"] isKindOfClass:NSNumber.class]) {
-        _microphoneMuted = [f[@"micMuted"] boolValue];
-      }
-      if ([f[@"cameraOn"] isKindOfClass:NSNumber.class]) {
-        _cameraOn = [f[@"cameraOn"] boolValue];
-      }
-      double area = OENumber(f[@"frameArea"], 0);
-      if (area > bestArea) {
-        bestArea = area;
-        largest = f;
-      }
-      double at = OENumber(f[@"lastPlayedAt"], 0);
-      if (at > latest) {
-        latest = at;
-        recent = f;
-      }
+    NSString* playback = OEString(state->GetString("playbackState"));
+    _playbackState = [playback isEqualToString:@"playing"]
+                         ? OEMediaPlaybackStatePlaying
+                     : [playback isEqualToString:@"paused"]
+                         ? OEMediaPlaybackStatePaused
+                         : OEMediaPlaybackStateNone;
+    _controllable = state->GetBool("controllable");
+    _hasVideo = state->GetBool("hasVideo");
+    _hasAudio = state->GetBool("hasAudio");
+    _largestVideoSize = CGSizeMake(state->GetInt("largestVideoWidth"),
+                                   state->GetInt("largestVideoHeight"));
+    _pictureInPictureDisabled = state->GetBool("pictureInPictureDisabled");
+    CefRefPtr<CefListValue> actions = state->GetList("actions");
+    for (size_t i = 0; actions && i < actions->GetSize(); ++i) {
+      _actions |= OEMediaActionBit(OEString(actions->GetString(i)));
     }
-    _playbackState = playing  ? OEMediaPlaybackStatePlaying
-                     : paused ? OEMediaPlaybackStatePaused
-                              : OEMediaPlaybackStateNone;
-    if (largest) {
-      _largestVideoSize = CGSizeMake(OENumber(largest[@"vw"], 0),
-                                     OENumber(largest[@"vh"], 0));
-      _pictureInPictureDisabled = [largest[@"pipDisabled"] boolValue];
+    _title = OENonEmpty(state, "title");
+    _artist = OENonEmpty(state, "artist");
+    _album = OENonEmpty(state, "album");
+    if (state->GetType("position") == VTYPE_DICTIONARY) {
+      _position = [[OEMediaPosition alloc]
+          initOEWithDictionary:state->GetDictionary("position")];
     }
-    if (_pictureInPicture) {
-      _actions |= OEMediaActionExitPictureInPicture;
-    }
-    if (recent) {
-      _title = OEText(recent[@"title"]);
-      _artist = OEText(recent[@"artist"]);
-      _album = OEText(recent[@"album"]);
-      if ([recent[@"position"] isKindOfClass:NSNumber.class]) {
-        double duration = OENumber(recent[@"duration"], 0);
-        _position = [[OEMediaPosition alloc]
-            initOEWithDuration:duration < 0 ? INFINITY : duration
-                      position:OENumber(recent[@"position"], 0)
-                          rate:OENumber(recent[@"rate"], 1)
-                         ended:[recent[@"ended"] boolValue]];
-      }
-    }
+    _pictureInPicture = state->GetBool("pictureInPicture");
+    _microphoneMuted =
+        [OEString(state->GetString("microphoneState")) isEqualToString:@"muted"];
+    _cameraOn = [OEString(state->GetString("cameraState")) isEqualToString:@"on"];
+    _volume = state->GetDouble("volume");
   }
   return self;
 }
 
-/// Frames to send `command` to, most suitable first.
-- (NSArray<NSString*>*)oe_framesFor:(NSString*)command {
-  NSMutableArray<NSString*>* all = [NSMutableArray array];
-  if ([command isEqualToString:@"pause"] || [command isEqualToString:@"stop"]) {
-    [_frames enumerateKeysAndObjectsUsingBlock:^(NSString* key, NSDictionary* f, BOOL*) {
-      if ([f[@"playback"] isEqual:@"playing"]) {
-        [all addObject:key];
-      }
-    }];
-    return all;
-  }
-  NSString* handler = command;
-  if ([command isEqualToString:@"seekby"] || [command isEqualToString:@"scrubto"]) {
-    handler = nil;
-  }
-  NSString* best = nil;
-  double bestAt = -1;
-  for (NSString* key in _frames) {
-    NSDictionary* f = _frames[key];
-    if (handler && ![@[ @"play", @"seekto" ] containsObject:handler] &&
-        ![f[@"actions"] containsObject:handler]) {
-      continue;
-    }
-    double at = OENumber(f[@"lastPlayedAt"], 0);
-    if (at > bestAt) {
-      bestAt = at;
-      best = key;
-    }
-  }
-  return best ? @[ best ] : @[];
-}
-
-- (void)oe_send:(NSString*)command value:(double)value {
-  OEWebContent* content = _webContent;
-  CefRefPtr<CefBrowser> browser = content.oe_browser;
-  if (!browser) {
+- (void)oe_run:(const char*)action key:(const char*)key value:(double)value {
+  OEMediaState* media = _webContent.oe_mediaState;
+  CefRefPtr<CefMediaController> controller =
+      media ? media->_controller : nullptr;
+  if (!controller || !controller->IsValid()) {
     return;
   }
-  for (NSString* frameId in [self oe_framesFor:command]) {
-    CefRefPtr<CefFrame> frame = browser->GetFrameByIdentifier(OECef(frameId));
-    if (!frame) {
-      continue;
-    }
-    CefRefPtr<CefProcessMessage> msg =
-        CefProcessMessage::Create(kOEMsgMediaCommand);
-    msg->GetArgumentList()->SetString(0, OECef(command));
-    msg->GetArgumentList()->SetDouble(1, value);
-    frame->SendProcessMessage(PID_RENDERER, msg);
+  CefRefPtr<CefDictionaryValue> args;
+  if (key) {
+    args = CefDictionaryValue::Create();
+    args->SetDouble(key, value);
   }
+  controller->ExecuteAction(action, args);
 }
 
-- (void)play { [self oe_send:@"play" value:0]; }
-- (void)pause { [self oe_send:@"pause" value:0]; }
-- (void)previousTrack { [self oe_send:@"previoustrack" value:0]; }
-- (void)nextTrack { [self oe_send:@"nexttrack" value:0]; }
-- (void)seekBy:(NSTimeInterval)delta { [self oe_send:@"seekby" value:delta]; }
-- (void)seekTo:(NSTimeInterval)time { [self oe_send:@"seekto" value:time]; }
-- (void)scrubTo:(NSTimeInterval)time { [self oe_send:@"scrubto" value:time]; }
-- (void)skipAd { [self oe_send:@"skipad" value:0]; }
-- (void)stop { [self oe_send:@"stop" value:0]; }
-- (void)toggleMicrophone { [self oe_send:@"togglemicrophone" value:0]; }
-- (void)toggleCamera { [self oe_send:@"togglecamera" value:0]; }
-- (void)hangUp { [self oe_send:@"hangup" value:0]; }
+- (void)play { [self oe_run:"play" key:nullptr value:0]; }
+- (void)pause { [self oe_run:"pause" key:nullptr value:0]; }
+- (void)previousTrack { [self oe_run:"previousTrack" key:nullptr value:0]; }
+- (void)nextTrack { [self oe_run:"nextTrack" key:nullptr value:0]; }
+- (void)seekBy:(NSTimeInterval)delta { [self oe_run:"seekBy" key:"delta" value:delta]; }
+- (void)seekTo:(NSTimeInterval)time { [self oe_run:"seekTo" key:"time" value:time]; }
+- (void)scrubTo:(NSTimeInterval)time { [self oe_run:"scrubTo" key:"time" value:time]; }
+- (void)skipAd { [self oe_run:"skipAd" key:nullptr value:0]; }
+- (void)stop { [self oe_run:"stop" key:nullptr value:0]; }
+- (void)toggleMicrophone { [self oe_run:"toggleMicrophone" key:nullptr value:0]; }
+- (void)toggleCamera { [self oe_run:"toggleCamera" key:nullptr value:0]; }
+- (void)hangUp { [self oe_run:"hangUp" key:nullptr value:0]; }
 
 @end
 
@@ -226,164 +176,132 @@ typedef void (^OEPiPCompletion)(BOOL);
 @implementation OEWebContent (Media)
 
 - (nullable OEMediaSession*)mediaSession {
-  return self.oe_mediaFrames.session;
+  return self.oe_mediaState.session;
 }
 
-- (OEMediaFrames*)oe_media {
-  if (!self.oe_mediaFrames) {
-    self.oe_mediaFrames = [[OEMediaFrames alloc] init];
+- (OEMediaState*)oe_media {
+  if (!self.oe_mediaState) {
+    self.oe_mediaState = [[OEMediaState alloc] init];
   }
-  return self.oe_mediaFrames;
+  return self.oe_mediaState;
 }
 
-- (void)oe_mediaReport:(NSString*)kind json:(NSString*)json frame:(NSString*)frameId {
-  OEMediaFrames* media = [self oe_media];
-  NSData* data = [json dataUsingEncoding:NSUTF8StringEncoding];
-  id parsed = data ? [NSJSONSerialization JSONObjectWithData:data options:0 error:nil] : nil;
-  NSDictionary* dict = [parsed isKindOfClass:NSDictionary.class] ? parsed : @{};
-  if ([kind isEqualToString:@"pip"]) {
-    NSNumber* request = [dict[@"id"] isKindOfClass:NSNumber.class] ? dict[@"id"] : nil;
-    OEPiPCompletion done = nil;
-    if (request) {
-      done = media.pipCallbacks[@(request.intValue)];
-    }
-    if (done) {
-      [media.pipCallbacks removeObjectForKey:@(request.intValue)];
-      done([dict[@"ok"] boolValue]);
-    }
+- (void)oe_attachMedia:(CefRefPtr<CefBrowser>)browser {
+  OEMediaState* media = [self oe_media];
+  if (!media->_handler) {
+    media->_handler = new OEMediaHandler(self);
+  }
+  media->_controller =
+      CefMediaController::GetForBrowser(browser, media->_handler);
+  if (!media->_controller) {
     return;
   }
-  if (dict.count) {
-    media.states[frameId] = dict;
-  } else if (media.states[frameId]) {
-    [media.states removeObjectForKey:frameId];
-  } else {
-    return;
+  if (media.volume != 1) {
+    media->_controller->SetVolume(media.volume);
   }
-  [self oe_rebuildMedia];
+  [self oe_setAudible:media->_controller->IsAudible()];
+  if (media->_controller->GetState()->GetBool("active")) {
+    [self oe_mediaStateChanged];
+  }
 }
 
-- (void)oe_rebuildMedia {
-  OEMediaFrames* media = [self oe_media];
+- (void)oe_mediaStateChanged {
+  OEMediaState* media = self.oe_mediaState;
+  CefRefPtr<CefMediaController> controller =
+      media ? media->_controller : nullptr;
+  if (!controller || !controller->IsValid()) {
+    return;
+  }
+  CefRefPtr<CefDictionaryValue> state = controller->GetState();
   BOOL wasPiP = media.session.pictureInPicture;
-  media.session = media.states.count
+  media.session = state->GetBool("active")
                       ? [[OEMediaSession alloc] initOEWithWebContent:self
-                                                              frames:media.states]
+                                                               state:state]
                       : nil;
   OEWebContentChange changes = OEWebContentChangeMedia;
   if (wasPiP != media.session.pictureInPicture) {
     changes |= OEWebContentChangePictureInPicture;
   }
+  if (media.session.pictureInPicture && media.pipCallbacks.count) {
+    NSArray<OEPiPCompletion>* entered = [media.pipCallbacks copy];
+    [media.pipCallbacks removeAllObjects];
+    for (OEPiPCompletion done in entered) {
+      done(YES);
+    }
+  }
   [self oe_notify:changes];
 }
 
-- (void)oe_resetMedia {
-  OEMediaFrames* media = self.oe_mediaFrames;
+- (void)oe_resetMediaDetaching:(BOOL)detach {
+  OEMediaState* media = self.oe_mediaState;
   if (!media) {
     return;
   }
-  NSArray<OEPiPCompletion>* pending = media.pipCallbacks.allValues;
+  NSArray<OEPiPCompletion>* pending = [media.pipCallbacks copy];
   [media.pipCallbacks removeAllObjects];
   for (OEPiPCompletion done in pending) {
     done(NO);
   }
-  if (media.states.count) {
-    [media.states removeAllObjects];
-    [self oe_rebuildMedia];
+  if (detach) {
+    media->_controller = nullptr;
+  }
+  if (media.session) {
+    BOOL wasPiP = media.session.pictureInPicture;
+    media.session = nil;
+    [self oe_notify:OEWebContentChangeMedia |
+                    (wasPiP ? OEWebContentChangePictureInPicture : 0)];
+  }
+}
+
+- (double)mediaVolume {
+  return self.oe_mediaState ? self.oe_mediaState.volume : 1;
+}
+
+- (void)setMediaVolume:(double)volume {
+  volume = std::isfinite(volume) ? MIN(MAX(volume, 0.0), 1.0) : 1.0;
+  OEMediaState* media = [self oe_media];
+  media.volume = volume;
+  if (media->_controller && media->_controller->IsValid()) {
+    // The controller reports the new volume in its state (one change).
+    media->_controller->SetVolume(volume);
   }
 }
 
 - (void)requestPictureInPictureWithCompletion:(void (^)(BOOL))completion {
-  OEPiPCompletion done = [completion copy];
-  if (!done) {
-    done = ^(BOOL) {
-    };
+  OEPiPCompletion done = [completion copy] ?: ^(BOOL) {
+  };
+  OEMediaState* media = self.oe_mediaState;
+  CefRefPtr<CefMediaController> controller =
+      media ? media->_controller : nullptr;
+  if (media.session.pictureInPicture) {
+    dispatch_async(dispatch_get_main_queue(), ^{ done(YES); });
+    return;
   }
-  OEMediaSession* session = self.mediaSession;
-  if (!self.oe_browser || !session ||
-      !(session.actions & OEMediaActionEnterPictureInPicture)) {
+  // The fork enters from the browser (no user activation needed) and checks
+  // the video's own availability (disablePictureInPicture) first.
+  if (!controller || !controller->IsValid() ||
+      !controller->RequestPictureInPicture()) {
     dispatch_async(dispatch_get_main_queue(), ^{ done(NO); });
     return;
   }
-  OEMediaFrames* media = [self oe_media];
-  int request = ++media.nextRequest;
-  media.pipCallbacks[@(request)] = done;
-  __weak OEWebContent* weakSelf = self;
-  // requestPictureInPicture() needs transient user activation. The DevTools
-  // evaluation carries a user gesture to the main frame (EM-5 interim; the
-  // fork path skips the activation check instead).
-  [self evaluateJavaScript:@"1"
-                completion:^(id, NSError*) {
-                  OEWebContent* content = weakSelf;
-                  OEMediaSession* now = content.mediaSession;
-                  if (!content || !now) {
-                    return;
-                  }
-                  NSString* frameId = nil;
-                  double bestArea = -1;
-                  for (NSString* key in content.oe_mediaFrames.states) {
-                    NSDictionary* f = content.oe_mediaFrames.states[key];
-                    if (![f[@"actions"] containsObject:@"pip"]) {
-                      continue;
-                    }
-                    double area = OENumber(f[@"frameArea"], 0);
-                    if (area > bestArea) {
-                      bestArea = area;
-                      frameId = key;
-                    }
-                  }
-                  CefRefPtr<CefFrame> frame =
-                      frameId && content.oe_browser
-                          ? content.oe_browser->GetFrameByIdentifier(OECef(frameId))
-                          : nullptr;
-                  if (!frame) {
-                    OEPiPCompletion pending = content.oe_mediaFrames.pipCallbacks[@(request)];
-                    [content.oe_mediaFrames.pipCallbacks removeObjectForKey:@(request)];
-                    if (pending) {
-                      pending(NO);
-                    }
-                    return;
-                  }
-                  CefRefPtr<CefProcessMessage> msg =
-                      CefProcessMessage::Create(kOEMsgMediaCommand);
-                  msg->GetArgumentList()->SetString(0, "pip");
-                  msg->GetArgumentList()->SetDouble(1, request);
-                  frame->SendProcessMessage(PID_RENDERER, msg);
-                }];
-  // A page that never answers (navigated away, hung) fails after 3 s.
-  dispatch_after(dispatch_time(DISPATCH_TIME_NOW, 3 * NSEC_PER_SEC),
+  [media.pipCallbacks addObject:done];
+  // Chromium has no direct reply: a page that never enters (navigated away,
+  // the request was dropped) fails after 2 s.
+  __weak OEMediaState* weakMedia = media;
+  dispatch_after(dispatch_time(DISPATCH_TIME_NOW, 2 * NSEC_PER_SEC),
                  dispatch_get_main_queue(), ^{
-                   OEWebContent* content = weakSelf;
-                   OEPiPCompletion pending = content.oe_mediaFrames.pipCallbacks[@(request)];
-                   if (pending) {
-                     [content.oe_mediaFrames.pipCallbacks removeObjectForKey:@(request)];
-                     pending(NO);
+                   OEMediaState* state = weakMedia;
+                   if (state && [state.pipCallbacks containsObject:done]) {
+                     [state.pipCallbacks removeObject:done];
+                     done(NO);
                    }
                  });
 }
 
 - (void)exitPictureInPicturePausingVideo:(BOOL)pause {
-  OEMediaSession* session = self.mediaSession;
-  CefRefPtr<CefBrowser> browser = self.oe_browser;
-  if (!session || !browser) {
-    return;
-  }
-  for (NSString* frameId in self.oe_mediaFrames.states) {
-    NSDictionary* f = self.oe_mediaFrames.states[frameId];
-    if (![f[@"pip"] boolValue]) {
-      continue;
-    }
-    CefRefPtr<CefFrame> frame = browser->GetFrameByIdentifier(OECef(frameId));
-    if (!frame) {
-      continue;
-    }
-    for (NSString* command in pause ? @[ @"exitpip", @"pause" ] : @[ @"exitpip" ]) {
-      CefRefPtr<CefProcessMessage> msg =
-          CefProcessMessage::Create(kOEMsgMediaCommand);
-      msg->GetArgumentList()->SetString(0, OECef(command));
-      msg->GetArgumentList()->SetDouble(1, 0);
-      frame->SendProcessMessage(PID_RENDERER, msg);
-    }
+  OEMediaState* media = self.oe_mediaState;
+  if (media && media->_controller && media->_controller->IsValid()) {
+    media->_controller->ExitPictureInPicture(pause ? 1 : 0);
   }
 }
 
