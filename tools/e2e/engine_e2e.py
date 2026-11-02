@@ -4792,7 +4792,13 @@ def capture_checks(factory, results, tmp):
         if state().get('card'):
             app.call('key', key='escape')
             wait_until(lambda: not state().get('card'), timeout=3, step=.05)
+    # The App writes these in the shared preferences domain: start from defaults, restore after.
+    capture_keys = ('open.capture.shortcutHintLastShown', 'open.capture.dragToCaptureEnabled', 'open.capture.portraitBackground')
+    saved_keys = {}
     try:
+        for key in capture_keys:
+            saved_keys[key] = app.call('defaults', key=key)
+            app.call('defaults', key=key, value=None)
         tab = app.call('tabs')[0]['id']
         app.call('wait', tab=tab)
         ws = app.call('window-state')
@@ -4841,6 +4847,10 @@ def capture_checks(factory, results, tmp):
         app.call('key', key='escape')
         closed = wait_until(lambda: (lambda s: s if not s.get('card') and s['phase'] == 'idle' else None)(state()), timeout=3, step=.05)
         results['capture_card_copy_save_escape'] = {'ok': bool(sheet) and bool(gone) and bool(closed), 'sheet': sheet}
+        # Section 4.6.7: after the first menu capture's flow ends, the keycap hint shows once and stores its time.
+        hint_time = app.call('defaults', key='open.capture.shortcutHintLastShown')
+        results['capture_shortcut_hint'] = {'ok': (closed or {}).get('hintShows') == 1 and isinstance(hint_time, (int, float)) and hint_time > 0,
+                                            'hintShows': (closed or {}).get('hintShows'), 'stored': hint_time}
 
         # C4: Cmd+Shift+2 on the real key path shows the overlay; Esc during it: no row.
         count, cancelled = len(rows()), state()['cancelled']
@@ -4912,10 +4922,16 @@ def capture_checks(factory, results, tmp):
 
         # C7 needs incognito windows (app-shell 4.8, not built yet); features-render C3/C7 covers the ephemeral path.
         results['capture_c7_incognito'] = {'status': 'BLOCKED', 'reason': 'no incognito window in Open yet (app-shell 4.8); the ephemeral-context path is covered offscreen (features-render C3/C7)'}
+        results['capture_shortcut_hint_once'] = {'ok': state()['hintShows'] == 1, 'hintShows': state()['hintShows']}
     finally:
         for cmd, kw in (('dismiss', {}), ('capture-action', {'action': 'cancel'})):
             try:
                 app.call(cmd, timeout=3, **kw)
+            except Exception:
+                pass
+        for key in capture_keys:
+            try:
+                app.call('defaults', key=key, value=saved_keys.get(key))
             except Exception:
                 pass
         app.quit(); server.shutdown(); server.server_close()
