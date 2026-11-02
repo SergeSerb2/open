@@ -108,7 +108,7 @@ All values are points from the panel's outer top-left corner, at 1x (window 2216
 | Text selection | theme `dark.subtitle` (#807571 exact) | measured, F0048 |
 | Caret | system accent (#007AFF), 1 pt | measured |
 | Placeholder | "Search or Enter URL…", 18 Medium, white 0.55 | measured text, fitted color |
-| Row title | 13 Medium, white 0.80; white on the selected row | measured |
+| Row title | 13 Medium, white 0.80; white on the selected row; at most 475 pt wide, tail truncation (`titleMaxWidth`) | measured; width measured on one frame, S2 18/0044 |
 | Subtitle, "Switch to Tab", Space name, hint label | white 0.33 (`CommandBarTextSecondaryColor`); hint label 12.75 Regular | measured, fitted size |
 | Plates (arrow, keycaps, action icons) | white 0.05; arrow white 0.66; selected row: white plate, arrow in the focus color | measured |
 | (i) circle | theme `dark.backgroundExtra` (#190700 exact); glyph white 0.57 | measured |
@@ -428,10 +428,10 @@ App (window and wiring):
 
 Engine (`OpenSuggest`) gaps seen against Arc:
 
-1. Empty Cmd+T: Arc lists up to four open tabs ("Switch to Tab", or the Space name for a tab in another Space), then "Contact the Team", and no history (S2 18/0008, 18/0014, 18/0040–0046 AX; F0063, A0327). Built in Section 2 item 9 (`TabsProvider.emptyQueryRows` 4, `ActionsProvider.emptyQueryActionID`, no history query). The current tab is one of the tabs (F0043, F0063). Which action Arc shows may vary (`featureSuggestion`); every capture shows this one.
-2. Split View: one row per Split with both panes, built in commandbar-completion Steps 3–4 (`Suggestion.split`, §3.3).
-3. Inline autocomplete (`CommandBarAutocompleteSuggestion`): built in commandbar-completion Steps 1–2 (rule T3a, `SuggestionSnapshot.inlineCompletion`, §4.1).
-4. The search-suggestion privacy notice (features-core §4.5 rule 13): built as Arc's (i) footer (CC-42, commandbar-completion Step 0).
+1. Closed. Empty Cmd+T: Arc lists up to four open tabs ("Switch to Tab", or the Space name for a tab in another Space), then "Contact the Team", and no history (S2 18/0008, 18/0014, 18/0040–0046 AX; F0063, A0327). Built in Section 2 item 9 (`TabsProvider.emptyQueryRows` 4, `ActionsProvider.emptyQueryActionID`, no history query). The current tab is one of the tabs (F0043, F0063). Which action Arc shows may vary (`featureSuggestion`); every capture shows this one.
+2. Closed. Split View: one row per Split with both panes, built in commandbar-completion Steps 3–4 (#139; `Suggestion.split`, §3.3).
+3. Closed. Inline autocomplete (`CommandBarAutocompleteSuggestion`): built in commandbar-completion Steps 1–2 (#138) (rule T3a, `SuggestionSnapshot.inlineCompletion`, §4.1).
+4. Closed. The search-suggestion privacy notice (features-core §4.5 rule 13): built as Arc's (i) footer (CC-42, commandbar-completion Step 0, #137).
 
 ## 11. Open questions
 

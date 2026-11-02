@@ -111,7 +111,7 @@ final class ResultRowView: NSView {
             }
         }
         let subtitleSpace = subtitle.map { $0.width + m.subtitleGap } ?? 0
-        title = title.truncated(to: available - subtitleSpace, font: font, color: titleColor.cgColor)
+        title = title.truncated(to: min(available - subtitleSpace, m.titleMaxWidth), font: font, color: titleColor.cgColor)
         title.draw(at: m.titleX, baseline: m.textBaseline, in: ctx)
         subtitle?.draw(at: m.titleX + ceil(title.width) + m.subtitleGap, baseline: m.textBaseline, in: ctx)
     }
