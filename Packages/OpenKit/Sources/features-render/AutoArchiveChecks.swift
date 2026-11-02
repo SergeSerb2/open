@@ -489,6 +489,7 @@ enum AutoArchiveChecks {
     func openProfileSubpage(profileID: ProfileID, page: ProfilePage) {}
     func openPreviewsSettings() {}
     func keyBindingsDidChange(store: KeyBindingStore) {}
+    func openEssentialShortcuts() {}
     func runImport(plan: ImportPlan) async -> ImportOutcome { ImportOutcome(errorText: "unavailable") }
     func setAdBlockEnabled(_ on: Bool, profileID: ProfileID) {}
     func setEnabledBlockLists(_ ids: [String], profileID: ProfileID) {}
