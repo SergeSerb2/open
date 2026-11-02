@@ -128,7 +128,7 @@ Arguments are `key=value`; values that parse as JSON are sent as JSON.
 | `archive` | — | Recent real archive rows for the focused profile |
 | `window-frame` | `frame` `[x, y, w, h]`, `unconstrained` | Move/resize the main window; `unconstrained: true` keeps the exact frame even past the screen (capture-size comparisons on a smaller display) |
 | `snapshot` | `path`, `window` or `tab` | PNG of one of Open's windows (default: the main window), or of one page |
-| `policy` | `dialogs`, `prompt`, `permissions`, `contextMenu`, `fullscreen` | Answer JS dialogs (`accept`/`dismiss`/`hold`), permissions (`grant`/`deny`), record context menus (`record`: the event lists `items` and `commands` with ids, titles, submenus) or run one command (`run:<id>`, after the right click returns), keep the window size on page fullscreen |
+| `policy` | `dialogs`, `prompt`, `permissions`, `contextMenu`, `fullscreen` | Answer JS dialogs (`accept`/`dismiss`/`hold`), permissions (`grant`/`deny`), record context menus (`record`: the event lists `items` and `commands` with ids, titles, submenus, and `openItems`, the titles of the menu Open would show, its own items included) or run one command (`run:<id>`, after the right click returns) or one of Open's own items by title (`run-open:<title>`), keep the window size on page fullscreen |
 | `dialog` | `accept`, `text` | Complete a held dialog |
 | `events` | — | Drain the event log: `change`, `load`, `loadError`, `open`, `dialog`, `permission`, `contextMenu`, `fullscreen`, `download`, `console`, `devtools`, `extensionPopup`, `tab-request` and `window-request` (P1 requests from Chromium, with `refused` when the shell said no) |
 | `script-add` / `script-remove` | `id`, `source`, `css`, `end`, `matches`, `allFrames` | Boost-style user scripts (through the OpenWeb `WebProfile` protocol) |
@@ -140,6 +140,7 @@ Arguments are `key=value`; values that parse as JSON are sent as JSON.
 | `startup` | — | Actual sidebar class, visible window count, page count and context count recorded before engine start |
 | `host-counts` | — | Cumulative tab host creations, retained tab hosts, and engine web-content count |
 | `sidebar-unload` | `tab` | Production sidebar unload intent without selecting the row |
+| `translate` | `action`: `state` (default), `offer`, `translate`, `revert`, `never`, `choose` (+ `target`), `settings`, `dismiss`, `reset`, `detect` (+ `text`), `availability` (+ `source`, `target`) | Page translation of the focused tab (page-platform §8.3). `state`: session state (`idle`/`offered`/`translating`/`translated`/`failed` + `reason`), source/target language codes, host, backend (`apple`/`fixture`), batches applied, `pulls` (answers of the runtime's `nextBatch()`), fallback units, sticky host, probed/loaded document counters, the status button (`shown`, `title`, `frame`), the popover (`presented`, `title`, `buttons`, `error`, `frame`, `window`), recent toasts, `neverTranslateHosts`, and the undo action name. `offer` presses the real status button; `translate`/`revert`/`never`/`choose`/`settings` press the popover's real buttons and menu items (opening it through the status button first). `reset` runs Settings ▸ Advanced "Reset Translated-site Prompts". `detect` runs `PageLanguageDetector` on a text. `availability` asks Apple's `LanguageAvailability`. Launch with `OPEN_AUTOMATION_TRANSLATE_BACKEND=fixture` for the fixed French → English backend (automation builds only; no network, no language assets) |
 | `save` | — | Write the snapshot now; returns its path |
 | `quit` | — | Quit Open normally |
 
@@ -165,6 +166,7 @@ Arguments are `key=value`; values that parse as JSON are sent as JSON.
 /usr/bin/lockf /tmp/open-onscreen-e2e.lock python3 tools/e2e/engine_e2e.py --only extensions --style alloy    # needs .re/ext/unpacked/*
 /usr/bin/lockf /tmp/open-onscreen-e2e.lock python3 tools/e2e/engine_e2e.py --only extensions --style chrome
 /usr/bin/lockf /tmp/open-onscreen-e2e.lock python3 tools/e2e/engine_e2e.py --only tabstrip --style chrome     # fork patch P1: chrome.tabs sees Open's tabs
+/usr/bin/lockf /tmp/open-onscreen-e2e.lock python3 tools/e2e/engine_e2e.py --only page                       # page-platform §8.3 (translation X1–X6 so far)
 /usr/bin/lockf /tmp/open-onscreen-e2e.lock python3 tools/e2e/engine_e2e.py --only actions --style chrome      # fork patch P2: toolbar actions and popups
 OPEN_AUTOMATION=1 ~/Library/Caches/OpenRE/scripts/heavy.sh nice -n 10 tools/build.sh Release
 /usr/bin/lockf /tmp/open-onscreen-e2e.lock python3 tools/e2e/engine_e2e.py --only measure --config Release    # launch, memory, idle CPU

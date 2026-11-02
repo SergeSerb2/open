@@ -118,9 +118,13 @@ final class TranslateAdapter {
       self.handle(event, session: s, id: id)
     }
     if let apple = backend as? AppleTranslationBackend {
-      // Only from the popover's Translate button (a user action): macOS's download prompt.
+      // Only from a user action (the popover's Translate button or the context menu item):
+      // macOS's download prompt. The SwiftUI host goes into the visible browser window (the
+      // popover has closed by then, and a view in a hidden window never runs its task).
       s.prepareLanguages = { [weak self] source, target in
-        guard let view = self?.popover?.view else { throw TranslationFailure("Language not installed") }
+        guard let view = self?.factory.controller?.contentView, view.window?.isVisible == true else {
+          throw TranslationFailure("Language not installed")
+        }
         try await apple.prepare(from: source, to: target, in: view)
       }
     }

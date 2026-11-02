@@ -7156,6 +7156,7 @@ def page_translate_checks(factory, results, tmp):
 
         # The popover through the real status button, then Esc through the real key path.
         pop = app.call('translate', action='offer')['popover']
+        shot(app, 'page-translate-popover.png')
         app.call('key', key='escape', route='app')
         closed = wait_until(lambda: not st()['popover']['presented'], timeout=3, step=.05)
         results['X1_popover_offer_and_escape'] = {'ok': pop['presented'] and pop['title'] == 'Translate this page to English?'
@@ -7254,7 +7255,7 @@ def page_translate_checks(factory, results, tmp):
         time.sleep(1)
         b0 = st()['pulls']; time.sleep(2); b1 = st()['pulls']
         results['X_idle_no_polling'] = {'ok': b0 == b1 and st()['loopRunning'], 'pulls': [b0, b1]}
-        shot(app, 'page-translate-translated')
+        shot(app, 'page-translate-translated.png')
         app.call('translate', action='revert')
 
         # X1 on Apple's backend: only when French → English is installed (no download prompt in e2e).
