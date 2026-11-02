@@ -219,6 +219,10 @@ public enum Ranking {
             topCompletion = InlineCompletion.make(for: rows[topIndex], input: input)
         }
 
+        // Empty query outside the scopes: the open tabs first, then the help action (Arc's empty Cmd+T).
+        if input.query.isEmpty, !mode.isScoped, input.siteSearch == nil {
+            rows = rows.filter { $0.kind == .switchToTab } + rows.filter { $0.kind == .action }
+        }
         var final: [Suggestion] = []
         var counts: [SuggestionKind: Int] = [:]
         if let topIndex {

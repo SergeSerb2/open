@@ -117,7 +117,9 @@ Open tabs come from every Space of that Profile, not only the current Space.
 History comes from that Profile's database (one `HistoryStore` per Profile).
 Remote suggestions use that Profile's search engine.
 
-An empty query gives recent tabs and top history, and no top hit.
+An empty query (not a scope, not Site Search) gives Arc's empty Cmd+T: up to four open tabs, then the
+"Contact the Team" action, and no top hit. History does not run for it (S2 18/0008, 18/0014, 18/0040–0046 AX;
+F0063; Section 2 item 9).
 The UI shows it as a list, not as a default action.
 
 ## Providers
@@ -242,21 +244,20 @@ Tabs and history match the text without a typed `https://`, `http://`, then `www
 The scan first checks a 64-bit bloom mask of the query bytes.
 A tab whose mask lacks a query byte cannot match, so most tabs cost one integer test.
 Empty query: every tab of the Profile matches with quality 0, and recency decides.
-At most 12 rows enter ranking (6 for an empty query outside search-tabs mode).
+At most 12 rows enter ranking (4 for an empty query outside search-tabs mode).
 
 ### 3. History
 
 Source: `HistoryStore.search` for the context Profile. It is async and off the main actor.
 
-- The store is SQLite with FTS5. It ranks by frecency and returns at most 24 matches
-  (6 for an empty query).
+- The store is SQLite with FTS5. It ranks by frecency and returns at most 24 matches.
+  An empty query does not query history (Arc's empty Cmd+T lists no history).
 - OpenSuggest re-scores each match with the same match quality as tabs,
   over title (1), host (1), and URL (0.9).
 - If FTS matched but the local score is 0 (the token reads differ),
   quality becomes 20 so the row still shows.
 - Only `http`, `https`, and `file` pages become rows.
 - In Site Search scope, only pages of that site stay.
-- Empty query gives the top history pages by frecency.
 - Carry-over: when the text extends the previous query (same Profile), snapshot 0 already
   holds that query's history pages whose host or URL still matches, re-scored for the new text.
   The history snapshot replaces them. Without it a history completion would vanish for a

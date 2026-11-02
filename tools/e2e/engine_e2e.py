@@ -4927,6 +4927,13 @@ def commandbar_checks(factory, results, tmp, config):
         switcher_after = app.call('tab-switcher-state')
         results['lazy_tab_switcher'] = {'ok': switcher_before['created'] is False and switcher_after['created'] is False and not switcher_after['monitoringModifiers'], 'before': switcher_before, 'after': switcher_after}
         results['cmd_t_mode'] = {'ok': opened['mode'] == 'newTab' and opened['newTabHighlighted'], 'state': opened}
+        # Arc's empty Cmd+T (Section 2 item 9; S2 18/0008, 18/0044 AX): open tabs, then "Contact the Team"; no history.
+        empty_final = wait_until(lambda: (lambda st: st if st.get('final') and st.get('text') == '' else None)(state()), timeout=3, step=.05) or state()
+        kinds = [r['kind'] for r in empty_final.get('rows', [])]
+        tab_rows = len(kinds) - len(list(__import__('itertools').dropwhile(lambda k: k == 'switchToTab', kinds)))
+        results['empty_cmd_t_order'] = {'ok': 1 <= tab_rows <= 4 and kinds[tab_rows:] == ['action']
+            and empty_final['rows'][tab_rows]['action'] == 'contact-team', 'kinds': kinds,
+            'actions': [r['action'] for r in empty_final.get('rows', []) if r['kind'] == 'action']}
         typed = type_query(origin.removeprefix('http://') + '/new')
         press('return')
         new = wait_until(lambda: next((t for t in app.call('tabs') if t['url'] == origin + '/new'), None), step=.1)

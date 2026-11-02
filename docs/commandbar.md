@@ -428,7 +428,7 @@ App (window and wiring):
 
 Engine (`OpenSuggest`) gaps seen against Arc:
 
-1. Empty Cmd+T: Arc lists open tabs ("Switch to Tab") and the help action first (F0063, A0327); `OpenSuggest` ranks top history first. Since Steps 1–2 the current tab is one of them (F0043, F0063).
+1. Empty Cmd+T: Arc lists up to four open tabs ("Switch to Tab", or the Space name for a tab in another Space), then "Contact the Team", and no history (S2 18/0008, 18/0014, 18/0040–0046 AX; F0063, A0327). Built in Section 2 item 9 (`TabsProvider.emptyQueryRows` 4, `ActionsProvider.emptyQueryActionID`, no history query). The current tab is one of the tabs (F0043, F0063). Which action Arc shows may vary (`featureSuggestion`); every capture shows this one.
 2. Split View: one row per Split with both panes, built in commandbar-completion Steps 3–4 (`Suggestion.split`, §3.3).
 3. Inline autocomplete (`CommandBarAutocompleteSuggestion`): built in commandbar-completion Steps 1–2 (rule T3a, `SuggestionSnapshot.inlineCompletion`, §4.1).
 4. The search-suggestion privacy notice (features-core §4.5 rule 13): built as Arc's (i) footer (CC-42, commandbar-completion Step 0).
