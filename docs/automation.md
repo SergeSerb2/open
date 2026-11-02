@@ -637,3 +637,27 @@ This avoids queuing cancellation on GCD
 behind a nested tracking loop. The Profile observer is removed when the menu
 or browser window closes. The share check verifies the picker’s own query
 and close callbacks; it chooses no service.
+
+## Page tools: Developer, Appearance, Clear, Troubleshooting (page-platform Steps 4–6)
+
+Suite `page` (`--only page`, both `--style chrome` and `--style alloy`) runs the
+rows of `docs/plans/page-platform.md` §8.3 against fixtures in
+`tools/e2e/fixtures/page-platform/`, served from 127.0.0.1 by
+`page_fixture_server()` (no external network). One function per row group;
+`page_checks` calls every group. A row that waits for an engine item reports
+`BLOCKED: <item>` and never counts as a pass. The group saves and restores the
+two preferences it writes (`open.web.colorScheme`,
+`open.developer.allowJavaScriptFromAppleEvents`), because the preferences
+domain is shared between runs.
+
+| Command | Args | Does |
+|---|---|---|
+| `menu-state` | — | Each row also reports `checked` (`state == .on`) and `hidden`. |
+| `devtools-frontend` | `tab`, `js` | Evaluates `js` in the open DevTools window of the page (the DevTools front end, `OEWebContent.evaluateInDevToolsFrontend`); fails when no DevTools window of that page is open. D1 reads the selected tab ids (`tab-console`). |
+| `devtools-close` | `tab` | Closes the page's DevTools window. |
+| `troubleshooting-setup` | `traceDir`, `recordReveals`, `recordToasts` | Stop writes traces into `traceDir` instead of `~/Downloads`; Finder reveals (Reveal Open Data, Show in Finder) are recorded instead of shown; Troubleshooting toasts are recorded (and still shown). |
+| `troubleshooting-state` | — | `tracing` (engine), `recording`, `lastTraceFile`, `lastTraceError`, `taskManagerShown`, `reveals`, `toasts`, the stored website appearance and each live context's `websiteColorScheme`, and the Apple Events JavaScript preference. |
+| `troubleshooting-toast-action` | `title` | Runs the button of the recorded Troubleshooting toast with that title (Stop on "Recording Trace…"). |
+
+The existing `appearance name=light|dark|system` command is the plan's
+`app-appearance` (it sets `NSApp.appearance`).

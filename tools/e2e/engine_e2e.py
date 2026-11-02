@@ -7356,12 +7356,36 @@ def page_tools_checks(factory, results, tmp, style):
         page_tools_devtools_checks(app, results, port, style)
         page_tools_apple_events_checks(app, results)
         page_tools_troubleshooting_checks(app, results, tmp, port, style)
+        page_tools_quit_with_devtools_check(app, results, saved)
     finally:
-        _try(lambda: app.call("dismiss"))
-        for key, value in saved.items():
-            _try(lambda: app.call("defaults", key=key, value=value))
+        if not app.closed:
+            _try(lambda: app.call("dismiss"))
+            _restore_defaults(app, saved)
         app.quit()
         server.shutdown()
+
+
+def _restore_defaults(app, saved):
+    for key, value in saved.items():
+        _try(lambda: app.call("defaults", key=key, value=value))
+
+
+def page_tools_quit_with_devtools_check(app, results, saved):
+    """Quit while a DevTools window is open: OpenEngine holds the front end's browser
+    (OEDevToolsClient) until OnBeforeClose, so quit must neither hang nor crash."""
+    tab = app.call("tabs")[0]["id"]
+    app.call("select", tab=tab)
+    app.call("command", id="javascript-console")
+    opened = wait_until(lambda: _try(lambda: app.call("devtools-frontend", tab=tab, js="1")) == 1, timeout=20, step=.5)
+    _restore_defaults(app, saved)
+    reports = os.path.expanduser("~/Library/Logs/DiagnosticReports")
+    started = time.time()
+    app.quit()
+    crashes = [f for f in (os.listdir(reports) if os.path.isdir(reports) else [])
+               if f.startswith("Open") and os.path.getmtime(os.path.join(reports, f)) >= started - 1]
+    report = app.quit_report
+    results["D1_quit_with_devtools_open"] = {"ok": bool(opened) and report.get("ok") is True and not report.get("forced")
+                                             and not crashes, "devtools": bool(opened), "quit": report, "crashReports": crashes}
 
 
 def page_checks(factory, results, tmp, style):
