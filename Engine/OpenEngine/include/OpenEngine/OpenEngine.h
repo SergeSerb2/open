@@ -6,4 +6,5 @@
 #import <OpenEngine/OEBrowser.h>
 #import <OpenEngine/OENavigationHistory.h>
 #import <OpenEngine/OEWebContent.h>
+#import <OpenEngine/OEMediaSession.h>
 #import <OpenEngine/OEExtension.h>

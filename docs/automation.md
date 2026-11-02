@@ -167,6 +167,7 @@ Arguments are `key=value`; values that parse as JSON are sent as JSON.
 /usr/bin/lockf /tmp/open-onscreen-e2e.lock python3 tools/e2e/engine_e2e.py --only extensions --style chrome
 /usr/bin/lockf /tmp/open-onscreen-e2e.lock python3 tools/e2e/engine_e2e.py --only tabstrip --style chrome     # fork patch P1: chrome.tabs sees Open's tabs
 /usr/bin/lockf /tmp/open-onscreen-e2e.lock python3 tools/e2e/engine_e2e.py --only actions --style chrome      # fork patch P2: toolbar actions and popups
+/usr/bin/lockf /tmp/open-onscreen-e2e.lock python3 tools/e2e/engine_e2e.py --only media --style chrome        # media-pip §8.4: mini players, auto-PiP, Now Playing, sleep feed
 OPEN_AUTOMATION=1 ~/Library/Caches/OpenRE/scripts/heavy.sh nice -n 10 tools/build.sh Release
 /usr/bin/lockf /tmp/open-onscreen-e2e.lock python3 tools/e2e/engine_e2e.py --only measure --config Release    # launch, memory, idle CPU
 ```
@@ -368,6 +369,23 @@ ordering check queues actual Save/background work with the automation-only
 `OPEN_AUTOMATION_ASYNC_TASK_DELAY_MS` scheduling delay, then quits. Cancellation
 must clear work and close hosts before the actual engine shutdown boundary. The
 flag delays scheduling; it does not replace engine responses.
+
+## Media (media-pip Step 6)
+
+Commands in `App/Automation/AutomationMedia.swift`. `tab` is a tab UUID.
+
+| Command | Args | Result |
+|---|---|---|
+| `media` | `tab` | The page's media session as the App sees it (`playback`, `controllable`, `hasVideo`, `hasAudio`, `largestVideoArea`, `pictureInPicture`, `pictureInPictureDisabled`, `actions`, `title`/`artist`/`album`, `duration`, `position`), `audible`, `muted` (engine), `modelMuted`, `capturing`, the store `source`, and the last auto-PiP `decision` (value and system-uptime time). |
+| `media-action` | `tab`, `action` (`play`, `pause`, `next`, `previous`, `toggle-mute`, `close`, `back-to-tab`, `pip`, `seek` + `value`, `volume` + `value`, `exit-pip` [+ `pause`]); or `action` `mute-all` / `unmute-all` without `tab` | Runs the same `MediaIntent` (or App command) path as the mini player and the command bar. |
+| `mini-players` | `window` (window id, default front) | `cards` in order (tab, kind, playback, pip, expanded, level, frame and shown buttons with frames in window coordinates, top-left origin), `expanded`, `stackHeight`, `displayed`, `pendingCollapse`. |
+| `media-click` | `window`, `tab`, `target` (`title`, `play`, `next`, `previous`, `volume`, `pip`, `close`, `favicon`, `microphone`, `camera`) | Clicks the real card control through `mouse` events built inside Open. Title-row targets hover the card first (`mouse` `hover`) and wait for the expanded stack. |
+| `pip` | — | Session `state` (`idle`, `requesting`, `active`, `minimized`, `closed` + `reason`), `tab`, `automatic`, `snoozed`, `requests`, `requestedAt`/`enteredAt` (system uptime), `now`, and the visible PiP windows (phase 1: Chromium's `NativeWidgetMacFramelessNSWindow`, number, frame, level). |
+| `pip-action` | `action` (`close`, `back-to-tab`) | Phase 1: the session paths that Chromium's own window's Close and Back to Tab end in. |
+| `now-playing` | — | `MPNowPlayingInfoCenter` title, artist, rate, elapsed, `playbackState`, and whether the remote play, pause, toggle, next and previous commands are enabled (read in-process; Chromium's system media controls own them). |
+| `sleep-visibility` | — | The media sleep feed (§4.10): `pictureInPicture`, `mediaControls`, the resulting `visible` set and window states, from `MediaCoordinator.visibility`. |
+
+The App accepts `--pip-site-rules=FILE` in Debug and automation builds; the `media` suite writes a rules file that disallows `blocked.localhost` and gives `inaudible.localhost` `activatesWhenInaudible` (Chromium maps `*.localhost` to the loopback server).
 
 ## Library Space Manager (App lane 1b)
 

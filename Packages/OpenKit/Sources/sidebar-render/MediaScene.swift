@@ -62,6 +62,7 @@ import OpenWeb
                 microphoneMuted: flags.contains("recording") ? false : nil, cameraOn: flags.contains("recording") ? true : nil, volume: 1)
             store.update(tabID: id, windowID: context.windowID, state: state, isMuted: tab.isMuted, isCapturing: tab.live.isCapturing)
             if let path = RenderCLI.value(args, "--media-title-from-ax") { tab.title = try titleFromAX(path) }
+            if let path = RenderCLI.value(args, "--row-title-from-ax") { tab.title = try RowMediaCompare.arcRow(axPath: path).title }
             finalStates.append((tab, state))
             if let depth = RenderCLI.value(args, "--media-depth").flatMap(Int.init), depth > 0,
                let space = context.focusedSpace {

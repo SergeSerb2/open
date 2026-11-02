@@ -441,9 +441,16 @@ final class TabCellView: SidebarCellView {
         b.accessibleTitle = { [weak self] in self?.tab?.isMuted == true ? "Unmute tab" : "Mute tab" }
         b.tooltip = { [weak self] in
             guard let self, let context = self.context, let space = context.focusedSpace else { return nil }
-            return Tooltip(title: self.tab?.isMuted == true ? "Unmute tab" : "Mute tab", placement: .beside, style: context.style(for: space))
+            // Arc's exact tooltip keys (TabCellState lazy globals, small-string immediates at
+            // 0x1002b4f24 / 0x1002b4fd8, shown as is: the bundle has no Localizable table;
+            // docs/re/features-advanced.md §8 PP-23). The AX label stays "Mute tab"/"Unmute tab".
+            return Tooltip(title: self.tab?.isMuted == true ? "Unmute this tab" : "Mute this tab", placement: .beside, style: context.style(for: space))
         }
-        b.showsHoverPlate = false
+        b.setAccessibilityIdentifier("sidebarTabCellMuteButton")  // Arc's AX id (S2 12/0022)
+        // guess: the hover plate copies the close button (plate = button frame, radius 6,
+        // the row's pressed tone); the synthetic pointer showed no hover in S2 12.
+        b.plateRadius = 6
+        b.plateColor = { _ in SidebarRole.rowPressed }
         b.glyphTint = { _ in SidebarRole.rowAccessory.nsColor }
         b.action = { [weak self] in
             guard let self, let tab = self.tab else { return }
@@ -555,21 +562,6 @@ final class TabCellView: SidebarCellView {
         layoutReset(leftPinned: leftPinned)
         let a = m.accessorySize
         accessory?.frame = CGRect(x: bounds.width - m.accessoryTrailingInset - a, y: m.accessoryY, width: a, height: a)
-        var titleX = m.titleX + x0
-        // A pinned tab away from its pinned URL shows "/" before the title (A0414; measured F0090, F0101).
-        if leftPinned || slash != nil {
-            let line = slash ?? { let l = CALayer(); layer?.addSublayer(l); slash = l; return l }()
-            CATransaction.begin(); CATransaction.setDisableActions(true)
-            line.isHidden = !leftPinned
-            if leftPinned {
-                line.bounds = CGRect(origin: .zero, size: m.pinnedSlashSize)
-                line.position = CGPoint(x: titleX + m.pinnedSlashCenterX, y: m.pinnedSlashCenterY)
-                line.backgroundColor = SidebarRole.pinnedSlash.cgColor(contentAppearance)
-                line.setAffineTransform(CGAffineTransform(rotationAngle: m.pinnedSlashAngle))
-                titleX += m.pinnedSlashTitleShift
-            }
-            CATransaction.commit()
-        }
         var titleRight = (accessory?.isHidden ?? true) ? bounds.width - m.titleTrailingInset : accessory!.frame.minX
         // An open Peek marks its source row, also while another row is selected (F0090, F0101).
         // guess: the close button replaces the badge while the row is hovered.
@@ -591,38 +583,55 @@ final class TabCellView: SidebarCellView {
             dot.update(shown: showsUnread, cell: self)
             if showsUnread { titleRight = min(titleRight, dot.frame.minX - 6) }
         }
-        titleRight = layoutMediaAccessories(audible: audible, muted: muted, capturing: capturing, titleX: titleX, titleRight: titleRight)
+        // Leading media slots come first; the "/" of a left pinned URL stays just before the title (guess).
+        var titleX = layoutMediaAccessories(audible: audible, muted: muted, capturing: capturing, x0: x0,
+                                            titleX: m.titleX + x0, titleRight: titleRight)
+        // A pinned tab away from its pinned URL shows "/" before the title (A0414; measured F0090, F0101).
+        if leftPinned || slash != nil {
+            let line = slash ?? { let l = CALayer(); layer?.addSublayer(l); slash = l; return l }()
+            CATransaction.begin(); CATransaction.setDisableActions(true)
+            line.isHidden = !leftPinned
+            if leftPinned {
+                line.bounds = CGRect(origin: .zero, size: m.pinnedSlashSize)
+                line.position = CGPoint(x: titleX + m.pinnedSlashCenterX, y: m.pinnedSlashCenterY)
+                line.backgroundColor = SidebarRole.pinnedSlash.cgColor(contentAppearance)
+                line.setAffineTransform(CGAffineTransform(rotationAngle: m.pinnedSlashAngle))
+                titleX += m.pinnedSlashTitleShift
+            }
+            CATransaction.commit()
+        }
         title.frame = CGRect(x: titleX, y: 0, width: max(0, titleRight - titleX), height: m.rowHeight)
     }
 
-    /// One placement point for the recording dot; S9 may move it to the leading side.
-    /// Under pressure, reserve the speaker first and omit the recording dot (lead D9).
-    private func layoutMediaAccessories(audible: Bool, muted: Bool, capturing: Bool, titleX: CGFloat, titleRight: CGFloat) -> CGFloat {
+    /// The one placement function for the leading media slots (media plan §4.1, Step 2b):
+    /// favicon, then the recording dot, then the 26 pt speaker; the title moves right by
+    /// both, and its right end stays. The speaker frame and the 26 pt title shift are facts
+    /// (S2 12/0022, 0027). The leading dot is a guess (no capture; Arc names
+    /// `hasLeadingRecordingIndicator`). Under pressure the dot goes before the speaker (lead D9).
+    /// Returns the title's left edge.
+    private func layoutMediaAccessories(audible: Bool, muted: Bool, capturing: Bool, x0: CGFloat,
+                                        titleX: CGFloat, titleRight: CGFloat) -> CGFloat {
         let m = RowMediaMetrics.self, showAudio = audible || muted
-        if !showAudio && !capturing && audio == nil && recording == nil { return titleRight }
+        if !showAudio && !capturing && audio == nil && recording == nil { return titleX }
         audio?.isHidden = !showAudio
         if !showAudio { audio?.update(tabID: tab?.id, muted: muted, animate: false) }
-        let available = max(0, titleRight - titleX - m.gapAfterTitle)
-        let audioWidth = showAudio ? m.buttonSize : 0
-        let showRecording = capturing && (!showAudio || available >= audioWidth + m.recordingSlotWidth)
+        let audioShift = showAudio ? m.titleShift : 0
+        let showRecording = capturing && (!showAudio || titleRight - titleX >= audioShift + m.recordingSlotWidth)
         recording?.isHidden = !showRecording
-        let width = audioWidth + (showRecording ? m.recordingSlotWidth : 0)
-        guard width > 0 else { return titleRight }
-        let textWidth = min(title.textWidth, max(0, available - width))
-        var x = min(titleX + textWidth + m.gapAfterTitle, titleRight - width)
-        let right = min(titleRight, x)
+        var x = m.buttonX + x0
         if showRecording {
             let view = recording ?? { let view = RowRecordingView(frame: .zero); addSubview(view); recording = view; return view }()
             view.context = context; view.isHidden = false
-            view.frame = CGRect(x: x, y: m.y, width: m.recordingSlotWidth, height: m.buttonSize)
+            view.frame = CGRect(x: x, y: m.buttonY + (m.buttonSize - m.recordingSlotHeight) / 2,
+                                width: m.recordingSlotWidth, height: m.recordingSlotHeight)
             x += m.recordingSlotWidth
         }
         if showAudio {
             let button = makeAudio(); button.isHidden = false; button.context = context
             button.update(tabID: tab?.id, muted: muted)
-            button.frame = CGRect(x: x, y: m.y, width: m.buttonSize, height: m.buttonSize)
+            button.frame = CGRect(x: x, y: m.buttonY, width: m.buttonSize, height: m.buttonSize)
         }
-        return right
+        return titleX + (showRecording ? m.recordingSlotWidth : 0) + audioShift
     }
 
     func beginRename() {
@@ -1087,12 +1096,16 @@ extension SidebarDiagnostics {
     override func hitTest(_ point: NSPoint) -> NSView? { nil }
     override func draw(_ dirtyRect: NSRect) {
         guard let image = glyph.image else { return }
-        image.drawTinted(in: CGRect(x: RowMediaMetrics.glyphInsetX, y: (bounds.height - image.size.height) / 2,
-                                   width: image.size.width, height: image.size.height), color: SidebarRole.rowAccessory.nsColor)
+        // Centered like the image view's .alignCenter (S2 12/0022, 0027: both glyphs centered).
+        let size = image.size
+        let rect = backingAlignedRect(NSRect(x: (bounds.width - size.width) / 2, y: (bounds.height - size.height) / 2,
+                                             width: size.width, height: size.height), options: .alignAllEdgesNearest)
+        image.drawTinted(in: rect, color: SidebarRole.rowAccessory.nsColor)
     }
 }
 
-/// System slash/wave replacement, anchored at the same left edge in both states (lead D1).
+/// System slash/wave replacement in one fixed image-view frame equal to the button,
+/// centered in both states (media plan §4.1, lead review r1 F8).
 @MainActor private final class RowSpeakerButton: PlateButton {
     private var symbol: RowSpeakerImageView?
     private var staticGlyph: RowStaticSpeakerView?
@@ -1104,8 +1117,7 @@ extension SidebarDiagnostics {
     override func layout() {
         super.layout()
         CATransaction.begin(); CATransaction.setDisableActions(true)
-        let fixed = CGRect(x: RowMediaMetrics.glyphInsetX, y: 0, width: max(0, bounds.width - RowMediaMetrics.glyphInsetX), height: bounds.height)
-        if symbol?.frame != fixed { symbol?.frame = fixed }
+        if symbol?.frame != bounds { symbol?.frame = bounds }
         staticGlyph?.frame = bounds
         CATransaction.commit()
     }
@@ -1130,7 +1142,7 @@ extension SidebarDiagnostics {
             if let symbol { view = symbol; created = false }
             else {
                 view = RowSpeakerImageView(frame: bounds)
-                view.wantsLayer = true; view.imageScaling = .scaleNone; view.imageAlignment = .alignLeft
+                view.wantsLayer = true; view.imageScaling = .scaleNone; view.imageAlignment = .alignCenter
                 view.identifier = NSUserInterfaceItemIdentifier("media.speakerGlyph")
                 addSubview(view); symbol = view; created = true
             }
@@ -1164,7 +1176,7 @@ extension SidebarDiagnostics {
     private func removeAnimations(_ layer: CALayer?) {
         layer?.removeAllAnimations(); layer?.sublayers?.forEach { removeAnimations($0) }
     }
-    override func accessibilityHelp() -> String? { accessibleTitle?() }
+    override func accessibilityHelp() -> String? { tooltip?()?.title ?? accessibleTitle?() }
 }
 
 /// Lazy, static recording indicator (PP-19). Its tooltip is an exact Arc string.
