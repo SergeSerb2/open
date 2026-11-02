@@ -1,4 +1,5 @@
 import AppKit
+import Observation
 import OpenEngine
 import OpenFeatures
 import OpenModel
@@ -54,6 +55,22 @@ final class EngineWebContentHost: NSObject, WebContentHost, WebContentProviding,
     self.tabID = tabID; self.profileID = profileID; self.content = content; self.owner = owner
     spaceID = owner.space(for: tabID)?.id ?? owner.focusedSpace?.id
     super.init(); content.delegate = self
+    observeMute()
+  }
+  /// The engine follows the tab's mute, including Undo/Redo and Mute All (media-pip §7.2).
+  private var muteObservation = 0
+  private func observeMute() {
+    muteObservation += 1
+    let token = muteObservation
+    guard !closed, let tab = owner?.model.tab(id: tabID) else { return }
+    if content.isMuted != tab.isMuted { content.isMuted = tab.isMuted }
+    withObservationTracking { _ = tab.isMuted } onChange: { [weak self] in
+      Task { @MainActor [weak self] in
+        guard let self, self.muteObservation == token else { return }
+        self.observeMute()
+        self.owner?.app.media.contentChanged(self, changes: .audio)
+      }
+    }
   }
   func load(_ url: URL) { if !closed { content.load(url) } }
   func reload() { if !closed { content.reload() } }
@@ -63,10 +80,10 @@ final class EngineWebContentHost: NSObject, WebContentHost, WebContentProviding,
   func focus() { if !closed { content.focusPage() } }
   func rebind(tabID: ItemID, spaceID: SpaceID?) {
     generation += 1; self.tabID = tabID; self.spaceID = spaceID
-    refreshPageBackground()
+    refreshPageBackground(); observeMute()
   }
   func close() {
-    guard !closed else { return }; closed = true; generation += 1
+    guard !closed else { return }; closed = true; generation += 1; muteObservation += 1
     cancelBackgroundRead(); faviconProbe?.cancel(); faviconProbe = nil
     onURLChange = nil; onTitleChange = nil; onLoadingChange = nil; onFaviconChange = nil; shouldNavigate = nil
     onPageBackgroundChange = nil; onLiveStateChange = nil
@@ -100,6 +117,7 @@ final class EngineWebContentHost: NSObject, WebContentHost, WebContentProviding,
     }
     guard !closed, generation == token else { return }
     onLiveStateChange?(liveState)
+    owner.app.media.contentChanged(self, changes: changes)
     if changes.contains(.loading), !page.isLoading { refreshPageBackground() }
     // Same-document History API path changes do not emit another load finish.
     if !page.isLoading, !changes.isDisjoint(with: [.URL, .loading]) { confirmFaviconForDocument(page, owner: owner) }

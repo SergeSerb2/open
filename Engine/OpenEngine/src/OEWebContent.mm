@@ -546,6 +546,7 @@ typedef void (^OEDevToolsCompletion)(NSDictionary* _Nullable, NSError* _Nullable
   _chromeHost = nullptr;
   _adoptedBrowserView = nullptr;
   _closeRequested = YES;
+  [self oe_resetMedia];
   [[OEEngine shared] oe_unregisterWebContent:self];
   [self oe_notify:OEWebContentChangeLive];
   _closingSelf = nil;
@@ -741,6 +742,9 @@ typedef void (^OEDevToolsCompletion)(NSDictionary* _Nullable, NSError* _Nullable
     return;
   }
   _crashState = state;
+  if (state != OEWebContentCrashStateNone) {
+    [self oe_resetMedia];
+  }
   [self oe_notify:OEWebContentChangeCrash];
 }
 

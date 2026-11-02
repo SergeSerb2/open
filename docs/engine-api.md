@@ -223,6 +223,25 @@ TODO(engine): `OEWebContent` has no page color yet. The M4 split pane bar needs 
 
 The caller makes lazy images load first (`img[loading=lazy]` → `eager`, wait ≤ 1 s) through `evaluateJavaScript`; the engine call itself does not change the page. Page zoom is not applied to the clip (Chromium's own full-page capture does the same).
 
+### Media (`OEMediaSession.h`, media-pip §6)
+
+- `OEWebContent.mediaSession`: an `OEMediaSession` snapshot (playback state,
+  controllable, hasVideo/hasAudio, largest playing video size,
+  `pictureInPictureDisabled`, `OEMediaActions`, title/artist/album,
+  `OEMediaPosition`, `pictureInPicture`, microphone/camera), nil until a
+  frame played media. A new snapshot replaces it on every
+  `OEWebContentChangeMedia`; `OEWebContentChangePictureInPicture` marks a PiP
+  enter or exit. Commands on the snapshot (`play`, `pause`, `previousTrack`,
+  `nextTrack`, `seek(by:)`, `seek(to:)`, `scrub(to:)`, `skipAd`, `stop`,
+  `toggleMicrophone`, `toggleCamera`, `hangUp`) go to the page it came from.
+- `requestPictureInPicture(completion:)` enters video PiP for the playing
+  video with the largest area; `exitPictureInPicture(pausing:)`.
+- Source (Section 3 Step 5): an engine-owned probe in every frame
+  (`kMediaProbe` in `OEApp.mm`) reports state on media events only and
+  calls the page's own `navigator.mediaSession` action handlers. Values are
+  page-reachable, so they drive UI only. The fork's media session (Step 7)
+  replaces the source; the API stays.
+
 ## Extensions
 
 `OEExtensionManager` (per context): `installedExtensions` (`OEExtension`: id, name, version, summary, manifest version, enabled, unpacked, folder, icon, options URL, permissions, host permissions), `extension(identifier:)`, `reload()`, `managementPageURL` (`chrome://extensions`, Chrome style only), `webStorePageURL(extensionIdentifier:)`, and a delegate. In stock CEF the list comes from the profile's Preferences and manifests and refreshes when Chromium rewrites them; fork patch P3 replaces this with Chromium's live registry.

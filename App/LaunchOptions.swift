@@ -7,7 +7,7 @@ import OpenEngine
 ///
 ///   Open [URL...] [--user-data-dir=DIR] [--style=alloy]
 ///        [--open-remote-debugging-port=N] [--automation-socket=PATH]
-///        [--chrome-toolbar] [--verbose]
+///        [--chrome-toolbar] [--verbose] [--pip-site-rules=FILE (Debug)]
 struct LaunchOptions {
   /// Open's data root (docs/plans/profiles.md §5): State/browser.json and
   /// Profiles/<dir>/{Engine,State,...}.
@@ -20,6 +20,8 @@ struct LaunchOptions {
   var verboseLogging = false
   var automationSocket: URL?
   var chromeToolbar = false
+  /// Debug and automation builds: replaces Open's PiP site-rule file (media-pip §4.5.4, e2e).
+  var pipSiteRules: URL?
 
   init(arguments: [String]) {
     let env = ProcessInfo.processInfo.environment
@@ -46,6 +48,10 @@ struct LaunchOptions {
         remoteDebuggingPort = Int(v) ?? 0
       } else if let v = value("automation-socket") {
         automationSocket = URL(fileURLWithPath: v)
+      } else if let v = value("pip-site-rules") {
+        #if DEBUG || OPEN_AUTOMATION
+          pipSiteRules = URL(fileURLWithPath: (v as NSString).expandingTildeInPath)
+        #endif
       } else if arg == "--chrome-toolbar" {
         chromeToolbar = true
       } else if arg == "--verbose" {
