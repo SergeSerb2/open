@@ -7081,6 +7081,294 @@ def space_manager_checks(results, tmp, config, style):
         if not receipt['ok']: raise AssertionError('Space Manager cleanup failed: ' + json.dumps(receipt))
 
 
+# ---------------------------------------------------------------------------
+# Suite `page`, Section 8 helper B rows (page-platform §8.3: A1, A2, K1, K2,
+# D1, D2, D4, H1-H4). One function per row group; `page_checks` calls them.
+
+PAGE_FIXTURES = os.path.join(ROOT, "tools", "e2e", "fixtures", "page-platform")
+
+
+def page_fixture_server():
+    """Serves tools/e2e/fixtures/page-platform on 127.0.0.1 (no external network)."""
+    import http.server
+    import threading
+    class Handler(http.server.SimpleHTTPRequestHandler):
+        def __init__(self, *args, **kwargs):
+            super().__init__(*args, directory=PAGE_FIXTURES, **kwargs)
+        def end_headers(self):
+            self.send_header("Cache-Control", "no-store")
+            super().end_headers()
+        def log_message(self, *args): pass
+    server = http.server.ThreadingHTTPServer(("127.0.0.1", 0), Handler)
+    threading.Thread(target=server.serve_forever, daemon=True).start()
+    return server, server.server_address[1]
+
+
+def _menu_row(app, command):
+    return next((r for r in app.call("menu-state") if r["id"] == command), None)
+
+
+def _blocked(reason, **evidence):
+    return dict(evidence, status="BLOCKED", reason=reason)
+
+
+def page_tools_appearance_checks(app, results, port, style):
+    """A1, A2: View ▸ Appearance reaches prefers-color-scheme without a reload (EP-9a)."""
+    tab = app.call("open", url="http://127.0.0.1:%d/scheme.html" % port)["id"]
+    app.call("wait", tab=tab)
+    state = lambda: app.eval(tab, "window.schemeState()")
+    def until_dark(value):
+        return wait_until(lambda: (lambda s: s if s["dark"] is value else None)(state()), timeout=8, step=.2) or state()
+    def checks():
+        return {i: (_menu_row(app, i) or {}).get("checked") for i in ("appearance-automatic", "appearance-light", "appearance-dark")}
+    try:
+        # A1: the website value wins over the app's appearance, both ways.
+        app.call("command", id="appearance-automatic")
+        app.call("appearance", name="light")
+        start = until_dark(False)
+        app.call("command", id="appearance-dark")
+        dark = until_dark(True)
+        dark_checks, dark_stored = checks(), app.call("defaults", key="open.web.colorScheme")
+        app.call("appearance", name="dark")
+        app.call("command", id="appearance-light")
+        light = until_dark(False)
+        light_checks, light_stored = checks(), app.call("defaults", key="open.web.colorScheme")
+        page_follows = (start["dark"] is False and dark["dark"] is True and light["dark"] is False
+                        and dark["loadId"] == light["loadId"] == start["loadId"])
+        evidence = {"start": start, "websitesDark": dark, "websitesLight": light}
+        if page_follows:
+            results["A1_appearance_light_dark_" + style] = dict(evidence, ok=True)
+        else:
+            # Stock CEF's SetChromeColorScheme does not reach this page style (page-platform R-5).
+            results["A1_appearance_light_dark_" + style] = _blocked(
+                "EP-9b (fork patch 0505): SetChromeColorScheme does not change prefers-color-scheme here", **evidence)
+        results["A1_appearance_menu_" + style] = {
+            "ok": dark_checks == {"appearance-automatic": False, "appearance-light": False, "appearance-dark": True}
+            and light_checks == {"appearance-automatic": False, "appearance-light": True, "appearance-dark": False}
+            and (dark_stored, light_stored) == ("dark", "light"),
+            "checked": [dark_checks, light_checks], "stored": [dark_stored, light_stored]}
+        # A2: Automatic follows the app's effective appearance, each time, without a reload.
+        app.call("command", id="appearance-automatic")
+        app.call("appearance", name="dark")
+        follow_dark = until_dark(True)
+        app.call("appearance", name="light")
+        follow_light = until_dark(False)
+        app.call("appearance", name="dark")
+        follow_dark2 = until_dark(True)
+        auto_checks = checks()
+        results["A2_appearance_automatic_follows_app_" + style] = {
+            "ok": follow_dark["dark"] is True and follow_light["dark"] is False and follow_dark2["dark"] is True
+            and follow_dark2["loadId"] == start["loadId"] and follow_dark2["changes"][-2:] == ["light", "dark"]
+            and auto_checks == {"appearance-automatic": True, "appearance-light": False, "appearance-dark": False},
+            "states": [follow_dark, follow_light, follow_dark2], "checked": auto_checks}
+    finally:
+        _try(lambda: app.call("appearance", name="system"))
+    app.call("close", tab=tab)
+
+
+def page_tools_clear_checks(app, results, port, style):
+    """K1, K2: Clear Cookies and Refresh (interim before Site Control E2); Clear Cache disabled."""
+    hosts = ["127.0.0.1", "localhost"]
+    tabs = []
+    for index, host in enumerate(hosts):
+        tab = app.call("open", url="http://%s:%d/cookies.html" % (host, port))["id"]
+        app.call("wait", tab=tab)
+        app.eval(tab, "window.setFixtureCookie('k%d')" % (index + 1))
+        tabs.append(tab)
+    before = [app.eval(t, "document.cookie") for t in tabs]
+    load_id = app.eval(tabs[0], "window.cookieLoadId")
+    app.call("select", tab=tabs[0])
+    wait_until(lambda: app.call("window-state")["selected"] == tabs[0], timeout=5, step=.1)
+    enabled = (_menu_row(app, "clear-cookies-and-refresh") or {}).get("enabled")
+    app.call("command", id="clear-cookies-and-refresh")
+    reloaded = wait_until(lambda: (lambda v: v if v and v != load_id else None)(
+        app.eval(tabs[0], "window.cookieLoadId")), timeout=10, step=.2)
+    after = [app.eval(t, "document.cookie") for t in tabs]
+    results["K1_clear_cookies_and_refresh_" + style] = {
+        "ok": enabled is True and before == ["k1=127.0.0.1", "k2=localhost"] and bool(reloaded)
+        and after == ["", "k2=localhost"],
+        "enabled": enabled, "before": before, "after": after, "reloaded": bool(reloaded),
+        "interim": "host cookies of the page's host via clearBrowsingData(origin:); Site Control E2 pending"}
+    cache = _menu_row(app, "clear-cache-and-refresh") or {}
+    results["K2_clear_cache_disabled_before_E2_" + style] = {"ok": cache.get("enabled") is False, "row": cache}
+    for tab in tabs:
+        app.call("close", tab=tab)
+
+
+# Ids of the selected tabs of the DevTools front end (every tabbed pane, shadow roots included).
+_DEVTOOLS_SELECTED_TABS = """(() => {
+  const out = [];
+  const walk = (root) => { for (const el of root.querySelectorAll('*')) {
+    if (el.getAttribute('role') === 'tab' && el.getAttribute('aria-selected') === 'true') out.push(el.id || el.textContent.trim());
+    if (el.shadowRoot) walk(el.shadowRoot); } };
+  walk(document);
+  return out;
+})()"""
+
+
+def page_tools_devtools_checks(app, results, port, style):
+    """D1 (Console panel, EP-4a), D2 (Network, blocked on EP-4b)."""
+    tab = app.call("open", url="http://127.0.0.1:%d/cookies.html" % port)["id"]
+    app.call("wait", tab=tab)
+    try:
+        app.call("command", id="javascript-console")
+        tabs = wait_until(lambda: (lambda ids: ids if "tab-console" in ids else None)(
+            _try(lambda: app.call("devtools-frontend", tab=tab, js=_DEVTOOLS_SELECTED_TABS)) or []), timeout=20, step=.5)
+        last = _try(lambda: app.call("devtools-frontend", tab=tab, js=_DEVTOOLS_SELECTED_TABS))
+        windows = [w["title"] for w in app.call("windows") if w["visible"]]
+        if style == "alloy":
+            # Alloy pages have no Chrome commands: EP-4a falls back to plain DevTools.
+            results["D1_console_fallback_opens_devtools_alloy"] = {"ok": bool(last), "selectedTabs": last, "windows": windows}
+            results["D1_javascript_console_panel_alloy"] = _blocked(
+                "Alloy pages have no Chrome commands; the Console panel there needs EP-4b's panel_id (fork patch 0503)",
+                selectedTabs=last)
+        else:
+            results["D1_javascript_console_panel_" + style] = {
+                "ok": bool(tabs) and "tab-console" in tabs, "selectedTabs": last, "windows": windows}
+    finally:
+        _try(lambda: app.call("devtools-close", tab=tab))
+        _try(lambda: app.call("dismiss"))
+    results["D2_network_inspector_panel_" + style] = _blocked(
+        "EP-4b (fork patch 0503 adds panel_id); network-inspector opens the default panel until then")
+    app.call("close", tab=tab)
+
+
+def page_tools_apple_events_checks(app, results):
+    """D4: Allow JavaScript from Apple Events (default off, checkmark)."""
+    key = "open.developer.allowJavaScriptFromAppleEvents"
+    initial = (_menu_row(app, "allow-js-apple-events") or {}, app.call("defaults", key=key))
+    app.call("command", id="allow-js-apple-events")
+    on = (_menu_row(app, "allow-js-apple-events") or {}, app.call("defaults", key=key))
+    app.call("command", id="allow-js-apple-events")
+    off = (_menu_row(app, "allow-js-apple-events") or {}, app.call("defaults", key=key))
+    results["D4_allow_js_apple_events_menu"] = {
+        "ok": initial[0].get("checked") is False and not initial[1] and on[0].get("checked") is True and on[1] is True
+        and off[0].get("checked") is False and off[1] is False,
+        "initial": initial, "on": on, "off": off}
+    results["D4_allow_js_apple_events_osascript"] = _blocked(
+        "the App does not host OpenScripting yet (applescript plan Steps 5-7); the 1013 gate is in "
+        "ScriptCommands.executeJavascript and runs once the App wires ScriptHost")
+
+
+def page_tools_troubleshooting_checks(app, results, tmp, port, style):
+    """H1-H4: Task Manager, Record Trace + Stop, Copy Open Info, Cast hidden / media router off."""
+    trace_dir = os.path.join(tmp, "traces")
+    os.makedirs(trace_dir, exist_ok=True)
+    app.call("troubleshooting-setup", traceDir=trace_dir, recordReveals=True, recordToasts=True)
+    tab = app.call("open", url="http://127.0.0.1:%d/cookies.html" % port)["id"]
+    app.call("wait", tab=tab)
+    # H1
+    try:
+        app.call("command", id="task-manager")
+        window = wait_until(lambda: next((w for w in app.call("windows")
+                                          if w["visible"] and w["title"].startswith("Task Manager")), None), timeout=10, step=.25)
+        state = app.call("troubleshooting-state")
+        evidence = {"window": window, "shown": state["taskManagerShown"],
+                    "titles": [w["title"] for w in app.call("windows") if w["visible"]]}
+        if style == "alloy":
+            # Chromium's window needs a Chrome style page; the App's pages are Chrome style
+            # unless --style=alloy. H1 passes in Chrome style, so EP-10b's own window is not built.
+            results["H1_task_manager_window_alloy"] = _blocked(
+                "Alloy run: no Chrome style page for IDC_TASK_MANAGER_MAIN_MENU", **evidence)
+        else:
+            results["H1_task_manager_window"] = dict(evidence, ok=bool(window) and state["taskManagerShown"] == "yes")
+    finally:
+        _try(lambda: app.call("dismiss"))
+    # H2
+    rows0 = {i: (_menu_row(app, i) or {}).get("enabled") for i in ("record-trace", "cancel-trace")}
+    app.call("command", id="record-trace")
+    recording = wait_until(lambda: (lambda s: s if s["recording"] else None)(app.call("troubleshooting-state")), timeout=5, step=.1)
+    rows1 = {i: (_menu_row(app, i) or {}).get("enabled") for i in ("record-trace", "cancel-trace")}
+    time.sleep(2)
+    app.call("troubleshooting-toast-action", title="Recording Trace…")
+    saved = wait_until(lambda: (lambda s: s if s["lastTraceFile"] or s["lastTraceError"] else None)(
+        app.call("troubleshooting-state")), timeout=60, step=.25) or app.call("troubleshooting-state")
+    path = saved.get("lastTraceFile") or ""
+    events = 0
+    if path and os.path.isfile(path):
+        with open(path) as stream:
+            trace = json.load(stream)
+        events = len(trace.get("traceEvents", [])) if isinstance(trace, dict) else 0
+    toasts = [t["title"] for t in saved.get("toasts", []) if t["title"]]
+    rows2 = {i: (_menu_row(app, i) or {}).get("enabled") for i in ("record-trace", "cancel-trace")}
+    results["H2_record_trace_stop"] = {
+        "ok": rows0 == {"record-trace": True, "cancel-trace": False} and bool(recording)
+        and rows1 == {"record-trace": False, "cancel-trace": True}
+        and os.path.dirname(path) == trace_dir and os.path.basename(path).startswith("Open Trace ") and path.endswith(".json")
+        and events > 0 and "Recording Trace…" in toasts and "Trace Saved" in toasts
+        and rows2 == {"record-trace": True, "cancel-trace": False},
+        "menu": [rows0, rows1, rows2], "file": path, "traceEvents": events, "toasts": toasts,
+        "error": saved.get("lastTraceError")}
+    # Cancel: no file is kept.
+    before_files = sorted(os.listdir(trace_dir))
+    app.call("command", id="record-trace")
+    wait_until(lambda: app.call("troubleshooting-state")["recording"], timeout=5, step=.1)
+    app.call("command", id="cancel-trace")
+    idle = wait_until(lambda: (lambda s: s if not s["tracing"] else None)(app.call("troubleshooting-state")), timeout=30, step=.25)
+    results["H2_cancel_trace"] = {"ok": bool(idle) and sorted(os.listdir(trace_dir)) == before_files,
+                                  "files": sorted(os.listdir(trace_dir))}
+    # H3
+    app.call("command", id="copy-open-info")
+    text = app.call("pasteboard")
+    lines = text.split("\n")
+    shape = (len(lines) == 4 and re.fullmatch(r"Open \S+ \(\S+\)", lines[0])
+             and re.fullmatch(r"Engine: Chromium 156\.0\.8078\.48, CEF \S+", lines[1])
+             and lines[2].startswith("macOS ") and re.fullmatch(r"Mac: \S+ \((arm64|x86_64)\)", lines[3]))
+    results["H3_copy_open_info"] = {"ok": bool(shape) and "http" not in text and "/Users" not in text and "Arc" not in text,
+                                    "text": text}
+    app.call("command", id="reveal-open-data")
+    reveals = app.call("troubleshooting-state")["reveals"]
+    root = app.call("ping")["root"]
+    results["H_reveal_open_data"] = {"ok": reveals[-1:] == [root], "reveals": reveals, "root": root}
+    # H4
+    cast = _menu_row(app, "cast") or {}
+    helpers = subprocess.run(["ps", "-axo", "pid,ppid,command"], capture_output=True, text=True).stdout.splitlines()
+    pid = str(app.pid)
+    children = [l for l in helpers if l.split(None, 2)[1:2] == [pid] and "Open Helper" in l]
+    disabled = [l for l in children if re.search(r"--disable-features=\S*\bMediaRouter\b", l)]
+    results["H4_cast_hidden_media_router_off"] = {
+        "ok": cast.get("hidden") is True and bool(children) and len(disabled) == len(children),
+        "cast": cast, "helpers": len(children), "helpersWithMediaRouterOff": len(disabled)}
+    app.call("close", tab=tab)
+
+
+def _try(fn):
+    try:
+        return fn()
+    except Exception:
+        return None
+
+
+def page_tools_checks(factory, results, tmp, style):
+    """Section 8 helper B rows of the `page` suite."""
+    server, port = page_fixture_server()
+    app = factory(urls=("http://127.0.0.1:%d/cookies.html" % port,), fresh=True)
+    # Open's preferences domain is shared with other runs: restore what this group writes.
+    keys = ("open.web.colorScheme", "open.developer.allowJavaScriptFromAppleEvents")
+    saved = {key: app.call("defaults", key=key) for key in keys}
+    try:
+        for key in keys:
+            app.call("defaults", key=key, value=None)
+        app.call("window-frame", frame=[80, 60, 1360, 860])
+        app.call("wait", tab=app.call("tabs")[0]["id"])
+        page_tools_appearance_checks(app, results, port, style)
+        page_tools_clear_checks(app, results, port, style)
+        page_tools_devtools_checks(app, results, port, style)
+        page_tools_apple_events_checks(app, results)
+        page_tools_troubleshooting_checks(app, results, tmp, port, style)
+    finally:
+        _try(lambda: app.call("dismiss"))
+        for key, value in saved.items():
+            _try(lambda: app.call("defaults", key=key, value=value))
+        app.quit()
+        server.shutdown()
+
+
+def page_checks(factory, results, tmp, style):
+    """Suite `page` (plans/page-platform.md §8.3). Each helper adds its row group here."""
+    page_tools_checks(factory, results, tmp, style)
+
+
 def main():
     global _ACTIVE_FOCUS_TRACKER
     ap = argparse.ArgumentParser()
@@ -7090,7 +7378,8 @@ def main():
     ap.add_argument("--engine-fingerprint-only", action="store_true", help="verify built engine artifacts and exit without launching Open")
     ap.add_argument("--extensions", default=os.path.join(ROOT, ".re", "ext", "unpacked"))
     ap.add_argument("--only", choices=["shell", "extensions", "features", "measure", "tabstrip", "window", "sidebar", "peek",
-                                       "commandbar", "app-actions", "actions", "profiles", "sidebar-completion", "toolbar", "numbering"])
+                                       "commandbar", "app-actions", "actions", "profiles", "sidebar-completion", "toolbar", "numbering",
+                                       "page"])
     ap.add_argument("--window-chrome-only", action="store_true", help="run only the window-chrome follow-up flows in the window suite")
     ap.add_argument("--keep", action="store_true",
                     help="keep this run's data root, cache root and scratch folder (paths printed at the end)")
@@ -7272,6 +7561,9 @@ def main():
         elif opts.only == "profiles":
             results["profiles"] = {}
             profiles_checks(factory, results["profiles"], tmp, opts.config)
+        elif opts.only == "page":
+            results["page"] = CheckedResults(tracker)
+            page_checks(factory, results["page"], tmp, opts.style)
         elif opts.only == "measure":
             results["measure"] = CheckedResults(tracker)
             measure(factory, results["measure"], tmp)
@@ -7338,18 +7630,18 @@ def main():
                           "processes": [instance.quit_report for instance in _OWNED_APPS]}
     print("owned_process_cleanup    " + ("PASS" if results["cleanup"]["ok"] else "FAIL"), flush=True)
     name = ("results-actions-p2.json" if opts.only == "actions" else
-            "results-%s-%s.json" % (opts.only, opts.style if opts.only in ("extensions", "features", "tabstrip")
+            "results-%s-%s.json" % (opts.only, opts.style if opts.only in ("extensions", "features", "tabstrip", "page")
                                     else opts.config.lower()))
     with open(os.path.join(OUT, name), "w") as f:
         json.dump(results, f, indent=2, sort_keys=True)
-    for group in ("shell", "extensions", "features", "measure", "tabstrip", "window", "sidebar", "peek", "commandbar", "app-actions", "actions", "profiles", "sidebar-completion", "toolbar", "numbering"):
+    for group in ("shell", "extensions", "features", "measure", "tabstrip", "window", "sidebar", "peek", "commandbar", "app-actions", "actions", "profiles", "sidebar-completion", "toolbar", "numbering", "page"):
         for k, v in results.get(group, {}).items():
             if isinstance(v, dict) and "ok" in v:
                 print("%-24s %s" % (k, "PASS" if v.get("ok") else "FAIL"))
             elif isinstance(v, dict) and v.get("status") in ("SKIP", "BLOCKED", "INTERRUPTED", "DEFERRED"):
                 print("%-24s %s: %s" % (k, v["status"], v.get("reason", "")))
     print("wrote", os.path.join(OUT, name))
-    failures = [k for group in ("shell", "extensions", "features", "measure", "tabstrip", "window", "sidebar", "peek", "commandbar", "app-actions", "actions", "sidebar-completion", "toolbar", "numbering")
+    failures = [k for group in ("shell", "extensions", "features", "measure", "tabstrip", "window", "sidebar", "peek", "commandbar", "app-actions", "actions", "sidebar-completion", "toolbar", "numbering", "page")
                 for k, v in results.get(group, {}).items() if isinstance(v, dict) and v.get("ok") is False]
     if failures or not results["cleanup"]["ok"]:
         sys.exit(1)

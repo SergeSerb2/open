@@ -27,6 +27,10 @@
     private var nativeInputStart: Double = 0
     private var managerUndoObserver: (any NSObjectProtocol)?
     private var managerUndoCount = 0
+    // troubleshooting-setup recorders (page-platform Troubleshooting checks).
+    private var revealedURLs: [URL] = []
+    private var troubleshootingToasts: [[String: Any]] = []
+    private var troubleshootingToastActions: [String: () -> Void] = [:]
 
     init(app: AppDelegate) { self.app = app }
 
@@ -593,6 +597,42 @@
       case "devtools-open":
         try content(a, w).showDevTools()
         return true
+      // Page tools (page-platform Steps 4-6, Section 8 helper B).
+      case "devtools-frontend":
+        // Evaluates `js` in the open DevTools window of a page (its front end).
+        guard let js = a["js"] as? String else { throw Failure(message: "missing js") }
+        let page = try content(a, w)
+        let value: Any? = try await page.evaluateInDevToolsFrontend(js)
+        return value ?? NSNull()
+      case "devtools-close":
+        try content(a, w).closeDevTools()
+        return true
+      case "troubleshooting-state":
+        let t = TroubleshootingActions.shared
+        return ["tracing": OEEngine.shared.isTracing, "recording": t.isRecording,
+          "lastTraceFile": t.lastTraceFile?.path ?? "", "lastTraceError": t.lastTraceError ?? "",
+          "taskManagerShown": t.taskManagerShown.map { $0 ? "yes" : "no" } ?? "",
+          "reveals": revealedURLs.map(\.path), "toasts": troubleshootingToasts,
+          "colorScheme": UserDefaults.standard.string(forKey: WebsiteAppearance.defaultsKey) ?? "",
+          "contextSchemes": OEEngine.shared.contexts.map { $0.websiteColorScheme.rawValue },
+          "allowJavaScriptFromAppleEvents": UserDefaults.standard.bool(forKey: PageTools.allowJavaScriptFromAppleEventsKey)] as [String: Any]
+      case "troubleshooting-setup":
+        // A run folder for traces, and Finder reveals recorded instead of shown.
+        let t = TroubleshootingActions.shared
+        if let path = a["traceDir"] as? String { t.traceDirectory = URL(fileURLWithPath: path, isDirectory: true) }
+        if a["recordReveals"] as? Bool == true { t.reveal = { [weak self] in self?.revealedURLs.append($0) } }
+        if a["recordToasts"] as? Bool == true {
+          let show = t.presentToast
+          t.presentToast = { [weak self] title, button, sticky in
+            self?.troubleshootingToasts.append(["title": title, "button": button?.title ?? "", "sticky": sticky])
+            if let button { self?.troubleshootingToastActions[title] = button.action }
+            show(title, button, sticky)
+          }
+        }
+        return true
+      case "troubleshooting-toast-action":
+        guard let title = a["title"] as? String, let action = troubleshootingToastActions[title] else { throw Failure(message: "no toast action") }
+        action(); return true
       case "print-pdf":
         let path = (a["path"] as? String) ?? NSTemporaryDirectory() + "open-print.pdf"
         let page = try content(a, w)
@@ -1409,7 +1449,7 @@
         // Validate first, as AppKit does before it shows a menu: validation can set the title (CC-32).
         let enabled = menuEnabled(item)
         return [["id": item.identifier?.rawValue ?? "", "title": item.title, "key": item.keyEquivalent,
-          "enabled": enabled, "targetNil": item.target == nil, "tag": item.tag, "action": item.action.map(NSStringFromSelector) ?? "", "payload": (item.representedObject as? [String: String])?["payload"] ?? ""]]
+          "enabled": enabled, "checked": item.state == .on, "hidden": item.isHidden, "targetNil": item.target == nil, "tag": item.tag, "action": item.action.map(NSStringFromSelector) ?? "", "payload": (item.representedObject as? [String: String])?["payload"] ?? ""]]
       }
     }
     private func findMenuItem(_ id: String, in menu: NSMenu?) -> (NSMenu, Int)? {

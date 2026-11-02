@@ -275,6 +275,16 @@ OE_EXPORT @interface OEWebContent : NSObject
     NS_SWIFT_NAME(showDevTools(panel:));
 - (void)closeDevTools;
 @property(nonatomic, readonly) BOOL hasDevTools;
+/// Diagnostics (automation checks): evaluates `script` in the page of this
+/// page's open DevTools window (the DevTools front end, not the inspected
+/// page), awaiting promises; the result is the JSON value. Fails when no
+/// DevTools window of this page is open.
+- (void)evaluateJavaScriptInDevToolsFrontend:(NSString*)script
+                                  completion:
+                                      (void (^NS_SWIFT_UI_ACTOR)(
+                                          id _Nullable result,
+                                          NSError* _Nullable error))completion
+    NS_SWIFT_NAME(evaluateInDevToolsFrontend(_:completion:));
 /// Shows the system print panel for the page.
 - (void)print NS_SWIFT_NAME(showPrintPanel());
 - (void)printToPDFAtURL:(NSURL*)fileURL

@@ -200,6 +200,8 @@ typedef void (^OEDevToolsCompletion)(NSDictionary* _Nullable, NSError* _Nullable
   CefRefPtr<CefRegistration> _devToolsRegistration;
   NSMutableDictionary<NSNumber*, OEDevToolsCompletion>* _devToolsCallbacks;
   int _nextDevToolsId;
+  // The DevTools window's own browser (front end), while it is open.
+  CefRefPtr<OEDevToolsClient> _devToolsFrontend;
   NSMutableSet<NSString*>* _audibleFrames;
   NSString* _lastFindString;
   BOOL _autoResize;
@@ -1025,6 +1027,33 @@ typedef void (^OEDevToolsCompletion)(NSDictionary* _Nullable, NSError* _Nullable
   }
   [self showDevTools];
   return NO;
+}
+
+- (void)oe_setDevToolsFrontend:(OEDevToolsClient*)frontend {
+  _devToolsFrontend = frontend;
+}
+
+- (void)oe_devToolsFrontendClosed:(OEDevToolsClient*)frontend {
+  if (_devToolsFrontend.get() == frontend) {
+    _devToolsFrontend = nullptr;
+  }
+}
+
+- (void)evaluateJavaScriptInDevToolsFrontend:(NSString*)script
+                                  completion:(void (^)(id _Nullable,
+                                                       NSError* _Nullable))
+                                                 completion {
+  CefRefPtr<OEDevToolsClient> frontend = _devToolsFrontend;
+  if (!frontend || !frontend->IsOpen()) {
+    completion(nil, [NSError errorWithDomain:OEErrorDomain
+                                        code:OEErrorWebContentClosed
+                                    userInfo:@{
+                                      NSLocalizedDescriptionKey :
+                                          @"No DevTools window is open"
+                                    }]);
+    return;
+  }
+  frontend->Evaluate(script, completion);
 }
 
 - (void)closeDevTools {

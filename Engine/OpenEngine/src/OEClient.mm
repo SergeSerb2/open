@@ -96,13 +96,6 @@ bool OEClient::OnBeforePopup(CefRefPtr<CefBrowser> browser,
 
 namespace {
 
-// The client of a page's DevTools window. Chrome opens that window itself
-// (the context menu's Inspect), and CEF gives it the inspected page's client
-// unless OnBeforeDevToolsPopup picks another one.
-class OEDevToolsClient : public CefClient {
-  IMPLEMENT_REFCOUNTING(OEDevToolsClient);
-};
-
 // True unless |browser| is a browser other than the page's own (a stray
 // callback must not create, retitle, or close the page).
 bool OEIsPageBrowser(OEWebContent* view, CefRefPtr<CefBrowser> browser) {
@@ -118,9 +111,96 @@ void OEClient::OnBeforeDevToolsPopup(CefRefPtr<CefBrowser> browser,
                                      CefBrowserSettings& settings,
                                      CefRefPtr<CefDictionaryValue>& extra_info,
                                      bool* use_default_window) {
-  // With this client the DevTools page's creation, title, and close would
-  // reach the inspected page: closing DevTools closed the tab.
-  client = new OEDevToolsClient();
+  // With the page's own client the DevTools page's creation, title, and close
+  // would reach the inspected page: closing DevTools closed the tab.
+  // |browser| is the inspected page: with a hosted tab, Chrome's command
+  // targets the hidden strip's active tab, which CEF maps to its browser.
+  OEWebContent* inspected = view_;
+  if (!OEIsPageBrowser(inspected, browser)) {
+    inspected = [[OEEngine shared] webContentWithIdentifier:browser->GetIdentifier()];
+  }
+  client = new OEDevToolsClient(inspected);
+}
+
+#pragma mark DevTools window
+
+void OEDevToolsClient::OnAfterCreated(CefRefPtr<CefBrowser> browser) {
+  browser_ = browser;
+  [inspected_ oe_setDevToolsFrontend:this];
+}
+
+void OEDevToolsClient::OnBeforeClose(CefRefPtr<CefBrowser> browser) {
+  // CEF requires dropping every browser reference here.
+  FailPending();
+  registration_ = nullptr;
+  browser_ = nullptr;
+  [inspected_ oe_devToolsFrontendClosed:this];
+}
+
+void OEDevToolsClient::FailPending() {
+  NSDictionary<NSNumber*, void (^)(id, NSError*)>* pending = [pending_ copy];
+  [pending_ removeAllObjects];
+  for (void (^done)(id, NSError*) in pending.allValues) {
+    done(nil, [NSError errorWithDomain:OEErrorDomain
+                                  code:OEErrorWebContentClosed
+                              userInfo:nil]);
+  }
+}
+
+void OEDevToolsClient::Evaluate(NSString* script,
+                                void (^completion)(id, NSError*)) {
+  void (^done)(id, NSError*) = [completion copy];
+  if (!browser_) {
+    done(nil, [NSError errorWithDomain:OEErrorDomain
+                                  code:OEErrorWebContentClosed
+                              userInfo:@{
+                                NSLocalizedDescriptionKey : @"No DevTools window"
+                              }]);
+    return;
+  }
+  CefRefPtr<CefBrowserHost> host = browser_->GetHost();
+  if (!registration_) {
+    registration_ = host->AddDevToolsMessageObserver(this);
+  }
+  CefRefPtr<CefDictionaryValue> params = CefDictionaryValue::Create();
+  params->SetString("expression", OECef(script));
+  params->SetBool("returnByValue", true);
+  params->SetBool("awaitPromise", true);
+  int messageId = host->ExecuteDevToolsMethod(0, "Runtime.evaluate", params);
+  if (messageId == 0) {
+    done(nil, [NSError errorWithDomain:OEErrorDomain
+                                  code:OEErrorDevToolsFailure
+                              userInfo:nil]);
+    return;
+  }
+  pending_[@(messageId)] = done;
+}
+
+void OEDevToolsClient::OnDevToolsMethodResult(CefRefPtr<CefBrowser> browser,
+                                              int message_id,
+                                              bool success,
+                                              const void* result,
+                                              size_t result_size) {
+  void (^done)(id, NSError*) = pending_[@(message_id)];
+  if (!done) {
+    return;
+  }
+  [pending_ removeObjectForKey:@(message_id)];
+  id object = [NSJSONSerialization
+      JSONObjectWithData:[NSData dataWithBytes:result length:result_size]
+                 options:NSJSONReadingFragmentsAllowed
+                   error:nil];
+  NSDictionary* dict = [object isKindOfClass:NSDictionary.class] ? object : @{};
+  NSDictionary* exception = dict[@"exceptionDetails"];
+  if (!success || exception) {
+    NSString* message = success ? [exception description]
+                                : (dict[@"message"] ?: @"Runtime.evaluate failed");
+    done(nil, [NSError errorWithDomain:OEErrorDomain
+                                  code:OEErrorJavaScriptException
+                              userInfo:@{NSLocalizedDescriptionKey : message}]);
+    return;
+  }
+  done(dict[@"result"][@"value"] ?: NSNull.null, nil);
 }
 
 void OEClient::OnAfterCreated(CefRefPtr<CefBrowser> browser) {

@@ -1,0 +1,255 @@
+{
+  "cleanup": {
+    "ok": true,
+    "processes": [
+      {
+        "forced": false,
+        "ok": true,
+        "owned_pids": [
+          19765,
+          19792,
+          19793,
+          19798,
+          19802,
+          19803,
+          20428,
+          20573
+        ],
+        "remaining_processes": [],
+        "reply": true,
+        "windows_after_quit": {
+          "count": 0,
+          "windows": []
+        },
+        "windows_before_quit": 1
+      }
+    ]
+  },
+  "config": "Debug",
+  "engine": {
+    "distributionCodeSHA256": "35b37ba3a72d079ed4e76fc7932bfe76e49b57c3456eda06f7fea9d928b901ae",
+    "distributionSHA256": "61c9ab17b6b08525af836cca93bba67819bfa1544f04abe5eae3baf4b57b98a8",
+    "distributionUUID": "4C4C44C8-5555-3144-A168-35B709BBDA3A",
+    "embeddedCodeSHA256": "35b37ba3a72d079ed4e76fc7932bfe76e49b57c3456eda06f7fea9d928b901ae",
+    "embeddedSHA256": "3e246c99539902496c44c4c6ed2533f3f4fd4a85f03b4f5e6dcaaf49f75f28d2",
+    "embeddedUUID": "4C4C44C8-5555-3144-A168-35B709BBDA3A",
+    "requiredSHA256": "",
+    "source": "fork",
+    "stamp": "fork /Users/serge/Developer/open-engine-s8-main/chromium_git/chromium/src/cef/binary_distrib/cef_binary_156.0.14+g4fa4ab5+chromium-156.0.8078.48_macosarm64_minimal 1793075034"
+  },
+  "interrupted_attempts": [],
+  "page": {
+    "A1_appearance_dark_alloy": {
+      "checked": false,
+      "dark": {
+        "background": "rgb(17, 17, 17)",
+        "changes": [],
+        "dark": true,
+        "loadId": "q21zapz89ga"
+      },
+      "ok": false,
+      "othersChecked": [
+        false,
+        false
+      ],
+      "start": {
+        "background": "rgb(17, 17, 17)",
+        "changes": [],
+        "dark": true,
+        "loadId": "q21zapz89ga"
+      },
+      "stored": "dark"
+    },
+    "A2_appearance_automatic_follows_app_alloy": {
+      "checked": false,
+      "ok": false,
+      "states": [
+        {
+          "background": "rgb(17, 17, 17)",
+          "changes": [],
+          "dark": true,
+          "loadId": "q21zapz89ga"
+        },
+        {
+          "background": "rgb(255, 255, 255)",
+          "changes": [],
+          "dark": false,
+          "loadId": "q21zapz89ga"
+        },
+        {
+          "background": "rgb(17, 17, 17)",
+          "changes": [
+            "light",
+            "dark"
+          ],
+          "dark": true,
+          "loadId": "q21zapz89ga"
+        }
+      ]
+    },
+    "D1_javascript_console_panel_alloy": {
+      "ok": false,
+      "selectedTabs": [
+        "tab-elements",
+        "tab-styles"
+      ],
+      "windows": [
+        "cookies",
+        ""
+      ]
+    },
+    "D2_network_inspector_panel_alloy": {
+      "reason": "EP-4b (fork patch 0503 adds panel_id); network-inspector opens the default panel until then",
+      "status": "BLOCKED"
+    },
+    "D4_allow_js_apple_events_menu": {
+      "initial": [
+        {
+          "action": "openCommandAction:",
+          "checked": false,
+          "enabled": true,
+          "hidden": false,
+          "id": "allow-js-apple-events",
+          "key": "",
+          "payload": "",
+          "tag": 0,
+          "targetNil": false,
+          "title": "Allow JavaScript from Apple Events"
+        },
+        null
+      ],
+      "off": [
+        {
+          "action": "openCommandAction:",
+          "checked": false,
+          "enabled": true,
+          "hidden": false,
+          "id": "allow-js-apple-events",
+          "key": "",
+          "payload": "",
+          "tag": 0,
+          "targetNil": false,
+          "title": "Allow JavaScript from Apple Events"
+        },
+        false
+      ],
+      "ok": false,
+      "on": [
+        {
+          "action": "openCommandAction:",
+          "checked": false,
+          "enabled": true,
+          "hidden": false,
+          "id": "allow-js-apple-events",
+          "key": "",
+          "payload": "",
+          "tag": 0,
+          "targetNil": false,
+          "title": "Allow JavaScript from Apple Events"
+        },
+        true
+      ]
+    },
+    "D4_allow_js_apple_events_osascript": {
+      "reason": "the App does not host OpenScripting yet (applescript plan Steps 5-7); the 1013 gate is in ScriptCommands.executeJavascript and runs once the App wires ScriptHost",
+      "status": "BLOCKED"
+    },
+    "H1_task_manager_window": {
+      "ok": false,
+      "shown": "no",
+      "titles": [
+        "cookies"
+      ],
+      "window": null
+    },
+    "H2_cancel_trace": {
+      "files": [
+        "Open Trace 2026-11-02 14.10.14.json"
+      ],
+      "ok": true
+    },
+    "H2_record_trace_stop": {
+      "error": "",
+      "file": "/var/folders/s6/_07cr4w13vsg_myjkv9ldpqc0000gn/T/Open-E2E-page-alloy-19664-68f022c2-scratch-5p96_ohw/traces/Open Trace 2026-11-02 14.10.14.json",
+      "menu": [
+        {
+          "cancel-trace": false,
+          "record-trace": true
+        },
+        {
+          "cancel-trace": true,
+          "record-trace": false
+        },
+        {
+          "cancel-trace": false,
+          "record-trace": true
+        }
+      ],
+      "ok": true,
+      "toasts": [
+        "Recording Trace\u2026",
+        "Trace Saved"
+      ],
+      "traceEvents": 1562
+    },
+    "H3_copy_open_info": {
+      "ok": true,
+      "text": "Open 0.1.0 (1)\nEngine: Chromium 156.0.8078.48, CEF 156.0.14+g4fa4ab5+chromium-156.0.8078.48\nmacOS Version 27.2 (Build 26B5112a)\nMac: Mac17,8 (arm64)"
+    },
+    "H4_cast_hidden_media_router_off": {
+      "cast": {
+        "action": "openCommandAction:",
+        "checked": false,
+        "enabled": false,
+        "hidden": false,
+        "id": "cast",
+        "key": "",
+        "payload": "",
+        "tag": 0,
+        "targetNil": false,
+        "title": "Cast\u2026"
+      },
+      "helpers": 7,
+      "helpersWithMediaRouterOff": 7,
+      "ok": false
+    },
+    "H_reveal_open_data": {
+      "ok": true,
+      "reveals": [
+        "/Users/serge/Library/Application Support/Open-E2E-page-alloy-19664-68f022c2"
+      ],
+      "root": "/Users/serge/Library/Application Support/Open-E2E-page-alloy-19664-68f022c2"
+    },
+    "K1_clear_cookies_and_refresh_alloy": {
+      "after": [
+        "",
+        "k2=localhost"
+      ],
+      "before": [
+        "k1=127.0.0.1",
+        "k2=localhost"
+      ],
+      "enabled": true,
+      "interim": "host cookies of the page's host via clearBrowsingData(origin:); Site Control E2 pending",
+      "ok": true,
+      "reloaded": true
+    },
+    "K2_clear_cache_disabled_before_E2_alloy": {
+      "ok": true,
+      "row": {
+        "action": "openCommandAction:",
+        "checked": false,
+        "enabled": false,
+        "hidden": false,
+        "id": "clear-cache-and-refresh",
+        "key": "",
+        "payload": "",
+        "tag": 0,
+        "targetNil": false,
+        "title": "Clear Cache and Refresh"
+      }
+    }
+  },
+  "started": "2026-11-02 14:09:27",
+  "style": "alloy"
+}

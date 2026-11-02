@@ -1,0 +1,18 @@
+<!doctype html>
+<meta charset="utf-8">
+<title>scheme</title>
+<style>
+  body { background: #ffffff; color: #111111; }
+  @media (prefers-color-scheme: dark) { body { background: #111111; color: #eeeeee; } }
+</style>
+<body>
+<p>prefers-color-scheme fixture (page-platform A1, A2).</p>
+<script>
+  // A marker that a reload would drop, and every change event the page sees.
+  window.schemeLoadId = Math.random().toString(36).slice(2);
+  window.schemeChanges = [];
+  const query = matchMedia('(prefers-color-scheme: dark)');
+  query.addEventListener('change', (event) => window.schemeChanges.push(event.matches ? 'dark' : 'light'));
+  window.schemeState = () => ({ dark: query.matches, background: getComputedStyle(document.body).backgroundColor,
+    loadId: window.schemeLoadId, changes: window.schemeChanges.slice() });
+</script>

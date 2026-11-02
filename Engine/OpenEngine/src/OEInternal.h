@@ -83,6 +83,8 @@ class OEClient;
                         callback:(CefRefPtr<CefDownloadItemCallback>)callback;
 @end
 
+class OEDevToolsClient;
+
 @interface OEWebContent ()
 @property(nonatomic, readonly) CefRefPtr<CefBrowser> oe_browser;
 @property(nonatomic, readonly) CefRefPtr<OEClient> oe_client;
@@ -134,6 +136,10 @@ class OEClient;
 - (void)oe_devToolsResult:(int)messageId
                   success:(BOOL)success
                      json:(NSData*)json;
+/// The DevTools window of this page opened (OEDevToolsClient::OnAfterCreated)
+/// or closed (OnBeforeClose).
+- (void)oe_setDevToolsFrontend:(OEDevToolsClient*)frontend;
+- (void)oe_devToolsFrontendClosed:(OEDevToolsClient*)frontend;
 @end
 
 @interface OEContextMenuItem ()
