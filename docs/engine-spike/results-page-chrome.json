@@ -6,15 +6,15 @@
         "forced": false,
         "ok": true,
         "owned_pids": [
-          4639,
-          4771,
-          4772,
-          4773,
-          4774,
-          4779,
-          4781,
-          5815,
-          5850
+          15605,
+          15680,
+          15681,
+          15682,
+          15683,
+          15684,
+          15685,
+          15917,
+          15921
         ],
         "remaining_processes": [],
         "reply": true,
@@ -61,21 +61,21 @@
       "menu": [
         {
           "appearance-automatic": false,
-          "appearance-dark": false,
+          "appearance-dark": true,
           "appearance-light": false
         },
         {
           "appearance-automatic": false,
           "appearance-dark": false,
-          "appearance-light": false
+          "appearance-light": true
         },
         {
-          "appearance-automatic": false,
+          "appearance-automatic": true,
           "appearance-dark": false,
           "appearance-light": false
         }
       ],
-      "ok": false
+      "ok": true
     },
     "A1_appearance_light_dark_chrome": {
       "reason": "EP-9b (fork patch 0505): SetChromeColorScheme does not change prefers-color-scheme here",
@@ -85,7 +85,7 @@
           "light"
         ],
         "dark": false,
-        "loadId": "3durk4v5sye"
+        "loadId": "ehqv4nop6y"
       },
       "status": "BLOCKED",
       "websitesDark": {
@@ -94,7 +94,7 @@
           "light"
         ],
         "dark": false,
-        "loadId": "3durk4v5sye"
+        "loadId": "ehqv4nop6y"
       },
       "websitesLight": {
         "background": "rgb(17, 17, 17)",
@@ -103,7 +103,7 @@
           "dark"
         ],
         "dark": true,
-        "loadId": "3durk4v5sye"
+        "loadId": "ehqv4nop6y"
       }
     },
     "A1_appearance_stored_chrome": {
@@ -123,7 +123,7 @@
             "dark"
           ],
           "dark": true,
-          "loadId": "3durk4v5sye"
+          "loadId": "ehqv4nop6y"
         },
         {
           "background": "rgb(255, 255, 255)",
@@ -133,7 +133,7 @@
             "light"
           ],
           "dark": false,
-          "loadId": "3durk4v5sye"
+          "loadId": "ehqv4nop6y"
         },
         {
           "background": "rgb(17, 17, 17)",
@@ -144,7 +144,7 @@
             "dark"
           ],
           "dark": true,
-          "loadId": "3durk4v5sye"
+          "loadId": "ehqv4nop6y"
         }
       ]
     },
@@ -155,7 +155,7 @@
       ],
       "windows": [
         "cookies",
-        "DevTools - 127.0.0.1:57124/cookies.html"
+        "DevTools - 127.0.0.1:59296/cookies.html"
       ]
     },
     "K1_clear_cookies_and_refresh_chrome": {
@@ -192,6 +192,6 @@
       "ok": false
     }
   },
-  "started": "2026-11-02 16:27:42",
+  "started": "2026-11-02 16:35:14",
   "style": "chrome"
 }

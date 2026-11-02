@@ -6,15 +6,16 @@
         "forced": false,
         "ok": true,
         "owned_pids": [
-          39799,
-          39805,
-          39806,
-          39808,
-          39824,
-          39825,
-          40233,
-          40368,
-          40406
+          11235,
+          11243,
+          11244,
+          11245,
+          11246,
+          11247,
+          11248,
+          11901,
+          12039,
+          13921
         ],
         "remaining_processes": [],
         "reply": true,
@@ -41,23 +42,6 @@
   "interrupted_attempts": [],
   "page": {
     "A1_appearance_checkmarks_alloy": {
-      "checked": [
-        {
-          "appearance-automatic": false,
-          "appearance-dark": false,
-          "appearance-light": false
-        },
-        {
-          "appearance-automatic": false,
-          "appearance-dark": false,
-          "appearance-light": false
-        },
-        {
-          "appearance-automatic": false,
-          "appearance-dark": false,
-          "appearance-light": false
-        }
-      ],
       "expected": [
         {
           "appearance-automatic": false,
@@ -75,8 +59,24 @@
           "appearance-light": false
         }
       ],
-      "reason": "CommandMenuState / menuState(for:) (page-platform Step 2, branch s8/toasts) not on main yet",
-      "status": "BLOCKED"
+      "menu": [
+        {
+          "appearance-automatic": false,
+          "appearance-dark": false,
+          "appearance-light": false
+        },
+        {
+          "appearance-automatic": false,
+          "appearance-dark": false,
+          "appearance-light": false
+        },
+        {
+          "appearance-automatic": false,
+          "appearance-dark": false,
+          "appearance-light": false
+        }
+      ],
+      "ok": false
     },
     "A1_appearance_light_dark_alloy": {
       "reason": "EP-9b (fork patch 0505): SetChromeColorScheme does not change prefers-color-scheme here",
@@ -86,7 +86,7 @@
           "light"
         ],
         "dark": false,
-        "loadId": "kt1pvw76p1l"
+        "loadId": "8ijj3w8ndar"
       },
       "status": "BLOCKED",
       "websitesDark": {
@@ -95,7 +95,7 @@
           "light"
         ],
         "dark": false,
-        "loadId": "kt1pvw76p1l"
+        "loadId": "8ijj3w8ndar"
       },
       "websitesLight": {
         "background": "rgb(17, 17, 17)",
@@ -104,22 +104,10 @@
           "dark"
         ],
         "dark": true,
-        "loadId": "kt1pvw76p1l"
+        "loadId": "8ijj3w8ndar"
       }
     },
     "A1_appearance_stored_alloy": {
-      "menuSource": [
-        {
-          "appearance-automatic": false,
-          "appearance-dark": true,
-          "appearance-light": false
-        },
-        {
-          "appearance-automatic": false,
-          "appearance-dark": false,
-          "appearance-light": true
-        }
-      ],
       "ok": true,
       "stored": [
         "dark",
@@ -136,7 +124,7 @@
             "dark"
           ],
           "dark": true,
-          "loadId": "kt1pvw76p1l"
+          "loadId": "8ijj3w8ndar"
         },
         {
           "background": "rgb(255, 255, 255)",
@@ -146,7 +134,7 @@
             "light"
           ],
           "dark": false,
-          "loadId": "kt1pvw76p1l"
+          "loadId": "8ijj3w8ndar"
         },
         {
           "background": "rgb(17, 17, 17)",
@@ -157,7 +145,7 @@
             "dark"
           ],
           "dark": true,
-          "loadId": "kt1pvw76p1l"
+          "loadId": "8ijj3w8ndar"
         }
       ]
     },
@@ -188,15 +176,16 @@
         "forced": false,
         "ok": true,
         "owned_pids": [
-          39799,
-          39805,
-          39806,
-          39808,
-          39824,
-          39825,
-          40233,
-          40368,
-          40406
+          11235,
+          11243,
+          11244,
+          11245,
+          11246,
+          11247,
+          11248,
+          11901,
+          12039,
+          13921
         ],
         "remaining_processes": [],
         "reply": true,
@@ -212,32 +201,26 @@
       "status": "BLOCKED"
     },
     "D4_allow_js_apple_events_checkmark": {
-      "checked": [
-        false,
-        false,
-        false
-      ],
       "expected": [
         false,
         true,
         false
       ],
-      "reason": "CommandMenuState / menuState(for:) (page-platform Step 2, branch s8/toasts) not on main yet",
-      "status": "BLOCKED"
+      "menu": [
+        false,
+        false,
+        false
+      ],
+      "ok": false
     },
     "D4_allow_js_apple_events_osascript": {
       "reason": "the App does not host OpenScripting yet (applescript plan Steps 5-7); the 1013 gate is in ScriptCommands.executeJavascript and runs once the App wires ScriptHost",
       "status": "BLOCKED"
     },
     "D4_allow_js_apple_events_setting": {
-      "menuSource": [
-        false,
-        true,
-        false
-      ],
       "ok": true,
       "stored": [
-        null,
+        false,
         true,
         false
       ]
@@ -253,13 +236,13 @@
     },
     "H2_cancel_trace": {
       "files": [
-        "Open Trace 2026-11-02 15.43.19.json"
+        "Open Trace 2026-11-02 16.31.59.json"
       ],
       "ok": true
     },
     "H2_record_trace_stop": {
       "error": "",
-      "file": "/var/folders/s6/_07cr4w13vsg_myjkv9ldpqc0000gn/T/Open-E2E-page-alloy-39735-f4edff81-scratch-ug6epavg/traces/Open Trace 2026-11-02 15.43.19.json",
+      "file": "/var/folders/s6/_07cr4w13vsg_myjkv9ldpqc0000gn/T/Open-E2E-page-alloy-11205-1bd3728f-scratch-gemry4ci/traces/Open Trace 2026-11-02 16.31.59.json",
       "menu": [
         {
           "cancel-trace": false,
@@ -274,16 +257,57 @@
           "record-trace": true
         }
       ],
-      "ok": true,
-      "toasts": [
-        "Recording Trace\u2026",
-        "Trace Saved"
-      ],
-      "traceEvents": 1949
+      "ok": false,
+      "recordingToast": {
+        "accessory": "none",
+        "accessoryFrame": null,
+        "age": 2.0236047916696407,
+        "coalescingKey": "trace",
+        "exiting": false,
+        "frame": [
+          1196,
+          18,
+          144,
+          60
+        ],
+        "hovered": false,
+        "lifetime": 3,
+        "sticky": false,
+        "subtitle": "0:01",
+        "symbol": null,
+        "title": "Recording Trace\u2026"
+      },
+      "savedToast": {
+        "accessory": "show in finder",
+        "accessoryFrame": [
+          1298,
+          28,
+          32,
+          27
+        ],
+        "age": 0.4191105416393839,
+        "coalescingKey": "trace",
+        "exiting": false,
+        "frame": [
+          1196,
+          18,
+          144,
+          46
+        ],
+        "hovered": false,
+        "lifetime": 5,
+        "sticky": false,
+        "subtitle": null,
+        "symbol": null,
+        "title": "Trace Saved"
+      },
+      "showInFinder": true,
+      "traceEvents": 163326
     },
     "H3_copy_open_info": {
       "ok": true,
-      "text": "Open 0.1.0 (1)\nEngine: Chromium 156.0.8078.48, CEF 156.0.14+g4fa4ab5+chromium-156.0.8078.48\nmacOS Version 27.2 (Build 26B5112a)\nMac: Mac17,8 (arm64)"
+      "text": "Open 0.1.0 (1)\nEngine: Chromium 156.0.8078.48, CEF 156.0.14+g4fa4ab5+chromium-156.0.8078.48\nmacOS Version 27.2 (Build 26B5112a)\nMac: Mac17,8 (arm64)",
+      "toast": "Copied Open Info"
     },
     "H4_cast_menu_hidden": {
       "cast": {
@@ -298,14 +322,15 @@
         "targetNil": false,
         "title": "Cast\u2026"
       },
-      "checked": [
+      "expected": [
+        true,
         false
       ],
-      "expected": [
-        true
+      "menu": [
+        false,
+        false
       ],
-      "reason": "CommandMenuState / menuState(for:) (page-platform Step 2, branch s8/toasts) not on main yet",
-      "status": "BLOCKED"
+      "ok": false
     },
     "H4_media_router_off": {
       "helpers": 7,
@@ -315,9 +340,10 @@
     "H_reveal_open_data": {
       "ok": true,
       "reveals": [
-        "/Users/serge/Library/Application Support/Open-E2E-page-alloy-39735-f4edff81"
+        "/var/folders/s6/_07cr4w13vsg_myjkv9ldpqc0000gn/T/Open-E2E-page-alloy-11205-1bd3728f-scratch-gemry4ci/traces/Open Trace 2026-11-02 16.31.59.json",
+        "/Users/serge/Library/Application Support/Open-E2E-page-alloy-11205-1bd3728f"
       ],
-      "root": "/Users/serge/Library/Application Support/Open-E2E-page-alloy-39735-f4edff81"
+      "root": "/Users/serge/Library/Application Support/Open-E2E-page-alloy-11205-1bd3728f"
     },
     "K1_clear_cookies_and_refresh_alloy": {
       "after": [
@@ -349,6 +375,6 @@
       }
     }
   },
-  "started": "2026-11-02 15:42:26",
+  "started": "2026-11-02 16:31:08",
   "style": "alloy"
 }
