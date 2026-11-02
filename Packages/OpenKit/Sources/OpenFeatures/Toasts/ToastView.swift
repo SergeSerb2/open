@@ -78,8 +78,7 @@ public final class ToastView: NSView {
             let view = symbolView ?? NSImageView()
             if symbolView == nil { symbolView = view; addSubview(view) }
             view.image = NSImage(systemSymbolName: symbol, accessibilityDescription: nil)?
-                .withSymbolConfiguration(.init(pointSize: m.symbolSize, weight: .medium))
-            view.contentTintColor = style.toastText.nsColor
+                .withSymbolConfiguration(.init(pointSize: m.symbolSize, weight: .medium)).map { ToastView.tinted($0, style.toastText) }
             view.frame = CGRect(x: x, y: ((height - m.symbolSize) / 2).rounded(), width: m.symbolSize, height: m.symbolSize)
             x += m.symbolSize + m.symbolToTitle
         } else { symbolView?.removeFromSuperview(); symbolView = nil }
@@ -124,6 +123,18 @@ public final class ToastView: NSView {
     public var titleFont: NSFont { Typography.toast.font }
     public var titleColor: RGBA { style.toastText }
     public var titleLineIsTruncated: Bool { text.titleTruncated }
+    /// A symbol drawn in the text color, cut-outs kept (`quote.bubble.fill`'s quotes). A borderless
+    /// button does not tint its template image, so the image carries the color.
+    static func tinted(_ symbol: NSImage, _ color: RGBA) -> NSImage {
+        let color = color.nsColor
+        let image = NSImage(size: symbol.size, flipped: false) { rect in
+            symbol.draw(in: rect)
+            color.set(); rect.fill(using: .sourceAtop)
+            return true
+        }
+        image.accessibilityDescription = symbol.accessibilityDescription
+        return image
+    }
 }
 
 /// The gradient, rim, and keycap plates (one layer tree, no drawing).
@@ -175,6 +186,7 @@ private final class ToastTextView: NSView {
     var keycaps: [(CTLine, CGRect)] = [] { didSet { needsDisplay = true } }
     private(set) var titleTruncated = false
     override init(frame: NSRect) { super.init(frame: frame); wantsLayer = true; setAccessibilityElement(true); setAccessibilityRole(.staticText) }
+    override func viewDidChangeBackingProperties() { super.viewDidChangeBackingProperties(); needsDisplay = true }
     @available(*, unavailable) required init?(coder: NSCoder) { fatalError() }
     override var isFlipped: Bool { true }
     override func hitTest(_ point: NSPoint) -> NSView? { nil }
@@ -222,8 +234,20 @@ private final class ToastTextView: NSView {
         let titleWidth = title.map { CGFloat(CTLineGetTypographicBounds($0, nil, nil, nil)) } ?? 0
         return CGRect(x: x, y: top, width: titleWidth, height: titleHeight)
     }
-    override func draw(_ dirtyRect: NSRect) {
-        guard let context = NSGraphicsContext.current?.cgContext else { return }
+    /// Rendered once per change into the layer's contents at the backing scale (as the hint toast).
+    override var wantsUpdateLayer: Bool { true }
+    override func updateLayer() {
+        let scale = window?.backingScaleFactor ?? 2
+        let width = Int((bounds.width * scale).rounded(.up)), height = Int((bounds.height * scale).rounded(.up))
+        guard width > 0, height > 0, let context = CGContext(data: nil, width: width, height: height, bitsPerComponent: 8, bytesPerRow: 0,
+              space: CGColorSpace(name: CGColorSpace.sRGB)!, bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue) else { return }
+        // Flip to the view's top-left coordinates, then let CoreText draw upright glyphs.
+        context.translateBy(x: 0, y: CGFloat(height)); context.scaleBy(x: scale, y: -scale)
+        drawText(in: context)
+        layer?.contents = context.makeImage()
+        layer?.contentsScale = scale
+    }
+    private func drawText(in context: CGContext) {
         context.textMatrix = CGAffineTransform(scaleX: 1, y: -1)
         if let title { context.textPosition = titleOrigin; CTLineDraw(title, context) }
         if let subtitle { context.textPosition = subtitleOrigin; CTLineDraw(subtitle, context) }
@@ -256,8 +280,7 @@ public final class ToastAccessoryButton: NSButton {
     func configure(symbol: String, label: String, style: SpaceThemeStyle) {
         symbolName = symbol
         image = NSImage(systemSymbolName: symbol, accessibilityDescription: label)?
-            .withSymbolConfiguration(.init(pointSize: ToastMetrics.accessorySymbolSize, weight: .medium))
-        contentTintColor = style.toastText.nsColor
+            .withSymbolConfiguration(.init(pointSize: ToastMetrics.accessorySymbolSize, weight: .medium)).map { ToastView.tinted($0, style.toastText) }
         fill = style.toastAccessoryFill; pressedFill = style.toastAccessoryPressedFill
         layer?.backgroundColor = fill.cgColor
         setAccessibilityLabel(label); toolTip = nil

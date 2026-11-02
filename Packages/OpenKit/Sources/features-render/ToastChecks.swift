@@ -354,7 +354,14 @@ enum ToastScene {
         default: c.toasts.show(ToastContent(title: variant == "copy" ? URLCleaner.cleanedTitle : URLCleaner.plainTitle, accessory: ToastContent.shareButton))
         }
         ToastChecks.pump(c.contentView)
-        try FeatureCLI.output(c.contentView, args: args, scale: scale)
+        guard args.contains("--crop") else { try FeatureCLI.output(c.contentView, args: args, scale: scale); c.container.closeAll(); return }
+        // `--crop`: only the panel's top-right corner, 560 × 120 pt (keeps committed renders small).
+        guard let out = RenderCLI.value(args, "--out") else { throw CLIError(description: "--out required") }
+        let image = OffscreenRenderer().render(c.contentView, scale: scale)
+        let panel = c.container.frame
+        let crop = CGRect(x: (panel.maxX + 10 - 560) * scale, y: 0, width: 560 * scale, height: 120 * scale)
+        guard let cropped = image.cropping(to: crop) else { throw CLIError(description: "crop failed") }
+        OffscreenRenderer.writePNG(cropped, to: URL(fileURLWithPath: out)); print("rendered \(out)")
         c.container.closeAll()
     }
 }
