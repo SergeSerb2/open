@@ -228,11 +228,30 @@ final class AppDelegate: NSObject, NSApplicationDelegate, OEEngineDelegate, OEBr
       let state = withoutWindowUndo({ model.createWindow(focusedSpaceID: spaceID) }) else { return nil }
     let offset = Double(windowControllers.count * 24)
     state.frameX += offset; state.frameY -= offset
+    // A new window copies the key window's toolbar (commandbar-completion §4.6.1; guess).
+    state.showsToolbar = frontWindowController?.context.window?.showsToolbar ?? false
     let controller = createWindowController(state: state)
     scheduleSave(); return controller
   }
 
-  @objc func newWindow(_ sender: Any?) { makeWindow() }
+  @objc func newWindow(_ sender: Any?) { makeUserWindow() }
+
+  /// File ▸ New Window and Blank Window: Arc opens every window the user creates with the command bar
+  /// open in New Tab mode (`showCommandBarOnNewlyCreatedWindows`, one Bool in Arc's app state beside its
+  /// session-restoration fields; F0098, F0157, A0359, S2 19/0029). Windows restored at launch and windows
+  /// made for a moved tab do not (guess for restoration; no launch capture), so cold launch pays nothing.
+  @discardableResult
+  func makeUserWindow() -> BrowserWindowController? {
+    guard let controller = makeWindow() else { return nil }
+    hostFactories[controller.windowID]?.showCommandBar(.newTab)
+    return controller
+  }
+
+  /// Settings ▸ Advanced "Show full URL when Toolbar is enabled" for every browser window.
+  func applyToolbarSettings() {
+    let full = UserDefaults.standard.bool(forKey: AppCommand.showFullURLKey)
+    for controller in windowControllers where controller.showsFullURLWithToolbar != full { controller.showsFullURLWithToolbar = full }
+  }
 
   func focusWindow(_ id: WindowID, activate: Bool = false) {
     didFocusWindow(id)
@@ -433,6 +452,7 @@ extension AppDelegate: CommandDispatcher {
     commandDefaultsObserver = NotificationCenter.default.addObserver(forName: UserDefaults.didChangeNotification, object: nil, queue: .main) { [weak self] _ in
       MainActor.assumeIsolated {
         guard let self else { return }
+        self.applyToolbarSettings()
         let options = self.currentNumberedShortcutOptions
         guard options != self.numberedShortcutOptions else { return }
         self.numberedShortcutOptions = options; self.scheduleMenuRebuild()
@@ -511,7 +531,7 @@ extension AppDelegate: CommandDispatcher {
   func performCommand(_ id: String) {
     if SystemCommandActions.selectors[id] != nil { _ = SystemCommandActions.perform(id); return }
     switch id {
-    case "new-window", "blank-window": makeWindow()
+    case "new-window", "blank-window": makeUserWindow()
     case "new-tab":
       let controller = frontWindowController ?? makeWindow()
       controller.flatMap { hostFactories[$0.windowID] }?.newTab(nil)

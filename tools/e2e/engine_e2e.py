@@ -4750,6 +4750,146 @@ def measure(app_factory, results, tmp):
     results["ok"] = True
 
 
+def _fixture_server(prefix):
+    import http.server
+    import threading
+    class Handler(http.server.BaseHTTPRequestHandler):
+        def do_GET(self):
+            body = ("<!doctype html><title>%s %s</title><body style='background:#ffffff;color:#222'>%s %s" % (prefix, self.path, prefix, self.path)).encode()
+            self.send_response(200); self.send_header('Content-Type', 'text/html'); self.end_headers(); self.wfile.write(body)
+        def log_message(self, *args): pass
+    server = http.server.ThreadingHTTPServer(('127.0.0.1', 0), Handler)
+    threading.Thread(target=server.serve_forever, daemon=True).start()
+    return server, 'http://127.0.0.1:%d' % server.server_address[1]
+
+
+def toolbar_checks(factory, results, tmp):
+    """commandbar-completion §4.6 / §5.3 `toolbar`: the optional content toolbar in the real App."""
+    server, origin = _fixture_server('TB')
+    app = factory(urls=(origin + '/alpha',), fresh=True)
+    def ws(): return app.call('window-state')
+    def title(id='toggle-toolbar'): return next((r['title'] for r in app.call('menu-state') if r['id'] == id), None)
+    def enabled(id='toggle-toolbar'): return next((r['enabled'] for r in app.call('menu-state') if r['id'] == id), None)
+    try:
+        tab = app.call('tabs')[0]['id']
+        app.call('wait', tab=tab)
+        wait_until(lambda: app.eval(tab, 'document.title') == 'TB /alpha', step=.1)
+        # The harness may move and resize the window after launch: compare the page with its own slot.
+        before, h0 = ws(), app.eval(tab, 'window.innerHeight')
+        results['toolbar_default_off'] = {'ok': not before['toolbar']['shown'] and not before['toolbar']['drawn'] and before['urlFieldVisible']
+            and h0 == before['toolbar']['page'][3]
+            and 'back' in before['toolbarButtons'] and title() == 'Show Toolbar' and enabled() is True,
+            'toolbar': before['toolbar'], 'title': title(), 'enabled': enabled(), 'buttons': before['toolbarButtons'],
+            'menuContext': app.call('menu-context'), 'frame': before['frame'], 'panel': before['panel']}
+        app.call('key', key='d', modifiers=['cmd', 'shift'])
+        shown = wait_until(lambda: (lambda s: s if s['toolbar']['drawn'] else None)(ws()), timeout=3, step=.05) or ws()
+        bar = shown['toolbar']
+        # The page fills the slot below the bar: innerHeight = slot height − 32.
+        h1 = wait_until(lambda: (lambda h: h if h == bar['page'][3] else None)(app.eval(tab, 'window.innerHeight')), timeout=3, step=.05)
+        results['toolbar_cmd_shift_d'] = {'ok': bar['shown'] and bar['drawn'] and h1 is not None and bar['frame'][1] == bar['page'][3] and bar['frame'][3] == 32
+            and bar['controls'] == ['Go back', 'Go forward', 'Reload', 'Copy Current URL', 'Site Control Center'] and bar['text'] == '127.0.0.1'
+            and title() == 'Hide Toolbar' and shown['menuTitles']['toggle-toolbar'] == 'Hide Toolbar',
+            'innerHeight': [h0, h1], 'toolbar': bar, 'title': title(), 'menuContext': app.call('menu-context'),
+            'frame': shown['frame'], 'panel': shown['panel']}
+        fav0, fav1 = before['chrome']['favorites'], shown['chrome']['favorites']
+        results['toolbar_sidebar_hides_url_and_navigation'] = {'ok': not shown['urlFieldVisible'] and shown['toolbarButtons'] == ['toggle']
+            and bool(fav0) and bool(fav1) and round(fav0[1] - fav1[1], 1) == 36,
+            'buttons': shown['toolbarButtons'], 'favoritesY': [fav0[1] if fav0 else None, fav1[1] if fav1 else None]}
+        menu = app.call('toolbar-menu')
+        app.call('toolbar-menu', item='Show Full URL')
+        full = wait_until(lambda: (lambda s: s if s['toolbar']['text'].startswith('http') else None)(ws()), timeout=3, step=.05)
+        stored = app.call('defaults', key='open.advanced.showFullURLWithToolbar')
+        app.call('defaults', key='open.advanced.showFullURLWithToolbar', value=False)
+        host = wait_until(lambda: (lambda s: s if s['toolbar']['text'] == '127.0.0.1' else None)(ws()), timeout=3, step=.05)
+        results['toolbar_full_url_setting'] = {'ok': menu == ['Show Full URL', 'Hide Toolbar', '-', 'Manage Extensions'] and bool(full)
+            and full['toolbar']['text'] == origin + '/alpha' and stored is True and bool(host),
+            'menu': menu, 'text': full['toolbar']['text'] if full else None, 'stored': stored}
+        tabs_before = len(app.call('tabs'))
+        app.call('toolbar-menu', item='Manage Extensions')
+        ext = wait_until(lambda: next((t for t in app.call('tabs') if 'extensions' in t['url']), None), timeout=5, step=.1)
+        results['toolbar_manage_extensions'] = {'ok': bool(ext), 'url': ext['url'] if ext else None, 'tabs': [tabs_before, len(app.call('tabs'))]}
+        if ext:
+            app.call('select', tab=tab); wait_until(lambda: ws()['selected'] == tab, timeout=3, step=.05)
+        app.call('toolbar-menu', item='Hide Toolbar')
+        hidden = wait_until(lambda: (lambda s: s if not s['toolbar']['drawn'] else None)(ws()), timeout=3, step=.05)
+        h2 = wait_until(lambda: (lambda h: h if hidden and h == hidden['toolbar']['page'][3] and h == hidden['panel'][3] else None)(app.eval(tab, 'window.innerHeight')), timeout=3, step=.05)
+        results['toolbar_hide_from_menu'] = {'ok': bool(hidden) and hidden['urlFieldVisible'] and h2 is not None and title() == 'Show Toolbar',
+            'innerHeight': h2, 'title': title()}
+        field_menu = app.call('url-field-menu')
+        app.call('url-field-menu', item='Show as Toolbar')
+        again = wait_until(lambda: (lambda s: s if s['toolbar']['drawn'] else None)(ws()), timeout=3, step=.05)
+        results['toolbar_url_field_show_as_toolbar'] = {'ok': field_menu == ['Show as Toolbar', '-', 'Manage Extensions'] and bool(again), 'menu': field_menu}
+        windows_before = len(app.call('shell-windows'))
+        app.call('key', key='n', modifiers=['cmd'])
+        second = wait_until(lambda: (lambda s: s if len(app.call('shell-windows')) > windows_before and s['id'] != before['id'] else None)(ws()), timeout=5, step=.1)
+        results['toolbar_new_window_copies'] = {'ok': bool(second) and second['toolbar']['shown'], 'toolbar': second['toolbar'] if second else None}
+        if second:
+            app.call('command', id='close-window')
+            wait_until(lambda: len(app.call('shell-windows')) == windows_before, timeout=5, step=.1)
+        app.call('window-focus', id=before['id'], activate=True)
+        app.call('menu-perform', id='new-little-open-window')
+        little = wait_until(lambda: next((w for w in app.call('windows') if w['title'] == 'Little Open' and w['key']), None), timeout=5, step=.1)
+        refused = enabled() is False if little else None
+        results['toolbar_little_open_refuses'] = {'ok': bool(little) and refused is True, 'enabled': enabled()}
+        app.call('window-focus', id=before['id'], activate=True)
+        app.call('save'); app.quit()
+        app = factory(urls=())
+        relaunched = wait_until(lambda: (lambda s: s if s['toolbar']['drawn'] else None)(ws()), timeout=10, step=.1)
+        results['toolbar_relaunch_keeps'] = {'ok': bool(relaunched) and relaunched['toolbar']['shown'] and not relaunched['urlFieldVisible']}
+    finally:
+        app.quit(); server.shutdown(); server.server_close()
+
+
+def numbering_checks(factory, results, tmp):
+    """commandbar-completion §5.3 `numbering`: holding Command shows nothing (D13, CC-39); Cmd+2 selects
+    item 2 of goToItemTargets; the Essential Keyboard Shortcuts window from its command."""
+    server, origin = _fixture_server('NB')
+    app = factory(urls=tuple(origin + '/%s' % n for n in ('one', 'two', 'three')), fresh=True)
+    def ws(): return app.call('window-state')
+    try:
+        for t in app.call('tabs'): app.call('wait', tab=t['id'])
+        time.sleep(.5)
+        # Control pair first (no key): the sidebar must already be still, so a difference while
+        # Command is held can only come from the press.
+        shots = {n: os.path.join(tmp, 'numbering-%s.png' % n) for n in ('rest', 'rest2', 'held')}
+        sidebar = ws()['sidebarFrame']
+        def sidebar_diff(a, b):
+            wa, ha, pa = read_image(a); wb, hb, pb = read_image(b)
+            if (wa, ha) != (wb, hb): return 999, None
+            scale = wa / ws()['frame'][2]; diff, where = 0, None
+            for y in range(0, ha, 2):
+                for x in range(int(sidebar[0] * scale), int((sidebar[0] + sidebar[2]) * scale), 2):
+                    ca, cb = pa(x, y), pb(x, y); d = max(abs(ca[i] - cb[i]) for i in range(3))
+                    if d > diff: diff, where = d, [round(x / scale), round(y / scale)]
+            return diff, where
+        still = None
+        for _ in range(10):
+            app.call('snapshot', path=shots['rest']); time.sleep(2); app.call('snapshot', path=shots['rest2'])
+            still = sidebar_diff(shots['rest'], shots['rest2'])
+            if still[0] <= 2: break
+        app.call('key', key='command', modifiers=['command'])
+        time.sleep(2)
+        app.call('snapshot', path=shots['held'])
+        app.call('key', key='command')
+        held = sidebar_diff(shots['rest2'], shots['held'])
+        results['numbering_hold_command_no_hints'] = {'ok': still[0] <= 2 and held[0] <= 2, 'controlDifference': still, 'heldDifference': held,
+            'scope': 'sidebar pixels, rest vs rest 2 s later (control), then rest vs Command held 2 s'}
+        today = [n['id'] for n in app.call('sidebar-tree')['today']]
+        app.call('key', key='2', modifiers=['cmd'])
+        picked = wait_until(lambda: ws()['selected'] == today[1], timeout=3, step=.05) if len(today) > 1 else None
+        app.call('key', key='9', modifiers=['cmd'])
+        last = wait_until(lambda: ws()['selected'] == today[-1], timeout=3, step=.05)
+        results['numbering_cmd2_cmd9'] = {'ok': bool(picked) and bool(last), 'today': today, 'selected': ws()['selected']}
+        app.call('command', id='keyboard-shortcuts-edu')
+        edu = wait_until(lambda: next((w for w in app.call('windows') if w['title'] == 'Essential Keyboard Shortcuts' and w['visible']), None), timeout=5, step=.1)
+        if edu:
+            app.call('key', key='escape', window=edu['number'])
+        gone = wait_until(lambda: not any(w['title'] == 'Essential Keyboard Shortcuts' and w['visible'] for w in app.call('windows')), timeout=5, step=.1)
+        results['numbering_edu_window'] = {'ok': bool(edu) and edu['level'] == 3 and bool(gone), 'window': edu}
+    finally:
+        app.quit(); server.shutdown(); server.server_close()
+
+
 def commandbar_checks(factory, results, tmp, config):
     import http.server
     import threading
@@ -5038,6 +5178,55 @@ def commandbar_checks(factory, results, tmp, config):
         results['save_page_capture'] = {'ok': bool(written) and not app.call('save-page-state')['pending'],
             'written': bool(written), 'bytes': os.path.getsize(capture) if os.path.exists(capture) else 0}
 
+        # Inline completion in the real App (commandbar-completion §4.1, §5.3): a page visited twice on
+        # localhost; Cmd+T, `localh` typed through the App's key path: the field completes the host with the
+        # port and selects the completed tail; Return goes to that page; Backspace removes only the completion.
+        host = 'localhost:%d' % server.server_address[1]
+        local = new_tab(app, 'http://%s/alpha' % host)
+        local_id = local['id'] if isinstance(local, dict) else local
+        app.call('wait', tab=local_id)
+        app.call('navigate', tab=local_id, url='http://%s/beta' % host); app.call('wait', tab=local_id)
+        app.call('navigate', tab=local_id, url='http://%s/alpha' % host); app.call('wait', tab=local_id)
+        other_tab = next(t['id'] for t in app.call('tabs') if t['id'] != local_id)
+        app.call('select', tab=other_tab); app.call('focus', tab=other_tab)
+        bar('t', 'window'); typed_l = type_query('localh')
+        completed = wait_until(lambda: (lambda st: st if st.get('fieldText') == host and st.get('range') == [6, len(host) - 6] else None)(state()), timeout=3, step=.05)
+        press('return')
+        went = wait_until(lambda: (lambda w: w if w['selected'] == local_id else None)(app.call('window-state')), timeout=5, step=.05)
+        bar('t', 'window'); type_query('localh')
+        wait_until(lambda: state().get('fieldText') == host, timeout=3, step=.05)
+        press('delete')
+        removed = wait_until(lambda: (lambda st: st if st.get('fieldText') == 'localh' and st.get('text') == 'localh' and st.get('range') == [6, 0] else None)(state()), timeout=3, step=.05)
+        press('escape')
+        results['commandbar_inline_completion'] = {'ok': bool(completed) and bool(went) and bool(removed),
+            'completed': {k: (completed or state()).get(k) for k in ('text', 'fieldText', 'range')},
+            'afterBackspace': {k: (removed or state()).get(k) for k in ('text', 'fieldText', 'range')}, 'switched': bool(went)}
+        app.call('close', tab=local_id)
+        # A window the user creates opens with the command bar in New Tab mode (Section 2 item 10:
+        # F0098, F0157, A0359); the launch window did not create a bar (`lazy_commandbar` above).
+        windows_before = len(app.call('shell-windows')); first_window = app.call('window-state')['id']
+        app.call('menu-perform', id='new-window')
+        opened_new = wait_until(lambda: (lambda w, st: st if len(app.call('shell-windows')) > windows_before and w['id'] != first_window
+            and st.get('presented') and st.get('mode') == 'newTab' else None)(app.call('window-state'), state()), timeout=5, step=.05)
+        press('escape')
+        app.call('menu-perform', id='close-window')
+        closed_new = wait_until(lambda: len(app.call('shell-windows')) == windows_before, timeout=5, step=.1)
+        app.call('window-focus', id=first_window, activate=True)
+        results['new_window_opens_command_bar'] = {'ok': bool(opened_new) and bool(closed_new),
+            'state': {k: (opened_new or {}).get(k) for k in ('presented', 'mode', 'newTabHighlighted')}}
+        # Edit Pinned URL (app-shell §4.1, Section 2 item 11): the row menu's Edit Pinned Page ▸ Edit… opens
+        # the command bar in edit mode with the pinned URL selected; Return stores the new pinned URL, and
+        # the tab, still on its pinned page, goes there.
+        pin_id = new_tab(app, origin + '/pinned')
+        app.call('pin', tab=pin_id)
+        app.call('sidebar-menu', node=pin_id, item='Edit Pinned Page/Edit…')
+        editing = wait_until(lambda: (lambda st: st if st.get('presented') and st.get('pinnedEdit') == pin_id else None)(state()), timeout=3, step=.05)
+        type_query(origin + '/pinned-new'); press('return')
+        changed = wait_until(lambda: next((t for t in app.call('tabs') if t['id'] == pin_id and t['pinnedURL'] == origin + '/pinned-new'), None), timeout=5, step=.1)
+        moved = wait_until(lambda: app.eval(pin_id, 'document.title') == 'Shell C /pinned-new', timeout=5, step=.1)
+        results['edit_pinned_url'] = {'ok': bool(editing) and editing['mode'] == 'editCurrentURL' and editing['text'] == origin + '/pinned'
+            and editing['range'] == [0, len(origin + '/pinned')] and bool(changed) and bool(moved) and not state().get('pinnedEdit'),
+            'editing': {k: (editing or {}).get(k) for k in ('mode', 'text', 'range', 'pinnedEdit')}, 'pinnedURL': (changed or {}).get('pinnedURL')}
         time.sleep(.25)
         app.call('menu-perform', id='settings'); original_external = app.call('settings-state')['external']
         app.call('settings-toggle', name='external'); app.call('save'); app.quit()
@@ -6881,7 +7070,7 @@ def main():
     ap.add_argument("--engine-fingerprint-only", action="store_true", help="verify built engine artifacts and exit without launching Open")
     ap.add_argument("--extensions", default=os.path.join(ROOT, ".re", "ext", "unpacked"))
     ap.add_argument("--only", choices=["shell", "extensions", "features", "measure", "tabstrip", "window", "sidebar", "peek",
-                                       "commandbar", "app-actions", "actions", "profiles", "sidebar-completion"])
+                                       "commandbar", "app-actions", "actions", "profiles", "sidebar-completion", "toolbar", "numbering"])
     ap.add_argument("--window-chrome-only", action="store_true", help="run only the window-chrome follow-up flows in the window suite")
     ap.add_argument("--keep", action="store_true",
                     help="keep this run's data root, cache root and scratch folder (paths printed at the end)")
@@ -7048,6 +7237,9 @@ def main():
             results[opts.only] = CheckedResults(tracker)
             space_manager_checks(results[opts.only], tmp, opts.config, opts.style)
             folder_peek_checks(factory, results[opts.only], tmp)
+        elif opts.only in ("toolbar", "numbering"):
+            results[opts.only] = CheckedResults(tracker)
+            (toolbar_checks if opts.only == "toolbar" else numbering_checks)(factory, results[opts.only], tmp)
         elif opts.only == "window":
             results["window"] = CheckedResults(tracker)
             window_checks(factory, results["window"], tmp, opts.config, chrome_only=opts.window_chrome_only)
@@ -7130,14 +7322,14 @@ def main():
                                     else opts.config.lower()))
     with open(os.path.join(OUT, name), "w") as f:
         json.dump(results, f, indent=2, sort_keys=True)
-    for group in ("shell", "extensions", "features", "measure", "tabstrip", "window", "sidebar", "peek", "commandbar", "app-actions", "actions", "profiles", "sidebar-completion"):
+    for group in ("shell", "extensions", "features", "measure", "tabstrip", "window", "sidebar", "peek", "commandbar", "app-actions", "actions", "profiles", "sidebar-completion", "toolbar", "numbering"):
         for k, v in results.get(group, {}).items():
             if isinstance(v, dict) and "ok" in v:
                 print("%-24s %s" % (k, "PASS" if v.get("ok") else "FAIL"))
             elif isinstance(v, dict) and v.get("status") in ("SKIP", "BLOCKED", "INTERRUPTED", "DEFERRED"):
                 print("%-24s %s: %s" % (k, v["status"], v.get("reason", "")))
     print("wrote", os.path.join(OUT, name))
-    failures = [k for group in ("shell", "extensions", "features", "measure", "tabstrip", "window", "sidebar", "peek", "commandbar", "app-actions", "actions", "sidebar-completion")
+    failures = [k for group in ("shell", "extensions", "features", "measure", "tabstrip", "window", "sidebar", "peek", "commandbar", "app-actions", "actions", "sidebar-completion", "toolbar", "numbering")
                 for k, v in results.get(group, {}).items() if isinstance(v, dict) and v.get("ok") is False]
     if failures or not results["cleanup"]["ok"]:
         sys.exit(1)

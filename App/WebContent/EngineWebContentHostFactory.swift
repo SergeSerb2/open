@@ -62,12 +62,23 @@ final class EngineWebContentHostFactory: NSResponder, WebContentHostFactory {
   #endif
   private(set) var navigationFocusDecisions = 0
   private(set) var lastNavigationFocusRestored = false
-  func showCommandBar(_ mode: CommandBarMode) {
+  func showCommandBar(_ mode: CommandBarMode, editingPinnedTab: ItemID? = nil) {
     guard !isClosing, !app.terminationRequested else { return }
     let requestedAt = LaunchTiming.shared.elapsedMilliseconds
     app.prepareCommandServices()
     if commandBarSession == nil { commandBarSession = AppCommandBarSession(factory: self) }
-    commandBarSession?.show(mode, requestedAt: requestedAt)
+    commandBarSession?.show(mode, requestedAt: requestedAt, editingPinnedTab: editingPinnedTab)
+  }
+  /// Edit Pinned URL confirmed in the command bar (app-shell §4.1): the pinned URL changes; a tab that
+  /// was still on its old pinned page also goes to the new one (guess: no capture of Arc's dialog).
+  func updatePinnedURL(_ id: ItemID, to url: URL) {
+    guard let tab = model.tab(id: id), let old = tab.pinnedURL else { return }
+    let onPinnedPage = tab.url.host == old.host && tab.url.path == old.path
+    guard model.setPinnedURL(id: id, url: url) else { return }
+    if onPinnedPage {
+      if let content = hosts[id]?.content { content.load(url) } else { tab.url = url }
+    }
+    controller?.refresh(); mirror.sync(); app.scheduleSave()
   }
   private var enteredWindowFullscreenForPage = false
   private(set) var auxiliaryPages: [AuxiliaryPage] = []
@@ -119,6 +130,7 @@ final class EngineWebContentHostFactory: NSResponder, WebContentHostFactory {
     controller.onFocus = { [weak self] in guard let self else { return }; self.app.didFocusWindow(self.windowState.id) }
     controller.nextResponder = self; nextResponder = NSApp
     controller.onSidebarIntent = { [weak self] intent in guard let self else { return false }; return self.performSidebar(intent) }
+    controller.showsFullURLWithToolbar = UserDefaults.standard.bool(forKey: AppCommand.showFullURLKey)
     controller.onStateChange = { [weak self] in
       guard let self else { return }
       if self.app.engineReady { for tab in self.visibleTabs { tab.live.sleepPhase = .live }; self.controller?.container.refreshPlaceholders() }
@@ -446,10 +458,19 @@ final class EngineWebContentHostFactory: NSResponder, WebContentHostFactory {
     case .share(let id): return shareSidebarTab(id)
     case .duplicate(let id): return model.duplicateNode(id: id) != nil
     case .showLibrary: app.settingsPresenter.showLibrary(); return true
+    // The content toolbar (commandbar-completion §4.6): the setting is Settings ▸ Advanced's
+    // "Show full URL when Toolbar is enabled"; every window follows it (AppDelegate's defaults observer).
+    case .setShowFullURL(let full): app.settingsPresenter.settings.set(full, for: AppCommand.showFullURLKey); app.applyToolbarSettings(); return true
+    case .manageExtensions: openExtensionsPage(nil); return true
     case .manageSpaces:
       app.settingsPresenter.showLibrary(section: .spaces); return true
+    case .editPinnedURL(let id):
+      // The command bar in edit mode, seeded with the pinned URL (app-shell §4.1). Arc's strings name an
+      // "Edit Pinned URL dialog" (FC §3.2 r3); Section 2's brief chose the command bar.
+      guard let tab = model.tab(id: id), tab.pinnedURL != nil else { return false }
+      showCommandBar(.editCurrentURL, editingPinnedTab: tab.id); return true
     case .showSiteControls, .changeSpaceIcon, .editSpaceTheme, .newProfile, .shareSpace,
-         .editPinnedURL, .changeIcon, .customizePage:
+         .changeIcon, .customizePage:
       return false // Explicitly deferred UI entries; see docs/app-shell.md Step B.
     default: return nil
     }

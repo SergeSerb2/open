@@ -2147,6 +2147,16 @@ public final class BrowserModel {
         registerChange(undo: { tab.url = old }, redo: { tab.url = pinned })
     }
 
+    /// Edit Pinned URL (app-shell §4.1): a new pinned URL for a pinned tab, one undo step.
+    @discardableResult
+    public func setPinnedURL(id: ItemID, url: URL) -> Bool {
+        guard let tab = tab(id: id), let old = tab.pinnedURL else { return false }
+        guard old != url else { return true }
+        tab.pinnedURL = url
+        registerChange(undo: { tab.pinnedURL = old }, redo: { tab.pinnedURL = url })
+        return true
+    }
+
     public func replacePinnedURL(id: ItemID) {
         guard let tab = tab(id: id) else { return }
         let old = tab.pinnedURL
