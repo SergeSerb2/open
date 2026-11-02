@@ -30,11 +30,6 @@ uint32_t ReadUInt32(const uint8_t* p) {
          (uint32_t(p[3]) << 24);
 }
 
-NSURL* _Nullable OEURL(const CefString& s) {
-  NSString* string = OEString(s);
-  return string.length ? [NSURL URLWithString:string] : nil;
-}
-
 }  // namespace
 
 @implementation OENavigationHistory {
@@ -86,7 +81,7 @@ NSURL* _Nullable OEURL(const CefString& s) {
   return self;
 }
 
-- (nullable instancetype)oe_initWithCefHistory:
+- (nullable instancetype)initOEWithCefHistory:
     (CefRefPtr<CefNavigationHistory>)history {
   if (!history) {
     return nil;

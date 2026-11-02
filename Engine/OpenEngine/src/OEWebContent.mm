@@ -909,7 +909,7 @@ typedef void (^OEDevToolsCompletion)(NSDictionary* _Nullable, NSError* _Nullable
     return nil;
   }
   return [[OENavigationHistory alloc]
-      oe_initWithCefHistory:CefGetNavigationHistory(_browser)];
+      initOEWithCefHistory:CefGetNavigationHistory(_browser)];
 }
 
 - (void)setPageHidden:(BOOL)hidden {

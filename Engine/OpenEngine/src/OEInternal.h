@@ -89,7 +89,7 @@ class OEClient;
 
 @interface OENavigationHistory ()
 /// Packs a fork history as OPNH v1; nil if it breaks a container limit.
-- (nullable instancetype)oe_initWithCefHistory:
+- (nullable instancetype)initOEWithCefHistory:
     (CefRefPtr<CefNavigationHistory>)history;
 /// The fork history for CefRestoreNavigationHistory; null if CEF refuses it.
 - (CefRefPtr<CefNavigationHistory>)oe_cefHistory;
