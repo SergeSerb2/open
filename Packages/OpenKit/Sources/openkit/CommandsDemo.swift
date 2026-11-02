@@ -710,6 +710,7 @@ func runCommandsDemo(args: [String]) async throws {
     try snapshots.saveNow(model: model)
     try await runFolderPeekDemo(root: root.appendingPathComponent("FolderPeek"), check: check)
     runTidyTitlesDemo(check: check)
+    runNumberingDemo(check: check)
     runTidyRenameDemo(check: check)
     try await runFolderArchiveDemo(root: root.appendingPathComponent("FolderArchive"), check: check)
     try await runSidebarCommandsDemo(root: root.appendingPathComponent("SidebarCommands"), check: check)

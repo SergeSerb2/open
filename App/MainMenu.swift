@@ -13,7 +13,7 @@ enum MainMenu {
     if let controller = factory?.controller { dispatcher = controller } else { dispatcher = app }
     return MenuBuilder.buildMainMenu(dispatcher: dispatcher,
       spaces: app.model.spaces.map { SpaceMenuEntry(id: $0.id.description, title: app.model.displayTitle(for: $0)) },
-      tabs: (factory?.numberedTabs ?? []).map { TabMenuEntry(id: $0.id.description, title: $0.displayTitle.isEmpty ? $0.url.absoluteString : $0.displayTitle) },
+      tabs: (factory.map { f in f.numberedItems.map { TabMenuEntry(id: $0.description, title: f.numberedTitle($0)) } } ?? []),
       overrides: app.keyBindings, switchToNinth: UserDefaults.standard.bool(forKey: "open.shortcuts.switchToNinthEnabled"))
   }
   static func targetWindowCommands(_ target: EngineWebContentHostFactory?) { NSApp.mainMenu = build(factoryOverride: target) }
@@ -38,7 +38,7 @@ enum AppCommand {
   static func canonicalID(_ id: String) -> String {
     ["reveal-tab-in-sidebar": "reveal-current-tab", "keyboard-shortcuts": "keyboard-shortcuts-edu"][id] ?? id
   }
-  static let implemented: Set<String> = ["new-tab", "open-command-bar", "search-tabs", "search-actions", "new-window", "blank-window", "archive-tab", "restore-last-closed-tab", "pin-unpin-tab", "pin-tab", "unpin-tab", "duplicate-tab", "rename-tab", "reset-tab", "replace-pinned-url", "clear-unpinned-tabs", "next-tab", "previous-tab", "cycle-tab-forward", "cycle-tab-backward", "tab-switcher-forward", "tab-switcher-backward", "next-space", "previous-space", "new-space", "new-folder", "focus-space", "reload", "force-reload", "stop-loading", "go-back", "go-forward", "zoom-in", "zoom-out", "zoom-actual-size", "print", "save-page-as", "share-page", "copy-url", "copy-url-markdown", "copy-url-quote", "developer-tools", "javascript-console", "view-source", "inspect-elements", "toggle-sidebar", "reveal-current-tab", "expand-pinned-section", "collapse-pinned-section", "settings", "search-settings", "air-traffic-control", "import-from-browser", "set-default-browser", "check-for-updates", "view-archive", "view-history", "view-downloads", "view-library", "view-boosts", "manage-extensions", "add-extension", "new-little-open-window", "little-open-global", "help-center", "keyboard-shortcuts-edu", "show-shortcuts-overlay", "getting-started", "release-notes", "contact-team", "expand-all-folders", "collapse-all-folders", "add-to-favorites", "remove-from-favorites", "mute-all-tabs", "unmute-all-tabs", "reset-all-tabs-in-space", "manage-spaces", "rename-space", "change-profile", "clear-archive"]
+  static let implemented: Set<String> = ["new-tab", "open-command-bar", "search-tabs", "search-actions", "new-window", "blank-window", "archive-tab", "restore-last-closed-tab", "pin-unpin-tab", "pin-tab", "unpin-tab", "duplicate-tab", "rename-tab", "reset-tab", "replace-pinned-url", "clear-unpinned-tabs", "next-tab", "previous-tab", "cycle-tab-forward", "cycle-tab-backward", "tab-switcher-forward", "tab-switcher-backward", "next-space", "previous-space", "new-space", "new-folder", "focus-space", "reload", "force-reload", "stop-loading", "go-back", "go-forward", "zoom-in", "zoom-out", "zoom-actual-size", "print", "save-page-as", "share-page", "copy-url", "copy-url-markdown", "copy-url-quote", "developer-tools", "javascript-console", "view-source", "inspect-elements", "toggle-sidebar", "reveal-current-tab", "expand-pinned-section", "collapse-pinned-section", "settings", "search-settings", "air-traffic-control", "import-from-browser", "set-default-browser", "check-for-updates", "view-archive", "view-history", "view-downloads", "view-library", "view-boosts", "manage-extensions", "add-extension", "new-little-open-window", "little-open-global", "help-center", "keyboard-shortcuts-edu", "getting-started", "release-notes", "contact-team", "expand-all-folders", "collapse-all-folders", "add-to-favorites", "remove-from-favorites", "mute-all-tabs", "unmute-all-tabs", "reset-all-tabs-in-space", "manage-spaces", "rename-space", "change-profile", "clear-archive"]
 }
 
 import OpenEngine
@@ -73,13 +73,13 @@ extension EngineWebContentHostFactory {
       return controller?.isCommandEnabled(id, enabledKey: enabledKey ?? EnabledKey.currentTabInSplit) == true
     }
     guard AppCommand.implemented.contains(id) || id == "go-to-last-tab" || id.hasPrefix("go-to-tab-") || id.hasPrefix("go-to-space-") else { return false }
-    if id == "go-to-last-tab" { return !numberedTabs.isEmpty }
+    if id == "go-to-last-tab" { return !numberedItems.isEmpty }
     if ["rename-space", "change-profile", "clear-archive"].contains(id) {
       return !isClosing && controller != nil && window?.isVisible == true && window?.attachedSheet == nil
         && focusedSpace != nil && spaceProfileMenu == nil
     }
     if id == "focus-space" { return payload.flatMap(UUID.init(uuidString:)).map { model.space(id: SpaceID(rawValue: $0)) != nil } ?? false }
-    if id.hasPrefix("go-to-tab-"), let n = Int(id.split(separator: "-").last ?? "") { return numberedTab(n) != nil }
+    if id.hasPrefix("go-to-tab-"), let n = Int(id.split(separator: "-").last ?? "") { return numberedItem(n) != nil }
     if id.hasPrefix("go-to-space-"), let n = Int(id.split(separator: "-").last ?? "") { return n <= model.spaces.count }
     if id == "pin-tab" { return selectedTab.map { !model.isPinned(tabID: $0.id) } ?? false }
     if id == "expand-all-folders" || id == "collapse-all-folders" {
@@ -123,10 +123,9 @@ extension EngineWebContentHostFactory {
       if let uuid = payload.flatMap(UUID.init(uuidString:)), let space = model.space(id: SpaceID(rawValue: uuid)) { focus(space: space) }
       else { focus(space: model.spaces[n - 1]) }; return true
     }
-    if id == "go-to-last-tab", let tab = numberedTabs.last { selectTabForCommand(tab.id); return true }
-    if id.hasPrefix("go-to-tab-"), let n = Int(id.split(separator: "-").last ?? ""), let tab = numberedTab(n) {
-      let tabID = payload.flatMap(UUID.init(uuidString:)).map { ItemID(rawValue: $0) } ?? tab.id
-      selectTabForCommand(tabID); return true
+    if id == "go-to-last-tab", let item = numberedItems.last { selectNumberedItem(item); return true }
+    if id.hasPrefix("go-to-tab-"), let n = Int(id.split(separator: "-").last ?? ""), let item = numberedItem(n) {
+      selectNumberedItem(payload.flatMap(UUID.init(uuidString:)).map { ItemID(rawValue: $0) } ?? item); return true
     }
     switch id {
     case "new-tab": newTab(nil)
