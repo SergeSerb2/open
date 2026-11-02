@@ -26,11 +26,11 @@
 #include "content/public/browser/visibility.h"
 #include "content/public/browser/web_contents.h"
 
+using Builder = sessions::ContentSerializedNavigationBuilder;
+
 namespace open_engine {
 
 namespace {
-
-using Builder = sessions::ContentSerializedNavigationBuilder;
 
 content::WebContents* WebContentsFor(CefRefPtr<CefBrowser> browser) {
   auto host = CefBrowserHostBase::FromBrowser(browser);

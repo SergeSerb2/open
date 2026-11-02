@@ -5,3 +5,13 @@ _cef_shutdown
 _cef_version_info
 # Open fork API (P1, cef/include/cef_tab_strip.h)
 _cef_tab_strip_create
+# Open fork API: tab sleeping (memory fork; cef/include/cef_page_lifecycle.h,
+# cef/include/cef_navigation_history.h)
+_cef_set_page_frozen
+_cef_is_page_frozen
+_cef_discard_browser
+_cef_was_discarded
+_cef_has_unload_handlers
+_cef_get_navigation_history
+_cef_restore_navigation_history
+_cef_navigation_history_create
