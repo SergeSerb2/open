@@ -301,10 +301,15 @@ public final class CaptureController {
         guard let view = card else { return }
         card = nil; phase = .idle
         view.onAction = nil; view.onHover = nil
+        // A card button's own action can close the card: the view leaves on a later turn
+        // (the fade's completion, or the next run-loop turn), never inside that callback.
         if view.window?.isVisible == true, !Motion.reducesMotion {
             NSAnimationContext.runAnimationGroup { $0.duration = CaptureMetrics.cardFade; view.animator().alphaValue = 0 }
                 completionHandler: { MainActor.assumeIsolated { view.removeFromSuperview() } }
-        } else { view.removeFromSuperview() }
+        } else {
+            view.isHidden = true
+            DispatchQueue.main.async { view.removeFromSuperview() }
+        }
         flowEnded()
     }
 

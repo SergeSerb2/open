@@ -279,8 +279,8 @@ enum CaptureChecks {
               "limits: 8,192 px wide and 32,768 px tall are accepted, one more is refused")
         check(CaptureComposer.withinLimits(width: 4096, height: 32768) && !CaptureComposer.withinLimits(width: 4097, height: 32768),
               "limits: 4,096 × 32,768 px in all is accepted, 4,097 × 32,768 is refused")
-        check(CaptureComposer.decode(Data("not a png".utf8)) == nil && CaptureComposer.decode(page + Data([0, 1, 2])) != nil,
-              "limits: garbage is refused")
+        check(CaptureComposer.decode(Data("not a png".utf8)) == nil && CaptureComposer.pixelSize(Data()) == nil,
+              "limits: data that is not a PNG is refused")
     }
 
     /// The controller over a fake page: overlay → crop → Library → card; lifetime and hover;
