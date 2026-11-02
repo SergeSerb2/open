@@ -2,7 +2,10 @@ import Foundation
 import OpenWeb
 
 /// One batch from the page runtime (§4.7.4). The page controls this value: the init refuses any
-/// shape or size the runtime itself never sends (checklist §1).
+/// shape or size the runtime itself never sends (checklist §1). Worst single allocation on this
+/// path: one unit string of 20,000 UTF-16 units (40 KB) or a batch of at most 24,000 (48 KB),
+/// and its JSON for `apply` (results may be up to twice as long, about 100 KB): far under every
+/// allocator ceiling.
 public struct TranslationBatch: Sendable, Equatable {
     public static let maxUnits = 40
     /// The runtime caps a batch at 4,000 characters unless one unit alone is longer, and a unit at
