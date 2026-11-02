@@ -52,14 +52,19 @@ extension Motion {
     public static let peekExpand: CFTimeInterval = 0.22
 }
 
-/// Media plan §4.1. Existing row geometry; recording dot size/color are provisional (S9).
+/// Media plan §4.1, capture session 2 amendment (Step 2b). Row-relative points.
+/// The speaker button sits right after the favicon: AX `[41, y + 7, 26, 26]`, and
+/// the title moves from x 43 to x 69 (facts, S2 12/0013, 0022, 0027). The leading
+/// recording slot and its dot are guesses (no capture; Arc names
+/// `hasLeadingRecordingIndicator`).
 public enum RowMediaMetrics {
-    public static let buttonSize: CGFloat = 20
-    public static let gapAfterTitle: CGFloat = 2
-    public static let y: CGFloat = 10
-    public static let recordingDot: CGFloat = 7
-    public static let recordingSlotWidth: CGFloat = 14
-    public static let glyphInsetX: CGFloat = 2
+    public static let buttonSize: CGFloat = 26          // fact S2 12/0022, 0027 (AX)
+    public static let buttonX: CGFloat = 41             // fact: 6 pt after the favicon (x 17…35)
+    public static let buttonY: CGFloat = 7              // fact
+    public static let titleShift: CGFloat = 26          // fact: title AX x 43 → 69
+    public static let recordingSlotWidth: CGFloat = 14  // guess (lead 2026-10-26)
+    public static let recordingSlotHeight: CGFloat = 20 // guess: centered on the button (y 10)
+    public static let recordingDot: CGFloat = 7         // guess
 }
 
 /// Media plan §13 (Step 3b). Capture session 2 frames are cited per value.

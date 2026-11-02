@@ -68,6 +68,12 @@ enum Checks {
             if failures > 0 { exit(1) }
             return
         }
+        if args == ["--row-media-only"] {
+            MediaChecks.runRowIndicators()
+            print("\nchecks: \(passes) passed, \(failures) failed")
+            if failures > 0 { exit(1) }
+            return
+        }
         if args == ["--media-motion-only"] {
             MediaMotionChecks.run()
             print("\nchecks: \(passes) passed, \(failures) failed")
