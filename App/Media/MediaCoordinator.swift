@@ -28,6 +28,11 @@ final class MediaCoordinator {
   private var pendingExit: [ItemID: TimeInterval] = [:]
   /// Sleep feed (media-pip §4.10): read by AppVisibilityProvider; section 8's sleep adapter consumes it.
   let visibility: AppVisibilityProvider
+  /// Phase 2 (Step 10): Open's own PiP window, when the engine can host the video (EM-4).
+  private(set) var pipWindow: PictureInPictureWindowController?
+  private(set) var pipHost: EnginePictureInPictureHost?
+  private var pipDelegate: PictureInPictureDelegate?
+  var hostsPictureInPicture: Bool { pipDelegate != nil }
 
   init(app: AppDelegate, rulesURL: URL?) {
     self.app = app
@@ -39,6 +44,12 @@ final class MediaCoordinator {
     } else {
       // The bundled file is part of OpenMedia; this branch only keeps a broken bundle from crashing.
       rules = try! PiPSiteRules(data: Data(#"{"version":1,"disallow":[],"sites":[]}"#.utf8))
+    }
+    // D-8: phase 2 replaces Chromium's PiP window only when the engine supports it (fork EM-4).
+    if OEEngine.shared.supportsShellPictureInPicture {
+      let delegate = PictureInPictureDelegate(coordinator: self)
+      pipDelegate = delegate
+      OEEngine.shared.pictureInPictureDelegate = delegate
     }
   }
 
@@ -98,6 +109,8 @@ final class MediaCoordinator {
       // The engine closes Chromium's PiP window with the page (§4.5.5).
       session.close(.sourceGone)
     }
+    // Step 10/11 lifecycle gate: tab close, archive, discard and crash dismiss Open's window, unpaused.
+    if let window = pipWindow, pipHost?.tabID == tabID { window.dismiss(reason: .sourceGone) }
     feedSleep()
   }
 
@@ -123,7 +136,8 @@ final class MediaCoordinator {
     case let .requesting(id, _) where id == tabID:
       if inPiP { enter(tabID) }
     case let .active(id, _) where id == tabID:
-      if !inPiP { session.close(playing ? .sourceShown : .userClosed); store.setPiP(tabID: tabID, .none) }
+      // Phase 2: Open's window reports why PiP ended (its controls, or the engine's close).
+      if !inPiP && pipHost?.tabID != tabID { session.close(playing ? .sourceShown : .userClosed); store.setPiP(tabID: tabID, .none) }
     default:
       if inPiP {
         // A PiP the page or Chromium's own menu started (manual, §4.8).
@@ -155,7 +169,8 @@ final class MediaCoordinator {
   }
 
   private func request(_ content: OEWebContent, tabID: ItemID, automatic: Bool) {
-    if let replaced = session.request(tabID: tabID, automatic: automatic) { apply(replaced) }
+    // A minimized PiP of the same tab reopening is not a replacement.
+    if let replaced = session.request(tabID: tabID, automatic: automatic), replaced.tabID != tabID { apply(replaced) }
     pipRequests += 1
     pipTimes[tabID] = (ProcessInfo.processInfo.systemUptime, nil)
     content.requestPictureInPicture { [weak self] entered in
@@ -168,6 +183,11 @@ final class MediaCoordinator {
 
   /// Exits the PiP of the effect's tab (§4.5.5). The page keeps playing unless the effect pauses.
   private func apply(_ effect: PiPSession.Effect) {
+    // Phase 2: Open's window closes itself (and returns the video) with the session's reason.
+    if let window = pipWindow, pipHost?.tabID == effect.tabID {
+      if !window.isClosing { window.dismiss(reason: effect.reason) }
+      return
+    }
     store.setPiP(tabID: effect.tabID, .none)
     guard effect.reason != .sourceGone, let content = page(effect.tabID) else { return }
     pendingExit[effect.tabID] = ProcessInfo.processInfo.systemUptime
@@ -216,6 +236,7 @@ final class MediaCoordinator {
     factory.selectTabForCommand(id, spaceID: factory.space(for: id)?.id)
     factory.window?.makeKeyAndOrderFront(nil)
     NSApp.activate()
+    if let window = pipWindow, pipHost?.tabID == id { window.dismiss(reason: .backToTab); return true }
     if session.activeSource?.tabID == id, let effect = session.close(.backToTab) { apply(effect) }
     feedSleep()
     return true
@@ -240,6 +261,63 @@ final class MediaCoordinator {
     undo.endUndoGrouping()
     for id in ids { if let host = host(id) { host.content.isMuted = muted; sync(host) } }
     app.scheduleSave()
+  }
+
+  // MARK: Phase 2 (Open's PiP window, §4.4.2)
+
+  fileprivate func pictureInPictureDidOpen(_ pip: OEPictureInPicture) {
+    guard let content = pip.webContent,
+          let factory = app.hostFactories.values.first(where: { $0.tabID(for: content) != nil }),
+          let tabID = factory.tabID(for: content) else { return }
+    if let old = pipWindow { old.dismiss(reason: .replaced) }
+    let host = EnginePictureInPictureHost(
+      pip: pip, tabID: tabID,
+      tabMuted: { [weak self] in self?.app.model.tab(id: tabID)?.isMuted ?? false },
+      setTabMuted: { [weak self] muted in
+        guard let self, let tab = self.app.model.tab(id: tabID), tab.isMuted != muted else { return }
+        _ = self.perform(.toggleMute(tabID))
+      })
+    guard let window = PictureInPictureWindowController(
+      host: host, sourceURL: content.url, settings: settings, rules: rules, sourceWindow: factory.window) else { return }
+    pipHost = host; pipWindow = window
+    window.onBackToTab = { [weak self] in self?.selectForBackToTab(tabID) }
+    window.onClosed = { [weak self, weak window] reason in
+      guard let self, let window, self.pipWindow === window else { return }
+      self.pipWindow = nil; self.pipHost = nil
+      self.pictureInPictureWindowClosed(tabID: tabID, reason: reason)
+    }
+    // A PiP Open asked for is already requesting; one the page started is manual (§4.8).
+    if session.activeSource?.tabID != tabID, let replaced = session.request(tabID: tabID, automatic: false) { apply(replaced) }
+    enter(tabID)
+    window.present()
+    feedSleep()
+  }
+
+  fileprivate func pictureInPictureDidChange(_ pip: OEPictureInPicture) {
+    guard pipHost?.pip === pip else { return }
+    pipWindow?.refresh()
+  }
+
+  fileprivate func pictureInPictureDidClose(_ pip: OEPictureInPicture) {
+    // The page, a navigation, a crash or a new PiP ended it: the window goes without pausing.
+    guard pipHost?.pip === pip, let window = pipWindow, !window.isClosing else { return }
+    window.dismiss(reason: .sourceGone)
+  }
+
+  /// §4.5.5 close rules for Open's window: Close pauses and snoozes an auto PiP, Minimize keeps
+  /// playing and leaves a mini player with "Open Picture in Picture", Back to Tab selects the tab.
+  private func pictureInPictureWindowClosed(tabID: ItemID, reason: PiPSession.Reason) {
+    if session.activeSource?.tabID == tabID { session.close(reason) }
+    store.setPiP(tabID: tabID, reason == .minimized ? .minimized : .none)
+    feedSleep()
+  }
+
+  private func selectForBackToTab(_ id: ItemID) {
+    guard let factory = app.hostFactories.values.first(where: { $0.hosts[id] != nil }) else { return }
+    store.noteInteraction(tabID: id)
+    factory.selectTabForCommand(id, spaceID: factory.space(for: id)?.id)
+    factory.window?.makeKeyAndOrderFront(nil)
+    NSApp.activate()
   }
 
   // MARK: Helpers
@@ -285,5 +363,20 @@ final class MediaCoordinator {
     guard visibility.pipTabIDs != pip || visibility.mediaControlTabIDs != controls else { return }
     visibility.pipTabIDs = pip; visibility.mediaControlTabIDs = controls
     visibility.visibilityChanged()
+  }
+}
+
+/// OEPictureInPictureDelegate → MediaCoordinator (phase 2). The engine calls on the main thread.
+@MainActor
+private final class PictureInPictureDelegate: NSObject, OEPictureInPictureDelegate {
+  weak var coordinator: MediaCoordinator?
+  init(coordinator: MediaCoordinator) { self.coordinator = coordinator }
+  func pictureInPictureDidOpen(_ pictureInPicture: OEPictureInPicture) { coordinator?.pictureInPictureDidOpen(pictureInPicture) }
+  func pictureInPicture(_ pictureInPicture: OEPictureInPicture, didChange changes: OEPictureInPictureChange) {
+    coordinator?.pictureInPictureDidChange(pictureInPicture)
+  }
+  func pictureInPictureDidClose(_ pictureInPicture: OEPictureInPicture) {
+    // Never close the object from inside its own callback (OEPictureInPicture.h): next turn.
+    DispatchQueue.main.async { [weak self] in self?.coordinator?.pictureInPictureDidClose(pictureInPicture) }
   }
 }
