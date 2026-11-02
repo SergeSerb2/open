@@ -268,7 +268,7 @@ Columns: feature · RE doc + section · plan · library code · App wiring · ve
 | Custom shortcuts: record, conflicts, reset, priority | MH "Custom shortcuts"; FC §7.2 Shortcuts | settings §5.4 | `OpenCommands/KeyBindings.swift`; `OpenSettings/ShortcutsPane.swift` | main | `commands-dump` (overrides); `settings-preview` `shortcuts-save` | done | The App reloads bindings on change (`App/Settings/AppSettingsActions.swift:110` `keyBindingsDidChange`). |
 | Global Little Open hotkey (Cmd+Opt+N) | MH "Global hotkey and Little Arc" | app-shell §4.3 | `OpenCommands/GlobalHotkey.swift` | main (stub) | `commands-dump` (register, unregister) | done (partial) | Spot-check: the hotkey registers (`App/AppDelegate.swift:417`) but opens `showLittleOpenStub`, a label that says Little Open is not available. S2 (2026-10-26): every press opens a new Little Open window (routing §9.2). |
 | Dynamic Spaces and Tabs menu sections | MH "Menu bar at a glance" | commands.md | `MenuBuilder.swift` | main | `commands-dump` | done | `App/MainMenu.swift:13` passes live Spaces and ordered tabs. |
-| Essential Keyboard Shortcuts window | MH Help | commandbar-completion §4.5 (Step 6, #70) | none | main (opens Shortcuts pane) | none | planned | Today the command opens Settings ▸ Shortcuts (`App/AppDelegate.swift` `keyboard-shortcuts-edu`). S2 (2026-10-26): reached from Help, the command bar action, and Settings ▸ Shortcuts; the (i) button opens the privacy footer instead (CC-42). See §3, gap 25. |
+| Essential Keyboard Shortcuts window | MH Help | commandbar-completion §4.5 (Step 6, #70) | `OpenSettings/EssentialShortcutsWindow.swift`; App `keyboard-shortcuts-edu`, Settings callout | main (#141) | `settings-preview` `essential-shortcuts`, `shortcuts-callout` and scenes; e2e `essential_shortcuts_window` | done | One shared floating window (CC-27), Arc's five rows (CC-28) with live keycaps; Esc and Cmd+W close it and never a tab. Reached from Help, the command bar action, and Settings ▸ Shortcuts; first run's "Learn Essential Shortcuts" belongs to `first-run.md`. Content is Open's design until a capture exists (plan §9 item 4). See §3, gap 25. |
 | Reference table complete | MH | — | `OpenCommands/Resources/expected-menu.json` | — | code read (§2.3) | done | Tabs ▸ "Reveal Tab in Sidebar" is now in the table (line 652) and in the registry (#85). |
 
 
@@ -477,7 +477,7 @@ Columns: feature · RE doc + section · plan · library code · App wiring · ve
 | General pane | FC §7.2 General; IS §18 | settings §5.1 | `OpenSettings/GeneralPane.swift` | main | `settings-preview` | done | Some actions are stubs (updates, import run). |
 | Profiles pane | FC §7.2 Profiles | settings §5.2 | `OpenSettings/ProfilesPane.swift` | main | `settings-preview` | done (partial) | See §1.10 limits. Passwords and cards open `chrome://settings` pages. |
 | Links pane | FC §7.2 Links | settings §5.3 | `OpenSettings/LinksPane.swift` | main | `settings-preview` | done | Rules have no effect until link intake lands (§1.11). |
-| Shortcuts pane | FC §7.2 Shortcuts | settings §5.4 | `OpenSettings/ShortcutsPane.swift` | main | `settings-preview` | done (partial) | "Learn the Essential Shortcuts" still draws as a filter; Arc has a callout button (#70, §6.1). |
+| Shortcuts pane | FC §7.2 Shortcuts | settings §5.4 | `OpenSettings/ShortcutsPane.swift` | main | `settings-preview` (`shortcuts-callout`) | done | "Learn the Essential Shortcuts" is a callout button that opens the Essential window (Step 6, CC-29/CC-30); the list shows every active command. |
 | Icon pane (Open's own icons) | FC §7.1 App Icon | settings | `OpenSettings/AppIconPane.swift` | main | `settings-preview` | done (partial) | Icon switching is not connected (`AppSettingsActions.swift:119`). |
 | Advanced pane plus Ad Blocking and Tab Sleeping groups | FC §7.2 Advanced | settings §5.5 | `OpenSettings/AdvancedPane.swift` | main | `settings-preview` | done (partial) | Ad blocking and sleep save settings only (§1.3, §1.14). |
 | Clear Browsing Data per profile with time range | FC §7.2 Profiles | settings | `OpenSettings` sheet and action | main | `settings-preview` | done (partial) | Only cookies + cache together, all time (§1.10). |
@@ -665,7 +665,7 @@ Ranking is by user impact for an Arc user who switches to Open. **P0** blocks da
 22. **Closed — Inline autocomplete.** Built in commandbar-completion Steps 1–2 (Section 2): engine rule T3a and `inlineCompletion`, the field's completion and its keys, checked by `suggest-check`, `commandbar-render` flows and budget, the F0043/F0062/F0061/S2 18/0009 compares, and e2e `commandbar`.
 23. **Closed — One command-bar row per Split View.** Built in commandbar-completion Steps 3–4 (Section 2).
 24. **Closed — Browser-actions-only scope.** Built in commandbar-completion Step 5 (Section 2).
-25. **Hints closed; window open — Hold-Cmd hints and the Essential Keyboard Shortcuts window.** **S2 (2026-10-26): closed for hints** (Arc shows none, CC-39; lead decision: Open builds none; out of scope in §1.7). The window is planned in commandbar-completion §4.5; the (i) button opens the privacy footer, not this window (CC-42). Today the menu item opens the Shortcuts pane.
+25. **Hints closed; window open — Hold-Cmd hints and the Essential Keyboard Shortcuts window.** **S2 (2026-10-26): closed for hints** (Arc shows none, CC-39; lead decision: Open builds none; out of scope in §1.7). The window is built (commandbar-completion Step 6, Section 2); the (i) button opens the privacy footer, not this window (CC-42).
 26. **Open — Optional toolbar.** Now planned in #70 (32 pt bar, split pane bar reuse).
 27. **Open — Website appearance menu.** Now planned in page-platform (#73).
 28. **Open — Clear Cache / Clear Cookies and Refresh.** Now planned in #73.
@@ -840,7 +840,7 @@ Found in this refresh:
 
 - `docs/plans/app-shell.md` Status line still says "Steps C–I remain planned". Step C merged in #85. Update the line to Steps A–C done.
 - `App/MainMenu.swift:141`: `copy-url-quote` writes the Markdown form. Arc's quote needs the selection (FC §1.4 r19). The command looks done and is wrong.
-- `OpenSettings/ShortcutsPane.swift` draws "Learn the Essential Shortcuts" as a filter. Arc has a callout button that opens the Essential window (RE CC-29, #70 Step 6 fixes it).
+- Fixed in commandbar-completion Step 6: `OpenSettings/ShortcutsPane.swift` draws "Learn the Essential Shortcuts" as Arc's callout button that opens the Essential window (RE CC-29).
 - The Arc Copy URL strips trackers (RE CC-31, #70). Open copies the plain URL (`copyCurrentURL`, `copy-url`). Track it as a follow-up, not as done.
 - `SuggestEngine` hides the current tab in every mode. `docs/suggest.md` limits that to edit mode, and Arc lists the tab in Cmd+T (#70 Step 1). Check `TabsProvider` before the commandbar-completion steps land.
 - Sidebar motion was corrected in #122 and verified in the 2026-10-28 [re-check](sidebar-completion/recheck-122.md): Cmd+S response 0.10 s and Space response 0.20 s. The command bar still animates in Open and does not in Arc (`docs/followups.md`).

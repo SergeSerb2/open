@@ -87,6 +87,9 @@ public extension ImportActions { var canImportPasswordsAndCookies: Bool { false 
     /// retains a successful result and may detach/rehost it on section switches.
     /// Return nil for temporary unavailability; the caller retries on later access.
     func makeSpaceManagerView() -> NSView?
+    /// Settings ▸ Shortcuts "Learn the Essential Shortcuts": open the Essential Keyboard Shortcuts window
+    /// (commandbar-completion §4.5.3, CC-29).
+    func openEssentialShortcuts()
 }
 
 public extension SettingsActions {

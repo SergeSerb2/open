@@ -7,6 +7,7 @@ import OpenSidebar
 import OpenCommands
 import OpenCommandBar
 import OpenSuggest
+import OpenSettings
 
 // App has no window controller of its own.
 typealias BrowserWindowController = OpenFeatures.BrowserWindowController
@@ -692,6 +693,8 @@ extension EngineWebContentHostFactory {
   }
 
   @objc func closeTab(_ sender: Any?) {
+    // Cmd+W in the Essential Keyboard Shortcuts window closes that window, never a tab (§4.5.1).
+    if let edu = EssentialShortcutsWindowController.shared.window, NSApp.keyWindow === edu { edu.close(); return }
     if let popupPanel, NSApp.keyWindow === popupPanel {
       focusedBrowser?.closeExtensionPopup()
       return

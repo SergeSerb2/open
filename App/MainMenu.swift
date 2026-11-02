@@ -1,5 +1,6 @@
 import AppKit
 import OpenCommands
+import OpenSettings
 
 /// The registry owns titles, ordering, shortcuts and menu actions.
 @MainActor
@@ -133,7 +134,8 @@ extension EngineWebContentHostFactory {
     case "search-tabs": showCommandBar(.searchTabs)
     case "search-actions": showCommandBar(.searchActions)
     case "archive-tab":
-      if popupPanel?.isKeyWindow == true { closeTab(nil) }
+      if let edu = EssentialShortcutsWindowController.shared.window, NSApp.keyWindow === edu { edu.close() }
+      else if popupPanel?.isKeyWindow == true { closeTab(nil) }
       else if controller?.hasPeekController == true, controller?.peekController.isShown == true { controller?.peekController.dismissTop() }
       else { closeTab(nil) }
     case "restore-last-closed-tab": restoreLastClosedTab(nil)

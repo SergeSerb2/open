@@ -92,7 +92,7 @@ View them to understand layout only. Never commit or copy them.
 | Open tab order (6 tabs) | General, Profiles, Links, Shortcuts, App Icon, Advanced. Keep the Arc relative order. Drop account, Max, Staff. |
 | Pane layout | Grouped rounded boxes. Each row: label on the left, control on the right (switch, pop-up button, push button). |
 | Profiles pane shape | Left list "Your Profiles" (name plus "N Spaces") with +, −, and edit buttons. Right side holds the per-profile form. |
-| Shortcuts pane shape | Segmented control ("Start with the basics" / "Learn the Essential Shortcuts"), a search field, a "Default Shortcuts" list, a "Custom Shortcuts" panel, "Reset All Shortcuts". |
+| Shortcuts pane shape | A callout "Start with the basics" with one button "Learn the Essential Shortcuts" that opens the Essential Keyboard Shortcuts window (corrected by commandbar-completion Step 6, RE CC-29/CC-30: Arc's control is not a filter), a search field, a "Default Shortcuts" list, a "Custom Shortcuts" panel, "Reset All Shortcuts". |
 | Links pane shape | Little Open section (illustration plus text, 3 toggles plus "Archive Little Arcs after: 6 hours (default)"), then Peek section (2 toggles). The Air Traffic Control rules editor is in the same pane (section 5.3). |
 | Advanced pane shape | 9 toggle rows, then buttons "More Settings…", "Reset Translated-site Prompts", "Export Data". Open adds the Ad Blocking and Tab Sleeping groups (section 5.5). |
 | General pane shape | 2 toggles, then "Previews" plus "Previews Settings…", then the Profile Settings hint plus "Profile Settings…" button. Open adds the rows in section 5.1. |
@@ -599,11 +599,13 @@ Test a Link section:
 
 ### 5.4 Shortcuts (edits `OpenCommands` overrides)
 
-Window title "Shortcuts". Top: segmented control "Start with the
-basics" / "Learn the Essential Shortcuts" (view-only filter; basics
-shows commands with non-empty `aliases` first-run set — use the
-command-bar seed set in `docs/commands.md`), search field (filters
-by title, id, aliases), priority pop-up (section 5.4.2). Middle:
+Window title "Shortcuts". Top: a callout (359×35, radius 6) with the
+label "Start with the basics" and a button "Learn the Essential
+Shortcuts" (`command.circle.fill`) that opens the Essential Keyboard
+Shortcuts window through `SettingsActions.openEssentialShortcuts()`
+(commandbar-completion Step 6; RE CC-29/CC-30 corrected the earlier
+filter reading). Search field (filters by title, id, aliases; the list
+shows every active command), priority pop-up (section 5.4.2). Middle:
 list. Bottom: "Reset All Shortcuts" plus status line.
 
 #### 5.4.1 List and capture

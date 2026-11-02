@@ -5,6 +5,7 @@ import OpenStore
 import OpenFeatures
 import QuartzCore
 import OpenCommands
+import OpenSettings
 
 /// Owns the model, its stores, and the windows.
 @MainActor
@@ -461,6 +462,7 @@ extension AppDelegate: CommandDispatcher {
         throw CocoaError(.fileReadCorruptFile)
       }
       keyBindings = loaded
+      EssentialShortcutsWindowController.shared.update(store: loaded)
     } catch {
       keyBindings = .empty; Self.commandLog("Key bindings could not be loaded: \(error)")
     }
@@ -524,7 +526,9 @@ extension AppDelegate: CommandDispatcher {
     case "view-archive": settingsPresenter.showLibrary(section: .archive)
     case "view-history": settingsPresenter.showLibrary(section: .history)
     case "view-boosts": settingsPresenter.show(); settingsPresenter.settings.statusText = "Boost editing is not available in this build."
-    case "keyboard-shortcuts-edu": settingsPresenter.show(pane: .shortcuts)
+    case "keyboard-shortcuts-edu":
+      // Help ▸ Essential Keyboard Shortcuts: Arc's floating EDU window (commandbar-completion §4.5, CC-27).
+      EssentialShortcutsWindowController.shared.show(near: frontWindowController?.window ?? NSApp.keyWindow, store: keyBindings)
     case "archive-tab": NSApp.keyWindow?.performClose(nil)
     case "manage-spaces": settingsPresenter.showLibrary(section: .spaces)
     case "new-little-open-window", "little-open-global": showLittleOpenStub()
