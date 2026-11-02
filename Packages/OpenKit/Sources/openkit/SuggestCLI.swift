@@ -11,7 +11,8 @@ func runSuggestCommand(_ command: String, args: [String]) async {
 
 private let suggestUsage = """
 usage: openkit suggest --snapshot DIR [--history DB|DIR] [--offline] [--mode new-tab|edit|tabs]
-                       [--current-url URL] [--site SITE_ID] [--engine ID] [--show-titles] [--redact-hosts] "query"
+                       [--current-url URL] [--site SITE_ID] [--engine ID] [--completion] [--show-titles] [--redact-hosts] "query"
+  --completion  allow inline completion, as the bar does after typing at the end of the text
 """
 
 /// `--history` takes an Open root's default Profile or an explicit per-Profile history file.
@@ -34,7 +35,7 @@ func historyStore(at path: String) throws -> HistoryStore? {
 @MainActor
 func runSuggest(args: [String]) async {
     var snapshotDir: String?, historyPath: String?, currentURL: String?, site: String?, engineID: String?
-    var offline = false, showTitles = false, redactHosts = false
+    var offline = false, showTitles = false, redactHosts = false, completion = false
     var mode = SuggestMode.newTab
     var words: [String] = []
     var i = 0
@@ -48,6 +49,7 @@ func runSuggest(args: [String]) async {
         case "--snapshot": snapshotDir = value()
         case "--history": historyPath = value()
         case "--offline": offline = true
+        case "--completion": completion = true
         case "--show-titles": showTitles = true
         case "--redact-hosts": redactHosts = true
         case "--current-url": currentURL = value()
@@ -95,7 +97,7 @@ func runSuggest(args: [String]) async {
     let context = SuggestContext(
         mode: mode, profileID: spaceID.flatMap { model.space(id: $0)?.profileID }, spaceID: spaceID,
         currentTabID: currentTabID, currentTabURL: currentURL.flatMap(URL.init(string:)) ?? currentTabID.flatMap { model.tab(id: $0)?.url },
-        allowsRemoteSuggestions: !offline, searchEngineID: engineID, siteSearchID: site)
+        allowsRemoteSuggestions: !offline, searchEngineID: engineID, siteSearchID: site, allowsInlineCompletion: completion)
     let engine = SuggestEngine(model: model, history: history)
     engine.prewarm()
 
@@ -173,6 +175,10 @@ func printSnapshot(_ snap: SuggestionSnapshot, redactor: Redactor) {
     let pending = snap.pendingProviders.isEmpty ? "" : " pending=[\(snap.pendingProviders.joined(separator: ","))]"
     print(String(format: "snapshot %d  %.2f ms  final=%@  input=%@  top=%@%@", snap.sequence, snap.elapsedMilliseconds,
                  snap.isFinal ? "yes" : "no", input, snap.topHitRule.rawValue, pending))
+    if let c = snap.inlineCompletion {
+        let typed = String(c.fieldText.utf16.prefix(c.typedLength)) ?? "", rest = String(c.fieldText.utf16.dropFirst(c.typedLength)) ?? ""
+        print("  inline completion: \(redactor.showTitles ? typed : "…")[\(redactor.showTitles ? rest : "\(rest.count) characters")]")
+    }
     let timings = snap.timings.map { String(format: "%@%@ %.3f", $0.provider, $0.isAsync ? "(async)" : "", $0.milliseconds) }
     print("  providers ms: " + timings.joined(separator: ", "))
     if snap.suggestions.isEmpty { print("  (no rows)") }

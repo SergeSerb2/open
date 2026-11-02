@@ -11,7 +11,9 @@ Sources: [interaction-states.md](re/interaction-states.md) §9 (captured command
 
 ![The (i) privacy footer](commandbar/privacy-footer.png)
 
-The screens above are our renders of synthetic data (`commandbar-render screens`): empty Cmd+T, typing "git", Cmd+L, actions with keycaps, the "Tab or Space" hint, the Site Search chip (empty and with a query), the calculator, a scrolled list, and the edge style over a white page.
+![Inline completion](commandbar/inline-completion.png)
+
+The screens above are our renders of synthetic data (`commandbar-render screens`): empty Cmd+T, typing "git", Cmd+L, actions with keycaps, the "Tab or Space" hint, the Site Search chip (empty and with a query), the calculator, a scrolled list, and the edge style over a white page. The first two sheets date from M3 (#43); rows and the "git" field have changed since (current tab in Cmd+T, inline completion). The completion sheet shows "gith" (completed to `github.com`, the completed part selected), "GitH" (the field keeps the candidate's case), and the text after Right accepts it.
 
 ## 1. Modules
 
@@ -146,6 +148,7 @@ Measured on S2 18/0044 (window 1728×1084, panel `[481, 373, 766, 329]`, 5 rows)
 | Cmd+T (`.newTab`) | Empty field, rows for the empty query, row 1 selected | F0063 |
 | Cmd+L (`.editCurrentURL`) | Field holds the current URL, fully selected; typing replaces it | F0048 |
 | `.searchTabs` | Tab rows only; placeholder "Search Tabs…" | placeholder guess |
+| Typing (inline completion) | Row 1's host or URL completes in the field; the completed part is selected. Rules, keys, and evidence: §4.1. | CC-1…CC-7, CC-40 |
 | Typing | One query per committed text change. Marked IME text does not query; composition end submits exactly one query. Paste replaces CR/LF with spaces and caps visible input at 2,048 characters before querying that same text. | implementation; flows 36–44, 64–65 |
 | Later snapshots | Before the user moves the selection it stays on row 1, so it changes only when the top hit changes. After a move it stays on the same suggestion id. | features-core §4.3 rule 8 (guess there); our rule |
 | Up / Down | Move the selection; stop at the ends; the list scrolls by whole rows | menus-and-hotkeys "normal list rules" (guess) |
@@ -165,7 +168,19 @@ During IME composition, Return, Tab, Esc, Space, and arrows go to the input meth
 
 Rows expose AX buttons with the title as their label, subtitle and accessory as their value, and a press action. Selection changes post `selectedChildrenChanged` and an announcement with the row label. The field's native placeholder matches the drawn placeholder. The (i) control is a labeled AX button; its press and Cmd+I toggle the footer. The footer is an AX group "Search suggestions privacy" with its two lines, the link "here", and the two buttons.
 
-The field editor has spelling, grammar, completion, substitutions, and data detection off: URLs must not be "corrected", and each check costs work per keystroke.
+The field editor has spelling, grammar, completion, substitutions, data detection, system inline predictions, math results, and Writing Tools off: URLs must not be "corrected", the system must not draw its own prediction next to ours, and each check costs work per keystroke (NSTextCheckingController ran on every selection change until the last three were off; §6).
+
+### 4.1 Inline completion
+
+Arc completes the typed text in the field with row 1's host (`CommandBarAutocompleteSuggestion`; `re/commandbar-completion.md` CC-1…CC-7, CC-40). The full spec is `plans/commandbar-completion.md` §4.1; this is what is built.
+
+- **Who decides.** The engine (`OpenSuggest`) picks the row and the text: rule T3a and `SuggestionSnapshot.inlineCompletion` (`docs/suggest.md` "Top hit"). The bar owns the field, the selection, and the keys (`CompletionSession`, `CommandBarController`).
+- **When.** New tab or Cmd+L, no scope, no marked text, the last edit an insertion at the end of the text (typing or an IME commit; never paste, deletion, undo, or a caret move), text without whitespace, and row 1 selected.
+- **What.** Text without `/`, `?`, or `#` completes to the host (plus a non-default port), never deeper; text with one completes to the URL. A typed `https://`, `http://`, then `www.` stays as typed. The field shows the candidate's letter case (CC-6); the query keeps the user's text (`text`; the whole field is `fieldText`).
+- **How it shows.** Real text in the field editor with the completed part selected (AppKit's selection look, CC-2), so the AX value is the whole text and the selected range is the completion (CC-3). Writes never enter undo and post no text change.
+- **Keys.** A character that continues the completion keeps it on screen before its snapshot: only the completion's first character is removed and the typed one takes its place (one storage edit, normal undo coalescing). Any other character replaces it. Backspace, Forward Delete, and the word and line deletions remove only the completion and re-query with completion off (CC-40). Right, End, Cmd+Right, Ctrl+E accept (caret at the end); Left makes the text typed with the caret at the selection start; Home and Cmd+Left put it at the start. Shift+arrows, Cmd+A, and clicks make it typed text. Down and pointer moves off row 1 hide it; back on row 1 shows it again (no query). Space never enters Site Search while a completion shows (CC-5). Cmd+Z undoes the typing and never brings back a completion.
+- **Speed.** One storage edit and one selection change per keystroke; no panel layout pass, no row redraw. `commandbar-render check` gates it (§6).
+
 
 ## 5. Motion
 
@@ -185,22 +200,33 @@ The provisional `Motion.commandBarOpen*` and `Motion.commandBarClose*` tokens (a
 | Rows redrawn per keystroke | 1.8 (unchanged rows are not redrawn) | |
 | History snapshot merge, main thread (off the keystroke path) | p50 0.65–0.72 ms, p95 1.4–1.9 ms | |
 
+Inline completion (`bench --completion`, check row 112): every query is typed twice per round, completion off then on (order alternating), against a history whose hosts complete the one-word queries, so about 56% of keystrokes show a completion. Main-thread cycles over the keystroke's own work (key handling, snapshot 0's apply, layout + draw + commit; no polling) are converted at the off run's measured cycles per ms; cycles only count while the thread runs, so the result barely moves with machine load. Budget (plan §5.4): p95 with completion ≤ plain p95 + 0.3 ms, and no extra panel layout pass.
+
+| Run (load average) | p95 added | Paired median | Panel layout passes, on / off | CPU p95 on / off |
+|---|---|---|---|---|
+| check, 218 keystrokes per side (5.4) | +0.097 ms | +0.059 ms | mean 0.11 / 0.11, max 1 | 2.90 / 2.74 ms |
+| check (9.6) | +0.079 ms | +0.074 ms | mean 0.11 / 0.11, max 1 | 4.62 ms on |
+| break: 8 extra field writes per show | +0.912 ms, FAIL | +0.333 ms | | |
+| break: one forced panel layout per show | | | mean 0.65 / 0.11, FAIL | |
+
+What it cost first: a storage edit of the field editor ran about 330k instructions, almost all in the selection change that follows it (NSTextCheckingController for inline predictions and Writing Tools, then the text input cursor UI). Turning those features off (§4) took keystroke CPU p50 from 3.0 to 2.05 ms with or without a completion; keeping the completion across a matching character with one edit instead of remove-then-show took the paired median from +0.50 to +0.08 ms.
+
 Profiling (`sample`) found three costs, now fixed: a forced panel layout on every snapshot (CPU p50 3.4 → 2.2 ms); SF Symbols redrawn as vectors on every row draw (now one bitmap per symbol, color, and scale); and AppKit text checking running per keystroke in the field editor (now off). Under heavier load (load average 18–23) earlier builds reached wall p95 10 ms while CPU stayed under 6 ms: wall time on this machine depends on the build running next to it.
 
 ## 7. `commandbar-render`
 
 ```text
 commandbar-render render (--state NAME | --scene FILE.json) --out FILE.png [--scale 1|2] [--size WxH] [--backdrop-color #RRGGBB]
-    states: empty, typing-git, cmd-l, space-hint, site-chip, site-search, calculator, actions, scrolled, privacy-footer
+    states: empty, typing-git, cmd-l, space-hint, site-chip, site-search, calculator, actions, scrolled, privacy-footer, completion, completion-case, completion-accepted
 commandbar-render compare --arc CAPTURE.png --ours RENDER.png --scene FILE.json --out DIR [--title TEXT] [--space srgb|p3]
 commandbar-render ax [--state NAME] # dump the rendered overlay AX tree
 commandbar-render flows       # keyboard and mouse flows
 commandbar-render check       # flows + a render of every state + the keystroke budget (tools/verify-all.sh)
-commandbar-render bench [--tabs 5000] [--history 100000] [--scale 2]
+commandbar-render bench [--tabs 5000] [--history 100000] [--scale 2] [--completion]
 commandbar-render screens --out DIR [--scale 2]
 ```
 
-`--space p3` loads both PNGs into Display P3 and measures ΔE00 there. Session-2 captures (S2) carry the AW2726DM display profile, whose gamut exceeds sRGB; use it for them. The session-1 comparisons in §8.1 stay in sRGB. A scene file can set `"footer": true`; the stage then supplies a stand-in privacy URL so line 2 draws.
+`--space p3` loads both PNGs into Display P3 and measures ΔE00 there. Session-2 captures (S2) carry the AW2726DM display profile, whose gamut exceeds sRGB; use it for them. The session-1 comparisons in §8.1 stay in sRGB. A scene file can set `"footer": true`; the stage then supplies a stand-in privacy URL so line 2 draws. It can also set `"selection": [location, length]`, a field selection such as an inline completion's range. `bench --completion` runs the completion A/B of §6.
 
 States run through the real engine over a synthetic world (neutral titles, public site names, our own theme colors and letter icons). A scene file instead gives fixed rows, a theme JSON, and a backdrop PNG, to match one Arc capture. Scene files that copy a capture's titles hold personal data, so they stay in `.re/` (git-ignored).
 
@@ -225,10 +251,23 @@ Targets: position ≤ 1 pt, ΔE00 ≤ 2.
 | A0327 | Space without a theme, Space-name accessory | 37 | 1.0 | 0.10 | 1.67 | 0.42 |
 | A0120 | white page (light edge style), split row | 37 | 6.0 | 0.27 | 2.47 | 0.55 |
 
+Inline completion (Steps 1–2; re-run on the branch build, sRGB; backdrop F0064, theme of Space 1):
+
+| Capture | State | Elements | Worst position (pt) | Mean position (pt) | Worst ΔE00 | Mean ΔE00 |
+|---|---|---|---|---|---|---|
+| F0043 | "googl" completed to "google.com" by an open tab | 36 | 1.0 | 0.38 | 1.93 | 0.33 |
+| F0062 | "Google" = tab title, completion in lower case | 36 | 1.0 | 0.38 | 1.93 | 0.33 |
+| F0061 | whole host typed, no completion, "Search Google [Tab]" | 33 | 1.0 | 0.27 | 1.93 | 0.34 |
+
+Completion elements: selection box 1.0 pt / 0.00, selected text 1.0 pt / 0.88–0.92; hint label 1.0 pt / 0.26 with ink width 88 px, as Arc's (12.75 Medium; Regular was 86 px).
+
+After the hint font and selected-subtitle changes of Steps 1–2, the session-1 scene files of the first table are no longer on disk, so their numbers above are from #43 and #137. The 10 built-in states were rendered on `main` and on the branch at 1x and 2x and diffed per pixel: `actions`, `cmd-l`, and `site-chip` are identical; `empty`, `calculator`, `site-search`, and `privacy-footer` differ only in row 1's "— subtitle" (max channel 40, the selected-subtitle color); `space-hint` only in the hint label (the font); `typing-git` and `scrolled` change their rows and field on purpose (the current tab in Cmd+T and the inline completion).
+
 Session 2 (Display P3, `--space p3`; window 1728×1084):
 
 | Capture | State | Footer elements | Worst position (pt) | Worst ΔE00 | Other elements |
 |---|---|---|---|---|---|
+| S2 18/0009 | "wiki" completed to "wikipedia.org", "Search Wikipedia [Tab]" (no "or Space") | — | 1.0 (completion box, text, hint) | 1.37 | 31 elements. Completion selection box 1.0 pt / 0.68, selected text 1.0 / 1.37, hint label 1.0 / 1.21 (105 px ink, ours 104). Misses: the edge style (§8.3; its position rows read 2 pt because the line styles differ) and row 1's selected subtitle ΔE00 2.67 (§8.3). |
 | S2 18/0044 | (i) footer on the empty Cmd+T panel, 5 rows | 13 (band top and fill, icon, line 1, line 2's first six words, both buttons' fill, edge, title) | 1.0 (band top) | 0.62 | Panel position 0 pt on all four sides. Two misses are not footer elements: the edge style (§8.3) and row 2's long title (Arc cuts it at ≈ 470 pt; commandbar-completion design-parity work). |
 
 ### 8.2 Per element (F0063)
@@ -264,11 +303,12 @@ Other states: text selection fill 0.00 (F0048); selected input text 1.0 pt / 0.6
 | Glyph ink boxes | ≤ 1 pt | SF Symbols are not Arc's art. Sizes are fitted on macOS 27.2 (26B5112a); symbol metrics changed once during this work, so re-fit after OS updates (`compare` shows it at once). |
 | Panel edge over a light page in session 2 (S2 18/0044, 0009, 0016, 0018) | ΔE00 ≈ 16 on both edge lines | Session 1 (F0039, F0040, A0120) shows one gray line over a light page; session 2 shows Arc's dark double line over light and blue pages. Open keeps the session-1 luminance rule; the input that switches the style is not known (`docs/followups.md`, capture request). |
 | (i) footer line 2 | one word | Arc says "Arc", Open says "Open" (naming rule). The App hides the line until Open has a privacy page. |
-| Light macOS appearance, Little Open, inline autocomplete | not built or not compared | Light: S2 20/0018 shows the light panel (§11 q3); not built yet. Arc has `CommandBarAutocompleteSuggestion`; commandbar-completion §4.1. |
+| Selected row "— subtitle" over a themed selection (S2 18/0009 row 1) | ΔE00 2.67 | Arc's core `#9EB1CE` over the blue selection `#3B679F` solves to white ≈ 0.5 (`CommandBarRole.subtitleSelected` white 0.52, fitted on one sample); ours reads `#9BB4CF`, a slightly different hue. One sample cannot tell a tint rule from a plain alpha. |
+| Light macOS appearance, Little Open | not built or not compared | Light: S2 20/0018 shows the light panel (§11 q3); not built yet. |
 
 ## 9. Flows (`commandbar-render flows`)
 
-Real key events go through the window and the bar's field editor; mouse events go to the hit-tested views; the engine is the real `SuggestEngine` over the synthetic world. 80/80 pass, including 33 review regression checks and the 12 Step 0 checks (flows 87–90). `check` adds a render of every state at 2x and the keystroke budget: 91/91.
+Real key events go through the window and the bar's field editor; mouse events go to the hit-tested views; the engine is the real `SuggestEngine` over the synthetic world. 97/97 pass, including 33 review regression checks, the 12 Step 0 checks (flows 87–90), and the 17 completion checks (flows 69–80, 86). `check` adds a render of every state at 2x, the keystroke budget, and the completion budget: 112/112.
 
 | # | Flow |
 |---|---|
@@ -304,6 +344,18 @@ Real key events go through the window and the bar's field editor; mouse events g
 | 64–65 | Multiline Unicode paste is capped at 2,048 characters; further typing preserves visible/query equality |
 | 66–67 | Dismiss/reopen and present while open clear composition and undo |
 | 68 | Present before attachment focuses the field, selects Cmd+L's URL, and accepts replacement typing |
+| 69 | "g", "gi", "git", "gith": row 1's completion shows in the same apply as each snapshot, the tail selected, one query per keystroke; one Undo removes the typing and nothing of the host |
+| 70 | A matching character keeps the completion before its snapshot and in every applied snapshot; in another letter case too (the field keeps the candidate's case), and Undo then clears the typing |
+| 71 | A non-matching character replaces the completion |
+| 72–73 | Backspace (and Forward Delete) removes only the completion and re-queries with completion off; row 1 becomes the typed URL; a second Backspace deletes a typed character; the next insertion completes again |
+| 74 | Right, End, Cmd+Right accept; Left and Home make the text typed with the caret where the key says |
+| 75 | Down hides the completion, Up restores it, a pointer on another row too; no query |
+| 76 | Return opens row 1, the completion row; a pending Return uses the first snapshot's row 1 |
+| 77 | Paste never completes; Cmd+A and a caret placement make the completion typed text |
+| 78 | Tab with a hint enters Site Search from the typed text; Space with a completion types a space (the hint offers Tab only) |
+| 79 | IME: marked text removes the completion first with no query; no completion while marked; a commit at the end may complete |
+| 80 | Cmd+L: typing replaces the selected URL, then completes |
+| 86 | AX: the field's value is the whole text; its selected range is the completion (CC-3) |
 | 87 | Present: the panel is fully drawn in the first frame (presentation-layer render equals a later render) and no layer has an animation key; dismiss: hidden at once, no animation key, the page shows again (CC-44) |
 | 88 | Click (i): footer on, (i) hidden, field +42 pt, panel frame unchanged; black band; the list's visible part ends at the band; the pointer over the band selects nothing; Down scrolls row 5 out from behind it; Cmd+I hides the footer; a panel without rows grows by the band |
 | 89 | "Dismiss": footer off, the delegate hears it, the query re-runs and remote rows arrive; `present` in every mode shows no footer (fresh, while open, after a close) |
@@ -340,9 +392,9 @@ App (window and wiring):
 
 Engine (`OpenSuggest`) gaps seen against Arc:
 
-1. Empty Cmd+T: Arc lists open tabs ("Switch to Tab") and the help action first (F0063, A0327); `OpenSuggest` ranks top history first.
+1. Empty Cmd+T: Arc lists open tabs ("Switch to Tab") and the help action first (F0063, A0327); `OpenSuggest` ranks top history first. Since Steps 1–2 the current tab is one of them (F0043, F0063).
 2. Split View: Arc shows one row per Split with both panes; `OpenSuggest` returns one row per pane.
-3. Inline autocomplete (`CommandBarAutocompleteSuggestion`): not provided. Planned in `plans/commandbar-completion.md` §4.1.
+3. Inline autocomplete (`CommandBarAutocompleteSuggestion`): built in commandbar-completion Steps 1–2 (rule T3a, `SuggestionSnapshot.inlineCompletion`, §4.1).
 4. The search-suggestion privacy notice (features-core §4.5 rule 13): built as Arc's (i) footer (CC-42, commandbar-completion Step 0).
 
 ## 11. Open questions

@@ -54,8 +54,12 @@ final class PanelView: NSView {
         }
     }
 
+    /// Layout passes since creation (the keystroke bench: at most one per keystroke).
+    private(set) var layoutCount = 0
+
     override func layout() {
         super.layout()
+        layoutCount += 1
         let m = CommandBarMetrics.self
         material.frame = bounds
         edge.frame = bounds

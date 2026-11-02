@@ -227,6 +227,16 @@ struct BarSpec {
         let tw = textWidth(shown, font: inputFont)
         let textName = preview.text.isEmpty ? "input placeholder" : (preview.selectAllText ? "input text (selected)" : "input text")
         e.append(E(name: textName, region: CGRect(x: p.minX + m.textFieldX + 1, y: p.minY + 15, width: tw + 3, height: 32), kind: .ink))
+        if let r = preview.selectedRange, r.length > 0, r.location > 0 {
+            // Inline completion (CC-2): the typed part, the selection box over the completed part, its text.
+            let typed = (preview.text as NSString).substring(to: r.location)
+            let t0 = textWidth(typed, font: inputFont)
+            e.append(E(name: "input typed text", region: CGRect(x: p.minX + m.textFieldX + 1, y: p.minY + 15, width: t0 + 1, height: 32), kind: .ink))
+            e.append(E(name: "completion selection box", region: CGRect(x: p.minX + m.textFieldX + t0 - 3, y: p.minY + 17, width: tw - t0 + 8, height: 28),
+                       kind: .fill(sample: CGRect(x: p.minX + m.textFieldX + t0 + 3, y: p.minY + m.textFieldY + 1, width: max(2, tw - t0 - 6), height: 2))))
+            // Starts 3 pt inside the box, so the plane ring lies on the selection fill (the box edge is its own element).
+            e.append(E(name: "completion selected text", region: CGRect(x: p.minX + m.textFieldX + t0 + 3, y: p.minY + m.textFieldY + 3, width: tw - t0 - 3, height: 19), kind: .ink))
+        }
         if preview.selectAllText {
             e.append(E(name: "input selection", region: CGRect(x: p.minX + m.textFieldX - 3, y: p.minY + 17, width: tw + 8, height: 28),
                        kind: .fill(sample: CGRect(x: p.minX + m.textFieldX + 2, y: p.minY + m.textFieldY + 1, width: tw - 6, height: 2))))
