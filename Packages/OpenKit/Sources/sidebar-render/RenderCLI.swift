@@ -40,7 +40,7 @@ enum RenderCLI {
                             [--banner auto-archive] [--preview folder:N]
                             [--clear-today] [--collapse-folders] [--no-lights] [--page] [--crop X,Y,W,H]
           --media "today:0=audible,today:1=muted,today:2=recording" [--media-depth N] [--media-theme default|red] [--reduce-motion] [--crop-media] [--crop-media-controls]
-          --media-hover expanded|title:N --media-drawer N [--media-title-from-ax PATH]
+          --media-hover expanded|title:N --media-drawer N [--media-title-from-ax PATH] [--row-title-from-ax PATH] [--media-frames-out FILE.json]
           --media-button-hover NAME[:N] [--media-button-pressed] [--media-tooltip] [--media-increase-contrast]
           ROW: pinned:N | today:N | favorite:N | folder:N/M (child M of the N-th pinned folder)
           TARGET: ROW | newtab | divider | header | url | home | plus | switcher:N | toolbar:back|forward|reload|toggle
@@ -51,6 +51,7 @@ enum RenderCLI {
       sidebar-render compare --arc FILE.png --ours FILE.png --spec NAME --out DIR [--scale S]
       sidebar-render bench [--rows N] [--selection] [--bulk N] [--expand-all N] [--folder-peek 50 [--parent-renderer PATH] [--trace-transition] [--visible-rows 1...64] [--negative-proof|--negative-transition-proof]] [--row-media mixed] [--media-card|--media-stack]
       sidebar-render compare-media --arc FILE.png --ours FILE.png --out DIR --state rest|expanded|stack|stack-expanded
+      sidebar-render compare-media --state row-audible|row-muted --arc FRAME.png --arc-ax AX.json --ours FILE.png --ours-frames FILE.json --out DIR
       sidebar-render check
       sidebar-render url-status --out DIR [--scale 1|2]
       sidebar-render sm6-measure [--fail-after-host] [--thread-instructions]
@@ -184,7 +185,7 @@ enum RenderCLI {
 
     static func render(_ args: [String]) throws {
         guard let dir = value(args, "--snapshot"), let out = value(args, "--out") else { throw CLIError(description: usage) }
-        if value(args, "--media-title-from-ax") != nil,
+        if value(args, "--media-title-from-ax") != nil || value(args, "--row-title-from-ax") != nil,
            !URL(fileURLWithPath: out).standardizedFileURL.pathComponents.contains(".re") {
             throw CLIError(description: "AX-title renders must stay under .re; use synthetic titles for committed images")
         }
@@ -254,6 +255,7 @@ enum RenderCLI {
         if let c = value(args, "--crop")?.split(separator: ",").compactMap({ Double($0) }), c.count == 4 {
             image = image.cropping(to: CGRect(x: c[0] * scale, y: c[1] * scale, width: c[2] * scale, height: c[3] * scale)) ?? image
         }
+        if let path = value(args, "--media-frames-out") { try RowMediaCompare.writeOursFrames(scene: scene, context: context, to: path) }
         OffscreenRenderer.writePNG(image, to: URL(fileURLWithPath: out))
         print("wrote \(out) \(image.width)x\(image.height)")
     }

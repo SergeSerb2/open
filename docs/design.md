@@ -174,7 +174,7 @@ SF Symbols where one fits. Sizes are tuned so the 1x ink box matches Arc's (meas
 | Header chevron | `chevron.down` / `chevron.right` | 12 Bold | not measured |
 | Header "…" | `ellipsis` | 13 Bold | not measured |
 | "Clear" arrow | `arrow.down` | 9 Semibold | AX 12×9 |
-| Audio / muted | `speaker.wave.2.fill` / `speaker.slash.fill` | 11 | session 2: outline glyphs (speaker with waves / slashed speaker), ink 19×13 / 16×16, in a 26×26 button `[41, y + 7]` right after the favicon; the title moves to x 69 (12/0022, 0027; `re/interaction-states.md` §20.7). **Change pending:** our glyphs are filled and sit after the title |
+| Audio / muted | `speaker.wave.3` / `speaker.slash` (outline, Regular) | 14 / 15.5 | session 2: outline glyphs in a 26×26 button `[41, y + 7]` right after the favicon; the title moves to x 69 (12/0022, 0027; `re/interaction-states.md` §20.7). Arc's audible glyph has three arcs, so Open uses `speaker.wave.3`, not `.wave.2`. Sizes are fits on the 50 % ink boxes (row-relative `[44, 15, 19, 11]` / `[47, 13, 14, 14]`); Step 2b, `plans/media-pip.md` §4.1 |
 | Bottom plus | `plus` | 17 Medium | 14×14 (=) |
 | Home (Library) | our vector `CustomIcon.library`: a filled box, a lid, two items above | 14×16 ink | 14×16 (=) |
 | Folder closed / open | our vector `CustomIcon.folder` in the Space accent | 18 pt frame | shape not matched (§9) |

@@ -370,7 +370,6 @@ struct Bitmap {
     init(path: String, viaDisplayP3: Bool = false) throws {
         guard let src = CGImageSourceCreateWithURL(URL(fileURLWithPath: path) as CFURL, nil),
               let img = CGImageSourceCreateImageAtIndex(src, 0, nil) else { throw CLIError(description: "cannot read \(path)") }
-        width = img.width; height = img.height
         let input: CGImage
         if viaDisplayP3 {
             // Draw through the embedded profile into P3, then convert that image to sRGB/Lab.
@@ -380,6 +379,12 @@ struct Bitmap {
             context.draw(img, in: CGRect(x: 0, y: 0, width: img.width, height: img.height))
             input = context.makeImage()!
         } else { input = img }
+        self.init(image: input)
+    }
+
+    /// Converts an image to sRGB through its color space (renders checked in process).
+    init(image input: CGImage) {
+        width = input.width; height = input.height
         data = [UInt8](repeating: 0, count: width * height * 4)
         let w = width, h = height
         data.withUnsafeMutableBytes { buf in
