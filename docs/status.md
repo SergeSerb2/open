@@ -453,7 +453,7 @@ Columns: feature · RE doc + section · plan · library code · App wiring · ve
 | Developer tools, JavaScript console, view source, inspect | MH Developer | app-shell §4.3 | — | main | none named | done | All four ids dispatch in Step C (`App/MainMenu.swift:145`). View Source opens a `view-source:` tab. |
 | Network Inspector, Toggle Developer Mode, Allow JavaScript from Apple Events | MH Developer | page-platform (#73) | registry | none | — | planned | Was unplanned. See §3, gap 29. |
 | Page translation: offer, translate, revert, never translate a site, reset | FA §9.2 TR-1–3 | page-platform (#73: on-device path; Chromium translate needs a Google key) | `OpenTranslate`, `OpenSidebar/URLStatusButton.swift`, `OpenFeatures/Translate/`, `App/Page/TranslateAdapter.swift` | s8/translate | `openkit lang-detect`; `features-render` R-X1; `sidebar-render` S-US1; e2e `page` X1–X6 | in PR | Apple Translation + NaturalLanguage, no network. Runtime in the main world until P7 (Step 19). e2e uses the automation-only fixture backend; Apple's backend row waits for U-X1. See §3, gap 8. |
-| Capture: area, full page, portrait; Cmd+Shift+2; Cmd+Shift drag | FA §9.1 CA-1–4; MH Gestures | page-platform (#73) | `OpenSettings/CapturesSection.swift` (reader) | main (reader) | `settings-preview` (index) | planned (tool) | The Library reader shows in the App. The capture tool does not exist. See §3, gap 13. |
+| Capture: area, full page, portrait; Cmd+Shift+2; Cmd+Shift drag | FA §9.1 CA-1–4; MH Gestures | page-platform Step 13 (Section 8) | `OpenFeatures/Capture/*`, `OpenDesign/CaptureTokens.swift`, `App/Page/CaptureLibraryWriter.swift`, `App/Page/CaptureCommands.swift`, `OEWebContent.captureFullPage` (EP-8); `OpenSettings/CapturesSection.swift` (reader) | branch `s8/capture` | `features-render` R-C1–R-C3 and controller rows; e2e `page` C1–C6 (C7 blocked: no incognito window) | done (partial) | Overlay, result card, and portrait canvas are guesses until captures C-C1 and C-C2. Toasts use the window's old toast until ToastCenter lands. See §3, gap 13. |
 | Sound effects | FA §9.7 | sidebar-completion (M4) | `OpenFeatures/SoundEffects.swift` with Open-generated sounds (#80); `OpenSettings` switch | none | `features-render` SE1–SE3 (#80) | planned | Spot-check: library only. Sounds exist and play through `SoundEffects`, but no App or sidebar code calls `play` (grep finds callers only in `features-render`). The switch defaults off. |
 | Share (File ▸ Share…, row Share…) | MH File; IS §15 | app-shell §4.1, §4.3 | `App/SidebarMenuActions.swift` | main (#132) | `I9_share_system_picker` | done | File ▸ Share uses the system picker. Items 9–10 (#132) wire the row Share… item through `share` to `NSSharingServicePicker`, anchored at the row; `I9_share_system_picker` checks its URL, service query and cancellation. |
 | Spelling, substitutions, transformations, speech, font menus | MH Edit | app-shell Step C (system dispatch) | registry; `SystemCommandActions` selectors | main | — | done | Closed in #85: 46 system ids keep AppKit selectors (§2). See §3, gap 3 (closed). |
@@ -653,7 +653,7 @@ Ranking is by user impact for an Arc user who switches to Open. **P0** blocks da
 
 ### 3.3 P2
 
-13. **Open — Capture tool.** Now planned in page-platform (#73). The Library reader shows in the App. No capture tool exists.
+13. **Partly closed — Capture tool.** page-platform Step 13 (Section 8, `s8/capture`): area, full page (EP-8), and portrait captures, Cmd+Shift+2, Cmd+Shift drag, the context menu items, and Library ▸ Captures rows. Open: Arc's look (captures C-C1, C-C2), ToastCenter toasts, incognito (C7).
 14. **Open (small) — Copy URL as Quote writes the wrong text.** The command dispatches (#85) but writes "[title](url)", the same as Markdown. It needs the page selection from the engine.
 15. **Open — Copy URL toast and the Arc toast look.** Now planned in page-platform (#73, measured spec). Toasts show today in the old look.
 16. **Open — Zoom level toast.** Now planned in page-platform (#73).
@@ -874,9 +874,9 @@ This appendix is the first audit's table. It is history. Today's counts and miss
 | File | Print… | Cmd+P | `print` | Y | Y | app-shell §4.3 |
 | File | Save Page As… | Cmd+Shift+S | `save-page-as` | — | — | app-shell §4.3 |
 | File | Share… | — | `share-page` | — | — | app-shell §4.3 |
-| File | Capture… | Cmd+Shift+2 | `capture-page` | — | — | none |
-| File | Capture Full Page | — | `capture-full-page` | — | — | none |
-| File | Capture in Portrait Mode | — | `capture-portrait` | — | — | none |
+| File | Capture… | Cmd+Shift+2 | `capture-page` | — | — | page-platform Step 13 |
+| File | Capture Full Page | — | `capture-full-page` | — | — | page-platform Step 13 |
+| File | Capture in Portrait Mode | — | `capture-portrait` | — | — | page-platform Step 13 |
 | File | New Profile | — | `new-profile` | — | — | none (`OpenSettings` has the create sheet) |
 | File | New Boost | — | `new-boost` | — | — | none (Boost editor plan in progress) |
 | File | Edit Boost | — | `edit-boost` | — | — | none (Boost editor plan in progress) |

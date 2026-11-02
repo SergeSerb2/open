@@ -36,6 +36,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, OEEngineDelegate, OEBr
   /// Mini players, auto-PiP and the media sleep feed (media-pip §7.2).
   lazy var media = MediaCoordinator(app: self, rulesURL: options.pipSiteRules)
   lazy var settingsPresenter = AppSettingsActions(app: self)
+  /// Library ▸ Captures writer (page-platform §4.6.6); one per app, shared by every window.
+  lazy var captureLibrary = CaptureLibraryWriter(app: self, root: directories.root)
   var keyBindings = KeyBindingStore.empty
   let fallbackKeyboard = KeyboardRouter()
   var commandServicesPrepared = false
