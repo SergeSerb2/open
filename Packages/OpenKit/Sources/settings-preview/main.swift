@@ -238,7 +238,7 @@ app.run()
 
 /// Hosts `view` offscreen with SwiftUI's accessibility nodes on (process-scoped, as `render` does), then
 /// calls `body` with the hosting view.
-@MainActor func withAccessibleHost<V: View>(_ view: V, size: CGSize, _ body: (NSView) throws -> Void) async throws {
+@MainActor func withAccessibleHost<V: View>(_ view: V, size: CGSize, _ body: @MainActor (NSView) throws -> Void) async throws {
     let host = NSHostingView(rootView: view.frame(width: size.width, height: size.height))
     host.frame = CGRect(origin: .zero, size: size)
     let window = RenderWindow(contentRect: CGRect(x: -20000, y: -20000, width: size.width, height: size.height), styleMask: .borderless, backing: .buffered, defer: false)

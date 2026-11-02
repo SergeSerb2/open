@@ -133,7 +133,7 @@ func require(_ condition: @autoclosure () throws -> Bool, _ message: String) thr
                 try await withAccessibleHost(ShortcutsPane(model: vm.shortcuts), size: CGSize(width: 684, height: 600)) { host in
                     // Static text reports its string as the AX value; buttons as the label.
                     var texts = Set(accessibilityLabels(host)), seen = Set<ObjectIdentifier>()
-                    func values(_ node: NSObject) {
+                    @MainActor func values(_ node: NSObject) {
                         guard seen.insert(ObjectIdentifier(node)).inserted, seen.count < 4096 else { return }
                         let value = NSSelectorFromString("accessibilityValue"), children = NSSelectorFromString("accessibilityChildren")
                         if node.responds(to: value), let v = node.perform(value)?.takeUnretainedValue() as? String { texts.insert(v) }
