@@ -11,6 +11,8 @@ extension EngineWebContentHostFactory: @preconcurrency NSSharingServicePickerDel
     guard !isClosing, let tab = model.tab(id: id), let sidebar = controller?.sidebar,
           sidebar.window != nil, let rect = sidebar.rowFrame(nodeID: id) ?? sidebar.favoriteFrame(tabID: id) else { return false }
     sidebarSharePicker?.close()
+    // Closing a picker the copy toast opened releases that toast too.
+    shareToastHandle?.hold(false); shareToastHandle = nil
     let picker = NSSharingServicePicker(items: [tab.url])
     sidebarSharePicker = picker; picker.delegate = self
     #if OPEN_AUTOMATION
