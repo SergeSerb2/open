@@ -123,6 +123,7 @@ public final class ToastCenter {
     }
     private var entries: [Entry] = []   // oldest first; the last is on top
     private var nextID = 1
+    private var dispatchingAccessory = 0
 
     public init(overlay: ToastOverlayView, style: @escaping @MainActor () -> SpaceThemeStyle, clock: any ToastClock = SystemToastClock()) {
         self.overlay = overlay; self.style = style; self.clock = clock
@@ -140,6 +141,10 @@ public final class ToastCenter {
         let id = entry.id
         view.onAccessory = { [weak self] in
             guard let self, let entry = self.entry(id), !entry.isExiting else { return }
+            // The handler may dismiss this toast (Undo) or show another one: views that leave
+            // during the button's own action are detached on the next run-loop turn.
+            self.dispatchingAccessory += 1
+            defer { self.dispatchingAccessory -= 1 }
             entry.onAccessory?(ToastHandle(center: self, id: id))
         }
         view.onHover = { [weak self] inside in self?.hover(id, inside) }
@@ -258,7 +263,12 @@ public final class ToastCenter {
     private func remove(_ id: Int) {
         guard let index = entries.firstIndex(where: { $0.id == id }) else { return }
         let entry = entries.remove(at: index)
-        entry.timer?.cancel(); entry.view.removeFromSuperview()
+        entry.timer?.cancel()
+        if dispatchingAccessory > 0 {
+            let view = entry.view
+            view.isHidden = true
+            DispatchQueue.main.async { view.removeFromSuperview() }
+        } else { entry.view.removeFromSuperview() }
         if entries.isEmpty { overlay.isHidden = true }
     }
 
