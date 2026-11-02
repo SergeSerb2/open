@@ -5,6 +5,8 @@
 #import "OEInternal.h"
 
 #include <cstdint>
+#include <cstring>
+#include <utility>
 #include <vector>
 
 #include "include/cef_navigation_history.h"

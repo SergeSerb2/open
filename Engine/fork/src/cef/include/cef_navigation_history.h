@@ -132,8 +132,8 @@ CefRefPtr<CefNavigationHistory> CefGetNavigationHistory(
     CefRefPtr<CefBrowser> browser);
 
 ///
-/// Installs |history| on |browser|, which must be unused: created with
-/// CefBrowserSettings.no_renderer, or with no navigation yet. Returns false
+/// Installs |history| on |browser|, which must be unused: created with the
+/// no_renderer browser setting, or with no navigation yet. Returns false
 /// and changes nothing if the browser already has a committed or pending
 /// navigation, or if an entry fails to decode. On success the current entry
 /// loads when the page is shown (at once if it is visible already), its

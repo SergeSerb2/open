@@ -2,6 +2,12 @@
 # One block per active series entry:
 # <file>.patch
 # paths: <space-separated pathspecs>
+# 0101-mem-visibility.patch
+paths: cef/libcef/browser/alloy/alloy_browser_host_impl.cc
+# 0104-mem-navigation-history.patch
+paths: cef/include/cef_navigation_entry.h cef/libcef/browser/navigation_entry_impl.cc cef/libcef/browser/navigation_entry_impl.h
+# 0105-mem-no-renderer-create.patch
+paths: cef/include/internal/cef_types.h cef/include/internal/cef_types_wrappers.h cef/libcef/browser/alloy/browser_platform_delegate_alloy.cc
 # 0302-open-hosted-tabs.patch
 paths: cef/BUILD.gn cef/libcef/browser/browser_host_base.h cef/libcef/browser/browser_info_manager.cc cef/libcef/browser/browser_platform_delegate_create.cc cef/libcef/browser/chrome/chrome_browser_delegate.cc cef/libcef/browser/chrome/chrome_browser_host_impl.cc
 # 0303-open-context-menu-submenu-commands.patch
