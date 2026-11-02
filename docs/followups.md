@@ -149,3 +149,7 @@ Arc's tracker cleaner (RE CC-31a, `0x100826084`) has six callers in the main bin
 ## `tools/rea-env.sh` points at a Ghidra that is gone
 
 `GHIDRA_INSTALL_DIR` is `/opt/homebrew/Cellar/ghidra/12.1.4/libexec`; Homebrew now has 12.2 only. Section 2 set `GHIDRA_INSTALL_DIR=/opt/homebrew/Cellar/ghidra/12.2/libexec` after sourcing it; 12.2 opens the shared `ArcMain` project read-only (one compiler-spec warning). Update the script to find the installed version.
+
+## `commandbar-render` inline completion gate is close to its budget under load
+
+The gate "inline completion adds ≤ 0.3 ms p95" read +0.301 ms in one full `verify-all` at load 12.0 (Section 2 item 13 PR) and +0.170 ms on the rerun at load 9.0 (earlier Section 2 runs: well under). The gate converts main-thread cycles at the off run's rate, so heavy machine load still moves it. If it trips again under load only, consider pairing more keystrokes or reporting the paired median beside the p95.
