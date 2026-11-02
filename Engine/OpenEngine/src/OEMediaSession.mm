@@ -268,8 +268,11 @@ typedef void (^OEPiPCompletion)(BOOL);
 }
 
 - (void)requestPictureInPictureWithCompletion:(void (^)(BOOL))completion {
-  OEPiPCompletion done = [completion copy] ?: ^(BOOL) {
-  };
+  OEPiPCompletion done = [completion copy];
+  if (!done) {
+    done = ^(BOOL) {
+    };
+  }
   OEMediaState* media = self.oe_mediaState;
   CefRefPtr<CefMediaController> controller =
       media ? media->_controller : nullptr;

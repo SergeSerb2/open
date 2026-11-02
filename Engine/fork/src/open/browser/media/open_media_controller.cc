@@ -529,8 +529,7 @@ bool OpenMediaController::IsPictureInPictureAvailable(
       static_cast<content::WebContentsImpl*>(web_contents())
           ->media_web_contents_observer();
   // chromium/0401: the player's own report (Blink SupportsPictureInPicture).
-  return observer && observer->session_controllers_manager()
-                         ->OpenIsPictureInPictureAvailable(id);
+  return observer && observer->OpenIsPictureInPictureAvailable(id);
 }
 
 bool OpenMediaController::SessionFrozen() const {
