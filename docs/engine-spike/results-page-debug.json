@@ -6,13 +6,14 @@
         "forced": false,
         "ok": true,
         "owned_pids": [
-          39551,
-          39580,
-          39581,
-          39582,
-          39585,
-          39586,
-          39607
+          89233,
+          89303,
+          89304,
+          89306,
+          89307,
+          89314,
+          89316,
+          89359
         ],
         "remaining_processes": [],
         "reply": true,
@@ -114,7 +115,7 @@
           7
         ],
         "title": "Translate this page to English?",
-        "window": 146537
+        "window": 153016
       },
       "tipY": 802,
       "window": [
@@ -287,6 +288,6 @@
       ]
     }
   },
-  "started": "2026-11-02 15:42:09",
+  "started": "2026-11-02 16:16:13",
   "style": "alloy"
 }
