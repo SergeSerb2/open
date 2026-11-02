@@ -141,3 +141,11 @@ Small items found during review and verification. Each line: area — issue — 
 - Command bar selected subtitle (Section 2 Steps 1–2) — on a themed selection Arc's "— subtitle" core reads `#9EB1CE` over `#3B679F` (S2 18/0009 row 1); white 0.52 gives `#9BB4CF`, ΔE00 2.67. One sample cannot separate a tint rule from plain alpha. Capture request: the same typed text in two Spaces with different theme colors, row 1 with a subtitle, one frame each. — Section 2, 2026-11-02
 - Command bar undo with a completion (Section 2 Steps 1–2) — Open's Cmd+Z undoes the typing run and never restores a completion (plan D3). No capture shows Arc's Cmd+Z while a completion shows; check it when a capture session runs. — Section 2, 2026-11-02
 - Command bar light appearance — the footer draws Arc's dark band only. The bar has no light look yet (`docs/commandbar.md` §11 q3, S2 20/0018); the footer's light variant comes with it. — Section 2, 2026-10-29
+
+## Copy URL trackers: Arc's other callers (Section 2 item 12)
+
+Arc's tracker cleaner (RE CC-31a, `0x100826084`) has six callers in the main binary (`.re/s2cb/trackers/ghidra-helpers.txt`: `0x1029ac780`, `0x1003e19f0`, `0x100076e18`, `0x1029ad764`, `0x102ee100c`, `0x1029acb48`). Open runs the rule for Copy URL only (`copy-url`, the sidebar copy button, the pane-bar and toolbar copy button). The other callers are not traced; the string "Copied clean links without trackers" suggests the copy-links-of-selected-items path is one. Trace them and apply the same rule where Arc does.
+
+## `tools/rea-env.sh` points at a Ghidra that is gone
+
+`GHIDRA_INSTALL_DIR` is `/opt/homebrew/Cellar/ghidra/12.1.4/libexec`; Homebrew now has 12.2 only. Section 2 set `GHIDRA_INSTALL_DIR=/opt/homebrew/Cellar/ghidra/12.2/libexec` after sourcing it; 12.2 opens the shared `ArcMain` project read-only (one compiler-spec warning). Update the script to find the installed version.

@@ -428,7 +428,7 @@ final class EngineWebContentHostFactory: NSResponder, WebContentHostFactory {
     case .reload: guard let page = selectedContent else { return false }; page.reload(); return true
     case .stopLoading: guard let page = selectedContent else { return false }; page.stopLoading(); return true
     case .copyCurrentURL:
-      guard let tab = selectedTab else { return false }; NSPasteboard.general.clearContents(); NSPasteboard.general.setString(tab.url.absoluteString, forType: .string); return true
+      guard let url = selectedContent?.url ?? selectedTab?.url else { return false }; copyCleanURL(url); return true
     case .toggleMute(let id):
       guard let tab = model.tab(id: id) else { return false }; model.setMuted(tabID: id, muted: !tab.isMuted); hosts[id]?.content.isMuted = tab.isMuted; app.scheduleSave(); return true
     case .resetToPinnedURL(let id):

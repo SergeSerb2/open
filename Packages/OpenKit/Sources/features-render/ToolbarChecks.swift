@@ -109,6 +109,20 @@ enum ToolbarChecks {
         c.performCommand("toggle-toolbar"); try await settle()
         check(!window.showsToolbar && c.container.slots[0].paneChrome == nil, "TB12 toggle-toolbar (Cmd+Shift+D) hides it again")
 
+        // The toolbar's copy button copies the URL without trackers (Section 2 item 12, Arc CC-31a).
+        c.setToolbarShown(true); try await settle()
+        let copyHost = c.container.host(for: first.id) as? FakeWebContentHost
+        copyHost?.load(URL(string: "https://site1.example.com/page?utm_source=news&q=1")!); try await settle()
+        let copyButton = c.container.slots[0].paneChrome?.subviews.compactMap { $0 as? NSButton }.first { $0.toolTip == "Copy Current URL" }
+        copyButton?.performClick(nil)
+        check(NSPasteboard.general.string(forType: .string) == "https://site1.example.com/page?q=1" && c.lastToastTitle == "Copied a clean link without trackers",
+              "TB14 the copy button copies the URL without trackers and says so (\(NSPasteboard.general.string(forType: .string) ?? "nil"), \(c.lastToastTitle))")
+        copyHost?.load(URL(string: "https://site1.example.com/page")!); try await settle()
+        copyButton?.performClick(nil)
+        check(NSPasteboard.general.string(forType: .string) == "https://site1.example.com/page" && c.lastToastTitle == "Copied Current URL",
+              "TB14 a URL without trackers copies as it is: Copied Current URL")
+        c.setToolbarShown(false); try await settle()
+
         let little = BrowserWindowState(focusedSpaceID: space.id, style: .littleOpen)
         let littleModel = BrowserModel(profiles: [], spaces: [], windows: [little])
         check(!littleModel.setToolbarShown(windowID: little.id, true) && !little.showsToolbar, "TB13 a Little Open window refuses the toolbar")

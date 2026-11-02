@@ -59,6 +59,14 @@ extension EngineWebContentHostFactory {
     return controller.context
   }
 
+  /// Copy URL (Cmd+Shift+C, the sidebar and pane-bar copy buttons): Arc copies the URL without trackers
+  /// (CC-31a) and says which it copied ("Copied a clean link without trackers" / "Copied Current URL").
+  func copyCleanURL(_ url: URL) {
+    let (clean, changed) = TrackerStripping.clean(url)
+    NSPasteboard.general.clearContents(); NSPasteboard.general.setString(clean.absoluteString, forType: .string)
+    controller?.showToast(changed ? TrackerStripping.cleanToast : TrackerStripping.plainToast, undo: nil)
+  }
+
   private func performSelectionAppCommand(_ id: String) -> Bool? {
     guard let context = selectionCommandContext(for: id) else { return nil }
     guard context.isSelectionCommandEnabled(id) else { return false }
@@ -200,7 +208,8 @@ extension EngineWebContentHostFactory {
     case "print": selectedContent?.showPrintPanel()
     case "save-page-as": savePage()
     case "share-page": if let url = selectedContent?.url { NSSharingServicePicker(items: [url]).show(relativeTo: controller?.container.bounds ?? .zero, of: controller!.container, preferredEdge: .maxY) }
-    case "copy-url", "copy-url-markdown", "copy-url-quote":
+    case "copy-url": guard let url = selectedContent?.url ?? selectedTab?.url else { return false }; copyCleanURL(url)
+    case "copy-url-markdown", "copy-url-quote":
       guard let url = selectedContent?.url ?? selectedTab?.url else { return false }
       let title = selectedContent?.title ?? selectedTab?.displayTitle ?? ""
       NSPasteboard.general.clearContents(); NSPasteboard.general.setString(id == "copy-url" ? url.absoluteString : "[\(title)](\(url.absoluteString))", forType: .string)

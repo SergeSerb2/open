@@ -20,7 +20,7 @@ public final class PaneSlotView: NSView {
     }
     @available(*, unavailable) required init?(coder: NSCoder) { fatalError() }
     func configure(tab: Tab, host: (any WebContentHost)?, split: Bool, toolbar: Bool = false, fullURL: Bool = false, focused: Bool, style: SpaceThemeStyle,
-                   close: @escaping () -> Void, menu: @escaping (NSView) -> Void, url: @escaping () -> Void, copy: @escaping () -> Void,
+                   close: @escaping () -> Void, menu: @escaping (NSView) -> Void, url: @escaping () -> Void, copy: @escaping (Bool) -> Void,
                    toolbarMenu: (() -> NSMenu?)? = nil) {
         isFocused = split && focused
         focusRing.strokeColor = style.accentColor(.light).cgColor
@@ -221,7 +221,7 @@ public final class WebContentContainer: NSView {
             guard let tab = tabProvider(slot.tabID) else { continue }; let id = slot.tabID
             slot.configure(tab: tab, host: cache[id], split: ids.count > 1, toolbar: showsToolbar, fullURL: showsFullURL, focused: focused == id, style: style,
                            close: { [weak self] in self?.onPaneClose?(id) }, menu: { [weak self] v in self?.onPaneMenu?(id, v) },
-                           url: { [weak self] in self?.onURLField?() }, copy: { [weak self] in self?.onToast?("Copied Current URL") },
+                           url: { [weak self] in self?.onURLField?() }, copy: { [weak self] changed in self?.onToast?(changed ? TrackerStripping.cleanToast : TrackerStripping.plainToast) },
                            toolbarMenu: { [weak self] in self?.onToolbarMenu?() })
         }
     }
