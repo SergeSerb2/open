@@ -439,6 +439,7 @@ func runSuggestCheck(args: [String]) async {
     // 32–40. Inline completion (commandbar-completion §4.1, §5.1).
     await completionChecks(log: log, tmp: tmp)
     await splitChecks(log: log, tmp: tmp)
+    await scopeChecks(log: log, engine: engine, fx: fx)
 
     // 22, 44. Latency, with and without inline completion.
     await latencyCheck(log: log, history: history)
@@ -737,6 +738,50 @@ private func latencyCheck(log: CheckLog, history: HistoryStore) async {
 }
 
 // MARK: - Inline completion (scenarios 32–40)
+
+/// Scenarios 42–43 (commandbar-completion §4.3): the Actions scope and the scope keywords.
+@MainActor
+private func scopeChecks(log: CheckLog, engine: SuggestEngine, fx: Fixture) async {
+    let order = ActionRegistry.arcDefaults.actions.map(\.id)
+    var wrong: [String] = []
+    // 42. Empty query: available actions in seed order, only action rows, no top hit, up to 12.
+    let empty = await lastSnapshot(engine, "", fx.context(mode: .searchActions))
+    let ids = empty?.suggestions.compactMap(\.actionID) ?? []
+    let kinds = Set(empty?.suggestions.map(\.kind) ?? [])
+    let seeded = order.filter { ids.contains($0) }
+    if ids.isEmpty || ids.count > 12 || kinds != [.action] || ids != seeded || empty?.hasTopHit != false {
+        wrong.append("empty: \(ids.count) rows \(kinds.map(\.rawValue)) top \(empty?.hasTopHit ?? true) in seed order \(ids == seeded)")
+    }
+    // "side" → Show/Hide Sidebar is the top hit (T2a); one letter already matches (no 2-character minimum).
+    let side = await lastSnapshot(engine, "side", fx.context(mode: .searchActions))
+    if side?.topHit?.actionID != "toggle-sidebar" || side?.topHitRule != .bestAction || side?.suggestions.contains(where: { $0.kind != .action }) == true {
+        wrong.append("side: top \(describe(side?.topHit)) rule \(side?.topHitRule.rawValue ?? "-")")
+    }
+    let one = await lastSnapshot(engine, "s", fx.context(mode: .searchActions))
+    if (one?.suggestions.count ?? 0) == 0 { wrong.append("one letter gave no rows") }
+    // Requirements still hide: on a pinned tab, "pin" offers Unpin Tab and not Pin Tab.
+    let pin = await lastSnapshot(engine, "pin", fx.context(mode: .searchActions, current: fx.news))
+    let pinIDs = pin?.suggestions.compactMap(\.actionID) ?? []
+    if !pinIDs.contains("unpin-tab") || pinIDs.contains("pin-tab") { wrong.append("pin on a pinned tab: \(pinIDs)") }
+    // No typed, history, remote, calculator, or Site Search rows; no inline completion.
+    let math = await lastSnapshot(engine, "2+2", fx.context(mode: .searchActions))
+    if math?.suggestions.contains(where: { $0.kind != .action }) == true || math?.inlineCompletion != nil { wrong.append("2+2 gave non-action rows") }
+    log.check("42: Actions scope: empty → available actions in seed order, no top hit; \"side\" → Show/Hide Sidebar (T2a); requirements still hide; only action rows",
+              wrong.isEmpty, wrong.isEmpty ? "\(ids.count) actions for the empty query" : wrong.joined(separator: "; "))
+
+    // 43. Scope keywords: exact words only, a scope wins over a site, Space never enters a scope.
+    var keys: [String] = []
+    for (text, expected) in [("actions", SiteSearch.actionsScopeID), ("action", SiteSearch.actionsScopeID), ("commands", SiteSearch.actionsScopeID),
+                             ("tabs", SiteSearch.tabsScopeID), ("tab", SiteSearch.tabsScopeID), ("TABS", SiteSearch.tabsScopeID)] {
+        if engine.siteSearchTrigger(for: text)?.id != expected { keys.append("\(text) → \(engine.siteSearchTrigger(for: text)?.id ?? "nil")") }
+    }
+    for text in ["act", "actio", "tab vs", "tabs vs spaces"] where engine.siteSearchTrigger(for: text)?.isScope == true { keys.append("\(text) gave a scope") }
+    if engine.siteSearchTrigger(for: "yt")?.id != "youtube" { keys.append("yt lost its site hint") }
+    let spaces = await lastSnapshot(engine, "tabs vs spaces", fx.context())
+    if spaces?.suggestions.contains(where: { $0.kind == .siteSearch }) == true { keys.append("\"tabs vs spaces\" made a scope search row") }
+    log.check("43: scope keywords: \"actions\"/\"action\"/\"commands\" and \"tabs\"/\"tab\" give scope hints; \"act\" and \"tab vs\" do not; a site keyword keeps its hint",
+              keys.isEmpty, keys.isEmpty ? "all as expected" : keys.joined(separator: "; "))
+}
 
 /// Scenario 41 (commandbar-completion §4.2.1): one row per Split View.
 @MainActor

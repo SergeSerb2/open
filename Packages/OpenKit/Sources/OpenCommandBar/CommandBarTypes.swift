@@ -9,20 +9,39 @@ public enum CommandBarMode: String, Sendable, Hashable, CaseIterable {
     case newTab
     /// Cmd+L: the current URL fills the input, fully selected; Return navigates the current tab.
     case editCurrentURL
-    /// Tabs scope: open, pinned, and favorite tabs only.
+    /// Opens in the Tabs scope: open, pinned, and favorite tabs only. Leaving the scope gives `.newTab`.
     case searchTabs
+    /// Opens in the Actions scope: browser actions only (commandbar-completion §4.3). Leaving gives `.newTab`.
+    case searchActions
 
     var suggestMode: SuggestMode {
         switch self {
         case .newTab: .newTab
         case .editCurrentURL: .editCurrentURL
         case .searchTabs: .searchTabs
+        case .searchActions: .searchActions
         }
     }
 }
 
 /// What opened the bar and the browser state the query needs. The App fills it from
 /// the window that received Cmd+T / Cmd+L.
+/// A scope: the chip in the input and what the engine searches (commandbar-completion §4.3.1).
+public enum CommandBarScope: Sendable, Hashable {
+    case site(SiteSearch)
+    case actions
+    case tabs
+
+    /// The chip text: the site name, "Actions" (CC-17), or "Tabs" (guess).
+    public var title: String {
+        switch self {
+        case .site(let s): s.name
+        case .actions: CommandBarText.actionsScope
+        case .tabs: CommandBarText.tabsScope
+        }
+    }
+}
+
 public struct CommandBarRequest: Sendable {
     public var mode: CommandBarMode
     public var profileID: ProfileID?

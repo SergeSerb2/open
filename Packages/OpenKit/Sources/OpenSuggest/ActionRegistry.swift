@@ -168,8 +168,8 @@ struct ActionMatcher: Sendable {
     }
 
     /// Quality over the title and aliases; queries shorter than 2 bytes never match.
-    static func quality(_ query: FoldedQuery, _ entry: Entry) -> Double {
-        guard query.bytes.count >= 2 else { return 0 }
+    static func quality(_ query: FoldedQuery, _ entry: Entry, minimumBytes: Int = 2) -> Double {
+        guard query.bytes.count >= minimumBytes else { return 0 }
         var best = TextMatching.rowQuality(query, fields: entry.phrases)
         if best < MatchQuality.initials, !query.bytes.contains(32), entry.initials.contains(query.bytes) {
             best = MatchQuality.initials

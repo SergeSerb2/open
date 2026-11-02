@@ -317,6 +317,8 @@ Menu path `—` means the command has no menu item (keys or command bar only).
 | `air-traffic-control` | Air Traffic Control | — | window | — |
 | `manage-passwords` | Manage Passwords | — | window | — |
 | `search-settings` | Search Settings | — | window | — |
+| `search-actions` | Search Actions | — | window | — |
+| `search-tabs` | Search Tabs | — | window | — |
 | `little-open-global` | Show Little Open (Global) | Cmd+Opt+N | global | — |
 | `show-shortcuts-overlay` | Show Shortcuts While Holding Command | — | window | — |
 | `go-to-tab-1` | Go to Tab 1 | Cmd+1 | window | — |

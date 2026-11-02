@@ -9,6 +9,11 @@ public enum SuggestMode: String, Sendable, Codable, CaseIterable {
     case editCurrentURL
     /// Tabs scope: only open, pinned, and favorite tabs.
     case searchTabs
+    /// Actions scope: only browser actions (commandbar-completion §4.3.3; Arc's TypeTravel, CC-16).
+    case searchActions
+
+    /// A scope mode: one provider, no typed, history, remote, calculator, or Site Search rows.
+    public var isScoped: Bool { self == .searchTabs || self == .searchActions }
 }
 
 public struct SuggestContext: Sendable {
@@ -218,4 +223,6 @@ public enum TopHitRule: String, Sendable {
     /// T3a: a strong tab or history row whose host (or URL) the typed text starts, while inline completion
     /// is allowed (commandbar-completion §4.1.3). Checked after T2 and before T3.
     case inlineCompletion = "T3a-inline-completion"
+    /// T2a: the Actions scope with a query → the best action (commandbar-completion §4.3.3).
+    case bestAction = "T2a-search-actions"
 }

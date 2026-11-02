@@ -70,6 +70,21 @@ public enum SiteSearches {
     }
 }
 
+extension SiteSearch {
+    /// The Actions and Tabs scopes as trigger entries with no URL template (commandbar-completion §4.3.2).
+    /// Exact keywords only: "actions", "action", "commands" and "tabs", "tab". The bar maps their ids to
+    /// its scopes; the engine never searches them.
+    public static let actionsScopeID = "scope-actions"
+    public static let tabsScopeID = "scope-tabs"
+    public static let scopes = [
+        SiteSearch(id: actionsScopeID, name: "Actions", host: "", keywords: ["actions", "action", "commands"], searchURLTemplate: ""),
+        SiteSearch(id: tabsScopeID, name: "Tabs", host: "", keywords: ["tabs", "tab"], searchURLTemplate: ""),
+    ]
+
+    /// True for the Actions and Tabs scope entries.
+    public var isScope: Bool { id == Self.actionsScopeID || id == Self.tabsScopeID }
+}
+
 /// Folded trigger words for fast per-keystroke matching.
 struct SiteSearchIndex: Sendable {
     struct Entry: Sendable {
@@ -80,23 +95,28 @@ struct SiteSearchIndex: Sendable {
     }
 
     let entries: [Entry]
+    /// The Actions and Tabs scopes (`SiteSearch.scopes`): exact keywords only, never a Space trigger.
+    let scopes: [Entry]
     let byID: [String: SiteSearch]
 
     init(_ sites: [SiteSearch]) {
-        entries = sites.map { site in
+        scopes = SiteSearch.scopes.map { Entry(site: $0, names: [], keywords: $0.keywords.map { TextMatching.fold($0) }) }
+        entries = sites.filter { !$0.isScope }.map { site in
             let name = TextMatching.fold(site.name.filter { !$0.isWhitespace })
             let host = TextMatching.fold(site.host)
             return Entry(site: site, names: [name, host], keywords: site.keywords.map { TextMatching.fold($0) })
         }
         var map: [String: SiteSearch] = [:]
-        for site in sites where map[site.id] == nil { map[site.id] = site }
+        for site in sites + SiteSearch.scopes where map[site.id] == nil { map[site.id] = site }
         byID = map
     }
 
     /// Site for a one-word query, for the "Press Tab to search <Site>" hint and the Tab key.
-    /// Exact name/host/keyword match first, then the shortest name the query is a prefix of (2+ bytes).
+    /// A scope keyword wins, exact only ("actions", never "act"); then an exact site name/host/keyword;
+    /// then the shortest site name the query is a prefix of (2+ bytes).
     func tabTrigger(for query: [UInt8]) -> SiteSearch? {
         guard query.count >= 2, !query.contains(32) else { return nil }
+        for e in scopes where e.keywords.contains(query) { return e.site }
         for e in entries where e.names.contains(query) || e.keywords.contains(query) { return e.site }
         var best: (site: SiteSearch, length: Int)?
         for e in entries {

@@ -63,6 +63,8 @@ Intents (`CommandBarIntent`):
 
 `commandBarDidDismissPrivacyNotice(_:)` reports "Dismiss" in the (i) footer. The App writes `open.general.searchSuggestNoticeDismissed` (the Settings notice key, "Code 4") and calls `setAllowsRemoteSuggestions(_:)`; the bar then re-runs the current query, so remote rows arrive at once.
 
+Scopes (commandbar-completion §4.3): `bar.scope` is `.site(SiteSearch)`, `.actions`, or `.tabs` while its chip shows (`siteScope` reads the Site Search one). `present` with `.searchActions` or `.searchTabs` opens in that scope; leaving it gives an empty Cmd+T bar. `enterScope(_:remainder:restoring:)` and `exitSiteSearch()` enter and leave a scope from code.
+
 `commandBar(_:didChangePresentation:mode:)` reports open and close. With `.newTab` the App sets `SidebarContext.isNewTabCommandBarOpen`, so the sidebar "New Tab" row looks selected during Cmd+T and not during Cmd+L (F0063 vs F0049).
 
 `presentPreview(_:)` shows fixed rows without a query (renders, design review).
@@ -131,6 +133,23 @@ Split View row (`CommandBarMetrics.split*`; A0120 row 3, CC-13, CC-14): plate 30
 
 The input's leading icon follows the first row (for a Split View row, the matched pane's icon; guess): magnifier for searches and an empty field, globe for a typed URL without a favicon, the favicon when known (F0040, F0052, F0061). In Cmd+L it is the page's favicon.
 
+### 3.5 The scope chip
+
+Measured on S2 18/0016 (chip, empty field) and 0018 (a query), panel `[481, 373]` in a 1728 × 1084 window (CC-41). Tokens: `CommandBarMetrics.chip*`, `CommandBarRole.scopeChip`, `BarFont.chip`, `BarFont.inputScoped`.
+
+| Part | Value | Mark, evidence |
+|---|---|---|
+| Chip | Capsule at `[54, 20]`, 24 tall, title advance + 2 × 10 wide (81 for "Wikipedia"), no icon | measured (pixels x 535…615, y 393…416) |
+| Fill | Display P3 `#FFA500` | measured: the captures read P3 #FFA501 (sRGB clips it to #FFA000) |
+| Glow | A shadow of the capsule in the chip color, blur 16 (σ ≈ 8), alpha 0.32, no offset | fitted on the 13 pt falloff left of the chip |
+| Title | 13 Medium, white | fitted: ink 59 px, chip 81 px; 12.75 Semibold fits the widths but carries 16% more ink |
+| Field | Starts at chip + 13 (AX frame at chip + 11 = 146; text ink at 149); 18 **Regular** inside a scope | fitted: "Search…" 68 px and "bird" 28 px ink (18 Medium: 70 and 30) |
+| Placeholder | "Search…" for every scope | CC-18, CC-41 |
+| Trailing | None: no (i) inside a scope | measured (S2 18/0016, 0018) |
+| Selected row | Fill = the chip color; the scoped row is the query alone, no "— Search \<Site\>" | measured (0018 "bird") |
+| Hover | `xmark.circle.fill` 11 pt in the left padding, title 15 pt to the right, chip 15 pt wider; a click leaves the scope | guess (CC-19 names a close accessory) |
+| Actions, Tabs | The same chip with "Actions" (CC-17) or "Tabs" (guess) | guess |
+
 ### 3.4 The (i) privacy footer
 
 Measured on S2 18/0044 (window 1728×1084, panel `[481, 373, 766, 329]`, 5 rows); `H` = panel height, `W` = panel width. Tokens: `CommandBarMetrics.footer*`, `CommandBarRole.footer*`.
@@ -159,9 +178,10 @@ Measured on S2 18/0044 (window 1728×1084, panel `[481, 373, 766, 329]`, 5 rows)
 | Up / Down | Move the selection; stop at the ends; the list scrolls by whole rows | menus-and-hotkeys "normal list rules" (guess) |
 | Return | Acts on what is highlighted on screen at the key press (what you see is what you get). Only if NO snapshot exists yet for the current text does Return wait for that text's first snapshot, then open its top row. It never waits for history or remote providers. An empty first snapshot consumes the pending Return without opening anything. | lead rule; flows 30, 52–57; F0041 shows selection |
 | Esc | Closes with `.dismissed(.escape)`, typed text or not. A second Esc is not the bar's (it reaches the App's Exit command). | F0052 → F0053; docs/commands.md |
-| Tab | With a hint: enters Site Search; the trigger word becomes the chip. Without: normal AppKit focus traversal; Shift+Tab also traverses normally. | features-core §4.6 rule 15 (hint); accessibility rule, flow 50 |
-| Space | After a site's exact name or keyword ("yt", "youtube"): enters Site Search; the hint then reads "Tab or Space". A prefix ("you") stays text. | F0040 shows "or Space"; exact-match rule guess |
-| Backspace on an empty scoped query | Leaves Site Search | features-core §4.6 rule 16 |
+| Tab | With a hint: enters Site Search, or the Actions or Tabs scope for "actions"/"action"/"commands" and "tabs"/"tab" (exact words only; a scope wins over a site with the same word). The field empties. Without a hint: normal AppKit focus traversal; Shift+Tab also traverses normally. | features-core §4.6 rule 15 (hint); scope words are an Open choice (CC-20: Arc's gesture is unknown); accessibility rule, flow 50 |
+| Space | After a site's exact name or keyword ("yt", "youtube"): enters Site Search; the hint then reads "Tab or Space". A prefix ("you") stays text. After "actions" or "tabs" it types a space ("tabs vs spaces"). | F0040 shows "or Space"; exact-match rule guess; scope rule plan §4.3.2 |
+| Backspace on an empty scoped query, or a click on the chip | Leaves the scope; the field gets back the text from before it (caret at the end) and re-queries. A scope opened by command gives an empty Cmd+T bar. | features-core §4.6 rule 16; CC-19, CC-41 (S2 18/0021 restores "wikipedia"); flows 82, 84, 85, 91 |
+| Inside the Actions scope | Only actions; the empty field lists the available ones in registry order (12 rows, 5 shown); any query, no 2-character minimum; best action is the top hit (T2a); equal matches: the title the query covers more of | plan §4.3.3; order and tie-break are Open choices (Arc ranks by recent use) |
 | Pointer move over a row | Selects it (real moves only; rows sliding under a still pointer do not) | features-core §4.7 rule 17 (guess) |
 | Click a row / outside | Choose / close (`.clickOutside`) | outside click guess |
 | Click (i), or Cmd+I in the field | Show the privacy footer (§3.4); Cmd+I again hides it. No intent, no window. Tab stays free for Site Search or focus traversal. | CC-42 (S2 18/0044); Cmd+I is an Open rule; flows 34, 49, 88 |
@@ -222,7 +242,7 @@ Profiling (`sample`) found three costs, now fixed: a forced panel layout on ever
 
 ```text
 commandbar-render render (--state NAME | --scene FILE.json) --out FILE.png [--scale 1|2] [--size WxH] [--backdrop-color #RRGGBB]
-    states: empty, typing-git, cmd-l, space-hint, site-chip, site-search, calculator, actions, scrolled, privacy-footer, completion, completion-case, completion-accepted, split-row, split-row-selected
+    states: empty, typing-git, cmd-l, space-hint, site-chip, site-search, calculator, actions, scrolled, privacy-footer, completion, completion-case, completion-accepted, split-row, split-row-selected, actions-scope, actions-scope-empty, tabs-scope, scope-chip-hover, site-chip-query
 commandbar-render compare --arc CAPTURE.png --ours RENDER.png --scene FILE.json --out DIR [--title TEXT] [--space srgb|p3]
 commandbar-render ax [--state NAME] # dump the rendered overlay AX tree
 commandbar-render flows       # keyboard and mouse flows
@@ -231,7 +251,7 @@ commandbar-render bench [--tabs 5000] [--history 100000] [--scale 2] [--completi
 commandbar-render screens --out DIR [--scale 2]
 ```
 
-`--space p3` loads both PNGs into Display P3 and measures ΔE00 there. Session-2 captures (S2) carry the AW2726DM display profile, whose gamut exceeds sRGB; use it for them. The session-1 comparisons in §8.1 stay in sRGB. A scene file can set `"footer": true`; the stage then supplies a stand-in privacy URL so line 2 draws. It can also set `"selection": [location, length]`, a field selection such as an inline completion's range, and per row `"titleParts"`, `"paneIcons"`, `"vertical"` for a Split View row. `bench --completion` runs the completion A/B of §6.
+`--space p3` loads both PNGs into Display P3 and measures ΔE00 there. Session-2 captures (S2) carry the AW2726DM display profile, whose gamut exceeds sRGB; use it for them. The session-1 comparisons in §8.1 stay in sRGB. A scene file can set `"footer": true`; the stage then supplies a stand-in privacy URL so line 2 draws. It can also set `"selection": [location, length]`, a field selection such as an inline completion's range, per row `"titleParts"`, `"paneIcons"`, `"vertical"` for a Split View row, and `"chip"` for a scope chip. The harness renders into sRGB: Display P3 colors outside sRGB (the scope chip's orange) come out clipped, so `compare --space p3` reads them about ΔE00 6 off. `bench --completion` runs the completion A/B of §6.
 
 States run through the real engine over a synthetic world (neutral titles, public site names, our own theme colors and letter icons). A scene file instead gives fixed rows, a theme JSON, and a backdrop PNG, to match one Arc capture. Scene files that copy a capture's titles hold personal data, so they stay in `.re/` (git-ignored).
 
@@ -276,6 +296,8 @@ Session 2 (Display P3, `--space p3`; window 1728×1084):
 | Capture | State | Footer elements | Worst position (pt) | Worst ΔE00 | Other elements |
 |---|---|---|---|---|---|
 | S2 18/0009 | "wiki" completed to "wikipedia.org", "Search Wikipedia [Tab]" (no "or Space") | — | 1.0 (completion box, text, hint) | 1.37 | 31 elements. Completion selection box 1.0 pt / 0.68, selected text 1.0 / 1.37, hint label 1.0 / 1.21 (105 px ink, ours 104). Misses: the edge style (§8.3; its position rows read 2 pt because the line styles differ) and row 1's selected subtitle ΔE00 2.67 (§8.3). |
+| S2 18/0016 | Site Search chip "Wikipedia", empty field, no rows (Step 5) | — | 0.0 (chip, chip text, placeholder, leading icon) | 0.96 (placeholder) | 17 elements. Chip 0.0 pt, text 0.0 / 0.52, placeholder 0.0 / 0.96. Misses: the chip fill ΔE00 6.0 (the harness clips the P3 orange to sRGB, §7), the glow 2.3–2.7 at 4 and 8 pt (same hue clipping), the panel fill 2.16, and the edge style (§8.3). |
+| S2 18/0018 | the same with "bird" and its orange row (Step 5) | — | 1.0 (field text) | 1.05 (field text) | 21 elements. Row 1 selection 0.0 pt (fill ΔE00 6.0, P3 clipping), row 1 title 0.0 / 0.18, field text 1.0 / 1.05; the other misses as in 0016. |
 | S2 18/0044 | (i) footer on the empty Cmd+T panel, 5 rows | 13 (band top and fill, icon, line 1, line 2's first six words, both buttons' fill, edge, title) | 1.0 (band top) | 0.62 | Panel position 0 pt on all four sides. Two misses are not footer elements: the edge style (§8.3) and row 2's long title (Arc cuts it at ≈ 470 pt; commandbar-completion design-parity work). |
 
 ### 8.2 Per element (F0063)
@@ -311,11 +333,12 @@ Other states: text selection fill 0.00 (F0048); selected input text 1.0 pt / 0.6
 | Panel edge over a light page in session 2 (S2 18/0044, 0009, 0016, 0018) | ΔE00 ≈ 16 on both edge lines | Session 1 (F0039, F0040, A0120) shows one gray line over a light page; session 2 shows Arc's dark double line over light and blue pages. Open keeps the session-1 luminance rule; the input that switches the style is not known (`docs/followups.md`, capture request). |
 | (i) footer line 2 | one word | Arc says "Arc", Open says "Open" (naming rule). The App hides the line until Open has a privacy page. |
 | Selected row "— subtitle" over a themed selection (S2 18/0009 row 1) | ΔE00 2.67 | Arc's core `#9EB1CE` over the blue selection `#3B679F` solves to white ≈ 0.5 (`CommandBarRole.subtitleSelected` white 0.52, fitted on one sample); ours reads `#9BB4CF`, a slightly different hue. One sample cannot tell a tint rule from a plain alpha. |
+| Scope chip and the scoped selection (S2 18/0016, 0018) | ΔE00 6.0 | Arc's orange is Display P3 #FFA500, outside sRGB; `commandbar-render` renders into sRGB, so its renders clip it to #FFA000. In the App the window draws P3. Positions match to 0 pt. |
 | Light macOS appearance, Little Open | not built or not compared | Light: S2 20/0018 shows the light panel (§11 q3); not built yet. |
 
 ## 9. Flows (`commandbar-render flows`)
 
-Real key events go through the window and the bar's field editor; mouse events go to the hit-tested views; the engine is the real `SuggestEngine` over the synthetic world. 102/102 pass, including 33 review regression checks, the 12 Step 0 checks (flows 87–90), the 17 completion checks (flows 69–80, 86), and the 5 split-row checks (flow 81). `check` adds a render of every state at 2x, the keystroke budget, and the completion budget: 119/119.
+Real key events go through the window and the bar's field editor; mouse events go to the hit-tested views; the engine is the real `SuggestEngine` over the synthetic world. 110/110 pass, including 33 review regression checks, the 12 Step 0 checks (flows 87–90), the 17 completion checks (flows 69–80, 86), the 5 split-row checks (flow 81), and the 8 scope checks (flows 82–85, 91). `check` adds a render of every state at 2x, the keystroke budget, and the completion budget: 132/132.
 
 | # | Flow |
 |---|---|
@@ -363,7 +386,12 @@ Real key events go through the window and the bar's field editor; mouse events g
 | 79 | IME: marked text removes the completion first with no query; no completion while marked; a commit at the end may complete |
 | 80 | Cmd+L: typing replaces the selected URL, then completes |
 | 81 | "review": one row for the split (both titles in pane order, "Switch to Split View", no subtitle, no pane rows); AX label "Spec draft, Review notes"; Return → `.switchToTab` of the matched pane; an exact other-pane title targets that pane; 2x pixels: white cells and a 1 pt gap that shows the selection fill |
+| 82 | "actions" offers "Search Actions [Tab]" (no Space); Tab → Actions chip, "Search…", only action rows, no (i); "side" → Show/Hide Sidebar; Backspace on empty restores "actions"; Space after "tabs" types a space |
+| 83 | "tabs" + Tab → Tabs chip; tab rows only, the split as one row; Esc closes |
+| 84 | Hover on the chip shows the close glyph and widens it by 15; a click leaves the scope and restores "wikipedia" |
+| 85 | `present(.searchActions)` and `.searchTabs` open in the scope; Backspace on empty gives an empty Cmd+T bar |
 | 86 | AX: the field's value is the whole text; its selected range is the completion (CC-3) |
+| 91 | "wikipedia" + Tab: chip `[54, 20, 81, 24]`, chip color, no icon, field x 146, "Search…"; "bird" selects the scoped row with the chip fill and no subtitle; Backspace on empty restores "wikipedia" |
 | 87 | Present: the panel is fully drawn in the first frame (presentation-layer render equals a later render) and no layer has an animation key; dismiss: hidden at once, no animation key, the page shows again (CC-44) |
 | 88 | Click (i): footer on, (i) hidden, field +42 pt, panel frame unchanged; black band; the list's visible part ends at the band; the pointer over the band selects nothing; Down scrolls row 5 out from behind it; Cmd+I hides the footer; a panel without rows grows by the band |
 | 89 | "Dismiss": footer off, the delegate hears it, the query re-runs and remote rows arrive; `present` in every mode shows no footer (fresh, while open, after a close) |
@@ -411,4 +439,4 @@ Engine (`OpenSuggest`) gaps seen against Arc:
 2. Is the edge style chosen by the page's color scheme or by backdrop luminance? (We use luminance.)
 3. Does the panel turn light in light macOS appearance? Answered by session 2: yes, in a default-theme Space the fill is `#F8F8F8`, the selection `#8E95FF`, the placeholder `#7D7D7D`, the separator `#E0E0DF` (`re/interaction-states.md` §20.11, S2 20/0018). Not built; no plan owns it yet (`re/capture-session-2-results.md` §2.7 "new work").
 4. Open and close timing. Answered by session 2: no animation (§5, CC-44); built in commandbar-completion Step 0.
-5. The Site Search chip's look and the scoped placeholder text. Answered by session 2: an orange text-only capsule (`#FFA000`) and the placeholder "Search…" (CC-41); spec in `plans/commandbar-completion.md` §4.3.6.
+5. The Site Search chip's look and the scoped placeholder text. Answered by session 2: an orange text-only capsule (Display P3 #FFA500) and the placeholder "Search…" (CC-41); built in commandbar-completion Step 5 (§3.5).

@@ -4926,6 +4926,18 @@ def commandbar_checks(factory, results, tmp, config):
                                                and next((t for t in chosen if t['id'] == other), {}).get('selected', False) and set(pane_ids) <= visible
                                                and not state().get('presented'),
                                                'rows': [(r['id'][:6], r['title'], r['tab'] in pane_ids) for r in found['rows']], 'visible': sorted(visible), 'panes': pane_ids}
+        # Actions scope (commandbar-completion §4.3): "actions", Tab, "side", Return runs Show/Hide Sidebar.
+        bar('t', 'window'); hinted = type_query('actions')
+        press('tab')
+        scoped = wait_until(lambda: state() if state().get('scope') == 'Actions' and state().get('text') == '' else None, timeout=3, step=.05)
+        sided = type_query('side')
+        top_action = (sided or {}).get('rows', [{}])[0].get('action') if sided and sided.get('rows') else None
+        only_actions = bool(sided) and all(r['kind'] == 'action' for r in sided['rows'])
+        press('return')
+        hid = sidebar_hidden(app)
+        results['commandbar_actions_scope'] = {'ok': bool(scoped) and top_action == 'toggle-sidebar' and only_actions and bool(hid) and not state().get('presented'),
+                                               'hint_rows': len((hinted or {}).get('rows', [])), 'scope': (scoped or {}).get('scope'), 'top': top_action}
+        app.call('menu-perform', id='toggle-sidebar'); sidebar_anchored(app)
         before = app.call('host-counts')['created']; app.call('sidebar-duplicate', id=split['id'])
         splits = [n for n in app.call('sidebar-tree')['today'] if n['kind'] == 'split']
         copied = next(n for n in splits if n['id'] != split['id'])
