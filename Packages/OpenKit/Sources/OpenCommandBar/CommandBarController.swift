@@ -32,8 +32,15 @@ public final class CommandBarController: NSObject {
 
     public private(set) var isPresented = false
     public private(set) var request: CommandBarRequest?
-    /// Current input text.
-    public var text: String { panel.input.field.stringValue }
+    /// What the user typed: the engine's query text (D4). Equals `fieldText` unless an inline
+    /// completion shows; then the field also holds the completed part.
+    public var text: String { completion.shown != nil ? completion.userText : panel.input.field.stringValue }
+    /// The field's whole text, an inline completion included (the AX value, CC-3).
+    public var fieldText: String { panel.input.field.stringValue }
+    /// The inline completion in the field, while one shows (§4.1).
+    public var inlineCompletion: InlineCompletion? { completion.shown }
+    /// Inline completion on (Arc has no setting for it). The keystroke bench turns it off for its A/B run.
+    public var allowsInlineCompletion = true
     /// Site Search scope, while the chip shows.
     public private(set) var siteScope: SiteSearch?
     /// Drawn rows and the suggestions behind them (same order).
@@ -52,7 +59,8 @@ public final class CommandBarController: NSObject {
     /// True when the last applied snapshot was the stream's final one.
     public private(set) var isSnapshotFinal = false
 
-    /// Called after each snapshot is applied to the views (diagnostics and checks).
+    /// Called before and after each snapshot is applied to the views (diagnostics and checks).
+    public var onSnapshotWillApply: ((SuggestionSnapshot) -> Void)?
     public var onSnapshotApplied: ((SuggestionSnapshot) -> Void)?
     /// Called when a query is submitted (diagnostics and end-to-end flows).
     public var onQueryStarted: ((String) -> Void)?
@@ -68,7 +76,11 @@ public final class CommandBarController: NSObject {
     private var hintAllowsSpace = false
     private var pendingReturn: (generation: Int, text: String, modifiers: CommandBarModifiers)?
     private var queriedText: String?
-    private var selectAllOnFocus = false
+    /// Selection to set when the field gets focus: all of Cmd+L's URL, else the caret at the end.
+    private var focusSelection: NSRange?
+    private let completion = CompletionSession()
+    /// The running query may carry an inline completion (§4.1.1 rule 2).
+    private var queryAllowsCompletion = false
 
     public init(engine: SuggestEngine) {
         self.engine = engine
@@ -94,6 +106,14 @@ public final class CommandBarController: NSObject {
         panel.footer.settingsButton.action = { [weak self] in self?.openSearchSettings() }
         panel.footer.dismissButton.action = { [weak self] in self?.dismissPrivacyNotice() }
         panel.footer.link.action = { [weak self] in self?.openPrivacyPage() }
+        let editor = panel.input.editor
+        editor.observeUndo()
+        editor.onBeforeEdit = { [weak self] insertion, replacing in self?.beforeEdit(insertion, replacing: replacing) ?? .none }
+        editor.onBeforeUndo = { [weak self] in
+            guard let self else { return }
+            _ = self.removeCompletionForEdit()
+        }
+        editor.onSelectionChange = { [weak self] in self?.selectionChanged() }
         panel.results.onHover = { [weak self] i in self?.hover(i) }
         panel.results.onClick = { [weak self] i, flags in self?.choose(i, modifiers: CommandBarModifiers(flags)) }
     }
@@ -110,6 +130,7 @@ public final class CommandBarController: NSObject {
         engine.prewarm()
         let field = panel.input.field
         let initial = request.mode == .editCurrentURL ? (request.currentTabURL?.absoluteString ?? "") : ""
+        completion.reset()
         field.stringValue = CommandBarFieldEditor.normalized(initial)
         panel.input.textDidChange()
         isPresented = true
@@ -117,7 +138,7 @@ public final class CommandBarController: NSObject {
         view.showsFooter = false // The footer never opens by itself (D14).
         view.setShown(true)
         applyBackdrop()
-        selectAllOnFocus = request.mode == .editCurrentURL
+        focusSelection = request.mode == .editCurrentURL ? NSRange(location: 0, length: (text as NSString).length) : nil
         runQuery(text, applyInitialImmediately: true)
         view.layoutSubtreeIfNeeded()
         focusInput()
@@ -137,6 +158,7 @@ public final class CommandBarController: NSObject {
         view.setShown(true)
         applyBackdrop()
         let field = panel.input.field
+        completion.reset()
         field.stringValue = CommandBarFieldEditor.normalized(preview.text)
         panel.input.textDidChange()
         suggestions = []
@@ -151,7 +173,8 @@ public final class CommandBarController: NSObject {
         appliedSequence = 0
         isSnapshotFinal = true
         view.layoutSubtreeIfNeeded()
-        selectAllOnFocus = preview.selectAllText
+        let length = (preview.text as NSString).length
+        focusSelection = preview.selectedRange ?? (preview.selectAllText ? NSRange(location: 0, length: length) : nil)
         focusInput()
     }
 
@@ -164,6 +187,7 @@ public final class CommandBarController: NSObject {
         pendingReturn = nil
         panel.input.editor.resetSession()
         guard isPresented else { return }
+        completion.reset()
         let mode = request?.mode ?? .newTab
         isPresented = false
         view.isActive = false
@@ -183,8 +207,8 @@ public final class CommandBarController: NSObject {
         let field = panel.input.field
         window.makeFirstResponder(field)
         // Cmd+L selects the whole URL, including when presented before attachment.
-        let length = (text as NSString).length
-        field.currentEditor()?.selectedRange = selectAllOnFocus ? NSRange(location: 0, length: length) : NSRange(location: length, length: 0)
+        let length = (fieldText as NSString).length
+        field.currentEditor()?.selectedRange = focusSelection ?? NSRange(location: length, length: 0)
         panel.input.editor.undoManager?.removeAllActions()
     }
 
@@ -242,15 +266,16 @@ public final class CommandBarController: NSObject {
         let r = request ?? CommandBarRequest(mode: .newTab)
         return SuggestContext(mode: r.mode.suggestMode, profileID: r.profileID, spaceID: r.spaceID, currentTabID: r.currentTabID,
                               currentTabURL: r.currentTabURL, allowsRemoteSuggestions: r.allowsRemoteSuggestions,
-                              searchEngineID: r.searchEngineID, siteSearchID: siteScope?.id)
+                              searchEngineID: r.searchEngineID, siteSearchID: siteScope?.id, allowsInlineCompletion: queryAllowsCompletion)
     }
 
     /// Opening applies ready local rows before cold focus work. Text edits
     /// retain the next-turn boundary so a queued Return can still be cancelled by
     /// another edit, presentation or dismissal. Later providers use the stream.
-    func runQuery(_ text: String, applyInitialImmediately: Bool = false) {
+    func runQuery(_ text: String, applyInitialImmediately: Bool = false, allowsCompletion: Bool = false) {
         pendingReturn = nil
         guard !panel.input.editor.hasMarkedText(), !panel.input.editor.isUpdatingComposition else { return }
+        queryAllowsCompletion = allowsCompletion
         generation += 1
         let gen = generation
         userMovedSelection = false
@@ -279,6 +304,7 @@ public final class CommandBarController: NSObject {
 
     private func apply(_ snapshot: SuggestionSnapshot) {
         guard snapshot.query == text, !panel.input.editor.hasMarkedText(), !panel.input.editor.isUpdatingComposition else { return }
+        onSnapshotWillApply?(snapshot)
         let appliedGeneration = generation
         let r = request
         let visible = snapshot.suggestions.filter {
@@ -307,6 +333,13 @@ public final class CommandBarController: NSObject {
         if let s = selected, userMovedSelection { panel.results.scrollToVisible(s) }
         view.visibleRowCount = min(newRows.count, CommandBarMetrics.maxVisibleRows)
         panel.showsSeparator = !newRows.isEmpty
+        // The completion belongs to row 1 (D2) and needs the edit that allowed it (§4.1.1 rules 2, 5).
+        if let c = snapshot.inlineCompletion, queryAllowsCompletion, completion.allowsCompletion, c.rowID == visible.first?.id {
+            completion.available = c
+        } else {
+            completion.available = nil
+        }
+        updateCompletionDisplay()
         updateInputPresentation()
         appliedSequence = snapshot.sequence
         appliedQuery = snapshot.query
@@ -361,7 +394,8 @@ public final class CommandBarController: NSObject {
             if top.kind == .navigate, case .symbol = input.leadingIcon { input.leadingIcon = .symbol("globe", plate: false) }
         }
         if let site = siteHint {
-            input.trailing = .siteSearchHint(name: site.name, space: hintAllowsSpace)
+            // Never "or Space" while a completion shows (CC-5, CC-40).
+            input.trailing = .siteSearchHint(name: site.name, space: hintAllowsSpace && completion.shown == nil)
         } else {
             input.trailing = .info
         }
@@ -376,6 +410,9 @@ public final class CommandBarController: NSObject {
 
     /// Enters Site Search for `site`. The trigger word becomes the chip; text after it stays the query.
     public func enterSiteSearch(_ site: SiteSearch, remainder: String = "") {
+        // The scope takes the typed text, never the completion (§4.1.5 Tab).
+        if let editor = activeEditor { completion.hide(in: editor) }
+        completion.reset()
         siteScope = site
         panel.input.setText(remainder)
         panel.input.needsLayout = true
@@ -399,12 +436,14 @@ public final class CommandBarController: NSObject {
         guard next != selectedIndex else { return }
         userMovedSelection = true
         panel.results.select(next)
+        updateCompletionDisplay() // only row 1 shows its completion (D2); no query
     }
 
     private func hover(_ index: Int) {
         guard index != selectedIndex else { return }
         userMovedSelection = true
         panel.results.select(index)
+        updateCompletionDisplay()
     }
 
     /// Return on the selection, or a click on row `index`.
@@ -461,10 +500,101 @@ public final class CommandBarController: NSObject {
             return false
         case #selector(NSResponder.deleteBackward(_:)):
             if siteScope != nil, text.isEmpty { exitSiteSearch(); return true }
+            return removeCompletionByDeletion()
+        case #selector(NSResponder.deleteForward(_:)), #selector(NSResponder.deleteWordBackward(_:)),
+             #selector(NSResponder.deleteToBeginningOfLine(_:)), #selector(NSResponder.deleteBackwardByDecomposingPreviousCharacter(_:)),
+             #selector(NSResponder.deleteWordForward(_:)), #selector(NSResponder.deleteToEndOfLine(_:)):
+            return removeCompletionByDeletion()
+        case #selector(NSResponder.moveRight(_:)), #selector(NSResponder.moveToEndOfLine(_:)), #selector(NSResponder.moveToRightEndOfLine(_:)),
+             #selector(NSResponder.moveToEndOfParagraph(_:)), #selector(NSResponder.moveToEndOfDocument(_:)),
+             #selector(NSResponder.scrollToEndOfDocument(_:)): // End
+            // Accept: the whole text becomes typed text, caret at the end (CC-7; key set guess).
+            guard completion.shown != nil, let editor = activeEditor else { return false }
+            completion.accept()
+            editor.setSelectedRange(NSRange(location: (fieldText as NSString).length, length: 0))
+            runQuery(text)
+            return true
+        case #selector(NSResponder.moveLeft(_:)), #selector(NSResponder.moveToBeginningOfLine(_:)), #selector(NSResponder.moveToLeftEndOfLine(_:)),
+             #selector(NSResponder.moveToBeginningOfParagraph(_:)), #selector(NSResponder.moveToBeginningOfDocument(_:)):
+            // The completed text becomes typed text; the native move puts the caret (guess, Q7).
+            guard completion.shown != nil else { return false }
+            completion.accept()
+            runQuery(text)
             return false
+        case #selector(NSResponder.scrollToBeginningOfDocument(_:)): // Home: AppKit only scrolls; the caret goes to the start (guess)
+            guard completion.shown != nil, let editor = activeEditor else { return false }
+            completion.accept()
+            editor.setSelectedRange(NSRange(location: 0, length: 0))
+            runQuery(text)
+            return true
         default:
             return false
         }
+    }
+
+    // MARK: Inline completion (§4.1.4–§4.1.8)
+
+    private var activeEditor: CommandBarFieldEditor? {
+        let editor = panel.input.editor
+        return panel.input.field.currentEditor() === editor ? editor : nil
+    }
+
+    /// Shows the available completion while row 1 is selected; otherwise the field holds the typed text.
+    private func updateCompletionDisplay() {
+        guard let editor = activeEditor, !editor.hasMarkedText(), !editor.isUpdatingComposition else { return }
+        if let c = completion.available, completion.allowsCompletion, selectedIndex == 0 {
+            completion.show(c, typed: text, in: editor)
+        } else {
+            completion.hide(in: editor)
+        }
+    }
+
+    /// Before typing, an IME change, or a paste. Typed text that continues the completion replaces only
+    /// the completion's first characters, so the rest stays on screen and nothing is written twice (§4.1.5).
+    /// Anything else removes the whole completion first (`removeCompletionForEdit`).
+    private func beforeEdit(_ insertion: String?, replacing: NSRange) -> CommandBarFieldEditor.CompletionEdit {
+        guard let editor = activeEditor, let shown = completion.shown, let range = completion.selectionRange else { return .none }
+        if let insertion, replacing.location == NSNotFound || NSEqualRanges(replacing, range) {
+            let n = (insertion as NSString).length
+            if n > 0, n < range.length,
+               TextMatching.fold((shown.fieldText as NSString).substring(with: NSRange(location: range.location, length: n))) == TextMatching.fold(insertion) {
+                hiddenForEdit = shown
+                completion.removeHead(n, in: editor)
+                return .kept(location: range.location, tail: range.length - n)
+            }
+        }
+        return removeCompletionForEdit().map { .removed($0) } ?? .none
+    }
+
+    /// Before an edit or an undo: the field goes back to the typed text, so the edit applies to it.
+    /// Returns the completion's former range. The completion is remembered so a character that matches
+    /// it keeps it on screen (no flicker, §4.1.5).
+    private func removeCompletionForEdit() -> NSRange? {
+        guard let editor = activeEditor, let range = completion.selectionRange else { return nil }
+        hiddenForEdit = completion.shown
+        completion.hide(in: editor)
+        return range
+    }
+    private var hiddenForEdit: InlineCompletion?
+
+    /// Backspace and the other deletions with a completion: remove only the completion. The text stays,
+    /// completion is off until the next insertion at the end, and the query re-runs (CC-40).
+    private func removeCompletionByDeletion() -> Bool {
+        guard completion.shown != nil, let editor = activeEditor else { return false }
+        completion.hide(in: editor)
+        completion.allowsCompletion = false
+        completion.available = nil
+        runQuery(text)
+        return true
+    }
+
+    /// A caret or selection change the bar did not make (Shift+arrows, Cmd+A, a click): the completed
+    /// text becomes typed text, and the query re-runs with completion off.
+    private func selectionChanged() {
+        guard isPresented, !completion.isApplying, let range = completion.selectionRange, let editor = activeEditor,
+              editor.selectedRange() != range else { return }
+        completion.accept()
+        runQuery(text)
     }
 
     private func returnPressed(_ modifiers: CommandBarModifiers) {
@@ -480,15 +610,46 @@ public final class CommandBarController: NSObject {
 
     fileprivate func textChanged() {
         panel.input.textDidChange()
-        guard isPresented, !panel.input.editor.hasMarkedText(), !panel.input.editor.isUpdatingComposition else { return }
-        let t = text
+        let editor = panel.input.editor
+        guard isPresented, !editor.hasMarkedText(), !editor.isUpdatingComposition else { return }
+        // A text-system edit (cut, for example) while a completion showed: the field text is the typed text.
+        if completion.shown != nil { completion.accept() }
+        let hidden = hiddenForEdit
+        hiddenForEdit = nil
+        // After a kept insertion the rest of the completion follows the caret: it is not typed text.
+        let full = fieldText as NSString
+        let typedLength = full.length - editor.keptTail
+        let t = editor.keptTail > 0 ? full.substring(to: typedLength) : fieldText
+        let selection = editor.selectedRange()
+        completion.allowsCompletion = allowsInlineCompletion && editor.lastEdit == .insertionAtEnd && selection.length == 0
+            && selection.location == typedLength
+        // The kept rest shows again below; if it cannot (completion off), the field drops it now.
+        if editor.keptTail > 0, !(completion.allowsCompletion && selectedIndex == 0 && hidden.flatMap({ Self.continued($0, typed: t) }) != nil) {
+            completion.trim(to: t, in: editor)
+        }
         guard queriedText != t else { return } // Commit can notify through both AppKit and unmarkText.
-        // Space right after a site name or keyword enters Site Search ("youtube" + Space).
-        if siteScope == nil, let site = siteHint, hintAllowsSpace, t == hintText + " " {
+        // Space right after a site name or keyword enters Site Search ("youtube" + Space), but not while a
+        // completion showed: then Space only types a space (CC-5).
+        if siteScope == nil, let site = siteHint, hintAllowsSpace, hidden == nil, t == hintText + " " {
             enterSiteSearch(site)
             return
         }
-        runQuery(t)
+        // A character that continues the completion keeps it on screen until the new snapshot (§4.1.5).
+        if let hidden, completion.allowsCompletion, selectedIndex == 0, let kept = Self.continued(hidden, typed: t), let active = activeEditor {
+            completion.available = kept
+            completion.show(kept, typed: t, in: active)
+        } else {
+            completion.available = nil
+        }
+        runQuery(t, allowsCompletion: completion.allowsCompletion)
+    }
+
+    /// `completion` with `typed` as its typed part, when the field text still extends `typed`.
+    static func continued(_ completion: InlineCompletion, typed: String) -> InlineCompletion? {
+        let field = completion.fieldText as NSString
+        let n = (typed as NSString).length
+        guard n < field.length, TextMatching.fold(field.substring(to: n)) == TextMatching.fold(typed) else { return nil }
+        return InlineCompletion(rowID: completion.rowID, fieldText: completion.fieldText, typedLength: n)
     }
 }
 
@@ -510,10 +671,12 @@ public struct CommandBarPreview: Sendable {
     public var selectedIndex: Int?
     /// Shows the (i) privacy footer.
     public var showsFooter: Bool
+    /// Text selection in the field (an inline completion's range); overrides `selectAllText`.
+    public var selectedRange: NSRange?
 
     public init(mode: CommandBarMode = .newTab, text: String = "", selectAllText: Bool = false, input: CommandBarInput,
-                rows: [CommandBarRow], selectedIndex: Int? = 0, showsFooter: Bool = false) {
+                rows: [CommandBarRow], selectedIndex: Int? = 0, showsFooter: Bool = false, selectedRange: NSRange? = nil) {
         self.mode = mode; self.text = text; self.selectAllText = selectAllText; self.input = input
-        self.rows = rows; self.selectedIndex = selectedIndex; self.showsFooter = showsFooter
+        self.rows = rows; self.selectedIndex = selectedIndex; self.showsFooter = showsFooter; self.selectedRange = selectedRange
     }
 }

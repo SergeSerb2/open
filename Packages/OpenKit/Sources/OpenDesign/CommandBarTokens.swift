@@ -198,6 +198,9 @@ public enum CommandBarRole {
     /// Subtitle, "Switch to Tab", Space name, hint label: `CommandBarTextSecondaryColor` white 0.33 (#646465).
     public static let secondaryText = CommandBarColors.textSecondary.dark
     public static let secondaryTextSelected = RGBA.white(1)
+    /// "— subtitle" on the selected row: core #9EB1CE over the blue selection #3B679F (S2 18/0009 row 1)
+    /// solves to white ≈ 0.5 at the text core. fitted (one sample; was a 0.7 guess).
+    public static let subtitleSelected = RGBA.white(0.52)
     /// Row glyphs (magnifier, globe): core #AEAEAF (F0052), #B3B3B3 (F0048 globe). fitted.
     public static let rowGlyph = RGBA.white(0.72)
     public static let rowGlyphSelected = RGBA.white(1)

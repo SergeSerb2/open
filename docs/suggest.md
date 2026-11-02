@@ -49,6 +49,7 @@ Call it when the command bar is about to open.
 | `allowsRemoteSuggestions` | False turns off the network provider. This is the setting "Include search engine suggestions" and the CLI flag `--offline`. |
 | `searchEngineID` | `SearchEngine.id`. Nil means Google. The Profile stores the choice. |
 | `siteSearchID` | Set while Site Search is active. The query then searches that site. |
+| `allowsInlineCompletion` | The command bar's rule: the last edit was an insertion at the end of the text (commandbar-completion §4.1.1 rule 2). Default false. With it, rule T3a may pick the top hit and the snapshot may carry `inlineCompletion`. |
 
 ### Output
 
@@ -64,6 +65,13 @@ The stream gives one or more `SuggestionSnapshot` values.
 - `suggestions` holds at most `maxResults` rows (default 12), top hit first.
 - `hasTopHit` is true when one row is the default Return action.
   `topHit` gives that row. `topHitRule` names the rule that picked it.
+- `inlineCompletion` (`InlineCompletion`: `rowID`, `fieldText`, `typedLength`) is the
+  text row 1 completes in the field, or nil. Only with `allowsInlineCompletion`;
+  only for tab and history rows on http(s) pages; only for the top hit of T3a, T5, or T7.
+  `fieldText` is the typed lead (`https://`, `http://`, `www.` as typed) plus the row's host
+  (with a non-default port) when the text has no `/`, `?`, or `#`, else its URL without scheme,
+  `www.`, fragment, or a root `/`; it must start with the typed text (folded) and be longer.
+  UTF-16 `[typedLength, end)` is the completed part.
 - A new `query` call cancels the previous stream.
   Cancel also stops its pending network request.
   `cancel()` stops the running query when the command bar closes.
@@ -99,7 +107,7 @@ The app acts on the top hit or the selected row:
 
 | Mode | Providers that run | Top hit |
 |---|---|---|
-| `newTab` | All. | Rules T1-T8. |
+| `newTab` | All. The current tab is offered like any open tab (F0043, F0063: the page behind the bar is a Switch to Tab row). | Rules T1-T8. |
 | `editCurrentURL` | All. The current tab is not offered as Switch to Tab. The typed URL row never merges into a tab row. | Rules T1-T8. |
 | `searchTabs` | Tabs only. History and remote do not run. | Best tab (T2). Empty query gives no top hit. |
 
@@ -221,6 +229,8 @@ The engine keeps a `TabIndex` so a keystroke never walks the live model:
   `lastIndexFoldedCount` expose this for diagnostics.
 
 Match: quality is the best of title (factor 1), host (factor 1), and URL (factor 0.9).
+Tabs and history match the text without a typed `https://`, `http://`, then `www.`
+(`SuggestInput.matchQuery`), so "https://goo" still finds google.com and can complete.
 The scan first checks a 64-bit bloom mask of the query bytes.
 A tab whose mask lacks a query byte cannot match, so most tabs cost one integer test.
 Empty query: every tab of the Profile matches with quality 0, and recency decides.
@@ -239,6 +249,10 @@ Source: `HistoryStore.search` for the context Profile. It is async and off the m
 - Only `http`, `https`, and `file` pages become rows.
 - In Site Search scope, only pages of that site stay.
 - Empty query gives the top history pages by frecency.
+- Carry-over: when the text extends the previous query (same Profile), snapshot 0 already
+  holds that query's history pages whose host or URL still matches, re-scored for the new text.
+  The history snapshot replaces them. Without it a history completion would vanish for a
+  frame on every keystroke (commandbar-completion §4.1.3). Same rule as the remote carry-over.
 
 ### 4. Remote search suggestions
 
@@ -550,6 +564,7 @@ The top hit is what Return does with no selection change.
 | T0 | Empty query, or no rule below applies and no typed row exists | none |
 | T1 | Site Search scope is active | the scoped `siteSearch` row |
 | T2 | Search-tabs mode, query not empty | the best tab row |
+| T3a | `allowsInlineCompletion`, no scope, new-tab or edit mode, text without whitespace, no calculator row, no exact tab title or host (T5) | the highest-ranked row that may be top hit (a tab also when only its URL matched, 2+ bytes typed: "localhost:30") and that the text completes; sets `inlineCompletion` |
 | T3 | Input is a URL | the what-you-typed row (after merge, this may be the open tab that has that URL, in new-tab mode) |
 | T4 | Input is arithmetic | the calculator row |
 | T5 | A tab title or host equals the query | that tab |
@@ -566,6 +581,8 @@ T7 eligibility (`canBeTopHit`):
 - Calculator and scoped site search: always eligible (T1/T4 pick them first).
 - Remote suggestions: never eligible. The typed search stays on top.
 
+T5 and T7 also set `inlineCompletion` when their row completes the text ("Google" = a tab title completes to `google.com` in lower case, F0062). T1–T4, T6, and T8 never do.
+
 If the picked rule finds no row, the top hit falls back to none (T0),
 except T8, which is the normal path for plain text.
 
@@ -573,6 +590,8 @@ Worked examples (all from suggest-check):
 
 - `gith` → history GitHub. T7: host prefix, typed 5 times.
 - `localhost:3000` → navigate. T3.
+- `googl` with an open tab on google.com and completion allowed → that tab, completion `google.com`. T3a.
+- `google.com` (whole host) → navigate, no completion. T3 (F0061).
 - `2+2*3` → calculator 8. T4.
 - `split` → Add Split View. T6: alias `Split` equals the query, case-folded.
 - Exact tab title `Design Review` → that tab. T5.
@@ -618,6 +637,11 @@ arithmetic 0.110 / 0.229 ms, action words 0.335 / 0.531 ms.
 Index costs in the same run: first build of 5,000 tabs 13.89 ms;
 rebuild after a structural change at most 2.99 ms, re-folding at most 1 tab.
 
+Inline completion (suggest-check row 43, 2026-11-02, load average 10): the first snapshot with
+`allowsInlineCompletion` costs main-thread CPU p50 0.156 ms, p95 0.446 ms (plain p95 0.511 ms over the
+same queries; 115 of 1,000 snapshots completed). The completion check itself (T3a plus `inlineCompletion`
+over the snapshot rows) is p50 0.0027 ms, p95 0.0116 ms, against a 0.05 ms budget.
+
 ## CLI
 
 ```text
@@ -654,7 +678,7 @@ zero warnings, zero errors (Swift 6.4, strict concurrency).
 
 ### suggest-check
 
-31/31 passed. The table is the real output shape (scores are from the run).
+44/44 passed (2026-11-02, commandbar-completion Steps 1–2, load average 9–11 on 18 cores). The table is the real output shape. Rows 34–43 are the inline completion scenarios 32–40 and 44 of the plan (§5.1).
 
 | # | Result | Scenario |
 |---|---|---|
@@ -682,15 +706,28 @@ zero warnings, zero errors (Swift 6.4, strict concurrency).
 | 22 | PASS | "personal" → Focus on Personal (dynamic Space action) |
 | 23 | PASS | Site Search: "yt cats" row, "you" Tab hint, scoped query, Tab target |
 | 24 | PASS | tab index: cached between keystrokes; title/URL change patches 1 tab; new tab rebuilds, re-folding only it |
-| 25 | PASS | remote: suggestions merge in a later snapshot; top hit stays the typed search |
-| 26 | PASS | remote: repeated query is served from cache in snapshot 0 (no request) |
-| 27 | PASS | remote: next keystroke carries over still-matching rows in snapshot 0 |
-| 28 | PASS | remote: 300 ms timeout (server takes 800 ms) → stream ends without remote rows |
-| 29 | PASS | remote: each keystroke cancels the previous request (debounce) |
-| 30 | PASS | remote: nothing sent when off, for URLs, for the current URL, for arithmetic |
-| 31 | PASS | first snapshot p95 < 5 ms (see Performance) |
+| 25 | PASS | tidy Gmail matches raw title, displays Inbox, and patches raw/custom title changes |
+| 26 | PASS | remote: suggestions merge in a later snapshot; top hit stays the typed search |
+| 27 | PASS | remote: repeated query is served from cache in snapshot 0 (no request) |
+| 28 | PASS | remote: next keystroke carries over still-matching rows in snapshot 0 |
+| 29 | PASS | remote: local test servers use distinct ephemeral ports |
+| 30 | PASS | remote: 300 ms timeout (server takes 800 ms) → stream ends without remote rows |
+| 31 | PASS | remote: real-time slow-server stream ends within 600 ms (debounce 80 + timeout 300) |
+| 32 | PASS | remote: each keystroke cancels the previous request (debounce) |
+| 33 | PASS | remote: nothing sent when off, for URLs, for the current URL, for arithmetic |
+| 34 | PASS | 32: "googl" + tab on google.com → T3a, completion "google.com" (typed 5), row 1 |
+| 35 | PASS | 33: "googl" with completion off → no completion, top hit by T7 |
+| 36 | PASS | 34: "Google" = tab title → T5, completion "google.com" in lower case (typed 6) |
+| 37 | PASS | 35: "google.co" → T3a "google.com" (typed 9); completion off → T3 typed URL, none |
+| 38 | PASS | 36: whole host "google.com" → T3, no completion (F0061) |
+| 39 | PASS | 37: path → full URL, host-only otherwise, whole host none, port kept, scheme and www. kept as typed |
+| 40 | PASS | 38: no completion for arithmetic, whitespace, scopes, search tabs, non-web URLs, typed URL or search rows |
+| 41 | PASS | 39: current tab offered in new-tab mode (also for an empty query), absent in edit mode |
+| 42 | PASS | 40: "gi" → "git": snapshot 0 carries the history row over and already completes "github.com" |
+| 43 | PASS | 44: first snapshot with inline completion p95 < 5 ms CPU (5,000 tabs); completion check p95 ≤ 0.05 ms |
+| 44 | PASS | first snapshot p95 < 5 ms main-thread CPU (1,000 random queries, 5,000 tabs, 100k history) |
 
-Rows 25-30 use a local stub fetcher, so no network runs in the check.
+Rows 26–33 use a local stub fetcher, so no network runs in the check.
 
 ### Real Arc snapshot
 

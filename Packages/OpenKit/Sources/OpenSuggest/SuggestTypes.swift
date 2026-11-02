@@ -26,6 +26,9 @@ public struct SuggestContext: Sendable {
     public var searchEngineID: String?
     /// Set while Site Search is active (`SiteSearch.id`). The query then searches that site.
     public var siteSearchID: String?
+    /// The bar's last edit was an insertion at the end of the text with no selection (typing, or an IME
+    /// commit at the end). Only then may the snapshot carry an inline completion (commandbar-completion §4.1.1).
+    public var allowsInlineCompletion: Bool
 
     public init(
         mode: SuggestMode = .newTab,
@@ -35,7 +38,8 @@ public struct SuggestContext: Sendable {
         currentTabURL: URL? = nil,
         allowsRemoteSuggestions: Bool = true,
         searchEngineID: String? = nil,
-        siteSearchID: String? = nil
+        siteSearchID: String? = nil,
+        allowsInlineCompletion: Bool = false
     ) {
         self.mode = mode
         self.profileID = profileID
@@ -45,6 +49,7 @@ public struct SuggestContext: Sendable {
         self.allowsRemoteSuggestions = allowsRemoteSuggestions
         self.searchEngineID = searchEngineID
         self.siteSearchID = siteSearchID
+        self.allowsInlineCompletion = allowsInlineCompletion
     }
 }
 
@@ -172,6 +177,9 @@ public struct SuggestionSnapshot: Sendable {
     public var timings: [ProviderTiming]
     /// Async providers still running.
     public var pendingProviders: [String]
+    /// The top hit's inline completion, when the context allowed one (§4.1). Rules T3a, T5, and T7 can
+    /// produce it; it always belongs to `suggestions[0]`.
+    public var inlineCompletion: InlineCompletion?
 
     public var topHit: Suggestion? { hasTopHit ? suggestions.first : nil }
 }
@@ -187,4 +195,7 @@ public enum TopHitRule: String, Sendable {
     case exactAction = "T6-exact-action"
     case bestEligible = "T7-best-eligible"
     case typedSearch = "T8-typed-search"
+    /// T3a: a strong tab or history row whose host (or URL) the typed text starts, while inline completion
+    /// is allowed (commandbar-completion §4.1.3). Checked after T2 and before T3.
+    case inlineCompletion = "T3a-inline-completion"
 }

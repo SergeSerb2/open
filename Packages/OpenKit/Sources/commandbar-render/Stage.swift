@@ -105,7 +105,7 @@ final class Stage {
     }
 
     enum Key {
-        case up, down, returnKey, escape, tab, backspace, space, info
+        case up, down, returnKey, escape, tab, backspace, space, info, left, right, home, end, forwardDelete
         var code: UInt16 {
             switch self {
             case .up: 126
@@ -116,6 +116,11 @@ final class Stage {
             case .backspace: 51
             case .space: 49
             case .info: 34
+            case .left: 123
+            case .right: 124
+            case .home: 115
+            case .end: 119
+            case .forwardDelete: 117
             }
         }
         var characters: String {
@@ -128,6 +133,11 @@ final class Stage {
             case .backspace: "\u{7F}"
             case .space: " "
             case .info: "i"
+            case .left: String(Character(UnicodeScalar(NSLeftArrowFunctionKey)!))
+            case .right: String(Character(UnicodeScalar(NSRightArrowFunctionKey)!))
+            case .home: String(Character(UnicodeScalar(NSHomeFunctionKey)!))
+            case .end: String(Character(UnicodeScalar(NSEndFunctionKey)!))
+            case .forwardDelete: String(Character(UnicodeScalar(NSDeleteFunctionKey)!))
             }
         }
     }

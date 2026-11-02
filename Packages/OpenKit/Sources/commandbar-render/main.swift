@@ -23,7 +23,7 @@ enum CLI {
       commandbar-render ax [--state NAME]           # dump the rendered overlay accessibility tree
       commandbar-render flows                      # keyboard and mouse flows; exit 1 on failure
       commandbar-render check                      # flows + a render of every state + the keystroke budget (tools/verify-all.sh)
-      commandbar-render bench [--tabs 5000] [--history 100000] [--scale 2]
+      commandbar-render bench [--tabs 5000] [--history 100000] [--scale 2] [--completion]
       commandbar-render screens --out DIR [--scale 2]   # every state on synthetic data, for docs
     """
 
@@ -54,15 +54,23 @@ enum CLI {
             // tools/verify-all.sh: flows, a render of every state, and the keystroke budget.
             var checks = Flows.run()
             checks += renderSmoke()
-            let r = Bench.run(tabs: 5000, history: 100_000, scale: 2, rounds: 2)
-            checks.append(Flows.Check(name: "keystroke → rows drawn, main-thread CPU p95 < 8 ms (5,000 tabs, 100k history, 2x)",
+            // Completion A/B: the same keystrokes with inline completion on (the budget run) and off.
+            let r = Bench.run(tabs: 5000, history: 100_000, scale: 2, rounds: 2, completionAB: true)
+            checks.append(Flows.Check(name: "keystroke → rows drawn, main-thread CPU p95 < 8 ms (5,000 tabs, 100k history, 2x, inline completion on)",
                                       pass: r.keystrokes > 0 && r.cpuP95 < 8,
                                       detail: String(format: "CPU p50 %.2f p95 %.2f ms; wall p50 %.2f p95 %.2f ms; %d keystrokes", r.cpuP50, r.cpuP95, r.wallP50, r.wallP95, r.keystrokes)))
+            print("\(checks.last!.pass ? "PASS" : "FAIL")  \(checks.last!.name)  —  \(checks.last!.detail)")
+            let added = r.addedP95Milliseconds
+            checks.append(Flows.Check(name: "inline completion adds ≤ 0.3 ms p95 over the plain keystroke (main-thread cycles); no extra panel layout pass (≤ 1 per keystroke)",
+                                      pass: added.map { $0 <= 0.3 } ?? false && r.maxLayoutPasses <= 1 && r.meanLayoutPasses <= r.meanLayoutPassesOff + 0.02
+                                        && r.completedKeystrokes * 3 >= r.keystrokes,
+                                      detail: (added.map { String(format: "p95 %+.3f ms, paired median %+.3f ms; ", $0, r.pairedMedianMilliseconds ?? 0) } ?? "cycle counter \(r.counterStatus); ")
+                                        + String(format: "layout passes on max %d mean %.2f, off mean %.2f; %d of %d keystrokes completed", r.maxLayoutPasses, r.meanLayoutPasses, r.meanLayoutPassesOff, r.completedKeystrokes, r.keystrokes)))
             print("\(checks.last!.pass ? "PASS" : "FAIL")  \(checks.last!.name)  —  \(checks.last!.detail)")
             report(checks)
         case "bench":
             Bench.run(tabs: Int(value(rest, "--tabs") ?? "") ?? 5000, history: Int(value(rest, "--history") ?? "") ?? 100_000,
-                      scale: CGFloat(Double(value(rest, "--scale") ?? "2") ?? 2))
+                      scale: CGFloat(Double(value(rest, "--scale") ?? "2") ?? 2), completionAB: rest.contains("--completion"))
         case "screens": try screens(rest)
         default: throw CLIError(description: usage)
         }

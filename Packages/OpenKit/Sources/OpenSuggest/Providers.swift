@@ -1,6 +1,7 @@
 import Foundation
 import OpenModel
 import OpenStore
+import Synchronization
 
 // MARK: - Protocol and input
 
@@ -20,6 +21,9 @@ public struct SuggestInput: Sendable {
     /// `rawText` without surrounding whitespace.
     public let text: String
     public let query: FoldedQuery
+    /// `query` without a typed `https://`, `http://`, then `www.`: what tab and history rows match, so
+    /// "https://goo" still finds google.com and can complete (commandbar-completion §4.1.2 rule 3).
+    public let matchQuery: FoldedQuery
     public let typed: TypedInput
     public let context: SuggestContext
     public let searchEngine: SearchEngine
@@ -103,7 +107,9 @@ public struct TabsProvider: SuggestProvider {
 
     public func localSuggestions(for input: SuggestInput) -> [Suggestion] {
         let index = input.tabs
-        let excluded = input.currentTab?.tabID
+        // Edit mode never offers the current tab; Cmd+T does (F0063, F0043: the page behind the bar is a
+        // Switch to Tab row, and F0043's completion comes from it; commandbar-completion §4.1.3).
+        let excluded = input.context.mode == .editCurrentURL ? input.currentTab?.tabID : nil
         let currentSpace = index.spaceOrdinal(of: input.context.spaceID)
         var top = TopRows(capacity: input.query.isEmpty && input.context.mode != .searchTabs ? emptyQueryRows : maxRows)
         // Scores are computed for every match from flat arrays; Suggestion values only for the winners.
@@ -123,7 +129,7 @@ public struct TabsProvider: SuggestProvider {
                 consider(i, quality: 0)
             }
         } else {
-            for m in Self.scan(input.query, index, profile: input.profileOrdinal) {
+            for m in Self.scan(input.matchQuery, index, profile: input.profileOrdinal) {
                 if let site = input.siteSearch {
                     let e = index.entries[m.entry]
                     if !site.contains(host: e.host, matchableURL: TextMatching.matchableURL(e.url)) { continue }
@@ -139,7 +145,7 @@ public struct TabsProvider: SuggestProvider {
                 title: displayTitle.isEmpty ? TextMatching.matchableURL(e.url) : displayTitle, subtitle: e.host,
                 url: e.url, icon: Self.icon(e), tabID: e.tab.id, tabLocation: e.location,
                 spaceID: e.spaceID, spaceTitle: e.spaceTitle, provider: id, scoreDetail: detail)
-            row.canBeTopHit = detail.quality >= MatchQuality.prefix && input.query.bytes.count >= 2
+            row.canBeTopHit = detail.quality >= MatchQuality.prefix && input.matchQuery.bytes.count >= 2
             row.isExactTabMatch = detail.quality == MatchQuality.exact
             return row
         }
@@ -353,21 +359,39 @@ public struct HistoryProvider: SuggestProvider {
     public var limit = 24
     public var emptyQueryRows = 6
     let store: @MainActor (ProfileID?) -> HistoryStore?
+    let carry = HistoryCarryOver()
 
     /// `store` returns the history database of a Profile (one per Profile, as in Chromium).
     public init(store: @escaping @MainActor (ProfileID?) -> HistoryStore?) {
         self.store = store
     }
 
+    /// Carry-over (commandbar-completion §4.1.3): when the text extends the previous query, snapshot 0
+    /// keeps that query's history pages whose host or URL still matches, re-scored for the new text.
+    /// The history snapshot replaces them. Without it a history completion would vanish for a frame
+    /// on every keystroke. Same rule as the remote carry-over (docs/suggest.md §4).
+    public func localSuggestions(for input: SuggestInput) -> [Suggestion] {
+        guard input.context.mode != .searchTabs, !input.query.isEmpty else { return [] }
+        let q = input.matchQuery
+        let matches = carry.matches(profile: input.profileID, extending: q.bytes)
+        guard !matches.isEmpty else { return [] }
+        return matches.compactMap { m -> Suggestion? in
+            let host = TextMatching.fold(TextMatching.displayHost(m.url)), url = TextMatching.fold(TextMatching.matchableURL(m.url))
+            guard TextMatching.quality(q.bytes, in: host) > 0 || TextMatching.quality(q.bytes, in: url) > 0 else { return nil }
+            return Self.row(m, query: q, now: input.now, site: input.siteSearch, provider: id)
+        }
+    }
+
     public func asyncOperation(for input: SuggestInput) -> (@Sendable () async -> [Suggestion]?)? {
         guard input.context.mode != .searchTabs, let store = store(input.profileID) else { return nil }
         if input.query.isEmpty && input.siteSearch != nil { return nil }
-        let text = input.text, query = input.query, now = input.now, site = input.siteSearch
+        let text = input.matchQuery.text, query = input.matchQuery, now = input.now, site = input.siteSearch
         let limit = input.query.isEmpty ? emptyQueryRows : limit
-        let provider = id
+        let provider = id, carry = carry, profile = input.profileID
         return {
             let matches = await store.search(text, limit: limit)
             if Task.isCancelled { return nil }
+            carry.store(profile: profile, query: query.bytes, matches: matches)
             return matches.compactMap { Self.row($0, query: query, now: now, site: site, provider: provider) }
         }
     }
@@ -395,5 +419,23 @@ public struct HistoryProvider: SuggestProvider {
         // Strong history: the host or URL starts with the query, and the page was typed or visited 3+ times.
         row.canBeTopHit = hostOrURL >= MatchQuality.prefix && (m.typedCount >= 1 || m.visitCount >= 3)
         return row
+    }
+}
+
+/// The last finished history answer, per engine instance: the source of history carry-over rows.
+final class HistoryCarryOver: Sendable {
+    private struct Last { var profile: ProfileID?; var query: [UInt8]; var matches: [HistoryMatch] }
+    private let last = Mutex<Last?>(nil)
+
+    func store(profile: ProfileID?, query: [UInt8], matches: [HistoryMatch]) {
+        last.withLock { $0 = query.isEmpty ? nil : Last(profile: profile, query: query, matches: matches) }
+    }
+
+    /// Matches of the previous query when `query` extends it in the same Profile, else none.
+    func matches(profile: ProfileID?, extending query: [UInt8]) -> [HistoryMatch] {
+        last.withLock { l in
+            guard let l, l.profile == profile, query.count > l.query.count, query.starts(with: l.query) else { return [] }
+            return l.matches
+        }
     }
 }

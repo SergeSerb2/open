@@ -101,9 +101,16 @@ enum Flows {
             let prefixHint = s.controller.view.debugTrailing
             s.type("be"); s.settle()
             let hint = s.controller.view.debugTrailing
+            let completedName = s.controller.inlineCompletion?.fieldText
             s.key(.tab); s.settle()
             check("\"youtu\" shows \"Search YouTube [Tab]\"", prefixHint == "hint YouTube", "trailing \(prefixHint)")
-            check("\"youtube\" (the name) also offers Space", hint == "hint+space YouTube", "trailing \(hint)")
+            // "youtube" completes to youtube.com (history), and a completion never offers Space (CC-5, F0062).
+            check("\"youtube\" (the name) with a completion: Tab only, no \"or Space\" (CC-5)",
+                  hint == "hint YouTube" && completedName == "youtube.com", "trailing \(hint), completion \(completedName ?? "none")")
+            let a = fresh(.newTab)
+            a.type("amazon"); a.settle()
+            check("\"amazon\" (the name, no completion) also offers Space", a.controller.view.debugTrailing == "hint+space Amazon" && a.controller.inlineCompletion == nil,
+                  "trailing \(a.controller.view.debugTrailing)")
             check("Tab enters Site Search (chip, empty query)", s.controller.siteScope?.id == "youtube" && s.controller.text.isEmpty,
                   "scope \(s.controller.siteScope?.id ?? "nil"), text \"\(s.controller.text)\"")
             s.type("lofi beats"); s.settle()
@@ -251,6 +258,7 @@ enum Flows {
         }
         checks += ReviewFlows.run(env)
         checks += FooterFlows.run(env)
+        checks += CompletionFlows.run(env)
         return checks
     }
 

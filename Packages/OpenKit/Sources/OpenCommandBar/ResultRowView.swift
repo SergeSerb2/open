@@ -91,7 +91,7 @@ final class ResultRowView: NSView {
 
         // Title, then " — subtitle".
         let titleColor = isSelected ? CommandBarRole.rowTitleSelected : CommandBarRole.rowTitle
-        let subColor = isSelected ? CommandBarRole.secondaryTextSelected.withAlpha(0.7) : CommandBarRole.secondaryText
+        let subColor = isSelected ? CommandBarRole.subtitleSelected : CommandBarRole.secondaryText
         let font = BarFont.row
         var title = TextLine(row.title, font: font, color: titleColor.cgColor)
         let available = textMaxX - m.titleX

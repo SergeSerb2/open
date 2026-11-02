@@ -267,9 +267,9 @@ func runSuggestCheck(args: [String]) async {
     let empty = await snapshots(engine, "", ctx)
     if let s = empty.last {
         let kinds = Set(s.suggestions.map(\.kind))
+        // The current tab is a row in Cmd+T (commandbar-completion §4.1.3, F0063); scenario 39 checks both modes.
         log.check("empty query → no crash, no top hit, recent tabs + top history",
-                  !s.hasTopHit && s.isFinal && !s.suggestions.isEmpty && kinds.isSubset(of: [.switchToTab, .history])
-                    && !s.suggestions.contains { $0.tabID == fx.splitLeft.id },
+                  !s.hasTopHit && s.isFinal && !s.suggestions.isEmpty && kinds.isSubset(of: [.switchToTab, .history]),
                   "snapshots=\(empty.count) rows=\(s.suggestions.count) kinds=\(kinds.map(\.rawValue).sorted()) rule=\(s.topHitRule.rawValue)")
     }
     let blank = await lastSnapshot(engine, "   ", fx.context(mode: .searchTabs))
@@ -436,7 +436,10 @@ func runSuggestCheck(args: [String]) async {
     // 21. Remote suggestions against a local HTTP server.
     await remoteChecks(log: log, fx: fx)
 
-    // 22. Latency.
+    // 32–40. Inline completion (commandbar-completion §4.1, §5.1).
+    await completionChecks(log: log, tmp: tmp)
+
+    // 22, 44. Latency, with and without inline completion.
     await latencyCheck(log: log, history: history)
 
     log.printTable()
@@ -699,8 +702,133 @@ private func latencyCheck(log: CheckLog, history: HistoryStore) async {
     print(String(format: "  index rebuild: p50 %.3f ms  max %.3f ms; at most %d tab(s) re-folded per rebuild",
                  percentile(rebuild, 0.5), rebuild.last ?? 0, folded))
     print("load average: \(loadAverage())")
+    // 44 (completion half): the same 1,000 random queries with inline completion allowed, as the bar sends
+    // them while typing at the end. Also times the completion check itself: every row of the first snapshot
+    // through `InlineCompletion.text` (the T3a loop stops at the first eligible row, so this is an upper bound).
+    rng = SuggestRNG(state: 7)
+    let completionCtx = SuggestContext(profileID: profile.id, spaceID: spaces[0].id, allowsRemoteSuggestions: false, allowsInlineCompletion: true)
+    var firstCPUCompletion: [Double] = [], checkCPU: [Double] = []
+    var completions = 0
+    for _ in 0..<1000 {
+        let q = randomQuery().1
+        let c0 = threadCPUMilliseconds()
+        for await snap in engine.query(q, context: completionCtx) {
+            firstCPUCompletion.append(threadCPUMilliseconds() - c0)
+            if snap.inlineCompletion != nil { completions += 1 }
+            let k0 = threadCPUMilliseconds()
+            for row in snap.suggestions.prefix(12) { if let u = row.url { _ = InlineCompletion.text(typed: q, url: u) } }
+            checkCPU.append(threadCPUMilliseconds() - k0)
+            break
+        }
+    }
+    firstCPUCompletion.sort(); checkCPU.sort()
+    let plainP95 = percentile(firstCPU, 0.95), completionP95 = percentile(firstCPUCompletion, 0.95)
+    print(String(format: "first snapshot with inline completion allowed, main-thread CPU: p50 %.3f ms  p95 %.3f ms (plain p95 %.3f); %d of 1000 snapshots completed",
+                 percentile(firstCPUCompletion, 0.5), completionP95, plainP95, completions))
+    print(String(format: "completion check over the snapshot rows, CPU: p50 %.4f ms  p95 %.4f ms  max %.4f ms", percentile(checkCPU, 0.5), percentile(checkCPU, 0.95), checkCPU.last ?? 0))
+    log.check("44: first snapshot with inline completion p95 < 5 ms CPU (5,000 tabs); completion check p95 ≤ 0.05 ms",
+              completionP95 < 5 && percentile(checkCPU, 0.95) <= 0.05 && completions > 0,
+              String(format: "first p95 %.3f ms (plain %.3f); check p95 %.4f ms; %d completions; load %@", completionP95, plainP95, percentile(checkCPU, 0.95), completions, loadAverage()))
     log.check("first snapshot p95 < 5 ms main-thread CPU (1,000 random queries, 5,000 tabs, 100k history)", percentile(firstCPU, 0.95) < 5,
               String(format: "CPU p50=%.3f p95=%.3f ms; wall p50=%.3f p95=%.3f ms; history snapshot wall p50=%.3f p95=%.3f ms",
                      percentile(firstCPU, 0.5), percentile(firstCPU, 0.95), percentile(first, 0.5), percentile(first, 0.95),
                      percentile(second, 0.5), percentile(second, 0.95)))
+}
+
+// MARK: - Inline completion (scenarios 32–40)
+
+/// A small model and history for the completion table of commandbar-completion §4.1.3 and §5.1.
+@MainActor
+private func completionChecks(log: CheckLog, tmp: URL) async {
+    let now = Date()
+    let profile = Profile(name: "Completion")
+    let space = Space(title: "Main", profileID: profile.id)
+    let google = Tab(url: URL(string: "https://www.google.com/")!, title: "Google", lastActiveAt: now.addingTimeInterval(-300))
+    let admin = Tab(url: URL(string: "http://localhost:3000/admin")!, title: "Admin Panel", lastActiveAt: now.addingTimeInterval(-600))
+    let current = Tab(url: URL(string: "https://news.example.org/today")!, title: "Today News", lastActiveAt: now)
+    space.today = [.tab(current), .tab(google), .tab(admin)]
+    let model = BrowserModel(profiles: [profile], spaces: [space], windows: [BrowserWindowState(focusedSpaceID: space.id)])
+    let history = HistoryStore(fileURL: tmp.appendingPathComponent("completion-history.sqlite3"))
+    for _ in 0..<5 { await history.recordVisit(url: URL(string: "https://github.com/")!, title: "GitHub", time: now.addingTimeInterval(-3_600), typed: true) }
+    for _ in 0..<2 { await history.recordVisit(url: URL(string: "https://github.com/openai")!, title: "OpenAI", time: now.addingTimeInterval(-7_200), typed: true) }
+    let engine = SuggestEngine(model: model, history: history, fetcher: nil)
+    func ctx(_ completion: Bool, mode: SuggestMode = .newTab, site: String? = nil) -> SuggestContext {
+        SuggestContext(mode: mode, profileID: profile.id, spaceID: space.id, currentTabID: current.id, currentTabURL: current.url,
+                       allowsRemoteSuggestions: false, siteSearchID: site, allowsInlineCompletion: completion)
+    }
+    func last(_ text: String, _ c: SuggestContext) async -> SuggestionSnapshot? { await lastSnapshot(engine, text, c) }
+    func show(_ s: SuggestionSnapshot?) -> String {
+        guard let s else { return "no snapshot" }
+        let c = s.inlineCompletion.map { "\"\($0.fieldText)\" typed \($0.typedLength) row \($0.rowID)" } ?? "none"
+        return "top=\(describe(s.topHit)) rule=\(s.topHitRule.rawValue) completion=\(c)"
+    }
+    let googleRow = "tab:\(google.id.rawValue.uuidString)"
+
+    // 32. "googl" + an open tab on that host, completion on → T3a, the host, typed length 5 (F0043).
+    let s32 = await last("googl", ctx(true))
+    log.check("32: \"googl\" + tab on google.com → T3a, completion \"google.com\" (typed 5), row 1",
+              s32?.topHitRule == .inlineCompletion && s32?.topHit?.id == googleRow && s32?.inlineCompletion == InlineCompletion(rowID: googleRow, fieldText: "google.com", typedLength: 5),
+              show(s32))
+    // 33. Same text with completion off: no completion, the old rules pick the top hit.
+    let s33 = await last("googl", ctx(false))
+    log.check("33: \"googl\" with completion off → no completion, top hit by T7", s33?.inlineCompletion == nil && s33?.topHitRule == .bestEligible, show(s33))
+    // 34. The text equals the tab title → T5, completion in the candidate's (lower) case (F0062, CC-6).
+    let s34 = await last("Google", ctx(true))
+    log.check("34: \"Google\" = tab title → T5, completion \"google.com\" in lower case (typed 6)",
+              s34?.topHitRule == .exactTab && s34?.inlineCompletion?.fieldText == "google.com" && s34?.inlineCompletion?.typedLength == 6, show(s34))
+    // 35. URL-like text: T3a with completion on, T3 typed URL with it off (after Backspace).
+    let s35 = await last("google.co", ctx(true)), s35off = await last("google.co", ctx(false))
+    log.check("35: \"google.co\" → T3a \"google.com\" (typed 9); completion off → T3 typed URL, none",
+              s35?.topHitRule == .inlineCompletion && s35?.inlineCompletion?.fieldText == "google.com" && s35?.inlineCompletion?.typedLength == 9
+                && s35off?.topHitRule == .typedURL && s35off?.inlineCompletion == nil,
+              "on: \(show(s35)); off: \(show(s35off))")
+    // 36. The whole host: T5 matches it, so T3a is skipped; T3, no completion (F0061).
+    let s36 = await last("google.com", ctx(true))
+    log.check("36: whole host \"google.com\" → T3, no completion (F0061)", s36?.topHitRule == .typedURL && s36?.inlineCompletion == nil, show(s36))
+    // 37. Path rule, port, and lead.
+    var table: [(String, String?)] = []
+    for (text, expected) in [("github.com/op", "github.com/openai"), ("gith", "github.com"), ("github.com", nil), ("localhost:30", "localhost:3000"),
+                             ("https://goo", "https://google.com"), ("www.goo", "www.google.com"), ("HTTPS://WWW.GOO", "HTTPS://WWW.google.com")] as [(String, String?)] {
+        let s = await last(text, ctx(true))
+        let got = s?.inlineCompletion?.fieldText
+        let typedOK = s?.inlineCompletion.map { $0.typedLength == text.utf16.count && $0.rowID == s?.topHit?.id } ?? true
+        if got != expected || !typedOK { table.append((text, got)) }
+    }
+    log.check("37: path → full URL, host-only otherwise, whole host none, port kept, scheme and www. kept as typed",
+              table.isEmpty, table.isEmpty ? "7 inputs as expected" : "wrong: \(table)")
+    // 38. Never: arithmetic, whitespace, Site Search scope, search-tabs mode, non-web URLs, remote rows.
+    var never: [String] = []
+    if await last("2+2", ctx(true))?.inlineCompletion != nil { never.append("2+2") }
+    if await last("goo gle", ctx(true))?.inlineCompletion != nil { never.append("whitespace") }
+    if await last("goo ", ctx(true))?.inlineCompletion != nil { never.append("trailing space") }
+    if await last("goo", ctx(true, site: "youtube"))?.inlineCompletion != nil { never.append("site scope") }
+    if await last("goo", ctx(true, mode: .searchTabs))?.inlineCompletion != nil { never.append("search tabs") }
+    if InlineCompletion.text(typed: "/Users/a", url: URL(string: "file:///Users/a/notes.txt")!) != nil { never.append("file URL") }
+    if InlineCompletion.text(typed: "goo", url: URL(string: "ftp://google.com/")!) != nil { never.append("ftp URL") }
+    // Text that only a typed URL or search row matches: navigate and search rows never complete.
+    if await last("zzqx.org", ctx(true))?.inlineCompletion != nil { never.append("typed URL row") }
+    if await last("zzqxv", ctx(true))?.inlineCompletion != nil { never.append("typed search row") }
+    // Length cap: a field text of exactly `maxFieldLength` UTF-16 units completes; one more does not.
+    let cap = InlineCompletion.maxFieldLength
+    let atCap = URL(string: "https://example.com/" + String(repeating: "a", count: cap - "example.com/".count))!
+    let overCap = URL(string: "https://example.com/" + String(repeating: "a", count: cap - "example.com/".count + 1))!
+    let atCapText = InlineCompletion.text(typed: "example.com/a", url: atCap)
+    if atCapText?.fieldText.utf16.count != cap { never.append("at cap refused (\(atCapText?.fieldText.utf16.count ?? 0))") }
+    if InlineCompletion.text(typed: "example.com/a", url: overCap) != nil { never.append("over cap \(cap + 1) completed") }
+    log.check("38: no completion for arithmetic, whitespace, scopes, search tabs, non-web URLs, typed URL or search rows; field text ≤ 2,048 (at the cap yes, one over no)", never.isEmpty, never.isEmpty ? "none completed; \(cap) accepted, \(cap + 1) refused" : "completed: \(never)")
+    // 39. The current tab: offered in Cmd+T, absent in Cmd+L.
+    let s39 = await last("Today News", ctx(false)), s39edit = await last("Today News", ctx(false, mode: .editCurrentURL))
+    let emptyRows = await last("", ctx(false))
+    log.check("39: current tab offered in new-tab mode (also for an empty query), absent in edit mode",
+              s39?.suggestions.contains { $0.tabID == current.id } == true && s39edit?.suggestions.contains { $0.tabID == current.id } == false
+                && emptyRows?.suggestions.contains { $0.tabID == current.id } == true,
+              "new tab \(s39?.suggestions.contains { $0.tabID == current.id } ?? false), edit \(s39edit?.suggestions.contains { $0.tabID == current.id } ?? true)")
+    // 40. History carry-over: "gi" answered, then "git": snapshot 0 already holds GitHub and completes it.
+    _ = await last("gi", ctx(true))
+    var first40: SuggestionSnapshot?
+    for await s in engine.query("git", context: ctx(true)) { first40 = s; break }
+    log.check("40: \"gi\" → \"git\": snapshot 0 carries the history row over and already completes \"github.com\"",
+              first40?.sequence == 0 && first40?.suggestions.contains { $0.kind == .history && $0.url?.host() == "github.com" } == true
+                && first40?.inlineCompletion?.fieldText == "github.com",
+              "snapshot \(first40?.sequence ?? -1): \(show(first40))")
 }

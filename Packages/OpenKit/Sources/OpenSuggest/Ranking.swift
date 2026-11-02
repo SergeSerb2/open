@@ -157,10 +157,12 @@ public enum Ranking {
         var rows: [Suggestion]
         var hasTopHit: Bool
         var rule: TopHitRule
+        var completion: InlineCompletion?
     }
 
     /// Top-hit rules, first match wins (docs/suggest.md "Top hit"):
     /// T0 empty → none · T1 Site Search scope → scoped row · T2 search-tabs → best tab ·
+    /// T3a inline completion allowed → the best strong tab/history row the text completes ·
     /// T3 URL-like input → typed URL (or the open tab that has that URL, new-tab mode) ·
     /// T4 arithmetic → calculator · T5 exact tab title/host → that tab ·
     /// T6 exact action title/alias (3+ characters) → that action ·
@@ -172,6 +174,7 @@ public enum Ranking {
 
         var topIndex: Int?
         var rule = TopHitRule.none
+        var topCompletion: InlineCompletion?
         if input.siteSearch != nil {
             topIndex = rows.firstIndex { $0.kind == .siteSearch && $0.isWhatYouTyped }
             rule = .siteSearchScope
@@ -180,6 +183,8 @@ public enum Ranking {
             rule = topIndex == nil ? .none : .bestTab
         } else if input.query.isEmpty {
             rule = .none
+        } else if let (i, completion) = inlineCompletionTopHit(rows, input: input) {
+            topIndex = i; rule = .inlineCompletion; topCompletion = completion
         } else if input.typed.isURL, let i = rows.firstIndex(where: { $0.isWhatYouTyped }) {
             topIndex = i; rule = .typedURL
         } else if let i = rows.firstIndex(where: { $0.kind == .calculator }) {
@@ -196,6 +201,10 @@ public enum Ranking {
             topIndex = i; rule = .typedSearch
         }
         if topIndex == nil, rule != .none { rule = .none }
+        // T5 and T7 may complete too (F0062: "Google" = a tab title completes to the lower-case host).
+        if let topIndex, topCompletion == nil, rule == .exactTab || rule == .bestEligible {
+            topCompletion = InlineCompletion.make(for: rows[topIndex], input: input)
+        }
 
         var final: [Suggestion] = []
         var counts: [SuggestionKind: Int] = [:]
@@ -210,6 +219,21 @@ public enum Ranking {
             counts[row.kind] = n + 1
             final.append(row)
         }
-        return Ranked(rows: final, hasTopHit: topIndex != nil, rule: rule)
+        return Ranked(rows: final, hasTopHit: topIndex != nil, rule: rule, completion: topCompletion)
+    }
+
+    /// Rule T3a (commandbar-completion §4.1.3): with inline completion allowed, no arithmetic (T4) and no
+    /// exact tab title or host (T5), the highest-ranked row that may be a top hit and that the typed text
+    /// completes. Looks at most at the ranked rows' first `maxResults` entries; prefix compares only.
+    static func inlineCompletionTopHit(_ rows: [Suggestion], input: SuggestInput) -> (Int, InlineCompletion)? {
+        guard InlineCompletion.allowed(input),
+              !rows.contains(where: { $0.kind == .calculator || ($0.kind == .switchToTab && $0.isExactTabMatch) }) else { return nil }
+        // A tab whose host (or URL) the text starts is strong for T3a even when only its URL field matched
+        // ("localhost:30" → a tab on localhost:3000: the host field has no port), as long as 2+ bytes were typed.
+        let strongTabBytes = input.matchQuery.bytes.count >= 2
+        for (i, row) in rows.enumerated() where (row.canBeTopHit || (row.kind == .switchToTab && strongTabBytes)) && InlineCompletion.canComplete(row) {
+            if let completion = InlineCompletion.make(for: row, input: input) { return (i, completion) }
+        }
+        return nil
     }
 }

@@ -52,6 +52,63 @@ final class CommandBarFieldEditor: NSTextView {
     var onCompositionEnded: (() -> Void)?
     var onHelp: (() -> Bool)?
 
+    // Inline completion hooks (CompletionSession, commandbar-completion §4.1.5–§4.1.6).
+
+    /// What the last text-system edit was. Only an insertion at the end of the text allows a completion.
+    enum EditKind { case insertionAtEnd, insertion, deletion, paste, undo }
+    private(set) var lastEdit = EditKind.insertion
+    /// Runs before typing, an IME change, or a paste, with the typed text (nil for IME and paste) and the
+    /// range it replaces. Removes the completion (all of it, or only the part the typed text replaces)
+    /// so the edit lands on what the user typed and the completion never enters undo.
+    var onBeforeEdit: ((_ insertion: String?, _ replacing: NSRange) -> CompletionEdit)?
+    enum CompletionEdit {
+        /// No completion showed.
+        case none
+        /// The completion at this range was removed; the field holds what the user typed.
+        case removed(NSRange)
+        /// The typed text continues the completion: only its first characters were removed. The insertion
+        /// goes at `location`, and `tail` UTF-16 units of completion stay after it (no hide-then-show write).
+        case kept(location: Int, tail: Int)
+    }
+    /// During a `.kept` insertion: completion text after the caret, which is not part of the typed text.
+    private(set) var keptTail = 0
+    /// Runs before undo or redo, for the same reason.
+    var onBeforeUndo: (() -> Void)?
+    /// The selection or caret moved (keys, a click, select all, or our own writes).
+    var onSelectionChange: (() -> Void)?
+    private var pasteDepth = 0
+    private var observesUndo = false
+
+    /// Starts reporting undo and redo. Called once the editor exists.
+    func observeUndo() {
+        guard !observesUndo else { return }
+        observesUndo = true
+        for name in [NSNotification.Name.NSUndoManagerWillUndoChange, .NSUndoManagerWillRedoChange] {
+            NotificationCenter.default.addObserver(self, selector: #selector(willUndoOrRedo(_:)), name: name, object: editingUndoManager)
+        }
+    }
+
+    @objc private func willUndoOrRedo(_ note: Notification) { onBeforeUndo?() }
+
+    /// An edit replacing `range` with the completion just removed keeps its meaning: replace the selection.
+    private func editRange(_ range: NSRange, hidden: NSRange?) -> NSRange {
+        guard range.location != NSNotFound, let hidden else { return range }
+        if NSEqualRanges(range, hidden) || NSMaxRange(range) > (string as NSString).length { return NSRange(location: NSNotFound, length: 0) }
+        return range
+    }
+
+    override func setSelectedRanges(_ ranges: [NSValue], affinity: NSSelectionAffinity, stillSelecting: Bool) {
+        super.setSelectedRanges(ranges, affinity: affinity, stillSelecting: stillSelecting)
+        onSelectionChange?()
+    }
+
+    override func readSelection(from pboard: NSPasteboard, type: NSPasteboard.PasteboardType) -> Bool {
+        _ = onBeforeEdit?(nil, NSRange(location: NSNotFound, length: 0))
+        pasteDepth += 1
+        defer { pasteDepth -= 1 }
+        return super.readSelection(from: pboard, type: type)
+    }
+
     static func normalized(_ text: String) -> String {
         String(text.replacingOccurrences(of: "\r\n", with: " ")
             .replacingOccurrences(of: "\r", with: " ")
@@ -59,6 +116,11 @@ final class CommandBarFieldEditor: NSTextView {
     }
 
     override func shouldChangeText(in affectedCharRange: NSRange, replacementString: String?) -> Bool {
+        let length = (string as NSString).length
+        if pasteDepth > 0 { lastEdit = .paste }
+        else if editingUndoManager.isUndoing || editingUndoManager.isRedoing { lastEdit = .undo }
+        else if (replacementString ?? "").isEmpty { lastEdit = .deletion }
+        else { lastEdit = NSMaxRange(affectedCharRange) == length - keptTail ? .insertionAtEnd : .insertion }
         guard let replacementString, NSMaxRange(affectedCharRange) <= (string as NSString).length else {
             return super.shouldChangeText(in: affectedCharRange, replacementString: replacementString)
         }
@@ -72,8 +134,11 @@ final class CommandBarFieldEditor: NSTextView {
     }
 
     override func setMarkedText(_ string: Any, selectedRange: NSRange, replacementRange: NSRange) {
+        // Marked text never shows a completion (§4.1.6): remove it first, with no query.
+        var range = replacementRange
+        if !hasMarkedText(), case .removed(let hidden) = onBeforeEdit?(nil, replacementRange) ?? .none { range = editRange(range, hidden: hidden) }
         compositionDepth += 1
-        super.setMarkedText(string, selectedRange: selectedRange, replacementRange: replacementRange)
+        super.setMarkedText(string, selectedRange: selectedRange, replacementRange: range)
         compositionDepth -= 1
     }
 
@@ -87,8 +152,18 @@ final class CommandBarFieldEditor: NSTextView {
 
     override func insertText(_ insertString: Any, replacementRange: NSRange) {
         let wasMarked = hasMarkedText()
+        var range = replacementRange
+        if !wasMarked {
+            let typed = (insertString as? String) ?? (insertString as? NSAttributedString)?.string
+            switch onBeforeEdit?(typed, replacementRange) ?? .none {
+            case .none: break
+            case .removed(let hidden): range = editRange(range, hidden: hidden)
+            case .kept(let location, let tail): range = NSRange(location: location, length: 0); keptTail = tail
+            }
+        }
         if wasMarked { compositionDepth += 1 }
-        super.insertText(insertString, replacementRange: replacementRange)
+        super.insertText(insertString, replacementRange: range)
+        keptTail = 0
         if wasMarked {
             compositionDepth -= 1
             if compositionDepth == 0 { onCompositionEnded?() }
@@ -210,6 +285,11 @@ final class InputRowView: NSView {
         editor.isAutomaticDataDetectionEnabled = false
         editor.isAutomaticLinkDetectionEnabled = false
         editor.enabledTextCheckingTypes = 0
+        // No system inline predictions or math results next to our own completion and calculator row,
+        // and no Writing Tools: each also runs text checking on every selection change.
+        editor.inlinePredictionType = .no
+        editor.mathExpressionCompletionType = .no
+        editor.writingToolsBehavior = .none
         applyEditorColors()
         addSubview(field)
         infoButton.fill = theme.infoFill
@@ -458,3 +538,4 @@ final class PaintView: NSView {
         ctx.restoreGState()
     }
 }
+

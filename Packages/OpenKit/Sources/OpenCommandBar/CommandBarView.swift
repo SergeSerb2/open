@@ -91,6 +91,8 @@ public final class CommandBarView: NSView {
     /// Visible part of the result list (its frame minus what the footer covers), in list points.
     public var debugVisibleListHeight: CGFloat { panel.results.visibleHeight }
     public var debugListScrollOffset: CGFloat { panel.results.scrollOffset }
+    /// Panel layout passes since creation.
+    public var debugPanelLayoutCount: Int { panel.layoutCount }
     /// Text field frame in panel points.
     public var debugFieldFrame: CGRect { panel.input.field.frame }
     /// Presses a bar control through its accessibility action, the same path as VoiceOver and

@@ -9,7 +9,8 @@ import OpenSuggest
 /// the real controller, and the real AppKit text path.
 @MainActor
 enum Scenes {
-    static let names = ["empty", "typing-git", "cmd-l", "space-hint", "site-chip", "site-search", "calculator", "actions", "scrolled", "privacy-footer"]
+    static let names = ["empty", "typing-git", "cmd-l", "space-hint", "site-chip", "site-search", "calculator", "actions", "scrolled", "privacy-footer",
+                        "completion", "completion-case", "completion-accepted"]
     /// Stands in for Open's privacy page in renders (the App has none yet, so its footer hides line 2).
     static let samplePrivacyURL = URL(string: "https://open.example/privacy")!
 
@@ -78,6 +79,17 @@ enum Scenes {
             stage.type("git")
             stage.settle()
             for _ in 0..<6 { stage.key(.down) }
+        case "completion": // "gith" + the selected "ub.com" (F0043 shape)
+            c.present(request(env, mode: .newTab))
+            stage.type("gith")
+        case "completion-case": // typed "GitH": the field shows the candidate's case (F0062, CC-6)
+            c.present(request(env, mode: .newTab))
+            stage.type("GitH")
+        case "completion-accepted": // Right arrow: the whole host, caret at the end (F0061)
+            c.present(request(env, mode: .newTab))
+            stage.type("gith")
+            stage.settle()
+            stage.key(.right)
         case "privacy-footer":
             c.privacyURL = samplePrivacyURL
             c.present(request(env, mode: .newTab))
@@ -128,6 +140,8 @@ struct SceneFile: Decodable {
     var windowHeight: Double?
     /// Shows the (i) privacy footer (with its "here" line).
     var footer: Bool?
+    /// Field selection `[location, length]` in UTF-16 units: an inline completion's tail, or `[n, 0]` for a caret.
+    var selection: [Int]?
 
     static func load(_ path: String) throws -> SceneFile {
         try JSONDecoder().decode(SceneFile.self, from: Data(contentsOf: URL(fileURLWithPath: path)))
@@ -162,7 +176,8 @@ struct SceneFile: Decodable {
                                     leadingIcon: icon(leadingIcon ?? "symbol:magnifyingglass"), trailing: trailingValue)
         return CommandBarPreview(mode: CommandBarMode(rawValue: mode ?? "newTab") ?? .newTab, text: text ?? "",
                                  selectAllText: selectAll ?? false, input: input, rows: rows, selectedIndex: selected ?? 0,
-                                 showsFooter: footer ?? false)
+                                 showsFooter: footer ?? false,
+                                 selectedRange: selection.flatMap { $0.count == 2 ? NSRange(location: $0[0], length: $0[1]) : nil })
     }
 
     func loadTheme() throws -> CommandBarTheme {

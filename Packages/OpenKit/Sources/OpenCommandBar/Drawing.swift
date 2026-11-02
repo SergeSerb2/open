@@ -118,7 +118,9 @@ enum BarGlyph {
 enum BarFont {
     @MainActor static var input: NSFont { Typography.commandBarInput.font }
     @MainActor static var row: NSFont { Typography.commandBarRow.font }
-    @MainActor static var hint: NSFont { FontToken(12.75, .regular).font }
+    /// Hint label: 12.75 Medium, fitted on two ink widths ("Search Google" 88 px in F0061, "Search Wikipedia"
+    /// 105 px in S2 18/0009); 12.75 Regular was 2 px narrow on the longer one.
+    @MainActor static var hint: NSFont { FontToken(12.75, .medium).font }
     @MainActor static var keycap: NSFont { FontToken(13, .semibold).font }
     @MainActor static var chip: NSFont { FontToken(14, .semibold).font }
 }

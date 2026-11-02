@@ -752,6 +752,8 @@ The Section 2 agent implements this plan. Each row names the merged PR and its e
 |---|---|---|---|
 | 0 | [#137](https://github.com/SergeSerb2/open/pull/137) | `commandbar-render check` 91/91 (flows 87–90; the 9 existing states render pixel-identical to `main` at 2x, scene path identical too); S2 18/0044 compare in Display P3: 13 footer elements ≤ 1 pt and ΔE00 ≤ 0.62; App build; e2e `commandbar` 54/54 incl. `commandbar_no_open_animation`, `_no_close_animation`, `_info_shows_footer`, `_footer_dismiss`, `_cmd_i_footer`, `_footer_search_settings`; break-and-revert: an added 0.13 s fade fails flow 87 and the App row (panel opacity 0.07 right after Cmd+T), no list occlusion fails flow 88, a footer kept across `present` fails flow 89 | done |
 
+| 1–2 | [#138](https://github.com/SergeSerb2/open/pull/138) | `suggest-check` 44/44 (scenarios 32–40, 44: completion first snapshot p95 0.446 ms vs plain 0.511, check p95 0.0116 ms, load 10); `commandbar-render check` 112/112 (flows 69–80, 86 with 17 checks; completion budget p95 +0.097 ms at load 5.4 and +0.079 ms at load 9.6, layout passes mean 0.11 on and off, max 1); compares F0043/F0062/F0061 worst 1.0 pt, ΔE00 1.93; S2 18/0009 completion box, text, and hint ≤ 1 pt, ≤ 1.37; pixel diff of the 10 states against `main` (only the intended changes, `docs/commandbar.md` §8.1); App build; e2e `commandbar` 55/55; break-and-revert: 8 extra field writes per show fail the budget (+0.912 ms), one forced panel layout per show fails the layout rule (mean 0.65 vs 0.11) | done |
+
 Section 2 decisions (Step 0):
 
 - `present(_:)` and `dismiss(reason:)` lose their `animated:` parameter: with no animation it would mean nothing.
@@ -759,3 +761,13 @@ Section 2 decisions (Step 0):
 - While Open has no privacy page, line 2 of the footer hides (`privacyURL` nil). Hiding only the word "here" would leave a broken sentence.
 - The panel edge keeps the session-1 luminance rule. Session 2 shows the dark double edge over light pages, against session-1 F0039/F0040/A0120; the rule's input is not known (`docs/followups.md`, capture request).
 - `compare --space p3` measures session-2 captures in Display P3 (their AW2726DM profile exceeds sRGB); session-1 comparisons stay in sRGB.
+
+Section 2 decisions (Steps 1–2):
+
+- A matching character keeps the completion with one storage edit: the completion's first character is removed and the typed one inserted in its place (normal undo coalescing). The plan's "move the selection start by one" is the visible result; removing and re-writing the whole completion cost two edits and two selection changes per keystroke.
+- The field editor turns off system inline predictions, math results, and Writing Tools. Each ran NSTextCheckingController on every selection change; a URL field must not show the system's own prediction next to ours.
+- The completion budget is measured in main-thread cycles over the keystroke's own work (no polling), converted at the off run's cycles per ms, as p95(on) − p95(off) (plan §5.4 wording); "no extra layout pass" compares the mean layout passes on and off. CPU-time differences moved by ±0.5 ms with machine load.
+- T3a also accepts a tab row whose URL field alone matched with 2+ bytes typed, so "localhost:30" completes from a tab on `localhost:3000` (the host field has no port).
+- History carry-over keeps a previous row when its host or its URL still matches (the plan says URL; host-only matches are the common case for completion).
+- Home (`scrollToBeginningOfDocument`, which AppKit only scrolls) puts the caret at the start, like Cmd+Left. Forward Delete and the word and line deletions remove only the completion, like Backspace (guess, plan §4.1.5).
+- The hint label font is 12.75 Medium (fitted on F0061 88 px and S2 18/0009 105 px ink widths; Regular was 2 px narrow). The selected row's subtitle is white 0.52 (fitted on S2 18/0009 row 1; it still misses by ΔE00 2.67, `docs/commandbar.md` §8.3).

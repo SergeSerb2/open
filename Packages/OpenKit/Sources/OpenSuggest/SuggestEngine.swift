@@ -144,13 +144,23 @@ public final class SuggestEngine {
         let text = raw.trimmingCharacters(in: .whitespacesAndNewlines)
         let index = indexer.current()
         let profileID = context.profileID ?? context.spaceID.flatMap { model?.space(id: $0)?.profileID }
+        let query = FoldedQuery(text)
+        let body = Self.withoutLead(text)
         return SuggestInput(
-            rawText: raw, text: text, query: FoldedQuery(text), typed: classifier.classify(text),
+            rawText: raw, text: text, query: query, matchQuery: body == text ? query : FoldedQuery(body), typed: classifier.classify(text),
             context: context, searchEngine: SearchEngines.resolve(id: context.searchEngineID, profile: profileID.flatMap { model?.profile(id: $0) }, in: searchEngines),
             customSearchEngines: profileID.flatMap { model?.profile(id:$0) }?.settings.customSearchEngines ?? [],
             siteSearch: context.siteSearchID.flatMap { siteIndex.byID[$0] },
             currentTab: currentTabState(context), profileID: profileID, now: Date(),
             tabs: index, profileOrdinal: index.ordinal(of: profileID))
+    }
+
+    /// `text` without a leading `https://` or `http://`, then `www.` (case-insensitive). Empty → `text`.
+    nonisolated static func withoutLead(_ text: String) -> String {
+        var rest = Substring(text)
+        for prefix in ["https://", "http://"] where rest.lowercased().hasPrefix(prefix) { rest = rest.dropFirst(prefix.count); break }
+        if rest.lowercased().hasPrefix("www.") { rest = rest.dropFirst(4) }
+        return rest.isEmpty ? text : String(rest)
     }
 
     private func currentTabState(_ context: SuggestContext) -> CurrentTabState? {
@@ -208,6 +218,6 @@ private final class QueryRun {
             query: text, sequence: sequence, isFinal: pending.isEmpty, input: input.typed,
             suggestions: ranked.rows, hasTopHit: ranked.hasTopHit, topHitRule: ranked.rule,
             elapsedMilliseconds: (ContinuousClock.now - start).milliseconds,
-            timings: timings, pendingProviders: pending)
+            timings: timings, pendingProviders: pending, inlineCompletion: ranked.completion)
     }
 }
