@@ -288,6 +288,48 @@ Motion stays static.
 Use a 14×20 recording slot, and hide it before the speaker when width is
 limited. Keep recording placement in one function until S9 decides its side.
 
+**Step 2b results (2026-11-02, branch `s3/step2b-row-speaker`).**
+`TabCellView.layoutMediaAccessories` is the one placement function: favicon,
+then the recording dot (14 × 20 at `[41, y + 10]`), then the 26 pt speaker
+(`[41, y + 7]`, or `[55, y + 7]` after a dot); the title moves right by 26
+(and 14 more with a dot; recording only: 14), and its right end stays. The dot
+hides first when `titleRight − titleX` is narrower than both slots. The "/" of
+a left pinned URL stays just before the title (guess). The speaker has AX id
+`sidebarTabCellMuteButton` and the close button's hover plate (button frame,
+radius 6, `rowPressed`; **guess**). `RowMediaMetrics` holds the listed values
+plus `recordingSlotHeight 20` (the 14 × 20 slot, centered on the button).
+
+Glyph fit (deviation from the table above): Arc's audible glyph has **three**
+arcs, and `speaker.wave.2` cannot reach the 19 pt ink width within 1 pt of the
+height at any size, so Open uses **`speaker.wave.3` Regular 14 pt** and
+**`speaker.slash` Regular 15.5 pt** (15 pt matched the box but drew too thin:
+core ΔE00 4.00). Both are centered in one 26 × 26 image-view frame (static
+Reduce Motion view: the same centered rect).
+
+RI5 compare (`compare-media --state row-audible|row-muted`, design.md §7 ink
+method, row-relative; colors through the embedded ICC into extended linear
+sRGB Float32, no clipping; self-test: P3 green → linear sRGB (−0.225, 1.042,
+−0.079)):
+
+| Element | 12/0022 audible: Arc / Open / error | 12/0027 muted: Arc / Open / error |
+|---|---|---|
+| Button frame (AX) | `[41, 7, 26, 26]` / same / 0.0 pt | same / same / 0.0 pt |
+| Glyph ink box | `[44, 15, 19, 11]` / `[45, 14, 18, 12]` / 1.0 pt | `[47, 13, 14, 14]` / same / 0.0 pt |
+| Glyph core color | `#B3B3BA` / `#B2B0B7` / ΔE00 1.38 | `#B5B5BC` / `#B2B0B7` / ΔE00 1.91 |
+| Glyph peak (tint check) | `#B8B8BF` / `#B9B8BD` / ΔE00 1.00 | `#B8B8BE` / `#B9B7BE` / ΔE00 1.49 |
+| Title start (ink left, top, bottom) | x 71, y 14…28 / same / 0.0 pt | same / same / 0.0 pt |
+| Title frame x (AX) | 69 / 69 / 0.0 pt | 69 / 69 / 0.0 pt |
+
+Context (not gated): the selected-row plate differs by ΔE00 2.23 (`#515060`
+vs `#544F5F`; the theme, not this step). `SidebarRole.rowAccessory` stays.
+`sidebar-render check` RI5 repeats these numbers in process against the Arc
+values above (no capture pixels). Negative proof: `buttonX` 43 makes RI1, RI3,
+RI5 and both compares FAIL (button 2.0 pt; ink 3.0 / 2.0 pt); reverted.
+Harness limit: after a symbol transition, neither `cacheDisplay` nor
+`layer.render` reproduces the image view's composited ink, so the image-view
+path is checked by frame (= button bounds) and `.alignCenter`, and ink boxes
+are measured on the static view and the 1x render.
+
 ### 4.2 Sidebar media controls (mini player stack)
 
 #### 4.2.1 Placement
@@ -1272,9 +1314,9 @@ widths 228 and 500.
 
 | ID | Check |
 |---|---|
-| RI1 | A muted audible row shows `speaker.slash.fill` at the §4.1 frame; a silent unmuted row builds no speaker view. |
+| RI1 | A muted audible row shows the outline `speaker.slash` (audible: `speaker.wave.3`) at the Step 2b frame `[41, y + 7, 26, 26]` with AX id `sidebarTabCellMuteButton`, and the title frame moves to x 69; a silent unmuted row builds no speaker view. |
 | RI2 | Clicking the speaker sends `.toggleMute` and does not change selection. |
-| RI3 | A capturing row shows the recording dot before the speaker; its tooltip text is exact. |
+| RI3 | A capturing row shows the recording dot in a leading 14 × 20 slot at `[41, y + 10]`, before the speaker (then at x 55) and the title (x 83); its tooltip text is exact. |
 | RI4 | The symbol transition runs once per mute change and leaves no animation on the layer afterwards. |
 | RI5 | Step 2b: an audible row draws the speaker at `[41, y + 7, 26, 26]` with the outline glyph and the title origin at x 70; `sidebar-render compare` against S2 12/0022 (audible) and 0027 (muted) is within 1 pt and ΔE00 2 for the button frame, glyph ink box and peak, and title start (favicon and title text masked). RI1 and RI3 use the new frames. |
 | MC1 | No source → container height 0 and the pager ends at `h − 50` (no layout change from today). |

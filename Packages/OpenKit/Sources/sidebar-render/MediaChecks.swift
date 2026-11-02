@@ -19,17 +19,29 @@ import OpenWeb
             || (layer.sublayers ?? []).contains { hasFallback($0) }
     }
     static func animatedLayers(_ layer: CALayer?) -> Int { animationKeys(layer).count }
-    static func inkLeft(_ view: NSView, direct: Bool = false) -> CGFloat? {
-        guard let glyph = direct ? view : descendants(view).first(where: { $0.identifier?.rawValue == "media.speakerGlyph" }),
-              let bitmap = glyph.bitmapImageRepForCachingDisplay(in: glyph.bounds) else { return nil }
+    /// Ink box of the static speaker glyph in its own points: pixels with at least half of the
+    /// peak alpha (the docs/design.md §7 50 % rule on a transparent background).
+    static func inkBox(_ view: NSView) -> CGRect? {
+        guard let glyph = descendants(view).first(where: { $0.identifier?.rawValue == "media.speakerGlyph" }) else { return nil }
+        guard let bitmap = glyph.bitmapImageRepForCachingDisplay(in: glyph.bounds) else { return nil }
         // The static glyph draws with AppKit. Read it synchronously rather than sampling
-        // a GPU layer clone while its contents are still being published.
+        // a GPU layer clone while its contents are still being published. (The image-view
+        // path is not measured this way: after a symbol transition neither cacheDisplay nor
+        // layer.render shows what the window composites. Its frame and alignment are checked.)
         glyph.cacheDisplay(in: glyph.bounds, to: bitmap)
-        var left = bitmap.pixelsWide
-        for y in (bitmap.pixelsHigh / 2 - 2)..<(bitmap.pixelsHigh / 2 + 2) {
-            for x in 0..<bitmap.pixelsWide where (bitmap.colorAt(x: x, y: y)?.alphaComponent ?? 0) > 0.03 { left = min(left, x) }
-        }
-        return left < bitmap.pixelsWide ? CGFloat(left) * glyph.bounds.width / CGFloat(bitmap.pixelsWide) : nil
+        var peak: CGFloat = 0
+        for y in 0..<bitmap.pixelsHigh { for x in 0..<bitmap.pixelsWide { peak = max(peak, bitmap.colorAt(x: x, y: y)?.alphaComponent ?? 0) } }
+        guard peak > 0.1 else { return nil }
+        var box: CGRect?
+        for y in 0..<bitmap.pixelsHigh { for x in 0..<bitmap.pixelsWide where (bitmap.colorAt(x: x, y: y)?.alphaComponent ?? 0) >= 0.5 * peak {
+            box = (box ?? CGRect(x: x, y: y, width: 0, height: 0)).union(CGRect(x: x, y: y, width: 1, height: 1))
+        } }
+        let s = glyph.bounds.width / CGFloat(bitmap.pixelsWide)
+        return box.map { CGRect(x: $0.minX * s, y: $0.minY * s, width: $0.width * s, height: $0.height * s) }
+    }
+    /// The row title label beside a media view (the cell's `TextLabel`), in cell points.
+    static func titleFrame(_ media: NSView) -> CGRect? {
+        media.superview?.subviews.first { String(describing: type(of: $0)) == "TextLabel" }?.frame
     }
     static func runRowIndicators() {
         let model = Synthetic.model(); model.rebuildIndex()
@@ -63,8 +75,16 @@ import OpenWeb
         _ = Checks.waitFor(settle: scene) { speaker() != nil }
         guard let button = speaker() else { Checks.check(false, "RI1 audible speaker exists"); return }
         let symbol = descendants(button).compactMap { $0 as? NSImageView }.first
-        Checks.check(button.frame.size == CGSize(width: 20, height: 20) && button.frame.minY == 10 && symbol?.image === Glyph.audioPlaying.image && button.accessibilityLabel() == "Mute tab", "RI1 audible unmuted frame and symbol")
+        Checks.check(button.frame == CGRect(x: 41, y: 7, width: 26, height: 26) && symbol?.image === Glyph.audioPlaying.image && Glyph.audioPlaying.spec.symbol == "speaker.wave.3" &&
+                     button.accessibilityLabel() == "Mute tab" && button.accessibilityIdentifier() == "sidebarTabCellMuteButton",
+                     "RI1 audible unmuted: leading [41, 7, 26, 26], outline speaker.wave.3, AX id (\(button.frame))")
+        Checks.check(titleFrame(button)?.minX == 69, "RI1 title frame moves to x 69 (text origin 70): \(String(describing: titleFrame(button)))")
         tooltip(button, "Mute tab")
+        button.mouseEntered(with: event(.mouseMoved, button)); pump(0.3)
+        let plate = button.layer?.sublayers?.first { $0.cornerRadius == 6 }
+        Checks.check(plate?.frame == button.bounds && plate?.opacity == 1 && plate?.cornerCurve == .continuous,
+                     "RI speaker hover plate like the close button: button frame, radius 6 (guess)")
+        button.mouseExited(with: event(.mouseMoved, button)); TooltipController.shared.cancel(for: button); pump(0.3)
         let audibleLeft = symbol?.frame.minX
         let before = symbol?.image
         model.setMuted(tabID: tab.id, muted: true)
@@ -80,10 +100,12 @@ import OpenWeb
         let mutedLeft = symbol?.frame.minX
         Checks.check(audibleLeft != nil && mutedLeft != nil && abs((audibleLeft ?? -100) - (mutedLeft ?? 100)) <= 0.5,
                      "RI image-view left edge stays within 0.5 pt (audible \(String(describing: audibleLeft)), muted \(String(describing: mutedLeft)))")
-        Checks.check(symbol?.imageAlignment == .alignLeft && symbol?.frame.minX == RowMediaMetrics.glyphInsetX, "RI speaker uses slot x + 2 left anchor")
+        Checks.check(symbol?.image === Glyph.audioMuted.image && Glyph.audioMuted.spec.symbol == "speaker.slash" && button.frame == CGRect(x: 41, y: 7, width: 26, height: 26),
+                     "RI1 muted audible: outline speaker.slash in the same leading frame")
+        Checks.check(symbol?.imageAlignment == .alignCenter && symbol?.frame == button.bounds, "RI speaker image view is one fixed frame equal to the button, centered")
         tooltip(button, "Unmute tab")
         let selection = window.selectedNodeBySpace
-        let center = button.convert(CGPoint(x: 10, y: 10), to: nil)
+        let center = button.convert(CGPoint(x: 13, y: 13), to: nil)
         Checks.check(host.contentView?.hitTest(center) === button, "RI2 window hitTest resolves speaker button")
         host.sendEvent(event(.leftMouseDown, button)); host.sendEvent(event(.leftMouseUp, button)); pump(0.12)
         Checks.check(delegate.log.last == .toggleMute(tabID: tab.id) && window.selectedNodeBySpace == selection && !tab.isMuted, "RI2 window events toggle mute without selecting")
@@ -96,19 +118,65 @@ import OpenWeb
         tab.live.isAudible = true; pump(0.005)
         Checks.check(button.accessibilityLabel() == "Mute tab" && symbol?.image?.size == Glyph.audioPlaying.image?.size && animationKeys(symbol?.layer).allSatisfy { $0 == "position" || $0 == "bounds" }, "RI4 reveal does not replay hidden unmute")
         tab.live.isCapturing = true; pump()
-        Checks.check(recording()?.frame.size == CGSize(width: 14, height: 20) && recording()?.frame.maxX == button.frame.minX && recording()?.accessibilityHelp() == "This tab is using your camera or microphone", "RI3 14x20 recording slot before speaker; exact tooltip")
+        Checks.check(recording()?.frame == CGRect(x: 41, y: 10, width: 14, height: 20) && recording()?.frame.maxX == button.frame.minX && button.frame.minX == 55 &&
+                     titleFrame(button)?.minX == 83 && recording()?.accessibilityHelp() == "This tab is using your camera or microphone",
+                     "RI3 leading 14x20 recording slot after the favicon, speaker at 55, title at 83; exact tooltip (\(String(describing: recording()?.frame)))")
         tab.live.isAudible = false; pump()
-        Checks.check(recording() != nil && speaker() == nil, "RI recording-only row has dot and no speaker")
+        Checks.check(recording()?.frame.minX == 41 && speaker() == nil && recording().flatMap(titleFrame)?.minX == 57,
+                     "RI recording-only row has the leading dot, no speaker, title at 57")
         SidebarDiagnostics.mediaReduceMotionOverride = true
         tab.live.isAudible = true; pump()
-        let staticLeft = inkLeft(button)
-        Checks.check(descendants(button).allSatisfy { !($0 is NSImageView) } && animationKeys(button.layer).isEmpty && staticLeft != nil,
+        let staticBox = inkBox(button)
+        Checks.check(descendants(button).allSatisfy { !($0 is NSImageView) } && animationKeys(button.layer).isEmpty && staticBox != nil,
                      "RI4 Reduce Motion uses static glyph without animation keys")
         model.setMuted(tabID: tab.id, muted: true); pump()
-        let staticMutedLeft = inkLeft(button)
-        Checks.check(staticLeft != nil && staticMutedLeft != nil && (staticLeft ?? 0) >= RowMediaMetrics.glyphInsetX && abs((staticLeft ?? -100) - (staticMutedLeft ?? 100)) <= 0.5, "RI static glyph shares the left anchor in both states (\(String(describing: staticLeft)), \(String(describing: staticMutedLeft))); same button \(speaker() === button), hidden \(button.isHidden), size \(button.bounds.size)")
+        let staticMutedBox = inkBox(button)
+        func centered(_ b: CGRect?) -> Bool { b.map { abs($0.midX - 13) <= 1 && abs($0.midY - 13) <= 1 } ?? false }
+        Checks.check(centered(staticBox) && centered(staticMutedBox),
+                     "RI static glyph is centered in the 26 pt button in both states (\(String(describing: staticBox)), \(String(describing: staticMutedBox))); same button \(speaker() === button), hidden \(button.isHidden), size \(button.bounds.size)")
         runNarrowRecording()
+        runLeadingSpeaker()
         Checks.check(PiPMetrics.compactPlayGlyph == 24, "RI compact PiP play/pause token is 24 pt")
+    }
+    /// RI5 (media plan §8.2, Step 2b): a real 1x render of the selected row in the default
+    /// dark theme, measured with the docs/design.md §7 ink method against the values that
+    /// `compare-media --state row-audible|row-muted` measured in S2 12/0022 and 12/0027
+    /// (row-relative points, sRGB from the unclipped float path). No capture pixels here.
+    static func runLeadingSpeaker() {
+        struct Fact { var state: String; var ink: CGRect; var core: [Double]; var peak: [Double] }
+        let facts = [Fact(state: "audible", ink: CGRect(x: 44, y: 15, width: 19, height: 11), core: [0xB3, 0xB3, 0xBA], peak: [0xB8, 0xB8, 0xBF]),
+                     Fact(state: "audible:muted", ink: CGRect(x: 47, y: 13, width: 14, height: 14), core: [0xB5, 0xB5, 0xBC], peak: [0xB8, 0xB8, 0xBE])]
+        defer { SidebarDiagnostics.mediaReduceMotionOverride = nil }
+        for fact in facts {
+            let model = Synthetic.model(); model.rebuildIndex()
+            guard let context = try? RenderCLI.makeContext(["--appearance", "dark", "--media-theme", "default", "--select", "today:0", "--media", "today:0=\(fact.state)"], model: model),
+                  let space = context.focusedSpace, let tab = space.today.first?.tab, let silent = space.today.dropFirst().first?.tab else {
+                Checks.check(false, "RI5 \(fact.state) scene"); continue
+            }
+            let scene = RenderScene(context: context, options: RenderScene.Options(), delegate: MediaScene.delegate(context: context))
+            let image = OffscreenRenderer().render(scene, scale: 1)
+            let views = descendants(scene.sidebar)
+            guard let button = views.first(where: { !$0.isHidden && $0.accessibilityIdentifier() == "sidebarTabCellMuteButton" }),
+                  let row = scene.sidebar.rowFrame(nodeID: tab.id), let silentRow = scene.sidebar.rowFrame(nodeID: silent.id),
+                  let silentTitle = views.first(where: { String(describing: type(of: $0)) == "TextLabel" && $0.superview.map { $0.convert($0.bounds, to: scene.sidebar).minY } == silentRow.minY })?.frame
+            else { Checks.check(false, "RI5 \(fact.state) speaker row exists"); continue }
+            let glyph = tab.isMuted ? Glyph.audioMuted : Glyph.audioPlaying
+            let title = titleFrame(button)
+            Checks.check(button.frame == CGRect(x: 41, y: 7, width: 26, height: 26) && !glyph.spec.symbol.contains(".fill") &&
+                         title?.minX == 69 && title.map { $0.minX + SpaceListMetrics.textInset } == 70 && title?.maxX == silentTitle.maxX,
+                         "RI5 \(fact.state): speaker [41, y + 7, 26, 26], outline \(glyph.spec.symbol), title origin 70, right end unchanged (\(String(describing: title)) vs \(silentTitle))")
+            let origin = scene.convert(row.origin, from: scene.sidebar)
+            let bitmap = Bitmap(image: image)
+            guard let ink = RowMediaCompare.ink(bitmap, RowMediaCompare.glyphRegion.offsetBy(dx: origin.x, dy: origin.y)) else {
+                Checks.check(false, "RI5 \(fact.state) glyph ink"); continue
+            }
+            let box = ink.box.offsetBy(dx: -origin.x, dy: -origin.y)
+            let edge = [abs(box.minX - fact.ink.minX), abs(box.minY - fact.ink.minY), abs(box.maxX - fact.ink.maxX), abs(box.maxY - fact.ink.maxY)].max()!
+            let core = ink.core.reduce([0.0, 0, 0]) { s, p in zip(s, bitmap.pixel(p.0, p.1)).map(+) }.map { $0 / Double(max(1, ink.core.count)) }
+            let coreDE = ColorMath.deltaE2000(core, fact.core), peakDE = ColorMath.deltaE2000(bitmap.pixel(ink.peak.0, ink.peak.1), fact.peak)
+            Checks.check(edge <= 1 && coreDE <= 2 && peakDE <= 2,
+                         String(format: "RI5 %@: ink box %@ vs Arc %@ (edge %.1f pt ≤ 1), core ΔE00 %.2f ≤ 2, peak ΔE00 %.2f ≤ 2", fact.state, "\(box)", "\(fact.ink)", edge, coreDE, peakDE))
+        }
     }
     static func runNarrowRecording() {
         let model = Synthetic.model(); model.rebuildIndex()
@@ -130,7 +198,7 @@ import OpenWeb
         let views = descendants(scene.sidebar)
         let speaker = views.first { !$0.isHidden && $0.accessibilityLabel() == "Mute tab" }
         let dot = views.first { !$0.isHidden && $0.accessibilityLabel() == "This tab is using your camera or microphone" }
-        Checks.check(speaker?.frame.width == 20 && dot == nil, "RI narrow deep hovered row hides dot before speaker")
+        Checks.check(speaker?.frame.width == 26 && dot == nil, "RI narrow deep hovered row hides dot before speaker")
     }
 }
 
