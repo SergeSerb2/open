@@ -126,6 +126,7 @@ final class EngineWebContentHostFactory: NSResponder, WebContentHostFactory {
       guard !AppCommand.featureIDs.contains(id), !id.hasPrefix("focus-split-pane-") else { return nil }
       return self?.isAppCommandEnabled(id, enabledKey: key) ?? false
     }
+    controller.onMenuState = { PageTools.menuState(for: $0) }  // checkmarks, Cast hidden (page-platform §7.1)
     controller.onLayout = { [weak self] in self?.layoutViews() }
     controller.onFocus = { [weak self] in guard let self else { return }; self.app.didFocusWindow(self.windowState.id) }
     controller.nextResponder = self; nextResponder = NSApp

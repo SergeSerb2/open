@@ -1,5 +1,6 @@
 import AppKit
 import OpenEngine
+import OpenFeatures
 
 /// Help ▸ Troubleshooting (plans/page-platform.md §4.11): Open Task Manager,
 /// Record Trace / Cancel Trace, Copy Open Info, Reveal Open Data.
@@ -14,8 +15,12 @@ final class TroubleshootingActions {
 
   /// Start of the trace this object records; nil when none records.
   private(set) var traceStartedAt: Date?
-  /// One-shot work for the automatic stop; never a repeating timer.
+  /// One-shot work: the automatic stop, and the next elapsed-time update of the toast. Both
+  /// exist only while a trace records; nothing is scheduled otherwise.
   private var autoStop: DispatchWorkItem?
+  private var elapsedTick: DispatchWorkItem?
+  /// The sticky "Recording Trace…" toast while a trace records.
+  private var recordingToast: ToastHandle?
   /// Where Stop writes the trace. nil = ~/Downloads (automation sets a run folder).
   var traceDirectory: URL?
   private(set) var lastTraceFile: URL?
@@ -23,12 +28,14 @@ final class TroubleshootingActions {
   private(set) var taskManagerShown: Bool?
   /// Finder reveal; automation can record instead of opening Finder.
   var reveal: (URL) -> Void = { NSWorkspace.shared.activateFileViewerSelecting([$0]) }
-  /// Shows a toast in the front browser window (title, optional button).
-  var presentToast: (_ title: String, _ button: (title: String, action: () -> Void)?, _ sticky: Bool) -> Void = { title, _, _ in
-    (NSApp.delegate as? AppDelegate)?.frontWindowController?.showToast(title, undo: nil)
-  }
 
   var isRecording: Bool { traceStartedAt != nil }
+
+  /// Toasts go to the front browser window (none without one).
+  @discardableResult
+  private func toast(_ content: ToastContent, onAccessory: ((ToastHandle) -> Void)? = nil) -> ToastHandle? {
+    (NSApp.delegate as? AppDelegate)?.frontWindowController?.toasts.show(content, onAccessory: onAccessory)
+  }
 
   // MARK: Task manager (§4.11.1, EP-10a)
 
@@ -50,7 +57,27 @@ final class TroubleshootingActions {
     let stop = DispatchWorkItem { [weak self] in self?.stopTrace() }
     autoStop = stop
     DispatchQueue.main.asyncAfter(deadline: .now() + Defaults.maxTraceSeconds, execute: stop)
-    presentToast("Recording Trace…", ("Stop", { [weak self] in self?.stopTrace() }), true)
+    recordingToast = toast(recordingContent(elapsed: 0)) { [weak self] _ in self?.stopTrace() }
+    scheduleElapsedTick()
+  }
+
+  /// "Recording Trace…" with the elapsed time and a Stop button; sticky until the trace ends.
+  private func recordingContent(elapsed: Int) -> ToastContent {
+    ToastContent(title: "Recording Trace…", subtitle: String(format: "%d:%02d", elapsed / 60, elapsed % 60),
+      accessory: .button(symbol: "stop.fill", accessibilityLabel: "Stop"), coalescingKey: "trace", isSticky: true)
+  }
+
+  /// The next whole second of the recording updates the toast's elapsed time.
+  private func scheduleElapsedTick() {
+    guard let started = traceStartedAt else { return }
+    let elapsed = Date().timeIntervalSince(started)
+    let tick = DispatchWorkItem { [weak self] in
+      guard let self, let started = self.traceStartedAt else { return }
+      self.recordingToast?.update(self.recordingContent(elapsed: Int(Date().timeIntervalSince(started).rounded())))
+      self.scheduleElapsedTick()
+    }
+    elapsedTick = tick
+    DispatchQueue.main.asyncAfter(deadline: .now() + (elapsed.rounded(.down) + 1 - elapsed), execute: tick)
   }
 
   /// Stop: writes `Open Trace <yyyy-MM-dd HH.mm.ss>.json` into Downloads.
@@ -67,9 +94,12 @@ final class TroubleshootingActions {
       self.lastTraceError = error?.localizedDescription
       MenuRefresh.request()
       if let written {
-        self.presentToast("Trace Saved", ("Show in Finder", { [weak self] in self?.reveal(written) }), false)
+        self.toast(ToastContent(title: "Trace Saved",
+          accessory: .button(symbol: "folder", accessibilityLabel: "Show in Finder"), coalescingKey: "trace")) { [weak self] handle in
+          self?.reveal(written); handle.dismiss()
+        }
       } else {
-        self.presentToast("The trace could not be saved", nil, false)
+        self.toast(ToastContent(title: "The trace could not be saved", coalescingKey: "trace"))
       }
     }
   }
@@ -84,7 +114,8 @@ final class TroubleshootingActions {
   private func finishRecording() {
     traceStartedAt = nil
     autoStop?.cancel(); autoStop = nil
-    presentToast("", nil, false)
+    elapsedTick?.cancel(); elapsedTick = nil
+    recordingToast?.dismiss(); recordingToast = nil
   }
 
   // MARK: Copy Open Info (§4.11.3)
@@ -115,7 +146,7 @@ final class TroubleshootingActions {
   func copyOpenInfo() {
     NSPasteboard.general.clearContents()
     NSPasteboard.general.setString(Self.openInfoText, forType: .string)
-    presentToast("Copied Open Info", nil, false)
+    toast(ToastContent(title: "Copied Open Info"))
   }
 
   // MARK: Reveal Open Data (§4.11.4)

@@ -6,16 +6,15 @@
         "forced": false,
         "ok": true,
         "owned_pids": [
-          13451,
-          13533,
-          13534,
-          13535,
-          13536,
-          13538,
-          13539,
-          13985,
-          13989,
-          14011
+          53810,
+          53910,
+          53911,
+          53914,
+          53917,
+          53918,
+          54402,
+          54405,
+          54524
         ],
         "remaining_processes": [],
         "reply": true,
@@ -42,23 +41,6 @@
   "interrupted_attempts": [],
   "page": {
     "A1_appearance_checkmarks_chrome": {
-      "checked": [
-        {
-          "appearance-automatic": false,
-          "appearance-dark": false,
-          "appearance-light": false
-        },
-        {
-          "appearance-automatic": false,
-          "appearance-dark": false,
-          "appearance-light": false
-        },
-        {
-          "appearance-automatic": false,
-          "appearance-dark": false,
-          "appearance-light": false
-        }
-      ],
       "expected": [
         {
           "appearance-automatic": false,
@@ -76,40 +58,7 @@
           "appearance-light": false
         }
       ],
-      "reason": "CommandMenuState / menuState(for:) (page-platform Step 2, branch s8/toasts) not on main yet",
-      "status": "BLOCKED"
-    },
-    "A1_appearance_light_dark_chrome": {
-      "reason": "EP-9b (fork patch 0505): SetChromeColorScheme does not change prefers-color-scheme here",
-      "start": {
-        "background": "rgb(255, 255, 255)",
-        "changes": [
-          "light"
-        ],
-        "dark": false,
-        "loadId": "egx6l7cqtqv"
-      },
-      "status": "BLOCKED",
-      "websitesDark": {
-        "background": "rgb(255, 255, 255)",
-        "changes": [
-          "light"
-        ],
-        "dark": false,
-        "loadId": "egx6l7cqtqv"
-      },
-      "websitesLight": {
-        "background": "rgb(17, 17, 17)",
-        "changes": [
-          "light",
-          "dark"
-        ],
-        "dark": true,
-        "loadId": "egx6l7cqtqv"
-      }
-    },
-    "A1_appearance_stored_chrome": {
-      "menuSource": [
+      "menu": [
         {
           "appearance-automatic": false,
           "appearance-dark": true,
@@ -119,8 +68,45 @@
           "appearance-automatic": false,
           "appearance-dark": false,
           "appearance-light": true
+        },
+        {
+          "appearance-automatic": true,
+          "appearance-dark": false,
+          "appearance-light": false
         }
       ],
+      "ok": true
+    },
+    "A1_appearance_light_dark_chrome": {
+      "reason": "EP-9b (fork patch 0505): SetChromeColorScheme does not change prefers-color-scheme here",
+      "start": {
+        "background": "rgb(255, 255, 255)",
+        "changes": [
+          "light"
+        ],
+        "dark": false,
+        "loadId": "7o839ovwmua"
+      },
+      "status": "BLOCKED",
+      "websitesDark": {
+        "background": "rgb(255, 255, 255)",
+        "changes": [
+          "light"
+        ],
+        "dark": false,
+        "loadId": "7o839ovwmua"
+      },
+      "websitesLight": {
+        "background": "rgb(17, 17, 17)",
+        "changes": [
+          "light",
+          "dark"
+        ],
+        "dark": true,
+        "loadId": "7o839ovwmua"
+      }
+    },
+    "A1_appearance_stored_chrome": {
       "ok": true,
       "stored": [
         "dark",
@@ -137,17 +123,16 @@
             "dark"
           ],
           "dark": true,
-          "loadId": "egx6l7cqtqv"
+          "loadId": "7o839ovwmua"
         },
         {
           "background": "rgb(255, 255, 255)",
           "changes": [
             "light",
-            "dark",
-            "light"
+            "dark"
           ],
           "dark": false,
-          "loadId": "egx6l7cqtqv"
+          "loadId": "7o839ovwmua"
         },
         {
           "background": "rgb(17, 17, 17)",
@@ -158,7 +143,7 @@
             "dark"
           ],
           "dark": true,
-          "loadId": "egx6l7cqtqv"
+          "loadId": "7o839ovwmua"
         }
       ]
     },
@@ -180,16 +165,15 @@
         "forced": false,
         "ok": true,
         "owned_pids": [
-          13451,
-          13533,
-          13534,
-          13535,
-          13536,
-          13538,
-          13539,
-          13985,
-          13989,
-          14011
+          53810,
+          53910,
+          53911,
+          53914,
+          53917,
+          53918,
+          54402,
+          54405,
+          54524
         ],
         "remaining_processes": [],
         "reply": true,
@@ -205,32 +189,26 @@
       "status": "BLOCKED"
     },
     "D4_allow_js_apple_events_checkmark": {
-      "checked": [
-        false,
-        false,
-        false
-      ],
       "expected": [
         false,
         true,
         false
       ],
-      "reason": "CommandMenuState / menuState(for:) (page-platform Step 2, branch s8/toasts) not on main yet",
-      "status": "BLOCKED"
+      "menu": [
+        false,
+        true,
+        false
+      ],
+      "ok": true
     },
     "D4_allow_js_apple_events_osascript": {
       "reason": "the App does not host OpenScripting yet (applescript plan Steps 5-7); the 1013 gate is in ScriptCommands.executeJavascript and runs once the App wires ScriptHost",
       "status": "BLOCKED"
     },
     "D4_allow_js_apple_events_setting": {
-      "menuSource": [
-        false,
-        true,
-        false
-      ],
       "ok": true,
       "stored": [
-        null,
+        false,
         true,
         false
       ]
@@ -249,7 +227,7 @@
         "frame": "{{960, 765}, {640, 390}}",
         "key": true,
         "level": 0,
-        "number": 142500,
+        "number": 149700,
         "parent": 0,
         "sheet": false,
         "title": "Task Manager",
@@ -258,13 +236,13 @@
     },
     "H2_cancel_trace": {
       "files": [
-        "Open Trace 2026-11-02 15.22.27.json"
+        "Open Trace 2026-11-02 15.56.39.json"
       ],
       "ok": true
     },
     "H2_record_trace_stop": {
       "error": "",
-      "file": "/var/folders/s6/_07cr4w13vsg_myjkv9ldpqc0000gn/T/Open-E2E-page-chrome-13310-682d3a20-scratch-p2riyjmi/traces/Open Trace 2026-11-02 15.22.27.json",
+      "file": "/var/folders/s6/_07cr4w13vsg_myjkv9ldpqc0000gn/T/Open-E2E-page-chrome-53756-373f1a5b-scratch-bc_rqt9l/traces/Open Trace 2026-11-02 15.56.39.json",
       "menu": [
         {
           "cancel-trace": false,
@@ -280,22 +258,68 @@
         }
       ],
       "ok": true,
-      "toasts": [
-        "Recording Trace\u2026",
-        "Trace Saved"
-      ],
-      "traceEvents": 5966
+      "recordingToast": {
+        "accessory": "stop",
+        "accessoryFrame": [
+          1298,
+          35,
+          32,
+          27
+        ],
+        "age": 2.025749916676432,
+        "coalescingKey": "trace",
+        "exiting": false,
+        "frame": [
+          1158,
+          18,
+          182,
+          60
+        ],
+        "hovered": false,
+        "lifetime": null,
+        "sticky": true,
+        "subtitle": "0:01",
+        "symbol": null,
+        "title": "Recording Trace\u2026"
+      },
+      "savedToast": {
+        "accessory": "show in finder",
+        "accessoryFrame": [
+          1298,
+          28,
+          32,
+          27
+        ],
+        "age": 0.0682711667031981,
+        "coalescingKey": "trace",
+        "exiting": false,
+        "frame": [
+          1196,
+          18,
+          144,
+          46
+        ],
+        "hovered": false,
+        "lifetime": 5,
+        "sticky": false,
+        "subtitle": null,
+        "symbol": null,
+        "title": "Trace Saved"
+      },
+      "showInFinder": true,
+      "traceEvents": 7539
     },
     "H3_copy_open_info": {
       "ok": true,
-      "text": "Open 0.1.0 (1)\nEngine: Chromium 156.0.8078.48, CEF 156.0.14+g4fa4ab5+chromium-156.0.8078.48\nmacOS Version 27.2 (Build 26B5112a)\nMac: Mac17,8 (arm64)"
+      "text": "Open 0.1.0 (1)\nEngine: Chromium 156.0.8078.48, CEF 156.0.14+g4fa4ab5+chromium-156.0.8078.48\nmacOS Version 27.2 (Build 26B5112a)\nMac: Mac17,8 (arm64)",
+      "toast": "Copied Open Info"
     },
     "H4_cast_menu_hidden": {
       "cast": {
         "action": "openCommandAction:",
         "checked": false,
         "enabled": false,
-        "hidden": false,
+        "hidden": true,
         "id": "cast",
         "key": "",
         "payload": "",
@@ -303,14 +327,15 @@
         "targetNil": false,
         "title": "Cast\u2026"
       },
-      "checked": [
+      "expected": [
+        true,
         false
       ],
-      "expected": [
-        true
+      "menu": [
+        true,
+        false
       ],
-      "reason": "CommandMenuState / menuState(for:) (page-platform Step 2, branch s8/toasts) not on main yet",
-      "status": "BLOCKED"
+      "ok": true
     },
     "H4_media_router_off": {
       "helpers": 7,
@@ -320,9 +345,10 @@
     "H_reveal_open_data": {
       "ok": true,
       "reveals": [
-        "/Users/serge/Library/Application Support/Open-E2E-page-chrome-13310-682d3a20"
+        "/var/folders/s6/_07cr4w13vsg_myjkv9ldpqc0000gn/T/Open-E2E-page-chrome-53756-373f1a5b-scratch-bc_rqt9l/traces/Open Trace 2026-11-02 15.56.39.json",
+        "/Users/serge/Library/Application Support/Open-E2E-page-chrome-53756-373f1a5b"
       ],
-      "root": "/Users/serge/Library/Application Support/Open-E2E-page-chrome-13310-682d3a20"
+      "root": "/Users/serge/Library/Application Support/Open-E2E-page-chrome-53756-373f1a5b"
     },
     "K1_clear_cookies_and_refresh_chrome": {
       "after": [
@@ -354,6 +380,6 @@
       }
     }
   },
-  "started": "2026-11-02 15:22:00",
+  "started": "2026-11-02 15:56:13",
   "style": "chrome"
 }

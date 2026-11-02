@@ -125,9 +125,10 @@ extension EngineWebContentHostFactory {
     case EnabledKey.webPage:
       // A live http(s), file, or data page in the focused host (page-platform §7.1).
       return ["http", "https", "file", "data"].contains(selectedContent?.url?.scheme?.lowercased() ?? "")
-    // Per-site cache clearing waits for Site Control E2; no trace recording exists before Step 5.
-    case EnabledKey.siteDataClearAvailable, EnabledKey.isTracing: return false
-    case EnabledKey.notTracing: return true
+    // Per-site cache clearing waits for Site Control E2 (App/Page/PageToolsCommands.swift).
+    case EnabledKey.siteDataClearAvailable: return PageTools.siteDataClearAvailable && PageTools.isSitePage(selectedContent?.url)
+    case EnabledKey.isTracing: return TroubleshootingActions.shared.isRecording
+    case EnabledKey.notTracing: return !OEEngine.shared.isTracing
     default: return true
     }
   }

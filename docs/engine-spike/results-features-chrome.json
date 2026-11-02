@@ -6,16 +6,15 @@
         "forced": false,
         "ok": true,
         "owned_pids": [
-          49991,
-          50017,
-          50018,
-          50019,
-          50026,
-          50027,
-          50396,
-          50870,
-          52340,
-          52510
+          44083,
+          44089,
+          44090,
+          44091,
+          44092,
+          44177,
+          44311,
+          44962,
+          45033
         ],
         "remaining_processes": [],
         "reply": true,
@@ -196,7 +195,7 @@
       ]
     },
     "print_to_pdf": {
-      "bytes": 389792,
+      "bytes": 441131,
       "ok": true
     },
     "profiles": {
@@ -206,8 +205,8 @@
         "cookie": "",
         "storage": null
       },
-      "work_space": "3C426A5E-E300-4B31-95E4-A3E1DAC15FA3",
-      "work_tab_context": "Profile-8314E4F4"
+      "work_space": "A547534E-9BE3-4F48-B8F4-C73C2024934B",
+      "work_tab_context": "Profile-769BE31F"
     },
     "request_filter": {
       "ok": true,
@@ -236,7 +235,7 @@
       "eme": "available: com.widevine.alpha",
       "ok": true,
       "playback": {
-        "currentTime": 4.955351,
+        "currentTime": 4.955957,
         "frames": 123,
         "keySystem": "com.widevine.alpha",
         "track": "vp09.00.41.08"
@@ -263,10 +262,10 @@
       "AttributeGraph",
       "AttributeGraph graph data"
     ],
-    "pid": 49991,
-    "root": "/Users/serge/Library/Application Support/Open-E2E-features-chrome-49823-162a407b",
-    "userData": "/Users/serge/Library/Application Support/Open-E2E-features-chrome-49823-162a407b/Engine"
+    "pid": 44083,
+    "root": "/Users/serge/Library/Application Support/Open-E2E-features-chrome-44003-5b659874",
+    "userData": "/Users/serge/Library/Application Support/Open-E2E-features-chrome-44003-5b659874/Engine"
   },
-  "started": "2026-11-02 14:30:10",
+  "started": "2026-11-02 15:46:52",
   "style": "chrome"
 }

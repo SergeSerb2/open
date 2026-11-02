@@ -6,14 +6,15 @@
         "forced": false,
         "ok": true,
         "owned_pids": [
-          19765,
-          19792,
-          19793,
-          19798,
-          19802,
-          19803,
-          20428,
-          20573
+          39799,
+          39805,
+          39806,
+          39808,
+          39824,
+          39825,
+          40233,
+          40368,
+          40406
         ],
         "remaining_processes": [],
         "reply": true,
@@ -21,7 +22,7 @@
           "count": 0,
           "windows": []
         },
-        "windows_before_quit": 1
+        "windows_before_quit": 2
       }
     ]
   },
@@ -39,43 +40,95 @@
   },
   "interrupted_attempts": [],
   "page": {
-    "A1_appearance_dark_alloy": {
-      "checked": false,
-      "dark": {
-        "background": "rgb(17, 17, 17)",
-        "changes": [],
-        "dark": true,
-        "loadId": "q21zapz89ga"
-      },
-      "ok": false,
-      "othersChecked": [
-        false,
-        false
+    "A1_appearance_checkmarks_alloy": {
+      "checked": [
+        {
+          "appearance-automatic": false,
+          "appearance-dark": false,
+          "appearance-light": false
+        },
+        {
+          "appearance-automatic": false,
+          "appearance-dark": false,
+          "appearance-light": false
+        },
+        {
+          "appearance-automatic": false,
+          "appearance-dark": false,
+          "appearance-light": false
+        }
       ],
+      "expected": [
+        {
+          "appearance-automatic": false,
+          "appearance-dark": true,
+          "appearance-light": false
+        },
+        {
+          "appearance-automatic": false,
+          "appearance-dark": false,
+          "appearance-light": true
+        },
+        {
+          "appearance-automatic": true,
+          "appearance-dark": false,
+          "appearance-light": false
+        }
+      ],
+      "reason": "CommandMenuState / menuState(for:) (page-platform Step 2, branch s8/toasts) not on main yet",
+      "status": "BLOCKED"
+    },
+    "A1_appearance_light_dark_alloy": {
+      "reason": "EP-9b (fork patch 0505): SetChromeColorScheme does not change prefers-color-scheme here",
       "start": {
-        "background": "rgb(17, 17, 17)",
-        "changes": [],
-        "dark": true,
-        "loadId": "q21zapz89ga"
+        "background": "rgb(255, 255, 255)",
+        "changes": [
+          "light"
+        ],
+        "dark": false,
+        "loadId": "kt1pvw76p1l"
       },
-      "stored": "dark"
+      "status": "BLOCKED",
+      "websitesDark": {
+        "background": "rgb(255, 255, 255)",
+        "changes": [
+          "light"
+        ],
+        "dark": false,
+        "loadId": "kt1pvw76p1l"
+      },
+      "websitesLight": {
+        "background": "rgb(17, 17, 17)",
+        "changes": [
+          "light",
+          "dark"
+        ],
+        "dark": true,
+        "loadId": "kt1pvw76p1l"
+      }
+    },
+    "A1_appearance_stored_alloy": {
+      "menuSource": [
+        {
+          "appearance-automatic": false,
+          "appearance-dark": true,
+          "appearance-light": false
+        },
+        {
+          "appearance-automatic": false,
+          "appearance-dark": false,
+          "appearance-light": true
+        }
+      ],
+      "ok": true,
+      "stored": [
+        "dark",
+        "light"
+      ]
     },
     "A2_appearance_automatic_follows_app_alloy": {
-      "checked": false,
-      "ok": false,
+      "ok": true,
       "states": [
-        {
-          "background": "rgb(17, 17, 17)",
-          "changes": [],
-          "dark": true,
-          "loadId": "q21zapz89ga"
-        },
-        {
-          "background": "rgb(255, 255, 255)",
-          "changes": [],
-          "dark": false,
-          "loadId": "q21zapz89ga"
-        },
         {
           "background": "rgb(17, 17, 17)",
           "changes": [
@@ -83,12 +136,33 @@
             "dark"
           ],
           "dark": true,
-          "loadId": "q21zapz89ga"
+          "loadId": "kt1pvw76p1l"
+        },
+        {
+          "background": "rgb(255, 255, 255)",
+          "changes": [
+            "light",
+            "dark",
+            "light"
+          ],
+          "dark": false,
+          "loadId": "kt1pvw76p1l"
+        },
+        {
+          "background": "rgb(17, 17, 17)",
+          "changes": [
+            "light",
+            "dark",
+            "light",
+            "dark"
+          ],
+          "dark": true,
+          "loadId": "kt1pvw76p1l"
         }
       ]
     },
-    "D1_javascript_console_panel_alloy": {
-      "ok": false,
+    "D1_console_fallback_opens_devtools_alloy": {
+      "ok": true,
       "selectedTabs": [
         "tab-elements",
         "tab-styles"
@@ -98,65 +172,80 @@
         ""
       ]
     },
+    "D1_javascript_console_panel_alloy": {
+      "reason": "Alloy pages have no Chrome commands; the Console panel there needs EP-4b's panel_id (fork patch 0503)",
+      "selectedTabs": [
+        "tab-elements",
+        "tab-styles"
+      ],
+      "status": "BLOCKED"
+    },
+    "D1_quit_with_devtools_open": {
+      "crashReports": [],
+      "devtools": true,
+      "ok": true,
+      "quit": {
+        "forced": false,
+        "ok": true,
+        "owned_pids": [
+          39799,
+          39805,
+          39806,
+          39808,
+          39824,
+          39825,
+          40233,
+          40368,
+          40406
+        ],
+        "remaining_processes": [],
+        "reply": true,
+        "windows_after_quit": {
+          "count": 0,
+          "windows": []
+        },
+        "windows_before_quit": 2
+      }
+    },
     "D2_network_inspector_panel_alloy": {
       "reason": "EP-4b (fork patch 0503 adds panel_id); network-inspector opens the default panel until then",
       "status": "BLOCKED"
     },
-    "D4_allow_js_apple_events_menu": {
-      "initial": [
-        {
-          "action": "openCommandAction:",
-          "checked": false,
-          "enabled": true,
-          "hidden": false,
-          "id": "allow-js-apple-events",
-          "key": "",
-          "payload": "",
-          "tag": 0,
-          "targetNil": false,
-          "title": "Allow JavaScript from Apple Events"
-        },
-        null
-      ],
-      "off": [
-        {
-          "action": "openCommandAction:",
-          "checked": false,
-          "enabled": true,
-          "hidden": false,
-          "id": "allow-js-apple-events",
-          "key": "",
-          "payload": "",
-          "tag": 0,
-          "targetNil": false,
-          "title": "Allow JavaScript from Apple Events"
-        },
+    "D4_allow_js_apple_events_checkmark": {
+      "checked": [
+        false,
+        false,
         false
       ],
-      "ok": false,
-      "on": [
-        {
-          "action": "openCommandAction:",
-          "checked": false,
-          "enabled": true,
-          "hidden": false,
-          "id": "allow-js-apple-events",
-          "key": "",
-          "payload": "",
-          "tag": 0,
-          "targetNil": false,
-          "title": "Allow JavaScript from Apple Events"
-        },
-        true
-      ]
+      "expected": [
+        false,
+        true,
+        false
+      ],
+      "reason": "CommandMenuState / menuState(for:) (page-platform Step 2, branch s8/toasts) not on main yet",
+      "status": "BLOCKED"
     },
     "D4_allow_js_apple_events_osascript": {
       "reason": "the App does not host OpenScripting yet (applescript plan Steps 5-7); the 1013 gate is in ScriptCommands.executeJavascript and runs once the App wires ScriptHost",
       "status": "BLOCKED"
     },
-    "H1_task_manager_window": {
-      "ok": false,
+    "D4_allow_js_apple_events_setting": {
+      "menuSource": [
+        false,
+        true,
+        false
+      ],
+      "ok": true,
+      "stored": [
+        null,
+        true,
+        false
+      ]
+    },
+    "H1_task_manager_window_alloy": {
+      "reason": "Alloy run: no Chrome style page for IDC_TASK_MANAGER_MAIN_MENU",
       "shown": "no",
+      "status": "BLOCKED",
       "titles": [
         "cookies"
       ],
@@ -164,13 +253,13 @@
     },
     "H2_cancel_trace": {
       "files": [
-        "Open Trace 2026-11-02 14.10.14.json"
+        "Open Trace 2026-11-02 15.43.19.json"
       ],
       "ok": true
     },
     "H2_record_trace_stop": {
       "error": "",
-      "file": "/var/folders/s6/_07cr4w13vsg_myjkv9ldpqc0000gn/T/Open-E2E-page-alloy-19664-68f022c2-scratch-5p96_ohw/traces/Open Trace 2026-11-02 14.10.14.json",
+      "file": "/var/folders/s6/_07cr4w13vsg_myjkv9ldpqc0000gn/T/Open-E2E-page-alloy-39735-f4edff81-scratch-ug6epavg/traces/Open Trace 2026-11-02 15.43.19.json",
       "menu": [
         {
           "cancel-trace": false,
@@ -190,13 +279,13 @@
         "Recording Trace\u2026",
         "Trace Saved"
       ],
-      "traceEvents": 1562
+      "traceEvents": 1949
     },
     "H3_copy_open_info": {
       "ok": true,
       "text": "Open 0.1.0 (1)\nEngine: Chromium 156.0.8078.48, CEF 156.0.14+g4fa4ab5+chromium-156.0.8078.48\nmacOS Version 27.2 (Build 26B5112a)\nMac: Mac17,8 (arm64)"
     },
-    "H4_cast_hidden_media_router_off": {
+    "H4_cast_menu_hidden": {
       "cast": {
         "action": "openCommandAction:",
         "checked": false,
@@ -209,16 +298,26 @@
         "targetNil": false,
         "title": "Cast\u2026"
       },
+      "checked": [
+        false
+      ],
+      "expected": [
+        true
+      ],
+      "reason": "CommandMenuState / menuState(for:) (page-platform Step 2, branch s8/toasts) not on main yet",
+      "status": "BLOCKED"
+    },
+    "H4_media_router_off": {
       "helpers": 7,
       "helpersWithMediaRouterOff": 7,
-      "ok": false
+      "ok": true
     },
     "H_reveal_open_data": {
       "ok": true,
       "reveals": [
-        "/Users/serge/Library/Application Support/Open-E2E-page-alloy-19664-68f022c2"
+        "/Users/serge/Library/Application Support/Open-E2E-page-alloy-39735-f4edff81"
       ],
-      "root": "/Users/serge/Library/Application Support/Open-E2E-page-alloy-19664-68f022c2"
+      "root": "/Users/serge/Library/Application Support/Open-E2E-page-alloy-39735-f4edff81"
     },
     "K1_clear_cookies_and_refresh_alloy": {
       "after": [
@@ -250,6 +349,6 @@
       }
     }
   },
-  "started": "2026-11-02 14:09:27",
+  "started": "2026-11-02 15:42:26",
   "style": "alloy"
 }

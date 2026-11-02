@@ -29,17 +29,18 @@ enum PageTools {
   /// until the engine reports per-site clearing (page-platform §4.9, D-12).
   static let siteDataClearAvailable = false
 
-  /// False until OpenCommands has `CommandMenuState` / `menuState(for:)` (page-platform
-  /// Step 2, Section 8 helper A, branch s8/toasts). Then `menuState(for:)` reports the
-  /// Appearance and Allow JavaScript checkmarks and hides View ▸ Cast…; until then the
-  /// the menu shows no checkmark, and Cast… stays visible but disabled (no handler).
-  static let menuStateWired = false
-
-  /// The checkmark each command should show; nil for commands without one.
-  static func isChecked(_ id: String) -> Bool? {
-    if WebsiteAppearance.commandIDs[id] != nil { return WebsiteAppearance.commandID(for: WebsiteAppearance.current) == id }
-    if id == "allow-js-apple-events" { return UserDefaults.standard.bool(forKey: allowJavaScriptFromAppleEventsKey) }
-    return nil
+  /// Runtime menu state (page-platform §7.1, `CommandMenuState`): the Appearance radio
+  /// checkmark on the stored value, the Allow JavaScript from Apple Events checkmark, and
+  /// View ▸ Cast… hidden (Cast is out of v1, §4.12, Q2). Window and app dispatchers both ask.
+  static func menuState(for id: String) -> CommandMenuState? {
+    if WebsiteAppearance.commandIDs[id] != nil {
+      return CommandMenuState(isChecked: WebsiteAppearance.commandID(for: WebsiteAppearance.current) == id)
+    }
+    switch id {
+    case "allow-js-apple-events": return CommandMenuState(isChecked: UserDefaults.standard.bool(forKey: allowJavaScriptFromAppleEventsKey))
+    case "cast": return CommandMenuState(isHidden: true)
+    default: return nil
+    }
   }
 
   /// http(s) page whose cookies or cache a site command may clear.

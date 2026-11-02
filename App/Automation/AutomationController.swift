@@ -27,10 +27,8 @@
     private var nativeInputStart: Double = 0
     private var managerUndoObserver: (any NSObjectProtocol)?
     private var managerUndoCount = 0
-    // troubleshooting-setup recorders (page-platform Troubleshooting checks).
+    // troubleshooting-setup recorder (page-platform Troubleshooting checks).
     private var revealedURLs: [URL] = []
-    private var troubleshootingToasts: [[String: Any]] = []
-    private var troubleshootingToastActions: [String: () -> Void] = [:]
 
     init(app: AppDelegate) { self.app = app }
 
@@ -631,30 +629,16 @@
         return ["tracing": OEEngine.shared.isTracing, "recording": t.isRecording,
           "lastTraceFile": t.lastTraceFile?.path ?? "", "lastTraceError": t.lastTraceError ?? "",
           "taskManagerShown": t.taskManagerShown.map { $0 ? "yes" : "no" } ?? "",
-          "reveals": revealedURLs.map(\.path), "toasts": troubleshootingToasts,
+          "reveals": revealedURLs.map(\.path),
           "colorScheme": UserDefaults.standard.string(forKey: WebsiteAppearance.defaultsKey) ?? "",
           "contextSchemes": OEEngine.shared.contexts.map { $0.websiteColorScheme.rawValue },
-          "allowJavaScriptFromAppleEvents": UserDefaults.standard.bool(forKey: PageTools.allowJavaScriptFromAppleEventsKey),
-          "menuStateWired": PageTools.menuStateWired,
-          "expectedChecks": ["appearance-automatic", "appearance-light", "appearance-dark", "allow-js-apple-events"].reduce(into: [String: Bool]()) {
-            $0[$1] = PageTools.isChecked($1) ?? false }] as [String: Any]
+          "allowJavaScriptFromAppleEvents": UserDefaults.standard.bool(forKey: PageTools.allowJavaScriptFromAppleEventsKey)] as [String: Any]
       case "troubleshooting-setup":
         // A run folder for traces, and Finder reveals recorded instead of shown.
         let t = TroubleshootingActions.shared
         if let path = a["traceDir"] as? String { t.traceDirectory = URL(fileURLWithPath: path, isDirectory: true) }
         if a["recordReveals"] as? Bool == true { t.reveal = { [weak self] in self?.revealedURLs.append($0) } }
-        if a["recordToasts"] as? Bool == true {
-          let show = t.presentToast
-          t.presentToast = { [weak self] title, button, sticky in
-            self?.troubleshootingToasts.append(["title": title, "button": button?.title ?? "", "sticky": sticky])
-            if let button { self?.troubleshootingToastActions[title] = button.action }
-            show(title, button, sticky)
-          }
-        }
         return true
-      case "troubleshooting-toast-action":
-        guard let title = a["title"] as? String, let action = troubleshootingToastActions[title] else { throw Failure(message: "no toast action") }
-        action(); return true
       case "print-pdf":
         let path = (a["path"] as? String) ?? NSTemporaryDirectory() + "open-print.pdf"
         let page = try content(a, w)

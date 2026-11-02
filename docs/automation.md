@@ -657,9 +657,9 @@ domain is shared between runs.
 | `menu-state` | — | Each row also reports `checked` (`state == .on`) and `hidden`. |
 | `devtools-frontend` | `tab`, `js` | Evaluates `js` in the open DevTools window of the page (the DevTools front end, `OEWebContent.evaluateInDevToolsFrontend`); fails when no DevTools window of that page is open. D1 reads the selected tab ids (`tab-console`). |
 | `devtools-close` | `tab` | Closes the page's DevTools window. |
-| `troubleshooting-setup` | `traceDir`, `recordReveals`, `recordToasts` | Stop writes traces into `traceDir` instead of `~/Downloads`; Finder reveals (Reveal Open Data, Show in Finder) are recorded instead of shown; Troubleshooting toasts are recorded (and still shown). |
-| `troubleshooting-state` | — | `tracing` (engine), `recording`, `lastTraceFile`, `lastTraceError`, `taskManagerShown`, `reveals`, `toasts`, the stored website appearance and each live context's `websiteColorScheme`, and the Apple Events JavaScript preference. |
-| `troubleshooting-toast-action` | `title` | Runs the button of the recorded Troubleshooting toast with that title (Stop on "Recording Trace…"). |
+| `troubleshooting-setup` | `traceDir`, `recordReveals` | Stop writes traces into `traceDir` instead of `~/Downloads`; Finder reveals (Reveal Open Data, the Trace Saved toast's Show in Finder) are recorded instead of shown. |
+| `troubleshooting-state` | — | `tracing` (engine), `recording`, `lastTraceFile`, `lastTraceError`, `taskManagerShown`, `reveals`, the stored website appearance and each live context's `websiteColorScheme`, and the Apple Events JavaScript preference. |
 
+The trace toasts are ToastCenter toasts: the H2 row reads them with `toasts` and presses Stop and Show in Finder with `toast-action` (the real buttons).
 The existing `appearance name=light|dark|system` command is the plan's
 `app-appearance` (it sets `NSApp.appearance`).

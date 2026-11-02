@@ -7129,19 +7129,13 @@ def _blocked(reason, **evidence):
     return dict(evidence, status="BLOCKED", reason=reason)
 
 
-def _menu_checks_row(app, menu, expected):
-    """Checkmarks as the menu shows them (`menu`, one dict per step) against `expected`.
-    Until the App answers CommandMenuState (s8/toasts), the row is BLOCKED and only
-    records the state the menu will show (`expectedChecks` from the App's own source)."""
-    if app.call("troubleshooting-state")["menuStateWired"]:
-        return {"ok": menu == expected, "checked": menu, "expected": expected}
-    return _blocked("CommandMenuState / menuState(for:) (page-platform Step 2, branch s8/toasts) not on main yet",
-                    checked=menu, expected=expected)
+def _menu_checks_row(menu, expected):
+    """Checkmarks (or hidden flags) as the validated menu shows them, one entry per step."""
+    return {"ok": menu == expected, "menu": menu, "expected": expected}
 
 
-def _expected_checks(app, ids):
-    state = app.call("troubleshooting-state")["expectedChecks"]
-    return {i: state.get(i) for i in ids}
+def _toasts(app):
+    return app.call("toasts")["toasts"]
 
 
 def page_tools_appearance_checks(app, results, port, style):
@@ -7161,11 +7155,11 @@ def page_tools_appearance_checks(app, results, port, style):
         start = until_dark(False)
         app.call("command", id="appearance-dark")
         dark = until_dark(True)
-        dark_checks, dark_stored, dark_source = checks(), app.call("defaults", key="open.web.colorScheme"), _expected_checks(app, ids)
+        dark_checks, dark_stored = checks(), app.call("defaults", key="open.web.colorScheme")
         app.call("appearance", name="dark")
         app.call("command", id="appearance-light")
         light = until_dark(False)
-        light_checks, light_stored, light_source = checks(), app.call("defaults", key="open.web.colorScheme"), _expected_checks(app, ids)
+        light_checks, light_stored = checks(), app.call("defaults", key="open.web.colorScheme")
         page_follows = (start["dark"] is False and dark["dark"] is True and light["dark"] is False
                         and dark["loadId"] == light["loadId"] == start["loadId"])
         evidence = {"start": start, "websitesDark": dark, "websitesLight": light}
@@ -7178,8 +7172,7 @@ def page_tools_appearance_checks(app, results, port, style):
         want_dark = {"appearance-automatic": False, "appearance-light": False, "appearance-dark": True}
         want_light = {"appearance-automatic": False, "appearance-light": True, "appearance-dark": False}
         results["A1_appearance_stored_" + style] = {
-            "ok": (dark_stored, light_stored) == ("dark", "light") and [dark_source, light_source] == [want_dark, want_light],
-            "stored": [dark_stored, light_stored], "menuSource": [dark_source, light_source]}
+            "ok": (dark_stored, light_stored) == ("dark", "light"), "stored": [dark_stored, light_stored]}
         # A2: Automatic follows the app's effective appearance, each time, without a reload.
         app.call("command", id="appearance-automatic")
         app.call("appearance", name="dark")
@@ -7196,7 +7189,7 @@ def page_tools_appearance_checks(app, results, port, style):
             and app.call("defaults", key="open.web.colorScheme") == "automatic",
             "states": [follow_dark, follow_light, follow_dark2]}
         results["A1_appearance_checkmarks_" + style] = _menu_checks_row(
-            app, [dark_checks, light_checks, auto_checks], [want_dark, want_light, want_auto])
+            [dark_checks, light_checks, auto_checks], [want_dark, want_light, want_auto])
     finally:
         _try(lambda: app.call("appearance", name="system"))
     app.call("close", tab=tab)
@@ -7273,18 +7266,16 @@ def page_tools_apple_events_checks(app, results):
     """D4: Allow JavaScript from Apple Events (default off, checkmark)."""
     key, command = "open.developer.allowJavaScriptFromAppleEvents", "allow-js-apple-events"
     def step():
-        return ((_menu_row(app, command) or {}).get("checked"), app.call("defaults", key=key),
-                _expected_checks(app, (command,))[command])
+        return ((_menu_row(app, command) or {}).get("checked"), app.call("defaults", key=key))
     initial = step()
     app.call("command", id=command)
     on = step()
     app.call("command", id=command)
     off = step()
     results["D4_allow_js_apple_events_setting"] = {
-        "ok": not initial[1] and initial[2] is False and on[1] is True and on[2] is True and off[1] is False and off[2] is False,
-        "stored": [initial[1], on[1], off[1]], "menuSource": [initial[2], on[2], off[2]]}
+        "ok": not initial[1] and on[1] is True and off[1] is False, "stored": [initial[1], on[1], off[1]]}
     results["D4_allow_js_apple_events_checkmark"] = _menu_checks_row(
-        app, [initial[0], on[0], off[0]], [False, True, False])
+        [initial[0], on[0], off[0]], [False, True, False])
     results["D4_allow_js_apple_events_osascript"] = _blocked(
         "the App does not host OpenScripting yet (applescript plan Steps 5-7); the 1013 gate is in "
         "ScriptCommands.executeJavascript and runs once the App wires ScriptHost")
@@ -7294,7 +7285,7 @@ def page_tools_troubleshooting_checks(app, results, tmp, port, style):
     """H1-H4: Task Manager, Record Trace + Stop, Copy Open Info, Cast hidden / media router off."""
     trace_dir = os.path.join(tmp, "traces")
     os.makedirs(trace_dir, exist_ok=True)
-    app.call("troubleshooting-setup", traceDir=trace_dir, recordReveals=True, recordToasts=True)
+    app.call("troubleshooting-setup", traceDir=trace_dir, recordReveals=True)
     tab = app.call("open", url="http://127.0.0.1:%d/cookies.html" % port)["id"]
     app.call("wait", tab=tab)
     # H1
@@ -7320,7 +7311,9 @@ def page_tools_troubleshooting_checks(app, results, tmp, port, style):
     recording = wait_until(lambda: (lambda s: s if s["recording"] else None)(app.call("troubleshooting-state")), timeout=5, step=.1)
     rows1 = {i: (_menu_row(app, i) or {}).get("enabled") for i in ("record-trace", "cancel-trace")}
     time.sleep(2)
-    app.call("troubleshooting-toast-action", title="Recording Trace…")
+    # The sticky toast's real Stop button (Helper A's ToastCenter `toast-action`).
+    recording_toast = next((t for t in _toasts(app) if t["title"] == "Recording Trace…" and not t["exiting"]), None)
+    app.call("toast-action", index=0)
     saved = wait_until(lambda: (lambda s: s if s["lastTraceFile"] or s["lastTraceError"] else None)(
         app.call("troubleshooting-state")), timeout=60, step=.25) or app.call("troubleshooting-state")
     path = saved.get("lastTraceFile") or ""
@@ -7329,15 +7322,21 @@ def page_tools_troubleshooting_checks(app, results, tmp, port, style):
         with open(path) as stream:
             trace = json.load(stream)
         events = len(trace.get("traceEvents", [])) if isinstance(trace, dict) else 0
-    toasts = [t["title"] for t in saved.get("toasts", []) if t["title"]]
+    saved_toast = wait_until(lambda: next((t for t in _toasts(app) if t["title"] == "Trace Saved" and not t["exiting"]), None), timeout=5, step=.1)
+    if saved_toast:
+        app.call("toast-action", index=0)  # Show in Finder (recorded, not shown)
+    finder = app.call("troubleshooting-state")["reveals"][-1:] == [path]
     rows2 = {i: (_menu_row(app, i) or {}).get("enabled") for i in ("record-trace", "cancel-trace")}
     results["H2_record_trace_stop"] = {
         "ok": rows0 == {"record-trace": True, "cancel-trace": False} and bool(recording)
         and rows1 == {"record-trace": False, "cancel-trace": True}
         and os.path.dirname(path) == trace_dir and os.path.basename(path).startswith("Open Trace ") and path.endswith(".json")
-        and events > 0 and "Recording Trace…" in toasts and "Trace Saved" in toasts
+        and events > 0 and bool(recording_toast) and recording_toast["sticky"] and recording_toast["accessory"] == "stop"
+        and re.fullmatch(r"0:0[0-9]", recording_toast["subtitle"] or "") is not None
+        and bool(saved_toast) and saved_toast["accessory"] == "show in finder" and finder
         and rows2 == {"record-trace": True, "cancel-trace": False},
-        "menu": [rows0, rows1, rows2], "file": path, "traceEvents": events, "toasts": toasts,
+        "menu": [rows0, rows1, rows2], "file": path, "traceEvents": events,
+        "recordingToast": recording_toast, "savedToast": saved_toast, "showInFinder": finder,
         "error": saved.get("lastTraceError")}
     # Cancel: no file is kept.
     before_files = sorted(os.listdir(trace_dir))
@@ -7354,8 +7353,9 @@ def page_tools_troubleshooting_checks(app, results, tmp, port, style):
     shape = (len(lines) == 4 and re.fullmatch(r"Open \S+ \(\S+\)", lines[0])
              and re.fullmatch(r"Engine: Chromium 156\.0\.8078\.48, CEF \S+", lines[1])
              and lines[2].startswith("macOS ") and re.fullmatch(r"Mac: \S+ \((arm64|x86_64)\)", lines[3]))
-    results["H3_copy_open_info"] = {"ok": bool(shape) and "http" not in text and "/Users" not in text and "Arc" not in text,
-                                    "text": text}
+    newest = (_toasts(app) or [{}])[0]
+    results["H3_copy_open_info"] = {"ok": bool(shape) and "http" not in text and "/Users" not in text and "Arc" not in text
+                                    and newest.get("title") == "Copied Open Info", "text": text, "toast": newest.get("title")}
     app.call("command", id="reveal-open-data")
     reveals = app.call("troubleshooting-state")["reveals"]
     root = app.call("ping")["root"]
@@ -7369,7 +7369,7 @@ def page_tools_troubleshooting_checks(app, results, tmp, port, style):
     results["H4_media_router_off"] = {
         "ok": bool(children) and len(disabled) == len(children),
         "helpers": len(children), "helpersWithMediaRouterOff": len(disabled)}
-    hidden = _menu_checks_row(app, [cast.get("hidden")], [True])
+    hidden = _menu_checks_row([cast.get("hidden"), cast.get("enabled")], [True, False])
     hidden["cast"] = cast
     results["H4_cast_menu_hidden"] = hidden
     app.call("close", tab=tab)
