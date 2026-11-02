@@ -1489,6 +1489,7 @@ def sleep_engine_checks(app, results, strip_ids):
                       and "--extension-process" not in r[2])
 
     selected = [t["id"] for t in app.call("tabs") if t["selected"]][0]
+    unload_tab = [None]
     tab = new_tab(app, base + "ticker.html")
     app.call("select", tab=selected)
     time.sleep(1.5)
@@ -1523,28 +1524,36 @@ def sleep_engine_checks(app, results, strip_ids):
                   and thawed["ok"] and not thawed["frozen"] and t1 - t0 <= 1 and t2 - t1 >= 2,
             "refused_visible": refused, "frozen": frozen, "ticks": [t0, t1, t2], "frozen_seconds": 6,
             "load": load}
-        # S5: beforeunload handler flag.
-        navigate(tab, "c.html?unload=1")
-        with_handler = wait_until(lambda: sleep_op(tab, "state")["unloadHandlers"] or None, timeout=5, step=0.3)
-        navigate(tab, "a.html")
+        # S5: beforeunload handler flag. Never navigate away from the page
+        # with the handler: closing it (force close) shows no dialog.
         without = sleep_op(tab, "state")["unloadHandlers"]
+        unload_tab[0] = new_tab(app, base + "c.html?unload=1")
+        app.call("select", tab=selected)
+        with_handler = wait_until(lambda: sleep_op(unload_tab[0], "state")["unloadHandlers"] or None,
+                                  timeout=5, step=0.3)
         results["sleep_hosted_unload_flag"] = {"ok": with_handler is True and without is False,
-                                               "with": with_handler, "without": without}
+                                               "with": with_handler, "without_on_ticker": without}
         # S4 discard in place: history a -> b -> c with scroll and form state.
         navigate(tab, "b.html")
         navigate(tab, "c.html")
         app.eval(tab, "scrollTo(0, innerHeight * 2); document.querySelector('#q').value = 'open-sleep-check'; true")
         scroll = app.eval(tab, "scrollY")
-        capture = sleep_op(tab, "capture")["history"] or {}
         before = sleep_op(tab, "state")
         strip_before = strip_ids()
         procs_before = renderers()
         app.call("select", tab=selected)
-        time.sleep(0.5)
+        # Blink syncs the hidden page's scroll and form state to the browser
+        # within about 5 s (measured: 840 B at 1 s, 1232 B at 6 s); sleep
+        # policy discards 30 s or more after a hide.
+        time.sleep(6)
         discard = sleep_op(tab, "discard")
         time.sleep(2)
         procs_after = renderers()
         after = sleep_op(tab, "state")
+        # Capture after the discard settled: the renderer flushed the page
+        # state (scroll, form) while it unloaded; a capture taken right after
+        # a hide can miss the last edits (Track A measurement).
+        capture = sleep_op(tab, "capture")["history"] or {}
         strip_after = strip_ids()
         again = sleep_op(tab, "discard")
         app.call("select", tab=tab)
@@ -1574,9 +1583,15 @@ def sleep_engine_checks(app, results, strip_ids):
     finally:
         server.shutdown()
         server.server_close()
+        # No dialog may outlive the checks (review checklist 4).
+        leftover = [d for d in (app.call("dismiss") or []) if str(d).startswith(("javascript", "modal", "sheet"))]
+        if leftover:
+            results["sleep_hosted_no_dialog_left"] = {"ok": False, "dismissed": leftover}
         try:
             app.call("select", tab=selected)
-            app.call("close", tab=tab)
+            for t in (tab, unload_tab[0]):
+                if t:
+                    app.call("close", tab=t)
         except RuntimeError:
             pass
 

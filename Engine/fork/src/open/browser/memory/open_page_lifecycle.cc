@@ -16,11 +16,13 @@
 #include "base/memory/ref_counted.h"
 #include "cef/libcef/browser/browser_host_base.h"
 #include "cef/libcef/browser/thread_util.h"
+#include "content/public/browser/render_frame_host.h"
 #include "content/public/browser/visibility.h"
 #include "content/public/browser/web_contents.h"
 #include "content/public/browser/web_contents_observer.h"
 #include "content/public/browser/web_contents_user_data.h"
 #include "content/public/common/content_features.h"
+#include "third_party/blink/public/mojom/frame/sudden_termination_disabler_type.mojom-shared.h"
 
 namespace open_engine {
 
@@ -237,5 +239,24 @@ bool CefWasDiscarded(CefRefPtr<CefBrowser> browser) {
 bool CefHasUnloadHandlers(CefRefPtr<CefBrowser> browser) {
   CEF_REQUIRE_UIT_RETURN(false);
   content::WebContents* web_contents = open_engine::WebContentsFor(browser);
-  return web_contents && web_contents->NeedToFireBeforeUnloadOrUnloadEvents();
+  if (!web_contents) {
+    return false;
+  }
+  // beforeunload and unload only. WebContents::
+  // NeedToFireBeforeUnloadOrUnloadEvents() also counts pagehide and
+  // visibilitychange handlers: those already ran when the page was hidden,
+  // and OpenEngine's own media probe has a pagehide listener in every frame,
+  // so that getter is true for every page in Open.
+  bool found = false;
+  web_contents->GetPrimaryMainFrame()->ForEachRenderFrameHost(
+      [&found](content::RenderFrameHost* frame) {
+        if (found || !frame->IsRenderFrameLive()) {
+          return;
+        }
+        using Type = blink::mojom::SuddenTerminationDisablerType;
+        found = frame->GetSuddenTerminationDisablerState(
+                    Type::kBeforeUnloadHandler) ||
+                frame->GetSuddenTerminationDisablerState(Type::kUnloadHandler);
+      });
+  return found;
 }
