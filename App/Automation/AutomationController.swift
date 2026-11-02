@@ -1012,6 +1012,7 @@
         return ["created": app.hostFactories.values.reduce(0) { $0 + $1.contentCreationCount },
                 "retained": app.hostFactories.values.reduce(0) { $0 + $1.contents.count },
                 "engineContents": OEEngine.shared.allWebContents.count]
+      case "translate": return try await translateCommand(a)
       case "sidebar-unload":
         return w.controller?.sidebar(w.controller!.sidebar, didRequest: .unloadTab(try modelTab(a, w).id)) == true
       default:

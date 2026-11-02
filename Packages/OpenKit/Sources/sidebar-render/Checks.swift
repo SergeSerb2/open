@@ -355,6 +355,7 @@ enum Checks {
         FolderPeekChecks.collapsedLoads()
         CompletionChecks.run()
         CompactToolbarChecks.run()
+        URLStatusChecks.run()
         SpaceManagerChecks.run()
         PreviewChecks.run()
         SidebarHaptics.defaults.removePersistentDomain(forName: suite)

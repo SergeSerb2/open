@@ -41,6 +41,8 @@ public final class BrowserWindowController: NSWindowController, NSWindowDelegate
     public var onCommand: ((String) -> Bool)?
     public var onCommandWithPayload: ((String, String?) -> Bool)?
     public var onCommandValidation: ((String, String) -> Bool?)?
+    /// Sees every key event of this window first (after the tab switcher); true consumes it.
+    public var keyInterceptor: ((NSEvent) -> Bool)?
     public var ownsAdditionalKeyWindow: ((NSWindow) -> Bool)?
     public var isApplicationActive: (() -> Bool)?
     public var isCommandBarPresented = false
@@ -785,6 +787,9 @@ public final class BrowserWindowController: NSWindowController, NSWindowDelegate
               eventWindow === window || ownsAdditionalKeyWindow?(eventWindow) == true
                 || existingTabSwitcher?.acceptsEventWindow(eventWindow) == true else { return false }
         if existingTabSwitcher?.handle(event) == true { return true }
+        // A window-anchored popover the App shows (the translate popover, page-platform §4.7.3)
+        // takes Esc and Return before any other route.
+        if let keyInterceptor, keyInterceptor(event) { return true }
         let flags = event.modifierFlags.rawValue
         if let last = lastKeyRoute, last.window == eventWindow.windowNumber, last.code == event.keyCode,
            last.flags == flags, unconsumed || (event.timestamp > 0 && last.timestamp == event.timestamp) { return last.handled }

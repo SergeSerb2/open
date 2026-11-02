@@ -343,6 +343,7 @@ enum FeatureChecks {
         try await TabSwitcherChecks.run { check($0, $1) }
         try await FaviconChecks.run { check($0, $1) }
         try await AutoArchiveChecks.run { check($0, $1) }
+        TranslateChecks.run { check($0, $1) }
         print("features-render check: \(passed) passed, \(failed) failed")
         if failed > 0 { throw CLIError(description: "\(failed) feature scenarios failed") }
     }
