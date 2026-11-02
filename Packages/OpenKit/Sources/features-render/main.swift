@@ -67,6 +67,7 @@ enum FeatureCLI {
             guard let loaded = try SnapshotStore(root: URL(fileURLWithPath: dir)).load() else { throw CLIError(description: "missing snapshot") }; model = loaded
         } else { model = synthetic() }
         let factory = FakeWebContentHostFactory(), defaults = defaults()
+        if cmd == "toast" { try await ToastScene.run(args, size: size, scale: scale); return }
         if cmd == "little" {
             let little = LittleOpenCoordinator(model: model, archiveSink: nil) { profile in factory.makeHost(tabID: ItemID(), profileID: profile, url: nil)! as! FakeWebContentHost }
             little.presentWindows = false; little.defaults = defaults; little.open(url: URL(string: RenderCLI.value(args, "--url") ?? "https://example.com")!, profileHint: nil)

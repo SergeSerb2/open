@@ -710,6 +710,8 @@ def main():
         directory = Path("data").resolve()
         text = run(cli, name, str(directory))
         matches(r"commands-demo OK: [1-9]\d* checks passed, 0 failed", text)
+        # Copy URL without trackers over the real library (page-platform §8.2): 30 fixed rows.
+        matches(r"^url-clean: 30 passed, 0 failed$", run(cli, "url-clean"))
         shutil.copytree(directory, seed, dirs_exist_ok=True)
         archive_migration(cli)
         folder_peek_import(cli)

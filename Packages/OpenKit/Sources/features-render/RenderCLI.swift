@@ -8,6 +8,7 @@ enum RenderCLI {
         [--controls visible|hidden] [--meeting] [--site twitch|meet|youtube|none] [--drag-precision N]
         [--menu] [--document --top-bar-title TEXT] [--document-hover-options] [--document-pressed-options]
           [--screen WIDTHxHEIGHT --natural-size WIDTHxHEIGHT --first-open --geometry-report FILE.json] [--hover-skip-ahead]
+    features-render toast --out FILE [--size WxH] [--scale 1|2] [--variant copy|plain|zoom|two-line|keycaps|undo|split|hidden|themed|light]
     features-render compare --arc FILE --ours FILE --out DIR --state split|peek; check [--only auto-archive]; bench
     """
     static func value(_ args: [String], _ key: String) -> String? { guard let i = args.firstIndex(of: key), args.indices.contains(i + 1) else { return nil }; return args[i + 1] }

@@ -441,7 +441,7 @@ Columns: feature · RE doc + section · plan · library code · App wiring · ve
 | Save Page As (Cmd+Shift+S) | MH File | app-shell §4.3 | MHTML snapshot from the App | main | none (code read) | done | Step C saves an MHTML snapshot (`App/MainMenu.swift:162` `savePage`, #85). |
 | Zoom in, out, actual size | MH View | — | — | main | e2e `features` "Zoom" | done | |
 | Zoom toast ("110%") | IS §16 | page-platform (#73) | none | none | none | planned | See §3, gap 16. |
-| Toasts: Space-tinted, top-right of the page, stacking | IS §16 | page-platform (#73: measured toast spec) | `OpenFeatures/BrowserWindowController.swift` toast (black, bottom center) | main | none | done (look differs) | Toasts show in the App. The Arc look is planned. See §3, gap 15. |
+| Toasts: Space-tinted, top-right of the page, stacking | IS §16; PG-1, PG-14 | page-platform Steps 1–2 (Section 8) | `OpenFeatures/Toasts/` (`ToastCenter`, `ToastView`, `ToastOverlayView`), `OpenDesign/PageTokens.swift` | PR (Section 8, `s8/toasts`) | `features-render` R-T1–R-T7; automation `toasts`, `toast-action` | done (pending merge) | One `ToastCenter` per window and per Little Open window; every toast (Peek closed, sidebar undo toasts, Copy URL, pane-bar Copy, command bar "Copied") uses it. Fill and text read one rule with the first-hide hint (`SpaceThemeStyle.toastFill`/`toastText`), including the macOS Light lavender toast (S2 20/0048). Share button, zoom toast: Step 3. |
 | Native and HTML full screen | FC §8.2 r5 | app-shell §3.8 | — | main | e2e `features` "HTML fullscreen"; e2e `window` | done | A flaky full-screen test fix is PR #112 (in PR). |
 | Multiple windows (Cmd+N), per-window state | FC §8.1 r1 | app-shell §3.8 | model window commands | main | e2e `window` (two windows, restore) | done | |
 | Close Window (Cmd+Shift+W), Blank Window, last-window behavior | FC §8.1 r2, r4; IS §17 | app-shell §3.8, §4.3 | — | main (partial) | — | done (partial) | `blank-window` dispatches and `close-window` is a system item (#85). The Blank Window "This Window" sidebar is not specified. |
@@ -655,7 +655,7 @@ Ranking is by user impact for an Arc user who switches to Open. **P0** blocks da
 
 13. **Open — Capture tool.** Now planned in page-platform (#73). The Library reader shows in the App. No capture tool exists.
 14. **Open (small) — Copy URL as Quote writes the wrong text.** The command dispatches (#85) but writes "[title](url)", the same as Markdown. It needs the page selection from the engine.
-15. **Open — Copy URL toast and the Arc toast look.** Now planned in page-platform (#73, measured spec). Toasts show today in the old look.
+15. **Section 8 — Copy URL toast and the Arc toast look.** The Arc look ships with page-platform Steps 1–2 (`ToastCenter`, R-T1–R-T7). The Share button on the copy toast is Step 3.
 16. **Open — Zoom level toast.** Now planned in page-platform (#73).
 17. **Closed in PR #85 — Expand / Collapse All Folders; Reset all tabs in this Space.** Both dispatch in the App (`App/MainMenu.swift:151`, `:157`). Nested reconcile in #95. Merged A3 (#128) E9 verifies recursive enablement and live folder/split resets, with Favorites and other Spaces excluded.
 18. **Space export closed in #124/#128; folder → Space closed in #132.** Browser Export and Manager Turn into Folder use the real model fallback. Merged A3 (#128) E10 verifies exact ordered IDs and one undo. `turnFolderIntoSpace` keeps the owning Profile and moves ordered children into Today with one undo (`I9_turn_folder_*`). The future New Space form remains in the Space/theme lane.
