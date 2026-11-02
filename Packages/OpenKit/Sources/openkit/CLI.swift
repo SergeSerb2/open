@@ -197,6 +197,21 @@ func runRoundtrip(args: [String]) throws {
     if SnapshotMapper.structurallyEqual(first, second) {
         print("roundtrip OK")
         print("roundtrip keepAliveSites OK: profiles=\(second.profiles.count) sites=\(second.profiles.reduce(0) { $0 + $1.settings.keepAliveSites.count })")
+        // The content toolbar flag (commandbar-completion §4.6.1): absent in older snapshots (= off),
+        // written only when on, and kept across a save. A copy, so DIR keeps its bytes.
+        let copy = FileManager.default.temporaryDirectory.appendingPathComponent("openkit-roundtrip-\(UUID().uuidString)")
+        defer { try? FileManager.default.removeItem(at: copy) }
+        let toolbarStore = SnapshotStore(root: copy)
+        let shown = second.windows.filter { $0.style == .standard }
+        for window in shown { second.setToolbarShown(windowID: window.id, true) }
+        try toolbarStore.saveNow(model: second)
+        guard let third = try toolbarStore.load() else { print("roundtrip toolbar reload failed"); exit(1) }
+        let kept = third.windows.filter { $0.style == .standard }.allSatisfy(\.showsToolbar)
+        let legacy = first.windows.allSatisfy { !$0.showsToolbar }
+        guard kept, legacy, SnapshotMapper.structurallyEqual(second, third) else {
+            print("roundtrip toolbar MISMATCH: legacy off \(legacy), saved on kept \(kept)"); exit(1)
+        }
+        print("roundtrip toolbar OK: windows=\(shown.count) (absent = off; on survives a save)")
     } else {
         print("roundtrip MISMATCH")
         exit(1)

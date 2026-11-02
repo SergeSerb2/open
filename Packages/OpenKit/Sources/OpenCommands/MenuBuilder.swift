@@ -13,11 +13,15 @@ public protocol CommandDispatcher: AnyObject {
     func performCommand(_ id: String, payload: String?)
     /// Answers one enabled-state key for one command. Return true to enable.
     func isCommandEnabled(_ id: String, enabledKey: String) -> Bool
+    /// The item's title right now, or nil for the registry title (commandbar-completion §4.6.4:
+    /// "Show Toolbar" / "Hide Toolbar", CC-32). Menu validation applies it.
+    func menuTitle(for id: String) -> String?
 }
 
 public extension CommandDispatcher {
     func performCommand(_ id: String, payload: String?) { performCommand(id) }
     func isCommandEnabled(_ id: String, enabledKey: String) -> Bool { true }
+    func menuTitle(for id: String) -> String? { nil }
 }
 
 /// Dispatcher that enables everything and does nothing. For dump and previews.
@@ -61,6 +65,7 @@ final class MenuCommandTarget: NSObject, NSMenuItemValidation {
         guard let info = menuItem.representedObject as? [String: String],
               let id = info["command"] else { return true }
         let key = enabledKeys[ObjectIdentifier(menuItem).debugDescription] ?? CommandRegistry.byID[id]?.enabledKey ?? EnabledKey.always
+        if let title = dispatcher?.menuTitle(for: id), menuItem.title != title { menuItem.title = title }
         return dispatcher?.isCommandEnabled(id, enabledKey: key) ?? true
     }
 }

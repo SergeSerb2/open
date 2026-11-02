@@ -151,6 +151,8 @@ public struct WindowDTO: Codable, Sendable {
     public var frameHeight: Double
     public var style: String
     public var stayOnTop: Bool
+    /// Absent in snapshots written before the toolbar (= false); written only when true.
+    public var showsToolbar: Bool?
 }
 
 public enum RoutingMatchDTO: Codable, Sendable {
@@ -385,7 +387,7 @@ public enum SnapshotMapper {
         return WindowDTO(id: w.id.rawValue.uuidString, focusedSpaceID: w.focusedSpaceID.rawValue.uuidString,
                          selectedNodeBySpace: sel, sidebarWidth: w.sidebarWidth, sidebarMode: w.sidebarMode.rawValue,
                          frameX: w.frameX, frameY: w.frameY, frameWidth: w.frameWidth, frameHeight: w.frameHeight,
-                         style: w.style.rawValue, stayOnTop: w.stayOnTop)
+                         style: w.style.rawValue, stayOnTop: w.stayOnTop, showsToolbar: w.showsToolbar ? true : nil)
     }
 
     static func window(from dto: WindowDTO) -> BrowserWindowState {
@@ -395,7 +397,8 @@ public enum SnapshotMapper {
                                   selectedNodeBySpace: sel, sidebarWidth: dto.sidebarWidth,
                                   sidebarMode: SidebarMode(rawValue: dto.sidebarMode) ?? .anchored,
                                   frameX: dto.frameX, frameY: dto.frameY, frameWidth: dto.frameWidth, frameHeight: dto.frameHeight,
-                                  style: WindowStyle(rawValue: dto.style) ?? (dto.style == "littleArc" ? .littleOpen : .standard), stayOnTop: dto.stayOnTop)
+                                  style: WindowStyle(rawValue: dto.style) ?? (dto.style == "littleArc" ? .littleOpen : .standard), stayOnTop: dto.stayOnTop,
+                                  showsToolbar: dto.showsToolbar ?? false)
     }
 
     private static func normalizedSourceBundleID(_ value: String?) -> String? {

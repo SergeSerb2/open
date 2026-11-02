@@ -336,6 +336,7 @@ enum FeatureChecks {
         check(image.width == 2216 && image.height == 1394, "C1 real CARenderer scene snapshot")
         try await visualFinish { check($0, $1) }
         try await reviewRound1 { check($0, $1) }
+        try await ToolbarChecks.run { check($0, $1) }
         try await PiPChecks.run { condition, label in check(condition, label) }
         try SoundChecks.run { check($0, $1) }
         try await CompletionFeatureChecks.run { check($0, $1) }

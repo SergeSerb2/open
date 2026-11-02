@@ -120,6 +120,9 @@ enum FeatureCLI {
         }
         model.selectNode(windowID: window.id, spaceID: space.id, nodeID: selected)
         let c = BrowserWindowController(model: model, windowID: window.id, factory: factory, size: size, defaults: defaults)
+        // The optional content toolbar (commandbar-completion §4.6): `split --fractions 1 --toolbar [--full-url]`.
+        if args.contains("--toolbar") { c.setToolbarShown(true) }
+        if args.contains("--full-url") { c.showsFullURLWithToolbar = true }
         if cmd == "switcher" {
             let event = NSEvent.keyEvent(with: .keyDown, location: .zero, modifierFlags: .control, timestamp: 0,
                 windowNumber: c.window!.windowNumber, context: nil, characters: "\t", charactersIgnoringModifiers: "\t",

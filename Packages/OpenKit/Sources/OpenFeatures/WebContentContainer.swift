@@ -19,12 +19,14 @@ public final class PaneSlotView: NSView {
         focusRing.zPosition = 10; focusRing.fillColor = nil; focusRing.lineWidth = SplitMetrics.ringWidth; layer?.addSublayer(focusRing)
     }
     @available(*, unavailable) required init?(coder: NSCoder) { fatalError() }
-    func configure(tab: Tab, host: (any WebContentHost)?, split: Bool, focused: Bool, style: SpaceThemeStyle,
-                   close: @escaping () -> Void, menu: @escaping (NSView) -> Void, url: @escaping () -> Void, copy: @escaping () -> Void) {
+    func configure(tab: Tab, host: (any WebContentHost)?, split: Bool, toolbar: Bool = false, fullURL: Bool = false, focused: Bool, style: SpaceThemeStyle,
+                   close: @escaping () -> Void, menu: @escaping (NSView) -> Void, url: @escaping () -> Void, copy: @escaping () -> Void,
+                   toolbarMenu: (() -> NSMenu?)? = nil) {
         isFocused = split && focused
         focusRing.strokeColor = style.accentColor(.light).cgColor
-        if split {
+        if split || toolbar {
             if paneChrome == nil { let chrome = PaneChromeView(); paneChrome = chrome; clip.addSubview(chrome) }
+            paneChrome?.role = split ? .pane : .toolbar; paneChrome?.showsFullURL = fullURL; paneChrome?.toolbarMenu = split ? nil : toolbarMenu
             paneChrome?.host = host; paneChrome?.isFocused = focused; paneChrome?.onClose = close; paneChrome?.onMenu = menu
             paneChrome?.onURL = url; paneChrome?.onCopy = copy
             // The bar takes the page's color (host.pageBackgroundColor); the Space's light background is the fallback.
@@ -93,6 +95,12 @@ public final class WebContentContainer: NSView {
     private var orientation: SplitOrientation = .horizontal
     private var fractions: [Double] = []
     public var maximizedTabID: ItemID? { didSet { needsLayout = true } }
+    /// The optional content toolbar on a single pane (§4.6.2). A split keeps its pane bars.
+    public var showsToolbar = false { didSet { if showsToolbar != oldValue { updateSlots(); for slot in slots { slot.needsLayout = true } } } }
+    /// Toolbar text: the full URL instead of the host (CC-37).
+    public var showsFullURL = false { didSet { if showsFullURL != oldValue { updateSlots() } } }
+    /// Right-click menu of the content toolbar.
+    public var onToolbarMenu: (() -> NSMenu?)?
     public var onPaneClicked: ((ItemID) -> Void)?
     public var onLinkClicked: ((ItemID, URL, NSEvent.ModifierFlags) -> Bool)?
     public var onPaneClose: ((ItemID) -> Void)?
@@ -211,9 +219,10 @@ public final class WebContentContainer: NSView {
     private func updateSlots() {
         for slot in slots {
             guard let tab = tabProvider(slot.tabID) else { continue }; let id = slot.tabID
-            slot.configure(tab: tab, host: cache[id], split: ids.count > 1, focused: focused == id, style: style,
+            slot.configure(tab: tab, host: cache[id], split: ids.count > 1, toolbar: showsToolbar, fullURL: showsFullURL, focused: focused == id, style: style,
                            close: { [weak self] in self?.onPaneClose?(id) }, menu: { [weak self] v in self?.onPaneMenu?(id, v) },
-                           url: { [weak self] in self?.onURLField?() }, copy: { [weak self] in self?.onToast?("Copied Current URL") })
+                           url: { [weak self] in self?.onURLField?() }, copy: { [weak self] in self?.onToast?("Copied Current URL") },
+                           toolbarMenu: { [weak self] in self?.onToolbarMenu?() })
         }
     }
     public func refreshPlaceholders() { for id in ids { ensureHost(id) }; updateSlots() }

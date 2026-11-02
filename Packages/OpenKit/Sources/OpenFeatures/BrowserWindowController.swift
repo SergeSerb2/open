@@ -228,6 +228,7 @@ public final class BrowserWindowController: NSWindowController, NSWindowDelegate
         container.onFocusedMetadata = { [weak self] in self?.window?.title = $0 }
         container.onURLField = { [weak self] in guard let self else { return }; self.onOpenCommandBar?(.urlField, self.context.currentTab?.url) }
         container.onToast = { [weak self] in self?.showToast($0, undo: nil) }
+        container.onToolbarMenu = { [weak self] in self?.makeToolbarMenu() }
         splitController.onChange = { [weak self] in self?.changed() }
         toast.wantsLayer = true; toast.layer?.cornerRadius = 8; toast.layer?.backgroundColor = NSColor.black.withAlphaComponent(0.85).cgColor
         toastLabel.textColor = .white; toast.addSubview(toastLabel)
@@ -257,7 +258,7 @@ public final class BrowserWindowController: NSWindowController, NSWindowDelegate
         observationArmed = true
         withObservationTracking {
             _ = context.currentTab?.url; _ = context.currentTab?.title; _ = context.window?.focusedSpaceID
-            _ = context.window?.selectedNodeBySpace; _ = context.window?.sidebarMode; _ = context.window?.sidebarWidth; _ = splitController.split?.focusedPaneID
+            _ = context.window?.selectedNodeBySpace; _ = context.window?.sidebarMode; _ = context.window?.sidebarWidth; _ = context.window?.showsToolbar; _ = splitController.split?.focusedPaneID
             _ = splitController.split?.orientation; _ = splitController.split?.fractions
             for tab in splitController.split?.panes ?? context.currentTab.map({ [$0] }) ?? [] { _ = tab.live.sleepPhase }
         } onChange: { [weak self] in Task { @MainActor [weak self] in self?.observationArmed = false; self?.scheduleRefresh() } }
@@ -265,6 +266,7 @@ public final class BrowserWindowController: NSWindowController, NSWindowDelegate
         // Sidebar's pager owns theme transitions. Never reset its cross-fade here.
         if background.targetStyle != context.style(for: space) { background.crossfade(to: context.style(for: space), animated: window?.isVisible == true && !Motion.reducesMotion) }
         container.style = context.style(for: space)
+        container.showsToolbar = context.window?.showsToolbar == true
         let style = context.style(for: space)
         peekStorage?.overlay.controlsFill = style.lightPalette?.title.nsColor ?? PeekMetrics.defaultControls.nsColor
         peekStorage?.overlay.scrimColor = style.darkPalette?.background.withAlpha(PeekMetrics.scrimAlpha).nsColor ?? PeekMetrics.defaultScrim.nsColor
@@ -661,6 +663,37 @@ public final class BrowserWindowController: NSWindowController, NSWindowDelegate
         // Toolbar button, Cmd+S, View ▸ Hide Sidebar, and "More options" all land here.
         if state.sidebarMode == .hidden { noteSidebarHidden() }
     }
+    /// View ▸ Show Toolbar / Hide Toolbar (Cmd+Shift+D, `toggle-toolbar`; §4.6). No animation (D11):
+    /// the container lays out once and the page resizes once.
+    public func toggleToolbar() { setToolbarShown(!(context.window?.showsToolbar ?? false)) }
+    @discardableResult public func setToolbarShown(_ shown: Bool) -> Bool {
+        guard model.setToolbarShown(windowID: windowID, shown) else { return false }
+        refresh(); changed(); return true
+    }
+    /// The toolbar's text shows the full URL (`open.advanced.showFullURLWithToolbar`); the App sets it from Settings.
+    public var showsFullURLWithToolbar: Bool {
+        get { container.showsFullURL }
+        set { container.showsFullURL = newValue }
+    }
+    /// Right-click on the content toolbar (CC-36; order guess): Show/Hide Full URL, Hide Toolbar,
+    /// a separator, Manage Extensions. Each item is a sidebar intent, so the App sees it first.
+    func makeToolbarMenu() -> NSMenu {
+        let menu = NSMenu(); menu.autoenablesItems = false
+        let full = showsFullURLWithToolbar
+        menu.addItem(FeatureMenuItem(full ? "Hide Full URL" : "Show Full URL") { [weak self] in
+            guard let self else { return }; _ = self.sidebar(self.sidebar, didRequest: .setShowFullURL(!full))
+        })
+        menu.addItem(FeatureMenuItem("Hide Toolbar") { [weak self] in
+            guard let self else { return }; _ = self.sidebar(self.sidebar, didRequest: .setToolbarShown(false))
+        })
+        menu.addItem(.separator())
+        menu.addItem(FeatureMenuItem("Manage Extensions") { [weak self] in
+            guard let self else { return }; _ = self.sidebar(self.sidebar, didRequest: .manageExtensions)
+        })
+        return menu
+    }
+    /// The content toolbar's right-click menu, built as a click would build it (harness).
+    public func toolbarMenu() -> NSMenu? { container.slots.first?.paneChrome?.role == .toolbar ? makeToolbarMenu() : nil }
     private func beginSidebarResize() {
         guard dragStartWidth == nil else { return }
         dragStartWidth = context.sidebarWidth
@@ -812,6 +845,7 @@ public final class BrowserWindowController: NSWindowController, NSWindowDelegate
     public func performCommand(_ id: String) {
         if id != "tab-switcher-forward", id != "tab-switcher-backward" { existingTabSwitcher?.cancel() }
         if onCommand?(id) == true { return }
+        if id == "toggle-toolbar" { toggleToolbar(); return }
         if id == "open-in-current-space", peekStorage?.isShown == true {
             let menu = NSMenu(title: "Open in Space")
             for space in model.spaces { menu.addItem(FeatureMenuItem(context.title(of: space)) { [weak self] in self?.peekStorage?.expandTop(into: space.id) }) }
@@ -826,8 +860,17 @@ public final class BrowserWindowController: NSWindowController, NSWindowDelegate
         if onCommandWithPayload?(id, payload) == true { return }
         performCommand(id)
     }
+    /// Runtime menu titles (CC-32): the View menu names the action the item performs.
+    public func menuTitle(for id: String) -> String? {
+        switch id {
+        case "toggle-toolbar": context.window?.showsToolbar == true ? "Hide Toolbar" : "Show Toolbar"
+        case "toggle-sidebar": context.window?.sidebarMode == .hidden ? "Show Sidebar" : "Hide Sidebar"
+        default: nil
+        }
+    }
     public func isCommandEnabled(_ id: String, enabledKey: String) -> Bool {
         if let enabled = onCommandValidation?(id, enabledKey) { return enabled }
+        if id == "toggle-toolbar" { return context.window?.style == .standard }
         if id == "open-in-current-space" { return peekStorage?.isShown == true }
         if id == "go-back" { return peekStorage?.isShown == true ? peekStorage?.stack.last?.host?.canGoBack == true : splitController.focusedTab.flatMap { container.host(for: $0.id) }?.canGoBack == true }
         if id == "go-forward" { return peekStorage?.isShown == true ? peekStorage?.stack.last?.host?.canGoForward == true : splitController.focusedTab.flatMap { container.host(for: $0.id) }?.canGoForward == true }
@@ -842,6 +885,8 @@ public final class BrowserWindowController: NSWindowController, NSWindowDelegate
         if let handled = onSidebarIntent?(intent) { return handled }
         switch intent {
         case .toggleSidebar: toggleSidebar(); return true
+        case .setToolbarShown(let shown): return setToolbarShown(shown)
+        case .setShowFullURL(let full): showsFullURLWithToolbar = full; return true
         case .sidebarHiddenByGesture: noteSidebarHidden(); return true
         case .hoverPreview(let request): hoverPreview.update(request); return true
         case .unloadFolder(let id):

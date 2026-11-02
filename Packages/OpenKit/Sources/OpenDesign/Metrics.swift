@@ -388,3 +388,17 @@ public enum BannerMetrics {
     public static let lineHeight: CGFloat = 15
     public static let buttonHeight: CGFloat = 24
 }
+
+/// The optional content toolbar (commandbar-completion §4.6.2). It is the split pane bar on a single
+/// pane: same height and left controls (`SplitMetrics`), no split menu, no close.
+public enum ToolbarMetrics {
+    /// Arc `toolbar-display-height` default 32 (decoded, CC-33).
+    public static let height: CGFloat = SplitMetrics.barHeight
+    /// The extensions button slot, the close button's place (CC-34 `contentToolbarOpenExtensionsButton`;
+    /// position guess). Empty until the extensions UI fills it.
+    public static func extensionsSlot(width w: CGFloat) -> CGRect { CGRect(x: w - 37, y: 4, width: 32, height: 24) }
+    /// Site Control Center: left of the extensions slot when it is filled, else in its place (guess).
+    public static func siteControls(width w: CGFloat, extensionsShown: Bool) -> CGRect {
+        CGRect(x: w - (extensionsShown ? 73 : 37), y: 2, width: 32, height: 28)
+    }
+}

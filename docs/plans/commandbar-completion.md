@@ -762,6 +762,8 @@ The Section 2 agent implements this plan. Each row names the merged PR and its e
 
 | 7 | [#142](https://github.com/SergeSerb2/open/pull/142) | `commands-demo` 314 checks OK incl. N1–N7 (Favorites on/off, ninth on/off, collapsed and nested folders, a peeked folder, a split once, a collapsed pinned section, missing slots); `sidebar-render check` 609/609 incl. the Command-press check (pixels, row layouts and reloads unchanged while Command is held, the event posted and dequeued so monitors would see it); App build; e2e `sidebar-completion` 194 PASS / 0 FAIL incl. the TS Cmd+1/Cmd+9 rows (#134) on the new query; break-and-revert: collapsed folders counted fail N2, N3, N4, N7; a monitor that shows a badge while Command is held fails the Command-press check | done |
 
+| 8 | this PR | `features-render check` incl. new TB1–TB13 (View ▸ Show Toolbar through the built menu: the bar takes the top 32 pt, the page loses 32 pt; back, forward, reload, copy, centered host, Site Control Center at `[W − 37, 2, 32, 28]`, no split menu or close; right-click menu and Show/Hide Full URL; a click opens the command bar in edit mode; the sidebar hides its URL field and navigation and Favorites move to y 46; the 164 pt compact sidebar shows only More options; a split keeps its pane bars; Hide Toolbar restores everything; the URL field's "Show as Toolbar"; `toggle-toolbar`; Little Open refuses); `commands-dump` runtime titles (static "Show/Hide Toolbar" kept; Show/Hide Toolbar and Show Sidebar through `menuTitle(for:)`), still 0/0/0 with 11 allowed missing; `roundtrip` toolbar (absent = off, on survives a save); break-and-revert: no title hook fails TB1, TB2 and `commands-dump`; never writing the field fails `roundtrip`; a URL field that never hides fails TB7 and TB8 | done |
+
 Section 2 decisions (Step 0):
 
 - `present(_:)` and `dismiss(reason:)` lose their `animated:` parameter: with no animation it would mean nothing.
@@ -769,6 +771,15 @@ Section 2 decisions (Step 0):
 - While Open has no privacy page, line 2 of the footer hides (`privacyURL` nil). Hiding only the word "here" would leave a broken sentence.
 - The panel edge keeps the session-1 luminance rule. Session 2 shows the dark double edge over light pages, against session-1 F0039/F0040/A0120; the rule's input is not known (`docs/followups.md`, capture request).
 - `compare --space p3` measures session-2 captures in Display P3 (their AW2726DM profile exceeds sRGB); session-1 comparisons stay in sRGB.
+
+Section 2 decisions (Step 8):
+
+- `setToolbarShown(windowID:_:)` registers no undo step (window chrome, §4.6.1) and returns false for Little Open; `BrowserWindowController.setToolbarShown` refreshes and schedules the save.
+- The snapshot writes `showsToolbar` only when it is on, so older snapshots and saves without the toolbar keep their bytes (the P1 legacy byte comparison).
+- The toolbar is `PaneChromeView` in a `.toolbar` role: the pane bar's frames and drawing, Site Control Center in the close button's place while the extensions slot is empty (`ToolbarMetrics`).
+- `BrowserWindowController` answers `menuTitle(for:)` for `toggle-toolbar` and `toggle-sidebar` itself (it is the menu dispatcher for a browser window) and runs `toggle-toolbar` when the App's `onCommand` does not take it; the plan put both in the App.
+- The toolbar's right-click items are sidebar intents sent through the window controller, so the App sees `.setShowFullURL` and `.manageExtensions` first (Step 9 stores the setting and opens the extensions page).
+- With the toolbar, the compact sidebar (< 219 pt) hides Back and Forward too, as it does for a selected split; More options keeps Reload and Hide Sidebar.
 
 Section 2 decisions (Step 7):
 
