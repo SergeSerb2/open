@@ -764,6 +764,8 @@ The Section 2 agent implements this plan. Each row names the merged PR and its e
 
 | 8 | [#143](https://github.com/SergeSerb2/open/pull/143) | `features-render check` incl. new TB1–TB13 (View ▸ Show Toolbar through the built menu: the bar takes the top 32 pt, the page loses 32 pt; back, forward, reload, copy, centered host, Site Control Center at `[W − 37, 2, 32, 28]`, no split menu or close; right-click menu and Show/Hide Full URL; a click opens the command bar in edit mode; the sidebar hides its URL field and navigation and Favorites move to y 46; the 164 pt compact sidebar shows only More options; a split keeps its pane bars; Hide Toolbar restores everything; the URL field's "Show as Toolbar"; `toggle-toolbar`; Little Open refuses); `commands-dump` runtime titles (static "Show/Hide Toolbar" kept; Show/Hide Toolbar and Show Sidebar through `menuTitle(for:)`), still 0/0/0 with 11 allowed missing; `roundtrip` toolbar (absent = off, on survives a save); break-and-revert: no title hook fails TB1, TB2 and `commands-dump`; never writing the field fails `roundtrip`; a URL field that never hides fails TB7 and TB8 | done |
 
+| 9 | this PR | App build; e2e `toolbar` 10/10 (new suite: off by default with "Show Toolbar"; Cmd+Shift+D draws the 32 pt bar with back, forward, reload, copy, host and Site Control Center, the page's `innerHeight` = slot − 32, the View item reads "Hide Toolbar"; the sidebar hides its URL field and navigation and Favorites move up 36 pt; right-click "Show Full URL" shows `http://127.0.0.1:…/alpha` and stores `open.advanced.showFullURLWithToolbar`, writing the default back restores the host; "Manage Extensions" opens the extensions page; "Hide Toolbar" restores the page; the URL field's "Show as Toolbar"; Cmd+N copies the toolbar; the Little Open window disables the item; a relaunch keeps it); e2e `numbering` 3/3 (new suite: sidebar pixels unchanged while Command is held 2 s after a still control pair; Cmd+2 and Cmd+9 select Today items 2 and last; `keyboard-shortcuts-edu` opens the window at level 3 and Esc closes it); e2e `commandbar` 60/60 incl. new `commandbar_inline_completion` (`localh` → `localhost:<port>` with the tail selected, Return switches to the tab, Backspace leaves `localh`); e2e `shell`, `window`, `measure`, `sidebar`, `app-actions` (see PR); break-and-revert: a sidebar change while Command is held fails `numbering_hold_command_no_hints` (difference 79 at the sidebar toolbar) | done |
+
 Section 2 decisions (Step 0):
 
 - `present(_:)` and `dismiss(reason:)` lose their `animated:` parameter: with no animation it would mean nothing.
@@ -771,6 +773,13 @@ Section 2 decisions (Step 0):
 - While Open has no privacy page, line 2 of the footer hides (`privacyURL` nil). Hiding only the word "here" would leave a broken sentence.
 - The panel edge keeps the session-1 luminance rule. Session 2 shows the dark double edge over light pages, against session-1 F0039/F0040/A0120; the rule's input is not known (`docs/followups.md`, capture request).
 - `compare --space p3` measures session-2 captures in Display P3 (their AW2726DM profile exceeds sRGB); session-1 comparisons stay in sRGB.
+
+Section 2 decisions (Step 9):
+
+- Most of Step 9's list landed with its library steps (`.switchToTab` for panes #139, scopes and `search-actions`/`search-tabs` #140, `.openSearchSettings` and the dismissal key #137, `keyboard-shortcuts-edu` #141, numbering #142). This step adds `toggle-toolbar`, the full-URL setting, Manage Extensions, the new-window copy, and the e2e suites.
+- `.setShowFullURL` writes the setting through `SettingsViewModel.set`; `AppDelegate.applyToolbarSettings()` applies it to every window, also when Settings ▸ Advanced changes it (the existing defaults observer).
+- Automation: `window-state` gains `toolbar`, `urlFieldVisible` and `menuTitles`; `toolbar-menu` and `url-field-menu` perform a right-click menu item; `key key=command` posts a Command `flagsChanged`. `menu-state` now validates an item before it reads its title, as AppKit does before a menu shows (the title hook runs in validation). The plan's separate `flags` and `perform` commands were not needed (`key` and `command` exist).
+- The `numbering` hold check first waits for two still sidebar snapshots 2 s apart: a fresh window's sidebar was still changing (difference 118) without any key.
 
 Section 2 decisions (Step 8):
 

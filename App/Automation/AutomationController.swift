@@ -372,6 +372,14 @@
         w.pendingSaveChoice = nil
         panel.sheetParent?.endSheet(panel, returnCode: .cancel); panel.orderOut(nil)
         choice(URL(fileURLWithPath: path)); return true
+      case "toolbar-menu", "url-field-menu":
+        // The content toolbar's or the sidebar URL field's right-click menu, built as a click builds
+        // it; with `item`, performs that item (the menu item's own action).
+        guard let controller = w.controller else { throw Failure(message: "no window") }
+        guard let menu = cmd == "toolbar-menu" ? controller.toolbarMenu() : controller.sidebar.urlFieldMenu() else { throw Failure(message: "no content toolbar") }
+        guard let title = a["item"] as? String else { return menu.items.map { $0.isSeparatorItem ? "-" : $0.title } }
+        guard let index = menu.items.firstIndex(where: { $0.title == title }) else { throw Failure(message: "no menu item \(title)") }
+        menu.performActionForItem(at: index); return true
       case "commandbar-state": return w.commandBarSession?.stateForAutomation() ?? ["created": false, "presented": false]
       case "commandbar-press":
         // AX press of one bar control (info, searchSettings, dismiss, privacyLink): the real control action.
@@ -794,6 +802,9 @@
           "screenFrame": win.screen.map { rect($0.frame) } ?? [],
           "frame": [win.frame.minX, win.frame.minY, win.frame.width, win.frame.height],
           "sidebarWidth": w.windowState.sidebarWidth, "sidebarMode": w.windowState.sidebarMode.rawValue,
+          // The optional content toolbar (commandbar-completion §4.6).
+          "toolbar": contentToolbarState(controller), "urlFieldVisible": controller.sidebar.urlFieldVisible,
+          "menuTitles": ["toggle-toolbar": controller.menuTitle(for: "toggle-toolbar") ?? "", "toggle-sidebar": controller.menuTitle(for: "toggle-sidebar") ?? ""],
           "sidebarFrame": rect(controller.sidebar.frame), "sidebarLiveWidth": controller.context.sidebarWidth,
           "toolbarFrames": controller.sidebar.toolbarGeometry.mapValues(rect),
           "toolbarButtons": controller.sidebar.toolbarVisibleButtons,
@@ -1277,6 +1288,15 @@
       return [color.redComponent, color.greenComponent, color.blueComponent, color.alphaComponent].map { Int(($0 * 255).rounded()) }
     }
 
+    private func contentToolbarState(_ controller: BrowserWindowController) -> [String: Any] {
+      let slot = controller.container.slots.count == 1 ? controller.container.slots[0] : nil
+      let bar = slot?.paneChrome.flatMap { $0.role == .toolbar ? $0 : nil }
+      return ["shown": controller.context.window?.showsToolbar == true, "drawn": bar != nil,
+        "frame": bar.map { rect($0.frame) } ?? [], "controls": bar?.visibleControls ?? [], "text": bar?.displayedText ?? "",
+        "page": slot?.contentHostView.map { rect($0.frame) } ?? [],
+        "menu": controller.toolbarMenu()?.items.map { $0.isSeparatorItem ? "-" : $0.title } ?? []]
+    }
+
     private func describe(_ w: NSWindow) -> [String: Any] {
       [
         "number": w.windowNumber, "title": w.title, "class": String(describing: type(of: w)),
@@ -1386,8 +1406,10 @@
       (menu?.items ?? []).flatMap { item -> [[String: Any]] in
         if let submenu = item.submenu { return menuRows(submenu) }
         guard !item.isSeparatorItem else { return [] }
+        // Validate first, as AppKit does before it shows a menu: validation can set the title (CC-32).
+        let enabled = menuEnabled(item)
         return [["id": item.identifier?.rawValue ?? "", "title": item.title, "key": item.keyEquivalent,
-          "enabled": menuEnabled(item), "targetNil": item.target == nil, "tag": item.tag, "action": item.action.map(NSStringFromSelector) ?? "", "payload": (item.representedObject as? [String: String])?["payload"] ?? ""]]
+          "enabled": enabled, "targetNil": item.target == nil, "tag": item.tag, "action": item.action.map(NSStringFromSelector) ?? "", "payload": (item.representedObject as? [String: String])?["payload"] ?? ""]]
       }
     }
     private func findMenuItem(_ id: String, in menu: NSMenu?) -> (NSMenu, Int)? {
@@ -1696,7 +1718,7 @@
         "delete": ("\u{7f}", 51), "forward-delete": (String(Character(UnicodeScalar(NSDeleteFunctionKey)!)), 117),
         "o": ("o", 31), ",": (",", 43), "z": ("z", 6), "n": ("n", 45), "t": ("t", 17), "w": ("w", 13), "l": ("l", 37), "f": ("f", 3), "s": ("s", 1), "a": ("a", 0),
         "v": ("v", 9), "x": ("x", 7), "c": ("c", 8), "d": ("d", 2), "i": ("i", 34), "1": ("1", 18), "2": ("2", 19), "9": ("9", 25), "=": ("=", 24),
-        "control": ("", 59),
+        "control": ("", 59), "command": ("", 55),
         "down": (String(Character(UnicodeScalar(NSDownArrowFunctionKey)!)), 125),
         "up": (String(Character(UnicodeScalar(NSUpArrowFunctionKey)!)), 126),
       ]
@@ -1713,7 +1735,8 @@
       }
       if code >= 123 { mods.insert([.function, .numericPad]) }
       let route = a["route"] as? String ?? "app"
-      let types: [NSEvent.EventType] = code == 59 ? [.flagsChanged] : [.keyDown, .keyUp]
+      // Modifier keys alone post one flagsChanged event (down: pass the modifier; up: none).
+      let types: [NSEvent.EventType] = code == 59 || code == 55 ? [.flagsChanged] : [.keyDown, .keyUp]
       for type in types {
         guard
           let event = NSEvent.keyEvent(

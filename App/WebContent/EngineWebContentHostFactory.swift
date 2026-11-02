@@ -119,6 +119,7 @@ final class EngineWebContentHostFactory: NSResponder, WebContentHostFactory {
     controller.onFocus = { [weak self] in guard let self else { return }; self.app.didFocusWindow(self.windowState.id) }
     controller.nextResponder = self; nextResponder = NSApp
     controller.onSidebarIntent = { [weak self] intent in guard let self else { return false }; return self.performSidebar(intent) }
+    controller.showsFullURLWithToolbar = UserDefaults.standard.bool(forKey: AppCommand.showFullURLKey)
     controller.onStateChange = { [weak self] in
       guard let self else { return }
       if self.app.engineReady { for tab in self.visibleTabs { tab.live.sleepPhase = .live }; self.controller?.container.refreshPlaceholders() }
@@ -446,6 +447,10 @@ final class EngineWebContentHostFactory: NSResponder, WebContentHostFactory {
     case .share(let id): return shareSidebarTab(id)
     case .duplicate(let id): return model.duplicateNode(id: id) != nil
     case .showLibrary: app.settingsPresenter.showLibrary(); return true
+    // The content toolbar (commandbar-completion §4.6): the setting is Settings ▸ Advanced's
+    // "Show full URL when Toolbar is enabled"; every window follows it (AppDelegate's defaults observer).
+    case .setShowFullURL(let full): app.settingsPresenter.settings.set(full, for: AppCommand.showFullURLKey); app.applyToolbarSettings(); return true
+    case .manageExtensions: openExtensionsPage(nil); return true
     case .manageSpaces:
       app.settingsPresenter.showLibrary(section: .spaces); return true
     case .showSiteControls, .changeSpaceIcon, .editSpaceTheme, .newProfile, .shareSpace,

@@ -458,7 +458,7 @@ Columns: feature · RE doc + section · plan · library code · App wiring · ve
 | Share (File ▸ Share…, row Share…) | MH File; IS §15 | app-shell §4.1, §4.3 | `App/SidebarMenuActions.swift` | main (#132) | `I9_share_system_picker` | done | File ▸ Share uses the system picker. Items 9–10 (#132) wire the row Share… item through `share` to `NSSharingServicePicker`, anchored at the row; `I9_share_system_picker` checks its URL, service query and cancellation. |
 | Spelling, substitutions, transformations, speech, font menus | MH Edit | app-shell Step C (system dispatch) | registry; `SystemCommandActions` selectors | main | — | done | Closed in #85: 46 system ids keep AppKit selectors (§2). See §3, gap 3 (closed). |
 | Two-finger swipe back/forward on the page; pinch zoom | MH "Gestures" | page-platform (#73) | — | — | not verified | planned | Was unplanned. See §3, gap 9. |
-| Optional toolbar (Show/Hide Toolbar, full URL) | FC §8.2 r6 | commandbar-completion §4.6 (#70, Step 8) | `BrowserWindowState.showsToolbar` (snapshot field, absent = off); `PaneChromeView` toolbar role; `BrowserWindowController.toggleToolbar`, `menuTitle(for:)`; sidebar `.setToolbarShown`, `.setShowFullURL`, `.manageExtensions` | main (#143) | `features-render` TB1–TB13; `commands-dump` runtime titles; `roundtrip` toolbar | done (partial) | The 32 pt bar is the split pane bar on a single pane: back, forward, reload, copy, host, Site Control Center (no split menu, no close). With it, the sidebar hides its URL field, Back, Forward and Reload, and Favorites move up to y 46 (layout guess, plan §9 item 1). View menu titles follow the window (CC-32). App wiring (Cmd+Shift+D on the key window, the full-URL setting, Manage Extensions, e2e `toolbar`) is Step 9. See §3, gap 26. |
+| Optional toolbar (Show/Hide Toolbar, full URL) | FC §8.2 r6 | commandbar-completion §4.6 (#70, Step 8) | `BrowserWindowState.showsToolbar` (snapshot field, absent = off); `PaneChromeView` toolbar role; `BrowserWindowController.toggleToolbar`, `menuTitle(for:)`; sidebar `.setToolbarShown`, `.setShowFullURL`, `.manageExtensions` | main (#143), branch `s2/step9-app-wiring` (App) | `features-render` TB1–TB13; `commands-dump` runtime titles; `roundtrip` toolbar; e2e `toolbar` (10 rows) | done | The 32 pt bar is the split pane bar on a single pane: back, forward, reload, copy, host, Site Control Center (no split menu, no close). With it, the sidebar hides its URL field, Back, Forward and Reload, and Favorites move up to y 46 (layout guess, plan §9 item 1). View menu titles follow the window (CC-32). App (Step 9): Cmd+Shift+D on the key window; the right-click "Show Full URL" writes Settings ▸ Advanced's setting and every window follows it; Manage Extensions opens the extensions page; a new window copies the key window's toolbar (guess); the toolbar survives a relaunch; the Little Open window disables the command. See §3, gap 26. |
 | Website appearance: Automatic, Light, Dark | MH View ▸ Appearance | page-platform (#73) | registry | — | — | planned | See §3, gap 27. |
 | Clear Cache and Refresh; Clear Cookies and Refresh | MH View | page-platform (#73) | registry | — | — | planned | See §3, gap 28. |
 | Cast | MH View | page-platform (#73) | registry | — | — | planned | May stay out of v1. See §3, gap 30. |
@@ -596,7 +596,7 @@ Sidebar intents merged in #128/#132: `moveToNewSpace` reuses A3’s atomic plain
 
 Items that left this list since the first audit: Copy URL as Quote (dispatches, wrong text), Reset all tabs in this Space, Expand and Collapse All Folders, Reveal Tab in Sidebar, and every system item (29). Step C dispatched them (#85).
 
-Menu keys with no dispatch (7): New Incognito Window Cmd+Shift+N, Capture Cmd+Shift+2, Show/Hide Toolbar Cmd+Shift+D, Exit Esc, Toggle Developer Mode Ctrl+D, Peek Email Cmd+Shift+E, Join Meeting Cmd+Ctrl+J. All are planned except Join Meeting, which needs a decision (§5.4).
+Menu keys with no dispatch (6; Show/Hide Toolbar Cmd+Shift+D dispatches since commandbar-completion Step 9): New Incognito Window Cmd+Shift+N, Capture Cmd+Shift+2, Exit Esc, Toggle Developer Mode Ctrl+D, Peek Email Cmd+Shift+E, Join Meeting Cmd+Ctrl+J. All are planned except Join Meeting, which needs a decision (§5.4).
 
 PR #134 earlier tab-switcher / cold-command-bar receipt, based on main
 `dee105e6` (2026-10-28; final PR receipt follows):
@@ -666,7 +666,7 @@ Ranking is by user impact for an Arc user who switches to Open. **P0** blocks da
 23. **Closed — One command-bar row per Split View.** Built in commandbar-completion Steps 3–4 (Section 2).
 24. **Closed — Browser-actions-only scope.** Built in commandbar-completion Step 5 (Section 2).
 25. **Hints closed; window open — Hold-Cmd hints and the Essential Keyboard Shortcuts window.** **S2 (2026-10-26): closed for hints** (Arc shows none, CC-39; lead decision: Open builds none; out of scope in §1.7). The window is built (commandbar-completion Step 6, Section 2); the (i) button opens the privacy footer, not this window (CC-42).
-26. **Open — Optional toolbar.** Library built in commandbar-completion Step 8 (32 pt bar on the split pane bar, sidebar hiding, menu titles, snapshot field); App wiring is Step 9.
+26. **Closed — Optional toolbar.** commandbar-completion Step 8 (#143: 32 pt bar on the split pane bar, sidebar hiding, menu titles, snapshot field) and Step 9 (App wiring, e2e `toolbar`). The sidebar layout with the toolbar is a guess until a capture exists (plan §9 item 1).
 27. **Open — Website appearance menu.** Now planned in page-platform (#73).
 28. **Open — Clear Cache / Clear Cookies and Refresh.** Now planned in #73.
 29. **Open — Developer extras and Troubleshooting items.** Now planned in #73. Copy Open Info and Reveal Open Data work from Settings; the menu ids do not.
@@ -922,7 +922,7 @@ This appendix is the first audit's table. It is history. Today's counts and miss
 | Edit > Format > Font | Italic | Cmd+I | `font-italic` | — | — | system (no dispatch spec) |
 | Edit > Format > Font | Underline | Cmd+U | `font-underline` | — | — | system (no dispatch spec) |
 | View | Show/Hide Sidebar | Cmd+S | `toggle-sidebar` | P | Y | app-shell §4.3 |
-| View | Show/Hide Toolbar | Cmd+Shift+D | `toggle-toolbar` | — | — | none |
+| View | Show/Hide Toolbar | Cmd+Shift+D | `toggle-toolbar` | Y | — | commandbar-completion §4.6 (Steps 8–9, #143) |
 | View | Enter Full Screen | Cmd+Ctrl+F | `toggle-full-screen` | Y | Y | app-shell §4.3 |
 | View | Refresh the Page | Cmd+R | `reload` | Y | Y | app-shell §4.3 |
 | View | Force Refresh the Page | Cmd+Shift+R | `force-reload` | — | — | app-shell §4.3 |
