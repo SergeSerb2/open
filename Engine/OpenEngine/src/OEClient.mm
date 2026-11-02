@@ -39,6 +39,13 @@ bool OEClient::OnProcessMessageReceived(CefRefPtr<CefBrowser> browser,
                    frame:OEString(message->GetArgumentList()->GetString(1))];
     return true;
   }
+  if (message->GetName() == kOEMsgMediaReport) {
+    CefRefPtr<CefListValue> args = message->GetArgumentList();
+    [view_ oe_mediaReport:OEString(args->GetString(0))
+                     json:OEString(args->GetString(1))
+                    frame:OEString(args->GetString(2))];
+    return true;
+  }
   return false;
 }
 

@@ -243,7 +243,7 @@ Keep the existing slot logic in `TabCellView.layout()` (the button sits
 |---|---|
 | Speaker button | 20×20 at `x = titleX + min(textWidth, available) + 2`, y 10 (unchanged). Glyph: `NSImageView` with SF `speaker.wave.2.fill` (audible, not muted) or `speaker.slash.fill` (muted) at 11 pt Regular (`docs/design.md` §4). Tint: keep `SidebarRole.rowAccessory` (today's value). Arc passes a `foregroundTintColor` (features-core rule 10); its value is not known, so S9 decides. Hover plate: none (unchanged). |
 | Mute change animation | `NSImageView.setSymbolImage(_:contentTransition: .replace.magic(fallback: .replace))`, system duration (≈ 0.25 s). Reduce Motion: no transition. No looping effect while audio plays (D-11). Arc animates slash and waves on change (`SpeakerIcon{slashStart, waveIncrement, waveReappearStart}`); this is the closest system effect. |
-| Tooltip | "Mute tab" / "Unmute tab" (guess: Arc's text is a short inline string; its comments are "Tooltip; mutes the tab." / "Tooltip; unmutes the tab."). Placement beside the pointer, as row tooltips (interaction-states §5). Delay `TooltipMetrics.showDelay`. |
+| Tooltip | "Mute this tab" / "Unmute this tab" (**fact**, Media D8: Arc's `TabCellState` keys, `docs/re/features-advanced.md` PP-23). The AX label stays "Mute tab" / "Unmute tab"; AX help is the tooltip text. Placement beside the pointer, as row tooltips (interaction-states §5). Delay `TooltipMetrics.showDelay`. |
 | Click | `.toggleMute(tabID:)` (exists). The App sets `OEWebContent.muted` from `tab.isMuted` on every change (§7.2). The row does not select the tab. |
 | Recording indicator | Shown when `tab.live.isCapturing` (camera or microphone). 14×20 slot placed directly before the speaker slot (or at the speaker position when no speaker shows). Glyph: a 7 pt filled circle drawn in `SidebarRole.recordingIndicator` (new: light `#F53714`, dark `#F25E6B`, the `CommandBarColors.lockInsecure` pair; guess). Static; no pulse. Tooltip "This tab is using your camera or microphone" (Arc string, PP-19). No click action. |
 | Build on demand | Both views are created only when first shown (keep the scroll budget, `docs/design.md` §11). |
@@ -266,7 +266,7 @@ These rows replace the "Speaker button" row above and the trailing slot logic:
 | Tint | White ≈ 0.65 on the selected row (peak `#B8B8BE`), i.e. the row accessory tone; keep `SidebarRole.rowAccessory` and check it against the peak. | measured (S2 12/0022) |
 | When | From the first frame with audio. | measured (S2 12/0013) |
 | Hover plate | Like the close button: plate = button frame, radius 6, the row hover plate tone. | **guess** (the pointer did not trigger hover feedback) |
-| Tooltip | Unchanged ("Mute tab" / "Unmute tab", guess): the speaker tooltip did not show for the synthetic pointer. | not captured |
+| Tooltip | "Mute this tab" / "Unmute this tab" (fact, PP-23; the synthetic pointer did not show it in S2 12). | code (Media D8) |
 | Recording dot | Not captured (the microphone steps were skipped). Keep it in the one placement function; default now **leading** too: a 14 pt slot directly after the favicon, before the speaker, and the title moves right by the slot width as well (**guess**: Arc names `hasLeadingRecordingIndicator`). | guess |
 | Click, mute transition, build on demand | Unchanged (§4.1 rows above). | — |
 
@@ -287,6 +287,85 @@ clarification 2026-10-26; record the failed native run in the PR). Reduce
 Motion stays static.
 Use a 14×20 recording slot, and hide it before the speaker when width is
 limited. Keep recording placement in one function until S9 decides its side.
+
+**Step 2b results (2026-11-02, branch `s3/step2b-row-speaker`).**
+`TabCellView.layoutMediaAccessories` is the one placement function: favicon,
+then the recording dot (14 × 20 at `[41, y + 10]`), then the 26 pt speaker
+(`[41, y + 7]`, or `[55, y + 7]` after a dot); the title moves right by 26
+(and 14 more with a dot; recording only: 14), and its right end stays. The dot
+hides first when `titleRight − titleX` is narrower than both slots. The "/" of
+a left pinned URL stays just before the title (guess). The speaker has AX id
+`sidebarTabCellMuteButton` and the close button's hover plate (button frame,
+radius 6, `rowPressed`; **guess**). `RowMediaMetrics` holds the listed values
+plus `recordingSlotHeight 20` (the 14 × 20 slot, centered on the button).
+
+Glyph fit (deviation from the table above): Arc draws SF "speaker" at 14 pt
+Medium plus **three** waves and a slash of its own (`SpeakerIcon`,
+`docs/re/features-advanced.md` PP-23); Open does not copy that drawing. Real
+1x renders through `compare-media` (row-relative ink box edge error; core /
+peak ΔE00):
+
+| Candidate | Audible vs `[44, 15, 19, 11]` | Muted candidate | Muted vs `[47, 13, 14, 14]` |
+|---|---|---|---|
+| `speaker.wave.2` Regular 13 | `[47, 15, 14, 11]` 3.0 pt FAIL; 1.85 / 0.74 | `speaker.slash` Regular 13 | `[48, 14, 12, 12]` 1.0 pt; 4.35 / 2.54 FAIL |
+| `speaker.wave.2` Medium 14 | `[46, 14, 16, 12]` 2.0 pt FAIL; 1.15 / 1.25 | `speaker.slash` Medium 14 | `[48, 14, 13, 13]` 1.0 pt; 1.62 / 1.24 |
+| `speaker.wave.3` Medium 14 | `[44, 13, 19, 14]` 2.0 pt FAIL; 0.88 / 1.25 | `speaker.slash` Medium 14.5 | `[47, 14, 13, 13]` 1.0 pt; 1.23 / 1.49 |
+| **`speaker.wave.3` Regular 14** | `[45, 14, 18, 12]` **1.0 pt**; 1.38 / 1.00 | `speaker.slash` Regular 15 | `[47, 13, 14, 14]` 0.0 pt; 4.00 / 2.52 FAIL |
+| | | **`speaker.slash` Regular 15.5** | `[47, 13, 14, 14]` **0.0 pt**; 1.91 / 1.49 |
+
+No `speaker.wave.2` size or weight meets the 1 pt box gate (SF's two waves
+are too narrow for Arc's three), so Open uses **`speaker.wave.3` Regular 14**
+and **`speaker.slash` Regular 15.5**: the best box for each state. Medium
+14 / 14.5 for muted pass too, with lower color error but a 1 pt box error.
+Both glyphs are centered in one 26 × 26 image-view frame (static Reduce Motion
+view: the same centered rect). Arc's own mute animation is a set of springs
+(response 0.3, damping 0.6, delays 0–0.12 s; PP-23); Open keeps the native
+`.replace` transition, as decided above.
+
+RI5 compare (`compare-media --state row-audible|row-muted`, design.md §7 ink
+method, row-relative; colors through the embedded ICC into extended linear
+sRGB Float32, no clipping; self-test: P3 green → linear sRGB (−0.225, 1.042,
+−0.079)):
+
+| Element | 12/0022 audible: Arc / Open / error | 12/0027 muted: Arc / Open / error |
+|---|---|---|
+| Button frame (AX) | `[41, 7, 26, 26]` / same / 0.0 pt | same / same / 0.0 pt |
+| Glyph ink box | `[44, 15, 19, 11]` / `[45, 14, 18, 12]` / 1.0 pt | `[47, 13, 14, 14]` / same / 0.0 pt |
+| Glyph core color | `#B3B3BA` / `#B2B0B7` / ΔE00 1.38 | `#B5B5BC` / `#B2B0B7` / ΔE00 1.91 |
+| Glyph peak (tint check) | `#B8B8BF` / `#B9B8BD` / ΔE00 1.00 | `#B8B8BE` / `#B9B7BE` / ΔE00 1.49 |
+| Title start (ink left, top, bottom) | x 71, y 14…28 / same / 0.0 pt | same / same / 0.0 pt |
+| Title frame x (AX) | 69 / 69 / 0.0 pt | 69 / 69 / 0.0 pt |
+
+Context (not gated): the selected-row plate differs by ΔE00 2.23 (`#515060`
+vs `#544F5F`; the theme, not this step). `SidebarRole.rowAccessory` stays.
+`sidebar-render check` RI5 repeats these numbers in process against the Arc
+values above (no capture pixels). Negative proof: `buttonX` 43 makes RI1, RI3,
+RI5 and both compares FAIL (button 2.0 pt; ink 3.0 / 2.0 pt); reverted.
+Harness limit: after a symbol transition, neither `cacheDisplay` nor
+`layer.render` reproduces the image view's composited ink, so the image-view
+path is checked by frame (= button bounds) and `.alignCenter`, and ink boxes
+are measured on the static view and the 1x render.
+
+Scroll budgets (`sidebar-render bench --rows 1000`, release, 2x, M5 Pro;
+baseline main `1b5e66d8` vs head, interleaved pairs in one session, under
+`lockf /tmp/open-onscreen-e2e.lock`; a Chromium build of another section kept
+the 1-minute load average at 16–18 on 18 cores):
+
+| Session | Variant | Baseline median / mean p95 | Head median / mean p95 | Head vs baseline | Load (1 min) |
+|---|---|---|---|---|---|
+| 2 (8 pairs) | plain | 5.150 / 5.200 ms | 5.410 / 5.474 ms | +5.0 % / +5.3 % | 16.0–16.7 |
+| 2 (8 pairs) | mixed | 7.195 / 7.311 ms | 7.465 / 8.216 ms | +3.8 % / +12.4 % (one 14.31 ms head run) | 16.0–17.4 |
+| 1 (6 pairs) | plain | 4.145 / 4.618 ms | 4.935 / 5.058 ms | +19 % / +9.5 % | 17.1–18.4 |
+| 1 (6 pairs) | mixed | 5.365 / 5.765 ms | 5.490 / 5.687 ms | +2.3 % / −1.4 % | 16.7–17.7 |
+| 3 (5 pairs) | plain | 4.110 / 4.326 ms | 4.020 / 4.072 ms | −2.2 % / −5.9 % | 17.5–21.4 |
+| 3 (5 pairs) | mixed | 7.250 / 7.186 ms | 8.310 / 7.778 ms | +14.6 % / +8.2 % | 17.5–21.4 |
+
+Plain rows run the same code as main (no media → the placement function
+returns at once; only the "/" block moved after the trailing slots); sessions
+2 and 3 are within ± 10 %, session 1 is within on the mean only. The mixed absolute budget (p95 ≤ 4.2 ms)
+**could not be judged** at this load: main's own mixed p95 was 5.4–7.2 ms
+here against 2.3 ms in the quiet Step 2 session. Rerun the mixed variant when
+the machine is idle before Step 3 relies on it.
 
 ### 4.2 Sidebar media controls (mini player stack)
 
@@ -1272,9 +1351,9 @@ widths 228 and 500.
 
 | ID | Check |
 |---|---|
-| RI1 | A muted audible row shows `speaker.slash.fill` at the §4.1 frame; a silent unmuted row builds no speaker view. |
+| RI1 | A muted audible row shows the outline `speaker.slash` (audible: `speaker.wave.3`) at the Step 2b frame `[41, y + 7, 26, 26]` with AX id `sidebarTabCellMuteButton`, and the title frame moves to x 69; a silent unmuted row builds no speaker view. |
 | RI2 | Clicking the speaker sends `.toggleMute` and does not change selection. |
-| RI3 | A capturing row shows the recording dot before the speaker; its tooltip text is exact. |
+| RI3 | A capturing row shows the recording dot in a leading 14 × 20 slot at `[41, y + 10]`, before the speaker (then at x 55) and the title (x 83); its tooltip text is exact. |
 | RI4 | The symbol transition runs once per mute change and leaves no animation on the layer afterwards. |
 | RI5 | Step 2b: an audible row draws the speaker at `[41, y + 7, 26, 26]` with the outline glyph and the title origin at x 70; `sidebar-render compare` against S2 12/0022 (audible) and 0027 (muted) is within 1 pt and ΔE00 2 for the button frame, glyph ink box and peak, and title start (favicon and title text masked). RI1 and RI3 use the new frames. |
 | MC1 | No source → container height 0 and the pager ends at `h − 50` (no layout change from today). |
@@ -2351,6 +2430,62 @@ Historical negative-control receipts describe their original frozen harnesses;
 this refresh retains their defect gates and adapts the delay assertions to main.
 
 [Current merge/checklist receipts](../../Packages/OpenKit/MediaRenders/step3b/evidence/main-refresh/README.md).
+
+## 14. Section 3 implementation notes (Steps 5–12, 2026-11-02)
+
+Section 3 (Media) builds the remaining steps. Each step adds its verification
+note here with its PR link.
+
+### 14.1 Steps 5–6: interim engine media state and the App wiring
+
+PR: (this PR, branch `s3/media-app-wiring`).
+
+Engine (Step 5, OpenEngine only, stock-CEF compatible):
+
+- `OEMediaSession` (`Engine/OpenEngine/include/OpenEngine/OEMediaSession.h`)
+  has the EM-1b shape, so Step 7 changes only its source. Until then a
+  per-frame probe (`kMediaProbe`, `OEApp.mm`) reports each frame's media
+  state as JSON on media events only (no timer, no `timeupdate`).
+  `OEMediaSession.mm` merges the frames. Change bits `OEWebContentChangeMedia`
+  (1 << 13) and `OEWebContentChangePictureInPicture` (1 << 14) (EM-8).
+- The probe records the page's `navigator.mediaSession` action handlers, so
+  previous/next work before the fork (the plan expected them to be absent).
+  Blink installs `MediaSession` after the probe runs, so the hook goes in at
+  the first of: a microtask, the first DOM mutation, DOMContentLoaded or a
+  media event.
+- EM-5 interim: `requestPictureInPicture(completion:)` gives the main frame a
+  user gesture through a DevTools evaluation, then asks the frame with the
+  largest playing video to enter PiP (3 s timeout).
+- Limits: a page can fake every value (UI only, no security decision);
+  videos in subframes get no user gesture; Web Audio is not audible (P6).
+
+App (Step 6): `App/Media/MediaCoordinator.swift` owns the store, the PiP
+session and the rules. Section 3 decisions:
+
+- Leave events come from a diff of each window's displayed tabs (selected
+  tab or split panes of the focused Space), computed on the window's refresh
+  hook and in `showSelection`, so minimize, occlusion and app hide never
+  produce one (D-4), and the request runs in the same turn as the selection.
+- Each page host follows its tab's `isMuted` by Observation, so Undo/Redo of
+  Mute All reaches the engine. Mute All is one Undo group.
+- Phase 1 learns about Chromium's own PiP window only as a PiP exit: a paused
+  video means Close (snooze), a playing one means Back to Tab (§4.4.1).
+- A page that reports "in PiP" within 2 s after Open asked it to leave is not
+  taken as a new manual PiP.
+- The sleep feed (§4.10) is `MediaCoordinator.visibility`, an
+  `AppVisibilityProvider` with the new `mediaControlTabIDs` field. Section 8's
+  App sleep adapter reads it; there is no App sleep adapter yet.
+- View Media opens the Library's Media section: Arc's item runs
+  `viewScreenshotsAndCaptures:` (`docs/re/menus-and-hotkeys.md`). The Library
+  Media grid (Captures + Screenshots) is not playback media.
+
+Verification: e2e `--only media --style chrome` (`tools/e2e/engine_e2e.py`,
+fixtures `tools/e2e/fixtures/media/`, no binary media). At load 17–25:
+card shown 3–8 ms after the leave (polled), PiP entered 80–90 ms after the
+request, idle CPU with a paused card equal to idle CPU without it (median of
+three interleaved pairs, all processes 0.46 vs 0.32 %, browser process 0.17
+vs 0.11 %). Rows E-M2 (P6), E-M8 and E-M14 (EM-4), E-M13 (EM-7) and the sleep
+adapter (section 8) report BLOCKED.
 
 ## Appendix — Lead decisions (2026-10-25)
 
