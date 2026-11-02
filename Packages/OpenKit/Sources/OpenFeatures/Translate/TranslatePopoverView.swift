@@ -385,12 +385,13 @@ public final class TranslatePopoverController {
     public var panelFrame: CGRect? { isPresented ? panel?.frame : nil }
     public var panelWindowNumber: Int? { isPresented ? panel?.windowNumber : nil }
     /// The panel is on screen in front of its browser window (the window server's order, front to back).
-    public var isAboveParent: Bool {
-        guard isPresented, let panel, let parent, panel.isVisible else { return false }
+    public var isAboveParent: Bool { stacking.panel.map { p in stacking.parent.map { p < $0 } ?? false } ?? false }
+    /// Positions in the window server's on-screen list, front to back (nil when not on screen).
+    public var stacking: (panel: Int?, parent: Int?) {
+        guard isPresented, let panel, let parent, panel.isVisible else { return (nil, nil) }
         let order = (CGWindowListCopyWindowInfo([.optionOnScreenOnly], kCGNullWindowID) as? [[String: Any]] ?? [])
-            .compactMap { $0[kCGWindowNumber as String] as? Int }
-        guard let p = order.firstIndex(of: panel.windowNumber), let w = order.firstIndex(of: parent.windowNumber) else { return false }
-        return p < w
+            .compactMap { ($0[kCGWindowNumber as String] as? NSNumber)?.intValue }
+        return (order.firstIndex(of: panel.windowNumber), order.firstIndex(of: parent.windowNumber))
     }
 }
 

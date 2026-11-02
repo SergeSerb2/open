@@ -7159,7 +7159,10 @@ def page_translate_checks(factory, results, tmp):
         results['X1_context_menu_item'] = {'ok': 'Translate to English' in items, 'openItems': items}
 
         # The popover through the real status button, then Esc through the real key path.
-        pop = app.call('translate', action='offer')['popover']
+        app.call('translate', action='offer')
+        # The window server lists the panel after the order-front commits: read it a moment later.
+        pop = (wait_until(lambda: (lambda p: p if p.get('aboveWindow') else None)(st()['popover']), timeout=3, step=.05)
+               or st()['popover'])
         # The in-app snapshot does not stack child panels; capture the panel window alone.
         shot(app, 'page-translate-popover.png', window=pop.get('window'))
         app.call('key', key='escape', route='app')

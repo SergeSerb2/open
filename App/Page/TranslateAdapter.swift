@@ -323,6 +323,7 @@ final class TranslateAdapter {
       if let f = popover.panelFrame { p["frame"] = [f.minX, f.minY, f.width, f.height] }
       p["window"] = popover.panelWindowNumber ?? 0
       p["aboveWindow"] = popover.isAboveParent
+      p["stacking"] = [popover.stacking.panel ?? -1, popover.stacking.parent ?? -1]
       out["popover"] = p
     } else { out["popover"] = ["presented": false] }
     out["toasts"] = toastsShown
