@@ -213,7 +213,14 @@ Source: the live `BrowserModel`, current Profile, all its Spaces.
 - Pinned and Today items include tabs inside folders and Split panes.
 - Favorites come from the Profile. They have no Space.
 - Each tab row carries its Space (`spaceID`, `spaceTitle`) and location.
-- In a Split, the subtitle names the Split. The exact caption is a UI choice.
+- A Split View is one row (commandbar-completion §4.2, Arc CC-12): the index records each pane's
+  split (`TabIndex.splits`, pane slots in pane order, orientation). Pane matches fold into one candidate
+  per split: the best pane's quality and entry, the most recent pane's recency, the `.splitPane` and
+  current-Space boosts. The row is `id = "split:<splitID>"`, kind `switchToTab`, `tabID` and `url` of the
+  best-matching pane (empty query: the focused pane), `title` the pane titles joined with " | ", and
+  `split: SplitRowInfo` (pane tab ids, titles, icons, URLs, `isVertical`). Any pane can make it exact (T5)
+  or eligible (T7). Edit mode leaves out a split that holds the current tab. A history or typed row whose
+  URL equals any pane's URL folds into the split row; a separate open tab with that URL stays its own row.
 
 The engine keeps a `TabIndex` so a keystroke never walks the live model:
 
@@ -678,7 +685,7 @@ zero warnings, zero errors (Swift 6.4, strict concurrency).
 
 ### suggest-check
 
-44/44 passed (2026-11-02, commandbar-completion Steps 1–2, load average 9–11 on 18 cores). The table is the real output shape. Rows 34–43 are the inline completion scenarios 32–40 and 44 of the plan (§5.1).
+45/45 passed (2026-11-02, commandbar-completion Steps 3–4, load average 9–11 on 18 cores). The table is the real output shape. Rows 34–44 are the plan's scenarios 32–41 and 44 (§5.1).
 
 | # | Result | Scenario |
 |---|---|---|
@@ -721,11 +728,12 @@ zero warnings, zero errors (Swift 6.4, strict concurrency).
 | 37 | PASS | 35: "google.co" → T3a "google.com" (typed 9); completion off → T3 typed URL, none |
 | 38 | PASS | 36: whole host "google.com" → T3, no completion (F0061) |
 | 39 | PASS | 37: path → full URL, host-only otherwise, whole host none, port kept, scheme and www. kept as typed |
-| 40 | PASS | 38: no completion for arithmetic, whitespace, scopes, search tabs, non-web URLs, typed URL or search rows |
+| 40 | PASS | 38: no completion for arithmetic, whitespace, scopes, search tabs, non-web URLs, typed URL or search rows; field text ≤ 2,048 (at the cap yes, one over no) |
 | 41 | PASS | 39: current tab offered in new-tab mode (also for an empty query), absent in edit mode |
 | 42 | PASS | 40: "gi" → "git": snapshot 0 carries the history row over and already completes "github.com" |
-| 43 | PASS | 44: first snapshot with inline completion p95 < 5 ms CPU (5,000 tabs); completion check p95 ≤ 0.05 ms |
-| 44 | PASS | first snapshot p95 < 5 ms main-thread CPU (1,000 random queries, 5,000 tabs, 100k history) |
+| 43 | PASS | 41: split → one row (either pane matches, targets it); exact pane title → T5; pane history folds in; empty query → focused pane; edit mode leaves out the current split |
+| 44 | PASS | 44: first snapshot with inline completion p95 < 5 ms CPU (5,000 tabs incl. 500 two-pane splits); completion check p95 ≤ 0.05 ms |
+| 45 | PASS | first snapshot p95 < 5 ms main-thread CPU (1,000 random queries, 5,000 tabs, 100k history) |
 
 Rows 26–33 use a local stub fetcher, so no network runs in the check.
 
@@ -779,8 +787,8 @@ No `--show-titles` output is in this file.
 
 ## Open questions
 
-1. Split caption: Arc shows "Switch to Split View" for a tab in a Split.
-   OpenSuggest gives the tab and its location. The UI picks the caption text.
+1. Split caption: closed. One row per Split View (`Suggestion.split`); the UI shows "Switch to Split View"
+   (commandbar-completion Steps 3–4).
 2. History per Profile: the engine takes one resolver, `(ProfileID?) -> HistoryStore?`.
    The app must give it the Profile's database. The CLI gives one database for all Profiles.
 3. Kagi suggest may need an account key. A failed fetch gives no rows, by design.

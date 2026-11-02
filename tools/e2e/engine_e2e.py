@@ -4912,6 +4912,20 @@ def commandbar_checks(factory, results, tmp, config):
         other = app.call('open', url=origin + '/split')['id']
         app.call('split')
         split = next(n for n in app.call('sidebar-tree')['today'] if n['kind'] == 'split')
+        # One row per Split View (commandbar-completion §4.2): a pane's title finds one split row, no pane
+        # rows; Return selects the split with that pane focused (the App's selectTabForCommand path).
+        pane_ids = [n['id'] for n in split['children']]
+        bar('t', 'window'); found = type_query('Shell C /split')
+        split_rows = [r for r in found['rows'] if r['id'].startswith('split:')]
+        pane_rows = [r for r in found['rows'] if not r['id'].startswith('split:') and r['tab'] in pane_ids]
+        top_is_split = bool(found['rows']) and found['rows'][0]['id'].startswith('split:')
+        press('return')
+        chosen = wait_until(lambda: (lambda ts: ts if next((t for t in ts if t['id'] == other), {}).get('selected') else None)(app.call('tabs')), timeout=5, step=.05) or app.call('tabs')
+        visible = {t['id'] for t in chosen if t['visible']}
+        results['commandbar_split_one_row'] = {'ok': len(split_rows) == 1 and not pane_rows and top_is_split and split_rows[0]['tab'] == other
+                                               and next((t for t in chosen if t['id'] == other), {}).get('selected', False) and set(pane_ids) <= visible
+                                               and not state().get('presented'),
+                                               'rows': [(r['id'][:6], r['title'], r['tab'] in pane_ids) for r in found['rows']], 'visible': sorted(visible), 'panes': pane_ids}
         before = app.call('host-counts')['created']; app.call('sidebar-duplicate', id=split['id'])
         splits = [n for n in app.call('sidebar-tree')['today'] if n['kind'] == 'split']
         copied = next(n for n in splits if n['id'] != split['id'])
