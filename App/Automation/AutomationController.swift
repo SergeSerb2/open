@@ -83,6 +83,7 @@
       case "archive-sweep", "archive-clock", "archive-state", "archive-wake", "profile-archive-setting", "archive-list", "archive-banner-state", "archive-banner-action":
         return try await runArchiveCommand(cmd, a)
       case "metrics": return await metrics(interval: a["interval"] as? Double ?? 1)
+      case _ where Self.mediaCommands.contains(cmd): return try await runMediaCommand(cmd, a)
       case "ping":
         return [
           "pid": Int(getpid()), "chromium": OEEngine.shared.chromiumVersion, "cef": OEEngine.shared.cefVersion,
@@ -250,6 +251,9 @@
         return ["frame": [inRoot.minX, inRoot.minY, inRoot.width, inRoot.height], "point": [inRoot.midX, inRoot.midY], "unreadBadge": controller.sidebar.unreadDotFrame(nodeID: ItemID(rawValue: uuid)) != nil, "current": controller.sidebar.isCurrentRow(nodeID: ItemID(rawValue: uuid))] as [String: Any]
       case "preview-state":
         return try previewState(a)
+      case "capture", "capture-state", "capture-action", "captures":
+        // Capture tool (page-platform §8.3); App/Automation/AutomationCapture.swift.
+        return try await runCaptureCommand(cmd, a)
       case "toast-undo":
         guard let controller = app.frontWindowController else { throw Failure(message: "no browser window") }
         return controller.pressToastUndo()
@@ -1414,7 +1418,7 @@
       case .split(let split): return ["id": split.id.description, "kind": "split", "children": split.panes.map { describeNode(.tab($0)) }]
       }
     }
-    private func menuEnabled(_ item: NSMenuItem) -> Bool {
+    func menuEnabled(_ item: NSMenuItem) -> Bool {
       guard let action = item.action else { return item.isEnabled }
       let target = item.target ?? NSApp.target(forAction: action, to: nil, from: item)
       if let validator = target as? NSMenuItemValidation { return validator.validateMenuItem(item) }
@@ -1431,7 +1435,7 @@
           "enabled": enabled, "targetNil": item.target == nil, "tag": item.tag, "action": item.action.map(NSStringFromSelector) ?? "", "payload": (item.representedObject as? [String: String])?["payload"] ?? ""]]
       }
     }
-    private func findMenuItem(_ id: String, in menu: NSMenu?) -> (NSMenu, Int)? {
+    func findMenuItem(_ id: String, in menu: NSMenu?) -> (NSMenu, Int)? {
       guard let menu else { return nil }
       for (index, item) in menu.items.enumerated() {
         if item.identifier?.rawValue == id { return (menu, index) }
@@ -1559,7 +1563,7 @@
         "makeHostCount": preview.makeHostCount, "reusedCachedHost": preview.reusedCachedHost, "shows": preview.shows] as [String: Any]
     }
 
-    private func mouse(_ a: [String: Any], _ w: EngineWebContentHostFactory) async throws -> Any {
+    func mouse(_ a: [String: Any], _ w: EngineWebContentHostFactory) async throws -> Any {
       let number = a["window"] as? Int ?? w.window?.windowNumber ?? 0
       guard let target = NSApp.windows.first(where: { $0.windowNumber == number }) else { throw Failure(message: "no window \(number)") }
       pointerRequestID += 1

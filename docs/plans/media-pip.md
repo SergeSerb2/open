@@ -2431,6 +2431,62 @@ this refresh retains their defect gates and adapts the delay assertions to main.
 
 [Current merge/checklist receipts](../../Packages/OpenKit/MediaRenders/step3b/evidence/main-refresh/README.md).
 
+## 14. Section 3 implementation notes (Steps 5–12, 2026-11-02)
+
+Section 3 (Media) builds the remaining steps. Each step adds its verification
+note here with its PR link.
+
+### 14.1 Steps 5–6: interim engine media state and the App wiring
+
+PR: (this PR, branch `s3/media-app-wiring`).
+
+Engine (Step 5, OpenEngine only, stock-CEF compatible):
+
+- `OEMediaSession` (`Engine/OpenEngine/include/OpenEngine/OEMediaSession.h`)
+  has the EM-1b shape, so Step 7 changes only its source. Until then a
+  per-frame probe (`kMediaProbe`, `OEApp.mm`) reports each frame's media
+  state as JSON on media events only (no timer, no `timeupdate`).
+  `OEMediaSession.mm` merges the frames. Change bits `OEWebContentChangeMedia`
+  (1 << 13) and `OEWebContentChangePictureInPicture` (1 << 14) (EM-8).
+- The probe records the page's `navigator.mediaSession` action handlers, so
+  previous/next work before the fork (the plan expected them to be absent).
+  Blink installs `MediaSession` after the probe runs, so the hook goes in at
+  the first of: a microtask, the first DOM mutation, DOMContentLoaded or a
+  media event.
+- EM-5 interim: `requestPictureInPicture(completion:)` gives the main frame a
+  user gesture through a DevTools evaluation, then asks the frame with the
+  largest playing video to enter PiP (3 s timeout).
+- Limits: a page can fake every value (UI only, no security decision);
+  videos in subframes get no user gesture; Web Audio is not audible (P6).
+
+App (Step 6): `App/Media/MediaCoordinator.swift` owns the store, the PiP
+session and the rules. Section 3 decisions:
+
+- Leave events come from a diff of each window's displayed tabs (selected
+  tab or split panes of the focused Space), computed on the window's refresh
+  hook and in `showSelection`, so minimize, occlusion and app hide never
+  produce one (D-4), and the request runs in the same turn as the selection.
+- Each page host follows its tab's `isMuted` by Observation, so Undo/Redo of
+  Mute All reaches the engine. Mute All is one Undo group.
+- Phase 1 learns about Chromium's own PiP window only as a PiP exit: a paused
+  video means Close (snooze), a playing one means Back to Tab (§4.4.1).
+- A page that reports "in PiP" within 2 s after Open asked it to leave is not
+  taken as a new manual PiP.
+- The sleep feed (§4.10) is `MediaCoordinator.visibility`, an
+  `AppVisibilityProvider` with the new `mediaControlTabIDs` field. Section 8's
+  App sleep adapter reads it; there is no App sleep adapter yet.
+- View Media opens the Library's Media section: Arc's item runs
+  `viewScreenshotsAndCaptures:` (`docs/re/menus-and-hotkeys.md`). The Library
+  Media grid (Captures + Screenshots) is not playback media.
+
+Verification: e2e `--only media --style chrome` (`tools/e2e/engine_e2e.py`,
+fixtures `tools/e2e/fixtures/media/`, no binary media). At load 17–25:
+card shown 3–8 ms after the leave (polled), PiP entered 80–90 ms after the
+request, idle CPU with a paused card equal to idle CPU without it (median of
+three interleaved pairs, all processes 0.46 vs 0.32 %, browser process 0.17
+vs 0.11 %). Rows E-M2 (P6), E-M8 and E-M14 (EM-4), E-M13 (EM-7) and the sleep
+adapter (section 8) report BLOCKED.
+
 ## Appendix — Lead decisions (2026-10-25)
 
 - Approved as the media controls + Picture in Picture plan. Steps 1–5 start now: they need no App window. Step 6 and later App steps wait for app-shell Step B (#52) and Step G (sleep).

@@ -127,6 +127,7 @@ final class EngineWebContentHostFactory: NSResponder, WebContentHostFactory {
       return self?.isAppCommandEnabled(id, enabledKey: key) ?? false
     }
     controller.onLayout = { [weak self] in self?.layoutViews() }
+    controller.captureLibrary = app.captureLibrary
     controller.onFocus = { [weak self] in guard let self else { return }; self.app.didFocusWindow(self.windowState.id) }
     controller.nextResponder = self; nextResponder = NSApp
     controller.onSidebarIntent = { [weak self] intent in guard let self else { return false }; return self.performSidebar(intent) }
@@ -136,6 +137,7 @@ final class EngineWebContentHostFactory: NSResponder, WebContentHostFactory {
       if self.app.engineReady { for tab in self.visibleTabs { tab.live.sleepPhase = .live }; self.controller?.container.refreshPlaceholders() }
       // BrowserWindowController schedules its SnapshotStore once per committed change.
       self.mirror.sync(); self.commandBarSession?.contextDidChange(); self.app.scheduleMenuRebuild()
+      self.app.media.windowChanged(self)
     }
     controller.onOpenCommandBar = { [weak self] source, _ in
       if source == .urlField { self?.focusAddressBar(nil) } else { self?.newTab(nil) }
@@ -275,6 +277,7 @@ final class EngineWebContentHostFactory: NSResponder, WebContentHostFactory {
   }
   func hostDidClose(_ host: EngineWebContentHost) {
     commandBarNavigationFocus.remove(host.tabID)
+    app.media.hostClosed(tabID: host.tabID)
     if hosts[host.tabID] === host { hosts[host.tabID] = nil }
     modelHostIDs.remove(host.tabID)
     mirror.sync()
@@ -356,6 +359,8 @@ final class EngineWebContentHostFactory: NSResponder, WebContentHostFactory {
     if focus { selectedContent?.focusPage() }
     commandBarSession?.contextDidChange(); app.scheduleMenuRebuild()
     layoutViews()
+    // Auto-PiP runs in the same turn as the selection change, after the new tab is attached (§4.5.3).
+    app.media.windowChanged(self)
   }
   func select(nodeID: ItemID?, focus: Bool = true) {
     controller?.existingTabSwitcher?.cancel()
@@ -431,6 +436,7 @@ final class EngineWebContentHostFactory: NSResponder, WebContentHostFactory {
       guard let url = selectedContent?.url ?? selectedTab?.url else { return false }; copyCleanURL(url); return true
     case .toggleMute(let id):
       guard let tab = model.tab(id: id) else { return false }; model.setMuted(tabID: id, muted: !tab.isMuted); hosts[id]?.content.isMuted = tab.isMuted; app.scheduleSave(); return true
+    case .media(let intent): return app.media.perform(intent)
     case .resetToPinnedURL(let id):
       guard let tab = model.tab(id: id), let url = tab.pinnedURL else { return false }; model.resetPinnedTab(id: id); hosts[id]?.load(url); app.scheduleSave(); return true
     case .newSpace:
@@ -1097,6 +1103,7 @@ extension EngineWebContentHostFactory: OEWebContentDelegate {
       mi.isEnabled = item.isEnabled
       ns.addItem(mi)
     }
+    let openItems = addCaptureItems(to: ns, for: webContent)
     func commands(_ items: [OEContextMenuItem], in submenu: String = "") -> [[String: Any]] {
       items.flatMap { item -> [[String: Any]] in
         if item.isSeparator { return [] }
@@ -1109,6 +1116,7 @@ extension EngineWebContentHostFactory: OEWebContentDelegate {
       [
         "items": menu.items.map(\.title), "commands": commands(menu.items),
         "link": menu.linkURL?.absoluteString ?? "", "targets": menu.targets.rawValue,
+        "open": openItems, "shown": ns.items.map { $0.isSeparatorItem ? "-" : $0.title },
       ])
     if contextMenuPolicy == "record" {
       menu.cancel()

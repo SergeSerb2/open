@@ -33,7 +33,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate, OEEngineDelegate, OEBr
   private var asyncEngineCalls: [String: Int] = [:]
   private var shutdownTrace: [[String: Any]] = []
   lazy var stores = AppStores(app: self)
+  /// Mini players, auto-PiP and the media sleep feed (media-pip §7.2).
+  lazy var media = MediaCoordinator(app: self, rulesURL: options.pipSiteRules)
   lazy var settingsPresenter = AppSettingsActions(app: self)
+  /// Library ▸ Captures writer (page-platform §4.6.6); one per app, shared by every window.
+  lazy var captureLibrary = CaptureLibraryWriter(app: self, root: directories.root)
   var keyBindings = KeyBindingStore.empty
   let fallbackKeyboard = KeyboardRouter()
   var commandServicesPrepared = false
@@ -210,6 +214,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, OEEngineDelegate, OEBr
     controller.context.storedFavicons = stores.sidebarFavicons
     factory.attach(controller)
     windowControllers.append(controller)
+    media.attach(factory)
     activeWindowID = state.id
     MainMenu.targetWindowCommands(factory)
     todayAutoArchive?.attach(context: controller.context)
@@ -274,6 +279,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, OEEngineDelegate, OEBr
       model.setWindowContentVisible(windowID: id, visible: false)
     }
     windowControllers.removeAll { $0.windowID == id }; hostFactories[id] = nil
+    media.windowClosed(id)
     if activeWindowID == id { activeWindowID = windowControllers.last?.windowID }
     MainMenu.targetWindowCommands(frontWindowController.flatMap { hostFactories[$0.windowID] })
     scheduleSave()
@@ -514,7 +520,7 @@ extension AppDelegate: CommandDispatcher {
   func isCommandEnabled(_ id: String, enabledKey: String) -> Bool {
     if SystemCommandActions.selectors[id] != nil { return SystemCommandActions.isEnabled(id) }
     if ["archive-tab", "close-window"].contains(id) { return NSApp.keyWindow != nil }
-    return ["new-window", "blank-window", "new-tab", "settings", "search-settings", "air-traffic-control", "import-from-browser", "set-default-browser", "check-for-updates", "view-archive", "view-history", "view-library", "view-downloads", "view-boosts", "quit-open", "new-little-open-window", "little-open-global", "about-open", "hide-open", "hide-others", "show-all", "help-center", "keyboard-shortcuts-edu", "getting-started", "release-notes", "contact-team", "manage-spaces"].contains(id)
+    return ["new-window", "blank-window", "new-tab", "settings", "search-settings", "air-traffic-control", "import-from-browser", "set-default-browser", "check-for-updates", "view-archive", "view-history", "view-library", "view-downloads", "view-media", "view-boosts", "quit-open", "new-little-open-window", "little-open-global", "about-open", "hide-open", "hide-others", "show-all", "help-center", "keyboard-shortcuts-edu", "getting-started", "release-notes", "contact-team", "manage-spaces"].contains(id)
   }
   func performCommand(_ id: String, payload: String?) {
     // Search engines live in Settings ▸ Profiles: open the named Profile, else the front window's.
@@ -543,6 +549,9 @@ extension AppDelegate: CommandDispatcher {
     case "check-for-updates": settingsPresenter.checkForUpdates()
     case "view-library": settingsPresenter.showLibrary()
     case "view-downloads": settingsPresenter.showLibrary(section: .downloads)
+    // Arc's View Media runs viewScreenshotsAndCaptures: (docs/re/menus-and-hotkeys.md): the Library's
+    // Media grid (Captures + Screenshots), not playback.
+    case "view-media": settingsPresenter.showLibrary(section: .media)
     case "view-archive": settingsPresenter.showLibrary(section: .archive)
     case "view-history": settingsPresenter.showLibrary(section: .history)
     case "view-boosts": settingsPresenter.show(); settingsPresenter.settings.statusText = "Boost editing is not available in this build."

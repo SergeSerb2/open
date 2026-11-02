@@ -262,6 +262,9 @@ public struct MiniPlayerTitleState {
         addTrackingArea(area); tracking = area
     }
     private func hover(_ event: NSEvent, inside: Bool) {
+        // The stack's enter can expand this card in the same event, before its frame is laid out;
+        // measure the pointer against the expanded frame, not the collapsed one (Section 3 real-window check).
+        if inside && isExpanded && abs(frame.height - cardHeight) > 0.5 { superview?.layoutSubtreeIfNeeded() }
         let hovered = inside && isExpanded && convert(event.locationInWindow, from: nil).y < MiniPlayerMetrics.rowHeight
         if hovered != pointerOnTitle { pointerOnTitle = hovered; sync() }
     }
