@@ -2390,6 +2390,15 @@ public final class BrowserModel {
         registerChange(undo: { state.sidebarMode = old }, redo: { state.sidebarMode = mode })
     }
 
+    /// Shows or hides the content toolbar (§4.6.1). No undo step: window chrome, like the
+    /// sidebar width while dragging; the caller schedules the snapshot save. Little Open refuses.
+    @discardableResult
+    public func setToolbarShown(windowID: WindowID, _ shown: Bool) -> Bool {
+        guard let state = windows.first(where: { $0.id == windowID }), state.style == .standard else { return false }
+        if state.showsToolbar != shown { state.showsToolbar = shown }
+        return true
+    }
+
     public func focusSpace(windowID: WindowID, spaceID: SpaceID) {
         guard let window = windows.first(where: { $0.id == windowID }) else { return }
         let old = window.focusedSpaceID

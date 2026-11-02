@@ -170,6 +170,43 @@ MainActor.assumeIsolated {
         fail("expected menu load failed: \(error)")
     }
 
+    // 5. Runtime titles (commandbar-completion §4.6.4, CC-32): the static titles above stay the
+    // reference ("Show/Hide Toolbar"); a dispatcher's `menuTitle(for:)` renames the item when the
+    // menu validates, and a dispatcher without it keeps the registry title.
+    print("== Runtime menu titles ==")
+    @MainActor final class TitleDispatcher: CommandDispatcher {
+        var toolbar = false, sidebarHidden = false
+        func performCommand(_ id: String) {}
+        func menuTitle(for id: String) -> String? {
+            switch id {
+            case "toggle-toolbar": toolbar ? "Hide Toolbar" : "Show Toolbar"
+            case "toggle-sidebar": sidebarHidden ? "Show Sidebar" : "Hide Sidebar"
+            default: nil
+            }
+        }
+    }
+    @MainActor func validatedTitle(_ id: String, in built: NSMenu) -> String? {
+        @MainActor func find(_ m: NSMenu) -> NSMenuItem? {
+            for i in m.items {
+                if (i.representedObject as? [String: String])?["command"] == id { return i }
+                if let sub = i.submenu, let hit = find(sub) { return hit }
+            }
+            return nil
+        }
+        guard let item = find(built) else { return nil }
+        _ = (item.target as? NSMenuItemValidation)?.validateMenuItem(item)
+        return item.title
+    }
+    let titles = TitleDispatcher()
+    let titled = MenuBuilder.buildMainMenu(dispatcher: titles, spaces: spaces, tabs: tabs)
+    let staticTitle = validatedTitle("toggle-toolbar", in: menu)
+    let shown = validatedTitle("toggle-toolbar", in: titled)
+    titles.toolbar = true; titles.sidebarHidden = true
+    let hidden = validatedTitle("toggle-toolbar", in: titled), sidebar = validatedTitle("toggle-sidebar", in: titled)
+    print("  toggle-toolbar: static=\(staticTitle ?? "-") off=\(shown ?? "-") on=\(hidden ?? "-"); toggle-sidebar hidden=\(sidebar ?? "-")")
+    if staticTitle != "Show/Hide Toolbar" { fail("a dispatcher without menuTitle changed the static title: \(staticTitle ?? "-")") }
+    if shown != "Show Toolbar" || hidden != "Hide Toolbar" || sidebar != "Show Sidebar" { fail("menuTitle hook did not rename the View items") }
+
     print(failures == 0 ? "commands-dump OK" : "commands-dump FAILED: \(failures) problem(s)")
 }
 

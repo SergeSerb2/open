@@ -458,7 +458,7 @@ Columns: feature · RE doc + section · plan · library code · App wiring · ve
 | Share (File ▸ Share…, row Share…) | MH File; IS §15 | app-shell §4.1, §4.3 | `App/SidebarMenuActions.swift` | main (#132) | `I9_share_system_picker` | done | File ▸ Share uses the system picker. Items 9–10 (#132) wire the row Share… item through `share` to `NSSharingServicePicker`, anchored at the row; `I9_share_system_picker` checks its URL, service query and cancellation. |
 | Spelling, substitutions, transformations, speech, font menus | MH Edit | app-shell Step C (system dispatch) | registry; `SystemCommandActions` selectors | main | — | done | Closed in #85: 46 system ids keep AppKit selectors (§2). See §3, gap 3 (closed). |
 | Two-finger swipe back/forward on the page; pinch zoom | MH "Gestures" | page-platform (#73) | — | — | not verified | planned | Was unplanned. See §3, gap 9. |
-| Optional toolbar (Show/Hide Toolbar, full URL) | FC §8.2 r6 | commandbar-completion §4.6 (#70) | registry | — | — | planned | The bar is 32 pt and reuses the split pane bar. See §3, gap 26. |
+| Optional toolbar (Show/Hide Toolbar, full URL) | FC §8.2 r6 | commandbar-completion §4.6 (#70, Step 8) | `BrowserWindowState.showsToolbar` (snapshot field, absent = off); `PaneChromeView` toolbar role; `BrowserWindowController.toggleToolbar`, `menuTitle(for:)`; sidebar `.setToolbarShown`, `.setShowFullURL`, `.manageExtensions` | main (#143) | `features-render` TB1–TB13; `commands-dump` runtime titles; `roundtrip` toolbar | done (partial) | The 32 pt bar is the split pane bar on a single pane: back, forward, reload, copy, host, Site Control Center (no split menu, no close). With it, the sidebar hides its URL field, Back, Forward and Reload, and Favorites move up to y 46 (layout guess, plan §9 item 1). View menu titles follow the window (CC-32). App wiring (Cmd+Shift+D on the key window, the full-URL setting, Manage Extensions, e2e `toolbar`) is Step 9. See §3, gap 26. |
 | Website appearance: Automatic, Light, Dark | MH View ▸ Appearance | page-platform (#73) | registry | — | — | planned | See §3, gap 27. |
 | Clear Cache and Refresh; Clear Cookies and Refresh | MH View | page-platform (#73) | registry | — | — | planned | See §3, gap 28. |
 | Cast | MH View | page-platform (#73) | registry | — | — | planned | May stay out of v1. See §3, gap 30. |
@@ -666,7 +666,7 @@ Ranking is by user impact for an Arc user who switches to Open. **P0** blocks da
 23. **Closed — One command-bar row per Split View.** Built in commandbar-completion Steps 3–4 (Section 2).
 24. **Closed — Browser-actions-only scope.** Built in commandbar-completion Step 5 (Section 2).
 25. **Hints closed; window open — Hold-Cmd hints and the Essential Keyboard Shortcuts window.** **S2 (2026-10-26): closed for hints** (Arc shows none, CC-39; lead decision: Open builds none; out of scope in §1.7). The window is built (commandbar-completion Step 6, Section 2); the (i) button opens the privacy footer, not this window (CC-42).
-26. **Open — Optional toolbar.** Now planned in #70 (32 pt bar, split pane bar reuse).
+26. **Open — Optional toolbar.** Library built in commandbar-completion Step 8 (32 pt bar on the split pane bar, sidebar hiding, menu titles, snapshot field); App wiring is Step 9.
 27. **Open — Website appearance menu.** Now planned in page-platform (#73).
 28. **Open — Clear Cache / Clear Cookies and Refresh.** Now planned in #73.
 29. **Open — Developer extras and Troubleshooting items.** Now planned in #73. Copy Open Info and Reveal Open Data work from Settings; the menu ids do not.

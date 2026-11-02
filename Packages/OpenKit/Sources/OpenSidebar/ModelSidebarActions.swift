@@ -19,6 +19,7 @@ public struct ModelSidebarActions {
     public func perform(_ intent: SidebarIntent) -> Bool {
         switch intent {
         case .media: return false
+        case .setToolbarShown(let shown): return model.setToolbarShown(windowID: windowID, shown)
         case .select(let id, let space):
             if case .splitPane(let splitID) = model.parent(of: id) {
                 model.focusSplitPane(splitID: splitID, tabID: id)

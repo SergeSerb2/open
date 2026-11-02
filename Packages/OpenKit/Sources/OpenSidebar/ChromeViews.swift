@@ -86,7 +86,8 @@ final class ToolbarView: NSView {
         reload.glyphView.glyph = loading ? .stopLoading : .reload
         // A selected split moves back, forward, and reload into each pane's bar: the
         // sidebar toolbar keeps only the toggle (F0081, F0082: AX and pixels).
-        let split = tracked({ context.isSplitSelected }) { [weak self] in self?.needsLayout = true }
+        // The content toolbar holds them too (§4.6.3, derived from CC-36 "Show as Toolbar").
+        let split = tracked({ context.isSplitSelected || context.isToolbarShown }) { [weak self] in self?.needsLayout = true }
         let compact = isCompact
         if compact != lastCompact { lastCompact = compact; SidebarDiagnostics.compactToolbarSwaps += 1 }
         if compact {
@@ -225,5 +226,6 @@ final class URLFieldView: NSView {
         if bounds.contains(convert(event.locationInWindow, from: nil)) { context.send(.openCommandBar(.urlField)) }
     }
     override func accessibilityPerformPress() -> Bool { context.send(.openCommandBar(.urlField)); return true }
+    override func menu(for event: NSEvent) -> NSMenu? { SidebarMenus(context: context).urlField() }
     var displayedText: String { label.text() }
 }

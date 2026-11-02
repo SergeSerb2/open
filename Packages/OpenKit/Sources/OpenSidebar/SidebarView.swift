@@ -126,7 +126,10 @@ public final class SidebarView: NSView {
         if presentation == .floatingCard { cardBackground?.frame = bounds }
         toolbar.frame = CGRect(x: 0, y: 0, width: w, height: URLFieldMetrics.y)
         urlField.frame = CGRect(x: URLFieldMetrics.insetX, y: URLFieldMetrics.y, width: w - 2 * URLFieldMetrics.insetX, height: URLFieldMetrics.height)
-        let favTop = FavoritesMetrics.sectionTop
+        // With the content toolbar, the URL field hides and Favorites move up to its place (§4.6.3; layout guess, §9 item 1).
+        let toolbarShown = tracked({ context.isToolbarShown }) { [weak self] in self?.needsLayout = true }
+        urlField.isHidden = toolbarShown
+        let favTop = toolbarShown ? URLFieldMetrics.y : FavoritesMetrics.sectionTop
         let favH = favoritesHeight
         favorites.frame = CGRect(x: 0, y: favTop, width: w, height: favH)
         let bottom = h - BottomBarMetrics.height
@@ -577,6 +580,10 @@ extension SidebarView {
     }
     /// The compact toolbar's "More options" menu, built as a click would build it.
     public func toolbarMoreMenu() -> NSMenu { toolbar.makeMoreMenu() }
+    /// The URL field's right-click menu, built as a click would build it.
+    public func urlFieldMenu() -> NSMenu { SidebarMenus(context: context).urlField() }
+    /// The URL field shows (it hides while the window shows the content toolbar).
+    public var urlFieldVisible: Bool { !urlField.isHidden }
 
     /// Toolbar row and bottom bar opacity (a Peek's dim lowers both).
     public var chromeOpacity: (toolbar: CGFloat, bottomBar: CGFloat) { (toolbar.alphaValue, bottomBar.alphaValue) }

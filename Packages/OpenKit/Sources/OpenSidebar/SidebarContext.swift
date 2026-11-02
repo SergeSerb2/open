@@ -167,6 +167,10 @@ public final class SidebarContext {
         return model.node(id: id)?.split != nil
     }
 
+    /// The window shows the content toolbar: the sidebar drops its URL field and its Back,
+    /// Forward and Reload buttons (§4.6.3).
+    var isToolbarShown: Bool { window?.showsToolbar == true }
+
     /// The page the toolbar and URL field describe: the Peek on screen, else the current tab.
     var hasPage: Bool { shownPeek != nil || currentTab != nil }
     var pageHost: String? { shownPeek?.displayHost ?? currentTab?.displayHost }

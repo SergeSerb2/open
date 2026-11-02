@@ -41,6 +41,15 @@ public final class PaneChromeView: NSView {
     var onMenu: ((NSView) -> Void)?
     var onURL: (() -> Void)?
     var onCopy: (() -> Void)?
+    /// Right-click menu of the content toolbar (§4.6.2); pane bars have none.
+    var toolbarMenu: (() -> NSMenu?)?
+    /// A split pane's bar, or the optional content toolbar on a single pane (commandbar-completion
+    /// §4.6.2, D8): the same bar without the split menu and close button, Site Control Center in the
+    /// close button's place while the extensions slot is empty.
+    public enum Role: Sendable { case pane, toolbar }
+    public internal(set) var role = Role.pane
+    /// Toolbar only: the full URL instead of the host (`open.advanced.showFullURLWithToolbar`, CC-37).
+    public internal(set) var showsFullURL = false
     /// Bar color when the page reports none: the Space's light background, else white.
     var fallbackColor: NSColor = .white
     let label = NSTextField(labelWithString: "")
@@ -72,8 +81,11 @@ public final class PaneChromeView: NSView {
     public override var isFlipped: Bool { true }
     func update() {
         layer?.backgroundColor = (host?.pageBackgroundColor ?? fallbackColor).cgColor
-        label.stringValue = host?.currentURL?.host()?.replacingOccurrences(of: "www.", with: "") ?? ""
-        for (i, b) in buttons.enumerated() { b.isHidden = !isFocused && !Self.unfocusedControls.contains(i) }
+        label.stringValue = role == .toolbar && showsFullURL ? host?.currentURL?.absoluteString ?? ""
+            : host?.currentURL?.host()?.replacingOccurrences(of: "www.", with: "") ?? ""
+        for (i, b) in buttons.enumerated() {
+            b.isHidden = role == .toolbar ? i >= 5 : !isFocused && !Self.unfocusedControls.contains(i)
+        }
         buttons[0].isEnabled = host?.canGoBack ?? false; buttons[1].isEnabled = host?.canGoForward ?? false
         buttons[4].isEnabled = false
         buttons[2].image = NSImage(systemSymbolName: host?.isLoading == true ? "xmark" : "arrow.clockwise", accessibilityDescription: "Reload or Stop")
@@ -82,14 +94,15 @@ public final class PaneChromeView: NSView {
     public override func layout() {
         super.layout(); let w = bounds.width
         buttons[0].frame = SplitMetrics.back; buttons[1].frame = SplitMetrics.forward; buttons[2].frame = SplitMetrics.reload
-        buttons[4].frame = CGRect(x: w - 105, y: 2, width: 32, height: 28)
+        let toolbar = role == .toolbar, focused = isFocused || toolbar
+        buttons[4].frame = toolbar ? ToolbarMetrics.siteControls(width: w, extensionsShown: false) : CGRect(x: w - 105, y: 2, width: 32, height: 28)
         buttons[5].frame = CGRect(x: w - 69, y: 4, width: 32, height: 24)
         buttons[6].frame = CGRect(x: w - 37, y: 4, width: 32, height: 24)
         // Centered group (F0081 AX): copy 24 · 3 · host · 3 · an empty 24 pt slot, so the
         // host sits on the bar's center line. Narrow panes truncate the host; with no room
         // for a few characters, the host and copy button hide. guess: no narrow capture.
-        let left = (isFocused ? buttons[2].frame.maxX : buttons[1].frame.maxX) + SplitMetrics.barControlGap
-        let right = (isFocused ? buttons[4].frame.minX : buttons[6].frame.minX) - SplitMetrics.barControlGap
+        let left = (focused ? buttons[2].frame.maxX : buttons[1].frame.maxX) + SplitMetrics.barControlGap
+        let right = (focused ? buttons[4].frame.minX : buttons[6].frame.minX) - SplitMetrics.barControlGap
         let slot = SplitMetrics.hostSlot
         let text = ceil((label.stringValue as NSString).size(withAttributes: [.font: label.font ?? .systemFont(ofSize: 13)]).width) + 4
         let box = min(text, right - left - 2 * slot)
@@ -118,4 +131,9 @@ public final class PaneChromeView: NSView {
         update()
     }
     public override func mouseDown(with event: NSEvent) { onURL?() }
+    public override func menu(for event: NSEvent) -> NSMenu? { role == .toolbar ? toolbarMenu?() : super.menu(for: event) }
+    /// Visible controls by tooltip, left to right (harness and automation).
+    public var visibleControls: [String] { buttons.filter { !$0.isHidden }.sorted { $0.frame.minX < $1.frame.minX }.compactMap(\.toolTip) }
+    public func controlFrame(_ title: String) -> CGRect? { buttons.first { $0.toolTip == title }?.frame }
+    public var displayedText: String { label.isHidden ? "" : label.stringValue }
 }

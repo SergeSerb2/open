@@ -24,6 +24,13 @@ public enum SidebarIntent: Equatable, Sendable {
     case openCommandBar(CommandBarSource)
     case copyCurrentURL
     case showSiteControls
+    /// The optional content toolbar (commandbar-completion §4.6): "Show as Toolbar" on the URL
+    /// field, "Hide Toolbar" on the toolbar. `ModelSidebarActions` runs the model command.
+    case setToolbarShown(Bool)
+    /// Toolbar right-click "Show Full URL" / "Hide Full URL" (`open.advanced.showFullURLWithToolbar`). App.
+    case setShowFullURL(Bool)
+    /// "Manage Extensions" on the URL field and the toolbar. App.
+    case manageExtensions
 
     // Selection and Spaces
     case select(nodeID: ItemID, space: SpaceID)

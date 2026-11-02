@@ -280,6 +280,11 @@ struct SidebarMenus {
     }
 
     /// Bottom-bar plus button. guess: not captured.
+    /// Right-click on the URL field (CC-36; order guess).
+    func urlField() -> NSMenu {
+        menu([item("Show as Toolbar", .setToolbarShown(true)), .separator(), item("Manage Extensions", .manageExtensions)])
+    }
+
     func plus() -> NSMenu {
         let space = context.focusedSpace
         return menu([

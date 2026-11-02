@@ -152,14 +152,17 @@ public final class BrowserWindowState {
     public var frameHeight: Double
     public var style: WindowStyle
     public var stayOnTop: Bool
+    /// The optional content toolbar (View ▸ Show Toolbar, Cmd+Shift+D; commandbar-completion §4.6).
+    /// Window chrome like `sidebarMode`; Little Open windows never show it.
+    public var showsToolbar: Bool
 
-    public init(id: WindowID = WindowID(), focusedSpaceID: SpaceID, selectedNodeBySpace: [SpaceID: ItemID] = [:], sidebarWidth: Double = 228, sidebarMode: SidebarMode = .anchored, frameX: Double = 100, frameY: Double = 100, frameWidth: Double = 1280, frameHeight: Double = 800, style: WindowStyle = .standard, stayOnTop: Bool = false) {
+    public init(id: WindowID = WindowID(), focusedSpaceID: SpaceID, selectedNodeBySpace: [SpaceID: ItemID] = [:], sidebarWidth: Double = 228, sidebarMode: SidebarMode = .anchored, frameX: Double = 100, frameY: Double = 100, frameWidth: Double = 1280, frameHeight: Double = 800, style: WindowStyle = .standard, stayOnTop: Bool = false, showsToolbar: Bool = false) {
         self.id = id; self.focusedSpaceID = focusedSpaceID
         self.selectedNodeBySpace = selectedNodeBySpace
         self.sidebarWidth = sidebarWidth; self.sidebarMode = sidebarMode
         self.frameX = frameX; self.frameY = frameY
         self.frameWidth = frameWidth; self.frameHeight = frameHeight
-        self.style = style; self.stayOnTop = stayOnTop
+        self.style = style; self.stayOnTop = stayOnTop; self.showsToolbar = showsToolbar
     }
 }
 
