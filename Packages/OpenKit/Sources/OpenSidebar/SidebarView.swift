@@ -211,7 +211,8 @@ public final class SidebarView: NSView {
             guard let layer = view.layer, old != view.frame else { continue }
             let presentation = layer.presentation()
             let move = CABasicAnimation(keyPath: "position")
-            move.fromValue = presentation?.position ?? CGPoint(x: old.midX, y: old.midY)
+            // No presentation layer yet (never drawn): the model position, shifted back by the move.
+            move.fromValue = presentation?.position ?? CGPoint(x: layer.position.x, y: layer.position.y - (view.frame.minY - old.minY))
             move.toValue = layer.position
             let resize = CABasicAnimation(keyPath: "bounds.size")
             resize.fromValue = presentation?.bounds.size ?? old.size
