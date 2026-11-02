@@ -6,16 +6,37 @@
         "forced": false,
         "ok": true,
         "owned_pids": [
-          10846,
-          10922,
-          10923,
-          10925,
-          10926,
-          10927,
-          10928,
-          10935,
-          10951,
-          13081
+          32949,
+          33050,
+          33051,
+          33054,
+          33055,
+          33064,
+          33072,
+          35047,
+          35056,
+          35066
+        ],
+        "remaining_processes": [],
+        "reply": true,
+        "windows_after_quit": {
+          "count": 0,
+          "windows": []
+        },
+        "windows_before_quit": 1
+      },
+      {
+        "forced": false,
+        "ok": true,
+        "owned_pids": [
+          35103,
+          35117,
+          35118,
+          35119,
+          35120,
+          35122,
+          35123,
+          35130
         ],
         "remaining_processes": [],
         "reply": true,
@@ -73,9 +94,9 @@
           "kind": "audioVideo",
           "pip": "none",
           "playback": "playing",
-          "window": "0075E6E5-CACF-41A4-B32F-E7BA6B4CA727"
+          "window": "8D2869EC-DD38-4BB1-9D53-8B7A9D22535E"
         },
-        "tab": "09AE3121-E538-42CF-8D8F-4DB0D3B53D13",
+        "tab": "58633345-18F2-472A-A65C-07244524EA03",
         "title": "Open Test Tone"
       },
       "ok": true,
@@ -109,40 +130,98 @@
           "kind": "audioVideo",
           "pip": "none",
           "playback": "playing",
-          "window": "0075E6E5-CACF-41A4-B32F-E7BA6B4CA727"
+          "window": "8D2869EC-DD38-4BB1-9D53-8B7A9D22535E"
         },
-        "tab": "09AE3121-E538-42CF-8D8F-4DB0D3B53D13",
+        "tab": "58633345-18F2-472A-A65C-07244524EA03",
         "title": "Open Test Tone"
       }
     },
-    "media_auto_pip_on_leave": {
-      "leaveToRequestSeconds": 0,
-      "load": [
-        19.01318359375,
-        22.318359375,
-        23.54345703125
+    "media_auto_pip_negatives": {
+      "activatesWhenInaudible": [
+        "open",
+        "active"
       ],
-      "ok": false,
+      "disablePictureInPicture": [
+        "videoDisabled",
+        "closed"
+      ],
+      "disallowed": [
+        "disallowed",
+        "closed"
+      ],
+      "inaudible": [
+        "inaudible",
+        "closed"
+      ],
+      "ok": true,
+      "settingOff": [
+        "settingOff",
+        "closed"
+      ]
+    },
+    "media_auto_pip_on_leave": {
+      "leaveToRequestSeconds": 2.3041677195578814e-05,
+      "load": [
+        15.76708984375,
+        18.89892578125,
+        20.65087890625
+      ],
+      "ok": true,
       "pip": {
-        "now": 502948.20479125006,
-        "requests": 0,
+        "automatic": true,
+        "enteredAt": 503886.01399370836,
+        "now": 503886.03226475004,
+        "requestedAt": 503885.92720258335,
+        "requests": 1,
         "snoozed": [],
-        "state": "idle",
-        "windows": []
+        "state": "active",
+        "tab": "05AFCE53-01E1-412E-BEEF-64FDA3AA52A5",
+        "windows": [
+          {
+            "class": "NativeWidgetMacFramelessNSWindow",
+            "frame": [
+              2027,
+              32,
+              501,
+              282
+            ],
+            "level": 3,
+            "number": 145564
+          }
+        ]
       },
-      "requestToEnterSeconds": null,
+      "requestToEnterSeconds": 0.08679112500976771,
       "windowsBefore": 2
     },
     "media_auto_pip_return": {
-      "ok": false,
+      "ok": true,
       "pip": {
-        "now": 502949.2336815,
-        "requests": 0,
+        "enteredAt": 503886.01399370836,
+        "now": 503886.05828725005,
+        "reason": "sourceShown",
+        "requestedAt": 503885.92720258335,
+        "requests": 1,
         "snoozed": [],
-        "state": "idle",
+        "state": "closed",
+        "tab": "05AFCE53-01E1-412E-BEEF-64FDA3AA52A5",
         "windows": []
       },
       "playing": true
+    },
+    "media_back_to_tab": {
+      "ok": true,
+      "pip": {
+        "enteredAt": 503886.20846133336,
+        "now": 503886.24134837504,
+        "reason": "sourceShown",
+        "requestedAt": 503886.1857709167,
+        "requests": 3,
+        "snoozed": [],
+        "state": "closed",
+        "tab": "05AFCE53-01E1-412E-BEEF-64FDA3AA52A5",
+        "windows": []
+      },
+      "selected": "05AFCE53-01E1-412E-BEEF-64FDA3AA52A5"
     },
     "media_card_controls": {
       "cardPaused": true,
@@ -156,8 +235,11 @@
       "paused": true,
       "resumed": true
     },
+    "media_card_leaves_on_close": {
+      "ok": true
+    },
     "media_card_on_leave": {
-      "appearMs": 6.0,
+      "appearMs": 10.0,
       "card": {
         "accessibility": "Media audio, 127.0.0.1, Playing",
         "buttons": {
@@ -226,13 +308,13 @@
         "pip": "none",
         "playback": "playing",
         "retiring": false,
-        "tab": "09AE3121-E538-42CF-8D8F-4DB0D3B53D13",
+        "tab": "58633345-18F2-472A-A65C-07244524EA03",
         "title": ""
       },
       "load": [
-        24.50341796875,
-        24.90771484375,
-        24.55126953125
+        19.78271484375,
+        20.8056640625,
+        21.50341796875
       ],
       "ok": true
     },
@@ -242,22 +324,65 @@
     },
     "media_cards_max_three": {
       "cards": [
-        "DB7F65CD-1A8E-4435-B48A-6B8C8185845E",
-        "0CB68F07-BEC3-428C-B986-1148FC0EEDDB",
-        "1A26D865-9BC3-41DE-8815-9EFC4983F594"
+        "8ED419E1-525A-4C37-8CB5-E0EAEC87179F",
+        "9BAD6CF3-7B8C-4713-859A-C916B1813D12",
+        "5E20CB1C-7BA2-4E50-8F75-0D83831E1B1C"
       ],
       "ok": true,
       "sources": [
-        "09AE3121-E538-42CF-8D8F-4DB0D3B53D13",
-        "1A26D865-9BC3-41DE-8815-9EFC4983F594",
-        "0CB68F07-BEC3-428C-B986-1148FC0EEDDB",
-        "DB7F65CD-1A8E-4435-B48A-6B8C8185845E"
+        "58633345-18F2-472A-A65C-07244524EA03",
+        "5E20CB1C-7BA2-4E50-8F75-0D83831E1B1C",
+        "9BAD6CF3-7B8C-4713-859A-C916B1813D12",
+        "8ED419E1-525A-4C37-8CB5-E0EAEC87179F"
       ]
     },
+    "media_close_snoozes": {
+      "again": {
+        "automatic": true,
+        "enteredAt": 503886.20846133336,
+        "now": 503886.210275,
+        "requestedAt": 503886.1857709167,
+        "requests": 3,
+        "snoozed": [],
+        "state": "active",
+        "tab": "05AFCE53-01E1-412E-BEEF-64FDA3AA52A5",
+        "windows": [
+          {
+            "class": "NativeWidgetMacFramelessNSWindow",
+            "frame": [
+              2027,
+              32,
+              501,
+              282
+            ],
+            "level": 3,
+            "number": 145564
+          }
+        ]
+      },
+      "closed": {
+        "enteredAt": 503886.080476375,
+        "now": 503886.1344014167,
+        "reason": "userClosed",
+        "requestedAt": 503886.06202500005,
+        "requests": 2,
+        "snoozed": [
+          "05AFCE53-01E1-412E-BEEF-64FDA3AA52A5"
+        ],
+        "state": "closed",
+        "tab": "05AFCE53-01E1-412E-BEEF-64FDA3AA52A5",
+        "windows": []
+      },
+      "ok": true
+    },
+    "media_document_pip": {
+      "reason": "EM-7: Document PiP disposition",
+      "status": "BLOCKED"
+    },
     "media_idle_cpu": {
-      "browserMinWith": 0.09,
-      "browserMinWithout": 0.12,
-      "minWith": 0.23,
+      "browserMinWith": 0.07,
+      "browserMinWithout": 0.04,
+      "minWith": 0.14,
       "minWithout": 0.19,
       "ok": true,
       "restAnimations": [
@@ -268,62 +393,210 @@
       ],
       "samples": {
         "browserWith": [
-          0.35,
-          2.68,
-          0.76,
-          0.09
+          0.37,
+          1.48,
+          0.46,
+          0.07
         ],
         "browserWithout": [
-          1.9,
-          1.01,
-          0.72,
-          0.12
+          2.07,
+          0.04,
+          0.14,
+          0.1
         ],
         "load": [
-          22.64404296875,
-          20.5009765625,
-          18.89990234375,
-          18.71337890625,
-          17.85302734375,
-          17.9970703125,
-          18.41015625,
-          19.1884765625
+          18.37158203125,
+          17.31689453125,
+          16.791015625,
+          16.37548828125,
+          16.39111328125,
+          15.8603515625,
+          15.5673828125,
+          15.76708984375
         ],
         "with": [
-          1.07,
-          2.75,
-          1.0,
-          0.23
+          0.79,
+          1.52,
+          0.77,
+          0.14
         ],
         "without": [
-          2.91,
-          1.06,
-          0.92,
-          0.19
+          3.02,
+          0.19,
+          0.2,
+          0.35
         ]
       }
     },
+    "media_largest_video": {
+      "chosen": "large",
+      "ok": true
+    },
+    "media_mute_all": {
+      "allMuted": true,
+      "ok": true,
+      "states": [
+        {
+          "actions": [],
+          "album": null,
+          "artist": null,
+          "audible": false,
+          "capturing": false,
+          "controllable": false,
+          "decision": {
+            "at": 503889.9163786667,
+            "value": "noPlayingVideo"
+          },
+          "duration": null,
+          "hasAudio": false,
+          "hasVideo": false,
+          "largestVideoArea": 0,
+          "live": true,
+          "modelMuted": false,
+          "muted": false,
+          "pictureInPicture": false,
+          "pictureInPictureDisabled": false,
+          "playback": "none",
+          "position": null,
+          "session": false,
+          "source": null,
+          "tab": "3809729B-136B-408E-AF27-BBDD9FBAAF66",
+          "title": null
+        },
+        {
+          "actions": [],
+          "album": null,
+          "artist": null,
+          "audible": false,
+          "capturing": false,
+          "controllable": false,
+          "decision": null,
+          "duration": null,
+          "hasAudio": false,
+          "hasVideo": false,
+          "largestVideoArea": 0,
+          "live": true,
+          "modelMuted": false,
+          "muted": false,
+          "pictureInPicture": false,
+          "pictureInPictureDisabled": false,
+          "playback": "none",
+          "position": null,
+          "session": false,
+          "source": null,
+          "tab": "0C6BC00D-7645-4150-9778-6135E876B306",
+          "title": null
+        }
+      ],
+      "undoneInOneStep": true,
+      "unmuted": true
+    },
+    "media_mute_survives_relaunch": {
+      "ok": true,
+      "state": {
+        "actions": [],
+        "album": null,
+        "artist": null,
+        "audible": false,
+        "capturing": false,
+        "controllable": false,
+        "decision": null,
+        "duration": null,
+        "hasAudio": false,
+        "hasVideo": false,
+        "largestVideoArea": 0,
+        "live": false,
+        "modelMuted": true,
+        "muted": false,
+        "pictureInPicture": false,
+        "pictureInPictureDisabled": false,
+        "playback": "none",
+        "position": null,
+        "session": false,
+        "source": null,
+        "tab": "3809729B-136B-408E-AF27-BBDD9FBAAF66",
+        "title": null
+      }
+    },
+    "media_now_playing": {
+      "ok": true,
+      "paused": {
+        "artist": "Open",
+        "commands": {
+          "next": true,
+          "pause": true,
+          "play": true,
+          "previous": true,
+          "toggle": true
+        },
+        "elapsed": 0.067189,
+        "playbackState": "paused",
+        "rate": 0,
+        "title": "Open Test Tone"
+      },
+      "playing": {
+        "artist": "Open",
+        "commands": {
+          "next": true,
+          "pause": true,
+          "play": true,
+          "previous": true,
+          "toggle": true
+        },
+        "elapsed": 0,
+        "playbackState": "playing",
+        "rate": 1,
+        "title": "Open Test Tone"
+      }
+    },
+    "media_pip_keep_on_top": {
+      "reason": "EM-4: the Keep Window on Top menu is in Open's own PiP window",
+      "status": "BLOCKED"
+    },
+    "media_pip_minimize": {
+      "reason": "EM-4: phase 1 uses Chromium's PiP window, which has no Minimize",
+      "status": "BLOCKED"
+    },
+    "media_sleep_adapter": {
+      "reason": "section 8: the App sleep adapter; the feed is checked above",
+      "status": "BLOCKED"
+    },
+    "media_sleep_feed_card": {
+      "afterClose": [],
+      "ok": true,
+      "withCard": [
+        "A7858E90-6547-49D2-A7BE-8C5D78E6965E"
+      ]
+    },
     "media_sleep_feed_pip": {
       "feed": {
-        "mediaControls": [
-          "0FE8E1AE-2E28-4E38-A149-A2C38B41A563"
+        "mediaControls": [],
+        "pictureInPicture": [
+          "05AFCE53-01E1-412E-BEEF-64FDA3AA52A5"
         ],
-        "pictureInPicture": [],
         "visible": [
-          "0FE8E1AE-2E28-4E38-A149-A2C38B41A563",
-          "E2790302-3AA3-4893-AA49-0964ECAA7D3F"
+          "05AFCE53-01E1-412E-BEEF-64FDA3AA52A5",
+          "25E396DD-701E-4D86-B84C-9B0F6C8AFF54"
         ],
         "windows": {
-          "0075E6E5-CACF-41A4-B32F-E7BA6B4CA727": "visible"
+          "8D2869EC-DD38-4BB1-9D53-8B7A9D22535E": "visible"
         }
       },
-      "ok": false
+      "ok": true
     },
-    "suite": {
-      "error": "pip-action: no active PiP",
-      "ok": false
+    "media_view_media_menu": {
+      "library": {
+        "section": "media",
+        "visible": true
+      },
+      "ok": true
+    },
+    "media_web_audio": {
+      "audible": false,
+      "reason": "P6 (EM-3): Web Audio is not audible before the fork patch",
+      "status": "BLOCKED"
     }
   },
-  "started": "2026-11-02 15:19:49",
+  "started": "2026-11-02 15:35:29",
   "style": "chrome"
 }
