@@ -615,7 +615,10 @@
           "reveals": revealedURLs.map(\.path), "toasts": troubleshootingToasts,
           "colorScheme": UserDefaults.standard.string(forKey: WebsiteAppearance.defaultsKey) ?? "",
           "contextSchemes": OEEngine.shared.contexts.map { $0.websiteColorScheme.rawValue },
-          "allowJavaScriptFromAppleEvents": UserDefaults.standard.bool(forKey: PageTools.allowJavaScriptFromAppleEventsKey)] as [String: Any]
+          "allowJavaScriptFromAppleEvents": UserDefaults.standard.bool(forKey: PageTools.allowJavaScriptFromAppleEventsKey),
+          "menuStateWired": PageTools.menuStateWired,
+          "expectedChecks": ["appearance-automatic", "appearance-light", "appearance-dark", "allow-js-apple-events"].reduce(into: [String: Bool]()) {
+            $0[$1] = PageTools.isChecked($1) ?? false }] as [String: Any]
       case "troubleshooting-setup":
         // A run folder for traces, and Finder reveals recorded instead of shown.
         let t = TroubleshootingActions.shared

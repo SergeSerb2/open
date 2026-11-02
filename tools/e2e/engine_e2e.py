@@ -7112,6 +7112,21 @@ def _blocked(reason, **evidence):
     return dict(evidence, status="BLOCKED", reason=reason)
 
 
+def _menu_checks_row(app, menu, expected):
+    """Checkmarks as the menu shows them (`menu`, one dict per step) against `expected`.
+    Until the App answers CommandMenuState (s8/toasts), the row is BLOCKED and only
+    records the state the menu will show (`expectedChecks` from the App's own source)."""
+    if app.call("troubleshooting-state")["menuStateWired"]:
+        return {"ok": menu == expected, "checked": menu, "expected": expected}
+    return _blocked("CommandMenuState / menuState(for:) (page-platform Step 2, branch s8/toasts) not on main yet",
+                    checked=menu, expected=expected)
+
+
+def _expected_checks(app, ids):
+    state = app.call("troubleshooting-state")["expectedChecks"]
+    return {i: state.get(i) for i in ids}
+
+
 def page_tools_appearance_checks(app, results, port, style):
     """A1, A2: View ▸ Appearance reaches prefers-color-scheme without a reload (EP-9a)."""
     tab = app.call("open", url="http://127.0.0.1:%d/scheme.html" % port)["id"]
@@ -7119,8 +7134,9 @@ def page_tools_appearance_checks(app, results, port, style):
     state = lambda: app.eval(tab, "window.schemeState()")
     def until_dark(value):
         return wait_until(lambda: (lambda s: s if s["dark"] is value else None)(state()), timeout=8, step=.2) or state()
+    ids = ("appearance-automatic", "appearance-light", "appearance-dark")
     def checks():
-        return {i: (_menu_row(app, i) or {}).get("checked") for i in ("appearance-automatic", "appearance-light", "appearance-dark")}
+        return {i: (_menu_row(app, i) or {}).get("checked") for i in ids}
     try:
         # A1: the website value wins over the app's appearance, both ways.
         app.call("command", id="appearance-automatic")
@@ -7128,11 +7144,11 @@ def page_tools_appearance_checks(app, results, port, style):
         start = until_dark(False)
         app.call("command", id="appearance-dark")
         dark = until_dark(True)
-        dark_checks, dark_stored = checks(), app.call("defaults", key="open.web.colorScheme")
+        dark_checks, dark_stored, dark_source = checks(), app.call("defaults", key="open.web.colorScheme"), _expected_checks(app, ids)
         app.call("appearance", name="dark")
         app.call("command", id="appearance-light")
         light = until_dark(False)
-        light_checks, light_stored = checks(), app.call("defaults", key="open.web.colorScheme")
+        light_checks, light_stored, light_source = checks(), app.call("defaults", key="open.web.colorScheme"), _expected_checks(app, ids)
         page_follows = (start["dark"] is False and dark["dark"] is True and light["dark"] is False
                         and dark["loadId"] == light["loadId"] == start["loadId"])
         evidence = {"start": start, "websitesDark": dark, "websitesLight": light}
@@ -7142,11 +7158,11 @@ def page_tools_appearance_checks(app, results, port, style):
             # Stock CEF's SetChromeColorScheme does not reach this page style (page-platform R-5).
             results["A1_appearance_light_dark_" + style] = _blocked(
                 "EP-9b (fork patch 0505): SetChromeColorScheme does not change prefers-color-scheme here", **evidence)
-        results["A1_appearance_menu_" + style] = {
-            "ok": dark_checks == {"appearance-automatic": False, "appearance-light": False, "appearance-dark": True}
-            and light_checks == {"appearance-automatic": False, "appearance-light": True, "appearance-dark": False}
-            and (dark_stored, light_stored) == ("dark", "light"),
-            "checked": [dark_checks, light_checks], "stored": [dark_stored, light_stored]}
+        want_dark = {"appearance-automatic": False, "appearance-light": False, "appearance-dark": True}
+        want_light = {"appearance-automatic": False, "appearance-light": True, "appearance-dark": False}
+        results["A1_appearance_stored_" + style] = {
+            "ok": (dark_stored, light_stored) == ("dark", "light") and [dark_source, light_source] == [want_dark, want_light],
+            "stored": [dark_stored, light_stored], "menuSource": [dark_source, light_source]}
         # A2: Automatic follows the app's effective appearance, each time, without a reload.
         app.call("command", id="appearance-automatic")
         app.call("appearance", name="dark")
@@ -7156,11 +7172,14 @@ def page_tools_appearance_checks(app, results, port, style):
         app.call("appearance", name="dark")
         follow_dark2 = until_dark(True)
         auto_checks = checks()
+        want_auto = {"appearance-automatic": True, "appearance-light": False, "appearance-dark": False}
         results["A2_appearance_automatic_follows_app_" + style] = {
             "ok": follow_dark["dark"] is True and follow_light["dark"] is False and follow_dark2["dark"] is True
             and follow_dark2["loadId"] == start["loadId"] and follow_dark2["changes"][-2:] == ["light", "dark"]
-            and auto_checks == {"appearance-automatic": True, "appearance-light": False, "appearance-dark": False},
-            "states": [follow_dark, follow_light, follow_dark2], "checked": auto_checks}
+            and app.call("defaults", key="open.web.colorScheme") == "automatic",
+            "states": [follow_dark, follow_light, follow_dark2]}
+        results["A1_appearance_checkmarks_" + style] = _menu_checks_row(
+            app, [dark_checks, light_checks, auto_checks], [want_dark, want_light, want_auto])
     finally:
         _try(lambda: app.call("appearance", name="system"))
     app.call("close", tab=tab)
@@ -7235,16 +7254,20 @@ def page_tools_devtools_checks(app, results, port, style):
 
 def page_tools_apple_events_checks(app, results):
     """D4: Allow JavaScript from Apple Events (default off, checkmark)."""
-    key = "open.developer.allowJavaScriptFromAppleEvents"
-    initial = (_menu_row(app, "allow-js-apple-events") or {}, app.call("defaults", key=key))
-    app.call("command", id="allow-js-apple-events")
-    on = (_menu_row(app, "allow-js-apple-events") or {}, app.call("defaults", key=key))
-    app.call("command", id="allow-js-apple-events")
-    off = (_menu_row(app, "allow-js-apple-events") or {}, app.call("defaults", key=key))
-    results["D4_allow_js_apple_events_menu"] = {
-        "ok": initial[0].get("checked") is False and not initial[1] and on[0].get("checked") is True and on[1] is True
-        and off[0].get("checked") is False and off[1] is False,
-        "initial": initial, "on": on, "off": off}
+    key, command = "open.developer.allowJavaScriptFromAppleEvents", "allow-js-apple-events"
+    def step():
+        return ((_menu_row(app, command) or {}).get("checked"), app.call("defaults", key=key),
+                _expected_checks(app, (command,))[command])
+    initial = step()
+    app.call("command", id=command)
+    on = step()
+    app.call("command", id=command)
+    off = step()
+    results["D4_allow_js_apple_events_setting"] = {
+        "ok": not initial[1] and initial[2] is False and on[1] is True and on[2] is True and off[1] is False and off[2] is False,
+        "stored": [initial[1], on[1], off[1]], "menuSource": [initial[2], on[2], off[2]]}
+    results["D4_allow_js_apple_events_checkmark"] = _menu_checks_row(
+        app, [initial[0], on[0], off[0]], [False, True, False])
     results["D4_allow_js_apple_events_osascript"] = _blocked(
         "the App does not host OpenScripting yet (applescript plan Steps 5-7); the 1013 gate is in "
         "ScriptCommands.executeJavascript and runs once the App wires ScriptHost")
@@ -7326,9 +7349,12 @@ def page_tools_troubleshooting_checks(app, results, tmp, port, style):
     pid = str(app.pid)
     children = [l for l in helpers if l.split(None, 2)[1:2] == [pid] and "Open Helper" in l]
     disabled = [l for l in children if re.search(r"--disable-features=\S*\bMediaRouter\b", l)]
-    results["H4_cast_hidden_media_router_off"] = {
-        "ok": cast.get("hidden") is True and bool(children) and len(disabled) == len(children),
-        "cast": cast, "helpers": len(children), "helpersWithMediaRouterOff": len(disabled)}
+    results["H4_media_router_off"] = {
+        "ok": bool(children) and len(disabled) == len(children),
+        "helpers": len(children), "helpersWithMediaRouterOff": len(disabled)}
+    hidden = _menu_checks_row(app, [cast.get("hidden")], [True])
+    hidden["cast"] = cast
+    results["H4_cast_menu_hidden"] = hidden
     app.call("close", tab=tab)
 
 
@@ -7360,14 +7386,29 @@ def page_tools_checks(factory, results, tmp, style):
     finally:
         if not app.closed:
             _try(lambda: app.call("dismiss"))
-            _restore_defaults(app, saved)
+        _restore_defaults(app, saved)
         app.quit()
         server.shutdown()
 
 
 def _restore_defaults(app, saved):
+    """Restores keys of the shared io.github.sergeserb2.open domain through the App, or
+    with `defaults` when the App can no longer answer (a crash must not leave keys behind)."""
     for key, value in saved.items():
-        _try(lambda: app.call("defaults", key=key, value=value))
+        restored = False
+        if not app.closed:
+            try:
+                app.call("defaults", key=key, value=value)
+                restored = True
+            except Exception:
+                pass
+        if not restored:
+            if value is None:
+                subprocess.run(["defaults", "delete", "io.github.sergeserb2.open", key], capture_output=True)
+            elif isinstance(value, bool):
+                subprocess.run(["defaults", "write", "io.github.sergeserb2.open", key, "-bool", "true" if value else "false"], capture_output=True)
+            else:
+                subprocess.run(["defaults", "write", "io.github.sergeserb2.open", key, "-string", str(value)], capture_output=True)
 
 
 def page_tools_quit_with_devtools_check(app, results, saved):

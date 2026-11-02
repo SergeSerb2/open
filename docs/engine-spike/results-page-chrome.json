@@ -6,16 +6,16 @@
         "forced": false,
         "ok": true,
         "owned_pids": [
-          26212,
-          26218,
-          26219,
-          26220,
-          26221,
-          26225,
-          26226,
-          26724,
-          26756,
-          26805
+          13451,
+          13533,
+          13534,
+          13535,
+          13536,
+          13538,
+          13539,
+          13985,
+          13989,
+          14011
         ],
         "remaining_processes": [],
         "reply": true,
@@ -41,37 +41,13 @@
   },
   "interrupted_attempts": [],
   "page": {
-    "A1_appearance_light_dark_chrome": {
-      "reason": "EP-9b (fork patch 0505): SetChromeColorScheme does not change prefers-color-scheme here",
-      "start": {
-        "background": "rgb(255, 255, 255)",
-        "changes": [
-          "light"
-        ],
-        "dark": false,
-        "loadId": "qmxv2zph63"
-      },
-      "status": "BLOCKED",
-      "websitesDark": {
-        "background": "rgb(255, 255, 255)",
-        "changes": [
-          "light"
-        ],
-        "dark": false,
-        "loadId": "qmxv2zph63"
-      },
-      "websitesLight": {
-        "background": "rgb(17, 17, 17)",
-        "changes": [
-          "light",
-          "dark"
-        ],
-        "dark": true,
-        "loadId": "qmxv2zph63"
-      }
-    },
-    "A1_appearance_menu_chrome": {
+    "A1_appearance_checkmarks_chrome": {
       "checked": [
+        {
+          "appearance-automatic": false,
+          "appearance-dark": false,
+          "appearance-light": false
+        },
         {
           "appearance-automatic": false,
           "appearance-dark": false,
@@ -83,19 +59,76 @@
           "appearance-light": false
         }
       ],
-      "ok": false,
+      "expected": [
+        {
+          "appearance-automatic": false,
+          "appearance-dark": true,
+          "appearance-light": false
+        },
+        {
+          "appearance-automatic": false,
+          "appearance-dark": false,
+          "appearance-light": true
+        },
+        {
+          "appearance-automatic": true,
+          "appearance-dark": false,
+          "appearance-light": false
+        }
+      ],
+      "reason": "CommandMenuState / menuState(for:) (page-platform Step 2, branch s8/toasts) not on main yet",
+      "status": "BLOCKED"
+    },
+    "A1_appearance_light_dark_chrome": {
+      "reason": "EP-9b (fork patch 0505): SetChromeColorScheme does not change prefers-color-scheme here",
+      "start": {
+        "background": "rgb(255, 255, 255)",
+        "changes": [
+          "light"
+        ],
+        "dark": false,
+        "loadId": "egx6l7cqtqv"
+      },
+      "status": "BLOCKED",
+      "websitesDark": {
+        "background": "rgb(255, 255, 255)",
+        "changes": [
+          "light"
+        ],
+        "dark": false,
+        "loadId": "egx6l7cqtqv"
+      },
+      "websitesLight": {
+        "background": "rgb(17, 17, 17)",
+        "changes": [
+          "light",
+          "dark"
+        ],
+        "dark": true,
+        "loadId": "egx6l7cqtqv"
+      }
+    },
+    "A1_appearance_stored_chrome": {
+      "menuSource": [
+        {
+          "appearance-automatic": false,
+          "appearance-dark": true,
+          "appearance-light": false
+        },
+        {
+          "appearance-automatic": false,
+          "appearance-dark": false,
+          "appearance-light": true
+        }
+      ],
+      "ok": true,
       "stored": [
         "dark",
         "light"
       ]
     },
     "A2_appearance_automatic_follows_app_chrome": {
-      "checked": {
-        "appearance-automatic": false,
-        "appearance-dark": false,
-        "appearance-light": false
-      },
-      "ok": false,
+      "ok": true,
       "states": [
         {
           "background": "rgb(17, 17, 17)",
@@ -104,7 +137,7 @@
             "dark"
           ],
           "dark": true,
-          "loadId": "qmxv2zph63"
+          "loadId": "egx6l7cqtqv"
         },
         {
           "background": "rgb(255, 255, 255)",
@@ -114,7 +147,7 @@
             "light"
           ],
           "dark": false,
-          "loadId": "qmxv2zph63"
+          "loadId": "egx6l7cqtqv"
         },
         {
           "background": "rgb(17, 17, 17)",
@@ -125,7 +158,7 @@
             "dark"
           ],
           "dark": true,
-          "loadId": "qmxv2zph63"
+          "loadId": "egx6l7cqtqv"
         }
       ]
     },
@@ -147,16 +180,16 @@
         "forced": false,
         "ok": true,
         "owned_pids": [
-          26212,
-          26218,
-          26219,
-          26220,
-          26221,
-          26225,
-          26226,
-          26724,
-          26756,
-          26805
+          13451,
+          13533,
+          13534,
+          13535,
+          13536,
+          13538,
+          13539,
+          13985,
+          13989,
+          14011
         ],
         "remaining_processes": [],
         "reply": true,
@@ -171,57 +204,36 @@
       "reason": "EP-4b (fork patch 0503 adds panel_id); network-inspector opens the default panel until then",
       "status": "BLOCKED"
     },
-    "D4_allow_js_apple_events_menu": {
-      "initial": [
-        {
-          "action": "openCommandAction:",
-          "checked": false,
-          "enabled": true,
-          "hidden": false,
-          "id": "allow-js-apple-events",
-          "key": "",
-          "payload": "",
-          "tag": 0,
-          "targetNil": false,
-          "title": "Allow JavaScript from Apple Events"
-        },
-        null
-      ],
-      "off": [
-        {
-          "action": "openCommandAction:",
-          "checked": false,
-          "enabled": true,
-          "hidden": false,
-          "id": "allow-js-apple-events",
-          "key": "",
-          "payload": "",
-          "tag": 0,
-          "targetNil": false,
-          "title": "Allow JavaScript from Apple Events"
-        },
+    "D4_allow_js_apple_events_checkmark": {
+      "checked": [
+        false,
+        false,
         false
       ],
-      "ok": false,
-      "on": [
-        {
-          "action": "openCommandAction:",
-          "checked": false,
-          "enabled": true,
-          "hidden": false,
-          "id": "allow-js-apple-events",
-          "key": "",
-          "payload": "",
-          "tag": 0,
-          "targetNil": false,
-          "title": "Allow JavaScript from Apple Events"
-        },
-        true
-      ]
+      "expected": [
+        false,
+        true,
+        false
+      ],
+      "reason": "CommandMenuState / menuState(for:) (page-platform Step 2, branch s8/toasts) not on main yet",
+      "status": "BLOCKED"
     },
     "D4_allow_js_apple_events_osascript": {
       "reason": "the App does not host OpenScripting yet (applescript plan Steps 5-7); the 1013 gate is in ScriptCommands.executeJavascript and runs once the App wires ScriptHost",
       "status": "BLOCKED"
+    },
+    "D4_allow_js_apple_events_setting": {
+      "menuSource": [
+        false,
+        true,
+        false
+      ],
+      "ok": true,
+      "stored": [
+        null,
+        true,
+        false
+      ]
     },
     "H1_task_manager_window": {
       "ok": true,
@@ -237,7 +249,7 @@
         "frame": "{{960, 765}, {640, 390}}",
         "key": true,
         "level": 0,
-        "number": 131297,
+        "number": 142500,
         "parent": 0,
         "sheet": false,
         "title": "Task Manager",
@@ -246,13 +258,13 @@
     },
     "H2_cancel_trace": {
       "files": [
-        "Open Trace 2026-11-02 14.15.04.json"
+        "Open Trace 2026-11-02 15.22.27.json"
       ],
       "ok": true
     },
     "H2_record_trace_stop": {
       "error": "",
-      "file": "/var/folders/s6/_07cr4w13vsg_myjkv9ldpqc0000gn/T/Open-E2E-page-chrome-26103-d14ee786-scratch-8z2r_92e/traces/Open Trace 2026-11-02 14.15.04.json",
+      "file": "/var/folders/s6/_07cr4w13vsg_myjkv9ldpqc0000gn/T/Open-E2E-page-chrome-13310-682d3a20-scratch-p2riyjmi/traces/Open Trace 2026-11-02 15.22.27.json",
       "menu": [
         {
           "cancel-trace": false,
@@ -272,13 +284,13 @@
         "Recording Trace\u2026",
         "Trace Saved"
       ],
-      "traceEvents": 5971
+      "traceEvents": 5966
     },
     "H3_copy_open_info": {
       "ok": true,
       "text": "Open 0.1.0 (1)\nEngine: Chromium 156.0.8078.48, CEF 156.0.14+g4fa4ab5+chromium-156.0.8078.48\nmacOS Version 27.2 (Build 26B5112a)\nMac: Mac17,8 (arm64)"
     },
-    "H4_cast_hidden_media_router_off": {
+    "H4_cast_menu_hidden": {
       "cast": {
         "action": "openCommandAction:",
         "checked": false,
@@ -291,16 +303,26 @@
         "targetNil": false,
         "title": "Cast\u2026"
       },
+      "checked": [
+        false
+      ],
+      "expected": [
+        true
+      ],
+      "reason": "CommandMenuState / menuState(for:) (page-platform Step 2, branch s8/toasts) not on main yet",
+      "status": "BLOCKED"
+    },
+    "H4_media_router_off": {
       "helpers": 7,
       "helpersWithMediaRouterOff": 7,
-      "ok": false
+      "ok": true
     },
     "H_reveal_open_data": {
       "ok": true,
       "reveals": [
-        "/Users/serge/Library/Application Support/Open-E2E-page-chrome-26103-d14ee786"
+        "/Users/serge/Library/Application Support/Open-E2E-page-chrome-13310-682d3a20"
       ],
-      "root": "/Users/serge/Library/Application Support/Open-E2E-page-chrome-26103-d14ee786"
+      "root": "/Users/serge/Library/Application Support/Open-E2E-page-chrome-13310-682d3a20"
     },
     "K1_clear_cookies_and_refresh_chrome": {
       "after": [
@@ -332,6 +354,6 @@
       }
     }
   },
-  "started": "2026-11-02 14:14:40",
+  "started": "2026-11-02 15:22:00",
   "style": "chrome"
 }
