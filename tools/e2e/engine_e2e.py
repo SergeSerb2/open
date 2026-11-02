@@ -7545,6 +7545,19 @@ def page_tools_devtools_checks(app, results, port, style):
     finally:
         _try(lambda: app.call("devtools-close", tab=tab))
         _try(lambda: app.call("dismiss"))
+    if style != "alloy":
+        # The real key path (OEApplication.sendEvent → page → unconsumed → menu): Cmd+Opt+J.
+        closed = wait_until(lambda: _try(lambda: app.call("devtools-frontend", tab=tab, js="1")) is None, timeout=10, step=.25)
+        try:
+            app.call("focus", tab=tab)
+            app.call("key", key="j", modifiers=["cmd", "opt"])
+            keyed = wait_until(lambda: (lambda ids: ids if "tab-console" in ids else None)(
+                _try(lambda: app.call("devtools-frontend", tab=tab, js=_DEVTOOLS_SELECTED_TABS)) or []), timeout=20, step=.5)
+            results["D1_key_cmd_opt_j_" + style] = {"ok": bool(closed) and bool(keyed), "devtoolsClosedFirst": bool(closed),
+                                                     "selectedTabs": keyed}
+        finally:
+            _try(lambda: app.call("devtools-close", tab=tab))
+            _try(lambda: app.call("dismiss"))
     results["D2_network_inspector_panel_" + style] = _blocked(
         "EP-4b (fork patch 0503 adds panel_id); network-inspector opens the default panel until then")
     app.call("close", tab=tab)

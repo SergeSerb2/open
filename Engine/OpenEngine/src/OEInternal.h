@@ -85,11 +85,8 @@ class OEClient;
                         callback:(CefRefPtr<CefDownloadItemCallback>)callback;
 @end
 
-<<<<<<< HEAD
 class OEDevToolsClient;
-=======
 @class OEMediaFrames;
->>>>>>> origin/main
 
 @interface OEWebContent ()
 @property(nonatomic, readonly) CefRefPtr<CefBrowser> oe_browser;
