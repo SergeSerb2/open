@@ -32,6 +32,14 @@ public struct WebContentChange: OptionSet, Sendable, Hashable {
     public static let pictureInPicture = WebContentChange(rawValue: 1 << 14)
 }
 
+/// A full-page capture (EP-8).
+public struct FullPagePNG: Sendable {
+    public var data: Data
+    /// The page was taller than the cap and was cut there.
+    public var truncated: Bool
+    public init(data: Data, truncated: Bool) { self.data = data; self.truncated = truncated }
+}
+
 /// One page. Split View, Peek, Little Arc, Boosts, and Zap work through this.
 @MainActor
 public protocol WebContent: AnyObject {
@@ -61,6 +69,9 @@ public protocol WebContent: AnyObject {
     func evaluateJavaScript(_ script: String) async throws -> Any
     /// PNG of the visible page.
     func snapshotPNG() async throws -> Data
+    /// PNG of the whole page at device scale, at most `maxDevicePixels` tall (page-platform
+    /// EP-8; `OEWebContent.captureFullPage`). `truncated` says the page was cut at the cap.
+    func fullPagePNG(maxDevicePixels: Int) async throws -> FullPagePNG
 
     func find(_ text: String, forward: Bool, caseSensitive: Bool)
     func stopFinding(clearSelection: Bool)

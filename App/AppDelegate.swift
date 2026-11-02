@@ -34,6 +34,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, OEEngineDelegate, OEBr
   private var shutdownTrace: [[String: Any]] = []
   lazy var stores = AppStores(app: self)
   lazy var settingsPresenter = AppSettingsActions(app: self)
+  /// Library ▸ Captures writer (page-platform §4.6.6); one per app, shared by every window.
+  lazy var captureLibrary = CaptureLibraryWriter(app: self, root: directories.root)
   var keyBindings = KeyBindingStore.empty
   let fallbackKeyboard = KeyboardRouter()
   var commandServicesPrepared = false

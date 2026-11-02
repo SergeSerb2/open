@@ -4763,6 +4763,160 @@ def _fixture_server(prefix):
     return server, 'http://127.0.0.1:%d' % server.server_address[1]
 
 
+def _static_server(folder):
+    import http.server
+    import threading
+    class Handler(http.server.SimpleHTTPRequestHandler):
+        def __init__(self, *a, **kw):
+            super().__init__(*a, directory=folder, **kw)
+        def log_message(self, *args): pass
+    server = http.server.ThreadingHTTPServer(('127.0.0.1', 0), Handler)
+    threading.Thread(target=server.serve_forever, daemon=True).start()
+    return server, 'http://127.0.0.1:%d' % server.server_address[1]
+
+
+# long.html band colors, top to bottom (one per 1,000 CSS px).
+CAPTURE_BANDS = [(224, 64, 64), (64, 176, 80), (48, 96, 224), (224, 192, 48), (160, 64, 192), (48, 192, 192),
+                 (240, 128, 32), (32, 32, 32), (128, 224, 128), (224, 128, 192), (64, 128, 160), (192, 160, 128)]
+
+
+def capture_checks(factory, results, tmp):
+    """page-platform §8.3 C1–C7: the Capture tool in the real App (Step 13)."""
+    server, origin = _static_server(os.path.join(ROOT, 'tools', 'e2e', 'fixtures', 'page-platform'))
+    app = factory(urls=(origin + '/long.html',), fresh=True)
+    def state(): return app.call('capture-state')
+    def rows(**kw): return app.call('captures', **kw)['rows']
+    def nearest(rgb):
+        return min(range(len(CAPTURE_BANDS)), key=lambda i: sum((a - b) ** 2 for a, b in zip(rgb[:3], CAPTURE_BANDS[i])))
+    def close_card():
+        if state().get('card'):
+            app.call('key', key='escape')
+            wait_until(lambda: not state().get('card'), timeout=3, step=.05)
+    try:
+        tab = app.call('tabs')[0]['id']
+        app.call('wait', tab=tab)
+        ws = app.call('window-state')
+        app.call('window-focus', id=ws['id'], activate=True)
+        scale = app.eval(tab, 'devicePixelRatio')
+        menu = {r['id']: r for r in app.call('menu-state') if r['id'].startswith('capture-')}
+        results['capture_menu_enabled'] = {'ok': all(menu.get(i, {}).get('enabled') for i in ('capture-page', 'capture-full-page', 'capture-portrait')),
+                                           'menu': menu}
+
+        # C1: File > Capture..., a drag inside the overlay, one `area` row at device scale.
+        before = rows()
+        r = app.call('capture', mode='area', rect=[100, 100, 300, 200])
+        after = rows()
+        st, steps = r['state'], r['steps']
+        overlay = steps[0]['state'].get('overlay', {})
+        new = [x for x in after if x['id'] not in {y['id'] for y in before}]
+        card = st.get('card', {})
+        panel = card.get('panel', [0, 0, 0, 0])
+        results['capture_c1_area'] = {'ok': len(new) == 1 and new[0]['kind'] == 'area' and new[0]['width'] == round(300 * scale)
+            and new[0]['height'] == round(200 * scale) and new[0]['bytes'] > 0 and st['result']['saved'] == new[0]['id']
+            and overlay.get('frame') == overlay.get('pageFrame') and overlay.get('firstResponder') is True
+            and overlay.get('hint') == 'Drag to capture. Press Esc to cancel.' and not overlay.get('hintHidden')
+            and steps[1]['hintHidden'] is True and steps[1]['selection'] == [100, 100, 150, 100]
+            and card.get('actions') == ['copy', 'save', 'share', 'library', 'retake', 'delete'] and card.get('savedLine') is True,
+            'scale': scale, 'row': new, 'steps': steps, 'state': st}
+        # The card's top-right corner is the toast anchor: panel maxX - 10, minY + 8 (section 4.1.1).
+        results['capture_card_anchor'] = {'ok': bool(card) and abs(card['frame'][0] + card['frame'][2] - (panel[0] + panel[2] - 10)) < 0.5
+            and abs(card['frame'][1] - (panel[1] + 8)) < 0.5 and card['frame'][2] == 248, 'card': card.get('frame'), 'panel': panel}
+        lifetime = (card.get('lifetime'), card.get('remaining', 0))
+        app.call('capture-action', hover=True)
+        paused = state().get('card', {})
+        app.call('capture-action', hover=False)
+        resumed = state().get('card', {})
+        results['capture_card_lifetime'] = {'ok': lifetime[0] == 8 and 7 < lifetime[1] <= 8 and paused.get('paused') is True
+            and resumed.get('paused') is False and resumed.get('remaining', 9) <= paused.get('remaining', 0),
+            'scheduled': lifetime, 'paused': paused.get('remaining'), 'resumed': resumed.get('remaining')}
+        # Copy through the real button, then the Save... sheet (closed by `dismiss`), then Esc on the real key path.
+        app.call('capture-action', action='copy')
+        app.call('capture-action', action='save')
+        sheet = wait_until(lambda: next((w for w in app.call('windows') if 'SavePanel' in w.get('class', '')), None), timeout=5, step=.1)
+        app.call('dismiss')
+        gone = wait_until(lambda: (not any('SavePanel' in w.get('class', '') for w in app.call('windows'))) or None, timeout=5, step=.1)
+        app.call('key', key='escape')
+        closed = wait_until(lambda: (lambda s: s if not s.get('card') and s['phase'] == 'idle' else None)(state()), timeout=3, step=.05)
+        results['capture_card_copy_save_escape'] = {'ok': bool(sheet) and bool(gone) and bool(closed), 'sheet': sheet}
+
+        # C4: Esc during the overlay: no row.
+        count, cancelled = len(rows()), state()['cancelled']
+        r = app.call('capture', mode='area')
+        shown = r['state'].get('overlay')
+        app.call('key', key='escape')
+        after_esc = wait_until(lambda: (lambda s: s if not s['overlayActive'] else None)(state()), timeout=3, step=.05) or state()
+        results['capture_c4_escape'] = {'ok': bool(shown) and not after_esc['overlayActive'] and after_esc['cancelled'] == cancelled + 1
+            and len(rows()) == count, 'overlay': shown, 'state': after_esc}
+
+        # C3: portrait -> a 4:5 PNG.
+        r = app.call('capture', mode='portrait')
+        row = rows()[-1]
+        results['capture_c3_portrait'] = {'ok': row['kind'] == 'portrait' and abs(row['width'] / row['height'] - 0.8) < 0.002
+            and r['state']['result']['saved'] == row['id'], 'row': row}
+        close_card()
+
+        # C2: full page of the 12,000 px page; bands at their offsets.
+        app.eval(tab, 'scrollTo(0, 3000), scrollY')
+        r = app.call('capture', mode='fullPage', timeout=90)
+        row = rows()[-1]
+        ys = [int((k * 1000 + 500) * scale) for k in range(12)]
+        probe = app.call('captures', probe=[[20, y] for y in ys])['probe'] if row['kind'] == 'fullPage' else []
+        bands = [nearest(p) if p else -1 for p in probe]
+        scroll_after = app.eval(tab, 'scrollY')
+        results['capture_c2_full_page'] = {'ok': row['kind'] == 'fullPage' and row['height'] == round(12000 * scale)
+            and bands == list(range(12)) and r['state']['result']['truncated'] is False
+            and r['state'].get('card', {}).get('actions') == ['copy', 'save', 'share', 'library', 'delete'],
+            'row': row, 'bands': bands, 'probe': probe, 'scrollAfter': scroll_after, 'state': r['state']}
+        # Delete on the card removes the file and the row in one step.
+        app.call('capture-action', action='delete')
+        rows_after_delete = rows()
+        results['capture_delete'] = {'ok': row['id'] not in {x['id'] for x in rows_after_delete}
+            and not os.path.exists(os.path.join(app.call('captures')['directory'], row['fileName'])) and not state().get('card'),
+            'rows': len(rows_after_delete)}
+
+        # C5: Cmd+Shift drag on the page: held under 4 pt, overlay at the press point after it.
+        app.call('navigate', tab=tab, url=origin + '/links.html'); app.call('wait', tab=tab)
+        count = len(rows())
+        r = app.call('capture', mode='area', entry='drag', rect=[500, 300, 240, 160])
+        steps, row = r['steps'], rows()[-1]
+        results['capture_c5_drag'] = {'ok': steps[0]['held'] and not steps[0]['overlay'] and steps[1]['held'] and not steps[1]['overlay']
+            and steps[2]['overlay'] and steps[2]['anchor'] == [500, 300] and len(rows()) == count + 1 and row['kind'] == 'area'
+            and row['width'] == round(240 * scale) and row['height'] == round(160 * scale) and r['state']['entry'] == 'drag',
+            'steps': steps, 'row': row}
+        close_card()
+
+        # C6: Cmd+Shift click on a link: the held press is replayed; a foreground tab opens.
+        link = app.eval(tab, "(() => { const r = document.querySelector('#link').getBoundingClientRect(); return [r.left + r.width / 2, r.top + r.height / 2] })()")
+        page = app.call('window-state')['panel']
+        tabs_before, replays = len(app.call('tabs')), state()['replays']
+        app.call('mouse', action='click', x=page[0] + link[0], y=page[1] + link[1], modifiers=['command', 'shift'])
+        opened = wait_until(lambda: next((t for t in app.call('tabs') if t['url'].endswith('/links-target.html') and t['selected']), None), timeout=8, step=.1)
+        results['capture_c6_click_replay'] = {'ok': bool(opened) and len(app.call('tabs')) == tabs_before + 1 and state()['replays'] == replays + 1
+            and not state()['overlayActive'], 'opened': opened, 'replays': state()['replays']}
+
+        # Section 7.3: "Capture" and "Capture Full Page" in the page context menu, before Inspect.
+        app.call('select', tab=tab); app.call('wait', tab=tab)
+        app.call('policy', contextMenu='record'); app.call('events')
+        app.call('rightclick', tab=tab, x=40, y=40)
+        menu_event = wait_until(lambda: next((e for e in app.call('events') if e['type'] == 'contextMenu'), None), timeout=5, step=.1)
+        app.call('policy', contextMenu='')
+        shown = (menu_event or {}).get('shown', [])
+        inspect = next((i for i, t in enumerate(shown) if t.startswith('Inspect')), len(shown))
+        results['capture_context_menu'] = {'ok': (menu_event or {}).get('open') == ['Capture', 'Capture Full Page']
+            and 'Capture' in shown and 'Capture Full Page' in shown and shown.index('Capture') + 1 == shown.index('Capture Full Page')
+            and shown.index('Capture Full Page') < inspect, 'shown': shown}
+
+        # C7 needs incognito windows (app-shell 4.8, not built yet); features-render C3/C7 covers the ephemeral path.
+        results['capture_c7_incognito'] = {'status': 'BLOCKED', 'reason': 'no incognito window in Open yet (app-shell 4.8); the ephemeral-context path is covered offscreen (features-render C3/C7)'}
+    finally:
+        for cmd, kw in (('dismiss', {}), ('capture-action', {'action': 'cancel'})):
+            try:
+                app.call(cmd, timeout=3, **kw)
+            except Exception:
+                pass
+        app.quit(); server.shutdown(); server.server_close()
+
+
 def toolbar_checks(factory, results, tmp):
     """commandbar-completion §4.6 / §5.3 `toolbar`: the optional content toolbar in the real App."""
     server, origin = _fixture_server('TB')
@@ -7090,7 +7244,7 @@ def main():
     ap.add_argument("--engine-fingerprint-only", action="store_true", help="verify built engine artifacts and exit without launching Open")
     ap.add_argument("--extensions", default=os.path.join(ROOT, ".re", "ext", "unpacked"))
     ap.add_argument("--only", choices=["shell", "extensions", "features", "measure", "tabstrip", "window", "sidebar", "peek",
-                                       "commandbar", "app-actions", "actions", "profiles", "sidebar-completion", "toolbar", "numbering"])
+                                       "commandbar", "app-actions", "actions", "profiles", "sidebar-completion", "toolbar", "numbering", "page"])
     ap.add_argument("--window-chrome-only", action="store_true", help="run only the window-chrome follow-up flows in the window suite")
     ap.add_argument("--keep", action="store_true",
                     help="keep this run's data root, cache root and scratch folder (paths printed at the end)")
@@ -7257,6 +7411,9 @@ def main():
             results[opts.only] = CheckedResults(tracker)
             space_manager_checks(results[opts.only], tmp, opts.config, opts.style)
             folder_peek_checks(factory, results[opts.only], tmp)
+        elif opts.only == "page":
+            results["page"] = CheckedResults(tracker)
+            capture_checks(factory, results["page"], tmp)
         elif opts.only in ("toolbar", "numbering"):
             results[opts.only] = CheckedResults(tracker)
             (toolbar_checks if opts.only == "toolbar" else numbering_checks)(factory, results[opts.only], tmp)
@@ -7342,14 +7499,14 @@ def main():
                                     else opts.config.lower()))
     with open(os.path.join(OUT, name), "w") as f:
         json.dump(results, f, indent=2, sort_keys=True)
-    for group in ("shell", "extensions", "features", "measure", "tabstrip", "window", "sidebar", "peek", "commandbar", "app-actions", "actions", "profiles", "sidebar-completion", "toolbar", "numbering"):
+    for group in ("shell", "extensions", "features", "measure", "tabstrip", "window", "sidebar", "peek", "commandbar", "app-actions", "actions", "profiles", "sidebar-completion", "toolbar", "numbering", "page"):
         for k, v in results.get(group, {}).items():
             if isinstance(v, dict) and "ok" in v:
                 print("%-24s %s" % (k, "PASS" if v.get("ok") else "FAIL"))
             elif isinstance(v, dict) and v.get("status") in ("SKIP", "BLOCKED", "INTERRUPTED", "DEFERRED"):
                 print("%-24s %s: %s" % (k, v["status"], v.get("reason", "")))
     print("wrote", os.path.join(OUT, name))
-    failures = [k for group in ("shell", "extensions", "features", "measure", "tabstrip", "window", "sidebar", "peek", "commandbar", "app-actions", "actions", "sidebar-completion", "toolbar", "numbering")
+    failures = [k for group in ("shell", "extensions", "features", "measure", "tabstrip", "window", "sidebar", "peek", "commandbar", "app-actions", "actions", "sidebar-completion", "toolbar", "numbering", "page")
                 for k, v in results.get(group, {}).items() if isinstance(v, dict) and v.get("ok") is False]
     if failures or not results["cleanup"]["ok"]:
         sys.exit(1)
