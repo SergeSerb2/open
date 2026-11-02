@@ -766,7 +766,7 @@ The Section 2 agent implements this plan. Each row names the merged PR and its e
 
 | 9 | [#144](https://github.com/SergeSerb2/open/pull/144) | App build; e2e `toolbar` 10/10 (new suite: off by default with "Show Toolbar"; Cmd+Shift+D draws the 32 pt bar with back, forward, reload, copy, host and Site Control Center, the page's `innerHeight` = slot − 32, the View item reads "Hide Toolbar"; the sidebar hides its URL field and navigation and Favorites move up 36 pt; right-click "Show Full URL" shows `http://127.0.0.1:…/alpha` and stores `open.advanced.showFullURLWithToolbar`, writing the default back restores the host; "Manage Extensions" opens the extensions page; "Hide Toolbar" restores the page; the URL field's "Show as Toolbar"; Cmd+N copies the toolbar; the Little Open window disables the item; a relaunch keeps it); e2e `numbering` 3/3 (new suite: sidebar pixels unchanged while Command is held 2 s after a still control pair; Cmd+2 and Cmd+9 select Today items 2 and last; `keyboard-shortcuts-edu` opens the window at level 3 and Esc closes it); e2e `commandbar` 62/62 incl. new `commandbar_inline_completion` (`localh` → `localhost:<port>` with the tail selected, Return switches to the tab, Backspace leaves `localh`), and Section 2 items 10 and 11 in the same PR: `new_window_opens_command_bar` (File ▸ New Window opens the new window with the bar in New Tab mode) and `edit_pinned_url` (Edit Pinned Page ▸ Edit… opens edit mode with the pinned URL selected; Return stores the new pinned URL and the tab goes there); e2e `shell`, `window`, `measure`, `sidebar`, `app-actions` (see PR); break-and-revert: a sidebar change while Command is held fails `numbering_hold_command_no_hints` (difference 79 at the sidebar toolbar); without the new-window call `new_window_opens_command_bar` fails; the binary before item 11 fails `edit_pinned_url` | done |
 
-| 10 | this PR | Docs and status: `docs/status.md` gaps 22–26 closed (gap 25 heading fixed), §1.7 rows (Copy URL toast, action count), §2.4 (Show/Hide Toolbar dispatches), the stale animation note; `docs/commandbar.md` §10 gaps 1–4 closed (gap 1 in #145); followups for every leftover | done |
+| 10 | [#148](https://github.com/SergeSerb2/open/pull/148) | Docs and status: `docs/status.md` gaps 22–26 closed (gap 25 heading fixed), §1.7 rows (Copy URL toast, action count), §2.4 (Show/Hide Toolbar dispatches), the stale animation note; `docs/commandbar.md` §10 gaps 1–4 closed (gap 1 in #145); followups for every leftover | done |
 
 Section 2 items 9–19 (brief `.re/handoff/sections/02-command-bar.md` §3.2–§3.5):
 
@@ -777,8 +777,8 @@ Section 2 items 9–19 (brief `.re/handoff/sections/02-command-bar.md` §3.2–�
 | 11 Edit Pinned URL | [#144](https://github.com/SergeSerb2/open/pull/144) | command bar edit mode; Arc's strings name a dialog |
 | 12 Copy URL without trackers | [#146](https://github.com/SergeSerb2/open/pull/146) | Arc's decoded rule (RE CC-31a) |
 | 13 2x black frames | [#147](https://github.com/SergeSerb2/open/pull/147) | cause: read-back fence on another Metal queue; fixed |
-| 14 Design parity | this PR | see below; row title width 475 pt (S2 18/0044 row 2: 88 pt → 0 pt) |
-| 15–18 Speed, regressions, soak, orphans | this PR and the done note | measured on the final `main` |
+| 14 Design parity | [#148](https://github.com/SergeSerb2/open/pull/148) | see below; row title width 475 pt (S2 18/0044 row 2: 88 pt → 0 pt) |
+| 15–18 Speed, regressions, soak, orphans | the done note (final `main`) | measured on the final `main` |
 
 Item 14, `commandbar-render compare` on this branch (M5; S2 captures in Display P3). Elements outside 1 pt or ΔE00 2, and why:
 
