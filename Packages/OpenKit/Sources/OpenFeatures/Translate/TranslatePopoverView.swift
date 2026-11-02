@@ -323,7 +323,9 @@ public final class TranslatePopoverController {
         guard let parent, let panel else { return }
         let size = view.preferredSize, m = TranslateMetrics.self
         let a = parent.convertToScreen(anchor)
-        let visible = parent.screen?.visibleFrame ?? parent.frame
+        // Inside the browser window (8 pt margin, like the Site Control panel), and on its screen.
+        let screen = parent.screen?.visibleFrame ?? parent.frame
+        let visible = parent.frame.intersection(screen).isNull ? parent.frame : parent.frame.intersection(screen)
         var x = a.midX - size.width / 2
         x = min(max(x, visible.minX + 8 - m.shadowMargin), visible.maxX - size.width - 8 + m.shadowMargin)
         let top = a.minY - m.anchorGap + m.shadowMargin

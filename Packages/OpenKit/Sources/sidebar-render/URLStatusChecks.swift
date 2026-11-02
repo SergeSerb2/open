@@ -104,7 +104,8 @@ enum URLStatusChecks {
         try FileManager.default.createDirectory(atPath: out, withIntermediateDirectories: true)
         for w: CGFloat in [228, 300] {
             for (name, item) in [("none", nil)] + states.map({ ($0.0, Optional($0.1)) }) {
-                let (context, scene, _) = makeScene(width: w, delegate: RecordingDelegate())
+                let delegate = RecordingDelegate()   // the sidebar holds its delegate weakly
+                let (context, scene, _) = makeScene(width: w, delegate: delegate)
                 context.urlStatus = item
                 let host = OffscreenRenderer.host(scene, scale: scale)
                 scene.needsLayout = true; OffscreenRenderer.settle(scene, runLoop: 0.01)
@@ -112,7 +113,7 @@ enum URLStatusChecks {
                 let crop = full.cropping(to: CGRect(x: 0, y: 0, width: Int(w * scale), height: Int(260 * scale))) ?? full
                 let url = URL(fileURLWithPath: out).appendingPathComponent("url-status-\(Int(w))-\(name).png")
                 OffscreenRenderer.writePNG(crop, to: url); print("rendered \(url.path)")
-                host.contentView = nil; host.close()
+                host.contentView = nil; host.close(); withExtendedLifetime(delegate) {}
             }
         }
     }

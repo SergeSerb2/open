@@ -7159,8 +7159,16 @@ def page_translate_checks(factory, results, tmp):
         shot(app, 'page-translate-popover.png')
         app.call('key', key='escape', route='app')
         closed = wait_until(lambda: not st()['popover']['presented'], timeout=3, step=.05)
+        # Geometry (screen points, y up): the body stays 8 pt inside the window (the panel has a 14 pt
+        # shadow margin), and the arrow tip sits 2 pt under the status button [8, 88, W − 16, 28].
+        win = app.call('window-state')['frame']
+        f = pop.get('frame') or [0, 0, 0, 0]
+        tip_y = f[1] + f[3] - 14
+        button_bottom = win[1] + win[3] - (88 + 28)
         results['X1_popover_offer_and_escape'] = {'ok': pop['presented'] and pop['title'] == 'Translate this page to English?'
-            and pop['buttons'] == ['Translate', 'Options'] and bool(closed), 'popover': pop}
+            and pop['buttons'] == ['Translate', 'Options'] and bool(closed)
+            and f[0] + 14 >= win[0] + 8 - 0.5 and abs(tip_y - (button_bottom - 2)) <= 1,
+            'popover': pop, 'window': win, 'tipY': tip_y, 'buttonBottom': button_bottom}
 
         app.call('translate', action='translate')
         done = state_is('translated')
