@@ -766,6 +766,32 @@ The Section 2 agent implements this plan. Each row names the merged PR and its e
 
 | 9 | [#144](https://github.com/SergeSerb2/open/pull/144) | App build; e2e `toolbar` 10/10 (new suite: off by default with "Show Toolbar"; Cmd+Shift+D draws the 32 pt bar with back, forward, reload, copy, host and Site Control Center, the page's `innerHeight` = slot − 32, the View item reads "Hide Toolbar"; the sidebar hides its URL field and navigation and Favorites move up 36 pt; right-click "Show Full URL" shows `http://127.0.0.1:…/alpha` and stores `open.advanced.showFullURLWithToolbar`, writing the default back restores the host; "Manage Extensions" opens the extensions page; "Hide Toolbar" restores the page; the URL field's "Show as Toolbar"; Cmd+N copies the toolbar; the Little Open window disables the item; a relaunch keeps it); e2e `numbering` 3/3 (new suite: sidebar pixels unchanged while Command is held 2 s after a still control pair; Cmd+2 and Cmd+9 select Today items 2 and last; `keyboard-shortcuts-edu` opens the window at level 3 and Esc closes it); e2e `commandbar` 62/62 incl. new `commandbar_inline_completion` (`localh` → `localhost:<port>` with the tail selected, Return switches to the tab, Backspace leaves `localh`), and Section 2 items 10 and 11 in the same PR: `new_window_opens_command_bar` (File ▸ New Window opens the new window with the bar in New Tab mode) and `edit_pinned_url` (Edit Pinned Page ▸ Edit… opens edit mode with the pinned URL selected; Return stores the new pinned URL and the tab goes there); e2e `shell`, `window`, `measure`, `sidebar`, `app-actions` (see PR); break-and-revert: a sidebar change while Command is held fails `numbering_hold_command_no_hints` (difference 79 at the sidebar toolbar); without the new-window call `new_window_opens_command_bar` fails; the binary before item 11 fails `edit_pinned_url` | done |
 
+| 10 | this PR | Docs and status: `docs/status.md` gaps 22–26 closed (gap 25 heading fixed), §1.7 rows (Copy URL toast, action count), §2.4 (Show/Hide Toolbar dispatches), the stale animation note; `docs/commandbar.md` §10 gaps 1–4 closed (gap 1 in #145); followups for every leftover | done |
+
+Section 2 items 9–19 (brief `.re/handoff/sections/02-command-bar.md` §3.2–§3.5):
+
+| Item | PR | Result |
+|---|---|---|
+| 9 Empty Cmd+T order | [#145](https://github.com/SergeSerb2/open/pull/145) | four open tabs, then Contact the Team, no history (S2 18/0008, 18/0044 AX) |
+| 10 New window opens with the bar | [#144](https://github.com/SergeSerb2/open/pull/144) | File ▸ New Window and Blank Window; not restored windows (guess) |
+| 11 Edit Pinned URL | [#144](https://github.com/SergeSerb2/open/pull/144) | command bar edit mode; Arc's strings name a dialog |
+| 12 Copy URL without trackers | [#146](https://github.com/SergeSerb2/open/pull/146) | Arc's decoded rule (RE CC-31a) |
+| 13 2x black frames | [#147](https://github.com/SergeSerb2/open/pull/147) | cause: read-back fence on another Metal queue; fixed |
+| 14 Design parity | this PR | see below; row title width 475 pt (S2 18/0044 row 2: 88 pt → 0 pt) |
+| 15–18 Speed, regressions, soak, orphans | this PR and the done note | measured on the final `main` |
+
+Item 14, `commandbar-render compare` on this branch (M5; S2 captures in Display P3). Elements outside 1 pt or ΔE00 2, and why:
+
+| Capture | Worst position / ΔE00 | Outside target |
+|---|---|---|
+| F0043, F0062, F0061 | 1.0 pt / 1.93 | none |
+| A0120 | 1.0 pt / 2.11 | shadow left ΔE00 2.11 (unchanged since #139) |
+| S2 18/0009 | 2.0 pt / 16.33 | the panel edge style (Arc's dark double edge over this page; Open's luminance rule draws one #3E3E3E line: open follow-up, §8.3) moves the measured edge 2 pt and gives ΔE00 16; row 1 subtitle ΔE00 2.67 |
+| S2 18/0016, 0018 | 2.0 pt / 16.44 | the edge style as above; the scope chip and the orange selection ΔE00 6.0 and the chip glow 2.3–3.3: the harness renders into sRGB, so Arc's Display P3 #FFA500 clips (the App draws P3); panel fill 2.2–2.5 over this page (material fit); row 1 icon 1 pt / 2.78 |
+| S2 18/0044 | 32 pt / 16.14 | the edge style: the edge detector finds a different line on Open's single edge (top 32 pt, right 10 pt; the panel frame itself sits at 0 pt, Step 0); row 2 title fixed in this PR (88 → 0 pt) |
+
+The eight session-1 comparisons of `docs/commandbar.md` §8 keep their numbers: their scene files were not kept from session 1, so every Section 2 PR checked that the §8 states render pixel-identical to `main` before it (Step 0 onward), and this PR's renders of the F0043/F0062/F0061/A0120 scenes are byte-identical to `main` (S2 0009/0016 differ by at most 1 level in 2–3 bytes of the blurred edge, identical across repeated renders).
+
 Section 2 decisions (Step 0):
 
 - `present(_:)` and `dismiss(reason:)` lose their `animated:` parameter: with no animation it would mean nothing.
@@ -773,6 +799,10 @@ Section 2 decisions (Step 0):
 - While Open has no privacy page, line 2 of the footer hides (`privacyURL` nil). Hiding only the word "here" would leave a broken sentence.
 - The panel edge keeps the session-1 luminance rule. Session 2 shows the dark double edge over light pages, against session-1 F0039/F0040/A0120; the rule's input is not known (`docs/followups.md`, capture request).
 - `compare --space p3` measures session-2 captures in Display P3 (their AW2726DM profile exceeds sRGB); session-1 comparisons stay in sRGB.
+
+Section 2 decisions (item 14):
+
+- `CommandBarMetrics.titleMaxWidth` 475: a row title stops at 475 pt (measured on one frame, S2 18/0044; a 475 pt box gives Arc's 468 pt of ink with tail truncation). Other frames have shorter titles, so nothing else moved.
 
 Section 2 decisions (Step 9):
 

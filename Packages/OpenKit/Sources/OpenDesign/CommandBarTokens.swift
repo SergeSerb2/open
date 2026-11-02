@@ -146,6 +146,10 @@ public enum CommandBarMetrics {
     public static let rowKeycapGap: CGFloat = 4
     /// Title and subtitle stop this far before the accessory. guess.
     public static let accessoryTextGap: CGFloat = 16
+    /// A row title keeps at most this width, truncated at the tail. measured: S2 18/0044 (one frame), row 2's
+    /// 93-character title ends at 468 pt of ink (a 475 pt box: tail truncation ends on a glyph) while its "Switch to
+    /// Tab" accessory is ≈ 350 pt further right.
+    public static let titleMaxWidth: CGFloat = 475
     /// Subtitle URLs keep at most this width, truncated in the middle (F0048: "resources.arc.net/…stinct-browsing-areas"). fitted.
     public static let subtitleMaxWidth: CGFloat = 278
 
