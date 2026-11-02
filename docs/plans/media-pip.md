@@ -590,10 +590,10 @@ in the Step 6 PR.
 
 | Property | Value |
 |---|---|
-| Window | `NSPanel`, style `[.borderless, .nonactivatingPanel, .resizable]`, `isFloatingPanel = true`, `hidesOnDeactivate = false`, `isMovableByWindowBackground = true`, `hasShadow = true`, `collectionBehavior = [.canJoinAllSpaces, .fullScreenAuxiliary]`. Content view layer: corner radius `PiPMetrics.cornerRadius` 12 (guess), masks to bounds. |
+| Window | `NSPanel`, style `[.borderless, .nonactivatingPanel, .resizable]`, `isFloatingPanel = true`, `hidesOnDeactivate = false`, `isMovableByWindowBackground = true`, `hasShadow = true`, `collectionBehavior = [.canJoinAllSpaces, .fullScreenAuxiliary]`. Content view layer: corner radius `PiPMetrics.cornerRadius` 6 with the continuous curve, a 1 pt white 0.12 inner edge (`edgeStrokeWidth`, `edgeStrokeAlpha`), masks to bounds (capture session 2 item 13; §14.2). Document PiP keeps 12 (`documentCornerRadius`, guess). |
 | Level | `.floating` when "Keep Window on Top" is on (default, key `open.pip.keepOnTop`), else `.normal`. `toggleAlwaysOnTop` exists in Arc (PP-8); the default is a guess. |
 | Content | The engine's `videoView` fills the window. The overlay (§4.4.3) sits above it. |
-| Initial size | Fit the video's natural aspect inside `visibleFrame.width / 8` × `visibleFrame.height / 8` on the source window's screen, then clamp to the orientation-aware minimum and 50% maximum. The /8 factor fits capture session 2 item 13 exactly at 2560×1440; it is a guess elsewhere (lead decision, 2026-10-26 11:25). This replaces the earlier Chromium /5 rule. |
+| Initial size | Fit the video's natural aspect inside `frame.width / 8` × `frame.height / 8` of the source window's screen (the whole screen, not `visibleFrame`; §14.2), then clamp to the orientation-aware minimum and 50% maximum. The /8 factor fits capture session 2 item 13 exactly at 2560×1440; it is a guess elsewhere (lead decision, 2026-10-26 11:25). This replaces the earlier Chromium /5 rule. |
 | Initial position | Bottom-right of that screen's `visibleFrame`, inset 10 pt from the right and bottom (capture session 2 item 13). Later opens in the same app run reuse the last frame's origin and LONG side, clamped to the current video's limits. Not persisted. |
 | Resize | `contentAspectRatio` = natural size; minimum box 284×160 for landscape, rotated to 160×284 for portrait, with the natural aspect preserved. Square remains 284×284. Landscape minimum comes from Chromium `kMinWindowSize` (`video_overlay_window_views.cc:109`); portrait rotation is Open lead design. Maximum is 50% of `visibleFrame` in each dimension (guess). A natural-size change (`didChangePiPVideoResolution`) keeps the width and updates the height. |
 | Size class | Compact below 300 pt wide, regular otherwise (guess; Arc has `PIPSizeClassKey`). |
@@ -2486,6 +2486,46 @@ request, idle CPU with a paused card equal to idle CPU without it (median of
 three interleaved pairs, all processes 0.46 vs 0.32 %, browser process 0.17
 vs 0.11 %). Rows E-M2 (P6), E-M8 and E-M14 (EM-4), E-M13 (EM-7) and the sleep
 adapter (section 8) report BLOCKED.
+
+### 14.2 Item 14 parity (part)
+
+Branch `s3/media-parity`. Evidence, tables and commands:
+`Packages/OpenKit/MediaRenders/section3-parity/README.md` (numbers and Open-only
+PNGs; Arc frames stay in `.re/`).
+
+- **Row speaker, real window** (1x AW2726DM, 1728 × 1084, sidebar 228, dark,
+  default theme; `compare-media --state row-audible|row-muted`, Open's frames from
+  its own AX tree): S2 12/0022, 12/0027, 13/0002 (not selected) and 14b/0014 (not
+  selected) all pass, worst edge 1.0 pt, worst ΔE00 1.21 (offscreen Step 2b: 1 pt,
+  1.91). The 1 pt audible ink edge is within Arc's own frame-to-frame variation.
+  No change. Open's row has no AX text element for the title, so the AX title-x row
+  of the compare is n/a (the pixel title start is 0.0 pt).
+- **PiP window vs item 13** (phase 2, `features-render pip --first-open`):
+  size and 10 pt insets were exact on the harness screen 2560 × 1440, but the
+  capture display's visible frame is 2560 × 1410 (30 pt menu bar), where the
+  `visibleFrame / 8` rule opens 314 × 177. Arc's corner is continuous r 6 (fitted
+  against on-screen calibration windows within 1/255) and it draws a 1 pt white
+  inner edge (alpha 0.121 median over 58 frames); Open had circular r 12 and no edge.
+  **Product changes** (capture facts): `PiPMetrics.cornerRadius` 6 with
+  `cornerCurve = .continuous`, `edgeStrokeWidth` 1 / `edgeStrokeAlpha` 0.12 on the
+  video PiP content layer, and the `/8` first-open box on the screen's `frame`
+  (placement and limits keep `visibleFrame`; `screenFrame:` initializer parameter,
+  `features-render pip --screen-frame`, new PP6 case for the capture display).
+  Document PiP keeps 12 (`documentCornerRadius`, guess). Shadow is not in the
+  window captures; controls never showed at rest, so there are no control targets.
+- **Phase 1** (Chromium's window, what the App shows until EM-4): 501 × 282 at
+  32 pt insets, square corners, no edge. Not fixable in Swift (§4.4.1).
+- **Other frames**: a two-card stack (16/0001) was not compared before; R5
+  (`compare-media --cards 2`, new option) passes, worst 1.0 pt, ΔE00 0.47, shadow
+  0.71 pp. The remaining mini-player and PiP frames are pixel-identical to compared
+  ones, a transition (14b/0023), the volume tooltip (14b/0024, no Open tooltip for a
+  synthetic hover), or a transparent 10 × 10 helper window.
+
+Verification: `tools/verify-all.sh --only sidebar-render,features-render` PASS
+(features-render 406/406, with the new PP6 capture-display case); e2e
+`--style chrome --only media` 19 media rows PASS (plus fingerprint and cleanup),
+5 BLOCKED (unchanged rows). Load
+averages: verify 8.6 → 6.5 (1 min), e2e 15.5 → 8.1, row runs 12.5–13.2.
 
 ## Appendix — Lead decisions (2026-10-25)
 
