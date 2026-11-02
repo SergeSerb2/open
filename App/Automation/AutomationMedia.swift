@@ -12,7 +12,7 @@ import OpenWeb
 /// Media automation commands (media-pip §8.4, docs/automation.md "Media").
 extension AutomationController {
   static let mediaCommands: Set<String> = ["media", "media-action", "mini-players", "media-click", "pip", "pip-action",
-                                           "now-playing", "sleep-visibility"]
+                                           "now-playing", "sleep-visibility", "library-section"]
 
   func runMediaCommand(_ cmd: String, _ a: [String: Any]) async throws -> Any {
     let media = app.media
@@ -56,6 +56,8 @@ extension AutomationController {
         "frame": rect(view.convert(view.bounds, to: nil), in: controller.window),
         "displayed": controller.context.displayedTabIDs.map(\.description).sorted(),
         "pendingCollapse": view.pendingCollapseCount,
+        // D-11: nothing animates while the stack rests (layer animation keys in the whole subtree).
+        "animations": animationKeyCount(view),
         "cards": view.cards.map { describeCard($0, window: controller.window) },
       ] as [String: Any]
     case "media-click":
@@ -119,6 +121,11 @@ extension AutomationController {
                      "toggle": center.togglePlayPauseCommand.isEnabled, "next": center.nextTrackCommand.isEnabled,
                      "previous": center.previousTrackCommand.isEnabled],
       ] as [String: Any]
+    case "library-section":
+      // View Media (Window menu) opens the Library at its Media section.
+      let presenter = app.settingsPresenter
+      return ["visible": presenter.libraryPresenter?.window?.isVisible == true,
+              "section": presenter.library.map { "\($0.section)" } ?? NSNull()] as [String: Any]
     case "sleep-visibility":
       media.feedSleep()
       let snapshot = media.visibility.sleepVisibility()
@@ -131,6 +138,13 @@ extension AutomationController {
     default:
       throw Failure(message: "unknown media command")
     }
+  }
+
+  private func animationKeyCount(_ view: NSView) -> Int {
+    func count(_ layer: CALayer) -> Int {
+      (layer.animationKeys()?.count ?? 0) + (layer.sublayers ?? []).reduce(0) { $0 + count($1) }
+    }
+    return view.layer.map(count) ?? 0
   }
 
   private func mediaTab(_ a: [String: Any]) throws -> Tab {

@@ -4808,6 +4808,10 @@ def media_checks(factory, results, tmp):
         return wait_until(lambda: (lambda p: p if p["state"] == state else None)(pip()), timeout=timeout, step=.01) or pip()
     def close_tab(tab):
         app.call("close", tab=tab)
+    # Start from the defaults the checks expect; a run killed mid-check (or another suite) can leave
+    # these keys behind in the shared defaults domain.
+    for key in ("open.advanced.enablePictureInPictureOnLeave", "open.pip.autoDisabledHosts", "open.pip.keepOnTop"):
+        app.call("defaults", key=key, value=None)
     try:
         app.call("window-frame", frame=[80, 60, 1280, 820])
         home = app.call("tabs")[0]["id"]
@@ -4836,7 +4840,7 @@ def media_checks(factory, results, tmp):
         gone = wait_until(lambda: not ids(), timeout=1, step=.01)
         results["media_card_on_leave"] = {"ok": bool(listed) and bool(gone) and appear_ms < 1000
             and card is not None and set(["favicon", "previous", "play", "next", "volume"]) <= set(card["buttons"]),
-            "appearMs": round(appear_ms, 1), "card": card}
+            "appearMs": round(appear_ms, 1), "load": os.getloadavg(), "card": card}
 
         # E-M4: the card's controls reach the page (Chromium's media session; next/previous route to the page's handlers).
         select(home)
@@ -4886,8 +4890,9 @@ def media_checks(factory, results, tmp):
         def browser_cpu(x): return round(sum(max(p["cpu"], 0) for p in x["tasks"] if p.get("kind") == 1), 2)
         samples = {"with": [], "without": [], "browserWith": [], "browserWithout": [], "load": []}
         card_view = players()
-        for _ in range(3):
-            time.sleep(6); x = app.call("metrics", interval=8)
+        rest_animations = []
+        for _ in range(4):
+            time.sleep(6); rest_animations.append(players()["animations"]); x = app.call("metrics", interval=8)
             samples["with"].append(cpu(x)); samples["browserWith"].append(browser_cpu(x)); samples["load"].append(os.getloadavg()[0])
             app.call("media-action", tab=audio, action="close"); wait_until(lambda: not ids(), timeout=3, step=.02)
             time.sleep(6); x = app.call("metrics", interval=8)
@@ -4896,12 +4901,14 @@ def media_checks(factory, results, tmp):
             app.call("media-action", tab=audio, action="play"); wait_until(lambda: audio in ids(), timeout=3, step=.02)
             app.call("media-action", tab=audio, action="pause")
             wait_until(lambda: (lambda c: c if c and c[0]["playback"] == "paused" else None)(players()["cards"]), timeout=3, step=.02)
-        # Median of three interleaved pairs: one pair can catch a background spike in either state.
-        def median(v): return sorted(v)[len(v) // 2]
-        results["media_idle_cpu"] = {"ok": abs(median(samples["with"]) - median(samples["without"])) <= 0.5
-            and abs(median(samples["browserWith"]) - median(samples["browserWithout"])) <= 0.5 and card_view["pendingCollapse"] == 0,
-            "medianWith": median(samples["with"]), "medianWithout": median(samples["without"]),
-            "browserMedianWith": median(samples["browserWith"]), "browserMedianWithout": median(samples["browserWithout"]), "samples": samples}
+        # Other work on the Mac only adds CPU, so compare the floor of four interleaved pairs; the
+        # structural part (no animation keys, no pending collapse) holds in every sample.
+        results["media_idle_cpu"] = {"ok": abs(min(samples["with"]) - min(samples["without"])) <= 0.5
+            and abs(min(samples["browserWith"]) - min(samples["browserWithout"])) <= 0.5
+            and card_view["pendingCollapse"] == 0 and rest_animations == [0] * len(rest_animations),
+            "minWith": min(samples["with"]), "minWithout": min(samples["without"]),
+            "browserMinWith": min(samples["browserWith"]), "browserMinWithout": min(samples["browserWithout"]),
+            "restAnimations": rest_animations, "samples": samples}
         app.call("media-action", tab=audio, action="close"); wait_until(lambda: not ids(), timeout=3, step=.02)
         close_tab(audio)
 
@@ -4918,7 +4925,8 @@ def media_checks(factory, results, tmp):
         pip_windows = p.get("windows", [])
         results["media_auto_pip_on_leave"] = {"ok": opened["state"] == "active" and opened.get("automatic") is True and opened.get("tab") == video
             and latency is not None and latency <= 0.5 and len(pip_windows) >= 1 and abs(leave_to_request) < 0.05,
-            "pip": p, "requestToEnterSeconds": latency, "windowsBefore": windows_before}
+            "pip": p, "requestToEnterSeconds": latency, "leaveToRequestSeconds": leave_to_request,
+            "load": os.getloadavg(), "windowsBefore": windows_before}
         # Sleep feed (§4.10): the PiP source is protected.
         feed = app.call("sleep-visibility")
         results["media_sleep_feed_pip"] = {"ok": video in feed["pictureInPicture"], "feed": feed}
@@ -4950,9 +4958,12 @@ def media_checks(factory, results, tmp):
             select(tab); select(home)
             time.sleep(.3)
             return m(tab)["decision"]["value"], pip()["state"]
+        # The App's defaults domain is shared by every Debug run on this Mac: always restore the key.
         app.call("defaults", key="open.advanced.enablePictureInPictureOnLeave", value=False)
-        setting_off = leave_decision(video)
-        app.call("defaults", key="open.advanced.enablePictureInPictureOnLeave", value=None)
+        try:
+            setting_off = leave_decision(video)
+        finally:
+            app.call("defaults", key="open.advanced.enablePictureInPictureOnLeave", value=None)
         close_tab(video)
         muted_video = open_tab(base + "video-muted.html"); start(muted_video)
         inaudible = leave_decision(muted_video)
@@ -5014,6 +5025,11 @@ def media_checks(factory, results, tmp):
         unmuted = not any(m(t)["modelMuted"] or m(t)["muted"] for t in (a1, a2))
         results["media_mute_all"] = {"ok": all_muted and bool(undone) and unmuted, "allMuted": all_muted,
             "undoneInOneStep": bool(undone), "unmuted": unmuted, "states": [m(t) for t in (a1, a2)]}
+        # View Media (Window menu): Arc's viewScreenshotsAndCaptures: opens the Library's Media section.
+        app.call("menu-perform", id="view-media")
+        library = wait_until(lambda: (lambda l: l if l["visible"] and l["section"] == "media" else None)(app.call("library-section")), timeout=5, step=.05)
+        app.call("library-close")
+        results["media_view_media_menu"] = {"ok": bool(library), "library": app.call("library-section") if not library else library}
         # E-M2 / P6 (EM-3): audible is Chromium's own signal, so Web Audio counts, in a background tab too
         # (OpenSleep's contract: an audio event for every change).
         def audible(tab): return next((t for t in app.call("tabs") if t["id"] == tab), {}).get("audible") is True

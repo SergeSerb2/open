@@ -23,6 +23,9 @@ final class MediaCoordinator {
   /// Automation evidence: when each tab's PiP request started and entered (system uptime).
   private(set) var pipTimes: [ItemID: (requested: TimeInterval, entered: TimeInterval?)] = [:]
   private(set) var pipRequests = 0
+  /// Tabs Open asked to leave PiP (system uptime). A report that still says "in PiP" before the
+  /// page's exit lands is not a new manual PiP.
+  private var pendingExit: [ItemID: TimeInterval] = [:]
   /// Sleep feed (media-pip §4.10): read by AppVisibilityProvider; section 8's sleep adapter consumes it.
   let visibility: AppVisibilityProvider
 
@@ -88,7 +91,7 @@ final class MediaCoordinator {
 
   /// A tab's page closed: tab close, archive, unload (sleep), crash teardown, window close.
   func hostClosed(tabID: ItemID) {
-    store.remove(tabID: tabID)
+    store.remove(tabID: tabID); pendingExit[tabID] = nil; decisions[tabID] = nil; pipTimes[tabID] = nil
     var minimized = false
     if case .minimized(let other) = session.state { minimized = other == tabID }
     if session.activeSource?.tabID == tabID || minimized {
@@ -111,6 +114,11 @@ final class MediaCoordinator {
   /// Phase 1 (§4.4.1): Chromium's own PiP window. The App learns of its Back to Tab and Close only
   /// as a PiP exit: a paused video means Close (snooze), a playing one means the user went back.
   private func followPictureInPicture(tabID: ItemID, inPiP: Bool, playing: Bool) {
+    if !inPiP { pendingExit[tabID] = nil }
+    if inPiP, let asked = pendingExit[tabID] {
+      if ProcessInfo.processInfo.systemUptime - asked < 2 { return }
+      pendingExit[tabID] = nil
+    }
     switch session.state {
     case let .requesting(id, _) where id == tabID:
       if inPiP { enter(tabID) }
@@ -162,6 +170,7 @@ final class MediaCoordinator {
   private func apply(_ effect: PiPSession.Effect) {
     store.setPiP(tabID: effect.tabID, .none)
     guard effect.reason != .sourceGone, let content = page(effect.tabID) else { return }
+    pendingExit[effect.tabID] = ProcessInfo.processInfo.systemUptime
     content.exitPictureInPicture(pausing: effect.pause)
   }
 
