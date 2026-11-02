@@ -43,6 +43,11 @@ typedef NS_OPTIONS(NSUInteger, OEWebContentChange) {
   OEWebContentChangeMediaCapture = 1u << 10,
   OEWebContentChangeStatusText = 1u << 11,
   OEWebContentChangeLive = 1u << 12,
+  /// mediaSession changed (state, actions, metadata, position on seek or
+  /// rate change; never on a playback timer).
+  OEWebContentChangeMedia = 1u << 13,
+  /// A video of the page entered or left Picture in Picture.
+  OEWebContentChangePictureInPicture = 1u << 14,
 };
 
 typedef NS_ENUM(NSInteger, OEWebContentCrashState) {

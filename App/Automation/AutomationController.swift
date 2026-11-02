@@ -85,6 +85,7 @@
       case "archive-sweep", "archive-clock", "archive-state", "archive-wake", "profile-archive-setting", "archive-list", "archive-banner-state", "archive-banner-action":
         return try await runArchiveCommand(cmd, a)
       case "metrics": return await metrics(interval: a["interval"] as? Double ?? 1)
+      case _ where Self.mediaCommands.contains(cmd): return try await runMediaCommand(cmd, a)
       case "ping":
         return [
           "pid": Int(getpid()), "chromium": OEEngine.shared.chromiumVersion, "cef": OEEngine.shared.cefVersion,
@@ -1586,7 +1587,7 @@
         "makeHostCount": preview.makeHostCount, "reusedCachedHost": preview.reusedCachedHost, "shows": preview.shows] as [String: Any]
     }
 
-    private func mouse(_ a: [String: Any], _ w: EngineWebContentHostFactory) async throws -> Any {
+    func mouse(_ a: [String: Any], _ w: EngineWebContentHostFactory) async throws -> Any {
       let number = a["window"] as? Int ?? w.window?.windowNumber ?? 0
       guard let target = NSApp.windows.first(where: { $0.windowNumber == number }) else { throw Failure(message: "no window \(number)") }
       pointerRequestID += 1

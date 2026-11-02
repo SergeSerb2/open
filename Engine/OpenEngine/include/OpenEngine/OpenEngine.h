@@ -5,4 +5,5 @@
 #import <OpenEngine/OEBrowserContext.h>
 #import <OpenEngine/OEBrowser.h>
 #import <OpenEngine/OEWebContent.h>
+#import <OpenEngine/OEMediaSession.h>
 #import <OpenEngine/OEExtension.h>
