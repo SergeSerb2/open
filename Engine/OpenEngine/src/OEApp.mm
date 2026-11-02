@@ -222,11 +222,35 @@ class OEApp : public CefApp,
     // Chromium features Open turns on, added to any --enable-features list:
     // ExtensionsPinnedByDefault pins a new install's action (extensions UI
     // plan Q4; the profile pref extensions.pinned_by_default defaults on).
+    // WebContentsDiscard: tab sleeping discards pages in place
+    // (docs/plans/memory-fork.md §10; off on desktop by default, and
+    // WebContents::Discard is NOTREACHED() without it).
     std::string features = command_line->GetSwitchValue("enable-features");
-    for (const char* feature : {"ExtensionsPinnedByDefault"}) {
+    for (const char* feature :
+         {"ExtensionsPinnedByDefault", "WebContentsDiscard"}) {
       features += features.empty() ? feature : std::string(",") + feature;
     }
     command_line->AppendSwitchWithValue("enable-features", features);
+    // Chromium services Open does not use (memory-fork §10; each string was
+    // read from its BASE_FEATURE in this Chromium tree): optimization guide
+    // hints, models and page-content extraction, the segmentation platform,
+    // Cast discovery, and the translate ranker (manual translate stays).
+    std::string disabled = command_line->GetSwitchValue("disable-features");
+    for (const char* feature :
+         {"OptimizationHints", "OptimizationTargetPrediction",
+          "OptimizationGuidePageContentExtraction",
+          "OptimizationGuideModelExecution", "SegmentationPlatform",
+          "SegmentationPlatformUkmEngine", "MediaRouter",
+          "TranslateRankerQuery", "TranslateRankerEnforcement"}) {
+      disabled += disabled.empty() ? feature : std::string(",") + feature;
+    }
+    command_line->AppendSwitchWithValue("disable-features", disabled);
+    // Chromium's RAM-scaled renderer limit governs, except on small Macs.
+    const unsigned long long kSmallMac = 8ull * 1024 * 1024 * 1024;
+    if (NSProcessInfo.processInfo.physicalMemory <= kSmallMac &&
+        !command_line->HasSwitch("renderer-process-limit")) {
+      command_line->AppendSwitchWithValue("renderer-process-limit", "32");
+    }
   }
 
   // CefBrowserProcessHandler

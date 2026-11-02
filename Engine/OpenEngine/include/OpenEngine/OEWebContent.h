@@ -1,6 +1,7 @@
 #import <AppKit/AppKit.h>
 #import <OpenEngine/OEBrowserContext.h>
 #import <OpenEngine/OEDefines.h>
+#import <OpenEngine/OENavigationHistory.h>
 
 NS_HEADER_AUDIT_BEGIN(nullability, sendability)
 
@@ -269,6 +270,63 @@ OE_EXPORT @interface OEWebContent : NSObject
 - (void)enableAutoResizeWithMinimumSize:(NSSize)minimumSize
                             maximumSize:(NSSize)maximumSize
     NS_SWIFT_NAME(enableAutoResize(minimumSize:maximumSize:));
+
+#pragma mark Sleep
+// The engine half of tab sleeping (docs/plans/memory-fork.md; fork patches
+// 0101, 0104, 0105 and the overlay API in cef_navigation_history.h and
+// cef_page_lifecycle.h). The shell owns all sleep policy; the engine supplies
+// honest visibility, freeze, discard in place, and capture/restore of the
+// navigation history. Supported for hosted tabs (Chrome style pages in an
+// OEBrowser, the shell's tabs) and Alloy pages.
+
+/// A web content that comes up with `history` instead of loading a URL. Its
+/// page is created as usual when the view first enters a window, but with no
+/// renderer process; the history is installed before the page is shown, and
+/// the current entry loads when the page becomes visible
+/// (document.wasDiscarded is true for that load). If the history cannot be
+/// installed, the page loads `fallbackURL` (the stored current URL) and
+/// `navigationHistoryRestore` becomes `.failed`: log it and keep going, the
+/// page itself is never lost.
+- (instancetype)initWithConfiguration:(OEWebContentConfiguration*)configuration
+                    navigationHistory:(OENavigationHistory*)history
+                          fallbackURL:(nullable NSURL*)fallbackURL;
+
+@property(nonatomic, readonly)
+    OENavigationHistoryRestore navigationHistoryRestore;
+
+/// Captures the back/forward list with scroll and form state. Reads the
+/// browser process only (works for frozen, discarded and crashed pages, and
+/// at quit). nil if the page is not live, never committed a navigation, or
+/// its history does not fit 2 MiB even without page state.
+- (nullable OENavigationHistory*)captureNavigationHistory;
+
+/// Tells Chromium that the page is hidden or shown. The view's own hidden
+/// state already does this; use it when the shell hides a page whose view
+/// stays in a visible window.
+- (void)setPageHidden:(BOOL)hidden NS_SWIFT_NAME(setPageHidden(_:));
+
+/// Depth 1: freezes or unfreezes the renderer (no timers, tasks or loads;
+/// memory kept). Only a hidden page can be frozen; showing it unfreezes it.
+/// Returns NO and changes nothing for a visible, discarded or not-live page.
+- (BOOL)setPageFrozen:(BOOL)frozen NS_SWIFT_NAME(setPageFrozen(_:));
+@property(nonatomic, readonly, getter=isPageFrozen) BOOL pageFrozen;
+
+/// Depth 2: discards the page in place. The renderer and frame tree go; the
+/// page object, its history and its chrome.tabs identity stay, and the page
+/// reloads from its history entry when shown. Only a hidden page can be
+/// discarded. The completion runs once on the main thread with the result
+/// of `isDiscarded` after the engine settled: NO means the page is still
+/// live (refused, a navigation was committing, or it was shown meanwhile),
+/// so keep it frozen and try later. Capture the history first.
+- (void)discardWithCompletion:(void (^NS_SWIFT_UI_ACTOR)(BOOL discarded))completion
+    NS_SWIFT_NAME(discard(completion:));
+/// True from a discard (or a history restore) until the page starts loading
+/// again.
+@property(nonatomic, readonly, getter=isDiscarded) BOOL discarded;
+
+/// The page has beforeunload or unload handlers: discarding would skip them
+/// (sleep policy keeps such pages frozen instead).
+@property(nonatomic, readonly) BOOL hasUnloadHandlers;
 
 #pragma mark Lifecycle
 /// Gives keyboard focus to the page.

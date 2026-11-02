@@ -57,6 +57,29 @@ class FaviconCallback : public CefDownloadImageCallback {
   IMPLEMENT_REFCOUNTING(FaviconCallback);
 };
 
+// Runs `done` once, on the main thread (the CEF UI thread).
+class OECompletionCallback : public CefCompletionCallback {
+ public:
+  explicit OECompletionCallback(void (^done)(void)) : done_([done copy]) {}
+  ~OECompletionCallback() override {
+    // Released unrun (the engine went away): still answer once.
+    if (void (^done)(void) = done_) {
+      dispatch_async(dispatch_get_main_queue(), done);
+    }
+  }
+  void OnComplete() override {
+    void (^done)(void) = done_;
+    done_ = nil;
+    if (done) {
+      done();
+    }
+  }
+
+ private:
+  void (^done_)(void);
+  IMPLEMENT_REFCOUNTING(OECompletionCallback);
+};
+
 class PdfCallback : public CefPdfPrintCallback {
  public:
   explicit PdfCallback(void (^done)(BOOL)) : done_([done copy]) {}
@@ -212,6 +235,11 @@ typedef void (^OEDevToolsCompletion)(NSDictionary* _Nullable, NSError* _Nullable
   // dereferences the parent NSView then (a freed view crashed in
   // CefBrowserPlatformDelegateNativeMac::CreateHostWindow).
   OEWebContent* _creatingSelf;
+  // Tab sleeping: the history to install when the page is created, and the
+  // URL to load if that fails.
+  OENavigationHistory* _restoreHistory;
+  NSURL* _restoreFallbackURL;
+  OENavigationHistoryRestore _navigationHistoryRestore;
 }
 
 - (instancetype)initWithConfiguration:(OEWebContentConfiguration*)configuration
@@ -352,6 +380,9 @@ typedef void (^OEDevToolsCompletion)(NSDictionary* _Nullable, NSError* _Nullable
       CefColorSetARGB(255, (int)(bg.redComponent * 255),
                       (int)(bg.greenComponent * 255),
                       (int)(bg.blueComponent * 255));
+  // Tab sleeping: no renderer until the restored page is shown (fork patch
+  // 0105; hosted tabs and Alloy pages).
+  settings.no_renderer = _restoreHistory ? 1 : 0;
   return settings;
 }
 
@@ -385,7 +416,10 @@ typedef void (^OEDevToolsCompletion)(NSDictionary* _Nullable, NSError* _Nullable
     _creating = NO;
     return;
   }
-  CefString url = OECef(_pendingURL.absoluteString ?: @"about:blank");
+  // A restored page starts with no URL: the history comes first.
+  CefString url = _restoreHistory
+                      ? CefString()
+                      : OECef(_pendingURL.absoluteString ?: @"about:blank");
   CefRefPtr<CefRequestContext> context = self.context.oe_requestContext;
   if (_configuration.runtimeStyle == OERuntimeStyleChrome &&
       [self oe_createHostedTab:url]) {
@@ -396,6 +430,11 @@ typedef void (^OEDevToolsCompletion)(NSDictionary* _Nullable, NSError* _Nullable
     // A tab whose context gets no hidden Chrome window (CefTabStrip::Create
     // refused it) stays Alloy rather than opening its own Chrome window.
     _configuration.runtimeStyle = OERuntimeStyleAlloy;
+  }
+  if (_configuration.runtimeStyle == OERuntimeStyleChrome && _restoreHistory) {
+    // A Views-window Chrome page navigates at creation: no restore there.
+    [self oe_restoreFailed];
+    url = OECef(_pendingURL.absoluteString ?: @"about:blank");
   }
   if (_configuration.runtimeStyle == OERuntimeStyleChrome) {
     _chromeHost = OECreateChromeHostWindow(
@@ -493,6 +532,10 @@ typedef void (^OEDevToolsCompletion)(NSDictionary* _Nullable, NSError* _Nullable
   _browser = browser;
   _creating = NO;
   _awaitingPopup = NO;
+  if (_restoreHistory) {
+    // Before the page can be shown (hosted tabs: still inside CreateTab).
+    [self oe_restoreHistoryIntoBrowser:browser];
+  }
   // Released at the end of this method; -close or the parking path in
   // -dealloc take over from here.
   OEWebContent* keepAlive = _creatingSelf;
@@ -814,6 +857,93 @@ typedef void (^OEDevToolsCompletion)(NSDictionary* _Nullable, NSError* _Nullable
 }
 - (void)stopLoading {
   if (_browser) _browser->StopLoad();
+}
+
+#pragma mark Sleep (memory-fork; fork API cef_page_lifecycle.h)
+
+- (instancetype)initWithConfiguration:(OEWebContentConfiguration*)configuration
+                    navigationHistory:(OENavigationHistory*)history
+                          fallbackURL:(nullable NSURL*)fallbackURL {
+  if ((self = [self initWithConfiguration:configuration URL:nil])) {
+    _restoreHistory = history;
+    _restoreFallbackURL = [fallbackURL copy] ?: history.currentURL;
+    _navigationHistoryRestore = OENavigationHistoryRestorePending;
+  }
+  return self;
+}
+
+- (OENavigationHistoryRestore)navigationHistoryRestore {
+  return _navigationHistoryRestore;
+}
+
+// The page could not take the history: it loads the fallback URL instead.
+- (void)oe_restoreFailed {
+  NSLog(@"OEWebContent: navigation history restore failed; loading the "
+        @"fallback URL");
+  _restoreHistory = nil;
+  _pendingURL = _restoreFallbackURL;
+  _restoreFallbackURL = nil;
+  _navigationHistoryRestore = OENavigationHistoryRestoreFailed;
+}
+
+- (void)oe_restoreHistoryIntoBrowser:(CefRefPtr<CefBrowser>)browser {
+  CefRefPtr<CefNavigationHistory> history = [_restoreHistory oe_cefHistory];
+  if (history && CefRestoreNavigationHistory(browser, history)) {
+    _restoreHistory = nil;
+    _restoreFallbackURL = nil;
+    _navigationHistoryRestore = OENavigationHistoryRestoreRestored;
+    return;
+  }
+  [self oe_restoreFailed];
+  if (_pendingURL) {
+    browser->GetMainFrame()->LoadURL(OECef(_pendingURL.absoluteString));
+  }
+}
+
+- (nullable OENavigationHistory*)captureNavigationHistory {
+  if (!_browser) {
+    return nil;
+  }
+  return [[OENavigationHistory alloc]
+      oe_initWithCefHistory:CefGetNavigationHistory(_browser)];
+}
+
+- (void)setPageHidden:(BOOL)hidden {
+  if (_browser) {
+    _browser->GetHost()->WasHidden(hidden);
+  }
+}
+
+- (BOOL)setPageFrozen:(BOOL)frozen {
+  return _browser && CefSetPageFrozen(_browser, frozen);
+}
+
+- (BOOL)isPageFrozen {
+  return _browser && CefIsPageFrozen(_browser);
+}
+
+- (BOOL)isDiscarded {
+  return _browser && CefWasDiscarded(_browser);
+}
+
+- (BOOL)hasUnloadHandlers {
+  return _browser && CefHasUnloadHandlers(_browser);
+}
+
+- (void)discardWithCompletion:(void (^)(BOOL))completion {
+  void (^done)(BOOL) = [completion copy];
+  if (!_browser) {
+    dispatch_async(dispatch_get_main_queue(), ^{
+      done(NO);
+    });
+    return;
+  }
+  // The engine settles exactly once (also when it refuses or gives up); the
+  // answer is the re-check, never the callback alone (memory-fork D-5).
+  __weak OEWebContent* weakSelf = self;
+  CefDiscardBrowser(_browser, new OECompletionCallback(^{
+                      done(weakSelf.isDiscarded);
+                    }));
 }
 
 #pragma mark DevTools protocol / JavaScript

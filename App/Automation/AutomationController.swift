@@ -533,6 +533,32 @@
       case "wait":
         return try await waitForLoad(try content(a, w), timeout: a["timeout"] as? Double ?? 20)
 
+      // Engine tab-sleep primitives (memory-fork, OEWebContent "Sleep"): test
+      // hooks for the e2e tabstrip suite. The shell's sleep policy (Step G)
+      // calls the same API; nothing here changes sleep phases in the model.
+      case "engine-sleep":
+        let page = try content(a, w)
+        var r: [String: Any] = [:]
+        switch a["op"] as? String ?? "state" {
+        case "state": break
+        case "hide": page.setPageHidden(true)
+        case "show": page.setPageHidden(false)
+        case "freeze": r["ok"] = page.setPageFrozen(true)
+        case "unfreeze": r["ok"] = page.setPageFrozen(false)
+        case "discard": r["ok"] = await page.discard()
+        case "capture":
+          guard let h = page.captureNavigationHistory() else { r["history"] = NSNull(); break }
+          r["history"] = ["entryCount": h.entryCount, "currentIndex": h.currentIndex, "hasPageState": h.hasPageState,
+            "bytes": h.container.count, "title": h.title, "currentURL": h.currentURL?.absoluteString ?? "",
+            "faviconURL": h.faviconURL?.absoluteString ?? "",
+            "roundTrip": OENavigationHistory(container: h.container)?.container == h.container] as [String: Any]
+        default: throw Failure(message: "unknown engine-sleep op")
+        }
+        r["frozen"] = page.isPageFrozen; r["discarded"] = page.isDiscarded
+        r["unloadHandlers"] = page.hasUnloadHandlers; r["chromeTabId"] = page.chromeTabIdentifier
+        r["identifier"] = page.identifier; r["live"] = page.isLive
+        return r
+
       // Pages (any live web content).
       case "pages":
         return OEEngine.shared.allWebContents.map { describe($0, in: w) }

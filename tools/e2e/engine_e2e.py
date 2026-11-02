@@ -1447,9 +1447,138 @@ def tabstrip_checks(app, results):
         info["ok"] = False
         info["error"] = str(e)
     results["bitwarden_popup"] = info
+    sleep_engine_checks(app, results, lambda: strip_ids(pop))
+    app.call("select", tab=first)
     results["window_screenshot"] = shot(app, "p1-window.png")
     context_menu_commands(app, results)
     new_window_outlives_opener(app, results)
+
+
+def sleep_engine_checks(app, results, strip_ids):
+    """Tab-sleep engine primitives on a hosted tab (memory-fork S1/S4/S5 on
+    the shell's real tab path; fork patches 0101/0104/0105 + overlay API).
+    Uses the memory-fork fixtures over loopback; prints the load average."""
+    import http.server
+    import threading
+    fixtures = os.path.join(ROOT, "Engine", "fork", "verification", "fixtures")
+    class Handler(http.server.SimpleHTTPRequestHandler):
+        def __init__(self, *a, **k):
+            super().__init__(*a, directory=fixtures, **k)
+
+        def log_message(self, *args):
+            pass
+    server = http.server.ThreadingHTTPServer(("127.0.0.1", 0), Handler)
+    threading.Thread(target=server.serve_forever, daemon=True).start()
+    base = "http://127.0.0.1:%d/" % server.server_address[1]
+    load = os.getloadavg()
+
+    def sleep_op(tab, op):
+        return app.call("engine-sleep", tab=tab, op=op, timeout=30)
+
+    def navigate(tab, name):
+        app.eval(tab, "location.href = %s; true" % json.dumps(base + name))
+        wait_until(lambda: app.eval(tab, "location.pathname + document.readyState") == "/" + name.split("?")[0] + "complete",
+                   timeout=20, step=0.2)
+
+    def renderers():
+        rows = [l.split(None, 2) for l in subprocess.check_output(["ps", "-axo", "pid=,ppid=,command="], text=True).splitlines()]
+        kids = {app.pid}
+        for _ in range(6):
+            kids |= {int(r[0]) for r in rows if len(r) == 3 and int(r[1]) in kids}
+        return sorted(int(r[0]) for r in rows if len(r) == 3 and int(r[0]) in kids and "--type=renderer" in r[2]
+                      and "--extension-process" not in r[2])
+
+    selected = [t["id"] for t in app.call("tabs") if t["selected"]][0]
+    tab = new_tab(app, base + "ticker.html")
+    app.call("select", tab=selected)
+    time.sleep(1.5)
+    try:
+        # S1: a background hosted tab is HIDDEN for Chromium (its view is
+        # hidden by the shell); setPageHidden goes through patch 0302's hosted
+        # path to UpdateWebContentsVisibility.
+        state = app.eval(tab, "document.visibilityState")
+        sleep_op(tab, "show")
+        shown = app.eval(tab, "document.visibilityState")
+        sleep_op(tab, "hide")
+        hidden = app.eval(tab, "document.visibilityState")
+        results["sleep_hosted_visibility"] = {"ok": state == "hidden" and shown == "visible" and hidden == "hidden",
+                                              "background": state, "after_show": shown, "after_hide": hidden}
+        # S4 freeze: refused while visible; the hidden ticker stops while
+        # frozen and runs again after unfreeze.
+        app.call("select", tab=tab)
+        time.sleep(0.5)
+        refused = sleep_op(tab, "freeze")
+        app.call("select", tab=selected)
+        time.sleep(1.5)
+        t0 = app.eval(tab, "ticks")
+        frozen = sleep_op(tab, "freeze")
+        time.sleep(6)
+        during = sleep_op(tab, "state")
+        thawed = sleep_op(tab, "unfreeze")
+        t1 = app.eval(tab, "ticks")
+        time.sleep(3.2)
+        t2 = app.eval(tab, "ticks")
+        results["sleep_hosted_freeze"] = {
+            "ok": refused["ok"] is False and frozen["ok"] and frozen["frozen"] and during["frozen"]
+                  and thawed["ok"] and not thawed["frozen"] and t1 - t0 <= 1 and t2 - t1 >= 2,
+            "refused_visible": refused, "frozen": frozen, "ticks": [t0, t1, t2], "frozen_seconds": 6,
+            "load": load}
+        # S5: beforeunload handler flag.
+        navigate(tab, "c.html?unload=1")
+        with_handler = wait_until(lambda: sleep_op(tab, "state")["unloadHandlers"] or None, timeout=5, step=0.3)
+        navigate(tab, "a.html")
+        without = sleep_op(tab, "state")["unloadHandlers"]
+        results["sleep_hosted_unload_flag"] = {"ok": with_handler is True and without is False,
+                                               "with": with_handler, "without": without}
+        # S4 discard in place: history a -> b -> c with scroll and form state.
+        navigate(tab, "b.html")
+        navigate(tab, "c.html")
+        app.eval(tab, "scrollTo(0, innerHeight * 2); document.querySelector('#q').value = 'open-sleep-check'; true")
+        scroll = app.eval(tab, "scrollY")
+        capture = sleep_op(tab, "capture")["history"] or {}
+        before = sleep_op(tab, "state")
+        strip_before = strip_ids()
+        procs_before = renderers()
+        app.call("select", tab=selected)
+        time.sleep(0.5)
+        discard = sleep_op(tab, "discard")
+        time.sleep(2)
+        procs_after = renderers()
+        after = sleep_op(tab, "state")
+        strip_after = strip_ids()
+        again = sleep_op(tab, "discard")
+        app.call("select", tab=tab)
+        wait_until(lambda: app.eval(tab, "document.readyState") == "complete", timeout=20, step=0.3)
+        time.sleep(0.5)
+        page = app.eval(tab, "({d: document.wasDiscarded, q: document.querySelector('#q').value, y: scrollY,"
+                             " n: history.length, path: location.pathname})")
+        reloaded = sleep_op(tab, "state")
+        results["sleep_hosted_capture"] = {
+            "ok": capture.get("entryCount", 0) >= 3 and capture.get("currentIndex") == capture.get("entryCount", 0) - 1
+                  and capture.get("hasPageState") is True and capture.get("title") == "Open history C"
+                  and capture.get("roundTrip") is True,
+            "history": capture}
+        results["sleep_hosted_discard"] = {
+            "ok": discard["ok"] is True and after["discarded"] and again["ok"] is True
+                  and len(procs_after) < len(procs_before)
+                  and page["d"] is True and page["path"] == "/c.html" and page["q"] == "open-sleep-check"
+                  and abs(page["y"] - scroll) < 50 and not reloaded["discarded"],
+            "renderers": [procs_before, procs_after], "page": page, "scroll_before": scroll, "load": load}
+        # The discarded tab keeps its chrome.tabs identity (no replacement
+        # WebContents, unlike Chrome's TabLifecycleUnit discard; patch 0303).
+        results["sleep_hosted_discard_keeps_tab_id"] = {
+            "ok": before["chromeTabId"] > 0 and before["chromeTabId"] == after["chromeTabId"] == reloaded["chromeTabId"]
+                  and strip_before == strip_after and before["chromeTabId"] in strip_after,
+            "chromeTabId": [before["chromeTabId"], after["chromeTabId"], reloaded["chromeTabId"]],
+            "strip": [strip_before, strip_after]}
+    finally:
+        server.shutdown()
+        server.server_close()
+        try:
+            app.call("select", tab=selected)
+            app.call("close", tab=tab)
+        except RuntimeError:
+            pass
 
 
 def new_window_outlives_opener(app, results):
