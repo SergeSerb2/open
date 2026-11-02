@@ -67,7 +67,14 @@ final class OffscreenRenderer {
         desc.usage = [.renderTarget, .shaderRead]
         desc.storageMode = .managed
         let texture = device.makeTexture(descriptor: desc)!
-        let renderer = CARenderer(mtlTexture: texture, options: [kCARendererColorSpace as String: CGColorSpace(name: CGColorSpace.sRGB)!])
+        // CARenderer and the read-back fence must share a queue (as in sidebar-render). A fence on an
+        // unrelated queue can finish before rendering does and return unwritten pixels: the 2x "black
+        // band" (Section 2 item 13; 1 of 60 renders on main, the lower part of the texture never written).
+        let queue = device.makeCommandQueue()!
+        let renderer = CARenderer(mtlTexture: texture, options: [
+            kCARendererColorSpace as String: CGColorSpace(name: CGColorSpace.sRGB)!,
+            kCARendererMetalCommandQueue as String: queue
+        ])
         // The window's context owns the live layers, so render a plain deep copy.
         CATransaction.begin()
         CATransaction.setDisableActions(true)
@@ -91,7 +98,6 @@ final class OffscreenRenderer {
             renderer.render()
             renderer.endFrame()
         }
-        let queue = device.makeCommandQueue()!
         let cb = queue.makeCommandBuffer()!
         let blit = cb.makeBlitCommandEncoder()!
         blit.synchronize(resource: texture)
