@@ -268,8 +268,12 @@ func runSuggestCheck(args: [String]) async {
     if let s = empty.last {
         let kinds = Set(s.suggestions.map(\.kind))
         // The current tab is a row in Cmd+T (commandbar-completion §4.1.3, F0063); scenario 39 checks both modes.
-        log.check("empty query → no crash, no top hit, recent tabs + top history",
-                  !s.hasTopHit && s.isFinal && !s.suggestions.isEmpty && kinds.isSubset(of: [.switchToTab, .history]),
+        // Arc's empty Cmd+T (S2 18/0008, 18/0044 AX): up to four open tabs, then the help action; no history.
+        let tabRows = s.suggestions.prefix { $0.kind == .switchToTab }.count
+        log.check("empty query → no top hit; up to 4 open tabs, then Contact the Team; no history",
+                  !s.hasTopHit && s.isFinal && kinds.isSubset(of: [.switchToTab, .action]) && tabRows <= 4
+                    && s.suggestions.dropFirst(tabRows).map(\.actionID) == (s.suggestions.contains { $0.kind == .action } ? ["contact-team"] : [])
+                    && s.suggestions.count == tabRows + s.suggestions.filter { $0.kind == .action }.count,
                   "snapshots=\(empty.count) rows=\(s.suggestions.count) kinds=\(kinds.map(\.rawValue).sorted()) rule=\(s.topHitRule.rawValue)")
     }
     let blank = await lastSnapshot(engine, "   ", fx.context(mode: .searchTabs))

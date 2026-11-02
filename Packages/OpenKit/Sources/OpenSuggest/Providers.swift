@@ -101,8 +101,9 @@ public struct TabsProvider: SuggestProvider {
     public let id = "tabs"
     /// Rows returned before ranking caps apply.
     public var maxRows = 12
-    /// Most recent tabs shown for an empty query (search-tabs mode shows up to `maxRows`).
-    public var emptyQueryRows = 6
+    /// Tabs shown for an empty query: Arc's empty Cmd+T shows four "Switch to Tab" rows, then the help
+    /// action (S2 18/0008, 18/0014, 18/0040–0046 AX; F0063). Search-tabs mode shows up to `maxRows`.
+    public var emptyQueryRows = 4
     public init() {}
 
     public func localSuggestions(for input: SuggestInput) -> [Suggestion] {
@@ -314,6 +315,7 @@ public struct ActionsProvider: SuggestProvider {
 
     public func localSuggestions(for input: SuggestInput) -> [Suggestion] {
         if input.context.mode == .searchActions { return scoped(input) }
+        if input.query.isEmpty { return emptyQueryRows(input) }
         guard !input.context.mode.isScoped, input.siteSearch == nil, case .text = input.typed,
               input.query.bytes.count >= 2 else { return [] }
         var rows: [Suggestion] = []
@@ -334,6 +336,20 @@ public struct ActionsProvider: SuggestProvider {
         }
         rows.sort(by: Ranking.order)
         return Array(rows.prefix(maxRows))
+    }
+
+    /// The action Arc's empty Cmd+T lists after the open tabs (S2 18/0008, 18/0014, 18/0040–0046 AX:
+    /// "Contact the Team" in every frame; F0063). Arc may pick it (`featureSuggestion`); Open keeps it fixed (guess).
+    public static let emptyQueryActionID = "contact-team"
+
+    /// Empty Cmd+T or Cmd+L (not a scope, not Site Search): the help action, when the registry has it.
+    private func emptyQueryRows(_ input: SuggestInput) -> [Suggestion] {
+        guard !input.context.mode.isScoped, input.siteSearch == nil,
+              let entry = matcher.entries.first(where: { $0.action.id == Self.emptyQueryActionID }),
+              Self.isAvailable(entry.action.requirement, input) else { return [] }
+        var help = row(entry.action, quality: 0, input: input, space: nil)
+        help.canBeTopHit = false
+        return [help]
     }
 
     /// The Actions scope (§4.3.3): any text, no length minimum; the empty query lists the available
@@ -476,7 +492,8 @@ public struct HistoryProvider: SuggestProvider {
 
     public func asyncOperation(for input: SuggestInput) -> (@Sendable () async -> [Suggestion]?)? {
         guard !input.context.mode.isScoped, let store = store(input.profileID) else { return nil }
-        if input.query.isEmpty && input.siteSearch != nil { return nil }
+        // Arc's empty Cmd+T lists open tabs and the help action, no history (S2 18/0008, 18/0044 AX).
+        if input.query.isEmpty { return nil }
         let text = input.matchQuery.text, query = input.matchQuery, now = input.now, site = input.siteSearch
         let limit = input.query.isEmpty ? emptyQueryRows : limit
         let provider = id, carry = carry, profile = input.profileID

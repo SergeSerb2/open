@@ -139,6 +139,9 @@ public struct ActionRegistry: Sendable {
         BrowserAction(id: "set-default-browser", title: "Set as Default Browser", aliases: ["Default Browser"], symbol: "checkmark.seal"),
         BrowserAction(id: "import-from-browser", title: "Import from Another Browser", aliases: ["Import Bookmarks", "Import Passwords", "Import Settings", "Bookmarks"], symbol: "square.and.arrow.down.on.square"),
         BrowserAction(id: "keyboard-shortcuts", title: "Essential Keyboard Shortcuts", aliases: ["Keyboard", "Shortcuts"], symbol: "keyboard"),
+        // Arc's empty Cmd+T ends with this row (S2 18/0008, 18/0044 AX: "Contact the Team", image
+        // "Ellipsis on a message bubble"); the empty-query row of `ActionsProvider`.
+        BrowserAction(id: "contact-team", title: "Contact the Team", aliases: ["Feedback", "Contact", "Support"], symbol: "ellipsis.bubble"),
     ])
 
     /// Id of the dynamic "Focus on <Space>" action. The row's `spaceID` names the Space.
