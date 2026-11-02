@@ -204,7 +204,13 @@ enum CaptureChecks {
     /// R-C2: thumbnail fit, six buttons, incognito variant.
     static func cardChecks(_ check: (Bool, String) -> Void) throws {
         let (root, card) = self.card(saved: true)
-        _ = OffscreenRenderer().render(root, scale: 1)
+        let cardPixels = Pixels(OffscreenRenderer().render(root, scale: 1))
+        // The card sits at (32, 32) in the scene: the thumbnail's red top band is at its top,
+        // the white-ish glyphs of the button row near its bottom (dark appearance).
+        let thumbTop = cardPixels.rgb(32 + 124, 32 + 20), glyphRow = (32 + 12 + 160 + 8 + 14 + 8 + 4)...(32 + 12 + 160 + 8 + 14 + 8 + 24)
+        let brightest = glyphRow.map { y in (32 + 40...32 + 208).map { x in cardPixels.rgb(x, y).reduce(0, +) }.max() ?? 0 }.max() ?? 0
+        check(thumbTop[0] > 200 && thumbTop[1] < 120 && brightest > 400,
+              "R-C2 rendered card: thumbnail at the top (\(thumbTop)), light glyphs in the button row at the bottom (max sum \(brightest))")
         check(card.frame.width == 248 && card.thumbnail.frame == CGRect(x: 18, y: 12, width: 213, height: 160),
               "R-C2 card 248 wide; 4:3 thumbnail fits 224 × 160 at the 12 pt padding: \(card.thumbnail.frame)")
         let order = card.actions.map(\.rawValue)

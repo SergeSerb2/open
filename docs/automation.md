@@ -637,3 +637,21 @@ This avoids queuing cancellation on GCD
 behind a nested tracking loop. The Profile observer is removed when the menu
 or browser window closes. The share check verifies the picker’s own query
 and close callbacks; it chooses no service.
+
+## Capture tool (page-platform Step 13)
+
+`--only page` runs the capture rows C1–C7 (page-platform §8.3) against
+`tools/e2e/fixtures/page-platform/` (served from a local port). Every step uses the
+real paths: the File menu item, own-window mouse events through
+`NSApplication.sendEvent` (the window's local monitors see them, as with real input),
+the real key path for Esc, and the result card's own buttons.
+
+| Command | Args | Does |
+|---|---|---|
+| `capture` | `mode` (`area`, `fullPage`, `portrait`), `rect` `[x, y, w, h]` in page points, `entry=drag`, `timeout` | Runs the File menu item. For `area` with `rect`, drags inside the overlay; without `rect`, returns with the overlay up (send `key key=escape` or `return`). `entry=drag` sends a Cmd+Shift press on the page, a 2.2 pt move (still held), then the drag, as the user would (§4.6.2). Waits for the pipeline; returns `steps` and `capture-state`. |
+| `capture-state` | — | `phase` (`idle`, `selecting`, `capturing`, `showing`), `overlayActive` (the swipe hook), `held`, counts (`completed`, `cancelled`, `replays`, `hintShows`), `entry`, `error`; `overlay` (frame, page frame, selection, anchor, size label, hint); `card` (frame, actions, Library line, note, scheduled lifetime, time left, `paused`, panel frame); `result` (kind, pixel size, `truncated`, saved row id, host, Save… file name). |
+| `capture-action` | `action` (`copy`, `save`, `share`, `library`, `retake`, `delete`, or `cancel`), or `hover` (bool) | Clicks that card button (`performClick`), or sets the card's hover state (the pointer pause), or cancels the overlay or card. |
+| `captures` | `probe` `[[x, y], …]` (≤ 64, image pixels), `index` | Rows of `State/captures.json` with file sizes and PNG pixel sizes; `probe` reads RGBA pixels of one row's PNG (default: the last). |
+
+The page context menu event (`policy contextMenu=record`) also lists `open` (Open's own
+items, "Capture" and "Capture Full Page") and `shown` (the whole menu as it would show).

@@ -4818,6 +4818,9 @@ def capture_checks(factory, results, tmp):
             and steps[1]['hintHidden'] is True and steps[1]['selection'] == [100, 100, 150, 100]
             and card.get('actions') == ['copy', 'save', 'share', 'library', 'retake', 'delete'] and card.get('savedLine') is True,
             'scale': scale, 'row': new, 'steps': steps, 'state': st}
+        # Real-window look of the card (no Arc capture exists yet, C-C1): kept for review in .re/.
+        os.makedirs(os.path.join(ROOT, '.re', 'page-capture'), exist_ok=True)
+        app.call('snapshot', path=os.path.join(ROOT, '.re', 'page-capture', 'card-window.png'))
         # The card's top-right corner is the toast anchor: panel maxX - 10, minY + 8 (section 4.1.1).
         results['capture_card_anchor'] = {'ok': bool(card) and abs(card['frame'][0] + card['frame'][2] - (panel[0] + panel[2] - 10)) < 0.5
             and abs(card['frame'][1] - (panel[1] + 8)) < 0.5 and card['frame'][2] == 248, 'card': card.get('frame'), 'panel': panel}
@@ -4843,6 +4846,7 @@ def capture_checks(factory, results, tmp):
         count, cancelled = len(rows()), state()['cancelled']
         r = app.call('capture', mode='area')
         shown = r['state'].get('overlay')
+        app.call('snapshot', path=os.path.join(ROOT, '.re', 'page-capture', 'overlay-window.png'))
         app.call('key', key='escape')
         after_esc = wait_until(lambda: (lambda s: s if not s['overlayActive'] else None)(state()), timeout=3, step=.05) or state()
         results['capture_c4_escape'] = {'ok': bool(shown) and not after_esc['overlayActive'] and after_esc['cancelled'] == cancelled + 1

@@ -44,7 +44,7 @@ public final class CaptureResultView: NSView {
     public var onAction: ((Action, NSView) -> Void)?
     public var onHover: ((Bool) -> Void)?
     public private(set) var isHovered = false
-    private let body = NSView()
+    private let body = FlippedView()
     private let imageSize: CGSize
 
     /// `imageSize` in pixels; the thumbnail fits it into 224 × 160.
@@ -153,10 +153,9 @@ public final class CaptureActionButton: NSButton {
     public init(action: CaptureResultView.Action) {
         captureAction = action
         super.init(frame: .zero)
-        isBordered = false; bezelStyle = .regularSquare; title = ""; setButtonType(.momentaryChange)
-        let config = NSImage.SymbolConfiguration(pointSize: CaptureMetrics.buttonSymbolSize, weight: .regular)
-        image = NSImage(systemSymbolName: action.symbol, accessibilityDescription: action.title)?.withSymbolConfiguration(config)
-        imagePosition = .imageOnly; contentTintColor = Core.foregroundPrimary.nsColor
+        isBordered = false; bezelStyle = .regularSquare; title = ""; setButtonType(.momentaryPushIn)
+        imagePosition = .imageOnly
+        updateGlyph()
         toolTip = action.title; setAccessibilityLabel(action.title)
         wantsLayer = true; layer?.cornerRadius = CaptureMetrics.buttonRadius; layer?.cornerCurve = .continuous
     }
@@ -170,10 +169,27 @@ public final class CaptureActionButton: NSButton {
     public override func mouseEntered(with event: NSEvent) { hovered = true; updateFill() }
     public override func mouseExited(with event: NSEvent) { hovered = false; updateFill() }
     public override func highlight(_ flag: Bool) { super.highlight(flag); updateFill() }
-    public override func viewDidChangeEffectiveAppearance() { super.viewDidChangeEffectiveAppearance(); updateFill() }
+    public override func viewDidChangeEffectiveAppearance() { super.viewDidChangeEffectiveAppearance(); updateGlyph(); updateFill() }
+    /// The glyph in `Core.foregroundPrimary` for the current appearance (a palette color, so it
+    /// never depends on how the cell tints a template image).
+    private func updateGlyph() {
+        let appearance = contentAppearance
+        guard appearance != glyphAppearance else { return }
+        glyphAppearance = appearance
+        let config = NSImage.SymbolConfiguration(pointSize: CaptureMetrics.buttonSymbolSize, weight: .regular)
+            .applying(NSImage.SymbolConfiguration(paletteColors: [Core.foregroundPrimary.resolved(appearance).nsColor]))
+        image = NSImage(systemSymbolName: captureAction.symbol, accessibilityDescription: captureAction.title)?.withSymbolConfiguration(config)
+    }
+    private var glyphAppearance: ContentAppearance?
     private func updateFill() {
         let appearance = contentAppearance
         layer?.backgroundColor = isHighlighted ? CaptureMetrics.buttonPressed.cgColor(appearance)
             : hovered ? CaptureMetrics.buttonHover.cgColor(appearance) : nil
     }
+}
+
+/// The card's content view: flipped, so the thumbnail sits at the top like the layout says.
+@MainActor
+final class FlippedView: NSView {
+    override var isFlipped: Bool { true }
 }

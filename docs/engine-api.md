@@ -154,7 +154,7 @@ Creation and lifetime:
 
 State (read the properties after `webContent(_:didChange:)`; the change set says what changed): `url`, `title`, `faviconURL`, `favicon`, `isLoading`, `estimatedProgress`, `canGoBack`, `canGoForward`, `isAudible`, `isMuted` (settable), `isFullscreen`, `crashState`, `isCapturingCamera`, `isCapturingMicrophone`, `statusText` (link hover), `zoomLevel` (settable). `.live` reports browser creation and destruction.
 
-Commands: `load(_:)`, `goBack()`, `goForward()`, `reload()`, `reloadIgnoringCache()`, `stopLoading()`; `evaluateJavaScript(_:) async throws -> Any` (main world, awaits promises, user gesture); `sendDevToolsMethod(_:parameters:) async throws` (events go to `didReceiveDevToolsEvent`); `find(_:forward:caseSensitive:)`, `stopFinding(clearSelection:)`; `zoomIn()`, `zoomOut()`, `resetZoom()`; `showDevTools()`, `closeDevTools()`, `hasDevTools`; `showPrintPanel()`, `printToPDF(at:)`; `takeSnapshot() async throws -> Data` (PNG of the visible page, also when hidden); `enableAutoResize(minimumSize:maximumSize:)`; `focusPage()`; `exitFullscreen()`.
+Commands: `load(_:)`, `goBack()`, `goForward()`, `reload()`, `reloadIgnoringCache()`, `stopLoading()`; `evaluateJavaScript(_:) async throws -> Any` (main world, awaits promises, user gesture); `sendDevToolsMethod(_:parameters:) async throws` (events go to `didReceiveDevToolsEvent`); `find(_:forward:caseSensitive:)`, `stopFinding(clearSelection:)`; `zoomIn()`, `zoomOut()`, `resetZoom()`; `showDevTools()`, `closeDevTools()`, `hasDevTools`; `showPrintPanel()`, `printToPDF(at:)`; `takeSnapshot() async throws -> Data` (PNG of the visible page, also when hidden); `captureFullPage(maxDevicePixels:completion:)` (whole page, below); `enableAutoResize(minimumSize:maximumSize:)`; `focusPage()`; `exitFullscreen()`.
 
 `OEWebContentDelegate` (all optional, all on the main thread):
 
@@ -211,6 +211,17 @@ Removed, and why (all seen in Open before this list, Chromium 156):
 ### Page background color
 
 TODO(engine): `OEWebContent` has no page color yet. The M4 split pane bar needs one (`WebContentHost.pageBackgroundColor` and `onPageBackgroundChange` in OpenFeatures). Arc paints each pane's 32 pt bar in the page's own color (F0081: lavender page → `#DEDEFA` bar, white page → white bar; `re/interaction-states.md` §11). The color is not the pixels under the bar, so the engine must report it: the page's `theme-color` or its document background (guess: which one Arc uses). Report it as a state change after the URL change of the same navigation, and again when the page changes it. The App adapter now performs a guarded renderer query after loading ends and emits `onPageBackgroundChange`: valid theme-color, then a nontransparent body/root background, then white. That priority is an App fallback policy, not a confirmed Arc rule. The Space color remains the fallback before the answer. Changes without another loading-end event are not observed yet; a real engine color event is still needed.
+
+### Full-page capture (EP-8)
+
+`captureFullPage(maxDevicePixels:completion:)` (Swift: `OEWebContent.fullPagePNG(maxDevicePixels:)` through OpenWeb) returns one PNG of the whole page at device scale and `truncated`. OpenEngine only, no fork patch (page-platform plan §6 EP-8, Arc's `captureFullPage:`, PG-6.3):
+
+1. DevTools `Page.getLayoutMetrics` → `cssContentSize` (CSS pixels; the same size Chromium's own full-page path uses, `LocalFrameMojoHandler::GetFullPageSize`).
+2. Device scale = the page window's backing scale (else the main screen's). Width is capped at 4,096 device pixels; height at `maxDevicePixels` (the App passes `CaptureMetrics.fullPageMaxDevicePixels` = 32,768). A taller page is cut there and `truncated` is YES.
+3. One `Page.captureScreenshot` per tile, top to bottom: `format: png`, `fromSurface: true`, `captureBeyondViewport: true`, `clip: {x: 0, y, width, height ≤ 4,096 / scale, scale: 1}` in document CSS pixels. Each call temporarily resizes the widget and restores it (`PageHandler::CaptureScreenshot`), so tiles run one at a time.
+4. The tiles are decoded, drawn top-down into one sRGB bitmap with Core Graphics, and encoded to PNG on a utility queue; only `NSData` crosses threads. Worst allocation: 4,096 × 32,768 × 4 B = 512 MiB. The completion runs on the main thread.
+
+The caller makes lazy images load first (`img[loading=lazy]` → `eager`, wait ≤ 1 s) through `evaluateJavaScript`; the engine call itself does not change the page. Page zoom is not applied to the clip (Chromium's own full-page capture does the same).
 
 ## Extensions
 

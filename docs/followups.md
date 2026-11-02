@@ -153,3 +153,12 @@ Arc's tracker cleaner (RE CC-31a, `0x100826084`) has six callers in the main bin
 ## `commandbar-render` inline completion gate is close to its budget under load
 
 The gate "inline completion adds ≤ 0.3 ms p95" read +0.301 ms in one full `verify-all` at load 12.0 (Section 2 item 13 PR) and +0.170 ms on the rerun at load 9.0 (earlier Section 2 runs: well under). The gate converts main-thread cycles at the off run's rate, so heavy machine load still moves it. If it trips again under load only, consider pairing more keystrokes or reporting the paired median beside the p95.
+
+## Capture tool leftovers (page-platform Step 13, Section 8)
+
+- Toasts: "Capture in Progress", "Copied Image", the keycap hint, and capture errors use the window's single old toast until `ToastCenter` (page-platform Step 1) lands; then `CaptureToastHooks` in `BrowserWindowController.capture` moves onto it (sticky progress toast, keycap plates ⌘ ⇧).
+- `hasWebPage`: the capture commands compute it in `App/Page/CaptureCommands.swift`; switch the registry rows to `EnabledKey.hasWebPage` when `CommandMenuState` (Step 2) lands.
+- C7 (incognito → no Library row) is blocked: Open has no incognito window yet (app-shell §4.8). The path reads `OEBrowserContext.isEphemeral`; offscreen features-render C3/C7 covers the card.
+- Swipe: `BrowserWindowController.captureOverlayActive` is the hook EP-1 (Steps 11–12) must read to keep history swipes off while the overlay shows.
+- A Cmd+Shift click replays the press with `NSWindow.sendEvent`, past the local monitors, so `WebContentContainer`'s click monitor does not see it: a Cmd+Shift click on a link in an unfocused split pane opens the link without focusing that pane first.
+- Arc's look: the overlay, the result card, and the portrait canvas are guesses until captures C-C1 and C-C2 (page-platform §12). Share was not driven end to end (the suite cannot close the system picker without choosing a service).

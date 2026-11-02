@@ -28,6 +28,8 @@ public final class CaptureOverlayView: NSView {
     public init(frame: CGRect, hintFill: NSColor) {
         super.init(frame: frame)
         wantsLayer = true
+        // The page view sits in a rounded panel or pane slot: dim only inside its corners.
+        layer?.cornerRadius = PanelMetrics.cornerRadius; layer?.cornerCurve = .continuous; layer?.masksToBounds = true
         hint.fill = hintFill
         addSubview(hint)
         setAccessibilityRole(.group); setAccessibilityLabel("Capture area")
