@@ -895,6 +895,88 @@ def feature_checks(app, style, results, tmp):
 
 
 # ----------------------------------------------------------------------------
+# Relaunch soak (section 8 item 14): the Release persistence relaunch once
+# aborted in PartitionAlloc's launch-zone race ("No zone found",
+# docs/engine-fork.md "PartitionAlloc and the launch race"). Build one
+# profile, then relaunch it N times. Every launch must reach automation,
+# restore the same tabs, load only the selected one, quit cleanly, write no
+# allocator FATAL and leave no new crash report. Local file pages only.
+
+RELAUNCH_COUNT = int(os.environ.get("OPEN_E2E_RELAUNCH_COUNT", "20"))
+_CRASH_DIR = os.path.expanduser("~/Library/Logs/DiagnosticReports")
+
+
+def _open_crash_reports():
+    try:
+        names = os.listdir(_CRASH_DIR)
+    except OSError:
+        return set()
+    return {n for n in names if n.startswith(("Open", "cefsimple")) and n.endswith((".ips", ".crash"))}
+
+
+def relaunch_checks(app_factory, results, tmp):
+    pages = []
+    for name, color in (("a", "#c33"), ("b", "#3c3"), ("c", "#33c")):
+        path = os.path.join(tmp, "relaunch-%s.html" % name)
+        with open(path, "w") as f:
+            f.write("<!doctype html><title>Relaunch %s</title><body style='background:%s'>%s</body>" % (name.upper(), color, name))
+        pages.append("file://" + path)
+    reports_before = _open_crash_reports()
+    app = app_factory(urls=(), fresh=True)
+    try:
+        ids = [new_tab(app, url) for url in pages]
+        app.call("select", tab=ids[0])
+        app.call("save")
+        expected = [(x["id"], x["section"], x["url"]) for x in app.call("tabs")]
+    finally:
+        app.quit()
+    results["relaunch_fixture"] = {"ok": len(expected) >= 3, "tabs": len(expected)}
+    runs, failures = [], []
+    for i in range(RELAUNCH_COUNT):
+        run = {"index": i + 1, "load": os.getloadavg()[0]}
+        started = time.monotonic()
+        try:
+            app = app_factory(urls=())
+        except Exception as error:
+            run.update(ok=False, error=str(error))
+            runs.append(run); failures.append(run)
+            continue
+        try:
+            run["automation_ms"] = round((time.monotonic() - started) * 1000)
+            ready = wait_until(lambda: (lambda t: t if any(x["loaded"] for x in t) else None)(app.call("tabs")), timeout=15, step=.1)
+            tabs = ready or app.call("tabs")
+            got = [(x["id"], x["section"], x["url"]) for x in tabs]
+            loaded = [x["url"] for x in tabs if x["loaded"]]
+            run.update(same_tabs=got == expected, loaded=len(loaded), pid=app.pid)
+        except Exception as error:
+            run.update(error=str(error))
+        finally:
+            app.quit()
+        log_text = ""
+        for path in (app.launch_log_path,):
+            try:
+                log_text += open(path, errors="replace").read()
+            except OSError:
+                pass
+        run["zone_fatal"] = "No zone found" in log_text
+        run["quit_ok"] = bool(app.quit_report.get("ok"))
+        run["ok"] = (not run.get("error") and run.get("same_tabs") and run.get("loaded") == 1
+                     and run["quit_ok"] and not run["zone_fatal"])
+        runs.append(run)
+        if not run["ok"]:
+            failures.append(run)
+        print("relaunch %2d/%d %s automation %s ms load %.1f" % (i + 1, RELAUNCH_COUNT, "PASS" if run["ok"] else "FAIL",
+                                                                 run.get("automation_ms"), run["load"]), flush=True)
+    # Crash reports are written asynchronously by ReportCrash.
+    time.sleep(3)
+    new_reports = sorted(_open_crash_reports() - reports_before)
+    results["relaunch_soak"] = {"ok": not failures and len(runs) == RELAUNCH_COUNT and not new_reports,
+                                "count": RELAUNCH_COUNT, "passed": len(runs) - len(failures),
+                                "aborts": sum(1 for r in runs if r.get("zone_fatal") or "error" in r),
+                                "new_crash_reports": new_reports, "failures": failures, "runs": runs}
+
+
+# ----------------------------------------------------------------------------
 # Shell checks: the M1 window bound to OpenModel
 
 
@@ -7599,7 +7681,7 @@ def main():
     ap.add_argument("--engine-fingerprint-only", action="store_true", help="verify built engine artifacts and exit without launching Open")
     ap.add_argument("--extensions", default=os.path.join(ROOT, ".re", "ext", "unpacked"))
     ap.add_argument("--only", choices=["shell", "extensions", "features", "measure", "tabstrip", "window", "sidebar", "peek",
-                                       "commandbar", "app-actions", "actions", "profiles", "sidebar-completion", "toolbar", "numbering", "media", "page"])
+                                       "commandbar", "app-actions", "actions", "profiles", "sidebar-completion", "toolbar", "numbering", "media", "relaunch", "page"])
     ap.add_argument("--window-chrome-only", action="store_true", help="run only the window-chrome follow-up flows in the window suite")
     ap.add_argument("--keep", action="store_true",
                     help="keep this run's data root, cache root and scratch folder (paths printed at the end)")
@@ -7764,6 +7846,9 @@ def main():
         if opts.only == "shell":
             results["shell"] = CheckedResults(tracker)
             shell_checks(factory, results["shell"], tmp)
+        elif opts.only == "relaunch":
+            results["relaunch"] = CheckedResults(tracker)
+            relaunch_checks(factory, results["relaunch"], tmp)
         elif opts.only in ("commandbar", "app-actions"):
             results[opts.only] = CheckedResults(tracker)
             commandbar_checks(factory, results[opts.only], tmp, opts.config)
@@ -7862,14 +7947,14 @@ def main():
                                     else opts.config.lower()))
     with open(os.path.join(OUT, name), "w") as f:
         json.dump(results, f, indent=2, sort_keys=True)
-    for group in ("shell", "extensions", "features", "measure", "tabstrip", "window", "sidebar", "peek", "commandbar", "app-actions", "actions", "profiles", "sidebar-completion", "toolbar", "numbering", "media", "page"):
+    for group in ("shell", "extensions", "features", "measure", "tabstrip", "window", "sidebar", "peek", "commandbar", "app-actions", "actions", "profiles", "sidebar-completion", "toolbar", "numbering", "media", "relaunch", "page"):
         for k, v in results.get(group, {}).items():
             if isinstance(v, dict) and "ok" in v:
                 print("%-24s %s" % (k, "PASS" if v.get("ok") else "FAIL"))
             elif isinstance(v, dict) and v.get("status") in ("SKIP", "BLOCKED", "INTERRUPTED", "DEFERRED"):
                 print("%-24s %s: %s" % (k, v["status"], v.get("reason", "")))
     print("wrote", os.path.join(OUT, name))
-    failures = [k for group in ("shell", "extensions", "features", "measure", "tabstrip", "window", "sidebar", "peek", "commandbar", "app-actions", "actions", "sidebar-completion", "toolbar", "numbering", "media", "page")
+    failures = [k for group in ("shell", "extensions", "features", "measure", "tabstrip", "window", "sidebar", "peek", "commandbar", "app-actions", "actions", "sidebar-completion", "toolbar", "numbering", "media", "relaunch", "page")
                 for k, v in results.get(group, {}).items() if isinstance(v, dict) and v.get("ok") is False]
     if failures or not results["cleanup"]["ok"]:
         sys.exit(1)
