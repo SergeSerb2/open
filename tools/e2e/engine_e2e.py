@@ -4763,6 +4763,294 @@ def _fixture_server(prefix):
     return server, 'http://127.0.0.1:%d' % server.server_address[1]
 
 
+
+def _media_server():
+    """Serves tools/e2e/fixtures/media on 127.0.0.1. Chromium maps *.localhost to loopback too,
+    so one server gives three hosts for the site-rule checks (media-pip §8.4)."""
+    import http.server
+    import threading
+    folder = os.path.join(ROOT, "tools", "e2e", "fixtures", "media")
+    class Handler(http.server.SimpleHTTPRequestHandler):
+        def __init__(self, *a, **kw):
+            super().__init__(*a, directory=folder, **kw)
+        def log_message(self, *args): pass
+    server = http.server.ThreadingHTTPServer(("127.0.0.1", 0), Handler)
+    threading.Thread(target=server.serve_forever, daemon=True).start()
+    return server, server.server_address[1]
+
+
+MEDIA_RULES = {"version": 1, "disallow": ["blocked.localhost"],
+               "sites": [{"hosts": ["inaudible.localhost"], "activatesWhenInaudible": True}]}
+
+
+def media_checks(factory, results, tmp):
+    """media-pip §8.4 E-M1…E-M15 in the real App (phase 1: Chromium's own PiP window)."""
+    server, port = _media_server()
+    base = "http://127.0.0.1:%d/" % port
+    app = factory(urls=(base + "plain.html",), fresh=True)
+    def m(tab): return app.call("media", tab=tab)
+    def players(window=None):
+        return app.call("mini-players", **({"window": window} if window else {}))
+    def ids(window=None): return [c["tab"] for c in players(window)["cards"]]
+    def pip(): return app.call("pip")
+    def playing(tab): return m(tab)["playback"] == "playing"
+    def start(tab):
+        app.eval(tab, "start()")
+        return wait_until(lambda: playing(tab), timeout=10, step=.05)
+    def select(tab):
+        app.call("select", tab=tab)
+        wait_until(lambda: app.call("window-state")["selected"] == tab, timeout=5, step=.02)
+    def open_tab(url):
+        t = new_tab(app, url)
+        wait_until(lambda: app.eval(t, "document.readyState") == "complete", timeout=10, step=.05)
+        return t
+    def wait_pip(state, timeout=3):
+        return wait_until(lambda: (lambda p: p if p["state"] == state else None)(pip()), timeout=timeout, step=.01) or pip()
+    def close_tab(tab):
+        app.call("close", tab=tab)
+    # Start from the defaults the checks expect; a run killed mid-check (or another suite) can leave
+    # these keys behind in the shared defaults domain.
+    for key in ("open.advanced.enablePictureInPictureOnLeave", "open.pip.autoDisabledHosts", "open.pip.keepOnTop"):
+        app.call("defaults", key=key, value=None)
+    try:
+        app.call("window-frame", frame=[80, 60, 1280, 820])
+        home = app.call("tabs")[0]["id"]
+        app.call("wait", tab=home)
+        # E-M1: audible tab, row speaker, mute through the model, survives relaunch (checked at the end).
+        audio = open_tab(base + "audio.html")
+        ok_play = start(audio)
+        audible = wait_until(lambda: next((t for t in app.call("tabs") if t["id"] == audio and t["audible"]), None), timeout=5, step=.05)
+        state = m(audio)
+        app.call("media-action", tab=audio, action="toggle-mute")
+        muted = m(audio)
+        element_muted = app.eval(audio, "document.getElementById('tone').muted")
+        results["media_audio_state"] = {"ok": bool(ok_play) and bool(audible) and state["controllable"] and state["title"] == "Open Test Tone"
+            and state["artist"] == "Open" and "nextTrack" in state["actions"] and "previousTrack" in state["actions"]
+            and muted["muted"] and muted["modelMuted"] and element_muted is False,
+            "state": state, "muted": muted, "elementMuted": element_muted}
+        app.call("media-action", tab=audio, action="toggle-mute")
+
+        # E-M3: the card appears when the source leaves the screen, and goes when it comes back.
+        select(home)
+        t0 = time.monotonic()
+        listed = wait_until(lambda: audio in ids(), timeout=1, step=.005)
+        appear_ms = (time.monotonic() - t0) * 1000
+        card = players()["cards"][0] if listed else None
+        select(audio)
+        gone = wait_until(lambda: not ids(), timeout=1, step=.01)
+        results["media_card_on_leave"] = {"ok": bool(listed) and bool(gone) and appear_ms < 1000
+            and card is not None and set(["favicon", "previous", "play", "next", "volume"]) <= set(card["buttons"]),
+            "appearMs": round(appear_ms, 1), "load": os.getloadavg(), "card": card}
+
+        # E-M4: the card's controls reach the page (interim probe: the page's own action handlers).
+        select(home)
+        wait_until(lambda: audio in ids(), timeout=2, step=.01)
+        app.call("media-click", tab=audio, target="play")
+        paused = wait_until(lambda: app.eval(audio, "document.getElementById('tone').paused"), timeout=3, step=.05)
+        card_paused = wait_until(lambda: (lambda c: c if c and c[0]["playback"] == "paused" else None)(players()["cards"]), timeout=2, step=.02)
+        app.call("media-click", tab=audio, target="play")
+        resumed = wait_until(lambda: app.eval(audio, "document.getElementById('tone').paused") is False, timeout=3, step=.05)
+        app.call("media-click", tab=audio, target="next")
+        next_count = wait_until(lambda: (lambda c: c if c["nexttrack"] == 1 else None)(app.eval(audio, "__counts")), timeout=3, step=.05)
+        app.call("media-click", tab=audio, target="previous")
+        counts = wait_until(lambda: (lambda c: c if c["nexttrack"] == 1 and c["previoustrack"] == 1 else None)(app.eval(audio, "__counts")), timeout=3, step=.05)
+        counts = counts or {"afterNext": next_count, "final": app.eval(audio, "__counts")} if not counts else counts
+        results["media_card_controls"] = {"ok": bool(paused) and bool(card_paused) and bool(resumed) and counts.get("nexttrack") == 1
+            and counts.get("previoustrack") == 1, "paused": bool(paused), "cardPaused": bool(card_paused), "resumed": bool(resumed), "counts": counts}
+
+        # E-M3: a Space switch away lists it; another window does not.
+        home_space = app.call("tab-state", tab=audio)["space"]
+        app.call("space-create", title="Media Other")
+        other_space = wait_until(lambda: audio in ids(), timeout=2, step=.02)
+        app.call("command", id="new-window")
+        second = wait_until(lambda: (lambda w: w if len(w) >= 2 else None)(app.call("shell-windows")), timeout=5, step=.05)
+        second_cards = ids() if second else None
+        if second:
+            app.call("command", id="close-window")
+            wait_until(lambda: len(app.call("shell-windows")) == 1, timeout=5, step=.05)
+        app.call("space", space=home_space)
+        results["media_card_scope"] = {"ok": bool(other_space) and second_cards == [], "secondWindowCards": second_cards}
+
+        # E-M3: four sources, three cards, newest first.
+        extra = []
+        for i in range(3):
+            t = open_tab(base + "audio.html?n=%d" % i); start(t); extra.append(t)
+        select(home)
+        four = wait_until(lambda: (lambda c: c if len(c) == 3 else None)(ids()), timeout=3, step=.02)
+        results["media_cards_max_three"] = {"ok": four == list(reversed(extra)), "cards": four, "sources": [audio] + extra}
+        for t in extra: close_tab(t)
+        wait_until(lambda: ids() == [audio], timeout=3, step=.02)
+
+        # E-M15 / D-11: idle CPU with a paused card on screen equals idle CPU without it.
+        # Alternate the two states (paused card shown / hidden by a sidebar toggle-free Space switch is not
+        # equivalent, so the card leaves by selecting its own tab and comes back by leaving it again).
+        app.call("media-action", tab=audio, action="pause")
+        wait_until(lambda: (lambda c: c if c and c[0]["playback"] == "paused" else None)(players()["cards"]), timeout=3, step=.02)
+        def cpu(x): return round(sum(max(p["cpu"], 0) for p in x["tasks"]), 2)
+        def browser_cpu(x): return round(sum(max(p["cpu"], 0) for p in x["tasks"] if p.get("kind") == 1), 2)
+        samples = {"with": [], "without": [], "browserWith": [], "browserWithout": [], "load": []}
+        card_view = players()
+        rest_animations = []
+        for _ in range(4):
+            time.sleep(6); rest_animations.append(players()["animations"]); x = app.call("metrics", interval=8)
+            samples["with"].append(cpu(x)); samples["browserWith"].append(browser_cpu(x)); samples["load"].append(os.getloadavg()[0])
+            app.call("media-action", tab=audio, action="close"); wait_until(lambda: not ids(), timeout=3, step=.02)
+            time.sleep(6); x = app.call("metrics", interval=8)
+            samples["without"].append(cpu(x)); samples["browserWithout"].append(browser_cpu(x)); samples["load"].append(os.getloadavg()[0])
+            # Back to a shown paused card: play (clears the dismissal), pause again.
+            app.call("media-action", tab=audio, action="play"); wait_until(lambda: audio in ids(), timeout=3, step=.02)
+            app.call("media-action", tab=audio, action="pause")
+            wait_until(lambda: (lambda c: c if c and c[0]["playback"] == "paused" else None)(players()["cards"]), timeout=3, step=.02)
+        # Other work on the Mac only adds CPU, so compare the floor of four interleaved pairs; the
+        # structural part (no animation keys, no pending collapse) holds in every sample.
+        results["media_idle_cpu"] = {"ok": abs(min(samples["with"]) - min(samples["without"])) <= 0.5
+            and abs(min(samples["browserWith"]) - min(samples["browserWithout"])) <= 0.5
+            and card_view["pendingCollapse"] == 0 and rest_animations == [0] * len(rest_animations),
+            "minWith": min(samples["with"]), "minWithout": min(samples["without"]),
+            "browserMinWith": min(samples["browserWith"]), "browserMinWithout": min(samples["browserWithout"]),
+            "restAnimations": rest_animations, "samples": samples}
+        app.call("media-action", tab=audio, action="close"); wait_until(lambda: not ids(), timeout=3, step=.02)
+        close_tab(audio)
+
+        # E-M5: auto-PiP on leave within 500 ms; back closes it, video keeps playing.
+        video = open_tab(base + "video.html")
+        start(video)
+        windows_before = len(app.call("windows"))
+        select(home)
+        opened = wait_pip("active", timeout=3)
+        p = pip()
+        latency = (p.get("enteredAt") or 0) - (p.get("requestedAt") or 0) if p.get("enteredAt") else None
+        decision = m(video)["decision"]
+        leave_to_request = (p.get("requestedAt") or 0) - (decision["at"] if decision else 0)
+        pip_windows = p.get("windows", [])
+        results["media_auto_pip_on_leave"] = {"ok": opened["state"] == "active" and opened.get("automatic") is True and opened.get("tab") == video
+            and latency is not None and latency <= 0.5 and len(pip_windows) >= 1 and abs(leave_to_request) < 0.05,
+            "pip": p, "requestToEnterSeconds": latency, "leaveToRequestSeconds": leave_to_request,
+            "load": os.getloadavg(), "windowsBefore": windows_before}
+        # Sleep feed (§4.10): the PiP source is protected.
+        feed = app.call("sleep-visibility")
+        results["media_sleep_feed_pip"] = {"ok": video in feed["pictureInPicture"], "feed": feed}
+        select(video)
+        closed = wait_until(lambda: (lambda p: p if p["state"] == "closed" and not m(video)["pictureInPicture"] else None)(pip()), timeout=1, step=.01)
+        still = app.eval(video, "document.getElementById('main').paused") is False
+        results["media_auto_pip_return"] = {"ok": bool(closed) and still and closed.get("reason") == "sourceShown", "pip": pip(), "playing": still}
+
+        # E-M7: Close pauses and snoozes until the tab shows again.
+        select(home); wait_pip("active")
+        app.call("pip-action", action="close")
+        closed = wait_until(lambda: (lambda p: p if p["state"] == "closed" else None)(pip()), timeout=3, step=.02)
+        paused = wait_until(lambda: app.eval(video, "document.getElementById('main').paused"), timeout=3, step=.05)
+        snoozed = video in pip()["snoozed"]
+        select(video); app.eval(video, "start()"); select(home)
+        again = wait_pip("active")
+        results["media_close_snoozes"] = {"ok": bool(closed) and closed.get("reason") == "userClosed" and bool(paused) and snoozed
+            and again["state"] == "active", "closed": closed, "again": again}
+
+        # E-M9: Back to Tab selects the tab, closes PiP, keeps playing.
+        app.call("pip-action", action="back-to-tab")
+        back = wait_until(lambda: (lambda p: p if p["state"] == "closed" else None)(pip()), timeout=3, step=.02)
+        ws = app.call("window-state")
+        playing_after = app.eval(video, "document.getElementById('main').paused") is False
+        results["media_back_to_tab"] = {"ok": bool(back) and ws["selected"] == video and playing_after, "pip": back, "selected": ws["selected"]}
+
+        # E-M6: negatives, each from a fresh leave.
+        def leave_decision(tab):
+            select(tab); select(home)
+            time.sleep(.3)
+            return m(tab)["decision"]["value"], pip()["state"]
+        # The App's defaults domain is shared by every Debug run on this Mac: always restore the key.
+        app.call("defaults", key="open.advanced.enablePictureInPictureOnLeave", value=False)
+        try:
+            setting_off = leave_decision(video)
+        finally:
+            app.call("defaults", key="open.advanced.enablePictureInPictureOnLeave", value=None)
+        close_tab(video)
+        muted_video = open_tab(base + "video-muted.html"); start(muted_video)
+        inaudible = leave_decision(muted_video)
+        close_tab(muted_video)
+        nopip = open_tab(base + "video-nopip.html"); start(nopip)
+        disabled = leave_decision(nopip)
+        close_tab(nopip)
+        blocked = open_tab("http://blocked.localhost:%d/video.html" % port); start(blocked)
+        disallowed = leave_decision(blocked)
+        close_tab(blocked)
+        relaxed = open_tab("http://inaudible.localhost:%d/video-muted.html" % port); start(relaxed)
+        relaxed_result = leave_decision(relaxed)
+        if pip()["state"] == "active": select(relaxed); wait_pip("closed")
+        close_tab(relaxed)
+        results["media_auto_pip_negatives"] = {"ok": setting_off[0] == "settingOff" and inaudible[0] == "inaudible"
+            and disabled[0] == "videoDisabled" and disallowed[0] == "disallowed" and relaxed_result[0] == "open",
+            "settingOff": setting_off, "inaudible": inaudible, "disablePictureInPicture": disabled,
+            "disallowed": disallowed, "activatesWhenInaudible": relaxed_result}
+
+        # E-M10: the largest playing video goes to PiP.
+        two = open_tab(base + "two-videos.html"); start(two)
+        select(home); wait_pip("active")
+        chosen = app.eval(two, "document.pictureInPictureElement && document.pictureInPictureElement.id")
+        select(two); wait_pip("closed")
+        close_tab(two)
+        results["media_largest_video"] = {"ok": chosen == "large", "chosen": chosen}
+
+        # E-M11: Chromium's system media controls (Now Playing, media keys) in Open.
+        audio = open_tab(base + "audio.html"); start(audio)
+        now = wait_until(lambda: (lambda n: n if n["title"] == "Open Test Tone" and n["playbackState"] == "playing" else None)(app.call("now-playing")), timeout=5, step=.1) or app.call("now-playing")
+        app.call("media-action", tab=audio, action="pause")
+        now_paused = wait_until(lambda: (lambda n: n if n["playbackState"] == "paused" else None)(app.call("now-playing")), timeout=3, step=.1) or app.call("now-playing")
+        results["media_now_playing"] = {"ok": now["title"] == "Open Test Tone" and now["artist"] == "Open" and now["playbackState"] == "playing"
+            and now_paused["playbackState"] == "paused" and all(now["commands"][k] for k in ("play", "pause", "next", "previous")),
+            "playing": now, "paused": now_paused}
+
+        # E-M12 (feed only; the App sleep adapter is section 8's): a shown paused card protects its tab.
+        select(home)
+        wait_until(lambda: audio in ids(), timeout=2, step=.02)
+        feed = app.call("sleep-visibility")
+        app.call("media-action", tab=audio, action="close")
+        wait_until(lambda: not ids(), timeout=2, step=.02)
+        feed_after = app.call("sleep-visibility")
+        results["media_sleep_feed_card"] = {"ok": audio in feed["mediaControls"] and audio not in feed_after["mediaControls"],
+            "withCard": feed["mediaControls"], "afterClose": feed_after["mediaControls"]}
+
+        # Close removes the source: the card leaves with the tab.
+        app.eval(audio, "start()"); wait_until(lambda: audio in ids(), timeout=2, step=.02)
+        close_tab(audio)
+        results["media_card_leaves_on_close"] = {"ok": bool(wait_until(lambda: not ids(), timeout=2, step=.02))}
+
+        # Mute All / Unmute All: app-wide, one Undo.
+        a1 = open_tab(base + "audio.html?all=1"); a2 = open_tab(base + "audio.html?all=2")
+        app.call("media-action", action="mute-all")
+        all_muted = all(m(t)["muted"] and m(t)["modelMuted"] for t in (a1, a2))
+        app.call("menu-perform", id="undo")
+        undone = wait_until(lambda: not any(m(t)["muted"] or m(t)["modelMuted"] for t in (a1, a2)), timeout=3, step=.05)
+        app.call("media-action", action="mute-all"); app.call("media-action", action="unmute-all")
+        unmuted = not any(m(t)["modelMuted"] or m(t)["muted"] for t in (a1, a2))
+        results["media_mute_all"] = {"ok": all_muted and bool(undone) and unmuted, "allMuted": all_muted,
+            "undoneInOneStep": bool(undone), "unmuted": unmuted, "states": [m(t) for t in (a1, a2)]}
+        # View Media (Window menu): Arc's viewScreenshotsAndCaptures: opens the Library's Media section.
+        app.call("menu-perform", id="view-media")
+        library = wait_until(lambda: (lambda l: l if l["visible"] and l["section"] == "media" else None)(app.call("library-section")), timeout=5, step=.05)
+        app.call("library-close")
+        results["media_view_media_menu"] = {"ok": bool(library), "library": app.call("library-section") if not library else library}
+        # E-M2: Web Audio only. The interim probe sees media elements only; patch P6 (EM-3) fixes it.
+        wa = open_tab(base + "webaudio.html"); app.eval(wa, "start()")
+        heard = wait_until(lambda: next((t for t in app.call("tabs") if t["id"] == wa and t["audible"]), None), timeout=3, step=.1)
+        results["media_web_audio"] = {"status": "BLOCKED", "reason": "P6 (EM-3): Web Audio is not audible before the fork patch",
+                                      "audible": bool(heard)}
+        close_tab(wa)
+        results["media_pip_minimize"] = {"status": "BLOCKED", "reason": "EM-4: phase 1 uses Chromium's PiP window, which has no Minimize"}
+        results["media_pip_keep_on_top"] = {"status": "BLOCKED", "reason": "EM-4: the Keep Window on Top menu is in Open's own PiP window"}
+        results["media_document_pip"] = {"status": "BLOCKED", "reason": "EM-7: Document PiP disposition"}
+        results["media_sleep_adapter"] = {"status": "BLOCKED", "reason": "section 8: the App sleep adapter; the feed is checked above"}
+        # E-M1 persistence: a muted tab stays muted after relaunch.
+        app.call("media-action", tab=a1, action="toggle-mute")
+        app.call("save"); app.quit()
+        app = factory(urls=())
+        kept = wait_until(lambda: next((t for t in app.call("tabs") if t["id"] == a1), None), timeout=10, step=.1)
+        state = m(a1) if kept else {}
+        results["media_mute_survives_relaunch"] = {"ok": bool(kept) and state.get("modelMuted") is True, "state": state}
+    finally:
+        app.quit(); server.shutdown(); server.server_close()
+
+
 def toolbar_checks(factory, results, tmp):
     """commandbar-completion §4.6 / §5.3 `toolbar`: the optional content toolbar in the real App."""
     server, origin = _fixture_server('TB')
@@ -7090,7 +7378,7 @@ def main():
     ap.add_argument("--engine-fingerprint-only", action="store_true", help="verify built engine artifacts and exit without launching Open")
     ap.add_argument("--extensions", default=os.path.join(ROOT, ".re", "ext", "unpacked"))
     ap.add_argument("--only", choices=["shell", "extensions", "features", "measure", "tabstrip", "window", "sidebar", "peek",
-                                       "commandbar", "app-actions", "actions", "profiles", "sidebar-completion", "toolbar", "numbering"])
+                                       "commandbar", "app-actions", "actions", "profiles", "sidebar-completion", "toolbar", "numbering", "media"])
     ap.add_argument("--window-chrome-only", action="store_true", help="run only the window-chrome follow-up flows in the window suite")
     ap.add_argument("--keep", action="store_true",
                     help="keep this run's data root, cache root and scratch folder (paths printed at the end)")
@@ -7135,6 +7423,11 @@ def main():
     for sig in (signal.SIGTERM, signal.SIGHUP):
         signal.signal(sig, lambda *_: sys.exit(128 + 15))
     extra = ["--use-mock-keychain"]
+    if opts.only == "media":
+        rules_path = os.path.join(tmp, "pip-site-rules.json")
+        with open(rules_path, "w") as f:
+            json.dump(MEDIA_RULES, f)
+        extra += ["--pip-site-rules=" + rules_path]
     if opts.only == "extensions":
         dirs = [os.path.join(opts.extensions, d) for d in ("ublock-lite", "darkreader", "1password", "bitwarden")]
         if not all(os.path.isdir(d) for d in dirs):
@@ -7260,6 +7553,9 @@ def main():
         elif opts.only in ("toolbar", "numbering"):
             results[opts.only] = CheckedResults(tracker)
             (toolbar_checks if opts.only == "toolbar" else numbering_checks)(factory, results[opts.only], tmp)
+        elif opts.only == "media":
+            results["media"] = CheckedResults(tracker)
+            media_checks(factory, results["media"], tmp)
         elif opts.only == "window":
             results["window"] = CheckedResults(tracker)
             window_checks(factory, results["window"], tmp, opts.config, chrome_only=opts.window_chrome_only)
@@ -7342,14 +7638,14 @@ def main():
                                     else opts.config.lower()))
     with open(os.path.join(OUT, name), "w") as f:
         json.dump(results, f, indent=2, sort_keys=True)
-    for group in ("shell", "extensions", "features", "measure", "tabstrip", "window", "sidebar", "peek", "commandbar", "app-actions", "actions", "profiles", "sidebar-completion", "toolbar", "numbering"):
+    for group in ("shell", "extensions", "features", "measure", "tabstrip", "window", "sidebar", "peek", "commandbar", "app-actions", "actions", "profiles", "sidebar-completion", "toolbar", "numbering", "media"):
         for k, v in results.get(group, {}).items():
             if isinstance(v, dict) and "ok" in v:
                 print("%-24s %s" % (k, "PASS" if v.get("ok") else "FAIL"))
             elif isinstance(v, dict) and v.get("status") in ("SKIP", "BLOCKED", "INTERRUPTED", "DEFERRED"):
                 print("%-24s %s: %s" % (k, v["status"], v.get("reason", "")))
     print("wrote", os.path.join(OUT, name))
-    failures = [k for group in ("shell", "extensions", "features", "measure", "tabstrip", "window", "sidebar", "peek", "commandbar", "app-actions", "actions", "sidebar-completion", "toolbar", "numbering")
+    failures = [k for group in ("shell", "extensions", "features", "measure", "tabstrip", "window", "sidebar", "peek", "commandbar", "app-actions", "actions", "sidebar-completion", "toolbar", "numbering", "media")
                 for k, v in results.get(group, {}).items() if isinstance(v, dict) and v.get("ok") is False]
     if failures or not results["cleanup"]["ok"]:
         sys.exit(1)
