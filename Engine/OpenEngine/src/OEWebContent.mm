@@ -1015,6 +1015,23 @@ static NSData* OEStitchTiles(NSArray<NSData*>* tiles, NSError** error) {
   return png;
 }
 
+/// Pixel width from a PNG's header (0 when it is not one).
+static double OEPNGPixelWidth(NSData* png) {
+  if (!png.length) {
+    return 0;
+  }
+  CGImageSourceRef source =
+      CGImageSourceCreateWithData((__bridge CFDataRef)png, nullptr);
+  if (!source) {
+    return 0;
+  }
+  NSDictionary* properties = CFBridgingRelease(
+      CGImageSourceCopyPropertiesAtIndex(source, 0, nullptr));
+  CFRelease(source);
+  return [properties[(__bridge NSString*)kCGImagePropertyPixelWidth]
+      doubleValue];
+}
+
 - (void)captureFullPageWithMaxDevicePixels:(NSInteger)maxDevicePixels
                                 completion:(void (^)(NSData* _Nullable, BOOL,
                                                      NSError* _Nullable))
@@ -1027,11 +1044,34 @@ static NSData* OEStitchTiles(NSArray<NSData*>* tiles, NSError** error) {
                          userInfo:nil]);
     return;
   }
-  // Fallback device scale: the window's backing scale, else the main
-  // screen's. The page's own scale (below) wins: it also covers DevTools
-  // device emulation, which the screenshot output follows.
+  // The device scale the screenshots come out at: one visible-page shot's
+  // pixel width over the view's width in points. It follows the window's
+  // backing scale and DevTools device emulation alike; the layout metrics
+  // do not (`contentSize` stays in CSS pixels on the Mac, even under
+  // emulation). Fallback: the window's, else the main screen's, backing scale.
   CGFloat fallbackScale = self.view.window.backingScaleFactor
                               ?: NSScreen.mainScreen.backingScaleFactor ?: 2;
+  CGFloat viewWidth = self.view.bounds.size.width;
+  __weak OEWebContent* weakSelf = self;
+  [self takeSnapshotWithCompletion:^(NSData* shot, NSError* shotError) {
+    OEWebContent* strongSelf = weakSelf;
+    if (!strongSelf) {
+      done(nil, NO, shotError ?: OECaptureError(@"The page closed."));
+      return;
+    }
+    double measured = viewWidth > 0 ? OEPNGPixelWidth(shot) / viewWidth : 0;
+    double scale = isfinite(measured) && measured >= 0.5 && measured <= 8
+                       ? round(measured * 100) / 100
+                       : fallbackScale;
+    [strongSelf oe_captureFullPageAtScale:scale
+                         maxDevicePixels:maxDevicePixels
+                              completion:done];
+  }];
+}
+
+- (void)oe_captureFullPageAtScale:(double)scale
+                  maxDevicePixels:(NSInteger)maxDevicePixels
+                       completion:(void (^)(NSData*, BOOL, NSError*))done {
   __weak OEWebContent* weakSelf = self;
   [self sendDevToolsMethod:@"Page.getLayoutMetrics"
                 parameters:nil
@@ -1047,18 +1087,6 @@ static NSData* OEStitchTiles(NSArray<NSData*>* tiles, NSError** error) {
                                       @"The page has no size to capture."));
                     return;
                   }
-                  // `contentSize` is physical pixels: CSS × device scale ×
-                  // page zoom (`LocalFrameView` contents size,
-                  // inspector_page_agent.cc GetLayoutMetrics). Screenshot
-                  // pixels are clip × device scale, without page zoom.
-                  double physicalHeight =
-                      [metrics[@"contentSize"][@"height"] doubleValue];
-                  double zoom = pow(1.2, strongSelf.zoomLevel);
-                  double measured = physicalHeight / contentHeight / zoom;
-                  double scale = isfinite(measured) && measured >= 0.5 &&
-                                         measured <= 8
-                                     ? round(measured * 100) / 100
-                                     : fallbackScale;
                   double tile = floor(kOECaptureTilePixels / scale);
                   double width = MIN(ceil(contentWidth), tile);
                   double cap = floor(MAX(maxDevicePixels, 1) / scale);
