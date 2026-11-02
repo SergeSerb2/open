@@ -60,7 +60,11 @@ public final class PeekController {
     @ObservationIgnored private var isDismissing = false
     @ObservationIgnored private var dismissGeneration = 0
     public var onChange: (() -> Void)?
-    public var onToast: ((String, (() -> Void)?) -> Void)?
+    /// The window's toasts: "Peek closed" with Undo (M4).
+    @ObservationIgnored public weak var toasts: ToastCenter?
+    @ObservationIgnored private var undoToast: ToastHandle?
+    /// How long a closed Peek can come back (M4); the toast lasts as long.
+    public static let undoWindow: TimeInterval = 5
     /// The top Peek's URL, history, loading state, or favicon changed (sidebar badge, URL field, toolbar).
     public var onPageChange: (() -> Void)?
     public var peekBadgeTabIDs: Set<ItemID> { Set(stack.map(\.sourceTabID)) }
@@ -176,21 +180,23 @@ public final class PeekController {
     }
     private func finishDismiss() {
         guard let item = stack.popLast() else { return }
-        item.host?.close(); undoItem = (item.url, item.sourceTabID, Date().addingTimeInterval(5))
-        onToast?("Peek closed", { [weak self] in self?.undoDismiss() })
+        item.host?.close(); undoItem = (item.url, item.sourceTabID, Date().addingTimeInterval(Self.undoWindow))
+        undoToast?.dismiss()
+        undoToast = toasts?.show(.undo("Peek closed", lifetime: Self.undoWindow)) { [weak self] _ in self?.undoDismiss() }
         undoTask?.cancel(); undoTask = Task { [weak self] in
-            try? await Task.sleep(for: .seconds(5)); guard !Task.isCancelled else { return }; self?.undoItem = nil; self?.onToast?("", nil)
+            try? await Task.sleep(for: .seconds(Self.undoWindow)); guard !Task.isCancelled else { return }; self?.undoItem = nil
         }
         refresh(); if stack.isEmpty { removeKeys(); splitController.container.host(for: item.sourceTabID)?.focus() }
         onChange?()
     }
     public func undoDismiss() {
         guard let item = undoItem, item.2 > Date() else { return }; undoItem = nil; undoTask?.cancel()
-        open(url: item.0, sourceTabID: item.1); onToast?("", nil)
+        undoToast?.dismiss(); undoToast = nil
+        open(url: item.0, sourceTabID: item.1)
     }
     public func dismissAll() {
         expandingGeneration += 1; isExpanding = false; dismissGeneration += 1; isDismissing = false
-        undoTask?.cancel(); undoItem = nil; onToast?("", nil)
+        undoTask?.cancel(); undoItem = nil; undoToast?.dismiss(); undoToast = nil
         for item in stack { item.host?.close() }; stack.removeAll(); overlay.isHidden = true; overlay.clearHost(); removeKeys(); onChange?()
     }
     private func removeKeys() { if let keyMonitor { NSEvent.removeMonitor(keyMonitor) }; keyMonitor = nil }
