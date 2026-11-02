@@ -6,17 +6,16 @@
         "forced": false,
         "ok": true,
         "owned_pids": [
-          43352,
-          43365,
-          43366,
-          43367,
-          43368,
-          43369,
-          43370,
-          43374,
-          45520,
-          45537,
-          45544
+          95461,
+          95515,
+          95516,
+          95517,
+          95519,
+          95520,
+          95527,
+          98156,
+          98165,
+          98171
         ],
         "remaining_processes": [],
         "reply": true,
@@ -30,13 +29,14 @@
         "forced": false,
         "ok": true,
         "owned_pids": [
-          45684,
-          45695,
-          45696,
-          45698,
-          45700,
-          45701,
-          45703
+          98255,
+          98277,
+          98278,
+          98279,
+          98280,
+          98281,
+          98282,
+          98288
         ],
         "remaining_processes": [],
         "reply": true,
@@ -94,9 +94,9 @@
           "kind": "audioVideo",
           "pip": "none",
           "playback": "playing",
-          "window": "4CD7B7AC-93B3-409C-B847-1B2A78C41978"
+          "window": "EF27BFB7-4319-4451-97D2-5529EF7A41E1"
         },
-        "tab": "2D11592E-114A-48E0-A0FA-42E3E9360535",
+        "tab": "2C3BB8B8-BB42-4562-9DFC-A21482321F5C",
         "title": "Open Test Tone"
       },
       "ok": true,
@@ -130,9 +130,9 @@
           "kind": "audioVideo",
           "pip": "none",
           "playback": "playing",
-          "window": "4CD7B7AC-93B3-409C-B847-1B2A78C41978"
+          "window": "EF27BFB7-4319-4451-97D2-5529EF7A41E1"
         },
-        "tab": "2D11592E-114A-48E0-A0FA-42E3E9360535",
+        "tab": "2C3BB8B8-BB42-4562-9DFC-A21482321F5C",
         "title": "Open Test Tone"
       }
     },
@@ -160,16 +160,22 @@
       ]
     },
     "media_auto_pip_on_leave": {
+      "leaveToRequestSeconds": 5.662499461323023e-05,
+      "load": [
+        20.79248046875,
+        26.7744140625,
+        25.67529296875
+      ],
       "ok": true,
       "pip": {
         "automatic": true,
-        "enteredAt": 499622.0098740417,
-        "now": 499622.0193954167,
-        "requestedAt": 499621.92938395834,
+        "enteredAt": 502206.3115307917,
+        "now": 502206.32705400005,
+        "requestedAt": 502206.2213329584,
         "requests": 1,
         "snoozed": [],
         "state": "active",
-        "tab": "DA790EFE-B7E7-438E-8A2A-CA1E69563A1E",
+        "tab": "5EFBCF77-545C-4D33-A782-EDDBBCD17AD2",
         "windows": [
           {
             "class": "NativeWidgetMacFramelessNSWindow",
@@ -180,24 +186,24 @@
               282
             ],
             "level": 3,
-            "number": 132449
+            "number": 139372
           }
         ]
       },
-      "requestToEnterSeconds": 0.08049008337548003,
-      "windowsBefore": 3
+      "requestToEnterSeconds": 0.09019783331314102,
+      "windowsBefore": 2
     },
     "media_auto_pip_return": {
       "ok": true,
       "pip": {
-        "enteredAt": 499622.0098740417,
-        "now": 499622.05691800005,
+        "enteredAt": 502206.3115307917,
+        "now": 502206.35863045836,
         "reason": "sourceShown",
-        "requestedAt": 499621.92938395834,
+        "requestedAt": 502206.2213329584,
         "requests": 1,
         "snoozed": [],
         "state": "closed",
-        "tab": "DA790EFE-B7E7-438E-8A2A-CA1E69563A1E",
+        "tab": "5EFBCF77-545C-4D33-A782-EDDBBCD17AD2",
         "windows": []
       },
       "playing": true
@@ -205,17 +211,17 @@
     "media_back_to_tab": {
       "ok": true,
       "pip": {
-        "enteredAt": 499622.16403745837,
-        "now": 499622.19637537503,
+        "enteredAt": 502206.5054059584,
+        "now": 502206.52970812505,
         "reason": "sourceShown",
-        "requestedAt": 499622.150599625,
+        "requestedAt": 502206.4807287917,
         "requests": 3,
         "snoozed": [],
         "state": "closed",
-        "tab": "DA790EFE-B7E7-438E-8A2A-CA1E69563A1E",
+        "tab": "5EFBCF77-545C-4D33-A782-EDDBBCD17AD2",
         "windows": []
       },
-      "selected": "DA790EFE-B7E7-438E-8A2A-CA1E69563A1E"
+      "selected": "5EFBCF77-545C-4D33-A782-EDDBBCD17AD2"
     },
     "media_card_controls": {
       "cardPaused": true,
@@ -302,9 +308,14 @@
         "pip": "none",
         "playback": "playing",
         "retiring": false,
-        "tab": "2D11592E-114A-48E0-A0FA-42E3E9360535",
+        "tab": "2C3BB8B8-BB42-4562-9DFC-A21482321F5C",
         "title": ""
       },
+      "load": [
+        52.79443359375,
+        32.193359375,
+        27.16845703125
+      ],
       "ok": true
     },
     "media_card_scope": {
@@ -313,28 +324,28 @@
     },
     "media_cards_max_three": {
       "cards": [
-        "17C1FE58-81EA-4553-8A36-4B332EC51346",
-        "E9292E5B-E9FE-43C8-9F81-E5B543CA0170",
-        "0D48D919-9461-42D0-AAF5-C41DADA9AFD3"
+        "4F6BF27B-4B48-4BC0-B903-68DC33F7B09D",
+        "68A3B199-E8E0-41FF-8E51-C0F729BB49E7",
+        "D9702CE1-0AE4-4F4A-8E68-83014DA1A884"
       ],
       "ok": true,
       "sources": [
-        "2D11592E-114A-48E0-A0FA-42E3E9360535",
-        "0D48D919-9461-42D0-AAF5-C41DADA9AFD3",
-        "E9292E5B-E9FE-43C8-9F81-E5B543CA0170",
-        "17C1FE58-81EA-4553-8A36-4B332EC51346"
+        "2C3BB8B8-BB42-4562-9DFC-A21482321F5C",
+        "D9702CE1-0AE4-4F4A-8E68-83014DA1A884",
+        "68A3B199-E8E0-41FF-8E51-C0F729BB49E7",
+        "4F6BF27B-4B48-4BC0-B903-68DC33F7B09D"
       ]
     },
     "media_close_snoozes": {
       "again": {
         "automatic": true,
-        "enteredAt": 499622.16403745837,
-        "now": 499622.1813896667,
-        "requestedAt": 499622.150599625,
+        "enteredAt": 502206.5054059584,
+        "now": 502206.5063013334,
+        "requestedAt": 502206.4807287917,
         "requests": 3,
         "snoozed": [],
         "state": "active",
-        "tab": "DA790EFE-B7E7-438E-8A2A-CA1E69563A1E",
+        "tab": "5EFBCF77-545C-4D33-A782-EDDBBCD17AD2",
         "windows": [
           {
             "class": "NativeWidgetMacFramelessNSWindow",
@@ -345,21 +356,21 @@
               282
             ],
             "level": 3,
-            "number": 132449
+            "number": 139372
           }
         ]
       },
       "closed": {
-        "enteredAt": 499622.08278370835,
-        "now": 499622.10198933334,
+        "enteredAt": 502206.386871125,
+        "now": 502206.41257625003,
         "reason": "userClosed",
-        "requestedAt": 499622.0618225417,
+        "requestedAt": 502206.36278745835,
         "requests": 2,
         "snoozed": [
-          "DA790EFE-B7E7-438E-8A2A-CA1E69563A1E"
+          "5EFBCF77-545C-4D33-A782-EDDBBCD17AD2"
         ],
         "state": "closed",
-        "tab": "DA790EFE-B7E7-438E-8A2A-CA1E69563A1E",
+        "tab": "5EFBCF77-545C-4D33-A782-EDDBBCD17AD2",
         "windows": []
       },
       "ok": true
@@ -369,39 +380,51 @@
       "status": "BLOCKED"
     },
     "media_idle_cpu": {
-      "browserMedianWith": 0.17,
-      "browserMedianWithout": 0.11,
-      "medianWith": 0.46,
-      "medianWithout": 0.32,
+      "browserMinWith": 0.06,
+      "browserMinWithout": 0.04,
+      "minWith": 0.09,
+      "minWithout": 0.08,
       "ok": true,
+      "restAnimations": [
+        0,
+        0,
+        0,
+        0
+      ],
       "samples": {
         "browserWith": [
-          0.34,
-          0.04,
-          0.17
+          0.33,
+          0.06,
+          0.92,
+          0.07
         ],
         "browserWithout": [
-          2.11,
-          0.03,
-          0.11
+          1.74,
+          0.04,
+          0.19,
+          0.12
         ],
         "load": [
-          16.787109375,
-          18.072265625,
-          17.37939453125,
-          17.1591796875,
-          17.12255859375,
-          16.98388671875
+          45.12255859375,
+          38.806640625,
+          33.68017578125,
+          29.326171875,
+          26.3251953125,
+          23.51416015625,
+          21.76171875,
+          21.03564453125
         ],
         "with": [
-          1.02,
+          1.05,
           0.09,
-          0.46
+          1.17,
+          0.11
         ],
         "without": [
-          3.26,
-          0.07,
-          0.32
+          2.35,
+          0.08,
+          0.31,
+          0.19
         ]
       }
     },
@@ -421,7 +444,7 @@
           "capturing": false,
           "controllable": false,
           "decision": {
-            "at": 499625.826052625,
+            "at": 502210.3327482917,
             "value": "noPlayingVideo"
           },
           "duration": null,
@@ -437,7 +460,7 @@
           "position": null,
           "session": false,
           "source": null,
-          "tab": "25D7DC86-9B36-4084-9129-E161D60CAE1A",
+          "tab": "F6175597-E015-41F6-BBBA-E34D3AA6024B",
           "title": null
         },
         {
@@ -461,7 +484,7 @@
           "position": null,
           "session": false,
           "source": null,
-          "tab": "73E3322D-8BE4-4DFC-AB16-AE87DF48A3CD",
+          "tab": "7DAE01B6-ED0C-49F8-AC81-2EBFCF1EFC36",
           "title": null
         }
       ],
@@ -491,7 +514,7 @@
         "position": null,
         "session": false,
         "source": null,
-        "tab": "25D7DC86-9B36-4084-9129-E161D60CAE1A",
+        "tab": "F6175597-E015-41F6-BBBA-E34D3AA6024B",
         "title": null
       }
     },
@@ -506,7 +529,7 @@
           "previous": true,
           "toggle": true
         },
-        "elapsed": 0.050443,
+        "elapsed": 0.16736,
         "playbackState": "paused",
         "rate": 0,
         "title": "Open Test Tone"
@@ -542,22 +565,29 @@
       "afterClose": [],
       "ok": true,
       "withCard": [
-        "221ADE48-A947-4358-AF14-3558BB4B0C8A"
+        "AA4EC9A2-4729-4858-A7CB-04D0A48B7995"
       ]
     },
     "media_sleep_feed_pip": {
       "feed": {
         "mediaControls": [],
         "pictureInPicture": [
-          "DA790EFE-B7E7-438E-8A2A-CA1E69563A1E"
+          "5EFBCF77-545C-4D33-A782-EDDBBCD17AD2"
         ],
         "visible": [
-          "0764DA29-77A7-47D2-83AE-46E7670914CC",
-          "DA790EFE-B7E7-438E-8A2A-CA1E69563A1E"
+          "5EFBCF77-545C-4D33-A782-EDDBBCD17AD2",
+          "BB9A4050-5F40-4339-BFE8-8B03D3DCD5A0"
         ],
         "windows": {
-          "4CD7B7AC-93B3-409C-B847-1B2A78C41978": "visible"
+          "EF27BFB7-4319-4451-97D2-5529EF7A41E1": "visible"
         }
+      },
+      "ok": true
+    },
+    "media_view_media_menu": {
+      "library": {
+        "section": "media",
+        "visible": true
       },
       "ok": true
     },
@@ -567,6 +597,6 @@
       "status": "BLOCKED"
     }
   },
-  "started": "2026-11-02 14:24:56",
+  "started": "2026-11-02 15:07:28",
   "style": "chrome"
 }
