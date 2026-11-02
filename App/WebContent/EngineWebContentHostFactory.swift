@@ -162,15 +162,32 @@ final class EngineWebContentHostFactory: NSResponder, WebContentHostFactory {
   var orderedTabs: [Tab] {
     (focusedProfile?.favorites ?? []) + (focusedSpace.map { flattened($0.pinned) + flattened($0.today) } ?? [])
   }
-  var numberedTabs: [Tab] {
-    let include = UserDefaults.standard.object(forKey: "open.shortcuts.includeFavoritesInTabNumbering") as? Bool ?? true
-    return (include ? focusedProfile?.favorites ?? [] : [])
-      + (focusedSpace.map { flattened($0.pinned) + flattened($0.today) } ?? [])
+  /// Cmd+1…9 numbering: the model's one query (commandbar-completion §4.4.1, `goToItemTargets`). Include
+  /// Favorites defaults on; "Switch to ninth tab" defaults off, so Cmd+9 is the last item.
+  private var includeFavoritesInNumbering: Bool {
+    UserDefaults.standard.object(forKey: "open.shortcuts.includeFavoritesInTabNumbering") as? Bool ?? true
   }
-  func numberedTab(_ number: Int) -> Tab? {
-    let tabs = numberedTabs
-    if number == 9, !UserDefaults.standard.bool(forKey: "open.shortcuts.switchToNinthEnabled") { return tabs.last }
-    return tabs.indices.contains(number - 1) ? tabs[number - 1] : nil
+  /// Every numbered item (tab or split ids), for the Tabs menu and Go to Last Tab.
+  var numberedItems: [ItemID] { model.goToItemCandidates(windowID: windowState.id, includeFavorites: includeFavoritesInNumbering) }
+  func numberedItem(_ number: Int) -> ItemID? {
+    guard (1...9).contains(number) else { return nil }
+    return model.goToItemTargets(windowID: windowState.id, includeFavorites: includeFavoritesInNumbering,
+                                 ninthSelectsLast: !UserDefaults.standard.bool(forKey: "open.shortcuts.switchToNinthEnabled"))[number - 1]
+  }
+  /// A numbered item's menu title: the tab title, or a split's pane titles.
+  func numberedTitle(_ id: ItemID) -> String {
+    func title(_ tab: Tab) -> String { tab.displayTitle.isEmpty ? tab.url.absoluteString : tab.displayTitle }
+    if let tab = model.tab(id: id) { return title(tab) }
+    if case .split(let split)? = model.node(id: id) { return split.panes.map(title).joined(separator: " | ") }
+    return ""
+  }
+  /// Selects a numbered item: a tab, or a split (its focused pane).
+  func selectNumberedItem(_ id: ItemID) {
+    if case .split(let split)? = model.node(id: id), let pane = split.panes.first(where: { $0.id == split.focusedPaneID }) ?? split.panes.first {
+      selectTabForCommand(pane.id)
+    } else {
+      selectTabForCommand(id)
+    }
   }
   func flattened(_ nodes: [SidebarNode]) -> [Tab] {
     nodes.flatMap { node in

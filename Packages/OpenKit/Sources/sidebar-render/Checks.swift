@@ -136,6 +136,34 @@ enum Checks {
         pump(); rowsMatch("undo of clearToday brings the divider back")
         check(SidebarDiagnostics.fullReloads == reloads0, "no full reloads during edits (reloadData calls: \(SidebarDiagnostics.fullReloads - reloads0))")
 
+        // Holding Command shows nothing (CC-39, D13; commandbar-completion §4.4.2): a Command press, posted
+        // and dequeued as the app's run loop does (so event monitors see it), changes no sidebar pixel while
+        // it is held, lays out no row, and reloads nothing.
+        print("hold Command (no hints)")
+        pump()
+        func pixels() -> Data { let img = OffscreenRenderer().snapshot(scene, scale: 1); return (img.dataProvider?.data as Data?) ?? Data() }
+        func flags(_ f: NSEvent.ModifierFlags) {
+            guard let e = NSEvent.keyEvent(with: .flagsChanged, location: .zero, modifierFlags: f, timestamp: 0, windowNumber: host.windowNumber,
+                                           context: nil, characters: "", charactersIgnoringModifiers: "", isARepeat: false, keyCode: 55) else { return }
+            NSApp.postEvent(e, atStart: false)
+            let deadline = Date().addingTimeInterval(1)
+            var delivered = false
+            while !delivered, Date() < deadline {
+                while let next = NSApp.nextEvent(matching: .any, until: Date().addingTimeInterval(0.02), inMode: .default, dequeue: true) {
+                    if next.type == .flagsChanged { delivered = true }
+                    NSApp.sendEvent(next)
+                }
+            }
+            pump()
+        }
+        let beforePress = pixels()
+        let layoutsC = SidebarDiagnostics.tabRowLayouts, reloadsC = SidebarDiagnostics.fullReloads
+        flags(.command)
+        let held = pixels()
+        flags([])
+        check(held == beforePress && SidebarDiagnostics.tabRowLayouts == layoutsC && SidebarDiagnostics.fullReloads == reloadsC,
+              "a Command press alone changes no sidebar view (pixels same \(held == beforePress), layouts \(SidebarDiagnostics.tabRowLayouts - layoutsC), reloads \(SidebarDiagnostics.fullReloads - reloadsC))")
+
         print("favorites")
         let profile = model.profiles[0]
         let fav = space.today.first!.tab!
