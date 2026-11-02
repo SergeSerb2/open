@@ -322,6 +322,7 @@ final class TranslateAdapter {
         "error": popover.view.errorText ?? NSNull()]
       if let f = popover.panelFrame { p["frame"] = [f.minX, f.minY, f.width, f.height] }
       p["window"] = popover.panelWindowNumber ?? 0
+      p["aboveWindow"] = popover.isAboveParent
       out["popover"] = p
     } else { out["popover"] = ["presented": false] }
     out["toasts"] = toastsShown

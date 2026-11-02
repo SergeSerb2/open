@@ -43,10 +43,13 @@ public final class TranslatePopoverView: NSView {
     /// Where the arrow tip points, in this view's coordinates (x only; the tip is at the top).
     public var arrowX: CGFloat = TranslateMetrics.width / 2 + TranslateMetrics.shadowMargin { didSet { needsLayout = true } }
     /// Offscreen renders cannot sample a material: draw `fallbackFill` instead.
-    public var usesMaterial = true { didSet { effect.isHidden = !usesMaterial; fallback.isHidden = usesMaterial } }
+    public var usesMaterial = true { didSet { effect.isHidden = !usesMaterial; needsDisplay = true } }
 
     private let effect = NSVisualEffectView()
-    private let fallback = CALayer(), rim = CAShapeLayer(), mask = CAShapeLayer(), shadowLayer = CALayer()
+    /// The shape in this (flipped) view's coordinates. The chrome is drawn in `draw(_:)` and the
+    /// material is masked with a flipped mask image, so the arrow points up in a window and in an
+    /// offscreen render alike (layer paths do not follow the view's flip in every host).
+    private var shape: CGPath?
     private let titleLabel = NSTextField(wrappingLabelWithString: "")
     private let errorLabel = NSTextField(wrappingLabelWithString: "")
     let primary = TranslatePopoverButton(primary: true)
@@ -58,13 +61,7 @@ public final class TranslatePopoverView: NSView {
         super.init(frame: .zero)
         wantsLayer = true
         effect.material = PopoverMaterial.material; effect.blendingMode = .behindWindow; effect.state = .active
-        effect.wantsLayer = true; effect.layer?.mask = mask
-        shadowLayer.shadowOpacity = PopoverMaterial.shadowOpacity; shadowLayer.shadowRadius = PopoverMaterial.shadowRadius
-        shadowLayer.shadowOffset = CGSize(width: 0, height: -PopoverMaterial.shadowOffsetY); shadowLayer.shadowColor = .black
-        layer?.addSublayer(shadowLayer)
         addSubview(effect)
-        layer?.addSublayer(fallback); fallback.isHidden = true
-        layer?.addSublayer(rim)
         for label in [titleLabel, errorLabel] { label.isSelectable = false; label.drawsBackground = false; label.isBordered = false; addSubview(label) }
         titleLabel.font = Typography.translateTitle.font
         titleLabel.textColor = .labelColor
@@ -85,6 +82,26 @@ public final class TranslatePopoverView: NSView {
 
     @available(*, unavailable) required init?(coder: NSCoder) { fatalError() }
     public override var isFlipped: Bool { true }
+
+    public override func draw(_ dirtyRect: NSRect) {
+        guard let shape, let ctx = NSGraphicsContext.current?.cgContext else { return }
+        let appearance = ContentAppearance(effectiveAppearance)
+        // Shadow outside the shape only (the material inside stays clear of it).
+        ctx.saveGState()
+        ctx.addRect(bounds); ctx.addPath(shape); ctx.clip(using: .evenOdd)
+        ctx.setShadow(offset: CGSize(width: 0, height: -PopoverMaterial.shadowOffsetY), blur: PopoverMaterial.shadowRadius * 2,
+                      color: NSColor.black.withAlphaComponent(CGFloat(PopoverMaterial.shadowOpacity)).cgColor)
+        ctx.addPath(shape); ctx.setFillColor(NSColor.black.cgColor); ctx.fillPath()
+        ctx.restoreGState()
+        if !usesMaterial {
+            ctx.addPath(shape)
+            ctx.setFillColor((appearance == .dark ? NSColor(white: 0.17, alpha: 1) : NSColor(white: 0.96, alpha: 1)).cgColor)
+            ctx.fillPath()
+        }
+    }
+
+    /// The 1 px rim draws above the material (the effect view is a subview).
+    private lazy var rimView: RimView = { let v = RimView(); addSubview(v, positioned: .above, relativeTo: effect); return v }()
 
     public func apply(_ content: TranslatePopoverContent) {
         self.content = content
@@ -119,19 +136,18 @@ public final class TranslatePopoverView: NSView {
         super.layout()
         let m = TranslateMetrics.self, body = bodyFrame
         let tip = CGPoint(x: min(max(arrowX, body.minX + m.cornerRadius + 16), body.maxX - m.cornerRadius - 16), y: m.shadowMargin)
-        // PopoverShape draws in a y-up space with the arrow below `body.minY`; this view is flipped,
-        // so draw in flipped coordinates directly: the arrow points up from the body's top edge.
+        // In flipped coordinates the tip (small y) sits above the body: the arrow points up.
         let path = PopoverShape.path(body: body, arrowTip: tip, radius: m.cornerRadius)
-        CATransaction.begin(); CATransaction.setDisableActions(true)
-        effect.frame = bounds; mask.frame = bounds; mask.path = path
-        fallback.frame = bounds
-        let fmask = CAShapeLayer(); fmask.path = path; fallback.mask = fmask
-        let appearance = ContentAppearance(effectiveAppearance)
-        fallback.backgroundColor = (appearance == .dark ? NSColor(white: 0.17, alpha: 1) : NSColor(white: 0.96, alpha: 1)).cgColor
-        shadowLayer.frame = bounds; shadowLayer.shadowPath = path
-        rim.frame = bounds; rim.path = path; rim.fillColor = nil
-        rim.strokeColor = SiteControlColors.rim.cgColor(appearance); rim.lineWidth = 1
-        CATransaction.commit()
+        if shape != path {
+            shape = path
+            effect.frame = bounds
+            effect.maskImage = NSImage(size: bounds.size, flipped: true) { _ in
+                NSColor.black.setFill(); NSBezierPath(cgPath: path).fill(); return true
+            }
+            needsDisplay = true
+        }
+        rimView.frame = bounds; rimView.shape = path
+        rimView.color = SiteControlColors.rim.resolved(ContentAppearance(effectiveAppearance)).nsColor
         let w = m.width - 2 * m.padding
         var y = body.minY + m.padding
         let titleHeight = titleLabel.sizeThatFits(CGSize(width: w, height: 1000)).height
@@ -204,6 +220,18 @@ public final class TranslatePopoverView: NSView {
     public var primaryFrame: CGRect { primary.frame }
     public var titleText: String { titleLabel.stringValue }
     public var errorText: String? { errorLabel.isHidden ? nil : errorLabel.stringValue }
+}
+
+@MainActor
+private final class RimView: NSView {
+    var shape: CGPath? { didSet { needsDisplay = true } }
+    var color: NSColor = .clear { didSet { needsDisplay = true } }
+    override var isFlipped: Bool { true }
+    override func hitTest(_ point: NSPoint) -> NSView? { nil }
+    override func draw(_ dirtyRect: NSRect) {
+        guard let shape, let ctx = NSGraphicsContext.current?.cgContext else { return }
+        ctx.addPath(shape); ctx.setStrokeColor(color.cgColor); ctx.setLineWidth(1); ctx.strokePath()
+    }
 }
 
 /// A popover button: the primary fills `Core.brandBlue` with white 13 pt Medium text; the plain
@@ -356,6 +384,14 @@ public final class TranslatePopoverController {
     }
     public var panelFrame: CGRect? { isPresented ? panel?.frame : nil }
     public var panelWindowNumber: Int? { isPresented ? panel?.windowNumber : nil }
+    /// The panel is on screen in front of its browser window (the window server's order, front to back).
+    public var isAboveParent: Bool {
+        guard isPresented, let panel, let parent, panel.isVisible else { return false }
+        let order = (CGWindowListCopyWindowInfo([.optionOnScreenOnly], kCGNullWindowID) as? [[String: Any]] ?? [])
+            .compactMap { $0[kCGWindowNumber as String] as? Int }
+        guard let p = order.firstIndex(of: panel.windowNumber), let w = order.firstIndex(of: parent.windowNumber) else { return false }
+        return p < w
+    }
 }
 
 private final class PopoverPanel: NSPanel {

@@ -7107,8 +7107,11 @@ def page_translate_checks(factory, results, tmp):
     """
     server, origin = _page_fixture_server()
     app = factory(urls=(origin + '/fr.html',), fresh=True, extra_env={'OPEN_AUTOMATION_TRANSLATE_BACKEND': 'fixture'})
-    hosts_key = 'open.translate.neverTranslateHosts'
-    saved_hosts = None
+    # Open's preferences domain is shared by every run: reset the translation keys at the start and
+    # restore them in `finally`.
+    translate_keys = ('open.translate.neverTranslateHosts', 'open.translate.enabled')
+    hosts_key = translate_keys[0]
+    saved = {}
     availability = None
 
     def st():
@@ -7128,8 +7131,9 @@ def page_translate_checks(factory, results, tmp):
           boldSame: document.getElementById('bold') === window.__boldRef, text: document.body.innerText }))()''')
 
     try:
-        saved_hosts = app.call('defaults', key=hosts_key)
-        app.call('defaults', key=hosts_key, value=None)
+        for key in translate_keys:
+            saved[key] = app.call('defaults', key=key)
+            app.call('defaults', key=key, value=None)
         app.call('window-frame', frame=[80, 60, 1360, 860])
         ws = app.call('window-state')
         app.call('window-focus', id=ws['id'], activate=True)
@@ -7156,7 +7160,8 @@ def page_translate_checks(factory, results, tmp):
 
         # The popover through the real status button, then Esc through the real key path.
         pop = app.call('translate', action='offer')['popover']
-        shot(app, 'page-translate-popover.png')
+        # The in-app snapshot does not stack child panels; capture the panel window alone.
+        shot(app, 'page-translate-popover.png', window=pop.get('window'))
         app.call('key', key='escape', route='app')
         closed = wait_until(lambda: not st()['popover']['presented'], timeout=3, step=.05)
         # Geometry (screen points, y up): the body stays 8 pt inside the window (the panel has a 14 pt
@@ -7166,7 +7171,7 @@ def page_translate_checks(factory, results, tmp):
         tip_y = f[1] + f[3] - 14
         button_bottom = win[1] + win[3] - (88 + 28)
         results['X1_popover_offer_and_escape'] = {'ok': pop['presented'] and pop['title'] == 'Translate this page to English?'
-            and pop['buttons'] == ['Translate', 'Options'] and bool(closed)
+            and pop['buttons'] == ['Translate', 'Options'] and bool(closed) and pop.get('aboveWindow') is True
             and f[0] + 14 >= win[0] + 8 - 0.5 and abs(tip_y - (button_bottom - 2)) <= 1,
             'popover': pop, 'window': win, 'tipY': tip_y, 'buttonBottom': button_bottom}
 
@@ -7273,7 +7278,8 @@ def page_translate_checks(factory, results, tmp):
     finally:
         try:
             app.call('filter', block=[])
-            app.call('defaults', key=hosts_key, value=saved_hosts)
+            for key, value in saved.items():
+                app.call('defaults', key=key, value=value)
         except Exception:
             pass
         app.quit()
