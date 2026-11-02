@@ -267,6 +267,10 @@
              "age": s.age, "lifetime": s.lifetime ?? NSNull(), "sticky": s.content.isSticky,
              "exiting": s.isExiting, "hovered": s.isHovered]
           }] as [String: Any]
+      case "quote-offer":
+        // The last Shared Quotes offer of the key window: page answer time (s) and whether it showed.
+        guard let controller = app.frontWindowController, let factory = app.hostFactories[controller.windowID] else { throw Failure(message: "no browser window") }
+        return factory.lastQuoteOffer
       case "toast-action":
         // Clicks the button of the visible toast at `index` (newest first, default 0) through the real button.
         guard let controller = app.frontWindowController else { throw Failure(message: "no browser window") }

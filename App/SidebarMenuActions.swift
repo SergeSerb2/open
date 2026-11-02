@@ -52,6 +52,8 @@ extension EngineWebContentHostFactory: @preconcurrency NSSharingServicePickerDel
 
   func sharingServicePicker(_ sharingServicePicker: NSSharingServicePicker, didChoose service: NSSharingService?) {
     guard sidebarSharePicker === sharingServicePicker else { return }
+    // A copy toast that opened this picker restarts its lifetime now.
+    shareToastHandle?.hold(false); shareToastHandle = nil
     #if OPEN_AUTOMATION
     stopShareDismissalForAutomation()
     sidebarShareRequest["closed"] = true

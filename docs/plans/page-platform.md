@@ -1582,3 +1582,11 @@ These replace the plan text where they differ; each cites its evidence.
 - Default theme in macOS Light: lavender `#D0C6F0` → `#C2B4E9` with dark text `#0D0D10` (S2 20/0048). Themed Spaces keep the §4.1.2 guess (tooltip fill ± 0.06 OKLab L, white text).
 - `ToastCenter.show(_:onAccessory:)` passes the `ToastHandle` to the accessory closure (an Undo dismisses its own toast); `ToastHandle.hold(_:)` keeps a toast while its share picker is open.
 - Renders: `features-render toast --variant … [--crop]`, committed under `docs/plans/page-platform/`.
+
+### Step 3 notes (Section 8)
+
+- The zoom percent is `round(100 × 1.2^zoomLevel)` read from the page right after the CEF zoom command (`App/Page/PageCommands.swift`); `WebContentHost.zoomPercent` is not added yet (no OpenKit caller needs it).
+- The copy toast's Share button opens the window's one `NSSharingServicePicker` (the sidebar Share uses the same one), anchored to the button; `ToastHandle.hold` keeps the toast until the picker closes.
+- Quote links (interim until EP-2): `String(getSelection())` in the main frame; an exact `#:~:text=` directive (ASCII letters, digits and `._~` stay, everything else is percent-encoded); more than 300 characters or no selection: Copy URL.
+- EP-5 needs no code: CEF's `CEF_ZOOM_COMMAND_RESET` runs `zoom::PageZoom::Zoom` (`cef/libcef/browser/browser_host_base.cc:397`), and its `PAGE_ZOOM_RESET` calls `WebContents::SetPageScale(1)` (`components/zoom/page_zoom.cc:81-83`). A build with `Emulation.resetPageScaleFactor` removed still passed Z2 on a sidebar tab and a Peek page, so the DevTools call was dropped (no DevTools session per Actual Size).
+- e2e `page`: T-E1, T-E2, Q1, Q3, Q4, Z1, Z2 (tab and Peek), Z4 pass; Q2 reports `BLOCKED: EP-2`, Z3 `DEFERRED` (U-S1).

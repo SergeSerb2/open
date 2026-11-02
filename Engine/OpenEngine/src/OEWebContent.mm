@@ -975,6 +975,9 @@ typedef void (^OEDevToolsCompletion)(NSDictionary* _Nullable, NSError* _Nullable
 
 - (void)resetZoom {
   if (_browser) {
+    // Also resets the pinch scale (page-platform EP-5, Arc's resetZoomAndScaleFactors,
+    // PG-3.2): CEF runs zoom::PageZoom::Zoom (cef/libcef/browser/browser_host_base.cc:397),
+    // whose PAGE_ZOOM_RESET calls WebContents::SetPageScale(1) (components/zoom/page_zoom.cc:81-83).
     _browser->GetHost()->Zoom(CEF_ZOOM_COMMAND_RESET);
     [self oe_notifyZoomChanged];
   }

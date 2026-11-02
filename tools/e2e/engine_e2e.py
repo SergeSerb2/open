@@ -3451,6 +3451,205 @@ def peek_checks(factory, results, tmp):
         app.quit()
 
 
+def page_fixture_server():
+    """Serves tools/e2e/fixtures/page-platform on an ephemeral 127.0.0.1 port (no external network)."""
+    import http.server
+    import threading
+    root = os.path.join(ROOT, "tools", "e2e", "fixtures", "page-platform")
+
+    class Handler(http.server.SimpleHTTPRequestHandler):
+        def __init__(self, *a, **kw):
+            super().__init__(*a, directory=root, **kw)
+
+        def log_message(self, *a):
+            pass
+
+    server = http.server.ThreadingHTTPServer(("127.0.0.1", 0), Handler)
+    threading.Thread(target=server.serve_forever, daemon=True).start()
+    return server, "http://127.0.0.1:%d" % server.server_port
+
+
+def page_newest_toast(app, title=None, timeout=3):
+    """The newest toast that is not leaving (with the anchor `panel`), once its title matches."""
+    def probe():
+        state = app.call("toasts")
+        live = [t for t in state["toasts"] if not t["exiting"]]
+        if live and (title is None or live[0]["title"] == title):
+            return dict(live[0], panel=state["panel"])
+        return None
+    return wait_until(probe, timeout=timeout, step=0.05)
+
+
+def page_toast_inset(toast):
+    """Top inset 8 and trailing inset 10 inside the web panel (PG-1.1)."""
+    panel, frame = toast["panel"], toast["frame"]
+    return abs(frame[1] - (panel[1] + 8)) < 0.5 and abs(frame[0] + frame[2] - (panel[0] + panel[2] - 10)) < 0.5
+
+
+def page_select(app, tab, selector):
+    """Selects one element's text in the page (main frame)."""
+    return app.eval(tab, "(() => { const e = document.querySelector(%s); const r = document.createRange();"
+                         " r.selectNodeContents(e); getSelection().removeAllRanges(); getSelection().addRange(r);"
+                         " return String(getSelection()); })()" % json.dumps(selector))
+
+
+def page_clear_selection(app, tab):
+    app.eval(tab, "getSelection().removeAllRanges(), true")
+
+
+def page_copy_rows(app, results, origin):
+    """T-E1, T-E2 (page-platform §8.3): Copy URL strips trackers, names what it copied, and shares."""
+    tab = new_tab(app, origin + "/en.html?utm_source=x&id=1#top")
+    app.call("wait", tab=tab)
+    app.call("menu-perform", id="copy-url")
+    copied = wait_until(lambda: app.call("pasteboard") == origin + "/en.html?id=1#top", timeout=3, step=0.05)
+    toast = page_newest_toast(app, "Copied a clean link without trackers") or {}
+    results["T-E1_copy_url_clean"] = {"ok": bool(copied) and toast.get("accessory") == "share"
+        and toast.get("frame", [0, 0, 0, 0])[3] == 46 and page_toast_inset(toast) if toast else False,
+        "pasteboard": app.call("pasteboard"), "toast": toast}
+    app.call("navigate", tab=tab, url=origin + "/en.html?id=1")
+    app.call("wait", tab=tab)
+    app.call("menu-perform", id="copy-url")
+    plain = wait_until(lambda: app.call("pasteboard") == origin + "/en.html?id=1", timeout=3, step=0.05)
+    toast = page_newest_toast(app, "Copied Current URL") or {}
+    # The real Share button opens the system picker anchored to it; the automation-only dismissal
+    # policy closes it again (the picker is a native menu no check may leave open).
+    app.call("sidebar-share", dismiss=True)
+    try:
+        acted = app.call("toast-action", index=0)
+        share = app.call("sidebar-share", waitClosed=True)
+    finally:
+        app.call("sidebar-share", dismiss=False, close=True)
+    results["T-E2_copy_url_share"] = {"ok": bool(plain) and bool(toast) and acted and share.get("node") == "toast"
+        and share.get("url") == origin + "/en.html?id=1" and share.get("servicesRequested") is True
+        and share.get("closed") is True and not share.get("pending"), "toast": toast, "share": share}
+    app.call("close", tab=tab)
+
+
+def page_quote_rows(app, results, origin):
+    """Q1–Q4 (page-platform §8.3): Copy URL as Quote with the interim selection path (until EP-2)."""
+    tab = new_tab(app, origin + "/quote.html")
+    app.call("wait", tab=tab)
+    page_clear_selection(app, tab)
+    # Q3: no selection behaves as Copy URL (lead Q11).
+    app.call("menu-perform", id="copy-url-quote")
+    plain = wait_until(lambda: app.call("pasteboard") == origin + "/quote.html", timeout=3, step=0.05)
+    toast = page_newest_toast(app, "Copied Current URL") or {}
+    results["Q3_quote_without_selection"] = {"ok": bool(plain) and toast.get("accessory") == "share",
+        "pasteboard": app.call("pasteboard"), "toast": toast}
+    # Q1: a unique sentence gives a #:~:text= link that scrolls to it in a new tab.
+    selected = page_select(app, tab, "#unique")
+    app.call("menu-perform", id="copy-url-quote")
+    link = wait_until(lambda: (lambda p: p if "#:~:text=" in p else None)(app.call("pasteboard")), timeout=3, step=0.05) or ""
+    toast = page_newest_toast(app, "Copied Quote Link") or {}
+    opened = new_tab(app, link) if link else None
+    landed = None
+    if opened:
+        app.call("wait", tab=opened)
+        landed = wait_until(lambda: (lambda s: s if s["scrollY"] > 3000 and s["visible"] else None)(app.eval(opened,
+            "(() => { const r = document.getElementById('unique').getBoundingClientRect();"
+            " return {scrollY: scrollY, visible: r.top >= 0 && r.bottom <= innerHeight, hash: location.hash}; })()")),
+            timeout=5, step=0.1)
+        app.call("close", tab=opened)
+    results["Q1_quote_link_scrolls"] = {"ok": selected.strip() == "A unique sentence far down the page for the quote link."
+        and link.startswith(origin + "/quote.html#:~:text=") and toast.get("symbol") == "quote.bubble.fill"
+        and toast.get("accessory") == "none" and bool(landed) and landed.get("hash") == "",
+        "link": link, "toast": toast, "landed": landed}
+    # Q2: an ambiguous sentence needs prefix/suffix context from Chromium's generator (EP-2).
+    results["Q2_quote_context"] = {"status": "BLOCKED", "reason": "EP-2 (the interim link is an exact text directive without context)"}
+    # Q4: with Shared Quotes on (the default) and a selection, Copy URL offers the quote link in place.
+    # Real-time budget (150 ms for the page's answer): up to 3 attempts, with the lateness and load.
+    attempts = []
+    offered = None
+    for attempt in range(3):
+        page_select(app, tab, "#unique")
+        app.call("menu-perform", id="copy-url")
+        offered = page_newest_toast(app, "Copied Current URL", timeout=2)
+        offered = wait_until(lambda: (lambda t: t if t and t.get("subtitle") else None)(page_newest_toast(app, timeout=0.2)), timeout=1, step=0.05)
+        report = app.call("quote-offer")
+        attempts.append({"attempt": attempt + 1, "elapsed": report.get("elapsed"), "shown": report.get("shown"),
+                         "load": os.getloadavg()})
+        print("Q4 attempt %d: answer after %.3f s (budget 0.150), load %s" % (attempt + 1, report.get("elapsed") or -1,
+              " ".join("%.1f" % v for v in os.getloadavg())), flush=True)
+        if offered:
+            break
+    acted = app.call("toast-action", index=0) if offered else False
+    quote = wait_until(lambda: (lambda p: p if "#:~:text=" in p else None)(app.call("pasteboard")), timeout=3, step=0.05)
+    results["Q4_copy_url_offers_quote"] = {"ok": bool(offered) and offered.get("subtitle") == "Share a link directly to this text instead?"
+        and offered.get("accessory") == "copy quote link" and acted and bool(quote), "toast": offered, "attempts": attempts,
+        "pasteboard": app.call("pasteboard")}
+    page_clear_selection(app, tab)
+    app.call("close", tab=tab)
+
+
+def page_zoom_rows(app, results, origin):
+    """Z1–Z4 (page-platform §8.3): zoom toasts, pinch reset on Actual Size (EP-5), no Chromium zoom bubble."""
+    tab = new_tab(app, origin + "/zoom.html")
+    app.call("wait", tab=tab)
+    windows_before = {w.get("number") for w in app.call("windows")}
+    titles = []
+    for command in ("zoom-in", "zoom-in", "zoom-actual-size"):
+        app.call("menu-perform", id=command)
+        expected = {"zoom-in": ["110%", "125%"][len(titles) % 2], "zoom-actual-size": "100%"}[command]
+        toast = page_newest_toast(app, expected) or {}
+        titles.append(toast.get("title"))
+    results["Z1_zoom_toasts"] = {"ok": titles == ["110%", "125%", "100%"], "titles": titles}
+    # Z4: Chrome's own zoom bubble never opens a window (hosted tabs have no location bar).
+    new_windows = [w for w in app.call("windows") if w.get("number") not in windows_before and w.get("visible")]
+    results["Z4_no_chromium_zoom_bubble"] = {"ok": not new_windows, "newWindows": new_windows}
+    # Z2: a synthetic pinch scales the visual viewport; Actual Size resets it (EP-5).
+    app.call("devtools", tab=tab, method="Input.synthesizePinchGesture",
+             params={"x": 200, "y": 200, "scaleFactor": 2, "relativeSpeed": 800, "gestureSourceType": "touch"})
+    pinched = wait_until(lambda: (lambda s: s if s > 1.5 else None)(app.eval(tab, "visualViewport.scale")), timeout=5, step=0.1)
+    # Control: the pinch scale stays until a command resets it.
+    time.sleep(1)
+    held = app.eval(tab, "visualViewport.scale")
+    app.call("menu-perform", id="zoom-actual-size")
+    reset = wait_until(lambda: abs(app.eval(tab, "visualViewport.scale") - 1) < 0.01, timeout=5, step=0.1)
+    results["Z2_pinch_then_actual_size"] = {"ok": bool(pinched) and held > 1.5 and bool(reset), "pinched": pinched, "heldAfter1s": held,
+        "after": app.eval(tab, "visualViewport.scale")}
+    results["Z3_smart_zoom"] = {"status": "DEFERRED", "reason": "no synthetic smart-zoom path; user check U-S1"}
+    # Z2 on a Peek page (an Alloy page in a Chrome-style window): Actual Size targets the top Peek page.
+    app.call("pin", tab=tab)
+    app.call("peek-open", tab=tab, url=origin + "/zoom.html#peek")
+    peek = wait_until(lambda: (lambda s: s["stack"][-1]["content"] if s["stack"] and s["stack"][-1]["content"] else None)(app.call("peek-state")), timeout=5, step=0.05)
+    peek_pinched = peek_reset = None
+    peek_held = 0
+    if peek:
+        app.call("wait", tab=peek)
+        app.call("devtools", tab=peek, method="Input.synthesizePinchGesture",
+                 params={"x": 200, "y": 200, "scaleFactor": 2, "relativeSpeed": 800, "gestureSourceType": "touch"})
+        peek_pinched = wait_until(lambda: (lambda s: s if s > 1.5 else None)(app.eval(peek, "visualViewport.scale")), timeout=5, step=0.1)
+        time.sleep(1)
+        peek_held = app.eval(peek, "visualViewport.scale")
+        app.call("menu-perform", id="zoom-actual-size")
+        peek_reset = wait_until(lambda: abs(app.eval(peek, "visualViewport.scale") - 1) < 0.01, timeout=5, step=0.1)
+    app.call("peek-close")
+    results["Z2_peek_pinch_then_actual_size"] = {"ok": bool(peek) and bool(peek_pinched) and peek_held > 1.5 and bool(peek_reset),
+        "pinched": peek_pinched, "heldAfter1s": peek_held, "reset": bool(peek_reset)}
+    app.call("close", tab=tab)
+
+
+def page_checks(factory, results, tmp):
+    """Suite `page` (page-platform §8.3). One function per row group; later steps add groups."""
+    server, origin = page_fixture_server()
+    app = factory(urls=(), fresh=True)
+    shared_quotes = None
+    try:
+        # Shared defaults domain: set the one key this suite reads, restore it in `finally`.
+        shared_quotes = app.call("defaults", key="open.advanced.enableSharedQuotes")
+        app.call("defaults", key="open.advanced.enableSharedQuotes", value=True)
+        page_copy_rows(app, results, origin)
+        page_quote_rows(app, results, origin)
+        page_zoom_rows(app, results, origin)
+    finally:
+        try:
+            app.call("defaults", key="open.advanced.enableSharedQuotes", value=shared_quotes)
+        finally:
+            app.quit()
+            server.shutdown()
+
+
 def sidebar_checks(factory, results, tmp):
     app = factory(urls=(), fresh=True)
     try:
@@ -7107,7 +7306,7 @@ def main():
     ap.add_argument("--engine-fingerprint-only", action="store_true", help="verify built engine artifacts and exit without launching Open")
     ap.add_argument("--extensions", default=os.path.join(ROOT, ".re", "ext", "unpacked"))
     ap.add_argument("--only", choices=["shell", "extensions", "features", "measure", "tabstrip", "window", "sidebar", "peek",
-                                       "commandbar", "app-actions", "actions", "profiles", "sidebar-completion", "toolbar", "numbering"])
+                                       "commandbar", "app-actions", "actions", "profiles", "sidebar-completion", "toolbar", "numbering", "page"])
     ap.add_argument("--window-chrome-only", action="store_true", help="run only the window-chrome follow-up flows in the window suite")
     ap.add_argument("--keep", action="store_true",
                     help="keep this run's data root, cache root and scratch folder (paths printed at the end)")
@@ -7286,6 +7485,9 @@ def main():
         elif opts.only == "peek":
             results["peek"] = CheckedResults(tracker)
             peek_checks(factory, results["peek"], tmp)
+        elif opts.only == "page":
+            results["page"] = CheckedResults(tracker)
+            page_checks(factory, results["page"], tmp)
         elif opts.only == "profiles":
             results["profiles"] = {}
             profiles_checks(factory, results["profiles"], tmp, opts.config)
@@ -7359,14 +7561,14 @@ def main():
                                     else opts.config.lower()))
     with open(os.path.join(OUT, name), "w") as f:
         json.dump(results, f, indent=2, sort_keys=True)
-    for group in ("shell", "extensions", "features", "measure", "tabstrip", "window", "sidebar", "peek", "commandbar", "app-actions", "actions", "profiles", "sidebar-completion", "toolbar", "numbering"):
+    for group in ("shell", "extensions", "features", "measure", "tabstrip", "window", "sidebar", "peek", "commandbar", "app-actions", "actions", "profiles", "sidebar-completion", "toolbar", "numbering", "page"):
         for k, v in results.get(group, {}).items():
             if isinstance(v, dict) and "ok" in v:
                 print("%-24s %s" % (k, "PASS" if v.get("ok") else "FAIL"))
             elif isinstance(v, dict) and v.get("status") in ("SKIP", "BLOCKED", "INTERRUPTED", "DEFERRED"):
                 print("%-24s %s: %s" % (k, v["status"], v.get("reason", "")))
     print("wrote", os.path.join(OUT, name))
-    failures = [k for group in ("shell", "extensions", "features", "measure", "tabstrip", "window", "sidebar", "peek", "commandbar", "app-actions", "actions", "sidebar-completion", "toolbar", "numbering")
+    failures = [k for group in ("shell", "extensions", "features", "measure", "tabstrip", "window", "sidebar", "peek", "commandbar", "app-actions", "actions", "sidebar-completion", "toolbar", "numbering", "page")
                 for k, v in results.get(group, {}).items() if isinstance(v, dict) and v.get("ok") is False]
     if failures or not results["cleanup"]["ok"]:
         sys.exit(1)

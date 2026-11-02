@@ -50,10 +50,16 @@ final class EngineWebContentHostFactory: NSResponder, WebContentHostFactory {
   var hasFindSelectionTask: Bool { findSelectionTask != nil }
   var pendingRenameAlert: NSAlert?
   var sidebarSharePicker: NSSharingServicePicker?
+  /// The copy toast whose Share picker is open: it stays until the picker closes (page-platform §4.2.2).
+  var shareToastHandle: ToastHandle?
+  /// Page-command engine work (selection reads for the quote offer and Copy URL as Quote).
+  var pageTasks: [UUID: Task<Void, Never>] = [:]
   var spaceProfileMenu: NSMenu?
   #if OPEN_AUTOMATION
   var dismissSidebarShareForAutomation = false
   var sidebarShareRequest: [String: Any] = [:]
+  /// The last Shared Quotes offer: how long the page took to answer, whether it showed.
+  var lastQuoteOffer: [String: Any] = [:]
   var sidebarShareDismissTimerForAutomation: Timer?
   var sidebarShareDismissAttemptsForAutomation = 0
   var profileMenuResponseForAutomation: String?
@@ -428,7 +434,7 @@ final class EngineWebContentHostFactory: NSResponder, WebContentHostFactory {
     case .reload: guard let page = selectedContent else { return false }; page.reload(); return true
     case .stopLoading: guard let page = selectedContent else { return false }; page.stopLoading(); return true
     case .copyCurrentURL:
-      guard let url = selectedContent?.url ?? selectedTab?.url else { return false }; copyCleanURL(url); return true
+      return copyURL()
     case .toggleMute(let id):
       guard let tab = model.tab(id: id) else { return false }; model.setMuted(tabID: id, muted: !tab.isMuted); hosts[id]?.content.isMuted = tab.isMuted; app.scheduleSave(); return true
     case .resetToPinnedURL(let id):
@@ -536,6 +542,9 @@ final class EngineWebContentHostFactory: NSResponder, WebContentHostFactory {
     controller?.existingTabSwitcher?.cancel()
     for task in saveCaptureTasks.values { task.cancel() }
     saveCaptureTasks.removeAll()
+    for task in pageTasks.values { task.cancel() }
+    pageTasks.removeAll()
+    shareToastHandle = nil
     findSelectionTask?.cancel(); findSelectionTask = nil
     pendingSaveChoice = nil
     if let panel = pendingSavePanel { window?.endSheet(panel, returnCode: .cancel); panel.orderOut(nil) }
