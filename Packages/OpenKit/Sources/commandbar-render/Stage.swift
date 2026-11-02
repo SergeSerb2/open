@@ -175,6 +175,7 @@ final class Stage {
             OffscreenRenderer.settle(root)
             image = OffscreenRenderer().snapshot(root, scale: scale)
             if looksValid(image, scale: scale) { return image }
+            FileHandle.standardError.write(Data("commandbar-render: render did not validate; retrying\n".utf8))
         }
         FileHandle.standardError.write(Data("commandbar-render: render did not validate after retries\n".utf8))
         return image
@@ -186,12 +187,13 @@ final class Stage {
             let i = Int(y * scale) * image.bytesPerRow + Int(x * scale) * 4
             return [Double(ptr[i]), Double(ptr[i + 1]), Double(ptr[i + 2])]
         }
-        // Page corner: the flat backdrop color (image backdrops: any non-garbage pixel).
-        let corner = px(4, 4)
+        // Page corners: the flat backdrop color (image backdrops: any non-garbage pixel). The bottom
+        // corners too: an incomplete read-back leaves the lower part of the image unwritten (item 13).
         if root.backdrop.image == nil, root.bottomColor == nil {
             let c = root.backdrop.color
             let expected = [c.red * 255, c.green * 255, c.blue * 255]
-            if zip(corner, expected).contains(where: { abs($0 - $1) > 3 }) { return false }
+            let h = CGFloat(image.height) / scale - 4, w = CGFloat(image.width) / scale - 4
+            for corner in [px(4, 4), px(4, h), px(w, h)] where zip(corner, expected).contains(where: { abs($0 - $1) > 3 }) { return false }
         }
         guard controller.isPresented else { return true }
         // Panel fill in the input row's empty middle: a dark, opaque-looking material.
