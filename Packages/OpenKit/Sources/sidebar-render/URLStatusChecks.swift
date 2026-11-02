@@ -37,8 +37,8 @@ enum URLStatusChecks {
         func settle() { scene.needsLayout = true; OffscreenRenderer.settle(scene, runLoop: 0.01) }
         settle()
         let favoritesBefore = sidebar.chromeGeometry.favorites
-        check(!sidebar.urlStatusState.shown && favoritesBefore.minY == FavoritesMetrics.sectionTop,
-              "S-US1 no offer: no status button; Favorites at y \(FavoritesMetrics.sectionTop)")
+        check(!sidebar.urlStatusState.shown && !sidebar.urlStatusButtonMade && favoritesBefore.minY == FavoritesMetrics.sectionTop,
+              "S-US1 no offer: no status button view is made; Favorites at y \(FavoritesMetrics.sectionTop)")
         var rows: [String] = [], ok = true
         for w: CGFloat in [228, 300] {
             context.sidebarWidthOverride = w

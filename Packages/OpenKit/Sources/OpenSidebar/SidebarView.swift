@@ -26,8 +26,18 @@ public final class SidebarView: NSView {
 
     let toolbar: ToolbarView
     let urlField: URLFieldView
-    /// "Translation Available" under the URL field (page-platform §4.7.3).
-    let urlStatusButton: URLStatusButton
+    /// "Translation Available" under the URL field (page-platform §4.7.3). Made the first time the
+    /// App sets `context.urlStatus` and kept afterwards: most windows never show it, so it costs
+    /// nothing until then.
+    private(set) var urlStatusButtonIfMade: URLStatusButton?
+    var urlStatusButton: URLStatusButton {
+        if let urlStatusButtonIfMade { return urlStatusButtonIfMade }
+        let button = URLStatusButton(context: context)
+        button.isHidden = true
+        addSubview(button, positioned: .above, relativeTo: urlField)
+        urlStatusButtonIfMade = button
+        return button
+    }
     private var urlStatusShown = false
     /// The last push-down animations (position of Favorites and the pager), for checks.
     public private(set) var urlStatusAnimations: [String: CAAnimation] = [:]
@@ -55,8 +65,6 @@ public final class SidebarView: NSView {
         let menus = SidebarMenus(context: context)
         toolbar = ToolbarView(context: context)
         urlField = URLFieldView(context: context)
-        urlStatusButton = URLStatusButton(context: context)
-        urlStatusButton.isHidden = true
         favorites = FavoritesView(context: context)
         pager = SpacePagerView(context: context, menus: menus)
         bottomBar = BottomBarView(context: context, menus: menus)
@@ -78,7 +86,7 @@ public final class SidebarView: NSView {
         favorites.menus = renaming
         pager.menus = renaming
         bottomBar.menus = renaming
-        for v in [pager, favorites, urlField, urlStatusButton, toolbar, bottomBar, mediaControls] as [NSView] { addSubview(v) }
+        for v in [pager, favorites, urlField, toolbar, bottomBar, mediaControls] as [NSView] { addSubview(v) }
         observerID = context.model.addObserver { [weak self] change in self?.apply(change) }
         loops.append(ObservationLoop(read: { [weak self] in
             guard let self else { return }
@@ -139,7 +147,7 @@ public final class SidebarView: NSView {
         // The status button pushes everything under the URL field down 34 pt (§4.7.3).
         let statusShown = tracked({ context.urlStatusVisible }) { [weak self] in self?.needsLayout = true }
         let oldFavorites = favorites.frame, oldPagerFrame = pager.frame
-        urlStatusButton.frame = URLStatusMetrics.frame(sidebarWidth: w)
+        if statusShown || urlStatusButtonIfMade != nil { urlStatusButton.frame = URLStatusMetrics.frame(sidebarWidth: w) }
         let favTop = toolbarShown ? URLFieldMetrics.y : FavoritesMetrics.sectionTop + (statusShown ? URLStatusMetrics.pushDown : 0)
         let favH = favoritesHeight
         favorites.frame = CGRect(x: 0, y: favTop, width: w, height: favH)
@@ -637,10 +645,13 @@ extension SidebarView {
     public var urlFieldVisible: Bool { !urlField.isHidden }
     /// The status button under the URL field: frame in sidebar coordinates, shown, drawn title.
     public var urlStatusState: (frame: CGRect, shown: Bool, title: String) {
-        (urlStatusButton.frame, urlStatusShown && !urlStatusButton.isHidden, urlStatusButton.currentTitle)
+        guard let button = urlStatusButtonIfMade else { return (URLStatusMetrics.frame(sidebarWidth: bounds.width), false, "") }
+        return (button.frame, urlStatusShown && !button.isHidden, button.currentTitle)
     }
     /// A click on the status button, as the real button sends it.
-    @discardableResult public func pressURLStatus() -> Bool { urlStatusShown ? urlStatusButton.press() : false }
+    @discardableResult public func pressURLStatus() -> Bool { urlStatusShown ? urlStatusButtonIfMade?.press() ?? false : false }
+    /// The status button exists (made on the first offer, page-platform §4.7.3).
+    public var urlStatusButtonMade: Bool { urlStatusButtonIfMade != nil }
 
     /// Toolbar row and bottom bar opacity (a Peek's dim lowers both).
     public var chromeOpacity: (toolbar: CGFloat, bottomBar: CGFloat) { (toolbar.alphaValue, bottomBar.alphaValue) }

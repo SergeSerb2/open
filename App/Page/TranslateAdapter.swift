@@ -81,13 +81,16 @@ final class TranslateAdapter {
     }
     documents[id] = nil
     undoDriven.remove(id)
+    // ObjectIdentifier values are reused after a page is freed: drop everything keyed by it.
+    lastTarget[id] = nil
     if popoverSession == id { popover?.dismiss() }
     if focused === content { focused = nil; syncStatus() }
   }
 
   func closeAll() {
     for content in sessions.keys { if let s = sessions[content] { factory.app.undoManager.removeAllActions(withTarget: s); s.close() } }
-    sessions.removeAll(); documents.removeAll(); popover?.dismiss(); languagesTask?.cancel()
+    sessions.removeAll(); documents.removeAll(); lastTarget.removeAll(); undoDriven.removeAll()
+    popover?.dismiss(); languagesTask?.cancel()
   }
 
   // MARK: Sessions
