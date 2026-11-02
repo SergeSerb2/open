@@ -7,9 +7,9 @@ import OpenSuggest
 /// rows, so a selection change redraws only the two rows whose text color changes.
 @MainActor
 final class ResultRowView: NSView {
-    var row: CommandBarRow? { didSet { if row != oldValue { needsDisplay = true } } }
-    var isSelected = false { didSet { if isSelected != oldValue { needsDisplay = true } } }
-    var theme = CommandBarTheme.default { didSet { if theme != oldValue { needsDisplay = true } } }
+    var row: CommandBarRow? { didSet { if row != oldValue { needsDisplay = true; updateSplitPlate() } } }
+    var isSelected = false { didSet { if isSelected != oldValue { needsDisplay = true; updateSplitPlate() } } }
+    var theme = CommandBarTheme.default { didSet { if theme != oldValue { needsDisplay = true; updateSplitPlate() } } }
     weak var favicons: CommandBarFaviconSource?
     /// Diagnostics: draw passes since creation.
     private(set) var drawCount = 0
@@ -29,7 +29,8 @@ final class ResultRowView: NSView {
 
     override func isAccessibilityElement() -> Bool { row != nil }
     override func accessibilityRole() -> NSAccessibility.Role? { .button }
-    override func accessibilityLabel() -> String? { row?.title }
+    /// A Split View row reads its pane titles, comma-separated (plan §4.2.2).
+    override func accessibilityLabel() -> String? { row.map { $0.titleParts.isEmpty ? $0.title : $0.titleParts.joined(separator: ", ") } }
     override func accessibilityValue() -> Any? {
         guard let row else { return nil }
         let accessory: String
@@ -89,6 +90,11 @@ final class ResultRowView: NSView {
             textMaxX = x - m.accessoryTextGap
         }
 
+        if !row.titleParts.isEmpty, case .split(let panes, _) = row.icon {
+            drawSplitTitle(row.titleParts, x: Self.splitPlateRect(panes: panes.count, row.icon).maxX + m.splitTitleGap, maxX: textMaxX, in: ctx)
+            return
+        }
+
         // Title, then " — subtitle".
         let titleColor = isSelected ? CommandBarRole.rowTitleSelected : CommandBarRole.rowTitle
         let subColor = isSelected ? CommandBarRole.subtitleSelected : CommandBarRole.secondaryText
@@ -125,6 +131,8 @@ final class ResultRowView: NSView {
             }
         case .symbol(let name, let plate):
             drawSymbol(name, plate: plate, in: ctx)
+        case .split:
+            break // sublayers (updateSplitPlate)
         case .emoji(let e):
             let font = NSFont.systemFont(ofSize: 14)
             let s = NSAttributedString(string: e, attributes: [.font: font])
@@ -132,6 +140,139 @@ final class ResultRowView: NSView {
             NSGraphicsContext.saveGraphicsState()
             s.draw(at: NSPoint(x: frame.midX - b.width / 2, y: frame.midY - b.height / 2))
             NSGraphicsContext.restoreGraphicsState()
+        }
+    }
+
+    // MARK: Split View row (CC-13, CC-14)
+
+    /// The plate: 30×30 for two side-by-side panes or any stacked split, 15 pt per pane for 3–4 side by side.
+    static func splitPlateRect(panes: Int, _ icon: CommandBarIcon) -> CGRect {
+        let m = CommandBarMetrics.self
+        var vertical = false
+        if case .split(_, let v) = icon { vertical = v }
+        let width = vertical ? m.splitPlateHeight : max(m.splitPlateHeight, m.splitCellWidth * CGFloat(max(2, panes)))
+        return CGRect(x: m.splitPlateOrigin.x, y: m.splitPlateOrigin.y, width: width, height: m.splitPlateHeight)
+    }
+
+    /// Cells of the plate in pane order, with the 1 pt gaps between them left out.
+    static func splitCells(_ plate: CGRect, panes: Int, vertical: Bool) -> [CGRect] {
+        let n = max(1, panes), gap = CommandBarMetrics.splitCellGap
+        let length = ((vertical ? plate.height : plate.width) - gap * CGFloat(n - 1)) / CGFloat(n)
+        return (0..<n).map { i in
+            let start = CGFloat(i) * (length + gap)
+            return vertical ? CGRect(x: plate.minX, y: plate.minY + start, width: plate.width, height: length)
+                            : CGRect(x: plate.minX + start, y: plate.minY, width: length, height: plate.height)
+        }
+    }
+
+    /// The Split View plate as Core Animation layers: one rounded cell per pane with a 1 pt gap
+    /// between cells (the row background shows through, A0120), and one icon layer per cell. Layers
+    /// rather than drawing: the cells need no clear-blend punch-out, and pane icons update alone.
+    private var splitLayers: [CALayer] = []
+
+    private func updateSplitPlate() {
+        guard case .split(let panes, let vertical)? = row?.icon, let host = layer else {
+            if !splitLayers.isEmpty { splitLayers.forEach { $0.removeFromSuperlayer() }; splitLayers = [] }
+            return
+        }
+        let m = CommandBarMetrics.self
+        let plate = Self.splitPlateRect(panes: panes.count, .split(panes, vertical: vertical))
+        let cells = Self.splitCells(plate, panes: panes.count, vertical: vertical)
+        let scale = window?.backingScaleFactor ?? host.contentsScale
+        let fill = (isSelected ? RGBA.white(1) : CommandBarRole.plate).cgColor
+        let size = vertical ? min(m.splitPaneIconSize, (cells.first?.height ?? 30) - 4) : m.splitPaneIconSize
+        CATransaction.begin()
+        CATransaction.setDisableActions(true)
+        splitLayers.forEach { $0.removeFromSuperlayer() }
+        splitLayers = []
+        for (i, (icon, cell)) in zip(panes, cells).enumerated() {
+            let c = CALayer()
+            // Flipped view: layer y grows down like the view's.
+            c.frame = cell
+            c.backgroundColor = fill
+            c.cornerRadius = m.splitPlateRadius
+            c.cornerCurve = .continuous
+            // Only the plate's outer corners are round.
+            let first = i == 0, last = i == cells.count - 1
+            var corners: CACornerMask = []
+            if vertical {
+                if first { corners.formUnion([.layerMinXMinYCorner, .layerMaxXMinYCorner]) }
+                if last { corners.formUnion([.layerMinXMaxYCorner, .layerMaxXMaxYCorner]) }
+            } else {
+                if first { corners.formUnion([.layerMinXMinYCorner, .layerMinXMaxYCorner]) }
+                if last { corners.formUnion([.layerMaxXMinYCorner, .layerMaxXMaxYCorner]) }
+            }
+            c.maskedCorners = corners
+            let image = paneImage(icon, size: size)
+            if let image {
+                let iconLayer = CALayer()
+                iconLayer.frame = CGRect(x: (cell.width - size) / 2, y: (cell.height - size) / 2, width: size, height: size)
+                iconLayer.contents = image.layerContents(forContentsScale: scale)
+                iconLayer.contentsScale = scale
+                iconLayer.contentsGravity = .resizeAspect
+                c.addSublayer(iconLayer)
+            }
+            host.addSublayer(c)
+            splitLayers.append(c)
+        }
+        CATransaction.commit()
+    }
+
+    private func paneImage(_ icon: CommandBarIcon, size: CGFloat) -> NSImage? {
+        switch icon {
+        case .favicon(let url, let fallback):
+            if let image = favicons?.favicon(for: url, loaded: { [weak self] u in
+                // Refresh only if this row still shows that pane (the view may hold another row by now).
+                if case .split(let current, _)? = self?.row?.icon, current.contains(.favicon(u, fallback: fallback)) { self?.updateSplitPlate() }
+            }) {
+                return image
+            }
+            return SymbolCache.image(fallback, size: size, weight: BarGlyph.rowSymbolWeight, color: isSelected ? theme.focus : CommandBarRole.plateGlyph)
+        case .symbol(let name, _):
+            return SymbolCache.image(name, size: size, weight: BarGlyph.rowSymbolWeight, color: isSelected ? theme.focus : CommandBarRole.plateGlyph)
+        case .emoji(let e):
+            let font = NSFont.systemFont(ofSize: size)
+            let text = NSAttributedString(string: e, attributes: [.font: font])
+            let b = text.size()
+            return NSImage(size: NSSize(width: max(size, b.width), height: max(size, b.height)), flipped: false) { r in
+                text.draw(at: NSPoint(x: r.midX - b.width / 2, y: r.midY - b.height / 2)); return true
+            }
+        case .split:
+            return nil
+        }
+    }
+
+    override func viewDidChangeBackingProperties() {
+        super.viewDidChangeBackingProperties()
+        updateSplitPlate()
+    }
+
+    /// Pane titles with a 1 pt rule between them. Too long: the last part truncates first, then earlier ones. guess.
+    private func drawSplitTitle(_ parts: [String], x: CGFloat, maxX: CGFloat, in ctx: CGContext) {
+        let m = CommandBarMetrics.self
+        let color = (isSelected ? CommandBarRole.rowTitleSelected : CommandBarRole.rowTitle).cgColor
+        let font = BarFont.row
+        var lines = parts.map { TextLine($0, font: font, color: color) }
+        let separator = m.splitRuleGapBefore + m.splitRuleWidth + m.splitRuleGapAfter
+        var excess = lines.reduce(0) { $0 + $1.width } + separator * CGFloat(max(0, lines.count - 1)) - (maxX - x)
+        var k = lines.count - 1
+        while excess > 0, k >= 0 {
+            let w = lines[k].width
+            let target = max(min(w, 24), w - excess)
+            lines[k] = TextLine(parts[k], font: font, color: color).truncated(to: target, font: font, color: color)
+            excess -= w - lines[k].width
+            k -= 1
+        }
+        var cursor = x
+        let rule = (isSelected ? RGBA.white(0.5) : CommandBarRole.splitTitleRule).cgColor // guess on the selected row
+        for (i, line) in lines.enumerated() {
+            if i > 0 {
+                ctx.setFillColor(rule)
+                ctx.fill(CGRect(x: cursor + m.splitRuleGapBefore, y: m.splitRuleTop, width: m.splitRuleWidth, height: m.splitRuleHeight))
+                cursor += separator
+            }
+            line.draw(at: cursor, baseline: m.textBaseline, in: ctx)
+            cursor += line.width
         }
     }
 

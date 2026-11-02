@@ -10,7 +10,7 @@ import OpenSuggest
 @MainActor
 enum Scenes {
     static let names = ["empty", "typing-git", "cmd-l", "space-hint", "site-chip", "site-search", "calculator", "actions", "scrolled", "privacy-footer",
-                        "completion", "completion-case", "completion-accepted"]
+                        "completion", "completion-case", "completion-accepted", "split-row", "split-row-selected"]
     /// Stands in for Open's privacy page in renders (the App has none yet, so its footer hides line 2).
     static let samplePrivacyURL = URL(string: "https://open.example/privacy")!
 
@@ -79,6 +79,11 @@ enum Scenes {
             stage.type("git")
             stage.settle()
             for _ in 0..<6 { stage.key(.down) }
+        case "split-row": // empty Cmd+T: the split "Spec draft" | "Review notes" as one row (A0120 shape)
+            c.present(request(env, mode: .newTab))
+        case "split-row-selected": // "review": the split row selected (white plate, gap shows the fill)
+            c.present(request(env, mode: .newTab))
+            stage.type("review")
         case "completion": // "gith" + the selected "ub.com" (F0043 shape)
             c.present(request(env, mode: .newTab))
             stage.type("gith")
@@ -115,6 +120,10 @@ struct SceneFile: Decodable {
         var icon: String
         /// "switch:<label>", "keys:⌘,T"
         var accessory: String?
+        /// A Split View row: pane titles (drawn with the rule) and pane icons ("favicon:<url>", …).
+        var titleParts: [String]?
+        var paneIcons: [String]?
+        var vertical: Bool?
     }
 
     var mode: String?
@@ -163,8 +172,9 @@ struct SceneFile: Decodable {
                 if a.hasPrefix("switch:") { acc = .switchTo(String(a.dropFirst(7))) }
                 if a.hasPrefix("keys:") { acc = .keys(a.dropFirst(5).split(separator: ",").map(String.init)) }
             }
+            let rowIcon = r.paneIcons.map { CommandBarIcon.split($0.map(icon), vertical: r.vertical ?? false) } ?? icon(r.icon)
             return CommandBarRow(id: "scene:\(i)", kind: SuggestionKind(rawValue: r.kind) ?? .navigate, title: r.title,
-                                 subtitle: r.subtitle ?? "", icon: icon(r.icon), accessory: acc)
+                                 subtitle: r.subtitle ?? "", icon: rowIcon, accessory: acc, titleParts: r.titleParts ?? [])
         }
         var trailingValue = CommandBarTrailing.info
         if let t = trailing {

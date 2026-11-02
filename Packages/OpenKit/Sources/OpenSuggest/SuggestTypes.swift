@@ -104,6 +104,23 @@ public struct ScoreDetail: Sendable, Hashable {
     public var total: Double { quality * weight + frecency + boost }
 }
 
+/// One Split View as one row (commandbar-completion §4.2; Arc CC-12…CC-14): the panes in order.
+public struct SplitRowInfo: Sendable, Hashable {
+    public var splitID: ItemID
+    /// Pane tabs, titles, icons, and URLs in pane order.
+    public var paneTabIDs: [ItemID]
+    public var paneTitles: [String]
+    public var paneIcons: [IconHint?]
+    public var paneURLs: [URL]
+    /// `SplitOrientation.vertical`: panes stacked top to bottom.
+    public var isVertical: Bool
+
+    public init(splitID: ItemID, paneTabIDs: [ItemID], paneTitles: [String], paneIcons: [IconHint?], paneURLs: [URL], isVertical: Bool) {
+        self.splitID = splitID; self.paneTabIDs = paneTabIDs; self.paneTitles = paneTitles
+        self.paneIcons = paneIcons; self.paneURLs = paneURLs; self.isVertical = isVertical
+    }
+}
+
 public struct Suggestion: Sendable, Identifiable, Hashable {
     /// Stable across snapshots of one query, so the UI can diff rows and keep the selection.
     public var id: String
@@ -132,6 +149,9 @@ public struct Suggestion: Sendable, Identifiable, Hashable {
     public var canBeTopHit: Bool = false
     /// Rule T5: a tab whose title or host equals the query.
     public var isExactTabMatch: Bool = false
+    /// A Split View row: one row for all its panes. `tabID` and `url` are the best-matching pane
+    /// (for an empty query the focused pane), `title` the pane titles joined with " | ". Nil otherwise.
+    public var split: SplitRowInfo?
 
     public init(
         id: String, kind: SuggestionKind, title: String, subtitle: String = "",

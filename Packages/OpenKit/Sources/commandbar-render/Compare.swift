@@ -291,9 +291,37 @@ struct BarSpec {
                 }
             case .emoji:
                 break
+            case .split(let panes, _):
+                // Plate (CC-13): fill, edges, and the 1 pt gap between the cells; pane icons are masked.
+                let sp = CGRect(x: f.minX + m.splitPlateOrigin.x, y: f.minY + m.splitPlateOrigin.y,
+                                width: max(m.splitPlateHeight, m.splitCellWidth * CGFloat(max(2, panes.count))), height: m.splitPlateHeight)
+                let gapX = sp.minX + (sp.width - m.splitCellGap) / 2
+                // Each cell on its own: the gap would split one box measured over the whole plate.
+                let left = CGRect(x: sp.minX - 3, y: sp.minY - 3, width: gapX + 0.5 - (sp.minX - 3), height: sp.height + 6)
+                let right = CGRect(x: gapX + 0.5, y: sp.minY - 3, width: sp.maxX + 3 - (gapX + 0.5), height: sp.height + 6)
+                e.append(E(name: "\(tag) split plate left cell", region: left, kind: .fill(sample: CGRect(x: sp.minX + 3, y: sp.minY + 2, width: 8, height: 3))))
+                e.append(E(name: "\(tag) split plate right cell", region: right, kind: .fill(sample: CGRect(x: sp.maxX - 11, y: sp.minY + 2, width: 8, height: 3))))
+                e.append(E(name: "\(tag) split gap", region: .zero, kind: .points([CGPoint(x: gapX, y: sp.minY + 4), CGPoint(x: gapX, y: sp.maxY - 4)])))
+            }
+            if !row.titleParts.isEmpty {
+                // Pane titles from x 50 with a 1 pt rule between them (CC-14).
+                let sp = CommandBarMetrics.splitPlateOrigin.x + max(m.splitPlateHeight, m.splitCellWidth * CGFloat(max(2, row.titleParts.count)))
+                var x = f.minX + sp + m.splitTitleGap
+                for (k, part) in row.titleParts.enumerated() {
+                    let pw = textWidth(part, font: rowFont)
+                    e.append(E(name: "\(tag) title part \(k + 1)", region: CGRect(x: x - 2, y: f.minY + 12, width: pw + 3, height: 26), kind: .ink))
+                    x += pw
+                    if k < row.titleParts.count - 1 {
+                        let rule = CGRect(x: x + m.splitRuleGapBefore, y: f.minY + m.splitRuleTop, width: m.splitRuleWidth, height: m.splitRuleHeight)
+                        e.append(E(name: "\(tag) title rule", region: rule.insetBy(dx: -2, dy: -2), kind: .ink))
+                        x += m.splitRuleGapBefore + m.splitRuleWidth + m.splitRuleGapAfter
+                    }
+                }
+            } else {
+                let titleW = textWidth(row.title, font: rowFont)
+                e.append(E(name: "\(tag) title", region: CGRect(x: f.minX + m.titleX - 2, y: f.minY + 12, width: titleW + 3, height: 26), kind: .ink))
             }
             let titleW = textWidth(row.title, font: rowFont)
-            e.append(E(name: "\(tag) title", region: CGRect(x: f.minX + m.titleX - 2, y: f.minY + 12, width: titleW + 3, height: 26), kind: .ink))
             if !row.subtitle.isEmpty {
                 let subW = min(textWidth(m.subtitlePrefix + row.subtitle, font: rowFont), m.subtitleMaxWidth) + 3
                 e.append(E(name: "\(tag) subtitle", region: CGRect(x: f.minX + m.titleX + titleW + m.subtitleGap - 2, y: f.minY + 12, width: subW, height: 26), kind: .ink))
@@ -366,6 +394,16 @@ struct BarSpec {
         for i in 0..<visibleRows where rowFrame(i).maxY <= bandTop + 1 {
             let f = rowFrame(i), row = preview.rows[i]
             if case .favicon = row.icon { r.append(m.iconPlateFrame.offsetBy(dx: f.minX, dy: f.minY).insetBy(dx: -2, dy: -2)) }
+            if case .split(let panes, _) = row.icon {
+                // Pane icons: a 9 pt square centered in each 15 pt cell.
+                let n = CGFloat(max(1, panes.count))
+                let plateW = max(m.splitPlateHeight, m.splitCellWidth * max(2, n))
+                let cell = (plateW - m.splitCellGap * (n - 1)) / n
+                for k in 0..<panes.count {
+                    let cx = f.minX + m.splitPlateOrigin.x + CGFloat(k) * (cell + m.splitCellGap) + cell / 2
+                    r.append(CGRect(x: cx - 7, y: f.minY + m.splitPlateOrigin.y + 8, width: 14, height: 14))
+                }
+            }
             r.append(CGRect(x: f.minX + m.titleX - 3, y: f.minY + 8, width: 560, height: 34))
         }
         return r

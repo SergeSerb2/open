@@ -103,14 +103,23 @@ public enum Ranking {
         return w
     }
 
-    /// One row per normalized URL (scheme, "www.", trailing slash, and fragment ignored). Then, for the
+    /// One row per normalized URL (scheme, "www.", trailing slash, and fragment ignored; a split row
+    /// covers all its panes' URLs). Then, for the
     /// hosts in `TextMatching.dedupeByTitleAndHost`, one tab/history row per (title, host).
     /// In edit mode the typed URL never absorbs a tab: both rows stay.
     static func dedupe(_ rows: [Suggestion], mode: SuggestMode) -> [Suggestion] {
         var groups: [String: [Suggestion]] = [:]
         var keys: [String] = []
+        // A split row stands for every pane: a row with any pane's URL joins its group (§4.2.1).
+        var alias: [String: String] = [:]
         for row in rows {
-            let k = dedupeKey(row)
+            guard let split = row.split else { continue }
+            let own = dedupeKey(row)
+            for url in split.paneURLs { let k = "u|" + TextMatching.urlKey(url); if k != own, alias[k] == nil { alias[k] = own } }
+        }
+        for row in rows {
+            var k = dedupeKey(row)
+            if row.kind != .switchToTab, let a = alias[k] { k = a }
             if groups[k] == nil { keys.append(k) }
             groups[k, default: []].append(row)
         }

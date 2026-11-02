@@ -136,6 +136,30 @@ public enum CommandBarMetrics {
     public static let accessoryTextGap: CGFloat = 16
     /// Subtitle URLs keep at most this width, truncated in the middle (F0048: "resources.arc.net/…stinct-browsing-areas"). fitted.
     public static let subtitleMaxWidth: CGFloat = 278
+
+    // MARK: Split View row (A0120 row 3; re/commandbar-completion.md CC-13, CC-14)
+
+    /// Plate 30×30 at row `[12, 10]` for two side-by-side panes (pixels: columns 12–41, rows 10–39). measured.
+    public static let splitPlateOrigin = CGPoint(x: 12, y: 10)
+    public static let splitPlateHeight: CGFloat = 30
+    /// Each pane cell is 15 pt wide; 3–4 side-by-side panes widen the plate to 15 × n. guess (no capture).
+    public static let splitCellWidth: CGFloat = 15
+    /// Corner radius ≈ 7, continuous. fitted from the corner coverage.
+    public static let splitPlateRadius: CGFloat = 7
+    /// A 1 pt gap at each cell boundary shows the row background (columns 26–27 at half coverage). measured.
+    public static let splitCellGap: CGFloat = 1
+    /// Pane favicon ≈ 9 pt, centered in its cell (left favicon ink `[15, 21, 9, 9]`). measured.
+    public static let splitPaneIconSize: CGFloat = 9
+    /// The title starts 8 pt after the plate (x 50 for two panes; title ink at 50.5). measured.
+    public static let splitTitleGap: CGFloat = 8
+    /// The rule between pane titles: 1 pt wide, row y 20.5–32.5. measured. It starts 4.5 pt after the
+    /// first title's advance and the next title starts 5 pt after it (A0120: rule over columns 870–871 at
+    /// half coverage each, so from x 870.5; next title ink at 877). fitted on one sample.
+    public static let splitRuleWidth: CGFloat = 1
+    public static let splitRuleTop: CGFloat = 20.5
+    public static let splitRuleHeight: CGFloat = 12
+    public static let splitRuleGapBefore: CGFloat = 4.5
+    public static let splitRuleGapAfter: CGFloat = 5
 }
 
 /// Shadow under the panel. Fitted on the darkening around the panel in F0063 against
@@ -206,6 +230,8 @@ public enum CommandBarRole {
     public static let rowGlyphSelected = RGBA.white(1)
     /// Plates: arrow plate, keycaps, action icon plate: `CommandBarAccessoryBackgroundColor` white 0.05.
     public static let plate = CommandBarColors.accessoryBackground.dark
+    /// The rule between a Split View row's pane titles: value 67 over a 49 panel (A0120). fitted.
+    public static let splitTitleRule = RGBA.white(0.17)
     /// Arrow on an unselected row: `CommandBarAccessoryForegroundColor` white 0.66.
     public static let plateGlyph = CommandBarColors.accessoryForeground.dark
     /// Selected row: white plate; the arrow takes the selection color (F0063).
