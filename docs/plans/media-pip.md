@@ -2521,11 +2521,12 @@ PNGs; Arc frames stay in `.re/`).
   ones, a transition (14b/0023), the volume tooltip (14b/0024, no Open tooltip for a
   synthetic hover), or a transparent 10 × 10 helper window.
 
-Verification: `tools/verify-all.sh --only sidebar-render,features-render` PASS
-(features-render 406/406, with the new PP6 capture-display case); e2e
-`--style chrome --only media` 19 media rows PASS (plus fingerprint and cleanup),
-5 BLOCKED (unchanged rows). Load
-averages: verify 8.6 → 6.5 (1 min), e2e 15.5 → 8.1, row runs 12.5–13.2.
+Verification (after merging `origin/main` fcf610ec): `tools/verify-all.sh --only
+sidebar-render,features-render` PASS (sidebar-render 616/616, features-render
+406/406 with the new PP6 capture-display case). e2e `--style chrome --only media`
+(run before the merge, which changed no App or OpenKit code): 19 media rows PASS
+(plus fingerprint and cleanup), 5 BLOCKED (unchanged rows). Load averages (1 min):
+verify 8.3 → 8.4, e2e 15.5 → 8.1, row runs 12.5–13.2.
 
 ## Appendix — Lead decisions (2026-10-25)
 
