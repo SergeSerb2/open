@@ -1,6 +1,7 @@
 import Foundation
 import AppKit
 import OpenSettings
+import SwiftUI
 import OpenModel
 import OpenStore
 import OpenCommands
@@ -85,7 +86,7 @@ func require(_ condition: @autoclosure () throws -> Bool, _ message: String) thr
 }
 
 @MainActor func runChecks(only: String?) async throws {
-    let names = ["general-toggles", "default-browser", "profile-search", "profile-archive-scope", "profile-downloads", "clear-data", "profile-guards", "links-rules", "links-toggles", "shortcuts-save", "shortcuts-conflict", "advanced-toggles", "adblock", "app-icon", "import-counts", "library-archive", "library-downloads", "library-captures-history", "empty-states", "archive-save-failure", "archive-owner-partial", "adblock-profile-lifecycle", "suggestion-notice", "shortcuts-recording-admission", "archive-paging", "links-save-failure", "adblock-readiness", "settings-caches", "library-folder-archive", "library-tidy-search", "first-run-actions-and-adapter-gate", "first-run-probe", "first-run-count-parity", "probe-cancel-mid-copy", "sidebar-defaults", "library-spaces", "previews-legacy-migration"]
+    let names = ["essential-shortcuts", "shortcuts-callout", "general-toggles", "default-browser", "profile-search", "profile-archive-scope", "profile-downloads", "clear-data", "profile-guards", "links-rules", "links-toggles", "shortcuts-save", "shortcuts-conflict", "advanced-toggles", "adblock", "app-icon", "import-counts", "library-archive", "library-downloads", "library-captures-history", "empty-states", "archive-save-failure", "archive-owner-partial", "adblock-profile-lifecycle", "suggestion-notice", "shortcuts-recording-admission", "archive-paging", "links-save-failure", "adblock-readiness", "settings-caches", "library-folder-archive", "library-tidy-search", "first-run-actions-and-adapter-gate", "first-run-probe", "first-run-count-parity", "probe-cancel-mid-copy", "sidebar-defaults", "library-spaces", "previews-legacy-migration"]
     if let only { try require(names.contains(only), "Unknown check \(only)") }
     var passed = 0
     for name in names where only == nil || only == name {
@@ -94,6 +95,56 @@ func require(_ condition: @autoclosure () throws -> Bool, _ message: String) thr
         let personal=vm.model.profiles[0].id,work=vm.model.profiles[1].id
         do {
             switch name {
+            case "essential-shortcuts":
+                // Rows in Arc's order with live keycaps; a custom key shows; a cleared one shows "—" (plan §4.5.2).
+                let store = KeyBindingStore.empty
+                try require(EssentialShortcuts.items.map(\.title) == ["Open a New Tab", "Switch to a Recent Tab", "Copy Page URL", "Add Split View", "Open Little Open"], "EDU rows or order")
+                let caps = EssentialShortcuts.items.map { EssentialShortcuts.keycaps(for: $0.commandID, in: store) }
+                try require(caps == [["⌘", "T"], ["⌃", "Tab"], ["⇧", "⌘", "C"], ["⌃", "⇧", "="], ["⌥", "⌘", "N"]], "EDU default keycaps \(caps)")
+                var custom = store
+                custom.setOverride(KeyBindingOverride(shortcuts: [.init(key: "y", modifiers: [.control, .option, .command])], priority: nil), for: "new-tab")
+                custom.setOverride(KeyBindingOverride(shortcuts: [], priority: nil), for: "copy-url")
+                try require(EssentialShortcuts.keycaps(for: "new-tab", in: custom) == ["⌃", "⌥", "⌘", "Y"] && EssentialShortcuts.keycaps(for: "copy-url", in: custom).isEmpty, "EDU custom or cleared keycaps")
+                try await withAccessibleHost(EssentialShortcutsView(store: custom), size: NSHostingView(rootView: EssentialShortcutsView(store: custom)).fittingSize) { host in
+                    let labels = accessibilityLabels(host)
+                    try require(EssentialShortcuts.items.allSatisfy { labels.contains($0.title) }, "EDU AX labels \(labels)")
+                }
+                // The window: Arc's setup (CC-27), one shared instance, Esc and Cmd+W close it.
+                let controller = EssentialShortcutsWindowController()
+                controller.show(near: nil, store: store)
+                guard let w = controller.window else { throw CheckFailure(description: "EDU window not created") }
+                try require(w.title == "Essential Keyboard Shortcuts" && w.titleVisibility == .hidden && w.titlebarAppearsTransparent && !w.isOpaque
+                            && w.isMovableByWindowBackground && w.level == .floating && w.collectionBehavior.contains(.fullScreenAuxiliary)
+                            && w.styleMask == [.titled, .closable, .miniaturizable, .fullSizeContentView] && !w.styleMask.contains(.resizable), "EDU window setup")
+                try require(abs(w.frame.width - 440) < 1 && w.frame.height > 300 && w.frame.height < 460, "EDU size \(w.frame.size)")
+                w.cancelOperation(nil)
+                try require(!w.isVisible, "Esc did not close the EDU window")
+                controller.show(near: nil, store: custom)
+                try require(controller.window === w && w.isVisible, "EDU window not reused")
+                let cmdW = NSEvent.keyEvent(with: .keyDown, location: .zero, modifierFlags: .command, timestamp: 0, windowNumber: w.windowNumber, context: nil,
+                                            characters: "w", charactersIgnoringModifiers: "w", isARepeat: false, keyCode: 13)!
+                try require(w.performKeyEquivalent(with: cmdW) && !w.isVisible, "Cmd+W did not close the EDU window")
+            case "shortcuts-callout":
+                // The callout's button opens the window through the Settings action (CC-29, CC-30); the
+                // list is no longer filtered ("Start with the basics" is a label, not a filter).
+                vm.selectedPane = .shortcuts; vm.shortcuts.query = ""
+                try require(vm.shortcuts.commands.count == CommandRegistry.active.count, "Shortcuts list hides commands: \(vm.shortcuts.commands.count) of \(CommandRegistry.active.count)")
+                let before = env.actions.log.filter { $0 == "openEssentialShortcuts" }.count
+                try await withAccessibleHost(ShortcutsPane(model: vm.shortcuts), size: CGSize(width: 684, height: 600)) { host in
+                    // Static text reports its string as the AX value; buttons as the label.
+                    var texts = Set(accessibilityLabels(host)), seen = Set<ObjectIdentifier>()
+                    func values(_ node: NSObject) {
+                        guard seen.insert(ObjectIdentifier(node)).inserted, seen.count < 4096 else { return }
+                        let value = NSSelectorFromString("accessibilityValue"), children = NSSelectorFromString("accessibilityChildren")
+                        if node.responds(to: value), let v = node.perform(value)?.takeUnretainedValue() as? String { texts.insert(v) }
+                        if node.responds(to: children), let c = node.perform(children)?.takeUnretainedValue() as? [NSObject] { c.forEach(values) }
+                        if let view = node as? NSView { view.subviews.forEach(values) }
+                    }
+                    values(host)
+                    try require(texts.contains("Start with the basics") && texts.contains("Learn the Essential Shortcuts"), "callout text missing: \(texts.sorted().prefix(20))")
+                    try require(pressAccessibilityElement(host, label: "Learn the Essential Shortcuts"), "callout button not found")
+                }
+                try require(env.actions.log.filter { $0 == "openEssentialShortcuts" }.count == before + 1, "callout did not call openEssentialShortcuts")
             case "first-run-probe":
                 let directory=env.root.appendingPathComponent("Probe Source")
                 try SyntheticData.writeProbeFixture(to:directory)

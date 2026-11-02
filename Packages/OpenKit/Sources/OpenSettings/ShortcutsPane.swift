@@ -10,7 +10,6 @@ import OpenDesign
     public private(set) var store: KeyBindingStore
     private var saved: KeyBindingStore
     public var query = ""
-    public var basics = true
     public var recordingCommandID: String?
     public var appendRecording = false
     public var selectedCommandID: String?
@@ -33,7 +32,7 @@ import OpenDesign
     }.joined(separator: "\n") }
     public var statusMessage:String {recordingCommandID != nil || banner.isEmpty ? statusText:banner}
     public var commands: [CommandDefinition] { CommandRegistry.active.filter { command in
-        (query.isEmpty || ([displayTitle(command), command.id] + command.aliases).contains { $0.localizedCaseInsensitiveContains(query) }) && (!basics || !command.aliases.isEmpty || store.bindings[command.id] != nil)
+        (query.isEmpty || ([displayTitle(command), command.id] + command.aliases).contains { $0.localizedCaseInsensitiveContains(query) })
     }.sorted { displayTitle($0).localizedStandardCompare(displayTitle($1)) == .orderedAscending } }
     public func displayTitle(_ command:CommandDefinition)->String {command.title == "Automatic" ? "Use Automatic Appearance":command.title}
     public func beginRecording(_ id: String, append: Bool = false) { guard CommandRegistry.byID[id]?.isCustomizable == true else { return }; selectedCommandID = id; appendRecording = append; recordingCommandID = id; statusText = "Press a shortcut. Escape cancels; Delete clears." }
@@ -74,7 +73,7 @@ public struct ShortcutsPane: View {
     public init(model:ShortcutsViewModel) {self.model=model}
     public var body:some View {
         VStack(spacing:30) {
-            ShortcutSegments(model:model).frame(width:359,height:35)
+            ShortcutsCallout(model:model).frame(width:359,height:35)
             HStack(alignment:.top,spacing:16) {
                 VStack(spacing:0) {
                     HStack {Image(systemName:"magnifyingglass").foregroundStyle(.secondary);TextField("Type a feature name or shortcut",text:$model.query).textFieldStyle(.plain)}.padding(.horizontal,10).frame(height:38)
@@ -149,31 +148,29 @@ private struct KeyRecorder: NSViewRepresentable {
     }
 }
 
-private struct ShortcutSegments:NSViewRepresentable {
-    let model:ShortcutsViewModel
-    func makeCoordinator()->Coordinator {Coordinator(model)}
-    func makeNSView(context:Context)->Segments {
-        let control=Segments(labels:["Start with the basics","Learn the Essential Shortcuts"],trackingMode:.selectOne,target:context.coordinator,action:#selector(Coordinator.select(_:)))
-        control.setWidth(148,forSegment:0);control.setWidth(211,forSegment:1);control.setAccessibilityLabel("Shortcuts");return control
-    }
-    func updateNSView(_ control:Segments,context:Context){control.selectedSegment=model.basics ? 0:1;control.needsDisplay=true}
-    @MainActor final class Coordinator:NSObject {
-        let model:ShortcutsViewModel
-        init(_ model:ShortcutsViewModel){self.model=model}
-        @objc func select(_ sender:NSSegmentedControl){model.basics=sender.selectedSegment == 0}
-    }
-    @MainActor final class Segments:NSSegmentedControl {
-        override var isFlipped:Bool {true}
-        override var intrinsicContentSize:NSSize {NSSize(width:359,height:35)}
-        override func draw(_ dirtyRect:NSRect) {
-            SettingsTokens.button.nsColor.setFill();NSBezierPath(roundedRect:bounds,xRadius:6,yRadius:6).fill()
-            let selected=selectedSegment == 0 ? NSRect(x:0,y:0,width:148,height:35):NSRect(x:148,y:0,width:211,height:35)
-            SettingsTokens.segmentAccent.nsColor.setFill();NSBezierPath(roundedRect:selected,xRadius:6,yRadius:6).fill()
-            for (index,width) in [CGFloat(148),211].enumerated() {
-                let title=label(forSegment:index) ?? "";let attributes:[NSAttributedString.Key:Any]=[.font:SettingsTokens.tabLabel.font,.foregroundColor:index == selectedSegment ? NSColor.white:NSColor.labelColor]
-                let size=(title as NSString).size(withAttributes:attributes);let x:CGFloat=index == 0 ? 0:148
-                (title as NSString).draw(at:.init(x:x+(width-size.width)/2,y:(35-size.height)/2),withAttributes:attributes)
+/// Settings ▸ Shortcuts callout (CC-29, CC-30): Arc's "Start with the basics" is a callout with one
+/// button that opens the Essential Keyboard Shortcuts window, not a filter. Same frame as before
+/// (359 × 35, radius 6, `SettingsTokens.button`).
+struct ShortcutsCallout: View {
+    let model: ShortcutsViewModel
+    var body: some View {
+        HStack(spacing: 8) {
+            Text("Start with the basics").font(Font(SettingsTokens.tabLabel.font)).foregroundStyle(.primary)
+                .padding(.leading, 12)
+            Spacer(minLength: 4)
+            Button { model.root.actions.openEssentialShortcuts() } label: {
+                HStack(spacing: 5) {
+                    Image(systemName: "command.circle.fill")
+                    Text("Learn the Essential Shortcuts")
+                }
+                .font(Font(SettingsTokens.tabLabel.font)).foregroundStyle(.white)
+                .padding(.horizontal, 10).frame(height: 27)
+                .background(Color(nsColor: SettingsTokens.segmentAccent.nsColor), in: RoundedRectangle(cornerRadius: 5))
             }
+            .buttonStyle(.plain).padding(.trailing, 4)
+            .accessibilityLabel("Learn the Essential Shortcuts")
         }
+        .frame(width: 359, height: 35)
+        .background(Color(nsColor: SettingsTokens.button.nsColor), in: RoundedRectangle(cornerRadius: 6))
     }
 }

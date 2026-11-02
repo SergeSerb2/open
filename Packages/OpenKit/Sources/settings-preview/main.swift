@@ -40,6 +40,7 @@ import CryptoKit
     func openLibrary() { record("openLibrary") }
     var spaceManagerAvailable = true
     private(set) var spaceManagerMakeCount = 0
+    func openEssentialShortcuts() { record("openEssentialShortcuts") }
     func makeSpaceManagerView() -> NSView? {
         spaceManagerMakeCount += 1
         record("makeSpaceManagerView")
@@ -143,7 +144,7 @@ import CryptoKit
         for scale in scales { try await render(SettingsContent(viewModel: settings), size: CGSize(width: 684, height: 650), scale: scale, dark: false, to: output.appendingPathComponent("shortcuts-custom@\(scale)x.png")) }
         settings.shortcuts.query = ""
         let originalBindings=try Data(contentsOf:settings.shortcuts.fileURL)
-        settings.shortcuts.selectedCommandID="go-to-tab-1";settings.shortcuts.basics=false
+        settings.shortcuts.selectedCommandID="go-to-tab-1"
         settings.shortcuts.query="Go to Tab"
         for scale in scales {try await render(SettingsContent(viewModel:settings),size:CGSize(width:684,height:650),scale:scale,dark:false,to:output.appendingPathComponent("shortcuts-tab-controls@\(scale)x.png"))}
         settings.shortcuts.query="New Window";settings.shortcuts.beginRecording("new-window")
@@ -152,6 +153,15 @@ import CryptoKit
         settings.shortcuts.record(.init(key:"y",modifiers:[.control,.option,.command]),for:"new-window")
         for scale in scales {try await render(SettingsContent(viewModel:settings),size:CGSize(width:684,height:650),scale:scale,dark:false,to:output.appendingPathComponent("shortcuts-conflict@\(scale)x.png"))}
         settings.shortcuts.revert();settings.shortcuts.reset("new-tab");settings.shortcuts.query=""
+        // Essential Keyboard Shortcuts window content (commandbar-completion §4.5), light and dark, and with a custom key.
+        let eduSize = NSHostingView(rootView: EssentialShortcutsView(store: settings.shortcuts.store)).fittingSize
+        for dark in [false, true] { for scale in scales {
+            try await render(EssentialShortcutsView(store: settings.shortcuts.store), size: eduSize, scale: scale, dark: dark, to: output.appendingPathComponent("essential-shortcuts-\(dark ? "dark" : "light")@\(scale)x.png"))
+        } }
+        var custom = settings.shortcuts.store
+        custom.setOverride(KeyBindingOverride(shortcuts: [.init(key: "y", modifiers: [.control, .option, .command])], priority: nil), for: "new-tab")
+        custom.setOverride(KeyBindingOverride(shortcuts: [], priority: nil), for: "copy-url")
+        for scale in scales { try await render(EssentialShortcutsView(store: custom), size: eduSize, scale: scale, dark: false, to: output.appendingPathComponent("essential-shortcuts-custom-key@\(scale)x.png")) }
         try originalBindings.write(to:settings.shortcuts.fileURL,options:.atomic)
         for scale in scales {
             try await render(PreviewsSheet(model:settings.general).buttonStyle(SettingsButtonStyle()),size:CGSize(width:480,height:320),scale:scale,dark:false,to:output.appendingPathComponent("sheet-previews@\(scale)x.png"),validatePreviewControls:true)
@@ -225,6 +235,40 @@ let app = NSApplication.shared
 app.setActivationPolicy(.prohibited)
 Task { @MainActor in do { try await run(); exit(0) } catch { FileHandle.standardError.write(Data("FAIL \(error)\n".utf8)); exit(1) } }
 app.run()
+
+/// Hosts `view` offscreen with SwiftUI's accessibility nodes on (process-scoped, as `render` does), then
+/// calls `body` with the hosting view.
+@MainActor func withAccessibleHost<V: View>(_ view: V, size: CGSize, _ body: (NSView) throws -> Void) async throws {
+    let host = NSHostingView(rootView: view.frame(width: size.width, height: size.height))
+    host.frame = CGRect(origin: .zero, size: size)
+    let window = RenderWindow(contentRect: CGRect(x: -20000, y: -20000, width: size.width, height: size.height), styleMask: .borderless, backing: .buffered, defer: false)
+    window.isReleasedWhenClosed = false; window.contentView = host
+    defer { window.contentView = nil; window.close() }
+    let axRead = NSSelectorFromString("accessibilityAttributeValue:"), axWrite = NSSelectorFromString("accessibilitySetValue:forAttribute:")
+    let enhancedAX = "AXEnhancedUserInterface"
+    let previousAX = NSApp.responds(to: axRead) ? NSApp.perform(axRead, with: enhancedAX)?.takeUnretainedValue() : nil
+    if NSApp.responds(to: axWrite) { NSApp.perform(axWrite, with: NSNumber(value: true), with: enhancedAX) }
+    defer { if NSApp.responds(to: axWrite) { NSApp.perform(axWrite, with: previousAX ?? NSNumber(value: false), with: enhancedAX) } }
+    for _ in 0..<3 { host.layoutSubtreeIfNeeded(); window.displayIfNeeded(); try await Task.sleep(for: .milliseconds(50)) }
+    try body(host)
+}
+
+/// Presses the first accessibility element labeled `label` (the real AX press path). False when absent.
+@MainActor func pressAccessibilityElement(_ root: NSObject, label wanted: String) -> Bool {
+    var visited = Set<ObjectIdentifier>()
+    func visit(_ node: NSObject) -> Bool {
+        guard visited.insert(ObjectIdentifier(node)).inserted, visited.count < 4096 else { return false }
+        let label = NSSelectorFromString("accessibilityLabel"), press = NSSelectorFromString("accessibilityPerformPress")
+        if node.responds(to: label), node.perform(label)?.takeUnretainedValue() as? String == wanted, node.responds(to: press) {
+            _ = node.perform(press); return true
+        }
+        let children = NSSelectorFromString("accessibilityChildren")
+        if node.responds(to: children), let values = node.perform(children)?.takeUnretainedValue() as? [NSObject] { for c in values where visit(c) { return true } }
+        if let view = node as? NSView { for c in view.subviews where visit(c) { return true } }
+        return false
+    }
+    return visit(root)
+}
 
 @MainActor func accessibilityLabels(_ root: NSObject) -> [String] {
     var visited = Set<ObjectIdentifier>(), labels: [String] = []

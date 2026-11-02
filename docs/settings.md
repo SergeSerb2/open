@@ -226,7 +226,7 @@ The lead chose **Icon** as the tab/window title (the stored pane ID and commands
 | Design 1 | 13 pt regular, 24 pt buttons with 12 pt side padding/radius 6; regular native pop-ups with actual fixed widths and standard arrows | General/Profiles and sheet PNGs; SettingsPopUp |
 | Design 2 | General box 2 rows 43/47; Profiles box 1 rows 44/44/36 | General/Profiles pairs |
 | Design 3 | Secondary headers with >=4.5:1 token contrast; Your Profiles semibold; 10 pt header inset | SettingsTokens and Profiles Light/Dark |
-| Design 4 | Blue #007AFF selected segment and white text; 148/211 pt segments | Shortcuts pairs |
+| Design 4 | Blue #007AFF selected segment and white text; 148/211 pt segments (replaced in commandbar-completion Step 6 by the callout: label + accent button, same 359×35 frame) | Shortcuts pairs; `shortcuts-callout` check |
 | Design 5 | Priority picker for every selected customizable command; numbering only for Go to Tab | Recording/custom/tab-control states |
 | Design 6 | Rules intro/divider and match subtitles; Test a Link label; controls align at the trailing edge | Links rules/test and Link Routing sheet |
 | Design 7 | Plain import summary; ordered Choose categories; skipped item line; Done default at bottom right | Import Report pair |

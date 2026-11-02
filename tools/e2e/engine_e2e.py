@@ -4938,6 +4938,23 @@ def commandbar_checks(factory, results, tmp, config):
         results['commandbar_actions_scope'] = {'ok': bool(scoped) and top_action == 'toggle-sidebar' and only_actions and bool(hid) and not state().get('presented'),
                                                'hint_rows': len((hinted or {}).get('rows', [])), 'scope': (scoped or {}).get('scope'), 'top': top_action}
         app.call('menu-perform', id='toggle-sidebar'); sidebar_anchored(app)
+        # Help ▸ Essential Keyboard Shortcuts (commandbar-completion §4.5): one floating window; Esc closes it;
+        # reopened, Cmd+W closes it and archives no tab.
+        def edu():
+            return next((w for w in app.call('windows') if w['title'] == 'Essential Keyboard Shortcuts'), None)
+        tabs_before = len(app.call('tabs'))
+        app.call('menu-perform', id='keyboard-shortcuts-edu')
+        shown = wait_until(lambda: (lambda w: w if w and w['visible'] and w['key'] else None)(edu()), timeout=3, step=.05)
+        press('escape', window=shown['number'] if shown else None)
+        closed_esc = wait_until(lambda: (lambda w: True if not w or not w['visible'] else None)(edu()), timeout=3, step=.05)
+        app.call('menu-perform', id='keyboard-shortcuts-edu')
+        reshown = wait_until(lambda: (lambda w: w if w and w['visible'] and w['key'] else None)(edu()), timeout=3, step=.05)
+        press('w', modifiers=['cmd'], window=reshown['number'] if reshown else None, route='app')
+        closed_w = wait_until(lambda: (lambda w: True if not w or not w['visible'] else None)(edu()), timeout=3, step=.05)
+        count = len([w for w in app.call('windows') if w['title'] == 'Essential Keyboard Shortcuts'])
+        results['essential_shortcuts_window'] = {'ok': bool(shown) and shown['level'] == 3 and bool(closed_esc) and bool(reshown) and reshown['number'] == shown['number']
+                                                 and bool(closed_w) and count == 1 and len(app.call('tabs')) == tabs_before,
+                                                 'window': shown, 'tabs': [tabs_before, len(app.call('tabs'))]}
         before = app.call('host-counts')['created']; app.call('sidebar-duplicate', id=split['id'])
         splits = [n for n in app.call('sidebar-tree')['today'] if n['kind'] == 'split']
         copied = next(n for n in splits if n['id'] != split['id'])

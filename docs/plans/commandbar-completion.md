@@ -758,6 +758,8 @@ The Section 2 agent implements this plan. Each row names the merged PR and its e
 
 | 5 | [#140](https://github.com/SergeSerb2/open/pull/140) | `suggest-check` 47/47 (42–43); `commandbar-render check` 132/132 (flows 82–85, 91: 8 checks; states `actions-scope`, `actions-scope-empty`, `tabs-scope`, `scope-chip-hover`, `site-chip-query`); S2 18/0016 and 0018 in Display P3: chip, chip text, placeholder and field text ≤ 1 pt, text ΔE00 ≤ 1.05, chip fill ΔE00 6.0 (the harness clips P3 to sRGB); `commands-dump` 0/0/0, same 11 allowed missing; App build; e2e `commandbar` 57/57 incl. new `commandbar_actions_scope`; break-and-revert: no text restore fails flows 82, 84, 91; no scope row color fails 91; prefix scope keywords fail `suggest-check` 43 | done |
 
+| 6 | this PR | `settings-preview check` 39/39 incl. new `essential-shortcuts` (Arc's rows and order, default/custom/cleared keycaps, AX labels, window setup per CC-27, one shared window, Esc and Cmd+W close it) and `shortcuts-callout` (label and button in AX, the AX press calls `openEssentialShortcuts`, the list shows all active commands); scenes `essential-shortcuts-light`/`-dark`/`-custom-key` and `shortcuts`; App build; e2e `commandbar` 58/58 incl. new `essential_shortcuts_window` (Help opens it at level 3, Esc closes, the same window reopens, Cmd+W closes it with the tab count unchanged); break-and-revert: no Esc handling fails `essential-shortcuts`, a no-op callout button fails `shortcuts-callout`; the first e2e run caught Cmd+W archiving a tab when the automation keyed the browser window, and the App now closes the EDU window in both `archive-tab` paths | done |
+
 Section 2 decisions (Step 0):
 
 - `present(_:)` and `dismiss(reason:)` lose their `animated:` parameter: with no animation it would mean nothing.
@@ -765,6 +767,13 @@ Section 2 decisions (Step 0):
 - While Open has no privacy page, line 2 of the footer hides (`privacyURL` nil). Hiding only the word "here" would leave a broken sentence.
 - The panel edge keeps the session-1 luminance rule. Session 2 shows the dark double edge over light pages, against session-1 F0039/F0040/A0120; the rule's input is not known (`docs/followups.md`, capture request).
 - `compare --space p3` measures session-2 captures in Display P3 (their AW2726DM profile exceeds sRGB); session-1 comparisons stay in sRGB.
+
+Section 2 decisions (Step 6):
+
+- The window lives in `OpenSettings` (`EssentialShortcutsWindowController.shared`), so section 7 (first run) can call `keyboard-shortcuts-edu` without new code.
+- Cmd+W: the window closes itself in `performKeyEquivalent`, and the App's two `archive-tab` paths (the factory's `closeTab` for the File menu item, and the command switch) close it first when it is key, so a menu click never archives a tab behind it.
+- Keycaps: one per modifier plus the key, from the first effective shortcut; single characters upper-cased ("T", "="); a cleared binding shows "—" and reads "No shortcut" to VoiceOver.
+- Settings gains `SettingsActions.openEssentialShortcuts()`; the App runs `keyboard-shortcuts-edu`.
 
 Section 2 decisions (Step 5):
 

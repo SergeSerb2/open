@@ -251,6 +251,7 @@ final class AppSettingsActions: SettingsActions, LibraryActions, DownloadsProvid
   }
   func openPreviewsSettings() {} // General owns its one sheet.
   func keyBindingsDidChange(store: KeyBindingStore) { app.reloadKeyBindings() }
+  func openEssentialShortcuts() { app.performCommand("keyboard-shortcuts-edu", payload: nil) }
   func runImport(plan: ImportPlan) async -> ImportOutcome { ImportOutcome(errorText: "Import is not available in this build. No data was imported.") }
   func setAdBlockEnabled(_ on: Bool, profileID: ProfileID) { status("Ad blocking is not active in this build. Your preferences were saved.") }
   func setEnabledBlockLists(_ ids: [String], profileID: ProfileID) { setAdBlockEnabled(true, profileID: profileID) }
