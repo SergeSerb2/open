@@ -23,4 +23,16 @@ static __weak id<OEPictureInPictureDelegate> gPictureInPictureDelegate;
   return NO;
 }
 
+- (BOOL)supportsShellDocumentPictureInPicture {
+  return NO;
+}
+
+@end
+
+@implementation OEWebContent (DocumentPictureInPicture)
+
+- (CGSize)requestedPictureInPictureSize {
+  return CGSizeZero;
+}
+
 @end

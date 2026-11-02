@@ -19,6 +19,8 @@ OEOpenDisposition OEMapDisposition(cef_window_open_disposition_t d) {
       return OEOpenDispositionOffTheRecord;
     case CEF_WOD_SAVE_TO_DISK:
       return OEOpenDispositionSaveToDisk;
+    case CEF_WOD_NEW_PICTURE_IN_PICTURE:
+      return OEOpenDispositionNewPictureInPicture;
     default:
       return OEOpenDispositionCurrentTab;
   }

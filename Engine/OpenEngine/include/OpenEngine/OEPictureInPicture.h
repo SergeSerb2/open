@@ -108,6 +108,15 @@ NS_SWIFT_UI_ACTOR
 @property(nonatomic, weak, nullable) id<OEPictureInPictureDelegate> pictureInPictureDelegate;
 /// YES when this engine build can host video PiP in the shell (fork EM-4).
 @property(nonatomic, readonly) BOOL supportsShellPictureInPicture;
+/// YES when a Document PiP child can live in the shell's panel (fork EM-7).
+/// Without it, answer OEOpenDispositionNewPictureInPicture with nil.
+@property(nonatomic, readonly) BOOL supportsShellDocumentPictureInPicture;
+@end
+
+@interface OEWebContent (DocumentPictureInPicture)
+/// For a Document PiP child: the size the page asked for (CSS px); zero until
+/// known. Changes come with OEWebContentChangePictureInPicture.
+@property(nonatomic, readonly) CGSize requestedPictureInPictureSize;
 @end
 
 NS_HEADER_AUDIT_END(nullability, sendability)

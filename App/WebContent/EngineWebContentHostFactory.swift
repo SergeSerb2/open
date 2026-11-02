@@ -973,6 +973,8 @@ extension EngineWebContentHostFactory: OEWebContentDelegate {
         return nil
       }
       return target.adoptUnownedRequest(request)
+    case .newPictureInPicture:
+      return app.media.openDocumentPictureInPicture(opener: webContent, request: request, factory: self)
     case .currentTab, .saveToDisk:
       return nil
     default:

@@ -32,6 +32,8 @@ final class MediaCoordinator {
   private(set) var pipWindow: PictureInPictureWindowController?
   private(set) var pipHost: EnginePictureInPictureHost?
   private var pipDelegate: PictureInPictureDelegate?
+  /// The open Document PiP (EM-7, Step 11), one at a time like Chromium.
+  private(set) var documentPiP: DocumentPictureInPicture?
   var hostsPictureInPicture: Bool { pipDelegate != nil }
 
   init(app: AppDelegate, rulesURL: URL?) {
@@ -111,6 +113,8 @@ final class MediaCoordinator {
     }
     // Step 10/11 lifecycle gate: tab close, archive, discard and crash dismiss Open's window, unpaused.
     if let window = pipWindow, pipHost?.tabID == tabID { window.dismiss(reason: .sourceGone) }
+    // Closing a Document PiP opener closes the Document PiP panel.
+    if let document = documentPiP, document.openerTabID == tabID { document.close() }
     feedSleep()
   }
 
@@ -320,6 +324,29 @@ final class MediaCoordinator {
     NSApp.activate()
   }
 
+  // MARK: Document PiP (§4.6, EM-7)
+
+  /// The page asked for a Document PiP window. Returns the child web content Chromium fills,
+  /// or nil (the request fails in the page) when the engine cannot host it in Open's panel.
+  func openDocumentPictureInPicture(opener: OEWebContent, request: OEOpenRequest,
+                                    factory: EngineWebContentHostFactory) -> OEWebContent? {
+    guard OEEngine.shared.supportsShellDocumentPictureInPicture, let tabID = factory.tabID(for: opener) else { return nil }
+    documentPiP?.close()
+    let config = OEWebContentConfiguration(context: request.context)
+    config.runtimeStyle = opener.runtimeStyle
+    let child = OEWebContent(configuration: config, url: nil)
+    let document = DocumentPictureInPicture(child: child, opener: opener, openerTabID: tabID)
+    document.openURL = { [weak factory] url in _ = factory?.openNewTab(url: url, background: false) }
+    document.onClosed = { [weak self, weak document] in
+      guard let self, self.documentPiP === document else { return }
+      self.documentPiP = nil; self.feedSleep()
+    }
+    guard document.present(settings: settings, screen: factory.window?.screen?.visibleFrame) else { return nil }
+    documentPiP = document
+    feedSleep()
+    return child
+  }
+
   // MARK: Helpers
 
   private func host(_ id: ItemID) -> EngineWebContentHost? {
@@ -352,6 +379,7 @@ final class MediaCoordinator {
   func feedSleep() {
     var pip: Set<ItemID> = []
     if let source = session.activeSource { pip.insert(source.tabID) }
+    if let document = documentPiP { pip.insert(document.openerTabID) }
     var controls: Set<ItemID> = []
     for controller in app.windowControllers {
       guard let window = controller.window, window.isVisible, !window.isMiniaturized else {

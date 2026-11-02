@@ -296,6 +296,10 @@ typedef NS_ENUM(NSInteger, OEOpenDisposition) {
   OEOpenDispositionNewWindow,
   OEOpenDispositionOffTheRecord,
   OEOpenDispositionSaveToDisk,
+  /// documentPictureInPicture.requestWindow() (EM-7). Return a web content
+  /// and host its view in a Document PiP panel; its
+  /// requestedPictureInPictureSize arrives with OEWebContentChangePictureInPicture.
+  OEOpenDispositionNewPictureInPicture,
 };
 
 /// A request for new browsing content.
