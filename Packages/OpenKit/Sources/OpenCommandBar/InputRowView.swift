@@ -398,6 +398,8 @@ final class InputRowView: NSView {
             let s = NSAttributedString(string: e, attributes: [.font: NSFont.systemFont(ofSize: 15)])
             let b = s.size()
             s.draw(at: NSPoint(x: f.midX - b.width / 2, y: f.midY - b.height / 2))
+        case .split:
+            drawSymbol("rectangle.split.2x1", in: f) // the controller passes a pane's icon; this is a fallback
         }
     }
 
@@ -427,7 +429,7 @@ final class InputRowView: NSView {
             if let s = SymbolCache.image(name, size: 11, weight: .semibold, color: .white(1)) {
                 s.drawFlipped(in: CGRect(x: iconRect.midX - s.size.width / 2, y: iconRect.midY - s.size.height / 2, width: s.size.width, height: s.size.height))
             }
-        case .emoji: break
+        case .emoji, .split: break
         }
         let line = TextLine(chip.name, font: BarFont.chip, color: CGColor(gray: 1, alpha: 1))
         line.draw(at: iconRect.maxX + 6, baseline: (rect.midY + BarFont.chip.capHeight / 2).rounded(), in: ctx)

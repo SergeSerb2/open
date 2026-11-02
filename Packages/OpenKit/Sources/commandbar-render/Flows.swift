@@ -259,6 +259,7 @@ enum Flows {
         checks += ReviewFlows.run(env)
         checks += FooterFlows.run(env)
         checks += CompletionFlows.run(env)
+        checks += SplitFlows.run(env)
         return checks
     }
 

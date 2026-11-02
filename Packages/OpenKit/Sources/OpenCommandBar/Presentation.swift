@@ -9,6 +9,8 @@ public enum CommandBarIcon: Sendable, Hashable {
     /// An SF Symbol. `plate` draws the 24 pt rounded plate behind it (action rows, F0063 row 4).
     case symbol(String, plate: Bool)
     case emoji(String)
+    /// A Split View: one cell per pane on a 30 pt plate, side by side or stacked (A0120, CC-13, CC-15).
+    case split([CommandBarIcon], vertical: Bool)
 }
 
 /// Right side of a row.
@@ -30,10 +32,13 @@ public struct CommandBarRow: Sendable, Hashable, Identifiable {
     public var subtitle: String
     public var icon: CommandBarIcon
     public var accessory: CommandBarAccessory
+    /// A Split View row's pane titles, drawn with a thin rule between them (CC-14). Empty for other rows.
+    public var titleParts: [String]
 
     public init(id: String, kind: SuggestionKind, title: String, subtitle: String = "", icon: CommandBarIcon,
-                accessory: CommandBarAccessory = .none) {
+                accessory: CommandBarAccessory = .none, titleParts: [String] = []) {
         self.id = id; self.kind = kind; self.title = title; self.subtitle = subtitle; self.icon = icon; self.accessory = accessory
+        self.titleParts = titleParts
     }
 }
 
@@ -108,6 +113,12 @@ enum RowPresentation {
         case .history:
             return CommandBarRow(id: s.id, kind: s.kind, title: s.title, subtitle: s.url.map(URLDisplay.short) ?? "", icon: icon)
         case .switchToTab:
+            if let split = s.split {
+                // One row per Split View: pane icons on one plate, pane titles with a rule, no subtitle (CC-12…CC-14).
+                let icons = split.paneIcons.enumerated().map { i, hint in paneIcon(hint, url: split.paneURLs[i]) }
+                return CommandBarRow(id: s.id, kind: s.kind, title: s.title, icon: .split(icons, vertical: split.isVertical),
+                                     accessory: .switchTo(CommandBarText.switchToSplit), titleParts: split.paneTitles)
+            }
             let label: String
             if s.tabLocation == .splitPane {
                 label = CommandBarText.switchToSplit
@@ -129,6 +140,15 @@ enum RowPresentation {
             return CommandBarRow(id: s.id, kind: s.kind, title: s.title, icon: icon, accessory: keys.isEmpty ? .none : .keys(keys))
         case .siteSearchHint:
             return CommandBarRow(id: s.id, kind: s.kind, title: s.title, subtitle: s.subtitle, icon: icon)
+        }
+    }
+
+    static func paneIcon(_ hint: IconHint?, url: URL) -> CommandBarIcon {
+        switch hint {
+        case .emoji(let e): return .emoji(e)
+        case .symbol(let name): return .symbol(name, plate: false)
+        case .favicon(let u): return .favicon(u, fallback: "globe")
+        case nil: return .favicon(url, fallback: "globe")
         }
     }
 

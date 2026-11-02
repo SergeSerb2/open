@@ -112,15 +112,30 @@ public struct TabsProvider: SuggestProvider {
         let excluded = input.context.mode == .editCurrentURL ? input.currentTab?.tabID : nil
         let currentSpace = index.spaceOrdinal(of: input.context.spaceID)
         var top = TopRows(capacity: input.query.isEmpty && input.context.mode != .searchTabs ? emptyQueryRows : maxRows)
+        // Split panes become one candidate per split (§4.2.1): the best pane's quality and entry,
+        // the most recent pane's recency. A split holding the excluded tab is left out.
+        var splitBest: [Int32: (entry: Int, quality: Double, frecency: Double)] = [:]
+        var excludedSplits: Set<Int32> = []
         // Scores are computed for every match from flat arrays; Suggestion values only for the winners.
-        func consider(_ i: Int, quality: Double) {
-            let tab = index.tabs[i]
-            if tab.id == excluded { return }
+        func detail(_ i: Int, quality: Double, frecency: Double) -> ScoreDetail {
             var boost = Ranking.locationBoost(index.locations[i])
             if index.spaceOrdinals[i] == currentSpace { boost += Ranking.currentSpaceBoost }
-            let detail = ScoreDetail(quality: quality, weight: Ranking.weight(.switchToTab),
-                                     frecency: TextMatching.tabRecency(lastActiveAt: tab.lastActiveAt, now: input.now), boost: boost)
-            top.insert(i, detail)
+            return ScoreDetail(quality: quality, weight: Ranking.weight(.switchToTab), frecency: frecency, boost: boost)
+        }
+        func consider(_ i: Int, quality: Double) {
+            let tab = index.tabs[i]
+            let split = index.splitOrdinals[i]
+            if tab.id == excluded {
+                if split >= 0 { excludedSplits.insert(split) }
+                return
+            }
+            let frecency = TextMatching.tabRecency(lastActiveAt: tab.lastActiveAt, now: input.now)
+            guard split >= 0 else { top.insert(i, detail(i, quality: quality, frecency: frecency)); return }
+            if let b = splitBest[split] {
+                splitBest[split] = (quality > b.quality ? i : b.entry, max(quality, b.quality), max(frecency, b.frecency))
+            } else {
+                splitBest[split] = (i, quality, frecency)
+            }
         }
         if input.query.isEmpty {
             // Empty query: most recently active tabs (score is recency + location), no Site Search scope.
@@ -137,8 +152,24 @@ public struct TabsProvider: SuggestProvider {
                 consider(m.entry, quality: m.quality)
             }
         }
+        // Edit mode: a split that holds the current tab is left out even when only another pane matched.
+        if let excluded, !splitBest.isEmpty,
+           let k = index.splits.firstIndex(where: { $0.paneSlots.contains { index.tabs[$0].id == excluded } }) {
+            excludedSplits.insert(Int32(k))
+        }
+        for (split, b) in splitBest where !excludedSplits.contains(split) {
+            var entry = b.entry
+            // Empty query: the row targets the focused pane (else the first).
+            if input.query.isEmpty {
+                let s = index.splits[Int(split)]
+                let focused = s.split.focusedPaneID
+                entry = s.paneSlots.first { index.tabs[$0].id == focused } ?? s.paneSlots.first ?? b.entry
+            }
+            top.insert(entry, detail(entry, quality: b.quality, frecency: b.frecency))
+        }
         return top.rows.map { (i, detail) in
             let e = index.entries[i]
+            if index.splitOrdinals[i] >= 0 { return splitRow(i, detail, index: index, input: input) }
             let displayTitle = e.tab.displayTitle
             var row = Suggestion(
                 id: "tab:\(e.tab.id.rawValue.uuidString)", kind: .switchToTab,
@@ -149,6 +180,24 @@ public struct TabsProvider: SuggestProvider {
             row.isExactTabMatch = detail.quality == MatchQuality.exact
             return row
         }
+    }
+
+    /// One row for the split that holds entry `i` (its best-matching or focused pane).
+    private func splitRow(_ i: Int, _ detail: ScoreDetail, index: TabIndex, input: SuggestInput) -> Suggestion {
+        let e = index.entries[i]
+        let s = index.splits[Int(index.splitOrdinals[i])]
+        let panes = s.paneSlots.map { index.entries[$0] }
+        let titles = panes.map { p in p.tab.displayTitle.isEmpty ? TextMatching.matchableURL(p.url) : p.tab.displayTitle }
+        var row = Suggestion(
+            id: "split:\(s.split.id.rawValue.uuidString)", kind: .switchToTab, title: titles.joined(separator: " | "),
+            url: e.url, icon: Self.icon(e), tabID: e.tab.id, tabLocation: .splitPane,
+            spaceID: e.spaceID, spaceTitle: e.spaceTitle, provider: id, scoreDetail: detail)
+        row.split = SplitRowInfo(splitID: s.split.id, paneTabIDs: panes.map(\.tab.id), paneTitles: titles,
+                                 paneIcons: panes.map(Self.icon), paneURLs: panes.map(\.url), isVertical: s.isVertical)
+        // Any pane may make the split exact (T5) or eligible (T7): the quality is the best pane's.
+        row.canBeTopHit = detail.quality >= MatchQuality.prefix && input.matchQuery.bytes.count >= 2
+        row.isExactTabMatch = detail.quality == MatchQuality.exact
+        return row
     }
 
     /// Keeps the best `capacity` rows by score (ties: lower entry index first). O(n) for typical input.

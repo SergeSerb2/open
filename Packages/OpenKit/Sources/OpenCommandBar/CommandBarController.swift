@@ -389,6 +389,12 @@ public final class CommandBarController: NSObject {
         } else if let top = suggestions.first {
             input.leadingIcon = rows.first.map(\.icon).map { icon in
                 if case .symbol(let name, _) = icon { return .symbol(name, plate: false) }
+                // A Split View row 1: the matched pane's icon. guess (no capture).
+                if case .split(let panes, _) = icon {
+                    let i = top.split?.paneTabIDs.firstIndex { $0 == top.tabID } ?? 0
+                    if i < panes.count, case .symbol(let name, _) = panes[i] { return .symbol(name, plate: false) }
+                    return i < panes.count ? panes[i] : .symbol("globe", plate: false)
+                }
                 return icon
             } ?? .symbol("magnifyingglass", plate: false)
             if top.kind == .navigate, case .symbol = input.leadingIcon { input.leadingIcon = .symbol("globe", plate: false) }

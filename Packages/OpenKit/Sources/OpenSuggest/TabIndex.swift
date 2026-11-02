@@ -20,6 +20,13 @@ final class TabIndex {
         let profileOrdinal: Int
     }
 
+    /// A Split View in the sidebar: its panes' entry slots in pane order (commandbar-completion §4.2.1).
+    struct SplitSummary {
+        let split: Split
+        var paneSlots: [Int]
+        let isVertical: Bool
+    }
+
     struct SpaceSummary {
         let id: SpaceID
         let title: String
@@ -41,6 +48,9 @@ final class TabIndex {
     /// Index into `spaces`, or -1 for favorites.
     fileprivate(set) var spaceOrdinals: [Int32] = []
     fileprivate(set) var locations: [TabLocation] = []
+    /// Index into `splits` for split panes, -1 for every other entry.
+    fileprivate(set) var splitOrdinals: [Int32] = []
+    fileprivate(set) var splits: [SplitSummary] = []
     fileprivate(set) var profiles: [ProfileID] = []
     fileprivate(set) var spaces: [SpaceSummary] = []
     fileprivate(set) var slotByTab: [ObjectIdentifier: Int] = [:]
@@ -115,6 +125,7 @@ final class TabIndexer {
         let location: TabLocation
         let space: Int32
         let profile: Int
+        var split: Int32 = -1
     }
 
     private func rebuild() {
@@ -137,7 +148,7 @@ final class TabIndexer {
         next.entries.reserveCapacity(n); next.tabs.reserveCapacity(n); next.masks.reserveCapacity(n)
         next.offsets.reserveCapacity(6 * n); next.bytes.reserveCapacity(previous?.bytes.count ?? 32 * 1024)
         next.profileOrdinals.reserveCapacity(n); next.spaceOrdinals.reserveCapacity(n)
-        next.locations.reserveCapacity(n); next.slotByTab.reserveCapacity(n)
+        next.locations.reserveCapacity(n); next.slotByTab.reserveCapacity(n); next.splitOrdinals.reserveCapacity(n)
         var folded = 0
         var keep: [ObjectIdentifier: WeakTab] = [:]
         keep.reserveCapacity(n)
@@ -170,6 +181,7 @@ final class TabIndexer {
             next.profileOrdinals.append(Int32(p.profile))
             next.spaceOrdinals.append(p.space)
             next.locations.append(p.location)
+            next.splitOrdinals.append(p.split)
             keep[id] = armed[id]
         }
         armed = keep // tabs that left the sidebar are forgotten; their one-shot scopes fire at most once
@@ -187,7 +199,14 @@ final class TabIndexer {
                 case .tab(let tab): out.append(Placement(tab: tab, location: location, space: space, profile: profile))
                 case .folder(let folder): walk(folder.children, location, space, profile, &out)
                 case .split(let split):
-                    for pane in split.panes { out.append(Placement(tab: pane, location: .splitPane, space: space, profile: profile)) }
+                    // The pane list and orientation are structure; `focusedPaneID` is read live for rows.
+                    let ordinal = Int32(next.splits.count)
+                    var slots: [Int] = []
+                    for pane in split.panes {
+                        slots.append(out.count)
+                        out.append(Placement(tab: pane, location: .splitPane, space: space, profile: profile, split: ordinal))
+                    }
+                    next.splits.append(TabIndex.SplitSummary(split: split, paneSlots: slots, isVertical: split.orientation == .vertical))
                 }
             }
         }

@@ -13,7 +13,9 @@ Sources: [interaction-states.md](re/interaction-states.md) §9 (captured command
 
 ![Inline completion](commandbar/inline-completion.png)
 
-The screens above are our renders of synthetic data (`commandbar-render screens`): empty Cmd+T, typing "git", Cmd+L, actions with keycaps, the "Tab or Space" hint, the Site Search chip (empty and with a query), the calculator, a scrolled list, and the edge style over a white page. The first two sheets date from M3 (#43); rows and the "git" field have changed since (current tab in Cmd+T, inline completion). The completion sheet shows "gith" (completed to `github.com`, the completed part selected), "GitH" (the field keeps the candidate's case), and the text after Right accepts it.
+![One row per Split View](commandbar/split-row.png)
+
+The screens above are our renders of synthetic data (`commandbar-render screens`): empty Cmd+T, typing "git", Cmd+L, actions with keycaps, the "Tab or Space" hint, the Site Search chip (empty and with a query), the calculator, a scrolled list, and the edge style over a white page. The first two sheets date from M3 (#43); rows and the "git" field have changed since (current tab in Cmd+T, inline completion). The completion sheet shows "gith" (completed to `github.com`, the completed part selected), "GitH" (the field keeps the candidate's case), and the text after Right accepts it. The split sheet shows the empty Cmd+T list with the split "Spec draft | Review notes" as one row, then "review" with that row selected (white plate cells, the gap shows the selection fill).
 
 ## 1. Modules
 
@@ -117,6 +119,7 @@ All values are points from the panel's outer top-left corner, at 1x (window 2216
 | navigate | "\<url\> — \<url\>", or "\<page title\> — \<url\>" after a history merge | favicon, else globe | — | F0040 |
 | history | "\<title\> — \<url\>" | favicon, else globe | — | F0048 |
 | switchToTab | title | favicon | "Switch to Tab", "Switch to Split View", or the tab's Space name + arrow | F0063, A0121, A0327 |
+| switchToTab, a Split View | pane titles with a 1 pt rule between them, no subtitle | one cell per pane on a plate | "Switch to Split View" + arrow | A0120, A0121 (CC-12…CC-14) |
 | search, searchSuggestion | the query | magnifier | — | F0052 |
 | action | title | SF Symbol on a plate | shortcut keycaps | F0063 (plate); keycaps guess |
 | calculator | "84 — 12*(3+4) =" | "=" on a plate | — | guess |
@@ -124,7 +127,9 @@ All values are points from the panel's outer top-left corner, at 1x (window 2216
 | siteSearchHint | not a row: shown as the input's trailing hint | — | — | F0040, F0061 |
 | Cmd+L, current page | the page title, no subtitle | favicon | — | F0048 |
 
-The input's leading icon follows the first row: magnifier for searches and an empty field, globe for a typed URL without a favicon, the favicon when known (F0040, F0052, F0061). In Cmd+L it is the page's favicon.
+Split View row (`CommandBarMetrics.split*`; A0120 row 3, CC-13, CC-14): plate 30×30 at row `[12, 10]`, radius 7 (continuous), white 0.05 (white on the selected row); one cell per pane with a 1 pt gap at each boundary that shows the row background; pane favicons 9 pt centered in their cells; for 3–4 side-by-side panes the plate is 15 pt per pane and a vertical split stacks the cells (guesses, no capture). Title at x 50 (plate + 8); the rule is 1 pt wide, row y 20.5–32.5, white 0.17, from 4.5 pt after the first title's advance, with the next title 5 pt after it (fitted on A0120). Too long: the last title truncates first, then earlier ones (guess). The plate cells and pane icons are Core Animation sublayers of the row, not drawn into its backing store: they need no clear-blend punch-out for the gap, and `commandbar-render` could not read a row backing store that had a fill drawn at the plate's place (§7). AX: the label is the pane titles joined with ", "; the value "Switch to Split View".
+
+The input's leading icon follows the first row (for a Split View row, the matched pane's icon; guess): magnifier for searches and an empty field, globe for a typed URL without a favicon, the favicon when known (F0040, F0052, F0061). In Cmd+L it is the page's favicon.
 
 ### 3.4 The (i) privacy footer
 
@@ -217,7 +222,7 @@ Profiling (`sample`) found three costs, now fixed: a forced panel layout on ever
 
 ```text
 commandbar-render render (--state NAME | --scene FILE.json) --out FILE.png [--scale 1|2] [--size WxH] [--backdrop-color #RRGGBB]
-    states: empty, typing-git, cmd-l, space-hint, site-chip, site-search, calculator, actions, scrolled, privacy-footer, completion, completion-case, completion-accepted
+    states: empty, typing-git, cmd-l, space-hint, site-chip, site-search, calculator, actions, scrolled, privacy-footer, completion, completion-case, completion-accepted, split-row, split-row-selected
 commandbar-render compare --arc CAPTURE.png --ours RENDER.png --scene FILE.json --out DIR [--title TEXT] [--space srgb|p3]
 commandbar-render ax [--state NAME] # dump the rendered overlay AX tree
 commandbar-render flows       # keyboard and mouse flows
@@ -226,11 +231,11 @@ commandbar-render bench [--tabs 5000] [--history 100000] [--scale 2] [--completi
 commandbar-render screens --out DIR [--scale 2]
 ```
 
-`--space p3` loads both PNGs into Display P3 and measures ΔE00 there. Session-2 captures (S2) carry the AW2726DM display profile, whose gamut exceeds sRGB; use it for them. The session-1 comparisons in §8.1 stay in sRGB. A scene file can set `"footer": true`; the stage then supplies a stand-in privacy URL so line 2 draws. It can also set `"selection": [location, length]`, a field selection such as an inline completion's range. `bench --completion` runs the completion A/B of §6.
+`--space p3` loads both PNGs into Display P3 and measures ΔE00 there. Session-2 captures (S2) carry the AW2726DM display profile, whose gamut exceeds sRGB; use it for them. The session-1 comparisons in §8.1 stay in sRGB. A scene file can set `"footer": true`; the stage then supplies a stand-in privacy URL so line 2 draws. It can also set `"selection": [location, length]`, a field selection such as an inline completion's range, and per row `"titleParts"`, `"paneIcons"`, `"vertical"` for a Split View row. `bench --completion` runs the completion A/B of §6.
 
 States run through the real engine over a synthetic world (neutral titles, public site names, our own theme colors and letter icons). A scene file instead gives fixed rows, a theme JSON, and a backdrop PNG, to match one Arc capture. Scene files that copy a capture's titles hold personal data, so they stay in `.re/` (git-ignored).
 
-Rendering uses the method of design.md §6 (a deep copy of the layer tree rendered by `CARenderer`). The harness window is never on screen, so AppKit can mark its backing stores purgeable; under memory pressure a store can be dropped before the snapshot. The renderer redraws every view right before each snapshot, checks the page corner and the panel fill, and retries.
+Rendering uses the method of design.md §6 (a deep copy of the layer tree rendered by `CARenderer`). Known limit (2026-11-02): a row view whose `draw(_:)` filled a rect at the split plate's place came out blank in the copy (also every later row drawn in that view), while `cacheDisplay` of the same view showed the content; which code ran before the fill changed the outcome, so the cause is in how the copy reads AppKit's backing store, not in the drawing. The split plate moved to sublayers. The same family of fault gives the intermittent black frames in `docs/followups.md` (a black lower band in 2 of 26 renders of `main` at 2x on the M5). The harness window is never on screen, so AppKit can mark its backing stores purgeable; under memory pressure a store can be dropped before the snapshot. The renderer redraws every view right before each snapshot, checks the page corner and the panel fill, and retries.
 
 ## 8. Comparison with Arc
 
@@ -250,6 +255,9 @@ Targets: position ≤ 1 pt, ΔE00 ≤ 2.
 | F0055 | typing, 1 row | 19 | 1.0 | 0.17 | 1.73 | 0.44 |
 | A0327 | Space without a theme, Space-name accessory | 37 | 1.0 | 0.10 | 1.67 | 0.42 |
 | A0120 | white page (light edge style), split row | 37 | 6.0 | 0.27 | 2.47 | 0.55 |
+| A0120 (Steps 3–4: split row) | the same, row 3 one Split View row; backdrop the sampled page colors `#FEF8FE` → `#F7F7FB` | 42 | 1.0 | 0.12 | 2.11 (left shadow, the non-uniform page) | 0.55 |
+
+Split row elements (A0120 row 3): plate left and right cells 0.0 pt / 1.04, gap 1.05 (both columns at half coverage, as in Arc), title part 1 0.0 / 0.07, rule 1.0 / 0.59, title part 2 0.0 / 0.09, accessory label 0.0 / 0.83, arrow 0.0 / 1.02. The row-3 miss of the first A0120 row (title 6 pt left) is gone.
 
 Inline completion (Steps 1–2; re-run on the branch build, sRGB; backdrop F0064, theme of Space 1):
 
@@ -298,7 +306,6 @@ Other states: text selection fill 0.00 (F0048); selected input text 1.0 pt / 0.6
 | Difference | Size | Why |
 |---|---|---|
 | Text selection box (F0048) | 2 pt at its right end | AppKit's field editor highlights from the text origin to the line's end; Arc's starts 1 px earlier and ends 2 px earlier. The text itself matches (0 pt). |
-| Split View row (A0120 row 3) | title 6 pt left | Arc draws one row per Split with a wider plate holding both pane icons. `OpenSuggest` returns one row per pane; we show the pane's favicon and "Switch to Split View". Needs a split row from the engine. |
 | Shadow below the panel over a white page (A0120) | ΔE 2.47 | No clean frame of that page without the bar exists; the page is not uniform (pink at the sides, blue-gray below) and we use one flat color. |
 | Glyph ink boxes | ≤ 1 pt | SF Symbols are not Arc's art. Sizes are fitted on macOS 27.2 (26B5112a); symbol metrics changed once during this work, so re-fit after OS updates (`compare` shows it at once). |
 | Panel edge over a light page in session 2 (S2 18/0044, 0009, 0016, 0018) | ΔE00 ≈ 16 on both edge lines | Session 1 (F0039, F0040, A0120) shows one gray line over a light page; session 2 shows Arc's dark double line over light and blue pages. Open keeps the session-1 luminance rule; the input that switches the style is not known (`docs/followups.md`, capture request). |
@@ -308,7 +315,7 @@ Other states: text selection fill 0.00 (F0048); selected input text 1.0 pt / 0.6
 
 ## 9. Flows (`commandbar-render flows`)
 
-Real key events go through the window and the bar's field editor; mouse events go to the hit-tested views; the engine is the real `SuggestEngine` over the synthetic world. 97/97 pass, including 33 review regression checks, the 12 Step 0 checks (flows 87–90), and the 17 completion checks (flows 69–80, 86). `check` adds a render of every state at 2x, the keystroke budget, and the completion budget: 112/112.
+Real key events go through the window and the bar's field editor; mouse events go to the hit-tested views; the engine is the real `SuggestEngine` over the synthetic world. 102/102 pass, including 33 review regression checks, the 12 Step 0 checks (flows 87–90), the 17 completion checks (flows 69–80, 86), and the 5 split-row checks (flow 81). `check` adds a render of every state at 2x, the keystroke budget, and the completion budget: 119/119.
 
 | # | Flow |
 |---|---|
@@ -355,6 +362,7 @@ Real key events go through the window and the bar's field editor; mouse events g
 | 78 | Tab with a hint enters Site Search from the typed text; Space with a completion types a space (the hint offers Tab only) |
 | 79 | IME: marked text removes the completion first with no query; no completion while marked; a commit at the end may complete |
 | 80 | Cmd+L: typing replaces the selected URL, then completes |
+| 81 | "review": one row for the split (both titles in pane order, "Switch to Split View", no subtitle, no pane rows); AX label "Spec draft, Review notes"; Return → `.switchToTab` of the matched pane; an exact other-pane title targets that pane; 2x pixels: white cells and a 1 pt gap that shows the selection fill |
 | 86 | AX: the field's value is the whole text; its selected range is the completion (CC-3) |
 | 87 | Present: the panel is fully drawn in the first frame (presentation-layer render equals a later render) and no layer has an animation key; dismiss: hidden at once, no animation key, the page shows again (CC-44) |
 | 88 | Click (i): footer on, (i) hidden, field +42 pt, panel frame unchanged; black band; the list's visible part ends at the band; the pointer over the band selects nothing; Down scrolls row 5 out from behind it; Cmd+I hides the footer; a panel without rows grows by the band |
@@ -393,7 +401,7 @@ App (window and wiring):
 Engine (`OpenSuggest`) gaps seen against Arc:
 
 1. Empty Cmd+T: Arc lists open tabs ("Switch to Tab") and the help action first (F0063, A0327); `OpenSuggest` ranks top history first. Since Steps 1–2 the current tab is one of them (F0043, F0063).
-2. Split View: Arc shows one row per Split with both panes; `OpenSuggest` returns one row per pane.
+2. Split View: one row per Split with both panes, built in commandbar-completion Steps 3–4 (`Suggestion.split`, §3.3).
 3. Inline autocomplete (`CommandBarAutocompleteSuggestion`): built in commandbar-completion Steps 1–2 (rule T3a, `SuggestionSnapshot.inlineCompletion`, §4.1).
 4. The search-suggestion privacy notice (features-core §4.5 rule 13): built as Arc's (i) footer (CC-42, commandbar-completion Step 0).
 

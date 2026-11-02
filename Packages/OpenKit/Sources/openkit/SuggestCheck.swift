@@ -438,6 +438,7 @@ func runSuggestCheck(args: [String]) async {
 
     // 32–40. Inline completion (commandbar-completion §4.1, §5.1).
     await completionChecks(log: log, tmp: tmp)
+    await splitChecks(log: log, tmp: tmp)
 
     // 22, 44. Latency, with and without inline completion.
     await latencyCheck(log: log, history: history)
@@ -587,8 +588,8 @@ private func makeBenchModel() -> (BrowserModel, Profile, [Space]) {
         for _ in 0..<5 { pinned.append(.folder(Folder(title: "Folder", children: (0..<10).map { _ in .tab(tab()) }))) }
         for _ in 0..<50 { pinned.append(.tab(tab())) }
         for _ in 0..<5 { today.append(.folder(Folder(title: "Folder", children: (0..<10).map { _ in .tab(tab()) }))) }
-        for _ in 0..<25 { today.append(.split(Split(panes: [tab(), tab()]))) }
-        for _ in 0..<290 { today.append(.tab(tab())) }
+        for _ in 0..<50 { today.append(.split(Split(panes: [tab(), tab()]))) } // 500 two-pane splits in all (plan §5.4)
+        for _ in 0..<240 { today.append(.tab(tab())) }
         space.pinned = pinned
         space.today = today
         spaces.append(space)
@@ -726,7 +727,7 @@ private func latencyCheck(log: CheckLog, history: HistoryStore) async {
     print(String(format: "first snapshot with inline completion allowed, main-thread CPU: p50 %.3f ms  p95 %.3f ms (plain p95 %.3f); %d of 1000 snapshots completed",
                  percentile(firstCPUCompletion, 0.5), completionP95, plainP95, completions))
     print(String(format: "completion check over the snapshot rows, CPU: p50 %.4f ms  p95 %.4f ms  max %.4f ms", percentile(checkCPU, 0.5), percentile(checkCPU, 0.95), checkCPU.last ?? 0))
-    log.check("44: first snapshot with inline completion p95 < 5 ms CPU (5,000 tabs); completion check p95 ≤ 0.05 ms",
+    log.check("44: first snapshot with inline completion p95 < 5 ms CPU (5,000 tabs incl. 500 two-pane splits); completion check p95 ≤ 0.05 ms",
               completionP95 < 5 && percentile(checkCPU, 0.95) <= 0.05 && completions > 0,
               String(format: "first p95 %.3f ms (plain %.3f); check p95 %.4f ms; %d completions; load %@", completionP95, plainP95, percentile(checkCPU, 0.95), completions, loadAverage()))
     log.check("first snapshot p95 < 5 ms main-thread CPU (1,000 random queries, 5,000 tabs, 100k history)", percentile(firstCPU, 0.95) < 5,
@@ -736,6 +737,58 @@ private func latencyCheck(log: CheckLog, history: HistoryStore) async {
 }
 
 // MARK: - Inline completion (scenarios 32–40)
+
+/// Scenario 41 (commandbar-completion §4.2.1): one row per Split View.
+@MainActor
+private func splitChecks(log: CheckLog, tmp: URL) async {
+    let now = Date()
+    let profile = Profile(name: "Splits")
+    let space = Space(title: "Main", profileID: profile.id)
+    let alpha = Tab(url: URL(string: "https://alpha.example.com/notes")!, title: "Alpha Notes", lastActiveAt: now.addingTimeInterval(-900))
+    let beta = Tab(url: URL(string: "https://beta.example.com/board")!, title: "Beta Board", lastActiveAt: now.addingTimeInterval(-60))
+    let lone = Tab(url: URL(string: "https://gamma.example.com/")!, title: "Gamma Home", lastActiveAt: now.addingTimeInterval(-30))
+    let split = Split(orientation: .vertical, panes: [alpha, beta], focusedPaneID: alpha.id)
+    space.today = [.tab(lone), .split(split)]
+    let model = BrowserModel(profiles: [profile], spaces: [space], windows: [BrowserWindowState(focusedSpaceID: space.id)])
+    let history = HistoryStore(fileURL: tmp.appendingPathComponent("split-history.sqlite3"))
+    for _ in 0..<3 { await history.recordVisit(url: URL(string: "https://beta.example.com/board")!, title: "Beta Board", time: now.addingTimeInterval(-3_600), typed: true) }
+    let engine = SuggestEngine(model: model, history: history, fetcher: nil)
+    func ctx(_ mode: SuggestMode = .newTab, current: Tab) -> SuggestContext {
+        SuggestContext(mode: mode, profileID: profile.id, spaceID: space.id, currentTabID: current.id, currentTabURL: current.url, allowsRemoteSuggestions: false)
+    }
+    let splitRow = "split:\(split.id.rawValue.uuidString)"
+    var wrong: [String] = []
+    func rows(_ s: SuggestionSnapshot?) -> String { s?.suggestions.map { "\($0.kind.rawValue):\($0.title)" }.joined(separator: ", ") ?? "none" }
+    // Either pane's words find the one split row; it targets the matching pane.
+    let byBeta = await lastSnapshot(engine, "beta", ctx(current: lone)), byAlpha = await lastSnapshot(engine, "alpha", ctx(current: lone))
+    let betaSplits = byBeta?.suggestions.filter { $0.split != nil } ?? []
+    if betaSplits.count != 1 || betaSplits.first?.id != splitRow || betaSplits.first?.tabID != beta.id { wrong.append("beta: \(rows(byBeta))") }
+    if byAlpha?.suggestions.first(where: { $0.split != nil })?.tabID != alpha.id { wrong.append("alpha: \(rows(byAlpha))") }
+    if byBeta?.suggestions.contains(where: { $0.tabID == beta.id && $0.split == nil }) == true { wrong.append("a pane row besides the split row") }
+    // The row: titles in pane order, orientation, location, no pane-level rows.
+    if let r = betaSplits.first, r.split?.paneTitles != ["Alpha Notes", "Beta Board"] || r.split?.isVertical != true || r.tabLocation != .splitPane || r.title != "Alpha Notes | Beta Board" {
+        wrong.append("row fields \(String(describing: r.split))")
+    }
+    // History for a pane URL folds into the split row (open-tab precedence).
+    let all = byBeta?.suggestions ?? []
+    if all.contains(where: { $0.kind == .history && $0.url.map(TextMatching.urlKey) == TextMatching.urlKey(beta.url) }) { wrong.append("history row for a pane URL stayed: \(rows(byBeta))") }
+    if !(betaSplits.first?.providers.contains("history") ?? false) { wrong.append("split row did not absorb history (providers \(betaSplits.first?.providers ?? []))") }
+    // An exact pane title makes the split row the T5 top hit.
+    let exact = await lastSnapshot(engine, "Beta Board", ctx(current: lone))
+    if exact?.topHitRule != .exactTab || exact?.topHit?.id != splitRow { wrong.append("exact: top=\(describe(exact?.topHit)) rule=\(exact?.topHitRule.rawValue ?? "-")") }
+    // Empty query: one row per split, targeting the focused pane.
+    let empty = await lastSnapshot(engine, "", ctx(current: lone))
+    let emptySplits = empty?.suggestions.filter { $0.split != nil } ?? []
+    if emptySplits.count != 1 || emptySplits.first?.tabID != alpha.id { wrong.append("empty: \(rows(empty))") }
+    // Edit mode with the current tab in the split: the split row is left out, also when the other pane matched.
+    let edit = await lastSnapshot(engine, "beta", ctx(.editCurrentURL, current: alpha))
+    if edit?.suggestions.contains(where: { $0.split != nil }) == true { wrong.append("edit mode kept the current split: \(rows(edit))") }
+    // Caps: the split row counts as one switchToTab row; search tabs mode shows it too.
+    let tabsMode = await lastSnapshot(engine, "a", ctx(.searchTabs, current: lone))
+    if tabsMode?.suggestions.filter({ $0.split != nil }).count != 1 { wrong.append("search tabs: \(rows(tabsMode))") }
+    log.check("41: split → one row (either pane matches, targets it); exact pane title → T5; pane history folds in; empty query → focused pane; edit mode leaves out the current split",
+              wrong.isEmpty, wrong.isEmpty ? "all as expected" : wrong.joined(separator: "; "))
+}
 
 /// A small model and history for the completion table of commandbar-completion §4.1.3 and §5.1.
 @MainActor

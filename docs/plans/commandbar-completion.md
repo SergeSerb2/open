@@ -754,6 +754,8 @@ The Section 2 agent implements this plan. Each row names the merged PR and its e
 
 | 1–2 | [#138](https://github.com/SergeSerb2/open/pull/138) | `suggest-check` 44/44 (scenarios 32–40, 44: completion first snapshot p95 0.446 ms vs plain 0.511, check p95 0.0116 ms, load 10); `commandbar-render check` 112/112 (flows 69–80, 86 with 17 checks; completion budget p95 +0.097 ms at load 5.4 and +0.079 ms at load 9.6, layout passes mean 0.11 on and off, max 1); compares F0043/F0062/F0061 worst 1.0 pt, ΔE00 1.93; S2 18/0009 completion box, text, and hint ≤ 1 pt, ≤ 1.37; pixel diff of the 10 states against `main` (only the intended changes, `docs/commandbar.md` §8.1); App build; e2e `commandbar` 55/55; break-and-revert: 8 extra field writes per show fail the budget (+0.912 ms), one forced panel layout per show fails the layout rule (mean 0.65 vs 0.11) | done |
 
+| 3–4 | [#139](https://github.com/SergeSerb2/open/pull/139) | `suggest-check` 45/45 (scenario 41; 44 now with 500 two-pane splits: completion first snapshot p95 0.444 ms, plain 0.513, load 11); `commandbar-render check` 119/119 (flow 81, 5 checks); A0120 compare: split plate cells 0.0 pt / 1.04, gap 1.05, title parts 0.0 / ≤ 0.09, rule 1.0 / 0.59, worst over the scene 1.0 pt and 2.11 (left shadow); pixel diff of 13 states × 2 scales against `main`: only `empty` and `privacy-footer` change (the split row), plus two `main` renders with a black lower band (item 13); App build; e2e `commandbar` 56/56 incl. new `commandbar_split_one_row`; break-and-revert: pane rows instead of split rows fail `suggest-check` 41, no cell gap and a joined-title AX label fail flow 81 ×2 | done |
+
 Section 2 decisions (Step 0):
 
 - `present(_:)` and `dismiss(reason:)` lose their `animated:` parameter: with no animation it would mean nothing.
@@ -761,6 +763,14 @@ Section 2 decisions (Step 0):
 - While Open has no privacy page, line 2 of the footer hides (`privacyURL` nil). Hiding only the word "here" would leave a broken sentence.
 - The panel edge keeps the session-1 luminance rule. Session 2 shows the dark double edge over light pages, against session-1 F0039/F0040/A0120; the rule's input is not known (`docs/followups.md`, capture request).
 - `compare --space p3` measures session-2 captures in Display P3 (their AW2726DM profile exceeds sRGB); session-1 comparisons stay in sRGB.
+
+Section 2 decisions (Steps 3–4):
+
+- The plate cells and pane icons are Core Animation sublayers of the row view, not drawn in `draw(_:)`: one rounded layer per cell with only the outer corners round, so the 1 pt gap needs no clear blend. Drawing the plate in `draw(_:)` made `commandbar-render` copies of that row view blank (`docs/commandbar.md` §7).
+- The rule starts 4.5 pt after the first title's advance and the next title 5 pt after the rule (fitted on A0120; the plan said 5 pt each side). Text widths are exact, not rounded up.
+- The selected split row's rule is white 0.5, and a split row 1 gives the input its matched pane's icon (guesses; no capture).
+- The App needs no change for Step 9's pane rule: `selectTabForCommand` already focuses the pane, selects the split, and reveals it. The e2e check `commandbar_split_one_row` proves it now.
+- `SplitRowInfo` also carries `paneURLs`, for the dedupe of history rows into the split row.
 
 Section 2 decisions (Steps 1–2):
 
