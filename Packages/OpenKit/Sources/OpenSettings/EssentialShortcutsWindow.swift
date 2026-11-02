@@ -19,7 +19,7 @@ public enum EssentialShortcuts {
     public static let items: [Item] = [
         Item(title: "Open a New Tab", detail: "Open the Command Bar to create a new tab", commandID: "new-tab"),
         Item(title: "Switch to a Recent Tab", detail: "Hold this to quickly switch between recent tabs", commandID: "tab-switcher-forward"),
-        Item(title: "Copy Page URL", detail: "Copy the current tab's URL", commandID: "copy-url"),
+        Item(title: "Copy Page URL", detail: "Copy the current tab's URL without trackers", commandID: "copy-url"),
         Item(title: "Add Split View", detail: "View multiple websites side-by-side", commandID: "add-split-view"),
         Item(title: "Open Little Open", detail: "Use a smaller browser window for quick searches", commandID: "new-little-open-window"),
     ]

@@ -5221,6 +5221,19 @@ def commandbar_checks(factory, results, tmp, config):
         app.call('window-focus', id=first_window, activate=True)
         results['new_window_opens_command_bar'] = {'ok': bool(opened_new) and bool(closed_new),
             'state': {k: (opened_new or {}).get(k) for k in ('presented', 'mode', 'newTabHighlighted')}}
+        # Copy URL removes trackers by Arc's rule and names what it copied (Section 2 item 12, CC-31a).
+        clean_tab = new_tab(app, origin + '/clean?utm_source=news&q=1&fbclid=x')
+        app.call('select', tab=clean_tab); wait_until(lambda: app.call('window-state')['selected'] == clean_tab, timeout=3, step=.05)
+        app.call('menu-perform', id='copy-url')
+        copied_clean = wait_until(lambda: app.call('pasteboard') == origin + '/clean?q=1', timeout=3, step=.05)
+        clean_toast = app.call('window-state')['toast']
+        app.call('navigate', tab=clean_tab, url=origin + '/plain'); app.call('wait', tab=clean_tab)
+        app.call('menu-perform', id='copy-url')
+        copied_plain = wait_until(lambda: app.call('pasteboard') == origin + '/plain', timeout=3, step=.05)
+        plain_toast = app.call('window-state')['toast']
+        results['copy_url_without_trackers'] = {'ok': bool(copied_clean) and clean_toast == 'Copied a clean link without trackers'
+            and bool(copied_plain) and plain_toast == 'Copied Current URL', 'toasts': [clean_toast, plain_toast], 'pasteboard': app.call('pasteboard')}
+        app.call('close', tab=clean_tab)
         # Edit Pinned URL (app-shell §4.1, Section 2 item 11): the row menu's Edit Pinned Page ▸ Edit… opens
         # the command bar in edit mode with the pinned URL selected; Return stores the new pinned URL, and
         # the tab, still on its pinned page, goes there.

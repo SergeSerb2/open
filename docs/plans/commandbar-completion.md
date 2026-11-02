@@ -413,7 +413,7 @@ Rows, in Arc's order (CC-28). Text is Arc's except the brand and the tracker cla
 |---|---|---|
 | Open a New Tab | Open the Command Bar to create a new tab | `new-tab` (⌘T) |
 | Switch to a Recent Tab | Hold this to quickly switch between recent tabs | `tab-switcher-forward` (⌃Tab) |
-| Copy Page URL | Copy the current tab's URL | `copy-url` (⇧⌘C) |
+| Copy Page URL | Copy the current tab's URL without trackers | `copy-url` (⇧⌘C) |
 | Add Split View | View multiple websites side-by-side | `add-split-view` (⌃⇧=) |
 | Open Little Open | Use a smaller browser window for quick searches | `new-little-open-window` (⌥⌘N) |
 
@@ -693,7 +693,7 @@ One PR per step. Each PR: merge `origin/main`, run `tools/verify-all.sh`, paste 
 | Q5 | Toolbar per window, and does Cmd+N inherit it? | Per window (CC-34); a new window copies the key window. |
 | Q6 | Does the field show the candidate's letter case (CC-6, one frame)? | Yes, as Arc does in F0062. `userText` keeps the user's case. |
 | Q7 | Left arrow with a completion? | Native: the completed text stays, caret at the selection start. Session 2 measured Backspace only (CC-40); Right and Left stay open (§9 item 5). |
-| Q8 | Arc's Copy URL strips trackers (CC-31). | Out of this plan. The window text says "Copy the current tab's URL". File a follow-up for tracker stripping in `copy-url`. |
+| Q8 | Arc's Copy URL strips trackers (CC-31). | Out of this plan at first; done in Section 2 item 12 with Arc's decoded rule (CC-31a). The window text is Arc's again: "Copy the current tab's URL without trackers". |
 | Q9 | What do the (i) button and Cmd+I open? | **Answered by capture (CC-42): an inline privacy footer in the bar** (§4.8), not a window. The Essential Keyboard Shortcuts window keeps its other entries (§4.5.3). |
 | Q10 | Split row icon for 3–4 panes and vertical splits? | 15 pt cells in a row, or stacked in a 30×30 plate for vertical. Refit when captured. |
 | Q11 | Remove the Shortcuts pane `basics` filter (CC-30)? | Yes. The settings-library plan owner confirms in the Step 6 PR. |

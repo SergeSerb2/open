@@ -711,6 +711,7 @@ func runCommandsDemo(args: [String]) async throws {
     try await runFolderPeekDemo(root: root.appendingPathComponent("FolderPeek"), check: check)
     runTidyTitlesDemo(check: check)
     runNumberingDemo(check: check)
+    runTrackerDemo(check: check)
     runTidyRenameDemo(check: check)
     try await runFolderArchiveDemo(root: root.appendingPathComponent("FolderArchive"), check: check)
     try await runSidebarCommandsDemo(root: root.appendingPathComponent("SidebarCommands"), check: check)

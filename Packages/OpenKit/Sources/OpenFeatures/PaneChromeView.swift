@@ -1,5 +1,6 @@
 import AppKit
 import OpenDesign
+import OpenModel
 
 @MainActor
 final class ActionButton: NSButton {
@@ -40,7 +41,8 @@ public final class PaneChromeView: NSView {
     var onClose: (() -> Void)?
     var onMenu: ((NSView) -> Void)?
     var onURL: (() -> Void)?
-    var onCopy: (() -> Void)?
+    /// After the copy button copied the URL; true when trackers were removed (Arc CC-31a).
+    var onCopy: ((Bool) -> Void)?
     /// Right-click menu of the content toolbar (§4.6.2); pane bars have none.
     var toolbarMenu: (() -> NSMenu?)?
     /// A split pane's bar, or the optional content toolbar on a single pane (commandbar-completion
@@ -123,7 +125,10 @@ public final class PaneChromeView: NSView {
         case 1: host?.goForward()
         case 2: if host?.isLoading == true { host?.stop() } else { host?.reload() }
         case 3:
-            if let url = host?.currentURL { NSPasteboard.general.clearContents(); NSPasteboard.general.setString(url.absoluteString, forType: .string); onCopy?() }
+            if let url = host?.currentURL {
+                let (clean, changed) = TrackerStripping.clean(url)
+                NSPasteboard.general.clearContents(); NSPasteboard.general.setString(clean.absoluteString, forType: .string); onCopy?(changed)
+            }
         case 5: onMenu?(buttons[5])
         case 6: onClose?()
         default: onURL?()
