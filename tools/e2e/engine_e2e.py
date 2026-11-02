@@ -5202,6 +5202,31 @@ def commandbar_checks(factory, results, tmp, config):
             'completed': {k: (completed or state()).get(k) for k in ('text', 'fieldText', 'range')},
             'afterBackspace': {k: (removed or state()).get(k) for k in ('text', 'fieldText', 'range')}, 'switched': bool(went)}
         app.call('close', tab=local_id)
+        # A window the user creates opens with the command bar in New Tab mode (Section 2 item 10:
+        # F0098, F0157, A0359); the launch window did not create a bar (`lazy_commandbar` above).
+        windows_before = len(app.call('shell-windows')); first_window = app.call('window-state')['id']
+        app.call('menu-perform', id='new-window')
+        opened_new = wait_until(lambda: (lambda w, st: st if len(app.call('shell-windows')) > windows_before and w['id'] != first_window
+            and st.get('presented') and st.get('mode') == 'newTab' else None)(app.call('window-state'), state()), timeout=5, step=.05)
+        press('escape')
+        app.call('menu-perform', id='close-window')
+        closed_new = wait_until(lambda: len(app.call('shell-windows')) == windows_before, timeout=5, step=.1)
+        app.call('window-focus', id=first_window, activate=True)
+        results['new_window_opens_command_bar'] = {'ok': bool(opened_new) and bool(closed_new),
+            'state': {k: (opened_new or {}).get(k) for k in ('presented', 'mode', 'newTabHighlighted')}}
+        # Edit Pinned URL (app-shell §4.1, Section 2 item 11): the row menu's Edit Pinned Page ▸ Edit… opens
+        # the command bar in edit mode with the pinned URL selected; Return stores the new pinned URL, and
+        # the tab, still on its pinned page, goes there.
+        pin_id = new_tab(app, origin + '/pinned')
+        app.call('pin', tab=pin_id)
+        app.call('sidebar-menu', node=pin_id, item='Edit Pinned Page/Edit…')
+        editing = wait_until(lambda: (lambda st: st if st.get('presented') and st.get('pinnedEdit') == pin_id else None)(state()), timeout=3, step=.05)
+        type_query(origin + '/pinned-new'); press('return')
+        changed = wait_until(lambda: next((t for t in app.call('tabs') if t['id'] == pin_id and t['pinnedURL'] == origin + '/pinned-new'), None), timeout=5, step=.1)
+        moved = wait_until(lambda: app.eval(pin_id, 'document.title') == 'Shell C /pinned-new', timeout=5, step=.1)
+        results['edit_pinned_url'] = {'ok': bool(editing) and editing['mode'] == 'editCurrentURL' and editing['text'] == origin + '/pinned'
+            and editing['range'] == [0, len(origin + '/pinned')] and bool(changed) and bool(moved) and not state().get('pinnedEdit'),
+            'editing': {k: (editing or {}).get(k) for k in ('mode', 'text', 'range', 'pinnedEdit')}, 'pinnedURL': (changed or {}).get('pinnedURL')}
         time.sleep(.25)
         app.call('menu-perform', id='settings'); original_external = app.call('settings-state')['external']
         app.call('settings-toggle', name='external'); app.call('save'); app.quit()

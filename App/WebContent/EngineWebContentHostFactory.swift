@@ -62,12 +62,23 @@ final class EngineWebContentHostFactory: NSResponder, WebContentHostFactory {
   #endif
   private(set) var navigationFocusDecisions = 0
   private(set) var lastNavigationFocusRestored = false
-  func showCommandBar(_ mode: CommandBarMode) {
+  func showCommandBar(_ mode: CommandBarMode, editingPinnedTab: ItemID? = nil) {
     guard !isClosing, !app.terminationRequested else { return }
     let requestedAt = LaunchTiming.shared.elapsedMilliseconds
     app.prepareCommandServices()
     if commandBarSession == nil { commandBarSession = AppCommandBarSession(factory: self) }
-    commandBarSession?.show(mode, requestedAt: requestedAt)
+    commandBarSession?.show(mode, requestedAt: requestedAt, editingPinnedTab: editingPinnedTab)
+  }
+  /// Edit Pinned URL confirmed in the command bar (app-shell §4.1): the pinned URL changes; a tab that
+  /// was still on its old pinned page also goes to the new one (guess: no capture of Arc's dialog).
+  func updatePinnedURL(_ id: ItemID, to url: URL) {
+    guard let tab = model.tab(id: id), let old = tab.pinnedURL else { return }
+    let onPinnedPage = tab.url.host == old.host && tab.url.path == old.path
+    guard model.setPinnedURL(id: id, url: url) else { return }
+    if onPinnedPage {
+      if let content = hosts[id]?.content { content.load(url) } else { tab.url = url }
+    }
+    controller?.refresh(); mirror.sync(); app.scheduleSave()
   }
   private var enteredWindowFullscreenForPage = false
   private(set) var auxiliaryPages: [AuxiliaryPage] = []
@@ -453,8 +464,13 @@ final class EngineWebContentHostFactory: NSResponder, WebContentHostFactory {
     case .manageExtensions: openExtensionsPage(nil); return true
     case .manageSpaces:
       app.settingsPresenter.showLibrary(section: .spaces); return true
+    case .editPinnedURL(let id):
+      // The command bar in edit mode, seeded with the pinned URL (app-shell §4.1). Arc's strings name an
+      // "Edit Pinned URL dialog" (FC §3.2 r3); Section 2's brief chose the command bar.
+      guard let tab = model.tab(id: id), tab.pinnedURL != nil else { return false }
+      showCommandBar(.editCurrentURL, editingPinnedTab: tab.id); return true
     case .showSiteControls, .changeSpaceIcon, .editSpaceTheme, .newProfile, .shareSpace,
-         .editPinnedURL, .changeIcon, .customizePage:
+         .changeIcon, .customizePage:
       return false // Explicitly deferred UI entries; see docs/app-shell.md Step B.
     default: return nil
     }

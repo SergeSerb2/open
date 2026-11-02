@@ -17,11 +17,15 @@ final class AppCommandBarSession: CommandBarDelegate {
   private(set) var openFirstResultsMilliseconds: Double?
   private var openingSelection: ItemID?
   private var openingProfile: ProfileID?
+  /// The pinned tab whose pinned URL this presentation edits (Edit Pinned Page ▸ Edit…), else nil.
+  private(set) var pinnedEditTabID: ItemID?
   init(factory: EngineWebContentHostFactory) { self.factory = factory }
 
   var isPresented: Bool { controller?.isPresented == true }
-  func show(_ mode: CommandBarMode, requestedAt: Double) {
+  func show(_ mode: CommandBarMode, requestedAt: Double, editingPinnedTab: ItemID? = nil) {
     openedAt = requestedAt
+    let pinned = editingPinnedTab.flatMap { id in factory.model.tab(id: id).flatMap { $0.pinnedURL == nil ? nil : $0 } }
+    pinnedEditTabID = pinned?.id
     guard let windowController = factory.controller, let profile = factory.focusedProfile else { return }
     if factory.window?.isKeyWindow != true || !NSApp.isActive {
       factory.app.focusWindow(factory.windowState.id, activate: true)
@@ -65,9 +69,9 @@ final class AppCommandBarSession: CommandBarDelegate {
     openingSelection = factory.selectedNodeID; openingProfile = profile.id
     openFirstResultsMilliseconds = nil; firstResultsMilliseconds = nil
     bar.present(CommandBarRequest(mode: mode, profileID: profile.id, spaceID: factory.focusedSpace?.id,
-      currentTabID: peek ? nil : factory.selectedTab?.id,
-      currentTabURL: peek ? factory.selectedContent?.url : factory.selectedTab?.url,
-      currentTabTitle: peek ? factory.selectedContent?.title : factory.selectedTab?.displayTitle,
+      currentTabID: pinned?.id ?? (peek ? nil : factory.selectedTab?.id),
+      currentTabURL: pinned?.pinnedURL ?? (peek ? factory.selectedContent?.url : factory.selectedTab?.url),
+      currentTabTitle: pinned?.displayTitle ?? (peek ? factory.selectedContent?.title : factory.selectedTab?.displayTitle),
       allowsRemoteSuggestions: profile.settings.searchSuggestEnabled && factory.app.settingsPresenter.prepareForRemoteSuggestions(profileID: profile.id), searchEngineID: profile.settings.searchEngineID))
   }
   func contextDidChange() {
@@ -84,6 +88,14 @@ final class AppCommandBarSession: CommandBarDelegate {
     factory.app.scheduleMenuRebuild()
   }
   func commandBar(_ commandBar: CommandBarController, perform intent: CommandBarIntent) {
+    if let id = pinnedEditTabID {
+      // Edit Pinned URL: a page or a search becomes the tab's pinned URL; any other row acts as usual.
+      pinnedEditTabID = nil
+      switch intent {
+      case .open(let url, _, _), .search(_, let url, _, _, _): factory.updatePinnedURL(id, to: url); return
+      default: break
+      }
+    }
     switch intent {
     case .open(let url, let destination, let modifiers),
          .search(_, let url, _, let destination, let modifiers):
@@ -121,7 +133,7 @@ final class AppCommandBarSession: CommandBarDelegate {
       "panelFrame": { let f = bar.view.convert(bar.view.panelFrame, to: nil); let h = factory.window?.contentView?.bounds.height ?? 0
         return [f.minX, h - f.maxY, f.width, f.height] }(),
       "fieldWidth": bar.view.debugFieldFrame.width, "allowsRemote": bar.request?.allowsRemoteSuggestions ?? false,
-      "scope": bar.scope?.title ?? "", "fieldText": bar.fieldText,
+      "scope": bar.scope?.title ?? "", "fieldText": bar.fieldText, "pinnedEdit": pinnedEditTabID?.description ?? "",
       "rows": bar.suggestions.map { ["id": $0.id, "kind": $0.kind.rawValue, "title": $0.title,
         "url": $0.url?.absoluteString ?? "", "tab": $0.tabID?.description ?? "",
         "space": $0.spaceID?.description ?? "", "action": $0.actionID ?? ""] }] as [String: Any]
