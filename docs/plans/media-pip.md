@@ -346,6 +346,27 @@ Harness limit: after a symbol transition, neither `cacheDisplay` nor
 path is checked by frame (= button bounds) and `.alignCenter`, and ink boxes
 are measured on the static view and the 1x render.
 
+Scroll budgets (`sidebar-render bench --rows 1000`, release, 2x, M5 Pro;
+baseline main `1b5e66d8` vs head, interleaved pairs in one session, under
+`lockf /tmp/open-onscreen-e2e.lock`; a Chromium build of another section kept
+the 1-minute load average at 16–18 on 18 cores):
+
+| Session | Variant | Baseline median / mean p95 | Head median / mean p95 | Head vs baseline | Load (1 min) |
+|---|---|---|---|---|---|
+| 2 (8 pairs) | plain | 5.150 / 5.200 ms | 5.410 / 5.474 ms | +5.0 % / +5.3 % | 16.0–16.7 |
+| 2 (8 pairs) | mixed | 7.195 / 7.311 ms | 7.465 / 8.216 ms | +3.8 % / +12.4 % (one 14.31 ms head run) | 16.0–17.4 |
+| 1 (6 pairs) | plain | 4.145 / 4.618 ms | 4.935 / 5.058 ms | +19 % / +9.5 % | 17.1–18.4 |
+| 1 (6 pairs) | mixed | 5.365 / 5.765 ms | 5.490 / 5.687 ms | +2.3 % / −1.4 % | 16.7–17.7 |
+| 3 (5 pairs) | plain | 4.110 / 4.326 ms | 4.020 / 4.072 ms | −2.2 % / −5.9 % | 17.5–21.4 |
+| 3 (5 pairs) | mixed | 7.250 / 7.186 ms | 8.310 / 7.778 ms | +14.6 % / +8.2 % | 17.5–21.4 |
+
+Plain rows run the same code as main (no media → the placement function
+returns at once; only the "/" block moved after the trailing slots); sessions
+2 and 3 are within ± 10 %, session 1 is within on the mean only. The mixed absolute budget (p95 ≤ 4.2 ms)
+**could not be judged** at this load: main's own mixed p95 was 5.4–7.2 ms
+here against 2.3 ms in the quiet Step 2 session. Rerun the mixed variant when
+the machine is idle before Step 3 relies on it.
+
 ### 4.2 Sidebar media controls (mini player stack)
 
 #### 4.2.1 Placement
