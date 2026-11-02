@@ -1,5 +1,6 @@
 #import "OEClient.h"
 
+#include "include/cef_id_mappers.h"
 #include "include/cef_parser.h"
 
 #pragma mark - OEWebContentConfiguration
@@ -990,6 +991,40 @@ typedef void (^OEDevToolsCompletion)(NSDictionary* _Nullable, NSError* _Nullable
   info.runtime_style = _browser->GetHost()->GetRuntimeStyle();
   CefBrowserSettings settings;
   _browser->GetHost()->ShowDevTools(info, nullptr, settings, CefPoint());
+}
+
+- (BOOL)showDevToolsPanel:(OEDevToolsPanel)panel {
+  if (!_browser) {
+    return NO;
+  }
+  // Version-safe IDC ids (cef_id_mappers.h); -1 if this build lacks one.
+  const char* name = nullptr;
+  switch (panel) {
+    case OEDevToolsPanelConsole:
+      name = "IDC_DEV_TOOLS_CONSOLE";
+      break;
+    case OEDevToolsPanelInspectMode:
+      name = "IDC_DEV_TOOLS_INSPECT";
+      break;
+    case OEDevToolsPanelDefault:
+    case OEDevToolsPanelElements:
+    case OEDevToolsPanelNetwork:  // EP-4b (fork patch 0503) adds panel_id.
+      break;
+  }
+  int command = name ? cef_id_for_command_id_name(name) : -1;
+  CefRefPtr<CefBrowserHost> host = _browser->GetHost();
+  // A hosted tab's Chrome browser is the window's hidden strip, whose
+  // commands act on Chromium's active tab, not necessarily this page.
+  OEBrowser* strip = _oe_hostBrowser;
+  BOOL targetsThisPage = !strip || [strip oe_isChromiumActiveTab:self];
+  if (command >= 0 && targetsThisPage &&
+      host->GetRuntimeStyle() == CEF_RUNTIME_STYLE_CHROME &&
+      host->CanExecuteChromeCommand(command)) {
+    host->ExecuteChromeCommand(command, CEF_WOD_CURRENT_TAB);
+    return YES;
+  }
+  [self showDevTools];
+  return NO;
 }
 
 - (void)closeDevTools {

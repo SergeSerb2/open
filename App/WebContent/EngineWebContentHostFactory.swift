@@ -226,7 +226,8 @@ final class EngineWebContentHostFactory: NSResponder, WebContentHostFactory {
   }
   func context(for profileID: ProfileID) -> OEBrowserContext? {
     guard app.engineReady, let profile = model.profile(id: profileID) else { return nil }
-    if profile.id == model.defaultProfile?.id { return OEEngine.shared.defaultContext }
+    // Website appearance is app-wide (page-platform §4.8): every context gets it at creation.
+    if profile.id == model.defaultProfile?.id { return WebsiteAppearance.prepare(OEEngine.shared.defaultContext) }
     guard app.engine.result.layout == .engine else {
       // The old layout has no disk folder for other profiles (CEF refused
       // Profiles/<dir>/Engine). Their pages wait for the next launch, whose
@@ -238,6 +239,7 @@ final class EngineWebContentHostFactory: NSResponder, WebContentHostFactory {
       return nil
     }
     return OEEngine.shared.context(identifier: profile.dataDirectoryName, directory: app.directories.engineDirectory(dataDirectoryName: profile.dataDirectoryName))
+      .map(WebsiteAppearance.prepare)
   }
   private static var legacyRefusals: Set<String> = []
   var focusedBrowser: OEBrowser? {

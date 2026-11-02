@@ -158,6 +158,10 @@ class OEClient;
 @property(nonatomic, readonly) BOOL oe_canHostTabs;
 /// Puts Chromium's tab strip in -webContents order on the next turn.
 - (void)oe_setNeedsTabStripSync;
+/// YES when `content` is the active tab of Chromium's hidden strip. Runs a
+/// pending strip sync first, so a selection the shell just made counts.
+/// Chrome commands (ExecuteChromeCommand) act on that active tab.
+- (BOOL)oe_isChromiumActiveTab:(OEWebContent*)content;
 - (void)oe_popupDidResize:(OEWebContent*)popup size:(NSSize)size;
 - (void)oe_popupRequestedClose:(OEWebContent*)popup;
 - (void)oe_webContentClosed:(OEWebContent*)webContent;

@@ -227,6 +227,16 @@ class OEApp : public CefApp,
       features += features.empty() ? feature : std::string(",") + feature;
     }
     command_line->AppendSwitchWithValue("enable-features", features);
+    // Chromium features Open turns off, added to any --disable-features
+    // list: MediaRouter (Cast is out of v1, plans/page-platform.md §4.12,
+    // EP-12). MediaRouterEnabled() is then false: no Cast or DIAL discovery,
+    // no Cast button on <video> controls, no Local Network prompt
+    // (chrome/browser/media/router/media_router_feature.cc).
+    std::string disabled = command_line->GetSwitchValue("disable-features");
+    for (const char* feature : {"MediaRouter"}) {
+      disabled += disabled.empty() ? feature : std::string(",") + feature;
+    }
+    command_line->AppendSwitchWithValue("disable-features", disabled);
   }
 
   // CefBrowserProcessHandler

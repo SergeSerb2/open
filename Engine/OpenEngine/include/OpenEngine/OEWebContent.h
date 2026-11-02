@@ -143,6 +143,15 @@ NS_SWIFT_UI_ACTOR
     NS_SWIFT_NAME(webContent(_:didLogConsoleMessage:level:source:line:));
 @end
 
+/// The DevTools panel -showDevToolsPanel: opens.
+typedef NS_ENUM(NSInteger, OEDevToolsPanel) {
+  OEDevToolsPanelDefault = 0,
+  OEDevToolsPanelElements,
+  OEDevToolsPanelConsole,
+  OEDevToolsPanelNetwork,
+  OEDevToolsPanelInspectMode,
+};
+
 /// One page (ADK "WebContent"). Its `view` can go anywhere: several per
 /// window (Split View), or a floating panel (Peek, Little Open, extension
 /// popups). The view can move between windows.
@@ -252,6 +261,18 @@ OE_EXPORT @interface OEWebContent : NSObject
 #pragma mark Tools
 /// Opens DevTools in a separate window.
 - (void)showDevTools;
+/// Opens DevTools on one panel (plans/page-platform.md EP-4a). Chrome style
+/// pages run Chrome's own command: Console is IDC_DEV_TOOLS_CONSOLE (shows
+/// the Console panel, opening DevTools if needed) and InspectMode is
+/// IDC_DEV_TOOLS_INSPECT (opens DevTools with the element picker on; a second
+/// call turns the picker off, as in Chrome). Default and Elements open
+/// DevTools as -showDevTools does. Network needs fork patch 0503 (EP-4b);
+/// until then it opens DevTools as -showDevTools does. Alloy pages, and a
+/// hosted tab that is not Chromium's active tab in its window's hidden strip
+/// (Chrome commands act on the active tab), also fall back to -showDevTools.
+/// Returns YES when the panel command ran, NO when it fell back.
+- (BOOL)showDevToolsPanel:(OEDevToolsPanel)panel
+    NS_SWIFT_NAME(showDevTools(panel:));
 - (void)closeDevTools;
 @property(nonatomic, readonly) BOOL hasDevTools;
 /// Shows the system print panel for the page.

@@ -116,6 +116,13 @@ typedef NS_ENUM(NSInteger, OEPermissionState) {
   OEPermissionStateBlock = 2,
 };
 
+/// The color scheme pages of a context see (`prefers-color-scheme`).
+typedef NS_ENUM(NSInteger, OEColorSchemePreference) {
+  OEColorSchemePreferenceAutomatic = 0,
+  OEColorSchemePreferenceLight,
+  OEColorSchemePreferenceDark,
+};
+
 #pragma mark - Browser context
 
 NS_SWIFT_UI_ACTOR
@@ -171,8 +178,21 @@ OE_EXPORT @interface OEBrowserContext : NSObject
                     origin:(NSURL*)origin
     NS_SWIFT_NAME(setPermissionState(_:for:origin:));
 
-/// Deletes cookies (for one origin when `origin` is non-nil) and, for all
-/// sites, the HTTP cache.
+/// Website appearance (plans/page-platform.md EP-9a): Automatic follows the
+/// app's effective appearance. Sets Chrome's browser color scheme of the
+/// context's profile (CefRequestContext::SetChromeColorScheme); Chrome
+/// derives `prefers-color-scheme` from it for pages that have a Chrome color
+/// provider, and open pages update without a reload. Chrome stores the value
+/// in the profile's prefs, so set it for every context at creation.
+/// Incognito (ephemeral) pages follow the device appearance in Chrome
+/// (chrome_content_browser_client.cc GetPreferredColorScheme).
+@property(nonatomic) OEColorSchemePreference websiteColorScheme;
+
+/// Deletes cookies: with a non-nil `origin`, the host cookies of that URL's
+/// host, any path (not Domain= cookies; CefCookieManager::DeleteCookies with
+/// a URL and no name); with nil, every cookie and also the whole HTTP cache. A per-origin call
+/// does not touch the HTTP cache (per-site cache clearing is Site Control
+/// E2, which needs a fork patch).
 - (void)clearBrowsingDataForOrigin:(nullable NSURL*)origin
                         completion:(void (^NS_SWIFT_UI_ACTOR _Nullable)(void))
                                        completion

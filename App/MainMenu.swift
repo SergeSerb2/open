@@ -78,6 +78,7 @@ extension EngineWebContentHostFactory {
   func isAppCommandEnabled(_ original: String, enabledKey: String? = nil, payload: String? = nil) -> Bool {
     let id = AppCommand.canonicalID(original)
     if let context = selectionCommandContext(for: id) { return context.isSelectionCommandEnabled(id) }
+    if let enabled = isPageToolEnabled(id) { return enabled }  // App/Page/PageToolsCommands.swift
     if SystemCommandActions.selectors[id] != nil { return SystemCommandActions.isEnabled(id) }
     if AppCommand.featureIDs.contains(id) || id.hasPrefix("focus-split-pane-") {
       return controller?.isCommandEnabled(id, enabledKey: enabledKey ?? EnabledKey.currentTabInSplit) == true
@@ -128,6 +129,7 @@ extension EngineWebContentHostFactory {
     if SystemCommandActions.selectors[id] != nil { return SystemCommandActions.perform(id) }
     if AppCommand.featureIDs.contains(id) || id.hasPrefix("focus-split-pane-") { return false }
     if let result = performSelectionAppCommand(id) { return result }
+    if let result = performPageTool(id) { app.scheduleMenuRebuild(); return result }  // App/Page/PageToolsCommands.swift
     guard isAppCommandEnabled(id, payload: payload) else { return false }
     if id.hasPrefix("go-to-space-"), let n = Int(id.split(separator: "-").last ?? ""), n <= model.spaces.count {
       if let uuid = payload.flatMap(UUID.init(uuidString:)), let space = model.space(id: SpaceID(rawValue: uuid)) { focus(space: space) }
@@ -213,7 +215,7 @@ extension EngineWebContentHostFactory {
       guard let url = selectedContent?.url ?? selectedTab?.url else { return false }
       let title = selectedContent?.title ?? selectedTab?.displayTitle ?? ""
       NSPasteboard.general.clearContents(); NSPasteboard.general.setString(id == "copy-url" ? url.absoluteString : "[\(title)](\(url.absoluteString))", forType: .string)
-    case "developer-tools", "javascript-console", "inspect-elements": selectedContent?.showDevTools()
+    case "developer-tools": selectedContent?.showDevTools()
     case "view-source": if let url = selectedContent?.url { _ = openNewTab(url: URL(string: "view-source:\(url.absoluteString)")!, background: false) }
     case "toggle-sidebar": controller?.toggleSidebar()
     case "toggle-toolbar": return controller?.toggleToolbar() != nil

@@ -231,8 +231,9 @@ final class AppSettingsActions: SettingsActions, LibraryActions, DownloadsProvid
   }
   func checkForUpdates() { status("An update feed is not available yet."); show(pane: .general) }
   func openMoreSettings() { openURL(URL(string: "chrome://settings")!, profileID: settings.selectedProfileID) }
-  func revealOpenDataFolder() { NSWorkspace.shared.activateFileViewerSelecting([app.directories.root]) }
-  func copyOpenInfoToPasteboard() { copyText("Open \(Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String ?? "development")\nChromium \(OEEngine.shared.chromiumVersion)") }
+  // One source with Help ▸ Troubleshooting (page-platform §4.11.3–4).
+  func revealOpenDataFolder() { TroubleshootingActions.shared.revealOpenData() }
+  func copyOpenInfoToPasteboard() { copyText(TroubleshootingActions.openInfoText) }
   func deleteProfileData(profileID: ProfileID) -> String? {
     guard let profile = app.model.profile(id: profileID) else { return "This profile is no longer available." }
     guard !OEEngine.shared.contexts.contains(where: { self.profile(for: $0)?.id == profileID }) else { return "Close this profile's pages and restart Open before deleting its data." }

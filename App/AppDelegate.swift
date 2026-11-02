@@ -513,6 +513,7 @@ extension AppDelegate: CommandDispatcher {
   }
   func isCommandEnabled(_ id: String, enabledKey: String) -> Bool {
     if SystemCommandActions.selectors[id] != nil { return SystemCommandActions.isEnabled(id) }
+    if let enabled = PageTools.isAppCommandEnabled(id) { return enabled }  // App/Page/PageToolsCommands.swift
     if ["archive-tab", "close-window"].contains(id) { return NSApp.keyWindow != nil }
     return ["new-window", "blank-window", "new-tab", "settings", "search-settings", "air-traffic-control", "import-from-browser", "set-default-browser", "check-for-updates", "view-archive", "view-history", "view-library", "view-downloads", "view-boosts", "quit-open", "new-little-open-window", "little-open-global", "about-open", "hide-open", "hide-others", "show-all", "help-center", "keyboard-shortcuts-edu", "getting-started", "release-notes", "contact-team", "manage-spaces"].contains(id)
   }
@@ -530,6 +531,7 @@ extension AppDelegate: CommandDispatcher {
   }
   func performCommand(_ id: String) {
     if SystemCommandActions.selectors[id] != nil { _ = SystemCommandActions.perform(id); return }
+    if PageTools.isAppCommandEnabled(id) == true, PageTools.performAppCommand(id) { return }
     switch id {
     case "new-window", "blank-window": makeUserWindow()
     case "new-tab":

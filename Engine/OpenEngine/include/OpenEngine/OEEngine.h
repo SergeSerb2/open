@@ -36,6 +36,8 @@ OE_EXPORT @interface OEEngineConfiguration : NSObject <NSCopying>
 
 /// Extra Chromium switches, for example "--enable-features=Foo" or
 /// "--load-extension=/path". Applied in OnBeforeCommandLineProcessing.
+/// OpenEngine always adds MediaRouter to --disable-features (Cast is out of
+/// v1, plans/page-platform.md EP-12), merged with any list given here.
 @property(nonatomic, copy) NSArray<NSString*>* additionalSwitches;
 
 /// Optional log file. Default: <userDataDirectory>/engine.log.
@@ -171,6 +173,39 @@ OE_EXPORT @interface OEEngine : NSObject
                                       NSArray<OEProcessMetrics*>* metrics))
                                       completion
     NS_SWIFT_NAME(sampleProcessMetrics(after:completion:));
+
+/// Shows Chromium's task manager window (plans/page-platform.md EP-10a) by
+/// running IDC_TASK_MANAGER_MAIN_MENU on a live Chrome style page's browser.
+/// A second call brings the open window to the front. Returns NO when no
+/// live Chrome style page exists (the command needs a Chrome browser).
+- (BOOL)showTaskManager;
+
+#pragma mark Tracing
+
+/// YES from -beginTracingWithCategories: until the trace ends or is
+/// cancelled (EP-11).
+@property(nonatomic, readonly, getter=isTracing) BOOL tracing;
+
+/// Starts tracing in every process (CefBeginTracing). `categories` is a
+/// comma-separated list of category wildcards; nil uses CEF's defaults.
+/// Returns NO while a trace runs or ends, or when Chromium refuses. CEF has
+/// no privacy filter: a trace can contain page URLs.
+- (BOOL)beginTracingWithCategories:(nullable NSString*)categories
+    NS_SWIFT_NAME(beginTracing(categories:));
+
+/// Ends the trace and writes Chromium's JSON trace (`traceEvents`) to
+/// `fileURL` (CefEndTracing). `completion` gets the written file, or an
+/// error when no trace runs or the file could not be written. Runs on the
+/// main thread.
+- (void)endTracingToFile:(NSURL*)fileURL
+              completion:(void (^NS_SWIFT_UI_ACTOR)(NSURL* _Nullable file,
+                                                    NSError* _Nullable error))
+                             completion
+    NS_SWIFT_NAME(endTracing(to:completion:));
+
+/// Ends the trace into a temporary file and deletes that file. Does nothing
+/// when no trace runs.
+- (void)cancelTracing;
 @end
 
 typedef NS_ENUM(NSInteger, OEProcessKind) {
