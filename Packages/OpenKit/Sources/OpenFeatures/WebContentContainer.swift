@@ -8,6 +8,10 @@ public final class PaneSlotView: NSView {
     public private(set) var paneChrome: PaneChromeView?
     public private(set) var placeholderView: PlaceholderContentView?
     public private(set) var contentHostView: NSView?
+    /// Open's history swipe indicator over this pane's page (page-platform §4.4.3), made on the
+    /// first swipe.
+    public private(set) var swipeIndicator: SwipeIndicatorView?
+    private var style: SpaceThemeStyle = .defaultTheme(system: .light)
     let clip = NSView()
     public let focusRing = CAShapeLayer()
     var isFocused = false
@@ -23,6 +27,7 @@ public final class PaneSlotView: NSView {
                    close: @escaping () -> Void, menu: @escaping (NSView) -> Void, url: @escaping () -> Void, copy: @escaping (Bool) -> Void,
                    toolbarMenu: (() -> NSMenu?)? = nil) {
         isFocused = split && focused
+        self.style = style; swipeIndicator?.style = style
         focusRing.strokeColor = style.accentColor(.light).cgColor
         if split || toolbar {
             if paneChrome == nil { let chrome = PaneChromeView(); paneChrome = chrome; clip.addSubview(chrome) }
@@ -49,6 +54,19 @@ public final class PaneSlotView: NSView {
     public override func layout() {
         super.layout(); layoutContents()
     }
+    /// One engine history swipe event for this pane's page: above the page, below the pane bar.
+    public func showHistorySwipe(_ event: SwipeIndicatorView.Event) {
+        let indicator: SwipeIndicatorView
+        if let swipeIndicator { indicator = swipeIndicator } else {
+            indicator = SwipeIndicatorView(frame: .zero); indicator.style = style; swipeIndicator = indicator
+        }
+        if indicator.superview !== clip {
+            if let paneChrome { clip.addSubview(indicator, positioned: .below, relativeTo: paneChrome) } else { clip.addSubview(indicator) }
+        }
+        let bar = paneChrome == nil ? 0 : SplitMetrics.barHeight
+        indicator.frame = CGRect(x: 0, y: 0, width: bounds.width, height: max(0, bounds.height - bar))
+        indicator.update(event)
+    }
     /// Updates slot geometry without forcing layout in the embedded web subtree.
     fileprivate func layoutContents() {
         clip.frame = bounds
@@ -56,6 +74,7 @@ public final class PaneSlotView: NSView {
         paneChrome?.frame = CGRect(x: 0, y: bounds.height - bar, width: bounds.width, height: bar)
         let page = CGRect(x: 0, y: 0, width: bounds.width, height: max(0, bounds.height - bar))
         contentHostView?.frame = page; placeholderView?.frame = page
+        swipeIndicator?.frame = page
         focusRing.frame = bounds
         focusRing.path = CGPath(roundedRect: bounds.insetBy(dx: 1, dy: 1), cornerWidth: PanelMetrics.cornerRadius - 1,
                                cornerHeight: PanelMetrics.cornerRadius - 1, transform: nil)
@@ -298,6 +317,13 @@ public final class WebContentContainer: NSView {
         }
         layoutDividers()
     }
+    /// Routes an engine history swipe to the pane that shows `tabID` (the host under the pointer).
+    @discardableResult
+    public func showHistorySwipe(tabID: ItemID, _ event: SwipeIndicatorView.Event) -> Bool {
+        guard let slot = slots.first(where: { $0.tabID == tabID }) else { return false }
+        slot.showHistorySwipe(event); return true
+    }
+
     public func layoutPanes(animated: Bool) {
         let frames = SplitLayout.frames(content: bounds, orientation: orientation, fractions: fractions, gap: SplitMetrics.gap, minPane: SplitMetrics.minimumPane)
         let animate = animated && window?.isVisible == true && !NSWorkspace.shared.accessibilityDisplayShouldReduceMotion

@@ -55,6 +55,9 @@ final class EngineWebContentHost: NSObject, WebContentHost, WebContentProviding,
     self.tabID = tabID; self.profileID = profileID; self.content = content; self.owner = owner
     spaceID = owner.space(for: tabID)?.id ?? owner.focusedSpace?.id
     super.init(); content.delegate = self
+    // Tab pages draw Open's own swipe indicator (page-platform §4.4.3), not Chromium's arrow.
+    content.drawsEngineHistorySwipeOverlay = false
+    content.historySwipeEnabled = owner.historySwipeAllowed
     observeMute()
   }
   /// The engine follows the tab's mute, including Undo/Redo and Mute All (media-pip §7.2).

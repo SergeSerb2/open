@@ -5429,8 +5429,10 @@ def page_engine_checks(factory, results, tmp):
         swipe_events = lambda: [e for e in app.call('events') if e['type'] == 'historySwipe']
         # SW1: back past the threshold navigates back; forward returns. Chrome's own overlay is off.
         app.call('events')
-        options = app.call('swipe', tab=tab, engineOverlay=False)
+        # Tab pages draw Open's indicator and turn Chromium's arrow off (page-platform §4.4.3).
+        options = app.call('swipe', tab=tab)
         back = app.call('swipe', tab=tab, direction='back', progress=1.2)
+        ind_back = back['indicator']
         at_a = wait_until(lambda: url() == a_url or None, timeout=10, step=.1)
         ev_back = swipe_events()
         fwd = app.call('swipe', tab=tab, direction='forward', progress=1.2)
@@ -5441,16 +5443,22 @@ def page_engine_checks(factory, results, tmp):
             'ok': options['engineOverlay'] is False and back['ran'] and fwd['ran'] and bool(at_a) and bool(at_b)
             and phases(ev_back)[:1] == ['began'] and phases(ev_back)[-1:] == ['completed']
             and all(e['direction'] == 'back' for e in ev_back) and phases(ev_fwd)[-1:] == ['completed']
-            and all(e['direction'] == 'forward' for e in ev_fwd) and ev_back[-1]['progress'] >= 1,
-            'back': phases(ev_back), 'forward': phases(ev_fwd), 'urls': [bool(at_a), bool(at_b)]}
+            and all(e['direction'] == 'forward' for e in ev_fwd) and ev_back[-1]['progress'] >= 1
+            and all(e.get('indicator') for e in ev_back + ev_fwd)
+            and ind_back.get('made') and ind_back['last']['phase'] == 'completed' and ind_back['last']['direction'] == 'back',
+            'back': phases(ev_back), 'forward': phases(ev_fwd), 'urls': [bool(at_a), bool(at_b)], 'indicator': ind_back}
+        # The completed indicator fades out (0.18 s) and hides.
+        gone = wait_until(lambda: app.call('swipe-indicator', tab=tab).get('hidden') or None, timeout=3, step=.05)
+        results['SW1_indicator_hides_after_completion'] = {'ok': bool(gone), 'state': app.call('swipe-indicator', tab=tab)}
         # SW2: half a swipe does not navigate; the swipe ends cancelled.
         half = app.call('swipe', tab=tab, direction='back', progress=0.5)
         time.sleep(1)
         ev_half = swipe_events()
+        ind_half = app.call('swipe-indicator', tab=tab)
         results['SW2_partial_swipe_cancels'] = {
             'ok': half['ran'] and url() == b_url and phases(ev_half)[-1:] == ['cancelled']
-            and max(e['progress'] for e in ev_half) <= 0.5,
-            'phases': phases(ev_half), 'url': url()}
+            and max(e['progress'] for e in ev_half) <= 0.5 and ind_half['last']['phase'] == 'cancelled' and ind_half['hidden'],
+            'phases': phases(ev_half), 'url': url(), 'indicator': ind_half}
         # SW4: a page with swipes off (capture overlay, Zap) refuses; no event, no navigation.
         app.call('swipe', tab=tab, enabled=False)
         refused = app.call('swipe', tab=tab, direction='back', progress=1.2)
@@ -5459,6 +5467,36 @@ def page_engine_checks(factory, results, tmp):
         app.call('swipe', tab=tab, enabled=True)
         results['SW4_swipe_disabled'] = {'ok': refused['ran'] is False and not ev_off and url() == b_url,
                                          'ran': refused['ran'], 'events': len(ev_off)}
+        # SW4: the Capture overlay pauses swipes on the window's pages; they come back after it.
+        app.call('command', id='capture-page')
+        up = wait_until(lambda: app.call('capture-state').get('overlay') or None, timeout=5, step=.1)
+        during = app.call('swipe', tab=tab, direction='back', progress=1.2)
+        app.call('capture-action', action='cancel')
+        down = wait_until(lambda: (not app.call('capture-state').get('overlay')) or None, timeout=5, step=.1)
+        after = app.call('swipe', tab=tab)
+        results['SW4_capture_overlay_pauses_swipes'] = {'ok': bool(up) and during['ran'] is False and during['enabled'] is False
+            and url() == b_url and bool(down) and after['enabled'] is True, 'during': during, 'after': after}
+
+        # SW3: in Split View the swipe navigates the pane it was made in; the other pane stays.
+        other = app.call('open', url=origin + '/quote.html')['id']
+        app.call('wait', tab=other)
+        app.call('navigate', tab=other, url=origin + '/links.html')
+        app.call('wait', tab=other)
+        wait_until(lambda: app.eval(other, "location.pathname === '/links.html' || null"), timeout=10, step=.1)
+        panes = app.call('split')
+        time.sleep(1)
+        visible = [t['id'] for t in app.call('tabs') if t.get('visible')]
+        tab_last_before = app.call('swipe-indicator', tab=tab).get('last')
+        pane_swipe = app.call('swipe', tab=other, direction='back', progress=1.2)
+        moved = wait_until(lambda: app.eval(other, "location.pathname === '/quote.html' || null"), timeout=10, step=.1)
+        still = url()
+        ind_other, ind_tab = app.call('swipe-indicator', tab=other), app.call('swipe-indicator', tab=tab)
+        results['SW3_split_pane_swipe'] = {'ok': len(panes) == 2 and tab in visible and other in visible and pane_swipe['ran']
+            and bool(moved) and still == b_url and ind_other.get('made') and ind_other['last']['phase'] == 'completed'
+            and ind_tab.get('last') == tab_last_before,
+            'visible': visible, 'otherIndicator': ind_other, 'tabIndicator': ind_tab, 'tabURL': still}
+        app.call('split')
+        app.call('close', tab=other)
 
         # Q2 (EP-2) and EP-3: select a sentence, read text + link, open the link.
         app.call('navigate', tab=tab, url=origin + '/quote.html')

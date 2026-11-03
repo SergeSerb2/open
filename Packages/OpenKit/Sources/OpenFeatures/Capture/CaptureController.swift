@@ -89,7 +89,10 @@ public final class CaptureController {
     public var onChange: (() -> Void)?
 
     public private(set) var phase = Phase.idle
-    public private(set) var overlay: CaptureOverlayView?
+    public private(set) var overlay: CaptureOverlayView? { didSet { if (overlay == nil) != (oldValue == nil) { onOverlayChange?(overlay != nil) } } }
+    /// The selection overlay came up (true) or went away (false): page history swipes pause
+    /// while it shows (page-platform §4.4.1).
+    public var onOverlayChange: ((Bool) -> Void)?
     public private(set) var card: CaptureResultView?
     public private(set) var lastResult: Result?
     public private(set) var lastError: String?
