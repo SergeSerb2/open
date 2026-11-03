@@ -628,8 +628,13 @@ class OENotificationListCallback : public CefNotificationListCallback {
   }
   // Waits for the profile inside CEF (GetBrowserContext), so this is safe
   // before the context is initialized. A transparent user color keeps
-  // Chrome's default palette.
+  // Chrome's default palette (the browser's own UI and WebUI).
   _context->SetChromeColorScheme(variant, 0);
+  // EP-9b (fork patch 0505): web pages of this context see the scheme in
+  // prefers-color-scheme and their root scrollbar, also after navigation;
+  // hosted tabs do not follow SetChromeColorScheme (check A1). Automatic
+  // removes the override. Applies when the context finishes initializing.
+  CefSetWebsiteColorScheme(_context, variant);
 }
 
 - (void)clearBrowsingDataForOrigin:(NSURL*)origin

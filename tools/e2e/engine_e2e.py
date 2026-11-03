@@ -8067,7 +8067,8 @@ def _toasts(app):
 
 
 def page_tools_appearance_checks(app, results, port, style):
-    """A1, A2: View ▸ Appearance reaches prefers-color-scheme without a reload (EP-9a)."""
+    """A1, A2: View ▸ Appearance reaches prefers-color-scheme without a reload, and stays after a
+    navigation (EP-9a SetChromeColorScheme + EP-9b fork patch 0505 CefSetWebsiteColorScheme)."""
     tab = app.call("open", url="http://127.0.0.1:%d/scheme.html" % port)["id"]
     app.call("wait", tab=tab)
     state = lambda: app.eval(tab, "window.schemeState()")
@@ -8084,19 +8085,23 @@ def page_tools_appearance_checks(app, results, port, style):
         app.call("command", id="appearance-dark")
         dark = until_dark(True)
         dark_checks, dark_stored = checks(), app.call("defaults", key="open.web.colorScheme")
+        # 0505: Chrome recomputes the scheme after every navigation; the website value wins again.
+        app.call("navigate", tab=tab, url="http://127.0.0.1:%d/scheme.html?nav=1" % port)
+        app.call("wait", tab=tab)
+        wait_until(lambda: app.eval(tab, "location.search") == "?nav=1" or None, timeout=8, step=.1)
+        after_nav = until_dark(True)
+        app.call("navigate", tab=tab, url="http://127.0.0.1:%d/scheme.html" % port)
+        app.call("wait", tab=tab)
+        wait_until(lambda: app.eval(tab, "location.search") == "" or None, timeout=8, step=.1)
+        dark = until_dark(True)
         app.call("appearance", name="dark")
         app.call("command", id="appearance-light")
         light = until_dark(False)
         light_checks, light_stored = checks(), app.call("defaults", key="open.web.colorScheme")
         page_follows = (start["dark"] is False and dark["dark"] is True and light["dark"] is False
-                        and dark["loadId"] == light["loadId"] == start["loadId"])
-        evidence = {"start": start, "websitesDark": dark, "websitesLight": light}
-        if page_follows:
-            results["A1_appearance_light_dark_" + style] = dict(evidence, ok=True)
-        else:
-            # Stock CEF's SetChromeColorScheme does not reach this page style (page-platform R-5).
-            results["A1_appearance_light_dark_" + style] = _blocked(
-                "EP-9b (fork patch 0505): SetChromeColorScheme does not change prefers-color-scheme here", **evidence)
+                        and dark["loadId"] == light["loadId"] and after_nav["dark"] is True)
+        results["A1_appearance_light_dark_" + style] = {"ok": page_follows, "start": start, "websitesDark": dark,
+                                                        "afterNavigation": after_nav, "websitesLight": light}
         want_dark = {"appearance-automatic": False, "appearance-light": False, "appearance-dark": True}
         want_light = {"appearance-automatic": False, "appearance-light": True, "appearance-dark": False}
         results["A1_appearance_stored_" + style] = {
