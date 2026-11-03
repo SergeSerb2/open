@@ -4869,10 +4869,10 @@ def media_checks(factory, results, tmp):
     """media-pip §8.4 E-M1…E-M15 in the real App (phase 1: Chromium's own PiP window)."""
     server, port = _media_server()
     base = "http://127.0.0.1:%d/" % port
-    # Chromium's fake capture devices and permission UI (recording card): no system camera or
-    # microphone is opened, so macOS shows no permission prompt.
-    app = factory(urls=(base + "plain.html",), fresh=True,
-                  extra_args=["--use-fake-device-for-media-stream", "--use-fake-ui-for-media-stream"])
+    # Chromium's fake capture devices (recording card): no system camera or microphone is opened, so
+    # macOS shows no permission prompt. The permission itself goes through Open's real request path
+    # (automation policy "grant"); Chromium's fake permission UI would skip the capture indicator.
+    app = factory(urls=(base + "plain.html",), fresh=True, extra_args=["--use-fake-device-for-media-stream"])
     def m(tab): return app.call("media", tab=tab)
     def players(window=None):
         return app.call("mini-players", **({"window": window} if window else {}))
@@ -5197,10 +5197,15 @@ def media_checks(factory, results, tmp):
         # Step 8 recording card (Q13, PP-19): a meeting-like page (fake camera and microphone, MediaStream
         # players only, so never controllable) gets a card with its microphone and camera toggles; the
         # toggles reach the page's own handlers; the card goes when capture stops.
+        # Auto-PiP is off for this row: the playing preview would otherwise open a PiP window on the leave,
+        # and a source in PiP has no card (rule 3).
+        app.call("policy", permissions="grant")
+        app.call("defaults", key="open.advanced.enablePictureInPictureOnLeave", value=False)
         rec = open_tab(base + "recording.html")
         rec_started = app.eval(rec, "start()")
         rec_capturing = wait_until(lambda: m(rec)["capturing"] is True, timeout=5, step=.05)
         rec_state = m(rec)
+        rec_audible = is_audible(rec)
         select(home)
         def rcard(): return next((c for c in players()["cards"] if c["tab"] == rec), None)
         rec_card = wait_until(lambda: (lambda c: c if c and c["kind"] == "recording" else None)(rcard()), timeout=3, step=.02)
@@ -5212,6 +5217,8 @@ def media_checks(factory, results, tmp):
         still_capturing = m(rec)["capturing"]
         app.eval(rec, "stop()")
         rec_gone = wait_until(lambda: rec not in ids(), timeout=5, step=.05)
+        app.call("defaults", key="open.advanced.enablePictureInPictureOnLeave", value=None)
+        app.call("policy", permissions="")
         results["media_recording_card"] = {"ok": rec_started is True and bool(rec_capturing) and rec_state["controllable"] is False
             and bool(rec_card) and {"favicon", "microphone", "camera"} <= set(rec_card["buttons"])
             and not ({"play", "previous", "next", "volume"} & set(rec_card["buttons"])) and rec_card["microphoneOn"] is True
@@ -5219,7 +5226,8 @@ def media_checks(factory, results, tmp):
             and rec_page["counts"]["togglecamera"] == 1 and rec_page["mic"] is False and rec_page["cam"] is False
             and still_capturing is True and bool(rec_gone),
             "started": rec_started, "state": {k: rec_state.get(k) for k in ("capturing", "controllable", "playback", "actions", "source")},
-            "card": rec_card, "page": rec_page, "stillCapturing": still_capturing, "gone": bool(rec_gone)}
+            "card": rec_card, "page": rec_page, "stillCapturing": still_capturing, "gone": bool(rec_gone), "audibleAtLeave": rec_audible,
+            "decision": m(rec)["decision"]}
         close_tab(rec)
 
         # EM-5: PiP from the browser needs no user gesture, and the browser enforces disablePictureInPicture
