@@ -2,6 +2,8 @@
 
 #import <ImageIO/ImageIO.h>
 
+#include <algorithm>
+
 #include "include/cef_parser.h"
 
 #pragma mark - OEWebContentConfiguration
@@ -200,6 +202,60 @@ static NSView* OEParkingView() {
 
 @end
 
+#pragma mark - Page handler (cef_open_page.h)
+
+@interface OEWebContent (OEPageEvents)
+- (void)oe_selectionChanged:(BOOL)hasSelection;
+- (void)oe_historySwipe:(int)phase direction:(int)direction progress:(double)progress;
+@end
+
+// Selection changes and history swipes of one page (page-platform EP-1, EP-3).
+class OEPageHandler : public CefOpenPageHandler {
+ public:
+  explicit OEPageHandler(OEWebContent* content) : content_(content) {}
+  void OnSelectionChanged(CefRefPtr<CefBrowser> browser,
+                          bool has_selection) override {
+    [content_ oe_selectionChanged:has_selection];
+  }
+  void OnHistorySwipe(CefRefPtr<CefBrowser> browser,
+                      int phase,
+                      int direction,
+                      double progress) override {
+    [content_ oe_historySwipe:phase direction:direction progress:progress];
+  }
+
+ private:
+  OEWebContent* __weak content_;
+  IMPLEMENT_REFCOUNTING(OEPageHandler);
+};
+
+// Runs a selection request's completion exactly once (also when the engine
+// drops the callback unrun).
+class OESelectionCallback : public CefSelectionCallback {
+ public:
+  explicit OESelectionCallback(void (^done)(NSString*, NSURL*))
+      : done_([done copy]) {}
+  ~OESelectionCallback() override {
+    if (void (^done)(NSString*, NSURL*) = done_) {
+      dispatch_async(dispatch_get_main_queue(), ^{
+        done(@"", nil);
+      });
+    }
+  }
+  void OnSelection(const CefString& text, const CefString& link) override {
+    void (^done)(NSString*, NSURL*) = done_;
+    done_ = nil;
+    if (!done) {
+      return;
+    }
+    done(OEString(text) ?: @"", link.empty() ? nil : OEURL(link));
+  }
+
+ private:
+  void (^done_)(NSString*, NSURL*);
+  IMPLEMENT_REFCOUNTING(OESelectionCallback);
+};
+
 #pragma mark - OEWebContent
 
 typedef void (^OEDevToolsCompletion)(NSDictionary* _Nullable, NSError* _Nullable);
@@ -227,6 +283,10 @@ typedef void (^OEDevToolsCompletion)(NSDictionary* _Nullable, NSError* _Nullable
   NSMutableSet<NSString*>* _audibleFrames;
   NSString* _lastFindString;
   BOOL _autoResize;
+  // Page API (cef_open_page.h): selection flag and swipe options.
+  BOOL _hasSelection;
+  BOOL _historySwipeEnabled;
+  BOOL _drawsEngineHistorySwipeOverlay;
   NSSize _autoResizeMin;
   NSSize _autoResizeMax;
   // Keeps this object (and so the parent view) alive from -close until
@@ -252,6 +312,8 @@ typedef void (^OEDevToolsCompletion)(NSDictionary* _Nullable, NSError* _Nullable
     _title = @"";
     _statusText = @"";
     _devToolsCallbacks = [NSMutableDictionary dictionary];
+    _historySwipeEnabled = YES;
+    _drawsEngineHistorySwipeOverlay = YES;
     _audibleFrames = [NSMutableSet set];
     _client = OECreateClient(self);
     _view = [[OEWebContentView alloc] initWithFrame:NSMakeRect(0, 0, 800, 600)];
@@ -553,6 +615,12 @@ typedef void (^OEDevToolsCompletion)(NSDictionary* _Nullable, NSError* _Nullable
   if (_muted) {
     browser->GetHost()->SetAudioMuted(true);
   }
+  // Selection changes and history swipe events (page-platform EP-1, EP-3).
+  CefSetOpenPageHandler(browser, new OEPageHandler(self));
+  if (!_historySwipeEnabled || !_drawsEngineHistorySwipeOverlay) {
+    CefSetHistorySwipeOptions(browser, _historySwipeEnabled,
+                              _drawsEngineHistorySwipeOverlay);
+  }
   if (_autoResize) {
     [self enableAutoResizeWithMinimumSize:_autoResizeMin
                               maximumSize:_autoResizeMax];
@@ -579,6 +647,7 @@ typedef void (^OEDevToolsCompletion)(NSDictionary* _Nullable, NSError* _Nullable
 
 - (void)oe_browserClosed {
   _browser = nullptr;
+  _hasSelection = NO;
   _devToolsRegistration = nullptr;
   for (OEDevToolsCompletion done in _devToolsCallbacks.allValues) {
     done(nil, [NSError errorWithDomain:OEErrorDomain
@@ -863,6 +932,79 @@ typedef void (^OEDevToolsCompletion)(NSDictionary* _Nullable, NSError* _Nullable
 }
 - (void)stopLoading {
   if (_browser) _browser->StopLoad();
+}
+
+#pragma mark Selection and history swipe (fork API cef_open_page.h)
+
+- (BOOL)hasSelection {
+  return _hasSelection;
+}
+
+- (void)oe_selectionChanged:(BOOL)hasSelection {
+  if (_hasSelection == hasSelection) {
+    return;
+  }
+  _hasSelection = hasSelection;
+  [self oe_notify:OEWebContentChangeSelection];
+}
+
+- (void)requestSelectionWithCompletion:(void (^)(NSString*, NSURL*))completion {
+  void (^done)(NSString*, NSURL*) = [completion copy];
+  if (!_browser) {
+    dispatch_async(dispatch_get_main_queue(), ^{
+      done(@"", nil);
+    });
+    return;
+  }
+  if (!CefRequestSelection(_browser, new OESelectionCallback(done))) {
+    // Refused without running the callback: the wrapper's destructor
+    // answers once.
+  }
+}
+
+- (BOOL)historySwipeEnabled {
+  return _historySwipeEnabled;
+}
+
+- (void)setHistorySwipeEnabled:(BOOL)enabled {
+  _historySwipeEnabled = enabled;
+  if (_browser) {
+    CefSetHistorySwipeOptions(_browser, _historySwipeEnabled,
+                              _drawsEngineHistorySwipeOverlay);
+  }
+}
+
+- (BOOL)drawsEngineHistorySwipeOverlay {
+  return _drawsEngineHistorySwipeOverlay;
+}
+
+- (void)setDrawsEngineHistorySwipeOverlay:(BOOL)draws {
+  _drawsEngineHistorySwipeOverlay = draws;
+  if (_browser) {
+    CefSetHistorySwipeOptions(_browser, _historySwipeEnabled,
+                              _drawsEngineHistorySwipeOverlay);
+  }
+}
+
+- (BOOL)simulateHistorySwipeInDirection:(OEHistorySwipeDirection)direction
+                               progress:(double)progress {
+  return _browser &&
+         CefSimulateHistorySwipe(
+             _browser, direction == OEHistorySwipeDirectionForward ? 1 : 0,
+             progress);
+}
+
+- (void)oe_historySwipe:(int)phase
+              direction:(int)direction
+               progress:(double)progress {
+  if ([_delegate respondsToSelector:@selector
+                 (webContent:historySwipe:direction:progress:)]) {
+    [_delegate webContent:self
+             historySwipe:(OEHistorySwipePhase)std::clamp(phase, 0, 3)
+                direction:direction == 1 ? OEHistorySwipeDirectionForward
+                                         : OEHistorySwipeDirectionBack
+                 progress:progress];
+  }
 }
 
 #pragma mark Sleep (memory-fork; fork API cef_page_lifecycle.h)

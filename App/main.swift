@@ -79,6 +79,11 @@ configuration.verboseLogging = options.verboseLogging
 // macOS would ask for keychain access each time; they use Chromium's mock key.
 // Developer ID builds use the "Open Safe Storage" keychain item.
 configuration.useMockKeychain = !CodeSignature.hasTeamIdentifier
+#if OPEN_AUTOMATION
+// The engine's notification test hooks (page-platform EP-7) run only with this
+// switch; release builds never pass it.
+configuration.additionalSwitches = configuration.additionalSwitches + ["--open-automation"]
+#endif
 
 OEEngine.shared.delegate = appDelegate
 LaunchTiming.shared.mark("engineStart")

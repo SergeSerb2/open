@@ -49,6 +49,22 @@ typedef NS_OPTIONS(NSUInteger, OEWebContentChange) {
   OEWebContentChangeMedia = 1u << 13,
   /// A video of the page entered or left Picture in Picture.
   OEWebContentChangePictureInPicture = 1u << 14,
+  /// The page's text selection became empty or non-empty (`hasSelection`);
+  /// not sent for caret moves that keep that state (page-platform EP-3).
+  OEWebContentChangeSelection = 1u << 15,
+};
+
+/// Phases of Chromium's history swipe (page-platform EP-1).
+typedef NS_ENUM(NSInteger, OEHistorySwipePhase) {
+  OEHistorySwipePhaseBegan = 0,
+  OEHistorySwipePhaseChanged,
+  OEHistorySwipePhaseCompleted,
+  OEHistorySwipePhaseCancelled,
+};
+
+typedef NS_ENUM(NSInteger, OEHistorySwipeDirection) {
+  OEHistorySwipeDirectionBack = 0,
+  OEHistorySwipeDirectionForward,
 };
 
 typedef NS_ENUM(NSInteger, OEWebContentCrashState) {
@@ -66,6 +82,14 @@ NS_SWIFT_UI_ACTOR
 - (void)webContent:(OEWebContent*)webContent
          didChange:(OEWebContentChange)changes
     NS_SWIFT_NAME(webContent(_:didChange:));
+/// Chromium's history swiper changed state (trackpad two-finger swipe or
+/// Magic Mouse). `progress` is 0...1; 1 means the swipe navigates when the
+/// gesture ends. Completed arrives after the navigation started.
+- (void)webContent:(OEWebContent*)webContent
+      historySwipe:(OEHistorySwipePhase)phase
+         direction:(OEHistorySwipeDirection)direction
+          progress:(double)progress
+    NS_SWIFT_NAME(webContent(_:historySwipe:direction:progress:));
 
 /// The page wants new content: target=_blank, window.open, middle click,
 /// Cmd-click. Return a new OEWebContent (any configuration with the same
@@ -287,6 +311,32 @@ OE_EXPORT @interface OEWebContent : NSObject
 - (void)enableAutoResizeWithMinimumSize:(NSSize)minimumSize
                             maximumSize:(NSSize)maximumSize
     NS_SWIFT_NAME(enableAutoResize(minimumSize:maximumSize:));
+
+#pragma mark Selection and history swipe (page-platform EP-1, EP-2, EP-3)
+
+/// True while the page has a non-empty text selection
+/// (OEWebContentChangeSelection).
+@property(nonatomic, readonly) BOOL hasSelection;
+/// Selected text of the focused frame (any frame) and a link that scrolls
+/// to it: the page URL plus a text-fragment directive from Chromium's
+/// generator. `link` is nil when no unique selector could be made or the
+/// selection is inside a child frame. `text` is empty when nothing is
+/// selected. The completion runs exactly once.
+- (void)requestSelectionWithCompletion:
+    (void (^NS_SWIFT_UI_ACTOR)(NSString* text, NSURL* _Nullable link))completion
+    NS_SWIFT_NAME(requestSelection(completion:));
+/// Default YES. NO makes Chromium's swiper ignore gestures on this page.
+@property(nonatomic) BOOL historySwipeEnabled;
+/// Default YES. NO hides Chromium's own arrow overlay (the shell draws its
+/// own from -webContent:historySwipe:direction:progress:).
+@property(nonatomic) BOOL drawsEngineHistorySwipeOverlay;
+/// Test hook (engine switch `--open-automation` only): replays one history
+/// swipe through Chromium's overlay controller up to `progress` (>= 1
+/// navigates). NO when the hook is off, swipes are disabled, or the page
+/// cannot go that way. Real gesture recognition is not replayed.
+- (BOOL)simulateHistorySwipeInDirection:(OEHistorySwipeDirection)direction
+                               progress:(double)progress
+    NS_SWIFT_NAME(simulateHistorySwipe(direction:progress:));
 
 #pragma mark Sleep
 // The engine half of tab sleeping (docs/plans/memory-fork.md; fork patches

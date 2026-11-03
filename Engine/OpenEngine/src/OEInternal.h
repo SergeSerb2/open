@@ -11,6 +11,7 @@
 #include "include/cef_browser.h"
 #include "include/cef_client.h"
 #include "include/cef_navigation_history.h"
+#include "include/cef_open_page.h"
 #include "include/cef_page_lifecycle.h"
 #include "include/cef_request_context.h"
 #include "include/cef_tab_strip.h"

@@ -314,6 +314,71 @@ OEPermissionKind OEPermissionKindsFromMedia(uint32_t m) {
 
 @end
 
+#pragma mark - Notifications (cef_open_page.h)
+
+@interface OEBrowserContext (OENotificationEvents)
+- (void)oe_notificationClicked:(NSString*)identifier
+                        origin:(NSString*)origin
+                    persistent:(BOOL)persistent;
+@end
+
+class OENotificationHandler : public CefOpenNotificationHandler {
+ public:
+  explicit OENotificationHandler(OEBrowserContext* context)
+      : context_(context) {}
+  void OnNotificationClick(const CefString& id,
+                           const CefString& origin,
+                           CefRefPtr<CefBrowser> browser,
+                           bool persistent) override {
+    [context_ oe_notificationClicked:OEString(id)
+                              origin:OEString(origin)
+                          persistent:persistent];
+  }
+
+ private:
+  OEBrowserContext* __weak context_;
+  IMPLEMENT_REFCOUNTING(OENotificationHandler);
+};
+
+class OENotificationListCallback : public CefNotificationListCallback {
+ public:
+  explicit OENotificationListCallback(
+      void (^done)(NSArray<NSDictionary<NSString*, NSString*>*>*))
+      : done_([done copy]) {}
+  ~OENotificationListCallback() override {
+    if (auto done = done_) {
+      dispatch_async(dispatch_get_main_queue(), ^{
+        done(@[]);
+      });
+    }
+  }
+  void OnNotifications(CefRefPtr<CefListValue> items) override {
+    auto done = done_;
+    done_ = nil;
+    if (!done) {
+      return;
+    }
+    NSMutableArray* out = [NSMutableArray array];
+    for (size_t i = 0; items && i < items->GetSize(); ++i) {
+      CefRefPtr<CefDictionaryValue> item = items->GetDictionary(i);
+      if (!item) {
+        continue;
+      }
+      [out addObject:@{
+        @"id" : OEString(item->GetString("id")) ?: @"",
+        @"origin" : OEString(item->GetString("origin")) ?: @"",
+        @"title" : OEString(item->GetString("title")) ?: @"",
+        @"body" : OEString(item->GetString("body")) ?: @"",
+      }];
+    }
+    done(out);
+  }
+
+ private:
+  void (^done_)(NSArray<NSDictionary<NSString*, NSString*>*>*);
+  IMPLEMENT_REFCOUNTING(OENotificationListCallback);
+};
+
 #pragma mark - OEBrowserContext
 
 @implementation OEBrowserContext {
@@ -382,11 +447,43 @@ OEPermissionKind OEPermissionKindsFromMedia(uint32_t m) {
 
 - (void)oe_contextInitialized {
   _ready = YES;
+  // Notification clicks reach the delegate (page-platform EP-6).
+  CefSetOpenNotificationHandler(_context, new OENotificationHandler(self));
   NSArray<dispatch_block_t>* blocks = [_whenReady copy];
   [_whenReady removeAllObjects];
   for (dispatch_block_t b in blocks) {
     b();
   }
+}
+
+#pragma mark Notifications
+
+- (void)oe_notificationClicked:(NSString*)identifier
+                        origin:(NSString*)origin
+                    persistent:(BOOL)persistent {
+  id<OEBrowserContextDelegate> delegate = self.delegate;
+  NSURL* url = [NSURL URLWithString:origin];
+  if (url && [delegate respondsToSelector:@selector
+                       (browserContext:didClickNotificationWithIdentifier:
+                                origin:persistent:)]) {
+    [delegate browserContext:self
+        didClickNotificationWithIdentifier:identifier
+                                    origin:url
+                                persistent:persistent];
+  }
+}
+
+- (void)displayedNotificationsWithCompletion:
+    (void (^)(NSArray<NSDictionary<NSString*, NSString*>*>*))completion {
+  auto done = [completion copy];
+  [self oe_whenReady:^{
+    CefGetDisplayedNotifications(self->_context,
+                                 new OENotificationListCallback(done));
+  }];
+}
+
+- (BOOL)simulateClickOnNotificationWithIdentifier:(NSString*)identifier {
+  return _ready && CefSimulateNotificationClick(_context, OECef(identifier));
 }
 
 #pragma mark User scripts

@@ -8,3 +8,4 @@
 0304-open-extension-popups.patch  # P2: extension action popups get a CEF browser host (ChromeBrowserDelegate friend)
 0310-open-adblock-service-owner.patch  # Ad-block: CefBrowserContext owns open_engine::OpenAdBlockService (none after Shutdown); selftest switches only without OFFICIAL_BUILD (adblock-fork §6.1, §13.1; review 100-3, 100-6)
 0314-open-adblock-cefsimple-smoke.patch  # Ad-block, test only: cefsimple opens no window in --open-adblock-selftest mode (adblock-fork §13.1); keep last
+0505-page-website-color-scheme.patch  # Page platform EP-9b: a request context's website color scheme wins over Chrome's in OverrideWebPreferences and after navigation (CefSetWebsiteColorScheme, overlay cef_open_page.h); page-platform §6

@@ -15,3 +15,13 @@ _cef_has_unload_handlers
 _cef_get_navigation_history
 _cef_restore_navigation_history
 _cef_navigation_history_create
+# Page platform (Section 8 PR E2, cef_open_page.h)
+_cef_set_open_page_handler
+_cef_has_selection
+_cef_request_selection
+_cef_set_history_swipe_options
+_cef_simulate_history_swipe
+_cef_set_open_notification_handler
+_cef_get_displayed_notifications
+_cef_simulate_notification_click
+_cef_set_website_color_scheme
