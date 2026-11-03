@@ -84,6 +84,7 @@
         return try await runArchiveCommand(cmd, a)
       case "metrics": return await metrics(interval: a["interval"] as? Double ?? 1)
       case _ where Self.mediaCommands.contains(cmd): return try await runMediaCommand(cmd, a)
+      case _ where Self.notificationCommands.contains(cmd): return try await runNotificationCommand(cmd, a)
       case "ping":
         return [
           "pid": Int(getpid()), "chromium": OEEngine.shared.chromiumVersion, "cef": OEEngine.shared.cefVersion,

@@ -591,6 +591,38 @@ user clicks
 - Open does not add Arc's per-profile "notification permission requests"
   switch in v1 (PG-5.3; no Settings row is planned for it). guess: low value.
 
+#### 4.5.5a As built (Step 7, s8/notifications, 2026-11-02)
+
+- Bundles (§4.5.2): `App/Info.plist` has `NSUserNotificationAlertStyle =
+  banner`; `Helper/Info-Alerts.plist` (only `OpenHelperAlerts`, set in
+  `project.yml`) has `alert` and `CFBundleDisplayName = Open`. Section 8
+  decision: no icon key yet, because the App has no icon file (both bundles
+  show the generic icon); add `CFBundleIconFile` to both when the App gets
+  its icon (`docs/followups.md`).
+- Authorization (§4.5.3): `App/Page/NotificationAuthorization.swift`
+  (`NotificationAuthorization.shared`, created on first use, re-read on every
+  app activation, no timer). The prompt's Allow and
+  `EngineWebProfile.setPermission(.allow, for: .notifications, …)` (Site
+  Control) call `userAllowedNotifications()`, which asks macOS once while the
+  status is `.notDetermined`. The automation `policy permissions=grant`
+  short-circuit is not the user and asks nothing. Section 12 hook: `isDenied`,
+  `deniedLine`, `openSettingsTitle`, `openSystemSettings()`,
+  `didChangeNotification`.
+- Activation (§4.5.4): `browser(_:requestsActivationOf:)` focuses the tab's
+  Space in its window and selects the tab; selecting wakes it (the App's only
+  wake path until OpenSleep is wired in the App; its wake call goes in that
+  handler). The window comes front through Chromium's `ActivateContents` →
+  `OpenBrowserWindow::Activate` (`[NSApp activate]`, `makeKeyAndOrderFront:`),
+  which also restores a minimized window (N3). The shell adds no window code.
+- e2e (`--only page --style chrome`): N3 triggers the activation with
+  DevTools `Page.bringToFront`, which calls the same `WebContents::Activate`
+  as `window.focus()` and `client.focus()`
+  (`content/browser/devtools/protocol/page_handler.cc` `BringToFront`). Rows
+  that need a notification click or the engine list report `BLOCKED: EP-7`.
+  The App runs with `OPEN_AUTOMATION_NOTIFICATION_AUTHORIZATION=record`, so a
+  run never shows the macOS prompt; U-N1 is the same suite with
+  `OPEN_E2E_NOTIFICATION_PROMPT=1` (`docs/automation.md`).
+
 #### 4.5.6 Tab sleep `[OpenKit]`
 
 - New never-sleep gate `.notifications` in `SleepPolicy`: a tab whose

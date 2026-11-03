@@ -1,0 +1,33 @@
+<!doctype html>
+<meta charset="utf-8">
+<title>Notify fixture</title>
+<!-- page-platform §8.3 N1–N3: page notifications. Each event goes to window.log. -->
+<body style="font: 14px -apple-system, sans-serif; background: #fff; color: #222">
+<p>Web notification fixture.</p>
+<button id="ask">Ask for permission</button>
+<button id="banner">Banner</button>
+<button id="alert">Alert (requireInteraction)</button>
+<script>
+window.log = [];
+window.shown = {};
+window.notes = {};
+function show(title, options) {
+  const n = new Notification(title, options);
+  notes[title] = n;
+  n.onshow = () => { log.push('show:' + title); shown[title] = true; };
+  n.onerror = () => log.push('error:' + title);
+  // A click selects this tab: the page's own focus() (P1 activation path).
+  n.onclick = () => { log.push('click:' + title); window.focus(); };
+  n.onclose = () => log.push('close:' + title);
+  return title;
+}
+// The suite closes what it showed, also when a check fails.
+window.closeAll = () => { for (const n of Object.values(notes)) n.close(); return Object.keys(notes).length; };
+document.getElementById('ask').onclick = () =>
+  Notification.requestPermission().then(result => log.push('permission:' + result));
+document.getElementById('banner').onclick = () =>
+  show('Open N1 banner', {body: 'Banner from notify.html', tag: 'open-n1'});
+document.getElementById('alert').onclick = () =>
+  show('Open N2 alert', {body: 'Stays until dismissed', tag: 'open-n2', requireInteraction: true});
+</script>
+</body>

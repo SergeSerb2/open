@@ -386,6 +386,23 @@ Commands in `App/Automation/AutomationMedia.swift`. `tab` is a tab UUID.
 
 The App accepts `--pip-site-rules=FILE` in Debug and automation builds; the `media` suite writes a rules file that disallows `blocked.localhost` and gives `inaudible.localhost` `activatesWhenInaudible` (Chromium maps `*.localhost` to the loopback server).
 
+## Notifications (page-platform Step 7)
+
+Commands in `App/Automation/AutomationNotifications.swift`.
+
+| Command | Args | Result |
+|---|---|---|
+| `notifications` | — | `authorization` (macOS status for Open.app: `notDetermined`, `denied`, `authorized`, `provisional`, `ephemeral`), `delivered` (`UNUserNotificationCenter.getDeliveredNotifications` of Open.app: `id`, `title`, `subtitle`, `body`, `thread`; banners only, because alerts come from the Alerts helper's own bundle), and `engine` (the engine list; `BLOCKED` until EP-7, fork patch 0504). |
+| `notification-click` | `id` | EP-7 simulated click. Returns `BLOCKED` until EP-7. |
+| `notification-authorization` | — | `status` (read now), `denied`, `requests` (one entry per Allow: `requested`, `suppressed`, or `skipped:<status>`), `suppressed`, `settingsURL` (System Settings ▸ Notifications for Open). |
+| `window-miniaturize` | — | Minimizes the front window, as its yellow button does. |
+
+`OPEN_AUTOMATION_NOTIFICATION_AUTHORIZATION=record` (automation builds only): when the user allows a site's notifications and macOS has not been asked yet, the App logs `suppressed` instead of showing the macOS prompt. The `page` suite sets it, so a normal run needs no person. For U-N1 (page-platform §8.4), run the suite once with `OPEN_E2E_NOTIFICATION_PROMPT=1` and click Allow in the macOS prompt:
+
+```sh
+OPEN_E2E_NOTIFICATION_PROMPT=1 /usr/bin/lockf /tmp/open-onscreen-e2e.lock python3 tools/e2e/engine_e2e.py --only page --style chrome
+```
+
 ## Library Space Manager (App lane 1b)
 
 The `sidebar-completion` suite covers sidebar selection, menus and commands,

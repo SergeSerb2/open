@@ -1076,7 +1076,10 @@ extension EngineWebContentHostFactory: OEWebContentDelegate {
       alert.addButton(withTitle: "Allow")
       alert.addButton(withTitle: "Block")
       alert.beginSheetModal(for: window) { response in
-        response == .alertFirstButtonReturn ? request.grant() : request.deny()
+        guard response == .alertFirstButtonReturn else { request.deny(); return }
+        request.grant()
+        // The user allowed a site's notifications: ask macOS once (page-platform §4.5.3).
+        if request.kinds.contains(.notifications) { NotificationAuthorization.shared.userAllowedNotifications() }
       }
       return true
     }
@@ -1281,14 +1284,24 @@ extension EngineWebContentHostFactory {
     }
   }
 
-  /// chrome.tabs.update({active: true}): select the tab, in its own Space.
+  /// A page asks to be shown: chrome.tabs.update({active: true}), or the
+  /// page's own focus() (window.focus() in a notification click handler, a
+  /// service worker's client.focus(), DevTools Page.bringToFront), which all
+  /// reach Chromium's ActivateContents (page-platform §4.5.4). Focus the
+  /// tab's Space in this window and select the tab. Selecting also wakes
+  /// it: showSelection marks the shown tabs live and loads their pages (the
+  /// App's only wake path until OpenSleep is wired in the App, s8/sleep-app;
+  /// its wake call belongs here). For a page's focus(), Chromium then brings
+  /// this window front itself (OpenBrowserWindow::Activate: NSApp activate
+  /// and makeKeyAndOrderFront, which also restores a minimized window).
   @objc(browser:requestsActivationOfWebContent:)
   func browser(_ browser: OEBrowser, requestsActivationOf webContent: OEWebContent) {
     defer { mirror.sync() }
     guard let id = requestTabID(for: webContent) else { return }
-    if let space = space(containing: id), space.id != focusedSpace?.id { focus(space: space) }
+    let space = space(containing: id)
+    if let space, space.id != focusedSpace?.id { focus(space: space) }
     select(nodeID: id)
-    record("tab-request", webContent, ["request": "activate"])
+    record("tab-request", webContent, ["request": "activate", "space": space?.id.description ?? ""])
   }
 
   /// chrome.tabs.move: applied only when one position in the tab's own

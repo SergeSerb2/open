@@ -7369,6 +7369,195 @@ def space_manager_checks(results, tmp, config, style):
         if not receipt['ok']: raise AssertionError('Space Manager cleanup failed: ' + json.dumps(receipt))
 
 
+EP7_BLOCKED = 'EP-7: engine notification list and simulated click (fork patch 0504)'
+
+
+def page_notification_checks(factory, results, tmp):
+    """page-platform §8.3 N1, N2, N3, N6: web notifications in the real App (Step 7).
+
+    macOS delivery needs the user's one-time Allow (U-N1). A normal run starts the App with
+    OPEN_AUTOMATION_NOTIFICATION_AUTHORIZATION=record: the App logs its authorization request
+    instead of showing the macOS prompt, so no human is needed, and the macOS-delivery rows
+    report BLOCKED: U-N1 until macOS has authorized Open. For U-N1, run the suite once with
+    OPEN_E2E_NOTIFICATION_PROMPT=1 and click Allow in the macOS prompt. Rows that need the
+    engine's notification list or a simulated click report BLOCKED: EP-7. This suite writes no
+    preferences keys.
+    """
+    import http.server
+    import threading
+    folder = os.path.join(ROOT, 'tools', 'e2e', 'fixtures', 'page-platform')
+
+    class Handler(http.server.SimpleHTTPRequestHandler):
+        def __init__(self, *a, **kw):
+            super().__init__(*a, directory=folder, **kw)
+        def log_message(self, *args): pass
+    server = http.server.ThreadingHTTPServer(('127.0.0.1', 0), Handler)
+    threading.Thread(target=server.serve_forever, daemon=True).start()
+    origin = 'http://127.0.0.1:%d' % server.server_address[1]
+    prompt = os.environ.get('OPEN_E2E_NOTIFICATION_PROMPT') == '1'
+    app = factory(urls=(origin + '/notify.html',), fresh=True,
+                  extra_env={} if prompt else {'OPEN_AUTOMATION_NOTIFICATION_AUTHORIZATION': 'record'})
+    pages = []
+
+    def live_tab(url):
+        def find():
+            rows = [t for t in app.call('tabs') if t['url'] == url and t.get('page') and t['page']['live']]
+            return rows[0] if rows else None
+        tab = wait_until(find, timeout=20, step=.2)
+        if not tab:
+            raise AssertionError('no live tab for ' + url)
+        wait_until(lambda: app.eval(tab['page']['identifier'], 'document.readyState') == 'complete', timeout=20, step=.2)
+        pages.append(tab['page']['identifier'])
+        return tab
+
+    def sheet():
+        try:
+            return app.call('alert')
+        except RuntimeError:
+            return None
+
+    def blocked(reason, **evidence):
+        return dict(evidence, status='BLOCKED', reason=reason)
+
+    try:
+        app.call('window-frame', frame=[80, 60, 1360, 860])
+        tab = live_tab(origin + '/notify.html')
+        page = tab['page']['identifier']
+
+        # N1: the user allows the site in Open's prompt (the real sheet button), Chromium shows
+        # the banner, and the Allow asks macOS once (§4.5.3).
+        before = app.call('notification-authorization')
+        app.call('click', tab=page, selector='#ask')
+        prompt_sheet = wait_until(sheet, timeout=10, step=.1)
+        if prompt_sheet:
+            app.call('alert', button='Allow')
+        granted = wait_until(lambda: 'permission:granted' in app.eval(page, 'log'), timeout=10, step=.1)
+        after = wait_until(lambda: (lambda s: s if len(s['requests']) > len(before['requests']) else None)(
+            app.call('notification-authorization')), timeout=10, step=.1) or app.call('notification-authorization')
+        entry = after['requests'][len(before['requests'])] if len(after['requests']) > len(before['requests']) else None
+        expected = (('requested' if prompt else 'suppressed') if before['status'] == 'notDetermined'
+                    else 'skipped:' + before['status'])
+        results['N1_allow_asks_macos'] = {
+            'ok': bool(prompt_sheet) and any(origin.split('//')[1].split(':')[0] in t for t in prompt_sheet['texts'])
+                  and bool(granted) and entry == expected and len(after['requests']) == len(before['requests']) + 1,
+            'sheet': prompt_sheet, 'granted': bool(granted), 'statusBefore': before['status'],
+            'request': entry, 'expected': expected, 'requests': after['requests']}
+        if prompt and before['status'] == 'notDetermined':
+            print('U-N1: click Allow in the macOS notification prompt for Open (waiting up to 120 s)', flush=True)
+            wait_until(lambda: app.call('notification-authorization')['status'] != 'notDetermined', timeout=120, step=1)
+        app.call('click', tab=page, selector='#banner')
+        shown = wait_until(lambda: app.eval(page, 'shown["Open N1 banner"] === true'), timeout=10, step=.1)
+        results['N1_engine_display'] = {'ok': bool(shown), 'log': app.eval(page, 'log')}
+        listed = app.call('notifications')
+        if listed['authorization'] in ('authorized', 'provisional', 'ephemeral'):
+            delivered = wait_until(lambda: [n for n in app.call('notifications')['delivered'] if n['title'] == 'Open N1 banner'],
+                                   timeout=10, step=.2)
+            results['N1_macos_delivered'] = {'ok': bool(delivered), 'delivered': delivered or listed['delivered'],
+                                             'authorization': listed['authorization']}
+        else:
+            results['N1_macos_delivered'] = blocked('U-N1: macOS has not authorized Open (status %s)' % listed['authorization'],
+                                                    delivered=listed['delivered'])
+        results['N1_engine_list'] = blocked(listed['engine']['reason'])
+
+        # N2: requireInteraction goes to the Alerts helper, whose bundle has the alert style and
+        # shows as "Open" (§4.5.2).
+        bundle = os.path.join(ROOT, 'build', app.config, 'Open.app', 'Contents')
+        def plist(path):
+            out = subprocess.run(['plutil', '-convert', 'json', '-o', '-', path], capture_output=True, text=True)
+            return json.loads(out.stdout) if out.returncode == 0 else {}
+        main_info = plist(os.path.join(bundle, 'Info.plist'))
+        alerts_info = plist(os.path.join(bundle, 'Frameworks', 'Open Helper (Alerts).app', 'Contents', 'Info.plist'))
+        helper_info = plist(os.path.join(bundle, 'Frameworks', 'Open Helper.app', 'Contents', 'Info.plist'))
+        results['N2_bundles'] = {
+            'ok': main_info.get('NSUserNotificationAlertStyle') == 'banner'
+                  and alerts_info.get('NSUserNotificationAlertStyle') == 'alert'
+                  and alerts_info.get('CFBundleDisplayName') == 'Open'
+                  and alerts_info.get('CFBundleIdentifier') == 'io.github.sergeserb2.open.helper.alerts'
+                  and 'NSUserNotificationAlertStyle' not in helper_info,
+            'main': main_info.get('NSUserNotificationAlertStyle'),
+            'alerts': {k: alerts_info.get(k) for k in ('NSUserNotificationAlertStyle', 'CFBundleDisplayName', 'CFBundleIdentifier')},
+            'helper': helper_info.get('NSUserNotificationAlertStyle')}
+
+        def alerts_helpers():
+            app.discover_owned_processes()
+            return sorted(pid for pid, path in app.owned_processes.items()
+                          if path.endswith('Open Helper (Alerts).app/Contents/MacOS/Open Helper (Alerts)')
+                          and app.process_path(pid) == path)
+        before_helpers = alerts_helpers()
+        app.call('click', tab=page, selector='#alert')
+        alert_shown = wait_until(lambda: app.eval(page, 'shown["Open N2 alert"] === true'), timeout=10, step=.1)
+        helpers = wait_until(alerts_helpers, timeout=15, step=.2)
+        results['N2_alerts_helper'] = {'ok': bool(alert_shown) and bool(helpers) and not before_helpers,
+                                       'shown': bool(alert_shown), 'helpersBefore': before_helpers, 'helpers': helpers or []}
+        results['N2_listed'] = blocked(EP7_BLOCKED + '; the Alerts helper posts from its own bundle, not in Open.app\'s list')
+
+        # N3: a page in Space 2 asks to be shown while Space 1 is focused and the window is
+        # minimized. DevTools Page.bringToFront calls the same WebContents::Activate →
+        # ActivateContents as window.focus() in a notification click or a worker's
+        # client.focus() (P1 path, §4.5.4).
+        if app.style != 'chrome':
+            results['N3_activation'] = {'status': 'SKIP', 'reason': 'P1 activation needs hosted tabs: run --style chrome (the App default)'}
+        else:
+            space1 = [s for s in app.call('spaces') if s['focused']][0]['id']
+            space2 = app.call('space-create', title='Notify Space 2', profile='Default')
+            url2 = origin + '/notify.html?space2'
+            tab2 = app.call('open', url=url2)
+            tab2_page = live_tab(url2)['page']
+            app.call('space', space=space1)
+            prepared = {'space1Focused': [s for s in app.call('spaces') if s['focused']][0]['id'] == space1,
+                        'tabSelected': app.call('tab-state', tab=tab2['id'])['selected'], 'style': tab2_page['style']}
+            app.call('window-miniaturize')
+            prepared['miniaturized'] = bool(state_when(app, lambda st: st['miniaturized'], timeout=5, step=.1))
+            app.call('events')
+            app.call('devtools', tab=tab2_page['identifier'], method='Page.bringToFront')
+            shown_state = state_when(app, lambda st: not st['miniaturized'] and st['isKeyWindow'], timeout=5, step=.05)
+            focused = [s for s in app.call('spaces') if s['focused']][0]['id']
+            selected = app.call('tab-state', tab=tab2['id'])['selected']
+            requests = [e for e in app.call('events') if e['type'] == 'tab-request' and e.get('request') == 'activate']
+            results['N3_activation'] = {
+                'ok': prepared['space1Focused'] and not prepared['tabSelected'] and prepared['miniaturized']
+                      and prepared['style'] == 'chrome' and bool(shown_state) and focused == space2 and selected
+                      and any(e['tab'] == tab2['id'] and e.get('space') == space2 for e in requests),
+                'prepared': prepared, 'windowRestoredAndKey': bool(shown_state), 'focusedSpace': focused, 'space2': space2,
+                'selected': selected, 'requests': requests}
+            results['N3_notification_click'] = blocked(app.call('notification-click', id='')['reason'])
+            app.call('space', space=space1)
+
+        # N6: a service worker notification outlives its tab (the engine still lists it with
+        # no tab of its page open); its click opens the target in a new Today tab.
+        sw_url = origin + '/notify-sw.html'
+        sw_tab = app.call('open', url=sw_url)
+        sw_page = live_tab(sw_url)['page']['identifier']
+        ready = app.eval(sw_page, 'workerReady')
+        titles = app.eval(sw_page, 'showWorkerNotification(%s)' % json.dumps(origin + '/notify.html?from=worker'))
+        app.call('close', tab=sw_tab['id'])
+        gone = wait_until(lambda: not [t for t in app.call('tabs') if t['url'] == sw_url], timeout=10, step=.2)
+        script = ('navigator.serviceWorker.getRegistration("/").then(r => r ? r.getNotifications() : [])'
+                  '.then(list => list.map(n => n.title))')
+        later = app.eval(page, script)
+        results['N6_engine_display'] = {'ok': ready is True and 'Open N6 worker' in (titles or []) and bool(gone)
+                                              and 'Open N6 worker' in (later or []),
+                                        'ready': ready, 'titles': titles, 'tabClosed': bool(gone), 'afterClose': later}
+        results['N6_click_opens_tab'] = blocked(EP7_BLOCKED)
+    finally:
+        # Close what the suite showed (Notification Center keeps delivered banners after U-N1).
+        for identifier in pages:
+            try:
+                app.eval(identifier, 'typeof closeAll === "function" ? closeAll() : 0', timeout=5)
+                app.eval(identifier, 'navigator.serviceWorker.getRegistration("/").then(r => r ? r.getNotifications() : [])'
+                                     '.then(list => { list.forEach(n => n.close()); return list.length; })', timeout=5)
+            except Exception:
+                pass  # The page may be closed already; quit ends the rest.
+        app.quit()
+        server.shutdown()
+        server.server_close()
+
+
+def page_checks(factory, results, tmp):
+    """page-platform §8.3 `--only page`. Each helper adds its row group here."""
+    page_notification_checks(factory, results, tmp)
+
+
 def main():
     global _ACTIVE_FOCUS_TRACKER
     ap = argparse.ArgumentParser()
@@ -7378,7 +7567,7 @@ def main():
     ap.add_argument("--engine-fingerprint-only", action="store_true", help="verify built engine artifacts and exit without launching Open")
     ap.add_argument("--extensions", default=os.path.join(ROOT, ".re", "ext", "unpacked"))
     ap.add_argument("--only", choices=["shell", "extensions", "features", "measure", "tabstrip", "window", "sidebar", "peek",
-                                       "commandbar", "app-actions", "actions", "profiles", "sidebar-completion", "toolbar", "numbering", "media"])
+                                       "commandbar", "app-actions", "actions", "profiles", "sidebar-completion", "toolbar", "numbering", "media", "page"])
     ap.add_argument("--window-chrome-only", action="store_true", help="run only the window-chrome follow-up flows in the window suite")
     ap.add_argument("--keep", action="store_true",
                     help="keep this run's data root, cache root and scratch folder (paths printed at the end)")
@@ -7556,6 +7745,9 @@ def main():
         elif opts.only == "media":
             results["media"] = CheckedResults(tracker)
             media_checks(factory, results["media"], tmp)
+        elif opts.only == "page":
+            results["page"] = CheckedResults(tracker)
+            page_checks(factory, results["page"], tmp)
         elif opts.only == "window":
             results["window"] = CheckedResults(tracker)
             window_checks(factory, results["window"], tmp, opts.config, chrome_only=opts.window_chrome_only)
@@ -7638,14 +7830,14 @@ def main():
                                     else opts.config.lower()))
     with open(os.path.join(OUT, name), "w") as f:
         json.dump(results, f, indent=2, sort_keys=True)
-    for group in ("shell", "extensions", "features", "measure", "tabstrip", "window", "sidebar", "peek", "commandbar", "app-actions", "actions", "profiles", "sidebar-completion", "toolbar", "numbering", "media"):
+    for group in ("shell", "extensions", "features", "measure", "tabstrip", "window", "sidebar", "peek", "commandbar", "app-actions", "actions", "profiles", "sidebar-completion", "toolbar", "numbering", "media", "page"):
         for k, v in results.get(group, {}).items():
             if isinstance(v, dict) and "ok" in v:
                 print("%-24s %s" % (k, "PASS" if v.get("ok") else "FAIL"))
             elif isinstance(v, dict) and v.get("status") in ("SKIP", "BLOCKED", "INTERRUPTED", "DEFERRED"):
                 print("%-24s %s: %s" % (k, v["status"], v.get("reason", "")))
     print("wrote", os.path.join(OUT, name))
-    failures = [k for group in ("shell", "extensions", "features", "measure", "tabstrip", "window", "sidebar", "peek", "commandbar", "app-actions", "actions", "sidebar-completion", "toolbar", "numbering", "media")
+    failures = [k for group in ("shell", "extensions", "features", "measure", "tabstrip", "window", "sidebar", "peek", "commandbar", "app-actions", "actions", "sidebar-completion", "toolbar", "numbering", "media", "page")
                 for k, v in results.get(group, {}).items() if isinstance(v, dict) and v.get("ok") is False]
     if failures or not results["cleanup"]["ok"]:
         sys.exit(1)
