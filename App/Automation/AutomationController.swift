@@ -251,6 +251,9 @@
         return ["frame": [inRoot.minX, inRoot.minY, inRoot.width, inRoot.height], "point": [inRoot.midX, inRoot.midY], "unreadBadge": controller.sidebar.unreadDotFrame(nodeID: ItemID(rawValue: uuid)) != nil, "current": controller.sidebar.isCurrentRow(nodeID: ItemID(rawValue: uuid))] as [String: Any]
       case "preview-state":
         return try previewState(a)
+      case "page-selection", "swipe":
+        // Engine page API (EP-1, EP-2, EP-3); App/Automation/AutomationPageEngine.swift.
+        return try await runPageEngineCommand(cmd, try content(a, try window), a)
       case "capture", "capture-state", "capture-action", "captures":
         // Capture tool (page-platform §8.3); App/Automation/AutomationCapture.swift.
         return try await runCaptureCommand(cmd, a)
@@ -536,6 +539,32 @@
         return true
       case "wait":
         return try await waitForLoad(try content(a, w), timeout: a["timeout"] as? Double ?? 20)
+
+      // Engine tab-sleep primitives (memory-fork, OEWebContent "Sleep"): test
+      // hooks for the e2e tabstrip suite. The shell's sleep policy (Step G)
+      // calls the same API; nothing here changes sleep phases in the model.
+      case "engine-sleep":
+        let page = try content(a, w)
+        var r: [String: Any] = [:]
+        switch a["op"] as? String ?? "state" {
+        case "state": break
+        case "hide": page.setPageHidden(true)
+        case "show": page.setPageHidden(false)
+        case "freeze": r["ok"] = page.setPageFrozen(true)
+        case "unfreeze": r["ok"] = page.setPageFrozen(false)
+        case "discard": r["ok"] = await page.discard()
+        case "capture":
+          guard let h = page.captureNavigationHistory() else { r["history"] = NSNull(); break }
+          r["history"] = ["entryCount": h.entryCount, "currentIndex": h.currentIndex, "hasPageState": h.hasPageState,
+            "bytes": h.container.count, "title": h.title, "currentURL": h.currentURL?.absoluteString ?? "",
+            "faviconURL": h.faviconURL?.absoluteString ?? "",
+            "roundTrip": OENavigationHistory(container: h.container)?.container == h.container] as [String: Any]
+        default: throw Failure(message: "unknown engine-sleep op")
+        }
+        r["frozen"] = page.isPageFrozen; r["discarded"] = page.isDiscarded
+        r["unloadHandlers"] = page.hasUnloadHandlers; r["chromeTabId"] = page.chromeTabIdentifier
+        r["identifier"] = page.identifier; r["live"] = page.isLive
+        return r
 
       // Pages (any live web content).
       case "pages":

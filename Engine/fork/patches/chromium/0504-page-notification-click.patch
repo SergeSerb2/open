@@ -1,0 +1,27 @@
+diff --git a/chrome/browser/notifications/notification_display_service_impl.cc b/chrome/browser/notifications/notification_display_service_impl.cc
+index 555b3c0ced2c5df3aa42cf8657a155c6fcb50c88..e0576de7ce30baa63cebf025f4ecdf58c53d811a 100644
+--- a/chrome/browser/notifications/notification_display_service_impl.cc
++++ b/chrome/browser/notifications/notification_display_service_impl.cc
+@@ -23,6 +23,7 @@
+ #include "components/prefs/pref_service.h"
+ #include "components/safe_browsing/buildflags.h"
+ #include "content/public/browser/browser_thread.h"
++#include "open/browser/page/open_notification_hooks.h"
+ #include "extensions/buildflags/buildflags.h"
+ #include "ui/message_center/public/cpp/notification.h"
+ 
+@@ -172,6 +173,14 @@ void NotificationDisplayServiceImpl::ProcessNotificationOperation(
+ 
+   switch (operation) {
+     case NotificationOperation::kClick:
++#if BUILDFLAG(IS_MAC)
++      // Open (patch 0504): the embedder hears of the click first
++      // (page-platform EP-6).
++      if (auto* clicked = open_engine::GetNotificationHooks().clicked) {
++        clicked(profile_, static_cast<int>(notification_type), origin,
++                notification_id);
++      }
++#endif
+       handler->OnClick(profile_, origin, notification_id, action_index, reply,
+                        std::move(on_completed_cb));
+       break;
