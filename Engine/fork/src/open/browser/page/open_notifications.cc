@@ -30,6 +30,7 @@
 #include "chrome/browser/notifications/notification_handler.h"
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/common/notifications/notification_operation.h"
+#include "content/browser/notifications/notification_id_generator.h"
 #include "open/browser/page/open_notification_hooks.h"
 #include "ui/message_center/public/cpp/notification.h"
 #include "url/gurl.h"
@@ -73,11 +74,19 @@ class NotificationState : public base::SupportsUserData::Data,
   void OnNotificationDisplayed(
       const message_center::Notification& notification,
       const NotificationCommon::Metadata* const metadata) override {
-    // Persistent web notifications carry a service worker scope; others that
-    // reach this observer from a page are non-persistent.
-    shown[notification.id()] = Shown{
-        metadata ? NotificationHandler::Type::WEB_PERSISTENT
-                 : NotificationHandler::Type::WEB_NON_PERSISTENT,
+    // Chromium's web notification ids say the kind (NotificationIdGenerator):
+    // persistent (service worker, "p[b]#…") or non-persistent (a page, "n#…").
+    // Other notifications (extensions, Chrome's own) are not web notifications.
+    const std::string& id = notification.id();
+    const bool persistent =
+        content::NotificationIdGenerator::IsPersistentNotification(id);
+    if (!persistent &&
+        !content::NotificationIdGenerator::IsNonPersistentNotification(id)) {
+      return;
+    }
+    shown[id] = Shown{
+        persistent ? NotificationHandler::Type::WEB_PERSISTENT
+                   : NotificationHandler::Type::WEB_NON_PERSISTENT,
         notification.origin_url().spec(), base::UTF16ToUTF8(notification.title()),
         base::UTF16ToUTF8(notification.message())};
   }
