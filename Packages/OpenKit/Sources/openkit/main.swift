@@ -28,6 +28,7 @@ let commands: [(name: String, handler: @MainActor ([String]) async throws -> Voi
     ("sleep-demo", { try await runSleepDemo(args: $0) }),
     ("sleep-sim", { try await runSleepSimulation(args: $0) }),
     ("url-clean", { try runURLClean(args: $0) }),
+    ("lang-detect", { try runLangDetect(args: $0) }),
 ]
 
 let arguments = Array(CommandLine.arguments.dropFirst())

@@ -64,6 +64,8 @@ final class EngineWebContentHostFactory: NSResponder, WebContentHostFactory {
   var sidebarMenuTrackingObserverForAutomation: NSObjectProtocol?
   #endif
   private(set) var navigationFocusDecisions = 0
+  /// On-device page translation for this window (page-platform Step 10).
+  private(set) lazy var translate = TranslateAdapter(factory: self)
   private(set) var lastNavigationFocusRestored = false
   func showCommandBar(_ mode: CommandBarMode, editingPinnedTab: ItemID? = nil) {
     guard !isClosing, !app.terminationRequested else { return }
@@ -141,6 +143,7 @@ final class EngineWebContentHostFactory: NSResponder, WebContentHostFactory {
       // BrowserWindowController schedules its SnapshotStore once per committed change.
       self.mirror.sync(); self.commandBarSession?.contextDidChange(); self.app.scheduleMenuRebuild()
       self.app.media.windowChanged(self)
+      self.translate.focusDidChange()
     }
     // History swipes (page-platform §4.4.1): macOS's "Swipe between pages" setting, re-read when
     // Open becomes active, and paused while the Capture overlay is up.
@@ -148,6 +151,9 @@ final class EngineWebContentHostFactory: NSResponder, WebContentHostFactory {
     swipeActivationObserver = NotificationCenter.default.addObserver(forName: NSApplication.didBecomeActiveNotification, object: nil, queue: .main) { [weak self] _ in
       MainActor.assumeIsolated { self?.syncHistorySwipe() }
     }
+    // Chained: MediaCoordinator.attach wraps this hook later and keeps it.
+    let previousVisibility = controller.onVisibilityChange
+    controller.onVisibilityChange = { [weak self] in previousVisibility?(); self?.translate.visibilityDidChange() }
     controller.onOpenCommandBar = { [weak self] source, _ in
       if source == .urlField { self?.focusAddressBar(nil) } else { self?.newTab(nil) }
     }
@@ -282,14 +288,17 @@ final class EngineWebContentHostFactory: NSResponder, WebContentHostFactory {
     if model.tab(id: tabID) != nil { modelHostIDs.insert(tabID) }
     mirror.sync()
     if let url { host.load(url) }
+    app.tabSleep.contentCreated(tabID: tabID, host: host)
     return host
   }
   func hostDidClose(_ host: EngineWebContentHost) {
+    translate.contentDidClose(host.content)
     commandBarNavigationFocus.remove(host.tabID)
     app.media.hostClosed(tabID: host.tabID)
     if hosts[host.tabID] === host { hosts[host.tabID] = nil }
     modelHostIDs.remove(host.tabID)
     mirror.sync()
+    app.tabSleep.hostClosed(tabID: host.tabID)
   }
   func adoptHost(_ host: any WebContentHost, as tabID: ItemID) -> Bool {
     guard let host = host as? EngineWebContentHost, host.owner === self, !host.closed,
@@ -306,6 +315,7 @@ final class EngineWebContentHostFactory: NSResponder, WebContentHostFactory {
       modelHostIDs.remove(oldID)
       host.rebind(tabID: tabID, spaceID: space(for: tabID)?.id)
       hosts[tabID] = host; modelHostIDs.insert(tabID)
+      app.tabSleep.contentCreated(tabID: tabID, host: host)
     }
     mirror.sync(); return true
   }
@@ -477,6 +487,8 @@ final class EngineWebContentHostFactory: NSResponder, WebContentHostFactory {
     // "Show full URL when Toolbar is enabled"; every window follows it (AppDelegate's defaults observer).
     case .setShowFullURL(let full): app.settingsPresenter.settings.set(full, for: AppCommand.showFullURLKey); app.applyToolbarSettings(); return true
     case .manageExtensions: openExtensionsPage(nil); return true
+    case .showTranslation(let anchor): return translate.showPopover(anchor: anchor)
+    case .shareQuote: return false // Share Quote is page-platform Step 15.
     case .manageSpaces:
       app.settingsPresenter.showLibrary(section: .spaces); return true
     case .editPinnedURL(let id):
@@ -549,6 +561,7 @@ final class EngineWebContentHostFactory: NSResponder, WebContentHostFactory {
     guard !isClosing else { return }
     isClosing = true
     controller?.existingTabSwitcher?.cancel()
+    translate.closeAll()
     for task in saveCaptureTasks.values { task.cancel() }
     saveCaptureTasks.removeAll()
     findSelectionTask?.cancel(); findSelectionTask = nil
@@ -1093,10 +1106,10 @@ extension EngineWebContentHostFactory: OEWebContentDelegate {
     record("permission", webContent, ["origin": request.origin.absoluteString, "kinds": request.kinds.rawValue])
     switch permissionPolicy {
     case "grant":
-      request.grant()
+      request.grant(); app.tabSleep.permissionsChanged(context: webContent.context)
       return true
     case "deny":
-      request.deny()
+      request.deny(); app.tabSleep.permissionsChanged(context: webContent.context)
       return true
     default:
       guard let window = webContent.view.window else { return false }
@@ -1105,8 +1118,9 @@ extension EngineWebContentHostFactory: OEWebContentDelegate {
       alert.informativeText = "Requested: \(request.kinds.rawValue)"
       alert.addButton(withTitle: "Allow")
       alert.addButton(withTitle: "Block")
-      alert.beginSheetModal(for: window) { response in
+      alert.beginSheetModal(for: window) { [weak self, weak webContent] response in
         response == .alertFirstButtonReturn ? request.grant() : request.deny()
+        self?.app.tabSleep.permissionsChanged(context: webContent?.context)
       }
       return true
     }
@@ -1122,6 +1136,8 @@ extension EngineWebContentHostFactory: OEWebContentDelegate {
         })
       ns.addItem(.separator())
     }
+    // Translate: Open's own item (Chromium's needs a Google API key, page-platform §2.1 T-1).
+    let translateItem = translate.contextMenuItem(for: webContent)
     for item in menu.items {
       if item.isSeparator {
         ns.addItem(.separator())
@@ -1131,6 +1147,11 @@ extension EngineWebContentHostFactory: OEWebContentDelegate {
       let mi = ClosureMenuItem(title: item.title) { menu.select(command: command) }
       mi.isEnabled = item.isEnabled
       ns.addItem(mi)
+    }
+    if let translateItem, menu.linkURL == nil {
+      let mi = ClosureMenuItem(title: translateItem.title) { [weak self] in self?.translate.perform(translateItem.action) }
+      // After Chromium's page items, before its last group (Inspect).
+      if let last = ns.items.lastIndex(where: \.isSeparatorItem) { ns.insertItem(mi, at: last) } else { ns.addItem(mi) }
     }
     let openItems = addCaptureItems(to: ns, for: webContent)
     func commands(_ items: [OEContextMenuItem], in submenu: String = "") -> [[String: Any]] {
@@ -1145,10 +1166,18 @@ extension EngineWebContentHostFactory: OEWebContentDelegate {
       [
         "items": menu.items.map(\.title), "commands": commands(menu.items),
         "link": menu.linkURL?.absoluteString ?? "", "targets": menu.targets.rawValue,
+        "openItems": ns.items.filter { !$0.isSeparatorItem }.map(\.title),
         "open": openItems, "shown": ns.items.map { $0.isSeparatorItem ? "-" : $0.title },
       ])
     if contextMenuPolicy == "record" {
       menu.cancel()
+      return true
+    }
+    if let policy = contextMenuPolicy, policy.hasPrefix("run-open:") {
+      // Runs one of Open's own items by title, after the right click returns.
+      let title = String(policy.dropFirst(9))
+      menu.cancel()
+      DispatchQueue.main.async { if let index = ns.items.firstIndex(where: { $0.title == title }) { ns.performActionForItem(at: index) } }
       return true
     }
     if let policy = contextMenuPolicy, policy.hasPrefix("run:"), let command = Int(policy.dropFirst(4)) {
@@ -1196,7 +1225,7 @@ extension EngineWebContentHostFactory: OEWebContentDelegate {
   func webContent(_ webContent: OEWebContent, didFinishLoadWithStatus status: Int) {
     finishCommandBarNavigation(webContent)
     app.prepareCommandsAfterPaint(webContent)
-    if tabID(for: webContent) != nil { LaunchTiming.shared.mark("firstLoadEnd") }
+    if tabID(for: webContent) != nil { LaunchTiming.shared.mark("firstLoadEnd"); translate.pageDidFinishLoad(webContent, status: status) }
     record("load", webContent, ["status": status, "url": webContent.url?.absoluteString ?? ""])
   }
 
@@ -1373,24 +1402,18 @@ extension EngineWebContentHostFactory {
     record("tab-request", webContent, ["request": pinned ? "pin" : "unpin"])
   }
 
-  /// chrome.tabs.discard: a tab that is not on screen unloads in place, the
-  /// way sleep unloads it (OpenSleep is not wired to this shell yet). It
-  /// stays in the sidebar and loads again when shown.
+  /// chrome.tabs.discard: the sleep controller's debug-sleep path (app-shell Step G). It
+  /// honors every never-sleep gate (the visible tab, keep-alive sites, audio, capture,
+  /// notifications, …); an allowed tab sleeps like a timed discard, stays in the sidebar,
+  /// and loads again when shown. The discard runs after the engine's call returns.
   @objc(browser:requestsDiscardOfWebContent:)
   func browser(_ browser: OEBrowser, requestsDiscardOf webContent: OEWebContent) -> Bool {
-    guard let id = requestTabID(for: webContent), !visibleTabs.contains(where: { $0.id == id }) else {
+    guard let id = requestTabID(for: webContent), !visibleTabs.contains(where: { $0.id == id }),
+          app.tabSleep.requestDiscard(tabID: id) else {
       record("tab-request", webContent, ["request": "discard", "refused": true])
       return false
     }
     record("tab-request", webContent, ["request": "discard"])
-    // Not inside the engine's call.
-    DispatchQueue.main.async { [weak self] in
-      guard let self, let host = self.hosts[id], host.content === webContent, !host.closed else { return }
-      self.controller?.container.closeHost(for: id)
-      host.close()
-      self.model.tab(id: id)?.live.sleepPhase = .sleeping
-      self.mirror.sync()
-    }
     return true
   }
 
@@ -1412,6 +1435,7 @@ extension EngineWebContentHostFactory {
     controller?.container.adopt(host, for: tab.id)
     if host.view.superview == nil { host.view.frame = contentContainer.bounds; contentContainer.addSubview(host.view) }
     mirror.sync()
+    app.tabSleep.contentCreated(tabID: tab.id, host: host)
   }
 
   /// The model tab of a request's page: sidebar tabs only (Peek hosts have
@@ -1489,6 +1513,7 @@ extension EngineWebContentHostFactory: OEBrowserContextDelegate {
 
   func browserContext(_ context: OEBrowserContext, downloadDidUpdate download: OEDownload) {
     app.settingsPresenter.noteDownload(download, context: context)
+    app.tabSleep.downloadUpdated(download, factory: self)
     record(
       "download", download.webContent,
       [

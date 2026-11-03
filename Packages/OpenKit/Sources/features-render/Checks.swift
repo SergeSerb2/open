@@ -343,6 +343,7 @@ enum FeatureChecks {
         try await TabSwitcherChecks.run { check($0, $1) }
         try await FaviconChecks.run { check($0, $1) }
         try await AutoArchiveChecks.run { check($0, $1) }
+        TranslateChecks.run { check($0, $1) }
         try await CaptureChecks.run { check($0, $1) }
         try await ToastChecks.run { check($0, $1) }
         try await SwipeChecks.run { check($0, $1) }

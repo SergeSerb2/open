@@ -192,6 +192,20 @@ Engine switches (memory-fork §10, browser process, `OEApp.mm`): `--enable-featu
 
 The fork API under these calls is C++ free functions in two overlay headers, not `CefBrowserHost` methods: `cef_page_lifecycle.h` (`CefSetPageFrozen`, `CefIsPageFrozen`, `CefDiscardBrowser`, `CefWasDiscarded`, `CefHasUnloadHandlers`) and `cef_navigation_history.h` (`CefNavigationHistory`, `CefGetNavigationHistory`, `CefRestoreNavigationHistory`), plus `CefBrowserSettings.no_renderer` (patch 0105) and `CefNavigationEntry::GetReferrerURL`/`GetFaviconURL` (patch 0104). See [engine-patches.md](engine-patches.md), "Tab sleeping".
 
+### Page selection and history swipe (page-platform EP-1, EP-2, EP-3)
+
+Fork API `cef/include/cef_open_page.h` (docs/engine-patches.md, "Page platform"). Every page gets a page handler when its browser is created.
+
+- `hasSelection` and `OEWebContentChangeSelection` (`1u << 15`): the page's text selection became empty or non-empty (input selections; a script-only selection that never reaches the browser's text input state does not count). Not sent for caret moves.
+- `requestSelection(completion:)`: the focused frame's selected text and a link that scrolls to it (the page URL plus Chromium's text-fragment directive, with prefix/suffix context when the text is not unique). `link` is nil for a selection in a child frame or when the generator fails. The completion runs exactly once.
+- `historySwipeEnabled` (default YES; NO makes Chromium's swiper ignore gestures on this page) and `drawsEngineHistorySwipeOverlay` (default YES; NO hides Chromium's arrow). Delegate `webContent(_:historySwipe:direction:progress:)`: began / changed / completed / cancelled, back or forward, progress 0…1. Completed arrives after the navigation started.
+- `simulateHistorySwipe(direction:progress:)`: test hook (engine switch `--open-automation`); replays the overlay sequence and the navigation; NO when swipes are off or the page cannot go that way.
+
+### Notifications (page-platform EP-6, EP-7)
+
+- `OEBrowserContextDelegate.browserContext(_:didClickNotification:origin:persistent:)`: a web notification of the context was clicked (body or button), before Chromium dispatches the click to the page. No page is reported; find the tab by origin.
+- `OEBrowserContext.displayedNotifications(completion:)` and `simulateClickOnNotification(identifier:)`: test hooks, active only with `--open-automation` (otherwise an empty list and NO). The list is Chromium's displayed set (`NotificationDisplayService::GetDisplayed`) with id, origin, title and body.
+
 ### Context menu items
 
 A Chrome style page gets Chrome's full page context menu. OpenEngine keeps only the items on an explicit allowlist (`Engine/OpenEngine/src/OEContextMenuAllowlist.mm`, applied in `OEClient::OnBeforeContextMenu`). It then removes empty submenus and extra separators. An item a later Chromium adds stays hidden until it is added to the list. Alloy style menus are CEF's short list and are not filtered. The shell adds Open's own items (Capture, Share, Copy URL, Little Open, Split View, and Arc's "Manage Extensions", EX-18) to what remains. `select(command:)` runs only the id of an enabled item in the delivered `items` (submenus included); any other id is refused, logged, and the menu is cancelled, because CEF would run it directly without checking the list. Not filtered: Alloy pages (Peek; CEF's short list, by design) and the short-lived Chrome windows that `chrome.windows.create` still opens (`OEDefaultClient`, P1 follow-up).

@@ -125,6 +125,8 @@ final class EngineWebContentHost: NSObject, WebContentHost, WebContentProviding,
     // Same-document History API path changes do not emit another load finish.
     if !page.isLoading, !changes.isDisjoint(with: [.URL, .loading]) { confirmFaviconForDocument(page, owner: owner) }
     if !changes.isDisjoint(with: [.URL, .title]) { owner.app.scheduleSave() }
+    // Tab sleep's hard event contract: every change of every page, background tabs included.
+    if !closed, generation == token { owner.app.tabSleep.pageChanged(self, changes: changes) }
     owner.record("change", page, ["changes": changes.rawValue])
   }
   /// Cache conversion by image identity, independent of the page key.
@@ -241,7 +243,11 @@ final class EngineWebContentHost: NSObject, WebContentHost, WebContentProviding,
   }
   func webContentDidRequestClose(_ page: OEWebContent) { if !closed { owner?.close(page: page) } }
   func webContent(_ page: OEWebContent, handleKeyEventBeforePage event: NSEvent) -> Bool {
-    !closed && owner?.controller?.handleKeyDown(event) == true
+    guard !closed else { return false }
+    if owner?.controller?.handleKeyDown(event) == true { return true }
+    // A key the page receives: tab sleep's form proxy (discard waits 5 min after typing).
+    if event.type == .keyDown { owner?.app.tabSleep.pageKeyDown(tabID: tabID) }
+    return false
   }
   func webContent(_ page: OEWebContent, handleUnconsumedKeyEvent event: NSEvent) -> Bool {
     !closed && owner?.controller?.handleKeyDown(event, unconsumed: true) == true

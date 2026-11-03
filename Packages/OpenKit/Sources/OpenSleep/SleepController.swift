@@ -5,7 +5,25 @@ import OpenModel
 public final class SleepController {
     public enum Pressure: Int, Sendable { case warning = 1, critical = 2 }
     public var onLog: ((String) -> Void)?
-    public var downloading: Set<ItemID> = []
+    public var downloading: Set<ItemID> = [] { didSet { if downloading != oldValue { setNeedsPass() } } }
+    /// macOS Low Power Mode (Battery Saver). Balanced ("Automatic") then uses the Aggressive
+    /// discard delay; other modes keep their own (settings-library, Tab Sleeping group).
+    public var lowPowerMode = false { didSet { if lowPowerMode != oldValue { setNeedsPass() } } }
+    /// The mode a profile's setting acts as right now.
+    public func effectiveMode(_ mode: SleepMode) -> SleepMode { lowPowerMode && mode == .balanced ? .aggressive : mode }
+    /// Completed passes (timer, pressure, and explicit ticks). Evidence for the idle checks.
+    public private(set) var passCount = 0
+    /// True while a pass is scheduled. False while nothing can change without an event.
+    public var isPassScheduled: Bool { loop != nil }
+    /// True while a pass (timer, pressure or explicit) runs; another `tick()` returns at once.
+    public var isRunningPass: Bool { runningPass }
+    /// Real seconds until the scheduled pass, or nil while parked.
+    public var scheduledPassDelay: TimeInterval? {
+        loopWakeAt.map { at in
+            let left = ContinuousClock.now.duration(to: at).components
+            return max(0, Double(left.seconds) + Double(left.attoseconds) / 1e18)
+        }
+    }
     public private(set) var liveContent: Set<ItemID>
     public var hiddenAt: [ItemID: Date] { stateValues(\.hiddenAt) }
     public var lastAudibleAt: [ItemID: Date] { stateValues(\.lastAudibleAt) }
@@ -34,6 +52,10 @@ public final class SleepController {
     }
     private var profileRules: [ProfileID: ProfileRules] = [:]
     private var loop: Task<Void, Never>?
+    private var loopWakeAt: ContinuousClock.Instant?
+    private var started = false
+    /// The cadence while a transition is pending. Never a per-tab timer.
+    public static let passInterval: TimeInterval = 5
     private var pressureSource: (any DispatchSourceMemoryPressure)?
     private var shown: Set<ItemID> = []
     private var knownVisible: Set<ItemID> = []
@@ -94,14 +116,9 @@ public final class SleepController {
     public func visibleTabIDs() -> Set<ItemID> { visibility.sleepVisibility().visibleTabIDs(in: model) }
 
     public func start() {
-        guard loop == nil else { return }
-        loop = Task { [weak self] in
-            while !Task.isCancelled {
-                do { try await Task.sleep(for: .seconds(5)) } catch { return }
-                guard let self else { return }
-                await self.tick()
-            }
-        }
+        guard !started else { return }
+        started = true
+        setNeedsPass()
         let source = DispatchSource.makeMemoryPressureSource(eventMask: [.warning, .critical], queue: .main)
         source.setEventHandler { [weak self, weak source] in
             guard let source else { return }
@@ -112,8 +129,91 @@ public final class SleepController {
     }
 
     public func stop() {
-        loop?.cancel(); loop = nil
+        started = false
+        loop?.cancel(); loop = nil; loopWakeAt = nil
         pressureSource?.cancel(); pressureSource = nil
+    }
+
+    /// Something may have changed: run a pass within `passInterval`. The loop parks when no
+    /// hidden tab can change phase without an event, so an idle app runs no sleep timer.
+    /// Every event hook calls this; the App calls it for other inputs (mode, permissions).
+    public func setNeedsPass() {
+        guard started else { return }
+        let soon = ContinuousClock.now.advanced(by: .seconds(Self.passInterval))
+        if loop != nil, let at = loopWakeAt, at <= soon { return }
+        schedulePass(after: Self.passInterval)
+    }
+
+    private func schedulePass(after seconds: TimeInterval) {
+        loop?.cancel()
+        let delay = Duration.milliseconds(Int64((seconds * 1000).rounded(.up)))
+        loopWakeAt = ContinuousClock.now.advanced(by: delay)
+        loop = Task { [weak self] in
+            do { try await Task.sleep(for: delay) } catch { return }
+            guard let self, !Task.isCancelled else { return }
+            self.loop = nil; self.loopWakeAt = nil
+            await self.tick()
+            // An event during the pass may already have scheduled the next one.
+            guard self.started, self.loop == nil else { return }
+            if let next = self.nextPassDelay() { self.schedulePass(after: next) }
+        }
+    }
+
+    /// Seconds until a pass can change anything, or nil when only an event can (parked).
+    /// Event-driven gates (keep-alive, notifications, audio, loading, capture, DevTools,
+    /// downloads, a known unload handler on a frozen page) wait for their event.
+    public func nextPassDelay() -> TimeInterval? {
+        updateEntries()
+        let date = now(), visible = visibleTabIDs(), policies = policies()
+        var deadline: Date?
+        for (owner, entries) in groups {
+            let policy = owner.flatMap { policies[$0] } ?? SleepPolicy()
+            for entry in entries where entry.state.hasContent && !visible.contains(entry.tab.id) {
+                let tab = entry.tab, state = entry.state
+                if state.busy { return Self.passInterval }
+                switch tab.live.sleepPhase {
+                case .placeholder: continue
+                case .live:
+                    if waitsForEvent(tab, state: state, policy: policy) { continue }
+                    return Self.passInterval
+                case .frozen:
+                    guard policy.mode.discardDelay != nil, !waitsForEvent(tab, state: state, policy: policy),
+                          state.unload != true else { continue }
+                    if let retry = state.retryAfter, retry > date { deadline = min(deadline ?? retry, retry); continue }
+                    return Self.passInterval
+                case .sleeping:
+                    if let slept = state.sleptAt {
+                        let due = slept.addingTimeInterval(policy.destroyDelay)
+                        deadline = min(deadline ?? due, due)
+                    }
+                }
+            }
+        }
+        return deadline.map { max(Self.passInterval, $0.timeIntervalSince(date)) }
+    }
+
+    private func waitsForEvent(_ tab: Tab, state: State, policy: SleepPolicy) -> Bool {
+        tab.live.notificationsAllowed || tab.live.isAudible || tab.live.isLoading || tab.live.isCapturing
+            || tab.live.devToolsOpen || downloading.contains(tab.id) || isKeepAlive(tab, state: state, policy: policy)
+    }
+
+    /// The first never-sleep gate that protects this tab now (automation and the App's
+    /// hidden-host cache use it). Nil when the tab may sleep.
+    public func blockingGate(tabID: ItemID, forDiscard: Bool) -> SleepPolicy.Gate? {
+        updateEntries()
+        guard let tab = model.tab(id: tabID) else { return nil }
+        let owner = entries.first { $0.tab.id == tabID }?.owner
+        let policy = owner.flatMap { policies()[$0] } ?? SleepPolicy()
+        // Same as debug sleep: an unknown unload state is asked once instead of guessed.
+        let state = state(tabID)
+        if forDiscard, state.unload == nil, state.hasContent { state.unload = engine.hasUnloadHandlers(tabID: tabID) }
+        return gate(tab, policy: policy, visible: visibleTabIDs(), at: now(), discard: forDiscard)
+    }
+
+    /// The App made content for a wake outside the controller (selection recreated a
+    /// discarded page). The wake latency logs at that page's first commit.
+    public func wakeStarted(tabID: ItemID, kind: String) {
+        if wakeStartedAt[tabID] == nil { wakeStartedAt[tabID] = (now(), kind) }
     }
 
     /// Call when the app creates initial engine content outside the wake path.
@@ -122,11 +222,13 @@ public final class SleepController {
         let state = state(tabID)
         purged.remove(tabID); liveContent.insert(tabID); state.hasContent = true; tab.live.sleepPhase = .live
         if state.everVisible && !knownVisible.contains(tabID) { state.hiddenAt = now() }
+        setNeedsPass()
     }
 
     public func tabBecameHidden(_ tabID: ItemID) {
         guard !visibleTabIDs().contains(tabID) else { return }
         hide(tabID, at: now())
+        setNeedsPass()
     }
 
     private func hide(_ id: ItemID, at date: Date) {
@@ -193,6 +295,7 @@ public final class SleepController {
         state.lastAudibleAt = nil; state.lastCommitAt = nil; state.sleptAt = nil
         state.unload = nil; wakeStartedAt[tabID] = nil; downloading.remove(tabID)
         tabUserInteracted(tabID)
+        setNeedsPass()
     }
 
     /// HARD S6 requirement: call on permanent deletion and archive purge, never
@@ -202,7 +305,7 @@ public final class SleepController {
     }
 
     public func tabUserInteracted(_ tabID: ItemID) { let state = state(tabID); state.retryAfter = nil; state.retryDelay = nil }
-    public func tabUnloadHandlersChanged(_ tabID: ItemID, hasHandlers: Bool) { state(tabID).unload = hasHandlers }
+    public func tabUnloadHandlersChanged(_ tabID: ItemID, hasHandlers: Bool) { state(tabID).unload = hasHandlers; setNeedsPass() }
 
     public func tabDidCommit(_ tabID: ItemID) {
         guard let tab = model.tab(id: tabID), liveContent.contains(tabID) else { return }
@@ -212,10 +315,17 @@ public final class SleepController {
         if let (start, kind) = wakeStartedAt.removeValue(forKey: tabID) {
             onLog?("sleep-wake \(kind) \(tabID.rawValue.uuidString.prefix(8)) ms=\(now().timeIntervalSince(start) * 1000)")
         }
+        setNeedsPass()
     }
 
     /// Mandatory event hook: preserves audio grace even if start/stop fall between ticks.
-    public func tabAudioChanged(_ tabID: ItemID) { state(tabID).lastAudibleAt = now() }
+    /// Set `tab.live.isAudible` first: the event's time then wins over the next pass's sample,
+    /// so a stop between passes starts the grace at the stop, not at the next sample.
+    public func tabAudioChanged(_ tabID: ItemID) {
+        guard let tab = model.tab(id: tabID) else { return }
+        let state = state(tabID)
+        state.lastAudibleAt = now(); state.wasAudible = tab.live.isAudible; setNeedsPass()
+    }
 
     private func refresh(_ tab: Tab, state: State, at date: Date) {
         let isAudible = tab.live.isAudible, isLoading = tab.live.isLoading
@@ -258,7 +368,7 @@ public final class SleepController {
             else {
                 cache = ProfileRules(); profileRules[profile.id] = cache
             }
-            return (profile.id, SleepPolicy(mode: profile.settings.sleepMode,
+            return (profile.id, SleepPolicy(mode: effectiveMode(profile.settings.sleepMode),
                                            keepAliveRules: cache.current(profile.settings.keepAliveSites)))
         })
         var result: [NodeParent: SleepPolicy] = [:]
@@ -291,12 +401,12 @@ public final class SleepController {
     }
 
     private func gate(_ tab: Tab, policy: SleepPolicy, visible: Set<ItemID>, at date: Date,
-                      discard: Bool) -> SleepPolicy.Gate? {
+                      discard: Bool, critical: Bool = false) -> SleepPolicy.Gate? {
         let state = state(tab.id)
         return policy.blockingReason(tab: tab, visible: visible, now: date,
             lastAudibleAt: state.lastAudibleAt, lastCommitAt: state.lastCommitAt,
             downloading: downloading.contains(tab.id), hasUnloadHandlers: state.unload ?? true,
-            forDiscard: discard, keepAlive: isKeepAlive(tab, state: state, policy: policy))
+            forDiscard: discard, keepAlive: isKeepAlive(tab, state: state, policy: policy), criticalPressure: critical)
     }
 
     private func isKeepAlive(_ tab: Tab, state: State, policy: SleepPolicy) -> Bool {
@@ -320,7 +430,7 @@ public final class SleepController {
     private func runPass(pressure: Pressure?) async {
         guard !runningPass else { return }
         runningPass = true
-        defer { runningPass = false }
+        defer { runningPass = false; passCount += 1 }
         var level = pressure
         repeat {
             pendingPressure = nil
@@ -350,7 +460,11 @@ public final class SleepController {
                     let phase = tab.live.sleepPhase
                     let action: SleepPolicy.Action
                     if level != nil {
-                        if phase == .frozen, date.timeIntervalSince(hiddenSince(tab, state: state, at: date)) >= 30 { action = .discard }
+                        let hiddenLongEnough = date.timeIntervalSince(hiddenSince(tab, state: state, at: date)) >= 30
+                        if phase == .frozen, hiddenLongEnough { action = .discard }
+                        // Notification permission protects from proactive sleep only (Chrome parity,
+                        // page-platform §4.5.6): critical pressure freezes and discards such a page.
+                        else if level == .critical, phase == .live, tab.live.notificationsAllowed, hiddenLongEnough { action = .discard }
                         else if level == .critical, phase == .sleeping, sleepingAtStart.contains(tab.id) { action = .destroy }
                         else { action = .none }
                     } else {
@@ -365,21 +479,24 @@ public final class SleepController {
                           policy.blockingReason(tab: tab, visible: visible, now: date,
                             lastAudibleAt: state.lastAudibleAt, lastCommitAt: state.lastCommitAt,
                             downloading: downloading.contains(tab.id), hasUnloadHandlers: state.unload ?? true,
-                            forDiscard: action == .discard, keepAlive: isKeepAlive(tab, state: state, policy: policy)) == nil else { continue }
+                            forDiscard: action == .discard, keepAlive: isKeepAlive(tab, state: state, policy: policy),
+                            criticalPressure: level == .critical) == nil else { continue }
                     actions.append((tab, policy, action))
                 }
             }
             actions.sort { hiddenSince($0.0, at: date) < hiddenSince($1.0, at: date) }
             var currentVisible = visible
+            let critical = level == .critical
             for (tab, policy, action) in actions {
                 guard model.tab(id: tab.id) === tab, liveContent.contains(tab.id),
-                      gate(tab, policy: policy, visible: currentVisible, at: now(), discard: action == .discard) == nil else { continue }
+                      gate(tab, policy: policy, visible: currentVisible, at: now(), discard: action == .discard, critical: critical) == nil else { continue }
                 switch action {
                 case .none: break
                 case .freeze:
                     if tab.live.sleepPhase == .live, engine.freeze(tabID: tab.id) { tab.live.sleepPhase = .frozen }
                 case .discard:
-                    if tab.live.sleepPhase == .frozen { await discard(tab, policy: policy, visible: currentVisible) }
+                    if critical, tab.live.sleepPhase == .live, engine.freeze(tabID: tab.id) { tab.live.sleepPhase = .frozen }
+                    if tab.live.sleepPhase == .frozen { await discard(tab, policy: policy, visible: currentVisible, critical: critical) }
                     // Async boundaries need fresh visibility for the remaining actions.
                     currentVisible = visibleTabIDs()
                 case .destroy:
@@ -417,10 +534,10 @@ public final class SleepController {
         onLog?("sleep-discard-backoff \(id.rawValue.uuidString.prefix(8)) seconds=\(Int(delay))")
     }
 
-    private func discard(_ tab: Tab, policy: SleepPolicy, visible: Set<ItemID>) async {
+    private func discard(_ tab: Tab, policy: SleepPolicy, visible: Set<ItemID>, critical: Bool = false) async {
         let id = tab.id
         let state = state(id)
-        guard !state.busy, gate(tab, policy: policy, visible: visible, at: now(), discard: true) == nil else { return }
+        guard !state.busy, gate(tab, policy: policy, visible: visible, at: now(), discard: true, critical: critical) == nil else { return }
         state.busy = true
         defer { state.busy = false }
         guard var envelope = engine.captureHistory(tabID: id) else {
@@ -432,7 +549,7 @@ public final class SleepController {
         // A permanent purge can race an in-flight save. Remove its row again.
         if purged.contains(id) { store.deleteSleepHistory(tabID: id); return }
         guard model.tab(id: id) === tab, liveContent.contains(id), tab.live.sleepPhase == .frozen,
-              gate(tab, policy: policy, visible: visibleTabIDs(), at: now(), discard: true) == nil else { return }
+              gate(tab, policy: policy, visible: visibleTabIDs(), at: now(), discard: true, critical: critical) == nil else { return }
         let discarded = await engine.discard(tabID: id)
         guard model.tab(id: id) === tab, liveContent.contains(id) else { return }
         let visibleNow = visibleTabIDs().contains(id)
