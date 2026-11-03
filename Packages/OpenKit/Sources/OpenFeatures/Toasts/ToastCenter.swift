@@ -201,6 +201,14 @@ public final class ToastCenter {
         button.performClick(nil)
         return true
     }
+    /// The pointer enters (true) or leaves (false) the visible toast at `index`, newest first: the
+    /// same pause and resume as the toast's tracking area (automation and checks).
+    @discardableResult public func setHovered(at index: Int, _ inside: Bool) -> Bool {
+        let shown = visibleEntries
+        guard shown.indices.contains(index) else { return false }
+        hover(shown[index].id, inside)
+        return true
+    }
     /// Clicks the newest visible Undo button. False when none shows.
     @discardableResult public func performUndo() -> Bool {
         guard let entry = visibleEntries.first(where: { $0.content.accessory == ToastContent.undoButton }),

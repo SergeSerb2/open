@@ -260,6 +260,7 @@ final class AppSettingsActions: SettingsActions, LibraryActions, DownloadsProvid
   func adBlockDebugInfo(profileID: ProfileID) -> String { "App engine filter adapter: pending Step D" }
   func setTabSleepMode(_ mode: TabSleepMode) {
     for profile in app.model.profiles { var settings = profile.settings; settings.sleepMode = mode.modelMode; app.model.updateProfileSettings(id: profile.id, settings: settings) }; app.scheduleSave()
+    app.tabSleep.modeChanged()
   }
   func setApplicationIcon(id: String) { status("Application icon switching is not connected yet.") }
   /// Settings ▸ Advanced "Reset Translated-site Prompts" (page-platform §4.7.7): app scope, every profile.

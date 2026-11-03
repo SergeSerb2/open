@@ -184,13 +184,16 @@ public final class PeekController {
         undoToast?.dismiss()
         undoToast = toasts?.show(.undo("Peek closed", lifetime: Self.undoWindow)) { [weak self] _ in self?.undoDismiss() }
         undoTask?.cancel(); undoTask = Task { [weak self] in
-            try? await Task.sleep(for: .seconds(Self.undoWindow)); guard !Task.isCancelled else { return }; self?.undoItem = nil
+            try? await Task.sleep(for: .seconds(Self.undoWindow)); guard !Task.isCancelled, let self else { return }
+            // The pointer over the toast pauses it (ToastCenter): its Undo stays live while it shows.
+            if self.undoToast?.isVisible != true { self.undoItem = nil }
         }
         refresh(); if stack.isEmpty { removeKeys(); splitController.container.host(for: item.sourceTabID)?.focus() }
         onChange?()
     }
     public func undoDismiss() {
-        guard let item = undoItem, item.2 > Date() else { return }; undoItem = nil; undoTask?.cancel()
+        // Live while its toast shows (a hovered toast outlasts the 5 s window), else for 5 s.
+        guard let item = undoItem, item.2 > Date() || undoToast?.isVisible == true else { return }; undoItem = nil; undoTask?.cancel()
         undoToast?.dismiss(); undoToast = nil
         open(url: item.0, sourceTabID: item.1)
     }

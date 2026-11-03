@@ -15,17 +15,21 @@ public struct SleepPolicy: Sendable {
         self.mode = mode; self.keepAliveRules = keepAliveRules
     }
 
-    public enum Gate: String, Sendable {
-        case visible, keepAlive, audible, loading, capturing, devTools, downloading, unload, form
+    public enum Gate: String, Sendable, CaseIterable {
+        case visible, keepAlive, notifications, audible, loading, capturing, devTools, downloading, unload, form
     }
     public enum Action: Sendable { case none, freeze, discard, destroy }
 
     @MainActor
     public func blockingReason(tab: Tab, visible: Set<ItemID>, now: Date,
                                lastAudibleAt: Date?, lastCommitAt: Date?, downloading: Bool,
-                               hasUnloadHandlers: Bool, forDiscard: Bool, keepAlive: Bool? = nil) -> Gate? {
+                               hasUnloadHandlers: Bool, forDiscard: Bool, keepAlive: Bool? = nil,
+                               criticalPressure: Bool = false) -> Gate? {
         if visible.contains(tab.id) { return .visible }
         if keepAlive ?? keepAliveRules.matches(tab.url) { return .keepAlive }
+        // Chrome parity (page-platform §4.5.6): notification permission blocks freeze and
+        // proactive discard; only critical memory pressure may still take the page.
+        if tab.live.notificationsAllowed && !criticalPressure { return .notifications }
         if tab.live.isAudible || recent(lastAudibleAt, now, audioProtection) { return .audible }
         if tab.live.isLoading || recent(lastCommitAt, now, loadProtection) { return .loading }
         if tab.live.isCapturing { return .capturing }

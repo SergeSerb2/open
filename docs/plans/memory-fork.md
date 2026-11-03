@@ -1349,6 +1349,10 @@ the fork-infra `# DISABLED:` series prefix, re-apply, rebuild. Swift steps
 roll back by reverting the OpenKit PR; `SleepStore` files left on disk are
 harmless (nothing reads them without the controller).
 
+### 12.1 Verification (Section 8, 2026-11-02)
+
+S1–S5 are built (docs/engine-patches.md, "Tab sleeping") and proven on Track B, the real App, instead of the `cefsimple` Track A: e2e `tabstrip --style chrome` rows `sleep_hosted_visibility` (S1: a background hosted tab is HIDDEN, show/hide through 0302's path), `sleep_hosted_freeze` (S4: refused while visible; the hidden ticker stops for 6 s and runs again after unfreeze), `sleep_hosted_unload_flag` (S5: `HasUnloadHandlers` true with `beforeunload`, false without), `sleep_hosted_capture` (S3: ≥ 3 entries, current index, page state, title, OPNH round trip), `sleep_hosted_discard` (S4: renderer count drops; the woken page has `document.wasDiscarded`, the form value and the scroll position), `sleep_hosted_discard_keeps_tab_id` (the `chrome.tabs` id stays; 0303 untouched) and `sleep_hosted_cleanup`. `engine-status` 8/8 and `expected-symbols.txt` cover the C API. F0 (§10 switches) is in `OEApp.mm`; its App rows run with the App wiring (app-shell Step G, PR G2). S2's no-renderer creation is exercised by the App's restore path in G2.
+
 ## 13. Risks and open questions
 
 1. **Chrome-style creation branch (P-MEM-05) may fight the tab strip.**

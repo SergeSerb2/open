@@ -84,6 +84,7 @@
         return try await runArchiveCommand(cmd, a)
       case "metrics": return await metrics(interval: a["interval"] as? Double ?? 1)
       case _ where Self.mediaCommands.contains(cmd): return try await runMediaCommand(cmd, a)
+      case _ where Self.sleepCommands.contains(cmd): return try await runSleepCommand(cmd, a)
       case "ping":
         return [
           "pid": Int(getpid()), "chromium": OEEngine.shared.chromiumVersion, "cef": OEEngine.shared.cefVersion,
@@ -281,6 +282,11 @@
         // The last Shared Quotes offer of the key window: page answer time (s) and whether it showed.
         guard let controller = app.frontWindowController, let factory = app.hostFactories[controller.windowID] else { throw Failure(message: "no browser window") }
         return factory.lastQuoteOffer
+      case "toast-hover":
+        // The pointer enters (`inside` true) or leaves the visible toast at `index` (newest first).
+        guard let controller = app.frontWindowController else { throw Failure(message: "no browser window") }
+        let index = (a["index"] as? Int) ?? 0
+        return controller.toasts.setHovered(at: index, a["inside"] as? Bool ?? true)
       case "toast-action":
         // Clicks the button of the visible toast at `index` (newest first, default 0) through the real button.
         guard let controller = app.frontWindowController else { throw Failure(message: "no browser window") }
@@ -1047,6 +1053,7 @@
         let kind = OEPermissionKind(rawValue: UInt32(a["kind"] as? Int ?? 0))
         if let state = a["state"] as? Int, let s = OEPermissionState(rawValue: state) {
           context.setPermissionState(s, for: kind, origin: origin)
+          app.tabSleep.permissionsChanged(context: context)
         }
         return context.permissionState(for: kind, origin: origin).rawValue
       case "download-dir":

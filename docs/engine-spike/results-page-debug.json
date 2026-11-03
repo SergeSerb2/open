@@ -6,14 +6,14 @@
         "forced": false,
         "ok": true,
         "owned_pids": [
-          75170,
-          75189,
-          75191,
-          75195,
-          75196,
-          75199,
-          75200,
-          75288
+          20607,
+          20621,
+          20622,
+          20623,
+          20624,
+          20625,
+          20626,
+          20646
         ],
         "remaining_processes": [],
         "reply": true,
@@ -27,14 +27,34 @@
         "forced": false,
         "ok": true,
         "owned_pids": [
-          75402,
-          75427,
-          75428,
-          75430,
-          75431,
-          75433,
-          75434,
-          75484
+          20705,
+          20715,
+          20717,
+          20718,
+          20719,
+          20722,
+          20761
+        ],
+        "remaining_processes": [],
+        "reply": true,
+        "windows_after_quit": {
+          "count": 0,
+          "windows": []
+        },
+        "windows_before_quit": 1
+      },
+      {
+        "forced": false,
+        "ok": true,
+        "owned_pids": [
+          20786,
+          20808,
+          20809,
+          20810,
+          20811,
+          20813,
+          20814,
+          20861
         ],
         "remaining_processes": [],
         "reply": true,
@@ -48,15 +68,15 @@
   },
   "config": "Debug",
   "engine": {
-    "distributionCodeSHA256": "9840fd750c7f3eb3ff70a7c1aa0eb70261cf8ae6e64e154f96286ff42e170991",
-    "distributionSHA256": "948a33fcc26a5c7130856b4c9e80c47b03e29f859dc22087abf2a2e5988511f9",
-    "distributionUUID": "4C4C4445-5555-3144-A1B8-BC70FF2519C3",
-    "embeddedCodeSHA256": "9840fd750c7f3eb3ff70a7c1aa0eb70261cf8ae6e64e154f96286ff42e170991",
-    "embeddedSHA256": "3167e7f2ce9887801f5b9322d77763ff903ebaca4351a0bf6c8c6c519068baee",
-    "embeddedUUID": "4C4C4445-5555-3144-A1B8-BC70FF2519C3",
+    "distributionCodeSHA256": "515f71a831da2938194ef5a52229f91835e220884d08a99946c223d524aa4abe",
+    "distributionSHA256": "a9937ab06318e2b719362476c0f40242b15991888cbb563cec1d5d69eea1423f",
+    "distributionUUID": "4C4C4431-5555-3144-A19A-66BC4F744D1F",
+    "embeddedCodeSHA256": "515f71a831da2938194ef5a52229f91835e220884d08a99946c223d524aa4abe",
+    "embeddedSHA256": "f89a285111ad4e02faf895528808abc783ed4726494fbb712148d1c13b8e03cb",
+    "embeddedUUID": "4C4C4431-5555-3144-A19A-66BC4F744D1F",
     "requiredSHA256": "",
     "source": "fork",
-    "stamp": "fork /Users/serge/Developer/open-engine-s8/chromium_git/chromium/src/cef/binary_distrib/cef_binary_156.0.14+g4fa4ab5+chromium-156.0.8078.48_macosarm64_minimal 1793677752"
+    "stamp": "fork /Users/serge/Developer/open-engine-s8-main/chromium_git/chromium/src/cef/binary_distrib/cef_binary_156.0.14+g4fa4ab5+chromium-156.0.8078.48_macosarm64_minimal 1793681464"
   },
   "interrupted_attempts": [],
   "page": {
@@ -79,7 +99,7 @@
       },
       "picked": {
         "hasSelection": true,
-        "link": "http://127.0.0.1:61102/quote.html#:~:text=The%20quick%20brown%20fox%20studies%20the%20lazy%20dog%20before%20every%20jump.",
+        "link": "http://127.0.0.1:56365/quote.html#:~:text=The%20quick%20brown%20fox%20studies%20the%20lazy%20dog%20before%20every%20jump.",
         "text": "The quick brown fox studies the lazy dog before every jump.\n\n"
       }
     },
@@ -116,22 +136,304 @@
         "changed",
         "cancelled"
       ],
-      "url": "http://127.0.0.1:61102/links-target.html"
+      "url": "http://127.0.0.1:56365/links-target.html"
     },
     "SW4_swipe_disabled": {
       "events": 0,
       "ok": true,
       "ran": false
     },
+    "X1_apple_backend": {
+      "reason": "U-X1: French \u2192 English is supported, not installed on this Mac",
+      "status": "BLOCKED"
+    },
+    "X1_context_menu_item": {
+      "ok": true,
+      "openItems": [
+        "Back",
+        "Forward",
+        "Translate to English",
+        "Print\u2026",
+        "View Page Source",
+        "Capture",
+        "Capture Full Page"
+      ]
+    },
+    "X1_marker_fallback": {
+      "fallbackUnits": 1,
+      "italic": "sometimes",
+      "ok": true
+    },
+    "X1_offer": {
+      "ok": true,
+      "state": {
+        "backend": "fixture",
+        "batches": 0,
+        "button": {
+          "frame": [
+            8,
+            88,
+            212,
+            28
+          ],
+          "shown": true,
+          "title": "Translation Available"
+        },
+        "document": 1,
+        "fallbackUnits": 0,
+        "host": "127.0.0.1",
+        "loopRunning": false,
+        "neverTranslateHosts": [],
+        "popover": {
+          "presented": false
+        },
+        "probedDocument": 1,
+        "pulls": 0,
+        "sessions": 1,
+        "source": "fr",
+        "state": "offered",
+        "sticky": "",
+        "target": "en",
+        "targetIdentifier": "en-CA",
+        "toasts": [],
+        "undoTitle": ""
+      }
+    },
+    "X1_popover_offer_and_escape": {
+      "buttonBottom": 804,
+      "ok": true,
+      "popover": {
+        "aboveWindow": true,
+        "buttons": [
+          "Translate",
+          "Options"
+        ],
+        "error": null,
+        "frame": [
+          74,
+          690,
+          328,
+          126
+        ],
+        "presented": true,
+        "stacking": [
+          5,
+          6
+        ],
+        "title": "Translate this page to English?",
+        "window": 173329
+      },
+      "tipY": 802,
+      "window": [
+        80,
+        60,
+        1360,
+        860
+      ]
+    },
+    "X1_translate": {
+      "detected": {
+        "confidence": 0.9775675535202026,
+        "language": "en"
+      },
+      "ok": true,
+      "state": {
+        "backend": "fixture",
+        "batches": 2,
+        "button": {
+          "frame": [
+            8,
+            88,
+            212,
+            28
+          ],
+          "shown": true,
+          "title": "Translated"
+        },
+        "document": 1,
+        "fallbackUnits": 1,
+        "host": "127.0.0.1",
+        "loopRunning": true,
+        "neverTranslateHosts": [],
+        "popover": {
+          "aboveWindow": false,
+          "buttons": [
+            "Translate",
+            "Options"
+          ],
+          "error": null,
+          "presented": false,
+          "stacking": [
+            -1,
+            -1
+          ],
+          "title": "Translate this page to English?",
+          "window": 0
+        },
+        "probedDocument": 1,
+        "pulls": 2,
+        "sessions": 1,
+        "source": "fr",
+        "state": "translated",
+        "sticky": "127.0.0.1",
+        "target": "en",
+        "targetIdentifier": "en-CA",
+        "toasts": [
+          "Translated to English"
+        ],
+        "undoTitle": "Translate"
+      },
+      "texts": {
+        "boldSame": true,
+        "brand": "Maison Dupont",
+        "p1": "This is the first sentence of this page. We avons a cat and a dog in the house.",
+        "p2": "This second sentence is <b id=\"bold\">very important</b> for we and for you.",
+        "p3": "The garden is small, mais <i>sometimes</i> the cat is in the garden with the dog.",
+        "placeholder": "Your address",
+        "send": "Send",
+        "title": "Title of the page",
+        "value": "Search"
+      }
+    },
+    "X2_revert": {
+      "equal": true,
+      "ok": true,
+      "state": {
+        "backend": "fixture",
+        "batches": 2,
+        "button": {
+          "frame": [
+            8,
+            88,
+            212,
+            28
+          ],
+          "shown": true,
+          "title": "Translation Available"
+        },
+        "document": 1,
+        "fallbackUnits": 1,
+        "host": "127.0.0.1",
+        "loopRunning": false,
+        "neverTranslateHosts": [],
+        "popover": {
+          "aboveWindow": false,
+          "buttons": [
+            "Show Original",
+            "Options"
+          ],
+          "error": null,
+          "presented": false,
+          "stacking": [
+            -1,
+            -1
+          ],
+          "title": "Translated from French.",
+          "window": 0
+        },
+        "probedDocument": 1,
+        "pulls": 2,
+        "sessions": 1,
+        "source": "fr",
+        "state": "offered",
+        "sticky": "",
+        "target": "en",
+        "targetIdentifier": "en-CA",
+        "toasts": [
+          "Translated to English",
+          "Translated back to French"
+        ],
+        "undoTitle": "Translate"
+      }
+    },
+    "X2_revert_keeps_page_structure": {
+      "ok": true,
+      "p1": "Ceci est la premi\u00e8re phrase de cette page. Nous avons un chat et un chien dans la maison.",
+      "p2": "Nouveau contenu de la page."
+    },
+    "X3_same_document": {
+      "added": "A new paragraph is added after a second with of the content dynamic.",
+      "ok": true,
+      "state": "translated"
+    },
+    "X3_same_host_auto_translate": {
+      "ok": true,
+      "p1": "This is the first sentence of this page. We avons a cat and a dog in the house.",
+      "state": "translated"
+    },
+    "X4_never_and_reset": {
+      "afterReload": "idle",
+      "again": true,
+      "hosts": [
+        "127.0.0.1"
+      ],
+      "ok": true,
+      "reset": {
+        "neverTranslateHosts": [],
+        "result": "Done"
+      }
+    },
+    "X5_no_network": {
+      "filterStats": {
+        "blocked": 0,
+        "recent": []
+      },
+      "method": "profile request filter on translate/googleapis/gstatic installed before the page loaded",
+      "ok": true
+    },
+    "X6_redo": {
+      "ok": true,
+      "state": "translated"
+    },
+    "X6_undo": {
+      "menuTitle": "Undo Translate",
+      "ok": true,
+      "state": "offered",
+      "undoTitle": "Translate"
+    },
+    "X_idle_no_polling": {
+      "ok": true,
+      "pulls": [
+        9,
+        9
+      ]
+    },
+    "X_offer_after_minimized_load": {
+      "hidden": {
+        "document": 7,
+        "probedDocument": -1,
+        "state": "idle"
+      },
+      "offered": true,
+      "ok": true
+    },
+    "X_root_notranslate": {
+      "after": "\n<p id=\"p1\">Ceci est la premi\u00e8re phrase de cette page. Nous avons un chat et un chien dans la maison.</p>\n<p id=\"p2\">Cette deuxi\u00e8me phrase est tr\u00e8s importante pour nous et pour vous.</p>\n\n\n",
+      "before": "\n<p id=\"p1\">Ceci est la premi\u00e8re phrase de cette page. Nous avons un chat et un chien dans la maison.</p>\n<p id=\"p2\">Cette deuxi\u00e8me phrase est tr\u00e8s importante pour nous et pour vous.</p>\n\n\n",
+      "equal": true,
+      "navigated": true,
+      "ok": true,
+      "state": "offered"
+    },
+    "X_stale_result_dropped": {
+      "ok": true,
+      "result": {
+        "applied": 8,
+        "hadUnit": true,
+        "p1": "Texte chang\u00e9 par la page.",
+        "title": "TRANSLATED Bonjour le monde",
+        "units": 9
+      }
+    },
     "capture_2x_c1_area": {
       "devicePixelRatio": 2,
       "ok": true,
       "row": {
-        "bytes": 4311,
-        "createdAt": 1793679764.671392,
-        "fileName": "28019AA1-C6A8-42A7-A428-B67FE00DF1EB.png",
+        "bytes": 4312,
+        "createdAt": 1793681996.6249762,
+        "fileName": "5C86E180-E948-42BD-9CB3-ED36BCC898EC.png",
         "height": 400,
-        "id": "28019AA1-C6A8-42A7-A428-B67FE00DF1EB",
+        "id": "5C86E180-E948-42BD-9CB3-ED36BCC898EC",
         "kind": "area",
         "sourceHost": "127.0.0.1",
         "width": 600
@@ -230,10 +532,10 @@
       ],
       "row": {
         "bytes": 978563,
-        "createdAt": 1793679765.7347841,
-        "fileName": "48EEFEBB-9733-4644-AF97-7B234CCB7A1C.png",
+        "createdAt": 1793681997.5262241,
+        "fileName": "A03CE2E3-4FAD-4102-8854-3F687EFF622C.png",
         "height": 24000,
-        "id": "48EEFEBB-9733-4644-AF97-7B234CCB7A1C",
+        "id": "A03CE2E3-4FAD-4102-8854-3F687EFF622C",
         "kind": "fullPage",
         "sourceHost": "127.0.0.1",
         "width": 2084
@@ -243,10 +545,10 @@
       "ok": true,
       "row": {
         "bytes": 162958,
-        "createdAt": 1793679769.340894,
-        "fileName": "46558921-3641-4678-BA33-0782613AA2B5.png",
+        "createdAt": 1793682000.77942,
+        "fileName": "4B5582D5-DEF5-49BA-9AC7-BF7F5D89C60A.png",
         "height": 3029,
-        "id": "46558921-3641-4678-BA33-0782613AA2B5",
+        "id": "4B5582D5-DEF5-49BA-9AC7-BF7F5D89C60A",
         "kind": "portrait",
         "sourceHost": "127.0.0.1",
         "width": 2423
@@ -279,10 +581,10 @@
       "ok": true,
       "row": {
         "bytes": 1270742,
-        "createdAt": 1793679767.903514,
-        "fileName": "B93F3FCE-AAAA-4497-9A6F-EB65C28D917B.png",
+        "createdAt": 1793681999.394987,
+        "fileName": "9AD22DD7-360F-4F8D-80BD-DE6217CC514B.png",
         "height": 32768,
-        "id": "B93F3FCE-AAAA-4497-9A6F-EB65C28D917B",
+        "id": "9AD22DD7-360F-4F8D-80BD-DE6217CC514B",
         "kind": "fullPage",
         "sourceHost": "127.0.0.1",
         "width": 2084
@@ -313,7 +615,7 @@
             780
           ],
           "paused": false,
-          "remaining": 7.989988833316602,
+          "remaining": 7.991420541657135,
           "savedLine": true
         },
         "completed": 7,
@@ -326,11 +628,11 @@
         "replays": 1,
         "result": {
           "bytes": 1270742,
-          "fileName": "Tall page 11-02 at 9.22PM.png",
+          "fileName": "Tall page 11-02 at 9.59PM.png",
           "height": 32768,
           "host": "127.0.0.1",
           "kind": "fullPage",
-          "saved": "B93F3FCE-AAAA-4497-9A6F-EB65C28D917B",
+          "saved": "9AD22DD7-360F-4F8D-80BD-DE6217CC514B",
           "truncated": true,
           "width": 2084
         }
@@ -341,10 +643,10 @@
       "row": [
         {
           "bytes": 1663,
-          "createdAt": 1793679761.691509,
-          "fileName": "A165338C-2B1F-4F29-B4B9-36D084D686BF.png",
+          "createdAt": 1793681993.808442,
+          "fileName": "0F854F82-024F-4905-9499-E19849EB017A.png",
           "height": 200,
-          "id": "A165338C-2B1F-4F29-B4B9-36D084D686BF",
+          "id": "0F854F82-024F-4905-9499-E19849EB017A",
           "kind": "area",
           "sourceHost": "127.0.0.1",
           "width": 300
@@ -378,7 +680,7 @@
             780
           ],
           "paused": false,
-          "remaining": 7.989215541747399,
+          "remaining": 7.988559083431028,
           "savedLine": true
         },
         "completed": 1,
@@ -391,11 +693,11 @@
         "replays": 0,
         "result": {
           "bytes": 1663,
-          "fileName": "Long page 11-02 at 9.22PM.png",
+          "fileName": "Long page 11-02 at 9.59PM.png",
           "height": 200,
           "host": "127.0.0.1",
           "kind": "area",
-          "saved": "A165338C-2B1F-4F29-B4B9-36D084D686BF",
+          "saved": "0F854F82-024F-4905-9499-E19849EB017A",
           "truncated": false,
           "width": 300
         }
@@ -546,10 +848,10 @@
       ],
       "row": {
         "bytes": 270568,
-        "createdAt": 1793679763.667251,
-        "fileName": "29A2EA81-0B28-47D1-B028-A591EDE10905.png",
+        "createdAt": 1793681995.650998,
+        "fileName": "4AADBB06-C2B7-4B50-98C5-F98E3BB38F37.png",
         "height": 12000,
-        "id": "29A2EA81-0B28-47D1-B028-A591EDE10905",
+        "id": "4AADBB06-C2B7-4B50-98C5-F98E3BB38F37",
         "kind": "fullPage",
         "sourceHost": "127.0.0.1",
         "width": 1042
@@ -581,7 +883,7 @@
             780
           ],
           "paused": false,
-          "remaining": 7.998974083340727,
+          "remaining": 7.994419083348475,
           "savedLine": true
         },
         "completed": 3,
@@ -594,11 +896,11 @@
         "replays": 0,
         "result": {
           "bytes": 270568,
-          "fileName": "Long page 11-02 at 9.22PM.png",
+          "fileName": "Long page 11-02 at 9.59PM.png",
           "height": 12000,
           "host": "127.0.0.1",
           "kind": "fullPage",
-          "saved": "29A2EA81-0B28-47D1-B028-A591EDE10905",
+          "saved": "4AADBB06-C2B7-4B50-98C5-F98E3BB38F37",
           "truncated": false,
           "width": 1042
         }
@@ -608,10 +910,10 @@
       "ok": true,
       "row": {
         "bytes": 51314,
-        "createdAt": 1793679763.3109422,
-        "fileName": "DFD864EC-1820-4033-BC92-8F18CDDD2BB5.png",
+        "createdAt": 1793681995.325032,
+        "fileName": "6E7D2BDD-B0AF-4AEB-8EFF-25AE2B71A298.png",
         "height": 1515,
-        "id": "DFD864EC-1820-4033-BC92-8F18CDDD2BB5",
+        "id": "6E7D2BDD-B0AF-4AEB-8EFF-25AE2B71A298",
         "kind": "portrait",
         "sourceHost": "127.0.0.1",
         "width": 1212
@@ -652,11 +954,11 @@
         "replays": 0,
         "result": {
           "bytes": 1663,
-          "fileName": "Long page 11-02 at 9.22PM.png",
+          "fileName": "Long page 11-02 at 9.59PM.png",
           "height": 200,
           "host": "127.0.0.1",
           "kind": "area",
-          "saved": "A165338C-2B1F-4F29-B4B9-36D084D686BF",
+          "saved": "0F854F82-024F-4905-9499-E19849EB017A",
           "truncated": false,
           "width": 300
         }
@@ -665,11 +967,11 @@
     "capture_c5_drag": {
       "ok": true,
       "row": {
-        "bytes": 1224,
-        "createdAt": 1793679764.1346521,
-        "fileName": "58700676-3C03-4C4A-B9E8-24426CACC73B.png",
+        "bytes": 1225,
+        "createdAt": 1793681996.092979,
+        "fileName": "56558409-DA59-42C9-BED3-7E3282F14C54.png",
         "height": 160,
-        "id": "58700676-3C03-4C4A-B9E8-24426CACC73B",
+        "id": "56558409-DA59-42C9-BED3-7E3282F14C54",
         "kind": "area",
         "sourceHost": "127.0.0.1",
         "width": 240
@@ -708,13 +1010,13 @@
         "canGoBack": false,
         "canGoForward": false,
         "crashed": false,
-        "createdAt": 1793679764.184299,
+        "createdAt": 1793681996.145011,
         "favicon": false,
         "faviconReportsCompleted": 0,
         "faviconReportsRejected": 0,
         "hasWebContent": true,
-        "id": "3F26861C-1A0D-4FDD-A663-40E36C30D1AC",
-        "lastActiveAt": 1793679764.186302,
+        "id": "66C923F7-E2E1-4140-B0AF-5DACD1A16BD4",
+        "lastActiveAt": 1793681996.14706,
         "loaded": true,
         "loading": false,
         "page": {
@@ -731,7 +1033,7 @@
           "favicon": false,
           "fullscreen": false,
           "hidden": false,
-          "hostTab": "3F26861C-1A0D-4FDD-A663-40E36C30D1AC",
+          "hostTab": "66C923F7-E2E1-4140-B0AF-5DACD1A16BD4",
           "identifier": 2,
           "kind": "tab",
           "live": true,
@@ -746,21 +1048,21 @@
           "popup": false,
           "style": "alloy",
           "title": "Link target",
-          "url": "http://127.0.0.1:61001/links-target.html",
+          "url": "http://127.0.0.1:56292/links-target.html",
           "zoom": 0
         },
         "pinnedURL": "",
-        "profile": "F4D7AFD7-A261-4924-952C-9E138133F4B6",
+        "profile": "8AD005BC-1305-4C10-BB66-235C17B8DAC1",
         "progress": 1,
         "rowFaviconHash": "",
         "rowFaviconSource": "placeholder",
         "section": "today",
         "selected": true,
         "sleepPhase": "live",
-        "space": "53D1F62C-6058-4762-AD46-3AEDEE001423",
+        "space": "4F022CD4-2F75-4F9E-813E-4D521A3A7186",
         "title": "Link target",
         "unread": false,
-        "url": "http://127.0.0.1:61001/links-target.html",
+        "url": "http://127.0.0.1:56292/links-target.html",
         "visible": true
       },
       "replays": 1
@@ -793,7 +1095,7 @@
         "frame": "{{555, 409}, {370, 182}}",
         "key": true,
         "level": 0,
-        "number": 168082,
+        "number": 173313,
         "parent": 0,
         "sheet": true,
         "title": "Save",
@@ -802,11 +1104,11 @@
     },
     "capture_card_lifetime": {
       "ok": true,
-      "paused": 7.775957250036299,
-      "resumed": 7.775484041776508,
+      "paused": 7.7856113750021905,
+      "resumed": 7.785035208333284,
       "scheduled": [
         8,
-        7.989215541747399
+        7.988559083431028
       ]
     },
     "capture_context_menu": {
@@ -864,13 +1166,13 @@
     "capture_shortcut_hint": {
       "hintShows": 1,
       "ok": true,
-      "stored": 1793679762.990333
+      "stored": 1793681995.01437
     },
     "capture_shortcut_hint_once": {
       "hintShows": 1,
       "ok": true
     }
   },
-  "started": "2026-11-02 21:22:35",
+  "started": "2026-11-02 21:59:48",
   "style": "alloy"
 }
