@@ -8592,7 +8592,9 @@ def page_notification_checks(factory, results, tmp):
             app.call('events')
             app.call('devtools', tab=tab2_page['identifier'], method='Page.bringToFront')
             shown_state = state_when(app, lambda st: not st['miniaturized'] and st['isKeyWindow'], timeout=5, step=.05)
-            focused = [s for s in app.call('spaces') if s['focused']][0]['id']
+            # The Space switch lands on the next model turn after the activation request.
+            focused = wait_until(lambda: (lambda f: f if f == space2 else None)([s for s in app.call('spaces') if s['focused']][0]['id']),
+                                 timeout=5, step=.05) or [s for s in app.call('spaces') if s['focused']][0]['id']
             selected = app.call('tab-state', tab=tab2['id'])['selected']
             requests = [e for e in app.call('events') if e['type'] == 'tab-request' and e.get('request') == 'activate']
             results['N3_activation'] = {
@@ -8622,6 +8624,7 @@ def page_notification_checks(factory, results, tmp):
         nf_url = origin + '/notify.html?nofocus'
         nf_tab = app.call('open', url=nf_url)
         nf_page = live_tab(nf_url)['page']['identifier']
+        wait_until(lambda: app.eval(nf_page, "!!document.getElementById('banner') || null"), timeout=10, step=.1)
         app.call('click', tab=nf_page, selector='#banner')
         wait_until(lambda: app.eval(nf_page, 'shown["Open N1 banner"] === true'), timeout=10, step=.1)
         # Another origin (localhost, not 127.0.0.1), so the fallback has one candidate tab.
