@@ -527,9 +527,9 @@ except the struck one, and adds hover expand and collapse.
 | `tabID` | `ItemID?` | App; nil for an auxiliary page |
 | `pageID` | `UUID?` | Runtime auxiliary-page identity; nil for a tab |
 | `windowID` | `WindowID` | the window whose `OEBrowser` holds the content |
-| `kind` | `.audioVideo` / `.recording` | `.recording` when capturing and no playing session (PP-15) |
+| `kind` | `.audioVideo` / `.recording` | `.recording` when capturing and no playing controllable session (PP-15; Step 8: a meeting page plays remote audio through MediaStream players, which are never controllable) |
 | `playback` | `.playing` / `.paused` / `.none` | `WebMediaState.playback` |
-| `isControllable` | `Bool` | engine; false suppresses the audio/video card, but not session sleep protection |
+| `isControllable` | `Bool` | engine; false suppresses the audio/video card, but not session sleep protection. A recording source with a microphone or camera toggle gets its card anyway (Step 8, PP-19) |
 | `hasVideo`, `largestVideoArea` | `Bool`, `Double` (CSS px²) | engine |
 | `actions` | `WebMediaActions` | engine |
 | `isMuted` | `Bool` | `tab.isMuted` |

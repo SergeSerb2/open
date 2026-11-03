@@ -4869,7 +4869,10 @@ def media_checks(factory, results, tmp):
     """media-pip §8.4 E-M1…E-M15 in the real App (phase 1: Chromium's own PiP window)."""
     server, port = _media_server()
     base = "http://127.0.0.1:%d/" % port
-    app = factory(urls=(base + "plain.html",), fresh=True)
+    # Chromium's fake capture devices and permission UI (recording card): no system camera or
+    # microphone is opened, so macOS shows no permission prompt.
+    app = factory(urls=(base + "plain.html",), fresh=True,
+                  extra_args=["--use-fake-device-for-media-stream", "--use-fake-ui-for-media-stream"])
     def m(tab): return app.call("media", tab=tab)
     def players(window=None):
         return app.call("mini-players", **({"window": window} if window else {}))
@@ -5158,6 +5161,66 @@ def media_checks(factory, results, tmp):
             and reset["volume"] == 1, "before": before["volume"], "after": after["volume"], "pageVolume": after["pageVolume"],
             "playback": after["playback"], "pagePlaying": vt_playing, "elementVolume": vt_element, "reset": reset["volume"]}
         close_tab(vt)
+
+        # Step 8 volume drawer (§13.7 O2): Volume on an expanded card opens a 33 pt drawer row (card 66 -> 99);
+        # a click on the slider sets the engine's tab volume, the high end sets 100 %, the low end toggles
+        # mute; moving off the stack collapses it and closes the drawer. Real mouse events on the card.
+        dv = open_tab(base + "audio.html"); start(dv); select(home)
+        wait_until(lambda: dv in ids(), timeout=2, step=.01)
+        def dcard(): return next((c for c in players()["cards"] if c["tab"] == dv), None)
+        def settled(pred): return wait_until(lambda: (lambda c: c if c and pred(c) and not players()["animations"] else None)(dcard()), timeout=2, step=.02)
+        closed_height = (dcard() or {}).get("height")
+        app.call("media-click", tab=dv, target="volume")
+        drawer = settled(lambda c: c["drawerOpen"] and abs(c["height"] - 99) < .5)
+        slid = app.call("media-click", tab=dv, target="slider", fraction=0.25)
+        quarter = wait_until(lambda: (lambda x: x if x["volume"] is not None and abs(x["volume"] - 0.25) < 1e-9 else None)(m(dv)), timeout=2, step=.02) or m(dv)
+        dv_element = app.eval(dv, "document.getElementById('tone').volume")
+        dv_playing = app.eval(dv, "!document.getElementById('tone').paused")
+        app.call("media-click", tab=dv, target="volumeHigh")
+        full = wait_until(lambda: m(dv)["volume"] == 1 and (dcard() or {}).get("slider") == "100%", timeout=2, step=.02)
+        app.call("media-click", tab=dv, target="volumeLow")
+        low_muted = wait_until(lambda: m(dv)["modelMuted"] is True and m(dv)["muted"] is True, timeout=2, step=.02)
+        app.call("media-click", tab=dv, target="volumeLow")
+        low_unmuted = wait_until(lambda: m(dv)["modelMuted"] is False, timeout=2, step=.02)
+        off = drawer["frame"] if drawer else [0, 0, 0, 0]
+        app.call("mouse", action="hover", x=off[0] + 40, y=160)
+        collapsed = wait_until(lambda: (lambda c: c if c and not c["drawerOpen"] and not c["expanded"] and not players()["animations"] else None)(dcard()), timeout=3, step=.02)
+        results["media_volume_drawer"] = {"ok": bool(drawer) and slid.get("value") == "25%" and quarter["volume"] is not None
+            and abs(quarter["volume"] - 0.25) < 1e-9 and abs(quarter["pageVolume"] - 0.25) < 1e-9 and dv_element == 1 and dv_playing is True
+            and bool(full) and bool(low_muted) and bool(low_unmuted) and bool(collapsed),
+            "closedHeight": closed_height, "drawer": {k: drawer[k] for k in ("height", "drawerOpen", "slider", "buttons")} if drawer else None,
+            "slider": slid, "volumeAfterSlider": quarter["volume"], "pageVolume": quarter["pageVolume"], "elementVolume": dv_element,
+            "playing": dv_playing, "full": bool(full), "lowMutes": bool(low_muted), "lowUnmutes": bool(low_unmuted),
+            "collapsed": {k: collapsed[k] for k in ("height", "drawerOpen", "expanded")} if collapsed else dcard()}
+        close_tab(dv)
+
+        # Step 8 recording card (Q13, PP-19): a meeting-like page (fake camera and microphone, MediaStream
+        # players only, so never controllable) gets a card with its microphone and camera toggles; the
+        # toggles reach the page's own handlers; the card goes when capture stops.
+        rec = open_tab(base + "recording.html")
+        rec_started = app.eval(rec, "start()")
+        rec_capturing = wait_until(lambda: m(rec)["capturing"] is True, timeout=5, step=.05)
+        rec_state = m(rec)
+        select(home)
+        def rcard(): return next((c for c in players()["cards"] if c["tab"] == rec), None)
+        rec_card = wait_until(lambda: (lambda c: c if c and c["kind"] == "recording" else None)(rcard()), timeout=3, step=.02)
+        app.call("media-click", tab=rec, target="microphone")
+        mic_off = wait_until(lambda: (lambda c: c if c and c["microphoneOn"] is False else None)(rcard()), timeout=2, step=.02)
+        app.call("media-click", tab=rec, target="camera")
+        cam_off = wait_until(lambda: (lambda c: c if c and c["cameraOn"] is False else None)(rcard()), timeout=2, step=.02)
+        rec_page = app.eval(rec, "state()")
+        still_capturing = m(rec)["capturing"]
+        app.eval(rec, "stop()")
+        rec_gone = wait_until(lambda: rec not in ids(), timeout=5, step=.05)
+        results["media_recording_card"] = {"ok": rec_started is True and bool(rec_capturing) and rec_state["controllable"] is False
+            and bool(rec_card) and {"favicon", "microphone", "camera"} <= set(rec_card["buttons"])
+            and not ({"play", "previous", "next", "volume"} & set(rec_card["buttons"])) and rec_card["microphoneOn"] is True
+            and rec_card["cameraOn"] is True and bool(mic_off) and bool(cam_off) and rec_page["counts"]["togglemicrophone"] == 1
+            and rec_page["counts"]["togglecamera"] == 1 and rec_page["mic"] is False and rec_page["cam"] is False
+            and still_capturing is True and bool(rec_gone),
+            "started": rec_started, "state": {k: rec_state.get(k) for k in ("capturing", "controllable", "playback", "actions", "source")},
+            "card": rec_card, "page": rec_page, "stillCapturing": still_capturing, "gone": bool(rec_gone)}
+        close_tab(rec)
 
         # EM-5: PiP from the browser needs no user gesture, and the browser enforces disablePictureInPicture
         # (Blink's browser-initiated path skips that check). Page reads go through Runtime.evaluate without
@@ -7837,14 +7900,14 @@ def main():
     tracker = FocusTracker()
     _ACTIVE_FOCUS_TRACKER = tracker
 
-    def factory(urls=("about:blank",), fresh=False, snapshot=None, extra_env=None):
+    def factory(urls=("about:blank",), fresh=False, snapshot=None, extra_env=None, extra_args=None):
         if fresh or snapshot:
             shutil.rmtree(user_data, ignore_errors=True)
             shutil.rmtree(user_caches, ignore_errors=True)
         if snapshot:
             os.makedirs(os.path.join(user_data, "State"), exist_ok=True)
             shutil.copyfile(snapshot, os.path.join(user_data, "State", "browser.json"))
-        app = Open(opts.config, opts.style, user_data, extra, log, urls=urls, extra_env=extra_env)
+        app = Open(opts.config, opts.style, user_data, extra + list(extra_args or []), log, urls=urls, extra_env=extra_env)
         app.focus_tracker = tracker
         tracker.apps.append(app)
         return app
