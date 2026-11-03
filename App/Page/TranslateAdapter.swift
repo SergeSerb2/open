@@ -248,7 +248,7 @@ final class TranslateAdapter {
       toast("Translated back to \(PageLanguageDetector.displayName(source))")
       if userAction, !undoDriven.contains(id), let target = lastTarget[id] { registerUndo(session, id: id, inverse: .translate(target)) }
     case .failed(let reason):
-      toast("Translation error (\(reason))")
+      toast("Translation error (\(reason))", lifetime: 6)
     }
     if case .translated(let target, _) = event { lastTarget[id] = target }
     undoDriven.remove(id)
@@ -281,11 +281,13 @@ final class TranslateAdapter {
     if explicit { manager.endUndoGrouping() }
   }
 
-  // TODO(s8/toasts): move onto ToastCenter when Helper A's PR lands (page-platform §4.1.4:
-  // "Translated to …" 3 s, "Translated back to …" 3 s, "Translation error (…)" 6 s).
-  private func toast(_ title: String) {
+  /// The window's ToastCenter (page-platform §4.1.4): "Translated to …" and "Translated back to …"
+  /// 3 s, "Translation error (…)" 6 s.
+  private func toast(_ title: String, lifetime: TimeInterval = 3) {
     toastsShown.append(title); if toastsShown.count > 20 { toastsShown.removeFirst() }
-    factory.controller?.showToast(title, undo: nil)
+    var content = ToastContent(title: title)
+    content.lifetime = lifetime
+    factory.controller?.toasts.show(content)
   }
 
   // MARK: Page context menu (followups: Translate in the context menu)

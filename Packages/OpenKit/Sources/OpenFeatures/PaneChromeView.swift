@@ -126,8 +126,8 @@ public final class PaneChromeView: NSView {
         case 2: if host?.isLoading == true { host?.stop() } else { host?.reload() }
         case 3:
             if let url = host?.currentURL {
-                let (clean, changed) = TrackerStripping.clean(url)
-                NSPasteboard.general.clearContents(); NSPasteboard.general.setString(clean.absoluteString, forType: .string); onCopy?(changed)
+                let (clean, removed) = URLCleaner.clean(url)
+                NSPasteboard.general.clearContents(); NSPasteboard.general.setString(clean.absoluteString, forType: .string); onCopy?(!removed.isEmpty)
             }
         case 5: onMenu?(buttons[5])
         case 6: onClose?()

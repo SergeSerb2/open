@@ -23,9 +23,9 @@ public final class BrowserWindowController: NSWindowController, NSWindowDelegate
         let peek = PeekController(model: model, splitController: splitController, factory: factory, defaults: defaults)
         peekStorage = peek
         root.addSubview(peek.overlay.backdrop, positioned: .below, relativeTo: sidebar)
-        root.addSubview(peek.overlay, positioned: .below, relativeTo: toast)
+        root.addSubview(peek.overlay, positioned: .below, relativeTo: toastOverlay)
         peek.onChange = { [weak self] in self?.changed() }
-        peek.onToast = { [weak self] in self?.showToast($0, undo: $1) }
+        peek.toasts = toasts
         peek.onPageChange = { [weak self] in self?.syncPeekSidebar() }
         if let space = context.focusedSpace {
             let style = context.style(for: space)
@@ -41,6 +41,8 @@ public final class BrowserWindowController: NSWindowController, NSWindowDelegate
     public var onCommand: ((String) -> Bool)?
     public var onCommandWithPayload: ((String, String?) -> Bool)?
     public var onCommandValidation: ((String, String) -> Bool?)?
+    /// Runtime menu state from the App (page-platform §7.1); nil keeps the item as built.
+    public var onMenuState: ((String) -> CommandMenuState?)?
     /// Sees every key event of this window first (after the tab switcher); true consumes it.
     public var keyInterceptor: ((NSEvent) -> Bool)?
     public var ownsAdditionalKeyWindow: ((NSWindow) -> Bool)?
@@ -96,7 +98,6 @@ public final class BrowserWindowController: NSWindowController, NSWindowDelegate
     public static var automationPointer: (window: Int, location: NSPoint)?
     /// Automation builds can turn this off to keep a capture-size frame on a smaller screen.
     public static var constrainsFramesToScreen = true
-    private var toastTask: Task<Void, Never>?
     private var pointerMonitor: Any?
     private var captureMonitor: Any?
     private var captureStorage: CaptureController?
@@ -116,16 +117,18 @@ public final class BrowserWindowController: NSWindowController, NSWindowDelegate
             guard let self, let space = self.context.focusedSpace else { return .defaultTheme(system: .dark) }
             return self.context.style(for: space)
         }
-        // Until ToastCenter (page-platform Step 1) lands, the window's single toast shows them.
+        // The window's toasts (page-platform §4.1.4 catalog).
         var hooks = CaptureToastHooks()
         hooks.progress = { [weak self] in
-            self?.showToast("Capture in Progress", undo: nil)
-            return { [weak self] in if self?.lastToastTitle == "Capture in Progress" { self?.dismissToast() } }
+            let handle = self?.toasts.show(ToastContent(title: "Capture in Progress", isSticky: true))
+            return { handle?.dismiss() }
         }
-        hooks.copied = { [weak self] in self?.showToast("Copied Image", undo: nil) }
-        hooks.shortcutHint = { [weak self] in self?.showToast("⌘ ⇧ and drag your mouse to capture any time.", undo: nil) }
-        hooks.failed = { [weak self] in self?.showToast($0, undo: nil) }
-        hooks.dismissAll = { [weak self] in self?.dismissToast() }
+        hooks.copied = { [weak self] in self?.toasts.show(ToastContent(title: "Copied Image")) }
+        hooks.shortcutHint = { [weak self] in
+            self?.toasts.show(ToastContent(title: "and drag your mouse to capture any time.", accessory: .keycaps(["⌘", "⇧"])))
+        }
+        hooks.failed = { [weak self] in self?.toasts.show(ToastContent(title: $0)) }
+        hooks.dismissAll = { [weak self] in self?.toasts.dismissAll() }
         capture.toasts = hooks
         return capture
     }
@@ -172,10 +175,13 @@ public final class BrowserWindowController: NSWindowController, NSWindowDelegate
     private var observationArmed = false
     private var refreshPending = false
     private let snapshotStore: SnapshotStore?
-    private let toast = NSView()
-    private let toastLabel = NSTextField(labelWithString: "")
-    private var undoButton: ActionButton!
-    private var toastUndo: (() -> Void)?
+    /// Toasts over the web panel (page-platform §4.1, D-1): one center per window.
+    public let toastOverlay = ToastOverlayView()
+    public private(set) lazy var toasts = ToastCenter(overlay: toastOverlay) { [weak self] in
+        guard let self else { return .defaultTheme(system: .dark) }
+        if let space = self.context.focusedSpace { return self.context.style(for: space) }
+        return .defaultTheme(system: self.context.systemAppearance)
+    }
     /// First-hide hint (completion §3.12); `open.sidebar.hideHintShown` records that it showed.
     public static let hideHintShownKey = "open.sidebar.hideHintShown"
     public private(set) var hintToast: HintToastView?
@@ -193,8 +199,8 @@ public final class BrowserWindowController: NSWindowController, NSWindowDelegate
     }
     /// The delete confirmation sheet currently shown on this window (completion §3.3).
     public private(set) var pendingConfirmation: NSAlert?
-    /// Title of the last toast, for checks.
-    public private(set) var lastToastTitle = ""
+    /// Title of the newest toast shown, for checks.
+    public var lastToastTitle: String { toasts.lastTitle }
     public init(model: BrowserModel, windowID: WindowID, factory: any WebContentHostFactory, size: CGSize? = nil, defaults: UserDefaults = .standard, snapshotStore: SnapshotStore? = nil) {
         self.model = model; self.windowID = windowID; self.snapshotStore = snapshotStore
         self.factory = factory; self.defaults = defaults
@@ -288,13 +294,10 @@ public final class BrowserWindowController: NSWindowController, NSWindowDelegate
         }
         container.onFocusedMetadata = { [weak self] in self?.window?.title = $0 }
         container.onURLField = { [weak self] in guard let self else { return }; self.onOpenCommandBar?(.urlField, self.context.currentTab?.url) }
-        container.onToast = { [weak self] in self?.showToast($0, undo: nil) }
+        container.toasts = toasts
         container.onToolbarMenu = { [weak self] in self?.makeToolbarMenu() }
         splitController.onChange = { [weak self] in self?.changed() }
-        toast.wantsLayer = true; toast.layer?.cornerRadius = 8; toast.layer?.backgroundColor = NSColor.black.withAlphaComponent(0.85).cgColor
-        toastLabel.textColor = .white; toast.addSubview(toastLabel)
-        undoButton = ActionButton(symbol: "arrow.uturn.backward", title: "Undo") { [weak self] in self?.performToastUndo() }
-        undoButton.contentTintColor = .white; toast.addSubview(undoButton); root.addSubview(toast); toast.isHidden = true
+        root.addSubview(toastOverlay)
         root.onLayout = { [weak self] in self?.layoutContent() }
         root.onDragBackground = { [weak self] event in self?.window?.performDrag(with: event) }
         treeObserver = model.addObserver { [weak self] _ in self?.scheduleRefresh() }
@@ -308,7 +311,7 @@ public final class BrowserWindowController: NSWindowController, NSWindowDelegate
         refresh()
     }
     @available(*, unavailable) required init?(coder: NSCoder) { fatalError() }
-    isolated deinit { hintWork?.cancel(); observing = false; if let treeObserver { model.removeObserver(treeObserver) }; if let keyMonitor { NSEvent.removeMonitor(keyMonitor) }; container.closeAll(); reveal.reset(); cardSampleTask?.cancel(); toastTask?.cancel(); if let pointerMonitor { NSEvent.removeMonitor(pointerMonitor) }; if let captureMonitor { NSEvent.removeMonitor(captureMonitor) }; captureStorage?.tearDown(); trafficLightObservers.forEach(NotificationCenter.default.removeObserver) }
+    isolated deinit { hintWork?.cancel(); observing = false; if let treeObserver { model.removeObserver(treeObserver) }; if let keyMonitor { NSEvent.removeMonitor(keyMonitor) }; container.closeAll(); reveal.reset(); cardSampleTask?.cancel(); if let pointerMonitor { NSEvent.removeMonitor(pointerMonitor) }; if let captureMonitor { NSEvent.removeMonitor(captureMonitor) }; captureStorage?.tearDown(); trafficLightObservers.forEach(NotificationCenter.default.removeObserver) }
     private func scheduleRefresh() {
         guard !refreshPending else { return }; refreshPending = true
         DispatchQueue.main.async { [weak self] in guard let self, self.observing else { return }; self.refreshPending = false; self.refresh() }
@@ -453,8 +456,8 @@ public final class BrowserWindowController: NSWindowController, NSWindowDelegate
             overlay.frame = root.bounds; overlay.contentRect = panelFrame
             overlay.baseWidth = hidden ? panelFrame.width : size.width - width; overlay.needsLayout = true
         }
-        toast.frame = CGRect(x: root.bounds.midX - 140, y: size.height - 58, width: 280, height: 34)
-        toastLabel.frame = CGRect(x: 12, y: 7, width: 210, height: 20); undoButton?.frame = CGRect(x: 238, y: 3, width: 32, height: 28)
+        // Toasts anchor at the web panel's top-right (PG-1.1); the whole panel in Split View (lead Q10).
+        if toastOverlay.frame != panelFrame { toastOverlay.frame = panelFrame }
         positionTrafficLights()
         hoverPreview.layout()
         captureStorage?.layout()
@@ -809,35 +812,21 @@ public final class BrowserWindowController: NSWindowController, NSWindowDelegate
         state.frameWidth = frame.width; state.frameHeight = frame.height
     }
     private func changed() { snapshotStore?.scheduleSave(model: model); peekStorage?.refresh(); syncPeekSidebar(); onStateChange?(); onVisibilityChange?() }
-    public func showToast(_ title: String, undo: (() -> Void)?) {
-        lastToastTitle = title
-        toastTask?.cancel(); toastUndo = undo; toastLabel.stringValue = title
-        undoButton.isHidden = undo == nil; toast.isHidden = title.isEmpty
-        if !title.isEmpty { toastTask = Task { @MainActor [weak self] in
-            try? await Task.sleep(for: .seconds(5)); guard !Task.isCancelled else { return }
-            self?.toast.isHidden = true; self?.toastUndo = nil
-        } }
-    }
-    private func dismissToast() {
-        toastTask?.cancel(); toastTask = nil
-        toastUndo = nil; toast.isHidden = true; undoButton.isHidden = true
-    }
-
-    private func performToastUndo() {
-        guard !toast.isHidden, let undo = toastUndo else { return }
-        dismissToast()
-        undo()
-    }
-
+    /// Sidebar undo toasts ("Folder deleted", "Cleared Tabs", …) stay as long as the old bottom
+    /// toast did (sidebar-completion §3; page-platform §4.1.4).
+    public static let undoToastLifetime: TimeInterval = 5
     /// Undo belongs to the model step that just completed, never a newer command.
     public func showModelUndoToast(_ title: String) {
-        guard let manager = model.undoManager, manager.canUndo else { showToast(title, undo: nil); return }
+        guard let manager = model.undoManager, manager.canUndo else {
+            toasts.show(ToastContent(title: title, lifetime: Self.undoToastLifetime)); return
+        }
         let generation = model.undoGeneration
-        showToast(title, undo: { [weak self, weak manager] in
+        toasts.show(.undo(title, lifetime: Self.undoToastLifetime)) { [weak self, weak manager] handle in
+            handle.dismiss()
             guard let self, let manager, self.model.undoManager === manager,
                   self.model.undoGeneration == generation, manager.canUndo else { return }
             manager.undo()
-        })
+        }
     }
 
     public var peekBadgeTabIDs: Set<ItemID> { peekStorage?.peekBadgeTabIDs ?? [] }
@@ -936,6 +925,7 @@ public final class BrowserWindowController: NSWindowController, NSWindowDelegate
         default: nil
         }
     }
+    public func menuState(for id: String) -> CommandMenuState? { onMenuState?(id) }
     public func isCommandEnabled(_ id: String, enabledKey: String) -> Bool {
         if let enabled = onCommandValidation?(id, enabledKey) { return enabled }
         if id == "toggle-toolbar" { return context.window?.style == .standard }
@@ -1193,11 +1183,7 @@ extension BrowserWindowController {
     }
 
     /// Clicks the shown toast's Undo button (automation and checks use the real button).
-    @discardableResult public func pressToastUndo() -> Bool {
-        guard !toast.isHidden, !undoButton.isHidden else { return false }
-        undoButton.performClick(nil)
-        return true
-    }
+    @discardableResult public func pressToastUndo() -> Bool { toasts.performUndo() }
 
     /// "Cleared Tabs" with Undo after any Clear (`FUN_102a68e2c`).
     public func showClearedToast() {
@@ -1217,7 +1203,7 @@ extension BrowserWindowController {
         let keys = command.flatMap { keyBindingOverrides.effectiveShortcuts(for: $0).first?.symbolDisplay } ?? "⌘S"
         let style = context.focusedSpace.map(context.style(for:)) ?? .defaultTheme(system: context.systemAppearance)
         let hint = HintToastView(keys: keys, style: style)
-        root.addSubview(hint, positioned: .below, relativeTo: toast)
+        root.addSubview(hint, positioned: .below, relativeTo: toastOverlay)
         hintToast = hint; hintShows += 1
         layoutContent()
         let m = HintToastMetrics.self

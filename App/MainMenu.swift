@@ -46,6 +46,7 @@ enum AppCommand {
 import OpenEngine
 import OpenModel
 import OpenSidebar
+import OpenFeatures
 
 extension EngineWebContentHostFactory {
   private func selectionCommandContext(for id: String) -> SidebarContext? {
@@ -60,11 +61,12 @@ extension EngineWebContentHostFactory {
   }
 
   /// Copy URL (Cmd+Shift+C, the sidebar and pane-bar copy buttons): Arc copies the URL without trackers
-  /// (CC-31a) and says which it copied ("Copied a clean link without trackers" / "Copied Current URL").
+  /// (CC-31a, `URLCleaner`) and says which it copied ("Copied a clean link without trackers" /
+  /// "Copied Current URL", PG-1.10) in the window's toast (page-platform §4.1).
   func copyCleanURL(_ url: URL) {
-    let (clean, changed) = TrackerStripping.clean(url)
+    let (clean, removed) = URLCleaner.clean(url)
     NSPasteboard.general.clearContents(); NSPasteboard.general.setString(clean.absoluteString, forType: .string)
-    controller?.showToast(changed ? TrackerStripping.cleanToast : TrackerStripping.plainToast, undo: nil)
+    controller?.toasts.show(ToastContent(title: URLCleaner.toastTitle(removed: removed)))
   }
 
   private func performSelectionAppCommand(_ id: String) -> Bool? {
@@ -120,6 +122,12 @@ extension EngineWebContentHostFactory {
     case EnabledKey.canGoForward: return selectedContent?.canGoForward == true
     case EnabledKey.textField: return window?.firstResponder is NSTextView || window?.firstResponder is NSTextField || selectedContent != nil
     case EnabledKey.hasHistory: return focusedProfile != nil
+    case EnabledKey.webPage:
+      // A live http(s), file, or data page in the focused host (page-platform §7.1).
+      return ["http", "https", "file", "data"].contains(selectedContent?.url?.scheme?.lowercased() ?? "")
+    // Per-site cache clearing waits for Site Control E2; no trace recording exists before Step 5.
+    case EnabledKey.siteDataClearAvailable, EnabledKey.isTracing: return false
+    case EnabledKey.notTracing: return true
     default: return true
     }
   }

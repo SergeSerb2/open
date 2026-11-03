@@ -1603,3 +1603,15 @@ Add these to the user's single combined Arc capture session
 - Q8 Cmd+Shift drag and Cmd+Shift click: a drag of at least 4 pt captures; a click replays to the page.
 - Q9–Q12 Appearance is app-wide. The split-view toast anchors at the whole panel's top-right. Quote without a selection acts as Copy URL. Auto-translate covers the same host.
 - The captures go into the user's single combined Arc capture session.
+
+## Appendix — Section 8 implementation notes (Steps 1–2)
+
+These replace the plan text where they differ; each cites its evidence.
+
+- D-5: there is one tracker table. `OpenModel/URLCleaner.swift` is a thin API (`clean(_:) -> (url, removed)`) over Section 2's `TrackerStripping`, Arc's decoded rule (RE CC-31a). The §4.2.1 name list is not used. The rule matches names case-sensitively; `openkit url-clean` checks 30 rows of the real rule (§8.2). Kept items keep their percent-encoding. Non-http(s) URLs stay unchanged (§4.2.1).
+- `ToastMetrics.accessoryLifetime` is 5.0 s, not 6.0: PG-14 measured the copy toast with Share for ≈ 4.95 s (V 69.99–75.11 s).
+- `Motion.toastIn` grows from 0.3 at the top center of the toast and `Motion.toastOut` shrinks back to it over 0.16 s (PG-14), not a 0.20 s fade to 0.96.
+- Toast text is opaque white, the value the hint toast fit chose (ΔE00 0.05); `Typography.toast` is 14 pt Medium.
+- Default theme in macOS Light: lavender `#D0C6F0` → `#C2B4E9` with dark text `#0D0D10` (S2 20/0048). Themed Spaces keep the §4.1.2 guess (tooltip fill ± 0.06 OKLab L, white text).
+- `ToastCenter.show(_:onAccessory:)` passes the `ToastHandle` to the accessory closure (an Undo dismisses its own toast); `ToastHandle.hold(_:)` keeps a toast while its share picker is open.
+- Renders: `features-render toast --variant … [--crop]`, committed under `docs/plans/page-platform/`.

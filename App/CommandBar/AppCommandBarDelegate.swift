@@ -1,5 +1,6 @@
 import AppKit
 import OpenCommandBar
+import OpenFeatures
 import OpenDesign
 import OpenModel
 import OpenSuggest
@@ -104,7 +105,7 @@ final class AppCommandBarSession: CommandBarDelegate {
     case .runAction(let id, let space): factory.controller?.performCommand(AppCommand.canonicalID(id), payload: space?.description)
     case .copy(let value):
       NSPasteboard.general.clearContents(); NSPasteboard.general.setString(value, forType: .string)
-      factory.controller?.showToast("Copied", undo: nil)
+      factory.controller?.toasts.show(ToastContent(title: "Copied"))
     case .openSearchSettings(let profile):
       // Open keeps search engines per Profile: Settings ▸ Profiles for the bar's Profile (CC-42 "Search Settings…").
       factory.app.performCommand("search-settings", payload: (profile ?? factory.focusedProfile?.id)?.description)
