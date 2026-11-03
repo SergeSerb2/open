@@ -1,6 +1,7 @@
 #if OPEN_AUTOMATION
 import AppKit
 import MediaPlayer
+import OpenDesign
 import OpenEngine
 import OpenFeatures
 import OpenMedia
@@ -70,13 +71,15 @@ extension AutomationController {
       }
       let target = a["target"] as? String ?? "play"
       let names = ["title": "media.titleRow", "play": "play", "next": "next", "previous": "previous", "volume": "volume",
-                   "pip": "pip", "close": "close", "favicon": "favicon", "microphone": "microphone", "camera": "camera"]
+                   "pip": "pip", "close": "close", "favicon": "favicon", "microphone": "microphone", "camera": "camera",
+                   "volumeLow": "volumeLow", "volumeHigh": "volumeHigh", "slider": "media.volumeSlider"]
       guard let name = names[target] else { throw Failure(message: "unknown media-click target") }
       func control() -> NSView? {
         name.hasPrefix("media.") ? card.firstDescendant(identifier: name) : card.control(named: name)?.view
       }
       // Title-row controls show only while the stack is expanded: hover the card first, as a pointer would.
-      if ["title", "pip", "close"].contains(target) && !card.isExpanded {
+      // The volume drawer opens only on an expanded card (a pointer over the card expands it).
+      if ["title", "pip", "close", "volume", "volumeLow", "volumeHigh", "slider"].contains(target) && !card.isExpanded {
         let center = point(of: card, in: window)
         _ = try await mouse(["action": "hover", "x": center.x, "y": center.y, "window": window.windowNumber], factory)
         let deadline = ContinuousClock.now.advanced(by: .seconds(2))
@@ -86,6 +89,17 @@ extension AutomationController {
         }
       }
       guard let view = control(), !view.isHiddenOrHasHiddenAncestor else { throw Failure(message: "control \(target) is not shown") }
+      if target == "slider" {
+        // A press and release at `fraction` of the knob's travel, as a pointer click on the track.
+        let fraction = min(1, max(0, a["fraction"] as? Double ?? 0.5))
+        let frame = view.convert(view.bounds, to: nil), knob = MiniPlayerMetrics.drawerKnob
+        let x = frame.minX + knob / 2 + CGFloat(fraction) * max(0, frame.width - knob)
+        let y = window.frame.height - frame.midY
+        for action in ["down", "up"] {
+          _ = try await mouse(["action": action, "x": Double(x), "y": Double(y), "window": window.windowNumber], factory)
+        }
+        return ["clicked": target, "at": [Double(x), Double(y)], "value": view.accessibilityValue() as? String ?? ""]
+      }
       let center = point(of: view, in: window)
       _ = try await mouse(["action": "click", "x": center.x, "y": center.y, "window": window.windowNumber], factory)
       return ["clicked": target, "at": [center.x, center.y]]
@@ -195,7 +209,7 @@ extension AutomationController {
   private func describeCard(_ card: MiniPlayerCardView, window: NSWindow?) -> [String: Any] {
     let s = card.source
     var buttons: [String: Any] = [:]
-    for name in ["favicon", "previous", "play", "next", "volume", "pip", "close", "microphone", "camera"] {
+    for name in ["favicon", "previous", "play", "next", "volume", "pip", "close", "microphone", "camera", "volumeLow", "volumeHigh"] {
       guard let c = card.control(named: name), !c.view.isHiddenOrHasHiddenAncestor else { continue }
       buttons[name] = ["frame": rect(c.view.convert(c.view.bounds, to: nil), in: window),
                        "tooltip": c.tooltip.map { String(describing: $0) } ?? "",
@@ -207,6 +221,9 @@ extension AutomationController {
       "expanded": card.isExpanded, "level": card.level, "retiring": card.isRetiring,
       "frame": rect(card.convert(card.bounds, to: nil), in: window), "buttons": buttons,
       "title": card.titleState.drawnText, "accessibility": card.accessibilityLabel() ?? "",
+      "drawerOpen": card.drawerIsOpen, "height": card.frame.height,
+      "slider": card.firstDescendant(identifier: "media.volumeSlider").flatMap { $0.isHiddenOrHasHiddenAncestor ? nil : $0.accessibilityValue() as? String } ?? NSNull(),
+      "volume": s.volume ?? NSNull(), "microphoneOn": s.microphoneOn ?? NSNull(), "cameraOn": s.cameraOn ?? NSNull(),
     ]
   }
 

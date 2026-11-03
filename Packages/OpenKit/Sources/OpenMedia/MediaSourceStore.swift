@@ -134,7 +134,9 @@ import OpenWeb
 
     private func apply(_ source: MediaSource, state: WebMediaState, isMuted: Bool, isCapturing: Bool) {
         let old = source.playback, now = clock()
-        let kind: MediaSource.Kind = isCapturing && state.playback != .playing ? .recording : .audioVideo
+        // A meeting page has only MediaStream ("one shot") players, which Chromium never makes
+        // controllable, so its playing remote audio does not make it an audio/video source.
+        let kind: MediaSource.Kind = isCapturing && !(state.isControllable && state.playback == .playing) ? .recording : .audioVideo
         if source.kind != kind { source.kind = kind }
         if source.playback != state.playback { source.playback = state.playback }
         if source.isControllable != state.isControllable { source.isControllable = state.isControllable }
@@ -164,7 +166,10 @@ import OpenWeb
         let list = sourceList(windowID: windowID), now = clock()
         let eligible = sources.values.filter { $0.windowID == windowID && $0.origin == .tab && !$0.userDismissed && !isExpired($0, at: now) }
         let cards = eligible.filter { s in
-            guard s.isControllable else { return false }
+            // PP-19: a capturing tab gets a recording card with its microphone and camera toggles,
+            // controllable or not. Without a toggle the card would have no control (guess: no card).
+            let recordingCard = s.kind == .recording && !s.actions.isDisjoint(with: [.toggleMicrophone, .toggleCamera])
+            guard s.isControllable || recordingCard else { return false }
             if s.enginePictureInPicture { return false }
             if case .active = s.pip { return false }
             return true
