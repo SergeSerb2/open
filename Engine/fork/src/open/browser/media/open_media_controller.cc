@@ -192,9 +192,15 @@ bool OpenMediaController::ExecuteAction(const CefString& action_name,
   content::MediaSessionImpl* session =
       content::MediaSessionImpl::Get(web_contents());
   // A muted tab, or only MediaStream ("one shot") players: the session has
-  // nothing to control, so the players get the command (as in Chrome's own
-  // fallback inside MediaSessionImpl).
-  if (!session->IsControllable()) {
+  // nothing to control, so the players get the playback commands (as in
+  // Chrome's own fallback inside MediaSessionImpl). Track, ad, slide and
+  // meeting actions still go to the session: MediaSessionImpl routes them to
+  // the page's own handler whether or not it is controllable, and a meeting
+  // page (camera or microphone streams only) is never controllable.
+  const bool playback_action = action == "play" || action == "pause" ||
+                               action == "stop" || action == "seekBy" ||
+                               action == "seekTo" || action == "scrubTo";
+  if (playback_action && !session->IsControllable()) {
     return RunOnPlayers(action, value);
   }
   if (action == "play") {
