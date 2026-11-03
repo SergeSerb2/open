@@ -65,6 +65,16 @@ public enum Motion {
     /// Capture session 2, V 26.63 s; app-shell §3.3: 2.9 pt overshoot on 223 pt travel.
     public static let revealCardIn = SpringToken(response: 0.164, dampingFraction: 0.81)
     public static let revealCardOut: CFTimeInterval = 0.105
+    /// Toast appear (page-platform §4.1.2, PG-1.9, PG-14 V 69.99–70.45 s): the pill grows from
+    /// a small scale at the top center of its final frame with this spring (settled ≈ 0.46 s)
+    /// while it fades in linearly.
+    public static let toastIn = SpringToken(response: 0.32, dampingFraction: 0.8)
+    public static let toastInScale: CGFloat = 0.3
+    public static let toastFadeIn: CFTimeInterval = 0.12
+    /// Toast exit: it shrinks back up toward its top center and fades out in ≈ 0.16 s
+    /// (PG-14 V 74.95–75.11 s; the plan's 0.20 s fade to 0.96 was a guess before that capture).
+    public static let toastOut: CFTimeInterval = 0.16
+    public static let toastOutScale: CGFloat = 0.3
     /// Process-local automation override; never changes the system preference.
     @MainActor public static var reduceMotionOverride: Bool?
     @MainActor public static var reducesMotion: Bool {

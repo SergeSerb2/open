@@ -71,3 +71,10 @@ extension Typography {
     public static let pipPrecision = FontToken(11, .medium)
     public static let documentPiPHost = FontToken(12, .medium)
 }
+
+extension Typography {
+    /// Toast title: 14 pt Medium (PG-1.6; the hint toast's fit, sidebar-completion §3.12).
+    public static let toast = FontToken(14, .medium)
+    /// Toast subtitle (the quote offer, the trace timer). guess.
+    public static let toastSubtitle = FontToken(12, .regular)
+}

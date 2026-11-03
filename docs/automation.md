@@ -413,11 +413,13 @@ no remote debugging port. It never opens or copies Arc.
 | `sidebar-share` | `[dismiss=true|false] [close=true] [waitClosed=true]` controls the automation-only cancel policy and reads the actual `NSSharingServicePicker` request: URL, node, row anchor, service-query callback, close callback and pending state. The menu action calls the real picker; `dismiss=true` closes it without choosing a service. Always close/reset in `finally`. |
 | `profile-menu` | `[response=cancel|<existing Profile name>] [close=true] [waitClosed=true]` controls an automation-only response for the actual Set Profile menu opened by `menu-perform id=change-profile`. Reports menu-open callback, native tracking, checked choices, chosen Profile, closure and pending state. A choice performs the existing menu item after ending tracking. Always close in `finally`. |
 | `alert` | `[window=library] [button=<title>]` reads the texts and buttons of the alert sheet attached to a browser (or the Library) window; with `button`, clicks it. |
-| `toast-undo` | Clicks the shown toast's Undo button in the front browser window. |
+| `toast-undo` | Clicks the newest visible toast's Undo button in the front browser window (its real `ToastCenter` button). |
+| `toasts` | The front browser window's toasts, newest first (page-platform §8.3): `title`, `subtitle`, `symbol`, `accessory` (`none`, `keycaps`, or the button's label in lower case: `undo`, `share`, …), `coalescingKey`, `frame` and `accessoryFrame` (window content, top-left origin), `age` and `lifetime` (seconds), `sticky`, `exiting`, `hovered`; plus `panel` (the anchor) and `shown` (toasts shown so far in the window). Exiting toasts stay listed until their exit animation ends. |
+| `toast-action` | `[index=<n>]` (default 0, newest first, visible toasts only) clicks that toast's button through the real `NSButton` (Share, Undo, …). Returns false when the toast has no button. |
 | `defaults` | `key=open.… [value=…]` reads (and writes) one Open preference in the app's own domain (run suites on a cloned bundle ID). |
 | `sound-effect` | `effect=capture|event` calls `SoundEffects.shared.play`; reports `played`, the resource name, and counts. Call it only with `open.advanced.playSoundEffects` off: it plays audio otherwise. |
 
-`window-state` also reports `toolbarButtons` (visible toolbar buttons in order), `hint` (shows, visible, frame, keys, plate), `toast` (last toast title), and `confirmation` (the pending delete alert's title, text, buttons).
+`window-state` also reports `toolbarButtons` (visible toolbar buttons in order), `hint` (shows, visible, frame, keys, plate), `toast` (title of the newest toast shown in the window, also after it left), and `confirmation` (the pending delete alert's title, text, buttons).
 | `library-close` | Closes the shared Library window, cancelling any attached sheet first. Reports `closed` and the sheet window numbers it cancelled. Available with no browser window. |
 
 Use existing `key route=app window=<Library number>` for Cmd+Z and other

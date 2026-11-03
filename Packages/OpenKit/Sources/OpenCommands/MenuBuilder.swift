@@ -16,12 +16,30 @@ public protocol CommandDispatcher: AnyObject {
     /// The item's title right now, or nil for the registry title (commandbar-completion §4.6.4:
     /// "Show Toolbar" / "Hide Toolbar", CC-32). Menu validation applies it.
     func menuTitle(for id: String) -> String?
+    /// The item's runtime state (page-platform §7.1): title, checkmark, hidden. nil keeps the
+    /// registry item as built. Menu validation applies it before it answers the enabled state; a
+    /// hidden item is also disabled, so its key cannot run it.
+    func menuState(for id: String) -> CommandMenuState?
+}
+
+/// Runtime state of one menu item (page-platform §7.1). nil fields leave the item as it is.
+public struct CommandMenuState: Equatable, Sendable {
+    /// Replaces the registry title ("Turn on Developer Mode for this site").
+    public var title: String?
+    /// `.on` / `.off` checkmark (View ▸ Appearance, Allow JavaScript from Apple Events).
+    public var isChecked: Bool?
+    /// Hidden everywhere it shows (Cast…), and never runs.
+    public var isHidden: Bool?
+    public init(title: String? = nil, isChecked: Bool? = nil, isHidden: Bool? = nil) {
+        self.title = title; self.isChecked = isChecked; self.isHidden = isHidden
+    }
 }
 
 public extension CommandDispatcher {
     func performCommand(_ id: String, payload: String?) { performCommand(id) }
     func isCommandEnabled(_ id: String, enabledKey: String) -> Bool { true }
     func menuTitle(for id: String) -> String? { nil }
+    func menuState(for id: String) -> CommandMenuState? { nil }
 }
 
 /// Dispatcher that enables everything and does nothing. For dump and previews.
@@ -65,7 +83,14 @@ final class MenuCommandTarget: NSObject, NSMenuItemValidation {
         guard let info = menuItem.representedObject as? [String: String],
               let id = info["command"] else { return true }
         let key = enabledKeys[ObjectIdentifier(menuItem).debugDescription] ?? CommandRegistry.byID[id]?.enabledKey ?? EnabledKey.always
-        if let title = dispatcher?.menuTitle(for: id), menuItem.title != title { menuItem.title = title }
+        let state = dispatcher?.menuState(for: id)
+        if let title = state?.title ?? dispatcher?.menuTitle(for: id), menuItem.title != title { menuItem.title = title }
+        if let checked = state?.isChecked {
+            let mark: NSControl.StateValue = checked ? .on : .off
+            if menuItem.state != mark { menuItem.state = mark }
+        }
+        if let hidden = state?.isHidden, menuItem.isHidden != hidden { menuItem.isHidden = hidden }
+        if state?.isHidden == true { return false }
         return dispatcher?.isCommandEnabled(id, enabledKey: key) ?? true
     }
 }

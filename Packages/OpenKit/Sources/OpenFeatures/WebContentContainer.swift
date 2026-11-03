@@ -106,7 +106,8 @@ public final class WebContentContainer: NSView {
     public var onPaneClose: ((ItemID) -> Void)?
     public var onPaneMenu: ((ItemID, NSView) -> Void)?
     public var onURLField: (() -> Void)?
-    public var onToast: ((String) -> Void)?
+    /// The window's toasts (the pane bar's Copy button says what it copied).
+    public weak var toasts: ToastCenter?
     public var onTabURLChanged: ((ItemID, URL) -> Void)?
     public var onFocusedMetadata: ((String) -> Void)?
     public var onFractionsCommitted: (([Double]) -> Void)?
@@ -221,7 +222,7 @@ public final class WebContentContainer: NSView {
             guard let tab = tabProvider(slot.tabID) else { continue }; let id = slot.tabID
             slot.configure(tab: tab, host: cache[id], split: ids.count > 1, toolbar: showsToolbar, fullURL: showsFullURL, focused: focused == id, style: style,
                            close: { [weak self] in self?.onPaneClose?(id) }, menu: { [weak self] v in self?.onPaneMenu?(id, v) },
-                           url: { [weak self] in self?.onURLField?() }, copy: { [weak self] changed in self?.onToast?(changed ? TrackerStripping.cleanToast : TrackerStripping.plainToast) },
+                           url: { [weak self] in self?.onURLField?() }, copy: { [weak self] changed in self?.toasts?.show(ToastContent(title: changed ? URLCleaner.cleanedTitle : URLCleaner.plainTitle)) },
                            toolbarMenu: { [weak self] in self?.onToolbarMenu?() })
         }
     }

@@ -3660,6 +3660,23 @@ def peek_checks(factory, results, tmp):
             and after["engineContents"] == baseline["engineContents"] and after["created"] == counts["created"]
             and strip[0]["tabs"] == [source] and check_page(app, source, "Peek source"), "after": after}
         results["window_png"] = {"ok": True, "file": shot(app, "peek-promoted-window.png")}
+        # "Peek closed" with Undo in the window's toast (page-platform §4.1.4): Esc through the real key
+        # path closes the Peek; the toast sits 8/10 pt inside the panel's top-right; its real Undo button
+        # brings the Peek back and the toast leaves.
+        app.call("peek-open", tab=source, url=fixture("Peek page"))
+        wait_until(lambda: app.call("peek-state")["shown"], timeout=5, step=0.05)
+        app.call("key", key="escape")
+        closed = wait_until(lambda: not app.call("peek-state")["stack"], timeout=5, step=0.05)
+        toasts = wait_until(lambda: (lambda t: t if t["toasts"] and t["toasts"][0]["title"] == "Peek closed" else None)(app.call("toasts")), timeout=3, step=0.05) or app.call("toasts")
+        first = (toasts.get("toasts") or [{}])[0]
+        panel, frame = toasts.get("panel", [0, 0, 0, 0]), first.get("frame", [0, 0, 0, 0])
+        placed = abs(frame[1] - (panel[1] + 8)) < 0.5 and abs(frame[0] + frame[2] - (panel[0] + panel[2] - 10)) < 0.5
+        undone = app.call("toast-action", index=0)
+        reopened = wait_until(lambda: len(app.call("peek-state")["stack"]) == 1, timeout=5, step=0.05)
+        left = wait_until(lambda: not any(not t["exiting"] for t in app.call("toasts")["toasts"]), timeout=3, step=0.05)
+        results["peek_closed_toast_undo"] = {"ok": bool(closed) and first.get("accessory") == "undo" and placed and frame[3] == 46
+            and undone and bool(reopened) and bool(left), "toast": first, "panel": panel}
+        app.call("peek-close")
     finally:
         app.quit()
     app = factory(urls=(), fresh=True)
