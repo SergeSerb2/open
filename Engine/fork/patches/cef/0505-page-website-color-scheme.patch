@@ -1,0 +1,56 @@
+diff --git a/cef/libcef/browser/chrome/chrome_content_browser_client_cef.cc b/cef/libcef/browser/chrome/chrome_content_browser_client_cef.cc
+index f990219e7..759d04e9d 100644
+--- a/cef/libcef/browser/chrome/chrome_content_browser_client_cef.cc
++++ b/cef/libcef/browser/chrome/chrome_content_browser_client_cef.cc
+@@ -61,6 +61,7 @@
+ #include "cef/libcef/common/util_mac.h"
+ #include "chrome/browser/child_process_host_flags.h"
+ #include "chrome/common/chrome_constants.h"
++#include "open/browser/page/open_website_color_scheme.h"
+ #endif
+ 
+ namespace {
+@@ -477,6 +478,27 @@ void ChromeContentBrowserClientCef::OverrideWebPreferences(
+     base_background_color = SK_ColorTRANSPARENT;
+   }
+   web_contents->SetPageBaseBackgroundColor(base_background_color);
++
++#if BUILDFLAG(IS_MAC)
++  // Open (patch 0505): a request context's website color scheme.
++  open_engine::ApplyWebsiteColorScheme(web_contents, prefs);
++#endif
++}
++
++bool ChromeContentBrowserClientCef::OverrideWebPreferencesAfterNavigation(
++    content::WebContents* web_contents,
++    content::SiteInstance& main_frame_site,
++    blink::web_pref::WebPreferences* prefs) {
++  // Open (patch 0505): Chrome recomputes the color scheme after every
++  // navigation; the request context's website color scheme wins again.
++  const bool changed =
++      ChromeContentBrowserClient::OverrideWebPreferencesAfterNavigation(
++          web_contents, main_frame_site, prefs);
++#if BUILDFLAG(IS_MAC)
++  return open_engine::ApplyWebsiteColorScheme(web_contents, prefs) || changed;
++#else
++  return changed;
++#endif
+ }
+ 
+ void ChromeContentBrowserClientCef::WillCreateURLLoaderFactory(
+diff --git a/cef/libcef/browser/chrome/chrome_content_browser_client_cef.h b/cef/libcef/browser/chrome/chrome_content_browser_client_cef.h
+index c7dc8039c..4ea211ed5 100644
+--- a/cef/libcef/browser/chrome/chrome_content_browser_client_cef.h
++++ b/cef/libcef/browser/chrome/chrome_content_browser_client_cef.h
+@@ -72,6 +72,11 @@ class ChromeContentBrowserClientCef : public ChromeContentBrowserClient {
+   void OverrideWebPreferences(content::WebContents* web_contents,
+                               content::SiteInstance& main_frame_site,
+                               blink::web_pref::WebPreferences* prefs) override;
++  // Open (patch 0505): the website color scheme also wins after navigation.
++  bool OverrideWebPreferencesAfterNavigation(
++      content::WebContents* web_contents,
++      content::SiteInstance& main_frame_site,
++      blink::web_pref::WebPreferences* prefs) override;
+   void WillCreateURLLoaderFactory(
+       content::BrowserContext* browser_context,
+       content::RenderFrameHost* frame,

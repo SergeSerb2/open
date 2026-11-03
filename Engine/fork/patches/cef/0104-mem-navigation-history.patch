@@ -1,0 +1,68 @@
+diff --git a/cef/include/cef_navigation_entry.h b/cef/include/cef_navigation_entry.h
+index a8e2f3377..21d142d60 100644
+--- a/cef/include/cef_navigation_entry.h
++++ b/cef/include/cef_navigation_entry.h
+@@ -116,6 +116,21 @@ class CefNavigationEntry : public virtual CefBaseRefCounted {
+   ///
+   /*--cef()--*/
+   virtual CefRefPtr<CefSSLStatus> GetSSLStatus() = 0;
++
++#if CEF_API_ADDED(CEF_EXPERIMENTAL)
++  ///
++  /// Returns the referrer URL of this navigation. May be empty.
++  ///
++  /*--cef(added=experimental)--*/
++  virtual CefString GetReferrerURL() = 0;
++
++  ///
++  /// Returns the URL of the page's favicon, or an empty string if it is not
++  /// known yet.
++  ///
++  /*--cef(added=experimental)--*/
++  virtual CefString GetFaviconURL() = 0;
++#endif
+ };
+ 
+ #endif  // CEF_INCLUDE_CEF_NAVIGATION_ENTRY_H_
+diff --git a/cef/libcef/browser/navigation_entry_impl.cc b/cef/libcef/browser/navigation_entry_impl.cc
+index fdbe22555..608bb6a68 100644
+--- a/cef/libcef/browser/navigation_entry_impl.cc
++++ b/cef/libcef/browser/navigation_entry_impl.cc
+@@ -6,7 +6,9 @@
+ 
+ #include "cef/libcef/browser/ssl_status_impl.h"
+ #include "cef/libcef/common/time_util.h"
++#include "content/public/browser/favicon_status.h"
+ #include "content/public/browser/navigation_entry.h"
++#include "content/public/common/referrer.h"
+ #include "url/gurl.h"
+ 
+ CefNavigationEntryImpl::CefNavigationEntryImpl(content::NavigationEntry* value)
+@@ -68,3 +70,14 @@ CefRefPtr<CefSSLStatus> CefNavigationEntryImpl::GetSSLStatus() {
+   CEF_VALUE_VERIFY_RETURN(false, nullptr);
+   return new CefSSLStatusImpl(mutable_value()->GetSSL());
+ }
++
++CefString CefNavigationEntryImpl::GetReferrerURL() {
++  CEF_VALUE_VERIFY_RETURN(false, CefString());
++  return mutable_value()->GetReferrer().url.spec();
++}
++
++CefString CefNavigationEntryImpl::GetFaviconURL() {
++  CEF_VALUE_VERIFY_RETURN(false, CefString());
++  const GURL& url = mutable_value()->GetFavicon().url;
++  return url.is_valid() ? url.spec() : std::string();
++}
+diff --git a/cef/libcef/browser/navigation_entry_impl.h b/cef/libcef/browser/navigation_entry_impl.h
+index 15ad68e2d..93163b4e8 100644
+--- a/cef/libcef/browser/navigation_entry_impl.h
++++ b/cef/libcef/browser/navigation_entry_impl.h
+@@ -33,6 +33,8 @@ class CefNavigationEntryImpl
+   CefBaseTime GetCompletionTime() override;
+   int GetHttpStatusCode() override;
+   CefRefPtr<CefSSLStatus> GetSSLStatus() override;
++  CefString GetReferrerURL() override;
++  CefString GetFaviconURL() override;
+ };
+ 
+ #endif  // CEF_LIBCEF_BROWSER_NAVIGATION_ENTRY_IMPL_H_

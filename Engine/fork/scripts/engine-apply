@@ -115,6 +115,11 @@ while IFS=$'\t' read -r kind series name line; do
           output=$(${git_apply[@]+"${git_apply[@]}"} --whitespace=nowarn "$patch" 2>&1); }; then
         log "applied: $name"
         applied=$((applied + 1))
+        # A CEF patch that changes a public header (cef/include/) changes
+        # the C API too: regenerate it below, as for overlay headers.
+        if [[ "$series" == cef ]] && grep -q '^+++ b/cef/include/' "$patch"; then
+            api_headers=$((api_headers + 1))
+        fi
         outcomes+="$series/$name"$'\t''applied'$'\n'
     else
         mkdir -p "$LOG_DIR/conflicts"

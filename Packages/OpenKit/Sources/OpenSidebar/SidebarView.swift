@@ -26,6 +26,21 @@ public final class SidebarView: NSView {
 
     let toolbar: ToolbarView
     let urlField: URLFieldView
+    /// "Translation Available" under the URL field (page-platform §4.7.3). Made the first time the
+    /// App sets `context.urlStatus` and kept afterwards: most windows never show it, so it costs
+    /// nothing until then.
+    private(set) var urlStatusButtonIfMade: URLStatusButton?
+    var urlStatusButton: URLStatusButton {
+        if let urlStatusButtonIfMade { return urlStatusButtonIfMade }
+        let button = URLStatusButton(context: context)
+        button.isHidden = true
+        addSubview(button, positioned: .above, relativeTo: urlField)
+        urlStatusButtonIfMade = button
+        return button
+    }
+    private var urlStatusShown = false
+    /// The last push-down animations (position of Favorites and the pager), for checks.
+    public private(set) var urlStatusAnimations: [String: CAAnimation] = [:]
     let favorites: FavoritesView
     let pager: SpacePagerView
     /// Last Space slide, read back from the real pager layer when scheduled.
@@ -129,7 +144,11 @@ public final class SidebarView: NSView {
         // With the content toolbar, the URL field hides and Favorites move up to its place (§4.6.3; layout guess, §9 item 1).
         let toolbarShown = tracked({ context.isToolbarShown }) { [weak self] in self?.needsLayout = true }
         urlField.isHidden = toolbarShown
-        let favTop = toolbarShown ? URLFieldMetrics.y : FavoritesMetrics.sectionTop
+        // The status button pushes everything under the URL field down 34 pt (§4.7.3).
+        let statusShown = tracked({ context.urlStatusVisible }) { [weak self] in self?.needsLayout = true }
+        let oldFavorites = favorites.frame, oldPagerFrame = pager.frame
+        if statusShown || urlStatusButtonIfMade != nil { urlStatusButton.frame = URLStatusMetrics.frame(sidebarWidth: w) }
+        let favTop = toolbarShown ? URLFieldMetrics.y : FavoritesMetrics.sectionTop + (statusShown ? URLStatusMetrics.pushDown : 0)
         let favH = favoritesHeight
         favorites.frame = CGRect(x: 0, y: favTop, width: w, height: favH)
         let bottom = h - BottomBarMetrics.height
@@ -163,12 +182,52 @@ public final class SidebarView: NSView {
                 }
             }
         }
+        if statusShown != urlStatusShown {
+            urlStatusShown = statusShown
+            animateURLStatus(shown: statusShown, oldFavorites: oldFavorites, oldPager: oldPagerFrame)
+        }
         bottomBar.frame = CGRect(x: 0, y: bottom, width: w, height: BottomBarMetrics.height)
         if bannerShown, let banner {
             let height = banner.height(for: max(0, w - 2 * BannerMetrics.inset))
             banner.frame = CGRect(x: BannerMetrics.inset, y: bottom - mediaControls.requiredHeight - BannerMetrics.inset - height,
                                   width: max(0, w - 2 * BannerMetrics.inset), height: height)
 
+        }
+    }
+
+    /// Shows or hides the status button. Favorites and the Space list slide with
+    /// `Motion.rowStructure` from where they are on screen (an interrupted slide continues from its
+    /// presentation layer); the button fades. Reduce Motion: no slide, the button still fades.
+    private func animateURLStatus(shown: Bool, oldFavorites: CGRect, oldPager: CGRect) {
+        let button = urlStatusButton
+        guard animatesSidebarChanges, oldPager != .zero else {
+            button.isHidden = !shown; button.alphaValue = 1; return
+        }
+        if shown { button.isHidden = false; button.alphaValue = 0 }
+        NSAnimationContext.runAnimationGroup({ ctx in
+            ctx.duration = Motion.rowStructure; ctx.timingFunction = Motion.easeInOut
+            button.animator().alphaValue = shown ? 1 : 0
+        }, completionHandler: { [weak self] in
+            MainActor.assumeIsolated {
+                guard let self, self.urlStatusShown == shown else { return }
+                self.urlStatusButton.isHidden = !shown; self.urlStatusButton.alphaValue = 1
+            }
+        })
+        urlStatusAnimations = [:]
+        guard !Motion.reducesMotion else { return }
+        for (view, old, key) in [(favorites as NSView, oldFavorites, "favorites"), (pager as NSView, oldPager, "pager")] {
+            guard let layer = view.layer, old != view.frame else { continue }
+            let presentation = layer.presentation()
+            let move = CABasicAnimation(keyPath: "position")
+            // No presentation layer yet (never drawn): the model position, shifted back by the move.
+            move.fromValue = presentation?.position ?? CGPoint(x: layer.position.x, y: layer.position.y - (view.frame.minY - old.minY))
+            move.toValue = layer.position
+            let resize = CABasicAnimation(keyPath: "bounds.size")
+            resize.fromValue = presentation?.bounds.size ?? old.size
+            resize.toValue = layer.bounds.size
+            for a in [move, resize] { a.duration = Motion.rowStructure; a.timingFunction = Motion.easeInOut }
+            layer.add(move, forKey: "urlStatus.move"); layer.add(resize, forKey: "urlStatus.resize")
+            urlStatusAnimations[key] = move
         }
     }
 
@@ -584,6 +643,15 @@ extension SidebarView {
     public func urlFieldMenu() -> NSMenu { SidebarMenus(context: context).urlField() }
     /// The URL field shows (it hides while the window shows the content toolbar).
     public var urlFieldVisible: Bool { !urlField.isHidden }
+    /// The status button under the URL field: frame in sidebar coordinates, shown, drawn title.
+    public var urlStatusState: (frame: CGRect, shown: Bool, title: String) {
+        guard let button = urlStatusButtonIfMade else { return (URLStatusMetrics.frame(sidebarWidth: bounds.width), false, "") }
+        return (button.frame, urlStatusShown && !button.isHidden, button.currentTitle)
+    }
+    /// A click on the status button, as the real button sends it.
+    @discardableResult public func pressURLStatus() -> Bool { urlStatusShown ? urlStatusButtonIfMade?.press() ?? false : false }
+    /// The status button exists (made on the first offer, page-platform §4.7.3).
+    public var urlStatusButtonMade: Bool { urlStatusButtonIfMade != nil }
 
     /// Toolbar row and bottom bar opacity (a Peek's dim lowers both).
     public var chromeOpacity: (toolbar: CGFloat, bottomBar: CGFloat) { (toolbar.alphaValue, bottomBar.alphaValue) }
