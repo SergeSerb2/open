@@ -8407,18 +8407,15 @@ def space_manager_checks(results, tmp, config, style):
         if not receipt['ok']: raise AssertionError('Space Manager cleanup failed: ' + json.dumps(receipt))
 
 
-EP7_BLOCKED = 'EP-7: engine notification list and simulated click (fork patch 0504)'
-
-
 def page_notification_checks(factory, results, tmp):
-    """page-platform §8.3 N1, N2, N3, N6: web notifications in the real App (Step 7).
+    """page-platform §8.3 N1–N4, N6: web notifications in the real App (Steps 7 and 16).
 
     macOS delivery needs the user's one-time Allow (U-N1). A normal run starts the App with
     OPEN_AUTOMATION_NOTIFICATION_AUTHORIZATION=record: the App logs its authorization request
     instead of showing the macOS prompt, so no human is needed, and the macOS-delivery rows
     report BLOCKED: U-N1 until macOS has authorized Open. For U-N1, run the suite once with
-    OPEN_E2E_NOTIFICATION_PROMPT=1 and click Allow in the macOS prompt. Rows that need the
-    engine's notification list or a simulated click report BLOCKED: EP-7. This suite writes no
+    OPEN_E2E_NOTIFICATION_PROMPT=1 and click Allow in the macOS prompt. The engine's own list and
+    clicks come from EP-7 (fork patch 0504, `--open-automation` builds only). This suite writes no
     preferences keys.
     """
     import http.server

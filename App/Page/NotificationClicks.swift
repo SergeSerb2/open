@@ -73,6 +73,5 @@ extension EngineWebContentHostFactory {
       window.makeKeyAndOrderFront(nil)
     }
     NSApp.activate()
-    mirror.sync()
   }
 }
