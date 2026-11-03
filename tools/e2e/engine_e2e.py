@@ -8801,6 +8801,10 @@ def page_tools_checks(factory, results, tmp, style):
         for key in keys:
             app.call("defaults", key=key, value=None)
         app.call("window-frame", frame=[80, 60, 1360, 860])
+        # The suite runs this group after others, each with its own app: make this window key and
+        # Open active, so the menu validates against it (window commands need the key window).
+        ws = app.call("window-state")
+        app.call("window-focus", id=ws["id"], activate=True)
         app.call("wait", tab=app.call("tabs")[0]["id"])
         page_tools_appearance_checks(app, results, port, style)
         page_tools_clear_checks(app, results, port, style)
