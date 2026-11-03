@@ -465,9 +465,93 @@ func runSleepDemo(args: [String]) async throws {
 
     try await runSleepReviewScenarios(root: root, check: check)
     try await runKeepAliveScenarios(root: root.appendingPathComponent("keep-alive"), check: check)
+    try await runAppWiringScenarios(root: root.appendingPathComponent("app-wiring"), check: check)
     try await runSleepControllerBench(root: root.appendingPathComponent("bench"), check: check)
     print("sleep-demo \(failed == 0 ? "OK" : "FAIL"): \(passed) checks passed, \(failed) failed")
     if failed != 0 { throw SleepCLIError.checksFailed(failed) }
+}
+
+/// App-shell Step G inputs (S6): the notification gate (page-platform §4.5.6), Battery Saver
+/// (settings-library Tab Sleeping group) and the parked pass loop (no idle timer).
+@MainActor
+private func runAppWiringScenarios(root: URL, check: (String, Bool) -> Void) async throws {
+    for mode in SleepMode.allCases {
+        let s = SleepScenario(root: root.appendingPathComponent("notify-\(mode.rawValue)"), mode: mode)
+        let tab = s.tab(); tab.live.notificationsAllowed = true
+        s.clock.advance(max(30, mode.discardDelay ?? 0) + 60); await s.controller.tick(); await s.controller.tick()
+        check("notifications allowed: stays live past the \(mode.rawValue) discard time", tab.live.sleepPhase == .live
+              && !s.trace.ids("freeze").contains(tab.id) && !s.trace.ids("discard").contains(tab.id))
+    }
+    let n = SleepScenario(root: root.appendingPathComponent("notify"))
+    let notified = n.tab(age: 1000); notified.live.notificationsAllowed = true
+    let gateOrder = n.controller.blockingGate(tabID: notified.id, forDiscard: true)
+    await n.controller.debugSleepNow(tabID: notified.id)
+    check("notifications gate refuses debug sleep with reason notifications", gateOrder == .notifications && notified.live.sleepPhase == .live)
+    check("notifications gate comes right after keepAlive", Array(SleepPolicy.Gate.allCases.prefix(3)) == [.visible, .keepAlive, .notifications])
+    await n.controller.handleMemoryPressure(.warning)
+    check("warning pressure keeps a notification tab live", notified.live.sleepPhase == .live)
+    notified.live.notificationsAllowed = false
+    await n.controller.tick()
+    check("Block lets the tab freeze on the next pass", notified.live.sleepPhase == .frozen)
+    let critical = n.tab(age: 1000); critical.live.notificationsAllowed = true
+    await n.controller.handleMemoryPressure(.critical)
+    check("critical pressure may still freeze and discard a notification tab", critical.live.sleepPhase == .sleeping
+          && n.trace.ids("freeze").contains(critical.id) && n.trace.ids("discard").contains(critical.id))
+
+    let expected: [SleepMode: SleepMode] = [.balanced: .aggressive, .conservative: .conservative, .aggressive: .aggressive, .off: .off]
+    for mode in SleepMode.allCases {
+        let s = SleepScenario(root: root.appendingPathComponent("battery-\(mode.rawValue)"), mode: mode)
+        s.controller.lowPowerMode = true
+        let tab = s.tab()
+        s.clock.advance(30); await s.controller.tick()
+        s.clock.advance(90); await s.controller.tick()
+        let atTwoMinutes = tab.live.sleepPhase
+        check("Battery Saver maps \(mode.rawValue) to \(expected[mode]!.rawValue)", s.controller.effectiveMode(mode) == expected[mode]
+              && (expected[mode] == .aggressive ? atTwoMinutes == .sleeping : atTwoMinutes == .frozen))
+    }
+    let battery = SleepScenario(root: root.appendingPathComponent("battery-off"))
+    let plugged = battery.tab()
+    battery.controller.lowPowerMode = true; battery.controller.lowPowerMode = false
+    battery.clock.advance(30); await battery.controller.tick()
+    battery.clock.advance(90); await battery.controller.tick()
+    let beforeFive = plugged.live.sleepPhase
+    battery.clock.advance(180); await battery.controller.tick()
+    check("Battery Saver off: Automatic waits the balanced 300 s again", beforeFive == .frozen && plugged.live.sleepPhase == .sleeping)
+
+    let audio = SleepScenario(root: root.appendingPathComponent("audio-event"))
+    let sound = audio.tab(age: 1000); sound.live.isAudible = true
+    await audio.controller.tick()
+    audio.clock.advance(10); sound.live.isAudible = false; audio.controller.tabAudioChanged(sound.id)
+    audio.clock.advance(59); await audio.controller.tick()
+    let inGrace = sound.live.sleepPhase
+    audio.clock.advance(2); await audio.controller.tick()
+    check("audio stop event between passes: the 60 s grace starts at the stop, not at the next sample",
+          inGrace == .live && sound.live.sleepPhase == .frozen)
+
+    let idle = SleepScenario(root: root.appendingPathComponent("idle"))
+    let shown = idle.tab(); await idle.select(shown)
+    check("parked: no pass due with only the visible tab", idle.controller.nextPassDelay() == nil)
+    idle.controller.setNeedsPass()
+    check("setNeedsPass before start schedules nothing", !idle.controller.isPassScheduled)
+    let quiet = idle.tab()
+    check("a hidden live quiet tab needs the 5 s pass", idle.controller.nextPassDelay() == SleepController.passInterval)
+    let keep = idle.tab(url: "https://mail.google.com/mail/u/0"), loud = idle.tab(), notify = idle.tab()
+    loud.live.isAudible = true; notify.live.notificationsAllowed = true
+    idle.model.closeTab(id: quiet.id); idle.controller.tabClosed(quiet.id)
+    check("keep-alive, audible and notification tabs wait for their event (parked)", idle.controller.nextPassDelay() == nil)
+    loud.live.isAudible = false
+    check("audio stop needs a pass for the 60 s grace", idle.controller.nextPassDelay() == SleepController.passInterval)
+    idle.clock.advance(400); await idle.controller.tick(); await idle.controller.tick()
+    let destroyDue = idle.controller.nextPassDelay()
+    check("only sleeping tabs left: one deadline at their 24 h destroy, no 5 s cadence", loud.live.sleepPhase == .sleeping && keep.live.sleepPhase == .live
+          && destroyDue.map { abs($0 - (86400 - 0)) < 1 } == true)
+    let off = SleepScenario(root: root.appendingPathComponent("idle-off"), mode: .off)
+    let offTab = off.tab(age: 100); await off.controller.tick()
+    check("off mode: a frozen tab parks the loop", offTab.live.sleepPhase == .frozen && off.controller.nextPassDelay() == nil)
+    idle.controller.start()
+    check("start schedules one pass", idle.controller.isPassScheduled && (idle.controller.scheduledPassDelay ?? 99) <= SleepController.passInterval)
+    idle.controller.stop()
+    check("stop leaves no scheduled pass", !idle.controller.isPassScheduled)
 }
 
 @MainActor

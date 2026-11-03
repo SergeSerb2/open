@@ -73,9 +73,9 @@ public struct AdvancedPane: View {
     }.controlSize(.mini).padding(.vertical,1) }
     private var quoteShortcut:String { CommandRegistry.byID["copy-url-quote"].flatMap {model.root.shortcutsStore.effectiveShortcuts(for:$0).first?.symbolDisplay} ?? "---" }
     private var sleepDescription:String { switch model.sleepMode {
-    case .automatic:"Tabs you haven't viewed for 5 minutes sleep to save memory. Pinned tabs pause but stay loaded."
-    case .conservative:"Tabs you haven't viewed for 15 minutes sleep to save memory. Pinned tabs pause but stay loaded."
-    case .aggressive:"Tabs you haven't viewed for 2 minutes sleep to save memory. Pinned tabs pause but stay loaded."
+    case .automatic:"Tabs you haven't viewed for 5 minutes (2 in Low Power Mode) sleep to save memory. Pinned tabs and Favorites sleep too unless they play audio or stay in use."
+    case .conservative:"Tabs you haven't viewed for 15 minutes sleep to save memory. Pinned tabs and Favorites sleep too unless they play audio or stay in use."
+    case .aggressive:"Tabs you haven't viewed for 2 minutes sleep to save memory. Pinned tabs and Favorites sleep too unless they play audio or stay in use."
     case .never:"Tabs stay awake until you close them. This uses more memory."
     } }
     private func tile(_ title:String,key:String,symbol:String,color:Color,last:Bool=false,subtitle:String?=nil)->some View {
