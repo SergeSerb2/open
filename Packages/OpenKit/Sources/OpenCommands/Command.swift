@@ -104,4 +104,11 @@ public enum EnabledKey {
     public static let canGoForward = "canGoForward"
     public static let textField = "textFieldFocused"
     public static let hasHistory = "hasHistory"
+    /// A live http(s), file, or data page in the focused host (page-platform §7.1: capture, Clear Cookies).
+    public static let webPage = "hasWebPage"
+    /// Per-site data clearing exists (Site Control E2) and the page is http(s) (Clear Cache and Refresh).
+    public static let siteDataClearAvailable = "siteDataClearAvailable"
+    /// A trace recording runs (Help ▸ Troubleshooting ▸ Cancel Trace), or none does (Record Trace).
+    public static let isTracing = "isTracing"
+    public static let notTracing = "notTracing"
 }

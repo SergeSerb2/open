@@ -79,6 +79,60 @@ visibility transitions immediately. Sampling alone is forbidden. The
 contract is also on the `SleepEngine` protocol in source. S0 CLI checks
 exercise these callbacks; live engine delivery remains an S6 gate.
 
+## App wiring (S6, app-shell Step G)
+
+PR G1 runs the controller in the App on the stock engine API. Files:
+`App/Sleep/AppSleepCoordinator.swift` (one controller, events, quit capture,
+Battery Saver), `App/Sleep/RoutingSleepStore.swift` (one `SleepStore` per
+Profile), `App/WebContent/EngineSleepAdapter.swift` (`SleepEngine` over the
+window factories' existing hosts; never a second page per tab), and
+`App/Automation/AutomationSleep.swift` (automation builds only).
+
+- Start: the controller is built and started after the first web paint
+  (startup T5; `LaunchTiming` mark `sleepStarted`), or 2 s after the first
+  load when no paint is reported. Hooks before that are no-ops; the
+  controller's init reads the phases the windows already set.
+- No idle timer: the five-second pass runs only while a hidden tab can
+  change phase. It parks when every hidden tab with content waits for an
+  event (keep-alive, notifications, audio, loading, capture, DevTools,
+  downloads, a known unload handler on a frozen page, a frozen page in off
+  mode). Sleeping shells schedule one pass at their 24 h destroy time. Every
+  event hook and `setNeedsPass()` (mode, permission, Low Power Mode changes)
+  restarts it.
+- Events: every page change of every sidebar tab, background tabs included
+  (`EngineWebContentHost` → `AppSleepCoordinator.pageChanged`): URL commit
+  (`Tab.url` first, then `tabDidCommit`), load end (`tabDidCommit`, the 10 s
+  loading grace), audio (`tabAudioChanged`), camera/microphone capture
+  (`isCapturing`), DevTools (`devToolsOpen`). Downloads per page; keys typed
+  into a page set the form proxy; page creation and close from the window
+  factories; window, selection, split, Peek, PiP and mini-player changes
+  through `AppVisibilityProvider` (Section 3's media feed fills
+  `pictureInPicture` and `mediaControls`).
+- Notification gate (page-platform §4.5.6): `.notifications` comes right
+  after `.keepAlive`. `TabLiveState.notificationsAllowed` refreshes on every
+  commit and every permission change made through Open (prompt answer, Site
+  Control adapter, automation). It blocks freeze, timed discard, warning
+  pressure and debug sleep; critical pressure may freeze and discard such a
+  page (Chrome parity).
+- Battery Saver: macOS Low Power Mode (`NSProcessInfoPowerStateDidChange`, no
+  polling) makes Automatic (balanced) act as Aggressive; other modes keep
+  their delays. A change while Open runs shows "Battery Saver Mode
+  Activated" / "Battery Saver Mode Deactivated".
+- `chrome.tabs.discard` of a hosted tab runs debug sleep and honors every
+  gate; the visible tab and protected tabs are refused.
+- The window's hidden-host cache (8 per window) skips pages a gate protects,
+  so keep-alive and audible pages are not closed by the cap.
+- Quit: `applicationShouldTerminate` answers cancel once, awaits
+  `captureAllForQuit()` (bounded at 3 s; a save error is logged and quit goes
+  on), then terminates again: snapshot save, archive flush, engine shutdown.
+
+Stock fallbacks, each marked `// Until P-MEM-0x` for PR G2: discard closes
+the page (the renderer exits; the wake creates a page and loads the URL);
+freeze records the phase only (a hidden view is already throttled);
+`setVisible` does nothing (the container owns the view); capture returns a
+minimal one-entry container with the current URL and no page state, because
+a nil capture keeps every tab frozen forever; `hasUnloadHandlers` is false.
+
 ## Keep-alive sites
 
 The `keepAlive` never-sleep gate blocks **freeze and discard**, including
@@ -173,7 +227,7 @@ that temporary store on exit. It does not save over its input snapshot.
 
 | Check | Observed result |
 |---|---|
-| `sleep-demo` | 148 checks passed, 0 failed; exit 0 (105 existing checks plus 43 keep-alive checks) |
+| `sleep-demo` | 148 checks passed, 0 failed; exit 0 (105 existing checks plus 43 keep-alive checks). Step G (2026-11-02): 172, adding 24 rows for the notification gate, Battery Saver, the audio stop event and the parked pass loop |
 | Timing | Freeze at 30 s; discard at 900/300/120 s; off freezes without timed discard; destroy at 24 h after discard |
 | Never-sleep gates | Visible, keepAlive, audible, loading, capturing, PiP, DevTools, and downloading block freeze and debug discard |
 | Keep-alive scope | All 21 translated service rules plus x.com stay live for 48 simulated hours; Gmail outside `/mail`, excluded paths, fixed-TLD mismatches, and unrelated hosts sleep normally. Subdomains and multiple-label TLDs pass. |

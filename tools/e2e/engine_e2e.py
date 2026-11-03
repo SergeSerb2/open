@@ -12,6 +12,7 @@ system mouse and keyboard.
   tools/e2e/engine_e2e.py --style chrome --only extensions
   tools/e2e/engine_e2e.py --config Release --only measure
   tools/e2e/engine_e2e.py --style chrome --only tabstrip   # fork patch P1
+  tools/e2e/engine_e2e.py --style chrome --only sleep      # tab sleep (app-shell Step G)
 
 Extensions are unpacked CRX folders (tools/crx-unpack.py) in
 .re/ext/unpacked/{ublock-lite,darkreader,1password,bitwarden}.
@@ -3660,6 +3661,39 @@ def peek_checks(factory, results, tmp):
             and after["engineContents"] == baseline["engineContents"] and after["created"] == counts["created"]
             and strip[0]["tabs"] == [source] and check_page(app, source, "Peek source"), "after": after}
         results["window_png"] = {"ok": True, "file": shot(app, "peek-promoted-window.png")}
+        # "Peek closed" with Undo in the window's toast (page-platform §4.1.4): Esc through the real key
+        # path closes the Peek; the toast sits 8/10 pt inside the panel's top-right; its real Undo button
+        # brings the Peek back and the toast leaves.
+        app.call("peek-open", tab=source, url=fixture("Peek page"))
+        wait_until(lambda: app.call("peek-state")["shown"], timeout=5, step=0.05)
+        app.call("key", key="escape")
+        closed = wait_until(lambda: not app.call("peek-state")["stack"], timeout=5, step=0.05)
+        toasts = wait_until(lambda: (lambda t: t if t["toasts"] and t["toasts"][0]["title"] == "Peek closed" else None)(app.call("toasts")), timeout=3, step=0.05) or app.call("toasts")
+        first = (toasts.get("toasts") or [{}])[0]
+        panel, frame = toasts.get("panel", [0, 0, 0, 0]), first.get("frame", [0, 0, 0, 0])
+        placed = abs(frame[1] - (panel[1] + 8)) < 0.5 and abs(frame[0] + frame[2] - (panel[0] + panel[2] - 10)) < 0.5
+        undone = app.call("toast-action", index=0)
+        reopened = wait_until(lambda: len(app.call("peek-state")["stack"]) == 1, timeout=5, step=0.05)
+        left = wait_until(lambda: not any(not t["exiting"] for t in app.call("toasts")["toasts"]), timeout=3, step=0.05)
+        results["peek_closed_toast_undo"] = {"ok": bool(closed) and first.get("accessory") == "undo" and placed and frame[3] == 46
+            and undone and bool(reopened) and bool(left), "toast": first, "panel": panel}
+        # Review #153: the pointer over "Peek closed" pauses it past the 5 s undo window; its Undo
+        # still brings the Peek back.
+        app.call("peek-close")
+        wait_until(lambda: not app.call("peek-state")["stack"], timeout=5, step=0.05)
+        app.call("peek-open", tab=source, url=fixture("Peek page"))
+        wait_until(lambda: app.call("peek-state")["shown"], timeout=5, step=0.05)
+        app.call("key", key="escape")
+        wait_until(lambda: not app.call("peek-state")["stack"], timeout=5, step=0.05)
+        wait_until(lambda: (lambda t: t if t["toasts"] and t["toasts"][0]["title"] == "Peek closed" else None)(app.call("toasts")), timeout=3, step=0.05)
+        hovered = app.call("toast-hover", index=0, inside=True)
+        time.sleep(6.5)
+        still = [t for t in app.call("toasts")["toasts"] if t["title"] == "Peek closed" and not t["exiting"]]
+        late_undo = app.call("toast-action", index=0) if still else False
+        late_reopened = wait_until(lambda: len(app.call("peek-state")["stack"]) == 1, timeout=5, step=0.05)
+        results["peek_closed_undo_while_hovered"] = {"ok": hovered and bool(still) and late_undo and bool(late_reopened),
+            "hovered": hovered, "shownAfter6s": bool(still), "reopened": bool(late_reopened)}
+        app.call("peek-close")
     finally:
         app.quit()
     app = factory(urls=(), fresh=True)
@@ -5427,6 +5461,403 @@ def media_checks(factory, results, tmp):
         results["media_mute_survives_relaunch"] = {"ok": bool(kept) and state.get("modelMuted") is True, "state": state}
     finally:
         app.quit(); server.shutdown(); server.server_close()
+
+
+def _sleep_server():
+    """Serves the memory-fork fixtures (Engine/fork/verification/fixtures) at / and the media
+    fixtures at /media/ on 127.0.0.1. Any other path answers a small page titled with its path.
+    Chromium maps *.localhost to loopback, so one server gives distinct sites (one renderer
+    each) and a Gmail-like host the built-in keep-alive table matches (mail.google.*/mail)."""
+    import html as _html
+    import http.server
+    import threading
+    fixtures = os.path.join(ROOT, "Engine", "fork", "verification", "fixtures")
+    media = os.path.join(ROOT, "tools", "e2e", "fixtures", "media")
+    class Handler(http.server.BaseHTTPRequestHandler):
+        def do_GET(self):
+            path = self.path.split("?")[0]
+            folder, name = (media, path[len("/media/"):]) if path.startswith("/media/") else (fixtures, path.lstrip("/"))
+            file = os.path.join(folder, name)
+            if name and "/" not in name and os.path.isfile(file):
+                with open(file, "rb") as f:
+                    body = f.read()
+                kind = "text/html; charset=utf-8" if name.endswith(".html") else "text/javascript"
+            else:
+                body = ("<!doctype html><meta charset=utf-8><title>Sleep %s</title><body>Sleep fixture %s"
+                        % (_html.escape(path), _html.escape(path))).encode()
+                kind = "text/html; charset=utf-8"
+            self.send_response(200); self.send_header("Content-Type", kind)
+            self.send_header("Content-Length", str(len(body))); self.end_headers(); self.wfile.write(body)
+        def log_message(self, *args): pass
+    server = http.server.ThreadingHTTPServer(("127.0.0.1", 0), Handler)
+    threading.Thread(target=server.serve_forever, daemon=True).start()
+    return server, server.server_address[1]
+
+
+SLEEP_MEDIA_KEYS = ("open.advanced.enablePictureInPictureOnLeave", "open.pip.autoDisabledHosts", "open.pip.keepOnTop")
+
+
+def sleep_checks(factory, results, tmp, style):
+    """app-shell §6 `sleep` (Step G, memory-fork S6, §11 F0–F5) in the real App on the stock
+    engine API. Timed rows move the controller's automation clock (`sleep-clock`) and run one
+    pass (`sleep-tick`); they assert the configured delays, never wall time. Rows that need the
+    fork's sleep patches report BLOCKED with the patch name and never pass."""
+    server, port = _sleep_server()
+    base = "http://127.0.0.1:%d/" % port
+    def site(n, path="a.html"): return "http://t%d.localhost:%d/%s" % (n, port, path)
+    app = factory(urls=(base + "a.html",), fresh=True)
+    def state(tab=None): return app.call("sleep-state", **({"tab": tab} if tab else {}))
+    def ts(tab): return state(tab)["tabs"][0]
+    def tick(**kw): return app.call("sleep-tick", **kw)
+    def advance(seconds): return app.call("sleep-clock", advance=float(seconds))
+    def sleep_now(tab): return app.call("sleep-now", tab=tab)
+    def selected(): return app.call("window-state")["selected"]
+    def select(tab):
+        app.call("select", tab=tab)
+        wait_until(lambda: selected() == tab, timeout=5, step=.02)
+        # The window's visibility hook reaches the controller in a task right after selection.
+        return wait_until(lambda: tab in state()["visible"], timeout=5, step=.02)
+    def open_live(url):
+        tab = new_tab(app, url)
+        wait_until(lambda: not app.tab(tab)["loading"], timeout=15, step=.05)
+        return tab
+    def phase(tab): return ts(tab)["phase"]
+    def renderers():
+        app.discover_owned_processes()
+        pids = [pid for pid, path in app.owned_processes.items()
+                if "(Renderer)" in path and app.process_path(pid) == path]
+        rss = 0
+        if pids:
+            out = subprocess.run(["ps", "-o", "rss=", "-p", ",".join(map(str, pids))], capture_output=True, text=True).stdout
+            rss = sum(int(x) for x in out.split())
+        return {"count": len(pids), "rssKB": rss}
+    def blocked(name, reason):
+        results[name] = {"status": "BLOCKED", "reason": reason}
+    for key in SLEEP_MEDIA_KEYS:
+        app.call("defaults", key=key, value=None)
+    app.call("sleep-power", lowPower=False)
+    try:
+        app.call("window-frame", frame=[80, 60, 1280, 820])
+        home = app.call("tabs")[0]["id"]
+        app.call("wait", tab=home)
+
+        # T5: the controller starts after the first paint, never before (app-shell §5.1).
+        started = wait_until(lambda: (lambda s: s if s.get("started") else None)(state()), timeout=10, step=.1)
+        timing = app.call("timing")
+        results["sleep_started_after_paint"] = {
+            "ok": bool(started) and timing.get("sleepStarted") is not None and timing.get("firstContentfulPaint") is not None
+                  and timing["sleepStarted"] >= timing["firstContentfulPaint"] and timing["sleepStarted"] >= timing.get("sidebarDrawn", 0),
+            "sleepStarted": timing.get("sleepStarted"), "firstContentfulPaint": timing.get("firstContentfulPaint"),
+            "sidebarDrawn": timing.get("sidebarDrawn")}
+
+        # No idle timer: with only the visible tab, the pass loop parks (no pass over 12 s).
+        parked = wait_until(lambda: (lambda s: s if not s["scheduled"] and s["nextPassDelay"] is None else None)(state()), timeout=15, step=.25)
+        before = state()["passes"]
+        time.sleep(12)
+        after = state()
+        results["sleep_idle_parked"] = {"ok": bool(parked) and after["passes"] == before and not after["scheduled"],
+                                        "passesBefore": before, "passesAfter": after["passes"], "scheduled": after["scheduled"],
+                                        "load": os.getloadavg()}
+
+        blocked("sleep_f0_switches", "P-MEM-07: the fork's sleep switches are not in the engine yet (engine PR E1)")
+
+        # Ladder on the stock engine: freeze at 30 s, discard at the balanced 300 s.
+        ladder = open_live(site(1, "ticker.html"))
+        select(home)
+        tick()
+        ladder_steps = []
+        advance(29); tick(); ladder_steps.append(phase(ladder))
+        advance(1); tick(); ladder_steps.append(phase(ladder))
+        scheduled = state()["scheduled"]
+        advance(269); tick(); ladder_steps.append(phase(ladder))
+        advance(1); tick(); s = ts(ladder); ladder_steps.append(s["phase"])
+        results["sleep_timed_ladder"] = {"ok": ladder_steps == ["live", "frozen", "frozen", "sleeping"] and scheduled
+                                         and s["hosts"] == 0 and s["discarded"] and not app.tab(ladder)["loaded"],
+                                         "phases": ladder_steps, "scheduledWhileFrozen": scheduled, "after": s}
+
+        # Wake: selecting the discarded tab recreates its page with its URL and title.
+        ladder_url = app.tab(ladder)["url"]
+        select(ladder)
+        woke = wait_until(lambda: (lambda t: t if t["phase"] == "live" and t["hosts"] == 1 else None)(ts(ladder)), timeout=10, step=.05)
+        app.call("wait", tab=ladder)
+        row = app.tab(ladder)
+        log = state()["log"]
+        results["sleep_wake_recreates"] = {"ok": bool(woke) and row["url"] == ladder_url and row["title"] == "Open freeze ticker"
+                                           and any(l.startswith("sleep-wake discard") for l in log),
+                                           "row": {k: row[k] for k in ("url", "title", "sleepPhase", "loaded")},
+                                           "wakeLog": [l for l in log if l.startswith("sleep-wake")]}
+        blocked("sleep_f2_history_scroll_form", "P-MEM-04: stock CEF cannot capture or restore navigation history, "
+                "scroll or form state; a woken tab reloads its URL with no Back list")
+
+        # Modes (memory-fork §9.3): aggressive 120 s, conservative 900 s, off never discards.
+        mode_rows = {}
+        for mode, delay in (("aggressive", 120), ("conservative", 900), ("off", None)):
+            app.call("sleep-mode", mode=mode)
+            t = open_live(site(2, "b.html?mode=" + mode))
+            select(home); tick()
+            advance(30); tick()
+            if delay:
+                advance(delay - 31); tick(); early = phase(t)
+                advance(1); tick(); late = phase(t)
+                mode_rows[mode] = {"ok": early == "frozen" and late == "sleeping", "before": early, "at": late}
+            else:
+                advance(48 * 3600); tick(); late = phase(t)
+                mode_rows[mode] = {"ok": late == "frozen", "after48h": late}
+            app.call("close", tab=t)
+        app.call("sleep-mode", mode="balanced")
+        results["sleep_modes"] = {"ok": all(r["ok"] for r in mode_rows.values()), "modes": mode_rows}
+
+        # F1: sleeping drops renderer processes. Eight distinct sites, then sleep them all.
+        select(home)
+        advance(15)
+        for t in state()["tabs"]:
+            if t["id"] != home and t["hosts"]:
+                sleep_now(t["id"])
+        time.sleep(2)
+        one_tab = renderers()
+        f1 = [open_live(site(10 + i, "a.html")) for i in range(8)]
+        select(home)
+        time.sleep(1)
+        loaded = renderers()
+        advance(15)  # past the 10 s loading grace after each page's commit
+        f1_answers = [sleep_now(t) for t in f1]
+        f1_slept = wait_until(lambda: all(phase(t) == "sleeping" for t in f1), timeout=10, step=.1)
+        time.sleep(2)
+        slept = renderers()
+        rows = {t["id"]: t for t in app.call("tabs")}
+        results["sleep_f1_renderers"] = {
+            "ok": bool(f1_slept) and all(rows[t]["title"].startswith("Open history A") for t in f1)
+                  and loaded["count"] >= one_tab["count"] + 4 and slept["count"] <= one_tab["count"]
+                  and slept["rssKB"] < loaded["rssKB"],
+            "oneTab": one_tab, "tenTabsLoaded": loaded, "nineSleeping": slept,
+            "refused": [a["refusedBy"] for a in f1_answers if a["refusedBy"]],
+            "note": "stock discard closes the page (P-MEM-03 replaces it with discard in place)"}
+
+        # F3: an audible tab never sleeps; after audio stops it waits the 60 s grace, then sleeps.
+        audio = open_live(base + "media/audio.html")
+        app.eval(audio, "start()")
+        audible = wait_until(lambda: app.tab(audio)["audible"], timeout=10, step=.05)
+        select(home)
+        refused = sleep_now(audio)["refusedBy"]
+        advance(600); tick(); tick()
+        held = phase(audio)
+        # Close (not pause): a paused card would keep the tab protected as a mini player.
+        app.call("media-action", tab=audio, action="close")
+        quiet = wait_until(lambda: not app.tab(audio)["audible"] and audio not in state()["mediaControls"], timeout=10, step=.05)
+        advance(59); tick(); grace = phase(audio)
+        advance(2); tick()
+        after_grace = phase(audio)
+        # The hide clock starts when the tab left the media feed (at the close): discard at +300 s.
+        advance(240); tick(); slept_after = phase(audio)
+        # While it plays, the media feed (visible) or the audio gate refuses first; both protect.
+        results["sleep_f3_audio"] = {"ok": bool(audible) and refused in ("audible", "visible") and held == "live" and bool(quiet)
+                                     and grace == "live" and after_grace == "frozen" and slept_after == "sleeping",
+                                     "debugSleepRefusedBy": refused, "after600s": held, "at59sAfterStop": grace,
+                                     "at61sAfterStop": after_grace, "at301sAfterStop": slept_after}
+        blocked("sleep_f3_capture", "unverified: no capture fixture without a camera or microphone grant "
+                "(memory-fork §11 F3 records capture as unverified, not passed)")
+
+        # Keep-alive (docs/sleep.md): a Gmail-like host the built-in table matches stays live.
+        gmail = open_live("http://mail.google.localhost:%d/mail/u/0" % port)
+        outside = open_live("http://mail.google.localhost:%d/settings" % port)
+        select(home)
+        keep_refused = sleep_now(gmail)["refusedBy"]
+        for _ in range(4):
+            advance(12 * 3600); tick(); tick()
+        g, o = ts(gmail), ts(outside)
+        results["sleep_keep_alive"] = {"ok": keep_refused == "keepAlive" and g["phase"] == "live" and g["freezeGate"] == "keepAlive"
+                                       and g["hosts"] == 1 and o["phase"] == "sleeping",
+                                       "debugSleepRefusedBy": keep_refused, "gmail48h": g["phase"], "gate": g["freezeGate"],
+                                       "outsideMail48h": o["phase"]}
+        app.call("close", tab=outside)
+
+        # N5 (page-platform §8.3): notification permission Allow refuses debug sleep; Block sleeps.
+        notify_origin = "http://t30.localhost:%d" % port
+        notify = open_live(notify_origin + "/a.html")
+        select(home)
+        try:
+            app.call("permission", origin=notify_origin, kind=8, state=1)
+            allowed = ts(notify)
+            n_refused = sleep_now(notify)["refusedBy"]
+            advance(1000); tick(); tick()
+            held_n = phase(notify)
+            app.call("permission", origin=notify_origin, kind=8, state=2)
+            blocked_state = ts(notify)
+            n_after = sleep_now(notify)
+        finally:
+            app.call("permission", origin=notify_origin, kind=8, state=0)
+        results["sleep_n5_notifications"] = {"ok": allowed["notificationsAllowed"] and n_refused == "notifications" and held_n == "live"
+                                             and not blocked_state["notificationsAllowed"] and n_after["refusedBy"] is None
+                                             and n_after["tab"]["phase"] == "sleeping",
+                                             "allowedRefusedBy": n_refused, "after1000s": held_n, "blockedThen": n_after["tab"]["phase"]}
+
+        # Media (Section 3's feed): a paused mini player and a PiP source never sleep.
+        player = open_live(base + "media/audio.html?player")
+        app.eval(player, "start()")
+        wait_until(lambda: app.tab(player)["audible"], timeout=10, step=.05)
+        select(home)
+        card = wait_until(lambda: player in state()["mediaControls"], timeout=5, step=.05)
+        app.call("media-action", tab=player, action="pause")
+        wait_until(lambda: not app.tab(player)["audible"], timeout=10, step=.05)
+        advance(400)
+        card_refused = sleep_now(player)["refusedBy"]
+        tick(); tick()
+        card_phase = phase(player)
+        app.call("media-action", tab=player, action="close")
+        pip_row = {}
+        video = open_live(base + "media/video.html")
+        app.eval(video, "start()")
+        wait_until(lambda: app.tab(video)["audible"], timeout=10, step=.05)
+        # Auto-PiP on leave (media-pip §4.5.3, default on) makes the PiP source.
+        select(home)
+        pip_on = wait_until(lambda: (lambda p: p if p["state"] == "active" else None)(app.call("pip")), timeout=5, step=.05)
+        if pip_on:
+            in_feed = wait_until(lambda: video in state()["pictureInPicture"], timeout=5, step=.05)
+            advance(400)
+            pip_refused = sleep_now(video)["refusedBy"]
+            tick(); tick()
+            pip_row = {"inFeed": bool(in_feed), "refusedBy": pip_refused, "phase": phase(video)}
+            try:
+                app.call("pip-action", action="close")
+            except RuntimeError:
+                pass
+            wait_until(lambda: app.call("pip")["state"] == "closed", timeout=5, step=.05)
+        results["sleep_media_protection"] = {
+            "ok": bool(card) and card_refused == "visible" and card_phase == "live" and bool(pip_on)
+                  and pip_row.get("inFeed") and pip_row.get("refusedBy") == "visible" and pip_row.get("phase") == "live",
+            "miniPlayer": {"listed": bool(card), "refusedBy": card_refused, "phase": card_phase}, "pip": pip_row or {"entered": False}}
+        app.call("close", tab=video)
+        app.call("close", tab=player)
+
+        # Battery Saver (features-core §3.4 r17): Low Power Mode makes Automatic discard at 120 s,
+        # with toasts when it turns on and off while Open runs.
+        try:
+            power_on = app.call("sleep-power", lowPower=True)
+            on_toast = power_on["lastToast"]
+            saver = open_live(site(3, "c.html"))
+            select(home); tick()
+            advance(30); tick(); advance(90); tick()
+            saver_phase = phase(saver)
+            power_off = app.call("sleep-power", lowPower=False)
+        finally:
+            app.call("sleep-power", lowPower=False)
+            app.call("sleep-power", lowPower=None)
+        results["sleep_battery_saver"] = {"ok": on_toast == "Battery Saver Mode Activated" and saver_phase == "sleeping"
+                                          and power_off["lastToast"] == "Battery Saver Mode Deactivated"
+                                          and power_off["toasts"][-2:] == ["Battery Saver Mode Activated", "Battery Saver Mode Deactivated"],
+                                          "toastOn": on_toast, "toastOff": power_off["lastToast"], "phaseAt120s": saver_phase}
+
+        # F5: wake latency per kind from the controller's log (selection to first commit).
+        target = open_live(site(4, "b.html"))
+        select(home)
+        def wake(kind_setup):
+            n = len([l for l in state()["log"] if l.startswith("sleep-wake")])
+            kind_setup()
+            select(target)
+            line = wait_until(lambda: (lambda ls: ls[n] if len(ls) > n else None)(
+                [l for l in state()["log"] if l.startswith("sleep-wake")]), timeout=10, step=.02)
+            app.call("wait", tab=target)
+            select(home)
+            return line
+        def discard_setup():
+            advance(15); sleep_now(target)
+        def destroyed_setup():
+            advance(15); sleep_now(target); advance(86400); tick()
+        discard_ms, destroyed_ms = [], []
+        for _ in range(20):
+            line = wake(discard_setup)
+            if line and line.startswith("sleep-wake discard"):
+                discard_ms.append(float(line.split("ms=")[1]))
+        for _ in range(10):
+            line = wake(destroyed_setup)
+            if line and line.startswith("sleep-wake destroyed"):
+                destroyed_ms.append(float(line.split("ms=")[1]))
+        def pct(xs, p): return sorted(xs)[min(len(xs) - 1, int(round(p * (len(xs) - 1))))] if xs else None
+        results["sleep_f5_discard_wake"] = {"ok": len(discard_ms) == 20 and pct(discard_ms, .95) <= 700,
+                                            "p50ms": pct(discard_ms, .5), "p95ms": pct(discard_ms, .95), "n": len(discard_ms),
+                                            "destroyed": {"p50ms": pct(destroyed_ms, .5), "p95ms": pct(destroyed_ms, .95), "n": len(destroyed_ms)},
+                                            "cache": "warm (same fixture page each wake)", "load": os.getloadavg(),
+                                            "note": "stock recreate + load; budget 700 ms first paint on a cached page"}
+        blocked("sleep_f5_unfreeze", "P-MEM-02: stock CEF has no renderer freeze, so an unfreeze has no wake to time")
+
+        # chrome.tabs.discard (engine-patches P1 "Discards") goes through the same gates.
+        if style == "chrome":
+            ext_row = sleep_tabs_discard_check(app, select, ts, home, open_live, site, advance)
+            results["sleep_tabs_discard"] = ext_row
+        else:
+            results["sleep_tabs_discard"] = {"status": "SKIP", "reason": "chrome.tabs sees sidebar tabs only in Chrome style (--style chrome)"}
+
+        # F4: quit captures live and frozen tabs; relaunch draws with one renderer for the selected tab.
+        live_tab = open_live(site(5, "c.html"))
+        frozen_tab = open_live(site(6, "a.html"))
+        slept_tab = open_live(site(7, "b.html"))
+        placeholder = app.call("open", url=site(8, "a.html"), background=True)["id"]
+        select(home)
+        advance(30); tick()
+        sleep_now(slept_tab)
+        pre = {t: phase(t) for t in (live_tab, frozen_tab, slept_tab, placeholder)}
+        # live_tab stays live: touch it so its hide clock restarts.
+        select(live_tab); select(home)
+        pre[live_tab] = phase(live_tab)
+        urls = {t: app.tab(t)["url"] for t in (live_tab, frozen_tab, slept_tab, home)}
+        app.call("save")
+        quit_started = time.monotonic()
+        app.quit()
+        quit_s = time.monotonic() - quit_started
+        quit_log = Path(app.launch_log_path).read_text(errors="replace") if os.path.exists(app.launch_log_path) else ""
+        capture_ms = [float(m) for m in re.findall(r"sleep-quit-capture ms=([0-9.]+)", quit_log)]
+        app = factory(urls=())
+        app.call("window-frame", frame=[80, 60, 1280, 820])
+        wait_until(lambda: app.call("tabs"), timeout=10)
+        app.call("wait", tab=home)
+        time.sleep(2)
+        store = {r["tab"]: r for r in app.call("sleep-store")}
+        rows = {t["id"]: t for t in app.call("tabs")}
+        hosted = [t for t, r in rows.items() if r["loaded"]]
+        relaunch_renderers = renderers()
+        results["sleep_f4_quit_capture"] = {
+            "ok": pre[frozen_tab] == "frozen" and pre[slept_tab] == "sleeping" and pre[live_tab] == "live"
+                  and all(t in store and store[t]["url"] == urls[t] for t in (live_tab, frozen_tab, slept_tab, home))
+                  and placeholder not in store and hosted == [home] and len(capture_ms) == 1 and quit_s < 10
+                  and capture_ms[0] < 3000,
+            "phasesBeforeQuit": pre, "storedRows": len(store), "quitCaptureMs": capture_ms, "quitSeconds": round(quit_s, 2),
+            "hostedAfterRelaunch": len(hosted), "renderersAfterRelaunch": relaunch_renderers, "load": os.getloadavg()}
+        blocked("sleep_f4_history_restore", "P-MEM-04/05: waking a relaunched tab loads its URL; the Back list needs history restore")
+        blocked("sleep_f4_corrupt_fallback", "P-MEM-04: stock wake never reads the stored container, so a corrupt one cannot be exercised")
+    finally:
+        try:
+            if not app.closed:
+                app.call("sleep-power", lowPower=None)
+                for key in SLEEP_MEDIA_KEYS:
+                    app.call("defaults", key=key, value=None)
+        except Exception:
+            pass
+        app.quit()
+        server.shutdown()
+
+
+def sleep_tabs_discard_check(app, select, ts, home, open_live, site, advance):
+    """chrome.tabs.discard from the tabs probe: a quiet background tab sleeps through the
+    controller; the visible tab and a keep-alive-protected tab are refused."""
+    wait_until(lambda: any(e["id"] == PROBE for e in app.call("extensions")["installed"]), timeout=30)
+    bg = open_live(site(40, "a.html"))
+    select(home)
+    advance(15)  # past the 10 s loading grace of the fresh page
+    page = app.call("popup", extension=PROBE)["identifier"]
+    wait_until(lambda: app.eval(page, "window.currentTab !== undefined", timeout=20), timeout=20)
+    def call(js):
+        return app.eval(page, "(%s).then(v => ({ok: v === undefined ? null : v}), e => ({error: String(e.message || e)}))" % js, timeout=20)
+    def cid(tab): return app.tab(tab)["page"]["chromeTabId"]
+    bg_cid, home_cid = cid(bg), cid(home)
+    background = call("chrome.tabs.discard(%d).then(t => ({id: t.id}))" % bg_cid)
+    slept = wait_until(lambda: ts(bg)["phase"] == "sleeping", timeout=10, step=.1)
+    visible = call("chrome.tabs.discard(%d)" % home_cid)
+    try:
+        app.call("popup-close")
+    except RuntimeError:
+        pass
+    return {"ok": "ok" in background and bool(slept) and "error" in visible and ts(home)["phase"] == "live",
+            "background": background, "backgroundSlept": bool(slept), "visible": visible}
 
 
 def _static_server(folder):
@@ -8063,6 +8494,293 @@ def space_manager_checks(results, tmp, config, style):
         if not receipt['ok']: raise AssertionError('Space Manager cleanup failed: ' + json.dumps(receipt))
 
 
+
+PAGE_FIXTURES = os.path.join(ROOT, 'tools', 'e2e', 'fixtures', 'page-platform')
+
+
+def page_translate_checks(factory, results, tmp):
+    """page-platform §8.3 X1–X6: on-device page translation in the real App.
+
+    Runs on the automation build's fixture backend (OPEN_AUTOMATION_TRANSLATE_BACKEND=fixture, a
+    French → English word list) so the whole pipeline runs without Apple's language assets; the
+    row X1_apple runs the same flow on Apple's backend when French → English is installed, else it
+    reports BLOCKED (U-X1). The never-translate list lives in Open's preferences domain: the suite
+    restores it in `finally`.
+    """
+    server, origin = _static_server(PAGE_FIXTURES)
+    app = factory(urls=(origin + '/fr.html',), fresh=True, extra_env={'OPEN_AUTOMATION_TRANSLATE_BACKEND': 'fixture'})
+    # Open's preferences domain is shared by every run: reset the translation keys at the start and
+    # restore them in `finally`.
+    translate_keys = ('open.translate.neverTranslateHosts', 'open.translate.enabled')
+    hosts_key = translate_keys[0]
+    saved = {}
+    availability = None
+
+    def st():
+        return app.call('translate', action='state')
+
+    def state_is(name, timeout=15):
+        return wait_until(lambda: (lambda s: s if s['state'] == name else None)(st()), timeout=timeout, step=.1)
+
+    def body(tab):
+        return app.eval(tab, 'document.body.innerHTML')
+
+    def texts(tab):
+        return app.eval(tab, '''(() => ({ p1: document.getElementById('p1').textContent, p2: document.getElementById('p2').innerHTML,
+          p3: document.getElementById('p3').innerHTML, brand: document.getElementById('brand').textContent,
+          send: document.getElementById('send').textContent, placeholder: document.getElementById('address').getAttribute('placeholder'),
+          value: document.getElementById('search').getAttribute('value'), title: document.getElementById('title').getAttribute('title'),
+          boldSame: document.getElementById('bold') === window.__boldRef, text: document.body.innerText }))()''')
+
+    try:
+        for key in translate_keys:
+            saved[key] = app.call('defaults', key=key)
+            app.call('defaults', key=key, value=None)
+        app.call('window-frame', frame=[80, 60, 1360, 860])
+        ws = app.call('window-state')
+        app.call('window-focus', id=ws['id'], activate=True)
+        # X5: a request filter on every translation-shaped request, before any page work.
+        app.call('filter', block=['translate', 'googleapis', 'gstatic'])
+        tab = app.call('tabs')[0]['id']
+        app.call('wait', tab=tab)
+        offered = state_is('offered')
+        s0 = st()
+        original = body(tab)
+        app.eval(tab, "window.__boldRef = document.getElementById('bold'); true")
+        results['X1_offer'] = {'ok': bool(offered) and s0['source'] == 'fr' and s0['target'] == 'en' and s0['button']['shown']
+            and s0['button']['title'] == 'Translation Available' and s0['button']['frame'][:2] == [8, 88]
+            and s0['button']['frame'][3] == 28 and s0['backend'] == 'fixture', 'state': s0}
+
+        # Context menu: Open's own "Translate to English" while the page has an offer.
+        app.call('events')
+        app.call('policy', contextMenu='record')
+        app.call('rightclick', tab=tab, x=600, y=500)
+        menu = wait_until(lambda: [e for e in app.call('events') if e['type'] == 'contextMenu'], timeout=5) or []
+        app.call('policy', contextMenu='')
+        items = menu[-1].get('openItems', []) if menu else []
+        results['X1_context_menu_item'] = {'ok': 'Translate to English' in items, 'openItems': items}
+
+        # The popover through the real status button, then Esc through the real key path.
+        app.call('translate', action='offer')
+        # The window server lists the panel after the order-front commits: read it a moment later.
+        pop = (wait_until(lambda: (lambda p: p if p.get('aboveWindow') else None)(st()['popover']), timeout=3, step=.05)
+               or st()['popover'])
+        # The in-app snapshot does not stack child panels; capture the panel window alone.
+        shot(app, 'page-translate-popover.png', window=pop.get('window'))
+        app.call('key', key='escape', route='app')
+        closed = wait_until(lambda: not st()['popover']['presented'], timeout=3, step=.05)
+        # Geometry (screen points, y up): the body stays 8 pt inside the window (the panel has a 14 pt
+        # shadow margin), and the arrow tip sits 2 pt under the status button [8, 88, W − 16, 28].
+        win = app.call('window-state')['frame']
+        f = pop.get('frame') or [0, 0, 0, 0]
+        tip_y = f[1] + f[3] - 14
+        button_bottom = win[1] + win[3] - (88 + 28)
+        results['X1_popover_offer_and_escape'] = {'ok': pop['presented'] and pop['title'] == 'Translate this page to English?'
+            and pop['buttons'] == ['Translate', 'Options'] and bool(closed) and pop.get('aboveWindow') is True
+            and f[0] + 14 >= win[0] + 8 - 0.5 and abs(tip_y - (button_bottom - 2)) <= 1,
+            'popover': pop, 'window': win, 'tipY': tip_y, 'buttonBottom': button_bottom}
+
+        app.call('translate', action='translate')
+        done = state_is('translated')
+        s1 = st()
+        t = wait_until(lambda: (lambda v: v if v['send'] == 'Send' and 'sometimes' in v['p3'] else None)(texts(tab)), timeout=15, step=.2) or texts(tab)
+        lang = app.call('translate', action='detect', text=t['text'])
+        results['X1_translate'] = {'ok': bool(done) and lang['language'] != 'fr' and t['brand'] == 'Maison Dupont'
+            and t['send'] == 'Send' and t['placeholder'] == 'Your address' and t['value'] == 'Search' and t['title'] == 'Title of the page'
+            and '<b id="bold">very important</b>' in t['p2'] and t['boldSame'] is True
+            and '<i>sometimes</i>' in t['p3'] and s1['fallbackUnits'] >= 1
+            and s1['button']['title'] == 'Translated' and 'Translated to English' in s1['toasts'] and not s1['popover']['presented'],
+            'detected': lang, 'texts': {k: v for k, v in t.items() if k != 'text'}, 'state': s1}
+        # The <i> sentence: the fixture translator drops its markers, so its text nodes are translated
+        # one by one and the <i> element stays (R-3 fallback).
+        italic = app.eval(tab, "document.querySelector('#p3 i') ? document.querySelector('#p3 i').textContent : null")
+        results['X1_marker_fallback'] = {'ok': italic == 'sometimes' and s1['fallbackUnits'] >= 1, 'italic': italic, 'fallbackUnits': s1['fallbackUnits']}
+        stats = app.call('filter-stats')
+        results['X5_no_network'] = {'ok': stats.get('blocked') == 0 and not stats.get('recent'), 'filterStats': stats,
+            'method': 'profile request filter on translate/googleapis/gstatic installed before the page loaded'}
+
+        # X2: Show Original restores the DOM byte for byte.
+        app.call('translate', action='revert')
+        back = state_is('offered')
+        restored = wait_until(lambda: body(tab) == original, timeout=5, step=.1)
+        s2 = st()
+        results['X2_revert'] = {'ok': bool(back) and bool(restored) and 'Translated back to French' in s2['toasts']
+            and app.eval(tab, "document.getElementById('bold') === window.__boldRef") is True and s2['button']['title'] == 'Translation Available',
+            'equal': body(tab) == original, 'state': s2}
+
+        # X6: Edit ▸ Undo Translate reverts. Cmd+Z through the real key path with the sidebar focused,
+        # like every window undo in Open: a focused page sends undo: to Chromium's own editing undo.
+        app.call('translate', action='translate')
+        state_is('translated')
+        undo_title = st()['undoTitle']
+        app.call('menu-perform', id='reveal-tab-in-sidebar')
+        menu_title = next((r['title'] for r in app.call('menu-state') if r['id'] == 'undo'), None)
+        app.call('key', key='z', modifiers=['cmd'], route='app')
+        undone = wait_until(lambda: body(tab) == original, timeout=5, step=.1)
+        s6 = st()
+        results['X6_undo'] = {'ok': undo_title == 'Translate' and menu_title == 'Undo Translate' and bool(undone) and s6['state'] == 'offered',
+            'undoTitle': undo_title, 'menuTitle': menu_title, 'state': s6['state']}
+        app.call('key', key='z', modifiers=['cmd', 'shift'], route='app')
+        redone = wait_until(lambda: (lambda v: v if v['send'] == 'Send' else None)(texts(tab)), timeout=8, step=.2)
+        results['X6_redo'] = {'ok': bool(undone) and bool(redone) and st()['state'] == 'translated', 'state': st()['state']}
+        app.call('translate', action='revert')
+        state_is('offered')
+        wait_until(lambda: body(tab) == original, timeout=5, step=.1)
+
+        # X3: a same-document navigation keeps translated mode; the new paragraph is translated.
+        spa_tab = app.call('open', url=origin + '/fr-spa.html')['id']
+        app.call('wait', tab=spa_tab)
+        state_is('offered')
+        app.call('translate', action='translate')
+        state_is('translated')
+        added = wait_until(lambda: app.eval(spa_tab, "(() => { const p = document.getElementById('added'); return p && !/paragraphe/.test(p.textContent) ? p.textContent : null })()"),
+                           timeout=10, step=.2)
+        s3 = st()
+        results['X3_same_document'] = {'ok': bool(added) and 'paragraph' in (added or '') and s3['state'] == 'translated'
+            and app.eval(spa_tab, 'location.search') == '?vue=2', 'added': added, 'state': s3['state']}
+
+        # Q12: a new page of the same host in this tab translates by itself until Show Original.
+        app.call('navigate', tab=spa_tab, url=origin + '/fr.html')
+        app.call('wait', tab=spa_tab)
+        auto = wait_until(lambda: (lambda v: v if v and v.startswith('This is') else None)(
+            app.eval(spa_tab, "document.getElementById('p1') && document.getElementById('p1').textContent")), timeout=15, step=.2)
+        sq = st()
+        results['X3_same_host_auto_translate'] = {'ok': bool(auto) and sq['state'] == 'translated' and sq['sticky'] == '127.0.0.1', 'p1': auto, 'state': sq['state']}
+        app.call('translate', action='revert')
+        state_is('offered')
+
+        # X4: Never Translate This Site hides the offer; a reload offers nothing; Settings reset brings it back.
+        app.call('translate', action='never')
+        hidden = wait_until(lambda: (lambda s: s if s['state'] == 'idle' and not s['button']['shown'] else None)(st()), timeout=5, step=.1)
+        hosts = app.call('defaults', key=hosts_key)
+        app.call('navigate', tab=spa_tab, url=origin + '/fr.html?again=1')
+        app.call('wait', tab=spa_tab)
+        probed = wait_until(lambda: (lambda s: s if s['probedDocument'] == s.get('document') else None)(st()), timeout=10, step=.1)
+        time.sleep(1)
+        after_reload = st()
+        reset = app.call('translate', action='reset')
+        app.call('navigate', tab=spa_tab, url=origin + '/fr.html?again=2')
+        app.call('wait', tab=spa_tab)
+        again = state_is('offered')
+        results['X4_never_and_reset'] = {'ok': bool(hidden) and hosts == ['127.0.0.1'] and bool(probed) and after_reload['state'] == 'idle'
+            and not after_reload['button']['shown'] and reset['neverTranslateHosts'] == [] and bool(again),
+            'hosts': hosts, 'afterReload': after_reload['state'], 'reset': reset, 'again': bool(again)}
+
+        # Review r2 rows. The runtime stays installed (inactive) in the page's main world after Show
+        # Original (Blocked on P7), so the page can drive it directly like the shell does.
+        app.call('navigate', tab=spa_tab, url=origin + '/fr.html?r2=1')
+        app.call('wait', tab=spa_tab)
+        state_is('offered')
+        app.call('translate', action='translate')
+        state_is('translated')
+        wait_until(lambda: (lambda v: v if v['send'] == 'Send' else None)(texts(spa_tab)), timeout=15, step=.2)
+        # Page-owned structure: the page replaces #p2's translated children; Show Original keeps
+        # the page's new content and does not bring the old text and <b> back.
+        app.eval(spa_tab, "document.getElementById('p2').replaceChildren(document.createTextNode('Nouveau contenu de la page.')); true")
+        time.sleep(1)   # the mutation debounce (300 ms) queues and translates the new text
+        app.call('translate', action='revert')
+        state_is('offered')
+        p2_after = wait_until(lambda: (lambda v: v if v == 'Nouveau contenu de la page.' else None)(
+            app.eval(spa_tab, "document.getElementById('p2').innerHTML")), timeout=5, step=.1) or app.eval(spa_tab, "document.getElementById('p2').innerHTML")
+        p1_after = app.eval(spa_tab, "document.getElementById('p1').textContent")
+        results['X2_revert_keeps_page_structure'] = {'ok': p2_after == 'Nouveau contenu de la page.' and p1_after.startswith('Ceci est'),
+            'p2': p2_after, 'p1': p1_after}
+        # A result for text the page changed while its batch was out is dropped.
+        stale = app.eval(spa_tab, '''(async () => {
+          const t = window.__openTranslate; t.start();
+          const b = await t.nextBatch();
+          const unit = b.units.find((u) => u.text.startsWith('Ceci est'));
+          document.getElementById('p1').firstChild.data = 'Texte changé par la page.';
+          const r = t.apply(b.id, b.units.map((u) => 'TRANSLATED ' + u.text));
+          const out = { p1: document.getElementById('p1').textContent, title: document.getElementById('title').textContent,
+            hadUnit: !!unit, applied: r.applied, units: b.units.length };
+          t.restore();
+          return out; })()''')
+        results['X_stale_result_dropped'] = {'ok': stale['hadUnit'] and stale['p1'] == 'Texte changé par la page.'
+            and stale['title'].startswith('TRANSLATED') and stale['applied'] == stale['units'] - 1, 'result': stale}
+        # <html translate="no"> opts the whole page out: translating changes no text. (The fixture's
+        # name must not contain "translate": X5's request filter blocks those URLs.)
+        app.call('navigate', tab=spa_tab, url=origin + '/fr-optout.html')
+        app.call('wait', tab=spa_tab)
+        on_nt = wait_until(lambda: app.eval(spa_tab, "location.pathname === '/fr-optout.html' && document.readyState === 'complete' || null"),
+                           timeout=10, step=.1)
+        before_nt = app.eval(spa_tab, 'document.body.innerHTML')
+        nt_state = (state_is('offered', timeout=5) or st())['state']
+        if nt_state == 'offered':
+            app.call('translate', action='translate')
+            state_is('translated')
+            time.sleep(1)
+        after_nt = app.eval(spa_tab, 'document.body.innerHTML')
+        results['X_root_notranslate'] = {'ok': bool(on_nt) and before_nt == after_nt and 'Ceci est' in after_nt, 'state': nt_state,
+            'equal': before_nt == after_nt, 'before': before_nt[:300], 'after': after_nt[:300], 'navigated': bool(on_nt)}
+        if st()['state'] in ('translated', 'translating'):
+            app.call('translate', action='revert')
+            state_is('offered')
+        # A page that finishes loading while its window is minimized offers once the window is back.
+        app.call('menu-perform', id='minimize-window')
+        mini = state_when(app, lambda w: w['miniaturized'], timeout=5, step=.1)
+        app.call('navigate', tab=spa_tab, url=origin + '/fr.html?minimized=1')
+        app.call('wait', tab=spa_tab)
+        wait_until(lambda: app.eval(spa_tab, "location.search === '?minimized=1' && document.readyState === 'complete' || null"), timeout=10, step=.1)
+        time.sleep(1)
+        while_hidden = st()
+        app.call('window-deminiaturize')
+        state_when(app, lambda w: not w['miniaturized'], timeout=5, step=.1)
+        shown = state_is('offered', timeout=10)
+        results['X_offer_after_minimized_load'] = {'ok': bool(mini) and while_hidden['state'] == 'idle'
+            and while_hidden['probedDocument'] != while_hidden.get('document') and bool(shown),
+            'hidden': {k: while_hidden.get(k) for k in ('state', 'probedDocument', 'document')}, 'offered': bool(shown)}
+        ws2 = app.call('window-state')
+        app.call('window-focus', id=ws2['id'], activate=True)
+
+        # Idle: with the page translated and nothing changing, the shell waits on one promise
+        # (no timer, no polling): the batch count does not move for 2 s.
+        app.call('translate', action='translate')
+        state_is('translated')
+        time.sleep(1)
+        b0 = st()['pulls']; time.sleep(2); b1 = st()['pulls']
+        results['X_idle_no_polling'] = {'ok': b0 == b1 and st()['loopRunning'], 'pulls': [b0, b1]}
+        shot(app, 'page-translate-translated.png')
+        app.call('translate', action='revert')
+
+        # X1 on Apple's backend: only when French → English is installed (no download prompt in e2e).
+        availability = app.call('translate', action='availability', source='fr', target='en')['status']
+        if availability != 'installed':
+            results['X1_apple_backend'] = {'status': 'BLOCKED', 'reason': 'U-X1: French → English is %s, not installed on this Mac' % availability}
+    finally:
+        try:
+            app.call('filter', block=[])
+            for key, value in saved.items():
+                app.call('defaults', key=key, value=value)
+        except Exception:
+            pass
+        app.quit()
+        server.shutdown()
+
+    if availability == 'installed':
+        server, origin2 = _static_server(PAGE_FIXTURES)
+        apple = factory(urls=(origin2 + '/fr.html',), fresh=True)
+        try:
+            tab = apple.call('tabs')[0]['id']
+            apple.call('wait', tab=tab)
+            wait_until(lambda: apple.call('translate', action='state')['state'] == 'offered', timeout=15, step=.1)
+            apple.call('translate', action='translate')
+            done = wait_until(lambda: apple.call('translate', action='state')['state'] == 'translated', timeout=60, step=.2)
+            text = apple.eval(tab, 'document.body.innerText')
+            lang = apple.call('translate', action='detect', text=text)
+            results['X1_apple_backend'] = {'ok': bool(done) and lang['language'] != 'fr', 'detected': lang}
+        finally:
+            apple.quit()
+            server.shutdown()
+
+
+def page_checks(factory, results, tmp):
+    """page-platform §8.3 `--only page`: one suite, one row group per feature."""
+    capture_checks(factory, results, tmp)
+    page_engine_checks(factory, results, tmp)
+    page_translate_checks(factory, results, tmp)
+
+
 def main():
     global _ACTIVE_FOCUS_TRACKER
     ap = argparse.ArgumentParser()
@@ -8072,7 +8790,8 @@ def main():
     ap.add_argument("--engine-fingerprint-only", action="store_true", help="verify built engine artifacts and exit without launching Open")
     ap.add_argument("--extensions", default=os.path.join(ROOT, ".re", "ext", "unpacked"))
     ap.add_argument("--only", choices=["shell", "extensions", "features", "measure", "tabstrip", "window", "sidebar", "peek",
-                                       "commandbar", "app-actions", "actions", "profiles", "sidebar-completion", "toolbar", "numbering", "media", "relaunch", "page"])
+                                       "commandbar", "app-actions", "actions", "profiles", "sidebar-completion", "toolbar", "numbering", "media", "relaunch", "page",
+                                       "sleep"])
     ap.add_argument("--window-chrome-only", action="store_true", help="run only the window-chrome follow-up flows in the window suite")
     ap.add_argument("--keep", action="store_true",
                     help="keep this run's data root, cache root and scratch folder (paths printed at the end)")
@@ -8122,6 +8841,10 @@ def main():
         with open(rules_path, "w") as f:
             json.dump(MEDIA_RULES, f)
         extra += ["--pip-site-rules=" + rules_path]
+    if opts.only == "sleep" and opts.style == "chrome":
+        # chrome.tabs.discard row: the committed tabs probe only.
+        extra += ["--load-extension=" + os.path.join(ROOT, "tools", "e2e", "fixtures", "tabs-probe"),
+                  "--disable-features=DisableLoadExtensionCommandLineSwitch"]
     if opts.only == "extensions":
         dirs = [os.path.join(opts.extensions, d) for d in ("ublock-lite", "darkreader", "1password", "bitwarden")]
         if not all(os.path.isdir(d) for d in dirs):
@@ -8249,14 +8972,16 @@ def main():
             folder_peek_checks(factory, results[opts.only], tmp)
         elif opts.only == "page":
             results["page"] = CheckedResults(tracker)
-            capture_checks(factory, results["page"], tmp)
-            page_engine_checks(factory, results["page"], tmp)
+            page_checks(factory, results["page"], tmp)
         elif opts.only in ("toolbar", "numbering"):
             results[opts.only] = CheckedResults(tracker)
             (toolbar_checks if opts.only == "toolbar" else numbering_checks)(factory, results[opts.only], tmp)
         elif opts.only == "media":
             results["media"] = CheckedResults(tracker)
             media_checks(factory, results["media"], tmp)
+        elif opts.only == "sleep":
+            results["sleep"] = CheckedResults(tracker)
+            sleep_checks(factory, results["sleep"], tmp, opts.style)
         elif opts.only == "window":
             results["window"] = CheckedResults(tracker)
             window_checks(factory, results["window"], tmp, opts.config, chrome_only=opts.window_chrome_only)
@@ -8339,14 +9064,14 @@ def main():
                                     else opts.config.lower()))
     with open(os.path.join(OUT, name), "w") as f:
         json.dump(results, f, indent=2, sort_keys=True)
-    for group in ("shell", "extensions", "features", "measure", "tabstrip", "window", "sidebar", "peek", "commandbar", "app-actions", "actions", "profiles", "sidebar-completion", "toolbar", "numbering", "media", "relaunch", "page"):
+    for group in ("shell", "extensions", "features", "measure", "tabstrip", "window", "sidebar", "peek", "commandbar", "app-actions", "actions", "profiles", "sidebar-completion", "toolbar", "numbering", "media", "relaunch", "page", "sleep"):
         for k, v in results.get(group, {}).items():
             if isinstance(v, dict) and "ok" in v:
                 print("%-24s %s" % (k, "PASS" if v.get("ok") else "FAIL"))
             elif isinstance(v, dict) and v.get("status") in ("SKIP", "BLOCKED", "INTERRUPTED", "DEFERRED"):
                 print("%-24s %s: %s" % (k, v["status"], v.get("reason", "")))
     print("wrote", os.path.join(OUT, name))
-    failures = [k for group in ("shell", "extensions", "features", "measure", "tabstrip", "window", "sidebar", "peek", "commandbar", "app-actions", "actions", "sidebar-completion", "toolbar", "numbering", "media", "relaunch", "page")
+    failures = [k for group in ("shell", "extensions", "features", "measure", "tabstrip", "window", "sidebar", "peek", "commandbar", "app-actions", "actions", "sidebar-completion", "toolbar", "numbering", "media", "relaunch", "page", "sleep")
                 for k, v in results.get(group, {}).items() if isinstance(v, dict) and v.get("ok") is False]
     if failures or not results["cleanup"]["ok"]:
         sys.exit(1)

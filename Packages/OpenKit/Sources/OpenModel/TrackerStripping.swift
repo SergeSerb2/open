@@ -4,10 +4,6 @@ import Foundation
 /// `docs/re/commandbar-completion.md`): the parameter names below are facts read from Arc's static arrays;
 /// the logic follows its cleaner (`FUN_100826084` in the shared Ghidra project).
 public enum TrackerStripping {
-    /// Arc's toasts after Copy URL (main binary strings): something removed, or the URL as it was.
-    public static let cleanToast = "Copied a clean link without trackers"
-    public static let plainToast = "Copied Current URL"
-
     /// Query item names that start with any of these are removed (case-sensitive).
     static let prefixes: [String] = [
         "_bta_c", "_bta_tid", "_ga", "_hsenc", "_hsmi", "_ke", "_openstat", "dm_i", "ef_id", "epik", "gclsrc",
@@ -46,22 +42,40 @@ public enum TrackerStripping {
     /// The URL without tracking parameters, and whether anything was removed. A query that uses `;`
     /// separators is left alone, as is a URL with no query (except an Amazon `/ref=…` path segment).
     public static func clean(_ url: URL) -> (url: URL, changed: Bool) {
-        guard var components = URLComponents(url: url, resolvingAgainstBaseURL: false) else { return (url, false) }
-        var items = components.queryItems ?? []
+        let result = strip(url)
+        return (result.url, !result.removed.isEmpty)
+    }
+
+    /// The URL without tracking parameters and the removed names in the order they were removed
+    /// (an Amazon `ref=…` path segment is reported as that segment). Kept items keep their original
+    /// percent-encoding (`%2B` stays `%2B`); names compare decoded. Nothing removed: the input URL.
+    public static func strip(_ url: URL) -> (url: URL, removed: [String]) {
+        guard var components = URLComponents(url: url, resolvingAgainstBaseURL: false) else { return (url, []) }
+        var items = components.percentEncodedQueryItems ?? []
         let rules = sites.filter { site in site.domains.contains { host(of: url, matches: $0) } }
-        if items.isEmpty && !rules.contains(where: \.dropsRefPathSegment) { return (url, false) }
-        if components.percentEncodedQuery?.contains(";") == true { return (url, false) }
+        if items.isEmpty && !rules.contains(where: \.dropsRefPathSegment) { return (url, []) }
+        if components.percentEncodedQuery?.contains(";") == true { return (url, []) }
+        var removed: [String] = []
+        func drop(where test: (String) -> Bool) {
+            items.removeAll { item in
+                let name = item.name.removingPercentEncoding ?? item.name
+                guard test(name) else { return false }
+                removed.append(name); return true
+            }
+        }
         for site in rules {
-            items.removeAll { item in site.names.contains(item.name) || site.prefixes.contains { item.name.hasPrefix($0) } }
+            drop { name in site.names.contains(name) || site.prefixes.contains { name.hasPrefix($0) } }
             if site.dropsRefPathSegment, let last = url.pathComponents.last, last.hasPrefix("ref=") {
                 var path = url.deletingLastPathComponent().path(percentEncoded: true)
                 if path.hasSuffix("/") && path.count > 1 { path.removeLast() }
                 components.percentEncodedPath = path
+                removed.append(last)
             }
         }
-        items.removeAll { item in prefixes.contains { item.name.hasPrefix($0) } || names.contains(item.name) }
-        components.queryItems = items.isEmpty ? nil : items
-        guard let cleaned = components.url else { return (url, false) }
-        return (cleaned, cleaned.absoluteString != url.absoluteString)
+        drop { name in prefixes.contains { name.hasPrefix($0) } || names.contains(name) }
+        guard !removed.isEmpty else { return (url, []) }
+        components.percentEncodedQueryItems = items.isEmpty ? nil : items
+        guard let cleaned = components.url else { return (url, []) }
+        return (cleaned, removed)
     }
 }

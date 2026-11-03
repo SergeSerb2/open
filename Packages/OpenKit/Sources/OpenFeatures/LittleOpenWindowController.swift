@@ -26,6 +26,11 @@ public final class LittleOpenWindowController: NSWindowController, NSWindowDeleg
     private let banner = NSView()
     private let bannerLabel = NSTextField(labelWithString: "Open in Space keeps this page in your browser.")
     private var bannerButton: ActionButton!
+    /// Toasts at the top-right of the page view (page-platform D-1, §4.1.1).
+    public let toastOverlay = ToastOverlayView()
+    public private(set) lazy var toasts = ToastCenter(overlay: toastOverlay) {
+        .defaultTheme(system: NSApp.effectiveAppearance.bestMatch(from: [.aqua, .darkAqua]) == .darkAqua ? .dark : .light)
+    }
     var offscreenKey = false
     var isKeyForReuse: Bool { window?.isKeyWindow == true || offscreenKey }
     public var currentURL: URL? { container.host(for: session.tab.id)?.currentURL }
@@ -57,12 +62,14 @@ public final class LittleOpenWindowController: NSWindowController, NSWindowDeleg
             self?.defaults.set(true, forKey: "open.links.littleOpenNUXSeen"); self?.banner.isHidden = true; self?.root.needsLayout = true
         }; banner.addSubview(bannerButton); root.addSubview(banner)
         banner.isHidden = defaults.bool(forKey: "open.links.littleOpenNUXSeen")
+        root.addSubview(toastOverlay)
         root.onLayout = { [weak self] in self?.layoutContent() }
         configureContainer(); layoutContent()
     }
     @available(*, unavailable) required init?(coder: NSCoder) { fatalError() }
     private func configureContainer() {
         container.tabProvider = { [weak session] id in session?.tab.id == id ? session?.tab : nil }
+        container.toasts = toasts
         container.onFocusedMetadata = { [weak self] title in
             guard let self else { return }; self.window?.title = self.session.tab.url.scheme == "about" ? "Little Open" : title
             self.urlField.stringValue = self.session.tab.url.scheme == "about" ? "" : self.session.tab.url.absoluteString
@@ -84,6 +91,7 @@ public final class LittleOpenWindowController: NSWindowController, NSWindowDeleg
         bannerLabel.frame = CGRect(x: 8, y: 6, width: max(0, banner.bounds.width - 55), height: 18)
         bannerLabel.font = .systemFont(ofSize: 12); bannerButton.frame = CGRect(x: banner.bounds.width - 35, y: 2, width: 30, height: 26)
         container.frame = CGRect(x: 10, y: 10, width: max(0, w - 20), height: max(0, h - 60 - bannerHeight))
+        if toastOverlay.frame != container.frame { toastOverlay.frame = container.frame }
     }
     /// A fresh container on profile switch prevents cache reuse across browser profiles.
     func replaceProfile() {

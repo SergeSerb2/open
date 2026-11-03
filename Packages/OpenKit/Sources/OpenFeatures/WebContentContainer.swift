@@ -106,11 +106,15 @@ public final class WebContentContainer: NSView {
     public var onPaneClose: ((ItemID) -> Void)?
     public var onPaneMenu: ((ItemID, NSView) -> Void)?
     public var onURLField: (() -> Void)?
-    public var onToast: ((String) -> Void)?
+    /// The window's toasts (the pane bar's Copy button says what it copied).
+    public weak var toasts: ToastCenter?
     public var onTabURLChanged: ((ItemID, URL) -> Void)?
     public var onFocusedMetadata: ((String) -> Void)?
     public var onFractionsCommitted: (([Double]) -> Void)?
     public var onDrop: ((ItemID, SplitDropOverlayView.Zone, Int?) -> Bool)?
+    /// True for a hidden host the sleep policy must keep (keep-alive site, audio, capture,
+    /// notifications, DevTools, downloads). The hidden-host cap counts only the others.
+    public var retainsHiddenHost: ((ItemID) -> Bool)?
     private var dividers: [SplitDividerView] = []
     public let dropOverlay = SplitDropOverlayView()
     private var monitor: Any?
@@ -221,7 +225,7 @@ public final class WebContentContainer: NSView {
             guard let tab = tabProvider(slot.tabID) else { continue }; let id = slot.tabID
             slot.configure(tab: tab, host: cache[id], split: ids.count > 1, toolbar: showsToolbar, fullURL: showsFullURL, focused: focused == id, style: style,
                            close: { [weak self] in self?.onPaneClose?(id) }, menu: { [weak self] v in self?.onPaneMenu?(id, v) },
-                           url: { [weak self] in self?.onURLField?() }, copy: { [weak self] changed in self?.onToast?(changed ? TrackerStripping.cleanToast : TrackerStripping.plainToast) },
+                           url: { [weak self] in self?.onURLField?() }, copy: { [weak self] changed in self?.toasts?.show(ToastContent(title: changed ? URLCleaner.cleanedTitle : URLCleaner.plainTitle)) },
                            toolbarMenu: { [weak self] in self?.onToolbarMenu?() })
         }
     }
@@ -277,7 +281,11 @@ public final class WebContentContainer: NSView {
         if !previewHosts.isEmpty { onReturnPreviewHost?() }
         for id in Set(cache.keys).union(previewHosts.keys) { closeHost(for: id) }
     }
-    private func trimCache() { while hiddenLRU.count > Self.maxCachedHiddenHosts { closeHost(for: hiddenLRU[0]) } }
+    private func trimCache() {
+        guard hiddenLRU.count > Self.maxCachedHiddenHosts else { return }
+        var unprotected = hiddenLRU.filter { retainsHiddenHost?($0) != true }
+        while unprotected.count > Self.maxCachedHiddenHosts { closeHost(for: unprotected.removeFirst()) }
+    }
     public func focus(tabID: ItemID) {
         guard ids.contains(tabID) else { return }; focused = tabID; updateSlots(); cache[tabID]?.focus(); metadataChanged(tabID)
     }
