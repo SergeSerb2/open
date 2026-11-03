@@ -89,6 +89,7 @@ Arguments are `key=value`; values that parse as JSON are sent as JSON.
 | `navigate` / `back` | `tab`, `url` | Load a URL / go back |
 | `wait` | `tab`, `timeout` | Wait until the page is live and not loading |
 | `eval` | `tab`, `js` | Run JavaScript in the page's main world (through the OpenWeb `WebContent` protocol); promises are awaited |
+| `engine-sleep` | `tab`, `op` (`state`, `hide`, `show`, `freeze`, `unfreeze`, `discard`, `capture`) | Test hook for the engine tab-sleep API (docs/engine-api.md, "Tab sleeping"): runs one call on the page and returns `ok` (freeze/unfreeze/discard result), `frozen`, `discarded`, `unloadHandlers`, `chromeTabId`, `identifier`, `live`; `capture` adds `history` (entry count, current index, page state, OPNH bytes, title, URLs, `roundTrip` through `OENavigationHistory(container:)`). It does not change the model's sleep phase |
 | `devtools` | `tab`, `method`, `params` | Raw DevTools protocol command; events arrive in `events` |
 | `click` | `tab`, `selector` or `text` | Click an element with DevTools input events (a real user gesture inside the page) |
 | `rightclick` | `tab`, `x`, `y` | Right click in the page |
@@ -166,9 +167,13 @@ Arguments are `key=value`; values that parse as JSON are sent as JSON.
 /usr/bin/lockf /tmp/open-onscreen-e2e.lock python3 tools/e2e/engine_e2e.py --only extensions --style chrome
 /usr/bin/lockf /tmp/open-onscreen-e2e.lock python3 tools/e2e/engine_e2e.py --only tabstrip --style chrome     # fork patch P1: chrome.tabs sees Open's tabs
 /usr/bin/lockf /tmp/open-onscreen-e2e.lock python3 tools/e2e/engine_e2e.py --only actions --style chrome      # fork patch P2: toolbar actions and popups
+/usr/bin/lockf /tmp/open-onscreen-e2e.lock python3 tools/e2e/engine_e2e.py --only media --style chrome        # media-pip §8.4: mini players, auto-PiP, Now Playing, sleep feed
 OPEN_AUTOMATION=1 ~/Library/Caches/OpenRE/scripts/heavy.sh nice -n 10 tools/build.sh Release
 /usr/bin/lockf /tmp/open-onscreen-e2e.lock python3 tools/e2e/engine_e2e.py --only measure --config Release    # launch, memory, idle CPU
+/usr/bin/lockf /tmp/open-onscreen-e2e.lock python3 tools/e2e/engine_e2e.py --only relaunch --config Release   # N same-profile relaunches (OPEN_E2E_RELAUNCH_COUNT, default 20)
 ```
+
+The `relaunch` suite (section 8 item 14) builds one profile with three local file tabs, then relaunches it `OPEN_E2E_RELAUNCH_COUNT` times (default 20). Each launch must reach automation, restore the same tabs, load only the selected tab, quit with no owned process left, and write no `No zone found` allocator FATAL to its launch log. The suite also fails on any new `Open*`/`cefsimple*` report in `~/Library/Logs/DiagnosticReports`. It is the regression check for the PartitionAlloc launch-zone race (`docs/engine-fork.md`, "PartitionAlloc and the launch race").
 
 Every run is isolated, because several agents run the harness at once: it gets its own data root `~/Library/Application Support/Open-E2E-<suite>-<style>-<pid>-<random>`, the matching Chromium cache root `~/Library/Caches/<same name>` (Chromium's rule for roots under Application Support), and a scratch folder in the system temp folder. All three are deleted when the run ends, also after `timeout` or Ctrl-C; `--keep` keeps them and prints their paths. A run also deletes the folders of earlier runs whose process is gone. No folder name is shared between runs. Each suite writes `docs/engine-spike/results-*.json` plus screenshots. `tabs` reports `page.chromeTabId` and `page.chromeWindowId` (the `chrome.tabs`/`chrome.windows` ids of a hosted tab, else -1). The `tabstrip` suite loads `tools/e2e/fixtures/tabs-probe` (records tab events, sets a badge) and Bitwarden. Extensions come from `.re/ext/unpacked/{ublock-lite,darkreader,1password,bitwarden}` (CRX files from the Chrome Web Store, unpacked with `tools/crx-unpack.py`, which keeps the store ID).
 
@@ -367,6 +372,23 @@ ordering check queues actual Save/background work with the automation-only
 `OPEN_AUTOMATION_ASYNC_TASK_DELAY_MS` scheduling delay, then quits. Cancellation
 must clear work and close hosts before the actual engine shutdown boundary. The
 flag delays scheduling; it does not replace engine responses.
+
+## Media (media-pip Step 6)
+
+Commands in `App/Automation/AutomationMedia.swift`. `tab` is a tab UUID.
+
+| Command | Args | Result |
+|---|---|---|
+| `media` | `tab` | The page's media session as the App sees it (`playback`, `controllable`, `hasVideo`, `hasAudio`, `largestVideoArea`, `pictureInPicture`, `pictureInPictureDisabled`, `actions`, `title`/`artist`/`album`, `duration`, `position`), `audible`, `muted` (engine), `modelMuted`, `capturing`, the store `source`, and the last auto-PiP `decision` (value and system-uptime time). |
+| `media-action` | `tab`, `action` (`play`, `pause`, `next`, `previous`, `toggle-mute`, `close`, `back-to-tab`, `pip`, `seek` + `value`, `volume` + `value`, `exit-pip` [+ `pause`]); or `action` `mute-all` / `unmute-all` without `tab` | Runs the same `MediaIntent` (or App command) path as the mini player and the command bar. |
+| `mini-players` | `window` (window id, default front) | `cards` in order (tab, kind, playback, pip, expanded, level, frame and shown buttons with frames in window coordinates, top-left origin), `expanded`, `stackHeight`, `displayed`, `pendingCollapse`. |
+| `media-click` | `window`, `tab`, `target` (`title`, `play`, `next`, `previous`, `volume`, `pip`, `close`, `favicon`, `microphone`, `camera`) | Clicks the real card control through `mouse` events built inside Open. Title-row targets hover the card first (`mouse` `hover`) and wait for the expanded stack. |
+| `pip` | — | Session `state` (`idle`, `requesting`, `active`, `minimized`, `closed` + `reason`), `tab`, `automatic`, `snoozed`, `requests`, `requestedAt`/`enteredAt` (system uptime), `now`, and the visible PiP windows (phase 1: Chromium's `NativeWidgetMacFramelessNSWindow`, number, frame, level). |
+| `pip-action` | `action` (`close`, `back-to-tab`) | Phase 1: the session paths that Chromium's own window's Close and Back to Tab end in. |
+| `now-playing` | — | `MPNowPlayingInfoCenter` title, artist, rate, elapsed, `playbackState`, and whether the remote play, pause, toggle, next and previous commands are enabled (read in-process; Chromium's system media controls own them). |
+| `sleep-visibility` | — | The media sleep feed (§4.10): `pictureInPicture`, `mediaControls`, the resulting `visible` set and window states, from `MediaCoordinator.visibility`. |
+
+The App accepts `--pip-site-rules=FILE` in Debug and automation builds; the `media` suite writes a rules file that disallows `blocked.localhost` and gives `inaudible.localhost` `activatesWhenInaudible` (Chromium maps `*.localhost` to the loopback server).
 
 ## Library Space Manager (App lane 1b)
 
@@ -640,3 +662,21 @@ This avoids queuing cancellation on GCD
 behind a nested tracking loop. The Profile observer is removed when the menu
 or browser window closes. The share check verifies the picker’s own query
 and close callbacks; it chooses no service.
+
+## Capture tool (page-platform Step 13)
+
+`--only page` runs the capture rows C1–C7 (page-platform §8.3) against
+`tools/e2e/fixtures/page-platform/` (served from a local port). Every step uses the
+real paths: the File menu item, own-window mouse events through
+`NSApplication.sendEvent` (the window's local monitors see them, as with real input),
+the real key path for Esc, and the result card's own buttons.
+
+| Command | Args | Does |
+|---|---|---|
+| `capture` | `mode` (`area`, `fullPage`, `portrait`), `rect` `[x, y, w, h]` in page points, `entry=drag`, `timeout` | Runs the File menu item. For `area` with `rect`, drags inside the overlay; without `rect`, returns with the overlay up (send `key key=escape` or `return`). `entry=drag` sends a Cmd+Shift press on the page, a 2.2 pt move (still held), then the drag, as the user would (§4.6.2). Waits for the pipeline; returns `steps` and `capture-state`. |
+| `capture-state` | — | `phase` (`idle`, `selecting`, `capturing`, `showing`), `overlayActive` (the swipe hook), `held`, counts (`completed`, `cancelled`, `replays`, `hintShows`), `entry`, `error`; `overlay` (frame, page frame, selection, anchor, size label, hint); `card` (frame, actions, Library line, note, scheduled lifetime, time left, `paused`, panel frame); `result` (kind, pixel size, `truncated`, saved row id, host, Save… file name). |
+| `capture-action` | `action` (`copy`, `save`, `share`, `library`, `retake`, `delete`, or `cancel`), or `hover` (bool) | Clicks that card button (`performClick`), or sets the card's hover state (the pointer pause), or cancels the overlay or card. |
+| `captures` | `probe` `[[x, y], …]` (≤ 64, image pixels), `index` | Rows of `State/captures.json` with file sizes and PNG pixel sizes; `probe` reads RGBA pixels of one row's PNG (default: the last). |
+
+The page context menu event (`policy contextMenu=record`) also lists `open` (Open's own
+items, "Capture" and "Capture Full Page") and `shown` (the whole menu as it would show).

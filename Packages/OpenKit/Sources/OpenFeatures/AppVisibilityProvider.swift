@@ -9,6 +9,9 @@ public final class AppVisibilityProvider: SleepVisibilityProviding {
     public var browserWindowControllers: [BrowserWindowController] = []
     public var littleOpenCoordinator: LittleOpenCoordinator?
     public var pipTabIDs: Set<ItemID> = []
+    /// Tabs of the mini players shown in visible windows, plus playing or paused sessions without
+    /// controls (media-pip §4.10). The App's MediaCoordinator feeds both sets.
+    public var mediaControlTabIDs: Set<ItemID> = []
     public weak var sleepController: SleepController?
     private let model: BrowserModel
     private var lastVisible: Set<ItemID> = []
@@ -33,7 +36,7 @@ public final class AppVisibilityProvider: SleepVisibilityProviding {
             if state == .visible, c.hasPeekController, c.peekController.isShown, let id = c.peekController.stack.last?.hostTabID { peek.insert(id) }
         }
         for s in littleOpenCoordinator?.sessions ?? [] where s.windowIsVisible { little.insert(s.tab.id) }
-        return SleepVisibilitySnapshot(windows: windows, peek: peek, littleOpen: little, splitPanes: [], pictureInPicture: pipTabIDs)
+        return SleepVisibilitySnapshot(windows: windows, peek: peek, littleOpen: little, splitPanes: [], pictureInPicture: pipTabIDs, mediaControls: mediaControlTabIDs)
     }
     public func visibilityChanged() {
         let visible = sleepVisibility().visibleTabIDs(in: model)

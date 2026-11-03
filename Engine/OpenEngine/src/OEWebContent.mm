@@ -1,5 +1,9 @@
 #import "OEClient.h"
 
+#import <ImageIO/ImageIO.h>
+
+#include <algorithm>
+
 #include "include/cef_parser.h"
 
 #pragma mark - OEWebContentConfiguration
@@ -55,6 +59,29 @@ class FaviconCallback : public CefDownloadImageCallback {
  private:
   void (^done_)(NSImage* _Nullable);
   IMPLEMENT_REFCOUNTING(FaviconCallback);
+};
+
+// Runs `done` once, on the main thread (the CEF UI thread).
+class OECompletionCallback : public CefCompletionCallback {
+ public:
+  explicit OECompletionCallback(void (^done)(void)) : done_([done copy]) {}
+  ~OECompletionCallback() override {
+    // Released unrun (the engine went away): still answer once.
+    if (void (^done)(void) = done_) {
+      dispatch_async(dispatch_get_main_queue(), done);
+    }
+  }
+  void OnComplete() override {
+    void (^done)(void) = done_;
+    done_ = nil;
+    if (done) {
+      done();
+    }
+  }
+
+ private:
+  void (^done_)(void);
+  IMPLEMENT_REFCOUNTING(OECompletionCallback);
 };
 
 class PdfCallback : public CefPdfPrintCallback {
@@ -175,6 +202,60 @@ static NSView* OEParkingView() {
 
 @end
 
+#pragma mark - Page handler (cef_open_page.h)
+
+@interface OEWebContent (OEPageEvents)
+- (void)oe_selectionChanged:(BOOL)hasSelection;
+- (void)oe_historySwipe:(int)phase direction:(int)direction progress:(double)progress;
+@end
+
+// Selection changes and history swipes of one page (page-platform EP-1, EP-3).
+class OEPageHandler : public CefOpenPageHandler {
+ public:
+  explicit OEPageHandler(OEWebContent* content) : content_(content) {}
+  void OnSelectionChanged(CefRefPtr<CefBrowser> browser,
+                          bool has_selection) override {
+    [content_ oe_selectionChanged:has_selection];
+  }
+  void OnHistorySwipe(CefRefPtr<CefBrowser> browser,
+                      int phase,
+                      int direction,
+                      double progress) override {
+    [content_ oe_historySwipe:phase direction:direction progress:progress];
+  }
+
+ private:
+  OEWebContent* __weak content_;
+  IMPLEMENT_REFCOUNTING(OEPageHandler);
+};
+
+// Runs a selection request's completion exactly once (also when the engine
+// drops the callback unrun).
+class OESelectionCallback : public CefSelectionCallback {
+ public:
+  explicit OESelectionCallback(void (^done)(NSString*, NSURL*))
+      : done_([done copy]) {}
+  ~OESelectionCallback() override {
+    if (void (^done)(NSString*, NSURL*) = done_) {
+      dispatch_async(dispatch_get_main_queue(), ^{
+        done(@"", nil);
+      });
+    }
+  }
+  void OnSelection(const CefString& text, const CefString& link) override {
+    void (^done)(NSString*, NSURL*) = done_;
+    done_ = nil;
+    if (!done) {
+      return;
+    }
+    done(OEString(text) ?: @"", link.empty() ? nil : OEURL(link));
+  }
+
+ private:
+  void (^done_)(NSString*, NSURL*);
+  IMPLEMENT_REFCOUNTING(OESelectionCallback);
+};
+
 #pragma mark - OEWebContent
 
 typedef void (^OEDevToolsCompletion)(NSDictionary* _Nullable, NSError* _Nullable);
@@ -199,9 +280,12 @@ typedef void (^OEDevToolsCompletion)(NSDictionary* _Nullable, NSError* _Nullable
   CefRefPtr<CefRegistration> _devToolsRegistration;
   NSMutableDictionary<NSNumber*, OEDevToolsCompletion>* _devToolsCallbacks;
   int _nextDevToolsId;
-  NSMutableSet<NSString*>* _audibleFrames;
   NSString* _lastFindString;
   BOOL _autoResize;
+  // Page API (cef_open_page.h): selection flag and swipe options.
+  BOOL _hasSelection;
+  BOOL _historySwipeEnabled;
+  BOOL _drawsEngineHistorySwipeOverlay;
   NSSize _autoResizeMin;
   NSSize _autoResizeMax;
   // Keeps this object (and so the parent view) alive from -close until
@@ -212,6 +296,11 @@ typedef void (^OEDevToolsCompletion)(NSDictionary* _Nullable, NSError* _Nullable
   // dereferences the parent NSView then (a freed view crashed in
   // CefBrowserPlatformDelegateNativeMac::CreateHostWindow).
   OEWebContent* _creatingSelf;
+  // Tab sleeping: the history to install when the page is created, and the
+  // URL to load if that fails.
+  OENavigationHistory* _restoreHistory;
+  NSURL* _restoreFallbackURL;
+  OENavigationHistoryRestore _navigationHistoryRestore;
 }
 
 - (instancetype)initWithConfiguration:(OEWebContentConfiguration*)configuration
@@ -222,7 +311,8 @@ typedef void (^OEDevToolsCompletion)(NSDictionary* _Nullable, NSError* _Nullable
     _title = @"";
     _statusText = @"";
     _devToolsCallbacks = [NSMutableDictionary dictionary];
-    _audibleFrames = [NSMutableSet set];
+    _historySwipeEnabled = YES;
+    _drawsEngineHistorySwipeOverlay = YES;
     _client = OECreateClient(self);
     _view = [[OEWebContentView alloc] initWithFrame:NSMakeRect(0, 0, 800, 600)];
     _view.content = self;
@@ -352,6 +442,9 @@ typedef void (^OEDevToolsCompletion)(NSDictionary* _Nullable, NSError* _Nullable
       CefColorSetARGB(255, (int)(bg.redComponent * 255),
                       (int)(bg.greenComponent * 255),
                       (int)(bg.blueComponent * 255));
+  // Tab sleeping: no renderer until the restored page is shown (fork patch
+  // 0105; hosted tabs and Alloy pages).
+  settings.no_renderer = _restoreHistory ? 1 : 0;
   return settings;
 }
 
@@ -385,7 +478,10 @@ typedef void (^OEDevToolsCompletion)(NSDictionary* _Nullable, NSError* _Nullable
     _creating = NO;
     return;
   }
-  CefString url = OECef(_pendingURL.absoluteString ?: @"about:blank");
+  // A restored page starts with no URL: the history comes first.
+  CefString url = _restoreHistory
+                      ? CefString()
+                      : OECef(_pendingURL.absoluteString ?: @"about:blank");
   CefRefPtr<CefRequestContext> context = self.context.oe_requestContext;
   if (_configuration.runtimeStyle == OERuntimeStyleChrome &&
       [self oe_createHostedTab:url]) {
@@ -396,6 +492,11 @@ typedef void (^OEDevToolsCompletion)(NSDictionary* _Nullable, NSError* _Nullable
     // A tab whose context gets no hidden Chrome window (CefTabStrip::Create
     // refused it) stays Alloy rather than opening its own Chrome window.
     _configuration.runtimeStyle = OERuntimeStyleAlloy;
+  }
+  if (_configuration.runtimeStyle == OERuntimeStyleChrome && _restoreHistory) {
+    // A Views-window Chrome page navigates at creation: no restore there.
+    [self oe_restoreFailed];
+    url = OECef(_pendingURL.absoluteString ?: @"about:blank");
   }
   if (_configuration.runtimeStyle == OERuntimeStyleChrome) {
     _chromeHost = OECreateChromeHostWindow(
@@ -493,6 +594,10 @@ typedef void (^OEDevToolsCompletion)(NSDictionary* _Nullable, NSError* _Nullable
   _browser = browser;
   _creating = NO;
   _awaitingPopup = NO;
+  if (_restoreHistory) {
+    // Before the page can be shown (hosted tabs: still inside CreateTab).
+    [self oe_restoreHistoryIntoBrowser:browser];
+  }
   // Released at the end of this method; -close or the parking path in
   // -dealloc take over from here.
   OEWebContent* keepAlive = _creatingSelf;
@@ -507,6 +612,13 @@ typedef void (^OEDevToolsCompletion)(NSDictionary* _Nullable, NSError* _Nullable
   }
   if (_muted) {
     browser->GetHost()->SetAudioMuted(true);
+  }
+  [self oe_attachMedia:browser];
+  // Selection changes and history swipe events (page-platform EP-1, EP-3).
+  CefSetOpenPageHandler(browser, new OEPageHandler(self));
+  if (!_historySwipeEnabled || !_drawsEngineHistorySwipeOverlay) {
+    CefSetHistorySwipeOptions(browser, _historySwipeEnabled,
+                              _drawsEngineHistorySwipeOverlay);
   }
   if (_autoResize) {
     [self enableAutoResizeWithMinimumSize:_autoResizeMin
@@ -534,6 +646,7 @@ typedef void (^OEDevToolsCompletion)(NSDictionary* _Nullable, NSError* _Nullable
 
 - (void)oe_browserClosed {
   _browser = nullptr;
+  _hasSelection = NO;
   _devToolsRegistration = nullptr;
   for (OEDevToolsCompletion done in _devToolsCallbacks.allValues) {
     done(nil, [NSError errorWithDomain:OEErrorDomain
@@ -544,6 +657,7 @@ typedef void (^OEDevToolsCompletion)(NSDictionary* _Nullable, NSError* _Nullable
   _chromeHost = nullptr;
   _adoptedBrowserView = nullptr;
   _closeRequested = YES;
+  [self oe_resetMediaDetaching:YES];
   [[OEEngine shared] oe_unregisterWebContent:self];
   [self oe_notify:OEWebContentChangeLive];
   _closingSelf = nil;
@@ -657,7 +771,6 @@ typedef void (^OEDevToolsCompletion)(NSDictionary* _Nullable, NSError* _Nullable
     return;
   }
   _URL = [url copy];
-  [_audibleFrames removeAllObjects];
   [self oe_notify:OEWebContentChangeURL];
 }
 
@@ -721,15 +834,9 @@ typedef void (^OEDevToolsCompletion)(NSDictionary* _Nullable, NSError* _Nullable
   [self oe_notify:OEWebContentChangeFullscreen];
 }
 
-- (void)oe_setAudible:(BOOL)audible frame:(NSString*)frameId {
-  if (audible) {
-    [_audibleFrames addObject:frameId];
-  } else {
-    [_audibleFrames removeObject:frameId];
-  }
-  BOOL now = _audibleFrames.count > 0;
-  if (now != _audible) {
-    _audible = now;
+- (void)oe_setAudible:(BOOL)audible {
+  if (audible != _audible) {
+    _audible = audible;
     [self oe_notify:OEWebContentChangeAudio];
   }
 }
@@ -739,6 +846,9 @@ typedef void (^OEDevToolsCompletion)(NSDictionary* _Nullable, NSError* _Nullable
     return;
   }
   _crashState = state;
+  if (state != OEWebContentCrashStateNone) {
+    [self oe_resetMediaDetaching:NO];
+  }
   [self oe_notify:OEWebContentChangeCrash];
 }
 
@@ -814,6 +924,166 @@ typedef void (^OEDevToolsCompletion)(NSDictionary* _Nullable, NSError* _Nullable
 }
 - (void)stopLoading {
   if (_browser) _browser->StopLoad();
+}
+
+#pragma mark Selection and history swipe (fork API cef_open_page.h)
+
+- (BOOL)hasSelection {
+  return _hasSelection;
+}
+
+- (void)oe_selectionChanged:(BOOL)hasSelection {
+  if (_hasSelection == hasSelection) {
+    return;
+  }
+  _hasSelection = hasSelection;
+  [self oe_notify:OEWebContentChangeSelection];
+}
+
+- (void)requestSelectionWithCompletion:(void (^)(NSString*, NSURL*))completion {
+  void (^done)(NSString*, NSURL*) = [completion copy];
+  if (!_browser) {
+    dispatch_async(dispatch_get_main_queue(), ^{
+      done(@"", nil);
+    });
+    return;
+  }
+  if (!CefRequestSelection(_browser, new OESelectionCallback(done))) {
+    // Refused without running the callback: the wrapper's destructor
+    // answers once.
+  }
+}
+
+- (BOOL)historySwipeEnabled {
+  return _historySwipeEnabled;
+}
+
+- (void)setHistorySwipeEnabled:(BOOL)enabled {
+  _historySwipeEnabled = enabled;
+  if (_browser) {
+    CefSetHistorySwipeOptions(_browser, _historySwipeEnabled,
+                              _drawsEngineHistorySwipeOverlay);
+  }
+}
+
+- (BOOL)drawsEngineHistorySwipeOverlay {
+  return _drawsEngineHistorySwipeOverlay;
+}
+
+- (void)setDrawsEngineHistorySwipeOverlay:(BOOL)draws {
+  _drawsEngineHistorySwipeOverlay = draws;
+  if (_browser) {
+    CefSetHistorySwipeOptions(_browser, _historySwipeEnabled,
+                              _drawsEngineHistorySwipeOverlay);
+  }
+}
+
+- (BOOL)simulateHistorySwipeInDirection:(OEHistorySwipeDirection)direction
+                               progress:(double)progress {
+  return _browser &&
+         CefSimulateHistorySwipe(
+             _browser, direction == OEHistorySwipeDirectionForward ? 1 : 0,
+             progress);
+}
+
+- (void)oe_historySwipe:(int)phase
+              direction:(int)direction
+               progress:(double)progress {
+  if ([_delegate respondsToSelector:@selector
+                 (webContent:historySwipe:direction:progress:)]) {
+    [_delegate webContent:self
+             historySwipe:(OEHistorySwipePhase)std::clamp(phase, 0, 3)
+                direction:direction == 1 ? OEHistorySwipeDirectionForward
+                                         : OEHistorySwipeDirectionBack
+                 progress:progress];
+  }
+}
+
+#pragma mark Sleep (memory-fork; fork API cef_page_lifecycle.h)
+
+- (instancetype)initWithConfiguration:(OEWebContentConfiguration*)configuration
+                    navigationHistory:(OENavigationHistory*)history
+                          fallbackURL:(nullable NSURL*)fallbackURL {
+  if ((self = [self initWithConfiguration:configuration URL:nil])) {
+    _restoreHistory = history;
+    _restoreFallbackURL = [fallbackURL copy] ?: history.currentURL;
+    _navigationHistoryRestore = OENavigationHistoryRestorePending;
+  }
+  return self;
+}
+
+- (OENavigationHistoryRestore)navigationHistoryRestore {
+  return _navigationHistoryRestore;
+}
+
+// The page could not take the history: it loads the fallback URL instead.
+- (void)oe_restoreFailed {
+  NSLog(@"OEWebContent: navigation history restore failed; loading the "
+        @"fallback URL");
+  _restoreHistory = nil;
+  _pendingURL = _restoreFallbackURL;
+  _restoreFallbackURL = nil;
+  _navigationHistoryRestore = OENavigationHistoryRestoreFailed;
+}
+
+- (void)oe_restoreHistoryIntoBrowser:(CefRefPtr<CefBrowser>)browser {
+  CefRefPtr<CefNavigationHistory> history = [_restoreHistory oe_cefHistory];
+  if (history && CefRestoreNavigationHistory(browser, history)) {
+    _restoreHistory = nil;
+    _restoreFallbackURL = nil;
+    _navigationHistoryRestore = OENavigationHistoryRestoreRestored;
+    return;
+  }
+  [self oe_restoreFailed];
+  if (_pendingURL) {
+    browser->GetMainFrame()->LoadURL(OECef(_pendingURL.absoluteString));
+  }
+}
+
+- (nullable OENavigationHistory*)captureNavigationHistory {
+  if (!_browser) {
+    return nil;
+  }
+  return [[OENavigationHistory alloc]
+      initOEWithCefHistory:CefGetNavigationHistory(_browser)];
+}
+
+- (void)setPageHidden:(BOOL)hidden {
+  if (_browser) {
+    _browser->GetHost()->WasHidden(hidden);
+  }
+}
+
+- (BOOL)setPageFrozen:(BOOL)frozen {
+  return _browser && CefSetPageFrozen(_browser, frozen);
+}
+
+- (BOOL)isPageFrozen {
+  return _browser && CefIsPageFrozen(_browser);
+}
+
+- (BOOL)isDiscarded {
+  return _browser && CefWasDiscarded(_browser);
+}
+
+- (BOOL)hasUnloadHandlers {
+  return _browser && CefHasUnloadHandlers(_browser);
+}
+
+- (void)discardWithCompletion:(void (^)(BOOL))completion {
+  void (^done)(BOOL) = [completion copy];
+  if (!_browser) {
+    dispatch_async(dispatch_get_main_queue(), ^{
+      done(NO);
+    });
+    return;
+  }
+  // The engine settles exactly once (also when it refuses or gives up); the
+  // answer is the re-check, never the callback alone (memory-fork D-5).
+  __weak OEWebContent* weakSelf = self;
+  CefDiscardBrowser(_browser, new OECompletionCallback(^{
+                      done(weakSelf.isDiscarded);
+                    }));
 }
 
 #pragma mark DevTools protocol / JavaScript
@@ -923,6 +1193,233 @@ typedef void (^OEDevToolsCompletion)(NSDictionary* _Nullable, NSError* _Nullable
                                                                 options:0]
                           : nil;
                   done(png, png ? nil : error);
+                }];
+}
+
+#pragma mark Full-page capture (EP-8)
+
+/// Largest tile edge and output width in device pixels. Tiles stay under the
+/// GPU texture size every Mac supports; the stitched bitmap is at most
+/// 4,096 × maxDevicePixels × 4 bytes (512 MiB at the 32,768 px cap).
+static const NSInteger kOECaptureTilePixels = 4096;
+
+static NSError* OECaptureError(NSString* message) {
+  return [NSError errorWithDomain:OEErrorDomain
+                             code:OEErrorDevToolsFailure
+                         userInfo:@{NSLocalizedDescriptionKey : message}];
+}
+
+/// Decodes the tiles, draws them top to bottom, and encodes one PNG. Runs on
+/// a utility queue: only NSData crosses threads.
+static NSData* OEStitchTiles(NSArray<NSData*>* tiles, NSError** error) {
+  NSMutableArray* images = [NSMutableArray array];
+  size_t width = 0, height = 0;
+  for (NSData* tile in tiles) {
+    CGImageSourceRef source =
+        CGImageSourceCreateWithData((__bridge CFDataRef)tile, nullptr);
+    CGImageRef image =
+        source ? CGImageSourceCreateImageAtIndex(source, 0, nullptr) : nullptr;
+    if (source) {
+      CFRelease(source);
+    }
+    if (!image) {
+      *error = OECaptureError(@"Unable to read a full page tile.");
+      return nil;
+    }
+    width = MAX(width, CGImageGetWidth(image));
+    height += CGImageGetHeight(image);
+    [images addObject:(__bridge_transfer id)image];
+  }
+  if (width == 0 || height == 0 || width > (size_t)kOECaptureTilePixels * 2) {
+    *error = OECaptureError(@"The full page capture is empty or too wide.");
+    return nil;
+  }
+  CGColorSpaceRef space = CGColorSpaceCreateWithName(kCGColorSpaceSRGB);
+  CGContextRef context = CGBitmapContextCreate(
+      nullptr, width, height, 8, 0, space,
+      (CGBitmapInfo)kCGImageAlphaPremultipliedLast);
+  CGColorSpaceRelease(space);
+  if (!context) {
+    *error = OECaptureError(@"Unable to allocate the full page image.");
+    return nil;
+  }
+  CGContextSetRGBFillColor(context, 1, 1, 1, 1);
+  CGContextFillRect(context, CGRectMake(0, 0, width, height));
+  // Core Graphics is bottom-up: the first tile goes at the top.
+  CGFloat top = height;
+  for (id object in images) {
+    CGImageRef image = (__bridge CGImageRef)object;
+    CGFloat h = CGImageGetHeight(image);
+    top -= h;
+    CGContextDrawImage(context,
+                       CGRectMake(0, top, CGImageGetWidth(image), h), image);
+  }
+  CGImageRef stitched = CGBitmapContextCreateImage(context);
+  CGContextRelease(context);
+  [images removeAllObjects];
+  if (!stitched) {
+    *error = OECaptureError(@"Unable to draw the full page image.");
+    return nil;
+  }
+  NSMutableData* png = [NSMutableData data];
+  CGImageDestinationRef destination = CGImageDestinationCreateWithData(
+      (__bridge CFMutableDataRef)png,
+      CFSTR("public.png"), 1, nullptr);
+  BOOL ok = NO;
+  if (destination) {
+    CGImageDestinationAddImage(destination, stitched, nullptr);
+    ok = CGImageDestinationFinalize(destination);
+    CFRelease(destination);
+  }
+  CGImageRelease(stitched);
+  if (!ok) {
+    *error = OECaptureError(@"Unable to encode the full page image.");
+    return nil;
+  }
+  return png;
+}
+
+/// Pixel width from a PNG's header (0 when it is not one).
+static double OEPNGPixelWidth(NSData* png) {
+  if (!png.length) {
+    return 0;
+  }
+  CGImageSourceRef source =
+      CGImageSourceCreateWithData((__bridge CFDataRef)png, nullptr);
+  if (!source) {
+    return 0;
+  }
+  NSDictionary* properties = CFBridgingRelease(
+      CGImageSourceCopyPropertiesAtIndex(source, 0, nullptr));
+  CFRelease(source);
+  return [properties[(__bridge NSString*)kCGImagePropertyPixelWidth]
+      doubleValue];
+}
+
+- (void)captureFullPageWithMaxDevicePixels:(NSInteger)maxDevicePixels
+                                completion:(void (^)(NSData* _Nullable, BOOL,
+                                                     NSError* _Nullable))
+                                               completion {
+  void (^done)(NSData*, BOOL, NSError*) = [completion copy];
+  if (!_browser) {
+    done(nil, NO,
+         [NSError errorWithDomain:OEErrorDomain
+                             code:OEErrorWebContentClosed
+                         userInfo:nil]);
+    return;
+  }
+  // The device scale the screenshots come out at: one visible-page shot's
+  // pixel width over the view's width in points. It follows the window's
+  // backing scale and DevTools device emulation alike; the layout metrics
+  // do not (`contentSize` stays in CSS pixels on the Mac, even under
+  // emulation). Fallback: the window's, else the main screen's, backing scale.
+  CGFloat fallbackScale = self.view.window.backingScaleFactor
+                              ?: NSScreen.mainScreen.backingScaleFactor ?: 2;
+  CGFloat viewWidth = self.view.bounds.size.width;
+  __weak OEWebContent* weakSelf = self;
+  [self takeSnapshotWithCompletion:^(NSData* shot, NSError* shotError) {
+    OEWebContent* strongSelf = weakSelf;
+    if (!strongSelf) {
+      done(nil, NO, shotError ?: OECaptureError(@"The page closed."));
+      return;
+    }
+    double measured = viewWidth > 0 ? OEPNGPixelWidth(shot) / viewWidth : 0;
+    double scale = isfinite(measured) && measured >= 0.5 && measured <= 8
+                       ? round(measured * 100) / 100
+                       : fallbackScale;
+    [strongSelf oe_captureFullPageAtScale:scale
+                         maxDevicePixels:maxDevicePixels
+                              completion:done];
+  }];
+}
+
+- (void)oe_captureFullPageAtScale:(double)scale
+                  maxDevicePixels:(NSInteger)maxDevicePixels
+                       completion:(void (^)(NSData*, BOOL, NSError*))done {
+  __weak OEWebContent* weakSelf = self;
+  [self sendDevToolsMethod:@"Page.getLayoutMetrics"
+                parameters:nil
+                completion:^(NSDictionary* metrics, NSError* error) {
+                  OEWebContent* strongSelf = weakSelf;
+                  NSDictionary* size = metrics[@"cssContentSize"];
+                  double contentWidth = [size[@"width"] doubleValue];
+                  double contentHeight = [size[@"height"] doubleValue];
+                  if (!strongSelf || error || contentWidth < 1 ||
+                      contentHeight < 1) {
+                    done(nil, NO,
+                         error ?: OECaptureError(
+                                      @"The page has no size to capture."));
+                    return;
+                  }
+                  double tile = floor(kOECaptureTilePixels / scale);
+                  double width = MIN(ceil(contentWidth), tile);
+                  double cap = floor(MAX(maxDevicePixels, 1) / scale);
+                  double height = MIN(ceil(contentHeight), cap);
+                  [strongSelf oe_captureTilesFrom:0
+                                            width:width
+                                           height:height
+                                             tile:tile
+                                            tiles:[NSMutableArray array]
+                                        truncated:ceil(contentHeight) > cap
+                                       completion:done];
+                }];
+}
+
+/// One tile at a time (each capture resizes the widget temporarily), CSS
+/// pixels in document coordinates.
+- (void)oe_captureTilesFrom:(double)y
+                      width:(double)width
+                     height:(double)height
+                       tile:(double)tile
+                      tiles:(NSMutableArray<NSData*>*)tiles
+                  truncated:(BOOL)truncated
+                 completion:(void (^)(NSData*, BOOL, NSError*))done {
+  if (y >= height) {
+    dispatch_async(dispatch_get_global_queue(QOS_CLASS_UTILITY, 0), ^{
+      NSError* error = nil;
+      NSData* png = OEStitchTiles(tiles, &error);
+      dispatch_async(dispatch_get_main_queue(), ^{
+        done(png, truncated, png ? nil : error);
+      });
+    });
+    return;
+  }
+  double h = MIN(tile, height - y);
+  __weak OEWebContent* weakSelf = self;
+  [self sendDevToolsMethod:@"Page.captureScreenshot"
+                parameters:@{
+                  @"format" : @"png",
+                  @"fromSurface" : @YES,
+                  @"captureBeyondViewport" : @YES,
+                  @"clip" : @{
+                    @"x" : @0,
+                    @"y" : @(y),
+                    @"width" : @(width),
+                    @"height" : @(h),
+                    @"scale" : @1
+                  },
+                }
+                completion:^(NSDictionary* result, NSError* error) {
+                  OEWebContent* strongSelf = weakSelf;
+                  NSString* b64 = result[@"data"];
+                  NSData* png = b64 ? [[NSData alloc]
+                                          initWithBase64EncodedString:b64
+                                                              options:0]
+                                    : nil;
+                  if (!strongSelf || !png) {
+                    done(nil, NO,
+                         error ?: OECaptureError(
+                                     @"A full page tile could not be captured."));
+                    return;
+                  }
+                  [tiles addObject:png];
+                  [strongSelf oe_captureTilesFrom:y + h
+                                            width:width
+                                           height:height
+                                             tile:tile
+                                            tiles:tiles
+                                        truncated:truncated
+                                       completion:done];
                 }];
 }
 

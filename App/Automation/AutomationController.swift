@@ -83,6 +83,7 @@
       case "archive-sweep", "archive-clock", "archive-state", "archive-wake", "profile-archive-setting", "archive-list", "archive-banner-state", "archive-banner-action":
         return try await runArchiveCommand(cmd, a)
       case "metrics": return await metrics(interval: a["interval"] as? Double ?? 1)
+      case _ where Self.mediaCommands.contains(cmd): return try await runMediaCommand(cmd, a)
       case "ping":
         return [
           "pid": Int(getpid()), "chromium": OEEngine.shared.chromiumVersion, "cef": OEEngine.shared.cefVersion,
@@ -250,6 +251,12 @@
         return ["frame": [inRoot.minX, inRoot.minY, inRoot.width, inRoot.height], "point": [inRoot.midX, inRoot.midY], "unreadBadge": controller.sidebar.unreadDotFrame(nodeID: ItemID(rawValue: uuid)) != nil, "current": controller.sidebar.isCurrentRow(nodeID: ItemID(rawValue: uuid))] as [String: Any]
       case "preview-state":
         return try previewState(a)
+      case "page-selection", "swipe", "swipe-indicator":
+        // Engine page API (EP-1, EP-2, EP-3); App/Automation/AutomationPageEngine.swift.
+        return try await runPageEngineCommand(cmd, try content(a, try window), a)
+      case "capture", "capture-state", "capture-action", "captures":
+        // Capture tool (page-platform §8.3); App/Automation/AutomationCapture.swift.
+        return try await runCaptureCommand(cmd, a)
       case "toast-undo":
         guard let controller = app.frontWindowController else { throw Failure(message: "no browser window") }
         return controller.pressToastUndo()
@@ -555,6 +562,32 @@
         return true
       case "wait":
         return try await waitForLoad(try content(a, w), timeout: a["timeout"] as? Double ?? 20)
+
+      // Engine tab-sleep primitives (memory-fork, OEWebContent "Sleep"): test
+      // hooks for the e2e tabstrip suite. The shell's sleep policy (Step G)
+      // calls the same API; nothing here changes sleep phases in the model.
+      case "engine-sleep":
+        let page = try content(a, w)
+        var r: [String: Any] = [:]
+        switch a["op"] as? String ?? "state" {
+        case "state": break
+        case "hide": page.setPageHidden(true)
+        case "show": page.setPageHidden(false)
+        case "freeze": r["ok"] = page.setPageFrozen(true)
+        case "unfreeze": r["ok"] = page.setPageFrozen(false)
+        case "discard": r["ok"] = await page.discard()
+        case "capture":
+          guard let h = page.captureNavigationHistory() else { r["history"] = NSNull(); break }
+          r["history"] = ["entryCount": h.entryCount, "currentIndex": h.currentIndex, "hasPageState": h.hasPageState,
+            "bytes": h.container.count, "title": h.title, "currentURL": h.currentURL?.absoluteString ?? "",
+            "faviconURL": h.faviconURL?.absoluteString ?? "",
+            "roundTrip": OENavigationHistory(container: h.container)?.container == h.container] as [String: Any]
+        default: throw Failure(message: "unknown engine-sleep op")
+        }
+        r["frozen"] = page.isPageFrozen; r["discarded"] = page.isDiscarded
+        r["unloadHandlers"] = page.hasUnloadHandlers; r["chromeTabId"] = page.chromeTabIdentifier
+        r["identifier"] = page.identifier; r["live"] = page.isLive
+        return r
 
       // Pages (any live web content).
       case "pages":
@@ -1418,7 +1451,7 @@
       case .split(let split): return ["id": split.id.description, "kind": "split", "children": split.panes.map { describeNode(.tab($0)) }]
       }
     }
-    private func menuEnabled(_ item: NSMenuItem) -> Bool {
+    func menuEnabled(_ item: NSMenuItem) -> Bool {
       guard let action = item.action else { return item.isEnabled }
       let target = item.target ?? NSApp.target(forAction: action, to: nil, from: item)
       if let validator = target as? NSMenuItemValidation { return validator.validateMenuItem(item) }
@@ -1435,7 +1468,7 @@
           "enabled": enabled, "targetNil": item.target == nil, "tag": item.tag, "action": item.action.map(NSStringFromSelector) ?? "", "payload": (item.representedObject as? [String: String])?["payload"] ?? ""]]
       }
     }
-    private func findMenuItem(_ id: String, in menu: NSMenu?) -> (NSMenu, Int)? {
+    func findMenuItem(_ id: String, in menu: NSMenu?) -> (NSMenu, Int)? {
       guard let menu else { return nil }
       for (index, item) in menu.items.enumerated() {
         if item.identifier?.rawValue == id { return (menu, index) }
@@ -1563,7 +1596,7 @@
         "makeHostCount": preview.makeHostCount, "reusedCachedHost": preview.reusedCachedHost, "shows": preview.shows] as [String: Any]
     }
 
-    private func mouse(_ a: [String: Any], _ w: EngineWebContentHostFactory) async throws -> Any {
+    func mouse(_ a: [String: Any], _ w: EngineWebContentHostFactory) async throws -> Any {
       let number = a["window"] as? Int ?? w.window?.windowNumber ?? 0
       guard let target = NSApp.windows.first(where: { $0.windowNumber == number }) else { throw Failure(message: "no window \(number)") }
       pointerRequestID += 1

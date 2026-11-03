@@ -1,12 +1,14 @@
 import AppKit
+import Observation
 import OpenEngine
 import OpenFeatures
 import OpenModel
 import OpenStore
+import OpenWeb
 
 /// The sole delegate of a tab page. Closed generations never update the model.
 @MainActor
-final class EngineWebContentHost: NSObject, WebContentHost, OEWebContentDelegate {
+final class EngineWebContentHost: NSObject, WebContentHost, WebContentProviding, OEWebContentDelegate {
   private(set) var tabID: ItemID
   private(set) var spaceID: SpaceID?
   let profileID: ProfileID
@@ -45,11 +47,33 @@ final class EngineWebContentHost: NSObject, WebContentHost, OEWebContentDelegate
   var canGoBack: Bool { content.canGoBack }
   var canGoForward: Bool { content.canGoForward }
   var isLoading: Bool { content.isLoading }
+  /// Capture, selection, and translation reach the page through this (page-platform §3.2).
+  var webContent: (any WebContent)? { closed ? nil : content }
+  var isPrivateBrowsing: Bool { content.context.isEphemeral }
 
   init(tabID: ItemID, profileID: ProfileID, content: OEWebContent, owner: EngineWebContentHostFactory) {
     self.tabID = tabID; self.profileID = profileID; self.content = content; self.owner = owner
     spaceID = owner.space(for: tabID)?.id ?? owner.focusedSpace?.id
     super.init(); content.delegate = self
+    // Tab pages draw Open's own swipe indicator (page-platform §4.4.3), not Chromium's arrow.
+    content.drawsEngineHistorySwipeOverlay = false
+    content.historySwipeEnabled = owner.historySwipeAllowed
+    observeMute()
+  }
+  /// The engine follows the tab's mute, including Undo/Redo and Mute All (media-pip §7.2).
+  private var muteObservation = 0
+  private func observeMute() {
+    muteObservation += 1
+    let token = muteObservation
+    guard !closed, let tab = owner?.model.tab(id: tabID) else { return }
+    if content.isMuted != tab.isMuted { content.isMuted = tab.isMuted }
+    withObservationTracking { _ = tab.isMuted } onChange: { [weak self] in
+      Task { @MainActor [weak self] in
+        guard let self, self.muteObservation == token else { return }
+        self.observeMute()
+        self.owner?.app.media.contentChanged(self, changes: .audio)
+      }
+    }
   }
   func load(_ url: URL) { if !closed { content.load(url) } }
   func reload() { if !closed { content.reload() } }
@@ -59,10 +83,10 @@ final class EngineWebContentHost: NSObject, WebContentHost, OEWebContentDelegate
   func focus() { if !closed { content.focusPage() } }
   func rebind(tabID: ItemID, spaceID: SpaceID?) {
     generation += 1; self.tabID = tabID; self.spaceID = spaceID
-    refreshPageBackground()
+    refreshPageBackground(); observeMute()
   }
   func close() {
-    guard !closed else { return }; closed = true; generation += 1
+    guard !closed else { return }; closed = true; generation += 1; muteObservation += 1
     cancelBackgroundRead(); faviconProbe?.cancel(); faviconProbe = nil
     onURLChange = nil; onTitleChange = nil; onLoadingChange = nil; onFaviconChange = nil; shouldNavigate = nil
     onPageBackgroundChange = nil; onLiveStateChange = nil
@@ -96,6 +120,7 @@ final class EngineWebContentHost: NSObject, WebContentHost, OEWebContentDelegate
     }
     guard !closed, generation == token else { return }
     onLiveStateChange?(liveState)
+    owner.app.media.contentChanged(self, changes: changes)
     if changes.contains(.loading), !page.isLoading { refreshPageBackground() }
     // Same-document History API path changes do not emit another load finish.
     if !page.isLoading, !changes.isDisjoint(with: [.URL, .loading]) { confirmFaviconForDocument(page, owner: owner) }
@@ -232,6 +257,11 @@ final class EngineWebContentHost: NSObject, WebContentHost, OEWebContentDelegate
   }
   func webContent(_ page: OEWebContent, didUpdateFindResult result: OEFindResult) { if !closed { owner?.webContent(page, didUpdateFindResult: result) } }
   func webContent(_ page: OEWebContent, didRequestFullscreen fullscreen: Bool) { if !closed { owner?.webContent(page, didRequestFullscreen: fullscreen) } }
+  /// Chromium's history swiper (page-platform EP-1): the factory records it; Step 12 draws Open's
+  /// indicator from it.
+  func webContent(_ page: OEWebContent, historySwipe phase: OEHistorySwipePhase, direction: OEHistorySwipeDirection, progress: Double) {
+    if !closed { owner?.webContent(page, historySwipe: phase, direction: direction, progress: progress) }
+  }
   func webContent(_ page: OEWebContent, didFinishLoadWithStatus status: Int) { if !closed { refreshPageBackground(); if let owner { confirmFaviconForDocument(page, owner: owner) }; owner?.webContent(page, didFinishLoadWithStatus: status) } }
   func webContent(_ page: OEWebContent, didFailLoadWithError error: any Error) { if !closed { owner?.webContent(page, didFailLoadWithError: error) } }
   func webContent(_ page: OEWebContent, didReceiveDevToolsEvent method: String, parameters: [String: Any]) { if !closed { owner?.webContent(page, didReceiveDevToolsEvent: method, parameters: parameters) } }

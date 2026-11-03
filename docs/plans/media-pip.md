@@ -590,10 +590,10 @@ in the Step 6 PR.
 
 | Property | Value |
 |---|---|
-| Window | `NSPanel`, style `[.borderless, .nonactivatingPanel, .resizable]`, `isFloatingPanel = true`, `hidesOnDeactivate = false`, `isMovableByWindowBackground = true`, `hasShadow = true`, `collectionBehavior = [.canJoinAllSpaces, .fullScreenAuxiliary]`. Content view layer: corner radius `PiPMetrics.cornerRadius` 12 (guess), masks to bounds. |
+| Window | `NSPanel`, style `[.borderless, .nonactivatingPanel, .resizable]`, `isFloatingPanel = true`, `hidesOnDeactivate = false`, `isMovableByWindowBackground = true`, `hasShadow = true`, `collectionBehavior = [.canJoinAllSpaces, .fullScreenAuxiliary]`. Content view layer: corner radius `PiPMetrics.cornerRadius` 6 with the continuous curve, a 1 pt white 0.12 inner edge (`edgeStrokeWidth`, `edgeStrokeAlpha`), masks to bounds (capture session 2 item 13; §14.2). Document PiP keeps 12 (`documentCornerRadius`, guess). |
 | Level | `.floating` when "Keep Window on Top" is on (default, key `open.pip.keepOnTop`), else `.normal`. `toggleAlwaysOnTop` exists in Arc (PP-8); the default is a guess. |
 | Content | The engine's `videoView` fills the window. The overlay (§4.4.3) sits above it. |
-| Initial size | Fit the video's natural aspect inside `visibleFrame.width / 8` × `visibleFrame.height / 8` on the source window's screen, then clamp to the orientation-aware minimum and 50% maximum. The /8 factor fits capture session 2 item 13 exactly at 2560×1440; it is a guess elsewhere (lead decision, 2026-10-26 11:25). This replaces the earlier Chromium /5 rule. |
+| Initial size | Fit the video's natural aspect inside `frame.width / 8` × `frame.height / 8` of the source window's screen (the whole screen, not `visibleFrame`; §14.2), then clamp to the orientation-aware minimum and 50% maximum. The /8 factor fits capture session 2 item 13 exactly at 2560×1440; it is a guess elsewhere (lead decision, 2026-10-26 11:25). This replaces the earlier Chromium /5 rule. |
 | Initial position | Bottom-right of that screen's `visibleFrame`, inset 10 pt from the right and bottom (capture session 2 item 13). Later opens in the same app run reuse the last frame's origin and LONG side, clamped to the current video's limits. Not persisted. |
 | Resize | `contentAspectRatio` = natural size; minimum box 284×160 for landscape, rotated to 160×284 for portrait, with the natural aspect preserved. Square remains 284×284. Landscape minimum comes from Chromium `kMinWindowSize` (`video_overlay_window_views.cc:109`); portrait rotation is Open lead design. Maximum is 50% of `visibleFrame` in each dimension (guess). A natural-size change (`didChangePiPVideoResolution`) keeps the width and updates the height. |
 | Size class | Compact below 300 pt wide, regular otherwise (guess; Arc has `PIPSizeClassKey`). |
@@ -2430,6 +2430,142 @@ Historical negative-control receipts describe their original frozen harnesses;
 this refresh retains their defect gates and adapts the delay assertions to main.
 
 [Current merge/checklist receipts](../../Packages/OpenKit/MediaRenders/step3b/evidence/main-refresh/README.md).
+
+## 14. Section 3 implementation notes (Steps 5–12, 2026-11-02)
+
+Section 3 (Media) builds the remaining steps. Each step adds its verification
+note here with its PR link.
+
+### 14.1 Steps 5–6: interim engine media state and the App wiring
+
+PR: [#151](https://github.com/SergeSerb2/open/pull/151), branch `s3/media-app-wiring`.
+
+Engine (Step 5, OpenEngine only, stock-CEF compatible):
+
+- `OEMediaSession` (`Engine/OpenEngine/include/OpenEngine/OEMediaSession.h`)
+  has the EM-1b shape, so Step 7 changes only its source. Until then a
+  per-frame probe (`kMediaProbe`, `OEApp.mm`) reports each frame's media
+  state as JSON on media events only (no timer, no `timeupdate`).
+  `OEMediaSession.mm` merges the frames. Change bits `OEWebContentChangeMedia`
+  (1 << 13) and `OEWebContentChangePictureInPicture` (1 << 14) (EM-8).
+- The probe records the page's `navigator.mediaSession` action handlers, so
+  previous/next work before the fork (the plan expected them to be absent).
+  Blink installs `MediaSession` after the probe runs, so the hook goes in at
+  the first of: a microtask, the first DOM mutation, DOMContentLoaded or a
+  media event.
+- EM-5 interim: `requestPictureInPicture(completion:)` gives the main frame a
+  user gesture through a DevTools evaluation, then asks the frame with the
+  largest playing video to enter PiP (3 s timeout).
+- Limits: a page can fake every value (UI only, no security decision);
+  videos in subframes get no user gesture; Web Audio is not audible (P6).
+
+App (Step 6): `App/Media/MediaCoordinator.swift` owns the store, the PiP
+session and the rules. Section 3 decisions:
+
+- Leave events come from a diff of each window's displayed tabs (selected
+  tab or split panes of the focused Space), computed on the window's refresh
+  hook and in `showSelection`, so minimize, occlusion and app hide never
+  produce one (D-4), and the request runs in the same turn as the selection.
+- Each page host follows its tab's `isMuted` by Observation, so Undo/Redo of
+  Mute All reaches the engine. Mute All is one Undo group.
+- Phase 1 learns about Chromium's own PiP window only as a PiP exit: a paused
+  video means Close (snooze), a playing one means Back to Tab (§4.4.1).
+- A page that reports "in PiP" within 2 s after Open asked it to leave is not
+  taken as a new manual PiP.
+- The sleep feed (§4.10) is `MediaCoordinator.visibility`, an
+  `AppVisibilityProvider` with the new `mediaControlTabIDs` field. Section 8's
+  App sleep adapter reads it; there is no App sleep adapter yet.
+- View Media opens the Library's Media section: Arc's item runs
+  `viewScreenshotsAndCaptures:` (`docs/re/menus-and-hotkeys.md`). The Library
+  Media grid (Captures + Screenshots) is not playback media.
+
+Verification: e2e `--only media --style chrome` (`tools/e2e/engine_e2e.py`,
+fixtures `tools/e2e/fixtures/media/`, no binary media). At load 17–25:
+card shown 3–8 ms after the leave (polled), PiP entered 80–90 ms after the
+request, idle CPU with a paused card equal to idle CPU without it (median of
+three interleaved pairs, all processes 0.46 vs 0.32 %, browser process 0.17
+vs 0.11 %). Rows E-M2 (P6), E-M8 and E-M14 (EM-4), E-M13 (EM-7) and the sleep
+adapter (section 8) report BLOCKED.
+
+### 14.2 Item 14 parity (part)
+
+Branch `s3/media-parity`. Evidence, tables and commands:
+`Packages/OpenKit/MediaRenders/section3-parity/README.md` (numbers and Open-only
+PNGs; Arc frames stay in `.re/`).
+
+- **Row speaker, real window** (1x AW2726DM, 1728 × 1084, sidebar 228, dark,
+  default theme; `compare-media --state row-audible|row-muted`, Open's frames from
+  its own AX tree): S2 12/0022, 12/0027, 13/0002 (not selected) and 14b/0014 (not
+  selected) all pass, worst edge 1.0 pt, worst ΔE00 1.21 (offscreen Step 2b: 1 pt,
+  1.91). The 1 pt audible ink edge is within Arc's own frame-to-frame variation.
+  No change. Open's row has no AX text element for the title, so the AX title-x row
+  of the compare is n/a (the pixel title start is 0.0 pt).
+- **PiP window vs item 13** (phase 2, `features-render pip --first-open`):
+  size and 10 pt insets were exact on the harness screen 2560 × 1440, but the
+  capture display's visible frame is 2560 × 1410 (30 pt menu bar), where the
+  `visibleFrame / 8` rule opens 314 × 177. Arc's corner is continuous r 6 (fitted
+  against on-screen calibration windows within 1/255) and it draws a 1 pt white
+  inner edge (alpha 0.121 median over 58 frames); Open had circular r 12 and no edge.
+  **Product changes** (capture facts): `PiPMetrics.cornerRadius` 6 with
+  `cornerCurve = .continuous`, `edgeStrokeWidth` 1 / `edgeStrokeAlpha` 0.12 on the
+  video PiP content layer, and the `/8` first-open box on the screen's `frame`
+  (placement and limits keep `visibleFrame`; `screenFrame:` initializer parameter,
+  `features-render pip --screen-frame`, new PP6 case for the capture display).
+  Document PiP keeps 12 (`documentCornerRadius`, guess). Shadow is not in the
+  window captures; controls never showed at rest, so there are no control targets.
+- **Phase 1** (Chromium's window, what the App shows until EM-4): 501 × 282 at
+  32 pt insets, square corners, no edge. Not fixable in Swift (§4.4.1).
+- **Other frames**: a two-card stack (16/0001) was not compared before; R5
+  (`compare-media --cards 2`, new option) passes, worst 1.0 pt, ΔE00 0.47, shadow
+  0.71 pp. The remaining mini-player and PiP frames are pixel-identical to compared
+  ones, a transition (14b/0023), the volume tooltip (14b/0024, no Open tooltip for a
+  synthetic hover), or a transparent 10 × 10 helper window.
+
+Verification (after merging `origin/main` fcf610ec): `tools/verify-all.sh --only
+sidebar-render,features-render` PASS (sidebar-render 616/616, features-render
+406/406 with the new PP6 capture-display case). e2e `--style chrome --only media`
+(run before the merge, which changed no App or OpenKit code): 19 media rows PASS
+(plus fingerprint and cleanup), 5 BLOCKED (unchanged rows). Load averages (1 min):
+verify 8.3 → 8.4, e2e 15.5 → 8.1, row runs 12.5–13.2.
+
+### 14.3 Step 7: the fork's media session (EM-1b, EM-2, EM-3/P6, EM-5)
+
+Branch `s3/engine-media-session`. The frame probe is gone; `OEMediaSession`
+keeps its API and now reads the fork's `CefMediaController` (overlay
+`cef/include/cef_media_controller.h`, `open/browser/media/open_media_controller.cc`,
+patch `chromium/0401`; `docs/engine-api.md` "Media", `docs/engine-patches.md`
+"Media").
+
+- Audible (EM-3, P6) is Chromium's tab audio signal, so Web Audio and background
+  tabs count. It follows the real output: a page whose `AudioContext` is
+  suspended (made at load without a gesture, Chromium's autoplay policy) is
+  inaudible while its element plays. The fixtures resume their tone contexts in
+  `start()`, which the driver runs with a user gesture.
+- Tab volume (EM-2): `mediaVolume` multiplies into every session player through
+  `MediaSessionImpl` (chromium/0401); the page's `element.volume` stays 1. Web
+  Audio is not a session player.
+- PiP (EM-5) enters from the browser with no user gesture; the engine checks the
+  player's own availability first, because Blink's browser-initiated path skips
+  `disablePictureInPicture`.
+- Chromium facts that shape the API: `MediaWebContentsObserver::session_controllers_manager()`
+  is protected (hence the public getter in 0401); MediaStream players are "one
+  shot" and never controllable (commands then go to the players); a muted tab's
+  players leave the session, so the session part keeps its last unmuted values.
+- Section 3 decision (phase 1): Chromium reports a PiP exit in the browser at once
+  and the pause of its Close a moment later from the renderer. The App waits
+  400 ms (`MediaCoordinator.exitGrace`) for that pause before it treats the exit
+  as Back to Tab. Without the wait, `media_close_snoozes` failed with reason
+  `sourceShown` on the fork build.
+- Follow-up: 0401 reads the controller's player id through
+  `get_player_id_for_testing()`; a non-testing accessor is cleaner the next time
+  the patch changes (`docs/followups.md`).
+
+Verification: e2e `--only media --style chrome` on the fork distribution
+(SHA-256 `e7d848d9…`): 24 rows PASS, 4 BLOCKED (EM-4 ×2, EM-7, the section 8
+sleep adapter). At load 8–10: card 1.7 ms after the leave, auto-PiP entered 65 ms
+after the request, gesture-free PiP 27 ms, Web Audio audible 86 ms after start
+(also in a background tab), inaudible 2–4 ms after suspend or close, tab volume
+0.3 read back with the page still playing at element volume 1.
 
 ## Appendix — Lead decisions (2026-10-25)
 

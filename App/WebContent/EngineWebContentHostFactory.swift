@@ -32,6 +32,9 @@ final class EngineWebContentHostFactory: NSResponder, WebContentHostFactory {
   var model: BrowserModel { app.model }
   var contentContainer: NSView { controller!.container }
   private(set) var hosts: [ItemID: EngineWebContentHost] = [:]
+  /// The Capture overlay is up in this window: history swipes pause (§4.4.1).
+  private(set) var captureOverlayUp = false
+  private var swipeActivationObserver: (any NSObjectProtocol)?
   private var modelHostIDs: Set<ItemID> = []
   private(set) var contentCreationCount = 0
   private var queuedNavigations: [ItemID: URL] = [:]
@@ -133,6 +136,7 @@ final class EngineWebContentHostFactory: NSResponder, WebContentHostFactory {
       return self?.isAppCommandEnabled(id, enabledKey: key) ?? false
     }
     controller.onLayout = { [weak self] in self?.layoutViews() }
+    controller.captureLibrary = app.captureLibrary
     controller.onFocus = { [weak self] in guard let self else { return }; self.app.didFocusWindow(self.windowState.id) }
     controller.nextResponder = self; nextResponder = NSApp
     controller.onSidebarIntent = { [weak self] intent in guard let self else { return false }; return self.performSidebar(intent) }
@@ -142,6 +146,13 @@ final class EngineWebContentHostFactory: NSResponder, WebContentHostFactory {
       if self.app.engineReady { for tab in self.visibleTabs { tab.live.sleepPhase = .live }; self.controller?.container.refreshPlaceholders() }
       // BrowserWindowController schedules its SnapshotStore once per committed change.
       self.mirror.sync(); self.commandBarSession?.contextDidChange(); self.app.scheduleMenuRebuild()
+      self.app.media.windowChanged(self)
+    }
+    // History swipes (page-platform §4.4.1): macOS's "Swipe between pages" setting, re-read when
+    // Open becomes active, and paused while the Capture overlay is up.
+    controller.onCaptureOverlayChange = { [weak self] up in self?.captureOverlayUp = up; self?.syncHistorySwipe() }
+    swipeActivationObserver = NotificationCenter.default.addObserver(forName: NSApplication.didBecomeActiveNotification, object: nil, queue: .main) { [weak self] _ in
+      MainActor.assumeIsolated { self?.syncHistorySwipe() }
     }
     controller.onOpenCommandBar = { [weak self] source, _ in
       if source == .urlField { self?.focusAddressBar(nil) } else { self?.newTab(nil) }
@@ -281,6 +292,7 @@ final class EngineWebContentHostFactory: NSResponder, WebContentHostFactory {
   }
   func hostDidClose(_ host: EngineWebContentHost) {
     commandBarNavigationFocus.remove(host.tabID)
+    app.media.hostClosed(tabID: host.tabID)
     if hosts[host.tabID] === host { hosts[host.tabID] = nil }
     modelHostIDs.remove(host.tabID)
     mirror.sync()
@@ -362,6 +374,8 @@ final class EngineWebContentHostFactory: NSResponder, WebContentHostFactory {
     if focus { selectedContent?.focusPage() }
     commandBarSession?.contextDidChange(); app.scheduleMenuRebuild()
     layoutViews()
+    // Auto-PiP runs in the same turn as the selection change, after the new tab is attached (§4.5.3).
+    app.media.windowChanged(self)
   }
   func select(nodeID: ItemID?, focus: Bool = true) {
     controller?.existingTabSwitcher?.cancel()
@@ -437,6 +451,7 @@ final class EngineWebContentHostFactory: NSResponder, WebContentHostFactory {
       return copyURL()
     case .toggleMute(let id):
       guard let tab = model.tab(id: id) else { return false }; model.setMuted(tabID: id, muted: !tab.isMuted); hosts[id]?.content.isMuted = tab.isMuted; app.scheduleSave(); return true
+    case .media(let intent): return app.media.perform(intent)
     case .resetToPinnedURL(let id):
       guard let tab = model.tab(id: id), let url = tab.pinnedURL else { return false }; model.resetPinnedTab(id: id); hosts[id]?.load(url); app.scheduleSave(); return true
     case .newSpace:
@@ -925,6 +940,26 @@ extension EngineWebContentHostFactory: OEWebContentDelegate {
     record("change", webContent, ["changes": changes.rawValue])
   }
 
+  /// Chromium's history swiper (page-platform EP-1). Recorded for automation; Step 12 draws
+  /// Open's indicator from it.
+  func webContent(_ webContent: OEWebContent, historySwipe phase: OEHistorySwipePhase, direction: OEHistorySwipeDirection, progress: Double) {
+    let phases: [SwipeIndicatorView.Phase] = [.began, .changed, .completed, .cancelled]
+    let event = SwipeIndicatorView.Event(phase: phases[max(0, min(3, phase.rawValue))],
+      direction: direction == .forward ? .forward : .back, progress: progress)
+    var shown = false
+    if let id = tabID(for: webContent) { shown = controller?.container.showHistorySwipe(tabID: id, event) ?? false }
+    record("historySwipe", webContent, ["phase": event.phase.rawValue, "direction": event.direction.rawValue,
+      "progress": progress, "indicator": shown])
+  }
+
+  /// Whether pages of this window may start a history swipe now (page-platform §4.4.1).
+  var historySwipeAllowed: Bool { NSEvent.isSwipeTrackingFromScrollEventsEnabled && !captureOverlayUp }
+
+  func syncHistorySwipe() {
+    let allowed = historySwipeAllowed
+    for host in hosts.values where host.content.historySwipeEnabled != allowed { host.content.historySwipeEnabled = allowed }
+  }
+
   static func pngData(_ image: NSImage) -> Data? {
     // Refuse oversized engine images before asking AppKit to rasterize them.
     // Explicit allocation: 64 * 64 * 4 = 16 KiB, independent of source size.
@@ -1106,6 +1141,7 @@ extension EngineWebContentHostFactory: OEWebContentDelegate {
       mi.isEnabled = item.isEnabled
       ns.addItem(mi)
     }
+    let openItems = addCaptureItems(to: ns, for: webContent)
     func commands(_ items: [OEContextMenuItem], in submenu: String = "") -> [[String: Any]] {
       items.flatMap { item -> [[String: Any]] in
         if item.isSeparator { return [] }
@@ -1118,6 +1154,7 @@ extension EngineWebContentHostFactory: OEWebContentDelegate {
       [
         "items": menu.items.map(\.title), "commands": commands(menu.items),
         "link": menu.linkURL?.absoluteString ?? "", "targets": menu.targets.rawValue,
+        "open": openItems, "shown": ns.items.map { $0.isSeparatorItem ? "-" : $0.title },
       ])
     if contextMenuPolicy == "record" {
       menu.cancel()

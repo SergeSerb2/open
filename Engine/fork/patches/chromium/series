@@ -4,3 +4,6 @@
 0302-open-hidden-browser-ui.patch  # P1: Chrome UI code that assumes "no BrowserView => unit test" accepts hidden tab-strip Browsers
 0303-open-hosted-tab-lifecycle.patch  # P1: hosted tabs are never discarded or moved to another window; chrome.tabs.discard asks the embedder
 0304-open-hidden-browser-no-tab-groups.patch  # P1: hidden Browsers have no tab group model (folders are not tab groups)
+0401-open-media-session.patch  # Media (media-pip EM-2, EM-5): tab volume multiplier in MediaSessionImpl; per-player Picture-in-Picture availability getter, so browser-initiated PiP respects disablePictureInPicture
+0501-page-history-swipe-hooks.patch  # Page platform EP-1: Chromium's history swipe overlay reports its phases to the page handler and can stay hidden (open/browser/page/open_history_swipe_hooks.h); page-platform §6
+0504-page-notification-click.patch  # Page platform EP-6: a web notification click reaches the embedder's handler before Chromium dispatches it (open/browser/page/open_notification_hooks.h); page-platform §6

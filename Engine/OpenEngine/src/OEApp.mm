@@ -1,6 +1,6 @@
 // CefApp for every process. The browser half forwards to OEEngine; the
-// renderer half injects profile user scripts at V8 context creation and
-// reports media playback for the "audible" tab indicator.
+// renderer half injects profile user scripts at V8 context creation. Media
+// and audible state come from the fork (CefMediaController, OEMediaSession.mm).
 
 #import "OEInternal.h"
 
@@ -13,7 +13,6 @@
 #include "include/wrapper/cef_library_loader.h"
 
 const char kOEMsgScriptsUpdate[] = "oe.scripts.update";
-const char kOEMsgAudibleChanged[] = "oe.audible";
 const char kOEExtraScripts[] = "oe.scripts";
 
 namespace {
@@ -118,69 +117,12 @@ bool OEMatchesPattern(const std::string& pattern, const std::string& url) {
 
 namespace {
 
-// Runs at document start in every frame. Tracks unmuted, playing media
-// elements and reports changes through the native callback, which is removed
-// from the global object before any page script runs.
-const char kAudibleProbe[] = R"JS((function(report){
-  let audible = false;
-  const media = new Set();
-  const update = () => {
-    let now = false;
-    for (const m of media) {
-      if (!m.paused && !m.muted && m.volume > 0) { now = true; break; }
-    }
-    if (now !== audible) { audible = now; report(now); }
-  };
-  const track = (e) => {
-    const t = e.target;
-    if (t instanceof HTMLMediaElement) { media.add(t); update(); }
-  };
-  const types = ['play','playing','pause','ended','volumechange','emptied'];
-  for (const type of types) window.addEventListener(type, track, true);
-  // Detached elements (new Audio()) never reach window listeners.
-  const play = HTMLMediaElement.prototype.play;
-  HTMLMediaElement.prototype.play = function() {
-    if (!media.has(this)) {
-      media.add(this);
-      for (const type of types) this.addEventListener(type, update);
-    }
-    const p = play.apply(this, arguments);
-    Promise.resolve(p).then(update, update);
-    return p;
-  };
-})(globalThis.__oeAudible); delete globalThis.__oeAudible;)JS";
-
 struct RendererScript {
   std::string source;
   bool css = false;
   bool document_end = false;
   bool main_frame_only = true;
   std::vector<std::string> patterns;
-};
-
-class AudibleHandler : public CefV8Handler {
- public:
-  bool Execute(const CefString& name,
-               CefRefPtr<CefV8Value> object,
-               const CefV8ValueList& arguments,
-               CefRefPtr<CefV8Value>& retval,
-               CefString& exception) override {
-    if (arguments.empty()) {
-      return false;
-    }
-    CefRefPtr<CefV8Context> ctx = CefV8Context::GetCurrentContext();
-    CefRefPtr<CefFrame> frame = ctx ? ctx->GetFrame() : nullptr;
-    if (!frame) {
-      return false;
-    }
-    CefRefPtr<CefProcessMessage> msg =
-        CefProcessMessage::Create(kOEMsgAudibleChanged);
-    msg->GetArgumentList()->SetBool(0, arguments[0]->GetBoolValue());
-    msg->GetArgumentList()->SetString(1, frame->GetIdentifier());
-    frame->SendProcessMessage(PID_BROWSER, msg);
-    return true;
-  }
-  IMPLEMENT_REFCOUNTING(AudibleHandler);
 };
 
 class OEApp : public CefApp,
@@ -222,11 +164,35 @@ class OEApp : public CefApp,
     // Chromium features Open turns on, added to any --enable-features list:
     // ExtensionsPinnedByDefault pins a new install's action (extensions UI
     // plan Q4; the profile pref extensions.pinned_by_default defaults on).
+    // WebContentsDiscard: tab sleeping discards pages in place
+    // (docs/plans/memory-fork.md §10; off on desktop by default, and
+    // WebContents::Discard is NOTREACHED() without it).
     std::string features = command_line->GetSwitchValue("enable-features");
-    for (const char* feature : {"ExtensionsPinnedByDefault"}) {
+    for (const char* feature :
+         {"ExtensionsPinnedByDefault", "WebContentsDiscard"}) {
       features += features.empty() ? feature : std::string(",") + feature;
     }
     command_line->AppendSwitchWithValue("enable-features", features);
+    // Chromium services Open does not use (memory-fork §10; each string was
+    // read from its BASE_FEATURE in this Chromium tree): optimization guide
+    // hints, models and page-content extraction, the segmentation platform,
+    // Cast discovery, and the translate ranker (manual translate stays).
+    std::string disabled = command_line->GetSwitchValue("disable-features");
+    for (const char* feature :
+         {"OptimizationHints", "OptimizationTargetPrediction",
+          "OptimizationGuidePageContentExtraction",
+          "OptimizationGuideModelExecution", "SegmentationPlatform",
+          "SegmentationPlatformUkmEngine", "MediaRouter",
+          "TranslateRankerQuery", "TranslateRankerEnforcement"}) {
+      disabled += disabled.empty() ? feature : std::string(",") + feature;
+    }
+    command_line->AppendSwitchWithValue("disable-features", disabled);
+    // Chromium's RAM-scaled renderer limit governs, except on small Macs.
+    const unsigned long long kSmallMac = 8ull * 1024 * 1024 * 1024;
+    if (NSProcessInfo.processInfo.physicalMemory <= kSmallMac &&
+        !command_line->HasSwitch("renderer-process-limit")) {
+      command_line->AppendSwitchWithValue("renderer-process-limit", "32");
+    }
   }
 
   // CefBrowserProcessHandler
@@ -255,20 +221,8 @@ class OEApp : public CefApp,
                         CefRefPtr<CefFrame> frame,
                         CefRefPtr<CefV8Context> context) override {
     std::string url = frame->GetURL().ToString();
-    bool web = url.rfind("http", 0) == 0 || url.rfind("file:", 0) == 0;
-
-    CefRefPtr<CefV8Value> global = context->GetGlobal();
     CefRefPtr<CefV8Value> retval;
     CefRefPtr<CefV8Exception> exception;
-    if (web) {
-      global->SetValue("__oeAudible",
-                       CefV8Value::CreateFunction("__oeAudible",
-                                                  new AudibleHandler()),
-                       V8_PROPERTY_ATTRIBUTE_DONTENUM);
-      context->Eval(kAudibleProbe, "openengine://audible", 1, retval,
-                    exception);
-    }
-
     std::vector<RendererScript> scripts;
     {
       std::lock_guard<std::mutex> lock(mutex_);

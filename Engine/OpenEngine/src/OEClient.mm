@@ -30,18 +30,6 @@ CefRefPtr<OEClient> OECreateClient(OEWebContent* webContent) {
   return new OEClient(webContent);
 }
 
-bool OEClient::OnProcessMessageReceived(CefRefPtr<CefBrowser> browser,
-                                        CefRefPtr<CefFrame> frame,
-                                        CefProcessId source_process,
-                                        CefRefPtr<CefProcessMessage> message) {
-  if (message->GetName() == kOEMsgAudibleChanged) {
-    [view_ oe_setAudible:message->GetArgumentList()->GetBool(0)
-                   frame:OEString(message->GetArgumentList()->GetString(1))];
-    return true;
-  }
-  return false;
-}
-
 #pragma mark Life span
 
 bool OEClient::OnBeforePopup(CefRefPtr<CefBrowser> browser,

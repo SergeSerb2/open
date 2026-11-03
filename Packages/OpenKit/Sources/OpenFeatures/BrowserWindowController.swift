@@ -97,6 +97,56 @@ public final class BrowserWindowController: NSWindowController, NSWindowDelegate
     /// Automation builds can turn this off to keep a capture-size frame on a smaller screen.
     public static var constrainsFramesToScreen = true
     private var pointerMonitor: Any?
+    private var captureMonitor: Any?
+    private var captureStorage: CaptureController?
+    /// The Capture tool (page-platform §4.6), made on first use.
+    /// The Capture tool's selection overlay came up or went away (page swipes pause meanwhile).
+    public var onCaptureOverlayChange: ((Bool) -> Void)?
+    public var capture: CaptureController {
+        if let captureStorage { return captureStorage }
+        let capture = CaptureController(root: root, defaults: defaults)
+        captureStorage = capture
+        capture.onOverlayChange = { [weak self] up in self?.onCaptureOverlayChange?(up) }
+        capture.library = captureLibrary
+        capture.pageTarget = { [weak self] in self?.capturePageTarget() }
+        capture.anchor = { [weak self] in
+            guard let self else { return .zero }
+            let panel = self.container.frame
+            return CGPoint(x: panel.maxX - CaptureMetrics.anchorTrailing, y: panel.minY + CaptureMetrics.anchorTop)
+        }
+        capture.style = { [weak self] in
+            guard let self, let space = self.context.focusedSpace else { return .defaultTheme(system: .dark) }
+            return self.context.style(for: space)
+        }
+        // The window's toasts (page-platform §4.1.4 catalog).
+        var hooks = CaptureToastHooks()
+        hooks.progress = { [weak self] in
+            let handle = self?.toasts.show(ToastContent(title: "Capture in Progress", isSticky: true))
+            return { handle?.dismiss() }
+        }
+        hooks.copied = { [weak self] in self?.toasts.show(ToastContent(title: "Copied Image")) }
+        hooks.shortcutHint = { [weak self] in
+            self?.toasts.show(ToastContent(title: "and drag your mouse to capture any time.", accessory: .keycaps(["⌘", "⇧"])))
+        }
+        hooks.failed = { [weak self] in self?.toasts.show(ToastContent(title: $0)) }
+        hooks.dismissAll = { [weak self] in self?.toasts.dismissAll() }
+        capture.toasts = hooks
+        return capture
+    }
+    /// Where captures are saved (the App's Library writer); nil saves nothing.
+    public weak var captureLibrary: (any CaptureLibrary)? { didSet { captureStorage?.library = captureLibrary } }
+    /// The capture overlay shows: history swipes must not navigate (EP-1 reads this, §4.4).
+    public var captureOverlayActive: Bool { captureStorage?.isOverlayActive == true }
+    /// The page a capture takes: the top Peek page while Peek shows, else the focused pane.
+    public func captureHost() -> (any WebContentHost)? {
+        if let peek = peekStorage, peek.isShown { return peek.stack.last?.host }
+        return splitController.focusedTab.flatMap { container.host(for: $0.id) }
+    }
+    private func capturePageTarget() -> CaptureController.PageTarget? {
+        guard let host = captureHost(), let provider = host as? WebContentProviding, let content = provider.webContent,
+              host.view.window != nil, !host.view.isHidden else { return nil }
+        return .init(url: host.currentURL, title: host.title, content: content, view: host.view, isPrivate: provider.isPrivateBrowsing)
+    }
     private var sidebarAnimationGeneration = 0
     private var anchoredSliding = false
     private var sidebarMotionRequestedAt: CFTimeInterval?
@@ -218,6 +268,20 @@ public final class BrowserWindowController: NSWindowController, NSWindowDelegate
             }
             return event
         }
+        // Cmd+Shift drag to capture (§4.6.2). Returns at once unless the press has exactly
+        // Cmd+Shift, or a held press is in progress; the capture controller is made lazily.
+        captureMonitor = NSEvent.addLocalMonitorForEvents(matching: [.leftMouseDown, .leftMouseDragged, .leftMouseUp]) { [weak self] event in
+            let consumed = MainActor.assumeIsolated { () -> Bool in
+                guard let self else { return false }
+                // A plain press also ends a held one whose mouse-up never came (another app took it).
+                if self.captureStorage?.isHoldingPress != true {
+                    guard event.type == .leftMouseDown, event.window === self.window,
+                          event.modifierFlags.intersection([.command, .shift, .option, .control]) == [.command, .shift] else { return false }
+                }
+                return self.capture.handleMouse(event)
+            }
+            return consumed ? nil : event
+        }
         sidebar.delegate = self; sidebar.themeBackground = background
         container.onLinkClicked = { [weak self] id, url, flags in
             guard let self else { return true }
@@ -248,7 +312,7 @@ public final class BrowserWindowController: NSWindowController, NSWindowDelegate
         refresh()
     }
     @available(*, unavailable) required init?(coder: NSCoder) { fatalError() }
-    isolated deinit { hintWork?.cancel(); observing = false; if let treeObserver { model.removeObserver(treeObserver) }; if let keyMonitor { NSEvent.removeMonitor(keyMonitor) }; container.closeAll(); reveal.reset(); cardSampleTask?.cancel(); if let pointerMonitor { NSEvent.removeMonitor(pointerMonitor) }; trafficLightObservers.forEach(NotificationCenter.default.removeObserver) }
+    isolated deinit { hintWork?.cancel(); observing = false; if let treeObserver { model.removeObserver(treeObserver) }; if let keyMonitor { NSEvent.removeMonitor(keyMonitor) }; container.closeAll(); reveal.reset(); cardSampleTask?.cancel(); if let pointerMonitor { NSEvent.removeMonitor(pointerMonitor) }; if let captureMonitor { NSEvent.removeMonitor(captureMonitor) }; captureStorage?.tearDown(); trafficLightObservers.forEach(NotificationCenter.default.removeObserver) }
     private func scheduleRefresh() {
         guard !refreshPending else { return }; refreshPending = true
         DispatchQueue.main.async { [weak self] in guard let self, self.observing else { return }; self.refreshPending = false; self.refresh() }
@@ -397,6 +461,7 @@ public final class BrowserWindowController: NSWindowController, NSWindowDelegate
         if toastOverlay.frame != panelFrame { toastOverlay.frame = panelFrame }
         positionTrafficLights()
         hoverPreview.layout()
+        captureStorage?.layout()
         onLayout?()
     }
     private func frameSpring(_ key: String, from: NSValue, to: NSValue) -> CASpringAnimation {
@@ -772,6 +837,9 @@ public final class BrowserWindowController: NSWindowController, NSWindowDelegate
               eventWindow === window || ownsAdditionalKeyWindow?(eventWindow) == true
                 || existingTabSwitcher?.acceptsEventWindow(eventWindow) == true else { return false }
         if existingTabSwitcher?.handle(event) == true { return true }
+        // Esc and Return for the capture overlay; Esc and Cmd+C for its result card (§4.6.3, §4.6.5).
+        if eventWindow === window, let capture = captureStorage, capture.phase == .selecting || capture.phase == .showing,
+           capture.handleKey(event) { return true }
         let flags = event.modifierFlags.rawValue
         if let last = lastKeyRoute, last.window == eventWindow.windowNumber, last.code == event.keyCode,
            last.flags == flags, unconsumed || (event.timestamp > 0 && last.timestamp == event.timestamp) { return last.handled }
@@ -921,7 +989,7 @@ public final class BrowserWindowController: NSWindowController, NSWindowDelegate
     public func windowWillClose(_ notification: Notification) {
         existingTabSwitcher?.cancel()
         saveWindowState(); visibilityOverride = .closed; removeRevealCard(); hintWork?.cancel(); hintWork = nil
-        hoverPreview.hide(animated: false)
+        hoverPreview.hide(animated: false); captureStorage?.tearDown()
         container.closeAll(); onClose?(); onVisibilityChange?()
     }
     public var onTextUndoManager: ((NSWindow) -> UndoManager?)?

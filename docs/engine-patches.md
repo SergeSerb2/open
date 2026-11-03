@@ -25,7 +25,7 @@ For this plan:
 | P3 | Extension management API and consent prompts | Install/uninstall/enable from our UI, Web Store install without Chrome dialogs | 1–2 weeks | P1 |
 | P4 | Proprietary codecs (Widevine is out of v1) | H.264/AAC sites | 0: already in the fork's GN args; verify on the first fork build | — |
 | P5 | Trim the Chrome layer (Google services, components, locales) | Less network chatter, smaller bundle, faster first launch | 1–2 weeks | — |
-| P6 | Audible state callback | Correct speaker icon (Web Audio too); OpenSleep needs every audio change | 1–2 days | — |
+| P6 | Audible state callback (done 2026-11-02, part of "Media" below) | Correct speaker icon (Web Audio too); OpenSleep needs every audio change | 1–2 days | — |
 | P7 | Isolated-world scripts for Open's page runtimes | Zap picker and Boost applier out of the page's reach | 3–5 days | — |
 | P8 | Native ad-block engine | Already planned in [plans/adblock-fork.md](plans/adblock-fork.md); listed here only for order | see that plan | — |
 
@@ -41,6 +41,8 @@ wrappers `engine-apply` regenerates.
 0301-open-headless-browser-window.patch        # P1: Browser features without a BrowserView
 0302-open-hidden-browser-ui.patch              # P1: Chrome UI that assumes "no BrowserView => unit test"
 0303-open-hosted-tab-lifecycle.patch           # P1: hosted tabs are never discarded or moved
+0304-open-hidden-browser-no-tab-groups.patch    # P1: hidden Browsers have no tab group model
+0401-open-media-session.patch                   # Media: tab volume; per-player PiP availability
 # cef/series (starts at 0302)
 0302-open-hosted-tabs.patch                    # P1: hosted Chrome style tabs
 0303-open-context-menu-submenu-commands.patch  # P1: submenu commands with their own delegate
@@ -51,7 +53,9 @@ A new patch takes the next free number of its series, counting open PRs:
 #64 adds `chromium/0304-open-hidden-browser-no-tab-groups.patch`. Still
 planned: P3 (extension management API in the overlay; the install and
 uninstall prompts patch `chrome/browser/ui/views/extensions/`, so a
-Chromium series entry) and P6 (audible state, a CEF series entry).
+Chromium series entry). P6 (audible state) landed without a patch of its
+own, inside the media controller overlay (Section 3, "Media"). Section 3
+uses `04xx`, Section 8 `05xx`.
 
 The keyboard hook needs no patch: `OEApplication.keyEquivalentHandler` plus CEF's `OnPreKeyEvent` cover app shortcuts (engine-spike.md, "Shell").
 
@@ -228,7 +232,34 @@ The Chrome bootstrap runs Chrome's browser services in every profile. A fresh pr
 
 ## P6. Audible state
 
-CEF has no audible callback (`cef/include/cef_display_handler.h` has no audio method). OpenEngine derives `audible` from media-element events in the page (`Engine/OpenEngine/src/OEApp.mm`), which misses Web Audio. OpenSleep's `SleepEngine` contract also requires an audio event for every change, including background tabs (`Packages/OpenKit/Sources/OpenSleep/SleepEngine.swift`). Patch `0306-open-audible-state.patch`: forward `WebContentsObserver::OnAudioStateChanged(bool)` (`content/public/browser/web_contents_observer.h:805`) as a new `CefDisplayHandler::OnAudioStateChange(browser, audible)` from `cef/libcef/browser/browser_contents_delegate.cc`. Then delete the JS probe.
+CEF has no audible callback (`cef/include/cef_display_handler.h` has no audio method). OpenEngine derived `audible` from media-element events in the page (`kAudibleProbe` in `Engine/OpenEngine/src/OEApp.mm`), which missed Web Audio. OpenSleep's `SleepEngine` contract also requires an audio event for every change, including background tabs (`Packages/OpenKit/Sources/OpenSleep/SleepEngine.swift`).
+
+### Status: implemented (2026-11-02, Section 3 Step 7, branch `s3/engine-media-session`)
+
+Deviation from the plan above: no `0306` CEF patch and no `CefDisplayHandler` change (that header has hundreds of includers). P6 is part of the media controller ("Media" below): `open_engine::OpenMediaController` observes `WebContentsObserver::OnAudioStateChanged(bool)` (`content/public/browser/web_contents_observer.h:805`; initial value `WebContents::IsCurrentlyAudible()`) and calls `CefMediaControllerHandler::OnAudibleChanged(browser, audible)` for every change. `AudioStreamMonitor` reports a change at once (no hold time: `content/browser/media/audio_stream_monitor.cc` `UpdateStreams`), for every output stream of the page, so media elements, Web Audio and WebRTC all count, in background tabs too. `OEWebContent.audible` comes from it; `kAudibleProbe`, its V8 handler, the `oe.audible` process message and `OEClient::OnProcessMessageReceived` are deleted. Evidence: e2e `media_web_audio` (see "Media").
+
+## Media (Section 3: media-pip EM-1b, EM-2, EM-3 = P6, EM-5)
+
+Status: implemented (2026-11-02, Section 3 Step 7, branch `s3/engine-media-session`). Plan: [plans/media-pip.md](plans/media-pip.md) §6; research: Section 3 engine design (helper H3, `.re/section3/engine-design.md`). Series numbers `04xx`.
+
+| Part | Where | What it does |
+|---|---|---|
+| CEF API | overlay `cef/include/cef_media_controller.h` (P1 mechanism: translator-generated C API, `CEF_API_ADDED(CEF_EXPERIMENTAL)`) | `CefMediaController` (one per browser, Chrome style and Alloy): `GetForBrowser(browser, handler)`, `IsValid`, `IsAudible`, `GetState` (a dictionary, so later fields need no translator change), `ExecuteAction(name, args)`, `SetVolume`/`GetVolume`, `RequestPictureInPicture`, `ExitPictureInPicture(behavior)`. `CefMediaControllerHandler`: `OnAudibleChanged`, `OnMediaStateChanged`. Declared for EM-4 and not called yet (so EM-4 needs no second API rebuild if the shape holds): `ShouldHostPictureInPicture`, `OnPictureInPictureOpened/Changed/Closed`, `CefPictureInPictureWindow` (`IsValid`, `GetVideoView`, `GetState`, `SetWindowFrame`, `ExecuteAction`). |
+| `open_engine::OpenMediaController` | overlay `open/browser/media/open_media_controller.{h,cc}` (in `open_libcef_mac_sources`) | WebContents user data + `WebContentsObserver` + `media_session::mojom::MediaSessionObserver`. Players from `MediaMetadataChanged`, `MediaStartedPlaying`, `MediaStoppedPlaying` (end of stream ends a player's "in progress"), `MediaResized` (natural size), `MediaDestroyed`, `MediaPictureInPictureChanged`; only players of active documents count (`RenderFrameHost::IsActive`: not the back-forward cache). Session part from the mojo observer, read back with the synchronous getters (`GetMediaSessionInfoSync`, `GetMediaSessionActionsSync`, `GetMediaSessionMetadata`, `GetMediaSessionPosition`) so a queued message never restores an older state. A snapshot is compared with the last one and `OnMediaStateChanged` posted at most once per message-loop turn; a position that continues the clock (within 250 ms of the extrapolated one, same rate, duration and end) is not a change. Commands: `MediaSessionImpl` (`Resume`/`Suspend`/`Stop(kUI)`, tracks, `Seek`, `SeekTo`, `ScrubTo`, meeting actions, slides), or the players' `media::mojom::MediaPlayer` remotes when the session is not controllable. |
+| Chromium hook | `patches/chromium/0401-open-media-session.patch` (+42/−1) | `MediaSessionImpl::SetOpenVolumeMultiplier` (0…1) multiplied into `GetVolumeMultiplier()` and pushed with `UpdateVolumeMultiplier()` to normal, one-shot and ambient players (players added later get it in `AddPlayer`); `MediaSessionControllersManager::OpenIsPictureInPictureAvailable(id)`, the player's last `OnPictureInPictureAvailabilityChanged` report. Files no CEF or other Open patch touches. |
+| OpenEngine | `Engine/OpenEngine/src/OEMediaSession.mm`, `OEWebContent.mm`, `OEApp.mm`, `OEClient.{h,mm}`, `OEInternal.h`; headers `OEMediaSession.h`, `OEWebContent.h` | `OEWebContent` attaches the controller in `OnAfterCreated` (`oe_attachMedia:`). `OEMediaSession` is built from `GetState`; commands call `ExecuteAction`. New: `OEWebContent.mediaVolume`, `OEMediaSession.volume`. The page probes (`kAudibleProbe`, `kMediaProbe`) are deleted (docs/engine-api.md "Media"). |
+
+Decisions and limits (Section 3):
+
+- **Natural size, not CSS area.** The browser does not know element rects, so `largestVideoSize` and the PiP choice use the largest natural area among playing videos (ties: the one that started last). The plan's §4.5.3 asked for the largest visible CSS area; a small element that shows a large video wins over a large element that upscales a small one. The App's A2 floor (160×90) now reads video pixels.
+- **`disablePictureInPicture` in the browser.** The browser-initiated path (`MediaPlayer::RequestEnterPictureInPicture` → `HTMLVideoElement::RequestEnterPictureInPicture` → `PictureInPictureControllerImpl::EnterPictureInPicture`) checks neither user activation nor `IsElementAllowed` (`third_party/blink/renderer/modules/document_picture_in_picture/picture_in_picture_controller_impl.cc`), so `RequestPictureInPicture` refuses a video whose own availability report is false (Blink `SupportsPictureInPicture` = `IsElementAllowed == kEnabled`, sent on first play, on `loadeddata` and on attribute changes, `html_video_element.cc`). The largest playing video is the candidate; if it is disabled, the request fails (no fallback to a smaller video).
+- **Muted tabs.** Chromium leaves a muted tab's players out of its media session (`MediaSessionController::IsMediaSessionNeeded`: `has_audio_ && !web_contents_->IsAudioMuted()`), so the session part keeps its last unmuted value while the tab is muted (the mini player stays), and play, pause and seeks go to the players. A tab muted before its first playback never gets a controllable session (no mini player) until it is unmuted. Previous/next track and meeting actions do nothing in a muted tab.
+- **MediaStream players** (`srcObject` streams, `WebMediaPlayerMS`) are "one shot" content (`third_party/blink/renderer/modules/mediastream/web_media_player_ms.cc`), so they are never controllable; their playback, video and PiP still come from the players.
+- **Tab volume and Web Audio.** The volume reaches media elements only (session players). Web Audio (`AudioContext`) is not a session player and plays at full volume; mute covers it.
+- **PiP completion.** Chromium has no reply for a browser-initiated request: OpenEngine completes YES on the next `pictureInPicture` state, NO after 2 s (guess at the timeout).
+- **Stock CEF fallback removed.** OpenEngine already includes `include/cef_tab_strip.h` unconditionally (`OEInternal.h`), so a `CEF_SOURCE=cdn` build cannot compile OpenEngine at all; a probe kept only for it would be dead code.
+
+Verification: see "Media verification" below.
 
 ## P7. Isolated-world scripts for Open's page runtimes
 
@@ -316,6 +347,30 @@ unicode-bidi 0.3.18 5c1cb5db39152898a79168971543b1cb5020dff7fe43c8dc468b0885f5e2
 unicode-normalization 0.1.26 75cd3fb03d5288b3ba9a1ee103ac7e9cbb59f0b03d64f8ddfcc04dd42758a85d
 url 2.5.8 ff67a8a4397373c3ef660812acab3268222035010ab8680ec4215f38ba3d0eed
 ```
+
+## Tab sleeping (memory fork, Section 8 PR E1)
+
+The engine primitives of [plans/memory-fork.md](plans/memory-fork.md) (S1–S5). Policy stays in Swift (`OpenSleep`); the OpenEngine API is in [engine-api.md](engine-api.md), "Tab sleeping".
+
+| Series | Patch | Files | What |
+|---|---|---|---|
+| cef | `0101-mem-visibility.patch` | `alloy/alloy_browser_host_impl.cc` | P-MEM-01: `WasHidden` of a windowed Alloy browser reaches `WebContents::UpdateWebContentsVisibility` (stock CEF: `DCHECK(false)` and return) |
+| cef | `0104-mem-navigation-history.patch` | `include/cef_navigation_entry.h`, `navigation_entry_impl.{h,cc}` | P-MEM-04 entry getters: `GetReferrerURL`, `GetFaviconURL` (experimental) |
+| cef | `0105-mem-no-renderer-create.patch` | `include/internal/cef_types.h`, `cef_types_wrappers.h`, `alloy/browser_platform_delegate_alloy.cc` | P-MEM-05: `CefBrowserSettings.no_renderer` (experimental) → `WebContents::CreateParams` `initially_hidden` + `kNoRendererProcess` for Alloy |
+| cef | `0302-open-hosted-tabs.patch` (changed) | `chrome/chrome_browser_host_impl.cc` | P-MEM-01, Chrome style: `ChromeBrowserHostImpl::WasHidden` keeps 0302's hosted path (platform delegate → `UpdateWebContentsVisibility`) and forwards the remaining (Views-window) Chrome browsers the same way instead of `NOTIMPLEMENTED()` |
+
+Overlay (no patch): `cef/include/cef_navigation_history.h` (`CefNavigationHistory`, `CefGetNavigationHistory`, `CefRestoreNavigationHistory`), `cef/include/cef_page_lifecycle.h` (`CefSetPageFrozen`, `CefIsPageFrozen`, `CefDiscardBrowser`, `CefWasDiscarded`, `CefHasUnloadHandlers`), their code in `open/browser/memory/`, wired through `open/open_libcef_sources.gni` (sources, and `//components/sessions` in `open_libcef_deps`). The hosted-tab half of `no_renderer` is in `OpenTabStrip::CreateTab` (`open/browser/tab_strip/open_tab_strip.cc`): Open's tabs are created there, not by `ChromeBrowserHostImpl::Create` + `AddTabAt`, so the plan's Chrome branch moved there (no site instance, `kNoRendererProcess`, no initial load, as Chrome's `CreateRestoredTab`). `engine-apply` regenerates the C API (`cef_navigation_history_capi.h`, `cef_page_lifecycle_capi.h`, the `libcef_dll` wrappers) from the two headers.
+
+Section 8 decisions (differences from memory-fork §3/§5, with the reason):
+
+- **Free functions in overlay headers instead of `CefBrowserHost` methods; no 0102/0103/0106 patch files.** `engine-refresh-patches` captures one `git diff HEAD` per patch over its manifest paths, so two patches can never share a file (docs/engine-fork.md: "Paths for different logical patches must not overlap"). The plan's six patches all edit `cef_browser.h` and `browser_host_base.{h,cc}`, and `browser_host_base.h` already belongs to 0302. fork-infra D-2 and §9.2 rule 2 prefer overlay code with free functions over new methods in a widely included header. Freeze (P-MEM-02), discard (P-MEM-03) and the unload flag (P-MEM-06) therefore need no existing-file edit at all; the numbers 0102, 0103 and 0106 stay unused. The series stays in numeric order (0101, 0104, 0105 before 0302), so `engine-status` S-8 still passes; with no shared files the apply order does not matter.
+- **Freeze state lives in a `WebContentsUserData`** (`PageLifecycleState`, overlay) instead of a `page_frozen_` member on `CefBrowserHostBase` (D-4's reason holds: content has no getter). It clears when the page becomes visible or its primary page changes, so "show unfreezes" needs no hunk in the `WasHidden` paths.
+- **Visibility uses `UpdateWebContentsVisibility`, not `WasShown()`/`WasHidden()`** (P1 finding: a direct `WasShown()` leaves "first set visible" unset and WebContents then ignores the view's later HIDDEN).
+- **Restore checks for an unused controller, not `GetEntryCount() == 0`.** A fresh `NavigationController` always holds the initial NavigationEntry, so the plan's check would refuse every restore. Capture also returns null for a controller with only the initial entry. A restore into a page that is already visible (an Alloy view in a shown window) calls `LoadIfNecessary()`; otherwise the entry loads when the page is shown (`SetActive(true)`).
+- **Discard is refused for a visible page** (content has no such guard), unfreezes a frozen page first (the discard waits for the renderer's answer), and settles at the latest 3 s after an accepted discard; the callback always runs exactly once, also when Chromium drops its closure.
+- **Size cap counts the OPNH container** (20 + 4 per entry + entries ≤ 2 MiB), the same rule as `SleepHistoryContainer`, so every capture fits one container.
+- `no_renderer` is appended at the end of `cef_browser_settings_t`'s experimental block (after `ax_viewport_collapse`), so `CEF_MEMBER_EXISTS` keeps working. Views-window Chrome browsers ignore it; OpenEngine never restores into them (it loads the fallback URL and reports `.failed`).
+- `cef_types.h` is included by every CEF file: 0105 rebuilds all of libcef and the wrapper (build time in the PR).
 
 ## Decisions for the lead
 

@@ -25,9 +25,14 @@ import OpenWeb
     public init?(host: any WebPictureInPictureHost, sourceURL: URL?, settings: MediaSettings,
                  rules: PiPSiteRules, privateSession: MediaSettings.PrivateHosts? = nil,
                  sourceWindow: NSWindow? = nil, presentationSourceRect: CGRect? = nil, screenVisibleFrame: CGRect? = nil,
-                 pasteboard: NSPasteboard = .general) {
-        let screen = screenVisibleFrame ?? sourceWindow?.screen?.visibleFrame ?? NSScreen.main?.visibleFrame ?? .zero
-        guard let geometry = PiPWindowGeometry(natural: host.naturalSize, screen: screen) else { return nil }
+                 screenFrame: CGRect? = nil, pasteboard: NSPasteboard = .general) {
+        let display = sourceWindow?.screen ?? NSScreen.main
+        let screen = screenVisibleFrame ?? display?.visibleFrame ?? .zero
+        // The /8 first-open box uses the whole screen (menu bar and Dock included): Arc opened 320 × 180 on a
+        // 2560 × 1440 screen whose visible frame is 2560 × 1410 (capture session 2 item 13). Placement and the
+        // size limits keep the visible frame. A caller that passes only a visible frame (harness) fits in it.
+        let fitArea = screenFrame?.size ?? (screenVisibleFrame == nil ? display?.frame.size : nil) ?? screen.size
+        guard let geometry = PiPWindowGeometry(natural: host.naturalSize, screen: screen, fitArea: fitArea) else { return nil }
         self.geometry = geometry; self.host = host; self.sourceWindow = sourceWindow; presentationRect = presentationSourceRect
         menuBuilder = PiPMenuBuilder(host: host, sourceURL: sourceURL, settings: settings, privateSession: privateSession, pasteboard: pasteboard)
         overlay = PiPOverlayView(host: host, menuBuilder: menuBuilder, configuration: sourceURL.flatMap { rules.configuration(for: $0) })
@@ -84,7 +89,7 @@ import OpenWeb
         overlay.showControls()
     }
     public func refresh() {
-        if let updated = PiPWindowGeometry(natural: host.naturalSize, screen: geometry.screen), updated.natural != geometry.natural {
+        if let updated = PiPWindowGeometry(natural: host.naturalSize, screen: geometry.screen, fitArea: geometry.fitArea), updated.natural != geometry.natural {
             geometry = updated; applyLimits(); resize(to: window?.frame.size ?? geometry.minimum)
         }
         overlay.refresh(); host.windowVisible = window?.isVisible == true
@@ -154,7 +159,10 @@ import OpenWeb
     private let video: NSView, overlay: PiPOverlayView
     init(video: NSView, overlay: PiPOverlayView, frame: CGRect) {
         self.video = video; self.overlay = overlay; super.init(frame: frame)
-        wantsLayer = true; layer?.cornerRadius = PiPMetrics.cornerRadius; layer?.masksToBounds = true
+        wantsLayer = true; layer?.cornerRadius = PiPMetrics.cornerRadius; layer?.cornerCurve = .continuous; layer?.masksToBounds = true
+        // The border draws above the video and the overlay (CALayer draws it over its sublayers).
+        layer?.borderWidth = PiPMetrics.edgeStrokeWidth
+        layer?.borderColor = CGColor(srgbRed: 1, green: 1, blue: 1, alpha: PiPMetrics.edgeStrokeAlpha)
         addSubview(video); addSubview(overlay)
     }
     @available(*, unavailable) required init?(coder: NSCoder) { fatalError() }
@@ -164,11 +172,12 @@ import OpenWeb
 
 /// Aspect-preserving limits, including the lead's portrait maximum-priority rule.
 private struct PiPWindowGeometry {
-    let natural: CGSize, screen: CGRect, minimum: CGSize, maximum: CGSize
+    let natural: CGSize, screen: CGRect, fitArea: CGSize, minimum: CGSize, maximum: CGSize
     private let ratio: CGFloat
-    init?(natural: CGSize, screen: CGRect) {
+    init?(natural: CGSize, screen: CGRect, fitArea: CGSize) {
         guard natural.width.isFinite, natural.height.isFinite, natural.width > 0, natural.height > 0, screen.width > 0, screen.height > 0 else { return nil }
         self.natural = natural; self.screen = screen; ratio = natural.width / natural.height
+        self.fitArea = fitArea.width > 0 && fitArea.height > 0 ? fitArea : screen.size
         let maxWidth = min(screen.width * PiPMetrics.maximumScreenFraction, screen.height * PiPMetrics.maximumScreenFraction * ratio)
         maximum = CGSize(width: maxWidth, height: maxWidth / ratio)
         let standard = ratio >= 1
@@ -183,7 +192,7 @@ private struct PiPWindowGeometry {
         return CGSize(width: width, height: width / ratio)
     }
     func initialFrame(reusing old: CGRect?) -> CGRect {
-        let fit = min(screen.width * PiPMetrics.initialScreenFraction, screen.height * PiPMetrics.initialScreenFraction * ratio)
+        let fit = min(fitArea.width * PiPMetrics.initialScreenFraction, fitArea.height * PiPMetrics.initialScreenFraction * ratio)
         let reusedWidth = old.map { max($0.width, $0.height) * min(1, ratio) }
         let size = constrained(CGSize(width: reusedWidth ?? min(maximum.width, max(minimum.width, fit)), height: 0))
         let inset = PiPMetrics.screenInset

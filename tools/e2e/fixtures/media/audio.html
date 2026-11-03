@@ -1,0 +1,9 @@
+<!doctype html><meta charset="utf-8"><title>Media audio</title>
+<body style="background:#fff;font:14px sans-serif">Audio fixture
+<script src="common.js"></script>
+<script>
+const a = new Audio(toneWavURL(12, 440)); a.loop = true; a.id = 'tone'; document.body.appendChild(a);
+navigator.mediaSession.metadata = new MediaMetadata({ title: 'Open Test Tone', artist: 'Open', album: 'Fixtures' });
+for (const k of ['previoustrack', 'nexttrack']) navigator.mediaSession.setActionHandler(k, () => { __counts[k]++; });
+window.start = () => a.play().then(() => true);
+</script>

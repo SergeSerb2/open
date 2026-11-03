@@ -44,6 +44,7 @@ enum FeatureCLI {
             return
         }
         if cmd == "pip" { try PiPScene.run(args); return }
+        if cmd == "capture" { try CaptureChecks.render(args); return }
         if cmd == "compare" { try FeatureCompare.run(args); return }
         if cmd == "hint" {
             // The first-hide hint at rest over a hidden sidebar (A0440's state), default dark theme.
