@@ -6,8 +6,6 @@ import OpenModel
 /// Page commands of the page-platform plan (§4.2, §4.3, §7.1): the Copy URL family with its toasts
 /// and Share, the Shared Quotes offer, and the zoom toast. Runs on the key window's factory.
 extension EngineWebContentHostFactory {
-  /// The quote offer waits this long for the page's selection; a later answer is dropped (§4.2.2).
-  static let quoteOfferBudget: TimeInterval = 0.150
   /// A selection longer than this cannot become an exact `#:~:text=` link (§4.2.4 rule 3).
   static let quoteTextLimit = 300
   static let quoteOfferSubtitle = "Share a link directly to this text instead?"
@@ -63,31 +61,20 @@ extension EngineWebContentHostFactory {
       guard let self else { return }
       if offer.isShown { _ = self.copyURLQuote(); handle.dismiss() } else { self.shareFromToast(clean, handle: handle) }
     }
-    guard offerQuote, UserDefaults.standard.object(forKey: "open.advanced.enableSharedQuotes") as? Bool ?? true,
-          let page = selectedContent else { return }
-    let started = CACurrentMediaTime()
-    let id = UUID()
-    pageTasks[id] = Task { @MainActor [weak self, weak page, handle] in
-      defer { self?.pageTasks[id] = nil }
-      guard let self, let page, !self.isClosing, self.app.engineReady else { return }
-      self.app.noteAsyncEngineCall("quoteOffer")
-      // Interim until EP-2: the main frame's selection through the page's own `getSelection()`.
-      let text = (try? await page.evaluateJavaScript("String(getSelection())")) as? String ?? ""
-      let elapsed = CACurrentMediaTime() - started
-      #if OPEN_AUTOMATION
-      self.lastQuoteOffer = ["elapsed": elapsed, "selected": !text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty,
-                             "shown": false]
-      #endif
-      // A late answer (after the budget, or after the toast left) is dropped.
-      guard !Task.isCancelled, !self.isClosing, elapsed <= Self.quoteOfferBudget, handle.isVisible,
-            !text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else { return }
-      offer.isShown = true
-      handle.update(ToastContent(title: content.title, subtitle: Self.quoteOfferSubtitle, accessory: Self.quoteButton))
-      #if OPEN_AUTOMATION
-      self.lastQuoteOffer["shown"] = true
-      #endif
-    }
+    guard offerQuote, Self.sharedQuotesEnabled, let page = selectedContent else { return }
+    // The engine keeps the page's selection state (EP-3, OEWebContentChangeSelection): the offer
+    // needs no page round trip, so it is decided at once, well inside the 150 ms budget (§4.2.2).
+    let selected = page.hasSelection
+    #if OPEN_AUTOMATION
+    lastQuoteOffer = ["elapsed": 0.0, "selected": selected, "shown": selected]
+    #endif
+    guard selected else { return }
+    offer.isShown = true
+    handle.update(ToastContent(title: content.title, subtitle: Self.quoteOfferSubtitle, accessory: Self.quoteButton))
   }
+
+  /// Settings ▸ Advanced "Enable Shared Quotes" (default on, §5).
+  static var sharedQuotesEnabled: Bool { UserDefaults.standard.object(forKey: "open.advanced.enableSharedQuotes") as? Bool ?? true }
 
   // MARK: copy-url-quote (Cmd+Ctrl+Shift+C)
 
@@ -102,18 +89,32 @@ extension EngineWebContentHostFactory {
       defer { self?.pageTasks[id] = nil }
       guard let self, let page, !self.isClosing, self.app.engineReady else { return }
       self.app.noteAsyncEngineCall("quoteSelection")
-      // Interim until EP-2: main-frame selection only, and an exact `#:~:text=` directive without
-      // prefix or suffix context (an ambiguous sentence scrolls to its first match).
-      let raw = (try? await page.evaluateJavaScript("String(getSelection())")) as? String ?? ""
+      // EP-2: the focused frame's selection and Chromium's text-fragment generator (prefix and
+      // suffix context where the sentence is not unique).
+      let (raw, engineLink) = await withCheckedContinuation { (done: CheckedContinuation<(String, URL?), Never>) in
+        page.requestSelection { text, link in done.resume(returning: (text, link)) }
+      }
       guard !Task.isCancelled, !self.isClosing else { return }
       let text = raw.trimmingCharacters(in: .whitespacesAndNewlines)
-      guard !text.isEmpty, text.count <= Self.quoteTextLimit, let link = Self.quoteLink(URLCleaner.clean(url).url, text: text) else {
-        self.copyURL(); return
-      }
+      let clean = URLCleaner.clean(url).url
+      // Rule 2: the generator's directive on the cleaned URL. Rule 3: no directive (generator error
+      // or a child frame) and at most 300 characters: an exact `#:~:text=`. Else Copy URL.
+      let link = engineLink.flatMap { Self.withFragment(of: $0, on: clean) }
+        ?? (text.count <= Self.quoteTextLimit ? Self.quoteLink(clean, text: text) : nil)
+      guard !text.isEmpty, let link else { self.copyURL(); return }
       self.writeLink(link)
       self.controller?.toasts.show(ToastContent(title: Self.quoteLinkTitle, symbol: "quote.bubble.fill"))
     }
     return true
+  }
+
+  /// `clean` with the fragment of the engine's link (the page's own fragment plus `:~:text=…`).
+  static func withFragment(of link: URL, on clean: URL) -> URL? {
+    guard let fragment = URLComponents(url: link, resolvingAgainstBaseURL: false)?.percentEncodedFragment,
+          fragment.contains(":~:text="),
+          var components = URLComponents(url: clean, resolvingAgainstBaseURL: false) else { return nil }
+    components.percentEncodedFragment = fragment
+    return components.url
   }
 
   /// `url#:~:text=<text>`: the text percent-encoded for a text directive (`-`, `,`, `&` included).

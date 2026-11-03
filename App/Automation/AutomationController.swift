@@ -143,7 +143,10 @@
         if a["name"] as? String == "hotkey" { settings.links.littleOpenHotkeyEnabled.toggle() }
         else { settings.links.externalLinksInLittleOpen.toggle() }
         return settings.commitLinks()
-      case "pasteboard": return NSPasteboard.general.string(forType: .string) ?? ""
+      case "pasteboard":
+        // `text`: replace the contents first (checks that must see a fresh copy).
+        if let text = a["text"] as? String { NSPasteboard.general.clearContents(); NSPasteboard.general.setString(text, forType: .string) }
+        return NSPasteboard.general.string(forType: .string) ?? ""
       case "pasteboard-write":
         guard let value = a["text"] as? String else { throw Failure(message: "missing clipboard text") }
         NSPasteboard.general.clearContents(); return NSPasteboard.general.setString(value, forType: .string)

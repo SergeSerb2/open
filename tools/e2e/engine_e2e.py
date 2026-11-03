@@ -3731,15 +3731,26 @@ def page_toast_inset(toast):
     return abs(frame[1] - (panel[1] + 8)) < 0.5 and abs(frame[0] + frame[2] - (panel[0] + panel[2] - 10)) < 0.5
 
 
-def page_select(app, tab, selector):
-    """Selects one element's text in the page (main frame)."""
-    return app.eval(tab, "(() => { const e = document.querySelector(%s); const r = document.createRange();"
-                         " r.selectNodeContents(e); getSelection().removeAllRanges(); getSelection().addRange(r);"
-                         " return String(getSelection()); })()" % json.dumps(selector))
+def page_select(app, tab, selector, index=0):
+    """Selects one element's text the way a user does: scroll it into view, then triple-click it
+    with DevTools Input mouse events (the page's real input path). The engine's selection state
+    (EP-3) and text (EP-2) follow input selections, not script-only ones."""
+    r = app.eval(tab, "(() => { const e = document.querySelectorAll(%s)[%d]; e.scrollIntoView({block: 'center'});"
+                      " const b = e.getBoundingClientRect(); return [b.left + 12, b.top + b.height / 2]; })()" % (json.dumps(selector), index))
+    for count in (1, 2, 3):
+        for kind in ("mousePressed", "mouseReleased"):
+            app.call("devtools", tab=tab, method="Input.dispatchMouseEvent",
+                     params={"type": kind, "x": r[0], "y": r[1], "button": "left", "clickCount": count})
+    wait_until(lambda: app.call("page-selection", tab=tab)["hasSelection"] or None, timeout=3, step=0.05)
+    return app.eval(tab, "String(getSelection())")
 
 
 def page_clear_selection(app, tab):
-    app.eval(tab, "getSelection().removeAllRanges(), true")
+    """A click on the empty page corner, as a user clears a selection."""
+    for kind in ("mousePressed", "mouseReleased"):
+        app.call("devtools", tab=tab, method="Input.dispatchMouseEvent",
+                 params={"type": kind, "x": 4, "y": 4, "button": "left", "clickCount": 1})
+    wait_until(lambda: (not app.call("page-selection", tab=tab)["hasSelection"]) or None, timeout=3, step=0.05)
 
 
 def page_copy_rows(app, results, origin):
@@ -3772,7 +3783,8 @@ def page_copy_rows(app, results, origin):
 
 
 def page_quote_rows(app, results, origin):
-    """Q1–Q4 (page-platform §8.3): Copy URL as Quote with the interim selection path (until EP-2)."""
+    """Q1–Q5 (page-platform §8.3): Copy URL as Quote through the engine's selection and
+    text-fragment generator (EP-2), the Copy URL offer (EP-3), and Share Quote (§4.2.5)."""
     tab = new_tab(app, origin + "/quote.html")
     app.call("wait", tab=tab)
     page_clear_selection(app, tab)
@@ -3800,30 +3812,47 @@ def page_quote_rows(app, results, origin):
         and link.startswith(origin + "/quote.html#:~:text=") and toast.get("symbol") == "quote.bubble.fill"
         and toast.get("accessory") == "none" and bool(landed) and landed.get("hash") == "",
         "link": link, "toast": toast, "landed": landed}
-    # Q2: an ambiguous sentence needs prefix/suffix context from Chromium's generator (EP-2).
-    results["Q2_quote_context"] = {"status": "BLOCKED", "reason": "EP-2 (the interim link is an exact text directive without context)"}
+    # Q2: the second of two identical sentences needs prefix/suffix context from Chromium's
+    # generator (EP-2); the link lands on that second sentence, not the first.
+    app.call("pasteboard", text="")
+    second = page_select(app, tab, ".repeated", 1)
+    app.call("menu-perform", id="copy-url-quote")
+    ctx_link = wait_until(lambda: (lambda p: p if "#:~:text=" in p else None)(app.call("pasteboard")), timeout=3, step=0.05) or ""
+    directive = ctx_link.split("#:~:text=", 1)[1] if ctx_link else ""
+    ctx_landed = None
+    if ctx_link:
+        opened = new_tab(app, ctx_link)
+        app.call("wait", tab=opened)
+        ctx_landed = wait_until(lambda: (lambda s: s if s["second"] else None)(app.eval(opened,
+            "(() => { const r = document.querySelectorAll('.repeated'); const a = r[0].getBoundingClientRect(), b = r[1].getBoundingClientRect();"
+            " return {scrollY: scrollY, second: b.top >= 0 && b.bottom <= innerHeight, first: a.bottom > 0 && a.top < innerHeight}; })()")),
+            timeout=5, step=0.1)
+        app.call("close", tab=opened)
+    results["Q2_quote_context"] = {"ok": second.strip() == "The same sentence appears twice on this page."
+        and ("-," in directive or ",-" in directive) and bool(ctx_landed) and not ctx_landed.get("first"),
+        "link": ctx_link, "landed": ctx_landed}
     # Q4: with Shared Quotes on (the default) and a selection, Copy URL offers the quote link in place.
-    # Real-time budget (150 ms for the page's answer): up to 3 attempts, with the lateness and load.
-    attempts = []
-    offered = None
-    for attempt in range(3):
-        page_select(app, tab, "#unique")
-        app.call("menu-perform", id="copy-url")
-        offered = page_newest_toast(app, "Copied Current URL", timeout=2)
-        offered = wait_until(lambda: (lambda t: t if t and t.get("subtitle") else None)(page_newest_toast(app, timeout=0.2)), timeout=1, step=0.05)
-        report = app.call("quote-offer")
-        attempts.append({"attempt": attempt + 1, "elapsed": report.get("elapsed"), "shown": report.get("shown"),
-                         "load": os.getloadavg()})
-        print("Q4 attempt %d: answer after %.3f s (budget 0.150), load %s" % (attempt + 1, report.get("elapsed") or -1,
-              " ".join("%.1f" % v for v in os.getloadavg())), flush=True)
-        if offered:
-            break
+    # The engine keeps the selection state (EP-3), so the offer needs no page round trip.
+    page_select(app, tab, "#unique")
+    app.call("menu-perform", id="copy-url")
+    offered = wait_until(lambda: (lambda t: t if t and t.get("subtitle") else None)(page_newest_toast(app, timeout=0.2)), timeout=2, step=0.05)
+    report = app.call("quote-offer")
     acted = app.call("toast-action", index=0) if offered else False
     quote = wait_until(lambda: (lambda p: p if "#:~:text=" in p else None)(app.call("pasteboard")), timeout=3, step=0.05)
     results["Q4_copy_url_offers_quote"] = {"ok": bool(offered) and offered.get("subtitle") == "Share a link directly to this text instead?"
-        and offered.get("accessory") == "copy quote link" and acted and bool(quote), "toast": offered, "attempts": attempts,
-        "pasteboard": app.call("pasteboard")}
+        and offered.get("accessory") == "copy quote link" and acted and bool(quote) and report.get("shown") is True,
+        "toast": offered, "offer": report, "pasteboard": app.call("pasteboard")}
+    # Q5: Share Quote under the URL field while the page has a selection (§4.2.5); its press copies
+    # the quote link. Without a selection the button goes away.
+    state = lambda: app.call("translate", action="state")["button"]
+    shown = wait_until(lambda: (lambda b: b if b["shown"] and b["title"] == "Share Quote" else None)(state()), timeout=3, step=0.05)
+    app.call("pasteboard", text="")
+    pressed = app.call("translate", action="press-status")
+    via_button = wait_until(lambda: (lambda p: p if "#:~:text=" in p else None)(app.call("pasteboard")), timeout=3, step=0.05)
     page_clear_selection(app, tab)
+    hidden = wait_until(lambda: (not state()["shown"]) or None, timeout=3, step=0.05)
+    results["Q5_share_quote_button"] = {"ok": bool(shown) and pressed.get("pressed") is True and bool(via_button) and bool(hidden),
+        "button": shown, "pasteboard": via_button, "hiddenAfterClear": bool(hidden)}
     app.call("close", tab=tab)
 
 

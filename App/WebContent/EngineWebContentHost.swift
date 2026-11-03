@@ -125,6 +125,8 @@ final class EngineWebContentHost: NSObject, WebContentHost, WebContentProviding,
     // Same-document History API path changes do not emit another load finish.
     if !page.isLoading, !changes.isDisjoint(with: [.URL, .loading]) { confirmFaviconForDocument(page, owner: owner) }
     if !changes.isDisjoint(with: [.URL, .title]) { owner.app.scheduleSave() }
+    // Share Quote follows the focused page's selection (page-platform §4.2.5, EP-3).
+    if changes.contains(.selection) { owner.translate.syncStatus() }
     owner.record("change", page, ["changes": changes.rawValue])
   }
   /// Cache conversion by image identity, independent of the page key.

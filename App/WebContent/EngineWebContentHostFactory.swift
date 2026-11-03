@@ -491,7 +491,7 @@ final class EngineWebContentHostFactory: NSResponder, WebContentHostFactory {
     case .setShowFullURL(let full): app.settingsPresenter.settings.set(full, for: AppCommand.showFullURLKey); app.applyToolbarSettings(); return true
     case .manageExtensions: openExtensionsPage(nil); return true
     case .showTranslation(let anchor): return translate.showPopover(anchor: anchor)
-    case .shareQuote: return false // Share Quote is page-platform Step 15.
+    case .shareQuote: return copyURLQuote()
     case .manageSpaces:
       app.settingsPresenter.showLibrary(section: .spaces); return true
     case .editPinnedURL(let id):
@@ -947,6 +947,8 @@ extension EngineWebContentHostFactory: NSSearchFieldDelegate {
 extension EngineWebContentHostFactory: OEWebContentDelegate {
   func webContent(_ webContent: OEWebContent, didChange changes: OEWebContentChange) {
     if changes.contains(.title), let popup = auxiliaryPages.first(where: { $0.content === webContent }) { popup.panel.title = webContent.title }
+    // Share Quote follows the focused page's selection (page-platform §4.2.5, EP-3).
+    if changes.contains(.selection) { translate.syncStatus() }
     record("change", webContent, ["changes": changes.rawValue])
   }
 

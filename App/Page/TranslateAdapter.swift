@@ -159,7 +159,12 @@ final class TranslateAdapter {
     case .translating: item = URLStatusItem(action: .translation, title: "Translating…", symbol: "translate", isBusy: true)
     case .translated: item = URLStatusItem(action: .translation, title: "Translated", symbol: "translate")
     }
-    if factory.controller?.context.urlStatus != item { factory.controller?.context.urlStatus = item }
+    // Share Quote (page-platform §4.2.5): the same button while Shared Quotes is on and the focused
+    // page has a selection (EP-3); translation wins when both apply.
+    let shareQuote = item == nil && EngineWebContentHostFactory.sharedQuotesEnabled && focusedContent?.hasSelection == true
+      ? URLStatusItem(action: .shareQuote, title: "Share Quote", symbol: "quote.bubble") : nil
+    let shown = item ?? shareQuote
+    if factory.controller?.context.urlStatus != shown { factory.controller?.context.urlStatus = shown }
     if item == nil { popover?.dismiss() }
     if let popover, popover.isPresented, let content = popoverContent() { popover.update(content) }
   }
