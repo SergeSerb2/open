@@ -29,6 +29,8 @@ final class AppSleepCoordinator {
   private(set) var quitCapture: [String: Any] = [:]
   /// True after T5 started the controller's pass loop.
   private(set) var isStarted = false
+  /// Set by the quit capture; nothing starts the controller again.
+  private var quitting = false
   /// Automation builds move the controller's clock to test timed transitions.
   final class Clock { var offset: TimeInterval = 0 }
   let clock = Clock()
@@ -45,7 +47,7 @@ final class AppSleepCoordinator {
   @discardableResult
   func prepare() -> SleepController? {
     if let controller { return controller }
-    guard app.engineReady, !app.shutdownPrepared, !app.terminationRequested, let model = app.model,
+    guard !quitting, app.engineReady, !app.shutdownPrepared, !app.terminationRequested, let model = app.model,
           let directories = app.directories else { return nil }
     let adapter = EngineSleepAdapter(app: app)
     let store = RoutingSleepStore(model: model, directories: directories)
@@ -74,7 +76,7 @@ final class AppSleepCoordinator {
 
   /// T5: start the controller's pass loop and the Low Power Mode observer.
   func start() {
-    guard let controller = prepare() else { return }
+    guard !quitting, let controller = prepare() else { return }
     if powerObserver == nil {
       powerObserver = NotificationCenter.default.addObserver(
         forName: .NSProcessInfoPowerStateDidChange, object: nil, queue: .main
@@ -199,18 +201,15 @@ final class AppSleepCoordinator {
   private func refreshPermissions(tabID: ItemID, host: EngineWebContentHost) {
     guard let tab = app.model.tab(id: tabID) else { return }
     var allowed = false
-    if let url = host.content.url, let scheme = url.scheme?.lowercased(), scheme == "http" || scheme == "https",
-       let host = url.host(), var origin = URLComponents(string: "\(scheme)://") {
-      origin.host = host; origin.port = url.port
+    let page = host.content
+    if let url = page.url, let scheme = url.scheme?.lowercased(), scheme == "http" || scheme == "https",
+       let name = url.host(), var origin = URLComponents(string: "\(scheme)://") {
+      origin.host = name; origin.port = url.port
       if let originURL = origin.url {
-        allowed = self.hostContext(tabID: tabID)?.permissionState(for: .notifications, origin: originURL) == .allow
+        allowed = page.context.permissionState(for: .notifications, origin: originURL) == .allow
       }
     }
     if tab.live.notificationsAllowed != allowed { tab.live.notificationsAllowed = allowed; controller?.setNeedsPass() }
-  }
-
-  private func hostContext(tabID: ItemID) -> OEBrowserContext? {
-    adapter?.hosts(tabID).first?.1.content.context
   }
 
   /// Settings or another input changed a Profile's sleep mode.
@@ -241,6 +240,7 @@ final class AppSleepCoordinator {
   /// stores and flush them. Bounded: quit continues after `limit` seconds, a save error is
   /// logged, and quit never waits on a renderer.
   func captureForQuit(limit: TimeInterval = 3) async {
+    quitting = true
     guard let controller else { quitCapture = ["ran": false]; return }
     let started = ContinuousClock.now
     let capture = Task { @MainActor () -> String in
