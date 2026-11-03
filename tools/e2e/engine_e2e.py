@@ -5313,6 +5313,101 @@ CAPTURE_BANDS = [(224, 64, 64), (64, 176, 80), (48, 96, 224), (224, 192, 48), (1
                  (240, 128, 32), (32, 32, 32), (128, 224, 128), (224, 128, 192), (64, 128, 160), (192, 160, 128)]
 
 
+def page_engine_checks(factory, results, tmp):
+    """Engine page API in the real App (page-platform §6, fork PR E2): EP-1 history swipe through the
+    engine's automation replay hook (SW1, SW2, SW4), EP-2 selection and link to highlight (Q2), and
+    EP-3 selection changes. Real trackpad recognition stays the manual check U-S1 (plan R-7)."""
+    folder = os.path.join(ROOT, 'tools', 'e2e', 'fixtures', 'page-platform')
+    server, origin = _static_server(folder)
+    app = factory(urls=(origin + '/links.html',), fresh=True)
+    selection_bit = 1 << 15
+    try:
+        tab = app.call('tabs')[0]['id']
+        app.call('wait', tab=tab)
+        a_url = origin + '/links.html'
+        b_url = origin + '/links-target.html'
+        app.call('navigate', tab=tab, url=b_url)
+        app.call('wait', tab=tab)
+        wait_until(lambda: app.eval(tab, 'location.href') == b_url or None, timeout=10, step=.1)
+        url = lambda: app.eval(tab, 'location.href')
+        swipe_events = lambda: [e for e in app.call('events') if e['type'] == 'historySwipe']
+        # SW1: back past the threshold navigates back; forward returns. Chrome's own overlay is off.
+        app.call('events')
+        options = app.call('swipe', tab=tab, engineOverlay=False)
+        back = app.call('swipe', tab=tab, direction='back', progress=1.2)
+        at_a = wait_until(lambda: url() == a_url or None, timeout=10, step=.1)
+        ev_back = swipe_events()
+        fwd = app.call('swipe', tab=tab, direction='forward', progress=1.2)
+        at_b = wait_until(lambda: url() == b_url or None, timeout=10, step=.1)
+        ev_fwd = swipe_events()
+        phases = lambda ev: [e['phase'] for e in ev]
+        results['SW1_swipe_back_forward'] = {
+            'ok': options['engineOverlay'] is False and back['ran'] and fwd['ran'] and bool(at_a) and bool(at_b)
+            and phases(ev_back)[:1] == ['began'] and phases(ev_back)[-1:] == ['completed']
+            and all(e['direction'] == 'back' for e in ev_back) and phases(ev_fwd)[-1:] == ['completed']
+            and all(e['direction'] == 'forward' for e in ev_fwd) and ev_back[-1]['progress'] >= 1,
+            'back': phases(ev_back), 'forward': phases(ev_fwd), 'urls': [bool(at_a), bool(at_b)]}
+        # SW2: half a swipe does not navigate; the swipe ends cancelled.
+        half = app.call('swipe', tab=tab, direction='back', progress=0.5)
+        time.sleep(1)
+        ev_half = swipe_events()
+        results['SW2_partial_swipe_cancels'] = {
+            'ok': half['ran'] and url() == b_url and phases(ev_half)[-1:] == ['cancelled']
+            and max(e['progress'] for e in ev_half) <= 0.5,
+            'phases': phases(ev_half), 'url': url()}
+        # SW4: a page with swipes off (capture overlay, Zap) refuses; no event, no navigation.
+        app.call('swipe', tab=tab, enabled=False)
+        refused = app.call('swipe', tab=tab, direction='back', progress=1.2)
+        time.sleep(1)
+        ev_off = swipe_events()
+        app.call('swipe', tab=tab, enabled=True)
+        results['SW4_swipe_disabled'] = {'ok': refused['ran'] is False and not ev_off and url() == b_url,
+                                         'ran': refused['ran'], 'events': len(ev_off)}
+
+        # Q2 (EP-2) and EP-3: select a sentence, read text + link, open the link.
+        app.call('navigate', tab=tab, url=origin + '/quote.html')
+        app.call('wait', tab=tab)
+        wait_until(lambda: app.eval(tab, "document.readyState === 'complete' && location.pathname === '/quote.html' || null"), timeout=10, step=.1)
+        app.call('focus', tab=tab)
+        app.call('events')
+        empty = app.call('page-selection', tab=tab)
+        # A user's selection: triple-click the sentence (DevTools Input mouse events, the page's
+        # real input path), so the page also has input focus as after a real click.
+        r = app.eval(tab, "(() => { const b = document.getElementById('quote').getBoundingClientRect(); return [b.left + 20, b.top + b.height / 2] })()")
+        for count in (1, 2, 3):
+            for kind in ('mousePressed', 'mouseReleased'):
+                app.call('devtools', tab=tab, method='Input.dispatchMouseEvent',
+                         params={'type': kind, 'x': r[0], 'y': r[1], 'button': 'left', 'clickCount': count})
+        has = wait_until(lambda: app.call('page-selection', tab=tab)['hasSelection'] or None, timeout=5, step=.1)
+        picked = app.call('page-selection', tab=tab)
+        changes = [e['changes'] for e in app.call('events') if e['type'] == 'change' and e['changes'] & selection_bit]
+        # A single click elsewhere clears it.
+        for kind in ('mousePressed', 'mouseReleased'):
+            app.call('devtools', tab=tab, method='Input.dispatchMouseEvent',
+                     params={'type': kind, 'x': 5, 'y': 5, 'button': 'left', 'clickCount': 1})
+        cleared = wait_until(lambda: (not app.call('page-selection', tab=tab)['hasSelection']) or None, timeout=5, step=.1)
+        link = picked.get('link') or ''
+        opened = None
+        if link:
+            other = app.call('open', url=link)['id']
+            app.call('wait', tab=other)
+            # Chromium strips the directive from location and highlights the text it found.
+            opened = wait_until(lambda: app.eval(other, "(() => { const s = CSS.highlights ? [...CSS.highlights.keys()] : []; "
+                                                 "return location.pathname === '/quote.html' && !location.hash.includes(':~:') ? "
+                                                 "{hash: location.hash, highlights: s, y: scrollY} : null })()"), timeout=10, step=.2)
+            app.call('close', tab=other)
+        results['Q2_selection_and_link'] = {
+            'ok': empty['text'] == '' and empty['link'] is None and bool(has)
+            and picked['text'].strip() == 'The quick brown fox studies the lazy dog before every jump.'
+            and link.startswith(origin + '/quote.html#:~:text=') and bool(opened),
+            'empty': empty, 'picked': picked, 'opened': opened}
+        results['EP3_selection_change_bit'] = {'ok': bool(has) and bool(cleared) and len(changes) >= 1,
+                                               'changeEvents': len(changes), 'cleared': bool(cleared)}
+    finally:
+        app.quit()
+        server.shutdown(); server.server_close()
+
+
 def capture_checks(factory, results, tmp):
     """page-platform §8.3 C1–C7: the Capture tool in the real App (Step 13)."""
     server, origin = _static_server(os.path.join(ROOT, 'tools', 'e2e', 'fixtures', 'page-platform'))
@@ -8022,6 +8117,7 @@ def main():
         elif opts.only == "page":
             results["page"] = CheckedResults(tracker)
             capture_checks(factory, results["page"], tmp)
+            page_engine_checks(factory, results["page"], tmp)
         elif opts.only in ("toolbar", "numbering"):
             results[opts.only] = CheckedResults(tracker)
             (toolbar_checks if opts.only == "toolbar" else numbering_checks)(factory, results[opts.only], tmp)

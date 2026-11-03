@@ -251,6 +251,9 @@
         return ["frame": [inRoot.minX, inRoot.minY, inRoot.width, inRoot.height], "point": [inRoot.midX, inRoot.midY], "unreadBadge": controller.sidebar.unreadDotFrame(nodeID: ItemID(rawValue: uuid)) != nil, "current": controller.sidebar.isCurrentRow(nodeID: ItemID(rawValue: uuid))] as [String: Any]
       case "preview-state":
         return try previewState(a)
+      case "page-selection", "swipe":
+        // Engine page API (EP-1, EP-2, EP-3); App/Automation/AutomationPageEngine.swift.
+        return try await runPageEngineCommand(cmd, try content(a, try window), a)
       case "capture", "capture-state", "capture-action", "captures":
         // Capture tool (page-platform §8.3); App/Automation/AutomationCapture.swift.
         return try await runCaptureCommand(cmd, a)
