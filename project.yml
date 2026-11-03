@@ -160,7 +160,11 @@ targets:
       - package: OpenKit
         product: OpenMedia
       - package: OpenKit
+        product: OpenSleep
+      - package: OpenKit
         product: OpenDesign
+      - package: OpenKit
+        product: OpenTranslate
       - target: OpenHelper
         embed: false
         link: false

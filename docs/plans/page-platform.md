@@ -867,6 +867,32 @@ strings, PG-7.3). The other strings are Arc's (PG-7.3).
   (the settings action `resetTranslatePrompts` calls
   `TranslatePreferences.reset()`).
 
+#### 4.7.8 As built (Steps 9 and 10, s8/translate, 2026-11-02)
+
+Section 8 decisions, where this section left a choice open:
+
+- Tokens live in `OpenDesign/TranslateTokens.swift` (not `PageTokens.swift`),
+  so Step 1 and Step 9 never edit one new file at once.
+- The push-down is in `SidebarView.layout` (the view that places Favorites and
+  the Space list); `ChromeViews.swift` is unchanged.
+- The status button also hides while the content toolbar replaces the URL
+  field (guess; no capture).
+- Detection also runs when a tab whose current document was never probed
+  becomes focused (a page loaded in the background still offers once seen).
+  Background tabs still cost nothing.
+- The popover is a borderless child panel that never becomes key, so it shows
+  above Chrome-style pages; Esc and Return reach it through
+  `BrowserWindowController.keyInterceptor`.
+- Context menu: Chromium never adds `IDC_CONTENT_CONTEXT_TRANSLATE` without a
+  Google key, so the App adds "Translate to <language>" / "Show Original".
+- Edit ▸ Undo Translate works with the focus outside the page; Cmd+Z in a
+  focused page is Chromium's editing undo (`docs/followups.md`).
+- e2e runs on an automation-only fixture backend (French → English word list)
+  because no Apple language pair is installed on the test Mac (U-X1); the row
+  `X1_apple_backend` runs on Apple's backend once the pair is installed.
+- Runtime limits: 20,000 units per start, 20,000 characters per unit, batches
+  of 40 units / 4,000 characters (`translate-runtime.js`, `TranslationBatch`).
+
 ### 4.8 Website appearance
 
 - View ▸ Appearance: the existing header "Websites will use:" and three

@@ -111,7 +111,11 @@ final class EngineWebProfile: WebProfile {
     context.setPermissionState(s, for: Self.kind(permission), origin: origin)
     // Site Control's Allow: ask macOS once (page-platform §4.5.3).
     if state == .allow, permission == .notifications { NotificationAuthorization.shared.userAllowedNotifications() }
+    Self.onPermissionChange?(context)
   }
+
+  /// Runs after every permission write through this adapter (tab sleep's notification gate).
+  static var onPermissionChange: ((OEBrowserContext) -> Void)?
 }
 
 /// OpenWeb.ExtensionHost over one OEBrowser.
