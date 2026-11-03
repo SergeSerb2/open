@@ -584,6 +584,8 @@ extension SidebarView {
     public func urlFieldMenu() -> NSMenu { SidebarMenus(context: context).urlField() }
     /// The URL field shows (it hides while the window shows the content toolbar).
     public var urlFieldVisible: Bool { !urlField.isHidden }
+    /// The URL field's text right now (the host, or the full URL for a Developer Mode site).
+    public var urlFieldText: String { context.pageHost ?? "" }
 
     /// Toolbar row and bottom bar opacity (a Peek's dim lowers both).
     public var chromeOpacity: (toolbar: CGFloat, bottomBar: CGFloat) { (toolbar.alphaValue, bottomBar.alphaValue) }

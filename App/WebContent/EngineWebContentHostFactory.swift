@@ -32,6 +32,7 @@ final class EngineWebContentHostFactory: NSResponder, WebContentHostFactory {
   var model: BrowserModel { app.model }
   var contentContainer: NSView { controller!.container }
   private(set) var hosts: [ItemID: EngineWebContentHost] = [:]
+  private var developerModeObserver: (any NSObjectProtocol)?
   private var modelHostIDs: Set<ItemID> = []
   private(set) var contentCreationCount = 0
   private var queuedNavigations: [ItemID: URL] = [:]
@@ -126,7 +127,16 @@ final class EngineWebContentHostFactory: NSResponder, WebContentHostFactory {
       guard !AppCommand.featureIDs.contains(id), !id.hasPrefix("focus-split-pane-") else { return nil }
       return self?.isAppCommandEnabled(id, enabledKey: key) ?? false
     }
-    controller.onMenuState = { PageTools.menuState(for: $0) }  // checkmarks, Cast hidden (page-platform §7.1)
+    controller.onMenuState = { [weak self] in self?.pageMenuState(for: $0) }  // checkmarks, Cast hidden, Developer Mode title (page-platform §7.1)
+    // Developer Mode sites show their full URL in the URL field (§4.10.3).
+    controller.context.developerModeHosts = DeveloperMode.hosts
+    developerModeObserver = NotificationCenter.default.addObserver(forName: DeveloperMode.didChange, object: nil, queue: .main) { [weak self] _ in
+      MainActor.assumeIsolated {
+        guard let self, let controller = self.controller else { return }
+        controller.context.developerModeHosts = DeveloperMode.hosts
+        self.app.scheduleMenuRebuild()
+      }
+    }
     controller.onLayout = { [weak self] in self?.layoutViews() }
     controller.onFocus = { [weak self] in guard let self else { return }; self.app.didFocusWindow(self.windowState.id) }
     controller.nextResponder = self; nextResponder = NSApp

@@ -515,7 +515,10 @@ extension AppDelegate: CommandDispatcher {
     littleOpenStub?.showWindow(nil); littleOpenStub?.window?.makeKeyAndOrderFront(nil); NSApp.activate()
     scheduleMenuRebuild()
   }
-  func menuState(for id: String) -> CommandMenuState? { PageTools.menuState(for: id) }
+  func menuState(for id: String) -> CommandMenuState? {
+    if id == "toggle-developer-mode" { return DeveloperMode.menuState(for: frontWindowController.flatMap { hostFactories[$0.windowID] }?.selectedContent?.url) }
+    return PageTools.menuState(for: id)
+  }
   func isCommandEnabled(_ id: String, enabledKey: String) -> Bool {
     if SystemCommandActions.selectors[id] != nil { return SystemCommandActions.isEnabled(id) }
     if let enabled = PageTools.isAppCommandEnabled(id) { return enabled }  // App/Page/PageToolsCommands.swift

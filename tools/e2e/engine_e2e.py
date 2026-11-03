@@ -7573,6 +7573,44 @@ def page_tools_devtools_checks(app, results, port, style):
     app.call("close", tab=tab)
 
 
+def page_tools_developer_mode_checks(app, results, port):
+    """D3 (page-platform §4.10.3, Q6): Developer Mode per site. The menu title flips, a toast
+    says the new state, and the URL field shows the full URL for that site only; Ctrl+D through
+    the real key path turns it off. Pages that are not http(s) or file hide the item."""
+    url = "http://127.0.0.1:%d/cookies.html?dev=1" % port
+    tab = app.call("open", url=url)["id"]
+    app.call("wait", tab=tab)
+    field = lambda: app.call("window-state")["urlFieldText"]
+    row = lambda: _menu_row(app, "toggle-developer-mode") or {}
+    off_title, off_field = row().get("title"), field()
+    app.call("menu-perform", id="toggle-developer-mode")
+    on_toast = wait_until(lambda: (lambda t: t if t and t[0]["title"] == "Developer Mode On" else None)(app.call("toasts")["toasts"]), timeout=3, step=.05)
+    on_field = wait_until(lambda: (lambda f: f if f.startswith("127.0.0.1:") else None)(field()), timeout=3, step=.05)
+    on_title = row().get("title")
+    # Another site keeps its plain host.
+    other = app.call("open", url="http://localhost:%d/cookies.html?dev=2" % port)["id"]
+    app.call("wait", tab=other)
+    other_field = wait_until(lambda: (lambda f: f if f == "localhost" else None)(field()), timeout=3, step=.05)
+    app.call("close", tab=other)
+    app.call("select", tab=tab)
+    wait_until(lambda: field().startswith("127.0.0.1:") or None, timeout=3, step=.05)
+    # Ctrl+D (the registry shortcut) through OEApplication.sendEvent with the sidebar focused.
+    app.call("menu-perform", id="reveal-tab-in-sidebar")
+    app.call("key", key="d", modifiers=["ctrl"], route="app")
+    off_toast = wait_until(lambda: (lambda t: t if t and t[0]["title"] == "Developer Mode Off" else None)(app.call("toasts")["toasts"]), timeout=3, step=.05)
+    back_field = wait_until(lambda: (lambda f: f if f == "127.0.0.1" else None)(field()), timeout=3, step=.05)
+    stored = app.call("defaults", key="open.developer.modeHosts")
+    app.call("navigate", tab=tab, url="about:blank")
+    wait_until(lambda: app.eval(tab, "location.href") == "about:blank" or None, timeout=5, step=.05)
+    hidden = row().get("hidden")
+    results["D3_developer_mode"] = {
+        "ok": off_title == "Turn on Developer Mode for this site" and off_field == "127.0.0.1" and bool(on_toast)
+              and on_field == "127.0.0.1:%d/cookies.html?dev=1" % port and on_title == "Turn off Developer Mode for this site"
+              and bool(other_field) and bool(off_toast) and bool(back_field) and not stored and hidden is True,
+        "titles": [off_title, on_title], "fields": [off_field, on_field, other_field, back_field], "stored": stored, "hiddenOnBlank": hidden}
+    app.call("close", tab=tab)
+
+
 def page_tools_apple_events_checks(app, results):
     """D4: Allow JavaScript from Apple Events (default off, checkmark)."""
     key, command = "open.developer.allowJavaScriptFromAppleEvents", "allow-js-apple-events"
@@ -7698,7 +7736,7 @@ def page_tools_checks(factory, results, tmp, style):
     server, port = page_fixture_server()
     app = factory(urls=("http://127.0.0.1:%d/cookies.html" % port,), fresh=True)
     # Open's preferences domain is shared with other runs: restore what this group writes.
-    keys = ("open.web.colorScheme", "open.developer.allowJavaScriptFromAppleEvents")
+    keys = ("open.web.colorScheme", "open.developer.allowJavaScriptFromAppleEvents", "open.developer.modeHosts")
     saved = {key: app.call("defaults", key=key) for key in keys}
     try:
         for key in keys:
@@ -7709,6 +7747,7 @@ def page_tools_checks(factory, results, tmp, style):
         page_tools_clear_checks(app, results, port, style)
         page_tools_devtools_checks(app, results, port, style)
         page_tools_apple_events_checks(app, results)
+        page_tools_developer_mode_checks(app, results, port)
         page_tools_troubleshooting_checks(app, results, tmp, port, style)
         page_tools_quit_with_devtools_check(app, results, saved)
     finally:

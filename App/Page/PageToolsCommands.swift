@@ -1,5 +1,6 @@
 import AppKit
 import OpenCommands
+import OpenFeatures
 import OpenEngine
 
 /// View ▸ Appearance, View ▸ Developer panels, Allow JavaScript from Apple Events,
@@ -10,7 +11,7 @@ enum PageTools {
   /// Commands that need the focused page of a window.
   static let pageIDs: Set<String> = [
     "javascript-console", "inspect-elements", "network-inspector",
-    "clear-cookies-and-refresh", "clear-cache-and-refresh",
+    "clear-cookies-and-refresh", "clear-cache-and-refresh", "toggle-developer-mode",
   ]
   /// Commands that also run with no browser window (AppDelegate dispatch).
   static let appIDs: Set<String> = [
@@ -94,6 +95,7 @@ extension EngineWebContentHostFactory {
     switch id {
     case "clear-cookies-and-refresh": return PageTools.isSitePage(page.url)
     case "clear-cache-and-refresh": return PageTools.siteDataClearAvailable && PageTools.isSitePage(page.url)
+    case "toggle-developer-mode": return DeveloperMode.host(for: page.url) != nil
     default: return true
     }
   }
@@ -111,9 +113,20 @@ extension EngineWebContentHostFactory {
     case "network-inspector": page.showDevTools(panel: .network)
     case "clear-cookies-and-refresh": clearCookiesAndRefresh(page)
     case "clear-cache-and-refresh": return false  // disabled until E2 (siteDataClearAvailable)
+    case "toggle-developer-mode":
+      // §4.10.3: the focused page's site; toast "Developer Mode On" / "Developer Mode Off".
+      guard let host = DeveloperMode.host(for: page.url) else { return false }
+      let on = DeveloperMode.toggle(host: host)
+      controller?.toasts.show(ToastContent(title: on ? "Developer Mode On" : "Developer Mode Off"))
     default: return false
     }
     return true
+  }
+
+  /// Window menu state: page tools plus the focused page's Developer Mode title (§4.10.3).
+  func pageMenuState(for id: String) -> CommandMenuState? {
+    if id == "toggle-developer-mode" { return DeveloperMode.menuState(for: selectedContent?.url) }
+    return PageTools.menuState(for: id)
   }
 
   /// §4.9 interim (before Site Control E2): the host cookies of the focused page's
