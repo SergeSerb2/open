@@ -4797,6 +4797,14 @@ def media_checks(factory, results, tmp):
     def start(tab):
         app.eval(tab, "start()")
         return wait_until(lambda: playing(tab), timeout=10, step=.05)
+    def is_audible(tab): return next((t for t in app.call("tabs") if t["id"] == tab), {}).get("audible") is True
+    def start_heard(tab):
+        # Auto-PiP needs real audibility (A4). Chromium's signal (P6) follows the audio output a few
+        # hundred ms after playback starts, so a leave right after play() would see "inaudible".
+        ok = start(tab)
+        t0 = time.monotonic()
+        heard = wait_until(lambda: is_audible(tab), timeout=3, step=.02)
+        return ok and bool(heard), round((time.monotonic() - t0) * 1000, 1)
     def select(tab):
         app.call("select", tab=tab)
         wait_until(lambda: app.call("window-state")["selected"] == tab, timeout=5, step=.02)
@@ -4914,7 +4922,7 @@ def media_checks(factory, results, tmp):
 
         # E-M5: auto-PiP on leave within 500 ms; back closes it, video keeps playing.
         video = open_tab(base + "video.html")
-        start(video)
+        _, video_audible_ms = start_heard(video)
         windows_before = len(app.call("windows"))
         select(home)
         opened = wait_pip("active", timeout=3)
@@ -4926,7 +4934,8 @@ def media_checks(factory, results, tmp):
         results["media_auto_pip_on_leave"] = {"ok": opened["state"] == "active" and opened.get("automatic") is True and opened.get("tab") == video
             and latency is not None and latency <= 0.5 and len(pip_windows) >= 1 and abs(leave_to_request) < 0.05,
             "pip": p, "requestToEnterSeconds": latency, "leaveToRequestSeconds": leave_to_request,
-            "load": os.getloadavg(), "windowsBefore": windows_before}
+            "load": os.getloadavg(), "windowsBefore": windows_before, "decision": decision, "audibleAfterPlayMs": video_audible_ms,
+            "autoPiPSetting": app.call("defaults", key="open.advanced.enablePictureInPictureOnLeave")}
         # Sleep feed (§4.10): the PiP source is protected.
         feed = app.call("sleep-visibility")
         results["media_sleep_feed_pip"] = {"ok": video in feed["pictureInPicture"], "feed": feed}
@@ -4941,7 +4950,7 @@ def media_checks(factory, results, tmp):
         closed = wait_until(lambda: (lambda p: p if p["state"] == "closed" else None)(pip()), timeout=3, step=.02)
         paused = wait_until(lambda: app.eval(video, "document.getElementById('main').paused"), timeout=3, step=.05)
         snoozed = video in pip()["snoozed"]
-        select(video); app.eval(video, "start()"); select(home)
+        select(video); app.eval(video, "start()"); wait_until(lambda: is_audible(video), timeout=3, step=.02); select(home)
         again = wait_pip("active")
         results["media_close_snoozes"] = {"ok": bool(closed) and closed.get("reason") == "userClosed" and bool(paused) and snoozed
             and again["state"] == "active", "closed": closed, "again": again}
@@ -4968,10 +4977,10 @@ def media_checks(factory, results, tmp):
         muted_video = open_tab(base + "video-muted.html"); start(muted_video)
         inaudible = leave_decision(muted_video)
         close_tab(muted_video)
-        nopip = open_tab(base + "video-nopip.html"); start(nopip)
+        nopip = open_tab(base + "video-nopip.html"); start_heard(nopip)
         disabled = leave_decision(nopip)
         close_tab(nopip)
-        blocked = open_tab("http://blocked.localhost:%d/video.html" % port); start(blocked)
+        blocked = open_tab("http://blocked.localhost:%d/video.html" % port); start_heard(blocked)
         disallowed = leave_decision(blocked)
         close_tab(blocked)
         relaxed = open_tab("http://inaudible.localhost:%d/video-muted.html" % port); start(relaxed)
@@ -4984,7 +4993,7 @@ def media_checks(factory, results, tmp):
             "disallowed": disallowed, "activatesWhenInaudible": relaxed_result}
 
         # E-M10: the largest playing video goes to PiP.
-        two = open_tab(base + "two-videos.html"); start(two)
+        two = open_tab(base + "two-videos.html"); start_heard(two)
         select(home); wait_pip("active")
         chosen = app.eval(two, "document.pictureInPictureElement && document.pictureInPictureElement.id")
         select(two); wait_pip("closed")
