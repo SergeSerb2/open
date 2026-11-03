@@ -5035,7 +5035,7 @@ def media_checks(factory, results, tmp):
         select(video); app.eval(video, "start()"); wait_until(lambda: is_audible(video), timeout=3, step=.02); select(home)
         again = wait_pip("active")
         results["media_close_snoozes"] = {"ok": bool(closed) and closed.get("reason") == "userClosed" and bool(paused) and snoozed
-            and again["state"] == "active", "closed": closed, "again": again}
+            and again["state"] == "active", "closed": closed, "paused": bool(paused), "snoozed": snoozed, "again": again}
 
         # E-M9: Back to Tab selects the tab, closes PiP, keeps playing.
         app.call("pip-action", action="back-to-tab")

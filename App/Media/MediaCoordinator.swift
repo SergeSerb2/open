@@ -26,6 +26,11 @@ final class MediaCoordinator {
   /// Tabs Open asked to leave PiP (system uptime). A report that still says "in PiP" before the
   /// page's exit lands is not a new manual PiP.
   private var pendingExit: [ItemID: TimeInterval] = [:]
+  /// Phase 1: a PiP exit seen while the page still says "playing". Chromium reports the exit in the
+  /// browser at once, and the pause of a Close a moment later from the renderer, so the reason waits
+  /// `exitGrace` for that pause before it becomes Back to Tab (`sourceShown`).
+  private var exitWaits: [ItemID: Task<Void, Never>] = [:]
+  private static let exitGrace: Duration = .milliseconds(400)
   /// Sleep feed (media-pip §4.10): read by AppVisibilityProvider; section 8's sleep adapter consumes it.
   let visibility: AppVisibilityProvider
 
@@ -92,6 +97,7 @@ final class MediaCoordinator {
   /// A tab's page closed: tab close, archive, unload (sleep), crash teardown, window close.
   func hostClosed(tabID: ItemID) {
     store.remove(tabID: tabID); pendingExit[tabID] = nil; decisions[tabID] = nil; pipTimes[tabID] = nil
+    exitWaits.removeValue(forKey: tabID)?.cancel()
     var minimized = false
     if case .minimized(let other) = session.state { minimized = other == tabID }
     if session.activeSource?.tabID == tabID || minimized {
@@ -115,6 +121,7 @@ final class MediaCoordinator {
   /// as a PiP exit: a paused video means Close (snooze), a playing one means the user went back.
   private func followPictureInPicture(tabID: ItemID, inPiP: Bool, playing: Bool) {
     if !inPiP { pendingExit[tabID] = nil }
+    if inPiP || !playing { exitWaits.removeValue(forKey: tabID)?.cancel() }
     if inPiP, let asked = pendingExit[tabID] {
       if ProcessInfo.processInfo.systemUptime - asked < 2 { return }
       pendingExit[tabID] = nil
@@ -123,7 +130,15 @@ final class MediaCoordinator {
     case let .requesting(id, _) where id == tabID:
       if inPiP { enter(tabID) }
     case let .active(id, _) where id == tabID:
-      if !inPiP { session.close(playing ? .sourceShown : .userClosed); store.setPiP(tabID: tabID, .none) }
+      guard !inPiP else { break }
+      if !playing { followedExit(tabID, .userClosed); break }
+      guard exitWaits[tabID] == nil else { break }
+      exitWaits[tabID] = Task { [weak self] in
+        try? await Task.sleep(for: Self.exitGrace)
+        guard let self, !Task.isCancelled else { return }
+        self.exitWaits[tabID] = nil
+        if case let .active(id, _) = self.session.state, id == tabID { self.followedExit(tabID, .sourceShown); self.feedSleep() }
+      }
     default:
       if inPiP {
         // A PiP the page or Chromium's own menu started (manual, §4.8).
@@ -131,6 +146,10 @@ final class MediaCoordinator {
         enter(tabID)
       }
     }
+  }
+
+  private func followedExit(_ tabID: ItemID, _ reason: PiPSession.Reason) {
+    session.close(reason); store.setPiP(tabID: tabID, .none)
   }
 
   private func enter(_ tabID: ItemID) {
