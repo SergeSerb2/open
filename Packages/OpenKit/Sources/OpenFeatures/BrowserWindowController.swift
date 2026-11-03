@@ -43,6 +43,8 @@ public final class BrowserWindowController: NSWindowController, NSWindowDelegate
     public var onCommandValidation: ((String, String) -> Bool?)?
     /// Runtime menu state from the App (page-platform §7.1); nil keeps the item as built.
     public var onMenuState: ((String) -> CommandMenuState?)?
+    /// Sees every key event of this window first (after the tab switcher); true consumes it.
+    public var keyInterceptor: ((NSEvent) -> Bool)?
     public var ownsAdditionalKeyWindow: ((NSWindow) -> Bool)?
     public var isApplicationActive: (() -> Bool)?
     public var isCommandBarPresented = false
@@ -837,6 +839,9 @@ public final class BrowserWindowController: NSWindowController, NSWindowDelegate
               eventWindow === window || ownsAdditionalKeyWindow?(eventWindow) == true
                 || existingTabSwitcher?.acceptsEventWindow(eventWindow) == true else { return false }
         if existingTabSwitcher?.handle(event) == true { return true }
+        // A window-anchored popover the App shows (the translate popover, page-platform §4.7.3)
+        // takes Esc and Return before any other route.
+        if let keyInterceptor, keyInterceptor(event) { return true }
         // Esc and Return for the capture overlay; Esc and Cmd+C for its result card (§4.6.3, §4.6.5).
         if eventWindow === window, let capture = captureStorage, capture.phase == .selecting || capture.phase == .showing,
            capture.handleKey(event) { return true }
