@@ -1,0 +1,125 @@
+diff --git a/content/browser/media/media_web_contents_observer.h b/content/browser/media/media_web_contents_observer.h
+index e6395d6e82b9cbb3f4067a81a6a3726be819e449..5a18f507f3d41b3246413486a4ac3d535bf85297 100644
+--- a/content/browser/media/media_web_contents_observer.h
++++ b/content/browser/media/media_web_contents_observer.h
+@@ -185,6 +185,13 @@ class CONTENT_EXPORT MediaWebContentsObserver
+   // be suspended.
+   void SuspendAllMediaPlayers();
+ 
++  // Open: the player's last picture-in-picture availability report (see
++  // MediaSessionControllersManager::OpenIsPictureInPictureAvailable).
++  bool OpenIsPictureInPictureAvailable(const MediaPlayerId& player_id) {
++    return session_controllers_manager_->OpenIsPictureInPictureAvailable(
++        player_id);
++  }
++
+  protected:
+   MediaSessionControllersManager* session_controllers_manager() {
+     return session_controllers_manager_.get();
+diff --git a/content/browser/media/session/media_session_controllers_manager.cc b/content/browser/media/session/media_session_controllers_manager.cc
+index 887a324759711b8a341544e2935f8be2dcf0b2d3..e7a684cf616cc324d325291e7617f9e82583ac05 100644
+--- a/content/browser/media/session/media_session_controllers_manager.cc
++++ b/content/browser/media/session/media_session_controllers_manager.cc
+@@ -174,6 +174,17 @@ void MediaSessionControllersManager::OnVideoFrameAvailabilityChanged(
+   controller->OnVideoFrameAvailabilityChanged(available);
+ }
+ 
++bool MediaSessionControllersManager::OpenIsPictureInPictureAvailable(
++    const MediaPlayerId& id) const {
++  auto it = controllers_map_.find(id);
++  if (it == controllers_map_.end()) {
++    return false;
++  }
++  const MediaSessionController& controller = *it->second;
++  return controller.IsPictureInPictureAvailable(
++      controller.get_player_id_for_testing());
++}
++
+ MediaSessionController* MediaSessionControllersManager::FindOrCreateController(
+     const MediaPlayerId& id) {
+   auto it = controllers_map_.find(id);
+diff --git a/content/browser/media/session/media_session_controllers_manager.h b/content/browser/media/session/media_session_controllers_manager.h
+index 837f557e56b7797c9cecd6fbf1d47db74574e6dc..1731f050914d4caa05897ffa3a3de39003fb74ab 100644
+--- a/content/browser/media/session/media_session_controllers_manager.h
++++ b/content/browser/media/session/media_session_controllers_manager.h
+@@ -102,6 +102,13 @@ class CONTENT_EXPORT MediaSessionControllersManager {
+   // Called when video frame availability for the player |id| has changed.
+   void OnVideoFrameAvailabilityChanged(const MediaPlayerId& id, bool available);
+ 
++  // Open: the last picture-in-picture availability the player |id| reported
++  // (Blink's SupportsPictureInPicture: metadata loaded, has video, no
++  // disablePictureInPicture attribute, permissions policy). False if the
++  // player never reported one. Open enters video PiP from the browser, a
++  // path on which Blink does not check the attribute itself.
++  bool OpenIsPictureInPictureAvailable(const MediaPlayerId& id) const;
++
+  private:
+   using ControllersMap =
+       std::map<MediaPlayerId, std::unique_ptr<MediaSessionController>>;
+diff --git a/content/browser/media/session/media_session_impl.cc b/content/browser/media/session/media_session_impl.cc
+index 2ceba89ab91b5a76b4b3b0ca5861fa4348e6e702..2fe5d81e6e8dfc1fb4228e8974308c85fb71b819 100644
+--- a/content/browser/media/session/media_session_impl.cc
++++ b/content/browser/media/session/media_session_impl.cc
+@@ -5,6 +5,7 @@
+ #include "content/browser/media/session/media_session_impl.h"
+ 
+ #include <algorithm>
++#include <cmath>
+ #include <memory>
+ #include <utility>
+ 
+@@ -835,6 +836,16 @@ void MediaSessionImpl::SetDuckingVolumeMultiplier(double multiplier) {
+   ducking_volume_multiplier_ = std::clamp(multiplier, 0.0, 1.0);
+ }
+ 
++void MediaSessionImpl::SetOpenVolumeMultiplier(double multiplier) {
++  multiplier = std::isfinite(multiplier) ? std::clamp(multiplier, 0.0, 1.0)
++                                         : 1.0;
++  if (multiplier == open_volume_multiplier_) {
++    return;
++  }
++  open_volume_multiplier_ = multiplier;
++  UpdateVolumeMultiplier();
++}
++
+ void MediaSessionImpl::SetAudioFocusGroupId(
+     const base::UnguessableToken& group_id) {
+   audio_focus_group_id_ = group_id;
+@@ -897,7 +908,9 @@ void MediaSessionImpl::UpdateVolumeMultiplier() {
+ }
+ 
+ double MediaSessionImpl::GetVolumeMultiplier() const {
+-  return is_ducking_ ? ducking_volume_multiplier_ : kUnduckedVolumeMultiplier;
++  return (is_ducking_ ? ducking_volume_multiplier_
++                      : kUnduckedVolumeMultiplier) *
++         open_volume_multiplier_;
+ }
+ 
+ bool MediaSessionImpl::IsActive() const {
+diff --git a/content/browser/media/session/media_session_impl.h b/content/browser/media/session/media_session_impl.h
+index 41ef57c62314ba9eb8adda92934daa1f7510ae04..cceca1cc15604dcdf85d6bce32e11d3e5c71daad 100644
+--- a/content/browser/media/session/media_session_impl.h
++++ b/content/browser/media/session/media_session_impl.h
+@@ -205,6 +205,12 @@ class MediaSessionImpl : public MediaSession,
+   // Set the volume multiplier applied during ducking.
+   CONTENT_EXPORT void SetDuckingVolumeMultiplier(double multiplier) override;
+ 
++  // Open: the embedder's tab volume, 0 to 1 (default 1). It multiplies the
++  // ducking multiplier for every player of this session, including players
++  // added later. Web Audio is not a session player and is not affected.
++  CONTENT_EXPORT void SetOpenVolumeMultiplier(double multiplier);
++  double open_volume_multiplier() const { return open_volume_multiplier_; }
++
+   // Set the audio focus group id for this media session. Sessions in the same
+   // group can share audio focus. Setting this to null will use the browser
+   // default value.
+@@ -661,6 +667,9 @@ class MediaSessionImpl : public MediaSession,
+ 
+   double ducking_volume_multiplier_;
+ 
++  // Open: tab volume (SetOpenVolumeMultiplier).
++  double open_volume_multiplier_ = 1.0;
++
+   // True if the WebContents associated with this MediaSessionImpl is focused.
+   bool focused_ = false;
+ 

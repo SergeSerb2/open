@@ -138,6 +138,7 @@ final class EngineWebContentHostFactory: NSResponder, WebContentHostFactory {
       }
     }
     controller.onLayout = { [weak self] in self?.layoutViews() }
+    controller.captureLibrary = app.captureLibrary
     controller.onFocus = { [weak self] in guard let self else { return }; self.app.didFocusWindow(self.windowState.id) }
     controller.nextResponder = self; nextResponder = NSApp
     controller.onSidebarIntent = { [weak self] intent in guard let self else { return false }; return self.performSidebar(intent) }
@@ -1115,6 +1116,7 @@ extension EngineWebContentHostFactory: OEWebContentDelegate {
       mi.isEnabled = item.isEnabled
       ns.addItem(mi)
     }
+    let openItems = addCaptureItems(to: ns, for: webContent)
     func commands(_ items: [OEContextMenuItem], in submenu: String = "") -> [[String: Any]] {
       items.flatMap { item -> [[String: Any]] in
         if item.isSeparator { return [] }
@@ -1127,6 +1129,7 @@ extension EngineWebContentHostFactory: OEWebContentDelegate {
       [
         "items": menu.items.map(\.title), "commands": commands(menu.items),
         "link": menu.linkURL?.absoluteString ?? "", "targets": menu.targets.rawValue,
+        "open": openItems, "shown": ns.items.map { $0.isSeparatorItem ? "-" : $0.title },
       ])
     if contextMenuPolicy == "record" {
       menu.cancel()

@@ -253,6 +253,9 @@
         return ["frame": [inRoot.minX, inRoot.minY, inRoot.width, inRoot.height], "point": [inRoot.midX, inRoot.midY], "unreadBadge": controller.sidebar.unreadDotFrame(nodeID: ItemID(rawValue: uuid)) != nil, "current": controller.sidebar.isCurrentRow(nodeID: ItemID(rawValue: uuid))] as [String: Any]
       case "preview-state":
         return try previewState(a)
+      case "capture", "capture-state", "capture-action", "captures":
+        // Capture tool (page-platform §8.3); App/Automation/AutomationCapture.swift.
+        return try await runCaptureCommand(cmd, a)
       case "toast-undo":
         guard let controller = app.frontWindowController else { throw Failure(message: "no browser window") }
         return controller.pressToastUndo()
@@ -1443,7 +1446,7 @@
       case .split(let split): return ["id": split.id.description, "kind": "split", "children": split.panes.map { describeNode(.tab($0)) }]
       }
     }
-    private func menuEnabled(_ item: NSMenuItem) -> Bool {
+    func menuEnabled(_ item: NSMenuItem) -> Bool {
       guard let action = item.action else { return item.isEnabled }
       let target = item.target ?? NSApp.target(forAction: action, to: nil, from: item)
       if let validator = target as? NSMenuItemValidation { return validator.validateMenuItem(item) }
@@ -1460,7 +1463,7 @@
           "enabled": enabled, "checked": item.state == .on, "hidden": item.isHidden, "targetNil": item.target == nil, "tag": item.tag, "action": item.action.map(NSStringFromSelector) ?? "", "payload": (item.representedObject as? [String: String])?["payload"] ?? ""]]
       }
     }
-    private func findMenuItem(_ id: String, in menu: NSMenu?) -> (NSMenu, Int)? {
+    func findMenuItem(_ id: String, in menu: NSMenu?) -> (NSMenu, Int)? {
       guard let menu else { return nil }
       for (index, item) in menu.items.enumerated() {
         if item.identifier?.rawValue == id { return (menu, index) }

@@ -10,6 +10,8 @@ open_libcef_mac_sources = [
   "//open/browser/extensions/open_extension_popup.h",
   "//open/browser/extensions/open_extensions_toolbar.cc",
   "//open/browser/extensions/open_extensions_toolbar.h",
+  "//open/browser/media/open_media_controller.cc",
+  "//open/browser/media/open_media_controller.h",
   "//open/browser/tab_strip/hidden_browser.h",
   "//open/browser/tab_strip/open_browser_window.h",
   "//open/browser/tab_strip/open_browser_window.mm",

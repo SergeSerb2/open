@@ -114,7 +114,15 @@ public enum MiniPlayerMetrics {
 
 /// Media plan §4.4/§4.6. PP-6 proves corner button sizes/padding and the 15 s skip.
 public enum PiPMetrics {
-    public static let cornerRadius: CGFloat = 12
+    /// Video PiP window corner, continuous curve. Capture session 2 item 13 (13/0002–0058, window alpha) equals an
+    /// on-screen continuous 6 pt calibration window within 1/255 (MediaRenders/section3-parity).
+    public static let cornerRadius: CGFloat = 6
+    /// Document PiP keeps the earlier guess; no capture shows a Document PiP window.
+    public static let documentCornerRadius: CGFloat = 12
+    /// Video PiP inner edge: a 1 pt white hairline at ≈ 0.12 alpha over the video on all four sides
+    /// (capture session 2 item 13, ring 0 vs ring 1 over 58 frames: median 0.121; MediaRenders/section3-parity).
+    public static let edgeStrokeWidth: CGFloat = 1
+    public static let edgeStrokeAlpha: CGFloat = 0.12
     public static let minimum = CGSize(width: 284, height: 160)
     public static let compactWidth: CGFloat = 300
     public static let compactPlayGlyph: CGFloat = 24

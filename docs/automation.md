@@ -169,7 +169,10 @@ Arguments are `key=value`; values that parse as JSON are sent as JSON.
 /usr/bin/lockf /tmp/open-onscreen-e2e.lock python3 tools/e2e/engine_e2e.py --only media --style chrome        # media-pip §8.4: mini players, auto-PiP, Now Playing, sleep feed
 OPEN_AUTOMATION=1 ~/Library/Caches/OpenRE/scripts/heavy.sh nice -n 10 tools/build.sh Release
 /usr/bin/lockf /tmp/open-onscreen-e2e.lock python3 tools/e2e/engine_e2e.py --only measure --config Release    # launch, memory, idle CPU
+/usr/bin/lockf /tmp/open-onscreen-e2e.lock python3 tools/e2e/engine_e2e.py --only relaunch --config Release   # N same-profile relaunches (OPEN_E2E_RELAUNCH_COUNT, default 20)
 ```
+
+The `relaunch` suite (section 8 item 14) builds one profile with three local file tabs, then relaunches it `OPEN_E2E_RELAUNCH_COUNT` times (default 20). Each launch must reach automation, restore the same tabs, load only the selected tab, quit with no owned process left, and write no `No zone found` allocator FATAL to its launch log. The suite also fails on any new `Open*`/`cefsimple*` report in `~/Library/Logs/DiagnosticReports`. It is the regression check for the PartitionAlloc launch-zone race (`docs/engine-fork.md`, "PartitionAlloc and the launch race").
 
 Every run is isolated, because several agents run the harness at once: it gets its own data root `~/Library/Application Support/Open-E2E-<suite>-<style>-<pid>-<random>`, the matching Chromium cache root `~/Library/Caches/<same name>` (Chromium's rule for roots under Application Support), and a scratch folder in the system temp folder. All three are deleted when the run ends, also after `timeout` or Ctrl-C; `--keep` keeps them and prints their paths. A run also deletes the folders of earlier runs whose process is gone. No folder name is shared between runs. Each suite writes `docs/engine-spike/results-*.json` plus screenshots. `tabs` reports `page.chromeTabId` and `page.chromeWindowId` (the `chrome.tabs`/`chrome.windows` ids of a hosted tab, else -1). The `tabstrip` suite loads `tools/e2e/fixtures/tabs-probe` (records tab events, sets a badge) and Bitwarden. Extensions come from `.re/ext/unpacked/{ublock-lite,darkreader,1password,bitwarden}` (CRX files from the Chrome Web Store, unpacked with `tools/crx-unpack.py`, which keeps the store ID).
 
@@ -681,3 +684,21 @@ domain is shared between runs.
 The trace toasts are ToastCenter toasts: the H2 row reads them with `toasts` and presses Stop and Show in Finder with `toast-action` (the real buttons).
 The existing `appearance name=light|dark|system` command is the plan's
 `app-appearance` (it sets `NSApp.appearance`).
+
+## Capture tool (page-platform Step 13)
+
+`--only page` runs the capture rows C1–C7 (page-platform §8.3) against
+`tools/e2e/fixtures/page-platform/` (served from a local port). Every step uses the
+real paths: the File menu item, own-window mouse events through
+`NSApplication.sendEvent` (the window's local monitors see them, as with real input),
+the real key path for Esc, and the result card's own buttons.
+
+| Command | Args | Does |
+|---|---|---|
+| `capture` | `mode` (`area`, `fullPage`, `portrait`), `rect` `[x, y, w, h]` in page points, `entry=drag`, `timeout` | Runs the File menu item. For `area` with `rect`, drags inside the overlay; without `rect`, returns with the overlay up (send `key key=escape` or `return`). `entry=drag` sends a Cmd+Shift press on the page, a 2.2 pt move (still held), then the drag, as the user would (§4.6.2). Waits for the pipeline; returns `steps` and `capture-state`. |
+| `capture-state` | — | `phase` (`idle`, `selecting`, `capturing`, `showing`), `overlayActive` (the swipe hook), `held`, counts (`completed`, `cancelled`, `replays`, `hintShows`), `entry`, `error`; `overlay` (frame, page frame, selection, anchor, size label, hint); `card` (frame, actions, Library line, note, scheduled lifetime, time left, `paused`, panel frame); `result` (kind, pixel size, `truncated`, saved row id, host, Save… file name). |
+| `capture-action` | `action` (`copy`, `save`, `share`, `library`, `retake`, `delete`, or `cancel`), or `hover` (bool) | Clicks that card button (`performClick`), or sets the card's hover state (the pointer pause), or cancels the overlay or card. |
+| `captures` | `probe` `[[x, y], …]` (≤ 64, image pixels), `index` | Rows of `State/captures.json` with file sizes and PNG pixel sizes; `probe` reads RGBA pixels of one row's PNG (default: the last). |
+
+The page context menu event (`policy contextMenu=record`) also lists `open` (Open's own
+items, "Capture" and "Capture Full Page") and `shown` (the whole menu as it would show).

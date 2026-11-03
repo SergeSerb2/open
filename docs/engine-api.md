@@ -34,7 +34,7 @@ Open.app/Contents/
 - `tools/fetch-cef.sh` puts a CEF distribution at `Vendor/cef/` (the contract from docs/plans/fork-infra.md, F-14) and builds `libcef_dll_wrapper.a` in `Vendor/cef/build/`. `CEF_SOURCE=fork` (default) runs `tools/fetch-engine.sh --run`, which copies the fork's recorded distribution (docs/engine-fork.md). `CEF_SOURCE=cdn` uses the pinned Spotify CDN build of the same CEF commit and Chromium tag as `Engine/fork/VERSIONS` (the script checks this), for comparisons; the archive and its extraction are cached in `~/Library/Caches/Open/cef`.
 - `tools/embed-cef.sh` (a build phase) copies the CEF framework and the helpers into the app and signs them. `OPEN_KEEP_LOCALES="en"` ships only those locales.
 - `tools/build.sh [Debug|Release]` runs everything at `nice 10` with at most 6 parallel jobs. `tools/run.sh` runs the built app.
-- Helpers link `OpenEngine.framework`, so the renderer half of the engine (user-script injection, the audible probe) lives in the same code as the browser half.
+- Helpers link `OpenEngine.framework`, so the renderer half of the engine (user-script injection) lives in the same code as the browser half.
 
 ## Lifecycle
 
@@ -155,9 +155,9 @@ Creation and lifetime:
 - A hidden view (`isHidden` or a hidden ancestor) tells Chromium the page is hidden, which throttles it.
 - `browser` (the `OEBrowser` it belongs to), `identifier` (unique per process, 0 until live), `chromeTabIdentifier` (the `chrome.tabs` id of a hosted tab, else -1), `isLive`, `isPopup`, `extensionPopupIdentifier`.
 
-State (read the properties after `webContent(_:didChange:)`; the change set says what changed): `url`, `title`, `faviconURL`, `favicon`, `isLoading`, `estimatedProgress`, `canGoBack`, `canGoForward`, `isAudible`, `isMuted` (settable), `isFullscreen`, `crashState`, `isCapturingCamera`, `isCapturingMicrophone`, `statusText` (link hover), `zoomLevel` (settable). `.live` reports browser creation and destruction.
+State (read the properties after `webContent(_:didChange:)`; the change set says what changed): `url`, `title`, `faviconURL`, `favicon`, `isLoading`, `estimatedProgress`, `canGoBack`, `canGoForward`, `isAudible` (Chromium's tab audio signal, "Media" below), `isMuted` (settable), `isFullscreen`, `crashState`, `isCapturingCamera`, `isCapturingMicrophone`, `statusText` (link hover), `zoomLevel` (settable). `.live` reports browser creation and destruction.
 
-Commands: `load(_:)`, `goBack()`, `goForward()`, `reload()`, `reloadIgnoringCache()`, `stopLoading()`; `evaluateJavaScript(_:) async throws -> Any` (main world, awaits promises, user gesture); `sendDevToolsMethod(_:parameters:) async throws` (events go to `didReceiveDevToolsEvent`); `find(_:forward:caseSensitive:)`, `stopFinding(clearSelection:)`; `zoomIn()`, `zoomOut()`, `resetZoom()`; `showDevTools()`, `closeDevTools()`, `hasDevTools`; `showDevTools(panel:)` (EP-4a: `.console` runs Chrome's `IDC_DEV_TOOLS_CONSOLE` and `.inspectMode` runs `IDC_DEV_TOOLS_INSPECT` (element picker; a second call turns it off) through `ExecuteChromeCommand` on Chrome style pages, ids from `cef_id_for_command_id_name`; Chrome commands act on the window's active tab, so a hosted tab that is not Chromium's active tab in the hidden strip, Alloy pages, `.default`, `.elements`, and `.network` (until fork patch 0503, EP-4b) open DevTools as `showDevTools()` does; returns whether the panel command ran); `evaluateInDevToolsFrontend(_:)` (diagnostics: `Runtime.evaluate` in the page's open DevTools window, the front end, which OpenEngine tracks through its DevTools window client); `showPrintPanel()`, `printToPDF(at:)`; `takeSnapshot() async throws -> Data` (PNG of the visible page, also when hidden); `enableAutoResize(minimumSize:maximumSize:)`; `focusPage()`; `exitFullscreen()`.
+Commands: `load(_:)`, `goBack()`, `goForward()`, `reload()`, `reloadIgnoringCache()`, `stopLoading()`; `evaluateJavaScript(_:) async throws -> Any` (main world, awaits promises, user gesture); `sendDevToolsMethod(_:parameters:) async throws` (events go to `didReceiveDevToolsEvent`); `find(_:forward:caseSensitive:)`, `stopFinding(clearSelection:)`; `zoomIn()`, `zoomOut()`, `resetZoom()`; `showDevTools()`, `closeDevTools()`, `hasDevTools`; `showDevTools(panel:)` (EP-4a: `.console` runs Chrome's `IDC_DEV_TOOLS_CONSOLE` and `.inspectMode` runs `IDC_DEV_TOOLS_INSPECT` (element picker; a second call turns it off) through `ExecuteChromeCommand` on Chrome style pages, ids from `cef_id_for_command_id_name`; `.elements`, `.network` (EP-4b) and `.console` where Chrome's command cannot run (a hosted tab that is not Chromium's active tab in the hidden strip, Alloy pages) open DevTools and select the panel through the front end's `DevToolsAPI.showPanel`, retried until selected (at most 15 s); `.default` opens DevTools as `showDevTools()` does; returns NO only for that plain fallback); `evaluateInDevToolsFrontend(_:)` (diagnostics: `Runtime.evaluate` in the page's open DevTools window, the front end, which OpenEngine tracks through its DevTools window client); `showPrintPanel()`, `printToPDF(at:)`; `takeSnapshot() async throws -> Data` (PNG of the visible page, also when hidden); `captureFullPage(maxDevicePixels:completion:)` (whole page, below); `enableAutoResize(minimumSize:maximumSize:)`; `focusPage()`; `exitFullscreen()`.
 
 `OEWebContentDelegate` (all optional, all on the main thread):
 
@@ -211,28 +211,32 @@ Removed, and why (all seen in Open before this list, Chromium 156):
 | Search <engine> for “…” (current or new tab) | It uses Chromium's default search engine (Google), not the search engine of the page's profile. App-shell Step D adds Open's own "Search <engine> for “…”" item (`docs/followups.md`). |
 | Get Image Descriptions from Google, Live Caption, PDF OCR, Listen to This Page, Gemini, Ask Google, Compose, AI items | Google services and AI (out of v1 scope). |
 
+### Media (`OEMediaSession`)
+
+From the fork's `CefMediaController` (overlay `cef/include/cef_media_controller.h`, `open/browser/media/open_media_controller.cc`; docs/engine-patches.md "Media"). OpenEngine attaches it to every page in `OnAfterCreated`; it works for Chrome style and Alloy pages and covers all frames.
+
+- `isAudible` is Chromium's tab audio signal (`WebContentsObserver::OnAudioStateChanged`, patch P6): media elements, Web Audio and WebRTC, background pages too. `.audio` fires on every change. There is no page probe any more.
+- `mediaSession` (`OEMediaSession`, a snapshot; nil until a player of the page has played, and again when none is playing or paused mid-way). `.media` fires at most once per message-loop turn and only for a real change: state, actions, metadata, a seek, a rate or duration change, the end. A position report that only continues the clock is not a change; read `position` (`OEMediaPosition`: duration, `INFINITY` for live; position at `lastUpdated`; rate; ended) and extrapolate. `.pictureInPicture` fires when a video of the page enters or leaves PiP.
+- Values: `playbackState` (from the players: playing if one plays, paused if one played and stopped before its end), `isControllable` (Chromium's media session: a player with sound that is not a short effect or a MediaStream; while the tab is muted Chromium leaves its players out of the session, so the session part (controllable, actions, metadata, position, microphone, camera) keeps its last unmuted value), `hasVideo`, `hasAudio`, `largestVideoSize` (natural size in video pixels of the playing video with the largest natural area, not CSS px), `isPictureInPictureDisabled` (that video's own availability report: `disablePictureInPicture`, no video track yet, or permissions policy), `actions` (the session's actions and the page's handlers; `enterPictureInPicture` when the largest playing video can enter PiP, `exitPictureInPicture` while in PiP, `enterAutoPictureInPicture` when the page handles `enterpictureinpicture`), `title`/`artist`/`album` (Chromium fills the title from the page when the page sets no metadata), `microphoneMuted`, `cameraOn`, `volume`.
+- Commands (`play`, `pause`, `stop`, `previousTrack`, `nextTrack`, `seek(by:)`, `seek(to:)`, `scrub(to:)`, `skipAd`, `toggleMicrophone`, `toggleCamera`, `hangUp`) go to Chromium's media session, which routes them to the page's action handlers when it has them. A session that is not controllable (muted tab, MediaStream-only page) gets play, pause, stop and seeks on its players directly. Track, ad, slide and meeting actions always go to the session, which routes them to the page's handler even when it is not controllable: a meeting page (camera or microphone streams only) is never controllable, and its recording card's toggles still reach the page.
+- `mediaVolume` (settable, 0...1, default 1, not persisted): a tab volume that Chromium's media session multiplies into every player's volume, players added later too (chromium/0401). The page's own `element.volume` does not change. Web Audio is not a session player and is not affected; use `isMuted` for silence.
+- `requestPictureInPicture(completion:)` enters video PiP for the largest playing video (`largestVideoSize`) from the browser, so no user gesture is needed. It fails at once for a video that cannot enter PiP (Blink's browser-initiated path does not check `disablePictureInPicture`, so the engine checks the player's availability first). Completion YES when the page is in PiP, NO otherwise after at most 2 s (Chromium has no direct reply). `exitPictureInPicture(pausing:)` closes this page's PiP window only (one app-wide): without pausing as Chromium's own exit, with pausing as the user's close.
+- Phase 1: the PiP window is Chromium's own (`VideoOverlayWindowViews`). `CefMediaControllerHandler::ShouldHostPictureInPicture` and `CefPictureInPictureWindow` are declared for EM-4 and not implemented yet.
+
 ### Page background color
 
 TODO(engine): `OEWebContent` has no page color yet. The M4 split pane bar needs one (`WebContentHost.pageBackgroundColor` and `onPageBackgroundChange` in OpenFeatures). Arc paints each pane's 32 pt bar in the page's own color (F0081: lavender page → `#DEDEFA` bar, white page → white bar; `re/interaction-states.md` §11). The color is not the pixels under the bar, so the engine must report it: the page's `theme-color` or its document background (guess: which one Arc uses). Report it as a state change after the URL change of the same navigation, and again when the page changes it. The App adapter now performs a guarded renderer query after loading ends and emits `onPageBackgroundChange`: valid theme-color, then a nontransparent body/root background, then white. That priority is an App fallback policy, not a confirmed Arc rule. The Space color remains the fallback before the answer. Changes without another loading-end event are not observed yet; a real engine color event is still needed.
 
-### Media (`OEMediaSession.h`, media-pip §6)
+### Full-page capture (EP-8)
 
-- `OEWebContent.mediaSession`: an `OEMediaSession` snapshot (playback state,
-  controllable, hasVideo/hasAudio, largest playing video size,
-  `pictureInPictureDisabled`, `OEMediaActions`, title/artist/album,
-  `OEMediaPosition`, `pictureInPicture`, microphone/camera), nil until a
-  frame played media. A new snapshot replaces it on every
-  `OEWebContentChangeMedia`; `OEWebContentChangePictureInPicture` marks a PiP
-  enter or exit. Commands on the snapshot (`play`, `pause`, `previousTrack`,
-  `nextTrack`, `seek(by:)`, `seek(to:)`, `scrub(to:)`, `skipAd`, `stop`,
-  `toggleMicrophone`, `toggleCamera`, `hangUp`) go to the page it came from.
-- `requestPictureInPicture(completion:)` enters video PiP for the playing
-  video with the largest area; `exitPictureInPicture(pausing:)`.
-- Source (Section 3 Step 5): an engine-owned probe in every frame
-  (`kMediaProbe` in `OEApp.mm`) reports state on media events only and
-  calls the page's own `navigator.mediaSession` action handlers. Values are
-  page-reachable, so they drive UI only. The fork's media session (Step 7)
-  replaces the source; the API stays.
+`captureFullPage(maxDevicePixels:completion:)` (Swift: `OEWebContent.fullPagePNG(maxDevicePixels:)` through OpenWeb) returns one PNG of the whole page at device scale and `truncated`. OpenEngine only, no fork patch (page-platform plan §6 EP-8, Arc's `captureFullPage:`, PG-6.3):
+
+1. DevTools `Page.getLayoutMetrics` → `cssContentSize` (CSS pixels; the same size Chromium's own full-page path uses, `LocalFrameMojoHandler::GetFullPageSize`).
+2. Device scale = one visible-page `Page.captureScreenshot`'s pixel width ÷ the page view's width in points. That follows the window's backing scale and DevTools device emulation (`Emulation.setDeviceMetricsOverride`), which the screenshots follow; `contentSize` from the layout metrics does not (it stays in CSS pixels on the Mac, also under emulation). Fallback: the window's backing scale, else the main screen's. Width is capped at 4,096 device pixels; height at `maxDevicePixels` (the App passes `CaptureMetrics.fullPageMaxDevicePixels` = 32,768). A taller page is cut there and `truncated` is YES.
+3. One `Page.captureScreenshot` per tile, top to bottom: `format: png`, `fromSurface: true`, `captureBeyondViewport: true`, `clip: {x: 0, y, width, height ≤ 4,096 / scale, scale: 1}` in document CSS pixels. Each call temporarily resizes the widget and restores it (`PageHandler::CaptureScreenshot`), so tiles run one at a time.
+4. The tiles are decoded, drawn top-down into one sRGB bitmap with Core Graphics, and encoded to PNG on a utility queue; only `NSData` crosses threads. Worst allocation: 4,096 × 32,768 × 4 B = 512 MiB. The completion runs on the main thread.
+
+The caller makes lazy images load first (`img[loading=lazy]` → `eager`, wait ≤ 1 s) through `evaluateJavaScript`; the engine call itself does not change the page. Page zoom is not applied to the clip (Chromium's own full-page capture does the same).
 
 ## Extensions
 
@@ -249,7 +253,8 @@ Each has a fork patch in [engine-patches.md](engine-patches.md):
 | Dynamic action state | Fixed by P2: Chrome's toolbar model (icon, badge, title, enabled, pin, order, context menu, `onClicked`) and real popup hosts (`getViews({type: "popup"})`, `chrome.action.openPopup()`). Extension shortcuts (`_execute_action`) still need the keybinding registry | P2, done |
 | Install, uninstall, enable from our UI; our own consent prompts | Web Store install needs a Chrome-style page and shows Chrome's dialog | P3 |
 | H.264, AAC, Widevine | Not in stock CEF | P4 |
-| Audible state for Web Audio | Media-element probe in the page | P6 |
+| Audible state for Web Audio | Fixed: Chromium's tab audio signal through `CefMediaController` (no page probe) | P6, done |
+| Media session, tab volume, PiP without a gesture | Fixed: `OEMediaSession`, `mediaVolume`, `requestPictureInPicture` from the fork's `CefMediaController` | media 0401, done |
 | User scripts in an isolated world | Main world | P7 |
 
 ## Debugging crashes

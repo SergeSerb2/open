@@ -1,0 +1,792 @@
+{
+  "cleanup": {
+    "ok": true,
+    "processes": [
+      {
+        "forced": false,
+        "ok": true,
+        "owned_pids": [
+          16568,
+          16594,
+          16595,
+          16596,
+          16597,
+          16603,
+          16604,
+          16775
+        ],
+        "remaining_processes": [],
+        "reply": true,
+        "windows_after_quit": {
+          "count": 0,
+          "windows": []
+        },
+        "windows_before_quit": 1
+      }
+    ]
+  },
+  "config": "Debug",
+  "engine": {
+    "distributionCodeSHA256": "35b37ba3a72d079ed4e76fc7932bfe76e49b57c3456eda06f7fea9d928b901ae",
+    "distributionSHA256": "61c9ab17b6b08525af836cca93bba67819bfa1544f04abe5eae3baf4b57b98a8",
+    "distributionUUID": "4C4C44C8-5555-3144-A168-35B709BBDA3A",
+    "embeddedCodeSHA256": "35b37ba3a72d079ed4e76fc7932bfe76e49b57c3456eda06f7fea9d928b901ae",
+    "embeddedSHA256": "3e246c99539902496c44c4c6ed2533f3f4fd4a85f03b4f5e6dcaaf49f75f28d2",
+    "embeddedUUID": "4C4C44C8-5555-3144-A168-35B709BBDA3A",
+    "requiredSHA256": "",
+    "source": "fork",
+    "stamp": "fork /Users/serge/Developer/open-engine-s8-main/chromium_git/chromium/src/cef/binary_distrib/cef_binary_156.0.14+g4fa4ab5+chromium-156.0.8078.48_macosarm64_minimal 1793075034"
+  },
+  "interrupted_attempts": [],
+  "page": {
+    "capture_2x_c1_area": {
+      "devicePixelRatio": 2,
+      "ok": true,
+      "row": {
+        "bytes": 4312,
+        "createdAt": 1793662613.581839,
+        "fileName": "53FD2D6C-1A20-45EE-8B5E-ED992C6CC81E.png",
+        "height": 400,
+        "id": "53FD2D6C-1A20-45EE-8B5E-ED992C6CC81E",
+        "kind": "area",
+        "sourceHost": "127.0.0.1",
+        "width": 600
+      }
+    },
+    "capture_2x_c2_full_page": {
+      "bands": [
+        0,
+        1,
+        2,
+        3,
+        4,
+        5,
+        6,
+        7,
+        8,
+        9,
+        10,
+        11
+      ],
+      "cssWidth": 1042,
+      "ok": true,
+      "probe": [
+        [
+          224,
+          65,
+          64,
+          255
+        ],
+        [
+          64,
+          176,
+          80,
+          255
+        ],
+        [
+          48,
+          96,
+          224,
+          255
+        ],
+        [
+          224,
+          192,
+          47,
+          255
+        ],
+        [
+          161,
+          64,
+          192,
+          255
+        ],
+        [
+          50,
+          192,
+          192,
+          255
+        ],
+        [
+          240,
+          128,
+          33,
+          255
+        ],
+        [
+          32,
+          32,
+          32,
+          255
+        ],
+        [
+          129,
+          224,
+          128,
+          255
+        ],
+        [
+          225,
+          127,
+          192,
+          255
+        ],
+        [
+          66,
+          128,
+          159,
+          255
+        ],
+        [
+          192,
+          160,
+          128,
+          255
+        ]
+      ],
+      "row": {
+        "bytes": 978563,
+        "createdAt": 1793662614.597955,
+        "fileName": "E05A7F58-FD15-4388-828D-E796677DE1E8.png",
+        "height": 24000,
+        "id": "E05A7F58-FD15-4388-828D-E796677DE1E8",
+        "kind": "fullPage",
+        "sourceHost": "127.0.0.1",
+        "width": 2084
+      }
+    },
+    "capture_2x_c3_portrait": {
+      "ok": true,
+      "row": {
+        "bytes": 162958,
+        "createdAt": 1793662618.446032,
+        "fileName": "607EE916-C591-4584-AE20-95FA0C8DE3A1.png",
+        "height": 3029,
+        "id": "607EE916-C591-4584-AE20-95FA0C8DE3A1",
+        "kind": "portrait",
+        "sourceHost": "127.0.0.1",
+        "width": 2423
+      },
+      "view": [
+        1042,
+        780
+      ]
+    },
+    "capture_2x_full_page_cap": {
+      "bands": [
+        0,
+        1,
+        2,
+        3,
+        4,
+        5,
+        6,
+        7,
+        8,
+        9,
+        10,
+        11,
+        0,
+        1,
+        2,
+        3
+      ],
+      "error": "",
+      "ok": true,
+      "row": {
+        "bytes": 1270742,
+        "createdAt": 1793662616.8690572,
+        "fileName": "246BAE81-CEBA-4C5D-A08B-11881B57C8F3.png",
+        "height": 32768,
+        "id": "246BAE81-CEBA-4C5D-A08B-11881B57C8F3",
+        "kind": "fullPage",
+        "sourceHost": "127.0.0.1",
+        "width": 2084
+      },
+      "state": {
+        "cancelled": 1,
+        "card": {
+          "actions": [
+            "copy",
+            "save",
+            "share",
+            "library",
+            "delete"
+          ],
+          "frame": [
+            1012,
+            18,
+            248,
+            264
+          ],
+          "hovered": false,
+          "lifetime": 8,
+          "note": "Page cut at 32,768 px.",
+          "panel": [
+            228,
+            10,
+            1042,
+            780
+          ],
+          "paused": false,
+          "remaining": 7.993026333337184,
+          "savedLine": true
+        },
+        "completed": 7,
+        "entry": "command",
+        "error": "",
+        "held": false,
+        "hintShows": 1,
+        "overlayActive": false,
+        "phase": "showing",
+        "replays": 1,
+        "result": {
+          "bytes": 1270742,
+          "fileName": "Tall page 11-02 at 4.36PM.png",
+          "height": 32768,
+          "host": "127.0.0.1",
+          "kind": "fullPage",
+          "saved": "246BAE81-CEBA-4C5D-A08B-11881B57C8F3",
+          "truncated": true,
+          "width": 2084
+        }
+      }
+    },
+    "capture_c1_area": {
+      "ok": true,
+      "row": [
+        {
+          "bytes": 1664,
+          "createdAt": 1793662610.5005798,
+          "fileName": "32F4DC4D-DDEE-46EB-A1AB-7727FA9ED35F.png",
+          "height": 200,
+          "id": "32F4DC4D-DDEE-46EB-A1AB-7727FA9ED35F",
+          "kind": "area",
+          "sourceHost": "127.0.0.1",
+          "width": 300
+        }
+      ],
+      "scale": 1,
+      "state": {
+        "cancelled": 0,
+        "card": {
+          "actions": [
+            "copy",
+            "save",
+            "share",
+            "library",
+            "retake",
+            "delete"
+          ],
+          "frame": [
+            1012,
+            18,
+            248,
+            231
+          ],
+          "hovered": false,
+          "lifetime": 8,
+          "note": "",
+          "panel": [
+            228,
+            10,
+            1042,
+            780
+          ],
+          "paused": false,
+          "remaining": 7.9900897917104885,
+          "savedLine": true
+        },
+        "completed": 1,
+        "entry": "command",
+        "error": "",
+        "held": false,
+        "hintShows": 0,
+        "overlayActive": false,
+        "phase": "showing",
+        "replays": 0,
+        "result": {
+          "bytes": 1664,
+          "fileName": "Long page 11-02 at 4.36PM.png",
+          "height": 200,
+          "host": "127.0.0.1",
+          "kind": "area",
+          "saved": "32F4DC4D-DDEE-46EB-A1AB-7727FA9ED35F",
+          "truncated": false,
+          "width": 300
+        }
+      },
+      "steps": [
+        {
+          "after": "command",
+          "state": {
+            "cancelled": 0,
+            "completed": 0,
+            "entry": "command",
+            "error": "",
+            "held": false,
+            "hintShows": 0,
+            "overlay": {
+              "anchor": [],
+              "firstResponder": true,
+              "frame": [
+                228,
+                10,
+                1042,
+                780
+              ],
+              "hint": "Drag to capture. Press Esc to cancel.",
+              "hintHidden": false,
+              "pageFrame": [
+                228,
+                10,
+                1042,
+                780
+              ],
+              "selection": [],
+              "sizeLabel": [],
+              "sizeText": ""
+            },
+            "overlayActive": true,
+            "phase": "selecting",
+            "replays": 0
+          }
+        },
+        {
+          "after": "drag",
+          "hintHidden": true,
+          "selection": [
+            100,
+            100,
+            150,
+            100
+          ],
+          "sizeLabel": [
+            142,
+            206,
+            67,
+            20
+          ]
+        }
+      ]
+    },
+    "capture_c2_full_page": {
+      "bands": [
+        0,
+        1,
+        2,
+        3,
+        4,
+        5,
+        6,
+        7,
+        8,
+        9,
+        10,
+        11
+      ],
+      "ok": true,
+      "probe": [
+        [
+          224,
+          65,
+          64,
+          255
+        ],
+        [
+          64,
+          176,
+          80,
+          255
+        ],
+        [
+          48,
+          96,
+          224,
+          255
+        ],
+        [
+          224,
+          192,
+          47,
+          255
+        ],
+        [
+          161,
+          64,
+          192,
+          255
+        ],
+        [
+          50,
+          192,
+          192,
+          255
+        ],
+        [
+          240,
+          128,
+          33,
+          255
+        ],
+        [
+          32,
+          32,
+          32,
+          255
+        ],
+        [
+          129,
+          224,
+          128,
+          255
+        ],
+        [
+          225,
+          127,
+          192,
+          255
+        ],
+        [
+          66,
+          128,
+          159,
+          255
+        ],
+        [
+          192,
+          160,
+          128,
+          255
+        ]
+      ],
+      "row": {
+        "bytes": 270568,
+        "createdAt": 1793662612.537198,
+        "fileName": "1ED9C34B-5880-4EB0-833A-D8F05F53AE97.png",
+        "height": 12000,
+        "id": "1ED9C34B-5880-4EB0-833A-D8F05F53AE97",
+        "kind": "fullPage",
+        "sourceHost": "127.0.0.1",
+        "width": 1042
+      },
+      "scrollAfter": 3000,
+      "state": {
+        "cancelled": 1,
+        "card": {
+          "actions": [
+            "copy",
+            "save",
+            "share",
+            "library",
+            "delete"
+          ],
+          "frame": [
+            1012,
+            18,
+            248,
+            242
+          ],
+          "hovered": false,
+          "lifetime": 8,
+          "note": "",
+          "panel": [
+            228,
+            10,
+            1042,
+            780
+          ],
+          "paused": false,
+          "remaining": 7.992952000000514,
+          "savedLine": true
+        },
+        "completed": 3,
+        "entry": "command",
+        "error": "",
+        "held": false,
+        "hintShows": 1,
+        "overlayActive": false,
+        "phase": "showing",
+        "replays": 0,
+        "result": {
+          "bytes": 270568,
+          "fileName": "Long page 11-02 at 4.36PM.png",
+          "height": 12000,
+          "host": "127.0.0.1",
+          "kind": "fullPage",
+          "saved": "1ED9C34B-5880-4EB0-833A-D8F05F53AE97",
+          "truncated": false,
+          "width": 1042
+        }
+      }
+    },
+    "capture_c3_portrait": {
+      "ok": true,
+      "row": {
+        "bytes": 51314,
+        "createdAt": 1793662612.179668,
+        "fileName": "D0B0C722-EFCD-42EE-BD8C-2C48E9DF8D5C.png",
+        "height": 1515,
+        "id": "D0B0C722-EFCD-42EE-BD8C-2C48E9DF8D5C",
+        "kind": "portrait",
+        "sourceHost": "127.0.0.1",
+        "width": 1212
+      }
+    },
+    "capture_c4_escape": {
+      "ok": true,
+      "overlay": {
+        "anchor": [],
+        "firstResponder": true,
+        "frame": [
+          228,
+          10,
+          1042,
+          780
+        ],
+        "hint": "Drag to capture. Press Esc to cancel.",
+        "hintHidden": false,
+        "pageFrame": [
+          228,
+          10,
+          1042,
+          780
+        ],
+        "selection": [],
+        "sizeLabel": [],
+        "sizeText": ""
+      },
+      "state": {
+        "cancelled": 1,
+        "completed": 1,
+        "entry": "command",
+        "error": "",
+        "held": false,
+        "hintShows": 1,
+        "overlayActive": false,
+        "phase": "idle",
+        "replays": 0,
+        "result": {
+          "bytes": 1664,
+          "fileName": "Long page 11-02 at 4.36PM.png",
+          "height": 200,
+          "host": "127.0.0.1",
+          "kind": "area",
+          "saved": "32F4DC4D-DDEE-46EB-A1AB-7727FA9ED35F",
+          "truncated": false,
+          "width": 300
+        }
+      }
+    },
+    "capture_c5_drag": {
+      "ok": true,
+      "row": {
+        "bytes": 1225,
+        "createdAt": 1793662613.0217052,
+        "fileName": "48EBD4E0-43A0-4D05-B809-191D34CC5399.png",
+        "height": 160,
+        "id": "48EBD4E0-43A0-4D05-B809-191D34CC5399",
+        "kind": "area",
+        "sourceHost": "127.0.0.1",
+        "width": 240
+      },
+      "steps": [
+        {
+          "after": "down",
+          "held": true,
+          "overlay": false
+        },
+        {
+          "after": "move 2.2 pt",
+          "held": true,
+          "overlay": false
+        },
+        {
+          "after": "drag",
+          "anchor": [
+            500,
+            300
+          ],
+          "overlay": true,
+          "selection": [
+            500,
+            300,
+            120,
+            80
+          ]
+        }
+      ]
+    },
+    "capture_c6_click_replay": {
+      "ok": true,
+      "opened": {
+        "audible": false,
+        "canGoBack": false,
+        "canGoForward": false,
+        "crashed": false,
+        "createdAt": 1793662613.0747108,
+        "favicon": false,
+        "faviconReportsCompleted": 0,
+        "faviconReportsRejected": 0,
+        "hasWebContent": true,
+        "id": "EB9E56F0-7AE6-47D8-BBBC-ED7CD356E9F4",
+        "lastActiveAt": 1793662613.077176,
+        "loaded": true,
+        "loading": false,
+        "page": {
+          "audible": false,
+          "browser": 1,
+          "browserIndex": 0,
+          "browserPinned": false,
+          "canGoBack": false,
+          "chromeTabId": -1,
+          "chromeWindowId": -1,
+          "context": "Default",
+          "crash": 0,
+          "extension": "",
+          "favicon": false,
+          "fullscreen": false,
+          "hidden": false,
+          "hostTab": "EB9E56F0-7AE6-47D8-BBBC-ED7CD356E9F4",
+          "identifier": 2,
+          "kind": "tab",
+          "live": true,
+          "loading": false,
+          "muted": false,
+          "pageBackground": [
+            255,
+            255,
+            255,
+            255
+          ],
+          "popup": false,
+          "style": "alloy",
+          "title": "Link target",
+          "url": "http://127.0.0.1:60062/links-target.html",
+          "zoom": 0
+        },
+        "pinnedURL": "",
+        "profile": "DBB15BCA-0808-4FAC-A2CF-37B9B66D5178",
+        "progress": 1,
+        "rowFaviconHash": "",
+        "rowFaviconSource": "placeholder",
+        "section": "today",
+        "selected": true,
+        "sleepPhase": "live",
+        "space": "F3FB289B-654F-43E1-AB91-6B474D6AB61D",
+        "title": "Link target",
+        "unread": false,
+        "url": "http://127.0.0.1:60062/links-target.html",
+        "visible": true
+      },
+      "replays": 1
+    },
+    "capture_c7_incognito": {
+      "reason": "no incognito window in Open yet (app-shell 4.8); the ephemeral-context path is covered offscreen (features-render C3/C7)",
+      "status": "BLOCKED"
+    },
+    "capture_card_anchor": {
+      "card": [
+        1012,
+        18,
+        248,
+        231
+      ],
+      "ok": true,
+      "panel": [
+        228,
+        10,
+        1042,
+        780
+      ]
+    },
+    "capture_card_copy_save_escape": {
+      "ok": true,
+      "sheet": {
+        "attachedSheet": 0,
+        "class": "NSSavePanel",
+        "firstResponder": "NSRemoteView",
+        "frame": "{{555, 409}, {370, 182}}",
+        "key": true,
+        "level": 0,
+        "number": 155056,
+        "parent": 0,
+        "sheet": true,
+        "title": "Save",
+        "visible": true
+      }
+    },
+    "capture_card_lifetime": {
+      "ok": true,
+      "paused": 7.775187499995809,
+      "resumed": 7.774776874983218,
+      "scheduled": [
+        8,
+        7.9900897917104885
+      ]
+    },
+    "capture_context_menu": {
+      "ok": true,
+      "shown": [
+        "Back",
+        "Forward",
+        "-",
+        "Print\u2026",
+        "View Page Source",
+        "-",
+        "Capture",
+        "Capture Full Page"
+      ]
+    },
+    "capture_delete": {
+      "ok": true,
+      "rows": 2
+    },
+    "capture_menu_enabled": {
+      "menu": {
+        "capture-full-page": {
+          "action": "openCommandAction:",
+          "enabled": true,
+          "id": "capture-full-page",
+          "key": "",
+          "payload": "",
+          "tag": 0,
+          "targetNil": false,
+          "title": "Capture Full Page"
+        },
+        "capture-page": {
+          "action": "openCommandAction:",
+          "enabled": true,
+          "id": "capture-page",
+          "key": "2",
+          "payload": "",
+          "tag": 0,
+          "targetNil": false,
+          "title": "Capture\u2026"
+        },
+        "capture-portrait": {
+          "action": "openCommandAction:",
+          "enabled": true,
+          "id": "capture-portrait",
+          "key": "",
+          "payload": "",
+          "tag": 0,
+          "targetNil": false,
+          "title": "Capture in Portrait Mode"
+        }
+      },
+      "ok": true
+    },
+    "capture_shortcut_hint": {
+      "hintShows": 1,
+      "ok": true,
+      "stored": 1793662611.8564749
+    },
+    "capture_shortcut_hint_once": {
+      "hintShows": 1,
+      "ok": true
+    }
+  },
+  "started": "2026-11-02 16:36:42",
+  "style": "alloy"
+}

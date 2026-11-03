@@ -10,6 +10,7 @@
 #include "include/cef_app.h"
 #include "include/cef_browser.h"
 #include "include/cef_client.h"
+#include "include/cef_media_controller.h"
 #include "include/cef_request_context.h"
 #include "include/cef_tab_strip.h"
 #include "include/cef_values.h"
@@ -42,9 +43,6 @@ bool OEMatchesPattern(const std::string& pattern, const std::string& url);
 
 /// Process message names (browser <-> renderer).
 extern const char kOEMsgScriptsUpdate[];    // browser -> renderer
-extern const char kOEMsgAudibleChanged[];   // renderer -> browser
-extern const char kOEMsgMediaReport[];      // renderer -> browser (EM-1a)
-extern const char kOEMsgMediaCommand[];     // browser -> renderer (EM-1a)
 extern const char kOEExtraScripts[];        // extra_info key
 
 #pragma mark - Engine internals
@@ -86,12 +84,13 @@ class OEClient;
 @end
 
 class OEDevToolsClient;
-@class OEMediaFrames;
+@class OEMediaState;
 
 @interface OEWebContent ()
 @property(nonatomic, readonly) CefRefPtr<CefBrowser> oe_browser;
-/// Per-frame media probe reports and the current OEMediaSession (EM-1a).
-@property(nonatomic, strong, nullable) OEMediaFrames* oe_mediaFrames;
+/// The fork's media controller, the current OEMediaSession, pending PiP
+/// requests and the tab volume (OEMediaSession.mm; media-pip EM-1b).
+@property(nonatomic, strong, nullable) OEMediaState* oe_mediaState;
 - (void)oe_notify:(OEWebContentChange)changes;
 
 @property(nonatomic, readonly) CefRefPtr<OEClient> oe_client;
@@ -133,7 +132,8 @@ class OEDevToolsClient;
 - (void)oe_setLoading:(BOOL)loading canGoBack:(BOOL)back canGoForward:(BOOL)forward;
 - (void)oe_setProgress:(double)progress;
 - (void)oe_setFullscreen:(BOOL)fullscreen;
-- (void)oe_setAudible:(BOOL)audible frame:(NSString*)frameId;
+/// From CefMediaControllerHandler::OnAudibleChanged (patch P6).
+- (void)oe_setAudible:(BOOL)audible;
 - (void)oe_setCrashState:(OEWebContentCrashState)state;
 - (void)oe_setMediaCaptureCamera:(BOOL)camera microphone:(BOOL)microphone;
 - (void)oe_setStatusText:(NSString*)text;
@@ -149,12 +149,15 @@ class OEDevToolsClient;
 - (void)oe_devToolsFrontendClosed:(OEDevToolsClient*)frontend;
 @end
 
-/// OEMediaSession.mm (media-pip EM-1a).
+/// OEMediaSession.mm (media-pip EM-1b, EM-2, EM-3, EM-5).
 @interface OEWebContent (OEMediaInternal)
-/// The media probe of one frame reported `kind` ("state" or "pip").
-- (void)oe_mediaReport:(NSString*)kind json:(NSString*)json frame:(NSString*)frameId;
-/// Forgets every frame's media state (crash, close).
-- (void)oe_resetMedia;
+/// Attaches the fork's CefMediaController to a new browser (OnAfterCreated).
+- (void)oe_attachMedia:(CefRefPtr<CefBrowser>)browser;
+/// CefMediaControllerHandler::OnMediaStateChanged: rebuilds mediaSession.
+- (void)oe_mediaStateChanged;
+/// Forgets the media state (crash); `detach` also drops the controller
+/// (the browser closed).
+- (void)oe_resetMediaDetaching:(BOOL)detach;
 @end
 
 @interface OEContextMenuItem ()

@@ -895,6 +895,88 @@ def feature_checks(app, style, results, tmp):
 
 
 # ----------------------------------------------------------------------------
+# Relaunch soak (section 8 item 14): the Release persistence relaunch once
+# aborted in PartitionAlloc's launch-zone race ("No zone found",
+# docs/engine-fork.md "PartitionAlloc and the launch race"). Build one
+# profile, then relaunch it N times. Every launch must reach automation,
+# restore the same tabs, load only the selected one, quit cleanly, write no
+# allocator FATAL and leave no new crash report. Local file pages only.
+
+RELAUNCH_COUNT = int(os.environ.get("OPEN_E2E_RELAUNCH_COUNT", "20"))
+_CRASH_DIR = os.path.expanduser("~/Library/Logs/DiagnosticReports")
+
+
+def _open_crash_reports():
+    try:
+        names = os.listdir(_CRASH_DIR)
+    except OSError:
+        return set()
+    return {n for n in names if n.startswith(("Open", "cefsimple")) and n.endswith((".ips", ".crash"))}
+
+
+def relaunch_checks(app_factory, results, tmp):
+    pages = []
+    for name, color in (("a", "#c33"), ("b", "#3c3"), ("c", "#33c")):
+        path = os.path.join(tmp, "relaunch-%s.html" % name)
+        with open(path, "w") as f:
+            f.write("<!doctype html><title>Relaunch %s</title><body style='background:%s'>%s</body>" % (name.upper(), color, name))
+        pages.append("file://" + path)
+    reports_before = _open_crash_reports()
+    app = app_factory(urls=(), fresh=True)
+    try:
+        ids = [new_tab(app, url) for url in pages]
+        app.call("select", tab=ids[0])
+        app.call("save")
+        expected = [(x["id"], x["section"], x["url"]) for x in app.call("tabs")]
+    finally:
+        app.quit()
+    results["relaunch_fixture"] = {"ok": len(expected) >= 3, "tabs": len(expected)}
+    runs, failures = [], []
+    for i in range(RELAUNCH_COUNT):
+        run = {"index": i + 1, "load": os.getloadavg()[0]}
+        started = time.monotonic()
+        try:
+            app = app_factory(urls=())
+        except Exception as error:
+            run.update(ok=False, error=str(error))
+            runs.append(run); failures.append(run)
+            continue
+        try:
+            run["automation_ms"] = round((time.monotonic() - started) * 1000)
+            ready = wait_until(lambda: (lambda t: t if any(x["loaded"] for x in t) else None)(app.call("tabs")), timeout=15, step=.1)
+            tabs = ready or app.call("tabs")
+            got = [(x["id"], x["section"], x["url"]) for x in tabs]
+            loaded = [x["url"] for x in tabs if x["loaded"]]
+            run.update(same_tabs=got == expected, loaded=len(loaded), pid=app.pid)
+        except Exception as error:
+            run.update(error=str(error))
+        finally:
+            app.quit()
+        log_text = ""
+        for path in (app.launch_log_path,):
+            try:
+                log_text += open(path, errors="replace").read()
+            except OSError:
+                pass
+        run["zone_fatal"] = "No zone found" in log_text
+        run["quit_ok"] = bool(app.quit_report.get("ok"))
+        run["ok"] = (not run.get("error") and run.get("same_tabs") and run.get("loaded") == 1
+                     and run["quit_ok"] and not run["zone_fatal"])
+        runs.append(run)
+        if not run["ok"]:
+            failures.append(run)
+        print("relaunch %2d/%d %s automation %s ms load %.1f" % (i + 1, RELAUNCH_COUNT, "PASS" if run["ok"] else "FAIL",
+                                                                 run.get("automation_ms"), run["load"]), flush=True)
+    # Crash reports are written asynchronously by ReportCrash.
+    time.sleep(3)
+    new_reports = sorted(_open_crash_reports() - reports_before)
+    results["relaunch_soak"] = {"ok": not failures and len(runs) == RELAUNCH_COUNT and not new_reports,
+                                "count": RELAUNCH_COUNT, "passed": len(runs) - len(failures),
+                                "aborts": sum(1 for r in runs if r.get("zone_fatal") or "error" in r),
+                                "new_crash_reports": new_reports, "failures": failures, "runs": runs}
+
+
+# ----------------------------------------------------------------------------
 # Shell checks: the M1 window bound to OpenModel
 
 
@@ -4814,6 +4896,14 @@ def media_checks(factory, results, tmp):
     def start(tab):
         app.eval(tab, "start()")
         return wait_until(lambda: playing(tab), timeout=10, step=.05)
+    def is_audible(tab): return next((t for t in app.call("tabs") if t["id"] == tab), {}).get("audible") is True
+    def start_heard(tab):
+        # Auto-PiP needs real audibility (A4). Chromium's signal (P6) follows the audio output a few
+        # hundred ms after playback starts, so a leave right after play() would see "inaudible".
+        ok = start(tab)
+        t0 = time.monotonic()
+        heard = wait_until(lambda: is_audible(tab), timeout=3, step=.02)
+        return ok and bool(heard), round((time.monotonic() - t0) * 1000, 1)
     def select(tab):
         app.call("select", tab=tab)
         wait_until(lambda: app.call("window-state")["selected"] == tab, timeout=5, step=.02)
@@ -4859,7 +4949,7 @@ def media_checks(factory, results, tmp):
             and card is not None and set(["favicon", "previous", "play", "next", "volume"]) <= set(card["buttons"]),
             "appearMs": round(appear_ms, 1), "load": os.getloadavg(), "card": card}
 
-        # E-M4: the card's controls reach the page (interim probe: the page's own action handlers).
+        # E-M4: the card's controls reach the page (Chromium's media session; next/previous route to the page's handlers).
         select(home)
         wait_until(lambda: audio in ids(), timeout=2, step=.01)
         app.call("media-click", tab=audio, target="play")
@@ -4931,7 +5021,7 @@ def media_checks(factory, results, tmp):
 
         # E-M5: auto-PiP on leave within 500 ms; back closes it, video keeps playing.
         video = open_tab(base + "video.html")
-        start(video)
+        _, video_audible_ms = start_heard(video)
         windows_before = len(app.call("windows"))
         select(home)
         opened = wait_pip("active", timeout=3)
@@ -4943,7 +5033,8 @@ def media_checks(factory, results, tmp):
         results["media_auto_pip_on_leave"] = {"ok": opened["state"] == "active" and opened.get("automatic") is True and opened.get("tab") == video
             and latency is not None and latency <= 0.5 and len(pip_windows) >= 1 and abs(leave_to_request) < 0.05,
             "pip": p, "requestToEnterSeconds": latency, "leaveToRequestSeconds": leave_to_request,
-            "load": os.getloadavg(), "windowsBefore": windows_before}
+            "load": os.getloadavg(), "windowsBefore": windows_before, "decision": decision, "audibleAfterPlayMs": video_audible_ms,
+            "autoPiPSetting": app.call("defaults", key="open.advanced.enablePictureInPictureOnLeave")}
         # Sleep feed (§4.10): the PiP source is protected.
         feed = app.call("sleep-visibility")
         results["media_sleep_feed_pip"] = {"ok": video in feed["pictureInPicture"], "feed": feed}
@@ -4958,10 +5049,10 @@ def media_checks(factory, results, tmp):
         closed = wait_until(lambda: (lambda p: p if p["state"] == "closed" else None)(pip()), timeout=3, step=.02)
         paused = wait_until(lambda: app.eval(video, "document.getElementById('main').paused"), timeout=3, step=.05)
         snoozed = video in pip()["snoozed"]
-        select(video); app.eval(video, "start()"); select(home)
+        select(video); app.eval(video, "start()"); wait_until(lambda: is_audible(video), timeout=3, step=.02); select(home)
         again = wait_pip("active")
         results["media_close_snoozes"] = {"ok": bool(closed) and closed.get("reason") == "userClosed" and bool(paused) and snoozed
-            and again["state"] == "active", "closed": closed, "again": again}
+            and again["state"] == "active", "closed": closed, "paused": bool(paused), "snoozed": snoozed, "again": again}
 
         # E-M9: Back to Tab selects the tab, closes PiP, keeps playing.
         app.call("pip-action", action="back-to-tab")
@@ -4985,10 +5076,10 @@ def media_checks(factory, results, tmp):
         muted_video = open_tab(base + "video-muted.html"); start(muted_video)
         inaudible = leave_decision(muted_video)
         close_tab(muted_video)
-        nopip = open_tab(base + "video-nopip.html"); start(nopip)
+        nopip = open_tab(base + "video-nopip.html"); start_heard(nopip)
         disabled = leave_decision(nopip)
         close_tab(nopip)
-        blocked = open_tab("http://blocked.localhost:%d/video.html" % port); start(blocked)
+        blocked = open_tab("http://blocked.localhost:%d/video.html" % port); start_heard(blocked)
         disallowed = leave_decision(blocked)
         close_tab(blocked)
         relaxed = open_tab("http://inaudible.localhost:%d/video-muted.html" % port); start(relaxed)
@@ -5001,7 +5092,7 @@ def media_checks(factory, results, tmp):
             "disallowed": disallowed, "activatesWhenInaudible": relaxed_result}
 
         # E-M10: the largest playing video goes to PiP.
-        two = open_tab(base + "two-videos.html"); start(two)
+        two = open_tab(base + "two-videos.html"); start_heard(two)
         select(home); wait_pip("active")
         chosen = app.eval(two, "document.pictureInPictureElement && document.pictureInPictureElement.id")
         select(two); wait_pip("closed")
@@ -5047,12 +5138,82 @@ def media_checks(factory, results, tmp):
         library = wait_until(lambda: (lambda l: l if l["visible"] and l["section"] == "media" else None)(app.call("library-section")), timeout=5, step=.05)
         app.call("library-close")
         results["media_view_media_menu"] = {"ok": bool(library), "library": app.call("library-section") if not library else library}
-        # E-M2: Web Audio only. The interim probe sees media elements only; patch P6 (EM-3) fixes it.
-        wa = open_tab(base + "webaudio.html"); app.eval(wa, "start()")
-        heard = wait_until(lambda: next((t for t in app.call("tabs") if t["id"] == wa and t["audible"]), None), timeout=3, step=.1)
-        results["media_web_audio"] = {"status": "BLOCKED", "reason": "P6 (EM-3): Web Audio is not audible before the fork patch",
-                                      "audible": bool(heard)}
+        # E-M2 / P6 (EM-3): audible is Chromium's own signal, so Web Audio counts, in a background tab too
+        # (OpenSleep's contract: an audio event for every change).
+        def audible(tab): return next((t for t in app.call("tabs") if t["id"] == tab), {}).get("audible") is True
+        def elapsed_ms(t0): return round((time.monotonic() - t0) * 1000, 1)
+        wa = open_tab(base + "webaudio.html")
+        t0 = time.monotonic(); app.eval(wa, "start()")
+        heard = wait_until(lambda: audible(wa), timeout=1, step=.02); heard_ms = elapsed_ms(t0)
+        t0 = time.monotonic(); app.eval(wa, "__ctx.suspend().then(() => true)")
+        quiet_suspend = wait_until(lambda: not audible(wa), timeout=3, step=.05); suspend_ms = elapsed_ms(t0)
+        select(home)
+        t0 = time.monotonic(); app.eval(wa, "__ctx.resume().then(() => true)")
+        heard_background = wait_until(lambda: audible(wa), timeout=1, step=.02); background_ms = elapsed_ms(t0)
+        t0 = time.monotonic(); app.eval(wa, "__ctx.close().then(() => true)")
+        quiet_close = wait_until(lambda: not audible(wa), timeout=3, step=.05); close_ms = elapsed_ms(t0)
+        wa_media = m(wa)
+        results["media_web_audio"] = {"ok": bool(heard) and heard_ms <= 1000 and bool(quiet_suspend) and bool(heard_background)
+            and background_ms <= 1000 and bool(quiet_close) and not wa_media["session"],
+            "audibleMs": heard_ms, "inaudibleAfterSuspendMs": suspend_ms, "audibleInBackgroundMs": background_ms,
+            "inaudibleAfterCloseMs": close_ms, "session": wa_media["session"]}
         close_tab(wa)
+
+        # EM-2: tab volume. The engine scales the page's players (MediaSessionImpl); the page's own
+        # element volume stays 1 and the page keeps playing. Read back through the session snapshot.
+        vt = open_tab(base + "audio.html?volume=1"); start(vt)
+        before = m(vt)
+        app.call("media-action", tab=vt, action="volume", value=0.3)
+        after = wait_until(lambda: (lambda x: x if x["volume"] is not None and abs(x["volume"] - 0.3) < 1e-9 else None)(m(vt)), timeout=2, step=.02) or m(vt)
+        time.sleep(.5)
+        vt_playing = app.eval(vt, "!document.getElementById('tone').paused && document.getElementById('tone').currentTime > 0")
+        vt_element = app.eval(vt, "document.getElementById('tone').volume")
+        app.call("media-action", tab=vt, action="volume", value=1)
+        reset = wait_until(lambda: (lambda x: x if x["volume"] == 1 else None)(m(vt)), timeout=2, step=.02) or m(vt)
+        results["media_tab_volume"] = {"ok": before["volume"] == 1 and after["volume"] is not None and abs(after["volume"] - 0.3) < 1e-9
+            and abs(after["pageVolume"] - 0.3) < 1e-9 and after["playback"] == "playing" and vt_playing is True and vt_element == 1
+            and reset["volume"] == 1, "before": before["volume"], "after": after["volume"], "pageVolume": after["pageVolume"],
+            "playback": after["playback"], "pagePlaying": vt_playing, "elementVolume": vt_element, "reset": reset["volume"]}
+        close_tab(vt)
+
+        # EM-5: PiP from the browser needs no user gesture, and the browser enforces disablePictureInPicture
+        # (Blink's browser-initiated path skips that check). Page reads go through Runtime.evaluate without
+        # a gesture, so they do not grant one.
+        def quiet_eval(tab, js):
+            r = app.call("devtools", tab=tab, method="Runtime.evaluate",
+                         params={"expression": js, "userGesture": False, "returnByValue": True, "awaitPromise": True})
+            return (r or {}).get("result", {}).get("value")
+        ng = open_tab(base + "video.html"); start(ng)
+        expired = wait_until(lambda: quiet_eval(ng, "navigator.userActivation.isActive") is False, timeout=10, step=.25)
+        page_attempt = quiet_eval(ng, "document.getElementById('main').requestPictureInPicture().then(() => 'entered', e => e.name)")
+        if page_attempt == "entered":
+            quiet_eval(ng, "document.exitPictureInPicture().then(() => true)")
+        app.call("media-action", tab=ng, action="pip")
+        entered = wait_pip("active", timeout=3)
+        ng_p = pip()
+        ng_latency = (ng_p.get("enteredAt") or 0) - (ng_p.get("requestedAt") or 0) if ng_p.get("enteredAt") else None
+        ng_element = quiet_eval(ng, "document.pictureInPictureElement && document.pictureInPictureElement.id")
+        ng_active = quiet_eval(ng, "navigator.userActivation.isActive")
+        app.call("media-action", tab=ng, action="exit-pip")
+        ng_closed = wait_until(lambda: not m(ng)["pictureInPicture"], timeout=2, step=.02)
+        ng_still = quiet_eval(ng, "!document.getElementById('main').paused")
+        results["media_pip_no_gesture"] = {"ok": bool(expired) and page_attempt == "NotAllowedError" and entered["state"] == "active"
+            and ng_element == "main" and ng_active is False and ng_latency is not None and ng_latency <= 0.5 and bool(ng_closed) and ng_still is True,
+            "activationExpired": bool(expired), "pageRequestWithoutGesture": page_attempt, "pip": ng_p, "requestToEnterSeconds": ng_latency,
+            "pipElement": ng_element, "activationAfter": ng_active, "closed": bool(ng_closed), "playingAfterExit": ng_still}
+        close_tab(ng)
+        nd = open_tab(base + "video-nopip.html"); start(nd)
+        nd_state = m(nd)
+        nd_requests = pip()["requests"]
+        app.call("media-action", tab=nd, action="pip")
+        nd_result = wait_until(lambda: (lambda p: p if p["requests"] > nd_requests and p.get("tab") == nd
+                                        and p["state"] in ("closed", "active") else None)(pip()), timeout=3, step=.02) or pip()
+        nd_element = quiet_eval(nd, "document.pictureInPictureElement && document.pictureInPictureElement.id")
+        results["media_pip_disabled_engine"] = {"ok": nd_state["pictureInPictureDisabled"] is True
+            and "enterPictureInPicture" not in nd_state["actions"] and nd_result["state"] == "closed"
+            and nd_result.get("reason") == "failed" and nd_element is None and not m(nd)["pictureInPicture"],
+            "state": {k: nd_state[k] for k in ("pictureInPictureDisabled", "actions", "playback")}, "pip": nd_result, "pipElement": nd_element}
+        close_tab(nd)
         results["media_pip_minimize"] = {"status": "BLOCKED", "reason": "EM-4: phase 1 uses Chromium's PiP window, which has no Minimize"}
         results["media_pip_keep_on_top"] = {"status": "BLOCKED", "reason": "EM-4: the Keep Window on Top menu is in Open's own PiP window"}
         results["media_document_pip"] = {"status": "BLOCKED", "reason": "EM-7: Document PiP disposition"}
@@ -5065,6 +5226,227 @@ def media_checks(factory, results, tmp):
         state = m(a1) if kept else {}
         results["media_mute_survives_relaunch"] = {"ok": bool(kept) and state.get("modelMuted") is True, "state": state}
     finally:
+        app.quit(); server.shutdown(); server.server_close()
+
+
+def _static_server(folder):
+    import http.server
+    import threading
+    class Handler(http.server.SimpleHTTPRequestHandler):
+        def __init__(self, *a, **kw):
+            super().__init__(*a, directory=folder, **kw)
+        def log_message(self, *args): pass
+    server = http.server.ThreadingHTTPServer(('127.0.0.1', 0), Handler)
+    threading.Thread(target=server.serve_forever, daemon=True).start()
+    return server, 'http://127.0.0.1:%d' % server.server_address[1]
+
+
+# long.html band colors, top to bottom (one per 1,000 CSS px).
+CAPTURE_BANDS = [(224, 64, 64), (64, 176, 80), (48, 96, 224), (224, 192, 48), (160, 64, 192), (48, 192, 192),
+                 (240, 128, 32), (32, 32, 32), (128, 224, 128), (224, 128, 192), (64, 128, 160), (192, 160, 128)]
+
+
+def capture_checks(factory, results, tmp):
+    """page-platform §8.3 C1–C7: the Capture tool in the real App (Step 13)."""
+    server, origin = _static_server(os.path.join(ROOT, 'tools', 'e2e', 'fixtures', 'page-platform'))
+    app = factory(urls=(origin + '/long.html',), fresh=True)
+    def state(): return app.call('capture-state')
+    def rows(**kw): return app.call('captures', **kw)['rows']
+    def nearest(rgb):
+        return min(range(len(CAPTURE_BANDS)), key=lambda i: sum((a - b) ** 2 for a, b in zip(rgb[:3], CAPTURE_BANDS[i])))
+    def close_card():
+        if state().get('card'):
+            app.call('key', key='escape')
+            wait_until(lambda: not state().get('card'), timeout=3, step=.05)
+    # The App writes these in the shared preferences domain: start from defaults, restore after.
+    capture_keys = ('open.capture.shortcutHintLastShown', 'open.capture.dragToCaptureEnabled', 'open.capture.portraitBackground')
+    saved_keys = {}
+    emulated = [False]
+    try:
+        for key in capture_keys:
+            saved_keys[key] = app.call('defaults', key=key)
+            app.call('defaults', key=key, value=None)
+        tab = app.call('tabs')[0]['id']
+        app.call('wait', tab=tab)
+        ws = app.call('window-state')
+        app.call('window-focus', id=ws['id'], activate=True)
+        scale = app.eval(tab, 'devicePixelRatio')
+        menu = {r['id']: r for r in app.call('menu-state') if r['id'].startswith('capture-')}
+        results['capture_menu_enabled'] = {'ok': all(menu.get(i, {}).get('enabled') for i in ('capture-page', 'capture-full-page', 'capture-portrait')),
+                                           'menu': menu}
+
+        # C1: File > Capture..., a drag inside the overlay, one `area` row at device scale.
+        before = rows()
+        r = app.call('capture', mode='area', rect=[100, 100, 300, 200])
+        after = rows()
+        st, steps = r['state'], r['steps']
+        overlay = steps[0]['state'].get('overlay', {})
+        new = [x for x in after if x['id'] not in {y['id'] for y in before}]
+        card = st.get('card', {})
+        panel = card.get('panel', [0, 0, 0, 0])
+        results['capture_c1_area'] = {'ok': len(new) == 1 and new[0]['kind'] == 'area' and new[0]['width'] == round(300 * scale)
+            and new[0]['height'] == round(200 * scale) and new[0]['bytes'] > 0 and st['result']['saved'] == new[0]['id']
+            and overlay.get('frame') == overlay.get('pageFrame') and overlay.get('firstResponder') is True
+            and overlay.get('hint') == 'Drag to capture. Press Esc to cancel.' and not overlay.get('hintHidden')
+            and steps[1]['hintHidden'] is True and steps[1]['selection'] == [100, 100, 150, 100]
+            and card.get('actions') == ['copy', 'save', 'share', 'library', 'retake', 'delete'] and card.get('savedLine') is True,
+            'scale': scale, 'row': new, 'steps': steps, 'state': st}
+        # Real-window look of the card (no Arc capture exists yet, C-C1): kept for review in .re/.
+        os.makedirs(os.path.join(ROOT, '.re', 'page-capture'), exist_ok=True)
+        app.call('snapshot', path=os.path.join(ROOT, '.re', 'page-capture', 'card-window.png'))
+        # The card's top-right corner is the toast anchor: panel maxX - 10, minY + 8 (section 4.1.1).
+        results['capture_card_anchor'] = {'ok': bool(card) and abs(card['frame'][0] + card['frame'][2] - (panel[0] + panel[2] - 10)) < 0.5
+            and abs(card['frame'][1] - (panel[1] + 8)) < 0.5 and card['frame'][2] == 248, 'card': card.get('frame'), 'panel': panel}
+        lifetime = (card.get('lifetime'), card.get('remaining', 0))
+        app.call('capture-action', hover=True)
+        paused = state().get('card', {})
+        app.call('capture-action', hover=False)
+        resumed = state().get('card', {})
+        results['capture_card_lifetime'] = {'ok': lifetime[0] == 8 and 7 < lifetime[1] <= 8 and paused.get('paused') is True
+            and resumed.get('paused') is False and resumed.get('remaining', 9) <= paused.get('remaining', 0),
+            'scheduled': lifetime, 'paused': paused.get('remaining'), 'resumed': resumed.get('remaining')}
+        # Copy through the real button, then the Save... sheet (closed by `dismiss`), then Esc on the real key path.
+        app.call('capture-action', action='copy')
+        app.call('capture-action', action='save')
+        sheet = wait_until(lambda: next((w for w in app.call('windows') if 'SavePanel' in w.get('class', '')), None), timeout=5, step=.1)
+        app.call('dismiss')
+        gone = wait_until(lambda: (not any('SavePanel' in w.get('class', '') for w in app.call('windows'))) or None, timeout=5, step=.1)
+        app.call('key', key='escape')
+        closed = wait_until(lambda: (lambda s: s if not s.get('card') and s['phase'] == 'idle' else None)(state()), timeout=3, step=.05)
+        results['capture_card_copy_save_escape'] = {'ok': bool(sheet) and bool(gone) and bool(closed), 'sheet': sheet}
+        # Section 4.6.7: after the first menu capture's flow ends, the keycap hint shows once and stores its time.
+        hint_time = app.call('defaults', key='open.capture.shortcutHintLastShown')
+        results['capture_shortcut_hint'] = {'ok': (closed or {}).get('hintShows') == 1 and isinstance(hint_time, (int, float)) and hint_time > 0,
+                                            'hintShows': (closed or {}).get('hintShows'), 'stored': hint_time}
+
+        # C4: Cmd+Shift+2 on the real key path shows the overlay; Esc during it: no row.
+        count, cancelled = len(rows()), state()['cancelled']
+        app.call('key', key='2', modifiers=['cmd', 'shift'])
+        shown = wait_until(lambda: state().get('overlay'), timeout=3, step=.05)
+        app.call('snapshot', path=os.path.join(ROOT, '.re', 'page-capture', 'overlay-window.png'))
+        app.call('key', key='escape')
+        after_esc = wait_until(lambda: (lambda s: s if not s['overlayActive'] else None)(state()), timeout=3, step=.05) or state()
+        results['capture_c4_escape'] = {'ok': bool(shown) and shown.get('firstResponder') is True and not after_esc['overlayActive'] and after_esc['cancelled'] == cancelled + 1
+            and len(rows()) == count, 'overlay': shown, 'state': after_esc}
+
+        # C3: portrait -> a 4:5 PNG.
+        r = app.call('capture', mode='portrait')
+        row = rows()[-1]
+        results['capture_c3_portrait'] = {'ok': row['kind'] == 'portrait' and abs(row['width'] / row['height'] - 0.8) < 0.002
+            and r['state']['result']['saved'] == row['id'], 'row': row}
+        close_card()
+
+        # C2: full page of the 12,000 px page; bands at their offsets.
+        app.eval(tab, 'scrollTo(0, 3000), scrollY')
+        r = app.call('capture', mode='fullPage', timeout=90)
+        row = rows()[-1]
+        ys = [int((k * 1000 + 500) * scale) for k in range(12)]
+        probe = app.call('captures', probe=[[20, y] for y in ys])['probe'] if row['kind'] == 'fullPage' else []
+        bands = [nearest(p) if p else -1 for p in probe]
+        scroll_after = app.eval(tab, 'scrollY')
+        results['capture_c2_full_page'] = {'ok': row['kind'] == 'fullPage' and row['height'] == round(12000 * scale)
+            and bands == list(range(12)) and r['state']['result']['truncated'] is False
+            and r['state'].get('card', {}).get('actions') == ['copy', 'save', 'share', 'library', 'delete'],
+            'row': row, 'bands': bands, 'probe': probe, 'scrollAfter': scroll_after, 'state': r['state']}
+        # Delete on the card removes the file and the row in one step.
+        app.call('capture-action', action='delete')
+        rows_after_delete = rows()
+        results['capture_delete'] = {'ok': row['id'] not in {x['id'] for x in rows_after_delete}
+            and not os.path.exists(os.path.join(app.call('captures')['directory'], row['fileName'])) and not state().get('card'),
+            'rows': len(rows_after_delete)}
+
+        # C5: Cmd+Shift drag on the page: held under 4 pt, overlay at the press point after it.
+        app.call('navigate', tab=tab, url=origin + '/links.html'); app.call('wait', tab=tab)
+        count = len(rows())
+        r = app.call('capture', mode='area', entry='drag', rect=[500, 300, 240, 160])
+        steps, row = r['steps'], rows()[-1]
+        results['capture_c5_drag'] = {'ok': steps[0]['held'] and not steps[0]['overlay'] and steps[1]['held'] and not steps[1]['overlay']
+            and steps[2]['overlay'] and steps[2]['anchor'] == [500, 300] and len(rows()) == count + 1 and row['kind'] == 'area'
+            and row['width'] == round(240 * scale) and row['height'] == round(160 * scale) and r['state']['entry'] == 'drag',
+            'steps': steps, 'row': row}
+        close_card()
+
+        # C6: Cmd+Shift click on a link: the held press is replayed; a foreground tab opens.
+        link = app.eval(tab, "(() => { const r = document.querySelector('#link').getBoundingClientRect(); return [r.left + r.width / 2, r.top + r.height / 2] })()")
+        page = app.call('window-state')['panel']
+        tabs_before, replays = len(app.call('tabs')), state()['replays']
+        app.call('mouse', action='click', x=page[0] + link[0], y=page[1] + link[1], modifiers=['command', 'shift'])
+        opened = wait_until(lambda: next((t for t in app.call('tabs') if t['url'].endswith('/links-target.html') and t['selected']), None), timeout=8, step=.1)
+        results['capture_c6_click_replay'] = {'ok': bool(opened) and len(app.call('tabs')) == tabs_before + 1 and state()['replays'] == replays + 1
+            and not state()['overlayActive'], 'opened': opened, 'replays': state()['replays']}
+
+        # Section 7.3: "Capture" and "Capture Full Page" in the page context menu, before Inspect.
+        app.call('select', tab=tab); app.call('wait', tab=tab)
+        app.call('policy', contextMenu='record'); app.call('events')
+        app.call('rightclick', tab=tab, x=40, y=40)
+        menu_event = wait_until(lambda: next((e for e in app.call('events') if e['type'] == 'contextMenu'), None), timeout=5, step=.1)
+        app.call('policy', contextMenu='')
+        shown = (menu_event or {}).get('shown', [])
+        inspect = next((i for i, t in enumerate(shown) if t.startswith('Inspect')), len(shown))
+        results['capture_context_menu'] = {'ok': (menu_event or {}).get('open') == ['Capture', 'Capture Full Page']
+            and 'Capture' in shown and 'Capture Full Page' in shown and shown.index('Capture') + 1 == shown.index('Capture Full Page')
+            and shown.index('Capture Full Page') < inspect, 'shown': shown}
+
+        # 2x: no 2x display is attached to this Mac, so the scale path runs under DevTools device
+        # emulation (deviceScaleFactor 2): the screenshot output and the layout metrics follow it.
+        app.call('navigate', tab=tab, url=origin + '/long.html'); app.call('wait', tab=tab)
+        app.call('devtools', tab=tab, method='Emulation.setDeviceMetricsOverride',
+                 params={'width': 0, 'height': 0, 'deviceScaleFactor': 2, 'mobile': False})
+        emulated[0] = True
+        dpr = wait_until(lambda: (lambda d: d if d == 2 else None)(app.eval(tab, 'devicePixelRatio')), timeout=5, step=.1)
+        css_width = app.eval(tab, 'document.documentElement.scrollWidth')
+        app.call('capture', mode='area', rect=[100, 100, 300, 200])
+        row = rows()[-1]
+        close_card()
+        results['capture_2x_c1_area'] = {'ok': dpr == 2 and row['kind'] == 'area' and row['width'] == 600 and row['height'] == 400,
+                                         'devicePixelRatio': dpr, 'row': row}
+        r = app.call('capture', mode='fullPage', timeout=120)
+        row = rows()[-1]
+        probe = app.call('captures', probe=[[20, (k * 1000 + 500) * 2] for k in range(12)])['probe'] if row['kind'] == 'fullPage' else []
+        bands = [nearest(p) if p else -1 for p in probe]
+        results['capture_2x_c2_full_page'] = {'ok': row['kind'] == 'fullPage' and row['height'] == 24000 and row['width'] == css_width * 2
+            and bands == list(range(12)) and r['state']['result']['truncated'] is False,
+            'row': row, 'cssWidth': css_width, 'bands': bands, 'probe': probe}
+        close_card()
+        # The 32,768 device-pixel cap counts device pixels: a 20,000 CSS px page at 2x is cut there.
+        app.call('navigate', tab=tab, url=origin + '/tall.html'); app.call('wait', tab=tab)
+        r = app.call('capture', mode='fullPage', timeout=120)
+        row = rows()[-1] if r['state'].get('result', {}).get('kind') == 'fullPage' else {}
+        probe = app.call('captures', probe=[[20, (k * 1000 + 500) * 2] for k in range(16)])['probe'] if row else []
+        bands = [nearest(p) if p else -1 for p in probe]
+        results['capture_2x_full_page_cap'] = {'ok': row.get('height') == 32768 and row.get('width') == css_width * 2
+            and r['state']['result']['truncated'] is True and r['state'].get('card', {}).get('note') == 'Page cut at 32,768 px.'
+            and bands == [k % 12 for k in range(16)], 'row': row, 'bands': bands, 'error': r['state'].get('error'), 'state': r['state']}
+        close_card()
+        app.call('navigate', tab=tab, url=origin + '/long.html'); app.call('wait', tab=tab)
+        app.call('capture', mode='portrait')
+        row = rows()[-1]
+        view = app.eval(tab, '[innerWidth, innerHeight]')
+        results['capture_2x_c3_portrait'] = {'ok': row['kind'] == 'portrait' and abs(row['width'] / row['height'] - 0.8) < 0.002
+            and abs(row['width'] - round(view[0] * 2 / 0.86)) <= 2, 'row': row, 'view': view}
+        close_card()
+        app.call('devtools', tab=tab, method='Emulation.clearDeviceMetricsOverride', params={})
+        emulated[0] = False
+
+        # C7 needs incognito windows (app-shell 4.8, not built yet); features-render C3/C7 covers the ephemeral path.
+        results['capture_c7_incognito'] = {'status': 'BLOCKED', 'reason': 'no incognito window in Open yet (app-shell 4.8); the ephemeral-context path is covered offscreen (features-render C3/C7)'}
+        results['capture_shortcut_hint_once'] = {'ok': state()['hintShows'] == 1, 'hintShows': state()['hintShows']}
+    finally:
+        for cmd, kw in (('dismiss', {}), ('capture-action', {'action': 'cancel'})):
+            try:
+                app.call(cmd, timeout=3, **kw)
+            except Exception:
+                pass
+        for key in capture_keys:
+            try:
+                app.call('defaults', key=key, value=saved_keys.get(key))
+            except Exception:
+                pass
+        if emulated[0]:
+            try:
+                app.call('devtools', tab=tab, method='Emulation.clearDeviceMetricsOverride', params={}, timeout=3)
+            except Exception:
+                pass
         app.quit(); server.shutdown(); server.server_close()
 
 
@@ -7810,8 +8192,7 @@ def main():
     ap.add_argument("--engine-fingerprint-only", action="store_true", help="verify built engine artifacts and exit without launching Open")
     ap.add_argument("--extensions", default=os.path.join(ROOT, ".re", "ext", "unpacked"))
     ap.add_argument("--only", choices=["shell", "extensions", "features", "measure", "tabstrip", "window", "sidebar", "peek",
-                                       "commandbar", "app-actions", "actions", "profiles", "sidebar-completion", "toolbar", "numbering",
-                                       "media", "page"])
+                                       "commandbar", "app-actions", "actions", "profiles", "sidebar-completion", "toolbar", "numbering", "media", "relaunch", "page"])
     ap.add_argument("--window-chrome-only", action="store_true", help="run only the window-chrome follow-up flows in the window suite")
     ap.add_argument("--keep", action="store_true",
                     help="keep this run's data root, cache root and scratch folder (paths printed at the end)")
@@ -7976,6 +8357,9 @@ def main():
         if opts.only == "shell":
             results["shell"] = CheckedResults(tracker)
             shell_checks(factory, results["shell"], tmp)
+        elif opts.only == "relaunch":
+            results["relaunch"] = CheckedResults(tracker)
+            relaunch_checks(factory, results["relaunch"], tmp)
         elif opts.only in ("commandbar", "app-actions"):
             results[opts.only] = CheckedResults(tracker)
             commandbar_checks(factory, results[opts.only], tmp, opts.config)
@@ -7983,6 +8367,9 @@ def main():
             results[opts.only] = CheckedResults(tracker)
             space_manager_checks(results[opts.only], tmp, opts.config, opts.style)
             folder_peek_checks(factory, results[opts.only], tmp)
+        elif opts.only == "page":
+            results["page"] = CheckedResults(tracker)
+            capture_checks(factory, results["page"], tmp)
         elif opts.only in ("toolbar", "numbering"):
             results[opts.only] = CheckedResults(tracker)
             (toolbar_checks if opts.only == "toolbar" else numbering_checks)(factory, results[opts.only], tmp)
@@ -8074,14 +8461,14 @@ def main():
                                     else opts.config.lower()))
     with open(os.path.join(OUT, name), "w") as f:
         json.dump(results, f, indent=2, sort_keys=True)
-    for group in ("shell", "extensions", "features", "measure", "tabstrip", "window", "sidebar", "peek", "commandbar", "app-actions", "actions", "profiles", "sidebar-completion", "toolbar", "numbering", "media", "page"):
+    for group in ("shell", "extensions", "features", "measure", "tabstrip", "window", "sidebar", "peek", "commandbar", "app-actions", "actions", "profiles", "sidebar-completion", "toolbar", "numbering", "media", "relaunch", "page"):
         for k, v in results.get(group, {}).items():
             if isinstance(v, dict) and "ok" in v:
                 print("%-24s %s" % (k, "PASS" if v.get("ok") else "FAIL"))
             elif isinstance(v, dict) and v.get("status") in ("SKIP", "BLOCKED", "INTERRUPTED", "DEFERRED"):
                 print("%-24s %s: %s" % (k, v["status"], v.get("reason", "")))
     print("wrote", os.path.join(OUT, name))
-    failures = [k for group in ("shell", "extensions", "features", "measure", "tabstrip", "window", "sidebar", "peek", "commandbar", "app-actions", "actions", "sidebar-completion", "toolbar", "numbering", "media", "page")
+    failures = [k for group in ("shell", "extensions", "features", "measure", "tabstrip", "window", "sidebar", "peek", "commandbar", "app-actions", "actions", "sidebar-completion", "toolbar", "numbering", "media", "relaunch", "page")
                 for k, v in results.get(group, {}).items() if isinstance(v, dict) and v.get("ok") is False]
     if failures or not results["cleanup"]["ok"]:
         sys.exit(1)
