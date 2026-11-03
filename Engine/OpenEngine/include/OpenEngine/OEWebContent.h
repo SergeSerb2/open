@@ -200,9 +200,11 @@ OE_EXPORT @interface OEWebContent : NSObject
 @property(nonatomic, readonly) double estimatedProgress;
 @property(nonatomic, readonly) BOOL canGoBack;
 @property(nonatomic, readonly) BOOL canGoForward;
-/// The page is playing sound. Stock CEF has no audible signal, so this is
-/// derived from media element events in the page (Web Audio is missed);
-/// patch P6 in docs/engine-patches.md replaces it.
+/// The page is producing sound now: Chromium's tab audio signal
+/// (WebContentsObserver::OnAudioStateChanged through the fork's
+/// CefMediaController, patch P6), so media elements, Web Audio and WebRTC
+/// count, in background pages too. OEWebContentChangeAudio fires on every
+/// change. Muting does not change it.
 @property(nonatomic, readonly, getter=isAudible) BOOL audible;
 @property(nonatomic, getter=isMuted) BOOL muted;
 @property(nonatomic, readonly, getter=isFullscreen) BOOL fullscreen;

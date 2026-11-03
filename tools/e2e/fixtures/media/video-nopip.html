@@ -1,4 +1,4 @@
 <!doctype html><meta charset="utf-8"><title>Media video no PiP</title>
 <body style="background:#fff;margin:0">
 <script src="common.js"></script>
-<script>const v = makeVideo('main', 640, 360, true, (v) => { v.disablePictureInPicture = true; }); window.start = () => v.play().then(() => true);</script>
+<script>const v = makeVideo('main', 640, 360, true, (v) => { v.disablePictureInPicture = true; }); window.start = () => playAll(v);</script>

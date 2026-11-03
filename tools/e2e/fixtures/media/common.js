@@ -20,8 +20,14 @@ function canvasStream(w, h, label) {
 function toneStream(freq) {
   const ctx = new AudioContext(), o = ctx.createOscillator(), g = ctx.createGain(), d = ctx.createMediaStreamDestination();
   o.frequency.value = freq; g.gain.value = 0.05; o.connect(g); g.connect(d); o.start();
-  window.__audioContext = ctx;
+  window.__audioContext = ctx; (window.__audioContexts = window.__audioContexts || []).push(ctx);
   return d.stream;
+}
+// Plays the elements and resumes the tone contexts. A context made at load without a user gesture
+// starts suspended under Chromium's autoplay policy, and its stream is then silent: Chromium's tab
+// audio signal (P6) reports the tab inaudible. start() runs from the driver with a user gesture.
+function playAll(...elements) {
+  return Promise.all([...elements.map((e) => e.play()), ...(window.__audioContexts || []).map((c) => c.resume())]).then(() => true);
 }
 function makeVideo(id, w, h, withAudio, extra) {
   const v = document.createElement('video'); v.id = id; v.width = w; v.height = h; v.playsInline = true;

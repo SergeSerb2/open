@@ -2438,7 +2438,7 @@ note here with its PR link.
 
 ### 14.1 Steps 5–6: interim engine media state and the App wiring
 
-PR: (this PR, branch `s3/media-app-wiring`).
+PR: [#151](https://github.com/SergeSerb2/open/pull/151), branch `s3/media-app-wiring`.
 
 Engine (Step 5, OpenEngine only, stock-CEF compatible):
 
@@ -2527,6 +2527,45 @@ sidebar-render,features-render` PASS (sidebar-render 616/616, features-render
 (run before the merge, which changed no App or OpenKit code): 19 media rows PASS
 (plus fingerprint and cleanup), 5 BLOCKED (unchanged rows). Load averages (1 min):
 verify 8.3 → 8.4, e2e 15.5 → 8.1, row runs 12.5–13.2.
+
+### 14.3 Step 7: the fork's media session (EM-1b, EM-2, EM-3/P6, EM-5)
+
+Branch `s3/engine-media-session`. The frame probe is gone; `OEMediaSession`
+keeps its API and now reads the fork's `CefMediaController` (overlay
+`cef/include/cef_media_controller.h`, `open/browser/media/open_media_controller.cc`,
+patch `chromium/0401`; `docs/engine-api.md` "Media", `docs/engine-patches.md`
+"Media").
+
+- Audible (EM-3, P6) is Chromium's tab audio signal, so Web Audio and background
+  tabs count. It follows the real output: a page whose `AudioContext` is
+  suspended (made at load without a gesture, Chromium's autoplay policy) is
+  inaudible while its element plays. The fixtures resume their tone contexts in
+  `start()`, which the driver runs with a user gesture.
+- Tab volume (EM-2): `mediaVolume` multiplies into every session player through
+  `MediaSessionImpl` (chromium/0401); the page's `element.volume` stays 1. Web
+  Audio is not a session player.
+- PiP (EM-5) enters from the browser with no user gesture; the engine checks the
+  player's own availability first, because Blink's browser-initiated path skips
+  `disablePictureInPicture`.
+- Chromium facts that shape the API: `MediaWebContentsObserver::session_controllers_manager()`
+  is protected (hence the public getter in 0401); MediaStream players are "one
+  shot" and never controllable (commands then go to the players); a muted tab's
+  players leave the session, so the session part keeps its last unmuted values.
+- Section 3 decision (phase 1): Chromium reports a PiP exit in the browser at once
+  and the pause of its Close a moment later from the renderer. The App waits
+  400 ms (`MediaCoordinator.exitGrace`) for that pause before it treats the exit
+  as Back to Tab. Without the wait, `media_close_snoozes` failed with reason
+  `sourceShown` on the fork build.
+- Follow-up: 0401 reads the controller's player id through
+  `get_player_id_for_testing()`; a non-testing accessor is cleaner the next time
+  the patch changes (`docs/followups.md`).
+
+Verification: e2e `--only media --style chrome` on the fork distribution
+(SHA-256 `e7d848d9…`): 24 rows PASS, 4 BLOCKED (EM-4 ×2, EM-7, the section 8
+sleep adapter). At load 8–10: card 1.7 ms after the leave, auto-PiP entered 65 ms
+after the request, gesture-free PiP 27 ms, Web Audio audible 86 ms after start
+(also in a background tab), inaudible 2–4 ms after suspend or close, tab volume
+0.3 read back with the page still playing at element volume 1.
 
 ## Appendix — Lead decisions (2026-10-25)
 

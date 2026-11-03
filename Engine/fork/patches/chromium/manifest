@@ -10,3 +10,5 @@ paths: chrome/browser/ui/read_anything/read_anything_side_panel_controller.cc ch
 paths: chrome/browser/extensions/api/tabs/tabs_api.cc chrome/browser/resource_coordinator/tab_lifecycle_unit.cc
 # 0304-open-hidden-browser-no-tab-groups.patch
 paths: chrome/browser/ui/browser.cc
+# 0401-open-media-session.patch
+paths: content/browser/media/media_web_contents_observer.h content/browser/media/session/media_session_impl.h content/browser/media/session/media_session_impl.cc content/browser/media/session/media_session_controllers_manager.h content/browser/media/session/media_session_controllers_manager.cc
