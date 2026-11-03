@@ -223,7 +223,7 @@ final class EngineWebContentHostFactory: NSResponder, WebContentHostFactory {
     if let space = space(for: tabID) { return model.profile(id: space.profileID) }
     return model.profiles.first { $0.favorites.contains { $0.id == tabID } }
   }
-  private func profile(for context: OEBrowserContext) -> Profile? {
+  func profile(for context: OEBrowserContext) -> Profile? {
     context === OEEngine.shared.defaultContext ? model.defaultProfile : model.profiles.first { $0.dataDirectoryName == context.identifier }
   }
   func context(for profileID: ProfileID) -> OEBrowserContext? {
@@ -1312,6 +1312,7 @@ extension EngineWebContentHostFactory {
     let space = space(containing: id)
     if let space, space.id != focusedSpace?.id { focus(space: space) }
     select(nodeID: id)
+    NotificationClickRouter.shared.pageRequestedActivation(tab: id)
     record("tab-request", webContent, ["request": "activate", "space": space?.id.description ?? ""])
   }
 
@@ -1423,7 +1424,7 @@ extension EngineWebContentHostFactory {
 
   /// The Space whose sidebar shows `id` (favorites: the focused Space of
   /// that profile, else its first Space).
-  private func space(containing id: ItemID) -> Space? {
+  func space(containing id: ItemID) -> Space? {
     var current = id
     while let parent = model.parent(of: current) {
       switch parent {

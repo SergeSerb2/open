@@ -8097,7 +8097,9 @@ def page_notification_checks(factory, results, tmp):
         else:
             results['N1_macos_delivered'] = blocked('U-N1: macOS has not authorized Open (status %s)' % listed['authorization'],
                                                     delivered=listed['delivered'])
-        results['N1_engine_list'] = blocked(listed['engine']['reason'])
+        engine_titles = lambda: [n['title'] for n in app.call('notifications')['engine']]
+        n1_listed = wait_until(lambda: 'Open N1 banner' in engine_titles() or None, timeout=5, step=.1)
+        results['N1_engine_list'] = {'ok': bool(n1_listed), 'engine': app.call('notifications')['engine']}
 
         # N2: requireInteraction goes to the Alerts helper, whose bundle has the alert style and
         # shows as "Open" (§4.5.2).
@@ -8129,7 +8131,10 @@ def page_notification_checks(factory, results, tmp):
         helpers = wait_until(alerts_helpers, timeout=15, step=.2)
         results['N2_alerts_helper'] = {'ok': bool(alert_shown) and bool(helpers) and not before_helpers,
                                        'shown': bool(alert_shown), 'helpersBefore': before_helpers, 'helpers': helpers or []}
-        results['N2_listed'] = blocked(EP7_BLOCKED + '; the Alerts helper posts from its own bundle, not in Open.app\'s list')
+        # EP-7: Chromium's own list has the alert too (macOS's list for Open.app does not: the
+        # Alerts helper posts from its own bundle).
+        n2_listed = wait_until(lambda: 'Open N2 alert' in engine_titles() or None, timeout=5, step=.1)
+        results['N2_listed'] = {'ok': bool(n2_listed), 'engine': engine_titles()}
 
         # N3: a page in Space 2 asks to be shown while Space 1 is focused and the window is
         # minimized. DevTools Page.bringToFront calls the same WebContents::Activate →
@@ -8160,8 +8165,44 @@ def page_notification_checks(factory, results, tmp):
                       and any(e['tab'] == tab2['id'] and e.get('space') == space2 for e in requests),
                 'prepared': prepared, 'windowRestoredAndKey': bool(shown_state), 'focusedSpace': focused, 'space2': space2,
                 'selected': selected, 'requests': requests}
-            results['N3_notification_click'] = blocked(app.call('notification-click', id='')['reason'])
+            # N3 click: the banner's click (EP-7's real click path) runs the page's onclick, whose
+            # focus() selects the tab through P1; Open's fallback sees the page answered.
             app.call('space', space=space1)
+            other_n3 = app.call('open', url=origin + '/links.html')['id']
+            wait_until(lambda: not app.call('tab-state', tab=tab['id'])['selected'] or None, timeout=5, step=.05)
+            banner = next((n for n in app.call('notifications')['engine'] if n['title'] == 'Open N1 banner'), None)
+            clicked = app.call('notification-click', id=banner['id']) if banner else {'clicked': False}
+            via_page = wait_until(lambda: app.call('tab-state', tab=tab['id'])['selected'] or None, timeout=5, step=.05)
+            time.sleep(0.8)
+            clicks = app.call('notifications')['clicks']
+            results['N3_notification_click'] = {
+                'ok': bool(banner) and clicked['clicked'] and 'click:Open N1 banner' in app.eval(page, 'log') and bool(via_page)
+                      and bool(clicks) and clicks[-1]['action'] == 'page',
+                'clicked': clicked, 'selected': bool(via_page), 'router': clicks[-1:] if clicks else []}
+            app.call('close', tab=other_n3)
+
+        # N4: a page whose click handler does not call focus(): after 500 ms Open selects the
+        # most recently active tab with the notification's origin (§4.5.4 fallback, EP-6).
+        nf_url = origin + '/notify.html?nofocus'
+        nf_tab = app.call('open', url=nf_url)
+        nf_page = live_tab(nf_url)['page']['identifier']
+        app.call('click', tab=nf_page, selector='#banner')
+        wait_until(lambda: app.eval(nf_page, 'shown["Open N1 banner"] === true'), timeout=10, step=.1)
+        away = app.call('open', url=origin + '/links.html')['id']
+        wait_until(lambda: not app.call('tab-state', tab=nf_tab['id'])['selected'] or None, timeout=5, step=.05)
+        nf_ids = [n['id'] for n in app.call('notifications')['engine'] if n['title'] == 'Open N1 banner']
+        # The same tag replaces the first page's banner: the newest id belongs to this page.
+        clicked4 = app.call('notification-click', id=nf_ids[-1]) if nf_ids else {'clicked': False}
+        early = app.call('tab-state', tab=nf_tab['id'])['selected']
+        time.sleep(0.2)
+        before_deadline = app.call('tab-state', tab=nf_tab['id'])['selected']
+        fallback = wait_until(lambda: app.call('tab-state', tab=nf_tab['id'])['selected'] or None, timeout=3, step=.05)
+        clicks4 = app.call('notifications')['clicks']
+        results['N4_click_fallback_selects_tab'] = {
+            'ok': clicked4['clicked'] and 'click:Open N1 banner' in app.eval(nf_page, 'log') and not early and not before_deadline
+                  and bool(fallback) and bool(clicks4) and clicks4[-1]['action'] == 'fallback' and clicks4[-1]['tab'] == nf_tab['id'],
+            'selectedAtClick': early, 'selectedAt200ms': before_deadline, 'selectedAfter': bool(fallback), 'router': clicks4[-1:]}
+        app.call('close', tab=away)
 
         # N6: a service worker notification outlives its tab (the engine still lists it with
         # no tab of its page open); its click opens the target in a new Today tab.
@@ -8178,7 +8219,15 @@ def page_notification_checks(factory, results, tmp):
         results['N6_engine_display'] = {'ok': ready is True and 'Open N6 worker' in (titles or []) and bool(gone)
                                               and 'Open N6 worker' in (later or []),
                                         'ready': ready, 'titles': titles, 'tabClosed': bool(gone), 'afterClose': later}
-        results['N6_click_opens_tab'] = blocked(EP7_BLOCKED)
+        # Its click (EP-7) reaches the worker, whose clients.openWindow opens a new tab (P1 didOpen).
+        worker_note = next((n for n in app.call('notifications')['engine'] if n['title'] == 'Open N6 worker'), None)
+        target = origin + '/notify.html?from=worker'
+        clicked6 = app.call('notification-click', id=worker_note['id']) if worker_note else {'clicked': False}
+        opened6 = wait_until(lambda: [t for t in app.call('tabs') if t['url'] == target], timeout=10, step=.2)
+        results['N6_click_opens_tab'] = {'ok': bool(worker_note) and clicked6['clicked'] and bool(opened6),
+                                         'notification': worker_note, 'opened': opened6}
+        for t in opened6 or []:
+            app.call('close', tab=t['id'])
     finally:
         # Close what the suite showed (Notification Center keeps delivered banners after U-N1).
         for identifier in pages:

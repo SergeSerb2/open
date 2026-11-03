@@ -16,8 +16,9 @@ function show(title, options) {
   notes[title] = n;
   n.onshow = () => { log.push('show:' + title); shown[title] = true; };
   n.onerror = () => log.push('error:' + title);
-  // A click selects this tab: the page's own focus() (P1 activation path).
-  n.onclick = () => { log.push('click:' + title); window.focus(); };
+  // A click selects this tab: the page's own focus() (P1 activation path). With ?nofocus the
+  // handler does not call focus(): Open's 500 ms fallback selects the tab (N4).
+  n.onclick = () => { log.push('click:' + title); if (!location.search.includes('nofocus')) window.focus(); };
   n.onclose = () => log.push('close:' + title);
   return title;
 }

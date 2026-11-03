@@ -1,5 +1,6 @@
 #if OPEN_AUTOMATION
 import AppKit
+import OpenEngine
 import UserNotifications
 
 /// Web notification automation commands (page-platform §8.3, docs/automation.md "Notifications").
@@ -8,10 +9,12 @@ extension AutomationController {
     "notifications", "notification-click", "notification-authorization", "window-miniaturize",
   ]
 
-  /// EP-7 (`OEBrowserContext (NotificationTesting)`, fork patch 0504) is not in the engine yet.
-  static let engineNotificationsBlocked: [String: Any] = [
-    "status": "BLOCKED", "reason": "EP-7: engine notification list and simulated click (fork patch 0504)",
-  ]
+  /// The context of the window's focused Space (its profile's notifications).
+  private func notificationContext() throws -> OEBrowserContext {
+    let w = try window
+    guard let space = w.focusedSpace, let context = w.context(for: space.profileID) else { throw Failure(message: "no profile context") }
+    return context
+  }
 
   func runNotificationCommand(_ cmd: String, _ a: [String: Any]) async throws -> Any {
     let authorization = NotificationAuthorization.shared
@@ -21,9 +24,17 @@ extension AutomationController {
       // come from the Alerts helper's own bundle and are not in this list.
       let status = await authorization.readStatus()
       let delivered = await Self.deliveredNotifications()
-      return ["authorization": status.rawValue, "delivered": delivered, "engine": Self.engineNotificationsBlocked] as [String: Any]
+      // EP-7: Chromium's own displayed list (engine switch --open-automation).
+      let context = try notificationContext()
+      let engine = await withCheckedContinuation { (done: CheckedContinuation<[[String: String]], Never>) in
+        context.displayedNotifications { done.resume(returning: $0) }
+      }
+      return ["authorization": status.rawValue, "delivered": delivered, "engine": engine,
+              "clicks": NotificationClickRouter.shared.log] as [String: Any]
     case "notification-click":
-      return Self.engineNotificationsBlocked
+      // EP-7: the same click path as macOS's response; `id` from `notifications`.engine.
+      guard let id = a["id"] as? String else { throw Failure(message: "missing id") }
+      return ["clicked": try notificationContext().simulateClickOnNotification(identifier: id)]
     case "notification-authorization":
       let status = await authorization.readStatus()
       return ["status": status.rawValue, "denied": authorization.isDenied, "requests": authorization.requestLog,
