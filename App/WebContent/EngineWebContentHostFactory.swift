@@ -134,7 +134,7 @@ final class EngineWebContentHostFactory: NSResponder, WebContentHostFactory {
     controller.showsFullURLWithToolbar = UserDefaults.standard.bool(forKey: AppCommand.showFullURLKey)
     controller.onStateChange = { [weak self] in
       guard let self else { return }
-      if self.app.engineReady { for tab in self.visibleTabs { tab.live.sleepPhase = .live }; self.controller?.container.refreshPlaceholders() }
+      if self.app.engineReady { self.markVisibleTabsLive(); self.controller?.container.refreshPlaceholders() }
       // BrowserWindowController schedules its SnapshotStore once per committed change.
       self.mirror.sync(); self.commandBarSession?.contextDidChange(); self.app.scheduleMenuRebuild()
       self.app.media.windowChanged(self)
@@ -362,9 +362,17 @@ final class EngineWebContentHostFactory: NSResponder, WebContentHostFactory {
     if case .spaceProfileChanged(let id, _, _) = change, focusedSpace?.id == id { showSelection(focus: false) }
     else { controller?.refresh(); mirror.sync() }
   }
+  /// Shown tabs become live; the sleep controller wakes the ones it put to sleep (or can restore
+  /// from a stored back list), so their wake kind and history are right (memory-fork §9.4).
+  func markVisibleTabsLive() {
+    for tab in visibleTabs {
+      if app.tabSleep.wakesThroughController(tab, hasHost: hosts[tab.id].map { !$0.closed } ?? false) { app.tabSleep.wake(tab.id) }
+      else { tab.live.sleepPhase = .live }
+    }
+  }
   func showSelection(focus: Bool = true) {
     guard let controller else { return }
-    if app.engineReady { for tab in visibleTabs { tab.live.sleepPhase = .live } }
+    if app.engineReady { markVisibleTabsLive() }
     controller.refresh(); mirror.sync()
     window?.title = selectedTab?.displayTitle.isEmpty == false ? selectedTab!.displayTitle : "Open"
     if focus { selectedContent?.focusPage() }

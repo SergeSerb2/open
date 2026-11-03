@@ -33,7 +33,9 @@ public final class PaneSlotView: NSView {
             paneChrome?.fallbackColor = style.lightPalette?.background.nsColor ?? .white
             paneChrome?.update()
         } else { paneChrome?.removeFromSuperview(); paneChrome = nil }
-        if let host, tab.live.sleepPhase == .live || tab.live.sleepPhase == .frozen {
+        // A sleeping tab whose page was discarded in place keeps its page object: showing it
+        // reloads its entry (memory-fork §5.5), and the phase turns live at that commit.
+        if let host, tab.live.sleepPhase == .live || tab.live.sleepPhase == .frozen || tab.live.sleepPhase == .sleeping {
             if contentHostView !== host.view { contentHostView?.removeFromSuperview() }
             placeholderView?.removeFromSuperview(); placeholderView = nil
             contentHostView = host.view; host.view.isHidden = false

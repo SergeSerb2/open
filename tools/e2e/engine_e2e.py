@@ -5480,8 +5480,9 @@ def sleep_checks(factory, results, tmp, style):
         app.call("close", tab=ver)
         select(home)
         def feature_list(flag):
-            m = re.search(r"--%s=(\S+)" % flag, cmd)
-            return set(m.group(1).split(",")) if m else set()
+            # A repeated switch takes its last value (base::CommandLine).
+            found = re.findall(r"--%s=(\S+)" % flag, cmd)
+            return set(found[-1].split(",")) if found else set()
         off = {"OptimizationHints", "OptimizationTargetPrediction", "OptimizationGuidePageContentExtraction",
                "OptimizationGuideModelExecution", "SegmentationPlatform", "SegmentationPlatformUkmEngine", "MediaRouter",
                "TranslateRankerQuery", "TranslateRankerEnforcement"}
