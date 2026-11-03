@@ -10,6 +10,8 @@ function report() {
 addEventListener('pageshow', () => requestAnimationFrame(report));
 addEventListener('scroll', report, {passive: true});
 if (new URLSearchParams(location.search).get('unload') === '1') {
-  addEventListener('beforeunload', event => { event.preventDefault(); event.returnValue = ''; });
+  // Kept in a global so a test can remove it before it closes the tab (no prompt left behind).
+  window.openUnloadHandler = event => { event.preventDefault(); event.returnValue = ''; };
+  addEventListener('beforeunload', window.openUnloadHandler);
 }
 </script></html>

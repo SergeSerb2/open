@@ -176,6 +176,39 @@ Commands: `load(_:)`, `goBack()`, `goForward()`, `reload()`, `reloadIgnoringCach
 | `webContent(_:didFinishLoadWithStatus:)`, `webContent(_:didFailLoadWithError:)` | Main frame |
 | `webContent(_:didReceiveDevToolsEvent:parameters:)`, `webContent(_:didLogConsoleMessage:level:source:line:)` | Diagnostics, automation |
 
+### Tab sleeping (memory fork)
+
+The engine half of [plans/memory-fork.md](plans/memory-fork.md): honest visibility, freeze, discard in place, and capture/restore of the back/forward list. The shell owns all policy (`OpenSleep`); these calls only do what they are told. They work for hosted tabs (Chrome style pages in an `OEBrowser`, the shell's tabs) and Alloy pages. All are main-thread calls on a live page; on a page that is not live they return `false`/`nil`.
+
+| Member | Notes |
+|---|---|
+| `setPageHidden(_:)` | `CefBrowserHost::WasHidden`. The view's hidden state already reports this (a background hosted tab is `document.visibilityState == "hidden"`); use it when a page's view stays in a visible window. Fork patch 0101 (Alloy windowed) and 0302 (Chrome style) make it reach `WebContents::UpdateWebContentsVisibility`. |
+| `setPageFrozen(_:) -> Bool`, `isPageFrozen` | Depth 1. Only a hidden page can be frozen (`false` for a visible or discarded page). Showing the page unfreezes it; `isPageFrozen` follows. |
+| `discard() async -> Bool` (`discardWithCompletion:`), `isDiscarded` | Depth 2, in place: the renderer and frame tree go; the `OEWebContent`, its history and its `chrome.tabs` id stay, and the page reloads from its entry when shown (`document.wasDiscarded` is true for that load). Refused for a visible page. The completion runs exactly once with the re-check of `isDiscarded` (memory-fork D-5): `false` means still live, keep the tab frozen and retry later. A navigation about to commit makes Chromium ignore a discard; the engine retries once after 100 ms. Needs the `WebContentsDiscard` feature, which OpenEngine turns on. `isDiscarded` is true from the discard (or a history restore) until the page starts loading again. |
+| `hasUnloadHandlers` | The page has `beforeunload`/`unload` handlers (sleep policy keeps such pages frozen, never discarded). |
+| `captureNavigationHistory() -> OENavigationHistory?` | The whole back/forward list with scroll and form state, read in the browser process (works for frozen, discarded and crashed pages, and at quit). Page state is dropped when the list would not fit 2 MiB with it (`hasPageState` false); `nil` if it does not fit without it, or nothing was committed. |
+| `init(configuration:navigationHistory:fallbackURL:)`, `navigationHistoryRestore` | A page that comes up with a history instead of a URL: its Chromium page is created (when the view enters a window) with no renderer process, the history is installed before it can show, and the current entry loads when it becomes visible. `.restored` on success. If an entry does not decode (the pickles are tied to the Chromium version) or the page is a Views-window Chrome page, it loads `fallbackURL` (default: the history's `currentURL`) and reports `.failed`; log `sleep-restore-fallback`. |
+
+`OENavigationHistory` is Open's OPNH v1 container (memory-fork §7.1), byte-identical to `SleepHistoryContainer` in OpenSleep: `init(container:)` validates it whole (nil on any violation, never a partial history); `container`, `entryCount`, `currentIndex`, `hasPageState`, and for a capture `currentURL`, `title`, `faviconURL` (store these as sidecars; a history parsed from stored bytes has none). Immutable and `Sendable`.
+
+Engine switches (memory-fork §10, browser process, `OEApp.mm`): `--enable-features` gains `WebContentsDiscard`; `--disable-features` gains `OptimizationHints`, `OptimizationTargetPrediction`, `OptimizationGuidePageContentExtraction`, `OptimizationGuideModelExecution`, `SegmentationPlatform`, `SegmentationPlatformUkmEngine`, `MediaRouter`, `TranslateRankerQuery`, `TranslateRankerEnforcement` (each string read from its `BASE_FEATURE` in the tree). On Macs with 8 GB or less, `--renderer-process-limit=32`. Both lists are merged with values the shell passes in `additionalSwitches`.
+
+The fork API under these calls is C++ free functions in two overlay headers, not `CefBrowserHost` methods: `cef_page_lifecycle.h` (`CefSetPageFrozen`, `CefIsPageFrozen`, `CefDiscardBrowser`, `CefWasDiscarded`, `CefHasUnloadHandlers`) and `cef_navigation_history.h` (`CefNavigationHistory`, `CefGetNavigationHistory`, `CefRestoreNavigationHistory`), plus `CefBrowserSettings.no_renderer` (patch 0105) and `CefNavigationEntry::GetReferrerURL`/`GetFaviconURL` (patch 0104). See [engine-patches.md](engine-patches.md), "Tab sleeping".
+
+### Page selection and history swipe (page-platform EP-1, EP-2, EP-3)
+
+Fork API `cef/include/cef_open_page.h` (docs/engine-patches.md, "Page platform"). Every page gets a page handler when its browser is created.
+
+- `hasSelection` and `OEWebContentChangeSelection` (`1u << 15`): the page's text selection became empty or non-empty (input selections; a script-only selection that never reaches the browser's text input state does not count). Not sent for caret moves.
+- `requestSelection(completion:)`: the focused frame's selected text and a link that scrolls to it (the page URL plus Chromium's text-fragment directive, with prefix/suffix context when the text is not unique). `link` is nil for a selection in a child frame or when the generator fails. The completion runs exactly once.
+- `historySwipeEnabled` (default YES; NO makes Chromium's swiper ignore gestures on this page) and `drawsEngineHistorySwipeOverlay` (default YES; NO hides Chromium's arrow). Delegate `webContent(_:historySwipe:direction:progress:)`: began / changed / completed / cancelled, back or forward, progress 0…1. Completed arrives after the navigation started.
+- `simulateHistorySwipe(direction:progress:)`: test hook (engine switch `--open-automation`); replays the overlay sequence and the navigation; NO when swipes are off or the page cannot go that way.
+
+### Notifications (page-platform EP-6, EP-7)
+
+- `OEBrowserContextDelegate.browserContext(_:didClickNotification:origin:persistent:)`: a web notification of the context was clicked (body or button), before Chromium dispatches the click to the page. No page is reported; find the tab by origin.
+- `OEBrowserContext.displayedNotifications(completion:)` and `simulateClickOnNotification(identifier:)`: test hooks, active only with `--open-automation` (otherwise an empty list and NO). The list is Chromium's displayed set (`NotificationDisplayService::GetDisplayed`) with id, origin, title and body.
+
 ### Context menu items
 
 A Chrome style page gets Chrome's full page context menu. OpenEngine keeps only the items on an explicit allowlist (`Engine/OpenEngine/src/OEContextMenuAllowlist.mm`, applied in `OEClient::OnBeforeContextMenu`). It then removes empty submenus and extra separators. An item a later Chromium adds stays hidden until it is added to the list. Alloy style menus are CEF's short list and are not filtered. The shell adds Open's own items (Capture, Share, Copy URL, Little Open, Split View, and Arc's "Manage Extensions", EX-18) to what remains. `select(command:)` runs only the id of an enabled item in the delivered `items` (submenus included); any other id is refused, logged, and the menu is cancelled, because CEF would run it directly without checking the list. Not filtered: Alloy pages (Peek; CEF's short list, by design) and the short-lived Chrome windows that `chrome.windows.create` still opens (`OEDefaultClient`, P1 follow-up).
