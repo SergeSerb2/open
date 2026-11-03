@@ -1522,6 +1522,13 @@ tagged `[APP]` need app-shell Steps B and C on `main` (real window, menus,
 | 18 | [APP] | Developer Mode v1 (§4.10.3) and the Site Control tile | 5; lead answer to Q6 | D3 |
 | 19 | [APP] | When P7 / E5 lands: move the translate runtime to the isolated world | 10, P7 | X1–X6 pass; `eval` in the main world cannot see `__openTranslate` |
 
+Step 13 status (Section 8, branch `s8/capture`): built. `features-render check` covers R-C1–R-C3
+plus the controller flow (renders in `docs/plans/page-platform/capture-*.png`); e2e `--only page`
+passes C1–C6 and the context-menu row; C7 is blocked (no incognito window yet). Interim: the
+capture toasts use the window's old toast until Step 1's `ToastCenter`, and `hasWebPage` is
+computed in `App/Page/CaptureCommands.swift` until Step 2. Leftovers: `docs/followups.md`,
+"Capture tool leftovers".
+
 Priority: steps 1–3 unblock every toast; 7–10 and 11–12 close the P1 gaps
 (notifications, translation, swipe; `docs/status.md` §3.2 items 8, 9, 12);
 the rest are P2.

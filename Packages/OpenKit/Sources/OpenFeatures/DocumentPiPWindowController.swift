@@ -60,7 +60,7 @@ import OpenWeb
     private let child: NSView, header: DocumentPiPTopBar
     init(child: NSView, header: DocumentPiPTopBar, size: CGSize) {
         self.child = child; self.header = header; super.init(frame: CGRect(origin: .zero, size: size))
-        wantsLayer = true; layer?.cornerRadius = PiPMetrics.cornerRadius; layer?.masksToBounds = true
+        wantsLayer = true; layer?.cornerRadius = PiPMetrics.documentCornerRadius; layer?.masksToBounds = true
         addSubview(child); addSubview(header)
     }
     @available(*, unavailable) required init?(coder: NSCoder) { fatalError() }

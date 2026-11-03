@@ -24,7 +24,10 @@ import OpenSidebar
         guard arc.width == 1728, arc.height == 1084, arc.width == ours.width, arc.height == ours.height else {
             throw CLIError(description: "compare-media requires matching 1728x1084 images at 1x")
         }
-        let expanded = state.contains("expanded"), stack = state.hasPrefix("stack"), n = stack ? 3 : 1
+        // `--cards 2` measures a two-card stack (capture session 2 16/0001); the default stack is three cards.
+        let cards = Int(RenderCLI.value(args, "--cards") ?? "3") ?? 0
+        guard (2...3).contains(cards) else { throw CLIError(description: "--cards must be 2 or 3") }
+        let expanded = state.contains("expanded"), stack = state.hasPrefix("stack"), n = stack ? cards : 1
         var elements: [Compare.Element] = [], masks: [CGRect] = [CGRect(x: 0, y: 1034, width: 228, height: 50)]
         for i in args.indices where args[i] == "--mask" {
             guard i + 1 < args.count else { throw CLIError(description: "missing media mask") }

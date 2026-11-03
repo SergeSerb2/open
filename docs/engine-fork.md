@@ -370,6 +370,9 @@ Rebase watch: the zone name and `kZoneVersion` in OEMallocZone.mm must match
 (`kDelegatingZoneName`, `kZoneVersion`). If they drift, PartitionAlloc takes
 the racy path again and `malloc_zones_early` fails.
 
+
+Relaunch proof (section 8, 2026-11-02): `engine_e2e.py --only relaunch --config Release` relaunched one profile 50 times (two runs of 25, load 26–44): 0 aborts, 0 `No zone found` lines, 0 new crash reports. Receipts: `docs/engine-spike/results-relaunch-release-run1.json`, `-run2.json`.
+
 ## Rebase watch list
 
 Things Open copies from upstream or relies on without a patch, so no patch

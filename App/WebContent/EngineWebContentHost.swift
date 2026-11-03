@@ -4,10 +4,11 @@ import OpenEngine
 import OpenFeatures
 import OpenModel
 import OpenStore
+import OpenWeb
 
 /// The sole delegate of a tab page. Closed generations never update the model.
 @MainActor
-final class EngineWebContentHost: NSObject, WebContentHost, OEWebContentDelegate {
+final class EngineWebContentHost: NSObject, WebContentHost, WebContentProviding, OEWebContentDelegate {
   private(set) var tabID: ItemID
   private(set) var spaceID: SpaceID?
   let profileID: ProfileID
@@ -46,6 +47,9 @@ final class EngineWebContentHost: NSObject, WebContentHost, OEWebContentDelegate
   var canGoBack: Bool { content.canGoBack }
   var canGoForward: Bool { content.canGoForward }
   var isLoading: Bool { content.isLoading }
+  /// Capture, selection, and translation reach the page through this (page-platform §3.2).
+  var webContent: (any WebContent)? { closed ? nil : content }
+  var isPrivateBrowsing: Bool { content.context.isEphemeral }
 
   init(tabID: ItemID, profileID: ProfileID, content: OEWebContent, owner: EngineWebContentHostFactory) {
     self.tabID = tabID; self.profileID = profileID; self.content = content; self.owner = owner

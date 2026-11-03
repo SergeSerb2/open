@@ -1,0 +1,673 @@
+{
+  "cleanup": {
+    "ok": true,
+    "processes": [
+      {
+        "forced": false,
+        "ok": true,
+        "owned_pids": [
+          58940,
+          58993,
+          58994,
+          58995,
+          58996,
+          59001,
+          59002,
+          59007,
+          59010
+        ],
+        "remaining_processes": [],
+        "reply": true,
+        "windows_after_quit": {
+          "count": 0,
+          "windows": []
+        },
+        "windows_before_quit": 1
+      },
+      {
+        "forced": false,
+        "ok": true,
+        "owned_pids": [
+          59031,
+          59042,
+          59043,
+          59045,
+          59049,
+          59050
+        ],
+        "remaining_processes": [],
+        "reply": true,
+        "windows_after_quit": {
+          "count": 0,
+          "windows": []
+        },
+        "windows_before_quit": 1
+      },
+      {
+        "forced": false,
+        "ok": true,
+        "owned_pids": [
+          59084,
+          59092,
+          59093,
+          59094,
+          59096,
+          59097
+        ],
+        "remaining_processes": [],
+        "reply": true,
+        "windows_after_quit": {
+          "count": 0,
+          "windows": []
+        },
+        "windows_before_quit": 1
+      },
+      {
+        "forced": false,
+        "ok": true,
+        "owned_pids": [
+          59142,
+          59166,
+          59167,
+          59168,
+          59169,
+          59171,
+          59172
+        ],
+        "remaining_processes": [],
+        "reply": true,
+        "windows_after_quit": {
+          "count": 0,
+          "windows": []
+        },
+        "windows_before_quit": 1
+      },
+      {
+        "forced": false,
+        "ok": true,
+        "owned_pids": [
+          59199,
+          59214,
+          59215,
+          59216,
+          59217,
+          59227,
+          59228
+        ],
+        "remaining_processes": [],
+        "reply": true,
+        "windows_after_quit": {
+          "count": 0,
+          "windows": []
+        },
+        "windows_before_quit": 1
+      },
+      {
+        "forced": false,
+        "ok": true,
+        "owned_pids": [
+          59266,
+          59276,
+          59277,
+          59279,
+          59280,
+          59281,
+          59282
+        ],
+        "remaining_processes": [],
+        "reply": true,
+        "windows_after_quit": {
+          "count": 0,
+          "windows": []
+        },
+        "windows_before_quit": 1
+      },
+      {
+        "forced": false,
+        "ok": true,
+        "owned_pids": [
+          59317,
+          59340,
+          59341,
+          59343,
+          59344,
+          59345,
+          59346
+        ],
+        "remaining_processes": [],
+        "reply": true,
+        "windows_after_quit": {
+          "count": 0,
+          "windows": []
+        },
+        "windows_before_quit": 1
+      },
+      {
+        "forced": false,
+        "ok": true,
+        "owned_pids": [
+          59358,
+          59370,
+          59371,
+          59373,
+          59374,
+          59375,
+          59376
+        ],
+        "remaining_processes": [],
+        "reply": true,
+        "windows_after_quit": {
+          "count": 0,
+          "windows": []
+        },
+        "windows_before_quit": 1
+      },
+      {
+        "forced": false,
+        "ok": true,
+        "owned_pids": [
+          59422,
+          59432,
+          59433,
+          59434,
+          59435,
+          59439,
+          59440
+        ],
+        "remaining_processes": [],
+        "reply": true,
+        "windows_after_quit": {
+          "count": 0,
+          "windows": []
+        },
+        "windows_before_quit": 1
+      },
+      {
+        "forced": false,
+        "ok": true,
+        "owned_pids": [
+          59459,
+          59470,
+          59471,
+          59472,
+          59473,
+          59474,
+          59475
+        ],
+        "remaining_processes": [],
+        "reply": true,
+        "windows_after_quit": {
+          "count": 0,
+          "windows": []
+        },
+        "windows_before_quit": 1
+      },
+      {
+        "forced": false,
+        "ok": true,
+        "owned_pids": [
+          59505,
+          59516,
+          59517,
+          59518,
+          59519,
+          59521,
+          59522
+        ],
+        "remaining_processes": [],
+        "reply": true,
+        "windows_after_quit": {
+          "count": 0,
+          "windows": []
+        },
+        "windows_before_quit": 1
+      },
+      {
+        "forced": false,
+        "ok": true,
+        "owned_pids": [
+          59534,
+          59539,
+          59540,
+          59542,
+          59543,
+          59544,
+          59545
+        ],
+        "remaining_processes": [],
+        "reply": true,
+        "windows_after_quit": {
+          "count": 0,
+          "windows": []
+        },
+        "windows_before_quit": 1
+      },
+      {
+        "forced": false,
+        "ok": true,
+        "owned_pids": [
+          59564,
+          59575,
+          59576,
+          59578,
+          59579,
+          59581,
+          59582
+        ],
+        "remaining_processes": [],
+        "reply": true,
+        "windows_after_quit": {
+          "count": 0,
+          "windows": []
+        },
+        "windows_before_quit": 1
+      },
+      {
+        "forced": false,
+        "ok": true,
+        "owned_pids": [
+          59641,
+          59720,
+          59721,
+          59727,
+          59728,
+          59741,
+          59742
+        ],
+        "remaining_processes": [],
+        "reply": true,
+        "windows_after_quit": {
+          "count": 0,
+          "windows": []
+        },
+        "windows_before_quit": 1
+      },
+      {
+        "forced": false,
+        "ok": true,
+        "owned_pids": [
+          59890,
+          59955,
+          59956,
+          59964,
+          59966,
+          59972,
+          59974
+        ],
+        "remaining_processes": [],
+        "reply": true,
+        "windows_after_quit": {
+          "count": 0,
+          "windows": []
+        },
+        "windows_before_quit": 1
+      },
+      {
+        "forced": false,
+        "ok": true,
+        "owned_pids": [
+          60002,
+          60028,
+          60029,
+          60030,
+          60037,
+          60038
+        ],
+        "remaining_processes": [],
+        "reply": true,
+        "windows_after_quit": {
+          "count": 0,
+          "windows": []
+        },
+        "windows_before_quit": 1
+      },
+      {
+        "forced": false,
+        "ok": true,
+        "owned_pids": [
+          60101,
+          60120,
+          60121,
+          60122,
+          60123,
+          60127,
+          60128
+        ],
+        "remaining_processes": [],
+        "reply": true,
+        "windows_after_quit": {
+          "count": 0,
+          "windows": []
+        },
+        "windows_before_quit": 1
+      },
+      {
+        "forced": false,
+        "ok": true,
+        "owned_pids": [
+          60162,
+          60193,
+          60194,
+          60196,
+          60199,
+          60200
+        ],
+        "remaining_processes": [],
+        "reply": true,
+        "windows_after_quit": {
+          "count": 0,
+          "windows": []
+        },
+        "windows_before_quit": 1
+      },
+      {
+        "forced": false,
+        "ok": true,
+        "owned_pids": [
+          60240,
+          60252,
+          60253,
+          60255,
+          60261,
+          60262
+        ],
+        "remaining_processes": [],
+        "reply": true,
+        "windows_after_quit": {
+          "count": 0,
+          "windows": []
+        },
+        "windows_before_quit": 1
+      },
+      {
+        "forced": false,
+        "ok": true,
+        "owned_pids": [
+          60298,
+          60323,
+          60324,
+          60325,
+          60327,
+          60328
+        ],
+        "remaining_processes": [],
+        "reply": true,
+        "windows_after_quit": {
+          "count": 0,
+          "windows": []
+        },
+        "windows_before_quit": 1
+      },
+      {
+        "forced": false,
+        "ok": true,
+        "owned_pids": [
+          60361,
+          60381,
+          60382,
+          60383,
+          60388,
+          60389
+        ],
+        "remaining_processes": [],
+        "reply": true,
+        "windows_after_quit": {
+          "count": 0,
+          "windows": []
+        },
+        "windows_before_quit": 1
+      }
+    ]
+  },
+  "config": "Release",
+  "engine": {
+    "distributionCodeSHA256": "35b37ba3a72d079ed4e76fc7932bfe76e49b57c3456eda06f7fea9d928b901ae",
+    "distributionSHA256": "61c9ab17b6b08525af836cca93bba67819bfa1544f04abe5eae3baf4b57b98a8",
+    "distributionUUID": "4C4C44C8-5555-3144-A168-35B709BBDA3A",
+    "embeddedCodeSHA256": "35b37ba3a72d079ed4e76fc7932bfe76e49b57c3456eda06f7fea9d928b901ae",
+    "embeddedSHA256": "3e246c99539902496c44c4c6ed2533f3f4fd4a85f03b4f5e6dcaaf49f75f28d2",
+    "embeddedUUID": "4C4C44C8-5555-3144-A168-35B709BBDA3A",
+    "requiredSHA256": "",
+    "source": "fork",
+    "stamp": "fork /Users/serge/Developer/open-engine-s8-main/chromium_git/chromium/src/cef/binary_distrib/cef_binary_156.0.14+g4fa4ab5+chromium-156.0.8078.48_macosarm64_minimal 1793075034"
+  },
+  "interrupted_attempts": [],
+  "relaunch": {
+    "relaunch_fixture": {
+      "ok": true,
+      "tabs": 3
+    },
+    "relaunch_soak": {
+      "aborts": 0,
+      "count": 20,
+      "failures": [],
+      "new_crash_reports": [],
+      "ok": true,
+      "passed": 20,
+      "runs": [
+        {
+          "automation_ms": 737,
+          "index": 1,
+          "load": 24.5400390625,
+          "loaded": 1,
+          "ok": true,
+          "pid": 59031,
+          "quit_ok": true,
+          "same_tabs": true,
+          "zone_fatal": false
+        },
+        {
+          "automation_ms": 902,
+          "index": 2,
+          "load": 24.5400390625,
+          "loaded": 1,
+          "ok": true,
+          "pid": 59084,
+          "quit_ok": true,
+          "same_tabs": true,
+          "zone_fatal": false
+        },
+        {
+          "automation_ms": 710,
+          "index": 3,
+          "load": 24.5400390625,
+          "loaded": 1,
+          "ok": true,
+          "pid": 59142,
+          "quit_ok": true,
+          "same_tabs": true,
+          "zone_fatal": false
+        },
+        {
+          "automation_ms": 712,
+          "index": 4,
+          "load": 24.5400390625,
+          "loaded": 1,
+          "ok": true,
+          "pid": 59199,
+          "quit_ok": true,
+          "same_tabs": true,
+          "zone_fatal": false
+        },
+        {
+          "automation_ms": 715,
+          "index": 5,
+          "load": 24.25634765625,
+          "loaded": 1,
+          "ok": true,
+          "pid": 59266,
+          "quit_ok": true,
+          "same_tabs": true,
+          "zone_fatal": false
+        },
+        {
+          "automation_ms": 752,
+          "index": 6,
+          "load": 24.25634765625,
+          "loaded": 1,
+          "ok": true,
+          "pid": 59317,
+          "quit_ok": true,
+          "same_tabs": true,
+          "zone_fatal": false
+        },
+        {
+          "automation_ms": 730,
+          "index": 7,
+          "load": 24.25634765625,
+          "loaded": 1,
+          "ok": true,
+          "pid": 59358,
+          "quit_ok": true,
+          "same_tabs": true,
+          "zone_fatal": false
+        },
+        {
+          "automation_ms": 722,
+          "index": 8,
+          "load": 24.25634765625,
+          "loaded": 1,
+          "ok": true,
+          "pid": 59422,
+          "quit_ok": true,
+          "same_tabs": true,
+          "zone_fatal": false
+        },
+        {
+          "automation_ms": 725,
+          "index": 9,
+          "load": 24.8759765625,
+          "loaded": 1,
+          "ok": true,
+          "pid": 59459,
+          "quit_ok": true,
+          "same_tabs": true,
+          "zone_fatal": false
+        },
+        {
+          "automation_ms": 710,
+          "index": 10,
+          "load": 24.8759765625,
+          "loaded": 1,
+          "ok": true,
+          "pid": 59505,
+          "quit_ok": true,
+          "same_tabs": true,
+          "zone_fatal": false
+        },
+        {
+          "automation_ms": 805,
+          "index": 11,
+          "load": 24.8759765625,
+          "loaded": 1,
+          "ok": true,
+          "pid": 59534,
+          "quit_ok": true,
+          "same_tabs": true,
+          "zone_fatal": false
+        },
+        {
+          "automation_ms": 711,
+          "index": 12,
+          "load": 25.7666015625,
+          "loaded": 1,
+          "ok": true,
+          "pid": 59564,
+          "quit_ok": true,
+          "same_tabs": true,
+          "zone_fatal": false
+        },
+        {
+          "automation_ms": 723,
+          "index": 13,
+          "load": 25.7666015625,
+          "loaded": 1,
+          "ok": true,
+          "pid": 59641,
+          "quit_ok": true,
+          "same_tabs": true,
+          "zone_fatal": false
+        },
+        {
+          "automation_ms": 759,
+          "index": 14,
+          "load": 25.7666015625,
+          "loaded": 1,
+          "ok": true,
+          "pid": 59890,
+          "quit_ok": true,
+          "same_tabs": true,
+          "zone_fatal": false
+        },
+        {
+          "automation_ms": 754,
+          "index": 15,
+          "load": 25.7666015625,
+          "loaded": 1,
+          "ok": true,
+          "pid": 60002,
+          "quit_ok": true,
+          "same_tabs": true,
+          "zone_fatal": false
+        },
+        {
+          "automation_ms": 669,
+          "index": 16,
+          "load": 26.10546875,
+          "loaded": 1,
+          "ok": true,
+          "pid": 60101,
+          "quit_ok": true,
+          "same_tabs": true,
+          "zone_fatal": false
+        },
+        {
+          "automation_ms": 683,
+          "index": 17,
+          "load": 26.10546875,
+          "loaded": 1,
+          "ok": true,
+          "pid": 60162,
+          "quit_ok": true,
+          "same_tabs": true,
+          "zone_fatal": false
+        },
+        {
+          "automation_ms": 704,
+          "index": 18,
+          "load": 26.10546875,
+          "loaded": 1,
+          "ok": true,
+          "pid": 60240,
+          "quit_ok": true,
+          "same_tabs": true,
+          "zone_fatal": false
+        },
+        {
+          "automation_ms": 718,
+          "index": 19,
+          "load": 26.10546875,
+          "loaded": 1,
+          "ok": true,
+          "pid": 60298,
+          "quit_ok": true,
+          "same_tabs": true,
+          "zone_fatal": false
+        },
+        {
+          "automation_ms": 708,
+          "index": 20,
+          "load": 27.0576171875,
+          "loaded": 1,
+          "ok": true,
+          "pid": 60361,
+          "quit_ok": true,
+          "same_tabs": true,
+          "zone_fatal": false
+        }
+      ]
+    }
+  },
+  "started": "2026-11-02 15:59:51",
+  "style": "chrome"
+}
