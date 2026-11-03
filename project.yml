@@ -158,6 +158,8 @@ targets:
         product: OpenSleep
       - package: OpenKit
         product: OpenDesign
+      - package: OpenKit
+        product: OpenTranslate
       - target: OpenHelper
         embed: false
         link: false
