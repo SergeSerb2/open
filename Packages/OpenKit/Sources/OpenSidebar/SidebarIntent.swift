@@ -31,6 +31,10 @@ public enum SidebarIntent: Equatable, Sendable {
     case setShowFullURL(Bool)
     /// "Manage Extensions" on the URL field and the toolbar. App.
     case manageExtensions
+    /// The status button under the URL field (page-platform §4.7.3). `anchor` is the button's
+    /// frame in window coordinates; the App anchors its popover there. App.
+    case showTranslation(anchor: CGRect)
+    case shareQuote(anchor: CGRect)
 
     // Selection and Spaces
     case select(nodeID: ItemID, space: SpaceID)

@@ -1,0 +1,20 @@
+<!doctype html>
+<html lang="fr">
+<head><meta charset="utf-8"><title>Page dynamique</title></head>
+<body>
+<main id="main">
+<p id="p1">Ceci est la première phrase de cette page. Nous avons un chat et un chien dans la maison.</p>
+<p id="p2">Cette deuxième phrase est très importante pour nous et pour vous.</p>
+</main>
+<script>
+// After one second the page changes its URL (pushState) and adds a new paragraph.
+setTimeout(() => {
+  history.pushState({}, '', '?vue=2');
+  const p = document.createElement('p');
+  p.id = 'added';
+  p.textContent = 'Un nouveau paragraphe est ajouté après une seconde avec du contenu dynamique.';
+  document.getElementById('main').appendChild(p);
+}, 1000);
+</script>
+</body>
+</html>

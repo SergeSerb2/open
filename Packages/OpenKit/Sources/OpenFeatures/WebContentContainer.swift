@@ -111,6 +111,9 @@ public final class WebContentContainer: NSView {
     public var onFocusedMetadata: ((String) -> Void)?
     public var onFractionsCommitted: (([Double]) -> Void)?
     public var onDrop: ((ItemID, SplitDropOverlayView.Zone, Int?) -> Bool)?
+    /// True for a hidden host the sleep policy must keep (keep-alive site, audio, capture,
+    /// notifications, DevTools, downloads). The hidden-host cap counts only the others.
+    public var retainsHiddenHost: ((ItemID) -> Bool)?
     private var dividers: [SplitDividerView] = []
     public let dropOverlay = SplitDropOverlayView()
     private var monitor: Any?
@@ -277,7 +280,11 @@ public final class WebContentContainer: NSView {
         if !previewHosts.isEmpty { onReturnPreviewHost?() }
         for id in Set(cache.keys).union(previewHosts.keys) { closeHost(for: id) }
     }
-    private func trimCache() { while hiddenLRU.count > Self.maxCachedHiddenHosts { closeHost(for: hiddenLRU[0]) } }
+    private func trimCache() {
+        guard hiddenLRU.count > Self.maxCachedHiddenHosts else { return }
+        var unprotected = hiddenLRU.filter { retainsHiddenHost?($0) != true }
+        while unprotected.count > Self.maxCachedHiddenHosts { closeHost(for: unprotected.removeFirst()) }
+    }
     public func focus(tabID: ItemID) {
         guard ids.contains(tabID) else { return }; focused = tabID; updateSlots(); cache[tabID]?.focus(); metadataChanged(tabID)
     }
