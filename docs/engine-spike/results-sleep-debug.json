@@ -6,29 +6,29 @@
         "forced": false,
         "ok": true,
         "owned_pids": [
-          26499,
-          26523,
-          26524,
-          26525,
-          26526,
-          26529,
-          26530,
-          26532,
-          26820,
-          26937,
-          26939,
-          26942,
-          26943,
-          26945,
-          26947,
-          26949,
-          26954,
-          26995,
-          26996,
-          27128,
-          27137,
-          27146,
-          27159
+          62135,
+          62138,
+          62139,
+          62140,
+          62141,
+          62143,
+          62144,
+          62146,
+          63104,
+          63182,
+          63196,
+          63209,
+          63212,
+          63216,
+          63225,
+          63237,
+          63243,
+          63389,
+          63391,
+          63617,
+          63663,
+          63673,
+          63675
         ],
         "remaining_processes": [],
         "reply": true,
@@ -42,14 +42,14 @@
         "forced": false,
         "ok": true,
         "owned_pids": [
-          27171,
-          27177,
-          27178,
-          27179,
-          27180,
-          27181,
-          27182,
-          27183
+          63692,
+          63703,
+          63704,
+          63705,
+          63706,
+          63708,
+          63709,
+          63710
         ],
         "remaining_processes": [],
         "reply": true,
@@ -88,18 +88,18 @@
     "sleep_f1_renderers": {
       "nineSleeping": {
         "count": 3,
-        "rssKB": 431328
+        "rssKB": 433824
       },
       "note": "stock discard closes the page (P-MEM-03 replaces it with discard in place)",
       "ok": true,
       "oneTab": {
         "count": 3,
-        "rssKB": 430160
+        "rssKB": 432256
       },
       "refused": [],
       "tenTabsLoaded": {
         "count": 11,
-        "rssKB": 1785232
+        "rssKB": 1789232
       }
     },
     "sleep_f2_history_scroll_form": {
@@ -129,24 +129,24 @@
     "sleep_f4_quit_capture": {
       "hostedAfterRelaunch": 1,
       "load": [
-        8.23779296875,
-        8.55517578125,
-        10.1416015625
+        10.7978515625,
+        10.69677734375,
+        10.4306640625
       ],
       "ok": true,
       "phasesBeforeQuit": {
-        "119B6F5D-9180-4621-B9A1-C89AE35940D2": "frozen",
-        "535AD28B-E68A-41E6-A61A-51EA6A48D60C": "live",
-        "A1A3C6D0-BBF1-4A71-BCE4-DF6BA7472238": "sleeping",
-        "ABF70CAB-5BEE-4042-B652-516670B2B802": "placeholder"
+        "451641EF-33CF-4F4F-8DE9-7698888F6267": "placeholder",
+        "7EBB65D5-08FC-4211-B830-7E069719750E": "frozen",
+        "E06CEBA7-C8AF-4450-8F8D-11B863674B0B": "live",
+        "E1685C11-4AA6-4018-89F0-0089A7531018": "sleeping"
       },
       "quitCaptureMs": [
-        1.1330842971801758
+        2.529025077819824
       ],
-      "quitSeconds": 0.37,
+      "quitSeconds": 0.51,
       "renderersAfterRelaunch": {
         "count": 3,
-        "rssKB": 430800
+        "rssKB": 429408
       },
       "storedRows": 23
     },
@@ -154,19 +154,19 @@
       "cache": "warm (same fixture page each wake)",
       "destroyed": {
         "n": 10,
-        "p50ms": 9.449005126953125,
-        "p95ms": 14.14799690246582
+        "p50ms": 17.722010612487793,
+        "p95ms": 25.03800392150879
       },
       "load": [
-        8.43310546875,
-        8.5986328125,
-        10.166015625
+        10.693359375,
+        10.6748046875,
+        10.421875
       ],
       "n": 20,
       "note": "stock recreate + load; budget 700 ms first paint on a cached page",
       "ok": true,
-      "p50ms": 16.456007957458496,
-      "p95ms": 19.82104778289795
+      "p50ms": 27.441024780273438,
+      "p95ms": 33.45298767089844
     },
     "sleep_f5_unfreeze": {
       "reason": "P-MEM-02: stock CEF has no renderer freeze, so an unfreeze has no wake to time",
@@ -174,9 +174,9 @@
     },
     "sleep_idle_parked": {
       "load": [
-        9.04736328125,
-        8.716796875,
-        10.23486328125
+        10.1328125,
+        10.5595703125,
+        10.37744140625
       ],
       "ok": true,
       "passesAfter": 1,
@@ -229,21 +229,21 @@
       "ok": true
     },
     "sleep_started_after_paint": {
-      "firstContentfulPaint": 2971,
+      "firstContentfulPaint": 789,
       "ok": true,
-      "sidebarDrawn": 393,
-      "sleepStarted": 3082
+      "sidebarDrawn": 470,
+      "sleepStarted": 896
     },
     "sleep_tabs_discard": {
       "background": {
         "ok": {
-          "id": 1609421829
+          "id": 757911527
         }
       },
       "backgroundSlept": true,
       "ok": true,
       "visible": {
-        "error": "Cannot discard tab with id: 1609421728."
+        "error": "Cannot discard tab with id: 757911426."
       }
     },
     "sleep_timed_ladder": {
@@ -256,16 +256,16 @@
         "discarded": true,
         "downloading": false,
         "freezeGate": null,
-        "hiddenAt": 1793663125.943944,
+        "hiddenAt": 1793678890.441922,
         "hosts": 0,
-        "id": "EBD2660B-664E-4D3E-AB16-3120E8E48406",
+        "id": "8FA2A5CA-57AF-42B9-9260-F7CC4ABDB1D7",
         "lastFormInteractionAt": null,
         "notificationsAllowed": false,
         "phase": "sleeping",
         "retryAfter": null,
-        "sleptAt": 1793663425.9687052,
+        "sleptAt": 1793679190.482143,
         "title": "Open freeze ticker",
-        "url": "http://t1.localhost:62287/ticker.html"
+        "url": "http://t1.localhost:56430/ticker.html"
       },
       "ok": true,
       "phases": [
@@ -282,13 +282,13 @@
         "loaded": true,
         "sleepPhase": "live",
         "title": "Open freeze ticker",
-        "url": "http://t1.localhost:62287/ticker.html"
+        "url": "http://t1.localhost:56430/ticker.html"
       },
       "wakeLog": [
-        "sleep-wake discard EBD2660B ms=13.370990753173828"
+        "sleep-wake discard 8FA2A5CA ms=17.609000205993652"
       ]
     }
   },
-  "started": "2026-11-02 16:45:02",
+  "started": "2026-11-02 21:07:49",
   "style": "chrome"
 }
