@@ -7844,6 +7844,73 @@ def page_translate_checks(factory, results, tmp):
             and not after_reload['button']['shown'] and reset['neverTranslateHosts'] == [] and bool(again),
             'hosts': hosts, 'afterReload': after_reload['state'], 'reset': reset, 'again': bool(again)}
 
+        # Review r2 rows. The runtime stays installed (inactive) in the page's main world after Show
+        # Original (Blocked on P7), so the page can drive it directly like the shell does.
+        app.call('navigate', tab=spa_tab, url=origin + '/fr.html?r2=1')
+        app.call('wait', tab=spa_tab)
+        state_is('offered')
+        app.call('translate', action='translate')
+        state_is('translated')
+        wait_until(lambda: (lambda v: v if v['send'] == 'Send' else None)(texts(spa_tab)), timeout=15, step=.2)
+        # Page-owned structure: the page replaces #p2's translated children; Show Original keeps
+        # the page's new content and does not bring the old text and <b> back.
+        app.eval(spa_tab, "document.getElementById('p2').replaceChildren(document.createTextNode('Nouveau contenu de la page.')); true")
+        time.sleep(1)   # the mutation debounce (300 ms) queues and translates the new text
+        app.call('translate', action='revert')
+        state_is('offered')
+        p2_after = wait_until(lambda: (lambda v: v if v == 'Nouveau contenu de la page.' else None)(
+            app.eval(spa_tab, "document.getElementById('p2').innerHTML")), timeout=5, step=.1) or app.eval(spa_tab, "document.getElementById('p2').innerHTML")
+        p1_after = app.eval(spa_tab, "document.getElementById('p1').textContent")
+        results['X2_revert_keeps_page_structure'] = {'ok': p2_after == 'Nouveau contenu de la page.' and p1_after.startswith('Ceci est'),
+            'p2': p2_after, 'p1': p1_after}
+        # A result for text the page changed while its batch was out is dropped.
+        stale = app.eval(spa_tab, '''(async () => {
+          const t = window.__openTranslate; t.start();
+          const b = await t.nextBatch();
+          const unit = b.units.find((u) => u.text.startsWith('Ceci est'));
+          document.getElementById('p1').firstChild.data = 'Texte changé par la page.';
+          const r = t.apply(b.id, b.units.map((u) => 'TRANSLATED ' + u.text));
+          const out = { p1: document.getElementById('p1').textContent, title: document.getElementById('title').textContent,
+            hadUnit: !!unit, applied: r.applied, units: b.units.length };
+          t.restore();
+          return out; })()''')
+        results['X_stale_result_dropped'] = {'ok': stale['hadUnit'] and stale['p1'] == 'Texte changé par la page.'
+            and stale['title'].startswith('TRANSLATED') and stale['applied'] == stale['units'] - 1, 'result': stale}
+        # <html translate="no"> opts the whole page out: translating changes no text. (The fixture's
+        # name must not contain "translate": X5's request filter blocks those URLs.)
+        app.call('navigate', tab=spa_tab, url=origin + '/fr-optout.html')
+        app.call('wait', tab=spa_tab)
+        on_nt = wait_until(lambda: app.eval(spa_tab, "location.pathname === '/fr-optout.html' && document.readyState === 'complete' || null"),
+                           timeout=10, step=.1)
+        before_nt = app.eval(spa_tab, 'document.body.innerHTML')
+        nt_state = (state_is('offered', timeout=5) or st())['state']
+        if nt_state == 'offered':
+            app.call('translate', action='translate')
+            state_is('translated')
+            time.sleep(1)
+        after_nt = app.eval(spa_tab, 'document.body.innerHTML')
+        results['X_root_notranslate'] = {'ok': bool(on_nt) and before_nt == after_nt and 'Ceci est' in after_nt, 'state': nt_state,
+            'equal': before_nt == after_nt, 'before': before_nt[:300], 'after': after_nt[:300], 'navigated': bool(on_nt)}
+        if st()['state'] in ('translated', 'translating'):
+            app.call('translate', action='revert')
+            state_is('offered')
+        # A page that finishes loading while its window is minimized offers once the window is back.
+        app.call('menu-perform', id='minimize-window')
+        mini = state_when(app, lambda w: w['miniaturized'], timeout=5, step=.1)
+        app.call('navigate', tab=spa_tab, url=origin + '/fr.html?minimized=1')
+        app.call('wait', tab=spa_tab)
+        wait_until(lambda: app.eval(spa_tab, "location.search === '?minimized=1' && document.readyState === 'complete' || null"), timeout=10, step=.1)
+        time.sleep(1)
+        while_hidden = st()
+        app.call('window-deminiaturize')
+        state_when(app, lambda w: not w['miniaturized'], timeout=5, step=.1)
+        shown = state_is('offered', timeout=10)
+        results['X_offer_after_minimized_load'] = {'ok': bool(mini) and while_hidden['state'] == 'idle'
+            and while_hidden['probedDocument'] != while_hidden.get('document') and bool(shown),
+            'hidden': {k: while_hidden.get(k) for k in ('state', 'probedDocument', 'document')}, 'offered': bool(shown)}
+        ws2 = app.call('window-state')
+        app.call('window-focus', id=ws2['id'], activate=True)
+
         # Idle: with the page translated and nothing changing, the shell waits on one promise
         # (no timer, no polling): the batch count does not move for 2 s.
         app.call('translate', action='translate')

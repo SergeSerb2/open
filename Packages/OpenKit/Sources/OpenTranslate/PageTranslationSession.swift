@@ -146,9 +146,14 @@ public final class PageTranslationSession {
         switch state { case .translating, .translated: active = true; default: active = false }
         if active, target == nil || target == offer.target { return }
         stop()
-        if active { _ = try? await page.evaluateJavaScript("window.__openTranslate ? window.__openTranslate.restore() : false") }
-        if let target { offer.target = target }
+        // Taken before the restore suspends: a load, revert or other action during it starts a
+        // newer generation, and this action must then give way.
         let token = generation
+        if active {
+            _ = try? await page.evaluateJavaScript("window.__openTranslate ? window.__openTranslate.restore() : false")
+            guard generation == token, !closed else { return }
+        }
+        if let target { offer.target = target }
         state = .translating(offer)
         do {
             switch await backend.status(from: offer.source, to: offer.target) {

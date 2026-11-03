@@ -47,7 +47,8 @@
     el.getAttribute('translate') === 'no' || (el.classList && el.classList.contains('notranslate')) ||
     el.isContentEditable === true;
   const inSkipped = (node) => {
-    for (let e = node.nodeType === 1 ? node : node.parentElement; e && e !== document.documentElement; e = e.parentElement) {
+    // Up to and including <html>: `<html translate="no">` opts the whole page out.
+    for (let e = node.nodeType === 1 ? node : node.parentElement; e; e = e.parentElement) {
       if (skipped(e)) return true;
     }
     return false;
@@ -164,6 +165,13 @@
   // ---- Batches -----------------------------------------------------------------------------
   const connected = (u) => u.kind === 'run' ? u.nodes.every((n) => n.isConnected && n.parentNode === u.container)
     : u.kind === 'node' ? u.node.isConnected : u.element.isConnected;
+  // The unit still reads as it did when it was made: a result for text the page changed in the
+  // meantime is dropped (the mutation observer queues the new text as its own unit).
+  function unchanged(u) {
+    if (u.kind === 'node') return u.node.data.trim().replace(/\s+/g, ' ') === u.text;
+    if (u.kind === 'attr') return (u.element.getAttribute(u.name) || '').trim() === u.text;
+    return serialize(u.nodes, { next: 1, texts: [], elements: {}, parents: {}, opaque: {} }, 0).trim() === u.text;
+  }
 
   function takeBatch() {
     const units = [];
@@ -255,22 +263,24 @@
     if (u.lead) { if (typeof top[0] === 'string') top[0] = ' ' + top[0].replace(/^\s+/, ''); else top.unshift(' '); }
     if (u.trail) { const i = top.length - 1; if (typeof top[i] === 'string') top[i] = top[i].replace(/\s+$/, '') + ' '; else top.push(' '); }
     for (const t of u.ctx.texts) rememberText(t);
-    const record = { kind: 'run', container: u.container, original: u.nodes.slice(), children: [], inserted: [], texts: u.ctx.texts.slice() };
+    const record = { kind: 'run', container: u.container, original: u.nodes.slice(), children: [], inserted: [], created: new Set(), texts: u.ctx.texts.slice() };
     // Text segments reuse the original text nodes of their level, in order; extra segments get new nodes.
     const pools = new Map([[0, u.nodes.filter((n) => n.nodeType === 3)]]);
     for (const k in u.ctx.elements) if (!u.ctx.opaque[k]) pools.set(Number(k), Array.from(u.ctx.elements[k].childNodes).filter((n) => n.nodeType === 3));
     const build = (key, segments) => segments.map((seg) => {
       if (typeof seg !== 'string') return seg;
       const pool = pools.get(key);
-      const node = pool && pool.length ? pool.shift() : document.createTextNode('');
+      let node;
+      if (pool && pool.length) node = pool.shift(); else { node = document.createTextNode(''); record.created.add(node); }
       node.data = seg;
       return node;
     });
     for (const key of Object.keys(levels).map(Number).sort((a, b) => a - b)) {
       if (key === 0) continue;
       const el = u.ctx.elements[key];
-      record.children.push({ el, nodes: Array.from(el.childNodes) });
-      el.replaceChildren(...build(key, levels[key]));
+      const placed = build(key, levels[key]);
+      record.children.push({ el, nodes: Array.from(el.childNodes), placed });
+      el.replaceChildren(...placed);
     }
     const nodes = build(0, top);
     const ref = u.nodes[u.nodes.length - 1].nextSibling;
@@ -308,7 +318,7 @@
     try {
       units.forEach((u, i) => {
         const r = results[i];
-        if (typeof r !== 'string' || r.length > 2 * MAX_UNIT_CHARS || !connected(u)) return;
+        if (typeof r !== 'string' || r.length > 2 * MAX_UNIT_CHARS || !connected(u) || !unchanged(u)) return;
         if (u.kind === 'run') {
           if (applyRun(u, r)) { done += 1; return; }
           // The translator lost or moved a marker: translate this run's text nodes one by one (R-3).
@@ -332,6 +342,8 @@
   }
 
   // ---- Restore -----------------------------------------------------------------------------
+  const sameNodes = (list, nodes) => list.length === nodes.length && nodes.every((n, i) => list[i] === n);
+
   function restoreAll() {
     selfWrite = true;
     try {
@@ -346,10 +358,21 @@
         } else if (r.kind === 'node') {
           if (originalText.has(r.node)) { r.node.data = originalText.get(r.node); originalText.delete(r.node); }
         } else {
-          for (let j = r.children.length - 1; j >= 0; j--) r.children[j].el.replaceChildren(...r.children[j].nodes);
-          const ref = r.inserted.length ? r.inserted[r.inserted.length - 1].nextSibling : null;
-          for (const n of r.inserted) if (n.parentNode === r.container) r.container.removeChild(n);
-          for (const n of r.original) r.container.insertBefore(n, ref && ref.parentNode === r.container ? ref : null);
+          // Structure goes back only where it is still exactly what the run put there. Where the
+          // page has since replaced or added children, the page owns that structure: only the
+          // original text comes back, and nodes the page removed stay removed.
+          for (let j = r.children.length - 1; j >= 0; j--) {
+            const c = r.children[j];
+            if (sameNodes(c.el.childNodes, c.placed)) c.el.replaceChildren(...c.nodes);
+            else for (const n of c.placed) if (r.created.has(n) && n.parentNode === c.el) c.el.removeChild(n);
+          }
+          if (r.inserted.every((n) => n.parentNode === r.container)) {
+            const ref = r.inserted.length ? r.inserted[r.inserted.length - 1].nextSibling : null;
+            for (const n of r.inserted) r.container.removeChild(n);
+            for (const n of r.original) r.container.insertBefore(n, ref);
+          } else {
+            for (const n of r.inserted) if (r.created.has(n) && n.parentNode === r.container) r.container.removeChild(n);
+          }
           for (const t of r.texts) if (originalText.has(t)) { t.data = originalText.get(t); originalText.delete(t); }
         }
       }

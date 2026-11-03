@@ -60,17 +60,28 @@ final class TranslateAdapter {
   }
 
   /// The window's focus or state changed (`BrowserWindowController.onStateChange`). Cheap when
-  /// the focused page is the same.
+  /// the focused page is the same: two dictionary lookups.
   func focusDidChange() {
     let content = focusedContent
-    guard content !== focused else { return }
-    focused = content
-    if let popover, popover.isPresented { popover.dismiss() }
-    if let content, let doc = documents[ObjectIdentifier(content)], isFocusedAndVisible(content), !content.isLoading,
-       sessions[ObjectIdentifier(content)]?.probedDocument != doc.count {
-      session(for: content).documentDidLoad(url: doc.url, status: doc.status, document: doc.count)
+    let changed = content !== focused
+    if changed {
+      focused = content
+      if let popover, popover.isPresented { popover.dismiss() }
     }
-    syncStatus()
+    probeFocusedIfNeeded()
+    if changed { syncStatus() }
+  }
+
+  /// The window was shown, restored from the Dock or uncovered (`onVisibilityChange`): a page
+  /// that finished loading while the window was hidden is probed now.
+  func visibilityDidChange() { probeFocusedIfNeeded() }
+
+  /// Probes the focused page's current document once, when the window is visible and the page
+  /// has finished loading.
+  private func probeFocusedIfNeeded() {
+    guard let content = focusedContent, let doc = documents[ObjectIdentifier(content)], isFocusedAndVisible(content),
+      !content.isLoading, sessions[ObjectIdentifier(content)]?.probedDocument != doc.count else { return }
+    session(for: content).documentDidLoad(url: doc.url, status: doc.status, document: doc.count)
   }
 
   func contentDidClose(_ content: OEWebContent) {

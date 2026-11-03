@@ -142,6 +142,9 @@ final class EngineWebContentHostFactory: NSResponder, WebContentHostFactory {
       self.app.media.windowChanged(self)
       self.translate.focusDidChange()
     }
+    // Chained: MediaCoordinator.attach wraps this hook later and keeps it.
+    let previousVisibility = controller.onVisibilityChange
+    controller.onVisibilityChange = { [weak self] in previousVisibility?(); self?.translate.visibilityDidChange() }
     controller.onOpenCommandBar = { [weak self] source, _ in
       if source == .urlField { self?.focusAddressBar(nil) } else { self?.newTab(nil) }
     }
