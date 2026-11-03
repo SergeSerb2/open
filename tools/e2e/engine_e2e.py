@@ -5176,8 +5176,11 @@ def media_checks(factory, results, tmp):
         decision = m(video)["decision"]
         leave_to_request = (p.get("requestedAt") or 0) - (decision["at"] if decision else 0)
         pip_windows = p.get("windows", [])
+        # Phase 1 shows Chromium's frameless window; phase 2 (EM-4) Open's own window and no Chromium one.
+        phase = p.get("phase", 1)
+        shown = len(pip_windows) >= 1 if phase == 1 else bool((p.get("openWindow") or {}).get("visible")) and not pip_windows
         results["media_auto_pip_on_leave"] = {"ok": opened["state"] == "active" and opened.get("automatic") is True and opened.get("tab") == video
-            and latency is not None and latency <= 0.5 and len(pip_windows) >= 1 and abs(leave_to_request) < 0.05,
+            and latency is not None and latency <= 0.5 and shown and abs(leave_to_request) < 0.05, "phase": phase,
             "pip": p, "requestToEnterSeconds": latency, "leaveToRequestSeconds": leave_to_request,
             "load": os.getloadavg(), "windowsBefore": windows_before, "decision": decision, "audibleAfterPlayMs": video_audible_ms,
             "autoPiPSetting": app.call("defaults", key="open.advanced.enablePictureInPictureOnLeave")}
@@ -5360,8 +5363,59 @@ def media_checks(factory, results, tmp):
             and nd_result.get("reason") == "failed" and nd_element is None and not m(nd)["pictureInPicture"],
             "state": {k: nd_state[k] for k in ("pictureInPictureDisabled", "actions", "playback")}, "pip": nd_result, "pipElement": nd_element}
         close_tab(nd)
-        results["media_pip_minimize"] = {"status": "BLOCKED", "reason": "EM-4: phase 1 uses Chromium's PiP window, which has no Minimize"}
-        results["media_pip_keep_on_top"] = {"status": "BLOCKED", "reason": "EM-4: the Keep Window on Top menu is in Open's own PiP window"}
+        # Steps 9-10 (EM-4): Open's own PiP window shows the engine's video, live. Two snapshots of
+        # that window 0.5 s apart: the canvas video changes its hue every frame.
+        fv = open_tab(base + "video.html"); start_heard(fv); select(home)
+        fp = wait_pip("active")
+        if fp.get("phase", 1) == 2:
+            ow = wait_until(lambda: (lambda o: o if o and o.get("visible") else None)(pip().get("openWindow")), timeout=3, step=.02)
+            time.sleep(.6)
+            shots = []
+            for i in range(2):
+                path = os.path.join(tmp, "pip-frame-%d.png" % i)
+                shot = app.call("snapshot", window=ow["number"], path=path) if ow else {}
+                shots.append((path, shot.get("method"))); time.sleep(.5)
+            def grid(path):
+                w, h, px = read_image(path)
+                return (w, h), [px(w * (i + .5) / 8, h * (j + .5) / 6) for i in range(8) for j in range(6)]
+            (size0, a0), (size1, a1) = grid(shots[0][0]), grid(shots[1][0])
+            lit = sum(1 for c in a0 if max(c) > 40)
+            moved = sum(1 for c, d in zip(a0, a1) if max(abs(c[k] - d[k]) for k in range(3)) > 12)
+            results["media_pip_frames"] = {"ok": bool(ow) and lit >= 24 and moved >= 24 and not pip()["windows"],
+                "lit": lit, "moved": moved, "of": len(a0), "size": [size0, size1], "methods": [m for _, m in shots],
+                "window": ow, "chromiumWindows": pip()["windows"], "load": os.getloadavg()}
+            # E-M8: Minimize hides the window, keeps playing and leaves a card that reopens PiP.
+            app.call("pip-action", action="minimize")
+            minimized = wait_pip("minimized")
+            hidden = wait_until(lambda: not (pip().get("openWindow") or {}).get("visible"), timeout=2, step=.02)
+            min_playing = app.eval(fv, "!document.getElementById('main').paused")
+            min_card = wait_until(lambda: next((c for c in players()["cards"] if c["tab"] == fv), None), timeout=3, step=.02)
+            if min_card:
+                app.call("media-click", tab=fv, target="pip")
+            reopened = wait_pip("active")
+            reshown = wait_until(lambda: (lambda o: o if o and o.get("visible") else None)(pip().get("openWindow")), timeout=3, step=.02)
+            results["media_pip_minimize"] = {"ok": minimized["state"] == "minimized" and bool(hidden) and min_playing is True
+                and bool(min_card) and reopened["state"] == "active" and bool(reshown),
+                "minimized": minimized, "playing": min_playing, "card": bool(min_card), "reopened": reopened["state"]}
+            # E-M14: Keep Window on Top (PP-8) changes the window level and the setting, both ways.
+            items = app.call("pip-action", action="menu")
+            level0 = (pip().get("openWindow") or {}).get("level")
+            setting0 = app.call("defaults", key="open.pip.keepOnTop")
+            app.call("pip-action", action="menu", item="Keep Window on Top")
+            level1 = (wait_until(lambda: (lambda o: o if o and o.get("level") != level0 else None)(pip().get("openWindow")), timeout=2, step=.02) or {}).get("level")
+            setting1 = app.call("defaults", key="open.pip.keepOnTop")
+            app.call("pip-action", action="menu", item="Keep Window on Top")
+            level2 = (wait_until(lambda: (lambda o: o if o and o.get("level") == level0 else None)(pip().get("openWindow")), timeout=2, step=.02) or {}).get("level")
+            results["media_pip_keep_on_top"] = {"ok": any(i.startswith("Keep Window on Top") for i in items) and level1 is not None
+                and level1 != level0 and level2 == level0 and setting1 != setting0,
+                "items": items, "levels": [level0, level1, level2], "settings": [setting0, setting1]}
+            app.call("defaults", key="open.pip.keepOnTop", value=None)
+        else:
+            results["media_pip_frames"] = {"status": "BLOCKED", "reason": "EM-4: phase 1 shows Chromium's window"}
+            results["media_pip_minimize"] = {"status": "BLOCKED", "reason": "EM-4: phase 1 uses Chromium's PiP window, which has no Minimize"}
+            results["media_pip_keep_on_top"] = {"status": "BLOCKED", "reason": "EM-4: the Keep Window on Top menu is in Open's own PiP window"}
+        select(fv); wait_pip("closed")
+        close_tab(fv)
         results["media_document_pip"] = {"status": "BLOCKED", "reason": "EM-7: Document PiP disposition"}
         results["media_sleep_adapter"] = {"status": "BLOCKED", "reason": "section 8: the App sleep adapter; the feed is checked above"}
         # E-M1 persistence: a muted tab stays muted after relaunch.
