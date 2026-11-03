@@ -84,6 +84,7 @@
         return try await runArchiveCommand(cmd, a)
       case "metrics": return await metrics(interval: a["interval"] as? Double ?? 1)
       case _ where Self.mediaCommands.contains(cmd): return try await runMediaCommand(cmd, a)
+      case _ where Self.sleepCommands.contains(cmd): return try await runSleepCommand(cmd, a)
       case "ping":
         return [
           "pid": Int(getpid()), "chromium": OEEngine.shared.chromiumVersion, "cef": OEEngine.shared.cefVersion,
@@ -1021,6 +1022,7 @@
         let kind = OEPermissionKind(rawValue: UInt32(a["kind"] as? Int ?? 0))
         if let state = a["state"] as? Int, let s = OEPermissionState(rawValue: state) {
           context.setPermissionState(s, for: kind, origin: origin)
+          app.tabSleep.permissionsChanged(context: context)
         }
         return context.permissionState(for: kind, origin: origin).rawValue
       case "download-dir":
