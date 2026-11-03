@@ -7,7 +7,7 @@ enum RenderCLI {
     features-render pip --out FILE [--size 384x216] [--scale 1|2] [--state playing|paused|ended]
         [--controls visible|hidden] [--meeting] [--site twitch|meet|youtube|none] [--drag-precision N]
         [--menu] [--document --top-bar-title TEXT] [--document-hover-options] [--document-pressed-options]
-          [--screen WIDTHxHEIGHT --natural-size WIDTHxHEIGHT --first-open --geometry-report FILE.json] [--hover-skip-ahead]
+          [--screen WIDTHxHEIGHT [--screen-frame WIDTHxHEIGHT] --natural-size WIDTHxHEIGHT --first-open --geometry-report FILE.json] [--hover-skip-ahead]
     features-render translate --out DIR [--scale 1|2] [--appearance light|dark]
     features-render capture --scene overlay|overlay-rest|overlay-above|card|card-private|card-full-page|portrait-theme|portrait-white|portrait-black
         --out FILE [--scale 1|2] [--appearance light|dark]

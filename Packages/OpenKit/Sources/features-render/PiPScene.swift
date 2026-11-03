@@ -127,6 +127,8 @@ import OpenWeb
             return CGSize(width: parts[0], height: parts[1])
         }
         let visibleScreen = CGRect(origin: screen.origin, size: try sizeOption("--screen") ?? screen.size)
+        // The whole screen for the /8 first-open box (default: the visible frame), e.g. 2560x1440 around a 2560x1410 visible frame.
+        let screenFrame = try sizeOption("--screen-frame").map { CGRect(origin: visibleScreen.origin, size: $0) }
         let host = FakePiPHost(); host.naturalSize = try sizeOption("--natural-size") ?? size
         switch RenderCLI.value(args, "--state") ?? "playing" {
         case "playing": break
@@ -156,7 +158,7 @@ import OpenWeb
             }
             cleanup = { controller.close() }
         } else {
-            guard let controller = PictureInPictureWindowController(host: host, sourceURL: url, settings: settings, rules: rules, screenVisibleFrame: visibleScreen) else { throw CLIError(description: "cannot create video PiP") }
+            guard let controller = PictureInPictureWindowController(host: host, sourceURL: url, settings: settings, rules: rules, screenVisibleFrame: visibleScreen, screenFrame: screenFrame) else { throw CLIError(description: "cannot create video PiP") }
             controller.presentWindows = false
             let firstFrame = controller.window!.frame
             if let path = RenderCLI.value(args, "--geometry-report") {
@@ -165,6 +167,7 @@ import OpenWeb
                 let minimumFrame = controller.window!.frame
                 let report: [String: [Double]] = [
                     "screen": [visibleScreen.width, visibleScreen.height],
+                    "screenFrame": [(screenFrame ?? visibleScreen).width, (screenFrame ?? visibleScreen).height],
                     "natural": [host.naturalSize.width, host.naturalSize.height],
                     "firstSize": [firstFrame.width, firstFrame.height],
                     "minimumSize": [minimumFrame.width, minimumFrame.height],

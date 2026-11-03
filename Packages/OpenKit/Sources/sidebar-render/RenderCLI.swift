@@ -50,7 +50,7 @@ enum RenderCLI {
       sidebar-render synth --out DIR [--rows N]
       sidebar-render compare --arc FILE.png --ours FILE.png --spec NAME --out DIR [--scale S]
       sidebar-render bench [--rows N] [--selection] [--bulk N] [--expand-all N] [--folder-peek 50 [--parent-renderer PATH] [--trace-transition] [--visible-rows 1...64] [--negative-proof|--negative-transition-proof]] [--row-media mixed] [--media-card|--media-stack]
-      sidebar-render compare-media --arc FILE.png --ours FILE.png --out DIR --state rest|expanded|stack|stack-expanded
+      sidebar-render compare-media --arc FILE.png --ours FILE.png --out DIR --state rest|expanded|stack|stack-expanded [--cards 2|3]
       sidebar-render compare-media --state row-audible|row-muted --arc FRAME.png --arc-ax AX.json --ours FILE.png --ours-frames FILE.json --out DIR
       sidebar-render check
       sidebar-render url-status --out DIR [--scale 1|2]
