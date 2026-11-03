@@ -27,6 +27,7 @@ let commands: [(name: String, handler: @MainActor ([String]) async throws -> Voi
     ("media-demo", { try await runMediaDemo(args: $0) }),
     ("sleep-demo", { try await runSleepDemo(args: $0) }),
     ("sleep-sim", { try await runSleepSimulation(args: $0) }),
+    ("url-clean", { try runURLClean(args: $0) }),
     ("lang-detect", { try runLangDetect(args: $0) }),
 ]
 
