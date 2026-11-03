@@ -109,7 +109,11 @@ final class EngineWebProfile: WebProfile {
   func setPermission(_ state: SitePermissionState, for permission: SitePermission, origin: URL) {
     let s: OEPermissionState = state == .allow ? .allow : state == .block ? .block : .ask
     context.setPermissionState(s, for: Self.kind(permission), origin: origin)
+    Self.onPermissionChange?(context)
   }
+
+  /// Runs after every permission write through this adapter (tab sleep's notification gate).
+  static var onPermissionChange: ((OEBrowserContext) -> Void)?
 }
 
 /// OpenWeb.ExtensionHost over one OEBrowser.

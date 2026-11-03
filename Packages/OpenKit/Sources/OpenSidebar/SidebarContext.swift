@@ -171,6 +171,13 @@ public final class SidebarContext {
     /// Forward and Reload buttons (§4.6.3).
     var isToolbarShown: Bool { window?.showsToolbar == true }
 
+    /// The status button under the URL field ("Translation Available", page-platform §4.7.3).
+    /// The App sets it for the focused page; nil hides the button.
+    public var urlStatus: URLStatusItem?
+    /// The button shows with an item, unless the content toolbar replaces the URL field or a Peek
+    /// shows (§4.7.3 "Hidden"). The hover-reveal card is this sidebar, so it shows the button too.
+    var urlStatusVisible: Bool { urlStatus != nil && !isToolbarShown && shownPeek == nil }
+
     /// The page the toolbar and URL field describe: the Peek on screen, else the current tab.
     var hasPage: Bool { shownPeek != nil || currentTab != nil }
     var pageHost: String? {
@@ -415,6 +422,8 @@ public enum SidebarHoverTarget: Hashable, Sendable {
     case home
     case plus
     case switcher(SpaceID)
+    /// The status button under the URL field (page-platform §4.7.3).
+    case urlStatus
 }
 
 public enum ToolbarButtonKind: Hashable, Sendable { case sidebarToggle, back, forward, reload, more }
