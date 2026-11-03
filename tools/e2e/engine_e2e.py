@@ -8644,9 +8644,14 @@ def page_notification_checks(factory, results, tmp):
         script = ('navigator.serviceWorker.getRegistration("/").then(r => r ? r.getNotifications() : [])'
                   '.then(list => list.map(n => n.title))')
         later = app.eval(page, script)
-        results['N6_engine_display'] = {'ok': ready is True and 'Open N6 worker' in (titles or []) and bool(gone)
-                                              and 'Open N6 worker' in (later or []),
-                                        'ready': ready, 'titles': titles, 'tabClosed': bool(gone), 'afterClose': later}
+        # The worker's notification outlives its tab in Chromium's own list (EP-7). The page-side
+        # getNotifications() is macOS's list: it can only see it once macOS authorized Open (U-N1).
+        authorized = app.call('notifications')['authorization'] in ('authorized', 'provisional', 'ephemeral')
+        engine_after = [n['title'] for n in app.call('notifications')['engine']]
+        results['N6_engine_display'] = {'ok': ready is True and bool(gone) and 'Open N6 worker' in engine_after
+                                              and (not authorized or 'Open N6 worker' in (later or [])),
+                                        'ready': ready, 'titles': titles, 'tabClosed': bool(gone), 'engineAfterClose': engine_after,
+                                        'pageListAfterClose': later if authorized else 'not checked: U-N1 (macOS has not authorized Open)'}
         # Its click (EP-7) reaches the worker, whose clients.openWindow opens a new tab (P1 didOpen).
         worker_note = next((n for n in app.call('notifications')['engine'] if n['title'] == 'Open N6 worker'), None)
         target = origin + '/notify.html?from=worker'

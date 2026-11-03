@@ -164,40 +164,28 @@ bool CefGetDisplayedNotifications(
   if (!callback) {
     return false;
   }
+  CefRefPtr<CefListValue> items = CefListValue::Create();
   Profile* profile = open_engine::ProfileFor(request_context);
   auto* state = open_engine::AutomationEnabled()
                     ? open_engine::StateFor(profile, true)
                     : nullptr;
-  auto* service = profile ? NotificationDisplayServiceFactory::GetForProfile(profile)
-                          : nullptr;
-  if (!state || !service) {
-    callback->OnNotifications(CefListValue::Create());
-    return true;
+  // What Chromium showed for this profile, from its display service (shown, then closed by the
+  // user or a click). Not NotificationDisplayService::GetDisplayed: on macOS that is
+  // Notification Center's list, which is empty while macOS has not authorized the app, and a
+  // test hook must not depend on that (manual check U-N1 covers delivery). A notification
+  // closed by its page (Notification.close()) reaches no observer and stays listed until the
+  // page shows another with its tag.
+  if (state) {
+    for (const auto& [id, shown] : state->shown) {
+      CefRefPtr<CefDictionaryValue> item = CefDictionaryValue::Create();
+      item->SetString("id", id);
+      item->SetString("origin", shown.origin);
+      item->SetString("title", shown.title);
+      item->SetString("body", shown.body);
+      items->SetDictionary(items->GetSize(), item);
+    }
   }
-  // Chromium's own list decides what is still shown.
-  service->GetDisplayed(base::BindOnce(
-      [](CefRefPtr<CefNotificationListCallback> callback,
-         base::WeakPtr<Profile> profile, std::set<std::string> ids,
-         bool supports_synchronization) {
-        CefRefPtr<CefListValue> items = CefListValue::Create();
-        auto* state = profile ? open_engine::StateFor(profile.get(), false)
-                              : nullptr;
-        if (state) {
-          for (const auto& [id, shown] : state->shown) {
-            if (!ids.count(id)) {
-              continue;
-            }
-            CefRefPtr<CefDictionaryValue> item = CefDictionaryValue::Create();
-            item->SetString("id", id);
-            item->SetString("origin", shown.origin);
-            item->SetString("title", shown.title);
-            item->SetString("body", shown.body);
-            items->SetDictionary(items->GetSize(), item);
-          }
-        }
-        callback->OnNotifications(items);
-      },
-      callback, profile->GetWeakPtr()));
+  callback->OnNotifications(items);
   return true;
 }
 
