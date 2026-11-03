@@ -1,0 +1,47 @@
+diff --git a/cef/libcef/browser/alloy/alloy_browser_host_impl.cc b/cef/libcef/browser/alloy/alloy_browser_host_impl.cc
+index 248604ecd..328596a8f 100644
+--- a/cef/libcef/browser/alloy/alloy_browser_host_impl.cc
++++ b/cef/libcef/browser/alloy/alloy_browser_host_impl.cc
+@@ -48,6 +48,7 @@
+ #include "content/public/browser/render_process_host.h"
+ #include "content/public/browser/render_view_host.h"
+ #include "content/public/browser/render_widget_host.h"
++#include "content/public/browser/visibility.h"
+ #include "content/public/browser/web_contents.h"
+ #include "content/public/common/url_constants.h"
+ #include "extensions/common/constants.h"
+@@ -358,19 +359,27 @@ void AlloyBrowserHostImpl::WasResized() {
+ }
+ 
+ void AlloyBrowserHostImpl::WasHidden(bool hidden) {
+-  if (!IsWindowless()) {
+-    DCHECK(false) << "Window rendering is not disabled";
+-    return;
+-  }
+-
+   if (!CEF_CURRENTLY_ON_UIT()) {
+     CEF_POST_TASK(CEF_UIT,
+                   base::BindOnce(&CefBrowserHost::WasHidden, this, hidden));
+     return;
+   }
+ 
+-  if (platform_delegate_) {
+-    platform_delegate_->WasHidden(hidden);
++  if (IsWindowless()) {
++    if (platform_delegate_) {
++      platform_delegate_->WasHidden(hidden);
++    }
++    return;
++  }
++
++  // Open (tab sleeping): windowed browsers report the embedder's visibility
++  // too, so hidden pages are throttled and can be frozen or discarded.
++  // UpdateWebContentsVisibility, not WasShown()/WasHidden(): those leave the
++  // "first set visible" state unset, and the view's later visibility updates
++  // would then be ignored.
++  if (auto* web_contents = GetWebContents()) {
++    web_contents->UpdateWebContentsVisibility(
++        hidden ? content::Visibility::HIDDEN : content::Visibility::VISIBLE);
+   }
+ }
+ 

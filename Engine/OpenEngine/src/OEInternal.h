@@ -11,6 +11,9 @@
 #include "include/cef_browser.h"
 #include "include/cef_client.h"
 #include "include/cef_media_controller.h"
+#include "include/cef_navigation_history.h"
+#include "include/cef_open_page.h"
+#include "include/cef_page_lifecycle.h"
 #include "include/cef_request_context.h"
 #include "include/cef_tab_strip.h"
 #include "include/cef_values.h"
@@ -81,6 +84,14 @@ class OEClient;
                        callback:(CefRefPtr<CefBeforeDownloadCallback>)callback;
 - (void)oe_handleDownloadUpdated:(CefRefPtr<CefDownloadItem>)item
                         callback:(CefRefPtr<CefDownloadItemCallback>)callback;
+@end
+
+@interface OENavigationHistory ()
+/// Packs a fork history as OPNH v1; nil if it breaks a container limit.
+- (nullable instancetype)initOEWithCefHistory:
+    (CefRefPtr<CefNavigationHistory>)history;
+/// The fork history for CefRestoreNavigationHistory; null if CEF refuses it.
+- (CefRefPtr<CefNavigationHistory>)oe_cefHistory;
 @end
 
 @class OEMediaState;

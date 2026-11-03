@@ -348,6 +348,49 @@ unicode-normalization 0.1.26 75cd3fb03d5288b3ba9a1ee103ac7e9cbb59f0b03d64f8ddfcc
 url 2.5.8 ff67a8a4397373c3ef660812acab3268222035010ab8680ec4215f38ba3d0eed
 ```
 
+## Tab sleeping (memory fork, Section 8 PR E1)
+
+The engine primitives of [plans/memory-fork.md](plans/memory-fork.md) (S1–S5). Policy stays in Swift (`OpenSleep`); the OpenEngine API is in [engine-api.md](engine-api.md), "Tab sleeping".
+
+| Series | Patch | Files | What |
+|---|---|---|---|
+| cef | `0101-mem-visibility.patch` | `alloy/alloy_browser_host_impl.cc` | P-MEM-01: `WasHidden` of a windowed Alloy browser reaches `WebContents::UpdateWebContentsVisibility` (stock CEF: `DCHECK(false)` and return) |
+| cef | `0104-mem-navigation-history.patch` | `include/cef_navigation_entry.h`, `navigation_entry_impl.{h,cc}` | P-MEM-04 entry getters: `GetReferrerURL`, `GetFaviconURL` (experimental) |
+| cef | `0105-mem-no-renderer-create.patch` | `include/internal/cef_types.h`, `cef_types_wrappers.h`, `alloy/browser_platform_delegate_alloy.cc` | P-MEM-05: `CefBrowserSettings.no_renderer` (experimental) → `WebContents::CreateParams` `initially_hidden` + `kNoRendererProcess` for Alloy |
+| cef | `0302-open-hosted-tabs.patch` (changed) | `chrome/chrome_browser_host_impl.cc` | P-MEM-01, Chrome style: `ChromeBrowserHostImpl::WasHidden` keeps 0302's hosted path (platform delegate → `UpdateWebContentsVisibility`) and forwards the remaining (Views-window) Chrome browsers the same way instead of `NOTIMPLEMENTED()` |
+
+Overlay (no patch): `cef/include/cef_navigation_history.h` (`CefNavigationHistory`, `CefGetNavigationHistory`, `CefRestoreNavigationHistory`), `cef/include/cef_page_lifecycle.h` (`CefSetPageFrozen`, `CefIsPageFrozen`, `CefDiscardBrowser`, `CefWasDiscarded`, `CefHasUnloadHandlers`), their code in `open/browser/memory/`, wired through `open/open_libcef_sources.gni` (sources, and `//components/sessions` in `open_libcef_deps`). The hosted-tab half of `no_renderer` is in `OpenTabStrip::CreateTab` (`open/browser/tab_strip/open_tab_strip.cc`): Open's tabs are created there, not by `ChromeBrowserHostImpl::Create` + `AddTabAt`, so the plan's Chrome branch moved there (no site instance, `kNoRendererProcess`, no initial load, as Chrome's `CreateRestoredTab`). `engine-apply` regenerates the C API (`cef_navigation_history_capi.h`, `cef_page_lifecycle_capi.h`, the `libcef_dll` wrappers) from the two headers.
+
+Section 8 decisions (differences from memory-fork §3/§5, with the reason):
+
+- **Free functions in overlay headers instead of `CefBrowserHost` methods; no 0102/0103/0106 patch files.** `engine-refresh-patches` captures one `git diff HEAD` per patch over its manifest paths, so two patches can never share a file (docs/engine-fork.md: "Paths for different logical patches must not overlap"). The plan's six patches all edit `cef_browser.h` and `browser_host_base.{h,cc}`, and `browser_host_base.h` already belongs to 0302. fork-infra D-2 and §9.2 rule 2 prefer overlay code with free functions over new methods in a widely included header. Freeze (P-MEM-02), discard (P-MEM-03) and the unload flag (P-MEM-06) therefore need no existing-file edit at all; the numbers 0102, 0103 and 0106 stay unused. The series stays in numeric order (0101, 0104, 0105 before 0302), so `engine-status` S-8 still passes; with no shared files the apply order does not matter.
+- **Freeze state lives in a `WebContentsUserData`** (`PageLifecycleState`, overlay) instead of a `page_frozen_` member on `CefBrowserHostBase` (D-4's reason holds: content has no getter). It clears when the page becomes visible or its primary page changes, so "show unfreezes" needs no hunk in the `WasHidden` paths.
+- **Visibility uses `UpdateWebContentsVisibility`, not `WasShown()`/`WasHidden()`** (P1 finding: a direct `WasShown()` leaves "first set visible" unset and WebContents then ignores the view's later HIDDEN).
+- **Restore checks for an unused controller, not `GetEntryCount() == 0`.** A fresh `NavigationController` always holds the initial NavigationEntry, so the plan's check would refuse every restore. Capture also returns null for a controller with only the initial entry. A restore into a page that is already visible (an Alloy view in a shown window) calls `LoadIfNecessary()`; otherwise the entry loads when the page is shown (`SetActive(true)`).
+- **Discard is refused for a visible page** (content has no such guard), unfreezes a frozen page first (the discard waits for the renderer's answer), and settles at the latest 3 s after an accepted discard; the callback always runs exactly once, also when Chromium drops its closure.
+- **Size cap counts the OPNH container** (20 + 4 per entry + entries ≤ 2 MiB), the same rule as `SleepHistoryContainer`, so every capture fits one container.
+- `no_renderer` is appended at the end of `cef_browser_settings_t`'s experimental block (after `ax_viewport_collapse`), so `CEF_MEMBER_EXISTS` keeps working. Views-window Chrome browsers ignore it; OpenEngine never restores into them (it loads the fallback URL and reports `.failed`).
+- `cef_types.h` is included by every CEF file: 0105 rebuilds all of libcef and the wrapper (build time in the PR).
+
+## Page platform (Section 8, engine PR with the memory fork)
+
+The engine requests of [plans/page-platform.md](plans/page-platform.md) §6. One public header, `cef/include/cef_open_page.h` (overlay, experimental API, translator-generated C API), with code in `open/browser/page/`. The OpenEngine API is in [engine-api.md](engine-api.md), "Page selection and history swipe" and "Notifications".
+
+| Series | Patch | Files | What |
+|---|---|---|---|
+| chromium | `0501-page-history-swipe-hooks.patch` | `chrome/browser/ui/cocoa/history_overlay_controller.mm` | EP-1: the history overlay reports began / changed / completed / cancelled with direction and progress to the page's `CefOpenPageHandler`, and stays hidden when the page asked for no engine overlay. Both swipe paths (trackpad, Magic Mouse) go through this controller. |
+| chromium | `0504-page-notification-click.patch` | `chrome/browser/notifications/notification_display_service_impl.cc` | EP-6: a web notification click reaches the request context's `CefOpenNotificationHandler` before Chromium dispatches it to the page (one hook in `ProcessNotificationOperation`, the entry point of the macOS response). |
+| cef | `0505-page-website-color-scheme.patch` | `libcef/browser/chrome/chrome_content_browser_client_cef.{h,cc}` | EP-9b: a request context's website color scheme (`CefSetWebsiteColorScheme`) wins over Chrome's in `OverrideWebPreferences` and again in a new `OverrideWebPreferencesAfterNavigation` override (Chrome recomputes the scheme after every navigation). DevTools and chrome:// pages keep Chrome's. |
+
+Section 8 decisions (differences from page-platform §6, with the reason):
+
+- **EP-2 and EP-3 need no patch (no 0502).** The selection text (`RenderWidgetHostView::GetSelectedText` of the focused frame), the link (`TextFragmentReceiver::RequestSelectorForSelection` + `shared_highlighting::AppendSelectors`) and the change bit (a `TextInputManager::Observer` on the page's `WebContentsImpl`) are reachable from overlay code (`open_page_state.cc`; dep `//components/shared_highlighting/core/common`). The change bit reports only empty ↔ non-empty transitions.
+- **EP-4b needs no patch (no 0503).** OpenEngine selects the Network panel through the DevTools front end's `DevToolsAPI.showPanel`, the call Chrome makes for its own Console command (`DevToolsWindow::DoAction`). This also switches an already open DevTools window (Section 8 branch `s8/page-tools`).
+- **The hooks from Chromium files into the overlay are header-only tables** (`open_history_swipe_hooks.h`, `open_notification_hooks.h`): `chrome/browser` and `chrome/browser/ui` cannot depend on libcef, and both are linked into the one framework binary (one `GetHistorySwipeHooks()::hooks` symbol, checked with `nm`). The overlay fills them the first time an embedder sets a page or notification handler.
+- **`historySwipeEnabled` uses Chromium's own `HistorySwipingControl`** (a `WebContentsUserData` the swiper already asks) instead of a hunk in `shouldAllowHistorySwiping`.
+- **EP-6 reports no page.** Chromium keeps the creating document of a non-persistent notification inside content's dispatcher; the embedder finds the tab by origin.
+- **Test hooks** (`CefGetDisplayedNotifications`, `CefSimulateNotificationClick`, `CefSimulateHistorySwipe`) run only with the browser switch `--open-automation`, which only automation builds of the App pass. The swipe hook replays the overlay controller sequence and the navigation, not Chromium's gesture recognition (manual check U-S1).
+
 ## Decisions for the lead
 
 1. Spaces and windows in `chrome.windows`: one Chrome window per Open window (proposed), or one per Space? Arc: per window (`ArcBrowser` has a `windowIdentifier`, docs/re/arccore-engine.md §4.3).

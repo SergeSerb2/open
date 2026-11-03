@@ -89,6 +89,7 @@ Arguments are `key=value`; values that parse as JSON are sent as JSON.
 | `navigate` / `back` | `tab`, `url` | Load a URL / go back |
 | `wait` | `tab`, `timeout` | Wait until the page is live and not loading |
 | `eval` | `tab`, `js` | Run JavaScript in the page's main world (through the OpenWeb `WebContent` protocol); promises are awaited |
+| `engine-sleep` | `tab`, `op` (`state`, `hide`, `show`, `freeze`, `unfreeze`, `discard`, `capture`) | Test hook for the engine tab-sleep API (docs/engine-api.md, "Tab sleeping"): runs one call on the page and returns `ok` (freeze/unfreeze/discard result), `frozen`, `discarded`, `unloadHandlers`, `chromeTabId`, `identifier`, `live`; `capture` adds `history` (entry count, current index, page state, OPNH bytes, title, URLs, `roundTrip` through `OENavigationHistory(container:)`). It does not change the model's sleep phase |
 | `devtools` | `tab`, `method`, `params` | Raw DevTools protocol command; events arrive in `events` |
 | `click` | `tab`, `selector` or `text` | Click an element with DevTools input events (a real user gesture inside the page) |
 | `rightclick` | `tab`, `x`, `y` | Right click in the page |

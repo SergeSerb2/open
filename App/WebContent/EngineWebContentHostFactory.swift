@@ -922,6 +922,14 @@ extension EngineWebContentHostFactory: OEWebContentDelegate {
     record("change", webContent, ["changes": changes.rawValue])
   }
 
+  /// Chromium's history swiper (page-platform EP-1). Recorded for automation; Step 12 draws
+  /// Open's indicator from it.
+  func webContent(_ webContent: OEWebContent, historySwipe phase: OEHistorySwipePhase, direction: OEHistorySwipeDirection, progress: Double) {
+    let phases = ["began", "changed", "completed", "cancelled"]
+    record("historySwipe", webContent, ["phase": phases[max(0, min(3, phase.rawValue))],
+      "direction": direction == .forward ? "forward" : "back", "progress": progress])
+  }
+
   static func pngData(_ image: NSImage) -> Data? {
     // Refuse oversized engine images before asking AppKit to rasterize them.
     // Explicit allocation: 64 * 64 * 4 = 16 KiB, independent of source size.
