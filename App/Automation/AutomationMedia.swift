@@ -92,6 +92,24 @@ extension AutomationController {
     case "pip":
       return describePiP()
     case "pip-action":
+      // Phase 2: Open's own window, through its real controls' paths.
+      if let window = media.pipWindow {
+        switch a["action"] as? String ?? "" {
+        case "close": window.dismiss(reason: .userClosed); return true
+        case "minimize": window.dismiss(reason: .minimized); return true
+        case "back-to-tab": window.dismiss(reason: .backToTab); return true
+        case "menu":
+          let menu = window.menuBuilder.build()
+          guard let title = a["item"] as? String else {
+            return menu.items.map { $0.isSeparatorItem ? "-" : $0.title + ($0.state == .on ? " ✓" : "") }
+          }
+          guard let index = menu.items.firstIndex(where: { $0.title == title }), menu.items[index].isEnabled else {
+            throw Failure(message: "no enabled PiP menu item \(title)")
+          }
+          menu.performActionForItem(at: index); return true
+        default: throw Failure(message: "unknown pip action")
+        }
+      }
       // Phase 1 has Chromium's own PiP window; these run the same session paths its controls end in.
       guard let source = media.session.activeSource else { throw Failure(message: "no active PiP") }
       switch a["action"] as? String ?? "" {
@@ -242,6 +260,12 @@ extension AutomationController {
       ["number": w.windowNumber, "class": NSStringFromClass(type(of: w)), "frame": [w.frame.minX, w.frame.minY, w.frame.width, w.frame.height],
        "level": w.level.rawValue] as [String: Any]
     }
+    if let window = media.pipWindow?.window {
+      state["openWindow"] = ["number": window.windowNumber, "frame": [window.frame.minX, window.frame.minY, window.frame.width, window.frame.height],
+                             "level": window.level.rawValue, "visible": window.isVisible, "closing": media.pipWindow?.isClosing ?? false,
+                             "tab": media.pipHost?.tabID.description ?? ""] as [String: Any]
+    }
+    state["phase"] = media.hostsPictureInPicture ? 2 : 1
     state["snoozed"] = media.session.snoozed.map(\.description).sorted()
     state["requests"] = media.pipRequests
     if let tab = media.session.activeSource?.tabID ?? {
