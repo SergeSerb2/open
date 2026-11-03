@@ -8,6 +8,7 @@
 #include <memory>
 #include <optional>
 #include <string>
+#include <vector>
 
 #include "base/memory/raw_ptr.h"
 #include "base/memory/weak_ptr.h"
@@ -28,6 +29,10 @@ class OpenPiPVideoView;
 
 namespace content {
 class VideoPictureInPictureWindowController;
+}
+
+namespace viz {
+class CopyOutputResult;
 }
 
 namespace ui {
@@ -121,6 +126,7 @@ class OpenVideoOverlayWindow : public content::VideoOverlayWindow,
   };
 
   void SetControl(Control control, bool visible);
+  void OnFrameCaptured(std::unique_ptr<viz::CopyOutputResult> result);
   // Ends the shown session: no more frames, the session object turns invalid.
   // Returns the ended session, or nullptr if none was shown.
   CefRefPtr<OpenPictureInPictureSession> EndSession();
@@ -166,6 +172,9 @@ class OpenVideoOverlayWindow : public content::VideoOverlayWindow,
   std::optional<media_session::MediaPosition> position_;
   std::u16string source_title_;
   bool changed_pending_ = false;
+  // ExecuteAction("captureFrame") results (PNG, empty on failure).
+  int capture_sequence_ = 0;
+  std::vector<uint8_t> capture_png_;
 
   base::WeakPtrFactory<OpenVideoOverlayWindow> weak_ptr_factory_{this};
 };

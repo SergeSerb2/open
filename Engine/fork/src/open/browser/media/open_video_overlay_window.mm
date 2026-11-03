@@ -13,7 +13,10 @@
 #include "base/functional/bind.h"
 #include "base/strings/utf_string_conversions.h"
 #include "base/time/time.h"
+#include "base/task/sequenced_task_runner.h"
 #include "cc/layers/deadline_policy.h"
+#include "components/viz/common/frame_sinks/copy_output_request.h"
+#include "components/viz/common/frame_sinks/copy_output_result.h"
 #include "cef/libcef/browser/thread_util.h"
 #include "chrome/browser/picture_in_picture/picture_in_picture_window_manager.h"
 #include "content/public/browser/context_factory.h"
@@ -21,6 +24,7 @@
 #include "content/public/browser/web_contents.h"
 #include "open/browser/media/open_media_controller.h"
 #include "open/browser/media/open_media_hooks.h"
+#include "third_party/skia/include/core/SkBitmap.h"
 #include "third_party/skia/include/core/SkColor.h"
 #include "ui/accelerated_widget_mac/display_ca_layer_tree.h"
 #include "ui/compositor/compositor.h"
@@ -30,6 +34,7 @@
 #include "ui/compositor/recyclable_compositor_mac.h"
 #include "ui/display/display.h"
 #include "ui/display/screen.h"
+#include "ui/gfx/codec/png_codec.h"
 #include "ui/gfx/geometry/dip_util.h"
 #include "ui/gfx/geometry/size_conversions.h"
 
@@ -48,11 +53,6 @@
 - (instancetype)initWithOwner:(open_engine::OpenVideoOverlayWindow*)owner {
   if ((self = [super initWithFrame:NSMakeRect(0, 0, 320, 180)])) {
     _owner = owner;
-    CALayer* background = [CALayer layer];
-    background.backgroundColor = NSColor.blackColor.CGColor;
-    // Layer-hosting: the compositor's DisplayCALayerTree adds its layers here.
-    self.layer = background;
-    self.wantsLayer = YES;
   }
   return self;
 }
@@ -182,7 +182,16 @@ OpenVideoOverlayWindow::OpenVideoOverlayWindow(
       handler_(std::move(handler)),
       browser_(std::move(browser)) {
   view_ = [[OpenPiPVideoView alloc] initWithOwner:this];
-  ca_layer_tree_ = std::make_unique<ui::DisplayCALayerTree>(view_.layer);
+  // Layer-hosting view. The tree goes on the layer before the view sizes it:
+  // its flipped child layer only grows by the root's later size changes
+  // (autoresizing), so a root that is already sized would leave it smaller
+  // than the view and the video outside it (unbounded_surface_window_mac.mm
+  // uses the same order).
+  CALayer* background = [CALayer layer];
+  background.backgroundColor = NSColor.blackColor.CGColor;
+  ca_layer_tree_ = std::make_unique<ui::DisplayCALayerTree>(background);
+  view_.layer = background;
+  view_.wantsLayer = YES;
 
   compositor_ = std::make_unique<ui::RecyclableCompositorMac>(
       content::GetContextFactory());
@@ -404,6 +413,12 @@ CefRefPtr<CefDictionaryValue> OpenVideoOverlayWindow::GetState() const {
   state->SetInt("controls", static_cast<int>(controls_));
   state->SetBool("controlsVisible", controls_visible_);
   state->SetBool("windowVisible", embedder_visible_);
+  if (capture_sequence_) {
+    state->SetInt("frameCaptureSequence", capture_sequence_);
+    state->SetBinary("frameCapture",
+                     CefBinaryValue::Create(capture_png_.data(),
+                                            capture_png_.size()));
+  }
   state->SetBool("microphoneMuted", microphone_muted_);
   state->SetBool("cameraOn", camera_on_);
   state->SetBool("mediaMuted", media_muted_);
@@ -471,6 +486,19 @@ void OpenVideoOverlayWindow::ExecuteAction(
     }
   } else if (action == "setMuted") {
     controller_->RequestMute(args && args->GetBool("muted"));
+  } else if (action == "captureFrame") {
+    // The composited picture of the view (video surface included), as the
+    // compositor hands it to the view's layers. Arrives as "frameCapture" in
+    // GetState with a new "frameCaptureSequence" (an empty capture on failure).
+    auto request = std::make_unique<viz::CopyOutputRequest>(
+        viz::CopyOutputRequest::ResultFormat::RGBA,
+        viz::CopyOutputRequest::ResultDestination::kSystemMemory,
+        base::BindOnce(&OpenVideoOverlayWindow::OnFrameCaptured,
+                       weak_ptr_factory_.GetWeakPtr()));
+    request->set_result_task_runner(
+        base::SequencedTaskRunner::GetCurrentDefault());
+    root_->RequestCopyOfOutput(std::move(request));
+    compositor_->compositor()->ScheduleFullRedraw();
   } else if (action == "close") {
     // Through the manager, so Chromium's auto Picture in Picture keeps its
     // "user closed" bookkeeping. Posted: the close ends in Hide, which calls
@@ -494,6 +522,23 @@ void OpenVideoOverlayWindow::ExecuteAction(
             },
             weak_ptr_factory_.GetWeakPtr(), ui));
   }
+}
+
+void OpenVideoOverlayWindow::OnFrameCaptured(
+    std::unique_ptr<viz::CopyOutputResult> result) {
+  std::vector<uint8_t> png;
+  if (result && !result->IsEmpty()) {
+    auto scoped = result->ScopedAccessSkBitmap();
+    const SkBitmap bitmap = scoped.GetOutScopedBitmap();
+    if (bitmap.readyToDraw()) {
+      png = gfx::PNGCodec::EncodeBGRASkBitmap(bitmap,
+                                              /*discard_transparency=*/true)
+                .value_or(std::vector<uint8_t>());
+    }
+  }
+  capture_png_ = std::move(png);
+  ++capture_sequence_;
+  ScheduleChanged();
 }
 
 void OpenVideoOverlayWindow::OnViewChanged() {

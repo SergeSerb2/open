@@ -12,7 +12,7 @@ import OpenWeb
 
 /// Media automation commands (media-pip §8.4, docs/automation.md "Media").
 extension AutomationController {
-  static let mediaCommands: Set<String> = ["media", "media-action", "mini-players", "media-click", "pip", "pip-action",
+  static let mediaCommands: Set<String> = ["media", "media-action", "mini-players", "media-click", "pip", "pip-action", "pip-frame",
                                            "now-playing", "sleep-visibility", "library-section"]
 
   func runMediaCommand(_ cmd: String, _ a: [String: Any]) async throws -> Any {
@@ -105,6 +105,17 @@ extension AutomationController {
       return ["clicked": target, "at": [center.x, center.y]]
     case "pip":
       return describePiP()
+    case "pip-frame":
+      // Phase 2: the engine's composited picture of Open's PiP video view (not the screen; the
+      // window server leaves out GPU-process layers on macOS 26).
+      guard let pip = media.pipHost?.pip else { throw Failure(message: "no Open PiP window") }
+      let path = a["path"] as? String ?? NSTemporaryDirectory() + "open-pip-frame.png"
+      let png: Data? = await withCheckedContinuation { continuation in
+        pip.captureVideoFrame { continuation.resume(returning: $0) }
+      }
+      guard let png else { throw Failure(message: "no frame") }
+      try png.write(to: URL(fileURLWithPath: path))
+      return ["path": path, "bytes": png.count]
     case "pip-action":
       // Phase 2: Open's own window, through its real controls' paths.
       if let window = media.pipWindow {

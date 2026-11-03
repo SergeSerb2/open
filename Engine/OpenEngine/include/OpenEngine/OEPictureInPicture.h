@@ -86,6 +86,12 @@ OE_EXPORT @interface OEPictureInPicture : NSObject
 /// Ends PiP; the video returns to the page. Never call it from inside a
 /// delegate callback of this object (defer to the next run-loop turn).
 - (void)closePausingVideo:(BOOL)pause NS_SWIFT_NAME(close(pausingVideo:));
+/// The composited picture of `videoView` (the video and its letterbox) as PNG
+/// data, from the engine's compositor, not from the screen. Nil if the session
+/// ended or the copy failed; also nil after 2 s without an answer. For
+/// automation checks and thumbnails.
+- (void)captureVideoFrameWithCompletion:(void (^)(NSData* _Nullable png))completion
+    NS_SWIFT_NAME(captureVideoFrame(completion:));
 @end
 
 NS_SWIFT_UI_ACTOR

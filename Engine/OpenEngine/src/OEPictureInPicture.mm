@@ -19,10 +19,14 @@
 static __weak id<OEPictureInPictureDelegate> gPictureInPictureDelegate;
 static char kOEPictureInPictureKey;
 
+typedef void (^OEFrameCompletion)(NSData* _Nullable);
+
 @implementation OEPictureInPicture {
   CefRefPtr<CefPictureInPictureWindow> _window;
   CGRect _windowFrame;
   BOOL _windowVisible;
+  int _captureSequence;
+  NSMutableArray<OEFrameCompletion>* _frameCompletions;
 }
 
 + (BOOL)oe_shellHostsPictureInPicture {
@@ -47,6 +51,40 @@ static char kOEPictureInPictureKey;
 
 - (void)oe_invalidate {
   _window = nullptr;
+  [self oe_finishFrameCaptures:nil];
+}
+
+- (void)oe_finishFrameCaptures:(nullable NSData*)png {
+  NSArray<OEFrameCompletion>* pending = [_frameCompletions copy];
+  [_frameCompletions removeAllObjects];
+  for (OEFrameCompletion done in pending) {
+    done(png);
+  }
+}
+
+- (void)captureVideoFrameWithCompletion:(void (^)(NSData* _Nullable))completion {
+  OEFrameCompletion done = [completion copy];
+  if (!done) {
+    return;
+  }
+  if (![self oe_isValid]) {
+    dispatch_async(dispatch_get_main_queue(), ^{ done(nil); });
+    return;
+  }
+  if (!_frameCompletions) {
+    _frameCompletions = [NSMutableArray array];
+  }
+  [_frameCompletions addObject:done];
+  _window->ExecuteAction("captureFrame", nullptr);
+  __weak OEPictureInPicture* weakSelf = self;
+  dispatch_after(dispatch_time(DISPATCH_TIME_NOW, 2 * NSEC_PER_SEC),
+                 dispatch_get_main_queue(), ^{
+                   OEPictureInPicture* pip = weakSelf;
+                   if (pip && [pip->_frameCompletions containsObject:done]) {
+                     [pip->_frameCompletions removeObject:done];
+                     done(nil);
+                   }
+                 });
 }
 
 // Reads the engine's state; returns what changed.
@@ -59,6 +97,19 @@ static char kOEPictureInPictureKey;
     return 0;
   }
   OEPictureInPictureChange changes = 0;
+  // A finished frame capture (captureVideoFrameWithCompletion:).
+  if (state->GetType("frameCaptureSequence") == VTYPE_INT &&
+      state->GetInt("frameCaptureSequence") != _captureSequence) {
+    _captureSequence = state->GetInt("frameCaptureSequence");
+    NSData* png = nil;
+    CefRefPtr<CefBinaryValue> binary = state->GetBinary("frameCapture");
+    if (binary && binary->GetSize() > 0) {
+      NSMutableData* data = [NSMutableData dataWithLength:binary->GetSize()];
+      binary->GetData(data.mutableBytes, data.length, 0);
+      png = data;
+    }
+    [self oe_finishFrameCaptures:png];
+  }
   CGSize natural = CGSizeMake(state->GetInt("naturalWidth"),
                               state->GetInt("naturalHeight"));
   if (!CGSizeEqualToSize(natural, _naturalSize)) {

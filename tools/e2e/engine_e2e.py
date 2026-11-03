@@ -5473,16 +5473,21 @@ def media_checks(factory, results, tmp):
         close_tab(nd)
         # Steps 9-10 (EM-4): Open's own PiP window shows the engine's video, live. Two snapshots of
         # that window 0.5 s apart: the canvas video changes its hue every frame.
-        fv = open_tab(base + "video.html"); start_heard(fv); select(home)
+        # A file-backed video: MediaStream players are never controllable, so they never get a card
+        # (Minimize leaves one). start() records the page's own 3 s WebM first.
+        fv = open_tab(base + "video-file.html")
+        start_heard(fv); select(home)
         fp = wait_pip("active")
         if fp.get("phase", 1) == 2:
             ow = wait_until(lambda: (lambda o: o if o and o.get("visible") else None)(pip().get("openWindow")), timeout=3, step=.02)
             time.sleep(.6)
+            # The engine's composited picture of the video view (`pip-frame`): the window server
+            # leaves out GPU-process layers on macOS 26, so a window snapshot shows no video.
             shots = []
             for i in range(2):
                 path = os.path.join(tmp, "pip-frame-%d.png" % i)
-                shot = app.call("snapshot", window=ow["number"], path=path) if ow else {}
-                shots.append((path, shot.get("method"))); time.sleep(.5)
+                shot = app.call("pip-frame", path=path) if ow else {}
+                shots.append((path, shot.get("bytes"))); time.sleep(.5)
             def grid(path):
                 w, h, px = read_image(path)
                 return (w, h), [px(w * (i + .5) / 8, h * (j + .5) / 6) for i in range(8) for j in range(6)]
@@ -5490,7 +5495,7 @@ def media_checks(factory, results, tmp):
             lit = sum(1 for c in a0 if max(c) > 40)
             moved = sum(1 for c, d in zip(a0, a1) if max(abs(c[k] - d[k]) for k in range(3)) > 12)
             results["media_pip_frames"] = {"ok": bool(ow) and lit >= 24 and moved >= 24 and not pip()["windows"],
-                "lit": lit, "moved": moved, "of": len(a0), "size": [size0, size1], "methods": [m for _, m in shots],
+                "lit": lit, "moved": moved, "of": len(a0), "size": [size0, size1], "bytes": [b for _, b in shots],
                 "window": ow, "chromiumWindows": pip()["windows"], "load": os.getloadavg()}
             # E-M8: Minimize hides the window, keeps playing and leaves a card that reopens PiP.
             app.call("pip-action", action="minimize")
