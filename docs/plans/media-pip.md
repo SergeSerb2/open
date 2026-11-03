@@ -2598,6 +2598,12 @@ Chromium's fake permission UI is not used: it skips the capture indicator, and
 `capturing` then stays false. With auto-PiP on, the playing preview opens a PiP window on
 the leave, and the card then stays away (rule 3), so the row turns auto-PiP off.
 
+Sleep (item 16, criterion 6): section 8's App sleep controller (#156) reads
+`MediaCoordinator.visibility`. `media_sleep_adapter` (was BLOCKED): a paused tab whose card
+shows stays live through a controller pass (its freeze gate is `visible`), while an idle
+background tab in the same pass freezes. After Close the card goes, and the next pass
+freezes that tab too. The controller's clock moves (`sleep-clock`); there is no wall-clock wait.
+
 ## Appendix — Lead decisions (2026-10-25)
 
 - Approved as the media controls + Picture in Picture plan. Steps 1–5 start now: they need no App window. Step 6 and later App steps wait for app-shell Step B (#52) and Step G (sleep).

@@ -5435,7 +5435,36 @@ def media_checks(factory, results, tmp):
         results["media_pip_minimize"] = {"status": "BLOCKED", "reason": "EM-4: phase 1 uses Chromium's PiP window, which has no Minimize"}
         results["media_pip_keep_on_top"] = {"status": "BLOCKED", "reason": "EM-4: the Keep Window on Top menu is in Open's own PiP window"}
         results["media_document_pip"] = {"status": "BLOCKED", "reason": "EM-7: Document PiP disposition"}
-        results["media_sleep_adapter"] = {"status": "BLOCKED", "reason": "section 8: the App sleep adapter; the feed is checked above"}
+        # Item 16 (criterion 6) with section 8's sleep controller (#156): a paused tab whose mini player
+        # shows survives a pass that sleeps an idle background tab; after Close (the card goes) the same
+        # pass may sleep it. The controller's clock moves; no wall-clock wait.
+        def sstate(tab): return next(iter(app.call("sleep-state", tab=tab)["tabs"]), {})
+        held = open_tab(base + "audio.html"); start(held)
+        idle = open_tab(base + "plain.html")
+        select(home)
+        wait_until(lambda: held in ids(), timeout=2, step=.02)
+        app.call("media-click", tab=held, target="play")
+        held_paused = wait_until(lambda: app.eval(held, "document.getElementById('tone').paused"), timeout=3, step=.05)
+        wait_until(lambda: not is_audible(held), timeout=5, step=.05)
+        app.call("sleep-start")
+        app.call("sleep-clock", advance=86400.0)
+        app.call("sleep-tick")
+        held_after, idle_after = sstate(held), sstate(idle)
+        feed_has = held in app.call("sleep-visibility")["mediaControls"]
+        app.call("media-click", tab=held, target="close")
+        wait_until(lambda: held not in ids(), timeout=3, step=.02)
+        wait_until(lambda: held not in app.call("sleep-visibility")["mediaControls"], timeout=3, step=.02)
+        app.call("sleep-clock", advance=86400.0)
+        app.call("sleep-tick")
+        held_closed = sstate(held)
+        results["media_sleep_adapter"] = {"ok": bool(held_paused) and feed_has and held_after.get("phase") == "live"
+            and held_after.get("freezeGate") is not None and idle_after.get("phase") in ("frozen", "sleeping")
+            and held_closed.get("phase") in ("frozen", "sleeping"),
+            "held": {k: held_after.get(k) for k in ("phase", "freezeGate", "discardGate", "audible")},
+            "idle": {k: idle_after.get(k) for k in ("phase", "freezeGate")},
+            "afterClose": {k: held_closed.get(k) for k in ("phase", "freezeGate")}, "feedHadTab": feed_has}
+        app.call("sleep-clock", reset=True)
+        close_tab(held); close_tab(idle)
         # E-M1 persistence: a muted tab stays muted after relaunch.
         app.call("media-action", tab=a1, action="toggle-mute")
         app.call("save"); app.quit()
