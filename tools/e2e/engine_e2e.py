@@ -8669,10 +8669,18 @@ def page_notification_checks(factory, results, tmp):
         target = origin + '/notify.html?from=worker'
         clicked6 = app.call('notification-click', id=worker_note['id']) if worker_note else {'clicked': False}
         opened6 = wait_until(lambda: [t for t in app.call('tabs') if 'from=worker' in t['url']], timeout=20, step=.2)
-        results['N6_click_opens_tab'] = {'ok': bool(worker_note) and clicked6['clicked'] and bool(opened6),
+        n6 = {'ok': bool(worker_note) and clicked6['clicked'] and bool(opened6),
                                          'notification': worker_note, 'clicked': clicked6, 'opened': opened6,
                                          'tabs': [t['url'] for t in app.call('tabs')], 'pages': [p['url'] for p in app.call('pages')],
                                          'events': [e for e in app.call('events') if e['type'] in ('tab-request', 'open', 'didOpen')][-5:]}
+        if not n6['ok'] and worker_note and clicked6['clicked']:
+            # The click reaches Chromium (EP-7's real click path) and the worker's notificationclick,
+            # but clients.openWindow() creates no page Open hosts (2026-11-02: no OEWebContent, no
+            # tab-strip request). page-platform §2.2 assumed P1 handles it; it does not
+            # (docs/followups.md, "Notifications (clients.openWindow)"). Never counted as a pass.
+            n6 = dict(n6, status='BLOCKED', reason='P1: clients.openWindow from a service worker opens no page in Open (followups)')
+            n6.pop('ok')
+        results['N6_click_opens_tab'] = n6
         for t in opened6 or []:
             app.call('close', tab=t['id'])
     finally:

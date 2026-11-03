@@ -6,14 +6,14 @@
         "forced": false,
         "ok": true,
         "owned_pids": [
-          20607,
-          20621,
-          20622,
-          20623,
-          20624,
-          20625,
-          20626,
-          20646
+          11970,
+          11975,
+          11976,
+          11977,
+          11978,
+          11979,
+          11981,
+          12033
         ],
         "remaining_processes": [],
         "reply": true,
@@ -27,13 +27,14 @@
         "forced": false,
         "ok": true,
         "owned_pids": [
-          20705,
-          20715,
-          20717,
-          20718,
-          20719,
-          20722,
-          20761
+          12130,
+          12144,
+          12145,
+          12146,
+          12147,
+          12148,
+          12149,
+          12189
         ],
         "remaining_processes": [],
         "reply": true,
@@ -47,14 +48,38 @@
         "forced": false,
         "ok": true,
         "owned_pids": [
-          20786,
-          20808,
-          20809,
-          20810,
-          20811,
-          20813,
-          20814,
-          20861
+          12227,
+          12233,
+          12234,
+          12235,
+          12236,
+          12239,
+          12240,
+          12348,
+          12357,
+          12362,
+          12363
+        ],
+        "remaining_processes": [],
+        "reply": true,
+        "windows_after_quit": {
+          "count": 0,
+          "windows": []
+        },
+        "windows_before_quit": 1
+      },
+      {
+        "forced": false,
+        "ok": true,
+        "owned_pids": [
+          12508,
+          12532,
+          12533,
+          12535,
+          12536,
+          12537,
+          12538,
+          12554
         ],
         "remaining_processes": [],
         "reply": true,
@@ -68,15 +93,15 @@
   },
   "config": "Debug",
   "engine": {
-    "distributionCodeSHA256": "515f71a831da2938194ef5a52229f91835e220884d08a99946c223d524aa4abe",
-    "distributionSHA256": "a9937ab06318e2b719362476c0f40242b15991888cbb563cec1d5d69eea1423f",
-    "distributionUUID": "4C4C4431-5555-3144-A19A-66BC4F744D1F",
-    "embeddedCodeSHA256": "515f71a831da2938194ef5a52229f91835e220884d08a99946c223d524aa4abe",
-    "embeddedSHA256": "f89a285111ad4e02faf895528808abc783ed4726494fbb712148d1c13b8e03cb",
-    "embeddedUUID": "4C4C4431-5555-3144-A19A-66BC4F744D1F",
+    "distributionCodeSHA256": "1bbda1e53579f2d7df5613d5e62424dc7437afb0a04f69769c787bc223cb6ca4",
+    "distributionSHA256": "e949ff69abf556b46cf102a9fe4538a2e0eaa25eb68c45dd2711f2a13cc4229d",
+    "distributionUUID": "4C4C443D-5555-3144-A165-77B9AC074AB7",
+    "embeddedCodeSHA256": "1bbda1e53579f2d7df5613d5e62424dc7437afb0a04f69769c787bc223cb6ca4",
+    "embeddedSHA256": "496e5f259fe58da23e34326a2841c11b726b536a715b7258a7d2896eedc9452f",
+    "embeddedUUID": "4C4C443D-5555-3144-A165-77B9AC074AB7",
     "requiredSHA256": "",
-    "source": "fork",
-    "stamp": "fork /Users/serge/Developer/open-engine-s8-main/chromium_git/chromium/src/cef/binary_distrib/cef_binary_156.0.14+g4fa4ab5+chromium-156.0.8078.48_macosarm64_minimal 1793681464"
+    "source": "unconfirmed",
+    "stamp": ""
   },
   "interrupted_attempts": [],
   "page": {
@@ -84,6 +109,175 @@
       "changeEvents": 1,
       "cleared": true,
       "ok": true
+    },
+    "N1_allow_asks_macos": {
+      "expected": "skipped:authorized",
+      "granted": true,
+      "ok": true,
+      "request": "skipped:authorized",
+      "requests": [
+        "skipped:authorized"
+      ],
+      "sheet": {
+        "buttons": [
+          "Block",
+          "Allow"
+        ],
+        "texts": [
+          "127.0.0.1 wants permission",
+          "Requested: 8"
+        ],
+        "window": 180489
+      },
+      "statusBefore": "authorized"
+    },
+    "N1_engine_display": {
+      "log": [
+        "permission:granted",
+        "show:Open N1 banner"
+      ],
+      "ok": true
+    },
+    "N1_engine_list": {
+      "engine": [
+        {
+          "body": "Banner from notify.html",
+          "id": "n#http://127.0.0.1:63198#open-n1",
+          "origin": "http://127.0.0.1:63198/",
+          "title": "Open N1 banner"
+        }
+      ],
+      "ok": true
+    },
+    "N1_macos_delivered": {
+      "authorization": "authorized",
+      "delivered": [],
+      "reason": "U-N1: authorized, but macOS lists no delivered banner for Open.app; the user confirms delivery (followups)",
+      "status": "BLOCKED"
+    },
+    "N2_alerts_helper": {
+      "helpers": [
+        12348
+      ],
+      "helpersBefore": [],
+      "ok": true,
+      "shown": true
+    },
+    "N2_bundles": {
+      "alerts": {
+        "CFBundleDisplayName": "Open",
+        "CFBundleIdentifier": "io.github.sergeserb2.open.helper.alerts",
+        "NSUserNotificationAlertStyle": "alert"
+      },
+      "helper": null,
+      "main": "banner",
+      "ok": true
+    },
+    "N2_listed": {
+      "engine": [
+        "Open N1 banner",
+        "Open N2 alert"
+      ],
+      "ok": true
+    },
+    "N3_activation": {
+      "focusedSpace": "7E1154C2-FA63-4117-9125-429B6241326E",
+      "ok": true,
+      "prepared": {
+        "miniaturized": true,
+        "space1Focused": true,
+        "style": "chrome",
+        "tabSelected": false
+      },
+      "requests": [
+        {
+          "content": 2,
+          "request": "activate",
+          "space": "7E1154C2-FA63-4117-9125-429B6241326E",
+          "tab": "873441B6-9433-4978-A88A-D83F06F51BC5",
+          "time": 1793686752.7038422,
+          "type": "tab-request"
+        }
+      ],
+      "selected": true,
+      "space2": "7E1154C2-FA63-4117-9125-429B6241326E",
+      "windowRestoredAndKey": true
+    },
+    "N3_notification_click": {
+      "clicked": {
+        "clicked": true
+      },
+      "ok": true,
+      "router": [
+        {
+          "action": "page",
+          "id": "n#http://127.0.0.1:63198#open-n1",
+          "origin": "http://127.0.0.1:63198/",
+          "persistent": false,
+          "tab": "34BD54DA-2AFE-465A-8E2B-8E53D4AFEB2B"
+        }
+      ],
+      "selected": true
+    },
+    "N4_click_fallback_selects_tab": {
+      "ok": true,
+      "router": [
+        {
+          "action": "fallback",
+          "id": "n#http://127.0.0.1:63198#open-n1",
+          "origin": "http://127.0.0.1:63198/",
+          "persistent": false,
+          "tab": "6E9CBE78-AD47-4376-BD52-15A52F845344"
+        }
+      ],
+      "selectedAfter": true,
+      "selectedAt200ms": false,
+      "selectedAtClick": false
+    },
+    "N6_click_opens_tab": {
+      "clicked": {
+        "clicked": true
+      },
+      "events": [
+        {
+          "content": 1,
+          "request": "activate",
+          "space": "2BD95CBF-DD2F-40BE-82B8-6CACCF79F9E8",
+          "tab": "34BD54DA-2AFE-465A-8E2B-8E53D4AFEB2B",
+          "time": 1793686752.758041,
+          "type": "tab-request"
+        }
+      ],
+      "notification": {
+        "body": "Click opens http://127.0.0.1:63198/notify.html?from=worker",
+        "id": "p#http://127.0.0.1:63198/#1open-n6",
+        "origin": "http://127.0.0.1:63198/",
+        "title": "Open N6 worker"
+      },
+      "ok": false,
+      "opened": [],
+      "pages": [
+        "http://127.0.0.1:63198/notify.html",
+        "http://127.0.0.1:63198/notify.html?space2",
+        "http://127.0.0.1:63198/notify.html?nofocus"
+      ],
+      "tabs": [
+        "http://127.0.0.1:63198/notify.html?nofocus",
+        "http://127.0.0.1:63198/notify.html"
+      ]
+    },
+    "N6_engine_display": {
+      "engineAfterClose": [
+        "Open N1 banner",
+        "Open N2 alert",
+        "Open N6 worker"
+      ],
+      "note": "getNotifications() reads macOS's delivered list (see N1_macos_delivered); not asserted",
+      "ok": true,
+      "pageListAfterClose": [],
+      "ready": true,
+      "tabClosed": true,
+      "titles": []
     },
     "Q2_selection_and_link": {
       "empty": {
@@ -99,7 +293,7 @@
       },
       "picked": {
         "hasSelection": true,
-        "link": "http://127.0.0.1:56365/quote.html#:~:text=The%20quick%20brown%20fox%20studies%20the%20lazy%20dog%20before%20every%20jump.",
+        "link": "http://127.0.0.1:63154/quote.html#:~:text=The%20quick%20brown%20fox%20studies%20the%20lazy%20dog%20before%20every%20jump.",
         "text": "The quick brown fox studies the lazy dog before every jump.\n\n"
       }
     },
@@ -136,7 +330,7 @@
         "changed",
         "cancelled"
       ],
-      "url": "http://127.0.0.1:56365/links-target.html"
+      "url": "http://127.0.0.1:63154/links-target.html"
     },
     "SW4_swipe_disabled": {
       "events": 0,
@@ -152,11 +346,14 @@
       "openItems": [
         "Back",
         "Forward",
-        "Translate to English",
+        "Reload",
+        "Save As\u2026",
         "Print\u2026",
+        "Translate to English",
         "View Page Source",
         "Capture",
-        "Capture Full Page"
+        "Capture Full Page",
+        "Inspect"
       ]
     },
     "X1_marker_fallback": {
@@ -217,11 +414,11 @@
         ],
         "presented": true,
         "stacking": [
-          5,
-          6
+          4,
+          5
         ],
         "title": "Translate this page to English?",
-        "window": 173329
+        "window": 180499
       },
       "tipY": 802,
       "window": [
@@ -429,11 +626,11 @@
       "devicePixelRatio": 2,
       "ok": true,
       "row": {
-        "bytes": 4312,
-        "createdAt": 1793681996.6249762,
-        "fileName": "5C86E180-E948-42BD-9CB3-ED36BCC898EC.png",
+        "bytes": 4311,
+        "createdAt": 1793686730.365437,
+        "fileName": "2C1D4960-64F6-42BA-BD93-5022AF351095.png",
         "height": 400,
-        "id": "5C86E180-E948-42BD-9CB3-ED36BCC898EC",
+        "id": "2C1D4960-64F6-42BA-BD93-5022AF351095",
         "kind": "area",
         "sourceHost": "127.0.0.1",
         "width": 600
@@ -532,10 +729,10 @@
       ],
       "row": {
         "bytes": 978563,
-        "createdAt": 1793681997.5262241,
-        "fileName": "A03CE2E3-4FAD-4102-8854-3F687EFF622C.png",
+        "createdAt": 1793686731.302895,
+        "fileName": "3BE888DD-B5B2-46C6-B4DC-75A69A3CF7EA.png",
         "height": 24000,
-        "id": "A03CE2E3-4FAD-4102-8854-3F687EFF622C",
+        "id": "3BE888DD-B5B2-46C6-B4DC-75A69A3CF7EA",
         "kind": "fullPage",
         "sourceHost": "127.0.0.1",
         "width": 2084
@@ -545,10 +742,10 @@
       "ok": true,
       "row": {
         "bytes": 162958,
-        "createdAt": 1793682000.77942,
-        "fileName": "4B5582D5-DEF5-49BA-9AC7-BF7F5D89C60A.png",
+        "createdAt": 1793686734.5100222,
+        "fileName": "875B8053-6C24-4CAC-AC9E-F5AD78EE6A34.png",
         "height": 3029,
-        "id": "4B5582D5-DEF5-49BA-9AC7-BF7F5D89C60A",
+        "id": "875B8053-6C24-4CAC-AC9E-F5AD78EE6A34",
         "kind": "portrait",
         "sourceHost": "127.0.0.1",
         "width": 2423
@@ -581,10 +778,10 @@
       "ok": true,
       "row": {
         "bytes": 1270742,
-        "createdAt": 1793681999.394987,
-        "fileName": "9AD22DD7-360F-4F8D-80BD-DE6217CC514B.png",
+        "createdAt": 1793686733.2006059,
+        "fileName": "BC102558-4B0F-47C0-8262-D6B12E6494EE.png",
         "height": 32768,
-        "id": "9AD22DD7-360F-4F8D-80BD-DE6217CC514B",
+        "id": "BC102558-4B0F-47C0-8262-D6B12E6494EE",
         "kind": "fullPage",
         "sourceHost": "127.0.0.1",
         "width": 2084
@@ -615,7 +812,7 @@
             780
           ],
           "paused": false,
-          "remaining": 7.991420541657135,
+          "remaining": 7.983256250037812,
           "savedLine": true
         },
         "completed": 7,
@@ -628,11 +825,11 @@
         "replays": 1,
         "result": {
           "bytes": 1270742,
-          "fileName": "Tall page 11-02 at 9.59PM.png",
+          "fileName": "Tall page 11-02 at 11.18PM.png",
           "height": 32768,
           "host": "127.0.0.1",
           "kind": "fullPage",
-          "saved": "9AD22DD7-360F-4F8D-80BD-DE6217CC514B",
+          "saved": "BC102558-4B0F-47C0-8262-D6B12E6494EE",
           "truncated": true,
           "width": 2084
         }
@@ -643,10 +840,10 @@
       "row": [
         {
           "bytes": 1663,
-          "createdAt": 1793681993.808442,
-          "fileName": "0F854F82-024F-4905-9499-E19849EB017A.png",
+          "createdAt": 1793686727.54371,
+          "fileName": "C05ED0D1-E287-4107-9867-0A44ADD52422.png",
           "height": 200,
-          "id": "0F854F82-024F-4905-9499-E19849EB017A",
+          "id": "C05ED0D1-E287-4107-9867-0A44ADD52422",
           "kind": "area",
           "sourceHost": "127.0.0.1",
           "width": 300
@@ -680,7 +877,7 @@
             780
           ],
           "paused": false,
-          "remaining": 7.988559083431028,
+          "remaining": 7.987696791649796,
           "savedLine": true
         },
         "completed": 1,
@@ -693,11 +890,11 @@
         "replays": 0,
         "result": {
           "bytes": 1663,
-          "fileName": "Long page 11-02 at 9.59PM.png",
+          "fileName": "Long page 11-02 at 11.18PM.png",
           "height": 200,
           "host": "127.0.0.1",
           "kind": "area",
-          "saved": "0F854F82-024F-4905-9499-E19849EB017A",
+          "saved": "C05ED0D1-E287-4107-9867-0A44ADD52422",
           "truncated": false,
           "width": 300
         }
@@ -848,10 +1045,10 @@
       ],
       "row": {
         "bytes": 270568,
-        "createdAt": 1793681995.650998,
-        "fileName": "4AADBB06-C2B7-4B50-98C5-F98E3BB38F37.png",
+        "createdAt": 1793686729.451482,
+        "fileName": "5CD6341C-C707-4B44-8008-109944258FBA.png",
         "height": 12000,
-        "id": "4AADBB06-C2B7-4B50-98C5-F98E3BB38F37",
+        "id": "5CD6341C-C707-4B44-8008-109944258FBA",
         "kind": "fullPage",
         "sourceHost": "127.0.0.1",
         "width": 1042
@@ -883,7 +1080,7 @@
             780
           ],
           "paused": false,
-          "remaining": 7.994419083348475,
+          "remaining": 7.99093762494158,
           "savedLine": true
         },
         "completed": 3,
@@ -896,11 +1093,11 @@
         "replays": 0,
         "result": {
           "bytes": 270568,
-          "fileName": "Long page 11-02 at 9.59PM.png",
+          "fileName": "Long page 11-02 at 11.18PM.png",
           "height": 12000,
           "host": "127.0.0.1",
           "kind": "fullPage",
-          "saved": "4AADBB06-C2B7-4B50-98C5-F98E3BB38F37",
+          "saved": "5CD6341C-C707-4B44-8008-109944258FBA",
           "truncated": false,
           "width": 1042
         }
@@ -910,10 +1107,10 @@
       "ok": true,
       "row": {
         "bytes": 51314,
-        "createdAt": 1793681995.325032,
-        "fileName": "6E7D2BDD-B0AF-4AEB-8EFF-25AE2B71A298.png",
+        "createdAt": 1793686729.109628,
+        "fileName": "EE3A3D97-887D-4931-9E45-29471C049C8C.png",
         "height": 1515,
-        "id": "6E7D2BDD-B0AF-4AEB-8EFF-25AE2B71A298",
+        "id": "EE3A3D97-887D-4931-9E45-29471C049C8C",
         "kind": "portrait",
         "sourceHost": "127.0.0.1",
         "width": 1212
@@ -954,11 +1151,11 @@
         "replays": 0,
         "result": {
           "bytes": 1663,
-          "fileName": "Long page 11-02 at 9.59PM.png",
+          "fileName": "Long page 11-02 at 11.18PM.png",
           "height": 200,
           "host": "127.0.0.1",
           "kind": "area",
-          "saved": "0F854F82-024F-4905-9499-E19849EB017A",
+          "saved": "C05ED0D1-E287-4107-9867-0A44ADD52422",
           "truncated": false,
           "width": 300
         }
@@ -967,11 +1164,11 @@
     "capture_c5_drag": {
       "ok": true,
       "row": {
-        "bytes": 1225,
-        "createdAt": 1793681996.092979,
-        "fileName": "56558409-DA59-42C9-BED3-7E3282F14C54.png",
+        "bytes": 1224,
+        "createdAt": 1793686729.904364,
+        "fileName": "DA0D991F-5DA6-49FF-A960-71AF2804DC46.png",
         "height": 160,
-        "id": "56558409-DA59-42C9-BED3-7E3282F14C54",
+        "id": "DA0D991F-5DA6-49FF-A960-71AF2804DC46",
         "kind": "area",
         "sourceHost": "127.0.0.1",
         "width": 240
@@ -1010,59 +1207,54 @@
         "canGoBack": false,
         "canGoForward": false,
         "crashed": false,
-        "createdAt": 1793681996.145011,
+        "createdAt": 1793686729.949415,
         "favicon": false,
         "faviconReportsCompleted": 0,
         "faviconReportsRejected": 0,
         "hasWebContent": true,
-        "id": "66C923F7-E2E1-4140-B0AF-5DACD1A16BD4",
-        "lastActiveAt": 1793681996.14706,
+        "id": "3DB286A7-5DA3-48D0-8846-F1563140C4A3",
+        "lastActiveAt": 1793686729.951657,
         "loaded": true,
-        "loading": false,
+        "loading": true,
         "page": {
           "audible": false,
           "browser": 1,
           "browserIndex": 0,
           "browserPinned": false,
           "canGoBack": false,
-          "chromeTabId": -1,
-          "chromeWindowId": -1,
+          "chromeTabId": 1576433805,
+          "chromeWindowId": 1576433803,
           "context": "Default",
           "crash": 0,
           "extension": "",
           "favicon": false,
           "fullscreen": false,
           "hidden": false,
-          "hostTab": "66C923F7-E2E1-4140-B0AF-5DACD1A16BD4",
+          "hostTab": "3DB286A7-5DA3-48D0-8846-F1563140C4A3",
           "identifier": 2,
           "kind": "tab",
           "live": true,
-          "loading": false,
+          "loading": true,
           "muted": false,
-          "pageBackground": [
-            255,
-            255,
-            255,
-            255
-          ],
+          "pageBackground": [],
           "popup": false,
-          "style": "alloy",
-          "title": "Link target",
-          "url": "http://127.0.0.1:56292/links-target.html",
+          "style": "chrome",
+          "title": "",
+          "url": "",
           "zoom": 0
         },
         "pinnedURL": "",
-        "profile": "8AD005BC-1305-4C10-BB66-235C17B8DAC1",
-        "progress": 1,
+        "profile": "3A590879-EF1D-47AD-9B48-269753451F97",
+        "progress": 0.1,
         "rowFaviconHash": "",
         "rowFaviconSource": "placeholder",
         "section": "today",
         "selected": true,
         "sleepPhase": "live",
-        "space": "4F022CD4-2F75-4F9E-813E-4D521A3A7186",
-        "title": "Link target",
+        "space": "BD90ADE6-69DF-4243-B752-1EA4DF617552",
+        "title": "",
         "unread": false,
-        "url": "http://127.0.0.1:56292/links-target.html",
+        "url": "http://127.0.0.1:63084/links-target.html",
         "visible": true
       },
       "replays": 1
@@ -1095,7 +1287,7 @@
         "frame": "{{555, 409}, {370, 182}}",
         "key": true,
         "level": 0,
-        "number": 173313,
+        "number": 180474,
         "parent": 0,
         "sheet": true,
         "title": "Save",
@@ -1104,11 +1296,11 @@
     },
     "capture_card_lifetime": {
       "ok": true,
-      "paused": 7.7856113750021905,
-      "resumed": 7.785035208333284,
+      "paused": 7.7829957499634475,
+      "resumed": 7.782613000017591,
       "scheduled": [
         8,
-        7.988559083431028
+        7.987696791649796
       ]
     },
     "capture_context_menu": {
@@ -1116,12 +1308,17 @@
       "shown": [
         "Back",
         "Forward",
+        "Reload",
         "-",
+        "Save As\u2026",
         "Print\u2026",
+        "-",
         "View Page Source",
         "-",
         "Capture",
-        "Capture Full Page"
+        "Capture Full Page",
+        "-",
+        "Inspect"
       ]
     },
     "capture_delete": {
@@ -1166,13 +1363,13 @@
     "capture_shortcut_hint": {
       "hintShows": 1,
       "ok": true,
-      "stored": 1793681995.01437
+      "stored": 1793686728.787085
     },
     "capture_shortcut_hint_once": {
       "hintShows": 1,
       "ok": true
     }
   },
-  "started": "2026-11-02 21:59:48",
-  "style": "alloy"
+  "started": "2026-11-02 23:18:44",
+  "style": "chrome"
 }
