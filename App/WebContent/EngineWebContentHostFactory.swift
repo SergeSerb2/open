@@ -61,6 +61,8 @@ final class EngineWebContentHostFactory: NSResponder, WebContentHostFactory {
   var sidebarMenuTrackingObserverForAutomation: NSObjectProtocol?
   #endif
   private(set) var navigationFocusDecisions = 0
+  /// On-device page translation for this window (page-platform Step 10).
+  private(set) lazy var translate = TranslateAdapter(factory: self)
   private(set) var lastNavigationFocusRestored = false
   func showCommandBar(_ mode: CommandBarMode, editingPinnedTab: ItemID? = nil) {
     guard !isClosing, !app.terminationRequested else { return }
@@ -138,7 +140,11 @@ final class EngineWebContentHostFactory: NSResponder, WebContentHostFactory {
       // BrowserWindowController schedules its SnapshotStore once per committed change.
       self.mirror.sync(); self.commandBarSession?.contextDidChange(); self.app.scheduleMenuRebuild()
       self.app.media.windowChanged(self)
+      self.translate.focusDidChange()
     }
+    // Chained: MediaCoordinator.attach wraps this hook later and keeps it.
+    let previousVisibility = controller.onVisibilityChange
+    controller.onVisibilityChange = { [weak self] in previousVisibility?(); self?.translate.visibilityDidChange() }
     controller.onOpenCommandBar = { [weak self] source, _ in
       if source == .urlField { self?.focusAddressBar(nil) } else { self?.newTab(nil) }
     }
@@ -276,6 +282,7 @@ final class EngineWebContentHostFactory: NSResponder, WebContentHostFactory {
     return host
   }
   func hostDidClose(_ host: EngineWebContentHost) {
+    translate.contentDidClose(host.content)
     commandBarNavigationFocus.remove(host.tabID)
     app.media.hostClosed(tabID: host.tabID)
     if hosts[host.tabID] === host { hosts[host.tabID] = nil }
@@ -468,6 +475,8 @@ final class EngineWebContentHostFactory: NSResponder, WebContentHostFactory {
     // "Show full URL when Toolbar is enabled"; every window follows it (AppDelegate's defaults observer).
     case .setShowFullURL(let full): app.settingsPresenter.settings.set(full, for: AppCommand.showFullURLKey); app.applyToolbarSettings(); return true
     case .manageExtensions: openExtensionsPage(nil); return true
+    case .showTranslation(let anchor): return translate.showPopover(anchor: anchor)
+    case .shareQuote: return false // Share Quote is page-platform Step 15.
     case .manageSpaces:
       app.settingsPresenter.showLibrary(section: .spaces); return true
     case .editPinnedURL(let id):
@@ -540,6 +549,7 @@ final class EngineWebContentHostFactory: NSResponder, WebContentHostFactory {
     guard !isClosing else { return }
     isClosing = true
     controller?.existingTabSwitcher?.cancel()
+    translate.closeAll()
     for task in saveCaptureTasks.values { task.cancel() }
     saveCaptureTasks.removeAll()
     findSelectionTask?.cancel(); findSelectionTask = nil
@@ -1101,6 +1111,8 @@ extension EngineWebContentHostFactory: OEWebContentDelegate {
         })
       ns.addItem(.separator())
     }
+    // Translate: Open's own item (Chromium's needs a Google API key, page-platform §2.1 T-1).
+    let translateItem = translate.contextMenuItem(for: webContent)
     for item in menu.items {
       if item.isSeparator {
         ns.addItem(.separator())
@@ -1110,6 +1122,11 @@ extension EngineWebContentHostFactory: OEWebContentDelegate {
       let mi = ClosureMenuItem(title: item.title) { menu.select(command: command) }
       mi.isEnabled = item.isEnabled
       ns.addItem(mi)
+    }
+    if let translateItem, menu.linkURL == nil {
+      let mi = ClosureMenuItem(title: translateItem.title) { [weak self] in self?.translate.perform(translateItem.action) }
+      // After Chromium's page items, before its last group (Inspect).
+      if let last = ns.items.lastIndex(where: \.isSeparatorItem) { ns.insertItem(mi, at: last) } else { ns.addItem(mi) }
     }
     let openItems = addCaptureItems(to: ns, for: webContent)
     func commands(_ items: [OEContextMenuItem], in submenu: String = "") -> [[String: Any]] {
@@ -1124,10 +1141,18 @@ extension EngineWebContentHostFactory: OEWebContentDelegate {
       [
         "items": menu.items.map(\.title), "commands": commands(menu.items),
         "link": menu.linkURL?.absoluteString ?? "", "targets": menu.targets.rawValue,
+        "openItems": ns.items.filter { !$0.isSeparatorItem }.map(\.title),
         "open": openItems, "shown": ns.items.map { $0.isSeparatorItem ? "-" : $0.title },
       ])
     if contextMenuPolicy == "record" {
       menu.cancel()
+      return true
+    }
+    if let policy = contextMenuPolicy, policy.hasPrefix("run-open:") {
+      // Runs one of Open's own items by title, after the right click returns.
+      let title = String(policy.dropFirst(9))
+      menu.cancel()
+      DispatchQueue.main.async { if let index = ns.items.firstIndex(where: { $0.title == title }) { ns.performActionForItem(at: index) } }
       return true
     }
     if let policy = contextMenuPolicy, policy.hasPrefix("run:"), let command = Int(policy.dropFirst(4)) {
@@ -1175,7 +1200,7 @@ extension EngineWebContentHostFactory: OEWebContentDelegate {
   func webContent(_ webContent: OEWebContent, didFinishLoadWithStatus status: Int) {
     finishCommandBarNavigation(webContent)
     app.prepareCommandsAfterPaint(webContent)
-    if tabID(for: webContent) != nil { LaunchTiming.shared.mark("firstLoadEnd") }
+    if tabID(for: webContent) != nil { LaunchTiming.shared.mark("firstLoadEnd"); translate.pageDidFinishLoad(webContent, status: status) }
     record("load", webContent, ["status": status, "url": webContent.url?.absoluteString ?? ""])
   }
 
