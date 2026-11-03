@@ -18,14 +18,15 @@ public final class HintToastView: NSView {
 
     public init(keys: String, style: SpaceThemeStyle) {
         self.keys = keys
-        func line(_ text: String, alpha: Double) -> CTLine {
+        // Text color: the shared toast rule (page-platform §4.1.2), white on the dark fills.
+        let color = style.toastText
+        func line(_ text: String) -> CTLine {
             // CoreText reads a CGColor foreground (an NSColor value is ignored).
             CTLineCreateWithAttributedString(NSAttributedString(string: text, attributes: [
-                .font: NSFont.systemFont(ofSize: HintToastMetrics.fontSize, weight: .medium),
-                NSAttributedString.Key(kCTForegroundColorAttributeName as String): RGBA.white(alpha).cgColor]))
+                .font: Typography.toast.font,
+                NSAttributedString.Key(kCTForegroundColorAttributeName as String): color.cgColor]))
         }
-        lines = (line(leadingText, alpha: HintToastMetrics.textAlpha), line(keys, alpha: HintToastMetrics.textAlpha),
-                 line(trailingText, alpha: HintToastMetrics.textAlpha))
+        lines = (line(leadingText), line(keys), line(trailingText))
         let m = HintToastMetrics.self
         // A0440 measures ink (HintToastMetrics): the runs are placed by their ink boxes.
         let leadingInk = CTLineGetImageBounds(lines.leading, nil), trailingInk = CTLineGetImageBounds(lines.trailing, nil)
@@ -44,11 +45,11 @@ public final class HintToastView: NSView {
         // subviews, so AppKit keeps the text layer above the fill.
         let layer = self.layer!
         layer.shadowColor = NSColor.black.cgColor
-        layer.shadowOpacity = m.shadowOpacity
-        layer.shadowRadius = m.shadowRadius
-        layer.shadowOffset = CGSize(width: 0, height: -m.shadowOffsetY)
+        layer.shadowOpacity = ToastMetrics.shadowOpacity
+        layer.shadowRadius = ToastMetrics.shadowRadius
+        layer.shadowOffset = CGSize(width: 0, height: -ToastMetrics.shadowOffsetY)
         layer.shadowPath = CGPath(roundedRect: bounds, cornerWidth: m.radius, cornerHeight: m.radius, transform: nil)
-        let background = HintBackgroundView(frame: bounds, fill: HintToastMetrics.fill(for: style), plate: plateFrame)
+        let background = HintBackgroundView(frame: bounds, fill: style.toastFill, plateFill: style.toastKeycapFill, plate: plateFrame)
         addSubview(background)
         addSubview(HintTextLayerView(frame: bounds, owner: self))
         setAccessibilityElement(true); setAccessibilityRole(.staticText)
@@ -95,7 +96,7 @@ private final class HintTextLayerView: NSView {
 /// Gradient fill, 1 px rim, and keycap plate of the hint (its own backing layer).
 @MainActor
 private final class HintBackgroundView: NSView {
-    init(frame: CGRect, fill: (top: RGBA, bottom: RGBA), plate frameOfPlate: CGRect) {
+    init(frame: CGRect, fill: (top: RGBA, bottom: RGBA), plateFill: RGBA, plate frameOfPlate: CGRect) {
         super.init(frame: frame)
         wantsLayer = true
         let m = HintToastMetrics.self
@@ -105,11 +106,11 @@ private final class HintBackgroundView: NSView {
         // The view is flipped: start at the top edge.
         gradient.startPoint = CGPoint(x: 0.5, y: 0); gradient.endPoint = CGPoint(x: 0.5, y: 1)
         gradient.cornerRadius = m.radius; gradient.cornerCurve = .continuous; gradient.masksToBounds = true
-        gradient.borderWidth = 1; gradient.borderColor = RGBA.black(m.rimAlpha).cgColor
+        gradient.borderWidth = 1; gradient.borderColor = RGBA.black(ToastMetrics.rimAlpha).cgColor
         let plate = CALayer()
         plate.frame = frameOfPlate
         plate.cornerRadius = m.plateRadius; plate.cornerCurve = .continuous
-        plate.backgroundColor = RGBA.white(m.plateAlpha).cgColor
+        plate.backgroundColor = plateFill.cgColor
         gradient.addSublayer(plate)
         layer?.addSublayer(gradient)
     }

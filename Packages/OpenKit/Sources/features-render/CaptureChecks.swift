@@ -99,7 +99,7 @@ enum CaptureChecks {
     static func overlay(size: CGSize, selection: CGRect?, startDrag: Bool = true) -> (NSView, CaptureOverlayView) {
         let root = NSView(frame: CGRect(origin: .zero, size: size)); root.wantsLayer = true
         root.addSubview(FakePage(size: size, png: pagePNG(size: size, scale: 2)))
-        let fill = HintToastMetrics.fill(for: .defaultTheme(system: .dark)).top.nsColor
+        let fill = SpaceThemeStyle.defaultTheme(system: .dark).toastFillTop.nsColor
         let view = CaptureOverlayView(frame: root.bounds, hintFill: fill)
         root.addSubview(view)
         if let selection, startDrag { view.begin(at: selection.origin); view.drag(to: CGPoint(x: selection.maxX, y: selection.maxY)) }

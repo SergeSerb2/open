@@ -138,7 +138,7 @@ public final class CaptureController {
 
     private func showOverlay(on page: NSView, pressPoint: CGPoint?) {
         guard let root else { return }
-        let fill = HintToastMetrics.fill(for: style()).top.nsColor
+        let fill = style().toastFillTop.nsColor
         let view = CaptureOverlayView(frame: root.convert(page.bounds, from: page), hintFill: fill)
         view.onFinish = { [weak self, weak view] outcome in
             guard let self, let view, self.overlay === view else { return }

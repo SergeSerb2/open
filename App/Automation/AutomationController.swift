@@ -261,6 +261,30 @@
       case "toast-undo":
         guard let controller = app.frontWindowController else { throw Failure(message: "no browser window") }
         return controller.pressToastUndo()
+      case "toasts":
+        // The toasts of the front browser window, newest first (page-platform §8.3). Frames are in
+        // the window content (top-left origin); `panel` is the anchor they sit in.
+        guard let controller = app.frontWindowController else { throw Failure(message: "no browser window") }
+        let center = controller.toasts, overlay = controller.toastOverlay, root = controller.contentView
+        return ["panel": rect(root.convert(overlay.bounds, from: overlay)), "shown": center.shownCount,
+          "toasts": center.snapshots.map { s -> [String: Any] in
+            ["title": s.content.title, "subtitle": s.content.subtitle ?? NSNull(), "symbol": s.content.symbol ?? NSNull(),
+             "accessory": s.content.accessoryName, "coalescingKey": s.content.coalescingKey ?? NSNull(),
+             "frame": rect(root.convert(s.frame, from: overlay)),
+             "accessoryFrame": s.accessoryFrame.map { rect(root.convert($0, from: overlay)) } ?? NSNull(),
+             "age": s.age, "lifetime": s.lifetime ?? NSNull(), "sticky": s.content.isSticky,
+             "exiting": s.isExiting, "hovered": s.isHovered]
+          }] as [String: Any]
+      case "toast-hover":
+        // The pointer enters (`inside` true) or leaves the visible toast at `index` (newest first).
+        guard let controller = app.frontWindowController else { throw Failure(message: "no browser window") }
+        let index = (a["index"] as? Int) ?? 0
+        return controller.toasts.setHovered(at: index, a["inside"] as? Bool ?? true)
+      case "toast-action":
+        // Clicks the button of the visible toast at `index` (newest first, default 0) through the real button.
+        guard let controller = app.frontWindowController else { throw Failure(message: "no browser window") }
+        let index = (a["index"] as? Int) ?? Int(a["index"] as? String ?? "") ?? 0
+        return controller.toasts.performAccessory(at: index)
       case "sidebar-menu", "sidebar-menu-state":
         // Builds the same NSMenu a right-click shows (a row, or the Space with no node)
         // and performs the item at a "/" path; `alternate` picks the ⌥ alternate title.
