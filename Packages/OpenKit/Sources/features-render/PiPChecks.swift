@@ -70,6 +70,23 @@ import OpenWeb
                       "PP6 \(orientation) bottom-right insets on \(width)x\(height): \(insets)")
             }
         }
+        // Capture session 2 item 13's display: frame 2560x1440, visible frame 2560x1410 (30 pt menu bar, Dock hidden).
+        // Arc opened 320x180 there, 10 pt from the visible frame's right and bottom; the /8 box is the whole screen.
+        do {
+            let reportURL = matrixRoot.appendingPathComponent("capture-display.json")
+            let process = Process(), output = Pipe()
+            process.executableURL = URL(fileURLWithPath: CommandLine.arguments[0])
+            process.arguments = ["pip", "--out", matrixRoot.appendingPathComponent("capture-display.png").path, "--screen", "2560x1410",
+                "--screen-frame", "2560x1440", "--natural-size", "1280x720", "--first-open", "--geometry-report", reportURL.path]
+            process.standardOutput = output; process.standardError = output
+            try process.run()
+            let receipt = output.fileHandleForReading.readDataToEndOfFile(); process.waitUntilExit()
+            guard process.terminationStatus == 0 else { throw CLIError(description: "PP6 capture-display CLI failed: " + String(decoding: receipt, as: UTF8.self)) }
+            let report = try JSONDecoder().decode([String: [Double]].self, from: Data(contentsOf: reportURL))
+            let first = report["firstSize"] ?? [], insets = report["insets"] ?? []
+            check(first == [320, 180] && insets.count == 2 && insets.allSatisfy { abs($0 - 10) < 0.01 },
+                  "PP6 capture display 2560x1440 (visible 2560x1410) opens 320x180 at 10 pt insets: \(first) \(insets)")
+        }
         let (regular, host, settings) = try make()
         let (compact, _, _) = try make(CGSize(width: 284, height: 160))
         for (controller, p) in [(regular, CGFloat(10)), (compact, CGFloat(8))] {

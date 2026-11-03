@@ -271,6 +271,18 @@ OE_EXPORT @interface OEWebContent : NSObject
 - (void)takeSnapshotWithCompletion:
     (void (^NS_SWIFT_UI_ACTOR)(NSData* _Nullable png,
                                NSError* _Nullable error))completion;
+/// PNG of the whole page at device scale, at most `maxDevicePixels` tall
+/// (page-platform EP-8). DevTools Page.getLayoutMetrics, then
+/// Page.captureScreenshot with captureBeyondViewport per tile of at most
+/// 4,096 device pixels, stitched and encoded off the main thread. Width is
+/// capped at 4,096 device pixels. `truncated` is YES when the page was taller
+/// than the cap and was cut there. The completion runs on the main thread.
+- (void)captureFullPageWithMaxDevicePixels:(NSInteger)maxDevicePixels
+                                completion:
+                                    (void (^NS_SWIFT_UI_ACTOR)(
+                                        NSData* _Nullable png, BOOL truncated,
+                                        NSError* _Nullable error))completion
+    NS_SWIFT_NAME(captureFullPage(maxDevicePixels:completion:));
 /// Reports the page's preferred size through
 /// -webContent:didRequestContentSize: (extension popups, Peek).
 - (void)enableAutoResizeWithMinimumSize:(NSSize)minimumSize
