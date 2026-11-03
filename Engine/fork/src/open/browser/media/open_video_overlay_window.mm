@@ -478,7 +478,7 @@ void OpenVideoOverlayWindow::ExecuteAction(
     using UiBehavior = PictureInPictureWindowManager::UiBehavior;
     const int behavior = args ? args->GetInt("behavior") : 0;
     UiBehavior ui = UiBehavior::kCloseWindowOnly;
-    if (behavior == 1 && (controls_ & kPlayPause)) {
+    if (behavior == 1) {
       ui = UiBehavior::kCloseWindowAndPauseVideo;
     } else if (behavior == 2) {
       ui = UiBehavior::kCloseWindowAndFocusOpener;

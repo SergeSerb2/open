@@ -5244,8 +5244,11 @@ def media_checks(factory, results, tmp):
         app.call("pip-action", action="back-to-tab")
         back = wait_until(lambda: (lambda p: p if p["state"] == "closed" else None)(pip()), timeout=3, step=.02)
         ws = app.call("window-state")
+        # Phase 2 closes the engine's PiP when the window's return animation ends.
+        page_left = wait_until(lambda: not m(video)["pictureInPicture"], timeout=3, step=.02)
         playing_after = app.eval(video, "document.getElementById('main').paused") is False
-        results["media_back_to_tab"] = {"ok": bool(back) and ws["selected"] == video and playing_after, "pip": back, "selected": ws["selected"]}
+        results["media_back_to_tab"] = {"ok": bool(back) and ws["selected"] == video and playing_after and bool(page_left),
+            "pip": back, "selected": ws["selected"], "pageLeftPiP": bool(page_left)}
 
         # E-M6: negatives, each from a fresh leave.
         def leave_decision(tab):
