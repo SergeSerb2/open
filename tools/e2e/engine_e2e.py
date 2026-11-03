@@ -8532,7 +8532,7 @@ def page_tools_appearance_checks(app, results, port, style):
         want_auto = {"appearance-automatic": True, "appearance-light": False, "appearance-dark": False}
         results["A2_appearance_automatic_follows_app_" + style] = {
             "ok": follow_dark["dark"] is True and follow_light["dark"] is False and follow_dark2["dark"] is True
-            and follow_dark2["loadId"] == start["loadId"] and follow_dark2["changes"][-2:] == ["light", "dark"]
+            and follow_dark2["loadId"] == dark["loadId"] and follow_dark2["changes"][-2:] == ["light", "dark"]
             and app.call("defaults", key="open.web.colorScheme") == "automatic",
             "states": [follow_dark, follow_light, follow_dark2]}
         results["A1_appearance_checkmarks_" + style] = _menu_checks_row(
