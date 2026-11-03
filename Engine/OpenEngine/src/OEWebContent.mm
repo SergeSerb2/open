@@ -202,6 +202,8 @@ typedef void (^OEDevToolsCompletion)(NSDictionary* _Nullable, NSError* _Nullable
   int _nextDevToolsId;
   // The DevTools window's own browser (front end), while it is open.
   CefRefPtr<OEDevToolsClient> _devToolsFrontend;
+  // The latest panel request through the front end (EP-4b).
+  NSInteger _devToolsPanelRequest;
   NSMutableSet<NSString*>* _audibleFrames;
   NSString* _lastFindString;
   BOOL _autoResize;
@@ -1005,16 +1007,23 @@ typedef void (^OEDevToolsCompletion)(NSDictionary* _Nullable, NSError* _Nullable
   }
   // Version-safe IDC ids (cef_id_mappers.h); -1 if this build lacks one.
   const char* name = nullptr;
+  // The front end's own panel id, for the path through DevToolsAPI.
+  NSString* frontendPanel = nil;
   switch (panel) {
     case OEDevToolsPanelConsole:
       name = "IDC_DEV_TOOLS_CONSOLE";
+      frontendPanel = @"console";
       break;
     case OEDevToolsPanelInspectMode:
       name = "IDC_DEV_TOOLS_INSPECT";
       break;
-    case OEDevToolsPanelDefault:
     case OEDevToolsPanelElements:
-    case OEDevToolsPanelNetwork:  // EP-4b (fork patch 0503) adds panel_id.
+      frontendPanel = @"elements";
+      break;
+    case OEDevToolsPanelNetwork:
+      frontendPanel = @"network";
+      break;
+    case OEDevToolsPanelDefault:
       break;
   }
   int command = name ? cef_id_for_command_id_name(name) : -1;
@@ -1030,7 +1039,52 @@ typedef void (^OEDevToolsCompletion)(NSDictionary* _Nullable, NSError* _Nullable
     return YES;
   }
   [self showDevTools];
+  if (frontendPanel) {
+    // EP-4b without a fork patch: the front end selects the panel through
+    // DevToolsAPI.showPanel, the call Chrome itself makes for its Console
+    // command (DevToolsWindow::DoAction). The front end exists and loads a
+    // moment after showDevTools; retry until the panel's tab is selected.
+    _devToolsPanelRequest += 1;
+    [self oe_selectFrontendPanel:frontendPanel
+                         request:_devToolsPanelRequest
+                         attempt:0];
+    return YES;
+  }
   return NO;
+}
+
+// One try every 250 ms for at most 15 s; a newer request ends older ones.
+- (void)oe_selectFrontendPanel:(NSString*)panel
+                       request:(NSInteger)request
+                       attempt:(int)attempt {
+  if (request != _devToolsPanelRequest || attempt >= 60 || !_browser) {
+    return;
+  }
+  NSString* script = [NSString
+      stringWithFormat:
+          @"(() => { const name = '%@'; if (!globalThis.DevToolsAPI || "
+          @"!globalThis.InspectorFrontendAPI) return false; const selected = []; "
+          @"const walk = (root) => { for (const el of root.querySelectorAll("
+          @"'[role=tab][aria-selected=true]')) selected.push(el.id); for (const "
+          @"el of root.querySelectorAll('*')) if (el.shadowRoot) "
+          @"walk(el.shadowRoot); }; walk(document); if (selected.includes('tab-' "
+          @"+ name)) return true; DevToolsAPI.showPanel(name); return false; })()",
+          panel];
+  __weak OEWebContent* weakSelf = self;
+  void (^retry)(void) = ^{
+    dispatch_after(dispatch_time(DISPATCH_TIME_NOW, 250 * NSEC_PER_MSEC),
+                   dispatch_get_main_queue(), ^{
+                     [weakSelf oe_selectFrontendPanel:panel
+                                              request:request
+                                              attempt:attempt + 1];
+                   });
+  };
+  [self evaluateJavaScriptInDevToolsFrontend:script
+                                  completion:^(id result, NSError* error) {
+                                    if (![result isEqual:@YES]) {
+                                      retry();
+                                    }
+                                  }];
 }
 
 - (void)oe_setDevToolsFrontend:(OEDevToolsClient*)frontend {

@@ -270,12 +270,14 @@ OE_EXPORT @interface OEWebContent : NSObject
 /// pages run Chrome's own command: Console is IDC_DEV_TOOLS_CONSOLE (shows
 /// the Console panel, opening DevTools if needed) and InspectMode is
 /// IDC_DEV_TOOLS_INSPECT (opens DevTools with the element picker on; a second
-/// call turns the picker off, as in Chrome). Default and Elements open
-/// DevTools as -showDevTools does. Network needs fork patch 0503 (EP-4b);
-/// until then it opens DevTools as -showDevTools does. Alloy pages, and a
-/// hosted tab that is not Chromium's active tab in its window's hidden strip
-/// (Chrome commands act on the active tab), also fall back to -showDevTools.
-/// Returns YES when the panel command ran, NO when it fell back.
+/// call turns the picker off, as in Chrome). Elements and Network (EP-4b),
+/// and Console where Chrome's command cannot run (Alloy pages, and a hosted
+/// tab that is not Chromium's active tab in its window's hidden strip), open
+/// DevTools and select the panel through the front end's
+/// DevToolsAPI.showPanel, the call Chrome makes for its own Console command;
+/// it retries until the panel is selected (at most 15 s). Default opens
+/// DevTools as -showDevTools does; so does InspectMode where Chrome's command
+/// cannot run. Returns NO only for that plain fallback.
 - (BOOL)showDevToolsPanel:(OEDevToolsPanel)panel
     NS_SWIFT_NAME(showDevTools(panel:));
 - (void)closeDevTools;

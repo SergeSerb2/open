@@ -7533,15 +7533,9 @@ def page_tools_devtools_checks(app, results, port, style):
             _try(lambda: app.call("devtools-frontend", tab=tab, js=_DEVTOOLS_SELECTED_TABS)) or []), timeout=20, step=.5)
         last = _try(lambda: app.call("devtools-frontend", tab=tab, js=_DEVTOOLS_SELECTED_TABS))
         windows = [w["title"] for w in app.call("windows") if w["visible"]]
-        if style == "alloy":
-            # Alloy pages have no Chrome commands: EP-4a falls back to plain DevTools.
-            results["D1_console_fallback_opens_devtools_alloy"] = {"ok": bool(last), "selectedTabs": last, "windows": windows}
-            results["D1_javascript_console_panel_alloy"] = _blocked(
-                "Alloy pages have no Chrome commands; the Console panel there needs EP-4b's panel_id (fork patch 0503)",
-                selectedTabs=last)
-        else:
-            results["D1_javascript_console_panel_" + style] = {
-                "ok": bool(tabs) and "tab-console" in tabs, "selectedTabs": last, "windows": windows}
+        # Chrome style: IDC_DEV_TOOLS_CONSOLE; Alloy: the front end's DevToolsAPI.showPanel (EP-4b path).
+        results["D1_javascript_console_panel_" + style] = {
+            "ok": bool(tabs) and "tab-console" in tabs, "selectedTabs": last, "windows": windows}
     finally:
         _try(lambda: app.call("devtools-close", tab=tab))
         _try(lambda: app.call("dismiss"))
@@ -7558,8 +7552,24 @@ def page_tools_devtools_checks(app, results, port, style):
         finally:
             _try(lambda: app.call("devtools-close", tab=tab))
             _try(lambda: app.call("dismiss"))
-    results["D2_network_inspector_panel_" + style] = _blocked(
-        "EP-4b (fork patch 0503 adds panel_id); network-inspector opens the default panel until then")
+    # D2 (EP-4b): Develop ▸ Network Inspector opens DevTools on the Network panel; a second
+    # request with DevTools open switches an already open window to it.
+    try:
+        app.call("command", id="network-inspector")
+        net = wait_until(lambda: (lambda ids: ids if "tab-network" in ids else None)(
+            _try(lambda: app.call("devtools-frontend", tab=tab, js=_DEVTOOLS_SELECTED_TABS)) or []), timeout=20, step=.5)
+        app.call("command", id="javascript-console")
+        back = wait_until(lambda: (lambda ids: ids if "tab-console" in ids else None)(
+            _try(lambda: app.call("devtools-frontend", tab=tab, js=_DEVTOOLS_SELECTED_TABS)) or []), timeout=20, step=.5)
+        app.call("command", id="network-inspector")
+        again = wait_until(lambda: (lambda ids: ids if "tab-network" in ids else None)(
+            _try(lambda: app.call("devtools-frontend", tab=tab, js=_DEVTOOLS_SELECTED_TABS)) or []), timeout=20, step=.5)
+        results["D2_network_inspector_panel_" + style] = {"ok": bool(net) and bool(back) and bool(again),
+            "first": net, "consoleAfter": back, "networkWhileOpen": again,
+            "method": "DevToolsAPI.showPanel in the DevTools front end (no fork patch; Chrome's own Console command path)"}
+    finally:
+        _try(lambda: app.call("devtools-close", tab=tab))
+        _try(lambda: app.call("dismiss"))
     app.call("close", tab=tab)
 
 

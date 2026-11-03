@@ -105,7 +105,7 @@ extension EngineWebContentHostFactory {
     if PageTools.appIDs.contains(id) { return PageTools.performAppCommand(id) }
     guard let page = selectedContent else { return false }
     switch id {
-    // §4.10.1. Network opens the default panel until fork patch 0503 (EP-4b).
+    // §4.10.1. Network (EP-4b) selects its panel through the DevTools front end.
     case "javascript-console": page.showDevTools(panel: .console)
     case "inspect-elements": page.showDevTools(panel: .inspectMode)
     case "network-inspector": page.showDevTools(panel: .network)
