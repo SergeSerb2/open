@@ -216,6 +216,7 @@ extension AutomationController {
       "duration": session?.position.map { $0.duration.isFinite ? $0.duration : -1 } ?? NSNull(),
       "position": session?.position?.position ?? NSNull(),
       "audible": page?.isAudible ?? false, "muted": page?.isMuted ?? false, "modelMuted": tab.isMuted,
+      "volume": state.volume ?? NSNull(), "pageVolume": page?.mediaVolume ?? NSNull(),
       "capturing": (page?.isCapturingCamera ?? false) || (page?.isCapturingMicrophone ?? false),
       "source": source.map { s in ["kind": s.kind == .recording ? "recording" : "audioVideo", "playback": "\(s.playback)",
                                    "window": s.windowID.description, "pip": "\(s.pip)"] as [String: Any] } ?? NSNull(),
