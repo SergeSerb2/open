@@ -3677,6 +3677,22 @@ def peek_checks(factory, results, tmp):
         left = wait_until(lambda: not any(not t["exiting"] for t in app.call("toasts")["toasts"]), timeout=3, step=0.05)
         results["peek_closed_toast_undo"] = {"ok": bool(closed) and first.get("accessory") == "undo" and placed and frame[3] == 46
             and undone and bool(reopened) and bool(left), "toast": first, "panel": panel}
+        # Review #153: the pointer over "Peek closed" pauses it past the 5 s undo window; its Undo
+        # still brings the Peek back.
+        app.call("peek-close")
+        wait_until(lambda: not app.call("peek-state")["stack"], timeout=5, step=0.05)
+        app.call("peek-open", tab=source, url=fixture("Peek page"))
+        wait_until(lambda: app.call("peek-state")["shown"], timeout=5, step=0.05)
+        app.call("key", key="escape")
+        wait_until(lambda: not app.call("peek-state")["stack"], timeout=5, step=0.05)
+        wait_until(lambda: (lambda t: t if t["toasts"] and t["toasts"][0]["title"] == "Peek closed" else None)(app.call("toasts")), timeout=3, step=0.05)
+        hovered = app.call("toast-hover", index=0, inside=True)
+        time.sleep(6.5)
+        still = [t for t in app.call("toasts")["toasts"] if t["title"] == "Peek closed" and not t["exiting"]]
+        late_undo = app.call("toast-action", index=0) if still else False
+        late_reopened = wait_until(lambda: len(app.call("peek-state")["stack"]) == 1, timeout=5, step=0.05)
+        results["peek_closed_undo_while_hovered"] = {"ok": hovered and bool(still) and late_undo and bool(late_reopened),
+            "hovered": hovered, "shownAfter6s": bool(still), "reopened": bool(late_reopened)}
         app.call("peek-close")
     finally:
         app.quit()
