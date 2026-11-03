@@ -25,3 +25,5 @@ _cef_set_open_notification_handler
 _cef_get_displayed_notifications
 _cef_simulate_notification_click
 _cef_set_website_color_scheme
+# Open fork API (media-pip EM-1b/EM-2/EM-3/EM-5, cef/include/cef_media_controller.h)
+_cef_media_controller_get_for_browser

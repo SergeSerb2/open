@@ -280,7 +280,6 @@ typedef void (^OEDevToolsCompletion)(NSDictionary* _Nullable, NSError* _Nullable
   CefRefPtr<CefRegistration> _devToolsRegistration;
   NSMutableDictionary<NSNumber*, OEDevToolsCompletion>* _devToolsCallbacks;
   int _nextDevToolsId;
-  NSMutableSet<NSString*>* _audibleFrames;
   NSString* _lastFindString;
   BOOL _autoResize;
   // Page API (cef_open_page.h): selection flag and swipe options.
@@ -314,7 +313,6 @@ typedef void (^OEDevToolsCompletion)(NSDictionary* _Nullable, NSError* _Nullable
     _devToolsCallbacks = [NSMutableDictionary dictionary];
     _historySwipeEnabled = YES;
     _drawsEngineHistorySwipeOverlay = YES;
-    _audibleFrames = [NSMutableSet set];
     _client = OECreateClient(self);
     _view = [[OEWebContentView alloc] initWithFrame:NSMakeRect(0, 0, 800, 600)];
     _view.content = self;
@@ -615,6 +613,7 @@ typedef void (^OEDevToolsCompletion)(NSDictionary* _Nullable, NSError* _Nullable
   if (_muted) {
     browser->GetHost()->SetAudioMuted(true);
   }
+  [self oe_attachMedia:browser];
   // Selection changes and history swipe events (page-platform EP-1, EP-3).
   CefSetOpenPageHandler(browser, new OEPageHandler(self));
   if (!_historySwipeEnabled || !_drawsEngineHistorySwipeOverlay) {
@@ -658,7 +657,7 @@ typedef void (^OEDevToolsCompletion)(NSDictionary* _Nullable, NSError* _Nullable
   _chromeHost = nullptr;
   _adoptedBrowserView = nullptr;
   _closeRequested = YES;
-  [self oe_resetMedia];
+  [self oe_resetMediaDetaching:YES];
   [[OEEngine shared] oe_unregisterWebContent:self];
   [self oe_notify:OEWebContentChangeLive];
   _closingSelf = nil;
@@ -772,7 +771,6 @@ typedef void (^OEDevToolsCompletion)(NSDictionary* _Nullable, NSError* _Nullable
     return;
   }
   _URL = [url copy];
-  [_audibleFrames removeAllObjects];
   [self oe_notify:OEWebContentChangeURL];
 }
 
@@ -836,15 +834,9 @@ typedef void (^OEDevToolsCompletion)(NSDictionary* _Nullable, NSError* _Nullable
   [self oe_notify:OEWebContentChangeFullscreen];
 }
 
-- (void)oe_setAudible:(BOOL)audible frame:(NSString*)frameId {
-  if (audible) {
-    [_audibleFrames addObject:frameId];
-  } else {
-    [_audibleFrames removeObject:frameId];
-  }
-  BOOL now = _audibleFrames.count > 0;
-  if (now != _audible) {
-    _audible = now;
+- (void)oe_setAudible:(BOOL)audible {
+  if (audible != _audible) {
+    _audible = audible;
     [self oe_notify:OEWebContentChangeAudio];
   }
 }
@@ -855,7 +847,7 @@ typedef void (^OEDevToolsCompletion)(NSDictionary* _Nullable, NSError* _Nullable
   }
   _crashState = state;
   if (state != OEWebContentCrashStateNone) {
-    [self oe_resetMedia];
+    [self oe_resetMediaDetaching:NO];
   }
   [self oe_notify:OEWebContentChangeCrash];
 }
