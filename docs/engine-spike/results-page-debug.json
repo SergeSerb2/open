@@ -6,14 +6,14 @@
         "forced": false,
         "ok": true,
         "owned_pids": [
-          20947,
-          21016,
-          21017,
-          21018,
-          21019,
-          21022,
-          21023,
-          21211
+          20607,
+          20621,
+          20622,
+          20623,
+          20624,
+          20625,
+          20626,
+          20646
         ],
         "remaining_processes": [],
         "reply": true,
@@ -27,14 +27,34 @@
         "forced": false,
         "ok": true,
         "owned_pids": [
-          21360,
-          21383,
-          21384,
-          21385,
-          21386,
-          21387,
-          21388,
-          21413
+          20705,
+          20715,
+          20717,
+          20718,
+          20719,
+          20722,
+          20761
+        ],
+        "remaining_processes": [],
+        "reply": true,
+        "windows_after_quit": {
+          "count": 0,
+          "windows": []
+        },
+        "windows_before_quit": 1
+      },
+      {
+        "forced": false,
+        "ok": true,
+        "owned_pids": [
+          20786,
+          20808,
+          20809,
+          20810,
+          20811,
+          20813,
+          20814,
+          20861
         ],
         "remaining_processes": [],
         "reply": true,
@@ -48,18 +68,81 @@
   },
   "config": "Debug",
   "engine": {
-    "distributionCodeSHA256": "35b37ba3a72d079ed4e76fc7932bfe76e49b57c3456eda06f7fea9d928b901ae",
-    "distributionSHA256": "61c9ab17b6b08525af836cca93bba67819bfa1544f04abe5eae3baf4b57b98a8",
-    "distributionUUID": "4C4C44C8-5555-3144-A168-35B709BBDA3A",
-    "embeddedCodeSHA256": "35b37ba3a72d079ed4e76fc7932bfe76e49b57c3456eda06f7fea9d928b901ae",
-    "embeddedSHA256": "3e246c99539902496c44c4c6ed2533f3f4fd4a85f03b4f5e6dcaaf49f75f28d2",
-    "embeddedUUID": "4C4C44C8-5555-3144-A168-35B709BBDA3A",
+    "distributionCodeSHA256": "515f71a831da2938194ef5a52229f91835e220884d08a99946c223d524aa4abe",
+    "distributionSHA256": "a9937ab06318e2b719362476c0f40242b15991888cbb563cec1d5d69eea1423f",
+    "distributionUUID": "4C4C4431-5555-3144-A19A-66BC4F744D1F",
+    "embeddedCodeSHA256": "515f71a831da2938194ef5a52229f91835e220884d08a99946c223d524aa4abe",
+    "embeddedSHA256": "f89a285111ad4e02faf895528808abc783ed4726494fbb712148d1c13b8e03cb",
+    "embeddedUUID": "4C4C4431-5555-3144-A19A-66BC4F744D1F",
     "requiredSHA256": "",
     "source": "fork",
-    "stamp": "fork /Users/serge/Developer/open-engine-s8-main/chromium_git/chromium/src/cef/binary_distrib/cef_binary_156.0.14+g4fa4ab5+chromium-156.0.8078.48_macosarm64_minimal 1793075034"
+    "stamp": "fork /Users/serge/Developer/open-engine-s8-main/chromium_git/chromium/src/cef/binary_distrib/cef_binary_156.0.14+g4fa4ab5+chromium-156.0.8078.48_macosarm64_minimal 1793681464"
   },
   "interrupted_attempts": [],
   "page": {
+    "EP3_selection_change_bit": {
+      "changeEvents": 1,
+      "cleared": true,
+      "ok": true
+    },
+    "Q2_selection_and_link": {
+      "empty": {
+        "hasSelection": false,
+        "link": null,
+        "text": ""
+      },
+      "ok": true,
+      "opened": {
+        "hash": "",
+        "highlights": [],
+        "y": 0
+      },
+      "picked": {
+        "hasSelection": true,
+        "link": "http://127.0.0.1:56365/quote.html#:~:text=The%20quick%20brown%20fox%20studies%20the%20lazy%20dog%20before%20every%20jump.",
+        "text": "The quick brown fox studies the lazy dog before every jump.\n\n"
+      }
+    },
+    "SW1_swipe_back_forward": {
+      "back": [
+        "began",
+        "changed",
+        "changed",
+        "changed",
+        "changed",
+        "changed",
+        "completed"
+      ],
+      "forward": [
+        "began",
+        "changed",
+        "changed",
+        "changed",
+        "changed",
+        "changed",
+        "completed"
+      ],
+      "ok": true,
+      "urls": [
+        true,
+        true
+      ]
+    },
+    "SW2_partial_swipe_cancels": {
+      "ok": true,
+      "phases": [
+        "began",
+        "changed",
+        "changed",
+        "cancelled"
+      ],
+      "url": "http://127.0.0.1:56365/links-target.html"
+    },
+    "SW4_swipe_disabled": {
+      "events": 0,
+      "ok": true,
+      "ran": false
+    },
     "X1_apple_backend": {
       "reason": "U-X1: French \u2192 English is supported, not installed on this Mac",
       "status": "BLOCKED"
@@ -134,11 +217,11 @@
         ],
         "presented": true,
         "stacking": [
-          3,
-          4
+          5,
+          6
         ],
         "title": "Translate this page to English?",
-        "window": 161922
+        "window": 173329
       },
       "tipY": 802,
       "window": [
@@ -346,11 +429,11 @@
       "devicePixelRatio": 2,
       "ok": true,
       "row": {
-        "bytes": 4311,
-        "createdAt": 1793677077.6905441,
-        "fileName": "35B96877-CD44-410C-8F11-0A2167F3913C.png",
+        "bytes": 4312,
+        "createdAt": 1793681996.6249762,
+        "fileName": "5C86E180-E948-42BD-9CB3-ED36BCC898EC.png",
         "height": 400,
-        "id": "35B96877-CD44-410C-8F11-0A2167F3913C",
+        "id": "5C86E180-E948-42BD-9CB3-ED36BCC898EC",
         "kind": "area",
         "sourceHost": "127.0.0.1",
         "width": 600
@@ -449,10 +532,10 @@
       ],
       "row": {
         "bytes": 978563,
-        "createdAt": 1793677078.780858,
-        "fileName": "CD713146-83EE-4AE1-B93A-411C52D95B4E.png",
+        "createdAt": 1793681997.5262241,
+        "fileName": "A03CE2E3-4FAD-4102-8854-3F687EFF622C.png",
         "height": 24000,
-        "id": "CD713146-83EE-4AE1-B93A-411C52D95B4E",
+        "id": "A03CE2E3-4FAD-4102-8854-3F687EFF622C",
         "kind": "fullPage",
         "sourceHost": "127.0.0.1",
         "width": 2084
@@ -462,10 +545,10 @@
       "ok": true,
       "row": {
         "bytes": 162958,
-        "createdAt": 1793677082.548259,
-        "fileName": "BB21E24B-C586-4914-B907-6346537158AF.png",
+        "createdAt": 1793682000.77942,
+        "fileName": "4B5582D5-DEF5-49BA-9AC7-BF7F5D89C60A.png",
         "height": 3029,
-        "id": "BB21E24B-C586-4914-B907-6346537158AF",
+        "id": "4B5582D5-DEF5-49BA-9AC7-BF7F5D89C60A",
         "kind": "portrait",
         "sourceHost": "127.0.0.1",
         "width": 2423
@@ -498,10 +581,10 @@
       "ok": true,
       "row": {
         "bytes": 1270742,
-        "createdAt": 1793677081.088846,
-        "fileName": "6859AD18-8DBD-45CE-9CA2-20D9564478D3.png",
+        "createdAt": 1793681999.394987,
+        "fileName": "9AD22DD7-360F-4F8D-80BD-DE6217CC514B.png",
         "height": 32768,
-        "id": "6859AD18-8DBD-45CE-9CA2-20D9564478D3",
+        "id": "9AD22DD7-360F-4F8D-80BD-DE6217CC514B",
         "kind": "fullPage",
         "sourceHost": "127.0.0.1",
         "width": 2084
@@ -532,7 +615,7 @@
             780
           ],
           "paused": false,
-          "remaining": 7.99262741667917,
+          "remaining": 7.991420541657135,
           "savedLine": true
         },
         "completed": 7,
@@ -545,11 +628,11 @@
         "replays": 1,
         "result": {
           "bytes": 1270742,
-          "fileName": "Tall page 11-02 at 8.38PM.png",
+          "fileName": "Tall page 11-02 at 9.59PM.png",
           "height": 32768,
           "host": "127.0.0.1",
           "kind": "fullPage",
-          "saved": "6859AD18-8DBD-45CE-9CA2-20D9564478D3",
+          "saved": "9AD22DD7-360F-4F8D-80BD-DE6217CC514B",
           "truncated": true,
           "width": 2084
         }
@@ -559,11 +642,11 @@
       "ok": true,
       "row": [
         {
-          "bytes": 1662,
-          "createdAt": 1793677074.613755,
-          "fileName": "8CA74D86-5C9C-4262-91DF-8825FDDAFD66.png",
+          "bytes": 1663,
+          "createdAt": 1793681993.808442,
+          "fileName": "0F854F82-024F-4905-9499-E19849EB017A.png",
           "height": 200,
-          "id": "8CA74D86-5C9C-4262-91DF-8825FDDAFD66",
+          "id": "0F854F82-024F-4905-9499-E19849EB017A",
           "kind": "area",
           "sourceHost": "127.0.0.1",
           "width": 300
@@ -597,7 +680,7 @@
             780
           ],
           "paused": false,
-          "remaining": 7.990558374964166,
+          "remaining": 7.988559083431028,
           "savedLine": true
         },
         "completed": 1,
@@ -609,12 +692,12 @@
         "phase": "showing",
         "replays": 0,
         "result": {
-          "bytes": 1662,
-          "fileName": "Long page 11-02 at 8.37PM.png",
+          "bytes": 1663,
+          "fileName": "Long page 11-02 at 9.59PM.png",
           "height": 200,
           "host": "127.0.0.1",
           "kind": "area",
-          "saved": "8CA74D86-5C9C-4262-91DF-8825FDDAFD66",
+          "saved": "0F854F82-024F-4905-9499-E19849EB017A",
           "truncated": false,
           "width": 300
         }
@@ -765,10 +848,10 @@
       ],
       "row": {
         "bytes": 270568,
-        "createdAt": 1793677076.6495252,
-        "fileName": "1888FF91-7E35-425F-B71C-E1467277462D.png",
+        "createdAt": 1793681995.650998,
+        "fileName": "4AADBB06-C2B7-4B50-98C5-F98E3BB38F37.png",
         "height": 12000,
-        "id": "1888FF91-7E35-425F-B71C-E1467277462D",
+        "id": "4AADBB06-C2B7-4B50-98C5-F98E3BB38F37",
         "kind": "fullPage",
         "sourceHost": "127.0.0.1",
         "width": 1042
@@ -800,7 +883,7 @@
             780
           ],
           "paused": false,
-          "remaining": 7.986182916618418,
+          "remaining": 7.994419083348475,
           "savedLine": true
         },
         "completed": 3,
@@ -813,11 +896,11 @@
         "replays": 0,
         "result": {
           "bytes": 270568,
-          "fileName": "Long page 11-02 at 8.37PM.png",
+          "fileName": "Long page 11-02 at 9.59PM.png",
           "height": 12000,
           "host": "127.0.0.1",
           "kind": "fullPage",
-          "saved": "1888FF91-7E35-425F-B71C-E1467277462D",
+          "saved": "4AADBB06-C2B7-4B50-98C5-F98E3BB38F37",
           "truncated": false,
           "width": 1042
         }
@@ -827,10 +910,10 @@
       "ok": true,
       "row": {
         "bytes": 51314,
-        "createdAt": 1793677076.281476,
-        "fileName": "115ACB15-8D93-4DB1-A864-58CF5F68FFEC.png",
+        "createdAt": 1793681995.325032,
+        "fileName": "6E7D2BDD-B0AF-4AEB-8EFF-25AE2B71A298.png",
         "height": 1515,
-        "id": "115ACB15-8D93-4DB1-A864-58CF5F68FFEC",
+        "id": "6E7D2BDD-B0AF-4AEB-8EFF-25AE2B71A298",
         "kind": "portrait",
         "sourceHost": "127.0.0.1",
         "width": 1212
@@ -870,12 +953,12 @@
         "phase": "idle",
         "replays": 0,
         "result": {
-          "bytes": 1662,
-          "fileName": "Long page 11-02 at 8.37PM.png",
+          "bytes": 1663,
+          "fileName": "Long page 11-02 at 9.59PM.png",
           "height": 200,
           "host": "127.0.0.1",
           "kind": "area",
-          "saved": "8CA74D86-5C9C-4262-91DF-8825FDDAFD66",
+          "saved": "0F854F82-024F-4905-9499-E19849EB017A",
           "truncated": false,
           "width": 300
         }
@@ -884,11 +967,11 @@
     "capture_c5_drag": {
       "ok": true,
       "row": {
-        "bytes": 1224,
-        "createdAt": 1793677077.130313,
-        "fileName": "32C199C0-3384-4579-BBDC-C15281AD8993.png",
+        "bytes": 1225,
+        "createdAt": 1793681996.092979,
+        "fileName": "56558409-DA59-42C9-BED3-7E3282F14C54.png",
         "height": 160,
-        "id": "32C199C0-3384-4579-BBDC-C15281AD8993",
+        "id": "56558409-DA59-42C9-BED3-7E3282F14C54",
         "kind": "area",
         "sourceHost": "127.0.0.1",
         "width": 240
@@ -927,13 +1010,13 @@
         "canGoBack": false,
         "canGoForward": false,
         "crashed": false,
-        "createdAt": 1793677077.1831331,
+        "createdAt": 1793681996.145011,
         "favicon": false,
         "faviconReportsCompleted": 0,
         "faviconReportsRejected": 0,
         "hasWebContent": true,
-        "id": "75DA14C6-2A98-4053-933D-480C0F274DD9",
-        "lastActiveAt": 1793677077.185431,
+        "id": "66C923F7-E2E1-4140-B0AF-5DACD1A16BD4",
+        "lastActiveAt": 1793681996.14706,
         "loaded": true,
         "loading": false,
         "page": {
@@ -950,7 +1033,7 @@
           "favicon": false,
           "fullscreen": false,
           "hidden": false,
-          "hostTab": "75DA14C6-2A98-4053-933D-480C0F274DD9",
+          "hostTab": "66C923F7-E2E1-4140-B0AF-5DACD1A16BD4",
           "identifier": 2,
           "kind": "tab",
           "live": true,
@@ -965,21 +1048,21 @@
           "popup": false,
           "style": "alloy",
           "title": "Link target",
-          "url": "http://127.0.0.1:62772/links-target.html",
+          "url": "http://127.0.0.1:56292/links-target.html",
           "zoom": 0
         },
         "pinnedURL": "",
-        "profile": "1FFEAE03-5C59-4BA5-A6AD-D5A3365A4575",
+        "profile": "8AD005BC-1305-4C10-BB66-235C17B8DAC1",
         "progress": 1,
         "rowFaviconHash": "",
         "rowFaviconSource": "placeholder",
         "section": "today",
         "selected": true,
         "sleepPhase": "live",
-        "space": "FFDD2C61-75DD-461F-8588-4818B8891CD7",
+        "space": "4F022CD4-2F75-4F9E-813E-4D521A3A7186",
         "title": "Link target",
         "unread": false,
-        "url": "http://127.0.0.1:62772/links-target.html",
+        "url": "http://127.0.0.1:56292/links-target.html",
         "visible": true
       },
       "replays": 1
@@ -1012,7 +1095,7 @@
         "frame": "{{555, 409}, {370, 182}}",
         "key": true,
         "level": 0,
-        "number": 161910,
+        "number": 173313,
         "parent": 0,
         "sheet": true,
         "title": "Save",
@@ -1021,11 +1104,11 @@
     },
     "capture_card_lifetime": {
       "ok": true,
-      "paused": 7.7693035416305065,
-      "resumed": 7.7686713332659565,
+      "paused": 7.7856113750021905,
+      "resumed": 7.785035208333284,
       "scheduled": [
         8,
-        7.990558374964166
+        7.988559083431028
       ]
     },
     "capture_context_menu": {
@@ -1083,13 +1166,13 @@
     "capture_shortcut_hint": {
       "hintShows": 1,
       "ok": true,
-      "stored": 1793677075.9571152
+      "stored": 1793681995.01437
     },
     "capture_shortcut_hint_once": {
       "hintShows": 1,
       "ok": true
     }
   },
-  "started": "2026-11-02 20:37:43",
+  "started": "2026-11-02 21:59:48",
   "style": "alloy"
 }
