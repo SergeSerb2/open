@@ -1,0 +1,48 @@
+diff --git a/cef/libcef/browser/chrome/chrome_content_browser_client_cef.cc b/cef/libcef/browser/chrome/chrome_content_browser_client_cef.cc
+index f990219e7..e3ec0a8a2 100644
+--- a/cef/libcef/browser/chrome/chrome_content_browser_client_cef.cc
++++ b/cef/libcef/browser/chrome/chrome_content_browser_client_cef.cc
+@@ -61,6 +61,8 @@
+ #include "cef/libcef/common/util_mac.h"
+ #include "chrome/browser/child_process_host_flags.h"
+ #include "chrome/common/chrome_constants.h"
++#include "content/public/browser/overlay_window.h"
++#include "open/browser/media/open_media_hooks.h"
+ #endif
+ 
+ namespace {
+@@ -765,6 +767,18 @@ ChromeContentBrowserClientCef::user_blocking_task_runner() const {
+   return browser_main_parts_->user_blocking_task_runner();
+ }
+ 
++std::unique_ptr<content::VideoOverlayWindow>
++ChromeContentBrowserClientCef::CreateWindowForVideoPictureInPicture(
++    content::VideoPictureInPictureWindowController* controller) {
++#if BUILDFLAG(IS_MAC)
++  if (auto window = open_engine::MaybeCreateVideoOverlayWindow(controller)) {
++    return window;
++  }
++#endif
++  return ChromeContentBrowserClient::CreateWindowForVideoPictureInPicture(
++      controller);
++}
++
+ #if !BUILDFLAG(IS_MAC)
+ // Defined in a separate .mm file on MacOS to work around
+ // ChromeWebContentsViewDelegateViewsMac containing ObjC references.
+diff --git a/cef/libcef/browser/chrome/chrome_content_browser_client_cef.h b/cef/libcef/browser/chrome/chrome_content_browser_client_cef.h
+index c7dc8039c..a9a8aaffd 100644
+--- a/cef/libcef/browser/chrome/chrome_content_browser_client_cef.h
++++ b/cef/libcef/browser/chrome/chrome_content_browser_client_cef.h
+@@ -148,6 +148,11 @@ class ChromeContentBrowserClientCef : public ChromeContentBrowserClient {
+       mojo::BinderMapWithContext<content::RenderFrameHost*>* map) override;
+   std::unique_ptr<content::WebContentsViewDelegate> GetWebContentsViewDelegate(
+       content::WebContents* web_contents) override;
++  // Open (media-pip EM-4): video Picture in Picture in the embedder's own
++  // window when its media handler hosts it (open/browser/media/).
++  std::unique_ptr<content::VideoOverlayWindow>
++  CreateWindowForVideoPictureInPicture(
++      content::VideoPictureInPictureWindowController* controller) override;
+ 
+   CefRefPtr<CefRequestContextImpl> request_context() const;
+ 

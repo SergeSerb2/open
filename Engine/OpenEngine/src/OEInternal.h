@@ -155,6 +155,25 @@ class OEClient;
 - (void)oe_resetMediaDetaching:(BOOL)detach;
 @end
 
+@interface OEMediaPosition ()
+/// A "position" dictionary of the fork's media or Picture in Picture state.
+- (instancetype)initOEWithDictionary:(CefRefPtr<CefDictionaryValue>)position;
+@end
+
+/// OEPictureInPicture.mm (media-pip EM-4): Open's own Picture in Picture
+/// window. The media handler (OEMediaSession.mm) forwards these.
+@interface OEPictureInPicture ()
+/// True when the App shows video Picture in Picture itself (a delegate is
+/// set): CefMediaControllerHandler::ShouldHostPictureInPicture.
++ (BOOL)oe_shellHostsPictureInPicture;
+@end
+
+@interface OEWebContent (OEPictureInPictureInternal)
+- (void)oe_pictureInPictureOpened:(CefRefPtr<CefPictureInPictureWindow>)window;
+- (void)oe_pictureInPictureChanged;
+- (void)oe_pictureInPictureClosed;
+@end
+
 @interface OEContextMenuItem ()
 /// From CefTabStrip::GetExtensionActionMenu (fork patch P2).
 - (instancetype)initOEWithDictionary:(CefRefPtr<CefDictionaryValue>)item;

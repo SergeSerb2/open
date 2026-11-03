@@ -50,6 +50,25 @@ class OEMediaHandler : public CefMediaControllerHandler {
   void OnMediaStateChanged(CefRefPtr<CefBrowser> browser) override {
     [content_ oe_mediaStateChanged];
   }
+  // EM-4 (OEPictureInPicture.mm).
+  bool ShouldHostPictureInPicture(CefRefPtr<CefBrowser> browser) override {
+    return content_ && [OEPictureInPicture oe_shellHostsPictureInPicture];
+  }
+  void OnPictureInPictureOpened(
+      CefRefPtr<CefBrowser> browser,
+      CefRefPtr<CefPictureInPictureWindow> window) override {
+    [content_ oe_pictureInPictureOpened:window];
+  }
+  void OnPictureInPictureChanged(
+      CefRefPtr<CefBrowser> browser,
+      CefRefPtr<CefPictureInPictureWindow> window) override {
+    [content_ oe_pictureInPictureChanged];
+  }
+  void OnPictureInPictureClosed(
+      CefRefPtr<CefBrowser> browser,
+      CefRefPtr<CefPictureInPictureWindow> window) override {
+    [content_ oe_pictureInPictureClosed];
+  }
 
  private:
   __weak OEWebContent* content_;

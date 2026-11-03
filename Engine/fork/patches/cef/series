@@ -5,3 +5,4 @@
 0304-open-extension-popups.patch  # P2: extension action popups get a CEF browser host (ChromeBrowserDelegate friend)
 0310-open-adblock-service-owner.patch  # Ad-block: CefBrowserContext owns open_engine::OpenAdBlockService (none after Shutdown); selftest switches only without OFFICIAL_BUILD (adblock-fork §6.1, §13.1; review 100-3, 100-6)
 0314-open-adblock-cefsimple-smoke.patch  # Ad-block, test only: cefsimple opens no window in --open-adblock-selftest mode (adblock-fork §13.1); keep last
+0401-open-media-hooks.patch  # Media EM-4 (media-pip §6): ChromeContentBrowserClientCef::CreateWindowForVideoPictureInPicture returns Open's window (open/browser/media/open_video_overlay_window.mm) when the page's media handler hosts video Picture in Picture; otherwise Chromium's window. No file overlap with 0314
