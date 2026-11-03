@@ -81,6 +81,11 @@ extension AutomationController {
       // The volume drawer opens only on an expanded card (a pointer over the card expands it).
       if ["title", "pip", "close", "volume", "volumeLow", "volumeHigh", "slider"].contains(target) && !card.isExpanded {
         let center = point(of: card, in: window)
+        // A pointer that comes from elsewhere, as a real one does: an earlier hover may have left the stack
+        // "entered" (the card collapsed under it since, for example when a PiP window took over), and a
+        // hover at the same place then delivers no new mouseEntered.
+        _ = try await mouse(["action": "hover", "x": Double(window.frame.width) - 20, "y": Double(window.frame.height) / 2,
+                             "window": window.windowNumber], factory)
         _ = try await mouse(["action": "hover", "x": center.x, "y": center.y, "window": window.windowNumber], factory)
         let deadline = ContinuousClock.now.advanced(by: .seconds(2))
         while !card.isExpanded || card.layer?.animationKeys()?.isEmpty == false || control()?.isHiddenOrHasHiddenAncestor != false {
