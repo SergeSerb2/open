@@ -14,10 +14,23 @@ class VideoPictureInPictureWindowController;
 
 namespace open_engine {
 
-// Fork hook (Engine/fork/patches/cef/0401-open-media-hooks.patch, called from
-// ChromeContentBrowserClientCef::CreateWindowForVideoPictureInPicture): Open's
-// window (OpenVideoOverlayWindow, EM-4) when the page's media handler hosts
-// video Picture in Picture itself, nullptr for Chromium's own window.
+// Fork hooks for Chrome code (Engine/fork/patches/chromium/0402-open-video-
+// pip-window.patch). Chrome's targets do not link against Open's sources, so
+// the overlay fills these in (OpenMediaController::GetOrCreate, before any
+// page can enter Picture in Picture).
+struct MediaHooks {
+  // Open's window (OpenVideoOverlayWindow, EM-4) when the page's media handler
+  // hosts video Picture in Picture itself, nullptr for Chromium's own window.
+  std::unique_ptr<content::VideoOverlayWindow> (*create_video_overlay_window)(
+      content::VideoPictureInPictureWindowController* controller) = nullptr;
+};
+
+inline MediaHooks& GetMediaHooks() {
+  static MediaHooks hooks;
+  return hooks;
+}
+
+// The overlay's implementation of create_video_overlay_window.
 std::unique_ptr<content::VideoOverlayWindow> MaybeCreateVideoOverlayWindow(
     content::VideoPictureInPictureWindowController* controller);
 

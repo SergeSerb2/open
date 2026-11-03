@@ -18,7 +18,5 @@ paths: cef/libcef/browser/chrome/chrome_browser_delegate.h
 paths: cef/libcef/browser/browser_context.h cef/libcef/browser/browser_context.cc
 # 0314-open-adblock-cefsimple-smoke.patch
 paths: cef/tests/cefsimple/simple_app.cc
-# 0401-open-media-hooks.patch
-paths: cef/libcef/browser/chrome/chrome_content_browser_client_cef.h cef/libcef/browser/chrome/chrome_content_browser_client_cef.cc
 # 0505-page-website-color-scheme.patch
 paths: cef/libcef/browser/chrome/chrome_content_browser_client_cef.cc cef/libcef/browser/chrome/chrome_content_browser_client_cef.h
