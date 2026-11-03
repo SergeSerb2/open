@@ -1,5 +1,7 @@
 #import "OEClient.h"
 
+#import <ImageIO/ImageIO.h>
+
 #include "include/cef_parser.h"
 
 #pragma mark - OEWebContentConfiguration
@@ -927,6 +929,233 @@ typedef void (^OEDevToolsCompletion)(NSDictionary* _Nullable, NSError* _Nullable
                                                                 options:0]
                           : nil;
                   done(png, png ? nil : error);
+                }];
+}
+
+#pragma mark Full-page capture (EP-8)
+
+/// Largest tile edge and output width in device pixels. Tiles stay under the
+/// GPU texture size every Mac supports; the stitched bitmap is at most
+/// 4,096 × maxDevicePixels × 4 bytes (512 MiB at the 32,768 px cap).
+static const NSInteger kOECaptureTilePixels = 4096;
+
+static NSError* OECaptureError(NSString* message) {
+  return [NSError errorWithDomain:OEErrorDomain
+                             code:OEErrorDevToolsFailure
+                         userInfo:@{NSLocalizedDescriptionKey : message}];
+}
+
+/// Decodes the tiles, draws them top to bottom, and encodes one PNG. Runs on
+/// a utility queue: only NSData crosses threads.
+static NSData* OEStitchTiles(NSArray<NSData*>* tiles, NSError** error) {
+  NSMutableArray* images = [NSMutableArray array];
+  size_t width = 0, height = 0;
+  for (NSData* tile in tiles) {
+    CGImageSourceRef source =
+        CGImageSourceCreateWithData((__bridge CFDataRef)tile, nullptr);
+    CGImageRef image =
+        source ? CGImageSourceCreateImageAtIndex(source, 0, nullptr) : nullptr;
+    if (source) {
+      CFRelease(source);
+    }
+    if (!image) {
+      *error = OECaptureError(@"Unable to read a full page tile.");
+      return nil;
+    }
+    width = MAX(width, CGImageGetWidth(image));
+    height += CGImageGetHeight(image);
+    [images addObject:(__bridge_transfer id)image];
+  }
+  if (width == 0 || height == 0 || width > (size_t)kOECaptureTilePixels * 2) {
+    *error = OECaptureError(@"The full page capture is empty or too wide.");
+    return nil;
+  }
+  CGColorSpaceRef space = CGColorSpaceCreateWithName(kCGColorSpaceSRGB);
+  CGContextRef context = CGBitmapContextCreate(
+      nullptr, width, height, 8, 0, space,
+      (CGBitmapInfo)kCGImageAlphaPremultipliedLast);
+  CGColorSpaceRelease(space);
+  if (!context) {
+    *error = OECaptureError(@"Unable to allocate the full page image.");
+    return nil;
+  }
+  CGContextSetRGBFillColor(context, 1, 1, 1, 1);
+  CGContextFillRect(context, CGRectMake(0, 0, width, height));
+  // Core Graphics is bottom-up: the first tile goes at the top.
+  CGFloat top = height;
+  for (id object in images) {
+    CGImageRef image = (__bridge CGImageRef)object;
+    CGFloat h = CGImageGetHeight(image);
+    top -= h;
+    CGContextDrawImage(context,
+                       CGRectMake(0, top, CGImageGetWidth(image), h), image);
+  }
+  CGImageRef stitched = CGBitmapContextCreateImage(context);
+  CGContextRelease(context);
+  [images removeAllObjects];
+  if (!stitched) {
+    *error = OECaptureError(@"Unable to draw the full page image.");
+    return nil;
+  }
+  NSMutableData* png = [NSMutableData data];
+  CGImageDestinationRef destination = CGImageDestinationCreateWithData(
+      (__bridge CFMutableDataRef)png,
+      CFSTR("public.png"), 1, nullptr);
+  BOOL ok = NO;
+  if (destination) {
+    CGImageDestinationAddImage(destination, stitched, nullptr);
+    ok = CGImageDestinationFinalize(destination);
+    CFRelease(destination);
+  }
+  CGImageRelease(stitched);
+  if (!ok) {
+    *error = OECaptureError(@"Unable to encode the full page image.");
+    return nil;
+  }
+  return png;
+}
+
+/// Pixel width from a PNG's header (0 when it is not one).
+static double OEPNGPixelWidth(NSData* png) {
+  if (!png.length) {
+    return 0;
+  }
+  CGImageSourceRef source =
+      CGImageSourceCreateWithData((__bridge CFDataRef)png, nullptr);
+  if (!source) {
+    return 0;
+  }
+  NSDictionary* properties = CFBridgingRelease(
+      CGImageSourceCopyPropertiesAtIndex(source, 0, nullptr));
+  CFRelease(source);
+  return [properties[(__bridge NSString*)kCGImagePropertyPixelWidth]
+      doubleValue];
+}
+
+- (void)captureFullPageWithMaxDevicePixels:(NSInteger)maxDevicePixels
+                                completion:(void (^)(NSData* _Nullable, BOOL,
+                                                     NSError* _Nullable))
+                                               completion {
+  void (^done)(NSData*, BOOL, NSError*) = [completion copy];
+  if (!_browser) {
+    done(nil, NO,
+         [NSError errorWithDomain:OEErrorDomain
+                             code:OEErrorWebContentClosed
+                         userInfo:nil]);
+    return;
+  }
+  // The device scale the screenshots come out at: one visible-page shot's
+  // pixel width over the view's width in points. It follows the window's
+  // backing scale and DevTools device emulation alike; the layout metrics
+  // do not (`contentSize` stays in CSS pixels on the Mac, even under
+  // emulation). Fallback: the window's, else the main screen's, backing scale.
+  CGFloat fallbackScale = self.view.window.backingScaleFactor
+                              ?: NSScreen.mainScreen.backingScaleFactor ?: 2;
+  CGFloat viewWidth = self.view.bounds.size.width;
+  __weak OEWebContent* weakSelf = self;
+  [self takeSnapshotWithCompletion:^(NSData* shot, NSError* shotError) {
+    OEWebContent* strongSelf = weakSelf;
+    if (!strongSelf) {
+      done(nil, NO, shotError ?: OECaptureError(@"The page closed."));
+      return;
+    }
+    double measured = viewWidth > 0 ? OEPNGPixelWidth(shot) / viewWidth : 0;
+    double scale = isfinite(measured) && measured >= 0.5 && measured <= 8
+                       ? round(measured * 100) / 100
+                       : fallbackScale;
+    [strongSelf oe_captureFullPageAtScale:scale
+                         maxDevicePixels:maxDevicePixels
+                              completion:done];
+  }];
+}
+
+- (void)oe_captureFullPageAtScale:(double)scale
+                  maxDevicePixels:(NSInteger)maxDevicePixels
+                       completion:(void (^)(NSData*, BOOL, NSError*))done {
+  __weak OEWebContent* weakSelf = self;
+  [self sendDevToolsMethod:@"Page.getLayoutMetrics"
+                parameters:nil
+                completion:^(NSDictionary* metrics, NSError* error) {
+                  OEWebContent* strongSelf = weakSelf;
+                  NSDictionary* size = metrics[@"cssContentSize"];
+                  double contentWidth = [size[@"width"] doubleValue];
+                  double contentHeight = [size[@"height"] doubleValue];
+                  if (!strongSelf || error || contentWidth < 1 ||
+                      contentHeight < 1) {
+                    done(nil, NO,
+                         error ?: OECaptureError(
+                                      @"The page has no size to capture."));
+                    return;
+                  }
+                  double tile = floor(kOECaptureTilePixels / scale);
+                  double width = MIN(ceil(contentWidth), tile);
+                  double cap = floor(MAX(maxDevicePixels, 1) / scale);
+                  double height = MIN(ceil(contentHeight), cap);
+                  [strongSelf oe_captureTilesFrom:0
+                                            width:width
+                                           height:height
+                                             tile:tile
+                                            tiles:[NSMutableArray array]
+                                        truncated:ceil(contentHeight) > cap
+                                       completion:done];
+                }];
+}
+
+/// One tile at a time (each capture resizes the widget temporarily), CSS
+/// pixels in document coordinates.
+- (void)oe_captureTilesFrom:(double)y
+                      width:(double)width
+                     height:(double)height
+                       tile:(double)tile
+                      tiles:(NSMutableArray<NSData*>*)tiles
+                  truncated:(BOOL)truncated
+                 completion:(void (^)(NSData*, BOOL, NSError*))done {
+  if (y >= height) {
+    dispatch_async(dispatch_get_global_queue(QOS_CLASS_UTILITY, 0), ^{
+      NSError* error = nil;
+      NSData* png = OEStitchTiles(tiles, &error);
+      dispatch_async(dispatch_get_main_queue(), ^{
+        done(png, truncated, png ? nil : error);
+      });
+    });
+    return;
+  }
+  double h = MIN(tile, height - y);
+  __weak OEWebContent* weakSelf = self;
+  [self sendDevToolsMethod:@"Page.captureScreenshot"
+                parameters:@{
+                  @"format" : @"png",
+                  @"fromSurface" : @YES,
+                  @"captureBeyondViewport" : @YES,
+                  @"clip" : @{
+                    @"x" : @0,
+                    @"y" : @(y),
+                    @"width" : @(width),
+                    @"height" : @(h),
+                    @"scale" : @1
+                  },
+                }
+                completion:^(NSDictionary* result, NSError* error) {
+                  OEWebContent* strongSelf = weakSelf;
+                  NSString* b64 = result[@"data"];
+                  NSData* png = b64 ? [[NSData alloc]
+                                          initWithBase64EncodedString:b64
+                                                              options:0]
+                                    : nil;
+                  if (!strongSelf || !png) {
+                    done(nil, NO,
+                         error ?: OECaptureError(
+                                     @"A full page tile could not be captured."));
+                    return;
+                  }
+                  [tiles addObject:png];
+                  [strongSelf oe_captureTilesFrom:y + h
+                                            width:width
+                                           height:height
+                                             tile:tile
+                                            tiles:tiles
+                                        truncated:truncated
+                                       completion:done];
                 }];
 }
 

@@ -9,6 +9,15 @@ extension OEWebContent: @retroactive WebContent {
   public var faviconPNG: Data? { favicon.flatMap(EngineWebContentHostFactory.pngData) }
   public var isCrashed: Bool { crashState != .none }
   public func snapshotPNG() async throws -> Data { try await takeSnapshot() }
+  /// EP-8 (page-platform §6): OpenEngine's tiled DevTools capture.
+  public func fullPagePNG(maxDevicePixels: Int) async throws -> FullPagePNG {
+    try await withCheckedThrowingContinuation { (continuation: CheckedContinuation<FullPagePNG, any Error>) in
+      captureFullPage(maxDevicePixels: maxDevicePixels) { png, truncated, error in
+        if let png { continuation.resume(returning: FullPagePNG(data: png, truncated: truncated)) }
+        else { continuation.resume(throwing: error ?? CocoaError(.fileReadUnknown)) }
+      }
+    }
+  }
 }
 
 /// OpenWeb.WebProfile over one OEBrowserContext.

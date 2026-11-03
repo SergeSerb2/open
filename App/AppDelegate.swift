@@ -41,6 +41,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, OEEngineDelegate, OEBr
   private var sleepQuitTask: Task<Void, Never>?
   private var sleepQuitCaptured = false
   lazy var settingsPresenter = AppSettingsActions(app: self)
+  /// Library ▸ Captures writer (page-platform §4.6.6); one per app, shared by every window.
+  lazy var captureLibrary = CaptureLibraryWriter(app: self, root: directories.root)
   var keyBindings = KeyBindingStore.empty
   let fallbackKeyboard = KeyboardRouter()
   var commandServicesPrepared = false

@@ -1,5 +1,6 @@
 import AppKit
 import OpenModel
+import OpenWeb
 
 public struct WebContentLiveState: Sendable {
     public var isLoading: Bool
@@ -50,6 +51,16 @@ public protocol WebContentHost: AnyObject {
 
 public extension WebContentHost {
     var liveState: WebContentLiveState { WebContentLiveState(isLoading: isLoading, canGoBack: canGoBack, canGoForward: canGoForward) }
+}
+
+/// The page behind a host, for capture, selection, and translation (page-platform §3.2).
+/// A separate protocol so render fakes and every existing host keep compiling; the App's
+/// engine host conforms.
+@MainActor
+public protocol WebContentProviding: AnyObject {
+    var webContent: (any WebContent)? { get }
+    /// The page runs in an in-memory (incognito) context: captures are not saved (§4.6.1).
+    var isPrivateBrowsing: Bool { get }
 }
 
 @MainActor
