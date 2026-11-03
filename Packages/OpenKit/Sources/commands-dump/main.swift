@@ -207,6 +207,40 @@ MainActor.assumeIsolated {
     if staticTitle != "Show/Hide Toolbar" { fail("a dispatcher without menuTitle changed the static title: \(staticTitle ?? "-")") }
     if shown != "Show Toolbar" || hidden != "Hide Toolbar" || sidebar != "Show Sidebar" { fail("menuTitle hook did not rename the View items") }
 
+    // 6. Runtime menu state (page-platform §7.1): a dispatcher's `menuState(for:)` sets the title,
+    // the checkmark, and hidden when the menu validates; a hidden item is also disabled.
+    print("== Runtime menu state ==")
+    @MainActor final class StateDispatcher: CommandDispatcher {
+        var states: [String: CommandMenuState] = [:]
+        func performCommand(_ id: String) {}
+        func menuState(for id: String) -> CommandMenuState? { states[id] }
+    }
+    @MainActor func validated(_ id: String, in built: NSMenu) -> (title: String, state: NSControl.StateValue, hidden: Bool, enabled: Bool)? {
+        @MainActor func find(_ m: NSMenu) -> NSMenuItem? {
+            for i in m.items {
+                if (i.representedObject as? [String: String])?["command"] == id { return i }
+                if let sub = i.submenu, let hit = find(sub) { return hit }
+            }
+            return nil
+        }
+        guard let item = find(built), let target = item.target as? NSMenuItemValidation else { return nil }
+        let enabled = target.validateMenuItem(item)
+        return (item.title, item.state, item.isHidden, enabled)
+    }
+    let stateful = StateDispatcher()
+    let stateMenu = MenuBuilder.buildMainMenu(dispatcher: stateful, spaces: spaces, tabs: tabs)
+    let plain = validated("appearance-dark", in: stateMenu)
+    stateful.states = ["appearance-dark": CommandMenuState(isChecked: true), "cast": CommandMenuState(isHidden: true),
+                       "toggle-developer-mode": CommandMenuState(title: "Turn on Developer Mode for this site")]
+    let checked = validated("appearance-dark", in: stateMenu), cast = validated("cast", in: stateMenu)
+    let renamed = validated("toggle-developer-mode", in: stateMenu)
+    stateful.states["appearance-dark"] = CommandMenuState(isChecked: false); stateful.states["cast"] = CommandMenuState(isHidden: false)
+    let unchecked = validated("appearance-dark", in: stateMenu), shownCast = validated("cast", in: stateMenu)
+    print("  appearance-dark: plain=\(plain?.state == .on ? "on" : "off") checked=\(checked?.state == .on ? "on" : "off") unchecked=\(unchecked?.state == .on ? "on" : "off"); cast hidden=\(cast?.hidden == true) enabled=\(cast?.enabled == true) shownAgain=\(shownCast?.hidden == false); developer title=\(renamed?.title ?? "-")")
+    if plain?.state != .off || checked?.state != .on || unchecked?.state != .off { fail("menuState checkmark was not applied") }
+    if cast?.hidden != true || cast?.enabled != false || shownCast?.hidden != false || shownCast?.enabled != true { fail("menuState hidden was not applied or a hidden item stayed enabled") }
+    if renamed?.title != "Turn on Developer Mode for this site" { fail("menuState title was not applied") }
+
     print(failures == 0 ? "commands-dump OK" : "commands-dump FAILED: \(failures) problem(s)")
 }
 

@@ -161,6 +161,18 @@ import OpenWeb
     let captureWithoutControls = ItemID()
     protection.update(tabID: captureWithoutControls, windowID: window, state: uncontrollable, isMuted: false, isCapturing: true)
     check("uncontrollable recording session has no card", protection.visibleSources(windowID: window, displayed: []).isEmpty && protection.sleepProtectedTabIDs(windowID: window, displayed: []).contains(captureWithoutControls))
+    // Step 8 (PP-19): a meeting page plays remote audio through MediaStream players, so it is never
+    // controllable; with microphone and camera toggles it still gets a recording card.
+    let meeting = ItemID()
+    var meetingState = video; meetingState.isControllable = false; meetingState.playback = .playing
+    meetingState.actions = [.toggleMicrophone, .toggleCamera, .hangUp]; meetingState.microphoneMuted = true; meetingState.cameraOn = true
+    protection.update(tabID: meeting, windowID: window, state: meetingState, isMuted: false, isCapturing: true)
+    let meetingCard = protection.visibleSources(windowID: window, displayed: []).first
+    check("uncontrollable meeting with toggles has a recording card", meetingCard?.tabID == meeting && meetingCard?.kind == .recording
+        && meetingCard?.microphoneOn == false && meetingCard?.cameraOn == true && protection.sleepProtectedTabIDs(windowID: window, displayed: []).contains(meeting))
+    protection.update(tabID: meeting, windowID: window, state: meetingState, isMuted: false, isCapturing: false)
+    check("meeting card leaves when capture stops", protection.visibleSources(windowID: window, displayed: []).isEmpty)
+    protection.remove(tabID: meeting)
     now.addTimeInterval(3600); await protectionScheduler.waitForFire()
     check("uncontrollable paused expires at 60 min", protectionScheduler.firedCount == 1 && protection.sleepProtectedTabIDs(windowID: window, displayed: []).isEmpty && protection.visibleSources(windowID: window, displayed: []).isEmpty)
 

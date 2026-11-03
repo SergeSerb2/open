@@ -129,7 +129,7 @@ Arguments are `key=value`; values that parse as JSON are sent as JSON.
 | `archive` | — | Recent real archive rows for the focused profile |
 | `window-frame` | `frame` `[x, y, w, h]`, `unconstrained` | Move/resize the main window; `unconstrained: true` keeps the exact frame even past the screen (capture-size comparisons on a smaller display) |
 | `snapshot` | `path`, `window` or `tab` | PNG of one of Open's windows (default: the main window), or of one page |
-| `policy` | `dialogs`, `prompt`, `permissions`, `contextMenu`, `fullscreen` | Answer JS dialogs (`accept`/`dismiss`/`hold`), permissions (`grant`/`deny`), record context menus (`record`: the event lists `items` and `commands` with ids, titles, submenus) or run one command (`run:<id>`, after the right click returns), keep the window size on page fullscreen |
+| `policy` | `dialogs`, `prompt`, `permissions`, `contextMenu`, `fullscreen` | Answer JS dialogs (`accept`/`dismiss`/`hold`), permissions (`grant`/`deny`), record context menus (`record`: the event lists `items` and `commands` with ids, titles, submenus, and `openItems`, the titles of the menu Open would show, its own items included) or run one command (`run:<id>`, after the right click returns) or one of Open's own items by title (`run-open:<title>`), keep the window size on page fullscreen |
 | `dialog` | `accept`, `text` | Complete a held dialog |
 | `events` | — | Drain the event log: `change`, `load`, `loadError`, `open`, `dialog`, `permission`, `contextMenu`, `fullscreen`, `download`, `console`, `devtools`, `extensionPopup`, `tab-request` and `window-request` (P1 requests from Chromium, with `refused` when the shell said no) |
 | `script-add` / `script-remove` | `id`, `source`, `css`, `end`, `matches`, `allFrames` | Boost-style user scripts (through the OpenWeb `WebProfile` protocol) |
@@ -141,6 +141,7 @@ Arguments are `key=value`; values that parse as JSON are sent as JSON.
 | `startup` | — | Actual sidebar class, visible window count, page count and context count recorded before engine start |
 | `host-counts` | — | Cumulative tab host creations, retained tab hosts, and engine web-content count |
 | `sidebar-unload` | `tab` | Production sidebar unload intent without selecting the row |
+| `translate` | `action`: `state` (default), `offer`, `translate`, `revert`, `never`, `choose` (+ `target`), `settings`, `dismiss`, `reset`, `detect` (+ `text`), `availability` (+ `source`, `target`) | Page translation of the focused tab (page-platform §8.3). `state`: session state (`idle`/`offered`/`translating`/`translated`/`failed` + `reason`), source/target language codes, host, backend (`apple`/`fixture`), batches applied, `pulls` (answers of the runtime's `nextBatch()`), fallback units, sticky host, probed/loaded document counters, the status button (`shown`, `title`, `frame`), the popover (`presented`, `title`, `buttons`, `error`, `frame`, `window`), recent toasts, `neverTranslateHosts`, and the undo action name. `offer` presses the real status button; `translate`/`revert`/`never`/`choose`/`settings` press the popover's real buttons and menu items (opening it through the status button first). `reset` runs Settings ▸ Advanced "Reset Translated-site Prompts". `detect` runs `PageLanguageDetector` on a text. `availability` asks Apple's `LanguageAvailability`. Launch with `OPEN_AUTOMATION_TRANSLATE_BACKEND=fixture` for the fixed French → English backend (automation builds only; no network, no language assets) |
 | `save` | — | Write the snapshot now; returns its path |
 | `quit` | — | Quit Open normally |
 
@@ -166,6 +167,7 @@ Arguments are `key=value`; values that parse as JSON are sent as JSON.
 /usr/bin/lockf /tmp/open-onscreen-e2e.lock python3 tools/e2e/engine_e2e.py --only extensions --style alloy    # needs .re/ext/unpacked/*
 /usr/bin/lockf /tmp/open-onscreen-e2e.lock python3 tools/e2e/engine_e2e.py --only extensions --style chrome
 /usr/bin/lockf /tmp/open-onscreen-e2e.lock python3 tools/e2e/engine_e2e.py --only tabstrip --style chrome     # fork patch P1: chrome.tabs sees Open's tabs
+/usr/bin/lockf /tmp/open-onscreen-e2e.lock python3 tools/e2e/engine_e2e.py --only page                       # page-platform §8.3: capture C1–C7, then translation X1–X6
 /usr/bin/lockf /tmp/open-onscreen-e2e.lock python3 tools/e2e/engine_e2e.py --only actions --style chrome      # fork patch P2: toolbar actions and popups
 /usr/bin/lockf /tmp/open-onscreen-e2e.lock python3 tools/e2e/engine_e2e.py --only media --style chrome        # media-pip §8.4: mini players, auto-PiP, Now Playing, sleep feed
 /usr/bin/lockf /tmp/open-onscreen-e2e.lock python3 tools/e2e/engine_e2e.py --only sleep --style chrome        # app-shell Step G: tab sleep, memory-fork §11 F0–F5
@@ -382,8 +384,8 @@ Commands in `App/Automation/AutomationMedia.swift`. `tab` is a tab UUID.
 |---|---|---|
 | `media` | `tab` | The page's media session as the App sees it (`playback`, `controllable`, `hasVideo`, `hasAudio`, `largestVideoArea`, `pictureInPicture`, `pictureInPictureDisabled`, `actions`, `title`/`artist`/`album`, `duration`, `position`), `audible`, `muted` (engine), `modelMuted`, `capturing`, the store `source`, and the last auto-PiP `decision` (value and system-uptime time). |
 | `media-action` | `tab`, `action` (`play`, `pause`, `next`, `previous`, `toggle-mute`, `close`, `back-to-tab`, `pip`, `seek` + `value`, `volume` + `value`, `exit-pip` [+ `pause`]); or `action` `mute-all` / `unmute-all` without `tab` | Runs the same `MediaIntent` (or App command) path as the mini player and the command bar. |
-| `mini-players` | `window` (window id, default front) | `cards` in order (tab, kind, playback, pip, expanded, level, frame and shown buttons with frames in window coordinates, top-left origin), `expanded`, `stackHeight`, `displayed`, `pendingCollapse`. |
-| `media-click` | `window`, `tab`, `target` (`title`, `play`, `next`, `previous`, `volume`, `pip`, `close`, `favicon`, `microphone`, `camera`) | Clicks the real card control through `mouse` events built inside Open. Title-row targets hover the card first (`mouse` `hover`) and wait for the expanded stack. |
+| `mini-players` | `window` (window id, default front) | `cards` in order (tab, kind, playback, pip, expanded, level, frame and shown buttons with frames in window coordinates, top-left origin; `drawerOpen`, `height`, the shown volume `slider` value such as `"25%"` or null, the source's `volume`, `microphoneOn`, `cameraOn`), `expanded`, `stackHeight`, `displayed`, `pendingCollapse`, `animations`. |
+| `media-click` | `window`, `tab`, `target` (`title`, `play`, `next`, `previous`, `volume`, `pip`, `close`, `favicon`, `microphone`, `camera`, and the volume drawer's `volumeLow`, `volumeHigh`, `slider`), `fraction` (slider only, 0…1 of the knob's travel, default 0.5) | Clicks the real card control through `mouse` events built inside Open. Title-row and volume targets hover the card first (`mouse` `hover`) and wait for the expanded stack. `slider` sends a press and a release at `fraction` and returns the slider's new `value`. |
 | `pip` | — | Session `state` (`idle`, `requesting`, `active`, `minimized`, `closed` + `reason`), `tab`, `automatic`, `snoozed`, `requests`, `requestedAt`/`enteredAt` (system uptime), `now`, and the visible PiP windows (phase 1: Chromium's `NativeWidgetMacFramelessNSWindow`, number, frame, level). |
 | `pip-action` | `action` (`close`, `back-to-tab`) | Phase 1: the session paths that Chromium's own window's Close and Back to Tab end in. |
 | `now-playing` | — | `MPNowPlayingInfoCenter` title, artist, rate, elapsed, `playbackState`, and whether the remote play, pause, toggle, next and previous commands are enabled (read in-process; Chromium's system media controls own them). |
@@ -431,11 +433,13 @@ no remote debugging port. It never opens or copies Arc.
 | `sidebar-share` | `[dismiss=true|false] [close=true] [waitClosed=true]` controls the automation-only cancel policy and reads the actual `NSSharingServicePicker` request: URL, node, row anchor, service-query callback, close callback and pending state. The menu action calls the real picker; `dismiss=true` closes it without choosing a service. Always close/reset in `finally`. |
 | `profile-menu` | `[response=cancel|<existing Profile name>] [close=true] [waitClosed=true]` controls an automation-only response for the actual Set Profile menu opened by `menu-perform id=change-profile`. Reports menu-open callback, native tracking, checked choices, chosen Profile, closure and pending state. A choice performs the existing menu item after ending tracking. Always close in `finally`. |
 | `alert` | `[window=library] [button=<title>]` reads the texts and buttons of the alert sheet attached to a browser (or the Library) window; with `button`, clicks it. |
-| `toast-undo` | Clicks the shown toast's Undo button in the front browser window. |
+| `toast-undo` | Clicks the newest visible toast's Undo button in the front browser window (its real `ToastCenter` button). |
+| `toasts` | The front browser window's toasts, newest first (page-platform §8.3): `title`, `subtitle`, `symbol`, `accessory` (`none`, `keycaps`, or the button's label in lower case: `undo`, `share`, …), `coalescingKey`, `frame` and `accessoryFrame` (window content, top-left origin), `age` and `lifetime` (seconds), `sticky`, `exiting`, `hovered`; plus `panel` (the anchor) and `shown` (toasts shown so far in the window). Exiting toasts stay listed until their exit animation ends. |
+| `toast-action` | `[index=<n>]` (default 0, newest first, visible toasts only) clicks that toast's button through the real `NSButton` (Share, Undo, …). Returns false when the toast has no button. |
 | `defaults` | `key=open.… [value=…]` reads (and writes) one Open preference in the app's own domain (run suites on a cloned bundle ID). |
 | `sound-effect` | `effect=capture|event` calls `SoundEffects.shared.play`; reports `played`, the resource name, and counts. Call it only with `open.advanced.playSoundEffects` off: it plays audio otherwise. |
 
-`window-state` also reports `toolbarButtons` (visible toolbar buttons in order), `hint` (shows, visible, frame, keys, plate), `toast` (last toast title), and `confirmation` (the pending delete alert's title, text, buttons).
+`window-state` also reports `toolbarButtons` (visible toolbar buttons in order), `hint` (shows, visible, frame, keys, plate), `toast` (title of the newest toast shown in the window, also after it left), and `confirmation` (the pending delete alert's title, text, buttons).
 | `library-close` | Closes the shared Library window, cancelling any attached sheet first. Reports `closed` and the sheet window numbers it cancelled. Available with no browser window. |
 
 Use existing `key route=app window=<Library number>` for Cmd+Z and other
@@ -680,7 +684,7 @@ and close callbacks; it chooses no service.
 
 ## Capture tool (page-platform Step 13)
 
-`--only page` runs the capture rows C1–C7 (page-platform §8.3) against
+`--only page` runs the capture rows C1–C7, then the translation rows X1–X6 (page-platform §8.3), against
 `tools/e2e/fixtures/page-platform/` (served from a local port). Every step uses the
 real paths: the File menu item, own-window mouse events through
 `NSApplication.sendEvent` (the window's local monitors see them, as with real input),

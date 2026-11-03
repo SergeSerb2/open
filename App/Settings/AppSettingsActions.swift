@@ -8,6 +8,7 @@ import OpenEngine
 import OpenAdBlock
 import OpenSidebar
 import OpenFeatures
+import OpenTranslate
 
 /// App-owned adapters for the two shared OpenSettings presenters. Neither
 /// presenter owns a second snapshot writer or an engine context.
@@ -262,7 +263,8 @@ final class AppSettingsActions: SettingsActions, LibraryActions, DownloadsProvid
     app.tabSleep.modeChanged()
   }
   func setApplicationIcon(id: String) { status("Application icon switching is not connected yet.") }
-  func resetTranslatePrompts(profileID: ProfileID) -> String? { "Translation prompt reset is not available in this engine yet." }
+  /// Settings ▸ Advanced "Reset Translated-site Prompts" (page-platform §4.7.7): app scope, every profile.
+  func resetTranslatePrompts(profileID: ProfileID) -> String? { TranslatePreferences().reset(); return nil }
   func openURL(_ url: URL, profileID: ProfileID) {
     guard let space = app.model.spaces.first(where: { $0.profileID == profileID }),
       let controller = app.frontWindowController ?? app.makeWindow(focusedSpaceID: space.id),
