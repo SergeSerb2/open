@@ -133,6 +133,15 @@ NS_SWIFT_UI_ACTOR
 - (void)browserContext:(OEBrowserContext*)context
      downloadDidUpdate:(OEDownload*)download
     NS_SWIFT_NAME(browserContext(_:downloadDidUpdate:));
+/// The user clicked a web notification of this context (body or button),
+/// before Chromium dispatches the click to the page (page-platform EP-6).
+/// `persistent` is YES for service worker notifications. The page is not
+/// reported (Section 8 decision): find the tab by `origin`.
+- (void)browserContext:(OEBrowserContext*)context
+    didClickNotificationWithIdentifier:(NSString*)identifier
+                                origin:(NSURL*)origin
+                            persistent:(BOOL)persistent
+    NS_SWIFT_NAME(browserContext(_:didClickNotification:origin:persistent:));
 @end
 
 /// One browsing profile (ADK "BrowserContext"): its own cookie jar, storage,
@@ -180,6 +189,20 @@ OE_EXPORT @interface OEBrowserContext : NSObject
 
 /// Every download of this context since launch.
 @property(nonatomic, readonly, copy) NSArray<OEDownload*>* downloads;
+
+#pragma mark Notification test hooks (page-platform EP-7)
+
+/// Web notifications Chromium shows for this context: dictionaries with the
+/// keys "id", "origin", "title" and "body". Active only when the engine runs
+/// with the `--open-automation` switch (OEEngine.additionalSwitches);
+/// otherwise always empty.
+- (void)displayedNotificationsWithCompletion:
+    (void (^NS_SWIFT_UI_ACTOR)(NSArray<NSDictionary<NSString*, NSString*>*>* items))completion
+    NS_SWIFT_NAME(displayedNotifications(completion:));
+/// Clicks a displayed notification through the same path as a real click.
+/// NO if the hook is off or the notification is unknown.
+- (BOOL)simulateClickOnNotificationWithIdentifier:(NSString*)identifier
+    NS_SWIFT_NAME(simulateClickOnNotification(identifier:));
 @end
 
 #pragma mark - Downloads

@@ -6,17 +6,17 @@
         "forced": false,
         "ok": true,
         "owned_pids": [
-          6980,
-          7165,
-          7166,
-          7170,
-          7171,
-          7179,
-          7180,
-          7207,
-          10184,
-          10188,
-          10190
+          52660,
+          52720,
+          52721,
+          52731,
+          52732,
+          52733,
+          52734,
+          52755,
+          53417,
+          53420,
+          53462
         ],
         "remaining_processes": [],
         "reply": true,
@@ -30,14 +30,14 @@
         "forced": false,
         "ok": true,
         "owned_pids": [
-          10292,
-          10315,
-          10316,
-          10317,
-          10318,
-          10320,
-          10321,
-          10326
+          53481,
+          53488,
+          53489,
+          53490,
+          53491,
+          53493,
+          53494,
+          53500
         ],
         "remaining_processes": [],
         "reply": true,
@@ -51,15 +51,15 @@
   },
   "config": "Debug",
   "engine": {
-    "distributionCodeSHA256": "35b37ba3a72d079ed4e76fc7932bfe76e49b57c3456eda06f7fea9d928b901ae",
-    "distributionSHA256": "61c9ab17b6b08525af836cca93bba67819bfa1544f04abe5eae3baf4b57b98a8",
-    "distributionUUID": "4C4C44C8-5555-3144-A168-35B709BBDA3A",
-    "embeddedCodeSHA256": "35b37ba3a72d079ed4e76fc7932bfe76e49b57c3456eda06f7fea9d928b901ae",
-    "embeddedSHA256": "3e246c99539902496c44c4c6ed2533f3f4fd4a85f03b4f5e6dcaaf49f75f28d2",
-    "embeddedUUID": "4C4C44C8-5555-3144-A168-35B709BBDA3A",
+    "distributionCodeSHA256": "f59a7f78059e5b81e69e46f1f8c15075cc0bbba307a0c925cb0b477a9fa00f8d",
+    "distributionSHA256": "538252a429099f6b6ceaa8d4feff288b8174b68f39edb5e043e10633e5f0f888",
+    "distributionUUID": "4C4C448B-5555-3144-A1B9-097D6704F554",
+    "embeddedCodeSHA256": "f59a7f78059e5b81e69e46f1f8c15075cc0bbba307a0c925cb0b477a9fa00f8d",
+    "embeddedSHA256": "7da9aa0fcf9a1fcb8f0a65d0c70197b332957192a1c4c0b4d9cf2141dc605468",
+    "embeddedUUID": "4C4C448B-5555-3144-A1B9-097D6704F554",
     "requiredSHA256": "",
     "source": "fork",
-    "stamp": "fork /Users/serge/Developer/open-engine/chromium_git/chromium/src/cef/binary_distrib/cef_binary_156.0.14+g4fa4ab5+chromium-156.0.8078.48_macosarm64_minimal 1793075034"
+    "stamp": "fork /Users/serge/Developer/open-engine/chromium_git/chromium/src/cef/binary_distrib/cef_binary_156.0.14+g4fa4ab5+chromium-156.0.8078.48_macosarm64_minimal 1793677192"
   },
   "interrupted_attempts": [],
   "media": {
@@ -71,7 +71,10 @@
           "pause",
           "previousTrack",
           "nextTrack",
-          "seekTo"
+          "seekBackward",
+          "seekForward",
+          "seekTo",
+          "stop"
         ],
         "album": "Fixtures",
         "artist": "Open",
@@ -86,19 +89,21 @@
         "live": true,
         "modelMuted": true,
         "muted": true,
+        "pageVolume": 1,
         "pictureInPicture": false,
         "pictureInPictureDisabled": false,
         "playback": "playing",
-        "position": 0,
+        "position": 0.000238,
         "session": true,
         "source": {
           "kind": "audioVideo",
           "pip": "none",
           "playback": "playing",
-          "window": "12186D9D-9962-429F-877F-BBBA1C5E04D7"
+          "window": "39F235C9-0C6D-48AD-BEF0-EADD2CB63078"
         },
-        "tab": "F553A9C6-E8F1-40CF-ADBD-E87078283650",
-        "title": "Open Test Tone"
+        "tab": "2C2A0485-BC1E-49AE-A1DF-793D2D597D4B",
+        "title": "Open Test Tone",
+        "volume": 1
       },
       "ok": true,
       "state": {
@@ -107,7 +112,10 @@
           "pause",
           "previousTrack",
           "nextTrack",
-          "seekTo"
+          "seekBackward",
+          "seekForward",
+          "seekTo",
+          "stop"
         ],
         "album": "Fixtures",
         "artist": "Open",
@@ -122,19 +130,21 @@
         "live": true,
         "modelMuted": false,
         "muted": false,
+        "pageVolume": 1,
         "pictureInPicture": false,
         "pictureInPictureDisabled": false,
         "playback": "playing",
-        "position": 0,
+        "position": 0.000238,
         "session": true,
         "source": {
           "kind": "audioVideo",
           "pip": "none",
           "playback": "playing",
-          "window": "12186D9D-9962-429F-877F-BBBA1C5E04D7"
+          "window": "39F235C9-0C6D-48AD-BEF0-EADD2CB63078"
         },
-        "tab": "F553A9C6-E8F1-40CF-ADBD-E87078283650",
-        "title": "Open Test Tone"
+        "tab": "2C2A0485-BC1E-49AE-A1DF-793D2D597D4B",
+        "title": "Open Test Tone",
+        "volume": 1
       }
     },
     "media_auto_pip_negatives": {
@@ -161,22 +171,28 @@
       ]
     },
     "media_auto_pip_on_leave": {
-      "leaveToRequestSeconds": 1.8749968148767948e-05,
+      "audibleAfterPlayMs": 98.5,
+      "autoPiPSetting": true,
+      "decision": {
+        "at": 522984.25683983334,
+        "value": "open"
+      },
+      "leaveToRequestSeconds": 3.983336500823498e-05,
       "load": [
-        7.943359375,
-        11.7216796875,
-        12.69970703125
+        5.982421875,
+        9.12060546875,
+        10.08837890625
       ],
       "ok": true,
       "pip": {
         "automatic": true,
-        "enteredAt": 507057.6917967084,
-        "now": 507057.70429533336,
-        "requestedAt": 507057.6103346667,
+        "enteredAt": 522984.3203156667,
+        "now": 522984.3294556667,
+        "requestedAt": 522984.2568796667,
         "requests": 1,
         "snoozed": [],
         "state": "active",
-        "tab": "2A2F42A1-B04F-4F57-886A-34613D16061F",
+        "tab": "B8883896-B699-49FF-88C4-0FA777BA8C28",
         "windows": [
           {
             "class": "NativeWidgetMacFramelessNSWindow",
@@ -187,24 +203,24 @@
               282
             ],
             "level": 3,
-            "number": 154850
+            "number": 164891
           }
         ]
       },
-      "requestToEnterSeconds": 0.08146204170770943,
-      "windowsBefore": 2
+      "requestToEnterSeconds": 0.0634359999676235,
+      "windowsBefore": 3
     },
     "media_auto_pip_return": {
       "ok": true,
       "pip": {
-        "enteredAt": 507057.6917967084,
-        "now": 507057.738074625,
+        "enteredAt": 522984.3203156667,
+        "now": 522984.3603605417,
         "reason": "sourceShown",
-        "requestedAt": 507057.6103346667,
+        "requestedAt": 522984.2568796667,
         "requests": 1,
         "snoozed": [],
         "state": "closed",
-        "tab": "2A2F42A1-B04F-4F57-886A-34613D16061F",
+        "tab": "B8883896-B699-49FF-88C4-0FA777BA8C28",
         "windows": []
       },
       "playing": true
@@ -212,17 +228,17 @@
     "media_back_to_tab": {
       "ok": true,
       "pip": {
-        "enteredAt": 507057.8161161667,
-        "now": 507057.84408175,
+        "enteredAt": 522984.41765633336,
+        "now": 522984.46511137503,
         "reason": "sourceShown",
-        "requestedAt": 507057.8116797917,
+        "requestedAt": 522984.41067425004,
         "requests": 3,
         "snoozed": [],
         "state": "closed",
-        "tab": "2A2F42A1-B04F-4F57-886A-34613D16061F",
+        "tab": "B8883896-B699-49FF-88C4-0FA777BA8C28",
         "windows": []
       },
-      "selected": "2A2F42A1-B04F-4F57-886A-34613D16061F"
+      "selected": "B8883896-B699-49FF-88C4-0FA777BA8C28"
     },
     "media_card_controls": {
       "cardPaused": true,
@@ -240,7 +256,7 @@
       "ok": true
     },
     "media_card_on_leave": {
-      "appearMs": 1.7,
+      "appearMs": 6.5,
       "card": {
         "accessibility": "Media audio, 127.0.0.1, Playing",
         "buttons": {
@@ -309,13 +325,13 @@
         "pip": "none",
         "playback": "playing",
         "retiring": false,
-        "tab": "F553A9C6-E8F1-40CF-ADBD-E87078283650",
+        "tab": "2C2A0485-BC1E-49AE-A1DF-793D2D597D4B",
         "title": ""
       },
       "load": [
-        14.1748046875,
-        14.02587890625,
-        13.55859375
+        9.0576171875,
+        10.60986328125,
+        10.6796875
       ],
       "ok": true
     },
@@ -325,28 +341,28 @@
     },
     "media_cards_max_three": {
       "cards": [
-        "E876C457-27DA-400B-80AE-942E673D4358",
-        "9822FC3E-29CF-4E43-869F-BDFBD9CDB497",
-        "17CA05BF-7564-44D5-A1E8-0BC2CE34D9C7"
+        "9ABBA0D8-574F-4BFF-884B-ABCA9B2BCED5",
+        "D030E1FC-ABF3-4E4D-A1D5-41844EE3FF5F",
+        "A9D7545C-5B84-4A06-AF28-FC17235B01CA"
       ],
       "ok": true,
       "sources": [
-        "F553A9C6-E8F1-40CF-ADBD-E87078283650",
-        "17CA05BF-7564-44D5-A1E8-0BC2CE34D9C7",
-        "9822FC3E-29CF-4E43-869F-BDFBD9CDB497",
-        "E876C457-27DA-400B-80AE-942E673D4358"
+        "2C2A0485-BC1E-49AE-A1DF-793D2D597D4B",
+        "A9D7545C-5B84-4A06-AF28-FC17235B01CA",
+        "D030E1FC-ABF3-4E4D-A1D5-41844EE3FF5F",
+        "9ABBA0D8-574F-4BFF-884B-ABCA9B2BCED5"
       ]
     },
     "media_close_snoozes": {
       "again": {
         "automatic": true,
-        "enteredAt": 507057.8161161667,
-        "now": 507057.8272922917,
-        "requestedAt": 507057.8116797917,
+        "enteredAt": 522984.41765633336,
+        "now": 522984.43680775,
+        "requestedAt": 522984.41067425004,
         "requests": 3,
         "snoozed": [],
         "state": "active",
-        "tab": "2A2F42A1-B04F-4F57-886A-34613D16061F",
+        "tab": "B8883896-B699-49FF-88C4-0FA777BA8C28",
         "windows": [
           {
             "class": "NativeWidgetMacFramelessNSWindow",
@@ -357,34 +373,36 @@
               282
             ],
             "level": 3,
-            "number": 154850
+            "number": 164891
           }
         ]
       },
       "closed": {
-        "enteredAt": 507057.75407745835,
-        "now": 507057.77606508334,
+        "enteredAt": 522984.370027,
+        "now": 522984.38904258335,
         "reason": "userClosed",
-        "requestedAt": 507057.746426,
+        "requestedAt": 522984.36524812505,
         "requests": 2,
         "snoozed": [
-          "2A2F42A1-B04F-4F57-886A-34613D16061F"
+          "B8883896-B699-49FF-88C4-0FA777BA8C28"
         ],
         "state": "closed",
-        "tab": "2A2F42A1-B04F-4F57-886A-34613D16061F",
+        "tab": "B8883896-B699-49FF-88C4-0FA777BA8C28",
         "windows": []
       },
-      "ok": true
+      "ok": true,
+      "paused": true,
+      "snoozed": true
     },
     "media_document_pip": {
       "reason": "EM-7: Document PiP disposition",
       "status": "BLOCKED"
     },
     "media_idle_cpu": {
-      "browserMinWith": 0.1,
-      "browserMinWithout": 0.09,
-      "minWith": 0.22,
-      "minWithout": 0.23,
+      "browserMinWith": 0.07,
+      "browserMinWithout": 0.07,
+      "minWith": 0.15,
+      "minWithout": 0.21,
       "ok": true,
       "restAnimations": [
         0,
@@ -394,38 +412,38 @@
       ],
       "samples": {
         "browserWith": [
-          0.61,
-          0.1,
-          0.75,
-          0.68
+          0.36,
+          0.08,
+          0.2,
+          0.07
         ],
         "browserWithout": [
-          2.67,
-          0.09,
-          0.54,
-          0.1
+          2.38,
+          0.07,
+          4.52,
+          0.13
         ],
         "load": [
-          12.18603515625,
-          10.74169921875,
-          9.2353515625,
-          9.6083984375,
-          8.54443359375,
-          9.04443359375,
-          8.92919921875,
-          7.943359375
+          8.373046875,
+          8.06787109375,
+          8.3544921875,
+          7.72119140625,
+          7.548828125,
+          7.19873046875,
+          6.61865234375,
+          5.982421875
         ],
         "with": [
-          1.28,
+          0.91,
           0.22,
-          1.23,
-          0.93
+          0.41,
+          0.15
         ],
         "without": [
-          3.81,
-          0.23,
-          0.75,
-          0.23
+          3.3,
+          0.21,
+          6.44,
+          0.27
         ]
       }
     },
@@ -445,7 +463,7 @@
           "capturing": false,
           "controllable": false,
           "decision": {
-            "at": 507061.4249645417,
+            "at": 522988.5282519167,
             "value": "noPlayingVideo"
           },
           "duration": null,
@@ -455,14 +473,16 @@
           "live": true,
           "modelMuted": false,
           "muted": false,
+          "pageVolume": 1,
           "pictureInPicture": false,
           "pictureInPictureDisabled": false,
           "playback": "none",
           "position": null,
           "session": false,
           "source": null,
-          "tab": "86F60500-0890-4E48-B7F5-98D97EE911D2",
-          "title": null
+          "tab": "A982A0C5-BF0B-4C24-8E18-462EFEF04C71",
+          "title": null,
+          "volume": null
         },
         {
           "actions": [],
@@ -479,14 +499,16 @@
           "live": true,
           "modelMuted": false,
           "muted": false,
+          "pageVolume": 1,
           "pictureInPicture": false,
           "pictureInPictureDisabled": false,
           "playback": "none",
           "position": null,
           "session": false,
           "source": null,
-          "tab": "154E8D6E-0089-4D0E-889A-09D96543B45B",
-          "title": null
+          "tab": "E296B2D8-A442-47AA-998D-048C48E3648E",
+          "title": null,
+          "volume": null
         }
       ],
       "undoneInOneStep": true,
@@ -509,14 +531,16 @@
         "live": false,
         "modelMuted": true,
         "muted": false,
+        "pageVolume": null,
         "pictureInPicture": false,
         "pictureInPictureDisabled": false,
         "playback": "none",
         "position": null,
         "session": false,
         "source": null,
-        "tab": "86F60500-0890-4E48-B7F5-98D97EE911D2",
-        "title": null
+        "tab": "A982A0C5-BF0B-4C24-8E18-462EFEF04C71",
+        "title": null,
+        "volume": null
       }
     },
     "media_now_playing": {
@@ -530,7 +554,7 @@
           "previous": true,
           "toggle": true
         },
-        "elapsed": 0.151258,
+        "elapsed": 0.079805,
         "playbackState": "paused",
         "rate": 0,
         "title": "Open Test Tone"
@@ -550,6 +574,26 @@
         "title": "Open Test Tone"
       }
     },
+    "media_pip_disabled_engine": {
+      "ok": true,
+      "pip": {
+        "enteredAt": null,
+        "now": 522995.66550987505,
+        "reason": "failed",
+        "requestedAt": 522995.6651910417,
+        "requests": 7,
+        "snoozed": [],
+        "state": "closed",
+        "tab": "C8B45350-C2F1-49B8-9DC1-167E8981E1AA",
+        "windows": []
+      },
+      "pipElement": null,
+      "state": {
+        "actions": [],
+        "pictureInPictureDisabled": true,
+        "playback": "playing"
+      }
+    },
     "media_pip_keep_on_top": {
       "reason": "EM-4: the Keep Window on Top menu is in Open's own PiP window",
       "status": "BLOCKED"
@@ -557,6 +601,39 @@
     "media_pip_minimize": {
       "reason": "EM-4: phase 1 uses Chromium's PiP window, which has no Minimize",
       "status": "BLOCKED"
+    },
+    "media_pip_no_gesture": {
+      "activationAfter": false,
+      "activationExpired": true,
+      "closed": true,
+      "ok": true,
+      "pageRequestWithoutGesture": "NotAllowedError",
+      "pip": {
+        "automatic": false,
+        "enteredAt": 522995.431367375,
+        "now": 522995.440141,
+        "requestedAt": 522995.3928649584,
+        "requests": 6,
+        "snoozed": [],
+        "state": "active",
+        "tab": "60773B6B-7F33-47C1-8091-4C0729FA97F2",
+        "windows": [
+          {
+            "class": "NativeWidgetMacFramelessNSWindow",
+            "frame": [
+              2027,
+              32,
+              501,
+              282
+            ],
+            "level": 3,
+            "number": 164895
+          }
+        ]
+      },
+      "pipElement": "main",
+      "playingAfterExit": true,
+      "requestToEnterSeconds": 0.03850241663167253
     },
     "media_sleep_adapter": {
       "reason": "section 8: the App sleep adapter; the feed is checked above",
@@ -566,24 +643,36 @@
       "afterClose": [],
       "ok": true,
       "withCard": [
-        "F7E0358F-FE21-4BE6-B81E-498FA7625A33"
+        "278C45BE-7F68-47B3-8E71-8AD199BCF63C"
       ]
     },
     "media_sleep_feed_pip": {
       "feed": {
-        "mediaControls": [],
+        "mediaControls": [
+          "B8883896-B699-49FF-88C4-0FA777BA8C28"
+        ],
         "pictureInPicture": [
-          "2A2F42A1-B04F-4F57-886A-34613D16061F"
+          "B8883896-B699-49FF-88C4-0FA777BA8C28"
         ],
         "visible": [
-          "2A2F42A1-B04F-4F57-886A-34613D16061F",
-          "F666FC7D-9013-4943-88A8-D448ED4341C6"
+          "3529EEC5-895A-4A4A-82E3-3243EE07E4DD",
+          "B8883896-B699-49FF-88C4-0FA777BA8C28"
         ],
         "windows": {
-          "12186D9D-9962-429F-877F-BBBA1C5E04D7": "visible"
+          "39F235C9-0C6D-48AD-BEF0-EADD2CB63078": "visible"
         }
       },
       "ok": true
+    },
+    "media_tab_volume": {
+      "after": 0.3,
+      "before": 1,
+      "elementVolume": 1,
+      "ok": true,
+      "pagePlaying": true,
+      "pageVolume": 0.3,
+      "playback": "playing",
+      "reset": 1
     },
     "media_view_media_menu": {
       "library": {
@@ -593,11 +682,14 @@
       "ok": true
     },
     "media_web_audio": {
-      "audible": false,
-      "reason": "P6 (EM-3): Web Audio is not audible before the fork patch",
-      "status": "BLOCKED"
+      "audibleInBackgroundMs": 91.0,
+      "audibleMs": 87.2,
+      "inaudibleAfterCloseMs": 2.7,
+      "inaudibleAfterSuspendMs": 2.7,
+      "ok": true,
+      "session": false
     }
   },
-  "started": "2026-11-02 16:28:22",
+  "started": "2026-11-02 20:53:48",
   "style": "chrome"
 }

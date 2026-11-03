@@ -2,4 +2,4 @@
 <body style="background:#fff;margin:0">
 <script src="common.js"></script>
 <script>const s = makeVideo('small', 160, 90, true), l = makeVideo('large', 640, 360, false);
-l.muted = true; window.start = () => Promise.all([s.play(), l.play()]).then(() => true);</script>
+l.muted = true; window.start = () => playAll(s, l);</script>
