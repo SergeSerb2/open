@@ -233,9 +233,19 @@ CefRefPtr<CefBrowser> OpenTabStrip::CreateTab(
   // send some URLs elsewhere: an off-the-record profile opens
   // chrome://settings and similar pages in a window of the original profile
   // (browser_navigator.cc, AdjustNavigateParamsForURL).
+  // CefBrowserSettings.no_renderer (fork patch 0105, tab sleeping): no
+  // renderer process and no navigation until the embedder restores the tab's
+  // history (CefRestoreNavigationHistory) and shows it, as Chrome creates
+  // restored tabs (browser_tabrestore.cc). |url| is not loaded.
+  const bool no_renderer = settings.no_renderer != 0;
   content::WebContents::CreateParams create_params(browser->GetProfile());
-  create_params.site_instance =
-      tab_util::GetSiteInstanceForNewTab(browser->GetProfile(), gurl);
+  if (!no_renderer) {
+    create_params.site_instance =
+        tab_util::GetSiteInstanceForNewTab(browser->GetProfile(), gurl);
+  } else {
+    create_params.desired_renderer_state =
+        content::WebContents::CreateParams::kNoRendererProcess;
+  }
   create_params.initially_hidden = true;
   std::unique_ptr<content::WebContents> owned =
       content::WebContents::Create(create_params);
@@ -252,6 +262,9 @@ CefRefPtr<CefBrowser> OpenTabStrip::CreateTab(
       !host || IdForHost(host.get()) != id_) {
     LOG(ERROR) << "Open: a new tab did not land in its own tab strip";
     return nullptr;
+  }
+  if (no_renderer) {
+    return host.get();
   }
   content::NavigationController::LoadURLParams load_params(gurl);
   load_params.transition_type = ui::PAGE_TRANSITION_TYPED;

@@ -1,0 +1,54 @@
+diff --git a/cef/include/internal/cef_types.h b/cef/include/internal/cef_types.h
+index 8c2c81fac..47e71be8c 100644
+--- a/cef/include/internal/cef_types.h
++++ b/cef/include/internal/cef_types.h
+@@ -754,6 +754,17 @@ typedef struct _cef_browser_settings_t {
+   /// CefBrowserHost::SetAxViewportCollapse.
+   ///
+   cef_state_t ax_viewport_collapse;
++
++  ///
++  /// Open fork (tab sleeping): set to true (1) to create the browser's page
++  /// hidden and with no renderer process. Create it with an empty URL (a
++  /// CefTabStrip::CreateTab tab ignores the URL), then restore its history
++  /// with CefRestoreNavigationHistory before the page is shown; the current
++  /// entry loads on first show. Supported by Alloy style browsers and by
++  /// CefTabStrip::CreateTab; other Chrome style browsers ignore it. Only read
++  /// at creation.
++  ///
++  int no_renderer;
+ #endif
+ } cef_browser_settings_t;
+ 
+diff --git a/cef/include/internal/cef_types_wrappers.h b/cef/include/internal/cef_types_wrappers.h
+index d94c81606..1d3857896 100644
+--- a/cef/include/internal/cef_types_wrappers.h
++++ b/cef/include/internal/cef_types_wrappers.h
+@@ -603,6 +603,9 @@ struct CefBrowserSettingsTraits {
+     if (CEF_MEMBER_EXISTS(src, ax_viewport_collapse)) {
+       target->ax_viewport_collapse = src->ax_viewport_collapse;
+     }
++    if (CEF_MEMBER_EXISTS(src, no_renderer)) {
++      target->no_renderer = src->no_renderer;
++    }
+ #endif
+   }
+ };
+diff --git a/cef/libcef/browser/alloy/browser_platform_delegate_alloy.cc b/cef/libcef/browser/alloy/browser_platform_delegate_alloy.cc
+index 48cf8b71c..e564af5da 100644
+--- a/cef/libcef/browser/alloy/browser_platform_delegate_alloy.cc
++++ b/cef/libcef/browser/alloy/browser_platform_delegate_alloy.cc
+@@ -46,6 +46,13 @@ content::WebContents* CefBrowserPlatformDelegateAlloy::CreateWebContents(
+ 
+   content::WebContents::CreateParams wc_create_params(browser_context, nullptr);
+ 
++  // Open (tab sleeping): no renderer until the restored page is shown.
++  if (create_params.settings.no_renderer) {
++    wc_create_params.initially_hidden = true;
++    wc_create_params.desired_renderer_state =
++        content::WebContents::CreateParams::kNoRendererProcess;
++  }
++
+   if (IsWindowless()) {
+     // Create the OSR view for the WebContents.
+     CreateViewForWebContents(&wc_create_params.view,
