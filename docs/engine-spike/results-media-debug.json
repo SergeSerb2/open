@@ -6,17 +6,18 @@
         "forced": false,
         "ok": true,
         "owned_pids": [
-          52660,
-          52720,
-          52721,
-          52731,
-          52732,
-          52733,
-          52734,
-          52755,
-          53417,
-          53420,
-          53462
+          11762,
+          11878,
+          11879,
+          11881,
+          11882,
+          11883,
+          11884,
+          11887,
+          13473,
+          13479,
+          13494,
+          13538
         ],
         "remaining_processes": [],
         "reply": true,
@@ -30,14 +31,14 @@
         "forced": false,
         "ok": true,
         "owned_pids": [
-          53481,
-          53488,
-          53489,
-          53490,
-          53491,
-          53493,
-          53494,
-          53500
+          13548,
+          13580,
+          13581,
+          13582,
+          13583,
+          13584,
+          13585,
+          13590
         ],
         "remaining_processes": [],
         "reply": true,
@@ -93,15 +94,15 @@
         "pictureInPicture": false,
         "pictureInPictureDisabled": false,
         "playback": "playing",
-        "position": 0.000238,
+        "position": 0.000168,
         "session": true,
         "source": {
           "kind": "audioVideo",
           "pip": "none",
           "playback": "playing",
-          "window": "39F235C9-0C6D-48AD-BEF0-EADD2CB63078"
+          "window": "1AA9DBB3-73F1-4C5E-A557-1878CC6888C1"
         },
-        "tab": "2C2A0485-BC1E-49AE-A1DF-793D2D597D4B",
+        "tab": "A0C03855-69DF-4F99-B6F8-BF7045D523F0",
         "title": "Open Test Tone",
         "volume": 1
       },
@@ -134,15 +135,15 @@
         "pictureInPicture": false,
         "pictureInPictureDisabled": false,
         "playback": "playing",
-        "position": 0.000238,
+        "position": 0.000168,
         "session": true,
         "source": {
           "kind": "audioVideo",
           "pip": "none",
           "playback": "playing",
-          "window": "39F235C9-0C6D-48AD-BEF0-EADD2CB63078"
+          "window": "1AA9DBB3-73F1-4C5E-A557-1878CC6888C1"
         },
-        "tab": "2C2A0485-BC1E-49AE-A1DF-793D2D597D4B",
+        "tab": "A0C03855-69DF-4F99-B6F8-BF7045D523F0",
         "title": "Open Test Tone",
         "volume": 1
       }
@@ -171,28 +172,28 @@
       ]
     },
     "media_auto_pip_on_leave": {
-      "audibleAfterPlayMs": 98.5,
+      "audibleAfterPlayMs": 73.8,
       "autoPiPSetting": true,
       "decision": {
-        "at": 522984.25683983334,
+        "at": 526278.999030125,
         "value": "open"
       },
-      "leaveToRequestSeconds": 3.983336500823498e-05,
+      "leaveToRequestSeconds": 2.16667540371418e-05,
       "load": [
-        5.982421875,
-        9.12060546875,
-        10.08837890625
+        6.77978515625,
+        7.6845703125,
+        8.171875
       ],
       "ok": true,
       "pip": {
         "automatic": true,
-        "enteredAt": 522984.3203156667,
-        "now": 522984.3294556667,
-        "requestedAt": 522984.2568796667,
+        "enteredAt": 526279.0399826667,
+        "now": 526279.0462092917,
+        "requestedAt": 526278.9990517917,
         "requests": 1,
         "snoozed": [],
         "state": "active",
-        "tab": "B8883896-B699-49FF-88C4-0FA777BA8C28",
+        "tab": "4D2A8770-DD01-468F-8840-CCC6E1349613",
         "windows": [
           {
             "class": "NativeWidgetMacFramelessNSWindow",
@@ -203,24 +204,24 @@
               282
             ],
             "level": 3,
-            "number": 164891
+            "number": 172163
           }
         ]
       },
-      "requestToEnterSeconds": 0.0634359999676235,
+      "requestToEnterSeconds": 0.04093087499495596,
       "windowsBefore": 3
     },
     "media_auto_pip_return": {
       "ok": true,
       "pip": {
-        "enteredAt": 522984.3203156667,
-        "now": 522984.3603605417,
+        "enteredAt": 526279.0399826667,
+        "now": 526279.0736632084,
         "reason": "sourceShown",
-        "requestedAt": 522984.2568796667,
+        "requestedAt": 526278.9990517917,
         "requests": 1,
         "snoozed": [],
         "state": "closed",
-        "tab": "B8883896-B699-49FF-88C4-0FA777BA8C28",
+        "tab": "4D2A8770-DD01-468F-8840-CCC6E1349613",
         "windows": []
       },
       "playing": true
@@ -228,17 +229,17 @@
     "media_back_to_tab": {
       "ok": true,
       "pip": {
-        "enteredAt": 522984.41765633336,
-        "now": 522984.46511137503,
+        "enteredAt": 526279.1053908333,
+        "now": 526279.1312727917,
         "reason": "sourceShown",
-        "requestedAt": 522984.41067425004,
+        "requestedAt": 526279.1036739583,
         "requests": 3,
         "snoozed": [],
         "state": "closed",
-        "tab": "B8883896-B699-49FF-88C4-0FA777BA8C28",
+        "tab": "4D2A8770-DD01-468F-8840-CCC6E1349613",
         "windows": []
       },
-      "selected": "B8883896-B699-49FF-88C4-0FA777BA8C28"
+      "selected": "4D2A8770-DD01-468F-8840-CCC6E1349613"
     },
     "media_card_controls": {
       "cardPaused": true,
@@ -256,7 +257,7 @@
       "ok": true
     },
     "media_card_on_leave": {
-      "appearMs": 6.5,
+      "appearMs": 1.2,
       "card": {
         "accessibility": "Media audio, 127.0.0.1, Playing",
         "buttons": {
@@ -311,6 +312,8 @@
             "tooltip": "Tooltip(showDelay: 0.45, title: \"Adjust Tab Volume\", subtitle: nil, keys: [], placement: OpenDesign.Tooltip.Placement.beside, fill: OpenDesign.RGBA(red: 0.0392156862745098, green: 0.050980392156862744, blue: 0.30980392156862746, alpha: 1.0, space: OpenDesign.TokenColorSpace.sRGB), text: OpenDesign.RGBA(red: 0.9568627450980393, green: 0.9568627450980393, blue: 0.9647058823529412, alpha: 1.0, space: OpenDesign.TokenColorSpace.sRGB), keycap: OpenDesign.RGBA(red: 0.9568627450980393, green: 0.9568627450980393, blue: 0.9647058823529412, alpha: 0.18, space: OpenDesign.TokenColorSpace.sRGB))"
           }
         },
+        "cameraOn": null,
+        "drawerOpen": false,
         "expanded": false,
         "frame": [
           8,
@@ -319,19 +322,23 @@
           33
         ],
         "hasVideo": false,
+        "height": 33,
         "kind": "audioVideo",
         "level": 0,
+        "microphoneOn": null,
         "muted": false,
         "pip": "none",
         "playback": "playing",
         "retiring": false,
-        "tab": "2C2A0485-BC1E-49AE-A1DF-793D2D597D4B",
-        "title": ""
+        "slider": null,
+        "tab": "A0C03855-69DF-4F99-B6F8-BF7045D523F0",
+        "title": "",
+        "volume": 1
       },
       "load": [
-        9.0576171875,
-        10.60986328125,
-        10.6796875
+        7.69873046875,
+        7.677734375,
+        8.21630859375
       ],
       "ok": true
     },
@@ -341,28 +348,28 @@
     },
     "media_cards_max_three": {
       "cards": [
-        "9ABBA0D8-574F-4BFF-884B-ABCA9B2BCED5",
-        "D030E1FC-ABF3-4E4D-A1D5-41844EE3FF5F",
-        "A9D7545C-5B84-4A06-AF28-FC17235B01CA"
+        "FB82A266-E605-499D-91F0-9C009A7B95B4",
+        "8EF5526A-201C-490A-AC32-04F742AD08F4",
+        "E4C546DC-4339-4AF9-AD47-98757DF5C2C6"
       ],
       "ok": true,
       "sources": [
-        "2C2A0485-BC1E-49AE-A1DF-793D2D597D4B",
-        "A9D7545C-5B84-4A06-AF28-FC17235B01CA",
-        "D030E1FC-ABF3-4E4D-A1D5-41844EE3FF5F",
-        "9ABBA0D8-574F-4BFF-884B-ABCA9B2BCED5"
+        "A0C03855-69DF-4F99-B6F8-BF7045D523F0",
+        "E4C546DC-4339-4AF9-AD47-98757DF5C2C6",
+        "8EF5526A-201C-490A-AC32-04F742AD08F4",
+        "FB82A266-E605-499D-91F0-9C009A7B95B4"
       ]
     },
     "media_close_snoozes": {
       "again": {
         "automatic": true,
-        "enteredAt": 522984.41765633336,
-        "now": 522984.43680775,
-        "requestedAt": 522984.41067425004,
+        "enteredAt": 526279.1053908333,
+        "now": 526279.1185466667,
+        "requestedAt": 526279.1036739583,
         "requests": 3,
         "snoozed": [],
         "state": "active",
-        "tab": "B8883896-B699-49FF-88C4-0FA777BA8C28",
+        "tab": "4D2A8770-DD01-468F-8840-CCC6E1349613",
         "windows": [
           {
             "class": "NativeWidgetMacFramelessNSWindow",
@@ -373,21 +380,21 @@
               282
             ],
             "level": 3,
-            "number": 164891
+            "number": 172163
           }
         ]
       },
       "closed": {
-        "enteredAt": 522984.370027,
-        "now": 522984.38904258335,
+        "enteredAt": 526279.0778459167,
+        "now": 526279.090277125,
         "reason": "userClosed",
-        "requestedAt": 522984.36524812505,
+        "requestedAt": 526279.0760383334,
         "requests": 2,
         "snoozed": [
-          "B8883896-B699-49FF-88C4-0FA777BA8C28"
+          "4D2A8770-DD01-468F-8840-CCC6E1349613"
         ],
         "state": "closed",
-        "tab": "B8883896-B699-49FF-88C4-0FA777BA8C28",
+        "tab": "4D2A8770-DD01-468F-8840-CCC6E1349613",
         "windows": []
       },
       "ok": true,
@@ -401,8 +408,8 @@
     "media_idle_cpu": {
       "browserMinWith": 0.07,
       "browserMinWithout": 0.07,
-      "minWith": 0.15,
-      "minWithout": 0.21,
+      "minWith": 0.14,
+      "minWithout": 0.24,
       "ok": true,
       "restAnimations": [
         0,
@@ -412,38 +419,38 @@
       ],
       "samples": {
         "browserWith": [
-          0.36,
+          0.42,
           0.08,
           0.2,
           0.07
         ],
         "browserWithout": [
-          2.38,
+          2.27,
           0.07,
-          4.52,
-          0.13
+          1.35,
+          0.18
         ],
         "load": [
-          8.373046875,
-          8.06787109375,
-          8.3544921875,
-          7.72119140625,
-          7.548828125,
-          7.19873046875,
-          6.61865234375,
-          5.982421875
+          7.69140625,
+          8.2451171875,
+          10.40087890625,
+          9.65283203125,
+          9.5791015625,
+          8.126953125,
+          6.97900390625,
+          6.77978515625
         ],
         "with": [
-          0.91,
-          0.22,
-          0.41,
-          0.15
+          1.01,
+          0.28,
+          0.31,
+          0.14
         ],
         "without": [
-          3.3,
-          0.21,
-          6.44,
-          0.27
+          3.11,
+          0.24,
+          1.73,
+          0.32
         ]
       }
     },
@@ -463,7 +470,7 @@
           "capturing": false,
           "controllable": false,
           "decision": {
-            "at": 522988.5282519167,
+            "at": 526282.9332451667,
             "value": "noPlayingVideo"
           },
           "duration": null,
@@ -480,7 +487,7 @@
           "position": null,
           "session": false,
           "source": null,
-          "tab": "A982A0C5-BF0B-4C24-8E18-462EFEF04C71",
+          "tab": "FF224DFD-F262-4BB5-8FFB-2DF284BD0758",
           "title": null,
           "volume": null
         },
@@ -506,7 +513,7 @@
           "position": null,
           "session": false,
           "source": null,
-          "tab": "E296B2D8-A442-47AA-998D-048C48E3648E",
+          "tab": "654498EA-286D-4BDA-AF09-3D359B657C33",
           "title": null,
           "volume": null
         }
@@ -538,7 +545,7 @@
         "position": null,
         "session": false,
         "source": null,
-        "tab": "A982A0C5-BF0B-4C24-8E18-462EFEF04C71",
+        "tab": "FF224DFD-F262-4BB5-8FFB-2DF284BD0758",
         "title": null,
         "volume": null
       }
@@ -554,7 +561,7 @@
           "previous": true,
           "toggle": true
         },
-        "elapsed": 0.079805,
+        "elapsed": 0.170341,
         "playbackState": "paused",
         "rate": 0,
         "title": "Open Test Tone"
@@ -578,13 +585,13 @@
       "ok": true,
       "pip": {
         "enteredAt": null,
-        "now": 522995.66550987505,
+        "now": 526291.726171875,
         "reason": "failed",
-        "requestedAt": 522995.6651910417,
+        "requestedAt": 526291.725869125,
         "requests": 7,
         "snoozed": [],
         "state": "closed",
-        "tab": "C8B45350-C2F1-49B8-9DC1-167E8981E1AA",
+        "tab": "153A264F-B0AB-4D02-B347-2678B1595D10",
         "windows": []
       },
       "pipElement": null,
@@ -610,13 +617,13 @@
       "pageRequestWithoutGesture": "NotAllowedError",
       "pip": {
         "automatic": false,
-        "enteredAt": 522995.431367375,
-        "now": 522995.440141,
-        "requestedAt": 522995.3928649584,
+        "enteredAt": 526291.5073767083,
+        "now": 526291.519215,
+        "requestedAt": 526291.478927375,
         "requests": 6,
         "snoozed": [],
         "state": "active",
-        "tab": "60773B6B-7F33-47C1-8091-4C0729FA97F2",
+        "tab": "88B85429-C994-4600-8DC6-1C5342B876E2",
         "windows": [
           {
             "class": "NativeWidgetMacFramelessNSWindow",
@@ -627,13 +634,115 @@
               282
             ],
             "level": 3,
-            "number": 164895
+            "number": 172168
           }
         ]
       },
       "pipElement": "main",
       "playingAfterExit": true,
-      "requestToEnterSeconds": 0.03850241663167253
+      "requestToEnterSeconds": 0.028449333272874355
+    },
+    "media_recording_card": {
+      "audibleAtLeave": false,
+      "card": {
+        "accessibility": "Media recording, 127.0.0.1, Playing",
+        "buttons": {
+          "camera": {
+            "enabled": true,
+            "frame": [
+              102,
+              742,
+              24,
+              24
+            ],
+            "tooltip": "Tooltip(showDelay: 0.45, title: \"Toggle Camera\", subtitle: nil, keys: [], placement: OpenDesign.Tooltip.Placement.beside, fill: OpenDesign.RGBA(red: 0.0392156862745098, green: 0.050980392156862744, blue: 0.30980392156862746, alpha: 1.0, space: OpenDesign.TokenColorSpace.sRGB), text: OpenDesign.RGBA(red: 0.9568627450980393, green: 0.9568627450980393, blue: 0.9647058823529412, alpha: 1.0, space: OpenDesign.TokenColorSpace.sRGB), keycap: OpenDesign.RGBA(red: 0.9568627450980393, green: 0.9568627450980393, blue: 0.9647058823529412, alpha: 0.18, space: OpenDesign.TokenColorSpace.sRGB))"
+          },
+          "favicon": {
+            "enabled": true,
+            "frame": [
+              18,
+              742,
+              24,
+              24
+            ],
+            "tooltip": ""
+          },
+          "microphone": {
+            "enabled": true,
+            "frame": [
+              60,
+              742,
+              24,
+              24
+            ],
+            "tooltip": "Tooltip(showDelay: 0.45, title: \"Toggle Microphone\", subtitle: nil, keys: [], placement: OpenDesign.Tooltip.Placement.beside, fill: OpenDesign.RGBA(red: 0.0392156862745098, green: 0.050980392156862744, blue: 0.30980392156862746, alpha: 1.0, space: OpenDesign.TokenColorSpace.sRGB), text: OpenDesign.RGBA(red: 0.9568627450980393, green: 0.9568627450980393, blue: 0.9647058823529412, alpha: 1.0, space: OpenDesign.TokenColorSpace.sRGB), keycap: OpenDesign.RGBA(red: 0.9568627450980393, green: 0.9568627450980393, blue: 0.9647058823529412, alpha: 0.18, space: OpenDesign.TokenColorSpace.sRGB))"
+          }
+        },
+        "cameraOn": true,
+        "drawerOpen": false,
+        "expanded": false,
+        "frame": [
+          8,
+          737,
+          212,
+          33
+        ],
+        "hasVideo": true,
+        "height": 33,
+        "kind": "recording",
+        "level": 0,
+        "microphoneOn": true,
+        "muted": false,
+        "pip": "none",
+        "playback": "playing",
+        "retiring": false,
+        "slider": null,
+        "tab": "77C278EF-41AD-4FEC-82F3-075D94D34EF4",
+        "title": "",
+        "volume": 1
+      },
+      "decision": {
+        "at": 526286.1367860833,
+        "value": "settingOff"
+      },
+      "gone": true,
+      "ok": true,
+      "page": {
+        "cam": false,
+        "counts": {
+          "hangup": 0,
+          "nexttrack": 0,
+          "pause": 0,
+          "play": 0,
+          "previoustrack": 0,
+          "togglecamera": 1,
+          "togglemicrophone": 1
+        },
+        "mic": false,
+        "tracks": [
+          "audio:live:false",
+          "video:live:false"
+        ]
+      },
+      "started": true,
+      "state": {
+        "actions": [
+          "enterPictureInPicture",
+          "toggleMicrophone",
+          "toggleCamera",
+          "hangUp"
+        ],
+        "capturing": true,
+        "controllable": false,
+        "playback": "playing",
+        "source": {
+          "kind": "recording",
+          "pip": "none",
+          "playback": "playing",
+          "window": "1AA9DBB3-73F1-4C5E-A557-1878CC6888C1"
+        }
+      },
+      "stillCapturing": true
     },
     "media_sleep_adapter": {
       "reason": "section 8: the App sleep adapter; the feed is checked above",
@@ -643,23 +752,23 @@
       "afterClose": [],
       "ok": true,
       "withCard": [
-        "278C45BE-7F68-47B3-8E71-8AD199BCF63C"
+        "DAFD6D39-9864-4427-8371-CCFC21D0B998"
       ]
     },
     "media_sleep_feed_pip": {
       "feed": {
         "mediaControls": [
-          "B8883896-B699-49FF-88C4-0FA777BA8C28"
+          "4D2A8770-DD01-468F-8840-CCC6E1349613"
         ],
         "pictureInPicture": [
-          "B8883896-B699-49FF-88C4-0FA777BA8C28"
+          "4D2A8770-DD01-468F-8840-CCC6E1349613"
         ],
         "visible": [
-          "3529EEC5-895A-4A4A-82E3-3243EE07E4DD",
-          "B8883896-B699-49FF-88C4-0FA777BA8C28"
+          "4D2A8770-DD01-468F-8840-CCC6E1349613",
+          "B4FCDA39-DDF6-45CB-A3AA-33030323BAB0"
         ],
         "windows": {
-          "39F235C9-0C6D-48AD-BEF0-EADD2CB63078": "visible"
+          "1AA9DBB3-73F1-4C5E-A557-1878CC6888C1": "visible"
         }
       },
       "ok": true
@@ -681,15 +790,126 @@
       },
       "ok": true
     },
+    "media_volume_drawer": {
+      "closedHeight": 33,
+      "collapsed": {
+        "drawerOpen": false,
+        "expanded": false,
+        "height": 33
+      },
+      "drawer": {
+        "buttons": {
+          "close": {
+            "enabled": true,
+            "frame": [
+              186,
+              676,
+              24,
+              24
+            ],
+            "tooltip": "Tooltip(showDelay: 0.45, title: \"Close Mini Player\", subtitle: nil, keys: [], placement: OpenDesign.Tooltip.Placement.beside, fill: OpenDesign.RGBA(red: 0.0392156862745098, green: 0.050980392156862744, blue: 0.30980392156862746, alpha: 1.0, space: OpenDesign.TokenColorSpace.sRGB), text: OpenDesign.RGBA(red: 0.9568627450980393, green: 0.9568627450980393, blue: 0.9647058823529412, alpha: 1.0, space: OpenDesign.TokenColorSpace.sRGB), keycap: OpenDesign.RGBA(red: 0.9568627450980393, green: 0.9568627450980393, blue: 0.9647058823529412, alpha: 0.18, space: OpenDesign.TokenColorSpace.sRGB))"
+          },
+          "favicon": {
+            "enabled": true,
+            "frame": [
+              18,
+              742,
+              24,
+              24
+            ],
+            "tooltip": ""
+          },
+          "next": {
+            "enabled": true,
+            "frame": [
+              144,
+              742,
+              24,
+              24
+            ],
+            "tooltip": "Tooltip(showDelay: 0.45, title: \"Next Track\", subtitle: nil, keys: [], placement: OpenDesign.Tooltip.Placement.beside, fill: OpenDesign.RGBA(red: 0.0392156862745098, green: 0.050980392156862744, blue: 0.30980392156862746, alpha: 1.0, space: OpenDesign.TokenColorSpace.sRGB), text: OpenDesign.RGBA(red: 0.9568627450980393, green: 0.9568627450980393, blue: 0.9647058823529412, alpha: 1.0, space: OpenDesign.TokenColorSpace.sRGB), keycap: OpenDesign.RGBA(red: 0.9568627450980393, green: 0.9568627450980393, blue: 0.9647058823529412, alpha: 0.18, space: OpenDesign.TokenColorSpace.sRGB))"
+          },
+          "play": {
+            "enabled": true,
+            "frame": [
+              102,
+              742,
+              24,
+              24
+            ],
+            "tooltip": "Tooltip(showDelay: 0.45, title: \"Pause\", subtitle: nil, keys: [], placement: OpenDesign.Tooltip.Placement.beside, fill: OpenDesign.RGBA(red: 0.0392156862745098, green: 0.050980392156862744, blue: 0.30980392156862746, alpha: 1.0, space: OpenDesign.TokenColorSpace.sRGB), text: OpenDesign.RGBA(red: 0.9568627450980393, green: 0.9568627450980393, blue: 0.9647058823529412, alpha: 1.0, space: OpenDesign.TokenColorSpace.sRGB), keycap: OpenDesign.RGBA(red: 0.9568627450980393, green: 0.9568627450980393, blue: 0.9647058823529412, alpha: 0.18, space: OpenDesign.TokenColorSpace.sRGB))"
+          },
+          "previous": {
+            "enabled": true,
+            "frame": [
+              60,
+              742,
+              24,
+              24
+            ],
+            "tooltip": "Tooltip(showDelay: 0.45, title: \"Previous Track\", subtitle: nil, keys: [], placement: OpenDesign.Tooltip.Placement.beside, fill: OpenDesign.RGBA(red: 0.0392156862745098, green: 0.050980392156862744, blue: 0.30980392156862746, alpha: 1.0, space: OpenDesign.TokenColorSpace.sRGB), text: OpenDesign.RGBA(red: 0.9568627450980393, green: 0.9568627450980393, blue: 0.9647058823529412, alpha: 1.0, space: OpenDesign.TokenColorSpace.sRGB), keycap: OpenDesign.RGBA(red: 0.9568627450980393, green: 0.9568627450980393, blue: 0.9647058823529412, alpha: 0.18, space: OpenDesign.TokenColorSpace.sRGB))"
+          },
+          "volume": {
+            "enabled": true,
+            "frame": [
+              186,
+              742,
+              24,
+              24
+            ],
+            "tooltip": "Tooltip(showDelay: 0.45, title: \"Adjust Tab Volume\", subtitle: nil, keys: [], placement: OpenDesign.Tooltip.Placement.beside, fill: OpenDesign.RGBA(red: 0.0392156862745098, green: 0.050980392156862744, blue: 0.30980392156862746, alpha: 1.0, space: OpenDesign.TokenColorSpace.sRGB), text: OpenDesign.RGBA(red: 0.9568627450980393, green: 0.9568627450980393, blue: 0.9647058823529412, alpha: 1.0, space: OpenDesign.TokenColorSpace.sRGB), keycap: OpenDesign.RGBA(red: 0.9568627450980393, green: 0.9568627450980393, blue: 0.9647058823529412, alpha: 0.18, space: OpenDesign.TokenColorSpace.sRGB))"
+          },
+          "volumeHigh": {
+            "enabled": true,
+            "frame": [
+              186,
+              709,
+              24,
+              24
+            ],
+            "tooltip": "Tooltip(showDelay: 0.45, title: \"Set Tab Volume to 100%\", subtitle: nil, keys: [], placement: OpenDesign.Tooltip.Placement.beside, fill: OpenDesign.RGBA(red: 0.0392156862745098, green: 0.050980392156862744, blue: 0.30980392156862746, alpha: 1.0, space: OpenDesign.TokenColorSpace.sRGB), text: OpenDesign.RGBA(red: 0.9568627450980393, green: 0.9568627450980393, blue: 0.9647058823529412, alpha: 1.0, space: OpenDesign.TokenColorSpace.sRGB), keycap: OpenDesign.RGBA(red: 0.9568627450980393, green: 0.9568627450980393, blue: 0.9647058823529412, alpha: 0.18, space: OpenDesign.TokenColorSpace.sRGB))"
+          },
+          "volumeLow": {
+            "enabled": true,
+            "frame": [
+              18,
+              709,
+              24,
+              24
+            ],
+            "tooltip": "Tooltip(showDelay: 0.45, title: \"Mute\", subtitle: nil, keys: [], placement: OpenDesign.Tooltip.Placement.beside, fill: OpenDesign.RGBA(red: 0.0392156862745098, green: 0.050980392156862744, blue: 0.30980392156862746, alpha: 1.0, space: OpenDesign.TokenColorSpace.sRGB), text: OpenDesign.RGBA(red: 0.9568627450980393, green: 0.9568627450980393, blue: 0.9647058823529412, alpha: 1.0, space: OpenDesign.TokenColorSpace.sRGB), keycap: OpenDesign.RGBA(red: 0.9568627450980393, green: 0.9568627450980393, blue: 0.9647058823529412, alpha: 0.18, space: OpenDesign.TokenColorSpace.sRGB))"
+          }
+        },
+        "drawerOpen": true,
+        "height": 99,
+        "slider": "100%"
+      },
+      "elementVolume": 1,
+      "full": true,
+      "lowMutes": true,
+      "lowUnmutes": true,
+      "ok": true,
+      "pageVolume": 0.25,
+      "playing": true,
+      "slider": {
+        "at": [
+          86,
+          720.5
+        ],
+        "clicked": "slider",
+        "value": "25%"
+      },
+      "volumeAfterSlider": 0.25
+    },
     "media_web_audio": {
-      "audibleInBackgroundMs": 91.0,
-      "audibleMs": 87.2,
+      "audibleInBackgroundMs": 81.4,
+      "audibleMs": 78.7,
       "inaudibleAfterCloseMs": 2.7,
-      "inaudibleAfterSuspendMs": 2.7,
+      "inaudibleAfterSuspendMs": 2.1,
       "ok": true,
       "session": false
     }
   },
-  "started": "2026-11-02 20:53:48",
+  "started": "2026-11-02 21:48:43",
   "style": "chrome"
 }
