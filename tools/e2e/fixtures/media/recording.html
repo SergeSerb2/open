@@ -1,0 +1,30 @@
+<!doctype html><meta charset="utf-8"><title>Media recording</title>
+<body style="background:#fff;margin:0">
+<script src="common.js"></script>
+<script>
+// A meeting-like page: camera and microphone from getUserMedia (the suite runs Chromium's fake
+// devices and fake permission UI, so no system prompt), a muted local preview, and the page's own
+// microphone, camera and hang-up handlers. Its only player is a MediaStream ("one shot") player,
+// so Chromium never makes the session controllable.
+window.__counts.togglemicrophone = 0; window.__counts.togglecamera = 0; window.__counts.hangup = 0;
+let stream = null, mic = true, cam = true;
+const v = document.createElement('video'); v.id = 'preview'; v.width = 320; v.height = 180; v.muted = true; v.playsInline = true;
+document.body.appendChild(v);
+navigator.mediaSession.setActionHandler('togglemicrophone', () => {
+  __counts.togglemicrophone++; mic = !mic; stream.getAudioTracks().forEach((t) => { t.enabled = mic; });
+  navigator.mediaSession.setMicrophoneActive(mic);
+});
+navigator.mediaSession.setActionHandler('togglecamera', () => {
+  __counts.togglecamera++; cam = !cam; stream.getVideoTracks().forEach((t) => { t.enabled = cam; });
+  navigator.mediaSession.setCameraActive(cam);
+});
+navigator.mediaSession.setActionHandler('hangup', () => { __counts.hangup++; window.stop(); });
+window.start = async () => {
+  stream = await navigator.mediaDevices.getUserMedia({ audio: true, video: true });
+  v.srcObject = stream; await v.play();
+  navigator.mediaSession.setMicrophoneActive(true); navigator.mediaSession.setCameraActive(true);
+  return true;
+};
+window.stop = () => { if (stream) stream.getTracks().forEach((t) => t.stop()); v.srcObject = null; stream = null; return true; };
+window.state = () => ({ mic, cam, counts: window.__counts, tracks: stream ? stream.getTracks().map((t) => t.kind + ':' + t.readyState + ':' + t.enabled) : [] });
+</script>
