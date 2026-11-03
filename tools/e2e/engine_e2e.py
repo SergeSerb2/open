@@ -1589,11 +1589,30 @@ def sleep_engine_checks(app, results, strip_ids):
             results["sleep_hosted_no_dialog_left"] = {"ok": False, "dismissed": leftover}
         try:
             app.call("select", tab=selected)
+            # Closing the page with a beforeunload handler asks it (Chrome
+            # style tab close); accept that prompt here, then restore the
+            # shell's default dialog handling.
+            app.call("policy", dialogs="accept")
+            if unload_tab[0]:
+                # Remove the fixture's beforeunload handler before the close:
+                # a closing tab with a handler gets Chromium's app-modal
+                # prompt, which no shell policy answers (docs/followups.md).
+                app.eval(unload_tab[0], "removeEventListener('beforeunload', window.openUnloadHandler); true")
+                wait_until(lambda: not sleep_op(unload_tab[0], "state")["unloadHandlers"] or None,
+                           timeout=10, step=0.3)
             for t in (tab, unload_tab[0]):
                 if t:
                     app.call("close", tab=t)
+            wait_until(lambda: not any(t["id"] in (tab, unload_tab[0]) for t in app.call("tabs")),
+                       timeout=10, step=0.3)
         except RuntimeError:
             pass
+        finally:
+            app.call("policy", dialogs=None)
+            left = [d for d in (app.call("dismiss") or []) if str(d).startswith(("javascript", "modal", "sheet"))]
+            results["sleep_hosted_cleanup"] = {
+                "ok": not left and not any(t["id"] in (tab, unload_tab[0]) for t in app.call("tabs")),
+                "dialogs": left}
 
 
 def new_window_outlives_opener(app, results):
