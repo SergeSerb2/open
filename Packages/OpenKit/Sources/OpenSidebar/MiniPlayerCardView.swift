@@ -72,6 +72,7 @@ public struct MiniPlayerTitleState {
         for row in [titleRow, drawerRow, controlsRow] as [NSView] { row.wantsLayer = true; contentView.addSubview(row) }
         titleRow.identifier = NSUserInterfaceItemIdentifier("media.titleRow")
         drawerRow.identifier = NSUserInterfaceItemIdentifier("media.drawerRow")
+        slider.identifier = NSUserInterfaceItemIdentifier("media.volumeSlider")
         titleLabel.identifier = NSUserInterfaceItemIdentifier("media.titleLabel")
         titleLabel.font = Typography.miniPlayerTitle.font; titleLabel.baseline = MiniPlayerMetrics.titleBaseline
         titleLabel.onDrawnLine = { [weak self] line, original, truncated, width in
