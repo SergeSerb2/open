@@ -274,6 +274,7 @@ void OpenVideoOverlayWindow::Hide() {
 }
 
 bool OpenVideoOverlayWindow::IsVisible() const {
+  // Shown since ShowInactive and not hidden since (see SetWindowFrame).
   return visible_;
 }
 
@@ -402,6 +403,7 @@ CefRefPtr<CefDictionaryValue> OpenVideoOverlayWindow::GetState() const {
   state->SetInt("playbackState", static_cast<int>(playback_state_));
   state->SetInt("controls", static_cast<int>(controls_));
   state->SetBool("controlsVisible", controls_visible_);
+  state->SetBool("windowVisible", embedder_visible_);
   state->SetBool("microphoneMuted", microphone_muted_);
   state->SetBool("cameraOn", camera_on_);
   state->SetBool("mediaMuted", media_muted_);
@@ -427,7 +429,10 @@ void OpenVideoOverlayWindow::SetWindowFrame(const gfx::Rect& frame_in_screen,
   const bool resized = frame_in_screen.size() != frame_in_screen_.size();
   frame_in_screen_ = frame_in_screen;
   frame_reported_ = true;
-  visible_ = visible && session_;
+  // The embedder's own visibility (a window it hid or is closing) is not
+  // Chromium's "visible": that means the session is shown, and Chromium's
+  // Close() does nothing for a window that is not visible.
+  embedder_visible_ = visible;
   // Tells the renderer the new window size (PiP "resize" event); Chromium
   // reads it back through GetBounds.
   if (resized && controller_ && session_) {

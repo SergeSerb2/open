@@ -150,7 +150,10 @@ class OpenVideoOverlayWindow : public content::VideoOverlayWindow,
   CefRefPtr<OpenPictureInPictureSession> session_;
   gfx::Rect frame_in_screen_{0, 0, 320, 180};
   bool frame_reported_ = false;
+  // Chromium's "visible": the session is shown (ShowInactive, until Hide).
   bool visible_ = false;
+  // The embedder's window visibility (SetWindowFrame), reported in GetState.
+  bool embedder_visible_ = false;
   bool closed_ = false;
 
   gfx::Size natural_size_;
