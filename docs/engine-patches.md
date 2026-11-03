@@ -372,6 +372,25 @@ Section 8 decisions (differences from memory-fork §3/§5, with the reason):
 - `no_renderer` is appended at the end of `cef_browser_settings_t`'s experimental block (after `ax_viewport_collapse`), so `CEF_MEMBER_EXISTS` keeps working. Views-window Chrome browsers ignore it; OpenEngine never restores into them (it loads the fallback URL and reports `.failed`).
 - `cef_types.h` is included by every CEF file: 0105 rebuilds all of libcef and the wrapper (build time in the PR).
 
+## Page platform (Section 8, engine PR with the memory fork)
+
+The engine requests of [plans/page-platform.md](plans/page-platform.md) §6. One public header, `cef/include/cef_open_page.h` (overlay, experimental API, translator-generated C API), with code in `open/browser/page/`. The OpenEngine API is in [engine-api.md](engine-api.md), "Page selection and history swipe" and "Notifications".
+
+| Series | Patch | Files | What |
+|---|---|---|---|
+| chromium | `0501-page-history-swipe-hooks.patch` | `chrome/browser/ui/cocoa/history_overlay_controller.mm` | EP-1: the history overlay reports began / changed / completed / cancelled with direction and progress to the page's `CefOpenPageHandler`, and stays hidden when the page asked for no engine overlay. Both swipe paths (trackpad, Magic Mouse) go through this controller. |
+| chromium | `0504-page-notification-click.patch` | `chrome/browser/notifications/notification_display_service_impl.cc` | EP-6: a web notification click reaches the request context's `CefOpenNotificationHandler` before Chromium dispatches it to the page (one hook in `ProcessNotificationOperation`, the entry point of the macOS response). |
+| cef | `0505-page-website-color-scheme.patch` | `libcef/browser/chrome/chrome_content_browser_client_cef.{h,cc}` | EP-9b: a request context's website color scheme (`CefSetWebsiteColorScheme`) wins over Chrome's in `OverrideWebPreferences` and again in a new `OverrideWebPreferencesAfterNavigation` override (Chrome recomputes the scheme after every navigation). DevTools and chrome:// pages keep Chrome's. |
+
+Section 8 decisions (differences from page-platform §6, with the reason):
+
+- **EP-2 and EP-3 need no patch (no 0502).** The selection text (`RenderWidgetHostView::GetSelectedText` of the focused frame), the link (`TextFragmentReceiver::RequestSelectorForSelection` + `shared_highlighting::AppendSelectors`) and the change bit (a `TextInputManager::Observer` on the page's `WebContentsImpl`) are reachable from overlay code (`open_page_state.cc`; dep `//components/shared_highlighting/core/common`). The change bit reports only empty ↔ non-empty transitions.
+- **EP-4b needs no patch (no 0503).** OpenEngine selects the Network panel through the DevTools front end's `DevToolsAPI.showPanel`, the call Chrome makes for its own Console command (`DevToolsWindow::DoAction`). This also switches an already open DevTools window (Section 8 branch `s8/page-tools`).
+- **The hooks from Chromium files into the overlay are header-only tables** (`open_history_swipe_hooks.h`, `open_notification_hooks.h`): `chrome/browser` and `chrome/browser/ui` cannot depend on libcef, and both are linked into the one framework binary (one `GetHistorySwipeHooks()::hooks` symbol, checked with `nm`). The overlay fills them the first time an embedder sets a page or notification handler.
+- **`historySwipeEnabled` uses Chromium's own `HistorySwipingControl`** (a `WebContentsUserData` the swiper already asks) instead of a hunk in `shouldAllowHistorySwiping`.
+- **EP-6 reports no page.** Chromium keeps the creating document of a non-persistent notification inside content's dispatcher; the embedder finds the tab by origin.
+- **Test hooks** (`CefGetDisplayedNotifications`, `CefSimulateNotificationClick`, `CefSimulateHistorySwipe`) run only with the browser switch `--open-automation`, which only automation builds of the App pass. The swipe hook replays the overlay controller sequence and the navigation, not Chromium's gesture recognition (manual check U-S1).
+
 ## Decisions for the lead
 
 1. Spaces and windows in `chrome.windows`: one Chrome window per Open window (proposed), or one per Space? Arc: per window (`ArcBrowser` has a `windowIdentifier`, docs/re/arccore-engine.md §4.3).

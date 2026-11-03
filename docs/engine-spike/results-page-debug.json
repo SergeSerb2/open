@@ -6,14 +6,14 @@
         "forced": false,
         "ok": true,
         "owned_pids": [
-          75170,
-          75189,
-          75191,
-          75195,
-          75196,
-          75199,
-          75200,
-          75288
+          1488,
+          1580,
+          1581,
+          1582,
+          1583,
+          1584,
+          1585,
+          1622
         ],
         "remaining_processes": [],
         "reply": true,
@@ -27,14 +27,14 @@
         "forced": false,
         "ok": true,
         "owned_pids": [
-          75402,
-          75427,
-          75428,
-          75430,
-          75431,
-          75433,
-          75434,
-          75484
+          1731,
+          1749,
+          1750,
+          1751,
+          1752,
+          1753,
+          1754,
+          1794
         ],
         "remaining_processes": [],
         "reply": true,
@@ -48,15 +48,15 @@
   },
   "config": "Debug",
   "engine": {
-    "distributionCodeSHA256": "9840fd750c7f3eb3ff70a7c1aa0eb70261cf8ae6e64e154f96286ff42e170991",
-    "distributionSHA256": "948a33fcc26a5c7130856b4c9e80c47b03e29f859dc22087abf2a2e5988511f9",
-    "distributionUUID": "4C4C4445-5555-3144-A1B8-BC70FF2519C3",
-    "embeddedCodeSHA256": "9840fd750c7f3eb3ff70a7c1aa0eb70261cf8ae6e64e154f96286ff42e170991",
-    "embeddedSHA256": "3167e7f2ce9887801f5b9322d77763ff903ebaca4351a0bf6c8c6c519068baee",
-    "embeddedUUID": "4C4C4445-5555-3144-A1B8-BC70FF2519C3",
+    "distributionCodeSHA256": "515f71a831da2938194ef5a52229f91835e220884d08a99946c223d524aa4abe",
+    "distributionSHA256": "a9937ab06318e2b719362476c0f40242b15991888cbb563cec1d5d69eea1423f",
+    "distributionUUID": "4C4C4431-5555-3144-A19A-66BC4F744D1F",
+    "embeddedCodeSHA256": "515f71a831da2938194ef5a52229f91835e220884d08a99946c223d524aa4abe",
+    "embeddedSHA256": "f89a285111ad4e02faf895528808abc783ed4726494fbb712148d1c13b8e03cb",
+    "embeddedUUID": "4C4C4431-5555-3144-A19A-66BC4F744D1F",
     "requiredSHA256": "",
     "source": "fork",
-    "stamp": "fork /Users/serge/Developer/open-engine-s8/chromium_git/chromium/src/cef/binary_distrib/cef_binary_156.0.14+g4fa4ab5+chromium-156.0.8078.48_macosarm64_minimal 1793677752"
+    "stamp": "fork /Users/serge/Developer/open-engine-s8/chromium_git/chromium/src/cef/binary_distrib/cef_binary_156.0.14+g4fa4ab5+chromium-156.0.8078.48_macosarm64_minimal 1793680115"
   },
   "interrupted_attempts": [],
   "page": {
@@ -79,7 +79,7 @@
       },
       "picked": {
         "hasSelection": true,
-        "link": "http://127.0.0.1:61102/quote.html#:~:text=The%20quick%20brown%20fox%20studies%20the%20lazy%20dog%20before%20every%20jump.",
+        "link": "http://127.0.0.1:50717/quote.html#:~:text=The%20quick%20brown%20fox%20studies%20the%20lazy%20dog%20before%20every%20jump.",
         "text": "The quick brown fox studies the lazy dog before every jump.\n\n"
       }
     },
@@ -116,7 +116,7 @@
         "changed",
         "cancelled"
       ],
-      "url": "http://127.0.0.1:61102/links-target.html"
+      "url": "http://127.0.0.1:50717/links-target.html"
     },
     "SW4_swipe_disabled": {
       "events": 0,
@@ -127,11 +127,11 @@
       "devicePixelRatio": 2,
       "ok": true,
       "row": {
-        "bytes": 4311,
-        "createdAt": 1793679764.671392,
-        "fileName": "28019AA1-C6A8-42A7-A428-B67FE00DF1EB.png",
+        "bytes": 4310,
+        "createdAt": 1793680845.849112,
+        "fileName": "29D47DCE-0787-4EA4-8786-FB4BBB83CD0F.png",
         "height": 400,
-        "id": "28019AA1-C6A8-42A7-A428-B67FE00DF1EB",
+        "id": "29D47DCE-0787-4EA4-8786-FB4BBB83CD0F",
         "kind": "area",
         "sourceHost": "127.0.0.1",
         "width": 600
@@ -230,10 +230,10 @@
       ],
       "row": {
         "bytes": 978563,
-        "createdAt": 1793679765.7347841,
-        "fileName": "48EEFEBB-9733-4644-AF97-7B234CCB7A1C.png",
+        "createdAt": 1793680846.855247,
+        "fileName": "A33B521F-9EB9-454D-A53B-62D29A3ACAEB.png",
         "height": 24000,
-        "id": "48EEFEBB-9733-4644-AF97-7B234CCB7A1C",
+        "id": "A33B521F-9EB9-454D-A53B-62D29A3ACAEB",
         "kind": "fullPage",
         "sourceHost": "127.0.0.1",
         "width": 2084
@@ -243,10 +243,10 @@
       "ok": true,
       "row": {
         "bytes": 162958,
-        "createdAt": 1793679769.340894,
-        "fileName": "46558921-3641-4678-BA33-0782613AA2B5.png",
+        "createdAt": 1793680850.281808,
+        "fileName": "137D5010-E100-43E8-9E80-A5EC09A82B46.png",
         "height": 3029,
-        "id": "46558921-3641-4678-BA33-0782613AA2B5",
+        "id": "137D5010-E100-43E8-9E80-A5EC09A82B46",
         "kind": "portrait",
         "sourceHost": "127.0.0.1",
         "width": 2423
@@ -279,10 +279,10 @@
       "ok": true,
       "row": {
         "bytes": 1270742,
-        "createdAt": 1793679767.903514,
-        "fileName": "B93F3FCE-AAAA-4497-9A6F-EB65C28D917B.png",
+        "createdAt": 1793680848.902467,
+        "fileName": "B3F3B65F-48C5-4BCA-ACCB-D7D62CD3FFFA.png",
         "height": 32768,
-        "id": "B93F3FCE-AAAA-4497-9A6F-EB65C28D917B",
+        "id": "B3F3B65F-48C5-4BCA-ACCB-D7D62CD3FFFA",
         "kind": "fullPage",
         "sourceHost": "127.0.0.1",
         "width": 2084
@@ -313,7 +313,7 @@
             780
           ],
           "paused": false,
-          "remaining": 7.989988833316602,
+          "remaining": 7.9945872916141525,
           "savedLine": true
         },
         "completed": 7,
@@ -326,11 +326,11 @@
         "replays": 1,
         "result": {
           "bytes": 1270742,
-          "fileName": "Tall page 11-02 at 9.22PM.png",
+          "fileName": "Tall page 11-02 at 9.40PM.png",
           "height": 32768,
           "host": "127.0.0.1",
           "kind": "fullPage",
-          "saved": "B93F3FCE-AAAA-4497-9A6F-EB65C28D917B",
+          "saved": "B3F3B65F-48C5-4BCA-ACCB-D7D62CD3FFFA",
           "truncated": true,
           "width": 2084
         }
@@ -340,11 +340,11 @@
       "ok": true,
       "row": [
         {
-          "bytes": 1663,
-          "createdAt": 1793679761.691509,
-          "fileName": "A165338C-2B1F-4F29-B4B9-36D084D686BF.png",
+          "bytes": 1662,
+          "createdAt": 1793680842.99859,
+          "fileName": "D00FA671-1AF2-4FDC-99BD-85050F39E135.png",
           "height": 200,
-          "id": "A165338C-2B1F-4F29-B4B9-36D084D686BF",
+          "id": "D00FA671-1AF2-4FDC-99BD-85050F39E135",
           "kind": "area",
           "sourceHost": "127.0.0.1",
           "width": 300
@@ -378,7 +378,7 @@
             780
           ],
           "paused": false,
-          "remaining": 7.989215541747399,
+          "remaining": 7.991886624949984,
           "savedLine": true
         },
         "completed": 1,
@@ -390,12 +390,12 @@
         "phase": "showing",
         "replays": 0,
         "result": {
-          "bytes": 1663,
-          "fileName": "Long page 11-02 at 9.22PM.png",
+          "bytes": 1662,
+          "fileName": "Long page 11-02 at 9.40PM.png",
           "height": 200,
           "host": "127.0.0.1",
           "kind": "area",
-          "saved": "A165338C-2B1F-4F29-B4B9-36D084D686BF",
+          "saved": "D00FA671-1AF2-4FDC-99BD-85050F39E135",
           "truncated": false,
           "width": 300
         }
@@ -546,10 +546,10 @@
       ],
       "row": {
         "bytes": 270568,
-        "createdAt": 1793679763.667251,
-        "fileName": "29A2EA81-0B28-47D1-B028-A591EDE10905.png",
+        "createdAt": 1793680844.851742,
+        "fileName": "46556B54-3F60-427D-BEDA-3928D03EFB04.png",
         "height": 12000,
-        "id": "29A2EA81-0B28-47D1-B028-A591EDE10905",
+        "id": "46556B54-3F60-427D-BEDA-3928D03EFB04",
         "kind": "fullPage",
         "sourceHost": "127.0.0.1",
         "width": 1042
@@ -581,7 +581,7 @@
             780
           ],
           "paused": false,
-          "remaining": 7.998974083340727,
+          "remaining": 7.988927041646093,
           "savedLine": true
         },
         "completed": 3,
@@ -594,11 +594,11 @@
         "replays": 0,
         "result": {
           "bytes": 270568,
-          "fileName": "Long page 11-02 at 9.22PM.png",
+          "fileName": "Long page 11-02 at 9.40PM.png",
           "height": 12000,
           "host": "127.0.0.1",
           "kind": "fullPage",
-          "saved": "29A2EA81-0B28-47D1-B028-A591EDE10905",
+          "saved": "46556B54-3F60-427D-BEDA-3928D03EFB04",
           "truncated": false,
           "width": 1042
         }
@@ -608,10 +608,10 @@
       "ok": true,
       "row": {
         "bytes": 51314,
-        "createdAt": 1793679763.3109422,
-        "fileName": "DFD864EC-1820-4033-BC92-8F18CDDD2BB5.png",
+        "createdAt": 1793680844.5113502,
+        "fileName": "F6F27E4E-05F6-40A5-B05C-AF053D610BF1.png",
         "height": 1515,
-        "id": "DFD864EC-1820-4033-BC92-8F18CDDD2BB5",
+        "id": "F6F27E4E-05F6-40A5-B05C-AF053D610BF1",
         "kind": "portrait",
         "sourceHost": "127.0.0.1",
         "width": 1212
@@ -651,12 +651,12 @@
         "phase": "idle",
         "replays": 0,
         "result": {
-          "bytes": 1663,
-          "fileName": "Long page 11-02 at 9.22PM.png",
+          "bytes": 1662,
+          "fileName": "Long page 11-02 at 9.40PM.png",
           "height": 200,
           "host": "127.0.0.1",
           "kind": "area",
-          "saved": "A165338C-2B1F-4F29-B4B9-36D084D686BF",
+          "saved": "D00FA671-1AF2-4FDC-99BD-85050F39E135",
           "truncated": false,
           "width": 300
         }
@@ -665,11 +665,11 @@
     "capture_c5_drag": {
       "ok": true,
       "row": {
-        "bytes": 1224,
-        "createdAt": 1793679764.1346521,
-        "fileName": "58700676-3C03-4C4A-B9E8-24426CACC73B.png",
+        "bytes": 1223,
+        "createdAt": 1793680845.3177881,
+        "fileName": "F36B10DB-23AA-43C2-960D-D129A3159696.png",
         "height": 160,
-        "id": "58700676-3C03-4C4A-B9E8-24426CACC73B",
+        "id": "F36B10DB-23AA-43C2-960D-D129A3159696",
         "kind": "area",
         "sourceHost": "127.0.0.1",
         "width": 240
@@ -708,13 +708,13 @@
         "canGoBack": false,
         "canGoForward": false,
         "crashed": false,
-        "createdAt": 1793679764.184299,
+        "createdAt": 1793680845.368017,
         "favicon": false,
         "faviconReportsCompleted": 0,
         "faviconReportsRejected": 0,
         "hasWebContent": true,
-        "id": "3F26861C-1A0D-4FDD-A663-40E36C30D1AC",
-        "lastActiveAt": 1793679764.186302,
+        "id": "5525C304-16E1-46B4-9500-163129084908",
+        "lastActiveAt": 1793680845.369906,
         "loaded": true,
         "loading": false,
         "page": {
@@ -731,7 +731,7 @@
           "favicon": false,
           "fullscreen": false,
           "hidden": false,
-          "hostTab": "3F26861C-1A0D-4FDD-A663-40E36C30D1AC",
+          "hostTab": "5525C304-16E1-46B4-9500-163129084908",
           "identifier": 2,
           "kind": "tab",
           "live": true,
@@ -746,21 +746,21 @@
           "popup": false,
           "style": "alloy",
           "title": "Link target",
-          "url": "http://127.0.0.1:61001/links-target.html",
+          "url": "http://127.0.0.1:50624/links-target.html",
           "zoom": 0
         },
         "pinnedURL": "",
-        "profile": "F4D7AFD7-A261-4924-952C-9E138133F4B6",
+        "profile": "E2D2F24A-F69F-41FC-A062-644776BFAA27",
         "progress": 1,
         "rowFaviconHash": "",
         "rowFaviconSource": "placeholder",
         "section": "today",
         "selected": true,
         "sleepPhase": "live",
-        "space": "53D1F62C-6058-4762-AD46-3AEDEE001423",
+        "space": "39CA478F-4E64-4E94-919C-BA9CA292C9D9",
         "title": "Link target",
         "unread": false,
-        "url": "http://127.0.0.1:61001/links-target.html",
+        "url": "http://127.0.0.1:50624/links-target.html",
         "visible": true
       },
       "replays": 1
@@ -793,7 +793,7 @@
         "frame": "{{555, 409}, {370, 182}}",
         "key": true,
         "level": 0,
-        "number": 168082,
+        "number": 170595,
         "parent": 0,
         "sheet": true,
         "title": "Save",
@@ -802,11 +802,11 @@
     },
     "capture_card_lifetime": {
       "ok": true,
-      "paused": 7.775957250036299,
-      "resumed": 7.775484041776508,
+      "paused": 7.782499541644938,
+      "resumed": 7.782054291688837,
       "scheduled": [
         8,
-        7.989215541747399
+        7.991886624949984
       ]
     },
     "capture_context_menu": {
@@ -864,13 +864,13 @@
     "capture_shortcut_hint": {
       "hintShows": 1,
       "ok": true,
-      "stored": 1793679762.990333
+      "stored": 1793680844.203253
     },
     "capture_shortcut_hint_once": {
       "hintShows": 1,
       "ok": true
     }
   },
-  "started": "2026-11-02 21:22:35",
+  "started": "2026-11-02 21:40:37",
   "style": "alloy"
 }
