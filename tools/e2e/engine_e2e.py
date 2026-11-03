@@ -5446,6 +5446,11 @@ def sleep_checks(factory, results, tmp, style):
         return {"count": len(pids), "rssKB": rss}
     def blocked(name, reason):
         results[name] = {"status": "BLOCKED", "reason": reason}
+    def _try(fn):
+        try:
+            return fn()
+        except Exception:
+            return None
     for key in SLEEP_MEDIA_KEYS:
         app.call("defaults", key=key, value=None)
     app.call("sleep-power", lowPower=False)
@@ -5733,17 +5738,30 @@ def sleep_checks(factory, results, tmp, style):
                                             "destroyed": {"p50ms": pct(destroyed_ms, .5), "p95ms": pct(destroyed_ms, .95), "n": len(destroyed_ms)},
                                             "cache": "warm (same fixture page each wake)", "load": os.getloadavg(),
                                             "note": "in-place discard reload; budget 700 ms first paint on a cached page"}
-        # F5 unfreeze: a frozen tab shows again (budget 16 ms from selection to content).
-        unfreeze_ms = []
+        # F5 unfreeze: a frozen tab shows again (budget 16 ms to content visible). An unfreeze has
+        # no commit, so the page itself stamps the moment it becomes visible (visibilitychange,
+        # which a frozen renderer cannot run); the clock starts right before the select call.
+        app.eval(target, "window.__vis = []; document.addEventListener('visibilitychange', () => {"
+                         " if (document.visibilityState === 'visible') __vis.push(Date.now()); }); true")
+        unfreeze_ms, unfreeze_phases = [], []
         for _ in range(20):
-            def freeze_setup():
-                advance(31); tick()
-            line = wake(freeze_setup)
-            if line and line.startswith("sleep-wake unfreeze"):
-                unfreeze_ms.append(float(line.split("ms=")[1]))
+            select(home)
+            seen = len(app.eval(target, "__vis"))
+            advance(31); tick()
+            unfreeze_phases.append(phase(target))
+            if unfreeze_phases[-1] != "frozen":
+                continue
+            t0 = time.time() * 1000
+            app.call("select", tab=target)
+            stamp = wait_until(lambda: (lambda v: v[-1] if len(v) > seen else None)(_try(lambda: app.eval(target, "__vis")) or []),
+                               timeout=5, step=.005)
+            if stamp:
+                unfreeze_ms.append(stamp - t0)
         results["sleep_f5_unfreeze"] = {"ok": len(unfreeze_ms) == 20 and pct(unfreeze_ms, .95) <= 16,
                                         "p50ms": pct(unfreeze_ms, .5), "p95ms": pct(unfreeze_ms, .95), "n": len(unfreeze_ms),
-                                        "load": os.getloadavg()}
+                                        "frozenBeforeWake": unfreeze_phases.count("frozen"), "load": os.getloadavg(),
+                                        "measure": "select call → the page's visibilitychange to visible (includes the automation round trip)"}
+        select(home)
 
         # chrome.tabs.discard (engine-patches P1 "Discards") goes through the same gates.
         if style == "chrome":
@@ -5827,8 +5845,10 @@ def sleep_checks(factory, results, tmp, style):
             app.call("wait", tab=home)
             n1 = len(state()["log"])
             select(victim)
-            app.call("wait", tab=victim)
-            landed = wait_until(lambda: app.eval(victim, "location.href") == urls[frozen_tab] or None, timeout=15, step=.1)
+            # No `wait` here: the first page (the refused restore) closes, and its replacement loads
+            # the URL; poll the tab's current page instead.
+            landed = wait_until(lambda: _try(lambda: app.eval(victim, "document.readyState === 'complete' ? location.href : null"))
+                                == urls[frozen_tab] or None, timeout=20, step=.1)
             corrupt = {"landed": bool(landed), "historyLength": app.eval(victim, "history.length"),
                        "log": state()["log"][n1:], "dialogs": [d for d in (app.call("dismiss") or []) if str(d).startswith(("javascript", "modal", "sheet"))]}
         results["sleep_f4_corrupt_fallback"] = {
