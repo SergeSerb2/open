@@ -8613,13 +8613,19 @@ def page_tools_devtools_checks(app, results, port, style):
             _try(lambda: app.call("dismiss"))
     # D2 (EP-4b): Develop ▸ Network Inspector opens DevTools on the Network panel; a second
     # request with DevTools open switches an already open window to it.
+    # Commands validate against the key window: the browser window, not a DevTools window.
+    def focus_browser():
+        app.call("window-focus", id=app.call("window-state")["id"], activate=True)
     try:
+        focus_browser()
         app.call("command", id="network-inspector")
         net = wait_until(lambda: (lambda ids: ids if "tab-network" in ids else None)(
             _try(lambda: app.call("devtools-frontend", tab=tab, js=_DEVTOOLS_SELECTED_TABS)) or []), timeout=20, step=.5)
+        focus_browser()
         app.call("command", id="javascript-console")
         back = wait_until(lambda: (lambda ids: ids if "tab-console" in ids else None)(
             _try(lambda: app.call("devtools-frontend", tab=tab, js=_DEVTOOLS_SELECTED_TABS)) or []), timeout=20, step=.5)
+        focus_browser()
         app.call("command", id="network-inspector")
         again = wait_until(lambda: (lambda ids: ids if "tab-network" in ids else None)(
             _try(lambda: app.call("devtools-frontend", tab=tab, js=_DEVTOOLS_SELECTED_TABS)) or []), timeout=20, step=.5)
