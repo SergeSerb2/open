@@ -1529,9 +1529,172 @@ def tabstrip_checks(app, results):
         info["ok"] = False
         info["error"] = str(e)
     results["bitwarden_popup"] = info
+    sleep_engine_checks(app, results, lambda: strip_ids(pop))
+    app.call("select", tab=first)
     results["window_screenshot"] = shot(app, "p1-window.png")
     context_menu_commands(app, results)
     new_window_outlives_opener(app, results)
+
+
+def sleep_engine_checks(app, results, strip_ids):
+    """Tab-sleep engine primitives on a hosted tab (memory-fork S1/S4/S5 on
+    the shell's real tab path; fork patches 0101/0104/0105 + overlay API).
+    Uses the memory-fork fixtures over loopback; prints the load average."""
+    import http.server
+    import threading
+    fixtures = os.path.join(ROOT, "Engine", "fork", "verification", "fixtures")
+    class Handler(http.server.SimpleHTTPRequestHandler):
+        def __init__(self, *a, **k):
+            super().__init__(*a, directory=fixtures, **k)
+
+        def log_message(self, *args):
+            pass
+    server = http.server.ThreadingHTTPServer(("127.0.0.1", 0), Handler)
+    threading.Thread(target=server.serve_forever, daemon=True).start()
+    base = "http://127.0.0.1:%d/" % server.server_address[1]
+    load = os.getloadavg()
+
+    def sleep_op(tab, op):
+        return app.call("engine-sleep", tab=tab, op=op, timeout=30)
+
+    def navigate(tab, name):
+        app.eval(tab, "location.href = %s; true" % json.dumps(base + name))
+        wait_until(lambda: app.eval(tab, "location.pathname + document.readyState") == "/" + name.split("?")[0] + "complete",
+                   timeout=20, step=0.2)
+
+    def renderers():
+        rows = [l.split(None, 2) for l in subprocess.check_output(["ps", "-axo", "pid=,ppid=,command="], text=True).splitlines()]
+        kids = {app.pid}
+        for _ in range(6):
+            kids |= {int(r[0]) for r in rows if len(r) == 3 and int(r[1]) in kids}
+        return sorted(int(r[0]) for r in rows if len(r) == 3 and int(r[0]) in kids and "--type=renderer" in r[2]
+                      and "--extension-process" not in r[2])
+
+    selected = [t["id"] for t in app.call("tabs") if t["selected"]][0]
+    unload_tab = [None]
+    tab = new_tab(app, base + "ticker.html")
+    app.call("select", tab=selected)
+    time.sleep(1.5)
+    try:
+        # S1: a background hosted tab is HIDDEN for Chromium (its view is
+        # hidden by the shell); setPageHidden goes through patch 0302's hosted
+        # path to UpdateWebContentsVisibility.
+        state = app.eval(tab, "document.visibilityState")
+        sleep_op(tab, "show")
+        shown = app.eval(tab, "document.visibilityState")
+        sleep_op(tab, "hide")
+        hidden = app.eval(tab, "document.visibilityState")
+        results["sleep_hosted_visibility"] = {"ok": state == "hidden" and shown == "visible" and hidden == "hidden",
+                                              "background": state, "after_show": shown, "after_hide": hidden}
+        # S4 freeze: refused while visible; the hidden ticker stops while
+        # frozen and runs again after unfreeze.
+        app.call("select", tab=tab)
+        time.sleep(0.5)
+        refused = sleep_op(tab, "freeze")
+        app.call("select", tab=selected)
+        time.sleep(1.5)
+        t0 = app.eval(tab, "ticks")
+        frozen = sleep_op(tab, "freeze")
+        time.sleep(6)
+        during = sleep_op(tab, "state")
+        thawed = sleep_op(tab, "unfreeze")
+        t1 = app.eval(tab, "ticks")
+        time.sleep(3.2)
+        t2 = app.eval(tab, "ticks")
+        results["sleep_hosted_freeze"] = {
+            "ok": refused["ok"] is False and frozen["ok"] and frozen["frozen"] and during["frozen"]
+                  and thawed["ok"] and not thawed["frozen"] and t1 - t0 <= 1 and t2 - t1 >= 2,
+            "refused_visible": refused, "frozen": frozen, "ticks": [t0, t1, t2], "frozen_seconds": 6,
+            "load": load}
+        # S5: beforeunload handler flag. Never navigate away from the page
+        # with the handler: closing it (force close) shows no dialog.
+        without = sleep_op(tab, "state")["unloadHandlers"]
+        unload_tab[0] = new_tab(app, base + "c.html?unload=1")
+        app.call("select", tab=selected)
+        with_handler = wait_until(lambda: sleep_op(unload_tab[0], "state")["unloadHandlers"] or None,
+                                  timeout=5, step=0.3)
+        results["sleep_hosted_unload_flag"] = {"ok": with_handler is True and without is False,
+                                               "with": with_handler, "without_on_ticker": without}
+        # S4 discard in place: history a -> b -> c with scroll and form state.
+        navigate(tab, "b.html")
+        navigate(tab, "c.html")
+        app.eval(tab, "scrollTo(0, innerHeight * 2); document.querySelector('#q').value = 'open-sleep-check'; true")
+        scroll = app.eval(tab, "scrollY")
+        before = sleep_op(tab, "state")
+        strip_before = strip_ids()
+        procs_before = renderers()
+        app.call("select", tab=selected)
+        # Blink syncs the hidden page's scroll and form state to the browser
+        # within about 5 s (measured: 840 B at 1 s, 1232 B at 6 s); sleep
+        # policy discards 30 s or more after a hide.
+        time.sleep(6)
+        discard = sleep_op(tab, "discard")
+        time.sleep(2)
+        procs_after = renderers()
+        after = sleep_op(tab, "state")
+        # Capture after the discard settled: the renderer flushed the page
+        # state (scroll, form) while it unloaded; a capture taken right after
+        # a hide can miss the last edits (Track A measurement).
+        capture = sleep_op(tab, "capture")["history"] or {}
+        strip_after = strip_ids()
+        again = sleep_op(tab, "discard")
+        app.call("select", tab=tab)
+        wait_until(lambda: app.eval(tab, "document.readyState") == "complete", timeout=20, step=0.3)
+        time.sleep(0.5)
+        page = app.eval(tab, "({d: document.wasDiscarded, q: document.querySelector('#q').value, y: scrollY,"
+                             " n: history.length, path: location.pathname})")
+        reloaded = sleep_op(tab, "state")
+        results["sleep_hosted_capture"] = {
+            "ok": capture.get("entryCount", 0) >= 3 and capture.get("currentIndex") == capture.get("entryCount", 0) - 1
+                  and capture.get("hasPageState") is True and capture.get("title") == "Open history C"
+                  and capture.get("roundTrip") is True,
+            "history": capture}
+        results["sleep_hosted_discard"] = {
+            "ok": discard["ok"] is True and after["discarded"] and again["ok"] is True
+                  and len(procs_after) < len(procs_before)
+                  and page["d"] is True and page["path"] == "/c.html" and page["q"] == "open-sleep-check"
+                  and abs(page["y"] - scroll) < 50 and not reloaded["discarded"],
+            "renderers": [procs_before, procs_after], "page": page, "scroll_before": scroll, "load": load}
+        # The discarded tab keeps its chrome.tabs identity (no replacement
+        # WebContents, unlike Chrome's TabLifecycleUnit discard; patch 0303).
+        results["sleep_hosted_discard_keeps_tab_id"] = {
+            "ok": before["chromeTabId"] > 0 and before["chromeTabId"] == after["chromeTabId"] == reloaded["chromeTabId"]
+                  and strip_before == strip_after and before["chromeTabId"] in strip_after,
+            "chromeTabId": [before["chromeTabId"], after["chromeTabId"], reloaded["chromeTabId"]],
+            "strip": [strip_before, strip_after]}
+    finally:
+        server.shutdown()
+        server.server_close()
+        # No dialog may outlive the checks (review checklist 4).
+        leftover = [d for d in (app.call("dismiss") or []) if str(d).startswith(("javascript", "modal", "sheet"))]
+        if leftover:
+            results["sleep_hosted_no_dialog_left"] = {"ok": False, "dismissed": leftover}
+        try:
+            app.call("select", tab=selected)
+            # Closing the page with a beforeunload handler asks it (Chrome
+            # style tab close); accept that prompt here, then restore the
+            # shell's default dialog handling.
+            app.call("policy", dialogs="accept")
+            if unload_tab[0]:
+                # Remove the fixture's beforeunload handler before the close:
+                # a closing tab with a handler gets Chromium's app-modal
+                # prompt, which no shell policy answers (docs/followups.md).
+                app.eval(unload_tab[0], "removeEventListener('beforeunload', window.openUnloadHandler); true")
+                wait_until(lambda: not sleep_op(unload_tab[0], "state")["unloadHandlers"] or None,
+                           timeout=10, step=0.3)
+            for t in (tab, unload_tab[0]):
+                if t:
+                    app.call("close", tab=t)
+            wait_until(lambda: not any(t["id"] in (tab, unload_tab[0]) for t in app.call("tabs")),
+                       timeout=10, step=0.3)
+        except RuntimeError:
+            pass
+        finally:
+            app.call("policy", dialogs=None)
+            left = [d for d in (app.call("dismiss") or []) if str(d).startswith(("javascript", "modal", "sheet"))]
+            results["sleep_hosted_cleanup"] = {
+                "ok": not left and not any(t["id"] in (tab, unload_tab[0]) for t in app.call("tabs")),
+                "dialogs": left}
 
 
 def new_window_outlives_opener(app, results):
@@ -5300,6 +5463,101 @@ CAPTURE_BANDS = [(224, 64, 64), (64, 176, 80), (48, 96, 224), (224, 192, 48), (1
                  (240, 128, 32), (32, 32, 32), (128, 224, 128), (224, 128, 192), (64, 128, 160), (192, 160, 128)]
 
 
+def page_engine_checks(factory, results, tmp):
+    """Engine page API in the real App (page-platform §6, fork PR E2): EP-1 history swipe through the
+    engine's automation replay hook (SW1, SW2, SW4), EP-2 selection and link to highlight (Q2), and
+    EP-3 selection changes. Real trackpad recognition stays the manual check U-S1 (plan R-7)."""
+    folder = os.path.join(ROOT, 'tools', 'e2e', 'fixtures', 'page-platform')
+    server, origin = _static_server(folder)
+    app = factory(urls=(origin + '/links.html',), fresh=True)
+    selection_bit = 1 << 15
+    try:
+        tab = app.call('tabs')[0]['id']
+        app.call('wait', tab=tab)
+        a_url = origin + '/links.html'
+        b_url = origin + '/links-target.html'
+        app.call('navigate', tab=tab, url=b_url)
+        app.call('wait', tab=tab)
+        wait_until(lambda: app.eval(tab, 'location.href') == b_url or None, timeout=10, step=.1)
+        url = lambda: app.eval(tab, 'location.href')
+        swipe_events = lambda: [e for e in app.call('events') if e['type'] == 'historySwipe']
+        # SW1: back past the threshold navigates back; forward returns. Chrome's own overlay is off.
+        app.call('events')
+        options = app.call('swipe', tab=tab, engineOverlay=False)
+        back = app.call('swipe', tab=tab, direction='back', progress=1.2)
+        at_a = wait_until(lambda: url() == a_url or None, timeout=10, step=.1)
+        ev_back = swipe_events()
+        fwd = app.call('swipe', tab=tab, direction='forward', progress=1.2)
+        at_b = wait_until(lambda: url() == b_url or None, timeout=10, step=.1)
+        ev_fwd = swipe_events()
+        phases = lambda ev: [e['phase'] for e in ev]
+        results['SW1_swipe_back_forward'] = {
+            'ok': options['engineOverlay'] is False and back['ran'] and fwd['ran'] and bool(at_a) and bool(at_b)
+            and phases(ev_back)[:1] == ['began'] and phases(ev_back)[-1:] == ['completed']
+            and all(e['direction'] == 'back' for e in ev_back) and phases(ev_fwd)[-1:] == ['completed']
+            and all(e['direction'] == 'forward' for e in ev_fwd) and ev_back[-1]['progress'] >= 1,
+            'back': phases(ev_back), 'forward': phases(ev_fwd), 'urls': [bool(at_a), bool(at_b)]}
+        # SW2: half a swipe does not navigate; the swipe ends cancelled.
+        half = app.call('swipe', tab=tab, direction='back', progress=0.5)
+        time.sleep(1)
+        ev_half = swipe_events()
+        results['SW2_partial_swipe_cancels'] = {
+            'ok': half['ran'] and url() == b_url and phases(ev_half)[-1:] == ['cancelled']
+            and max(e['progress'] for e in ev_half) <= 0.5,
+            'phases': phases(ev_half), 'url': url()}
+        # SW4: a page with swipes off (capture overlay, Zap) refuses; no event, no navigation.
+        app.call('swipe', tab=tab, enabled=False)
+        refused = app.call('swipe', tab=tab, direction='back', progress=1.2)
+        time.sleep(1)
+        ev_off = swipe_events()
+        app.call('swipe', tab=tab, enabled=True)
+        results['SW4_swipe_disabled'] = {'ok': refused['ran'] is False and not ev_off and url() == b_url,
+                                         'ran': refused['ran'], 'events': len(ev_off)}
+
+        # Q2 (EP-2) and EP-3: select a sentence, read text + link, open the link.
+        app.call('navigate', tab=tab, url=origin + '/quote.html')
+        app.call('wait', tab=tab)
+        wait_until(lambda: app.eval(tab, "document.readyState === 'complete' && location.pathname === '/quote.html' || null"), timeout=10, step=.1)
+        app.call('focus', tab=tab)
+        app.call('events')
+        empty = app.call('page-selection', tab=tab)
+        # A user's selection: triple-click the sentence (DevTools Input mouse events, the page's
+        # real input path), so the page also has input focus as after a real click.
+        r = app.eval(tab, "(() => { const b = document.getElementById('quote').getBoundingClientRect(); return [b.left + 20, b.top + b.height / 2] })()")
+        for count in (1, 2, 3):
+            for kind in ('mousePressed', 'mouseReleased'):
+                app.call('devtools', tab=tab, method='Input.dispatchMouseEvent',
+                         params={'type': kind, 'x': r[0], 'y': r[1], 'button': 'left', 'clickCount': count})
+        has = wait_until(lambda: app.call('page-selection', tab=tab)['hasSelection'] or None, timeout=5, step=.1)
+        picked = app.call('page-selection', tab=tab)
+        changes = [e['changes'] for e in app.call('events') if e['type'] == 'change' and e['changes'] & selection_bit]
+        # A single click elsewhere clears it.
+        for kind in ('mousePressed', 'mouseReleased'):
+            app.call('devtools', tab=tab, method='Input.dispatchMouseEvent',
+                     params={'type': kind, 'x': 5, 'y': 5, 'button': 'left', 'clickCount': 1})
+        cleared = wait_until(lambda: (not app.call('page-selection', tab=tab)['hasSelection']) or None, timeout=5, step=.1)
+        link = picked.get('link') or ''
+        opened = None
+        if link:
+            other = app.call('open', url=link)['id']
+            app.call('wait', tab=other)
+            # Chromium strips the directive from location and highlights the text it found.
+            opened = wait_until(lambda: app.eval(other, "(() => { const s = CSS.highlights ? [...CSS.highlights.keys()] : []; "
+                                                 "return location.pathname === '/quote.html' && !location.hash.includes(':~:') ? "
+                                                 "{hash: location.hash, highlights: s, y: scrollY} : null })()"), timeout=10, step=.2)
+            app.call('close', tab=other)
+        results['Q2_selection_and_link'] = {
+            'ok': empty['text'] == '' and empty['link'] is None and bool(has)
+            and picked['text'].strip() == 'The quick brown fox studies the lazy dog before every jump.'
+            and link.startswith(origin + '/quote.html#:~:text=') and bool(opened),
+            'empty': empty, 'picked': picked, 'opened': opened}
+        results['EP3_selection_change_bit'] = {'ok': bool(has) and bool(cleared) and len(changes) >= 1,
+                                               'changeEvents': len(changes), 'cleared': bool(cleared)}
+    finally:
+        app.quit()
+        server.shutdown(); server.server_close()
+
+
 def capture_checks(factory, results, tmp):
     """page-platform §8.3 C1–C7: the Capture tool in the real App (Step 13)."""
     server, origin = _static_server(os.path.join(ROOT, 'tools', 'e2e', 'fixtures', 'page-platform'))
@@ -8009,6 +8267,7 @@ def main():
         elif opts.only == "page":
             results["page"] = CheckedResults(tracker)
             capture_checks(factory, results["page"], tmp)
+            page_engine_checks(factory, results["page"], tmp)
         elif opts.only in ("toolbar", "numbering"):
             results[opts.only] = CheckedResults(tracker)
             (toolbar_checks if opts.only == "toolbar" else numbering_checks)(factory, results[opts.only], tmp)
