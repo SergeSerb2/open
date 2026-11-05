@@ -1,0 +1,473 @@
+"""S11 real App menu flows. Called by engine_e2e.py; no isolated or mocked tests."""
+import json
+import os
+import time
+import traceback
+import urllib.parse
+
+
+LINK_ITEMS = ['Open Link in New Tab', 'Open Link in Split View', 'Open Link in Peek',
+              'Open Link in Little Open', 'Open Link in New Window']
+
+
+def context_menu_checks(factory, results, tmp, h):
+    folder = os.path.join(h.ROOT, 'tools', 'e2e', 'fixtures', 'context-menus')
+    server, origin = h._static_server(folder)
+    app = factory(urls=(origin + '/index.html',), fresh=True,
+                  extra_env={'OPEN_AUTOMATION_TRANSLATE_BACKEND': 'fixture'},
+                  extra_args=['--load-extension=' + os.path.join(h.ROOT, 'tools/e2e/fixtures/context-menu-probe'),
+                              '--disable-features=DisableLoadExtensionCommandLineSwitch'])
+    saved = {}
+    tab = app.call('tabs')[0]['id']
+    home = app.call('window-state')['id']
+    space = next(x['id'] for x in app.call('spaces') if x['focused'])
+    wait = h.wait_until
+
+    def run(name, fn):
+        try:
+            value = fn()
+            results[name] = value
+        except h.FocusInterruption:
+            raise
+        except Exception as error:
+            results[name] = {'ok': False, 'error': str(error), 'trace': traceback.format_exc()[-900:]}
+
+    def focus():
+        app.call('window-focus', id=home, activate=True)
+        app.call('peek-close')
+        app.call('space', space=space)
+        app.call('select', tab=tab)
+        app.call('wait', tab=tab)
+        app.call('focus', tab=tab)
+
+    def point(selector, target=tab):
+        return app.eval(target, '''(() => { const e=document.querySelector(%s); e.scrollIntoView({block:'center'});
+          const r=e.getBoundingClientRect(); return [r.left + Math.min(r.width/2, 25), r.top+r.height/2] })()''' % json.dumps(selector))
+
+    def select(selector, text=None):
+        app.eval(tab, '''(() => { const e=document.querySelector(%s); %s
+          const r=document.createRange(); r.selectNodeContents(e); const s=getSelection();s.removeAllRanges();s.addRange(r) })()'''
+                 % (json.dumps(selector), ('e.textContent=' + json.dumps(text) + ';') if text is not None else ''))
+
+    def menu(selector='#page', policy='record', target=tab, clear=True):
+        if clear:
+            app.eval(target, 'getSelection().removeAllRanges(); document.activeElement?.blur()')
+        app.call('policy', contextMenu=policy)
+        app.call('events')
+        x, y = point(selector, target)
+        app.call('rightclick', tab=target, x=x, y=y)
+        collected = []
+
+        def received():
+            collected.extend(app.call('events'))
+            return next((e for e in collected if e['type'] == 'contextMenu'), None)
+        event = wait(received, timeout=8, step=.05)
+        # Drain the queued action/decision after the engine callback returns.
+        collected.extend(app.call('events'))
+        return event or {}, collected
+
+    def selected():
+        return next((t for t in app.call('tabs') if t['selected']), {})
+
+    def opener_of(identifier):
+        with open(app.call('save')) as stream:
+            snapshot = json.load(stream)
+        def find(value):
+            if isinstance(value, dict):
+                if value.get('id') == identifier:
+                    return value.get('openerID')
+                for child in value.values():
+                    result = find(child)
+                    if result:
+                        return result
+            if isinstance(value, list):
+                for child in value:
+                    result = find(child)
+                    if result:
+                        return result
+        return find(snapshot)
+
+    def row_enabled(identifier):
+        return next(r['enabled'] for r in app.call('menu-state') if r['id'] == identifier)
+
+    def new_background(selector, title, url):
+        focus()
+        before = {x['id'] for x in app.call('tabs')}
+        if title == 'Open Image in New Tab':
+            recorded, _ = menu(selector)
+            command = next(c for c in recorded['commands'] if c['title'] == title)
+            policy = 'run:' + str(command['id'])
+        else:
+            policy = 'run-open:' + title
+        event, decisions = menu(selector, policy)
+        new = wait(lambda: [x for x in app.call('tabs') if x['id'] not in before], timeout=5)
+        result = {'ok': len(new) == 1 and new[0]['url'] == url and not new[0]['selected']
+                  and selected()['id'] == tab and new[0]['section'] == 'today'
+                  and opener_of(new[0]['id']) == tab,
+                  'new': new, 'shown': event.get('shown'), 'decisions': decisions}
+        for item in new:
+            app.call('close', tab=item['id'])
+        return result
+
+    try:
+        for key in ('open.translate.neverTranslateHosts', 'open.translate.enabled', 'open.previews.pinned',
+                    'open.links.littleOpenHotkeyEnabled'):
+            saved[key] = app.call('defaults', key=key)
+            app.call('defaults', key=key, value=None)
+        app.call('window-frame', frame=[80, 60, 1360, 1000])
+        focus()
+        app.call('settings-custom-engine', template=origin + '/target.html?q=%s')
+        wait(lambda: app.call('translate', action='state').get('state') == 'offered', timeout=10)
+
+        def order(name, selector, selection=False):
+            focus()
+            if selection:
+                select(selector)
+            event, events = menu(selector, clear=not selection)
+            shown = event.get('shown', [])
+            raw = event.get('items', [])
+            ok = bool(shown) and shown[0] != '-' and shown[-1] != '-' and not any(a == b == '-' for a, b in zip(shown, shown[1:]))
+            if name in ('link', 'mailto', 'linked_image'):
+                ok = ok and all(shown.count(t) == 1 for t in LINK_ITEMS)
+                anchor = shown.index(LINK_ITEMS[0]) if LINK_ITEMS[0] in shown else -1
+                ok = ok and shown[anchor:anchor + 6] == LINK_ITEMS + ['-']
+                ok = ok and next((r['enabled'] for r in event.get('rows', []) if r['key'] == 'link-little-open'), None) is False
+                if name == 'mailto':
+                    ok = ok and any('Copy Email Address' in t or 'Copy Link' in t for t in shown)
+            else:
+                ok = ok and not any(t in shown for t in LINK_ITEMS)
+            if name == 'page':
+                expected = ['Back', 'Forward', 'Reload']
+                ok = ok and all(x in shown for x in expected) and 'Capture' in shown and 'Capture Full Page' in shown
+                if 'Translate to English' in shown:
+                    ok = ok and shown.index('Translate to English') < shown.index('Capture')
+                for title in ('View Page Source', 'Inspect'):
+                    if title in shown:
+                        ok = ok and shown.index('Capture Full Page') < shown.index(title)
+                ok = ok and shown.index('Capture') + 1 == shown.index('Capture Full Page')
+            if name in ('image', 'linked_image'):
+                ok = ok and all(any(x.startswith(t) for x in shown) for t in ('Open Image in New Tab', 'Save Image As', 'Copy Image', 'Copy Image Address'))
+            if name == 'selection':
+                title = 'Search Local Search for “bonjour menu contextuel”'
+                ok = ok and title in shown and shown.index(title) == shown.index('Copy') + 1
+            if name == 'url':
+                title = 'Go to https://example.invalid/context-target'
+                ok = ok and shown.count(title) == 1 and shown.index(title) == shown.index('Copy') + 1
+            if name == 'editable':
+                ok = ok and shown == [t or '-' for t in raw] and not any(t.startswith('Search ') for t in shown)
+            # The recorded complete order is also checked against the committed target receipt.
+            expected_path = os.path.join(folder, 'order-' + app.style + '.json')
+            if os.path.exists(expected_path):
+                with open(expected_path) as stream:
+                    expected = json.load(stream)
+                ok = ok and shown == expected[name]
+            return {'ok': bool(ok), 'shown': shown, 'engine': raw, 'rows': event.get('rows'),
+                    'decisions': [e for e in events if e['type'] == 'contextMenuDecision']}
+
+        for name, selector, selection in [('page', '#page', False), ('link', '#link', False), ('mailto', '#mailto', False),
+                                         ('image', '#image', False), ('linked_image', '#linked-image', False),
+                                         ('selection', '#selection', True), ('url', '#url', True), ('editable', '#editable', False)]:
+            run('cm_order_' + name, lambda n=name, s=selector, v=selection: order(n, s, v))
+        run('cm_link_background', lambda: new_background('#link', LINK_ITEMS[0], origin + '/target.html'))
+        run('cm_image_background', lambda: new_background('#image', 'Open Image in New Tab', origin + '/image.svg'))
+
+        def split():
+            focus()
+            event, _ = menu('#link', 'run-open:Open Link in Split View')
+            panes = wait(lambda: [t for t in app.call('tabs') if t['visible']], timeout=5)
+            # Wait for both panes rather than accepting the source's pre-action single pane.
+            panes = wait(lambda: (lambda p: p if len(p) == 2 else None)([t for t in app.call('tabs') if t['visible']]), timeout=5) or panes
+            with open(app.call('save')) as stream:
+                snap = json.load(stream)
+            def find_split(value):
+                if isinstance(value, dict):
+                    if 'panes' in value and any(t['id'] == tab for t in value['panes']):
+                        return value
+                    for child in value.values():
+                        found = find_split(child)
+                        if found:
+                            return found
+                if isinstance(value, list):
+                    for child in value:
+                        found = find_split(child)
+                        if found:
+                            return found
+            made = find_split(snap) or {}
+            ids = [p['id'] for p in made.get('panes', [])]
+            target = next((p for p in panes if p['id'] != tab), {})
+            ok = len(panes) == 2 and target.get('url') == origin + '/target.html' and ids == [tab, target.get('id')]
+            if made:
+                app.call('menu-perform', id='separate-from-split-view')
+            if target:
+                app.call('close', tab=target['id'])
+            return {'ok': ok, 'panes': panes, 'split': made, 'shown': event.get('shown')}
+        run('cm_split', split)
+
+        def new_window():
+            focus()
+            before = app.call('shell-windows')
+            event, _ = menu('#link', 'run-open:Open Link in New Window')
+            windows = wait(lambda: (lambda w: w if len(w) == len(before) + 1 else None)(app.call('shell-windows')), timeout=5) or []
+            new = next((w for w in windows if w['id'] not in {b['id'] for b in before}), None)
+            target = selected() if new else {}
+            ok = new is not None and target.get('url') == origin + '/target.html' and target.get('section') == 'today'
+            if new:
+                app.call('window-focus', id=new['id'], activate=True)
+                app.call('window-close')
+            focus()
+            return {'ok': ok, 'new': new, 'tab': target, 'shown': event.get('shown')}
+        run('cm_new_window', new_window)
+
+        def peek():
+            focus()
+            event, _ = menu('#link', 'run-open:Open Link in Peek')
+            state = wait(lambda: (lambda s: s if s['shown'] else None)(app.call('peek-state')), timeout=5) or {}
+            stack = state.get('stack', [])
+            if stack:
+                app.call('wait', tab=stack[-1]['content'])
+            url = app.eval(stack[-1]['content'], 'location.href') if stack else ''
+            # Right-click inside Peek uses its real host, and Split stays disabled.
+            if stack:
+                nested, _ = menu('p', target=stack[-1]['content'])
+                # The target has no link; add a real link only to this fixture document.
+                app.eval(stack[-1]['content'], 'document.body.innerHTML += \'<a id="nested" href="/target.html">Nested link</a>\'')
+                nested, _ = menu('#nested', target=stack[-1]['content'])
+            else:
+                nested = {}
+            disabled = next((r['enabled'] is False for r in nested.get('rows', []) if r['key'] == 'link-split'), False)
+            app.call('peek-close')
+            return {'ok': bool(stack) and url == origin + '/target.html' and disabled, 'state': state, 'url': url, 'nested': nested.get('shown')}
+        run('cm_peek_and_split_disabled', peek)
+
+        def search(selector, text, title, expected):
+            focus()
+            select(selector, text)
+            before = {t['id'] for t in app.call('tabs')}
+            event, _ = menu(selector, 'run-open:' + title, clear=False)
+            opened = wait(lambda: next((t for t in app.call('tabs') if t['id'] not in before and t['selected']), None), timeout=5) or {}
+            ok = opened.get('url') == expected and opened.get('section') == 'today'
+            if opened:
+                app.call('close', tab=opened['id'])
+            return {'ok': ok, 'opened': opened, 'shown': event.get('shown')}
+        run('cm_search', lambda: search('#selection', 'bonjour menu contextuel', 'Search Local Search for “bonjour menu contextuel”',
+                                       origin + '/target.html?q=bonjour%20menu%20contextuel'))
+        run('cm_go_url', lambda: search('#url', origin + '/target.html', 'Go to ' + origin + '/target.html', origin + '/target.html'))
+        long_text = 'x' * 40
+        run('cm_search_truncation', lambda: search('#selection', long_text, 'Search Local Search for “' + 'x' * 32 + '…”', origin + '/target.html?q=' + long_text))
+
+        def cancellation():
+            focus()
+            event, events = menu()
+            # Repeat after the first cancel to prove a fresh engine request still works.
+            again, next_events = menu()
+            decisions = [e for e in events + next_events if e['type'] == 'contextMenuDecision']
+            return {'ok': bool(event) and bool(again) and len(decisions) == 2 and all(e['key'] == 'cancel' for e in decisions), 'decisions': decisions}
+        run('cm_cancel_once', cancellation)
+
+        def disabled_little():
+            focus()
+            before = app.call('shell-windows')
+            event, events = menu('#link', 'run-open:Open Link in Little Open')
+            return {'ok': app.call('shell-windows') == before and any(r['key'] == 'link-little-open' and not r['enabled'] for r in event.get('rows', []))
+                    and len([e for e in events if e['type'] == 'contextMenuDecision' and e['key'] == 'cancel']) == 1,
+                    'shown': event.get('shown'), 'events': events}
+        run('cm_little_open_disabled', disabled_little)
+
+        def translate():
+            focus()
+            # Reload restores the real French fixture and triggers language detection again.
+            app.call('navigate', tab=tab, url=origin + '/index.html'); app.call('wait', tab=tab)
+            offered = wait(lambda: app.call('translate', action='state')['state'] == 'offered', timeout=10)
+            event, _ = menu('#page', 'run-open:Translate to English')
+            translated = wait(lambda: (lambda s: s if s['state'] == 'translated' else None)(app.call('translate', action='state')), timeout=10)
+            return {'ok': bool(offered) and bool(translated), 'state': translated, 'shown': event.get('shown')}
+        run('cm_translate', translate)
+
+        def capture(title, full):
+            focus()
+            event, _ = menu('#page', 'run-open:' + title)
+            if full:
+                captured = wait(lambda: (lambda s: s if s.get('result') else None)(app.call('capture-state')), timeout=30) or {}
+                ok = captured.get('result', {}).get('saved') is not None
+                if captured.get('card'):
+                    app.call('capture-action', action='delete')
+            else:
+                captured = wait(lambda: (lambda s: s if s['overlayActive'] else None)(app.call('capture-state')), timeout=5) or {}
+                ok = captured.get('overlayActive') is True
+                app.call('key', key='escape', route='app')
+            return {'ok': ok, 'state': captured, 'shown': event.get('shown')}
+        run('cm_capture', lambda: capture('Capture', False))
+        run('cm_capture_full', lambda: capture('Capture Full Page', True))
+
+        def selection_limit():
+            focus()
+            values = []
+            for size in (16384, 16385):
+                select('#long', 'x' * size)
+                app.call('policy', contextMenu='record'); app.call('events')
+                x, y = point('#long')
+                app.call('rightclick', tab=tab, x=x, y=y)
+                events = []
+                def received():
+                    events.extend(app.call('events'))
+                    return next((e for e in events if e['type'] in ('contextMenu', 'contextMenuRefused')), None)
+                event = wait(received, timeout=5) or {}
+                values.append(event)
+            app.eval(tab, "document.querySelector('#long').textContent=''")
+            return {'ok': values[0].get('selectionBytes') == 16384 and values[1].get('type') == 'contextMenuRefused', 'events': values}
+        run('cm_selection_limit', selection_limit)
+
+        def url_limit():
+            focus()
+            events = []
+            prefix = origin + '/target.html?'
+            for size in (65536, 65537):
+                app.eval(tab, "document.querySelector('#link').href=" + json.dumps(prefix + 'x' * (size - len(prefix))))
+                app.call('policy', contextMenu='record'); app.call('events')
+                x, y = point('#link'); app.call('rightclick', tab=tab, x=x, y=y)
+                seen = []
+                def received():
+                    seen.extend(app.call('events'))
+                    return next((e for e in seen if e['type'] in ('contextMenu', 'contextMenuRefused')), None)
+                event = wait(received, timeout=5) or {}
+                events.append({'type': event.get('type'), 'reason': event.get('reason'), 'linkBytes': len(event.get('link', '').encode())})
+            app.eval(tab, "document.querySelector('#link').href='target.html'")
+            return {'ok': events[0]['linkBytes'] == 65536 and events[1]['type'] == 'contextMenuRefused', 'events': events}
+        run('cm_url_limit', url_limit)
+
+        def extension_limits():
+            focus()
+            extension = wait(lambda: next((e for e in app.call('extensions')['installed'] if e['name'] == 'Open context menu limits probe'), None), timeout=15)
+            if not extension:
+                raise RuntimeError('real extension probe was not loaded')
+            probe = h.new_tab(app, 'chrome-extension://' + extension['id'] + '/probe.html')
+            def configure(**options):
+                result = app.eval(probe, 'chrome.runtime.sendMessage(' + json.dumps(dict(op='configure', **options)) + ')')
+                if not result.get('ok'):
+                    raise RuntimeError(str(result))
+                focus()
+            def observed():
+                app.call('policy', contextMenu='record'); app.call('events')
+                x, y = point('#page'); app.call('rightclick', tab=tab, x=x, y=y)
+                seen = []
+                def received():
+                    seen.extend(app.call('events'))
+                    return next((e for e in seen if e['type'] in ('contextMenu', 'contextMenuRefused')), None)
+                return wait(received, timeout=5) or {}
+            checks = {}
+            try:
+                configure(count=1, title='x' * 1024)
+                accepted = observed()
+                configure(count=1, title='x' * 1025)
+                refused = observed()
+                checks['title'] = {'ok': accepted.get('type') == 'contextMenu' and refused.get('type') == 'contextMenuRefused',
+                                   'acceptedNodes': accepted.get('incomingNodes'), 'refused': refused}
+                configure(count=2)
+                base = observed().get('incomingNodes', 0) - 3  # extension wrapper + two leaves
+                count = 128 - base - 1
+                configure(count=count)
+                accepted = observed()
+                configure(count=count + 1)
+                refused = observed()
+                checks['nodes'] = {'ok': accepted.get('incomingNodes') == 128 and refused.get('type') == 'contextMenuRefused',
+                                   'acceptedNodes': accepted.get('incomingNodes'), 'refused': refused}
+                configure(count=1, depth=7)
+                accepted = observed()
+                configure(count=1, depth=8)
+                refused = observed()
+                checks['depth'] = {'ok': accepted.get('type') == 'contextMenu' and refused.get('type') == 'contextMenuRefused',
+                                   'acceptedNodes': accepted.get('incomingNodes'), 'refused': refused}
+                return {'ok': all(c['ok'] for c in checks.values()), 'limits': checks}
+            finally:
+                configure(count=0)
+                app.call('close', tab=probe)
+        run('cm_extension_limits', extension_limits)
+
+        def email():
+            focus()
+            empty = not row_enabled('peek-email')
+            today = app.call('open', url='https://mail.google.com/mail/u/0/', background=True)['id']
+            ignored_today = not row_enabled('peek-email')
+            app.call('pin', tab=today)
+            enabled = row_enabled('peek-email')
+            # The real menu key route, not a direct call to the handler.
+            app.call('key', key='e', modifiers=['command', 'shift'], route='app')
+            state = wait(lambda: (lambda s: s if s['shown'] else None)(app.call('peek-state')), timeout=5) or {}
+            content = state.get('stack', [{}])[-1].get('content')
+            urls = wait(lambda: [p['url'] for p in app.call('pages') if p['identifier'] == content and p['url'].startswith('https://')], timeout=5) or []
+            app.call('peek-close')
+            app.call('pin', tab=today); app.call('close', tab=today)
+            disabled = not row_enabled('peek-email')
+            return {'ok': empty and ignored_today and enabled and disabled and urls == ['https://mail.google.com/mail/u/0/'],
+                    'empty': empty, 'ignoredToday': ignored_today, 'enabled': enabled, 'disabledAgain': disabled, 'peek': state, 'urls': urls}
+        run('cm_peek_email', email)
+
+        def email_scope():
+            focus()
+            second = app.call('space-create', title='Other mail Space', profile='Default')
+            app.call('space', space=second)
+            other = app.call('open', url='https://app.fastmail.com/mail/', background=True)['id']
+            app.call('pin', tab=other)
+            app.call('space', space=space); app.call('select', tab=tab)
+            from_other = row_enabled('peek-email')
+            near = app.call('open', url='https://mail.proton.me/u/0/inbox', background=True)['id']
+            app.call('pin', tab=near)
+            app.call('key', key='e', modifiers=['command', 'shift'], route='app')
+            state = wait(lambda: (lambda s: s if s['shown'] else None)(app.call('peek-state')), timeout=5) or {}
+            content = state.get('stack', [{}])[-1].get('content')
+            urls = wait(lambda: [p['url'] for p in app.call('pages') if p['identifier'] == content and p['url'].startswith('https://')], timeout=5) or []
+            app.call('peek-close')
+            app.call('space-profile', space=second, profile='Unrelated')
+            app.call('pin', tab=near); app.call('close', tab=near)
+            unrelated = not row_enabled('peek-email')
+            return {'ok': from_other and urls == ['https://mail.proton.me/u/0/inbox'] and unrelated,
+                    'otherSpaceEnabled': from_other, 'focusedSpaceURL': urls, 'otherProfileIgnored': unrelated}
+        run('cm_peek_email_scope', email_scope)
+
+        def email_hosts():
+            focus()
+            accepted = ['mail.google.com', 'outlook.live.com', 'outlook.office.com', 'outlook.office365.com',
+                        'app.fastmail.com', 'mail.proton.me', 'mail.yahoo.com', 'www.icloud.com/mail', 'app.hey.com']
+            rejected = ['www.icloud.com', 'www.icloud.com/mailish', 'evil.mail.google.com', 'mail.google.com.evil.invalid']
+            actual = {}
+            for value in accepted + rejected:
+                candidate = app.call('open', url='https://' + value, background=True)['id']
+                app.call('pin', tab=candidate)
+                actual[value] = row_enabled('peek-email')
+                app.call('pin', tab=candidate); app.call('close', tab=candidate)
+            # A Favorite is eligible without a pinned row.
+            candidate = app.call('open', url='https://app.hey.com/', background=False)['id']
+            app.call('menu-perform', id='add-to-favorites')
+            favorite = row_enabled('peek-email')
+            app.call('menu-perform', id='remove-from-favorites')
+            app.call('close', tab=candidate)
+            return {'ok': all(actual[h] for h in accepted) and not any(actual[h] for h in rejected) and favorite,
+                    'hosts': actual, 'favorite': favorite}
+        run('cm_peek_email_hosts', email_hosts)
+
+        def help_item(identifier, url):
+            focus()
+            before = {t['id'] for t in app.call('tabs')}
+            app.call('menu-perform', id=identifier)
+            opened = wait(lambda: next((t for t in app.call('tabs') if t['id'] not in before and t['selected']), None), timeout=5) or {}
+            ok = opened.get('url') == url and opened.get('section') == 'today'
+            if opened:
+                app.call('close', tab=opened['id'])
+            return {'ok': ok, 'opened': opened}
+        for identifier, path in [('help-center', '/blob/main/docs/commands.md'), ('getting-started', '#readme'),
+                                 ('release-notes', '/releases'), ('contact-team', '/issues/new')]:
+            run('cm_help_' + identifier, lambda i=identifier, p=path: help_item(i, 'https://github.com/SergeSerb2/open' + p))
+        run('cm_join_meeting_disabled', lambda: {'ok': row_enabled('join-meeting') is False})
+    finally:
+        try:
+            if not app.closed:
+                h._try(lambda: app.call('policy', contextMenu='record'))
+                h._try(lambda: app.call('peek-close'))
+                h._try(lambda: app.call('capture-action', action='cancel'))
+        finally:
+            h._restore_defaults(app, saved)
+            try:
+                app.quit()
+            finally:
+                server.shutdown()
+                server.server_close()
