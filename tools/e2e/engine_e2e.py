@@ -5192,6 +5192,82 @@ def profiles_checks(factory, results, tmp, config):
 # Measurements (run with --config Release)
 
 
+def process_cpu_window(app, seconds=60):
+    """OS CPU time deltas, without enabling Chromium's task-manager observer.
+
+    rusage_info_v0 CPU times use Mach absolute ticks (not nanoseconds).
+    Convert with this host's timebase. Each PID gets its own monotonic
+    interval, so process discovery and ps do not skew the denominator. CPU
+    is percent of one core, as in Activity Monitor, not divided by core count.
+    Process churn is reported; a partial total is not idle-budget acceptance.
+    """
+    libproc = ctypes.CDLL('/usr/lib/libproc.dylib', use_errno=True)
+    class Timebase(ctypes.Structure):
+        _fields_ = [('numer', ctypes.c_uint32), ('denom', ctypes.c_uint32)]
+    timebase = Timebase()
+    if ctypes.CDLL('/usr/lib/libSystem.B.dylib').mach_timebase_info(ctypes.byref(timebase)) != 0 or not timebase.denom:
+        raise RuntimeError('could not read Mach timebase for idle CPU sample')
+    ns_per_tick = timebase.numer / timebase.denom
+
+    def snapshot():
+        app.discover_owned_processes()
+        if len(app.owned_processes) > 512:
+            raise RuntimeError('idle CPU sample exceeds 512 owned processes')
+        rows = {}
+        for pid, path in app.owned_processes.items():
+            if app.process_path(pid) != path:
+                continue
+            # SDK sys/resource.h: ri_uuid[16], then ten uint64_t fields.
+            usage = ctypes.create_string_buffer(96)
+            if libproc.proc_pid_rusage(pid, 0, usage) != 0:
+                continue
+            values = struct.unpack('=16s10Q', usage.raw)
+            stamp = time.monotonic_ns()
+            process = subprocess.run(['ps', '-p', str(pid), '-o', 'time=,args='],
+                                     capture_output=True, text=True, check=False).stdout.strip().split(maxsplit=1)
+            if len(process) != 2:
+                continue
+            clock, args = process
+            ps_seconds = sum(float(v) * 60 ** i for i, v in enumerate(reversed(clock.split(':'))))
+            kind = ('browser' if pid == app.pid else
+                    'gpu' if '--type=gpu-process' in args else
+                    'renderer' if '--type=renderer' in args else
+                    'network' if 'network.mojom.NetworkService' in args else
+                    'utility' if '--type=utility' in args else 'other')
+            rows[pid] = {'kind': kind, 'cpu_ticks': values[1] + values[2],
+                         'idle_wakeups': values[3], 'interrupt_wakeups': values[4],
+                         'start': values[9], 'stamp': stamp, 'ps_seconds': ps_seconds}
+        if app.pid not in rows:
+            raise RuntimeError('idle CPU sample could not read the Open process')
+        return rows
+
+    app.begin_timing('OS idle CPU window')
+    load_start = subprocess.check_output(['sysctl', '-n', 'vm.loadavg'], text=True).strip()
+    before = snapshot()
+    time.sleep(seconds)
+    after = snapshot()
+    by_process, by_kind = [], {}
+    common = {pid for pid in before.keys() & after.keys() if before[pid]['start'] == after[pid]['start']}
+    for pid in sorted(common):
+        a, b = before[pid], after[pid]
+        elapsed = (b['stamp'] - a['stamp']) / 1e9
+        cpu = (b['cpu_ticks'] - a['cpu_ticks']) * ns_per_tick / 1e9 / elapsed * 100
+        by_kind[b['kind']] = by_kind.get(b['kind'], 0) + cpu
+        by_process.append({'pid': pid, 'kind': b['kind'], 'seconds': round(elapsed, 3),
+                           'cpu_time_ticks': b['cpu_ticks'] - a['cpu_ticks'],
+                           'ps_cpu_seconds_delta': round(b['ps_seconds'] - a['ps_seconds'], 2),
+                           'cpu_percent': round(cpu, 4),
+                           'package_idle_wakeups_per_second': round((b['idle_wakeups'] - a['idle_wakeups']) / elapsed, 3),
+                           'interrupt_wakeups_per_second': round((b['interrupt_wakeups'] - a['interrupt_wakeups']) / elapsed, 3)})
+    return {'requested_seconds': seconds, 'mach_timebase': [timebase.numer, timebase.denom], 'load_start': load_start,
+            'load_end': subprocess.check_output(['sysctl', '-n', 'vm.loadavg'], text=True).strip(),
+            'by_process': by_process, 'by_kind': {k: round(v, 4) for k, v in by_kind.items()},
+            'total_cpu_percent': round(sum(by_kind.values()), 4),
+            'processes_started': sorted(after.keys() - common),
+            'processes_exited': sorted(before.keys() - common),
+            'complete': before.keys() == after.keys() == common}
+
+
 def measure(app_factory, results, tmp):
     def mb(x):
         return round(x / 1048576, 1)
@@ -5200,11 +5276,24 @@ def measure(app_factory, results, tmp):
     results["load_average_at_start"] = [round(x, 1) for x in os.getloadavg()]
     results["cpu_count"] = os.cpu_count()
 
+    # A fresh, one-blank-page window is a separate baseline. Never reuse a
+    # restored real page and call it an empty window. Sample before metrics:
+    # CefTaskManager adds a periodic CPU/memory/GPU observer while it is held.
+    app = app_factory(urls=('about:blank',), fresh=True)
+    try:
+        time.sleep(30)
+        results['idle_cpu_empty_startup_tail'] = process_cpu_window(app)
+        results['idle_cpu_empty_window'] = process_cpu_window(app)
+        results['idle_empty_tabs'] = app.call('tabs')
+        results['idle_cpu_empty_task_manager'] = app.call('metrics', interval=10)
+    finally:
+        app.quit()
+
     # Cold-ish launch: profile already exists (second launch), one restored
     # tab. Process start to first contentful paint of that tab.
     runs = []
     for i in range(4):
-        app = app_factory(urls=("https://example.com/",) if i == 0 else ())
+        app = app_factory(urls=("https://example.com/",) if i == 0 else (), fresh=i == 0)
         try:
             tab = wait_until(lambda: (app.call("tabs") or [None])[0], timeout=20)
             app.call("wait", tab=tab["id"], timeout=30)
@@ -5232,8 +5321,13 @@ def measure(app_factory, results, tmp):
                 "https://github.com/", "https://www.rust-lang.org/", "https://www.python.org/"]
         for u in urls:
             new_tab(app, u)
-        time.sleep(8)
+        time.sleep(30)
         m10 = app.call("metrics", interval=2)
+        results['idle_10_tabs_sleep_before'] = app.call('sleep-state')
+        results['idle_cpu_10_tabs_startup_tail'] = process_cpu_window(app)
+        results['idle_cpu_10_tabs_os'] = process_cpu_window(app)
+        results['idle_10_tabs'] = app.call('tabs')
+        results['idle_10_tabs_sleep'] = app.call('sleep-state')
         idle = app.call("metrics", interval=10)
     finally:
         app.quit()
@@ -5253,7 +5347,12 @@ def measure(app_factory, results, tmp):
                 "by_process": sorted(((x["name"], mb(x["footprint"])) for x in m["processes"]), key=lambda x: -x[1])}
     results["memory_1_tab"] = summary(m1)
     results["memory_10_tabs"] = summary(m10)
-    results["idle_cpu_10_tabs_percent"] = round(sum(max(p["cpu"], 0) for p in idle["tasks"]), 2)
+    # Keep the historical number explicitly labeled. CEF's CPU is per process
+    # but returned per task (shared processes can repeat), and its macOS
+    # refresh is 2 s: waiting 10 s does not produce a 10 s CPU average.
+    results['idle_cpu_10_tabs_task_manager_percent'] = round(sum(max(p['cpu'], 0) for p in idle['tasks']), 2)
+    results['idle_cpu_10_tabs_task_manager'] = idle
+    results['idle_cpu_10_tabs_percent'] = results['idle_cpu_10_tabs_os']['total_cpu_percent']
     results["ok"] = True
 
 
@@ -5936,6 +6035,13 @@ def sleep_checks(factory, results, tmp, style):
         advance(29); tick(); ladder_steps.append(phase(ladder))
         advance(1); tick(); ladder_steps.append(phase(ladder))
         scheduled = state()["scheduled"]
+        # The phase deadline is still 270 s away. Frozen pages cannot change
+        # without that deadline or an event; five-second polling is idle work.
+        frozen_delay = state()['nextPassDelay']
+        results['sleep_frozen_deadline'] = {
+            'ok': frozen_delay is not None and 5 < frozen_delay <= 270,
+            'nextPassDelay': frozen_delay, 'discardDelay': 300, 'hiddenElapsed': 30,
+            'load': os.getloadavg()}
         advance(269); tick(); ladder_steps.append(phase(ladder))
         advance(1); tick(); s = ts(ladder); ladder_steps.append(s["phase"])
         results["sleep_timed_ladder"] = {"ok": ladder_steps == ["live", "frozen", "frozen", "sleeping"] and scheduled

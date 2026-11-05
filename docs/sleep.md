@@ -92,13 +92,17 @@ window factories' existing hosts; never a second page per tab), and
   (startup T5; `LaunchTiming` mark `sleepStarted`), or 2 s after the first
   load when no paint is reported. Hooks before that are no-ops; the
   controller's init reads the phases the windows already set.
-- No idle timer: the five-second pass runs only while a hidden tab can
-  change phase. It parks when every hidden tab with content waits for an
-  event (keep-alive, notifications, audio, loading, capture, DevTools,
+- No idle polling: a live hidden tab uses the five-second pass while it can
+  change phase. Frozen tabs wait for their discard deadline, extended by any
+  audio, load, form or retry grace deadline. It parks when every hidden tab
+  with content waits for an event (keep-alive, notifications, audio, loading, capture, DevTools,
   downloads, a known unload handler on a frozen page, a frozen page in off
   mode). Sleeping shells schedule one pass at their 24 h destroy time. Every
   event hook and `setNeedsPass()` (mode, permission, Low Power Mode changes)
-  restarts it.
+  brings a pass forward within five seconds. The real-App
+  `sleep_frozen_deadline` check proves the scheduled policy delay is greater
+  than five seconds with 270 seconds left before balanced discard; it fails
+  on the previous implementation. See [idle CPU](idle-cpu.md).
 - Events: every page change of every sidebar tab, background tabs included
   (`EngineWebContentHost` → `AppSleepCoordinator.pageChanged`): URL commit
   (`Tab.url` first, then `tabDidCommit`), load end (`tabDidCommit`, the 10 s
