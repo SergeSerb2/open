@@ -246,6 +246,10 @@ final class EngineWebContentHost: NSObject, WebContentHost, WebContentProviding,
   func webContent(_ page: OEWebContent, createWebContentFor request: OEOpenRequest) -> OEWebContent? {
     guard !closed else { return nil }; return owner?.webContent(page, createWebContentFor: request)
   }
+  func webContent(_ page: OEWebContent, shouldNavigateTo url: URL, userGesture: Bool, modifiers: NSEvent.ModifierFlags) -> Bool {
+    guard !closed else { return false }
+    return !userGesture || shouldNavigate?(url, modifiers) != false
+  }
   func webContentDidRequestClose(_ page: OEWebContent) {
     guard !closed else { return }
     if let onCloseRequest { onCloseRequest() } else { owner?.close(page: page) }
