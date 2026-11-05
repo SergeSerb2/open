@@ -1,0 +1,28 @@
+diff --git a/chrome/browser/ui/views/overlay/video_overlay_window_views.cc b/chrome/browser/ui/views/overlay/video_overlay_window_views.cc
+index 0afdeb691c3eebf4f9acf92214e4d9ed25ae6314..cf5adb1366c385073f9cccba447ff81c2b4de6ac 100644
+--- a/chrome/browser/ui/views/overlay/video_overlay_window_views.cc
++++ b/chrome/browser/ui/views/overlay/video_overlay_window_views.cc
+@@ -100,6 +100,7 @@
+ 
+ #if BUILDFLAG(IS_MAC)
+ #include "chrome/browser/ui/views/overlay/video_overlay_window_native_widget_mac.h"
++#include "open/browser/media/open_media_hooks.h"
+ #endif  // BUILDFLAG(IS_MAC)
+ 
+ namespace {
+@@ -423,6 +424,15 @@ std::unique_ptr<VideoOverlayWindowViews> VideoOverlayWindowViews::Create(
+ // static
+ std::unique_ptr<content::VideoOverlayWindow> CreateVideoOverlayWindow(
+     content::VideoPictureInPictureWindowController* controller) {
++#if BUILDFLAG(IS_MAC)
++  // Open (patch 0402): the embedder's own window when its media handler hosts
++  // video Picture in Picture (media-pip EM-4).
++  if (auto* create = open_engine::GetMediaHooks().create_video_overlay_window) {
++    if (auto window = create(controller)) {
++      return window;
++    }
++  }
++#endif
+   return VideoOverlayWindowViews::Create(controller);
+ }
+ 
