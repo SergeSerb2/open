@@ -958,7 +958,6 @@ extension EngineWebContentHostFactory {
 
   /// Closes one page wherever it lives.
   func close(page: OEWebContent) {
-    if pageChrome.pageRequestedClose(page) { return }
     if let aux = auxiliaryPages.first(where: { $0.content === page }) {
       closeAuxiliary(aux)
     } else if page.extensionPopupIdentifier != nil {
