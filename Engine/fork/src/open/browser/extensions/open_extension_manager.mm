@@ -34,6 +34,7 @@
 #include "extensions/browser/extension_system.h"
 #include "extensions/browser/load_error_reporter.h"
 #include "extensions/browser/permissions/active_tab_permission_granter.h"
+#include "extensions/browser/ui_util.h"
 #include "extensions/common/mojom/context_type.mojom.h"
 #include "extensions/common/api/extension_action/action_info.h"
 #include "extensions/common/manifest_handlers/icons_handler.h"
@@ -545,7 +546,8 @@ class UninstallDialog : public extensions::ExtensionUninstallDialog {
   void Show() override {
     auto data = PromptData(extension(), 100);
     Text(data, "title", base::UTF16ToUTF8(l10n_util::GetStringFUTF16(
-        IDS_EXTENSION_PROMPT_UNINSTALL_TITLE, base::UTF8ToUTF16(extension()->name()))));
+        IDS_EXTENSION_PROMPT_UNINSTALL_TITLE,
+        extensions::ui_util::GetFixupExtensionNameForUIDisplay(extension()->name()))));
     Text(data, "acceptLabel", base::UTF16ToUTF8(l10n_util::GetStringUTF16(IDS_EXTENSION_PROMPT_UNINSTALL_BUTTON)));
     Text(data, "cancelLabel", base::UTF16ToUTF8(l10n_util::GetStringUTF16(IDS_APP_CANCEL)));
     if (triggering_extension()) Text(data, "triggeringExtensionName", triggering_extension()->name());

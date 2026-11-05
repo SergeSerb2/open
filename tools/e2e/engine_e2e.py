@@ -1150,7 +1150,10 @@ def tabstrip_checks(app, results):
         return strip_ids(page) == [p["chromeTabId"] for _, p in live()]
 
     wait_until(lambda: any(e["id"] == PROBE for e in app.call("extensions")["installed"]), timeout=30)
-    first = app.call("tabs")[0]["id"]
+    # The live registry can be ready before Bitwarden opens its welcome tab.
+    # Finish that install side effect before establishing selected-tab state.
+    wait_until(lambda: [t for t in app.call("tabs") if "bitwarden.com" in t["url"]], timeout=15)
+    first = next(t["id"] for t in app.call("tabs") if t["url"].startswith("https://example.com"))
     a = new_tab(app, "https://example.org/")
     b = new_tab(app, "https://www.iana.org/help/example-domains")
     app.call("select", tab=first)
@@ -1310,20 +1313,29 @@ def tabstrip_checks(app, results):
         "today_tab_gone_from_sidebar": bool(gone), "pinned_and_favorite_unloaded_in_place": bool(stays),
         "results": [removed_pinned, removed_fav]}
 
-    # chrome.tabs.discard asks Open: a background tab unloads in place; the
-    # visible tab is refused. Chromium never discards on its own.
+    # chrome.tabs.discard asks Open's sleep controller: a background renderer
+    # is discarded in place; the visible tab is refused. The sleeping page
+    # object stays until the controller's later destroy deadline.
     bg = f2
     bg_cid = chrome_id(bg)
     discard_bg = ext_call(pop, "chrome.tabs.discard(%d).then(t => ({id: t.id, discarded: t.discarded}))" % bg_cid)
-    unloaded = wait_until(lambda: (lambda r: r if r and not r["loaded"] else None)(row(bg)), timeout=10)
+    def discarded_in_place():
+        state = app.call("sleep-state", tab=bg)
+        tab = next(iter(state.get("tabs", [])), {})
+        return tab if tab.get("phase") == "sleeping" and tab.get("discarded") else None
+    asleep = wait_until(discarded_in_place, timeout=10)
+    chromium_after = ext_call(pop, "chrome.tabs.get(%d).then(t => ({id: t.id, discarded: t.discarded}))" % bg_cid)
     visible = [t for t in app.call("tabs") if t["visible"]][0]
     discard_visible = ext_call(pop, "chrome.tabs.discard(%d)" % visible["page"]["chromeTabId"])
     time.sleep(0.5)
     results["tabs_discard"] = {
-        "ok": "ok" in discard_bg and bool(unloaded) and "error" in discard_visible
+        "ok": "ok" in discard_bg and bool(asleep) and bool(row(bg))
+              and chromium_after.get("ok", {}).get("id") == bg_cid and "error" in discard_visible
               and bool(row(visible["id"])) and row(visible["id"])["loaded"],
-        "background": discard_bg, "background_unloaded_in_place": bool(unloaded),
-        "visible": discard_visible}
+        "background": discard_bg, "background_sleeping_in_place": bool(asleep),
+        "sleep_state": asleep or app.call("sleep-state", tab=bg), "chromium_after": chromium_after,
+        "visible": discard_visible,
+        "note": "P1 returns discarded:false in desktop chrome.tabs metadata; the engine's renderer-discard flag and sleeping phase prove the discard."}
 
     # Tabs stay in their Open window: windows.create({tabId}) and moves to
     # or from another window are refused.

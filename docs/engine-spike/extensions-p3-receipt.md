@@ -19,6 +19,30 @@ After P3, the same status command reports 8 PASS, 0 FAIL, 0 WARN:
 The signed App framework and distribution have the same normalized code
 SHA-256 `0d78c64d7a1037569b075286817487080bded30c3e76f88ef93dbf77a5903352`.
 
+Active series in that root (only 0305 is new in P3):
+
+```text
+chromium/0301-open-headless-browser-window.patch
+chromium/0302-open-hidden-browser-ui.patch
+chromium/0303-open-hosted-tab-lifecycle.patch
+chromium/0304-open-hidden-browser-no-tab-groups.patch
+chromium/0305-open-extension-prompts.patch
+chromium/0401-open-media-session.patch
+chromium/0402-open-video-pip-window.patch
+chromium/0501-page-history-swipe-hooks.patch
+chromium/0504-page-notification-click.patch
+cef/0101-mem-visibility.patch
+cef/0104-mem-navigation-history.patch
+cef/0105-mem-no-renderer-create.patch
+cef/0302-open-hosted-tabs.patch
+cef/0303-open-context-menu-submenu-commands.patch
+cef/0304-open-extension-popups.patch
+cef/0310-open-adblock-service-owner.patch
+cef/0314-open-adblock-cefsimple-smoke.patch
+cef/0505-page-website-color-scheme.patch
+rust/0001-adblock-vendor.patch
+```
+
 Engine apply/build/distrib used `/tmp/open-engine-build.lock`, the scripts'
 nice setting, 10 jobs, and a separate session. Release App build used
 `OPEN_ENGINE_ROOT=$HOME/Developer/open-engine-s8 OPEN_AUTOMATION=1
