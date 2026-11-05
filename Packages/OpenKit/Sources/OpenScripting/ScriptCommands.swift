@@ -282,6 +282,11 @@ extension ScriptTab {
         guard let script = command.arguments?["javascript"] as? String, !script.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
             return command.fail(ScriptError.invalidValue, "execute needs a javascript string.")
         }
+        // View ▸ Developer ▸ Allow JavaScript from Apple Events, off by default
+        // (plans/page-platform.md §4.10.2, lead decision Q3; overrides applescript Q5).
+        guard ScriptHost.shared.allowsJavaScriptFromAppleEvents() else {
+            return command.fail(ScriptError.javascriptFailed, ScriptHost.javaScriptFromAppleEventsOffMessage)
+        }
         guard let bridge = ScriptTarget.bridge(command) else { return nil }
         do {
             return try bridge.executeJavaScript(tabID: target.tabID, script: script) as NSString

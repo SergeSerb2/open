@@ -6165,13 +6165,14 @@ CAPTURE_BANDS = [(224, 64, 64), (64, 176, 80), (48, 96, 224), (224, 192, 48), (1
                  (240, 128, 32), (32, 32, 32), (128, 224, 128), (224, 128, 192), (64, 128, 160), (192, 160, 128)]
 
 
-def page_checks(factory, results, tmp):
+def page_checks(factory, results, tmp, style="alloy"):
     """page-platform §8.3 `--only page`: one suite, one row group per feature."""
     capture_checks(factory, results, tmp)
     page_commands_checks(factory, results, tmp)
     page_engine_checks(factory, results, tmp)
     page_notification_checks(factory, results, tmp)
     page_translate_checks(factory, results, tmp)
+    page_tools_checks(factory, results, tmp, style)
 
 
 def page_engine_checks(factory, results, tmp):
@@ -8829,6 +8830,434 @@ def space_manager_checks(results, tmp, config, style):
         if not receipt['ok']: raise AssertionError('Space Manager cleanup failed: ' + json.dumps(receipt))
 
 
+# ---------------------------------------------------------------------------
+# Suite `page`, Section 8 helper B rows (page-platform §8.3: A1, A2, K1, K2,
+# D1, D2, D4, H1-H4). One function per row group; `page_checks` calls them.
+
+PAGE_FIXTURES = os.path.join(ROOT, "tools", "e2e", "fixtures", "page-platform")
+
+
+def page_tools_fixture_server():
+    """Serves tools/e2e/fixtures/page-platform on 127.0.0.1 with no-store caching (page tools rows; no external network)."""
+    import http.server
+    import threading
+    class Handler(http.server.SimpleHTTPRequestHandler):
+        def __init__(self, *args, **kwargs):
+            super().__init__(*args, directory=PAGE_FIXTURES, **kwargs)
+        def end_headers(self):
+            self.send_header("Cache-Control", "no-store")
+            super().end_headers()
+        def log_message(self, *args): pass
+    server = http.server.ThreadingHTTPServer(("127.0.0.1", 0), Handler)
+    threading.Thread(target=server.serve_forever, daemon=True).start()
+    return server, server.server_address[1]
+
+
+def _menu_row(app, command):
+    return next((r for r in app.call("menu-state") if r["id"] == command), None)
+
+
+def _blocked(reason, **evidence):
+    return dict(evidence, status="BLOCKED", reason=reason)
+
+
+def _menu_checks_row(menu, expected):
+    """Checkmarks (or hidden flags) as the validated menu shows them, one entry per step."""
+    return {"ok": menu == expected, "menu": menu, "expected": expected}
+
+
+def _toasts(app):
+    return app.call("toasts")["toasts"]
+
+
+def page_tools_appearance_checks(app, results, port, style):
+    """A1, A2: View ▸ Appearance reaches prefers-color-scheme without a reload, and stays after a
+    navigation (EP-9a SetChromeColorScheme + EP-9b fork patch 0505 CefSetWebsiteColorScheme)."""
+    tab = app.call("open", url="http://127.0.0.1:%d/scheme.html" % port)["id"]
+    app.call("wait", tab=tab)
+    state = lambda: app.eval(tab, "window.schemeState()")
+    def until_dark(value, event=False):
+        # event: also wait for the page's change event for this switch (it fires at the next frame).
+        want = "dark" if value else "light"
+        return wait_until(lambda: (lambda s: s if s["dark"] is value and (not event or s["changes"][-1:] == [want])
+                                   else None)(state()), timeout=8, step=.2) or state()
+    ids = ("appearance-automatic", "appearance-light", "appearance-dark")
+    def checks():
+        return {i: (_menu_row(app, i) or {}).get("checked") for i in ids}
+    try:
+        # A1: the website value wins over the app's appearance, both ways.
+        app.call("command", id="appearance-automatic")
+        app.call("appearance", name="light")
+        start = until_dark(False)
+        app.call("command", id="appearance-dark")
+        dark = until_dark(True)
+        dark_checks, dark_stored = checks(), app.call("defaults", key="open.web.colorScheme")
+        # 0505: Chrome recomputes the scheme after every navigation; the website value wins again.
+        app.call("navigate", tab=tab, url="http://127.0.0.1:%d/scheme.html?nav=1" % port)
+        app.call("wait", tab=tab)
+        wait_until(lambda: app.eval(tab, "location.search") == "?nav=1" or None, timeout=8, step=.1)
+        after_nav = until_dark(True)
+        app.call("navigate", tab=tab, url="http://127.0.0.1:%d/scheme.html" % port)
+        app.call("wait", tab=tab)
+        wait_until(lambda: app.eval(tab, "location.search") == "" or None, timeout=8, step=.1)
+        dark = until_dark(True)
+        app.call("appearance", name="dark")
+        app.call("command", id="appearance-light")
+        light = until_dark(False)
+        light_checks, light_stored = checks(), app.call("defaults", key="open.web.colorScheme")
+        page_follows = (start["dark"] is False and dark["dark"] is True and light["dark"] is False
+                        and dark["loadId"] == light["loadId"] and after_nav["dark"] is True)
+        results["A1_appearance_light_dark_" + style] = {"ok": page_follows, "start": start, "websitesDark": dark,
+                                                        "afterNavigation": after_nav, "websitesLight": light}
+        want_dark = {"appearance-automatic": False, "appearance-light": False, "appearance-dark": True}
+        want_light = {"appearance-automatic": False, "appearance-light": True, "appearance-dark": False}
+        results["A1_appearance_stored_" + style] = {
+            "ok": (dark_stored, light_stored) == ("dark", "light"), "stored": [dark_stored, light_stored]}
+        # A2: Automatic follows the app's effective appearance, each time, without a reload.
+        app.call("command", id="appearance-automatic")
+        app.call("appearance", name="dark")
+        follow_dark = until_dark(True, event=True)
+        app.call("appearance", name="light")
+        follow_light = until_dark(False, event=True)
+        app.call("appearance", name="dark")
+        follow_dark2 = until_dark(True, event=True)
+        auto_checks = checks()
+        want_auto = {"appearance-automatic": True, "appearance-light": False, "appearance-dark": False}
+        results["A2_appearance_automatic_follows_app_" + style] = {
+            "ok": follow_dark["dark"] is True and follow_light["dark"] is False and follow_dark2["dark"] is True
+            and follow_dark2["loadId"] == dark["loadId"] and follow_dark2["changes"][-2:] == ["light", "dark"]
+            and app.call("defaults", key="open.web.colorScheme") == "automatic",
+            "states": [follow_dark, follow_light, follow_dark2]}
+        results["A1_appearance_checkmarks_" + style] = _menu_checks_row(
+            [dark_checks, light_checks, auto_checks], [want_dark, want_light, want_auto])
+    finally:
+        _try(lambda: app.call("appearance", name="system"))
+    app.call("close", tab=tab)
+
+
+def page_tools_clear_checks(app, results, port, style):
+    """K1, K2: Clear Cookies and Refresh (interim before Site Control E2); Clear Cache disabled."""
+    hosts = ["127.0.0.1", "localhost"]
+    tabs = []
+    for index, host in enumerate(hosts):
+        tab = app.call("open", url="http://%s:%d/cookies.html" % (host, port))["id"]
+        app.call("wait", tab=tab)
+        app.eval(tab, "window.setFixtureCookie('k%d')" % (index + 1))
+        tabs.append(tab)
+    before = [app.eval(t, "document.cookie") for t in tabs]
+    load_id = app.eval(tabs[0], "window.cookieLoadId")
+    app.call("select", tab=tabs[0])
+    wait_until(lambda: app.call("window-state")["selected"] == tabs[0], timeout=5, step=.1)
+    enabled = (_menu_row(app, "clear-cookies-and-refresh") or {}).get("enabled")
+    app.call("command", id="clear-cookies-and-refresh")
+    reloaded = wait_until(lambda: (lambda v: v if v and v != load_id else None)(
+        app.eval(tabs[0], "window.cookieLoadId")), timeout=10, step=.2)
+    after = [app.eval(t, "document.cookie") for t in tabs]
+    results["K1_clear_cookies_and_refresh_" + style] = {
+        "ok": enabled is True and before == ["k1=127.0.0.1", "k2=localhost"] and bool(reloaded)
+        and after == ["", "k2=localhost"],
+        "enabled": enabled, "before": before, "after": after, "reloaded": bool(reloaded),
+        "interim": "host cookies of the page's host via clearBrowsingData(origin:); Site Control E2 pending"}
+    cache = _menu_row(app, "clear-cache-and-refresh") or {}
+    results["K2_clear_cache_disabled_before_E2_" + style] = {"ok": cache.get("enabled") is False, "row": cache}
+    for tab in tabs:
+        app.call("close", tab=tab)
+
+
+# Ids of the selected tabs of the DevTools front end (every tabbed pane, shadow roots included).
+_DEVTOOLS_SELECTED_TABS = """(() => {
+  const out = [];
+  const walk = (root) => { for (const el of root.querySelectorAll('*')) {
+    if (el.getAttribute('role') === 'tab' && el.getAttribute('aria-selected') === 'true') out.push(el.id || el.textContent.trim());
+    if (el.shadowRoot) walk(el.shadowRoot); } };
+  walk(document);
+  return out;
+})()"""
+
+
+def page_tools_devtools_checks(app, results, port, style):
+    """D1 (Console panel, EP-4a), D2 (Network, blocked on EP-4b)."""
+    tab = app.call("open", url="http://127.0.0.1:%d/cookies.html" % port)["id"]
+    app.call("wait", tab=tab)
+    try:
+        app.call("command", id="javascript-console")
+        tabs = wait_until(lambda: (lambda ids: ids if "tab-console" in ids else None)(
+            _try(lambda: app.call("devtools-frontend", tab=tab, js=_DEVTOOLS_SELECTED_TABS)) or []), timeout=20, step=.5)
+        last = _try(lambda: app.call("devtools-frontend", tab=tab, js=_DEVTOOLS_SELECTED_TABS))
+        windows = [w["title"] for w in app.call("windows") if w["visible"]]
+        # Chrome style: IDC_DEV_TOOLS_CONSOLE; Alloy: the front end's DevToolsAPI.showPanel (EP-4b path).
+        results["D1_javascript_console_panel_" + style] = {
+            "ok": bool(tabs) and "tab-console" in tabs, "selectedTabs": last, "windows": windows}
+    finally:
+        _try(lambda: app.call("devtools-close", tab=tab))
+        _try(lambda: app.call("dismiss"))
+    if style != "alloy":
+        # The real key path (OEApplication.sendEvent → page → unconsumed → menu): Cmd+Opt+J.
+        closed = wait_until(lambda: _try(lambda: app.call("devtools-frontend", tab=tab, js="1")) is None, timeout=10, step=.25)
+        try:
+            app.call("focus", tab=tab)
+            app.call("key", key="j", modifiers=["cmd", "opt"])
+            keyed = wait_until(lambda: (lambda ids: ids if "tab-console" in ids else None)(
+                _try(lambda: app.call("devtools-frontend", tab=tab, js=_DEVTOOLS_SELECTED_TABS)) or []), timeout=20, step=.5)
+            results["D1_key_cmd_opt_j_" + style] = {"ok": bool(closed) and bool(keyed), "devtoolsClosedFirst": bool(closed),
+                                                     "selectedTabs": keyed}
+        finally:
+            _try(lambda: app.call("devtools-close", tab=tab))
+            _try(lambda: app.call("dismiss"))
+    # D2 (EP-4b): Develop ▸ Network Inspector opens DevTools on the Network panel; a second
+    # request with DevTools open switches an already open window to it.
+    # Commands validate against the key window: the browser window, not a DevTools window.
+    def focus_browser():
+        app.call("window-focus", id=app.call("window-state")["id"], activate=True)
+    try:
+        focus_browser()
+        app.call("command", id="network-inspector")
+        net = wait_until(lambda: (lambda ids: ids if "tab-network" in ids else None)(
+            _try(lambda: app.call("devtools-frontend", tab=tab, js=_DEVTOOLS_SELECTED_TABS)) or []), timeout=20, step=.5)
+        focus_browser()
+        app.call("command", id="javascript-console")
+        back = wait_until(lambda: (lambda ids: ids if "tab-console" in ids else None)(
+            _try(lambda: app.call("devtools-frontend", tab=tab, js=_DEVTOOLS_SELECTED_TABS)) or []), timeout=20, step=.5)
+        focus_browser()
+        app.call("command", id="network-inspector")
+        again = wait_until(lambda: (lambda ids: ids if "tab-network" in ids else None)(
+            _try(lambda: app.call("devtools-frontend", tab=tab, js=_DEVTOOLS_SELECTED_TABS)) or []), timeout=20, step=.5)
+        results["D2_network_inspector_panel_" + style] = {"ok": bool(net) and bool(back) and bool(again),
+            "first": net, "consoleAfter": back, "networkWhileOpen": again,
+            "method": "DevToolsAPI.showPanel in the DevTools front end (no fork patch; Chrome's own Console command path)"}
+    finally:
+        _try(lambda: app.call("devtools-close", tab=tab))
+        _try(lambda: app.call("dismiss"))
+    app.call("close", tab=tab)
+
+
+def page_tools_developer_mode_checks(app, results, port):
+    """D3 (page-platform §4.10.3, Q6): Developer Mode per site. The menu title flips, a toast
+    says the new state, and the URL field shows the full URL for that site only; Ctrl+D through
+    the real key path turns it off. Pages that are not http(s) or file hide the item."""
+    url = "http://127.0.0.1:%d/cookies.html?dev=1" % port
+    tab = app.call("open", url=url)["id"]
+    app.call("wait", tab=tab)
+    field = lambda: app.call("window-state")["urlFieldText"]
+    row = lambda: _menu_row(app, "toggle-developer-mode") or {}
+    off_title, off_field = row().get("title"), field()
+    app.call("menu-perform", id="toggle-developer-mode")
+    on_toast = wait_until(lambda: (lambda t: t if t and t[0]["title"] == "Developer Mode On" else None)(app.call("toasts")["toasts"]), timeout=3, step=.05)
+    on_field = wait_until(lambda: (lambda f: f if f.startswith("127.0.0.1:") else None)(field()), timeout=3, step=.05)
+    on_title = row().get("title")
+    # Another site keeps its plain host.
+    other = app.call("open", url="http://localhost:%d/cookies.html?dev=2" % port)["id"]
+    app.call("wait", tab=other)
+    other_field = wait_until(lambda: (lambda f: f if f == "localhost" else None)(field()), timeout=3, step=.05)
+    app.call("close", tab=other)
+    app.call("select", tab=tab)
+    wait_until(lambda: field().startswith("127.0.0.1:") or None, timeout=3, step=.05)
+    # Ctrl+D (the registry shortcut) through OEApplication.sendEvent with the sidebar focused.
+    app.call("menu-perform", id="reveal-tab-in-sidebar")
+    app.call("key", key="d", modifiers=["ctrl"], route="app")
+    off_toast = wait_until(lambda: (lambda t: t if t and t[0]["title"] == "Developer Mode Off" else None)(app.call("toasts")["toasts"]), timeout=3, step=.05)
+    back_field = wait_until(lambda: (lambda f: f if f == "127.0.0.1" else None)(field()), timeout=3, step=.05)
+    stored = app.call("defaults", key="open.developer.modeHosts")
+    app.call("navigate", tab=tab, url="about:blank")
+    wait_until(lambda: app.eval(tab, "location.href") == "about:blank" or None, timeout=5, step=.05)
+    hidden = row().get("hidden")
+    results["D3_developer_mode"] = {
+        "ok": off_title == "Turn on Developer Mode for this site" and off_field == "127.0.0.1" and bool(on_toast)
+              and on_field == "127.0.0.1:%d/cookies.html?dev=1" % port and on_title == "Turn off Developer Mode for this site"
+              and bool(other_field) and bool(off_toast) and bool(back_field) and not stored and hidden is True,
+        "titles": [off_title, on_title], "fields": [off_field, on_field, other_field, back_field], "stored": stored, "hiddenOnBlank": hidden}
+    app.call("close", tab=tab)
+
+
+def page_tools_apple_events_checks(app, results):
+    """D4: Allow JavaScript from Apple Events (default off, checkmark)."""
+    key, command = "open.developer.allowJavaScriptFromAppleEvents", "allow-js-apple-events"
+    def step():
+        return ((_menu_row(app, command) or {}).get("checked"), app.call("defaults", key=key))
+    initial = step()
+    app.call("command", id=command)
+    on = step()
+    app.call("command", id=command)
+    off = step()
+    results["D4_allow_js_apple_events_setting"] = {
+        "ok": not initial[1] and on[1] is True and off[1] is False, "stored": [initial[1], on[1], off[1]]}
+    results["D4_allow_js_apple_events_checkmark"] = _menu_checks_row(
+        [initial[0], on[0], off[0]], [False, True, False])
+    results["D4_allow_js_apple_events_osascript"] = _blocked(
+        "the App does not host OpenScripting yet (applescript plan Steps 5-7); the 1013 gate is in "
+        "ScriptCommands.executeJavascript and runs once the App wires ScriptHost")
+
+
+def page_tools_troubleshooting_checks(app, results, tmp, port, style):
+    """H1-H4: Task Manager, Record Trace + Stop, Copy Open Info, Cast hidden / media router off."""
+    trace_dir = os.path.join(tmp, "traces")
+    os.makedirs(trace_dir, exist_ok=True)
+    app.call("troubleshooting-setup", traceDir=trace_dir, recordReveals=True)
+    tab = app.call("open", url="http://127.0.0.1:%d/cookies.html" % port)["id"]
+    app.call("wait", tab=tab)
+    # H1
+    try:
+        app.call("command", id="task-manager")
+        window = wait_until(lambda: next((w for w in app.call("windows")
+                                          if w["visible"] and w["title"].startswith("Task Manager")), None), timeout=10, step=.25)
+        state = app.call("troubleshooting-state")
+        evidence = {"window": window, "shown": state["taskManagerShown"],
+                    "titles": [w["title"] for w in app.call("windows") if w["visible"]]}
+        if style == "alloy":
+            # Chromium's window needs a Chrome style page; the App's pages are Chrome style
+            # unless --style=alloy. H1 passes in Chrome style, so EP-10b's own window is not built.
+            results["H1_task_manager_window_alloy"] = _blocked(
+                "Alloy run: no Chrome style page for IDC_TASK_MANAGER_MAIN_MENU", **evidence)
+        else:
+            results["H1_task_manager_window"] = dict(evidence, ok=bool(window) and state["taskManagerShown"] == "yes")
+    finally:
+        _try(lambda: app.call("dismiss"))
+    # H2
+    rows0 = {i: (_menu_row(app, i) or {}).get("enabled") for i in ("record-trace", "cancel-trace")}
+    app.call("command", id="record-trace")
+    recording = wait_until(lambda: (lambda s: s if s["recording"] else None)(app.call("troubleshooting-state")), timeout=5, step=.1)
+    rows1 = {i: (_menu_row(app, i) or {}).get("enabled") for i in ("record-trace", "cancel-trace")}
+    time.sleep(2)
+    # The sticky toast's real Stop button (Helper A's ToastCenter `toast-action`).
+    recording_toast = next((t for t in _toasts(app) if t["title"] == "Recording Trace…" and not t["exiting"]), None)
+    app.call("toast-action", index=0)
+    saved = wait_until(lambda: (lambda s: s if s["lastTraceFile"] or s["lastTraceError"] else None)(
+        app.call("troubleshooting-state")), timeout=60, step=.25) or app.call("troubleshooting-state")
+    path = saved.get("lastTraceFile") or ""
+    events = 0
+    if path and os.path.isfile(path):
+        with open(path) as stream:
+            trace = json.load(stream)
+        events = len(trace.get("traceEvents", [])) if isinstance(trace, dict) else 0
+    saved_toast = wait_until(lambda: next((t for t in _toasts(app) if t["title"] == "Trace Saved" and not t["exiting"]), None), timeout=5, step=.1)
+    if saved_toast:
+        app.call("toast-action", index=0)  # Show in Finder (recorded, not shown)
+    finder = app.call("troubleshooting-state")["reveals"][-1:] == [path]
+    rows2 = {i: (_menu_row(app, i) or {}).get("enabled") for i in ("record-trace", "cancel-trace")}
+    results["H2_record_trace_stop"] = {
+        "ok": rows0 == {"record-trace": True, "cancel-trace": False} and bool(recording)
+        and rows1 == {"record-trace": False, "cancel-trace": True}
+        and os.path.dirname(path) == trace_dir and os.path.basename(path).startswith("Open Trace ") and path.endswith(".json")
+        and events > 0 and bool(recording_toast) and recording_toast["sticky"] and recording_toast["accessory"] == "stop"
+        and re.fullmatch(r"0:0[0-9]", recording_toast["subtitle"] or "") is not None
+        and bool(saved_toast) and saved_toast["accessory"] == "show in finder" and finder
+        and rows2 == {"record-trace": True, "cancel-trace": False},
+        "menu": [rows0, rows1, rows2], "file": path, "traceEvents": events,
+        "recordingToast": recording_toast, "savedToast": saved_toast, "showInFinder": finder,
+        "error": saved.get("lastTraceError")}
+    # Cancel: no file is kept.
+    before_files = sorted(os.listdir(trace_dir))
+    app.call("command", id="record-trace")
+    wait_until(lambda: app.call("troubleshooting-state")["recording"], timeout=5, step=.1)
+    app.call("command", id="cancel-trace")
+    idle = wait_until(lambda: (lambda s: s if not s["tracing"] else None)(app.call("troubleshooting-state")), timeout=30, step=.25)
+    results["H2_cancel_trace"] = {"ok": bool(idle) and sorted(os.listdir(trace_dir)) == before_files,
+                                  "files": sorted(os.listdir(trace_dir))}
+    # H3
+    app.call("command", id="copy-open-info")
+    text = app.call("pasteboard")
+    lines = text.split("\n")
+    shape = (len(lines) == 4 and re.fullmatch(r"Open \S+ \(\S+\)", lines[0])
+             and re.fullmatch(r"Engine: Chromium 156\.0\.8078\.48, CEF \S+", lines[1])
+             and lines[2].startswith("macOS ") and re.fullmatch(r"Mac: \S+ \((arm64|x86_64)\)", lines[3]))
+    newest = (_toasts(app) or [{}])[0]
+    results["H3_copy_open_info"] = {"ok": bool(shape) and "http" not in text and "/Users" not in text and "Arc" not in text
+                                    and newest.get("title") == "Copied Open Info", "text": text, "toast": newest.get("title")}
+    app.call("command", id="reveal-open-data")
+    reveals = app.call("troubleshooting-state")["reveals"]
+    root = app.call("ping")["root"]
+    results["H_reveal_open_data"] = {"ok": reveals[-1:] == [root], "reveals": reveals, "root": root}
+    # H4
+    cast = _menu_row(app, "cast") or {}
+    helpers = subprocess.run(["ps", "-axo", "pid,ppid,command"], capture_output=True, text=True).stdout.splitlines()
+    pid = str(app.pid)
+    children = [l for l in helpers if l.split(None, 2)[1:2] == [pid] and "Open Helper" in l]
+    disabled = [l for l in children if re.search(r"--disable-features=\S*\bMediaRouter\b", l)]
+    results["H4_media_router_off"] = {
+        "ok": bool(children) and len(disabled) == len(children),
+        "helpers": len(children), "helpersWithMediaRouterOff": len(disabled)}
+    hidden = _menu_checks_row([cast.get("hidden"), cast.get("enabled")], [True, False])
+    hidden["cast"] = cast
+    results["H4_cast_menu_hidden"] = hidden
+    app.call("close", tab=tab)
+
+
+def _try(fn):
+    try:
+        return fn()
+    except Exception:
+        return None
+
+
+def page_tools_checks(factory, results, tmp, style):
+    """Section 8 helper B rows of the `page` suite."""
+    server, port = page_tools_fixture_server()
+    app = factory(urls=("http://127.0.0.1:%d/cookies.html" % port,), fresh=True)
+    # Open's preferences domain is shared with other runs: restore what this group writes.
+    keys = ("open.web.colorScheme", "open.developer.allowJavaScriptFromAppleEvents", "open.developer.modeHosts")
+    saved = {key: app.call("defaults", key=key) for key in keys}
+    try:
+        for key in keys:
+            app.call("defaults", key=key, value=None)
+        app.call("window-frame", frame=[80, 60, 1360, 860])
+        # The suite runs this group after others, each with its own app: make this window key and
+        # Open active, so the menu validates against it (window commands need the key window).
+        ws = app.call("window-state")
+        app.call("window-focus", id=ws["id"], activate=True)
+        app.call("wait", tab=app.call("tabs")[0]["id"])
+        page_tools_appearance_checks(app, results, port, style)
+        page_tools_clear_checks(app, results, port, style)
+        page_tools_devtools_checks(app, results, port, style)
+        page_tools_apple_events_checks(app, results)
+        page_tools_developer_mode_checks(app, results, port)
+        page_tools_troubleshooting_checks(app, results, tmp, port, style)
+        page_tools_quit_with_devtools_check(app, results, saved)
+    finally:
+        if not app.closed:
+            _try(lambda: app.call("dismiss"))
+        _restore_defaults(app, saved)
+        app.quit()
+        server.shutdown()
+
+
+def _restore_defaults(app, saved):
+    """Restores keys of the shared io.github.sergeserb2.open domain through the App, or
+    with `defaults` when the App can no longer answer (a crash must not leave keys behind)."""
+    for key, value in saved.items():
+        restored = False
+        if not app.closed:
+            try:
+                app.call("defaults", key=key, value=value)
+                restored = True
+            except Exception:
+                pass
+        if not restored:
+            if value is None:
+                subprocess.run(["defaults", "delete", "io.github.sergeserb2.open", key], capture_output=True)
+            elif isinstance(value, bool):
+                subprocess.run(["defaults", "write", "io.github.sergeserb2.open", key, "-bool", "true" if value else "false"], capture_output=True)
+            else:
+                subprocess.run(["defaults", "write", "io.github.sergeserb2.open", key, "-string", str(value)], capture_output=True)
+
+
+def page_tools_quit_with_devtools_check(app, results, saved):
+    """Quit while a DevTools window is open: OpenEngine holds the front end's browser
+    (OEDevToolsClient) until OnBeforeClose, so quit must neither hang nor crash."""
+    tab = app.call("tabs")[0]["id"]
+    app.call("select", tab=tab)
+    app.call("command", id="javascript-console")
+    opened = wait_until(lambda: _try(lambda: app.call("devtools-frontend", tab=tab, js="1")) == 1, timeout=20, step=.5)
+    _restore_defaults(app, saved)
+    reports = os.path.expanduser("~/Library/Logs/DiagnosticReports")
+    started = time.time()
+    app.quit()
+    crashes = [f for f in (os.listdir(reports) if os.path.isdir(reports) else [])
+               if f.startswith("Open") and os.path.getmtime(os.path.join(reports, f)) >= started - 1]
+    report = app.quit_report
+    results["D1_quit_with_devtools_open"] = {"ok": bool(opened) and report.get("ok") is True and not report.get("forced")
+                                             and not crashes, "devtools": bool(opened), "quit": report, "crashReports": crashes}
+
+
 def page_notification_checks(factory, results, tmp):
     """page-platform §8.3 N1–N4, N6: web notifications in the real App (Steps 7 and 16).
 
@@ -9038,6 +9467,9 @@ def page_notification_checks(factory, results, tmp):
         sw_url = origin + '/notify-sw.html'
         sw_tab = app.call('open', url=sw_url)
         sw_page = live_tab(sw_url)['page']['identifier']
+        # The fixture defines workerReady in its script: wait for the load before reading it.
+        app.call('wait', tab=sw_tab['id'])
+        wait_until(lambda: app.eval(sw_page, 'typeof workerReady') == 'object' or None, timeout=10, step=.1)
         ready = app.eval(sw_page, 'workerReady')
         titles = app.eval(sw_page, 'showWorkerNotification(%s)' % json.dumps(origin + '/notify.html?from=worker'))
         app.call('close', tab=sw_tab['id'])
@@ -9564,7 +9996,7 @@ def main():
             folder_peek_checks(factory, results[opts.only], tmp)
         elif opts.only == "page":
             results["page"] = CheckedResults(tracker)
-            page_checks(factory, results["page"], tmp)
+            page_checks(factory, results["page"], tmp, opts.style)
         elif opts.only in ("toolbar", "numbering"):
             results[opts.only] = CheckedResults(tracker)
             (toolbar_checks if opts.only == "toolbar" else numbering_checks)(factory, results[opts.only], tmp)
@@ -9653,7 +10085,7 @@ def main():
                           "processes": [instance.quit_report for instance in _OWNED_APPS]}
     print("owned_process_cleanup    " + ("PASS" if results["cleanup"]["ok"] else "FAIL"), flush=True)
     name = ("results-actions-p2.json" if opts.only == "actions" else
-            "results-%s-%s.json" % (opts.only, opts.style if opts.only in ("extensions", "features", "tabstrip")
+            "results-%s-%s.json" % (opts.only, opts.style if opts.only in ("extensions", "features", "tabstrip", "page")
                                     else opts.config.lower()))
     with open(os.path.join(OUT, name), "w") as f:
         json.dump(results, f, indent=2, sort_keys=True)

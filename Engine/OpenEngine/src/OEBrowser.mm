@@ -490,6 +490,21 @@ class OETabStripHandler : public CefTabStripHandler {
   }
 }
 
+- (BOOL)oe_isChromiumActiveTab:(OEWebContent*)content {
+  if (!_strip || content.oe_hostBrowser != self || !content.oe_browser) {
+    return NO;
+  }
+  if (_stripSyncScheduled) {
+    // The scheduled block still runs later; a second sync is idempotent.
+    [self oe_syncTabStrip];
+  }
+  int index = _strip->GetActiveIndex();
+  CefRefPtr<CefBrowser> active =
+      index >= 0 && index < _strip->GetTabCount() ? _strip->GetTabAt(index)
+                                                  : nullptr;
+  return active && active->IsSame(content.oe_browser);
+}
+
 - (nullable OEWebContent*)oe_contentForBrowser:(CefRefPtr<CefBrowser>)browser {
   return browser ? [[OEEngine shared]
                        webContentWithIdentifier:browser->GetIdentifier()]

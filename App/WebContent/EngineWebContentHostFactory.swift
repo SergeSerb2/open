@@ -32,6 +32,7 @@ final class EngineWebContentHostFactory: NSResponder, WebContentHostFactory {
   var model: BrowserModel { app.model }
   var contentContainer: NSView { controller!.container }
   private(set) var hosts: [ItemID: EngineWebContentHost] = [:]
+  private var developerModeObserver: (any NSObjectProtocol)?
   /// The Capture overlay is up in this window: history swipes pause (§4.4.1).
   private(set) var captureOverlayUp = false
   private var swipeActivationObserver: (any NSObjectProtocol)?
@@ -136,6 +137,16 @@ final class EngineWebContentHostFactory: NSResponder, WebContentHostFactory {
     controller.onCommandValidation = { [weak self] id, key in
       guard !AppCommand.featureIDs.contains(id), !id.hasPrefix("focus-split-pane-") else { return nil }
       return self?.isAppCommandEnabled(id, enabledKey: key) ?? false
+    }
+    controller.onMenuState = { [weak self] in self?.pageMenuState(for: $0) }  // checkmarks, Cast hidden, Developer Mode title (page-platform §7.1)
+    // Developer Mode sites show their full URL in the URL field (§4.10.3).
+    controller.context.developerModeHosts = DeveloperMode.hosts
+    developerModeObserver = NotificationCenter.default.addObserver(forName: DeveloperMode.didChange, object: nil, queue: .main) { [weak self] _ in
+      MainActor.assumeIsolated {
+        guard let self, let controller = self.controller else { return }
+        controller.context.developerModeHosts = DeveloperMode.hosts
+        self.app.scheduleMenuRebuild()
+      }
     }
     controller.onLayout = { [weak self] in self?.layoutViews() }
     controller.captureLibrary = app.captureLibrary
@@ -251,7 +262,8 @@ final class EngineWebContentHostFactory: NSResponder, WebContentHostFactory {
   }
   func context(for profileID: ProfileID) -> OEBrowserContext? {
     guard app.engineReady, let profile = model.profile(id: profileID) else { return nil }
-    if profile.id == model.defaultProfile?.id { return OEEngine.shared.defaultContext }
+    // Website appearance is app-wide (page-platform §4.8): every context gets it at creation.
+    if profile.id == model.defaultProfile?.id { return WebsiteAppearance.prepare(OEEngine.shared.defaultContext) }
     guard app.engine.result.layout == .engine else {
       // The old layout has no disk folder for other profiles (CEF refused
       // Profiles/<dir>/Engine). Their pages wait for the next launch, whose
@@ -263,6 +275,7 @@ final class EngineWebContentHostFactory: NSResponder, WebContentHostFactory {
       return nil
     }
     return OEEngine.shared.context(identifier: profile.dataDirectoryName, directory: app.directories.engineDirectory(dataDirectoryName: profile.dataDirectoryName))
+      .map(WebsiteAppearance.prepare)
   }
   private static var legacyRefusals: Set<String> = []
   var focusedBrowser: OEBrowser? {

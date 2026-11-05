@@ -206,3 +206,43 @@ class OEClient : public CefClient,
   bool close_requested_ = false;
   IMPLEMENT_REFCOUNTING(OEClient);
 };
+
+/// The client of a page's DevTools window (Chrome's DevToolsWindow, opened by
+/// -showDevTools, -showDevToolsPanel:, or the context menu's Inspect). CEF
+/// would give that window the inspected page's client, whose creation, title,
+/// and close callbacks would reach the page (closing DevTools closed the tab).
+/// It reports the window's own browser (the DevTools front end) to the
+/// inspected page, which holds it until OnBeforeClose, and runs
+/// Runtime.evaluate in it for -evaluateJavaScriptInDevToolsFrontend:.
+class OEDevToolsClient : public CefClient,
+                         public CefLifeSpanHandler,
+                         public CefDevToolsMessageObserver {
+ public:
+  explicit OEDevToolsClient(OEWebContent* inspected) : inspected_(inspected) {}
+
+  CefRefPtr<CefLifeSpanHandler> GetLifeSpanHandler() override { return this; }
+  void OnAfterCreated(CefRefPtr<CefBrowser> browser) override;
+  void OnBeforeClose(CefRefPtr<CefBrowser> browser) override;
+
+  /// Evaluates `script` in the front end's main world; awaits promises.
+  void Evaluate(NSString* script,
+                void (^completion)(id _Nullable result,
+                                   NSError* _Nullable error));
+  bool IsOpen() const { return browser_ != nullptr; }
+
+  // CefDevToolsMessageObserver
+  void OnDevToolsMethodResult(CefRefPtr<CefBrowser> browser,
+                              int message_id,
+                              bool success,
+                              const void* result,
+                              size_t result_size) override;
+
+ private:
+  void FailPending();
+  __weak OEWebContent* inspected_;
+  CefRefPtr<CefBrowser> browser_;
+  CefRefPtr<CefRegistration> registration_;
+  NSMutableDictionary<NSNumber*, void (^)(id, NSError*)>* pending_ =
+      [NSMutableDictionary dictionary];
+  IMPLEMENT_REFCOUNTING(OEDevToolsClient);
+};
