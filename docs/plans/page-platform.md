@@ -1,6 +1,8 @@
 # Page and platform features — implementation plan for Open
 
-Status: plan (2026-10-26). Implementers: coding agents with no other
+Status: plan (2026-10-26), reconciled with merged Section 8 work on 2026-11-05.
+The Verification (Section 8) table in §9 records current results and deviations.
+Implementers: coding agents with no other
 context, plus the engine lead for §6. Follow this file literally. Where it
 says "Open choice", the choice is final for v1 unless the lead changes it in
 the appendix. Where it says "guess", build the stated value and keep it in
@@ -591,7 +593,7 @@ user clicks
 - Open does not add Arc's per-profile "notification permission requests"
   switch in v1 (PG-5.3; no Settings row is planned for it). guess: low value.
 
-#### 4.5.5a As built (Step 7, s8/notifications, 2026-11-02)
+#### 4.5.5a As built (Step 7, #160, 2026-11-02)
 
 - Bundles (§4.5.2): `App/Info.plist` has `NSUserNotificationAlertStyle =
   banner`; `Helper/Info-Alerts.plist` (only `OpenHelperAlerts`, set in
@@ -609,16 +611,15 @@ user clicks
   `deniedLine`, `openSettingsTitle`, `openSystemSettings()`,
   `didChangeNotification`.
 - Activation (§4.5.4): `browser(_:requestsActivationOf:)` focuses the tab's
-  Space in its window and selects the tab; selecting wakes it (the App's only
-  wake path until OpenSleep is wired in the App; its wake call goes in that
-  handler). The window comes front through Chromium's `ActivateContents` →
+  Space in its window and selects the tab; selecting wakes it (#165 routes sleep wakes through the controller: unfreeze, retained discard reload, or destroyed history restore). The window comes front through Chromium's `ActivateContents` →
   `OpenBrowserWindow::Activate` (`[NSApp activate]`, `makeKeyAndOrderFront:`),
-  which also restores a minimized window (N3). The shell adds no window code.
+  which also restores a minimized window (N3). #160 adds
+  `NotificationClicks.swift`: the shell also raises/restores the window for fallback activation.
 - e2e (`--only page --style chrome`): N3 triggers the activation with
   DevTools `Page.bringToFront`, which calls the same `WebContents::Activate`
   as `window.focus()` and `client.focus()`
-  (`content/browser/devtools/protocol/page_handler.cc` `BringToFront`). Rows
-  that need a notification click or the engine list report `BLOCKED: EP-7`.
+  (`content/browser/devtools/protocol/page_handler.cc` `BringToFront`). The engine list and click rows now pass in #160, including N4 fallback.
+  N1 native delivery (U-N1) and N6 clients.openWindow (P1) remain BLOCKED.
   The App runs with `OPEN_AUTOMATION_NOTIFICATION_AUTHORIZATION=record`, so a
   run never shows the macOS prompt; U-N1 is the same suite with
   `OPEN_E2E_NOTIFICATION_PROMPT=1` (`docs/automation.md`).
@@ -867,7 +868,7 @@ strings, PG-7.3). The other strings are Arc's (PG-7.3).
   (the settings action `resetTranslatePrompts` calls
   `TranslatePreferences.reset()`).
 
-#### 4.7.8 As built (Steps 9 and 10, s8/translate, 2026-11-02)
+#### 4.7.8 As built (Steps 9 and 10, #152, 2026-11-02)
 
 Section 8 decisions, where this section left a choice open:
 
@@ -1548,12 +1549,33 @@ tagged `[APP]` need app-shell Steps B and C on `main` (real window, menus,
 | 18 | [APP] | Developer Mode v1 (§4.10.3) and the Site Control tile | 5; lead answer to Q6 | D3 |
 | 19 | [APP] | When P7 / E5 lands: move the translate runtime to the isolated world | 10, P7 | X1–X6 pass; `eval` in the main world cannot see `__openTranslate` |
 
-Step 13 status (Section 8, branch `s8/capture`): built. `features-render check` covers R-C1–R-C3
-plus the controller flow (renders in `docs/plans/page-platform/capture-*.png`); e2e `--only page`
-passes C1–C6 and the context-menu row; C7 is blocked (no incognito window yet). Interim: the
-capture toasts use the window's old toast until Step 1's `ToastCenter`, and `hasWebPage` is
-computed in `App/Page/CaptureCommands.swift` until Step 2. Leftovers: `docs/followups.md`,
-"Capture tool leftovers".
+### Verification (Section 8, 2026-11-05)
+
+These are saved merged-PR results. Planned acceptance above is not a new run.
+Paths below are relative to `Packages/OpenKit/Sources/` unless they start with `App/` or `Engine/`.
+
+| Step | Merged evidence | Code and deviations |
+|---|---|---|
+| 1 | [#153](https://github.com/SergeSerb2/open/pull/153); `features-render` R-T1–R-T7 | `OpenFeatures/Toasts/`, `OpenDesign/PageTokens.swift`. All old window toasts moved, including Capture, translation and Battery Saver. Button lifetime is 5 s (PG-14). |
+| 2 | [#153](https://github.com/SergeSerb2/open/pull/153); `commands-dump` 0/0/0; `openkit url-clean` 30/30 | `OpenCommands/Command.swift`, `OpenModel/URLCleaner.swift`; one tracker table. |
+| 3 | [#163](https://github.com/SergeSerb2/open/pull/163); `page` T-E1/T-E2, Q1/Q3/Q4, Z1/Z2/Z4 | `App/Page/PageCommands.swift`. EP-5 needs no engine change: resetZoom already resets pinch scale. |
+| 4 | [#164](https://github.com/SergeSerb2/open/pull/164); `page` D1/D2, A1/A2, H2/H4 | `Engine/OpenEngine/src/{OEWebContent,OEBrowserContext,OEEngine}.mm`; EP-4a/9a/10/11/12. H1 needs a live Chrome-style page; Alloy H1 is BLOCKED. |
+| 5 | [#164](https://github.com/SergeSerb2/open/pull/164); A1/A2, D1/D4, H2–H4 | `App/Page/{WebsiteAppearance,PageToolsCommands,TroubleshootingActions}.swift`. D4 setting/checkmark pass; osascript execute is BLOCKED until App OpenScripting integration. Cast stays hidden. |
+| 6 | [#164](https://github.com/SergeSerb2/open/pull/164); K1/K2 | `App/Page/PageToolsCommands.swift`. Host cookies only; Clear Cache stays disabled until Site Control E2. |
+| 7 | [#160](https://github.com/SergeSerb2/open/pull/160); N1 engine display/list, N2 helper/list, N3 activation/click, N6 engine display | `App/Page/NotificationAuthorization.swift`, `Helper/Info-Alerts.plist`. N1 macOS delivery (U-N1) and N6 clients.openWindow (P1) are BLOCKED. |
+| 8 | [#156](https://github.com/SergeSerb2/open/pull/156); `sleep-demo` 172/172; `sleep_n5_notifications` | `OpenSleep/SleepPolicy.swift`, `App/Sleep/AppSleepCoordinator.swift`. Permission gate follows commits and permission changes. |
+| 9 | [#152](https://github.com/SergeSerb2/open/pull/152); `lang-detect` 17/17, R-X1, S-US1 | `OpenTranslate/`, `OpenFeatures/Translate/`, `OpenSidebar/URLStatusButton.swift`, `OpenDesign/TranslateTokens.swift`. Tokens/layout differ from planned file names. |
+| 10 | [#152](https://github.com/SergeSerb2/open/pull/152); X1–X6, X_idle_no_polling, X_stale_result_dropped, X2_revert_keeps_page_structure, X_offer_after_minimized_load, X_root_notranslate | `App/Page/TranslateAdapter.swift`. Fixture backend proves the pipeline; X1_apple_backend stays BLOCKED on language assets. Main world until Step 19. Toast migration completed in [#153](https://github.com/SergeSerb2/open/pull/153). |
+| 11 | [#158](https://github.com/SergeSerb2/open/pull/158); SW1/SW2/SW4 | `Engine/fork/patches/chromium/0501-page-history-swipe-hooks.patch`, overlay `cef_open_page.h`. Hook replay proves overlay/navigation, not gesture recognition. |
+| 12 | [#162](https://github.com/SergeSerb2/open/pull/162); R-W1, SW1–SW4 | `OpenFeatures/SwipeIndicatorView.swift`, `App/WebContent/EngineWebContentHostFactory.swift`. Tabs/splits only; Peek/Little Open keep engine arrows. Capture pauses swipes. Zap/backdrop pause and U-S1 remain open. |
+| 13 | [#154](https://github.com/SergeSerb2/open/pull/154); R-C1–R-C3, C1–C6, capture_2x_* | `OpenFeatures/Capture/`, `App/Page/{CaptureCommands,CaptureLibraryWriter}.swift`; `OEWebContent.captureFullPage`. 2x scale/cap proven with device emulation in #154; C7 incognito stays BLOCKED. ToastCenter migration completed in [#153](https://github.com/SergeSerb2/open/pull/153). Visual captures remain open. |
+| 14 | [#158](https://github.com/SergeSerb2/open/pull/158); Q2, EP3 | `Engine/fork/src/open/browser/page/open_page_state.cc`, `cef/include/cef_open_page.h`. EP-2/EP-3 are overlay-only; no 0502. |
+| 15 | [#163](https://github.com/SergeSerb2/open/pull/163); Q1–Q5, EP3 | `App/Page/PageCommands.swift`, `TranslateAdapter.swift`. Engine fragment on cleaned URL; bounded exact-text fallback; Share Quote status button. |
+| 16 | [#158](https://github.com/SergeSerb2/open/pull/158) + [#160](https://github.com/SergeSerb2/open/pull/160); N3/N4; [#164](https://github.com/SergeSerb2/open/pull/164) D1/D2 | `App/Page/NotificationClicks.swift`, `open_notifications.cc`, Chromium 0504. 500 ms fallback selects the same-origin/profile MRU tab. EP-4b uses DevToolsAPI.showPanel; no 0503. EP-7 observes Chromium's display set, not macOS GetDisplayed. |
+| 17 | [#158](https://github.com/SergeSerb2/open/pull/158) + [#164](https://github.com/SergeSerb2/open/pull/164); A1/A2 on both styles and after navigation | CEF 0505 and `OEBrowserContext.websiteColorScheme` call `CefSetWebsiteColorScheme`. |
+| 18 | [#164](https://github.com/SergeSerb2/open/pull/164); D3 | `App/Page/DeveloperMode.swift`; per-site preference, menu state and full URL. Site Control tile is separate Site Control work. |
+| 19 | Open; no Section 8 merge | `OpenTranslate/PageTranslationSession.swift` still uses the main world. Waits for P7/E5; no isolated-world acceptance claimed. |
+
 
 Priority: steps 1–3 unblock every toast; 7–10 and 11–12 close the P1 gaps
 (notifications, translation, swipe; `docs/status.md` §3.2 items 8, 9, 12);
@@ -1662,3 +1684,5 @@ These replace the plan text where they differ; each cites its evidence.
 - The copy toast's quote offer reads `hasSelection` (EP-3): no page round trip, so the offer is decided at once.
 - Share Quote: the status button under the URL field (`TranslateAdapter.syncStatus`, the same slot as "Translation Available") shows while the selected tab has a selection; the host forwards `.selection` changes. Pressing it runs Copy URL as Quote.
 - e2e `page`: Q1–Q5 and EP3 pass. Break-and-revert (M1, head `86054b9c`): with `hasSelection` forced false and the engine link dropped, `Q2_quote_context` and `Q4_copy_url_offers_quote` FAIL; restored, PASS.
+
+Section 8 reconciliation: the as-built notes above retain implementation context. All translation and Capture toasts now use `ToastCenter` ([#153](https://github.com/SergeSerb2/open/pull/153)); earlier old-toast interim notes are closed. EP-9b and EP-4b App wiring merged in [#164](https://github.com/SergeSerb2/open/pull/164).

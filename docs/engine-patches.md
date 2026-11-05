@@ -350,7 +350,7 @@ unicode-normalization 0.1.26 75cd3fb03d5288b3ba9a1ee103ac7e9cbb59f0b03d64f8ddfcc
 url 2.5.8 ff67a8a4397373c3ef660812acab3268222035010ab8680ec4215f38ba3d0eed
 ```
 
-## Tab sleeping (memory fork, Section 8 PR E1)
+## Tab sleeping (memory fork, Section 8 PR #158)
 
 The engine primitives of [plans/memory-fork.md](plans/memory-fork.md) (S1–S5). Policy stays in Swift (`OpenSleep`); the OpenEngine API is in [engine-api.md](engine-api.md), "Tab sleeping".
 
@@ -374,7 +374,7 @@ Section 8 decisions (differences from memory-fork §3/§5, with the reason):
 - `no_renderer` is appended at the end of `cef_browser_settings_t`'s experimental block (after `ax_viewport_collapse`), so `CEF_MEMBER_EXISTS` keeps working. Views-window Chrome browsers ignore it; OpenEngine never restores into them (it loads the fallback URL and reports `.failed`).
 - `cef_types.h` is included by every CEF file: 0105 rebuilds all of libcef and the wrapper (build time in the PR).
 
-## Page platform (Section 8, engine PR with the memory fork)
+## Page platform (Section 8, PR #158)
 
 The engine requests of [plans/page-platform.md](plans/page-platform.md) §6. One public header, `cef/include/cef_open_page.h` (overlay, experimental API, translator-generated C API), with code in `open/browser/page/`. The OpenEngine API is in [engine-api.md](engine-api.md), "Page selection and history swipe" and "Notifications".
 
@@ -387,7 +387,7 @@ The engine requests of [plans/page-platform.md](plans/page-platform.md) §6. One
 Section 8 decisions (differences from page-platform §6, with the reason):
 
 - **EP-2 and EP-3 need no patch (no 0502).** The selection text (`RenderWidgetHostView::GetSelectedText` of the focused frame), the link (`TextFragmentReceiver::RequestSelectorForSelection` + `shared_highlighting::AppendSelectors`) and the change bit (a `TextInputManager::Observer` on the page's `WebContentsImpl`) are reachable from overlay code (`open_page_state.cc`; dep `//components/shared_highlighting/core/common`). The change bit reports only empty ↔ non-empty transitions.
-- **EP-4b needs no patch (no 0503).** OpenEngine selects the Network panel through the DevTools front end's `DevToolsAPI.showPanel`, the call Chrome makes for its own Console command (`DevToolsWindow::DoAction`). This also switches an already open DevTools window (Section 8 branch `s8/page-tools`).
+- **EP-4b needs no patch (no 0503).** OpenEngine selects the Network panel through the DevTools front end's `DevToolsAPI.showPanel`, the call Chrome makes for its own Console command (`DevToolsWindow::DoAction`). This also switches an already open DevTools window ([#164](https://github.com/SergeSerb2/open/pull/164)).
 - **The hooks from Chromium files into the overlay are header-only tables** (`open_history_swipe_hooks.h`, `open_notification_hooks.h`): `chrome/browser` and `chrome/browser/ui` cannot depend on libcef, and both are linked into the one framework binary (one `GetHistorySwipeHooks()::hooks` symbol, checked with `nm`). The overlay fills them the first time an embedder sets a page or notification handler.
 - **`historySwipeEnabled` uses Chromium's own `HistorySwipingControl`** (a `WebContentsUserData` the swiper already asks) instead of a hunk in `shouldAllowHistorySwiping`.
 - **EP-6 reports no page.** Chromium keeps the creating document of a non-persistent notification inside content's dispatcher; the embedder finds the tab by origin.
@@ -406,3 +406,21 @@ Section 8 decisions (differences from page-platform §6, with the reason):
 3. ~~Folders map to `chrome.tabGroups` (title = folder name, collapsed = folder collapsed) after core P1 works.~~ Superseded (lead, 2026-10-25): follow Arc. There is no evidence that Arc maps folders to tab groups (docs/re/arccore-engine.md §4.3.1), so v1 has no tab groups (an Open decision, not an Arc fact): folder tabs keep their pinned state in `chrome.tabs` (`groupId` -1), and Open's hidden windows have no tab group model, so `chrome.tabs.group` fails with Chrome's own error and `chrome.tabGroups.query` is empty (patch `0304`, e2e `--only tabstrip` → `no_tab_groups`). Splits are not tab groups. Known v1 differences from Chrome (Open decisions, not Arc facts; docs/re/arccore-engine.md §4.3.1): `chrome.tabs.group` and `chrome.tabs.ungroup` reject with "Grouping is not supported by tabs in this window." (`ungroup` too, even for a tab in no group), `chrome.tabGroups.get/update/move` reject with no group for that id, `Tab.groupId` is -1 for every tab, and `tabGroups.on*` events never fire. Auto-grouping extensions and tab managers lose their grouping features.
 4. ~~Default profile engine data stays at `Profiles/Default/` (CEF's fixed default slot); other profiles use `Profiles/<dir>/Engine/`.~~ Superseded (lead, 2026-10-25): one engine root, `<root>/Engine/` = `root_cache_path`; `Engine/Default` for the default profile, `Engine/<dir>` for the others (CEF loads a disk profile only for a direct child of `root_cache_path`). Open's own files stay in `Profiles/<dir>/`. See docs/plans/profiles.md §6.2 and its appendix.
 5. Until P1 lands: extensions run in our own views; the Chrome-style window remains available (debug/advanced menu) for the Web Store and `chrome://extensions`.
+
+## Verification (Section 8, merged)
+
+[#158](https://github.com/SergeSerb2/open/pull/158) merged the active CEF patches 0101, 0104, 0105, the visibility change
+in CEF 0302, Chromium 0501/0504, and CEF 0505. The authoritative apply order
+is `Engine/fork/patches/{cef,chromium}/series`. The overlay public headers
+are `Engine/fork/src/cef/include/{cef_navigation_history,cef_page_lifecycle,cef_open_page}.h`.
+There is no 0502 or 0503. EP-2/EP-3 use overlay code; EP-4b uses the
+DevTools front end ([#164](https://github.com/SergeSerb2/open/pull/164)). EP-5 needs no patch or extra API call.
+
+[#158](https://github.com/SergeSerb2/open/pull/158) records engine-status 8/8, page SW1/SW2/SW4/Q2/EP3, and tabstrip
+sleep_hosted_visibility/freeze/unload_flag/capture/discard/discard_keeps_tab_id PASS.
+S2 App restore acceptance passes in [#165](https://github.com/SergeSerb2/open/pull/165) (`sleep` F4 restore and F5 destroyed wake). [#160](https://github.com/SergeSerb2/open/pull/160) updates the notification overlay
+`Engine/fork/src/open/browser/page/open_notifications.cc`: EP-7 lists the display
+service observer's set, independent of native macOS delivery. It adds no series
+entry. Its distribution receipt is `e949ff69`; N1 macOS delivery and N6
+clients.openWindow stay BLOCKED. App swipe and appearance wiring merged in
+[#162](https://github.com/SergeSerb2/open/pull/162) and [#164](https://github.com/SergeSerb2/open/pull/164). These are saved receipts, not checks run for this docs change.
