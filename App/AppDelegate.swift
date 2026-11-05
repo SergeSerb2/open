@@ -28,6 +28,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate, OEEngineDelegate, OEBr
   private(set) var engineReady = false
   private(set) var terminationRequested = false
   private var faviconShutdownTask: Task<Void, Never>?
+  private var historyQuitTask: Task<Void, Never>?
+  /// Uptime of the last quit-time history flush. A quit cancelled later (downloads alert,
+  /// beforeunload) must flush again on the next attempt, so the flush is valid only briefly.
+  private var historyQuitFlushedAt: TimeInterval?
   private(set) var shutdownPrepared = false
   private var lateAsyncEngineCalls = 0
   private var asyncEngineCalls: [String: Int] = [:]
@@ -41,6 +45,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate, OEEngineDelegate, OEBr
   private var sleepQuitTask: Task<Void, Never>?
   private var sleepQuitCaptured = false
   lazy var settingsPresenter = AppSettingsActions(app: self)
+  let defaultBrowserService = DefaultBrowserService()
+  lazy var linkExecutor = AppLinkExecutor(app: self)
+  lazy var linkIntake = ExternalLinkIntake(executor: linkExecutor, snapshot: { [unowned self] in self.linkExecutor.snapshot() })
+  var lastLittleOpenRequest: LittleOpenRequest?
   /// Library ▸ Captures writer (page-platform §4.6.6); one per app, shared by every window.
   lazy var captureLibrary = CaptureLibraryWriter(app: self, root: directories.root)
   var keyBindings = KeyBindingStore.empty
@@ -90,6 +98,16 @@ final class AppDelegate: NSObject, NSApplicationDelegate, OEEngineDelegate, OEBr
   private lazy var pageQuit = PageQuitCoordinator(app: self)
 
   func applicationShouldTerminate(_ sender: NSApplication) -> NSApplication.TerminateReply {
+    if historyQuitTask != nil { return .terminateCancel }
+    let now = ProcessInfo.processInfo.systemUptime
+    if !shutdownPrepared, historyQuitFlushedAt.map({ now - $0 > 5 }) ?? true {
+      historyQuitTask = Task { @MainActor in
+        await self.stores.flushHistory()
+        self.historyQuitFlushedAt = ProcessInfo.processInfo.systemUptime; self.historyQuitTask = nil
+        NSApp.terminate(nil)
+      }
+      return .terminateCancel
+    }
     if faviconShutdownTask != nil || sleepQuitTask != nil { return .terminateCancel }
     if engineReady, !shutdownPrepared, !pageQuit.shouldTerminate() { return .terminateCancel }
     if !sleepQuitCaptured, engineReady, !shutdownPrepared, tabSleep.controller != nil {
@@ -347,6 +365,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, OEEngineDelegate, OEBr
     engineReady = true
     showWindowsIfNeeded()
     for factory in hostFactories.values { factory.engineDidBecomeReady() }
+    completeLinkRestoration()
     EngineWebProfile.onPermissionChange = { [weak self] context in self?.tabSleep.permissionsChanged(context: context) }
     scheduleMenuRebuild()
     #if OPEN_AUTOMATION
@@ -553,6 +572,7 @@ extension AppDelegate: CommandDispatcher {
     scheduleMenuRebuild()
   }
   func menuState(for id: String) -> CommandMenuState? {
+    if id == "set-default-browser" { return CommandMenuState(isChecked: defaultBrowserService.isDefaultBrowser) }
     if id == "toggle-developer-mode" { return DeveloperMode.menuState(for: frontWindowController.flatMap { hostFactories[$0.windowID] }?.selectedContent?.url) }
     return PageTools.menuState(for: id)
   }
