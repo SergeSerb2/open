@@ -1318,8 +1318,10 @@ def tabstrip_checks(app, results):
     # object stays until the controller's later destroy deadline.
     bg = f2
     bg_cid = chrome_id(bg)
+    discard_initial = []
     def ready_to_discard():
         state = next(iter(app.call("sleep-state", tab=bg).get("tabs", [])), {})
+        if not discard_initial: discard_initial.append(state)
         # A recent network commit has the controller's existing 10 s loading
         # grace. Establish an eligible background tab before sending one
         # discard request; a correct refusal during that grace is not failure.
@@ -1342,6 +1344,7 @@ def tabstrip_checks(app, results):
               and bool(row(visible["id"])) and row(visible["id"])["loaded"],
         "background": discard_bg, "background_sleeping_in_place": bool(asleep),
         "eligible_before_request": discard_ready,
+        "initial_eligibility": discard_initial[0] if discard_initial else None,
         "sleep_state": asleep or app.call("sleep-state", tab=bg), "chromium_after": chromium_after,
         "visible": discard_visible,
         "note": "P1 returns discarded:false in desktop chrome.tabs metadata; the engine's renderer-discard flag and sleeping phase prove the discard."}
