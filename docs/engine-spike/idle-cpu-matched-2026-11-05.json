@@ -1,0 +1,660 @@
+{
+  "measurement_base": "03a0d5cbd5f1dce1f63458631f5390e2a795de81",
+  "final_integration_base": "18c14f33",
+  "configuration": "Release + OPEN_AUTOMATION=1; before app is a clone named IdleCPU-Before",
+  "engine_sha256": "f34400e71412d87a0b268fcd5658a8563cca34f600c8dd17b534a63e76aa7939",
+  "display": [
+    {
+      "_name": "Color LCD",
+      "_spdisplays_resolution": "1728 x 1117 @ 120.00Hz",
+      "spdisplays_connection_type": "spdisplays_internal",
+      "spdisplays_main": "spdisplays_yes",
+      "spdisplays_online": "spdisplays_yes",
+      "spdisplays_pixelresolution": "spdisplays_3456x2234Retina"
+    }
+  ],
+  "unit": "percent of one core",
+  "variants": {
+    "before": {
+      "engine_code_sha256": "1bc8b6044b77d53d46d76745a39b029e9709dbeb00fd31d08870ed0a38dd576a",
+      "cleanup_ok": true,
+      "legacy_task_manager_sum": 0.34,
+      "cases": {
+        "empty": {
+          "startup": {
+            "total_cpu_percent": 1.1737,
+            "by_kind": {
+              "browser": 0.9299,
+              "gpu": 0.0061,
+              "network": 0.1601,
+              "utility": 0.0025,
+              "renderer": 0.075
+            },
+            "load_start": "{ 8.74 8.78 7.40 }",
+            "load_end": "{ 6.59 8.09 7.23 }",
+            "complete": true
+          },
+          "settled": {
+            "requested_seconds": 60,
+            "mach_timebase": [
+              125,
+              3
+            ],
+            "load_start": "{ 6.59 8.09 7.23 }",
+            "load_end": "{ 5.61 7.64 7.12 }",
+            "by_process": [
+              {
+                "pid": 47607,
+                "kind": "browser",
+                "seconds": 60.06,
+                "cpu_time_ticks": 1308480,
+                "ps_cpu_seconds_delta": 0.06,
+                "cpu_percent": 0.0908,
+                "package_idle_wakeups_per_second": 0.0,
+                "interrupt_wakeups_per_second": 1.499
+              },
+              {
+                "pid": 47640,
+                "kind": "gpu",
+                "seconds": 60.061,
+                "cpu_time_ticks": 172687,
+                "ps_cpu_seconds_delta": 0.0,
+                "cpu_percent": 0.012,
+                "package_idle_wakeups_per_second": 0.0,
+                "interrupt_wakeups_per_second": 0.783
+              },
+              {
+                "pid": 47641,
+                "kind": "network",
+                "seconds": 60.062,
+                "cpu_time_ticks": 194877,
+                "ps_cpu_seconds_delta": 0.01,
+                "cpu_percent": 0.0135,
+                "package_idle_wakeups_per_second": 0.0,
+                "interrupt_wakeups_per_second": 0.4
+              },
+              {
+                "pid": 47642,
+                "kind": "utility",
+                "seconds": 60.062,
+                "cpu_time_ticks": 42562,
+                "ps_cpu_seconds_delta": 0.0,
+                "cpu_percent": 0.003,
+                "package_idle_wakeups_per_second": 0.0,
+                "interrupt_wakeups_per_second": 0.383
+              },
+              {
+                "pid": 47645,
+                "kind": "renderer",
+                "seconds": 60.062,
+                "cpu_time_ticks": 23666,
+                "ps_cpu_seconds_delta": 0.0,
+                "cpu_percent": 0.0016,
+                "package_idle_wakeups_per_second": 0.0,
+                "interrupt_wakeups_per_second": 0.15
+              },
+              {
+                "pid": 47646,
+                "kind": "renderer",
+                "seconds": 60.062,
+                "cpu_time_ticks": 24070,
+                "ps_cpu_seconds_delta": 0.0,
+                "cpu_percent": 0.0017,
+                "package_idle_wakeups_per_second": 0.0,
+                "interrupt_wakeups_per_second": 0.15
+              }
+            ],
+            "by_kind": {
+              "browser": 0.0908,
+              "gpu": 0.012,
+              "network": 0.0135,
+              "utility": 0.003,
+              "renderer": 0.0033
+            },
+            "total_cpu_percent": 0.1225,
+            "processes_started": [],
+            "processes_exited": [],
+            "complete": true
+          },
+          "window_frame": [
+            440,
+            8,
+            1280,
+            1067
+          ],
+          "screen_frame": [
+            0,
+            0,
+            1728,
+            1117
+          ],
+          "window_visible": true,
+          "app_active": true
+        },
+        "ten": {
+          "startup": {
+            "total_cpu_percent": 5.5101,
+            "by_kind": {
+              "browser": 1.1524,
+              "gpu": 2.6559,
+              "network": 0.222,
+              "utility": 0.0155,
+              "renderer": 1.4643
+            },
+            "load_start": "{ 5.24 6.77 6.83 }",
+            "load_end": "{ 4.45 6.25 6.63 }",
+            "complete": true
+          },
+          "settled": {
+            "requested_seconds": 60,
+            "mach_timebase": [
+              125,
+              3
+            ],
+            "load_start": "{ 4.45 6.25 6.63 }",
+            "load_end": "{ 4.26 5.88 6.47 }",
+            "by_process": [
+              {
+                "pid": 51544,
+                "kind": "browser",
+                "seconds": 60.105,
+                "cpu_time_ticks": 3904761,
+                "ps_cpu_seconds_delta": 0.16,
+                "cpu_percent": 0.2707,
+                "package_idle_wakeups_per_second": 0.0,
+                "interrupt_wakeups_per_second": 2.113
+              },
+              {
+                "pid": 51599,
+                "kind": "gpu",
+                "seconds": 60.105,
+                "cpu_time_ticks": 36964937,
+                "ps_cpu_seconds_delta": 1.54,
+                "cpu_percent": 2.5625,
+                "package_idle_wakeups_per_second": 0.0,
+                "interrupt_wakeups_per_second": 24.773
+              },
+              {
+                "pid": 51600,
+                "kind": "network",
+                "seconds": 60.103,
+                "cpu_time_ticks": 611302,
+                "ps_cpu_seconds_delta": 0.02,
+                "cpu_percent": 0.0424,
+                "package_idle_wakeups_per_second": 0.0,
+                "interrupt_wakeups_per_second": 0.399
+              },
+              {
+                "pid": 51604,
+                "kind": "utility",
+                "seconds": 60.103,
+                "cpu_time_ticks": 35632,
+                "ps_cpu_seconds_delta": 0.0,
+                "cpu_percent": 0.0025,
+                "package_idle_wakeups_per_second": 0.017,
+                "interrupt_wakeups_per_second": 0.366
+              },
+              {
+                "pid": 51608,
+                "kind": "renderer",
+                "seconds": 60.105,
+                "cpu_time_ticks": 18395,
+                "ps_cpu_seconds_delta": 0.0,
+                "cpu_percent": 0.0013,
+                "package_idle_wakeups_per_second": 0.0,
+                "interrupt_wakeups_per_second": 0.133
+              },
+              {
+                "pid": 51675,
+                "kind": "renderer",
+                "seconds": 60.107,
+                "cpu_time_ticks": 756107,
+                "ps_cpu_seconds_delta": 0.03,
+                "cpu_percent": 0.0524,
+                "package_idle_wakeups_per_second": 0.0,
+                "interrupt_wakeups_per_second": 0.449
+              },
+              {
+                "pid": 51700,
+                "kind": "renderer",
+                "seconds": 60.107,
+                "cpu_time_ticks": 334207,
+                "ps_cpu_seconds_delta": 0.01,
+                "cpu_percent": 0.0232,
+                "package_idle_wakeups_per_second": 0.0,
+                "interrupt_wakeups_per_second": 0.399
+              },
+              {
+                "pid": 51701,
+                "kind": "renderer",
+                "seconds": 60.108,
+                "cpu_time_ticks": 349765,
+                "ps_cpu_seconds_delta": 0.01,
+                "cpu_percent": 0.0242,
+                "package_idle_wakeups_per_second": 0.0,
+                "interrupt_wakeups_per_second": 0.433
+              },
+              {
+                "pid": 51711,
+                "kind": "renderer",
+                "seconds": 60.108,
+                "cpu_time_ticks": 28473,
+                "ps_cpu_seconds_delta": 0.0,
+                "cpu_percent": 0.002,
+                "package_idle_wakeups_per_second": 0.0,
+                "interrupt_wakeups_per_second": 0.383
+              },
+              {
+                "pid": 51725,
+                "kind": "renderer",
+                "seconds": 60.106,
+                "cpu_time_ticks": 18869,
+                "ps_cpu_seconds_delta": 0.0,
+                "cpu_percent": 0.0013,
+                "package_idle_wakeups_per_second": 0.0,
+                "interrupt_wakeups_per_second": 0.15
+              },
+              {
+                "pid": 51728,
+                "kind": "renderer",
+                "seconds": 60.106,
+                "cpu_time_ticks": 53382,
+                "ps_cpu_seconds_delta": 0.01,
+                "cpu_percent": 0.0037,
+                "package_idle_wakeups_per_second": 0.0,
+                "interrupt_wakeups_per_second": 0.2
+              },
+              {
+                "pid": 51739,
+                "kind": "renderer",
+                "seconds": 60.107,
+                "cpu_time_ticks": 249604,
+                "ps_cpu_seconds_delta": 0.01,
+                "cpu_percent": 0.0173,
+                "package_idle_wakeups_per_second": 0.0,
+                "interrupt_wakeups_per_second": 0.2
+              },
+              {
+                "pid": 51808,
+                "kind": "renderer",
+                "seconds": 60.107,
+                "cpu_time_ticks": 17793792,
+                "ps_cpu_seconds_delta": 0.74,
+                "cpu_percent": 1.2335,
+                "package_idle_wakeups_per_second": 0.0,
+                "interrupt_wakeups_per_second": 22.127
+              },
+              {
+                "pid": 51813,
+                "kind": "renderer",
+                "seconds": 60.107,
+                "cpu_time_ticks": 21634,
+                "ps_cpu_seconds_delta": 0.0,
+                "cpu_percent": 0.0015,
+                "package_idle_wakeups_per_second": 0.0,
+                "interrupt_wakeups_per_second": 0.133
+              }
+            ],
+            "by_kind": {
+              "browser": 0.2707,
+              "gpu": 2.5625,
+              "network": 0.0424,
+              "utility": 0.0025,
+              "renderer": 1.3604
+            },
+            "total_cpu_percent": 4.2384,
+            "processes_started": [],
+            "processes_exited": [],
+            "complete": true
+          },
+          "window_frame": [
+            440,
+            8,
+            1280,
+            1067
+          ],
+          "screen_frame": [
+            0,
+            0,
+            1728,
+            1117
+          ],
+          "window_visible": true,
+          "app_active": true
+        }
+      },
+      "scheduler": {
+        "passes_at_start": 9,
+        "passes_at_end": 33,
+        "completed_passes_in_two_cpu_windows": 24,
+        "next_pass_delay_seconds": 5,
+        "scheduled_delay_seconds": 4.7181704159999995,
+        "model_tabs": 10,
+        "live_pages_at_memory_sample": 9
+      }
+    },
+    "after": {
+      "engine_code_sha256": "1bc8b6044b77d53d46d76745a39b029e9709dbeb00fd31d08870ed0a38dd576a",
+      "cleanup_ok": true,
+      "legacy_task_manager_sum": 2.78,
+      "cases": {
+        "empty": {
+          "startup": {
+            "total_cpu_percent": 1.205,
+            "by_kind": {
+              "browser": 0.9607,
+              "gpu": 0.0067,
+              "network": 0.2234,
+              "utility": 0.0032,
+              "renderer": 0.0111
+            },
+            "load_start": "{ 12.93 9.63 8.14 }",
+            "load_end": "{ 7.42 8.77 7.92 }",
+            "complete": true
+          },
+          "settled": {
+            "requested_seconds": 60,
+            "mach_timebase": [
+              125,
+              3
+            ],
+            "load_start": "{ 7.42 8.77 7.92 }",
+            "load_end": "{ 5.67 7.97 7.67 }",
+            "by_process": [
+              {
+                "pid": 90804,
+                "kind": "browser",
+                "seconds": 60.062,
+                "cpu_time_ticks": 6753869,
+                "ps_cpu_seconds_delta": 0.29,
+                "cpu_percent": 0.4685,
+                "package_idle_wakeups_per_second": 0.0,
+                "interrupt_wakeups_per_second": 2.98
+              },
+              {
+                "pid": 90924,
+                "kind": "gpu",
+                "seconds": 60.062,
+                "cpu_time_ticks": 520984,
+                "ps_cpu_seconds_delta": 0.02,
+                "cpu_percent": 0.0361,
+                "package_idle_wakeups_per_second": 0.033,
+                "interrupt_wakeups_per_second": 1.315
+              },
+              {
+                "pid": 90927,
+                "kind": "network",
+                "seconds": 60.062,
+                "cpu_time_ticks": 528839,
+                "ps_cpu_seconds_delta": 0.02,
+                "cpu_percent": 0.0367,
+                "package_idle_wakeups_per_second": 0.0,
+                "interrupt_wakeups_per_second": 0.549
+              },
+              {
+                "pid": 90928,
+                "kind": "utility",
+                "seconds": 60.061,
+                "cpu_time_ticks": 84206,
+                "ps_cpu_seconds_delta": 0.0,
+                "cpu_percent": 0.0058,
+                "package_idle_wakeups_per_second": 0.0,
+                "interrupt_wakeups_per_second": 0.4
+              },
+              {
+                "pid": 90932,
+                "kind": "renderer",
+                "seconds": 60.061,
+                "cpu_time_ticks": 59535,
+                "ps_cpu_seconds_delta": 0.0,
+                "cpu_percent": 0.0041,
+                "package_idle_wakeups_per_second": 0.0,
+                "interrupt_wakeups_per_second": 0.133
+              },
+              {
+                "pid": 90933,
+                "kind": "renderer",
+                "seconds": 60.06,
+                "cpu_time_ticks": 592898,
+                "ps_cpu_seconds_delta": 0.02,
+                "cpu_percent": 0.0411,
+                "package_idle_wakeups_per_second": 0.0,
+                "interrupt_wakeups_per_second": 0.25
+              }
+            ],
+            "by_kind": {
+              "browser": 0.4685,
+              "gpu": 0.0361,
+              "network": 0.0367,
+              "utility": 0.0058,
+              "renderer": 0.0453
+            },
+            "total_cpu_percent": 0.5925,
+            "processes_started": [],
+            "processes_exited": [],
+            "complete": true
+          },
+          "window_frame": [
+            -1279,
+            8,
+            1280,
+            1067
+          ],
+          "screen_frame": [
+            0,
+            0,
+            1728,
+            1117
+          ],
+          "window_visible": true,
+          "app_active": false
+        },
+        "ten": {
+          "startup": {
+            "total_cpu_percent": 5.3246,
+            "by_kind": {
+              "renderer": 1.4797,
+              "browser": 1.079,
+              "gpu": 2.5406,
+              "network": 0.2114,
+              "utility": 0.0139
+            },
+            "load_start": "{ 5.52 7.39 7.47 }",
+            "load_end": "{ 5.68 7.17 7.39 }",
+            "complete": true
+          },
+          "settled": {
+            "requested_seconds": 60,
+            "mach_timebase": [
+              125,
+              3
+            ],
+            "load_start": "{ 5.68 7.17 7.39 }",
+            "load_end": "{ 4.34 6.53 7.13 }",
+            "by_process": [
+              {
+                "pid": 138,
+                "kind": "renderer",
+                "seconds": 60.083,
+                "cpu_time_ticks": 16715564,
+                "ps_cpu_seconds_delta": 0.69,
+                "cpu_percent": 1.1592,
+                "package_idle_wakeups_per_second": 0.033,
+                "interrupt_wakeups_per_second": 22.719
+              },
+              {
+                "pid": 178,
+                "kind": "renderer",
+                "seconds": 60.08,
+                "cpu_time_ticks": 11054,
+                "ps_cpu_seconds_delta": 0.0,
+                "cpu_percent": 0.0008,
+                "package_idle_wakeups_per_second": 0.0,
+                "interrupt_wakeups_per_second": 0.117
+              },
+              {
+                "pid": 99306,
+                "kind": "browser",
+                "seconds": 60.085,
+                "cpu_time_ticks": 1027506,
+                "ps_cpu_seconds_delta": 0.04,
+                "cpu_percent": 0.0713,
+                "package_idle_wakeups_per_second": 0.0,
+                "interrupt_wakeups_per_second": 1.465
+              },
+              {
+                "pid": 99345,
+                "kind": "gpu",
+                "seconds": 60.087,
+                "cpu_time_ticks": 36867702,
+                "ps_cpu_seconds_delta": 1.54,
+                "cpu_percent": 2.5566,
+                "package_idle_wakeups_per_second": 0.05,
+                "interrupt_wakeups_per_second": 24.564
+              },
+              {
+                "pid": 99346,
+                "kind": "network",
+                "seconds": 60.086,
+                "cpu_time_ticks": 62046,
+                "ps_cpu_seconds_delta": 0.0,
+                "cpu_percent": 0.0043,
+                "package_idle_wakeups_per_second": 0.0,
+                "interrupt_wakeups_per_second": 0.399
+              },
+              {
+                "pid": 99347,
+                "kind": "utility",
+                "seconds": 60.085,
+                "cpu_time_ticks": 34113,
+                "ps_cpu_seconds_delta": 0.01,
+                "cpu_percent": 0.0024,
+                "package_idle_wakeups_per_second": 0.0,
+                "interrupt_wakeups_per_second": 0.366
+              },
+              {
+                "pid": 99349,
+                "kind": "renderer",
+                "seconds": 60.085,
+                "cpu_time_ticks": 14772,
+                "ps_cpu_seconds_delta": 0.0,
+                "cpu_percent": 0.001,
+                "package_idle_wakeups_per_second": 0.0,
+                "interrupt_wakeups_per_second": 0.133
+              },
+              {
+                "pid": 99718,
+                "kind": "renderer",
+                "seconds": 60.084,
+                "cpu_time_ticks": 613917,
+                "ps_cpu_seconds_delta": 0.03,
+                "cpu_percent": 0.0426,
+                "package_idle_wakeups_per_second": 0.0,
+                "interrupt_wakeups_per_second": 0.399
+              },
+              {
+                "pid": 99772,
+                "kind": "renderer",
+                "seconds": 60.078,
+                "cpu_time_ticks": 14647,
+                "ps_cpu_seconds_delta": 0.0,
+                "cpu_percent": 0.001,
+                "package_idle_wakeups_per_second": 0.0,
+                "interrupt_wakeups_per_second": 0.15
+              },
+              {
+                "pid": 99785,
+                "kind": "renderer",
+                "seconds": 60.083,
+                "cpu_time_ticks": 20950,
+                "ps_cpu_seconds_delta": 0.0,
+                "cpu_percent": 0.0015,
+                "package_idle_wakeups_per_second": 0.0,
+                "interrupt_wakeups_per_second": 0.166
+              },
+              {
+                "pid": 99824,
+                "kind": "renderer",
+                "seconds": 60.08,
+                "cpu_time_ticks": 16333,
+                "ps_cpu_seconds_delta": 0.0,
+                "cpu_percent": 0.0011,
+                "package_idle_wakeups_per_second": 0.0,
+                "interrupt_wakeups_per_second": 0.133
+              },
+              {
+                "pid": 99867,
+                "kind": "renderer",
+                "seconds": 60.081,
+                "cpu_time_ticks": 15493,
+                "ps_cpu_seconds_delta": 0.0,
+                "cpu_percent": 0.0011,
+                "package_idle_wakeups_per_second": 0.0,
+                "interrupt_wakeups_per_second": 0.15
+              },
+              {
+                "pid": 99910,
+                "kind": "renderer",
+                "seconds": 60.083,
+                "cpu_time_ticks": 45235,
+                "ps_cpu_seconds_delta": 0.0,
+                "cpu_percent": 0.0031,
+                "package_idle_wakeups_per_second": 0.0,
+                "interrupt_wakeups_per_second": 0.183
+              },
+              {
+                "pid": 99995,
+                "kind": "renderer",
+                "seconds": 60.083,
+                "cpu_time_ticks": 223396,
+                "ps_cpu_seconds_delta": 0.01,
+                "cpu_percent": 0.0155,
+                "package_idle_wakeups_per_second": 0.0,
+                "interrupt_wakeups_per_second": 0.483
+              }
+            ],
+            "by_kind": {
+              "renderer": 1.2269,
+              "browser": 0.0713,
+              "gpu": 2.5566,
+              "network": 0.0043,
+              "utility": 0.0024
+            },
+            "total_cpu_percent": 3.8613,
+            "processes_started": [],
+            "processes_exited": [],
+            "complete": true
+          },
+          "window_frame": [
+            -748,
+            8,
+            1280,
+            1067
+          ],
+          "screen_frame": [
+            0,
+            0,
+            1728,
+            1117
+          ],
+          "window_visible": true,
+          "app_active": true
+        }
+      },
+      "scheduler": {
+        "passes_at_start": 8,
+        "passes_at_end": 9,
+        "completed_passes_in_two_cpu_windows": 1,
+        "next_pass_delay_seconds": 139.59481298923492,
+        "scheduled_delay_seconds": 139.595867542,
+        "model_tabs": 10,
+        "live_pages_at_memory_sample": 9
+      }
+    }
+  },
+  "source_variants": {
+    "fixed_source_sha256": "520341e8fc013db3e6d9506dde8bebc36e9dc089e8ca208b84857ce064a0b721",
+    "before_source_sha256": "9d2abdf9e8bd54b432b42ab90e6c24f01b5ebc04cb88aceab968ca387ddc97be",
+    "variant": "same Release build flags; only SleepController.swift replaced by origin/main version"
+  }
+}
