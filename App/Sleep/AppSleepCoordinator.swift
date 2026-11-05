@@ -268,6 +268,11 @@ final class AppSleepCoordinator {
     let elapsed = started.duration(to: .now).components
     let ms = Double(elapsed.seconds) * 1000 + Double(elapsed.attoseconds) / 1e15
     quitCapture = ["ran": true, "outcome": outcome, "ms": ms, "tabs": controller.liveContent.count]
+    #if OPEN_AUTOMATION && !DEBUG
+    // The real-App F4 check reads the successful capture timing after exit.
+    // Debug already prints the controller's summary through record(_:).
+    if outcome == "ok" { FileHandle.standardError.write(Data("Open: sleep-quit-capture ms=\(ms)\n".utf8)) }
+    #endif
     if outcome != "ok" { FileHandle.standardError.write(Data("Open: sleep quit capture \(outcome) after \(Int(ms)) ms\n".utf8)) }
     stop()
   }

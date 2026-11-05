@@ -5241,9 +5241,9 @@ def process_cpu_window(app, seconds=60):
             raise RuntimeError('idle CPU sample could not read the Open process')
         return rows
 
+    app.begin_timing('OS idle CPU window')
     load_start = subprocess.check_output(['sysctl', '-n', 'vm.loadavg'], text=True).strip()
     before = snapshot()
-    app.begin_timing('OS idle CPU window')
     time.sleep(seconds)
     after = snapshot()
     by_process, by_kind = [], {}
@@ -5947,7 +5947,8 @@ def sleep_checks(factory, results, tmp, style):
         frozen_delay = state()['nextPassDelay']
         results['sleep_frozen_deadline'] = {
             'ok': frozen_delay is not None and 5 < frozen_delay <= 270,
-            'nextPassDelay': frozen_delay, 'discardDelay': 300, 'hiddenElapsed': 30}
+            'nextPassDelay': frozen_delay, 'discardDelay': 300, 'hiddenElapsed': 30,
+            'load': os.getloadavg()}
         advance(269); tick(); ladder_steps.append(phase(ladder))
         advance(1); tick(); s = ts(ladder); ladder_steps.append(s["phase"])
         results["sleep_timed_ladder"] = {"ok": ladder_steps == ["live", "frozen", "frozen", "sleeping"] and scheduled

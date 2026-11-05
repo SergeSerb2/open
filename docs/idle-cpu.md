@@ -129,7 +129,11 @@ The baseline `measure` task-manager sum was 0.81% at load
 pages at the task-manager sample; phases and individual process rows are
 retained in the raw receipts. The OS results include spare renderers and
 network/storage helpers. These are shared-machine observations, not a
-controlled CPU reduction claim across changing public pages.
+controlled CPU reduction claim across changing public pages. The before
+app was built at `5782add4`; the after app includes the required merge of
+`origin/main` at `c993c35d`. The deadline regression proof isolates the
+changed scheduling rule; these cross-run CPU observations do not isolate
+its small contribution from page, load or main-merge effects.
 
 The blank-page helper processes consumed about 0.054% in later idle. They
 are Chromium processes. The shared App/browser process added about 0.075%,
