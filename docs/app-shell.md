@@ -1316,3 +1316,56 @@ The sampled diagnostic launch is excluded from budget results: `sample` caused
 synchronous dyld debugger-notification waits. Its call graph also locates default
 menu setup under `NSApplication.finishLaunching` and `NSWritingToolsCoordinator`.
 No Chromium source, fork patch, display deadline or budget comparator changed.
+
+### Final candidate measurement — 2026-11-05
+
+The final Release build merges main `18c14f33`, uses framework SHA-256
+`f34400e71412d87a0b268fcd5658a8563cca34f600c8dd17b534a63e76aa7939`, and
+measures code `d410c3fb`. The M5 Pro used its built-in 2x panel as the main
+display; the AW2726DM was disconnected. The original e949ff69 measurements above
+are historical observations on a different engine/display setup, so they do not
+prove a speedup from this change. No new main timing comparison was run after
+the user reduced the final gate.
+
+The real `window` launch subset ran **10 fresh / 10 warm pairs**, under the quiet
+lock followed by the on-screen lock, without a concurrent build. Load averages
+(1/5/15 minutes) were **5.59/5.57/6.29 → 10.65/6.84/6.73**; each sample also
+records its own load before and after. All 20 process-start clocks and presented
+frames were confirmed. All owned processes quit without force; no windows or
+helpers remained. There were no interrupted attempts.
+[Full final samples and metadata](engine-spike/results-cold-launch-final-f344.json).
+
+| Budget | Fresh median, 10 | Warm median, 10 | Result |
+|---|---:|---:|---|
+| Sidebar presented ≤250 ms | 349.5 ms | 350.5 ms | **FAIL** |
+| First web paint ≤700 ms | 646.5 ms | 658.5 ms | **PASS (medians)** |
+
+| Mark from kernel process start | Fresh median, ms | Warm median, ms |
+|---|---:|---:|
+| processMain (raw Swift entry) | 141 | 139.5 |
+| main (after OEApplication.shared) | 228 | 224.5 |
+| modelLoaded | 231.5 | 228 |
+| windowShown | 301 | 302.5 |
+| windowFlushed | 338 | 338 |
+| sidebarDrawn (presented frame) | 349.5 | 350.5 |
+| appKitLaunchEnd | 372 | 372.5 |
+| engineStarted | 479 | 481.5 |
+| engineInitialized | 489.5 | 490.5 |
+| firstLoadEnd | 627.5 | 637.5 |
+| firstContentfulPaint | 646.5 | 658.5 |
+
+The first fresh launch still painted at **2,950 ms**. Its framework load took
+**2,183.23 ms**, configuration **0.43 ms**, and `CefInitialize` **116.19 ms**.
+Median framework loads were **18.32 / 18.95 ms**, fresh / warm. This locates the
+large outlier before Chromium initialization; it does not identify the specific
+dyld, code-signing or disk mechanism. The signed-framework reuse change did not
+eliminate it. The large pre-Swift and AppKit construction costs also remain;
+sidebar acceptance is **not achieved**.
+
+The launch subset reports 42 structural PASS rows and two combined budget FAIL
+rows. It proves one startup menu, sidebar presentation before AppKit launch
+completion, no pages before engine start, and selected-tab-only warm restore.
+It does not prove the full window or keyboard flows. By the user's final scope
+decision, `window` (full suite), `app-actions`, `shell`, `measure`, and a new full
+`verify-all` run are deferred to Section 8's single final regression on final
+main. Existing verification failures remain failures; see `docs/followups.md`.

@@ -1,0 +1,1812 @@
+{
+  "budget_summary": {
+    "cold_fresh_profile": {
+      "first_paint_budget_ms": 700,
+      "first_paint_median_ms": 646.5,
+      "first_paint_median_result": "PASS",
+      "samples": 10,
+      "sidebar_budget_ms": 250,
+      "sidebar_median_ms": 349.5,
+      "sidebar_result": "FAIL",
+      "timeline_medians_ms": {
+        "appKitLaunchEnd": 372.0,
+        "appKitLaunchStart": 349.5,
+        "engineInitialized": 489.5,
+        "engineStart": 373.0,
+        "engineStarted": 479.0,
+        "firstContentfulPaint": 646.5,
+        "firstLoadEnd": 627.5,
+        "main": 228.0,
+        "modelLoaded": 231.5,
+        "processMain": 141.0,
+        "sidebarDrawn": 349.5,
+        "windowFlushed": 338.0,
+        "windowShown": 301.0
+      },
+      "worst_first_paint_ms": 2950
+    },
+    "warm_existing_profile": {
+      "first_paint_budget_ms": 700,
+      "first_paint_median_ms": 658.5,
+      "first_paint_median_result": "PASS",
+      "samples": 10,
+      "sidebar_budget_ms": 250,
+      "sidebar_median_ms": 350.5,
+      "sidebar_result": "FAIL",
+      "timeline_medians_ms": {
+        "appKitLaunchEnd": 372.5,
+        "appKitLaunchStart": 350.5,
+        "engineInitialized": 490.5,
+        "engineStart": 373.5,
+        "engineStarted": 481.5,
+        "firstContentfulPaint": 658.5,
+        "firstLoadEnd": 637.5,
+        "main": 224.5,
+        "modelLoaded": 228.0,
+        "processMain": 139.5,
+        "sidebarDrawn": 350.5,
+        "windowFlushed": 338.0,
+        "windowShown": 302.5
+      },
+      "worst_first_paint_ms": 705
+    }
+  },
+  "cleanup": {
+    "ok": true,
+    "processes": [
+      {
+        "forced": false,
+        "ok": true,
+        "owned_pids": [
+          27713,
+          27873,
+          27874,
+          27876,
+          27888,
+          27893,
+          27900,
+          27908
+        ],
+        "remaining_processes": [],
+        "reply": true,
+        "windows_after_quit": {
+          "count": 0,
+          "windows": []
+        },
+        "windows_before_quit": 1
+      },
+      {
+        "forced": false,
+        "ok": true,
+        "owned_pids": [
+          27966,
+          27998,
+          27999,
+          28000,
+          28001,
+          28003,
+          28004
+        ],
+        "remaining_processes": [],
+        "reply": true,
+        "windows_after_quit": {
+          "count": 0,
+          "windows": []
+        },
+        "windows_before_quit": 1
+      },
+      {
+        "forced": false,
+        "ok": true,
+        "owned_pids": [
+          28061,
+          28095,
+          28097,
+          28102,
+          28103,
+          28110,
+          28119,
+          28120
+        ],
+        "remaining_processes": [],
+        "reply": true,
+        "windows_after_quit": {
+          "count": 0,
+          "windows": []
+        },
+        "windows_before_quit": 1
+      },
+      {
+        "forced": false,
+        "ok": true,
+        "owned_pids": [
+          28165,
+          28191,
+          28192,
+          28200,
+          28201,
+          28202,
+          28203
+        ],
+        "remaining_processes": [],
+        "reply": true,
+        "windows_after_quit": {
+          "count": 0,
+          "windows": []
+        },
+        "windows_before_quit": 1
+      },
+      {
+        "forced": false,
+        "ok": true,
+        "owned_pids": [
+          28266,
+          28292,
+          28293,
+          28297,
+          28298,
+          28300,
+          28331,
+          28338
+        ],
+        "remaining_processes": [],
+        "reply": true,
+        "windows_after_quit": {
+          "count": 0,
+          "windows": []
+        },
+        "windows_before_quit": 1
+      },
+      {
+        "forced": false,
+        "ok": true,
+        "owned_pids": [
+          28369,
+          28397,
+          28398,
+          28400,
+          28401,
+          28412,
+          28413
+        ],
+        "remaining_processes": [],
+        "reply": true,
+        "windows_after_quit": {
+          "count": 0,
+          "windows": []
+        },
+        "windows_before_quit": 1
+      },
+      {
+        "forced": false,
+        "ok": true,
+        "owned_pids": [
+          28471,
+          28499,
+          28500,
+          28510,
+          28511,
+          28513,
+          28514,
+          28530,
+          28531
+        ],
+        "remaining_processes": [],
+        "reply": true,
+        "windows_after_quit": {
+          "count": 0,
+          "windows": []
+        },
+        "windows_before_quit": 1
+      },
+      {
+        "forced": false,
+        "ok": true,
+        "owned_pids": [
+          28573,
+          28608,
+          28609,
+          28610,
+          28611,
+          28619,
+          28620
+        ],
+        "remaining_processes": [],
+        "reply": true,
+        "windows_after_quit": {
+          "count": 0,
+          "windows": []
+        },
+        "windows_before_quit": 1
+      },
+      {
+        "forced": false,
+        "ok": true,
+        "owned_pids": [
+          28676,
+          28703,
+          28704,
+          28705,
+          28706,
+          28715,
+          28734,
+          28735
+        ],
+        "remaining_processes": [],
+        "reply": true,
+        "windows_after_quit": {
+          "count": 0,
+          "windows": []
+        },
+        "windows_before_quit": 1
+      },
+      {
+        "forced": false,
+        "ok": true,
+        "owned_pids": [
+          28774,
+          28798,
+          28799,
+          28809,
+          28810,
+          28815,
+          28818
+        ],
+        "remaining_processes": [],
+        "reply": true,
+        "windows_after_quit": {
+          "count": 0,
+          "windows": []
+        },
+        "windows_before_quit": 1
+      },
+      {
+        "forced": false,
+        "ok": true,
+        "owned_pids": [
+          28877,
+          28908,
+          28909,
+          28910,
+          28911,
+          28912,
+          28913,
+          28934,
+          28937
+        ],
+        "remaining_processes": [],
+        "reply": true,
+        "windows_after_quit": {
+          "count": 0,
+          "windows": []
+        },
+        "windows_before_quit": 1
+      },
+      {
+        "forced": false,
+        "ok": true,
+        "owned_pids": [
+          28976,
+          29012,
+          29013,
+          29020,
+          29021,
+          29022,
+          29024
+        ],
+        "remaining_processes": [],
+        "reply": true,
+        "windows_after_quit": {
+          "count": 0,
+          "windows": []
+        },
+        "windows_before_quit": 1
+      },
+      {
+        "forced": false,
+        "ok": true,
+        "owned_pids": [
+          29080,
+          29093,
+          29094,
+          29102,
+          29103,
+          29118,
+          29132,
+          29133
+        ],
+        "remaining_processes": [],
+        "reply": true,
+        "windows_after_quit": {
+          "count": 0,
+          "windows": []
+        },
+        "windows_before_quit": 1
+      },
+      {
+        "forced": false,
+        "ok": true,
+        "owned_pids": [
+          29174,
+          29217,
+          29218,
+          29220,
+          29221,
+          29233,
+          29234
+        ],
+        "remaining_processes": [],
+        "reply": true,
+        "windows_after_quit": {
+          "count": 0,
+          "windows": []
+        },
+        "windows_before_quit": 1
+      },
+      {
+        "forced": false,
+        "ok": true,
+        "owned_pids": [
+          29283,
+          29320,
+          29321,
+          29322,
+          29324,
+          29326,
+          29346,
+          29353
+        ],
+        "remaining_processes": [],
+        "reply": true,
+        "windows_after_quit": {
+          "count": 0,
+          "windows": []
+        },
+        "windows_before_quit": 1
+      },
+      {
+        "forced": false,
+        "ok": true,
+        "owned_pids": [
+          29393,
+          29416,
+          29417,
+          29418,
+          29419,
+          29429,
+          29432
+        ],
+        "remaining_processes": [],
+        "reply": true,
+        "windows_after_quit": {
+          "count": 0,
+          "windows": []
+        },
+        "windows_before_quit": 1
+      },
+      {
+        "forced": false,
+        "ok": true,
+        "owned_pids": [
+          29484,
+          29520,
+          29521,
+          29523,
+          29524,
+          29525,
+          29526,
+          29542,
+          29546
+        ],
+        "remaining_processes": [],
+        "reply": true,
+        "windows_after_quit": {
+          "count": 0,
+          "windows": []
+        },
+        "windows_before_quit": 1
+      },
+      {
+        "forced": false,
+        "ok": true,
+        "owned_pids": [
+          29606,
+          29646,
+          29647,
+          29654,
+          29655,
+          29664,
+          29665
+        ],
+        "remaining_processes": [],
+        "reply": true,
+        "windows_after_quit": {
+          "count": 0,
+          "windows": []
+        },
+        "windows_before_quit": 1
+      },
+      {
+        "forced": false,
+        "ok": true,
+        "owned_pids": [
+          29706,
+          29721,
+          29722,
+          29723,
+          29724,
+          29728,
+          29738,
+          29739
+        ],
+        "remaining_processes": [],
+        "reply": true,
+        "windows_after_quit": {
+          "count": 0,
+          "windows": []
+        },
+        "windows_before_quit": 1
+      },
+      {
+        "forced": false,
+        "ok": true,
+        "owned_pids": [
+          29772,
+          29794,
+          29795,
+          29796,
+          29797,
+          29799,
+          29800
+        ],
+        "remaining_processes": [],
+        "reply": true,
+        "windows_after_quit": {
+          "count": 0,
+          "windows": []
+        },
+        "windows_before_quit": 1
+      }
+    ]
+  },
+  "config": "Release",
+  "engine": {
+    "distributionCodeSHA256": "1bc8b6044b77d53d46d76745a39b029e9709dbeb00fd31d08870ed0a38dd576a",
+    "distributionSHA256": "f34400e71412d87a0b268fcd5658a8563cca34f600c8dd17b534a63e76aa7939",
+    "distributionUUID": "4C4C4465-5555-3144-A1AB-FCF4EA280540",
+    "embeddedCodeSHA256": "1bc8b6044b77d53d46d76745a39b029e9709dbeb00fd31d08870ed0a38dd576a",
+    "embeddedSHA256": "7965fb82d3670f2824f8657069fcb816cb10fa70c82dd4260a575eb46c395359",
+    "embeddedUUID": "4C4C4465-5555-3144-A1AB-FCF4EA280540",
+    "requiredSHA256": "f34400e71412d87a0b268fcd5658a8563cca34f600c8dd17b534a63e76aa7939",
+    "source": "fork",
+    "stamp": "fork /Users/serge/Developer/open-engine-s8-main/chromium_git/chromium/src/cef/binary_distrib/cef_binary_156.0.14+g4fa4ab5+chromium-156.0.8078.48_macosarm64_minimal 1793841834"
+  },
+  "interrupted_attempts": [],
+  "measurement_metadata": {
+    "command": "lockf /tmp/open-m5-quiet.lock lockf /tmp/open-onscreen-e2e.lock python3 tools/e2e/engine_e2e.py --config Release --style chrome --only window --window-launch-only --launch-samples 10 --engine-sha256 f34400e71412d87a0b268fcd5658a8563cca34f600c8dd17b534a63e76aa7939 --keep",
+    "deferred_gate": "No new full verify-all or main comparison: user scope decision; Section 8 final regression on final main.",
+    "deferred_suites": [
+      "window (full suite)",
+      "app-actions",
+      "shell",
+      "measure"
+    ],
+    "display": "built-in 2x main; AW2726DM disconnected",
+    "engine_sha256": "f34400e71412d87a0b268fcd5658a8563cca34f600c8dd17b534a63e76aa7939",
+    "exit_code": 1,
+    "load_average_end": [
+      10.64599609375,
+      6.83740234375,
+      6.7314453125
+    ],
+    "load_average_start": [
+      5.59423828125,
+      5.56640625,
+      6.29443359375
+    ],
+    "machine": "M5 Pro, 18 CPUs, 48 GB",
+    "merged_main": "18c14f33",
+    "samples_per_case": 10,
+    "source_head": "d410c3fb85c557a43d3cfba043a10af081a3d766",
+    "started": "2026-11-05 11:01:02",
+    "timezone": "America/Vancouver"
+  },
+  "started": "2026-11-05 11:01:02",
+  "style": "chrome",
+  "window": {
+    "cold_fresh_profile": {
+      "median_ms": {
+        "engineStart": 373.0,
+        "engineStarted": 479.0,
+        "firstContentfulPaint": 646.5,
+        "main": 228.0,
+        "modelLoaded": 231.5,
+        "sidebarDrawn": 349.5
+      },
+      "ok": false,
+      "samples": 10
+    },
+    "cpu_count": 18,
+    "kernel_process_start": {
+      "ok": true,
+      "samples": 20
+    },
+    "launch_runs": {
+      "cold_fresh_profile": [
+        {
+          "appKitLaunchEnd": 397,
+          "appKitLaunchStart": 378,
+          "clock": "mach_continuous_time; kernel ri_proc_start_abstime",
+          "dataRootPrepared": 255,
+          "didFinishLaunching": 2734,
+          "engineInitialized": 2729,
+          "engineStart": 398,
+          "engineStarted": 2698,
+          "engineStartupDurations": {
+            "cefInitializeMs": 116.188375,
+            "configurationMs": 0.426208,
+            "frameworkLoadMs": 2183.227833
+          },
+          "faviconsAttached": 311,
+          "firstContentfulPaint": 2950,
+          "firstFrameConfirmed": true,
+          "firstLoadEnd": 2923,
+          "firstPaintClockUncertaintyMs": 0.16,
+          "kernelProcessStart": true,
+          "load_average_after": [
+            6.18701171875,
+            5.689453125,
+            6.33349609375
+          ],
+          "load_average_before": [
+            6.18701171875,
+            5.689453125,
+            6.33349609375
+          ],
+          "main": 254,
+          "menuBuild1Start": 321,
+          "menuBuildEnd": 323,
+          "menuBuildStart": 321,
+          "modelLoaded": 257,
+          "processMain": 167,
+          "selectionRestoreEnd": 2732,
+          "selectionRestoreStart": 2729,
+          "sidebarDrawn": 378,
+          "sleepStarted": 3026,
+          "windowControllerBuilt": 311,
+          "windowDisplayEnd": 343,
+          "windowDisplayStart": 323,
+          "windowFlushed": 362,
+          "windowShown": 323,
+          "windowWillShow": 312
+        },
+        {
+          "appKitLaunchEnd": 366,
+          "appKitLaunchStart": 348,
+          "clock": "mach_continuous_time; kernel ri_proc_start_abstime",
+          "dataRootPrepared": 218,
+          "didFinishLaunching": 488,
+          "engineInitialized": 480,
+          "engineStart": 367,
+          "engineStarted": 468,
+          "engineStartupDurations": {
+            "cefInitializeMs": 82.588,
+            "configurationMs": 0.206209,
+            "frameworkLoadMs": 17.911083
+          },
+          "faviconsAttached": 281,
+          "firstContentfulPaint": 643,
+          "firstFrameConfirmed": true,
+          "firstLoadEnd": 624,
+          "firstPaintClockUncertaintyMs": 0.13,
+          "kernelProcessStart": true,
+          "load_average_after": [
+            9.21484375,
+            6.3251953125,
+            6.5537109375
+          ],
+          "load_average_before": [
+            9.21484375,
+            6.3251953125,
+            6.5537109375
+          ],
+          "main": 216,
+          "menuBuild1Start": 294,
+          "menuBuildEnd": 297,
+          "menuBuildStart": 294,
+          "modelLoaded": 219,
+          "processMain": 137,
+          "selectionRestoreEnd": 482,
+          "selectionRestoreStart": 480,
+          "sidebarDrawn": 348,
+          "sleepStarted": 715,
+          "windowControllerBuilt": 281,
+          "windowDisplayEnd": 318,
+          "windowDisplayStart": 298,
+          "windowFlushed": 336,
+          "windowShown": 298,
+          "windowWillShow": 282
+        },
+        {
+          "appKitLaunchEnd": 367,
+          "appKitLaunchStart": 345,
+          "clock": "mach_continuous_time; kernel ri_proc_start_abstime",
+          "dataRootPrepared": 230,
+          "didFinishLaunching": 533,
+          "engineInitialized": 478,
+          "engineStart": 368,
+          "engineStarted": 469,
+          "engineStartupDurations": {
+            "cefInitializeMs": 78.585917,
+            "configurationMs": 0.208167,
+            "frameworkLoadMs": 21.422458
+          },
+          "faviconsAttached": 283,
+          "firstContentfulPaint": 637,
+          "firstFrameConfirmed": true,
+          "firstLoadEnd": 615,
+          "firstPaintClockUncertaintyMs": 0.18,
+          "kernelProcessStart": true,
+          "load_average_after": [
+            9.21484375,
+            6.3251953125,
+            6.5537109375
+          ],
+          "load_average_before": [
+            9.21484375,
+            6.3251953125,
+            6.5537109375
+          ],
+          "main": 228,
+          "menuBuild1Start": 292,
+          "menuBuildEnd": 295,
+          "menuBuildStart": 292,
+          "modelLoaded": 231,
+          "processMain": 141,
+          "selectionRestoreEnd": 479,
+          "selectionRestoreStart": 478,
+          "sidebarDrawn": 345,
+          "sleepStarted": 699,
+          "windowControllerBuilt": 283,
+          "windowDisplayEnd": 316,
+          "windowDisplayStart": 295,
+          "windowFlushed": 334,
+          "windowShown": 295,
+          "windowWillShow": 284
+        },
+        {
+          "appKitLaunchEnd": 379,
+          "appKitLaunchStart": 360,
+          "clock": "mach_continuous_time; kernel ri_proc_start_abstime",
+          "dataRootPrepared": 233,
+          "didFinishLaunching": 512,
+          "engineInitialized": 509,
+          "engineStart": 380,
+          "engineStarted": 496,
+          "engineStartupDurations": {
+            "cefInitializeMs": 92.197333,
+            "configurationMs": 0.286,
+            "frameworkLoadMs": 23.088375
+          },
+          "faviconsAttached": 301,
+          "firstContentfulPaint": 680,
+          "firstFrameConfirmed": true,
+          "firstLoadEnd": 656,
+          "firstPaintClockUncertaintyMs": 0.16,
+          "kernelProcessStart": true,
+          "load_average_after": [
+            9.677734375,
+            6.46875,
+            6.60302734375
+          ],
+          "load_average_before": [
+            9.677734375,
+            6.46875,
+            6.60302734375
+          ],
+          "main": 231,
+          "menuBuild1Start": 311,
+          "menuBuildEnd": 317,
+          "menuBuildStart": 311,
+          "modelLoaded": 234,
+          "processMain": 139,
+          "selectionRestoreEnd": 511,
+          "selectionRestoreStart": 509,
+          "sidebarDrawn": 360,
+          "sleepStarted": 743,
+          "windowControllerBuilt": 301,
+          "windowDisplayEnd": 332,
+          "windowDisplayStart": 317,
+          "windowFlushed": 348,
+          "windowShown": 317,
+          "windowWillShow": 302
+        },
+        {
+          "appKitLaunchEnd": 370,
+          "appKitLaunchStart": 357,
+          "clock": "mach_continuous_time; kernel ri_proc_start_abstime",
+          "dataRootPrepared": 231,
+          "didFinishLaunching": 495,
+          "engineInitialized": 491,
+          "engineStart": 371,
+          "engineStarted": 482,
+          "engineStartupDurations": {
+            "cefInitializeMs": 92.572375,
+            "configurationMs": 0.289458,
+            "frameworkLoadMs": 17.975875
+          },
+          "faviconsAttached": 301,
+          "firstContentfulPaint": 664,
+          "firstFrameConfirmed": true,
+          "firstLoadEnd": 640,
+          "firstPaintClockUncertaintyMs": 0.14,
+          "kernelProcessStart": true,
+          "load_average_after": [
+            9.677734375,
+            6.46875,
+            6.60302734375
+          ],
+          "load_average_before": [
+            9.677734375,
+            6.46875,
+            6.60302734375
+          ],
+          "main": 229,
+          "menuBuild1Start": 309,
+          "menuBuildEnd": 315,
+          "menuBuildStart": 309,
+          "modelLoaded": 233,
+          "processMain": 140,
+          "selectionRestoreEnd": 493,
+          "selectionRestoreStart": 491,
+          "sidebarDrawn": 357,
+          "sleepStarted": 725,
+          "windowControllerBuilt": 301,
+          "windowDisplayEnd": 331,
+          "windowDisplayStart": 316,
+          "windowFlushed": 345,
+          "windowShown": 316,
+          "windowWillShow": 301
+        },
+        {
+          "appKitLaunchEnd": 377,
+          "appKitLaunchStart": 351,
+          "clock": "mach_continuous_time; kernel ri_proc_start_abstime",
+          "dataRootPrepared": 221,
+          "didFinishLaunching": 499,
+          "engineInitialized": 492,
+          "engineStart": 377,
+          "engineStarted": 480,
+          "engineStartupDurations": {
+            "cefInitializeMs": 83.336541,
+            "configurationMs": 0.315459,
+            "frameworkLoadMs": 18.666333
+          },
+          "faviconsAttached": 284,
+          "firstContentfulPaint": 637,
+          "firstFrameConfirmed": true,
+          "firstLoadEnd": 610,
+          "firstPaintClockUncertaintyMs": 0.24,
+          "kernelProcessStart": true,
+          "load_average_after": [
+            9.86328125,
+            6.560546875,
+            6.63427734375
+          ],
+          "load_average_before": [
+            9.86328125,
+            6.560546875,
+            6.63427734375
+          ],
+          "main": 219,
+          "menuBuild1Start": 294,
+          "menuBuildEnd": 300,
+          "menuBuildStart": 294,
+          "modelLoaded": 222,
+          "processMain": 146,
+          "selectionRestoreEnd": 494,
+          "selectionRestoreStart": 492,
+          "sidebarDrawn": 351,
+          "sleepStarted": 697,
+          "windowControllerBuilt": 284,
+          "windowDisplayEnd": 322,
+          "windowDisplayStart": 300,
+          "windowFlushed": 340,
+          "windowShown": 300,
+          "windowWillShow": 285
+        },
+        {
+          "appKitLaunchEnd": 367,
+          "appKitLaunchStart": 342,
+          "clock": "mach_continuous_time; kernel ri_proc_start_abstime",
+          "dataRootPrepared": 217,
+          "didFinishLaunching": 485,
+          "engineInitialized": 481,
+          "engineStart": 368,
+          "engineStarted": 470,
+          "engineStartupDurations": {
+            "cefInitializeMs": 83.855333,
+            "configurationMs": 0.22525,
+            "frameworkLoadMs": 17.728208
+          },
+          "faviconsAttached": 281,
+          "firstContentfulPaint": 650,
+          "firstFrameConfirmed": true,
+          "firstLoadEnd": 631,
+          "firstPaintClockUncertaintyMs": 0.16,
+          "kernelProcessStart": true,
+          "load_average_after": [
+            9.86328125,
+            6.560546875,
+            6.63427734375
+          ],
+          "load_average_before": [
+            9.86328125,
+            6.560546875,
+            6.63427734375
+          ],
+          "main": 216,
+          "menuBuild1Start": 291,
+          "menuBuildEnd": 297,
+          "menuBuildStart": 291,
+          "modelLoaded": 218,
+          "processMain": 140,
+          "selectionRestoreEnd": 483,
+          "selectionRestoreStart": 481,
+          "sidebarDrawn": 342,
+          "sleepStarted": 716,
+          "windowControllerBuilt": 281,
+          "windowDisplayEnd": 313,
+          "windowDisplayStart": 297,
+          "windowFlushed": 331,
+          "windowShown": 297,
+          "windowWillShow": 282
+        },
+        {
+          "appKitLaunchEnd": 390,
+          "appKitLaunchStart": 368,
+          "clock": "mach_continuous_time; kernel ri_proc_start_abstime",
+          "dataRootPrepared": 230,
+          "didFinishLaunching": 511,
+          "engineInitialized": 507,
+          "engineStart": 391,
+          "engineStarted": 496,
+          "engineStartupDurations": {
+            "cefInitializeMs": 89.922209,
+            "configurationMs": 0.184416,
+            "frameworkLoadMs": 14.662667
+          },
+          "faviconsAttached": 300,
+          "firstContentfulPaint": 669,
+          "firstFrameConfirmed": true,
+          "firstLoadEnd": 653,
+          "firstPaintClockUncertaintyMs": 0.26,
+          "kernelProcessStart": true,
+          "load_average_after": [
+            10.3544921875,
+            6.716796875,
+            6.68896484375
+          ],
+          "load_average_before": [
+            10.3544921875,
+            6.716796875,
+            6.68896484375
+          ],
+          "main": 228,
+          "menuBuild1Start": 310,
+          "menuBuildEnd": 315,
+          "menuBuildStart": 310,
+          "modelLoaded": 232,
+          "processMain": 145,
+          "selectionRestoreEnd": 509,
+          "selectionRestoreStart": 507,
+          "sidebarDrawn": 368,
+          "sleepStarted": 743,
+          "windowControllerBuilt": 300,
+          "windowDisplayEnd": 337,
+          "windowDisplayStart": 316,
+          "windowFlushed": 354,
+          "windowShown": 316,
+          "windowWillShow": 301
+        },
+        {
+          "appKitLaunchEnd": 374,
+          "appKitLaunchStart": 346,
+          "clock": "mach_continuous_time; kernel ri_proc_start_abstime",
+          "dataRootPrepared": 227,
+          "didFinishLaunching": 490,
+          "engineInitialized": 488,
+          "engineStart": 375,
+          "engineStarted": 478,
+          "engineStartupDurations": {
+            "cefInitializeMs": 81.056917,
+            "configurationMs": 0.3145,
+            "frameworkLoadMs": 21.703583
+          },
+          "faviconsAttached": 283,
+          "firstContentfulPaint": 637,
+          "firstFrameConfirmed": true,
+          "firstLoadEnd": 609,
+          "firstPaintClockUncertaintyMs": 0.23,
+          "kernelProcessStart": true,
+          "load_average_after": [
+            10.3544921875,
+            6.716796875,
+            6.68896484375
+          ],
+          "load_average_before": [
+            10.3544921875,
+            6.716796875,
+            6.68896484375
+          ],
+          "main": 226,
+          "menuBuild1Start": 290,
+          "menuBuildEnd": 295,
+          "menuBuildStart": 290,
+          "modelLoaded": 229,
+          "processMain": 141,
+          "selectionRestoreEnd": 489,
+          "selectionRestoreStart": 488,
+          "sidebarDrawn": 346,
+          "sleepStarted": 692,
+          "windowControllerBuilt": 283,
+          "windowDisplayEnd": 311,
+          "windowDisplayStart": 296,
+          "windowFlushed": 329,
+          "windowShown": 296,
+          "windowWillShow": 283
+        },
+        {
+          "appKitLaunchEnd": 356,
+          "appKitLaunchStart": 338,
+          "clock": "mach_continuous_time; kernel ri_proc_start_abstime",
+          "dataRootPrepared": 235,
+          "didFinishLaunching": 466,
+          "engineInitialized": 463,
+          "engineStart": 357,
+          "engineStarted": 454,
+          "engineStartupDurations": {
+            "cefInitializeMs": 81.037875,
+            "configurationMs": 0.148875,
+            "frameworkLoadMs": 15.838333
+          },
+          "faviconsAttached": 290,
+          "firstContentfulPaint": 634,
+          "firstFrameConfirmed": true,
+          "firstLoadEnd": 607,
+          "firstPaintClockUncertaintyMs": 0.11,
+          "kernelProcessStart": true,
+          "load_average_after": [
+            10.64599609375,
+            6.83740234375,
+            6.7314453125
+          ],
+          "load_average_before": [
+            10.64599609375,
+            6.83740234375,
+            6.7314453125
+          ],
+          "main": 233,
+          "menuBuild1Start": 298,
+          "menuBuildEnd": 302,
+          "menuBuildStart": 298,
+          "modelLoaded": 236,
+          "processMain": 148,
+          "selectionRestoreEnd": 464,
+          "selectionRestoreStart": 463,
+          "sidebarDrawn": 338,
+          "sleepStarted": 689,
+          "windowControllerBuilt": 290,
+          "windowDisplayEnd": 315,
+          "windowDisplayStart": 302,
+          "windowFlushed": 330,
+          "windowShown": 302,
+          "windowWillShow": 291
+        }
+      ],
+      "warm_existing_profile": [
+        {
+          "appKitLaunchEnd": 376,
+          "appKitLaunchStart": 349,
+          "clock": "mach_continuous_time; kernel ri_proc_start_abstime",
+          "dataRootPrepared": 231,
+          "didFinishLaunching": 498,
+          "engineInitialized": 490,
+          "engineStart": 378,
+          "engineStarted": 481,
+          "engineStartupDurations": {
+            "cefInitializeMs": 83.105333,
+            "configurationMs": 0.183708,
+            "frameworkLoadMs": 19.857667
+          },
+          "faviconsAttached": 285,
+          "firstContentfulPaint": 663,
+          "firstFrameConfirmed": true,
+          "firstLoadEnd": 642,
+          "firstPaintClockUncertaintyMs": 0.3,
+          "kernelProcessStart": true,
+          "load_average_after": [
+            9.21484375,
+            6.3251953125,
+            6.5537109375
+          ],
+          "load_average_before": [
+            6.18701171875,
+            5.689453125,
+            6.33349609375
+          ],
+          "main": 229,
+          "menuBuild1Start": 292,
+          "menuBuildEnd": 294,
+          "menuBuildStart": 292,
+          "modelLoaded": 233,
+          "processMain": 138,
+          "selectionRestoreEnd": 495,
+          "selectionRestoreStart": 490,
+          "sidebarDrawn": 349,
+          "sleepStarted": 727,
+          "windowControllerBuilt": 285,
+          "windowDisplayEnd": 310,
+          "windowDisplayStart": 297,
+          "windowFlushed": 331,
+          "windowShown": 297,
+          "windowWillShow": 286
+        },
+        {
+          "appKitLaunchEnd": 361,
+          "appKitLaunchStart": 348,
+          "clock": "mach_continuous_time; kernel ri_proc_start_abstime",
+          "dataRootPrepared": 231,
+          "didFinishLaunching": 490,
+          "engineInitialized": 483,
+          "engineStart": 362,
+          "engineStarted": 471,
+          "engineStartupDurations": {
+            "cefInitializeMs": 86.6415,
+            "configurationMs": 0.329709,
+            "frameworkLoadMs": 21.349041
+          },
+          "faviconsAttached": 293,
+          "firstContentfulPaint": 629,
+          "firstFrameConfirmed": true,
+          "firstLoadEnd": 598,
+          "firstPaintClockUncertaintyMs": 0.14,
+          "kernelProcessStart": true,
+          "load_average_after": [
+            9.21484375,
+            6.3251953125,
+            6.5537109375
+          ],
+          "load_average_before": [
+            9.21484375,
+            6.3251953125,
+            6.5537109375
+          ],
+          "main": 229,
+          "menuBuild1Start": 301,
+          "menuBuildEnd": 305,
+          "menuBuildStart": 301,
+          "modelLoaded": 232,
+          "processMain": 138,
+          "selectionRestoreEnd": 487,
+          "selectionRestoreStart": 483,
+          "sidebarDrawn": 348,
+          "sleepStarted": 688,
+          "windowControllerBuilt": 293,
+          "windowDisplayEnd": 320,
+          "windowDisplayStart": 305,
+          "windowFlushed": 335,
+          "windowShown": 305,
+          "windowWillShow": 294
+        },
+        {
+          "appKitLaunchEnd": 382,
+          "appKitLaunchStart": 359,
+          "clock": "mach_continuous_time; kernel ri_proc_start_abstime",
+          "dataRootPrepared": 220,
+          "didFinishLaunching": 506,
+          "engineInitialized": 500,
+          "engineStart": 383,
+          "engineStarted": 489,
+          "engineStartupDurations": {
+            "cefInitializeMs": 88.499333,
+            "configurationMs": 0.185167,
+            "frameworkLoadMs": 16.887833
+          },
+          "faviconsAttached": 301,
+          "firstContentfulPaint": 670,
+          "firstFrameConfirmed": true,
+          "firstLoadEnd": 642,
+          "firstPaintClockUncertaintyMs": 0.14,
+          "kernelProcessStart": true,
+          "load_average_after": [
+            9.677734375,
+            6.46875,
+            6.60302734375
+          ],
+          "load_average_before": [
+            9.21484375,
+            6.3251953125,
+            6.5537109375
+          ],
+          "main": 219,
+          "menuBuild1Start": 310,
+          "menuBuildEnd": 314,
+          "menuBuildStart": 310,
+          "modelLoaded": 222,
+          "processMain": 139,
+          "selectionRestoreEnd": 505,
+          "selectionRestoreStart": 500,
+          "sidebarDrawn": 359,
+          "sleepStarted": 725,
+          "windowControllerBuilt": 301,
+          "windowDisplayEnd": 331,
+          "windowDisplayStart": 314,
+          "windowFlushed": 349,
+          "windowShown": 314,
+          "windowWillShow": 301
+        },
+        {
+          "appKitLaunchEnd": 384,
+          "appKitLaunchStart": 365,
+          "clock": "mach_continuous_time; kernel ri_proc_start_abstime",
+          "dataRootPrepared": 216,
+          "didFinishLaunching": 514,
+          "engineInitialized": 508,
+          "engineStart": 385,
+          "engineStarted": 496,
+          "engineStartupDurations": {
+            "cefInitializeMs": 94.279334,
+            "configurationMs": 0.242541,
+            "frameworkLoadMs": 16.155125
+          },
+          "faviconsAttached": 300,
+          "firstContentfulPaint": 669,
+          "firstFrameConfirmed": true,
+          "firstLoadEnd": 644,
+          "firstPaintClockUncertaintyMs": 0.16,
+          "kernelProcessStart": true,
+          "load_average_after": [
+            9.677734375,
+            6.46875,
+            6.60302734375
+          ],
+          "load_average_before": [
+            9.677734375,
+            6.46875,
+            6.60302734375
+          ],
+          "main": 215,
+          "menuBuild1Start": 313,
+          "menuBuildEnd": 316,
+          "menuBuildStart": 313,
+          "modelLoaded": 219,
+          "processMain": 137,
+          "selectionRestoreEnd": 513,
+          "selectionRestoreStart": 508,
+          "sidebarDrawn": 365,
+          "sleepStarted": 728,
+          "windowControllerBuilt": 299,
+          "windowDisplayEnd": 337,
+          "windowDisplayStart": 316,
+          "windowFlushed": 353,
+          "windowShown": 316,
+          "windowWillShow": 301
+        },
+        {
+          "appKitLaunchEnd": 370,
+          "appKitLaunchStart": 344,
+          "clock": "mach_continuous_time; kernel ri_proc_start_abstime",
+          "dataRootPrepared": 231,
+          "didFinishLaunching": 489,
+          "engineInitialized": 481,
+          "engineStart": 371,
+          "engineStarted": 474,
+          "engineStartupDurations": {
+            "cefInitializeMs": 82.412709,
+            "configurationMs": 0.232583,
+            "frameworkLoadMs": 20.374208
+          },
+          "faviconsAttached": 284,
+          "firstContentfulPaint": 653,
+          "firstFrameConfirmed": true,
+          "firstLoadEnd": 631,
+          "firstPaintClockUncertaintyMs": 0.11,
+          "kernelProcessStart": true,
+          "load_average_after": [
+            9.86328125,
+            6.560546875,
+            6.63427734375
+          ],
+          "load_average_before": [
+            9.677734375,
+            6.46875,
+            6.60302734375
+          ],
+          "main": 230,
+          "menuBuild1Start": 292,
+          "menuBuildEnd": 297,
+          "menuBuildStart": 292,
+          "modelLoaded": 233,
+          "processMain": 141,
+          "selectionRestoreEnd": 485,
+          "selectionRestoreStart": 481,
+          "sidebarDrawn": 344,
+          "sleepStarted": 710,
+          "windowControllerBuilt": 284,
+          "windowDisplayEnd": 314,
+          "windowDisplayStart": 297,
+          "windowFlushed": 333,
+          "windowShown": 297,
+          "windowWillShow": 285
+        },
+        {
+          "appKitLaunchEnd": 372,
+          "appKitLaunchStart": 353,
+          "clock": "mach_continuous_time; kernel ri_proc_start_abstime",
+          "dataRootPrepared": 229,
+          "didFinishLaunching": 494,
+          "engineInitialized": 486,
+          "engineStart": 373,
+          "engineStarted": 473,
+          "engineStartupDurations": {
+            "cefInitializeMs": 79.791125,
+            "configurationMs": 0.187875,
+            "frameworkLoadMs": 19.941125
+          },
+          "faviconsAttached": 282,
+          "firstContentfulPaint": 657,
+          "firstFrameConfirmed": true,
+          "firstLoadEnd": 637,
+          "firstPaintClockUncertaintyMs": 0.28,
+          "kernelProcessStart": true,
+          "load_average_after": [
+            9.86328125,
+            6.560546875,
+            6.63427734375
+          ],
+          "load_average_before": [
+            9.86328125,
+            6.560546875,
+            6.63427734375
+          ],
+          "main": 227,
+          "menuBuild1Start": 295,
+          "menuBuildEnd": 301,
+          "menuBuildStart": 295,
+          "modelLoaded": 230,
+          "processMain": 143,
+          "selectionRestoreEnd": 492,
+          "selectionRestoreStart": 486,
+          "sidebarDrawn": 353,
+          "sleepStarted": 720,
+          "windowControllerBuilt": 282,
+          "windowDisplayEnd": 319,
+          "windowDisplayStart": 301,
+          "windowFlushed": 338,
+          "windowShown": 301,
+          "windowWillShow": 283
+        },
+        {
+          "appKitLaunchEnd": 395,
+          "appKitLaunchStart": 370,
+          "clock": "mach_continuous_time; kernel ri_proc_start_abstime",
+          "dataRootPrepared": 234,
+          "didFinishLaunching": 533,
+          "engineInitialized": 526,
+          "engineStart": 397,
+          "engineStarted": 511,
+          "engineStartupDurations": {
+            "cefInitializeMs": 92.146167,
+            "configurationMs": 0.182167,
+            "frameworkLoadMs": 21.75675
+          },
+          "faviconsAttached": 305,
+          "firstContentfulPaint": 705,
+          "firstFrameConfirmed": true,
+          "firstLoadEnd": 687,
+          "firstPaintClockUncertaintyMs": 0.32,
+          "kernelProcessStart": true,
+          "load_average_after": [
+            10.3544921875,
+            6.716796875,
+            6.68896484375
+          ],
+          "load_average_before": [
+            10.3544921875,
+            6.716796875,
+            6.68896484375
+          ],
+          "main": 233,
+          "menuBuild1Start": 317,
+          "menuBuildEnd": 319,
+          "menuBuildStart": 317,
+          "modelLoaded": 236,
+          "processMain": 140,
+          "selectionRestoreEnd": 530,
+          "selectionRestoreStart": 526,
+          "sidebarDrawn": 370,
+          "sleepStarted": 770,
+          "windowControllerBuilt": 305,
+          "windowDisplayEnd": 337,
+          "windowDisplayStart": 320,
+          "windowFlushed": 355,
+          "windowShown": 320,
+          "windowWillShow": 305
+        },
+        {
+          "appKitLaunchEnd": 369,
+          "appKitLaunchStart": 351,
+          "clock": "mach_continuous_time; kernel ri_proc_start_abstime",
+          "dataRootPrepared": 222,
+          "didFinishLaunching": 499,
+          "engineInitialized": 491,
+          "engineStart": 369,
+          "engineStarted": 482,
+          "engineStartupDurations": {
+            "cefInitializeMs": 94.359625,
+            "configurationMs": 0.243166,
+            "frameworkLoadMs": 18.041
+          },
+          "faviconsAttached": 288,
+          "firstContentfulPaint": 639,
+          "firstFrameConfirmed": true,
+          "firstLoadEnd": 604,
+          "firstPaintClockUncertaintyMs": 0.16,
+          "kernelProcessStart": true,
+          "load_average_after": [
+            10.3544921875,
+            6.716796875,
+            6.68896484375
+          ],
+          "load_average_before": [
+            10.3544921875,
+            6.716796875,
+            6.68896484375
+          ],
+          "main": 221,
+          "menuBuild1Start": 301,
+          "menuBuildEnd": 303,
+          "menuBuildStart": 301,
+          "modelLoaded": 224,
+          "processMain": 143,
+          "selectionRestoreEnd": 496,
+          "selectionRestoreStart": 491,
+          "sidebarDrawn": 351,
+          "sleepStarted": 685,
+          "windowControllerBuilt": 288,
+          "windowDisplayEnd": 322,
+          "windowDisplayStart": 303,
+          "windowFlushed": 339,
+          "windowShown": 303,
+          "windowWillShow": 289
+        },
+        {
+          "appKitLaunchEnd": 373,
+          "appKitLaunchStart": 350,
+          "clock": "mach_continuous_time; kernel ri_proc_start_abstime",
+          "dataRootPrepared": 224,
+          "didFinishLaunching": 508,
+          "engineInitialized": 500,
+          "engineStart": 374,
+          "engineStarted": 489,
+          "engineStartupDurations": {
+            "cefInitializeMs": 97.989625,
+            "configurationMs": 0.209208,
+            "frameworkLoadMs": 16.853042
+          },
+          "faviconsAttached": 286,
+          "firstContentfulPaint": 660,
+          "firstFrameConfirmed": true,
+          "firstLoadEnd": 638,
+          "firstPaintClockUncertaintyMs": 0.13,
+          "kernelProcessStart": true,
+          "load_average_after": [
+            10.64599609375,
+            6.83740234375,
+            6.7314453125
+          ],
+          "load_average_before": [
+            10.64599609375,
+            6.83740234375,
+            6.7314453125
+          ],
+          "main": 222,
+          "menuBuild1Start": 299,
+          "menuBuildEnd": 301,
+          "menuBuildStart": 299,
+          "modelLoaded": 226,
+          "processMain": 139,
+          "selectionRestoreEnd": 506,
+          "selectionRestoreStart": 500,
+          "sidebarDrawn": 350,
+          "sleepStarted": 718,
+          "windowControllerBuilt": 286,
+          "windowDisplayEnd": 320,
+          "windowDisplayStart": 302,
+          "windowFlushed": 338,
+          "windowShown": 302,
+          "windowWillShow": 287
+        },
+        {
+          "appKitLaunchEnd": 332,
+          "appKitLaunchStart": 316,
+          "clock": "mach_continuous_time; kernel ri_proc_start_abstime",
+          "dataRootPrepared": 218,
+          "didFinishLaunching": 448,
+          "engineInitialized": 442,
+          "engineStart": 333,
+          "engineStarted": 432,
+          "engineStartupDurations": {
+            "cefInitializeMs": 81.668,
+            "configurationMs": 0.261375,
+            "frameworkLoadMs": 17.293542
+          },
+          "faviconsAttached": 268,
+          "firstContentfulPaint": 610,
+          "firstFrameConfirmed": true,
+          "firstLoadEnd": 586,
+          "firstPaintClockUncertaintyMs": 4.5,
+          "kernelProcessStart": true,
+          "load_average_after": [
+            10.64599609375,
+            6.83740234375,
+            6.7314453125
+          ],
+          "load_average_before": [
+            10.64599609375,
+            6.83740234375,
+            6.7314453125
+          ],
+          "main": 217,
+          "menuBuild1Start": 275,
+          "menuBuildEnd": 277,
+          "menuBuildStart": 275,
+          "modelLoaded": 219,
+          "processMain": 151,
+          "selectionRestoreEnd": 446,
+          "selectionRestoreStart": 442,
+          "sidebarDrawn": 316,
+          "sleepStarted": 664,
+          "windowControllerBuilt": 268,
+          "windowDisplayEnd": 293,
+          "windowDisplayStart": 277,
+          "windowFlushed": 307,
+          "windowShown": 277,
+          "windowWillShow": 268
+        }
+      ]
+    },
+    "load_average": [
+      6.18701171875,
+      5.689453125,
+      6.33349609375
+    ],
+    "selected_only_0": {
+      "ok": true,
+      "tabs": [
+        {
+          "loaded": false,
+          "selected": false,
+          "title": "Unselected"
+        },
+        {
+          "loaded": true,
+          "selected": true,
+          "title": "Open launch fixture"
+        }
+      ]
+    },
+    "selected_only_1": {
+      "ok": true,
+      "tabs": [
+        {
+          "loaded": false,
+          "selected": false,
+          "title": "Unselected"
+        },
+        {
+          "loaded": true,
+          "selected": true,
+          "title": "Open launch fixture"
+        }
+      ]
+    },
+    "selected_only_2": {
+      "ok": true,
+      "tabs": [
+        {
+          "loaded": false,
+          "selected": false,
+          "title": "Unselected"
+        },
+        {
+          "loaded": true,
+          "selected": true,
+          "title": "Open launch fixture"
+        }
+      ]
+    },
+    "selected_only_3": {
+      "ok": true,
+      "tabs": [
+        {
+          "loaded": false,
+          "selected": false,
+          "title": "Unselected"
+        },
+        {
+          "loaded": true,
+          "selected": true,
+          "title": "Open launch fixture"
+        }
+      ]
+    },
+    "selected_only_4": {
+      "ok": true,
+      "tabs": [
+        {
+          "loaded": false,
+          "selected": false,
+          "title": "Unselected"
+        },
+        {
+          "loaded": true,
+          "selected": true,
+          "title": "Open launch fixture"
+        }
+      ]
+    },
+    "selected_only_5": {
+      "ok": true,
+      "tabs": [
+        {
+          "loaded": false,
+          "selected": false,
+          "title": "Unselected"
+        },
+        {
+          "loaded": true,
+          "selected": true,
+          "title": "Open launch fixture"
+        }
+      ]
+    },
+    "selected_only_6": {
+      "ok": true,
+      "tabs": [
+        {
+          "loaded": false,
+          "selected": false,
+          "title": "Unselected"
+        },
+        {
+          "loaded": true,
+          "selected": true,
+          "title": "Open launch fixture"
+        }
+      ]
+    },
+    "selected_only_7": {
+      "ok": true,
+      "tabs": [
+        {
+          "loaded": false,
+          "selected": false,
+          "title": "Unselected"
+        },
+        {
+          "loaded": true,
+          "selected": true,
+          "title": "Open launch fixture"
+        }
+      ]
+    },
+    "selected_only_8": {
+      "ok": true,
+      "tabs": [
+        {
+          "loaded": false,
+          "selected": false,
+          "title": "Unselected"
+        },
+        {
+          "loaded": true,
+          "selected": true,
+          "title": "Open launch fixture"
+        }
+      ]
+    },
+    "selected_only_9": {
+      "ok": true,
+      "tabs": [
+        {
+          "loaded": false,
+          "selected": false,
+          "title": "Unselected"
+        },
+        {
+          "loaded": true,
+          "selected": true,
+          "title": "Open launch fixture"
+        }
+      ]
+    },
+    "sidebar_before_appkit_finish_0": {
+      "ok": true
+    },
+    "sidebar_before_appkit_finish_1": {
+      "ok": true
+    },
+    "sidebar_before_appkit_finish_2": {
+      "ok": true
+    },
+    "sidebar_before_appkit_finish_3": {
+      "ok": true
+    },
+    "sidebar_before_appkit_finish_4": {
+      "ok": true
+    },
+    "sidebar_before_appkit_finish_5": {
+      "ok": true
+    },
+    "sidebar_before_appkit_finish_6": {
+      "ok": true
+    },
+    "sidebar_before_appkit_finish_7": {
+      "ok": true
+    },
+    "sidebar_before_appkit_finish_8": {
+      "ok": true
+    },
+    "sidebar_before_appkit_finish_9": {
+      "ok": true
+    },
+    "startup_menu_once_0": {
+      "builds": 1,
+      "ok": true
+    },
+    "startup_menu_once_1": {
+      "builds": 1,
+      "ok": true
+    },
+    "startup_menu_once_2": {
+      "builds": 1,
+      "ok": true
+    },
+    "startup_menu_once_3": {
+      "builds": 1,
+      "ok": true
+    },
+    "startup_menu_once_4": {
+      "builds": 1,
+      "ok": true
+    },
+    "startup_menu_once_5": {
+      "builds": 1,
+      "ok": true
+    },
+    "startup_menu_once_6": {
+      "builds": 1,
+      "ok": true
+    },
+    "startup_menu_once_7": {
+      "builds": 1,
+      "ok": true
+    },
+    "startup_menu_once_8": {
+      "builds": 1,
+      "ok": true
+    },
+    "startup_menu_once_9": {
+      "builds": 1,
+      "ok": true
+    },
+    "warm_existing_profile": {
+      "median_ms": {
+        "engineStart": 373.5,
+        "engineStarted": 481.5,
+        "firstContentfulPaint": 658.5,
+        "main": 224.5,
+        "modelLoaded": 228.0,
+        "sidebarDrawn": 350.5
+      },
+      "ok": false,
+      "samples": 10
+    },
+    "window_before_engine_0": {
+      "evidence": {
+        "contextsBeforeEngine": 0,
+        "pagesBeforeEngine": 0,
+        "sidebarClass": "OpenSidebar.SidebarView",
+        "visibleWindows": 1
+      },
+      "ok": true
+    },
+    "window_before_engine_1": {
+      "evidence": {
+        "contextsBeforeEngine": 0,
+        "pagesBeforeEngine": 0,
+        "sidebarClass": "OpenSidebar.SidebarView",
+        "visibleWindows": 1
+      },
+      "ok": true
+    },
+    "window_before_engine_2": {
+      "evidence": {
+        "contextsBeforeEngine": 0,
+        "pagesBeforeEngine": 0,
+        "sidebarClass": "OpenSidebar.SidebarView",
+        "visibleWindows": 1
+      },
+      "ok": true
+    },
+    "window_before_engine_3": {
+      "evidence": {
+        "contextsBeforeEngine": 0,
+        "pagesBeforeEngine": 0,
+        "sidebarClass": "OpenSidebar.SidebarView",
+        "visibleWindows": 1
+      },
+      "ok": true
+    },
+    "window_before_engine_4": {
+      "evidence": {
+        "contextsBeforeEngine": 0,
+        "pagesBeforeEngine": 0,
+        "sidebarClass": "OpenSidebar.SidebarView",
+        "visibleWindows": 1
+      },
+      "ok": true
+    },
+    "window_before_engine_5": {
+      "evidence": {
+        "contextsBeforeEngine": 0,
+        "pagesBeforeEngine": 0,
+        "sidebarClass": "OpenSidebar.SidebarView",
+        "visibleWindows": 1
+      },
+      "ok": true
+    },
+    "window_before_engine_6": {
+      "evidence": {
+        "contextsBeforeEngine": 0,
+        "pagesBeforeEngine": 0,
+        "sidebarClass": "OpenSidebar.SidebarView",
+        "visibleWindows": 1
+      },
+      "ok": true
+    },
+    "window_before_engine_7": {
+      "evidence": {
+        "contextsBeforeEngine": 0,
+        "pagesBeforeEngine": 0,
+        "sidebarClass": "OpenSidebar.SidebarView",
+        "visibleWindows": 1
+      },
+      "ok": true
+    },
+    "window_before_engine_8": {
+      "evidence": {
+        "contextsBeforeEngine": 0,
+        "pagesBeforeEngine": 0,
+        "sidebarClass": "OpenSidebar.SidebarView",
+        "visibleWindows": 1
+      },
+      "ok": true
+    },
+    "window_before_engine_9": {
+      "evidence": {
+        "contextsBeforeEngine": 0,
+        "pagesBeforeEngine": 0,
+        "sidebarClass": "OpenSidebar.SidebarView",
+        "visibleWindows": 1
+      },
+      "ok": true
+    },
+    "window_png": {
+      "file": "window-startup.png",
+      "ok": true
+    }
+  }
+}
