@@ -186,3 +186,27 @@ priority flag; its offscreen child completed normally. The 239 s Site Control
 receipt includes lock queue time. Native cleanup reaped its renderer, found
 zero surviving owned apps and removed its private root. Cancelled/incomplete
 pre-final runs are not counted. No privileged process inspector was used.
+
+## PR review fix
+
+PR #173's automated review found that calculator/action selections dismissed
+the embedded bar before calling the window delegate, leaving a surviving
+blank window without controls. Those non-navigation intents now restore the
+focused input and close control only while the session remains open in bar
+state. Page overlays keep their existing dismissal behavior.
+
+Four added L7 flows use the real command-bar selection path: calculator copy,
+an action that keeps the blank session, later navigation, and an action that
+closes the session. Before the fix the same CLI returned **49 PASS / 2 FAIL**:
+the calculator and surviving-action control-restoration assertions failed.
+The corrected full features flow passes **564/564**, including **51/51**
+Little Open rows, and idle **19/19**. Post-review Debug App build: **PASS**,
+with `OPEN_ENGINE_ROOT` exported to `open-engine-s8-main`.
+
+Per AGENTS.md rule 10 for review fixes, the intermediate push reran the
+affected gate with `heavy.sh tools/verify-all.sh --only features-render`.
+Start load: **21.64 / 19.25 / 16.62**; build PASS **38 s**, features PASS
+**86 s**. The fresh Debug build started at **8.95 / 15.34 / 15.42**. The full
+gate and timing receipts above remain the pre-review results; they are not
+presented as runs of the review-fix head. Renders and command-bar source are
+unchanged by this fix. Main `b913e127` was fetched and remained merged.

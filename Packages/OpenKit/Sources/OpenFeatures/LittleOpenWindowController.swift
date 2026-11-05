@@ -168,14 +168,24 @@ public final class LittleOpenWindowController: NSWindowController, NSWindowDeleg
             let coordinator = coordinator
             coordinator?.onSwitchToTab?(id, spaceID)
             coordinator?.close(sessionID: session.id, archiveReason: nil)
-        case .runAction(let id, let spaceID): coordinator?.performCommand?(id, spaceID)
-        case .copy(let text): NSPasteboard.general.clearContents(); NSPasteboard.general.setString(text, forType: .string)
+        case .runAction(let id, let spaceID):
+            coordinator?.performCommand?(id, spaceID)
+            restoreEmbeddedBarIfNeeded()
+        case .copy(let text):
+            NSPasteboard.general.clearContents(); NSPasteboard.general.setString(text, forType: .string)
+            restoreEmbeddedBarIfNeeded()
         case .dismissed(.escape):
             if state == .bar { coordinator?.close(sessionID: session.id, archiveReason: nil) }
             else { commandBar.dismiss(reason: .programmatic); container.focus(tabID: session.tab.id) }
         case .dismissed(.clickOutside): if state == .page { container.focus(tabID: session.tab.id) }
         default: break
         }
+    }
+    private func restoreEmbeddedBarIfNeeded() {
+        // Selection dismisses the bar before calling its delegate. A surviving blank
+        // window must keep its input and close control; an action may have closed it.
+        guard state == .bar, !closed else { return }
+        presentCommandBar()
     }
     public func openInCurrentSpace() {
         guard state == .page, let spaceID = pillSpaceID else { return }

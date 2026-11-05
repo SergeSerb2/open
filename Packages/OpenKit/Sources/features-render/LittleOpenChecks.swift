@@ -179,6 +179,30 @@ enum LittleOpenChecks {
         try await type(intent, "2+2")
         if let index = intent.commandBar.suggestions.firstIndex(where: { $0.kind == .calculator }) { intent.commandBar.choose(index) }
         check(NSPasteboard.general.string(forType: .string) == "4", "L7 copy intent writes real pasteboard")
+        let blankSelection = blank()
+        try await type(blankSelection, "2+2")
+        if let index = blankSelection.commandBar.suggestions.firstIndex(where: { $0.kind == .calculator }) { blankSelection.commandBar.choose(index) }
+        pump(blankSelection)
+        check(NSPasteboard.general.string(forType: .string) == "4" && blankSelection.state == .bar
+              && blankSelection.commandBar.isPresented && blankSelection.commandBar.view.debugHasCloseButton
+              && blankSelection.window?.firstResponder is NSTextView,
+              "L7 blank calculator selection retains focused embedded input and close control")
+        try await type(blankSelection, "New Window")
+        if let index = blankSelection.commandBar.suggestions.firstIndex(where: { $0.kind == .action && $0.actionID == "new-window" }) { blankSelection.commandBar.choose(index) }
+        pump(blankSelection)
+        check(commands == ["new-window", "new-window"] && blankSelection.state == .bar
+              && blankSelection.commandBar.isPresented && blankSelection.window?.firstResponder is NSTextView,
+              "L7 action that leaves a blank window open retains its focused embedded bar")
+        try await type(blankSelection, "https://after-selection.example/")
+        if let index = blankSelection.commandBar.suggestions.firstIndex(where: { $0.kind == .navigate }) { blankSelection.commandBar.choose(index) }
+        check(blankSelection.state == .page && blankSelection.currentURL?.host == "after-selection.example",
+              "L7 blank window can navigate after calculator and action selections")
+        let closingAction = blank()
+        little.performCommand = { [weak little] _, _ in little?.close(sessionID: closingAction.session.id, archiveReason: nil) }
+        try await type(closingAction, "New Window")
+        if let index = closingAction.commandBar.suggestions.firstIndex(where: { $0.kind == .action && $0.actionID == "new-window" }) { closingAction.commandBar.choose(index) }
+        check(little.controllers[closingAction.session.id] == nil && !closingAction.commandBar.isPresented,
+              "L7 action callback that closes the session does not restore the embedded bar")
         intent.focusURL(); key(intent.window!, code: 53, text: "\u{1b}")
         check(little.controllers[intent.session.id] != nil && !intent.commandBar.isPresented, "L7 page Escape closes overlay only")
         intent.focusURL(); intent.commandBar.dismiss(reason: .clickOutside)

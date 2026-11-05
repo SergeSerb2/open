@@ -1795,7 +1795,7 @@ Acceptance:
 | L4 | A committed navigation turns the window into the page state at 1185 × 832 with the top-right corner unchanged; the web content frame is `[0, 47, W, H − 47]`; LA-S2-4 element frames within 0.5 pt at W 1185 and at W 800. |
 | L5 | The pill shows the most recent Space's title; pressing it (or `open-in-current-space`) calls `moveToSpace` with that Space; the chevron opens the picker; typing filters rows; Return calls `moveToSpace` with the highlighted Space. |
 | L6 | Two `openBlank` calls with the same key-down timestamp make one window; two with timestamps 0.2 s apart make two. |
-| L7 | Bar intents (table in §9.3) with a fake host: `.open` and `.search` load in this window and ignore modifiers; `.switchToTab` calls `onSwitchToTab` once and closes the window; `.runAction` calls `performCommand` once; `.copy` writes the pasteboard; `.dismissed(.escape)` and the "x" close a bar-state window and only close the overlay bar in the page state. |
+| L7 | Bar intents (table in §9.3) with a fake host: `.open` and `.search` load in this window and ignore modifiers; `.switchToTab` calls `onSwitchToTab` once and closes the window; `.runAction` calls `performCommand` once; `.copy` writes the pasteboard. Non-navigation selections restore the focused embedded bar if the session survives in bar state; an action callback can close the session without restoring it. `.dismissed(.escape)` and the "x" close a bar-state window and only close the overlay bar in the page state. |
 | L8 | `nextExpiry(now:)` chooses the earliest per-Profile deadline, nil for Never/no sessions; activity sends `onChange`; exact-deadline expiry writes `.autoArchived`, `littleOpen:<id>`, nil Space and the supplied timestamp to the real SQLite ArchiveStore. |
 
 Step 6a verification log (2026-11-05): library implementation on
@@ -1807,6 +1807,12 @@ proofs and the complete gate receipt are recorded there in `verification.md`.
 The App still shows `showLittleOpenStub`; Step 6b owns App wiring, global/menu
 key delivery, the App sweeper, and B9/B10 native-window comparison. No engine
 build, Arc launch, desktop input or unit tests are part of Step 6a.
+PR review added four L7 flows for blank calculator/action selections, later
+navigation and an action callback that closes the session. The old source
+fails the two control-restoration rows; the corrected library passes all
+51 Little Open rows in the 564-row features flow, plus 19 idle rows. The
+post-review Debug App build also passes. The receipt distinguishes the full
+pre-review gate from the focused post-review verification.
 
 Then `tools/verify-all.sh` and the B10 compare once the App can show the window.
 
