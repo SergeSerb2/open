@@ -1,5 +1,6 @@
 #import "OEClient.h"
 
+#include "include/cef_id_mappers.h"
 #import <ImageIO/ImageIO.h>
 
 #include <algorithm>
@@ -280,6 +281,10 @@ typedef void (^OEDevToolsCompletion)(NSDictionary* _Nullable, NSError* _Nullable
   CefRefPtr<CefRegistration> _devToolsRegistration;
   NSMutableDictionary<NSNumber*, OEDevToolsCompletion>* _devToolsCallbacks;
   int _nextDevToolsId;
+  // The DevTools window's own browser (front end), while it is open.
+  CefRefPtr<OEDevToolsClient> _devToolsFrontend;
+  // The latest panel request through the front end (EP-4b).
+  NSInteger _devToolsPanelRequest;
   NSString* _lastFindString;
   BOOL _autoResize;
   // Page API (cef_open_page.h): selection flag and swipe options.
@@ -1490,6 +1495,124 @@ static double OEPNGPixelWidth(NSData* png) {
   info.runtime_style = _browser->GetHost()->GetRuntimeStyle();
   CefBrowserSettings settings;
   _browser->GetHost()->ShowDevTools(info, nullptr, settings, CefPoint());
+}
+
+- (BOOL)showDevToolsPanel:(OEDevToolsPanel)panel {
+  if (!_browser) {
+    return NO;
+  }
+  // Version-safe IDC ids (cef_id_mappers.h); -1 if this build lacks one.
+  const char* name = nullptr;
+  // The front end's own panel id, for the path through DevToolsAPI.
+  NSString* frontendPanel = nil;
+  switch (panel) {
+    case OEDevToolsPanelConsole:
+      name = "IDC_DEV_TOOLS_CONSOLE";
+      frontendPanel = @"console";
+      break;
+    case OEDevToolsPanelInspectMode:
+      name = "IDC_DEV_TOOLS_INSPECT";
+      break;
+    case OEDevToolsPanelElements:
+      frontendPanel = @"elements";
+      break;
+    case OEDevToolsPanelNetwork:
+      frontendPanel = @"network";
+      break;
+    case OEDevToolsPanelDefault:
+      break;
+  }
+  int command = name ? cef_id_for_command_id_name(name) : -1;
+  CefRefPtr<CefBrowserHost> host = _browser->GetHost();
+  // A hosted tab's Chrome browser is the window's hidden strip, whose
+  // commands act on Chromium's active tab, not necessarily this page.
+  OEBrowser* strip = _oe_hostBrowser;
+  BOOL targetsThisPage = !strip || [strip oe_isChromiumActiveTab:self];
+  // Every request ends an older panel retry (a Network request still retrying
+  // must not switch back after a later Console request).
+  _devToolsPanelRequest += 1;
+  // DevTools already open (for example from Network Inspector): Chrome's
+  // Console command does not switch that window's panel, so use the front end.
+  BOOL useFrontend = frontendPanel && [self hasDevTools];
+  if (command >= 0 && targetsThisPage && !useFrontend &&
+      host->GetRuntimeStyle() == CEF_RUNTIME_STYLE_CHROME &&
+      host->CanExecuteChromeCommand(command)) {
+    host->ExecuteChromeCommand(command, CEF_WOD_CURRENT_TAB);
+    return YES;
+  }
+  [self showDevTools];
+  if (frontendPanel) {
+    // EP-4b without a fork patch: the front end selects the panel through
+    // DevToolsAPI.showPanel, the call Chrome itself makes for its Console
+    // command (DevToolsWindow::DoAction). The front end exists and loads a
+    // moment after showDevTools; retry until the panel's tab is selected.
+    [self oe_selectFrontendPanel:frontendPanel
+                         request:_devToolsPanelRequest
+                         attempt:0];
+    return YES;
+  }
+  return NO;
+}
+
+// One try every 250 ms for at most 15 s; a newer request ends older ones.
+- (void)oe_selectFrontendPanel:(NSString*)panel
+                       request:(NSInteger)request
+                       attempt:(int)attempt {
+  if (request != _devToolsPanelRequest || attempt >= 60 || !_browser) {
+    return;
+  }
+  NSString* script = [NSString
+      stringWithFormat:
+          @"(() => { const name = '%@'; if (!globalThis.DevToolsAPI || "
+          @"!globalThis.InspectorFrontendAPI) return false; const selected = []; "
+          @"const walk = (root) => { for (const el of root.querySelectorAll("
+          @"'[role=tab][aria-selected=true]')) selected.push(el.id); for (const "
+          @"el of root.querySelectorAll('*')) if (el.shadowRoot) "
+          @"walk(el.shadowRoot); }; walk(document); if (selected.includes('tab-' "
+          @"+ name)) return true; DevToolsAPI.showPanel(name); return false; })()",
+          panel];
+  __weak OEWebContent* weakSelf = self;
+  void (^retry)(void) = ^{
+    dispatch_after(dispatch_time(DISPATCH_TIME_NOW, 250 * NSEC_PER_MSEC),
+                   dispatch_get_main_queue(), ^{
+                     [weakSelf oe_selectFrontendPanel:panel
+                                              request:request
+                                              attempt:attempt + 1];
+                   });
+  };
+  [self evaluateJavaScriptInDevToolsFrontend:script
+                                  completion:^(id result, NSError* error) {
+                                    if (![result isEqual:@YES]) {
+                                      retry();
+                                    }
+                                  }];
+}
+
+- (void)oe_setDevToolsFrontend:(OEDevToolsClient*)frontend {
+  _devToolsFrontend = frontend;
+}
+
+- (void)oe_devToolsFrontendClosed:(OEDevToolsClient*)frontend {
+  if (_devToolsFrontend.get() == frontend) {
+    _devToolsFrontend = nullptr;
+  }
+}
+
+- (void)evaluateJavaScriptInDevToolsFrontend:(NSString*)script
+                                  completion:(void (^)(id _Nullable,
+                                                       NSError* _Nullable))
+                                                 completion {
+  CefRefPtr<OEDevToolsClient> frontend = _devToolsFrontend;
+  if (!frontend || !frontend->IsOpen()) {
+    completion(nil, [NSError errorWithDomain:OEErrorDomain
+                                        code:OEErrorWebContentClosed
+                                    userInfo:@{
+                                      NSLocalizedDescriptionKey :
+                                          @"No DevTools window is open"
+                                    }]);
+    return;
+  }
+  frontend->Evaluate(script, completion);
 }
 
 - (void)closeDevTools {

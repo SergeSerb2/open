@@ -5,7 +5,9 @@
 #include <set>
 
 #include "include/cef_application_mac.h"
+#include "include/cef_id_mappers.h"
 #include "include/cef_task_manager.h"
+#include "include/cef_trace.h"
 #include "include/cef_version.h"
 #include "include/wrapper/cef_library_loader.h"
 
@@ -235,6 +237,19 @@ class OEDefaultClient : public CefClient,
   IMPLEMENT_REFCOUNTING(OEDefaultClient);
 };
 
+// Calls `done` with the path CEF wrote (main thread).
+class OEEndTracingCallback : public CefEndTracingCallback {
+ public:
+  explicit OEEndTracingCallback(void (^done)(NSString*)) : done_([done copy]) {}
+  void OnEndTracingComplete(const CefString& tracing_file) override {
+    done_(OEString(tracing_file));
+  }
+
+ private:
+  void (^done_)(NSString*);
+  IMPLEMENT_REFCOUNTING(OEEndTracingCallback);
+};
+
 }  // namespace
 
 #pragma mark - OEEngine
@@ -251,6 +266,8 @@ class OEDefaultClient : public CefClient,
   NSUInteger _ephemeralCount;
   NSURL* _defaultContextDirectory;  // resolved
   NSMutableArray<dispatch_block_t>* _pendingReleases;
+  BOOL _tracing;        // CefBeginTracing succeeded; no end requested yet
+  BOOL _tracingEnding;  // CefEndTracing runs; its callback is pending
 }
 
 + (OEEngine*)shared {
@@ -676,6 +693,99 @@ static NSArray* OELiveObjects(NSPointerArray* array) {
     }
   }
   return nil;
+}
+
+#pragma mark Task manager
+
+- (BOOL)showTaskManager {
+  int command = cef_id_for_command_id_name("IDC_TASK_MANAGER_MAIN_MENU");
+  if (command < 0) {
+    return NO;
+  }
+  // Any live Chrome style page's Chrome browser can open the (app-wide)
+  // window: a hosted tab's hidden window or a Chrome Views window.
+  for (OEWebContent* content in self.allWebContents) {
+    CefRefPtr<CefBrowser> browser = content.oe_browser;
+    if (!browser || !content.live) {
+      continue;
+    }
+    CefRefPtr<CefBrowserHost> host = browser->GetHost();
+    if (host->GetRuntimeStyle() == CEF_RUNTIME_STYLE_CHROME &&
+        host->CanExecuteChromeCommand(command)) {
+      host->ExecuteChromeCommand(command, CEF_WOD_CURRENT_TAB);
+      return YES;
+    }
+  }
+  return NO;
+}
+
+#pragma mark Tracing
+
+- (BOOL)isTracing {
+  return _tracing || _tracingEnding;
+}
+
+- (BOOL)beginTracingWithCategories:(NSString*)categories {
+  if (!_running || _tracing || _tracingEnding) {
+    return NO;
+  }
+  CefString list = categories.length ? OECef(categories) : CefString();
+  _tracing = CefBeginTracing(list, nullptr);
+  return _tracing;
+}
+
+- (void)endTracingToFile:(NSURL*)fileURL
+              completion:(void (^)(NSURL*, NSError*))completion {
+  void (^done)(NSURL*, NSError*) = [completion copy];
+  NSError* (^failure)(NSString*) = ^(NSString* message) {
+    return [NSError errorWithDomain:OEErrorDomain
+                               code:OEErrorUnsupported
+                           userInfo:@{NSLocalizedDescriptionKey : message}];
+  };
+  if (!_tracing || _tracingEnding || !fileURL.isFileURL) {
+    done(nil, failure(_tracing ? @"Invalid trace file URL"
+                               : @"No trace is being recorded"));
+    return;
+  }
+  __weak OEEngine* weakSelf = self;
+  CefRefPtr<OEEndTracingCallback> callback =
+      new OEEndTracingCallback(^(NSString* path) {
+        OEEngine* engine = weakSelf;
+        if (engine) {
+          engine->_tracingEnding = NO;
+        }
+        BOOL written = [NSFileManager.defaultManager fileExistsAtPath:path];
+        done(written ? [NSURL fileURLWithPath:path] : nil,
+             written ? nil : failure(@"Chromium did not write the trace"));
+      });
+  if (!CefEndTracing(OECef(fileURL.path), callback)) {
+    done(nil, failure(@"Chromium refused to end the trace"));
+    return;
+  }
+  _tracing = NO;
+  _tracingEnding = YES;
+}
+
+- (void)cancelTracing {
+  if (!_tracing || _tracingEnding) {
+    return;
+  }
+  // An empty path makes CEF pick a temporary file; delete it when written.
+  __weak OEEngine* weakSelf = self;
+  CefRefPtr<OEEndTracingCallback> callback =
+      new OEEndTracingCallback(^(NSString* path) {
+        OEEngine* engine = weakSelf;
+        if (engine) {
+          engine->_tracingEnding = NO;
+        }
+        if (path.length) {
+          [NSFileManager.defaultManager removeItemAtPath:path error:nil];
+        }
+      });
+  if (CefEndTracing(CefString(), callback)) {
+    _tracing = NO;
+    _tracingEnding = YES;
+  }
 }
 
 #pragma mark Metrics

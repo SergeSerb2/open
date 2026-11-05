@@ -16,6 +16,14 @@ public final class ScriptHost {
     public var makeWindow: ((Bool) -> WindowID?)?
     public var model: BrowserModel? { modelProvider?() }
     public var lastSetterError: (number: Int, message: String)?
+    /// `execute` runs only while this answers true. The App's View ▸ Developer
+    /// item stores the same defaults key (plans/page-platform.md §4.10.2).
+    public var allowsJavaScriptFromAppleEvents: () -> Bool = {
+        UserDefaults.standard.bool(forKey: ScriptHost.allowJavaScriptFromAppleEventsKey)
+    }
+    public nonisolated static let allowJavaScriptFromAppleEventsKey = "open.developer.allowJavaScriptFromAppleEvents"
+    public nonisolated static let javaScriptFromAppleEventsOffMessage =
+        "JavaScript from Apple Events is off. Turn it on in View ▸ Developer."
     public var windowModes: [WindowID: String] = [:]
 
     // Strong caches preserve identity. The App model observer purges external removals.
