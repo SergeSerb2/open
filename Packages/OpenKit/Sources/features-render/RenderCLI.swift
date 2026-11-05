@@ -12,7 +12,8 @@ enum RenderCLI {
     features-render translate --out DIR [--scale 1|2] [--appearance light|dark]
     features-render capture --scene overlay|overlay-rest|overlay-above|card|card-private|card-full-page|portrait-theme|portrait-white|portrait-black
         --out FILE [--scale 1|2] [--appearance light|dark]
-    features-render compare --arc FILE --ours FILE --out DIR --state split|peek; check [--only auto-archive]; bench
+    features-render compare --arc FILE --ours FILE --out DIR --state split|peek; check [--only auto-archive|idle]; bench
+        idle: run via python3 tools/verification/features-idle.py (loads the native observer)
     """
     static func value(_ args: [String], _ key: String) -> String? { guard let i = args.firstIndex(of: key), args.indices.contains(i + 1) else { return nil }; return args[i + 1] }
     /// Every value of a repeatable option.

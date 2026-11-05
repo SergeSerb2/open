@@ -877,3 +877,31 @@ read, or subagent ran. These CLI results do not close native app/engine gates.
 
 Release `openkit` SHA-256:
 `b10ff50c87fee7ba6f8d59f2c6fa8c839a1cbe5f4803d6f469ebd8cb2b9a1db8`.
+
+# Toast and history-swipe idle work (Section 8)
+
+`tools/verify-all.sh` runs this gate as part of `features-render`. To run it
+alone after a Release harness build:
+
+```sh
+~/Library/Caches/OpenRE/scripts/heavy.sh swift build --package-path Packages/OpenKit -c release -j 6 --product features-render
+/usr/bin/lockf /tmp/open-m5-quiet.lock python3 tools/verification/features-idle.py
+```
+
+Use a separate session for long jobs. The helper compiles a temporary native
+observer, loads it only into the harness, bounds the flow to 90 seconds, and
+reaps its owned child on failure or interruption. It is never linked into Open.
+The gate uses real window controllers, toast expiry/dismissal and history-swipe
+events with the production clock. It covers both Reduce Motion paths. Each
+2-second idle interval requires zero feature-owned live native timers, display
+links, layer animations, draw/layout/display calls, invalidations and new work
+scheduling. A native canary proves each observer works before feature sampling.
+Missing observation support and tracking overflow fail closed.
+
+The windows stay offscreen and the web host is synthetic. This gate makes no
+whole-App idle CPU or frame-presentation claim. See
+[the Section 8 report](s8-speed-gates.md) for the runtime observation boundary,
+break-and-revert proofs, load averages and the pre-#153 A/B comparison. Keep
+Section 2's existing command-bar budgets unchanged.
+
+For the Section 8 milestone, the lead's final instruction defers full and targeted regression suites to one run on final main. This PR records the completed negative proofs and current-display before/after measurements; it does not claim a new full-suite PASS.
