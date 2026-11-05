@@ -463,10 +463,8 @@ def context_menu_checks(factory, results, tmp, h):
                 refused = observed()
                 titles = [c['title'] for e in (accepted, refused) for c in e.get('commands', []) if c['id'] >= 49000 and c['title'].startswith('x')]
                 if len(titles) == 2 and all(len(t.encode()) < 1024 for t in titles):
-                    # Chrome elides extension labels before OEContextMenu exists. Do not claim
-                    # an App boundary proof from data the App never receives.
-                    results['cm_title_boundary'] = {'status': 'BLOCKED', 'reason': 'Chromium elides both requested 1024/1025-byte extension titles before the App callback',
-                                                    'deliveredBytes': [len(t.encode()) for t in titles]}
+                    # These labels are bounded upstream; exercise the App's own title limit
+                    # below through a real selection whose combining marks stay in 32 characters.
                     checks['title'] = {'upstreamElision': True, 'deliveredBytes': [len(t.encode()) for t in titles]}
                 else:
                     checks['title'] = {'ok': accepted.get('type') == 'contextMenu' and refused.get('type') == 'contextMenuRefused',
@@ -486,6 +484,22 @@ def context_menu_checks(factory, results, tmp, h):
                 refused = observed()
                 checks['depth'] = {'ok': accepted.get('type') == 'contextMenu' and refused.get('type') == 'contextMenuRefused',
                                    'acceptedNodes': accepted.get('incomingNodes'), 'refused': refused}
+                configure(count=0)
+                title_events = []
+                overhead = len('Search Local Search for “”'.encode())
+                for size in (1024, 1025):
+                    payload = size - overhead
+                    base = 31 if payload % 2 else 32
+                    text = 'x' * base + '\u035c' * ((payload - base) // 2)
+                    assert len(text.encode()) + overhead == size
+                    select('#selection', text)
+                    event = observed('#selection')
+                    own = next((r for r in event.get('rows', []) if r['key'] == 'selection-search'), None)
+                    title_events.append({'type': event.get('type'), 'reason': event.get('reason'),
+                                         'requestedBytes': size, 'shownBytes': len(own['title'].encode()) if own else None})
+                results['cm_title_boundary'] = {'ok': title_events[0]['type'] == 'contextMenu'
+                    and title_events[0]['shownBytes'] == 1024 and title_events[1]['type'] == 'contextMenuRefused',
+                    'events': title_events, 'engineExtensionTitleBytes': [len(t.encode()) for t in titles]}
                 configure(count=1, title='Go to fixture')
                 select('#selection', 'Extension collision selection')
                 go = observed('#selection')
