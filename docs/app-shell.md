@@ -1270,3 +1270,48 @@ is still memoized by identity and store codecs by identical bytes. No engine
 source changes, dependencies, unit tests or Arc data are added. The failed FV16
 run also passed cleanup. Generated engine-spike outputs and temporary retry
 spacing are restored before committing.
+
+
+## Section 8 cold launch — 2026-11-04
+
+The startup path now composes restored windows and their final menu once. Focus
+and model callbacks during composition do not build intermediate menus. The
+real sidebar is laid out, drawn and flushed, and the existing display link
+confirms its presented frame. Only then does `finishLaunching()` run, followed
+by `OEEngine.start` outside the temporary AppKit loop. The same sidebar and
+selected-tab-only restore behavior remain in place. The missing-display-link
+path still has its real three-second deadline and records an unconfirmed frame.
+
+`processMain` separates pre-main work from `OEApplication.shared` (the existing
+`main` mark remains after that call). Marks around data preparation, window
+construction, display, transaction flush, AppKit launch and selected-page restore
+locate work on that path. `timing.engineStartupDurations` separately reports
+framework loading, configuration and `CefInitialize` in monotonic milliseconds.
+
+The unchanged `5782add4` Release app measured sidebar medians **344 / 341 ms**
+and paint medians **564 / 546 ms**, fresh / warm, five launches each, at load
+**7.08 / 10.93 / 11.10** on this 18-CPU M5 Pro. One foreground-interrupted
+attempt remains recorded; the complete attempt used for those medians has five
+runs per case and passes owned-process cleanup.
+[Baseline samples](engine-spike/results-cold-launch-before.json).
+
+A diagnostic build with the original startup order reproduced a **3,085 ms**
+fresh paint at load **8.45 / 7.66 / 8.41**. Framework loading consumed
+**2,370 ms**, configuration **0.24 ms**, and `CefInitialize` **122 ms**. Later
+framework loads were **15–16 ms**. All five fresh runs built two menus before
+engine readiness, so the new one-menu check fails on the original order.
+[Diagnostic samples](engine-spike/results-cold-launch-diagnostic.json).
+
+The build script also invalidated the load cache: its rsync source still had
+the distribution signature, whereas the embedded framework had been re-signed.
+Each App-only build copied and signed the unchanged 458 MB embedded binary
+again. `tools/embed-cef.sh` now keeps that file when the complete source-tree
+SHA-256, signing identity and locale policy match its DerivedData stamp, the
+embedded CDHash matches, and deep strict signature verification succeeds.
+A missing or changed stamp, changed source or invalid destination takes the
+normal copy-and-sign path. The stamp is outside the app. Helpers still update.
+
+The sampled diagnostic launch is excluded from budget results: `sample` caused
+synchronous dyld debugger-notification waits. Its call graph also locates default
+menu setup under `NSApplication.finishLaunching` and `NSWritingToolsCoordinator`.
+No Chromium source, fork patch, display deadline or budget comparator changed.
