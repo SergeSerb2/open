@@ -121,7 +121,7 @@ public struct ExtensionPromptText: Equatable, Sendable {
         return ceil(cell.cellSize(forBounds: CGRect(x: 0, y: 0, width: width, height: 100000)).height)
     }
     public override func draw(_ dirtyRect: NSRect) {
-        if let icon = model.icon { ExtensionActionButton.draw(icon, centeredIn: CGRect(x: 24, y: 24, width: 48, height: 48), scale: window?.backingScaleFactor ?? 2) }
+        if let icon = model.icon { ExtensionActionButton.draw(icon, in: CGRect(x: 24, y: 24, width: 48, height: 48), scale: window?.backingScaleFactor ?? 2, interpolation: .high) }
     }
     public override func viewDidChangeEffectiveAppearance() {
         super.viewDidChangeEffectiveAppearance()

@@ -49,7 +49,7 @@ public enum ExtensionItemIntent {
         let image = NSImage(systemSymbolName: item.isPinned ? "pin.fill" : "pin", accessibilityDescription: nil)
         pin.image = image?.withSymbolConfiguration(.init(pointSize: style == .row ? 12 : 8, weight: .regular))
         pin.contentTintColor = SidebarRole.toolbarGlyph.nsColor
-        if style == .tile { pin.wantsLayer = true; pin.layer?.cornerRadius = 7; pin.layer?.backgroundColor = Core.backgroundPrimary.cgColor(contentAppearance) }
+        if style == .tile { pin.wantsLayer = true; pin.layer?.cornerRadius = 7; pin.restingFill = Core.backgroundPrimary }
     }
     public override func draw(_ dirtyRect: NSRect) {
         let radius: CGFloat = style == .row ? 6 : 8

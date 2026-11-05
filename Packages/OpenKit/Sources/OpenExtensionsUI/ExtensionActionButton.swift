@@ -61,14 +61,18 @@ public enum ExtensionActionIntent {
     }
     /// No tint or size mutation. Pick the immutable backing rep, draw at its point size.
     public static func draw(_ image: ExtensionImage, centeredIn rect: CGRect, scale: CGFloat) {
+        let destination = CGRect(x: rect.midX - image.pointSize.width / 2, y: rect.midY - image.pointSize.height / 2,
+                                 width: image.pointSize.width, height: image.pointSize.height)
+        draw(image, in: destination, scale: scale)
+    }
+    /// Prompt icons have a prescribed frame; action images use the natural-size path above.
+    public static func draw(_ image: ExtensionImage, in rect: CGRect, scale: CGFloat, interpolation: CGInterpolationQuality = .none) {
         guard let graphics = NSGraphicsContext.current else { return }
-        let rect = CGRect(x: rect.midX - image.pointSize.width / 2, y: rect.midY - image.pointSize.height / 2,
-                          width: image.pointSize.width, height: image.pointSize.height)
         let context = graphics.cgContext
-        context.saveGState(); context.interpolationQuality = .none
+        context.saveGState(); context.interpolationQuality = interpolation
         if graphics.isFlipped {
             context.translateBy(x: rect.minX, y: rect.maxY); context.scaleBy(x: 1, y: -1)
-            context.draw(image.representation(scale: scale), in: CGRect(origin: .zero, size: image.pointSize))
+            context.draw(image.representation(scale: scale), in: CGRect(origin: .zero, size: rect.size))
         } else { context.draw(image.representation(scale: scale), in: rect) }
         context.restoreGState()
     }
@@ -126,6 +130,7 @@ public enum ExtensionActionIntent {
     public var glyph: Glyph? { didSet { image = glyph?.image } }
     public var tooltipTitle = ""
     public var tooltipStyle: SpaceThemeStyle?
+    public var restingFill: DesignColor? { didSet { plate(animated: false) } }
     private var tracking: NSTrackingArea?
     private var hovered = false
     public override init(frame: NSRect) {
@@ -141,17 +146,29 @@ public enum ExtensionActionIntent {
     }
     public override func mouseEntered(with event: NSEvent) {
         guard !isHiddenOrHasHiddenAncestor else { return }
-        hovered = true; plate()
+        setHovered(true)
         if !tooltipTitle.isEmpty { TooltipController.shared.schedule(Tooltip(title: tooltipTitle, style: tooltipStyle ?? .defaultTheme(system: contentAppearance)), for: self) }
     }
-    public override func mouseExited(with event: NSEvent) { hovered = false; plate(); TooltipController.shared.cancel(for: self) }
+    public func setHovered(_ value: Bool, animated: Bool = true) {
+        guard hovered != value else { return }; hovered = value; plate(animated: animated)
+    }
+    public override func mouseExited(with event: NSEvent) { setHovered(false); TooltipController.shared.cancel(for: self) }
     public override var isHighlighted: Bool { didSet { plate() } }
-    private func plate() {
-        let color = (isHighlighted ? SidebarRole.buttonPressed : hovered ? SidebarRole.buttonHover : DesignColor(.clear)).cgColor(contentAppearance)
+    public override func viewDidChangeEffectiveAppearance() { super.viewDidChangeEffectiveAppearance(); plate(animated: false) }
+    private func plate(animated: Bool = true) {
+        guard layer != nil else { return }
+        let overlay = (isHighlighted ? SidebarRole.buttonPressed : hovered ? SidebarRole.buttonHover : DesignColor(.clear)).resolved(contentAppearance)
+        let color: CGColor
+        if let base = restingFill?.resolved(contentAppearance) {
+            // Preserve the pin's circular base beneath its transient hover/press plate.
+            let alpha = overlay.alpha
+            color = RGBA(overlay.red * alpha + base.red * (1 - alpha), overlay.green * alpha + base.green * (1 - alpha),
+                         overlay.blue * alpha + base.blue * (1 - alpha), base.alpha + alpha * (1 - base.alpha), overlay.space).cgColor
+        } else { color = overlay.cgColor }
         guard layer?.backgroundColor != color else { return }
         let from = layer?.presentation()?.backgroundColor ?? layer?.backgroundColor
         CATransaction.begin(); CATransaction.setDisableActions(true); layer?.backgroundColor = color; CATransaction.commit()
-        if !Motion.reducesMotion {
+        if animated && !Motion.reducesMotion {
             let a = CABasicAnimation(keyPath: "backgroundColor"); a.fromValue = from; a.toValue = color
             a.duration = Motion.hoverFade; layer?.add(a, forKey: "hover")
         }

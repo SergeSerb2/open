@@ -107,7 +107,11 @@ import OpenExtensionsUI
                 canvas.label("\(count) extensions", x: x, y: 8)
                 let body = ExtensionsSectionBody(frame: .zero); _ = body.setActions(Synthetic.actions(count, pinned: count / 2)); body.pickerMode = true
                 body.frame = CGRect(origin: CGPoint(x: x, y: 40), size: body.intrinsicContentSize); canvas.addSubview(body)
-                body.layoutSubtreeIfNeeded(); if body.items.count > 1 { body.items[1].setHovered(true) }
+                body.layoutSubtreeIfNeeded()
+                if body.items.count > 1 {
+                    body.items[1].setHovered(true)
+                    body.items[1].subviews.compactMap { $0 as? ExtensionsPlateButton }.first?.setHovered(true, animated: false)
+                }
                 if body.items.count > 1 { body.keyDown(with: key(body.isGrid ? 124 : 125)) }
             }
             return canvas
