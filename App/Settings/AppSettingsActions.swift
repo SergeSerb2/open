@@ -23,6 +23,10 @@ final class AppSettingsActions: SettingsActions, LibraryActions, DownloadsProvid
       focusedProfileID: app.frontWindowController.flatMap { app.hostFactories[$0.windowID]?.focusedProfile?.id })
     if let store = app.stores.adBlock { vm.attach(adBlockStore: store) }
     else { vm.statusText = "Ad blocking settings could not be opened." }
+    app.defaultBrowserService.onChange = { [weak vm] state in
+      vm?.general.refresh()
+      vm?.links.isDefaultBrowser = state.values.allSatisfy { $0 }
+    }
     return vm
   }()
   @ObservationIgnored lazy var settingsPresenter = SettingsPresenter(viewModel: settings)
@@ -220,14 +224,13 @@ final class AppSettingsActions: SettingsActions, LibraryActions, DownloadsProvid
   }
   private func status(_ message: String) { settings.statusText = message; AppDelegate.commandLog(message) }
   var canImportPasswordsAndCookies: Bool { false }
-  func isDefaultBrowser() -> Bool { NSWorkspace.shared.urlForApplication(toOpen: URL(string: "https://example.com")!)?.standardizedFileURL == Bundle.main.bundleURL.standardizedFileURL }
+  func isDefaultBrowser() -> Bool { app.defaultBrowserService.isDefaultBrowser }
   func setAsDefaultBrowser() -> String? {
     Task { @MainActor in
-      do {
-        try await NSWorkspace.shared.setDefaultApplication(at: Bundle.main.bundleURL, toOpenURLsWithScheme: "http")
-        try await NSWorkspace.shared.setDefaultApplication(at: Bundle.main.bundleURL, toOpenURLsWithScheme: "https")
-        settings.general.refresh()
-      } catch { settings.general.errorText = "The default browser could not be changed. \(error.localizedDescription)" }
+      let state = await app.defaultBrowserService.makeDefault()
+      settings.general.refresh()
+      settings.links.isDefaultBrowser = state.values.allSatisfy { $0 }
+      settings.general.errorText = settings.links.isDefaultBrowser ? "" : "The default browser was not changed."
     }
     return nil
   }

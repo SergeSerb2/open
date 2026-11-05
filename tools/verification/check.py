@@ -456,7 +456,67 @@ def route(cli, root, seed):
     decision = json.loads(text)
     require("littleOpen" in decision["resolved"] and "defaultDestination" in decision["via"],
             "A10 JSON does not agree with default Little Open decision")
-    print("route A1-A10 passed")
+    print("A11")
+    directory = save_snapshot(data)
+    matches(r"^roundtrip OK$", run(cli, "roundtrip", directory))
+    matches(r"commands-demo OK: [1-9]\d* checks passed, 0 failed", run(cli, "commands-demo", directory))
+
+    for address in ("2001:db8::1", "2001:db8::99"):
+        for spelling in (address, "[" + address + "]"):
+            case("A12 IPv6 host is not a host-rule name", "https://[" + address + "]/docs", "littleOpen",
+                 [rule("hostEquals", spelling, space), rule("hostContains", spelling, space)])
+    prefix = rule("urlPrefix", "https://[2001:db8::1]/docs", space)
+    case("A12 IPv6 prefix exact", "https://[2001:db8::1]/docs/a", "space:" + target, [prefix])
+    case("A12 IPv6 prefix distinct address", "https://[2001:db8::99]/docs/a", "littleOpen", [prefix])
+    case("A12 IPv6 prefix distinct port", "https://[2001:db8::1]:8443/docs/a", "littleOpen", [prefix])
+
+    for pattern in ("münchen.de", "xn--mnchen-3ya.de"):
+        for spelling in ("münchen.de", "xn--mnchen-3ya.de"):
+            case("A13 IDN equivalence", "https://" + spelling + "/x", "space:" + target,
+                 [rule("hostEquals", pattern, space)])
+    case("A13 IDN prefix", "https://münchen.de/docs/a", "space:" + target,
+         [rule("urlPrefix", "xn--mnchen-3ya.de/docs", space)])
+
+    print("A14 one-way legacy migration")
+    data["routingRules"] = [rule("hostEquals", "legacy.example", {"littleArc": {}})]
+    data["defaultDestination"] = {"littleArc": {}}
+    directory = save_snapshot(data)
+    run(cli, "route", directory, "https://legacy.example/", "--expect-destination", "littleOpen", "--external-little-open", "on")
+    matches(r"^roundtrip OK$", run(cli, "roundtrip", directory))
+    migrated = (Path(directory) / "State/browser.json").read_text()
+    require('"littleArc"' not in migrated and '"littleOpen"' in migrated, "A14 legacy spelling survived save")
+    run(cli, "route", directory, "https://legacy.example/", "--expect-destination", "littleOpen", "--external-little-open", "on")
+    data["defaultDestination"] = little
+
+    for scheme, port in (("https", "443"), ("http", "80")):
+        prefix = rule("urlPrefix", "example.com:" + port + "/docs", space)
+        case("A15 omitted default port", scheme + "://example.com/docs/a", "space:" + target, [prefix])
+        case("A15 explicit default port", scheme + "://example.com:" + port + "/docs/a", "space:" + target, [prefix])
+        case("A15 nondefault port", scheme + "://example.com:8443/docs/a", "littleOpen", [prefix])
+    case("A15 preserved port", "https://example.com:8443/docs", "space:" + target,
+         [rule("urlPrefix", "example.com:8443/docs", space)])
+    for value, host in (("example.com:8080/docs", "example.com"), ("localhost:3000/x", "localhost"),
+                        ("example.com:8080", "example.com"), ("localhost:3000", "localhost")):
+        case("A16 bare authority with port", value, "space:" + target, [rule("hostEquals", host, space)])
+
+    for window in data["windows"]:
+        if window["style"] == "standard": window["focusedSpaceID"] = target
+    for default, toggle, expected, via in ((space, "on", "space:" + target, "defaultDestination"),
+        ({"mostRecentSpace": {}}, "on", "space:" + target, "defaultDestination"),
+        (little, "on", "littleOpen", "defaultDestination"),
+        (little, "off", "space:" + target, "defaultSuppressedByToggle"),
+        ({"space": {"_0": "00000000-0000-0000-0000-000000000098"}}, "on", "space:" + target, "fallbackMissingSpace")):
+        data["defaultDestination"] = default
+        text = case("A17 skipped rule retains default reason", "https://example.com/", expected, [stale],
+                    "--external-little-open", toggle, "--json")
+        decision = json.loads(text)
+        require(via in decision["via"], "A17 default reason changed after a skipped rule")
+        if via == "fallbackMissingSpace":
+            require(decision["via"][via]["requested"] == default["space"]["_0"], "A17 names the skipped rule instead of missing default")
+    data["spaces"] = []; data["windows"] = []; data["defaultDestination"] = little
+    decision = json.loads(run(cli, "route", save_snapshot(data), "https://example.com/", "--external-little-open", "off", "--json"))
+    require("noSpaces" in decision["via"] and decision.get("resolved") is None, "A17 empty state did not report noSpaces")
+    print("route A1-A17 passed")
 
 
 @contextlib.contextmanager
