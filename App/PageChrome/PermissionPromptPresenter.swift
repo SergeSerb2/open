@@ -136,7 +136,8 @@ final class PermissionPromptPresenter: NSObject, NSPopoverDelegate {
       // Chromium persists deny as well as grant synchronously. Not Now must
       // restore the previous content setting after resolving this request.
       for (kind, _, _) in SitePermissionStore.kinds where entry.request.kinds.contains(kind) && SitePermissionStore.canPersist(kind) {
-        store.set(origin: entry.request.origin, kind: kind, state: decision == .allow ? .allow : entry.previous[kind.rawValue] ?? .ask)
+        store.set(origin: entry.request.origin, kind: kind, state: decision == .allow ? .allow : entry.previous[kind.rawValue] ?? .ask,
+                  requestSystemAuthorization: decision == .allow)
       }
     }
     decisions += 1
