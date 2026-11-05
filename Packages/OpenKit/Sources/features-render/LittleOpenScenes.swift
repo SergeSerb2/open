@@ -34,6 +34,7 @@ enum LittleOpenScenes {
         guard scale == 1 || scale == 2 else { throw CLIError(description: "scale must be 1 or 2") }
         // Keep the native backing scale when rehosting. A Retina → 1x transition can
         // lose native text backing stores; downsample the complete snapshot for a 1x export.
+        // Fixed 1185×832 page at 2x: the largest RGBA8 bitmap is 15,774,720 bytes.
         let renderScale = max(scale, controller.window?.backingScaleFactor ?? scale)
         // Include the real native window buttons in this offscreen view-only export.
         if scene == "little-page", let window = controller.window {

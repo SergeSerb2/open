@@ -2422,12 +2422,18 @@ public final class BrowserModel {
         return spaces.first { $0.profileID == profileID }
     }
 
+    private func recordFocusedSpace(_ id: SpaceID) {
+        focusedSpaceOrder.removeAll { $0 == id || space(id: $0) == nil }
+        if space(id: id) != nil { focusedSpaceOrder.insert(id, at: 0) }
+    }
+
     public func focusSpace(windowID: WindowID, spaceID: SpaceID) {
         guard let window = windows.first(where: { $0.id == windowID }) else { return }
-        focusedSpaceOrder.removeAll { $0 == spaceID || space(id: $0) == nil }; focusedSpaceOrder.insert(spaceID, at: 0)
+        recordFocusedSpace(spaceID)
         let old = window.focusedSpaceID
         window.focusedSpaceID = spaceID
-        registerChange(undo: { window.focusedSpaceID = old }, redo: { window.focusedSpaceID = spaceID })
+        registerChange(undo: { [weak self] in window.focusedSpaceID = old; self?.recordFocusedSpace(old) },
+                       redo: { [weak self] in window.focusedSpaceID = spaceID; self?.recordFocusedSpace(spaceID) })
     }
 
     /// Every pane is visible when a split is selected or its keyboard focus changes.

@@ -101,10 +101,17 @@ enum LittleOpenChecks {
         let destination = model.createSpace(title: "Reading", profileID: page.session.profileID, icon: .emoji("📘"))
         let third = model.createSpace(title: "Studio", profileID: page.session.profileID, icon: .emoji("🌿"))
         _ = model.createSpace(title: "Foreign Profile", profileID: otherProfile.id)
+        let focusUndo = UndoManager(); focusUndo.groupsByEvent = false; model.undoManager = focusUndo
         model.focusSpace(windowID: model.windows[0].id, spaceID: destination.id)
         pump(page); try await Task.sleep(for: .milliseconds(20)); pump(page)
         check(page.pillSpaceID == destination.id && page.titleBar.spaceTitle == "Reading" && !page.titleBar.profileButton.isHidden,
               "L5 pill follows model's most recent Profile Space; >=2 Profiles shows chip")
+        focusUndo.undo(); pump(page); try await Task.sleep(for: .milliseconds(20)); pump(page)
+        let undoSpace = page.pillSpaceID
+        focusUndo.redo(); pump(page); try await Task.sleep(for: .milliseconds(20)); pump(page)
+        check(undoSpace == model.spaces[0].id && page.pillSpaceID == destination.id && page.titleBar.spaceTitle == "Reading",
+              "L5 pill follows real model focus Undo/Redo")
+        model.undoManager = nil
         page.titleBar.chevronButton.performClick(nil)
         let picker = page.spacePicker!
         check(picker.filteredSpaces.first?.id == destination.id && picker.highlightedIndex == 0 && !picker.filteredSpaces.contains { $0.profileID != page.session.profileID },
