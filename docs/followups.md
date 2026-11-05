@@ -191,3 +191,7 @@ The gate "inline completion adds ≤ 0.3 ms p95" read +0.301 ms in one full `ver
 - Arc's look: the overlay, the result card, and the portrait canvas are guesses until captures C-C1 and C-C2 (page-platform §12). Share was not driven end to end (the suite cannot close the system picker without choosing a service).
 
 - Swipe indicator interim (#162): Peek and Little Open pages keep Chromium's own arrow; Zap and the command-bar backdrop have no swipe pause yet. `App/WebContent/EngineWebContentHostFactory.swift` routes the tab/split indicator and Capture pause. [#162](https://github.com/SergeSerb2/open/pull/162) records R-W1 and SW1–SW4; U-S1 real gesture recognition remains open.
+
+## Sleep: intermittent F4 corrupt-fallback log line (from Section 8, filed by Section 11)
+
+- `sleep_f4_corrupt_fallback` (e2e `sleep`) is intermittent: the fallback itself works (the tab restores from its URL), but the suite misses the fallback's log line after the relaunch in about 2 of 9 runs (`08-engine-basics-done.md`). Owner: the lead (section 16 hardening if not sooner). Next step: read the log from the relaunched process's own stderr capture instead of the shared log, or wait for the line with a bounded retry, and rerun ×10.
