@@ -233,6 +233,13 @@ final class AppSleepCoordinator {
 
   func wake(_ id: ItemID) {
     guard let controller, !wakeRequests.contains(id) else { return }
+    // Selection shows a retained page before the queued wake task runs. Chromium
+    // can finish its discard reload in that gap, so arm the first-commit record
+    // now, while the tab still carries its sleeping phase.
+    if controller.liveContent.contains(id), controller.visibleTabIDs().contains(id),
+       app.model.tab(id: id)?.live.sleepPhase == .sleeping {
+      controller.wakeStarted(tabID: id, kind: "discard")
+    }
     wakeRequests.insert(id)
     Task { @MainActor [weak self] in
       await controller.tabBecameVisible(id)
