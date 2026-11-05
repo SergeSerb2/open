@@ -121,6 +121,11 @@ targets:
     templateAttributes:
       helper_suffix: " (Alerts)"
       bundle_suffix: ".alerts"
+    # Web notifications that stay on screen (requireInteraction, progress)
+    # come from this helper: alert style, shown as "Open" (page-platform §4.5.2).
+    settings:
+      base:
+        INFOPLIST_FILE: Helper/Info-Alerts.plist
 
   Open:
     type: application
