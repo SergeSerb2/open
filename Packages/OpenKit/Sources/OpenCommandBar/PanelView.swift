@@ -120,6 +120,12 @@ final class MaterialView: NSView {
         CATransaction.commit()
     }
 
+    /// Embedded Little Open has its own window shadow and a fixed solid fill.
+    func applySolid(_ color: RGBA) {
+        backdropLayer.contents = nil; backdropLayer.backgroundColor = nil; backdropSize = nil
+        tintLayer.backgroundColor = color.cgColor
+    }
+
     /// Uniform backdrop: a single precomputed fill.
     func apply(color: RGBA) {
         CATransaction.begin()

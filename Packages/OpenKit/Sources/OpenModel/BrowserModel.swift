@@ -147,6 +147,8 @@ public final class BrowserModel {
     public var windows: [BrowserWindowState] { didSet { commitMutation() } }
     public var routingRules: [RoutingRule]
     public var defaultDestination: DefaultDestination
+    /// Session-only Space focus order; never persisted in a snapshot.
+    private var focusedSpaceOrder: [SpaceID] = []
 
     /// Injected services. Not persisted, not observed.
     @ObservationIgnored public var archiveSink: (any ArchiveSink)?
@@ -2409,8 +2411,20 @@ public final class BrowserModel {
         return true
     }
 
+    /// The Little Open pill asks the model for this Profile's last focused Space.
+    public func mostRecentlyFocusedSpace(profileID: ProfileID) -> Space? {
+        for id in focusedSpaceOrder {
+            if let space = space(id: id), space.profileID == profileID { return space }
+        }
+        for window in windows where window.style == .standard {
+            if let space = space(id: window.focusedSpaceID), space.profileID == profileID { return space }
+        }
+        return spaces.first { $0.profileID == profileID }
+    }
+
     public func focusSpace(windowID: WindowID, spaceID: SpaceID) {
         guard let window = windows.first(where: { $0.id == windowID }) else { return }
+        focusedSpaceOrder.removeAll { $0 == spaceID || space(id: $0) == nil }; focusedSpaceOrder.insert(spaceID, at: 0)
         let old = window.focusedSpaceID
         window.focusedSpaceID = spaceID
         registerChange(undo: { window.focusedSpaceID = old }, redo: { window.focusedSpaceID = spaceID })
