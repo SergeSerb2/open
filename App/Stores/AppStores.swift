@@ -34,8 +34,31 @@ final class AppStores {
     return engine
   }
   func prewarm(profileID: ProfileID) { suggest(for: profileID).prewarm() }
-  func recordTyped(url: URL, title: String, profileID: ProfileID) {
-    guard let history = history(for: profileID) else { return }
-    Task { await history.open(); await history.recordVisit(url: url, title: title, transition: "typed", typed: true) }
+  private var historyTail: Task<Void, Never>?
+  private(set) var historyEnqueueSamples: [Double] = []
+  private(set) var historyWriteCount = 0
+  func noteHistoryEnqueue(milliseconds: Double) {
+    #if OPEN_AUTOMATION
+    if historyEnqueueSamples.count < 4_096 { historyEnqueueSamples.append(milliseconds) }
+    #endif
+  }
+  func enqueueHistoryVisit(store: HistoryStore, url: URL, time: Date, typed: Bool) -> Task<Int64?, Never> {
+    let previous = historyTail
+    let visit = Task { await previous?.value
+      return await store.recordVisit(url: url, title: "", time: time, transition: typed ? "typed" : "link", typed: typed)
+    }
+    historyTail = Task { _ = await visit.value; historyWriteCount += 1 }
+    return visit
+  }
+  func enqueueHistoryWrite(_ write: @escaping @Sendable () async -> Void) {
+    let previous = historyTail
+    historyTail = Task { await previous?.value; await write(); historyWriteCount += 1 }
+  }
+  func flushHistory() async {
+    for factory in app.hostFactories.values {
+      for host in factory.hosts.values { await host.historyRecorder.flush() }
+      for page in factory.auxiliaryPages { await page.historyRecorder?.flush() }
+    }
+    await historyTail?.value
   }
 }
