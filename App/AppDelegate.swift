@@ -97,7 +97,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, OEEngineDelegate, OEBr
   }
 
   func applicationShouldTerminate(_ sender: NSApplication) -> NSApplication.TerminateReply {
-    if historyQuitTask != nil { return .terminateCancel }
+    if historyQuitTask != nil || faviconShutdownTask != nil || sleepQuitTask != nil { return .terminateCancel }
+    if downloadsCenter.shouldKeepBrowsing() { return .terminateCancel }
     let now = ProcessInfo.processInfo.systemUptime
     if !shutdownPrepared, historyQuitFlushedAt.map({ now - $0 > 5 }) ?? true {
       historyQuitTask = Task { @MainActor in
@@ -107,8 +108,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate, OEEngineDelegate, OEBr
       }
       return .terminateCancel
     }
-    if faviconShutdownTask != nil || sleepQuitTask != nil { return .terminateCancel }
-    if downloadsCenter.shouldKeepBrowsing() { return .terminateCancel }
     if !sleepQuitCaptured, engineReady, !shutdownPrepared, tabSleep.controller != nil {
       // OEApplication has no terminateLater: capture sleep history first (bounded at 3 s),
       // then ask again. The snapshot save and engine shutdown follow below.
