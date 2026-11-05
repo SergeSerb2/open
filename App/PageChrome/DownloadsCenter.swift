@@ -183,6 +183,8 @@ final class DownloadsCenter: DownloadsProvider {
     }
   }
   func opensDownloads(in context: SidebarContext) -> Bool {
+    // A new window may have no callback yet. Reuse session snapshots on click.
+    updateBadges()
     guard let badge = context.downloadBadge else { return false }
     return badge.running > 0 || badge.completedAt.map { Date().timeIntervalSince($0) < 60 } == true
   }
