@@ -28,6 +28,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate, OEEngineDelegate, OEBr
   private(set) var engineReady = false
   private(set) var terminationRequested = false
   private var faviconShutdownTask: Task<Void, Never>?
+  private var historyQuitTask: Task<Void, Never>?
+  /// Uptime of the last quit-time history flush. A quit cancelled later (downloads alert,
+  /// beforeunload) must flush again on the next attempt, so the flush is valid only briefly.
+  private var historyQuitFlushedAt: TimeInterval?
   private(set) var shutdownPrepared = false
   private var lateAsyncEngineCalls = 0
   private var asyncEngineCalls: [String: Int] = [:]
@@ -92,6 +96,16 @@ final class AppDelegate: NSObject, NSApplicationDelegate, OEEngineDelegate, OEBr
   }
 
   func applicationShouldTerminate(_ sender: NSApplication) -> NSApplication.TerminateReply {
+    if historyQuitTask != nil { return .terminateCancel }
+    let now = ProcessInfo.processInfo.systemUptime
+    if !shutdownPrepared, historyQuitFlushedAt.map({ now - $0 > 5 }) ?? true {
+      historyQuitTask = Task { @MainActor in
+        await self.stores.flushHistory()
+        self.historyQuitFlushedAt = ProcessInfo.processInfo.systemUptime; self.historyQuitTask = nil
+        NSApp.terminate(nil)
+      }
+      return .terminateCancel
+    }
     if faviconShutdownTask != nil || sleepQuitTask != nil { return .terminateCancel }
     if !sleepQuitCaptured, engineReady, !shutdownPrepared, tabSleep.controller != nil {
       // OEApplication has no terminateLater: capture sleep history first (bounded at 3 s),

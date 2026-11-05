@@ -15,8 +15,23 @@ public struct HistoryMatch: Sendable {
 public actor HistoryStore {
     var db: SQLiteDB?
     public let fileURL: URL
+    private var observers: [UUID: AsyncStream<Void>.Continuation] = [:]
 
     public init(fileURL: URL) { self.fileURL = fileURL }
+
+    /// Event driven, with one pending invalidation per subscriber. No idle work.
+    public func changes() -> AsyncStream<Void> {
+        let id = UUID()
+        return AsyncStream(bufferingPolicy: .bufferingNewest(1)) { continuation in
+            observers[id] = continuation
+            continuation.yield(())
+            continuation.onTermination = { [weak self] _ in
+                Task { await self?.removeObserver(id) }
+            }
+        }
+    }
+    private func removeObserver(_ id: UUID) { observers[id] = nil }
+    func didChange() { for observer in observers.values { observer.yield(()) } }
 
     public func open() {
         guard db == nil else { return }
@@ -49,9 +64,10 @@ public actor HistoryStore {
         """)
     }
 
-    public func recordVisit(url: URL, title: String, time: Date = Date(), transition: String = "link", typed: Bool = false) {
+    @discardableResult
+    public func recordVisit(url: URL, title: String, time: Date = Date(), transition: String = "link", typed: Bool = false) -> Int64? {
         open()
-        guard let db else { return }
+        guard let db else { return nil }
         db.exec("BEGIN")
         let upsert = db.prepare("INSERT INTO urls(url,title,visit_count,typed_count,last_visit) VALUES(?,?,1,?,?) ON CONFLICT(url) DO UPDATE SET title=CASE WHEN excluded.title<>'' THEN excluded.title ELSE urls.title END, visit_count=urls.visit_count+1, typed_count=urls.typed_count+excluded.typed_count, last_visit=excluded.last_visit")
         db.bindText(upsert, 1, url.absoluteString)
@@ -69,9 +85,12 @@ public actor HistoryStore {
         db.bindInt(visit, 1, urlID)
         db.bindDouble(visit, 2, time.timeIntervalSince1970)
         db.bindText(visit, 3, transition)
-        sqlite3_step(visit)
+        let recorded = sqlite3_step(visit) == SQLITE_DONE
+        let visitID = db.lastInsertRowID
         sqlite3_finalize(visit)
-        db.exec("COMMIT")
+        guard recorded, db.exec("COMMIT") else { db.exec("ROLLBACK"); return nil }
+        didChange()
+        return visitID
     }
 
     /// Bulk insert for bench/import. One transaction, FTS kept in sync by triggers.
