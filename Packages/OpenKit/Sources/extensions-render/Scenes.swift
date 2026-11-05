@@ -71,9 +71,11 @@ import OpenExtensionsUI
                         let hostLabel = NSTextField(labelWithString: host == 40 ? "site" : "long.example.com")
                         hostLabel.font = Typography.urlHost.font; hostLabel.textColor = Core.foregroundPrimary.nsColor
                         hostLabel.lineBreakMode = .byTruncatingTail
-                        let hostRight = (strip.geometry.frames.first?.minX ?? scc.frame.minX) - 4
+                        scc.isHidden = !focused && name == "pane-strip"
+                        let hostRight = (name == "toolbar-strip" ? scc.frame.minX : strip.geometry.frames.first?.minX ?? scc.frame.minX) - 4
                         let hostWidth = min(host, max(0, hostRight - 115 - 50))
                         hostLabel.frame = CGRect(x: min(max(140, (width - hostWidth) / 2), hostRight - 25 - hostWidth), y: 8, width: hostWidth, height: 18)
+                        hostLabel.isHidden = hostWidth < SplitMetrics.hostMinimumWidth
                         strip.addSubview(hostLabel)
                         for (glyph, rect) in [(Glyph.back, SplitMetrics.back), (.forward, SplitMetrics.forward), (.reload, SplitMetrics.reload)] {
                             if !focused && name == "pane-strip" && glyph == .reload { continue }

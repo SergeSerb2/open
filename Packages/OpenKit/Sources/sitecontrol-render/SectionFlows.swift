@@ -1,6 +1,8 @@
 import AppKit
 import OpenSiteControl
 import OpenDesign
+import OpenWeb
+import OpenExtensionsUI
 
 @MainActor
 enum SectionFlows {
@@ -9,6 +11,66 @@ enum SectionFlows {
         var timer: Timer?
         weak var menu: NSMenu?
         weak var stage: Stage?
+    }
+    /// Real SCC host + shared section + NSWindow events; no on-screen menu or app launch.
+    static func extensions() -> [Flows.Check] {
+        var rows: [Flows.Check] = []
+        func check(_ name: String, _ pass: Bool) { rows.append(.init(name: name, pass: pass)) }
+        let stage = Stage(open: false), context = ExtensionsUIContext()
+        defer {
+            stage.controller.dismiss(reason: .escape, animated: false)
+            context.run = nil; context.togglePin = nil; context.contextMenu = nil; context.addExtension = nil
+            stage.controller.extensionsUIContext = nil
+        }
+        _ = context.setActions([
+            .init(extensionID: "zulu", name: "Zulu"),
+            .init(extensionID: "second", name: "Second", isPinned: true, pinnedIndex: 1),
+            .init(extensionID: "first", name: "First", isPinned: true, pinnedIndex: 0)])
+        stage.controller.extensionsUIContext = context
+        let body = stage.controller.view.panel.extensionsBody
+        func present() { stage.controller.present(anchor: .urlField, tabID: stage.source.tabID, mode: .extensionPicker, animated: false) }
+        var ran = "", runSource = ExtensionRunSource.toolbarButton, closedBeforeRun = false, pinned = "", menu = "", added = 0
+        context.run = { id, source, _ in ran = id; runSource = source; closedBeforeRun = !stage.controller.isPresented }
+        context.togglePin = { pinned = $0 }
+        context.contextMenu = { id, _, _ in menu = id }
+        context.addExtension = { added += 1 }
+        present()
+        check("extensions host uses the shared body, pinned first, with one Add item", stage.controller.view.panel.hasExtensionItems && body.items.map { $0.item.id } == ["first", "second", "zulu", "extensions.add"] && stage.controller.view.panel.control(id: "extension.add") == nil)
+        check("picker host focuses the first real pinned item", stage.window.firstResponder === body && body.focusedID == "first" && stage.controller.view.panel.extensionPickerFocusResolved)
+        stage.key(code: 125, characters: String(UnicodeScalar(NSDownArrowFunctionKey)!))
+        check("hosted picker arrows reach the shared section", body.focusedID == "second")
+        var updated = context.actions.first { $0.id == "second" }!
+        updated.badgeText = "9"; updated.accessibleName = "Second, 9"
+        _ = context.updateAction(updated); stage.controller.refreshExtensions()
+        check("action refresh retains hosted picker focus", body.focusedID == "second" && stage.window.firstResponder === body && body.items.first(where: { $0.item.id == "second" })?.item.badgeText == "9")
+        stage.key(code: 6, characters: "z")
+        check("hosted picker type-select reaches an unpinned item", body.focusedID == "zulu")
+        stage.key(code: 36, characters: "\r")
+        check("hosted picker Return closes SCC before menu-entry run", ran == "zulu" && runSource == .menuEntry && closedBeforeRun)
+        present()
+        body.items.first?.subviews.compactMap { $0 as? NSButton }.first?.performClick(nil)
+        check("hosted pin emits its intent without closing SCC", pinned == "first" && stage.controller.isPresented)
+        if let item = body.items.first {
+            let point = item.convert(CGPoint(x: 12, y: 12), to: stage.root)
+            stage.click(point, button: .rightMouseDown)
+        }
+        check("hosted right click emits its context-menu intent", menu == "first" && stage.controller.isPresented)
+        stage.key(code: 53, characters: "\u{1b}")
+        check("hosted picker Esc closes SCC", !stage.controller.isPresented)
+        present(); stage.key(code: 48, characters: "\t")
+        check("Tab leaves shared extension body for the following section", stage.focusedID == "section.settings")
+        stage.key(code: 48, characters: "\t", modifiers: .shift)
+        check("Shift-Tab returns to the shared extension body", stage.window.firstResponder === body)
+        _ = body.items.last?.accessibilityPerformPress()
+        check("hosted Add Extension closes SCC and emits once", added == 1 && !stage.controller.isPresented)
+        _ = context.setActions((0..<6).map { (index: Int) in ExtensionItem(extensionID: "grid.\(index)", name: "Grid \(index)", isPinned: true, pinnedIndex: index) })
+        stage.controller.refreshExtensions(); present()
+        check("shared five-column grid fits the SCC panel width", body.isGrid && body.items.count == 7 && body.frame.width == 236 && body.frame.maxX <= stage.controller.view.panel.bounds.width)
+        stage.controller.dismiss(reason: .escape, animated: false)
+        _ = context.setActions([]); stage.controller.refreshExtensions(); present()
+        check("empty hosted extensions use standard SCC mode with Add only", stage.controller.mode == .standard && !stage.controller.view.panel.hasExtensionItems && body.items.count == 1)
+        stage.controller.dismiss(reason: .escape, animated: false)
+        return rows
     }
     static func run() -> [Flows.Check] {
         var result: [Flows.Check] = []
@@ -82,12 +144,7 @@ enum SectionFlows {
         let picker = Stage(open: false); var menuOpens = 0; picker.controller.onMenu = { _,_ in menuOpens += 1 }
         picker.controller.present(anchor: .urlField,tabID: picker.source.tabID,mode: .extensionPicker,animated: false)
         check("picker focuses + without opening a menu",picker.controller.mode == .extensionPicker && picker.focusedID == "extension.add" && menuOpens == 0)
-        var package = URL(fileURLWithPath: #filePath).deletingLastPathComponent()
-        while package.path != "/" && !FileManager.default.fileExists(atPath: package.appendingPathComponent("Package.swift").path) { package.deleteLastPathComponent() }
-        let extensionHostLanded = FileManager.default.fileExists(atPath: package.appendingPathComponent("Sources/OpenExtensionsUI").path)
-        // Blocked on OpenExtensionsUI: replace this guard with its real first
-        // pinned-item flow when that target lands; do not silently pass fallback.
-        check("picker host guard requires the first real item when extensions land",!extensionHostLanded && !picker.controller.view.panel.hasExtensionItems && picker.controller.view.panel.extensionPickerFocusResolved)
+        result += extensions()
         picker.key(code: 36,characters: "\r")
         check("picker Return runs Add Extension",picker.source.calls == ["add-extension"] && !picker.controller.isPresented && menuOpens == 0)
         let ax = Flows.accessibilityDump(Stage(state: "scc-boost").controller.view.panel)

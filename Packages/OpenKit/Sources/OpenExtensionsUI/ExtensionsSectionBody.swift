@@ -7,6 +7,7 @@ import OpenWeb
     public private(set) var focusedID: String?
     public var tooltipStyle: SpaceThemeStyle? { didSet { items.forEach { $0.tooltipStyle = tooltipStyle } } }
     public var onIntent: ((ExtensionItemIntent) -> Void)?
+    public var onUnhandledKey: ((NSEvent) -> Bool)?
     public var onClose: (() -> Void)?
     public var pickerMode = false { didSet { updateFocus() } }
     public private(set) var isGrid = false
@@ -18,6 +19,7 @@ import OpenWeb
     @available(*, unavailable) required init?(coder: NSCoder) { fatalError() }
     @discardableResult public func setActions(_ actions: [ExtensionItem]) -> Bool {
         guard ExtensionsUIContext.accepts(actions) else { return false }
+        let previousID = focusedID, previousIDs = items.map { $0.item.id }
         items.forEach { $0.removeFromSuperview() }
         let ordered = ExtensionsUIContext.ordered(actions)
         isGrid = actions.count > 4
@@ -28,8 +30,8 @@ import OpenWeb
             item.onIntent = { [weak self] intent in self?.onIntent?(intent) }
             addSubview(item); return item
         }
-        focusedID = ordered.first?.id ?? add.id
-        prefix = ""; lastTypeTime = -.infinity
+        focusedID = previousID.flatMap { old in items.contains(where: { $0.item.id == old }) ? old : nil } ?? ordered.first?.id ?? add.id
+        if previousIDs != items.map({ $0.item.id }) { prefix = ""; lastTypeTime = -.infinity }
         invalidateIntrinsicContentSize(); needsLayout = true; updateFocus(); return true
     }
     public override var intrinsicContentSize: NSSize {
@@ -45,8 +47,16 @@ import OpenWeb
         }
     }
     private func updateFocus() { for item in items { item.pickerFocused = pickerMode && item.item.id == focusedID } }
+    @discardableResult public func focusFirst() -> Bool {
+        guard let first = items.first else { return false }
+        prefix = ""; lastTypeTime = -.infinity
+        focusedID = first.item.id; pickerMode = true; updateFocus()
+        return window?.makeFirstResponder(self) == true
+    }
+    private func forwardKey(_ event: NSEvent) { if onUnhandledKey?(event) != true { super.keyDown(with: event) } }
     public override func keyDown(with event: NSEvent) {
-        guard pickerMode, !items.isEmpty else { super.keyDown(with: event); return }
+        guard pickerMode, !items.isEmpty else { forwardKey(event); return }
+        if event.modifierFlags.contains(.command) || event.keyCode == 48 { forwardKey(event); return }
         let index = items.firstIndex { $0.item.id == focusedID } ?? 0
         var next = index
         switch event.keyCode {
@@ -62,7 +72,7 @@ import OpenWeb
             else { next = (index - 1 + items.count) % items.count }
         default:
             guard event.modifierFlags.intersection([.command, .control, .option]).isEmpty,
-                  let text = event.characters, !text.isEmpty, text.unicodeScalars.allSatisfy({ CharacterSet.letters.contains($0) }) else { super.keyDown(with: event); return }
+                  let text = event.characters, !text.isEmpty, text.unicodeScalars.allSatisfy({ CharacterSet.letters.contains($0) }) else { forwardKey(event); return }
             if event.timestamp - lastTypeTime > 1 { prefix = "" }
             lastTypeTime = event.timestamp
             if prefix.utf8.count + text.utf8.count <= 4096 { prefix += text }

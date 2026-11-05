@@ -1653,7 +1653,9 @@ The engine side of E1–E7 is in (docs/engine-patches.md, P2 status; docs/engine
 PR: TBD (`s6/ui-kit`). Steps 1 and 4, plus the engine-free menu, popup-panel,
 and prompt-sheet parts of Steps 3 and 6, land in `OpenExtensionsUI` and
 `extensions-render`. `OpenWeb` retains the old App bridge API with compatibility
-defaults. App wiring, engine adapters, popup lifecycle observers, and real-browser
+defaults. An optional `SiteControlController.extensionsUIContext` hosts the
+shared body and picker; the existing nil-context SCC fallback stays compatible.
+App wiring, engine adapters, popup lifecycle observers, and real-browser
 X-1–X-27 acceptance remain for the App step; this PR changes no `App/` source.
 
 The toolbar style uses x 115 as its host-group left limit and w − 5 as its
@@ -1666,3 +1668,8 @@ Use `extensions-render all --scale 1|2 --appearance light|dark --out DIR`,
 `extensions-render check`, and `extensions-render menus --out DIR` for the
 engine-free surfaces. Generated PNGs and JSON stay in `.re/extensions-ui/`,
 following the sidebar render receipt convention; no new baseline is committed.
+
+The existing SCC guard required real item focus as soon as this target existed.
+Its sentinel is now a real hosted picker flow (`sitecontrol-render extensions-check`,
+offscreen). **guess (child), S-5/S-11:** its required 236 pt grid uses the SCC's
+full 236 pt width; row items retain the existing 10 pt SCC inset.
