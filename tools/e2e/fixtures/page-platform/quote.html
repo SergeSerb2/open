@@ -1,8 +1,16 @@
 <!doctype html>
-<meta charset=utf-8>
-<title>Quote fixture</title>
-<!-- Page engine fixture (page-platform §8.3 Q2): one unique sentence to select. -->
-<style>body{font:18px sans-serif;margin:40px}</style>
-<p id=intro>Open pages keep their own quotes.</p>
-<p id=quote>The quick brown fox studies the lazy dog before every jump.</p>
-<p id=outro>Nothing else on this page repeats that sentence.</p>
+<html lang="en">
+<head><meta charset="utf-8"><title>Page platform: Quote</title>
+<style>body{font:16px -apple-system,sans-serif;margin:40px;max-width:640px}.spacer{height:3000px}</style></head>
+<body>
+<h1>Quote fixture</h1>
+<!-- Page engine rows (EP-2, EP-3): one unique sentence in the first viewport to select. -->
+<p id="quote">The quick brown fox studies the lazy dog before every jump.</p>
+<p class="repeated">The same sentence appears twice on this page.</p>
+<div class="spacer"></div>
+<p class="repeated">The same sentence appears twice on this page.</p>
+<div class="spacer"></div>
+<p id="unique">A unique sentence far down the page for the quote link.</p>
+<div class="spacer"></div>
+</body>
+</html>

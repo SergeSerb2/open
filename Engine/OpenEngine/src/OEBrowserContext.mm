@@ -389,6 +389,7 @@ class OENotificationListCallback : public CefNotificationListCallback {
   OERequestFilter _requestFilter;
   BOOL _ready;
   NSMutableArray<dispatch_block_t>* _whenReady;
+  BOOL _colorSchemeApplied;
 }
 
 - (instancetype)initOEWithIdentifier:(NSString*)identifier
@@ -602,6 +603,38 @@ class OENotificationListCallback : public CefNotificationListCallback {
                                         : CEF_CONTENT_SETTING_VALUE_DEFAULT;
   CefString url = OECef(origin.absoluteString);
   _context->SetContentSetting(url, url, type, value);
+}
+
+#pragma mark Appearance
+
+- (void)setWebsiteColorScheme:(OEColorSchemePreference)scheme {
+  // Chrome keeps the last value in the profile's prefs, so the first set
+  // always reaches Chromium, even when it equals the initial Automatic.
+  if (_colorSchemeApplied && scheme == _websiteColorScheme) {
+    return;
+  }
+  _colorSchemeApplied = YES;
+  _websiteColorScheme = scheme;
+  cef_color_variant_t variant = CEF_COLOR_VARIANT_SYSTEM;
+  switch (scheme) {
+    case OEColorSchemePreferenceLight:
+      variant = CEF_COLOR_VARIANT_LIGHT;
+      break;
+    case OEColorSchemePreferenceDark:
+      variant = CEF_COLOR_VARIANT_DARK;
+      break;
+    case OEColorSchemePreferenceAutomatic:
+      break;
+  }
+  // Waits for the profile inside CEF (GetBrowserContext), so this is safe
+  // before the context is initialized. A transparent user color keeps
+  // Chrome's default palette (the browser's own UI and WebUI).
+  _context->SetChromeColorScheme(variant, 0);
+  // EP-9b (fork patch 0505): web pages of this context see the scheme in
+  // prefers-color-scheme and their root scrollbar, also after navigation;
+  // hosted tabs do not follow SetChromeColorScheme (check A1). Automatic
+  // removes the override. Applies when the context finishes initializing.
+  CefSetWebsiteColorScheme(_context, variant);
 }
 
 - (void)clearBrowsingDataForOrigin:(NSURL*)origin

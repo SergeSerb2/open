@@ -180,7 +180,23 @@ public final class SidebarContext {
 
     /// The page the toolbar and URL field describe: the Peek on screen, else the current tab.
     var hasPage: Bool { shownPeek != nil || currentTab != nil }
-    var pageHost: String? { shownPeek?.displayHost ?? currentTab?.displayHost }
+    var pageHost: String? {
+        if let peek = shownPeek { return Self.fieldText(peek.url, developerModeHosts) }
+        return currentTab.map { Self.fieldText($0.url, developerModeHosts) }
+    }
+    /// Sites in Developer Mode (page-platform §4.10.3): their URL field shows the full URL.
+    public var developerModeHosts: Set<String> = []
+    /// The URL field text: the host, or for a Developer Mode site the full URL without the scheme
+    /// (host, port, path, query).
+    static func fieldText(_ url: URL, _ developerHosts: Set<String>) -> String {
+        let scheme = url.scheme?.lowercased()
+        let key = scheme == "file" ? "file" : url.host()?.lowercased()
+        guard let key, developerHosts.contains(key) else { return URL.displayHost(url) }
+        var text = url.absoluteString
+        if let r = text.range(of: "://") { text = String(text[r.upperBound...]) }
+        if let hash = text.firstIndex(of: "#") { text = String(text[..<hash]) }
+        return text
+    }
     var pageCanGoBack: Bool { shownPeek?.canGoBack ?? currentTab?.live.canGoBack ?? false }
     var pageCanGoForward: Bool { shownPeek?.canGoForward ?? currentTab?.live.canGoForward ?? false }
     var pageIsLoading: Bool { shownPeek?.isLoading ?? currentTab?.live.isLoading ?? false }
