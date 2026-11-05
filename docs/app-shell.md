@@ -1302,10 +1302,11 @@ framework loads were **15–16 ms**. All five fresh runs built two menus before
 engine readiness, so the new one-menu check fails on the original order.
 [Diagnostic samples](engine-spike/results-cold-launch-diagnostic.json).
 
-The build script also invalidated the load cache: its rsync source still had
+The build script also replaced the framework file on each build: its rsync source still had
 the distribution signature, whereas the embedded framework had been re-signed.
 Each App-only build copied and signed the unchanged 458 MB embedded binary
-again. `tools/embed-cef.sh` now keeps that file when the complete source-tree
+again. Repeated file replacement is a candidate cause of repeated cold loader
+work. `tools/embed-cef.sh` now keeps that file when the complete source-tree
 SHA-256, signing identity and locale policy match its DerivedData stamp, the
 embedded CDHash matches, and deep strict signature verification succeeds.
 A missing or changed stamp, changed source or invalid destination takes the

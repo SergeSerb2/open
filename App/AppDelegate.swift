@@ -204,7 +204,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, OEEngineDelegate, OEBr
     todayAutoArchive?.finishStartupComposition()
     composingStartupWindows = false
     // Composition can change selection and focus several times. Install one
-    // menu for the final state, before any window transaction is submitted.
+    // menu for the final state, before the explicit initial display and flush.
     menuRebuildTask?.cancel(); menuRebuildTask = nil
     MainMenu.targetWindowCommands(frontWindowController.flatMap { hostFactories[$0.windowID] })
     LaunchTiming.shared.mark("windowShown")
