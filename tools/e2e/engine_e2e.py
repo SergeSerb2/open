@@ -5845,10 +5845,10 @@ SLEEP_MEDIA_KEYS = ("open.advanced.enablePictureInPictureOnLeave", "open.pip.aut
 
 
 def sleep_checks(factory, results, tmp, style):
-    """app-shell §6 `sleep` (Step G, memory-fork S6, §11 F0–F5) in the real App on the stock
-    engine API. Timed rows move the controller's automation clock (`sleep-clock`) and run one
-    pass (`sleep-tick`); they assert the configured delays, never wall time. Rows that need the
-    fork's sleep patches report BLOCKED with the patch name and never pass."""
+    """app-shell §6 `sleep` (Step G, memory-fork S6, §11 F0–F5) in the real App on the fork's
+    sleep API (freeze, discard in place, history capture and restore; PR G2). Timed rows move the
+    controller's automation clock (`sleep-clock`) and run one pass (`sleep-tick`); they assert
+    the configured delays, never wall time."""
     server, port = _sleep_server()
     base = "http://127.0.0.1:%d/" % port
     def site(n, path="a.html"): return "http://t%d.localhost:%d/%s" % (n, port, path)
@@ -5880,6 +5880,11 @@ def sleep_checks(factory, results, tmp, style):
         return {"count": len(pids), "rssKB": rss}
     def blocked(name, reason):
         results[name] = {"status": "BLOCKED", "reason": reason}
+    def _try(fn):
+        try:
+            return fn()
+        except Exception:
+            return None
     for key in SLEEP_MEDIA_KEYS:
         app.call("defaults", key=key, value=None)
     app.call("sleep-power", lowPower=False)
@@ -5906,9 +5911,24 @@ def sleep_checks(factory, results, tmp, style):
                                         "passesBefore": before, "passesAfter": after["passes"], "scheduled": after["scheduled"],
                                         "load": os.getloadavg()}
 
-        blocked("sleep_f0_switches", "P-MEM-07: the fork's sleep switches are not in the engine yet (engine PR E1)")
+        # F0 (memory-fork §10): the browser runs with Open's feature switches (chrome://version
+        # shows the command line every process inherits).
+        ver = app.call("open", url="chrome://version")["id"]
+        app.call("wait", tab=ver)
+        cmd = wait_until(lambda: app.eval(ver, "(document.getElementById('command_line') || {}).innerText || null"), timeout=10, step=.2) or ""
+        app.call("close", tab=ver)
+        select(home)
+        def feature_list(flag):
+            # A repeated switch takes its last value (base::CommandLine).
+            found = re.findall(r"--%s=(\S+)" % flag, cmd)
+            return set(found[-1].split(",")) if found else set()
+        off = {"OptimizationHints", "OptimizationTargetPrediction", "OptimizationGuidePageContentExtraction",
+               "OptimizationGuideModelExecution", "SegmentationPlatform", "SegmentationPlatformUkmEngine", "MediaRouter",
+               "TranslateRankerQuery", "TranslateRankerEnforcement"}
+        results["sleep_f0_switches"] = {"ok": "WebContentsDiscard" in feature_list("enable-features") and off <= feature_list("disable-features"),
+                                        "enabled": sorted(feature_list("enable-features")), "disabledMissing": sorted(off - feature_list("disable-features"))}
 
-        # Ladder on the stock engine: freeze at 30 s, discard at the balanced 300 s.
+        # Ladder: freeze at 30 s (the renderer stops), discard in place at the balanced 300 s.
         ladder = open_live(site(1, "ticker.html"))
         select(home)
         tick()
@@ -5919,7 +5939,7 @@ def sleep_checks(factory, results, tmp, style):
         advance(269); tick(); ladder_steps.append(phase(ladder))
         advance(1); tick(); s = ts(ladder); ladder_steps.append(s["phase"])
         results["sleep_timed_ladder"] = {"ok": ladder_steps == ["live", "frozen", "frozen", "sleeping"] and scheduled
-                                         and s["hosts"] == 0 and s["discarded"] and not app.tab(ladder)["loaded"],
+                                         and s["hosts"] == 1 and s["discarded"] and app.tab(ladder)["loaded"],
                                          "phases": ladder_steps, "scheduledWhileFrozen": scheduled, "after": s}
 
         # Wake: selecting the discarded tab recreates its page with its URL and title.
@@ -5933,8 +5953,35 @@ def sleep_checks(factory, results, tmp, style):
                                            and any(l.startswith("sleep-wake discard") for l in log),
                                            "row": {k: row[k] for k in ("url", "title", "sleepPhase", "loaded")},
                                            "wakeLog": [l for l in log if l.startswith("sleep-wake")]}
-        blocked("sleep_f2_history_scroll_form", "P-MEM-04: stock CEF cannot capture or restore navigation history, "
-                "scroll or form state; a woken tab reloads its URL with no Back list")
+        # F2 (memory-fork §11): A → B → C, scroll and a typed value on C; sleep; wake. In order: the
+        # page is C, document.wasDiscarded, scroll, the field, Back to B then A, Forward to B.
+        hist = open_live(site(31, "a.html"))
+        for page in ("b.html", "c.html"):
+            app.call("navigate", tab=hist, url=site(31, page))
+            wait_until(lambda: app.eval(hist, "location.pathname") == "/" + page or None, timeout=10, step=.05)
+            app.call("wait", tab=hist)
+        app.eval(hist, "scrollTo(0, innerHeight * 2); document.querySelector('#q').value = 'open-sleep-check'; true")
+        y0 = app.eval(hist, "scrollY")
+        select(home)
+        time.sleep(6)  # Blink syncs a hidden page's scroll and form state within about 5 s
+        advance(15)
+        f2_sleep = sleep_now(hist)
+        f2_discarded = ts(hist)["discarded"]
+        select(hist)
+        wait_until(lambda: app.eval(hist, "document.readyState") == "complete" or None, timeout=15, step=.1)
+        time.sleep(.5)
+        woke2 = app.eval(hist, "({path: location.pathname, d: document.wasDiscarded, y: scrollY, q: document.querySelector('#q').value, n: history.length})")
+        def nav(js, want):
+            app.eval(hist, js + "; true")
+            return wait_until(lambda: app.eval(hist, "location.pathname") == want or None, timeout=10, step=.05)
+        back_b = nav("history.back()", "/b.html"); back_a = nav("history.back()", "/a.html"); fwd_b = nav("history.forward()", "/b.html")
+        results["sleep_f2_history_scroll_form"] = {
+            "ok": f2_sleep["refusedBy"] is None and f2_discarded and woke2["path"] == "/c.html" and woke2["d"] is True
+                  and abs(woke2["y"] - y0) < 50 and woke2["q"] == "open-sleep-check" and woke2["n"] >= 3
+                  and bool(back_b) and bool(back_a) and bool(fwd_b),
+            "woke": woke2, "scrollBefore": y0, "back": [bool(back_b), bool(back_a)], "forward": bool(fwd_b)}
+        select(home)
+        app.call("close", tab=hist)
 
         # Modes (memory-fork §9.3): aggressive 120 s, conservative 900 s, off never discards.
         mode_rows = {}
@@ -5978,7 +6025,7 @@ def sleep_checks(factory, results, tmp, style):
                   and slept["rssKB"] < loaded["rssKB"],
             "oneTab": one_tab, "tenTabsLoaded": loaded, "nineSleeping": slept,
             "refused": [a["refusedBy"] for a in f1_answers if a["refusedBy"]],
-            "note": "stock discard closes the page (P-MEM-03 replaces it with discard in place)"}
+            "note": "discard in place: the page objects stay, their renderers go"}
 
         # F3: an audible tab never sleeps; after audio stops it waits the 60 s grace, then sleeps.
         audio = open_live(base + "media/audio.html")
@@ -6124,8 +6171,31 @@ def sleep_checks(factory, results, tmp, style):
                                             "p50ms": pct(discard_ms, .5), "p95ms": pct(discard_ms, .95), "n": len(discard_ms),
                                             "destroyed": {"p50ms": pct(destroyed_ms, .5), "p95ms": pct(destroyed_ms, .95), "n": len(destroyed_ms)},
                                             "cache": "warm (same fixture page each wake)", "load": os.getloadavg(),
-                                            "note": "stock recreate + load; budget 700 ms first paint on a cached page"}
-        blocked("sleep_f5_unfreeze", "P-MEM-02: stock CEF has no renderer freeze, so an unfreeze has no wake to time")
+                                            "note": "in-place discard reload; budget 700 ms first paint on a cached page"}
+        # F5 unfreeze: a frozen tab shows again (budget 16 ms to content visible). An unfreeze has
+        # no commit, so the page itself stamps the moment it becomes visible (visibilitychange,
+        # which a frozen renderer cannot run); the clock starts right before the select call.
+        app.eval(target, "window.__vis = []; document.addEventListener('visibilitychange', () => {"
+                         " if (document.visibilityState === 'visible') __vis.push(Date.now()); }); true")
+        unfreeze_ms, unfreeze_phases = [], []
+        for _ in range(20):
+            select(home)
+            seen = len(app.eval(target, "__vis"))
+            advance(31); tick()
+            unfreeze_phases.append(phase(target))
+            if unfreeze_phases[-1] != "frozen":
+                continue
+            t0 = time.time() * 1000
+            app.call("select", tab=target)
+            stamp = wait_until(lambda: (lambda v: v[-1] if len(v) > seen else None)(_try(lambda: app.eval(target, "__vis")) or []),
+                               timeout=5, step=.005)
+            if stamp:
+                unfreeze_ms.append(stamp - t0)
+        results["sleep_f5_unfreeze"] = {"ok": len(unfreeze_ms) == 20 and pct(unfreeze_ms, .95) <= 16,
+                                        "p50ms": pct(unfreeze_ms, .5), "p95ms": pct(unfreeze_ms, .95), "n": len(unfreeze_ms),
+                                        "frozenBeforeWake": unfreeze_phases.count("frozen"), "load": os.getloadavg(),
+                                        "measure": "select call → the page's visibilitychange to visible (includes the automation round trip)"}
+        select(home)
 
         # chrome.tabs.discard (engine-patches P1 "Discards") goes through the same gates.
         if style == "chrome":
@@ -6137,7 +6207,11 @@ def sleep_checks(factory, results, tmp, style):
         # F4: quit captures live and frozen tabs; relaunch draws with one renderer for the selected tab.
         live_tab = open_live(site(5, "c.html"))
         frozen_tab = open_live(site(6, "a.html"))
-        slept_tab = open_live(site(7, "b.html"))
+        slept_tab = open_live(site(7, "a.html"))
+        # Two entries, so the relaunched wake can prove the Back list (F4).
+        app.call("navigate", tab=slept_tab, url=site(7, "b.html"))
+        wait_until(lambda: app.eval(slept_tab, "location.pathname") == "/b.html" or None, timeout=10, step=.05)
+        app.call("wait", tab=slept_tab)
         placeholder = app.call("open", url=site(8, "a.html"), background=True)["id"]
         select(home)
         advance(30); tick()
@@ -6169,8 +6243,52 @@ def sleep_checks(factory, results, tmp, style):
                   and capture_ms[0] < 3000,
             "phasesBeforeQuit": pre, "storedRows": len(store), "quitCaptureMs": capture_ms, "quitSeconds": round(quit_s, 2),
             "hostedAfterRelaunch": len(hosted), "renderersAfterRelaunch": relaunch_renderers, "load": os.getloadavg()}
-        blocked("sleep_f4_history_restore", "P-MEM-04/05: waking a relaunched tab loads its URL; the Back list needs history restore")
-        blocked("sleep_f4_corrupt_fallback", "P-MEM-04: stock wake never reads the stored container, so a corrupt one cannot be exercised")
+        # F4: waking the relaunched sleeping tab restores its Back list (no-renderer create + history).
+        n0 = len(state()["log"])
+        select(slept_tab)
+        app.call("wait", tab=slept_tab)
+        restored = wait_until(lambda: (lambda v: v if v and v["path"] == "/b.html" else None)(
+            app.eval(slept_tab, "({path: location.pathname, n: history.length})")), timeout=15, step=.1)
+        back_a4 = None
+        if restored:
+            app.eval(slept_tab, "history.back(); true")
+            back_a4 = wait_until(lambda: app.eval(slept_tab, "location.pathname") == "/a.html" or None, timeout=10, step=.05)
+        log4 = state()["log"][n0:]
+        results["sleep_f4_history_restore"] = {"ok": bool(restored) and restored["n"] >= 2 and bool(back_a4)
+                                               and not any(l.startswith("sleep-restore-fallback") for l in log4),
+                                               "restored": restored, "back": bool(back_a4), "log": log4}
+        # F4 fallback: a stored container the engine cannot decode (one entry's pickle header
+        # overwritten in this run's own store, never a user profile) loads the URL, Back
+        # disabled, `sleep-restore-fallback` logged, no dialog, no crash.
+        select(home)
+        stored = {r["tab"]: r for r in app.call("sleep-store")}
+        victim = frozen_tab if frozen_tab in stored else None
+        corrupt = {}
+        if victim:
+            db = stored[victim]["file"]
+            app.quit()
+            import sqlite3
+            con = sqlite3.connect(db)
+            blob = bytearray(con.execute("SELECT container FROM sleep_history WHERE tab_id = ?", (victim,)).fetchone()[0])
+            blob[24:28] = b"\xff\xff\xff\x7f"  # first entry's pickle payload size: undecodable
+            con.execute("UPDATE sleep_history SET container = ? WHERE tab_id = ?", (bytes(blob), victim))
+            con.commit(); con.close()
+            app = factory(urls=())
+            app.call("window-frame", frame=[80, 60, 1280, 820])
+            wait_until(lambda: app.call("tabs"), timeout=10)
+            app.call("wait", tab=home)
+            n1 = len(state()["log"])
+            select(victim)
+            # No `wait` here: the first page (the refused restore) closes, and its replacement loads
+            # the URL; poll the tab's current page instead.
+            landed = wait_until(lambda: _try(lambda: app.eval(victim, "document.readyState === 'complete' ? location.href : null"))
+                                == urls[frozen_tab] or None, timeout=20, step=.1)
+            corrupt = {"landed": bool(landed), "historyLength": app.eval(victim, "history.length"),
+                       "log": state()["log"][n1:], "dialogs": [d for d in (app.call("dismiss") or []) if str(d).startswith(("javascript", "modal", "sheet"))]}
+        results["sleep_f4_corrupt_fallback"] = {
+            "ok": bool(victim) and corrupt.get("landed") and corrupt.get("historyLength") == 1
+                  and any(l.startswith("sleep-restore-fallback") for l in corrupt.get("log", [])) and not corrupt.get("dialogs"),
+            "victimStored": bool(victim), **corrupt}
     finally:
         try:
             if not app.closed:
