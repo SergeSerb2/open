@@ -1,0 +1,58 @@
+{
+  "routing": [
+    {
+      "run": "final-1",
+      "started": "2026-11-05 13:43:22",
+      "results": {
+        "routing_cold_launch_queue": true,
+        "routing_dedupe_2s": true,
+        "routing_default_browser_read_only": true,
+        "routing_no_window": true,
+        "routing_non_http_rejected": true,
+        "routing_source_detected": true,
+        "routing_toggle_off_most_recent_space": true,
+        "routing_warm_default_little_open": true,
+        "routing_warm_space_rule": true
+      },
+      "cleanup": true,
+      "engine": "f34400e71412d87a0b268fcd5658a8563cca34f600c8dd17b534a63e76aa7939"
+    },
+    {
+      "run": "final-2",
+      "started": "2026-11-05 13:44:20",
+      "results": {
+        "routing_cold_launch_queue": true,
+        "routing_dedupe_2s": true,
+        "routing_default_browser_read_only": true,
+        "routing_no_window": true,
+        "routing_non_http_rejected": true,
+        "routing_source_detected": true,
+        "routing_toggle_off_most_recent_space": true,
+        "routing_warm_default_little_open": true,
+        "routing_warm_space_rule": true
+      },
+      "cleanup": true,
+      "engine": "f34400e71412d87a0b268fcd5658a8563cca34f600c8dd17b534a63e76aa7939"
+    },
+    {
+      "run": "negative",
+      "started": "2026-11-05 13:41:42",
+      "results": {
+        "routing_cold_launch_queue": false,
+        "routing_dedupe_2s": false,
+        "routing_default_browser_read_only": true,
+        "routing_no_window": true,
+        "routing_non_http_rejected": true,
+        "routing_source_detected": true,
+        "routing_toggle_off_most_recent_space": true,
+        "routing_warm_default_little_open": true,
+        "routing_warm_space_rule": true
+      },
+      "cleanup": true,
+      "engine": "f34400e71412d87a0b268fcd5658a8563cca34f600c8dd17b534a63e76aa7939"
+    }
+  ],
+  "negativeMutation": "Temporarily disabled pending.append and dedupe guard; restored byte-for-byte before final-1/final-2",
+  "systemDefaultSetterCalled": false,
+  "lsregisterUsed": false
+}

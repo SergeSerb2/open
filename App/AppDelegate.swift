@@ -41,6 +41,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate, OEEngineDelegate, OEBr
   private var sleepQuitTask: Task<Void, Never>?
   private var sleepQuitCaptured = false
   lazy var settingsPresenter = AppSettingsActions(app: self)
+  let defaultBrowserService = DefaultBrowserService()
+  lazy var linkExecutor = AppLinkExecutor(app: self)
+  lazy var linkIntake = ExternalLinkIntake(executor: linkExecutor, snapshot: { [unowned self] in self.linkExecutor.snapshot() })
+  var lastLittleOpenRequest: LittleOpenRequest?
   /// Library ▸ Captures writer (page-platform §4.6.6); one per app, shared by every window.
   lazy var captureLibrary = CaptureLibraryWriter(app: self, root: directories.root)
   var keyBindings = KeyBindingStore.empty
@@ -344,6 +348,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, OEEngineDelegate, OEBr
     engineReady = true
     showWindowsIfNeeded()
     for factory in hostFactories.values { factory.engineDidBecomeReady() }
+    completeLinkRestoration()
     EngineWebProfile.onPermissionChange = { [weak self] context in self?.tabSleep.permissionsChanged(context: context) }
     scheduleMenuRebuild()
     #if OPEN_AUTOMATION
@@ -550,6 +555,7 @@ extension AppDelegate: CommandDispatcher {
     scheduleMenuRebuild()
   }
   func menuState(for id: String) -> CommandMenuState? {
+    if id == "set-default-browser" { return CommandMenuState(isChecked: defaultBrowserService.isDefaultBrowser) }
     if id == "toggle-developer-mode" { return DeveloperMode.menuState(for: frontWindowController.flatMap { hostFactories[$0.windowID] }?.selectedContent?.url) }
     return PageTools.menuState(for: id)
   }

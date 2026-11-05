@@ -1,0 +1,1943 @@
+{
+  "cleanup": {
+    "ok": true,
+    "processes": [
+      {
+        "forced": false,
+        "ok": true,
+        "owned_pids": [
+          70964,
+          70969,
+          70970,
+          70971,
+          70972
+        ],
+        "remaining_processes": [],
+        "reply": true,
+        "windows_after_quit": {
+          "count": 0,
+          "windows": []
+        },
+        "windows_before_quit": 1
+      },
+      {
+        "forced": false,
+        "ok": true,
+        "owned_pids": [
+          70981,
+          71015,
+          71016,
+          71018,
+          71019,
+          71024,
+          71025,
+          71146,
+          71148,
+          71162,
+          71165,
+          71170,
+          71172
+        ],
+        "remaining_processes": [],
+        "reply": true,
+        "windows_after_quit": {
+          "count": 0,
+          "windows": []
+        },
+        "windows_before_quit": 2
+      },
+      {
+        "forced": false,
+        "ok": true,
+        "owned_pids": [
+          71178,
+          71192,
+          71193,
+          71194,
+          71195
+        ],
+        "remaining_processes": [],
+        "reply": true,
+        "windows_after_quit": {
+          "count": 0,
+          "windows": []
+        },
+        "windows_before_quit": 1
+      },
+      {
+        "forced": false,
+        "ok": true,
+        "owned_pids": [
+          71208,
+          71223,
+          71224,
+          71239,
+          71240
+        ],
+        "remaining_processes": [],
+        "reply": true,
+        "windows_after_quit": {
+          "count": 0,
+          "windows": []
+        },
+        "windows_before_quit": 1
+      }
+    ]
+  },
+  "config": "Debug",
+  "engine": {
+    "distributionCodeSHA256": "1bc8b6044b77d53d46d76745a39b029e9709dbeb00fd31d08870ed0a38dd576a",
+    "distributionSHA256": "f34400e71412d87a0b268fcd5658a8563cca34f600c8dd17b534a63e76aa7939",
+    "distributionUUID": "4C4C4465-5555-3144-A1AB-FCF4EA280540",
+    "embeddedCodeSHA256": "1bc8b6044b77d53d46d76745a39b029e9709dbeb00fd31d08870ed0a38dd576a",
+    "embeddedSHA256": "7965fb82d3670f2824f8657069fcb816cb10fa70c82dd4260a575eb46c395359",
+    "embeddedUUID": "4C4C4465-5555-3144-A1AB-FCF4EA280540",
+    "requiredSHA256": "",
+    "source": "fork",
+    "stamp": "fork /Users/serge/Developer/open-engine-s8-main/chromium_git/chromium/src/cef/binary_distrib/cef_binary_156.0.14+g4fa4ab5+chromium-156.0.8078.48_macosarm64_minimal 1793841834"
+  },
+  "interrupted_attempts": [],
+  "routing": {
+    "routing_cold_launch_queue": {
+      "command": "open -n -a <exact built bundle> <URL> --args --user-data-dir=<suite root> ...",
+      "fastLaunch": {
+        "drainedCount": 0,
+        "duplicatesDropped": 0,
+        "entries": [
+          {
+            "decision": {
+              "evaluatedAt": 815604269.223067,
+              "normalizedHost": "127.0.0.1",
+              "request": {
+                "receivedAt": 815604269.223067,
+                "source": {
+                  "displayName": "open",
+                  "pid": 71177
+                },
+                "url": "http://127.0.0.1:62018/cold-fast"
+              },
+              "resolved": {
+                "space": {
+                  "profileID": "D862EB30-8DA6-45A2-ADAE-E3EF181718B5",
+                  "spaceID": "6DDCD277-D9C6-4245-A74F-BAC2D05FEDA0"
+                }
+              },
+              "standardWindowCount": 1,
+              "traces": [
+                {
+                  "index": 0,
+                  "outcome": {
+                    "matched": {}
+                  },
+                  "rule": {
+                    "destination": {
+                      "space": {
+                        "_0": "6DDCD277-D9C6-4245-A74F-BAC2D05FEDA0"
+                      }
+                    },
+                    "id": "EFC28631-4C26-401F-B59C-6BC0E4C3AE88",
+                    "match": {
+                      "hostEquals": {
+                        "_0": "127.0.0.1"
+                      }
+                    }
+                  },
+                  "ruleID": "EFC28631-4C26-401F-B59C-6BC0E4C3AE88"
+                }
+              ],
+              "via": {
+                "rule": {
+                  "id": "EFC28631-4C26-401F-B59C-6BC0E4C3AE88",
+                  "index": 0
+                }
+              }
+            },
+            "sourceBundleID": null,
+            "sourcePID": 71177,
+            "summary": "http://127.0.0.1:62018/cold-fast \u2192 Space \u201cRouting target\u201d via rule #1 (hostEquals)"
+          }
+        ],
+        "lastLittleOpenRequest": null,
+        "pendingCount": 0,
+        "queuedCount": 0,
+        "ready": true
+      },
+      "log": {
+        "drainedCount": 1,
+        "duplicatesDropped": 0,
+        "entries": [
+          {
+            "decision": {
+              "evaluatedAt": 815604270.288491,
+              "normalizedHost": "127.0.0.1",
+              "request": {
+                "receivedAt": 815604270.288491,
+                "source": {
+                  "displayName": "open",
+                  "pid": 71207
+                },
+                "url": "http://127.0.0.1:62018/cold-launch"
+              },
+              "resolved": {
+                "space": {
+                  "profileID": "D862EB30-8DA6-45A2-ADAE-E3EF181718B5",
+                  "spaceID": "6DDCD277-D9C6-4245-A74F-BAC2D05FEDA0"
+                }
+              },
+              "standardWindowCount": 1,
+              "traces": [
+                {
+                  "index": 0,
+                  "outcome": {
+                    "matched": {}
+                  },
+                  "rule": {
+                    "destination": {
+                      "space": {
+                        "_0": "6DDCD277-D9C6-4245-A74F-BAC2D05FEDA0"
+                      }
+                    },
+                    "id": "EFC28631-4C26-401F-B59C-6BC0E4C3AE88",
+                    "match": {
+                      "hostEquals": {
+                        "_0": "127.0.0.1"
+                      }
+                    }
+                  },
+                  "ruleID": "EFC28631-4C26-401F-B59C-6BC0E4C3AE88"
+                }
+              ],
+              "via": {
+                "rule": {
+                  "id": "EFC28631-4C26-401F-B59C-6BC0E4C3AE88",
+                  "index": 0
+                }
+              }
+            },
+            "sourceBundleID": null,
+            "sourcePID": 71207,
+            "summary": "http://127.0.0.1:62018/cold-launch \u2192 Space \u201cRouting target\u201d via rule #1 (hostEquals)"
+          }
+        ],
+        "lastLittleOpenRequest": null,
+        "pendingCount": 0,
+        "queuedCount": 1,
+        "ready": true
+      },
+      "ok": true,
+      "pending": {
+        "drainedCount": 0,
+        "duplicatesDropped": 0,
+        "entries": [],
+        "lastLittleOpenRequest": null,
+        "pendingCount": 1,
+        "queuedCount": 1,
+        "ready": false
+      }
+    },
+    "routing_dedupe_2s": {
+      "finalLog": {
+        "drainedCount": 0,
+        "duplicatesDropped": 1,
+        "entries": [
+          {
+            "decision": {
+              "evaluatedAt": 815604264.913269,
+              "normalizedHost": "127.0.0.1",
+              "request": {
+                "receivedAt": 815604264.913269,
+                "source": {
+                  "pid": 71022
+                },
+                "url": "http://127.0.0.1:62018/warm-space"
+              },
+              "resolved": {
+                "space": {
+                  "profileID": "D862EB30-8DA6-45A2-ADAE-E3EF181718B5",
+                  "spaceID": "6DDCD277-D9C6-4245-A74F-BAC2D05FEDA0"
+                }
+              },
+              "standardWindowCount": 1,
+              "traces": [
+                {
+                  "index": 0,
+                  "outcome": {
+                    "matched": {}
+                  },
+                  "rule": {
+                    "destination": {
+                      "space": {
+                        "_0": "6DDCD277-D9C6-4245-A74F-BAC2D05FEDA0"
+                      }
+                    },
+                    "id": "EFC28631-4C26-401F-B59C-6BC0E4C3AE88",
+                    "match": {
+                      "hostEquals": {
+                        "_0": "127.0.0.1"
+                      }
+                    }
+                  },
+                  "ruleID": "EFC28631-4C26-401F-B59C-6BC0E4C3AE88"
+                }
+              ],
+              "via": {
+                "rule": {
+                  "id": "EFC28631-4C26-401F-B59C-6BC0E4C3AE88",
+                  "index": 0
+                }
+              }
+            },
+            "sourceBundleID": null,
+            "sourcePID": 71022,
+            "summary": "http://127.0.0.1:62018/warm-space \u2192 Space \u201cRouting target\u201d via rule #1 (hostEquals)"
+          },
+          {
+            "decision": {
+              "evaluatedAt": 815604265.054333,
+              "normalizedHost": "localhost",
+              "request": {
+                "receivedAt": 815604265.054333,
+                "source": {
+                  "pid": 71029
+                },
+                "url": "http://localhost:62018/default-little"
+              },
+              "resolved": {
+                "littleOpen": {
+                  "profileHint": "D862EB30-8DA6-45A2-ADAE-E3EF181718B5"
+                }
+              },
+              "standardWindowCount": 1,
+              "traces": [
+                {
+                  "index": 0,
+                  "outcome": {
+                    "hostMismatch": {}
+                  },
+                  "rule": {
+                    "destination": {
+                      "space": {
+                        "_0": "6DDCD277-D9C6-4245-A74F-BAC2D05FEDA0"
+                      }
+                    },
+                    "id": "EFC28631-4C26-401F-B59C-6BC0E4C3AE88",
+                    "match": {
+                      "hostEquals": {
+                        "_0": "127.0.0.1"
+                      }
+                    }
+                  },
+                  "ruleID": "EFC28631-4C26-401F-B59C-6BC0E4C3AE88"
+                }
+              ],
+              "via": {
+                "defaultDestination": {}
+              }
+            },
+            "sourceBundleID": null,
+            "sourcePID": 71029,
+            "summary": "http://localhost:62018/default-little \u2192 Little Open (profile hint: D862EB30) via default destination"
+          },
+          {
+            "decision": {
+              "evaluatedAt": 815604265.314343,
+              "normalizedHost": "localhost",
+              "request": {
+                "receivedAt": 815604265.314343,
+                "source": {
+                  "pid": 71053
+                },
+                "url": "http://localhost:62018/default-little?toggle=off"
+              },
+              "resolved": {
+                "space": {
+                  "profileID": "D862EB30-8DA6-45A2-ADAE-E3EF181718B5",
+                  "spaceID": "07410E26-F8A2-4E8C-83CB-4AC277CB105A"
+                }
+              },
+              "standardWindowCount": 2,
+              "traces": [
+                {
+                  "index": 0,
+                  "outcome": {
+                    "hostMismatch": {}
+                  },
+                  "rule": {
+                    "destination": {
+                      "space": {
+                        "_0": "6DDCD277-D9C6-4245-A74F-BAC2D05FEDA0"
+                      }
+                    },
+                    "id": "EFC28631-4C26-401F-B59C-6BC0E4C3AE88",
+                    "match": {
+                      "hostEquals": {
+                        "_0": "127.0.0.1"
+                      }
+                    }
+                  },
+                  "ruleID": "EFC28631-4C26-401F-B59C-6BC0E4C3AE88"
+                }
+              ],
+              "via": {
+                "defaultSuppressedByToggle": {}
+              }
+            },
+            "sourceBundleID": null,
+            "sourcePID": 71053,
+            "summary": "http://localhost:62018/default-little?toggle=off \u2192 Space \u201cSpace\u201d via default (Little Open off \u2192 most recent Space)"
+          },
+          {
+            "decision": {
+              "evaluatedAt": 815604265.451665,
+              "normalizedHost": "localhost",
+              "request": {
+                "receivedAt": 815604265.451665,
+                "source": {
+                  "pid": 71092
+                },
+                "url": "http://localhost:62018/default-little?toggle=on"
+              },
+              "resolved": {
+                "littleOpen": {
+                  "profileHint": "D862EB30-8DA6-45A2-ADAE-E3EF181718B5"
+                }
+              },
+              "standardWindowCount": 2,
+              "traces": [
+                {
+                  "index": 0,
+                  "outcome": {
+                    "hostMismatch": {}
+                  },
+                  "rule": {
+                    "destination": {
+                      "space": {
+                        "_0": "6DDCD277-D9C6-4245-A74F-BAC2D05FEDA0"
+                      }
+                    },
+                    "id": "EFC28631-4C26-401F-B59C-6BC0E4C3AE88",
+                    "match": {
+                      "hostEquals": {
+                        "_0": "127.0.0.1"
+                      }
+                    }
+                  },
+                  "ruleID": "EFC28631-4C26-401F-B59C-6BC0E4C3AE88"
+                }
+              ],
+              "via": {
+                "defaultDestination": {}
+              }
+            },
+            "sourceBundleID": null,
+            "sourcePID": 71092,
+            "summary": "http://localhost:62018/default-little?toggle=on \u2192 Little Open (profile hint: D862EB30) via default destination"
+          },
+          {
+            "decision": {
+              "evaluatedAt": 815604265.601652,
+              "normalizedHost": "127.0.0.1",
+              "request": {
+                "receivedAt": 815604265.601652,
+                "source": {
+                  "pid": 71095
+                },
+                "url": "http://127.0.0.1:62018/duplicate?preserve=Query%20Case"
+              },
+              "resolved": {
+                "space": {
+                  "profileID": "D862EB30-8DA6-45A2-ADAE-E3EF181718B5",
+                  "spaceID": "6DDCD277-D9C6-4245-A74F-BAC2D05FEDA0"
+                }
+              },
+              "standardWindowCount": 2,
+              "traces": [
+                {
+                  "index": 0,
+                  "outcome": {
+                    "matched": {}
+                  },
+                  "rule": {
+                    "destination": {
+                      "space": {
+                        "_0": "6DDCD277-D9C6-4245-A74F-BAC2D05FEDA0"
+                      }
+                    },
+                    "id": "EFC28631-4C26-401F-B59C-6BC0E4C3AE88",
+                    "match": {
+                      "hostEquals": {
+                        "_0": "127.0.0.1"
+                      }
+                    }
+                  },
+                  "ruleID": "EFC28631-4C26-401F-B59C-6BC0E4C3AE88"
+                }
+              ],
+              "via": {
+                "rule": {
+                  "id": "EFC28631-4C26-401F-B59C-6BC0E4C3AE88",
+                  "index": 0
+                }
+              }
+            },
+            "sourceBundleID": null,
+            "sourcePID": 71095,
+            "summary": "http://127.0.0.1:62018/duplicate?preserve=Query%20Case \u2192 Space \u201cRouting target\u201d via rule #1 (hostEquals)"
+          },
+          {
+            "decision": {
+              "evaluatedAt": 815604267.752644,
+              "normalizedHost": "127.0.0.1",
+              "request": {
+                "receivedAt": 815604267.752644,
+                "source": {
+                  "pid": 71161
+                },
+                "url": "http://127.0.0.1:62018/duplicate?preserve=Query%20Case"
+              },
+              "resolved": {
+                "space": {
+                  "profileID": "D862EB30-8DA6-45A2-ADAE-E3EF181718B5",
+                  "spaceID": "6DDCD277-D9C6-4245-A74F-BAC2D05FEDA0"
+                }
+              },
+              "standardWindowCount": 2,
+              "traces": [
+                {
+                  "index": 0,
+                  "outcome": {
+                    "matched": {}
+                  },
+                  "rule": {
+                    "destination": {
+                      "space": {
+                        "_0": "6DDCD277-D9C6-4245-A74F-BAC2D05FEDA0"
+                      }
+                    },
+                    "id": "EFC28631-4C26-401F-B59C-6BC0E4C3AE88",
+                    "match": {
+                      "hostEquals": {
+                        "_0": "127.0.0.1"
+                      }
+                    }
+                  },
+                  "ruleID": "EFC28631-4C26-401F-B59C-6BC0E4C3AE88"
+                }
+              ],
+              "via": {
+                "rule": {
+                  "id": "EFC28631-4C26-401F-B59C-6BC0E4C3AE88",
+                  "index": 0
+                }
+              }
+            },
+            "sourceBundleID": null,
+            "sourcePID": 71161,
+            "summary": "http://127.0.0.1:62018/duplicate?preserve=Query%20Case \u2192 Space \u201cRouting target\u201d via rule #1 (hostEquals)"
+          }
+        ],
+        "lastLittleOpenRequest": {
+          "profileHint": "D862EB30-8DA6-45A2-ADAE-E3EF181718B5",
+          "url": "http://localhost:62018/default-little?toggle=on"
+        },
+        "pendingCount": 0,
+        "queuedCount": 0,
+        "ready": true
+      },
+      "firstLog": {
+        "drainedCount": 0,
+        "duplicatesDropped": 1,
+        "entries": [
+          {
+            "decision": {
+              "evaluatedAt": 815604264.913269,
+              "normalizedHost": "127.0.0.1",
+              "request": {
+                "receivedAt": 815604264.913269,
+                "source": {
+                  "pid": 71022
+                },
+                "url": "http://127.0.0.1:62018/warm-space"
+              },
+              "resolved": {
+                "space": {
+                  "profileID": "D862EB30-8DA6-45A2-ADAE-E3EF181718B5",
+                  "spaceID": "6DDCD277-D9C6-4245-A74F-BAC2D05FEDA0"
+                }
+              },
+              "standardWindowCount": 1,
+              "traces": [
+                {
+                  "index": 0,
+                  "outcome": {
+                    "matched": {}
+                  },
+                  "rule": {
+                    "destination": {
+                      "space": {
+                        "_0": "6DDCD277-D9C6-4245-A74F-BAC2D05FEDA0"
+                      }
+                    },
+                    "id": "EFC28631-4C26-401F-B59C-6BC0E4C3AE88",
+                    "match": {
+                      "hostEquals": {
+                        "_0": "127.0.0.1"
+                      }
+                    }
+                  },
+                  "ruleID": "EFC28631-4C26-401F-B59C-6BC0E4C3AE88"
+                }
+              ],
+              "via": {
+                "rule": {
+                  "id": "EFC28631-4C26-401F-B59C-6BC0E4C3AE88",
+                  "index": 0
+                }
+              }
+            },
+            "sourceBundleID": null,
+            "sourcePID": 71022,
+            "summary": "http://127.0.0.1:62018/warm-space \u2192 Space \u201cRouting target\u201d via rule #1 (hostEquals)"
+          },
+          {
+            "decision": {
+              "evaluatedAt": 815604265.054333,
+              "normalizedHost": "localhost",
+              "request": {
+                "receivedAt": 815604265.054333,
+                "source": {
+                  "pid": 71029
+                },
+                "url": "http://localhost:62018/default-little"
+              },
+              "resolved": {
+                "littleOpen": {
+                  "profileHint": "D862EB30-8DA6-45A2-ADAE-E3EF181718B5"
+                }
+              },
+              "standardWindowCount": 1,
+              "traces": [
+                {
+                  "index": 0,
+                  "outcome": {
+                    "hostMismatch": {}
+                  },
+                  "rule": {
+                    "destination": {
+                      "space": {
+                        "_0": "6DDCD277-D9C6-4245-A74F-BAC2D05FEDA0"
+                      }
+                    },
+                    "id": "EFC28631-4C26-401F-B59C-6BC0E4C3AE88",
+                    "match": {
+                      "hostEquals": {
+                        "_0": "127.0.0.1"
+                      }
+                    }
+                  },
+                  "ruleID": "EFC28631-4C26-401F-B59C-6BC0E4C3AE88"
+                }
+              ],
+              "via": {
+                "defaultDestination": {}
+              }
+            },
+            "sourceBundleID": null,
+            "sourcePID": 71029,
+            "summary": "http://localhost:62018/default-little \u2192 Little Open (profile hint: D862EB30) via default destination"
+          },
+          {
+            "decision": {
+              "evaluatedAt": 815604265.314343,
+              "normalizedHost": "localhost",
+              "request": {
+                "receivedAt": 815604265.314343,
+                "source": {
+                  "pid": 71053
+                },
+                "url": "http://localhost:62018/default-little?toggle=off"
+              },
+              "resolved": {
+                "space": {
+                  "profileID": "D862EB30-8DA6-45A2-ADAE-E3EF181718B5",
+                  "spaceID": "07410E26-F8A2-4E8C-83CB-4AC277CB105A"
+                }
+              },
+              "standardWindowCount": 2,
+              "traces": [
+                {
+                  "index": 0,
+                  "outcome": {
+                    "hostMismatch": {}
+                  },
+                  "rule": {
+                    "destination": {
+                      "space": {
+                        "_0": "6DDCD277-D9C6-4245-A74F-BAC2D05FEDA0"
+                      }
+                    },
+                    "id": "EFC28631-4C26-401F-B59C-6BC0E4C3AE88",
+                    "match": {
+                      "hostEquals": {
+                        "_0": "127.0.0.1"
+                      }
+                    }
+                  },
+                  "ruleID": "EFC28631-4C26-401F-B59C-6BC0E4C3AE88"
+                }
+              ],
+              "via": {
+                "defaultSuppressedByToggle": {}
+              }
+            },
+            "sourceBundleID": null,
+            "sourcePID": 71053,
+            "summary": "http://localhost:62018/default-little?toggle=off \u2192 Space \u201cSpace\u201d via default (Little Open off \u2192 most recent Space)"
+          },
+          {
+            "decision": {
+              "evaluatedAt": 815604265.451665,
+              "normalizedHost": "localhost",
+              "request": {
+                "receivedAt": 815604265.451665,
+                "source": {
+                  "pid": 71092
+                },
+                "url": "http://localhost:62018/default-little?toggle=on"
+              },
+              "resolved": {
+                "littleOpen": {
+                  "profileHint": "D862EB30-8DA6-45A2-ADAE-E3EF181718B5"
+                }
+              },
+              "standardWindowCount": 2,
+              "traces": [
+                {
+                  "index": 0,
+                  "outcome": {
+                    "hostMismatch": {}
+                  },
+                  "rule": {
+                    "destination": {
+                      "space": {
+                        "_0": "6DDCD277-D9C6-4245-A74F-BAC2D05FEDA0"
+                      }
+                    },
+                    "id": "EFC28631-4C26-401F-B59C-6BC0E4C3AE88",
+                    "match": {
+                      "hostEquals": {
+                        "_0": "127.0.0.1"
+                      }
+                    }
+                  },
+                  "ruleID": "EFC28631-4C26-401F-B59C-6BC0E4C3AE88"
+                }
+              ],
+              "via": {
+                "defaultDestination": {}
+              }
+            },
+            "sourceBundleID": null,
+            "sourcePID": 71092,
+            "summary": "http://localhost:62018/default-little?toggle=on \u2192 Little Open (profile hint: D862EB30) via default destination"
+          },
+          {
+            "decision": {
+              "evaluatedAt": 815604265.601652,
+              "normalizedHost": "127.0.0.1",
+              "request": {
+                "receivedAt": 815604265.601652,
+                "source": {
+                  "pid": 71095
+                },
+                "url": "http://127.0.0.1:62018/duplicate?preserve=Query%20Case"
+              },
+              "resolved": {
+                "space": {
+                  "profileID": "D862EB30-8DA6-45A2-ADAE-E3EF181718B5",
+                  "spaceID": "6DDCD277-D9C6-4245-A74F-BAC2D05FEDA0"
+                }
+              },
+              "standardWindowCount": 2,
+              "traces": [
+                {
+                  "index": 0,
+                  "outcome": {
+                    "matched": {}
+                  },
+                  "rule": {
+                    "destination": {
+                      "space": {
+                        "_0": "6DDCD277-D9C6-4245-A74F-BAC2D05FEDA0"
+                      }
+                    },
+                    "id": "EFC28631-4C26-401F-B59C-6BC0E4C3AE88",
+                    "match": {
+                      "hostEquals": {
+                        "_0": "127.0.0.1"
+                      }
+                    }
+                  },
+                  "ruleID": "EFC28631-4C26-401F-B59C-6BC0E4C3AE88"
+                }
+              ],
+              "via": {
+                "rule": {
+                  "id": "EFC28631-4C26-401F-B59C-6BC0E4C3AE88",
+                  "index": 0
+                }
+              }
+            },
+            "sourceBundleID": null,
+            "sourcePID": 71095,
+            "summary": "http://127.0.0.1:62018/duplicate?preserve=Query%20Case \u2192 Space \u201cRouting target\u201d via rule #1 (hostEquals)"
+          }
+        ],
+        "lastLittleOpenRequest": {
+          "profileHint": "D862EB30-8DA6-45A2-ADAE-E3EF181718B5",
+          "url": "http://localhost:62018/default-little?toggle=on"
+        },
+        "pendingCount": 0,
+        "queuedCount": 0,
+        "ready": true
+      },
+      "loadAverage": [
+        8.61279296875,
+        10.935546875,
+        11.0185546875
+      ],
+      "ok": true
+    },
+    "routing_default_browser_read_only": {
+      "after": {
+        "http": {
+          "isDefault": false
+        },
+        "https": {
+          "isDefault": false
+        },
+        "isDefaultBrowser": false
+      },
+      "before": {
+        "http": {
+          "isDefault": false
+        },
+        "https": {
+          "isDefault": false
+        },
+        "isDefaultBrowser": false
+      },
+      "ok": true
+    },
+    "routing_no_window": {
+      "log": {
+        "drainedCount": 0,
+        "duplicatesDropped": 1,
+        "entries": [
+          {
+            "decision": {
+              "evaluatedAt": 815604264.913269,
+              "normalizedHost": "127.0.0.1",
+              "request": {
+                "receivedAt": 815604264.913269,
+                "source": {
+                  "pid": 71022
+                },
+                "url": "http://127.0.0.1:62018/warm-space"
+              },
+              "resolved": {
+                "space": {
+                  "profileID": "D862EB30-8DA6-45A2-ADAE-E3EF181718B5",
+                  "spaceID": "6DDCD277-D9C6-4245-A74F-BAC2D05FEDA0"
+                }
+              },
+              "standardWindowCount": 1,
+              "traces": [
+                {
+                  "index": 0,
+                  "outcome": {
+                    "matched": {}
+                  },
+                  "rule": {
+                    "destination": {
+                      "space": {
+                        "_0": "6DDCD277-D9C6-4245-A74F-BAC2D05FEDA0"
+                      }
+                    },
+                    "id": "EFC28631-4C26-401F-B59C-6BC0E4C3AE88",
+                    "match": {
+                      "hostEquals": {
+                        "_0": "127.0.0.1"
+                      }
+                    }
+                  },
+                  "ruleID": "EFC28631-4C26-401F-B59C-6BC0E4C3AE88"
+                }
+              ],
+              "via": {
+                "rule": {
+                  "id": "EFC28631-4C26-401F-B59C-6BC0E4C3AE88",
+                  "index": 0
+                }
+              }
+            },
+            "sourceBundleID": null,
+            "sourcePID": 71022,
+            "summary": "http://127.0.0.1:62018/warm-space \u2192 Space \u201cRouting target\u201d via rule #1 (hostEquals)"
+          },
+          {
+            "decision": {
+              "evaluatedAt": 815604265.054333,
+              "normalizedHost": "localhost",
+              "request": {
+                "receivedAt": 815604265.054333,
+                "source": {
+                  "pid": 71029
+                },
+                "url": "http://localhost:62018/default-little"
+              },
+              "resolved": {
+                "littleOpen": {
+                  "profileHint": "D862EB30-8DA6-45A2-ADAE-E3EF181718B5"
+                }
+              },
+              "standardWindowCount": 1,
+              "traces": [
+                {
+                  "index": 0,
+                  "outcome": {
+                    "hostMismatch": {}
+                  },
+                  "rule": {
+                    "destination": {
+                      "space": {
+                        "_0": "6DDCD277-D9C6-4245-A74F-BAC2D05FEDA0"
+                      }
+                    },
+                    "id": "EFC28631-4C26-401F-B59C-6BC0E4C3AE88",
+                    "match": {
+                      "hostEquals": {
+                        "_0": "127.0.0.1"
+                      }
+                    }
+                  },
+                  "ruleID": "EFC28631-4C26-401F-B59C-6BC0E4C3AE88"
+                }
+              ],
+              "via": {
+                "defaultDestination": {}
+              }
+            },
+            "sourceBundleID": null,
+            "sourcePID": 71029,
+            "summary": "http://localhost:62018/default-little \u2192 Little Open (profile hint: D862EB30) via default destination"
+          },
+          {
+            "decision": {
+              "evaluatedAt": 815604265.314343,
+              "normalizedHost": "localhost",
+              "request": {
+                "receivedAt": 815604265.314343,
+                "source": {
+                  "pid": 71053
+                },
+                "url": "http://localhost:62018/default-little?toggle=off"
+              },
+              "resolved": {
+                "space": {
+                  "profileID": "D862EB30-8DA6-45A2-ADAE-E3EF181718B5",
+                  "spaceID": "07410E26-F8A2-4E8C-83CB-4AC277CB105A"
+                }
+              },
+              "standardWindowCount": 2,
+              "traces": [
+                {
+                  "index": 0,
+                  "outcome": {
+                    "hostMismatch": {}
+                  },
+                  "rule": {
+                    "destination": {
+                      "space": {
+                        "_0": "6DDCD277-D9C6-4245-A74F-BAC2D05FEDA0"
+                      }
+                    },
+                    "id": "EFC28631-4C26-401F-B59C-6BC0E4C3AE88",
+                    "match": {
+                      "hostEquals": {
+                        "_0": "127.0.0.1"
+                      }
+                    }
+                  },
+                  "ruleID": "EFC28631-4C26-401F-B59C-6BC0E4C3AE88"
+                }
+              ],
+              "via": {
+                "defaultSuppressedByToggle": {}
+              }
+            },
+            "sourceBundleID": null,
+            "sourcePID": 71053,
+            "summary": "http://localhost:62018/default-little?toggle=off \u2192 Space \u201cSpace\u201d via default (Little Open off \u2192 most recent Space)"
+          },
+          {
+            "decision": {
+              "evaluatedAt": 815604265.451665,
+              "normalizedHost": "localhost",
+              "request": {
+                "receivedAt": 815604265.451665,
+                "source": {
+                  "pid": 71092
+                },
+                "url": "http://localhost:62018/default-little?toggle=on"
+              },
+              "resolved": {
+                "littleOpen": {
+                  "profileHint": "D862EB30-8DA6-45A2-ADAE-E3EF181718B5"
+                }
+              },
+              "standardWindowCount": 2,
+              "traces": [
+                {
+                  "index": 0,
+                  "outcome": {
+                    "hostMismatch": {}
+                  },
+                  "rule": {
+                    "destination": {
+                      "space": {
+                        "_0": "6DDCD277-D9C6-4245-A74F-BAC2D05FEDA0"
+                      }
+                    },
+                    "id": "EFC28631-4C26-401F-B59C-6BC0E4C3AE88",
+                    "match": {
+                      "hostEquals": {
+                        "_0": "127.0.0.1"
+                      }
+                    }
+                  },
+                  "ruleID": "EFC28631-4C26-401F-B59C-6BC0E4C3AE88"
+                }
+              ],
+              "via": {
+                "defaultDestination": {}
+              }
+            },
+            "sourceBundleID": null,
+            "sourcePID": 71092,
+            "summary": "http://localhost:62018/default-little?toggle=on \u2192 Little Open (profile hint: D862EB30) via default destination"
+          },
+          {
+            "decision": {
+              "evaluatedAt": 815604265.601652,
+              "normalizedHost": "127.0.0.1",
+              "request": {
+                "receivedAt": 815604265.601652,
+                "source": {
+                  "pid": 71095
+                },
+                "url": "http://127.0.0.1:62018/duplicate?preserve=Query%20Case"
+              },
+              "resolved": {
+                "space": {
+                  "profileID": "D862EB30-8DA6-45A2-ADAE-E3EF181718B5",
+                  "spaceID": "6DDCD277-D9C6-4245-A74F-BAC2D05FEDA0"
+                }
+              },
+              "standardWindowCount": 2,
+              "traces": [
+                {
+                  "index": 0,
+                  "outcome": {
+                    "matched": {}
+                  },
+                  "rule": {
+                    "destination": {
+                      "space": {
+                        "_0": "6DDCD277-D9C6-4245-A74F-BAC2D05FEDA0"
+                      }
+                    },
+                    "id": "EFC28631-4C26-401F-B59C-6BC0E4C3AE88",
+                    "match": {
+                      "hostEquals": {
+                        "_0": "127.0.0.1"
+                      }
+                    }
+                  },
+                  "ruleID": "EFC28631-4C26-401F-B59C-6BC0E4C3AE88"
+                }
+              ],
+              "via": {
+                "rule": {
+                  "id": "EFC28631-4C26-401F-B59C-6BC0E4C3AE88",
+                  "index": 0
+                }
+              }
+            },
+            "sourceBundleID": null,
+            "sourcePID": 71095,
+            "summary": "http://127.0.0.1:62018/duplicate?preserve=Query%20Case \u2192 Space \u201cRouting target\u201d via rule #1 (hostEquals)"
+          },
+          {
+            "decision": {
+              "evaluatedAt": 815604267.752644,
+              "normalizedHost": "127.0.0.1",
+              "request": {
+                "receivedAt": 815604267.752644,
+                "source": {
+                  "pid": 71161
+                },
+                "url": "http://127.0.0.1:62018/duplicate?preserve=Query%20Case"
+              },
+              "resolved": {
+                "space": {
+                  "profileID": "D862EB30-8DA6-45A2-ADAE-E3EF181718B5",
+                  "spaceID": "6DDCD277-D9C6-4245-A74F-BAC2D05FEDA0"
+                }
+              },
+              "standardWindowCount": 2,
+              "traces": [
+                {
+                  "index": 0,
+                  "outcome": {
+                    "matched": {}
+                  },
+                  "rule": {
+                    "destination": {
+                      "space": {
+                        "_0": "6DDCD277-D9C6-4245-A74F-BAC2D05FEDA0"
+                      }
+                    },
+                    "id": "EFC28631-4C26-401F-B59C-6BC0E4C3AE88",
+                    "match": {
+                      "hostEquals": {
+                        "_0": "127.0.0.1"
+                      }
+                    }
+                  },
+                  "ruleID": "EFC28631-4C26-401F-B59C-6BC0E4C3AE88"
+                }
+              ],
+              "via": {
+                "rule": {
+                  "id": "EFC28631-4C26-401F-B59C-6BC0E4C3AE88",
+                  "index": 0
+                }
+              }
+            },
+            "sourceBundleID": null,
+            "sourcePID": 71161,
+            "summary": "http://127.0.0.1:62018/duplicate?preserve=Query%20Case \u2192 Space \u201cRouting target\u201d via rule #1 (hostEquals)"
+          },
+          {
+            "decision": {
+              "evaluatedAt": 815604267.901761,
+              "normalizedHost": "127.0.0.1",
+              "request": {
+                "receivedAt": 815604267.901761,
+                "source": {
+                  "pid": 71163
+                },
+                "url": "ftp://127.0.0.1/non-http"
+              },
+              "standardWindowCount": 2,
+              "traces": [],
+              "via": {
+                "rejectedNonHTTP": {
+                  "scheme": "ftp"
+                }
+              }
+            },
+            "sourceBundleID": null,
+            "sourcePID": 71163,
+            "summary": "ftp://127.0.0.1/non-http \u2192 rejected via rejected (not http/https)"
+          },
+          {
+            "decision": {
+              "evaluatedAt": 815604268.121772,
+              "normalizedHost": "127.0.0.1",
+              "request": {
+                "receivedAt": 815604268.121772,
+                "source": {
+                  "pid": 71167
+                },
+                "url": "http://127.0.0.1:62018/no-window"
+              },
+              "resolved": {
+                "space": {
+                  "profileID": "D862EB30-8DA6-45A2-ADAE-E3EF181718B5",
+                  "spaceID": "6DDCD277-D9C6-4245-A74F-BAC2D05FEDA0"
+                }
+              },
+              "standardWindowCount": 0,
+              "traces": [
+                {
+                  "index": 0,
+                  "outcome": {
+                    "matched": {}
+                  },
+                  "rule": {
+                    "destination": {
+                      "space": {
+                        "_0": "6DDCD277-D9C6-4245-A74F-BAC2D05FEDA0"
+                      }
+                    },
+                    "id": "EFC28631-4C26-401F-B59C-6BC0E4C3AE88",
+                    "match": {
+                      "hostEquals": {
+                        "_0": "127.0.0.1"
+                      }
+                    }
+                  },
+                  "ruleID": "EFC28631-4C26-401F-B59C-6BC0E4C3AE88"
+                }
+              ],
+              "via": {
+                "rule": {
+                  "id": "EFC28631-4C26-401F-B59C-6BC0E4C3AE88",
+                  "index": 0
+                }
+              }
+            },
+            "sourceBundleID": null,
+            "sourcePID": 71167,
+            "summary": "http://127.0.0.1:62018/no-window \u2192 Space \u201cRouting target\u201d via rule #1 (hostEquals)"
+          }
+        ],
+        "lastLittleOpenRequest": {
+          "profileHint": "D862EB30-8DA6-45A2-ADAE-E3EF181718B5",
+          "url": "http://localhost:62018/default-little?toggle=on"
+        },
+        "pendingCount": 0,
+        "queuedCount": 0,
+        "ready": true
+      },
+      "ok": true,
+      "windows": [
+        {
+          "id": "5DBCBD14-50C4-400C-B098-2EA9EBB00FEF",
+          "number": 18086
+        }
+      ]
+    },
+    "routing_non_http_rejected": {
+      "entries": [
+        {
+          "decision": {
+            "evaluatedAt": 815604267.901761,
+            "normalizedHost": "127.0.0.1",
+            "request": {
+              "receivedAt": 815604267.901761,
+              "source": {
+                "pid": 71163
+              },
+              "url": "ftp://127.0.0.1/non-http"
+            },
+            "standardWindowCount": 2,
+            "traces": [],
+            "via": {
+              "rejectedNonHTTP": {
+                "scheme": "ftp"
+              }
+            }
+          },
+          "sourceBundleID": null,
+          "sourcePID": 71163,
+          "summary": "ftp://127.0.0.1/non-http \u2192 rejected via rejected (not http/https)"
+        }
+      ],
+      "exit": 0,
+      "launchServices": "delivered to explicit app",
+      "ok": true,
+      "stderr": ""
+    },
+    "routing_source_detected": {
+      "delivery": "/usr/bin/open -a <exact built bundle>",
+      "ok": true,
+      "source": {
+        "decision": {
+          "evaluatedAt": 815604264.913269,
+          "normalizedHost": "127.0.0.1",
+          "request": {
+            "receivedAt": 815604264.913269,
+            "source": {
+              "pid": 71022
+            },
+            "url": "http://127.0.0.1:62018/warm-space"
+          },
+          "resolved": {
+            "space": {
+              "profileID": "D862EB30-8DA6-45A2-ADAE-E3EF181718B5",
+              "spaceID": "6DDCD277-D9C6-4245-A74F-BAC2D05FEDA0"
+            }
+          },
+          "standardWindowCount": 1,
+          "traces": [
+            {
+              "index": 0,
+              "outcome": {
+                "matched": {}
+              },
+              "rule": {
+                "destination": {
+                  "space": {
+                    "_0": "6DDCD277-D9C6-4245-A74F-BAC2D05FEDA0"
+                  }
+                },
+                "id": "EFC28631-4C26-401F-B59C-6BC0E4C3AE88",
+                "match": {
+                  "hostEquals": {
+                    "_0": "127.0.0.1"
+                  }
+                }
+              },
+              "ruleID": "EFC28631-4C26-401F-B59C-6BC0E4C3AE88"
+            }
+          ],
+          "via": {
+            "rule": {
+              "id": "EFC28631-4C26-401F-B59C-6BC0E4C3AE88",
+              "index": 0
+            }
+          }
+        },
+        "sourceBundleID": null,
+        "sourcePID": 71022,
+        "summary": "http://127.0.0.1:62018/warm-space \u2192 Space \u201cRouting target\u201d via rule #1 (hostEquals)"
+      }
+    },
+    "routing_toggle_off_most_recent_space": {
+      "off": {
+        "drainedCount": 0,
+        "duplicatesDropped": 0,
+        "entries": [
+          {
+            "decision": {
+              "evaluatedAt": 815604264.913269,
+              "normalizedHost": "127.0.0.1",
+              "request": {
+                "receivedAt": 815604264.913269,
+                "source": {
+                  "pid": 71022
+                },
+                "url": "http://127.0.0.1:62018/warm-space"
+              },
+              "resolved": {
+                "space": {
+                  "profileID": "D862EB30-8DA6-45A2-ADAE-E3EF181718B5",
+                  "spaceID": "6DDCD277-D9C6-4245-A74F-BAC2D05FEDA0"
+                }
+              },
+              "standardWindowCount": 1,
+              "traces": [
+                {
+                  "index": 0,
+                  "outcome": {
+                    "matched": {}
+                  },
+                  "rule": {
+                    "destination": {
+                      "space": {
+                        "_0": "6DDCD277-D9C6-4245-A74F-BAC2D05FEDA0"
+                      }
+                    },
+                    "id": "EFC28631-4C26-401F-B59C-6BC0E4C3AE88",
+                    "match": {
+                      "hostEquals": {
+                        "_0": "127.0.0.1"
+                      }
+                    }
+                  },
+                  "ruleID": "EFC28631-4C26-401F-B59C-6BC0E4C3AE88"
+                }
+              ],
+              "via": {
+                "rule": {
+                  "id": "EFC28631-4C26-401F-B59C-6BC0E4C3AE88",
+                  "index": 0
+                }
+              }
+            },
+            "sourceBundleID": null,
+            "sourcePID": 71022,
+            "summary": "http://127.0.0.1:62018/warm-space \u2192 Space \u201cRouting target\u201d via rule #1 (hostEquals)"
+          },
+          {
+            "decision": {
+              "evaluatedAt": 815604265.054333,
+              "normalizedHost": "localhost",
+              "request": {
+                "receivedAt": 815604265.054333,
+                "source": {
+                  "pid": 71029
+                },
+                "url": "http://localhost:62018/default-little"
+              },
+              "resolved": {
+                "littleOpen": {
+                  "profileHint": "D862EB30-8DA6-45A2-ADAE-E3EF181718B5"
+                }
+              },
+              "standardWindowCount": 1,
+              "traces": [
+                {
+                  "index": 0,
+                  "outcome": {
+                    "hostMismatch": {}
+                  },
+                  "rule": {
+                    "destination": {
+                      "space": {
+                        "_0": "6DDCD277-D9C6-4245-A74F-BAC2D05FEDA0"
+                      }
+                    },
+                    "id": "EFC28631-4C26-401F-B59C-6BC0E4C3AE88",
+                    "match": {
+                      "hostEquals": {
+                        "_0": "127.0.0.1"
+                      }
+                    }
+                  },
+                  "ruleID": "EFC28631-4C26-401F-B59C-6BC0E4C3AE88"
+                }
+              ],
+              "via": {
+                "defaultDestination": {}
+              }
+            },
+            "sourceBundleID": null,
+            "sourcePID": 71029,
+            "summary": "http://localhost:62018/default-little \u2192 Little Open (profile hint: D862EB30) via default destination"
+          },
+          {
+            "decision": {
+              "evaluatedAt": 815604265.314343,
+              "normalizedHost": "localhost",
+              "request": {
+                "receivedAt": 815604265.314343,
+                "source": {
+                  "pid": 71053
+                },
+                "url": "http://localhost:62018/default-little?toggle=off"
+              },
+              "resolved": {
+                "space": {
+                  "profileID": "D862EB30-8DA6-45A2-ADAE-E3EF181718B5",
+                  "spaceID": "07410E26-F8A2-4E8C-83CB-4AC277CB105A"
+                }
+              },
+              "standardWindowCount": 2,
+              "traces": [
+                {
+                  "index": 0,
+                  "outcome": {
+                    "hostMismatch": {}
+                  },
+                  "rule": {
+                    "destination": {
+                      "space": {
+                        "_0": "6DDCD277-D9C6-4245-A74F-BAC2D05FEDA0"
+                      }
+                    },
+                    "id": "EFC28631-4C26-401F-B59C-6BC0E4C3AE88",
+                    "match": {
+                      "hostEquals": {
+                        "_0": "127.0.0.1"
+                      }
+                    }
+                  },
+                  "ruleID": "EFC28631-4C26-401F-B59C-6BC0E4C3AE88"
+                }
+              ],
+              "via": {
+                "defaultSuppressedByToggle": {}
+              }
+            },
+            "sourceBundleID": null,
+            "sourcePID": 71053,
+            "summary": "http://localhost:62018/default-little?toggle=off \u2192 Space \u201cSpace\u201d via default (Little Open off \u2192 most recent Space)"
+          }
+        ],
+        "lastLittleOpenRequest": {
+          "profileHint": "D862EB30-8DA6-45A2-ADAE-E3EF181718B5",
+          "url": "http://localhost:62018/default-little"
+        },
+        "pendingCount": 0,
+        "queuedCount": 0,
+        "ready": true
+      },
+      "ok": true,
+      "on": {
+        "drainedCount": 0,
+        "duplicatesDropped": 0,
+        "entries": [
+          {
+            "decision": {
+              "evaluatedAt": 815604264.913269,
+              "normalizedHost": "127.0.0.1",
+              "request": {
+                "receivedAt": 815604264.913269,
+                "source": {
+                  "pid": 71022
+                },
+                "url": "http://127.0.0.1:62018/warm-space"
+              },
+              "resolved": {
+                "space": {
+                  "profileID": "D862EB30-8DA6-45A2-ADAE-E3EF181718B5",
+                  "spaceID": "6DDCD277-D9C6-4245-A74F-BAC2D05FEDA0"
+                }
+              },
+              "standardWindowCount": 1,
+              "traces": [
+                {
+                  "index": 0,
+                  "outcome": {
+                    "matched": {}
+                  },
+                  "rule": {
+                    "destination": {
+                      "space": {
+                        "_0": "6DDCD277-D9C6-4245-A74F-BAC2D05FEDA0"
+                      }
+                    },
+                    "id": "EFC28631-4C26-401F-B59C-6BC0E4C3AE88",
+                    "match": {
+                      "hostEquals": {
+                        "_0": "127.0.0.1"
+                      }
+                    }
+                  },
+                  "ruleID": "EFC28631-4C26-401F-B59C-6BC0E4C3AE88"
+                }
+              ],
+              "via": {
+                "rule": {
+                  "id": "EFC28631-4C26-401F-B59C-6BC0E4C3AE88",
+                  "index": 0
+                }
+              }
+            },
+            "sourceBundleID": null,
+            "sourcePID": 71022,
+            "summary": "http://127.0.0.1:62018/warm-space \u2192 Space \u201cRouting target\u201d via rule #1 (hostEquals)"
+          },
+          {
+            "decision": {
+              "evaluatedAt": 815604265.054333,
+              "normalizedHost": "localhost",
+              "request": {
+                "receivedAt": 815604265.054333,
+                "source": {
+                  "pid": 71029
+                },
+                "url": "http://localhost:62018/default-little"
+              },
+              "resolved": {
+                "littleOpen": {
+                  "profileHint": "D862EB30-8DA6-45A2-ADAE-E3EF181718B5"
+                }
+              },
+              "standardWindowCount": 1,
+              "traces": [
+                {
+                  "index": 0,
+                  "outcome": {
+                    "hostMismatch": {}
+                  },
+                  "rule": {
+                    "destination": {
+                      "space": {
+                        "_0": "6DDCD277-D9C6-4245-A74F-BAC2D05FEDA0"
+                      }
+                    },
+                    "id": "EFC28631-4C26-401F-B59C-6BC0E4C3AE88",
+                    "match": {
+                      "hostEquals": {
+                        "_0": "127.0.0.1"
+                      }
+                    }
+                  },
+                  "ruleID": "EFC28631-4C26-401F-B59C-6BC0E4C3AE88"
+                }
+              ],
+              "via": {
+                "defaultDestination": {}
+              }
+            },
+            "sourceBundleID": null,
+            "sourcePID": 71029,
+            "summary": "http://localhost:62018/default-little \u2192 Little Open (profile hint: D862EB30) via default destination"
+          },
+          {
+            "decision": {
+              "evaluatedAt": 815604265.314343,
+              "normalizedHost": "localhost",
+              "request": {
+                "receivedAt": 815604265.314343,
+                "source": {
+                  "pid": 71053
+                },
+                "url": "http://localhost:62018/default-little?toggle=off"
+              },
+              "resolved": {
+                "space": {
+                  "profileID": "D862EB30-8DA6-45A2-ADAE-E3EF181718B5",
+                  "spaceID": "07410E26-F8A2-4E8C-83CB-4AC277CB105A"
+                }
+              },
+              "standardWindowCount": 2,
+              "traces": [
+                {
+                  "index": 0,
+                  "outcome": {
+                    "hostMismatch": {}
+                  },
+                  "rule": {
+                    "destination": {
+                      "space": {
+                        "_0": "6DDCD277-D9C6-4245-A74F-BAC2D05FEDA0"
+                      }
+                    },
+                    "id": "EFC28631-4C26-401F-B59C-6BC0E4C3AE88",
+                    "match": {
+                      "hostEquals": {
+                        "_0": "127.0.0.1"
+                      }
+                    }
+                  },
+                  "ruleID": "EFC28631-4C26-401F-B59C-6BC0E4C3AE88"
+                }
+              ],
+              "via": {
+                "defaultSuppressedByToggle": {}
+              }
+            },
+            "sourceBundleID": null,
+            "sourcePID": 71053,
+            "summary": "http://localhost:62018/default-little?toggle=off \u2192 Space \u201cSpace\u201d via default (Little Open off \u2192 most recent Space)"
+          },
+          {
+            "decision": {
+              "evaluatedAt": 815604265.451665,
+              "normalizedHost": "localhost",
+              "request": {
+                "receivedAt": 815604265.451665,
+                "source": {
+                  "pid": 71092
+                },
+                "url": "http://localhost:62018/default-little?toggle=on"
+              },
+              "resolved": {
+                "littleOpen": {
+                  "profileHint": "D862EB30-8DA6-45A2-ADAE-E3EF181718B5"
+                }
+              },
+              "standardWindowCount": 2,
+              "traces": [
+                {
+                  "index": 0,
+                  "outcome": {
+                    "hostMismatch": {}
+                  },
+                  "rule": {
+                    "destination": {
+                      "space": {
+                        "_0": "6DDCD277-D9C6-4245-A74F-BAC2D05FEDA0"
+                      }
+                    },
+                    "id": "EFC28631-4C26-401F-B59C-6BC0E4C3AE88",
+                    "match": {
+                      "hostEquals": {
+                        "_0": "127.0.0.1"
+                      }
+                    }
+                  },
+                  "ruleID": "EFC28631-4C26-401F-B59C-6BC0E4C3AE88"
+                }
+              ],
+              "via": {
+                "defaultDestination": {}
+              }
+            },
+            "sourceBundleID": null,
+            "sourcePID": 71092,
+            "summary": "http://localhost:62018/default-little?toggle=on \u2192 Little Open (profile hint: D862EB30) via default destination"
+          }
+        ],
+        "lastLittleOpenRequest": {
+          "profileHint": "D862EB30-8DA6-45A2-ADAE-E3EF181718B5",
+          "url": "http://localhost:62018/default-little?toggle=on"
+        },
+        "pendingCount": 0,
+        "queuedCount": 0,
+        "ready": true
+      }
+    },
+    "routing_warm_default_little_open": {
+      "log": {
+        "drainedCount": 0,
+        "duplicatesDropped": 0,
+        "entries": [
+          {
+            "decision": {
+              "evaluatedAt": 815604264.913269,
+              "normalizedHost": "127.0.0.1",
+              "request": {
+                "receivedAt": 815604264.913269,
+                "source": {
+                  "pid": 71022
+                },
+                "url": "http://127.0.0.1:62018/warm-space"
+              },
+              "resolved": {
+                "space": {
+                  "profileID": "D862EB30-8DA6-45A2-ADAE-E3EF181718B5",
+                  "spaceID": "6DDCD277-D9C6-4245-A74F-BAC2D05FEDA0"
+                }
+              },
+              "standardWindowCount": 1,
+              "traces": [
+                {
+                  "index": 0,
+                  "outcome": {
+                    "matched": {}
+                  },
+                  "rule": {
+                    "destination": {
+                      "space": {
+                        "_0": "6DDCD277-D9C6-4245-A74F-BAC2D05FEDA0"
+                      }
+                    },
+                    "id": "EFC28631-4C26-401F-B59C-6BC0E4C3AE88",
+                    "match": {
+                      "hostEquals": {
+                        "_0": "127.0.0.1"
+                      }
+                    }
+                  },
+                  "ruleID": "EFC28631-4C26-401F-B59C-6BC0E4C3AE88"
+                }
+              ],
+              "via": {
+                "rule": {
+                  "id": "EFC28631-4C26-401F-B59C-6BC0E4C3AE88",
+                  "index": 0
+                }
+              }
+            },
+            "sourceBundleID": null,
+            "sourcePID": 71022,
+            "summary": "http://127.0.0.1:62018/warm-space \u2192 Space \u201cRouting target\u201d via rule #1 (hostEquals)"
+          },
+          {
+            "decision": {
+              "evaluatedAt": 815604265.054333,
+              "normalizedHost": "localhost",
+              "request": {
+                "receivedAt": 815604265.054333,
+                "source": {
+                  "pid": 71029
+                },
+                "url": "http://localhost:62018/default-little"
+              },
+              "resolved": {
+                "littleOpen": {
+                  "profileHint": "D862EB30-8DA6-45A2-ADAE-E3EF181718B5"
+                }
+              },
+              "standardWindowCount": 1,
+              "traces": [
+                {
+                  "index": 0,
+                  "outcome": {
+                    "hostMismatch": {}
+                  },
+                  "rule": {
+                    "destination": {
+                      "space": {
+                        "_0": "6DDCD277-D9C6-4245-A74F-BAC2D05FEDA0"
+                      }
+                    },
+                    "id": "EFC28631-4C26-401F-B59C-6BC0E4C3AE88",
+                    "match": {
+                      "hostEquals": {
+                        "_0": "127.0.0.1"
+                      }
+                    }
+                  },
+                  "ruleID": "EFC28631-4C26-401F-B59C-6BC0E4C3AE88"
+                }
+              ],
+              "via": {
+                "defaultDestination": {}
+              }
+            },
+            "sourceBundleID": null,
+            "sourcePID": 71029,
+            "summary": "http://localhost:62018/default-little \u2192 Little Open (profile hint: D862EB30) via default destination"
+          }
+        ],
+        "lastLittleOpenRequest": {
+          "profileHint": "D862EB30-8DA6-45A2-ADAE-E3EF181718B5",
+          "url": "http://localhost:62018/default-little"
+        },
+        "pendingCount": 0,
+        "queuedCount": 0,
+        "ready": true
+      },
+      "ok": true
+    },
+    "routing_warm_space_rule": {
+      "log": {
+        "drainedCount": 0,
+        "duplicatesDropped": 0,
+        "entries": [
+          {
+            "decision": {
+              "evaluatedAt": 815604264.913269,
+              "normalizedHost": "127.0.0.1",
+              "request": {
+                "receivedAt": 815604264.913269,
+                "source": {
+                  "pid": 71022
+                },
+                "url": "http://127.0.0.1:62018/warm-space"
+              },
+              "resolved": {
+                "space": {
+                  "profileID": "D862EB30-8DA6-45A2-ADAE-E3EF181718B5",
+                  "spaceID": "6DDCD277-D9C6-4245-A74F-BAC2D05FEDA0"
+                }
+              },
+              "standardWindowCount": 1,
+              "traces": [
+                {
+                  "index": 0,
+                  "outcome": {
+                    "matched": {}
+                  },
+                  "rule": {
+                    "destination": {
+                      "space": {
+                        "_0": "6DDCD277-D9C6-4245-A74F-BAC2D05FEDA0"
+                      }
+                    },
+                    "id": "EFC28631-4C26-401F-B59C-6BC0E4C3AE88",
+                    "match": {
+                      "hostEquals": {
+                        "_0": "127.0.0.1"
+                      }
+                    }
+                  },
+                  "ruleID": "EFC28631-4C26-401F-B59C-6BC0E4C3AE88"
+                }
+              ],
+              "via": {
+                "rule": {
+                  "id": "EFC28631-4C26-401F-B59C-6BC0E4C3AE88",
+                  "index": 0
+                }
+              }
+            },
+            "sourceBundleID": null,
+            "sourcePID": 71022,
+            "summary": "http://127.0.0.1:62018/warm-space \u2192 Space \u201cRouting target\u201d via rule #1 (hostEquals)"
+          }
+        ],
+        "lastLittleOpenRequest": null,
+        "pendingCount": 0,
+        "queuedCount": 0,
+        "ready": true
+      },
+      "ok": true,
+      "tabs": [
+        {
+          "audible": false,
+          "canGoBack": false,
+          "canGoForward": false,
+          "crashed": false,
+          "createdAt": 1793911464.9183102,
+          "favicon": false,
+          "faviconReportsCompleted": 0,
+          "faviconReportsRejected": 0,
+          "hasWebContent": false,
+          "id": "324E7A23-BCB8-490B-B8A7-22CA3354D004",
+          "lastActiveAt": 1793911464.920567,
+          "loaded": false,
+          "loading": false,
+          "pinnedURL": "",
+          "profile": "D862EB30-8DA6-45A2-ADAE-E3EF181718B5",
+          "progress": 0,
+          "rowFaviconHash": "",
+          "rowFaviconSource": "placeholder",
+          "section": "today",
+          "selected": true,
+          "sleepPhase": "placeholder",
+          "space": "6DDCD277-D9C6-4245-A74F-BAC2D05FEDA0",
+          "title": "",
+          "unread": false,
+          "url": "http://127.0.0.1:62018/warm-space",
+          "visible": true
+        },
+        {
+          "audible": false,
+          "canGoBack": false,
+          "canGoForward": false,
+          "crashed": false,
+          "createdAt": 1793911464.825017,
+          "favicon": false,
+          "faviconReportsCompleted": 0,
+          "faviconReportsRejected": 0,
+          "hasWebContent": true,
+          "id": "3F75ECD3-AE41-46C8-86D1-72BDD3360D5A",
+          "lastActiveAt": 1793911464.920572,
+          "loaded": true,
+          "loading": false,
+          "page": {
+            "audible": false,
+            "browser": 1,
+            "browserIndex": 0,
+            "browserPinned": false,
+            "canGoBack": false,
+            "chromeTabId": 183633739,
+            "chromeWindowId": 183633738,
+            "context": "Default",
+            "crash": 0,
+            "extension": "",
+            "favicon": false,
+            "fullscreen": false,
+            "hidden": true,
+            "hostTab": "3F75ECD3-AE41-46C8-86D1-72BDD3360D5A",
+            "identifier": 1,
+            "kind": "tab",
+            "live": true,
+            "loading": false,
+            "muted": false,
+            "pageBackground": [],
+            "popup": false,
+            "style": "chrome",
+            "title": "Routing /existing-today",
+            "url": "http://127.0.0.1:62018/existing-today",
+            "zoom": 0
+          },
+          "pinnedURL": "",
+          "profile": "D862EB30-8DA6-45A2-ADAE-E3EF181718B5",
+          "progress": 1,
+          "rowFaviconHash": "",
+          "rowFaviconSource": "placeholder",
+          "section": "today",
+          "selected": false,
+          "sleepPhase": "live",
+          "space": "6DDCD277-D9C6-4245-A74F-BAC2D05FEDA0",
+          "title": "Routing /existing-today",
+          "unread": false,
+          "url": "http://127.0.0.1:62018/existing-today",
+          "visible": false
+        }
+      ]
+    }
+  },
+  "started": "2026-11-05 13:44:20",
+  "style": "chrome"
+}
