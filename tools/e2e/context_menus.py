@@ -155,13 +155,38 @@ def context_menu_checks(factory, results, tmp, h):
                 ok = ok and shown.count(title) == 1 and shown.index(title) == shown.index('Copy') + 1
             if name == 'editable':
                 ok = ok and shown == [t or '-' for t in raw] and not any(t.startswith('Search ') for t in shown)
-            # The recorded complete order is also checked against the committed target receipt.
-            expected_path = os.path.join(folder, 'order-' + app.style + '.json')
-            if os.path.exists(expected_path):
-                with open(expected_path) as stream:
-                    expected = json.load(stream)
-                ok = ok and shown == expected[name]
-            return {'ok': bool(ok), 'shown': shown, 'engine': raw, 'rows': event.get('rows'),
+            # Compare the complete native order with Chromium's delivered base plus the
+            # lead's fixed insertions. These are real engine/native menu rows, not mocks.
+            expected = [title or '-' for title in raw]
+            link_open = {'Open Link in New Tab', 'Open Link in New Window', 'Open Link in Incognito Window',
+                         'Open Link in Split View', 'Open Link in Left View', 'Open Link in Right View',
+                         'Open Link in Top View', 'Open Link in Bottom View', 'Open Link With…', 'Open Link With'}
+            if name in ('link', 'mailto', 'linked_image'):
+                anchor = next((i for i, title in enumerate(expected) if title in link_open), 0)
+                expected = [title for title in expected if title not in link_open]
+                expected[anchor:anchor] = LINK_ITEMS + ['-']
+            if name in ('selection', 'url'):
+                expected = [title for title in expected if not title.startswith('Go to ')]
+                addition = ('Search Local Search for “bonjour menu contextuel”' if name == 'selection'
+                            else 'Go to https://example.invalid/context-target')
+                anchor = expected.index('Copy') + 1
+                expected.insert(anchor, addition)
+            if name == 'page':
+                anchor = next((i for i, title in enumerate(expected) if title.startswith(('View Page Source', 'Inspect'))), len(expected))
+                addition = ['Translate to English', 'Capture', 'Capture Full Page']
+                if anchor > 0 and expected[anchor - 1] != '-':
+                    addition.insert(0, '-')
+                if anchor < len(expected) and expected[anchor] != '-':
+                    addition.append('-')
+                expected[anchor:anchor] = addition
+            trimmed = []
+            for title in expected:
+                if title != '-' or (trimmed and trimmed[-1] != '-'):
+                    trimmed.append(title)
+            if trimmed and trimmed[-1] == '-':
+                trimmed.pop()
+            ok = ok and shown == trimmed
+            return {'ok': bool(ok), 'shown': shown, 'expected': trimmed, 'engine': raw, 'rows': event.get('rows'),
                     'decisions': [e for e in events if e['type'] == 'contextMenuDecision']}
 
         for name, selector, selection in [('page', '#page', False), ('link', '#link', False), ('mailto', '#mailto', False),

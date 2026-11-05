@@ -1,5 +1,6 @@
 import AppKit
 import OpenEngine
+import OpenFeatures
 import OpenModel
 import OpenSuggest
 
@@ -185,7 +186,7 @@ final class PageContextMenuBuilder {
     let engine = SearchEngines.resolve(profile: owner.focusedProfile)
     let url = Self.selectionURL(text)
     let display = String(text.prefix(32)) + (text.count > 32 ? "…" : "")
-    let title = url.map { "Go to \($0.absoluteString)" } ?? "Search \(engine.name) for “\(display)”"
+    let title = url.map { _ in "Go to \(text)" } ?? "Search \(engine.name) for “\(display)”"
     guard let target = url ?? engine.searchURL(for: text) else { return }
     let index = menu.items.firstIndex { Self.title($0) == "Copy" }.map { $0 + 1 } ?? menu.items.count
     menu.insertItem(openItem("selection-search", title) { [weak owner] in _ = owner?.openNewTab(url: target, background: false) }, at: index)
@@ -194,7 +195,7 @@ final class PageContextMenuBuilder {
   private static func selectionURL(_ text: String) -> URL? {
     guard text.rangeOfCharacter(from: .whitespacesAndNewlines) == nil else { return nil }
     if let url = URL(string: text), ["http", "https", "ftp", "file", "about"].contains(url.scheme?.lowercased() ?? "") { return url }
-    if !text.contains(":"), text.contains("."), let url = URL(string: "https://" + text), url.host != nil { return url }
+    if !text.contains(":"), !text.contains("@"), text.contains("."), let url = URL(string: "https://" + text), url.host != nil { return url }
     return nil
   }
 

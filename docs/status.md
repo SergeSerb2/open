@@ -294,7 +294,7 @@ Columns: feature · RE doc + section · plan · library code · App wiring · ve
 | Dismiss Peek with "Peek closed" undo toast; nested peeks (depth cap 5) | FA PK-7, PK-8 | m4 | `PeekController.swift` | main | `features-render P2`, `P4` | done | |
 | Peek badge on the source row; Peek follows its source tab | IS §12 | design.md §15 | `OpenSidebar`, `OpenFeatures` | main | `features-render P5`; `sidebar-render check` | done | |
 | Peek Split button | IS §12; m4 lead Q4 | m4 | `PeekController.swift` | main | `features-render P3` ("lead Q4 Split promotes same host beside source"), `R4` (favorite refusal) | done | |
-| Peek Email (Cmd+Shift+E) | FA PK-4 | app-shell §4.3: disabled in v1 | — | — | — | planned (disabled) | `peek-email` is not in `AppCommand.implemented`. |
+| Peek Email (Cmd+Shift+E) | FA PK-4 | S11 lead decision (2026-11-05) | `App/PageChrome/PeekEmailCommand.swift` | `s11/context-menus` | e2e `context-menus` `cm_peek_email*` | in progress | Profile Favorites first, then focused Space’s pinned tabs and the Profile’s other Spaces in sidebar order. Exact known-webmail hosts only; iCloud requires `/mail`. Today-only and unrelated Profiles do not enable it. Uses section 9’s public Peek entry; no live mail lookup. |
 | Peek settings switches | FA PK-5; IS §18 Links | settings §5.3 | `OpenSettings/LinksPane.swift` | main (switches) | `settings-preview` | done (partial) | The Links pane shows in the App (Step C). Switch effects ride on the same settings store. |
 | Little Open window: a 490×329 command-bar first frame at the screen's top-right, 1185×832 after load, Arc's title bar, one page, no sidebar | FA LA-1; IS §20.10 | routing §9.3 and Step 6a; m4 §6 | `OpenFeatures/LittleOpenWindowController.swift`, `LittleOpenSession.swift` (built with the old 720×540 guesses) | none (stub window) | `features-render L1` | planned (Step E) | Spot-check: library only. The App shows a stub label (`App/AppDelegate.swift:421` `showLittleOpenStub`). S2 (2026-10-26): measured (C15); replaces the 720×540 centered guess. |
 | Entry: links from other apps | FA LA-2 | routing §8 (Phase B); app-shell Step E | `OpenRouting` | none | verify-all `route` (A1–A17) | planned | Still no open-URL handler in `App/` (grep for Apple Event and open-URL handlers finds none). |
@@ -430,7 +430,7 @@ Columns: feature · RE doc + section · plan · library code · App wiring · ve
 | Downloads: destination and progress | FA DL-1 | app-shell §4.9 (Step D, in flight) | engine `OEDownload` | main: saves to `~/Downloads` with no popover | e2e `features` "Downloads" | done (partial) | Step C feeds live downloads to the Library (`App/Settings/AppSettingsActions.swift:47`). |
 | Downloads UI: popover, Cmd+Shift+J, Library section, quit warning | FA DL-1; FC §8.1 r4 | app-shell §4.9; settings G-2 | `OpenSettings/DownloadsSection.swift` | main (Library) | `settings-preview` (downloads) | done (partial) | Cmd+Shift+J and the Library section work (#85). The toolbar popover and the quit warning do not exist. App shell Step D is in flight (§0.3). |
 | Find in page: bar, count, next, previous, Esc | MH Find | app-shell §4.9 (Step D, in flight) | plain `NSSearchField` in the factory | main (partial) | e2e `features` "Find in page" | planned | Find keys route as system items (§2). The Arc-style bar with a count is Step D work. |
-| Page context menu: link, image, selection, spelling; Open in Peek, Little Open, Split | MH "Context menus" | app-shell §4.9; allowlist in PR #94 | in PR #94 | main: Chromium items plus "Open Link in New Tab" | e2e `features` "Context menu hook" | in PR (partial) | PR #94 adds Open's allowlist of Chrome's items. Peek, Little Open, and Split entries are later work. |
+| Page context menu: link, image, selection, spelling; Open in Peek, Little Open, Split | MH "Context menus"; `docs/re/page-chrome.md` §5 | S11 lead design (2026-11-05); allowlist #94 | `App/PageChrome/PageContextMenuBuilder.swift`, `PageContextMenuHooks.swift` | `s11/context-menus` | e2e `context-menus` (real App, loopback fixture; receipts below) | in progress | Preserve Chromium order/submenus/checkmarks. Open replaces link-open actions and adds Profile search/Go to after Copy; Translate → Capture → Source → Inspect on pages. Peek uses section 9’s public entry. Little Open is disabled: the File command is a URL-less stub. Hooks: `mediaItems` after image/media; `extensionItems` before Inspect; both empty by default. Exact Arc page-menu order remains unverified (§5), not a parity claim. |
 | Permission prompts (Arc style, remember) | FA SC-2 | app-shell §4.9; site-control-boost-editor | — | main: `NSAlert` sheet | e2e `features` "Permission prompts" | planned | |
 | Web notifications delivered to macOS Notification Center | — | page-platform Steps 7, 16 | `App/Page/NotificationAuthorization.swift`, `NotificationClicks.swift`, `Helper/Info-Alerts.plist`; `Engine/fork/src/open/browser/page/open_notifications.cc` | main (#160, engine #158) | e2e `page` N1–N4, N6; `sleep` N5 (#156) | done (partial) | Engine display/list, Alerts helper, page activation and 500 ms origin/profile fallback pass. `N1_macos_delivered` (U-N1) and `N6_click_opens_tab` (P1 clients.openWindow) are BLOCKED. See gap 12. |
 | JavaScript dialogs: alert, confirm, prompt, beforeunload | — | app-shell §4.9 | — | main | e2e `features` "JS dialogs" | done | Plain `NSAlert` sheets. |
@@ -446,7 +446,7 @@ Columns: feature · RE doc + section · plan · library code · App wiring · ve
 | Toasts: Space-tinted, top-right of the page, stacking | IS §16; PG-1, PG-14 | page-platform Steps 1–2 (Section 8) | `OpenFeatures/Toasts/` (`ToastCenter`, `ToastView`, `ToastOverlayView`), `OpenDesign/PageTokens.swift` | main (#153) | `features-render` R-T1–R-T7; automation `toasts`, `toast-action` | done | One `ToastCenter` per window and per Little Open window; every toast (Peek closed, sidebar undo toasts, Copy URL, pane-bar Copy, command bar "Copied") uses it. Fill and text read one rule with the first-hide hint (`SpaceThemeStyle.toastFill`/`toastText`), including the macOS Light lavender toast (S2 20/0048). Share button and zoom toast merged in #163 (e2e `page` T-E1/T-E2, Z1/Z2/Z4). |
 | Native and HTML full screen | FC §8.2 r5 | app-shell §3.8 | — | main | e2e `features` "HTML fullscreen"; e2e `window` | done | A flaky full-screen test fix is PR #112 (in PR). |
 | Multiple windows (Cmd+N), per-window state | FC §8.1 r1 | app-shell §3.8 | model window commands | main | e2e `window` (two windows, restore) | done | |
-| Close Window (Cmd+Shift+W), Blank Window, last-window behavior | FC §8.1 r2, r4; IS §17 | app-shell §3.8, §4.3 | — | main (partial) | — | done (partial) | `blank-window` dispatches and `close-window` is a system item (#85). The Blank Window "This Window" sidebar is not specified. |
+| Close Window (Cmd+Shift+W), Blank Window, last-window behavior | FC §8.1 r2, r4; IS §17 | app-shell §3.8, §4.3 | — | main (partial) | — | done (partial) | `blank-window` dispatches and `close-window` is a system item (#85). GUESS: a distinct Blank Window “This Window” sidebar is not specified. Lead decision: keep the existing New Window path unchanged. |
 | Renderer crash recovery (Sad Tab) | FA ST-1 | app-shell §4.13 (placeholder offers reload) | model `tab.live.isCrashed` | main (crash state reaches the model) | e2e `features` "Renderer crash" | planned (page UI) | |
 | Relaunch restores windows, tabs, selection | FC §3.7 r24–25 | app-shell §3.8 | `OpenStore/SnapshotStore.swift` | main (#149) | e2e `shell` persistence; e2e `window` restore; Release `relaunch` 70/70 | done | `tools/e2e/engine_e2e.py`; three committed results-relaunch-release receipts. |
 | "Restore windows from previous session" switch | FC §3.7 r24; IS §18 Advanced | settings | `OpenSettings` | main (setting) | `settings-preview` | planned (setting only) | The switch shows in the App. Restore always runs. |
@@ -469,7 +469,8 @@ Columns: feature · RE doc + section · plan · library code · App wiring · ve
 | AppleScript with Arc's terms | FA §10 | applescript Steps 1–4 done; Steps 5–7 and app-shell §4.10 (Step H) | `OpenScripting/*`; `App/Resources/Open.sdef` | none (`App/Info.plist` has no `OSAScriptingDefinition`) | `docs/scripting.md` Steps 1–4 verification | planned (App) | |
 | Tab-sleep engine patches (P-MEM-01…07) | memory-design §6 | memory-fork S1–S6 | `Engine/fork/patches/cef/0101*`, `0104*`, `0105*`, `0302*`; `Engine/fork/src/open/browser/memory/`; `OEApp.mm`; `App/WebContent/EngineSleepAdapter.swift` | main (#158 + #165) | `tabstrip` sleep_hosted_visibility/freeze/unload_flag/capture/discard/discard_keeps_tab_id; `sleep` F0/F2/F4/F5 | done (capture fixture blocked) | Engine APIs and App G2 wiring are merged. App restore, corrupt fallback, discard/destroyed wake and unfreeze pass in #165. `sleep_f3_capture` remains BLOCKED. |
 | Trim the Chrome layer (P5) | engine-patches P5 | P5 | — | — | — | planned | |
-| Join Meeting (Cmd+Ctrl+J) | FC §4.4; MH Tabs | none | registry | — | — | unplanned | Needs a calendar source; may be account-like. |
+| Join Meeting (Cmd+Ctrl+J) | FC §4.4; MH Tabs | Lead decision S2 on live-data sources | registry; `App/MainMenu.swift` comment/false gate | disabled | e2e `context-menus` `cm_join_meeting_disabled` | post-v1 | Needs calendar live data. Do not add a calendar source in v1. |
+| Help: Help Center, Getting Started, Release Notes, Contact the Team | MH Help (selectors); destinations are Open lead decisions | S11 (2026-11-05) | `AppCommand.helpURL(for:)` | `s11/context-menus` | e2e `context-menus` `cm_help_*` | in progress | Foreground Today tabs: commands document; repository `#readme`; `/releases`; `/issues/new`, respectively. |
 
 ### 1.18 Settings and Library
 
@@ -544,7 +545,7 @@ Hotkeys. Menu keys come from the same rows (78 rows carry a key). Code-only keys
 ### 2.3 Gaps in the reference data
 
 - Closed: `expected-menu.json` now has Tabs ▸ "Reveal Tab in Sidebar" (line 652) and the registry has `reveal-tab-in-sidebar` (`CommandRegistry.swift:184`). Step C maps it to `reveal-current-tab` (#85). Rerun `commands-dump` to confirm the counts; this refresh did not run it.
-- `docs/commands.md` still names the Cmd+O command "Move Little Open or Peek to Space…". The registry uses "Open Little Open or Peek in…" (`open-in-current-space`). Fix the doc title. See §6.1.
+- Cmd+O documentation now matches the registry: “Open Little Open or Peek in…” (`open-in-current-space`). The 11 allowed-missing menu rows are unchanged.
 - Gestures are not in the registry and not counted above: page swipe back/forward (#158/#162, SW1–SW4), Space swipe (done), sidebar edge swipe (planned, sidebar-completion), pinch zoom (not verified), Opt+Cmd-click Little Open (planned, conditional), Shift-click Peek (done), hold Cmd for shortcut hints (planned, #70), Cmd+Shift drag Capture (#154, C5/C6), double-click rename (done).
 - New: Copy URL as Quote dispatches, but writes the Markdown form. `copy-url-quote` and `copy-url-markdown` write the same "[title](url)" text (`App/MainMenu.swift:141`). A quote needs the page selection. See §6.1.
 
@@ -681,7 +682,7 @@ Ranking is by user impact for an Arc user who switches to Open. **P0** blocks da
 36. **Closed in PR #126 — Hide the sidebar with the gesture.** The 164 pt floor, compact toolbar and hint trigger merged in A1 (#126); #129 rechecks native width/hide/reset and the springs. The gesture is the resize drag past 164 pt. C10 is complete for the broad flow; refinement `drag-hide-threshold` and C11 compact-menu contents remain open. Lost mouse-up and gesture Undo stay in section 5 follow-ups.
 37. **Open — Extension shortcuts; omnibox keywords.** Shortcuts are in extensions-ui (#58). Omnibox keywords were not confirmed in that plan. Keep open.
 38. **Open (blocked) — Import Arc Boosts.** No sample file exists on this Mac. Belongs in `OpenImport`.
-39. **Open (decision) — Join Meeting and Meet link toast.** Meet toast stays deferred. Join Meeting needs a calendar source. Decide v1 scope (§5.4).
+39. **Post-v1 — Join Meeting and Meet link toast.** Meet toast stays deferred. Join Meeting needs calendar live data (lead decision S2).
 40. **Open — Auto-disable an extension ad blocker on allow-listed sites.** No plan. Arc's reason is unknown.
 41. **Closed in PR #85 — Reveal Tab in Sidebar.** In the registry, in `expected-menu.json`, and dispatched.
 
@@ -775,8 +776,8 @@ Capture session 2 ran on 2026-10-26 and is committed as findings only (#106; rou
 | Keep Safe Browsing on? | Not decided | engine-patches P5 ("Keep Safe Browsing as a product decision") |
 | Pinned tabs sleep like other tabs (Chrome protects them) | Sleep; say so in Settings | memory-design §5 |
 | Tab-sleep mode names in Settings | Designer names later | memory-fork lead decision |
-| Is Join Meeting (calendar) in v1? | Not planned; decide | §3 gap 39 |
-| Is Peek Email in v1? | Disabled | app-shell §4.3 |
+| Is Join Meeting (calendar) in v1? | Post-v1; needs calendar live data (lead decision S2) | §1.17 |
+| Is Peek Email in v1? | Saved known-webmail Favorite/pinned tab in the window’s Profile; S11 lead decision | §1.9 |
 | Password manager approach | Decided in #72: Chromium's built-in manager in the fork, with Arc's UI | `docs/plans/passwords-autofill.md` |
 | Library filesystem sources | Deferred to v1.1 | settings D-9 (decided) |
 | Widevine | Out of v1 | fork-infra lead decision (decided) |
@@ -834,7 +835,7 @@ Merged PR bodies used for §4 and the step claims: #63–#68, #74–#102, #104, 
 
 First audit:
 
-- `docs/commands.md` command table: the Cmd+O title is stale (§2.3). Still true at this refresh.
+- `docs/commands.md` command table: Cmd+O now matches “Open Little Open or Peek in…” (S11).
 - `docs/architecture.md` module list puts Boosts, Zap, Site Control Center, ad blocking, and Air Traffic Control in `OpenFeatures`. They live in `OpenBoosts`, `OpenAdBlock`, and `OpenRouting`. Not rechecked line by line in this refresh.
 - Before #51, `main` defaulted new profiles to DuckDuckGo. #51 fixed it.
 - app-shell §4.3 listed no system ids. Fixed in code by #85; fix the plan text or mark it historical.
