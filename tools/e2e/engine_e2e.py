@@ -4573,9 +4573,15 @@ def popup_key_checks(app, results, open_popup, close_popup):
             app.call("focus", tab=state["page"]["identifier"])
             app.call("events")
             app.call("key", key="d", modifiers=["ctrl"], window="popup", route="window")
-            stages = wait_until(lambda: (lambda e: e if {"beforePage", "unconsumed"} <= {x.get("phase") for x in e} else None)(
-                [x for x in app.call("events") if x["type"] == "popupKey"]), timeout=5)
+            # The socket drains events. CEF can deliver the before-page and
+            # unconsumed callbacks in separate polls; retain both observations.
+            observed = []
+            def key_stages():
+                observed.extend(x for x in app.call("events") if x["type"] == "popupKey")
+                return observed if {"beforePage", "unconsumed"} <= {x.get("phase") for x in observed} else None
+            stages = wait_until(key_stages, timeout=5)
             keys["ctrl_d_stages"] = sorted({x.get("phase") for x in stages or []})
+            keys["events"] = observed
             keys["still_open"] = bool(app.call("ext-popup").get("open"))
             app.call("key", key="w", modifiers=["cmd"], window="popup", route="app")
             keys["closed"] = bool(wait_until(lambda: not app.call("ext-popup").get("open"), timeout=5))

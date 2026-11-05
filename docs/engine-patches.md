@@ -249,7 +249,13 @@ Deviations and limits:
 - Global registration uses Chromium's profile registry. OS-level global key
   delivery is not proved by an in-process command execution check.
 
-Verification: pending the final recorded engine/App and end-to-end gates.
+Verification: the local-CRX `extensions-p3` suite passes all 14 feature rows,
+including the unchanged native-dialog fallback; its deliberate install-cancel
+fault fails X-1 and the restored run passes. Engine status is 8/8 with 19
+patches and distribution SHA-256
+`e65426c9ffa518d7cae75479c4ede2aa189f87ff8ec78ba5fec3c3dcfa2c7415`.
+See the [P3 receipt](engine-spike/extensions-p3-receipt.md) and the PR's final
+regression/full-verification tables.
 
 ## P4. Proprietary codecs and Widevine
 
