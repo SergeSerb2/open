@@ -50,7 +50,7 @@ final class HomeDownloadButton: PlateButton, CAAnimationDelegate {
         super.updateLayer()
         let state = tracked({ context?.downloadBadge }) { [weak self] in self?.needsDisplay = true }
         let dark = effectiveAppearance.bestMatch(from: [.darkAqua, .aqua]) == .darkAqua
-        let tint = glyphTint(true)
+        let tint = glyphView.tint()
         CATransaction.begin(); CATransaction.setDisableActions(true)
         track.strokeColor = (dark ? NSColor(srgbRed: 0.443, green: 0.467, blue: 0.510, alpha: 1) : NSColor(srgbRed: 0.808, green: 0.843, blue: 0.906, alpha: 1)).cgColor
         ring.strokeColor = tint.cgColor; check.contentTintColor = tint
@@ -96,6 +96,7 @@ final class HomeDownloadButton: PlateButton, CAAnimationDelegate {
         let now = CACurrentMediaTime()
         ring.removeAnimation(forKey: "download-spin")
         CATransaction.begin(); CATransaction.setDisableActions(true)
+        ring.strokeEnd = 1
         for shape in [track, ring] {
             let fade = CABasicAnimation(keyPath: "opacity")
             fade.fromValue = shape.presentation()?.opacity ?? 1; fade.toValue = 0
@@ -105,6 +106,7 @@ final class HomeDownloadButton: PlateButton, CAAnimationDelegate {
         }
         let opacity = CAKeyframeAnimation(keyPath: "opacity")
         opacity.values = [0, 0, 1, 1, 0, 0]; opacity.keyTimes = [0.0, 0.15/1.45, 0.3/1.45, 1.15/1.45, 1.3/1.45, 1.0].map { NSNumber(value: $0) }
+        opacity.timingFunctions = [CAMediaTimingFunctionName.linear, .easeOut, .linear, .easeOut, .linear].map { CAMediaTimingFunction(name: $0) }
         opacity.duration = 1.45
         check.layer?.add(opacity, forKey: "download-complete-check")
         if !Motion.reducesMotion {

@@ -1,6 +1,7 @@
 #if OPEN_AUTOMATION
 import AppKit
 import Darwin
+import ObjectiveC
 import OpenModel
 import OpenSettings
 
@@ -28,6 +29,10 @@ extension AutomationController {
         center.quitAlertPolicy = value
       }
       if let value = args["recordFiles"] as? Bool { center.recordFileActions = value }
+      if let path = args["openApp"] as? String {
+        guard path.utf8.count <= 4096 else { throw Failure(message: "opener path too long") }
+        center.fileOpenerForAutomation = URL(fileURLWithPath: path)
+      }
       return true
     case "downloads-state":
       return ["items": center.downloads.map { item in
@@ -37,6 +42,8 @@ extension AutomationController {
       }, "rows": downloadRows().map { ["id": $0.item.id, "subtitle": $0.subtitle.stringValue, "buttons": $0.buttons.map { $0.identifier?.rawValue ?? "" }] },
        "badge": app.frontWindowController?.sidebar.downloadBadgeEvidence ?? [:], "running": center.hasRunning,
        "queued": center.queued, "updates": center.updateCount, "publishes": center.publishCount,
+       "openerPID": center.fileOpenerPID,
+       "copiedFileURL": NSPasteboard.general.string(forType: .fileURL) ?? "",
        "fallbacks": center.fallbackCount, "error": center.lastFileError, "fileActions": center.fileActions, "quitAlerts": center.quitAlerts,
        "sheets": center.choices.map { ["id": $0.key, "name": $0.value.panel.nameFieldStringValue,
          "directory": $0.value.panel.directoryURL?.path ?? "", "visible": $0.value.panel.isVisible,
@@ -66,7 +73,22 @@ extension AutomationController {
         try? await Task.sleep(for: .milliseconds(150))
       }
       let title = cancel ? "Cancel" : choice.panel.prompt ?? "Save"
-      guard pressDownloadPanelButton(choice.panel, title: title) else { throw Failure(message: "save sheet button unavailable: " + title) }
+      if !pressDownloadPanelButton(choice.panel, title: title) {
+        // The remote panel hides its buttons. The spec also permits URL
+        // input: supply the selected URL to NSSavePanel's native service
+        // response path. Its existing beginSheetModal completion (not this
+        // automation command) reads panel.url and answers OpenEngine.
+        let selector = NSSelectorFromString("completeWithReturnCode:url:urls:")
+        guard let method = class_getInstanceMethod(type(of: choice.panel), selector),
+          let types = method_getTypeEncoding(method), String(cString: types) == "v40@0:8q16@24@32"
+        else { throw Failure(message: "save panel URL input is unavailable") }
+        typealias Complete = @convention(c) (AnyObject, Selector, Int, NSURL?, NSArray?) -> Void
+        let complete = unsafeBitCast(method_getImplementation(method), to: Complete.self)
+        let selected = cancel ? nil : (args["path"] as? String).map { URL(fileURLWithPath: $0) }
+        // AppKit requires a one-file array for OK and nil for Cancel.
+        let urls: NSArray? = selected.map { [$0 as NSURL] as NSArray }
+        complete(choice.panel, selector, cancel ? NSApplication.ModalResponse.cancel.rawValue : NSApplication.ModalResponse.OK.rawValue, selected as NSURL?, urls)
+      }
       return true
     case "download-home":
       guard let home = app.frontWindowController?.sidebar.homeButton, home.accessibilityPerformPress() else { throw Failure(message: "Home unavailable") }
@@ -76,43 +98,18 @@ extension AutomationController {
     default: throw Failure(message: "unknown download command")
     }
   }
-  /// Save panels use a remote view on current macOS. Walk only this owned
-  /// sheet's bounded accessibility tree and invoke its real AXPress action.
+  /// Prefer an actual native button where AppKit exposes one. Remote panels
+  /// use the spec's native URL-input path in runDownloadCommand above.
   private func pressDownloadPanelButton(_ panel: NSSavePanel, title: String) -> Bool {
-    var seen: Set<ObjectIdentifier> = []
-    func string(_ object: NSObject, _ name: String) -> String {
-      let selector = NSSelectorFromString(name)
-      return object.responds(to: selector) ? (object.perform(selector)?.takeUnretainedValue() as? String ?? "") : ""
+    var visited = 0
+    func button(_ view: NSView) -> NSButton? {
+      guard visited < 512 else { return nil }; visited += 1
+      if let button = view as? NSButton, button.title == title, button.isEnabled { return button }
+      for child in view.subviews.prefix(512) { if let found = button(child) { return found } }
+      return nil
     }
-    func attribute(_ object: NSObject, _ name: String) -> Any? {
-      let selector = NSSelectorFromString("accessibilityAttributeValue:")
-      return object.responds(to: selector) ? object.perform(selector, with: name)?.takeUnretainedValue() : nil
-    }
-    func press(_ object: NSObject, depth: Int) -> Bool {
-      guard depth < 20, seen.count < 512, seen.insert(ObjectIdentifier(object)).inserted else { return false }
-      let labels = ["accessibilityTitle", "accessibilityLabel", "accessibilityDescription"].map { string(object, $0) } + ["AXTitle", "AXDescription", "AXHelp"].map { attribute(object, $0) as? String ?? "" }
-      if labels.contains(title) {
-        if let button = object as? NSButton, button.isEnabled { button.performClick(nil); return true }
-        let modern = NSSelectorFromString("accessibilityPerformPress")
-        if object.responds(to: modern) {
-          typealias Press = @convention(c) (AnyObject, Selector) -> Bool
-          let call = unsafeBitCast(object.method(for: modern), to: Press.self)
-          if call(object, modern) { return true }
-        }
-        let legacy = NSSelectorFromString("accessibilityPerformAction:")
-        if object.responds(to: legacy) { object.perform(legacy, with: "AXPress"); return true }
-      }
-      let children = NSSelectorFromString("accessibilityChildren")
-      if object.responds(to: children), let nodes = object.perform(children)?.takeUnretainedValue() as? [NSObject] {
-        for child in nodes.prefix(512) where press(child, depth: depth + 1) { return true }
-      }
-      if let nodes = attribute(object, "AXChildren") as? [NSObject] {
-        for child in nodes.prefix(512) where press(child, depth: depth + 1) { return true }
-      }
-      if let view = object as? NSView { for child in view.subviews.prefix(512) where press(child, depth: depth + 1) { return true } }
-      return false
-    }
-    return press(panel, depth: 0) || panel.contentView.map { press($0, depth: 0) } == true
+    guard let content = panel.contentView, let target = button(content) else { return false }
+    target.performClick(nil); return true
   }
   /// The same native observer as S8, injected only by the e2e runner. No idle
   /// hooks or observer library are included in a shipping build.

@@ -10285,7 +10285,7 @@ def main():
         elif opts.only == "downloads":
             import downloads
             results["downloads"] = CheckedResults(tracker)
-            downloads.checks(factory, results["downloads"], tmp, opts.config)
+            downloads.checks(factory, results["downloads"], tmp, opts.config, sys.modules[__name__])
         elif opts.only == "sleep":
             results["sleep"] = CheckedResults(tracker)
             sleep_checks(factory, results["sleep"], tmp, opts.style)
