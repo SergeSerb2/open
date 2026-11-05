@@ -384,14 +384,31 @@ Commands in `App/Automation/AutomationMedia.swift`. `tab` is a tab UUID.
 |---|---|---|
 | `media` | `tab` | The page's media session as the App sees it (`playback`, `controllable`, `hasVideo`, `hasAudio`, `largestVideoArea`, `pictureInPicture`, `pictureInPictureDisabled`, `actions`, `title`/`artist`/`album`, `duration`, `position`), `audible`, `muted` (engine), `modelMuted`, `capturing`, the store `source`, and the last auto-PiP `decision` (value and system-uptime time). |
 | `media-action` | `tab`, `action` (`play`, `pause`, `next`, `previous`, `toggle-mute`, `close`, `back-to-tab`, `pip`, `seek` + `value`, `volume` + `value`, `exit-pip` [+ `pause`]); or `action` `mute-all` / `unmute-all` without `tab` | Runs the same `MediaIntent` (or App command) path as the mini player and the command bar. |
-| `mini-players` | `window` (window id, default front) | `cards` in order (tab, kind, playback, pip, expanded, level, frame and shown buttons with frames in window coordinates, top-left origin), `expanded`, `stackHeight`, `displayed`, `pendingCollapse`. |
-| `media-click` | `window`, `tab`, `target` (`title`, `play`, `next`, `previous`, `volume`, `pip`, `close`, `favicon`, `microphone`, `camera`) | Clicks the real card control through `mouse` events built inside Open. Title-row targets hover the card first (`mouse` `hover`) and wait for the expanded stack. |
+| `mini-players` | `window` (window id, default front) | `cards` in order (tab, kind, playback, pip, expanded, level, frame and shown buttons with frames in window coordinates, top-left origin; `drawerOpen`, `height`, the shown volume `slider` value such as `"25%"` or null, the source's `volume`, `microphoneOn`, `cameraOn`), `expanded`, `stackHeight`, `displayed`, `pendingCollapse`, `animations`. |
+| `media-click` | `window`, `tab`, `target` (`title`, `play`, `next`, `previous`, `volume`, `pip`, `close`, `favicon`, `microphone`, `camera`, and the volume drawer's `volumeLow`, `volumeHigh`, `slider`), `fraction` (slider only, 0…1 of the knob's travel, default 0.5) | Clicks the real card control through `mouse` events built inside Open. Title-row and volume targets hover the card first (`mouse` `hover`) and wait for the expanded stack. `slider` sends a press and a release at `fraction` and returns the slider's new `value`. |
 | `pip` | — | Session `state` (`idle`, `requesting`, `active`, `minimized`, `closed` + `reason`), `tab`, `automatic`, `snoozed`, `requests`, `requestedAt`/`enteredAt` (system uptime), `now`, and the visible PiP windows (phase 1: Chromium's `NativeWidgetMacFramelessNSWindow`, number, frame, level). |
 | `pip-action` | `action` (`close`, `back-to-tab`) | Phase 1: the session paths that Chromium's own window's Close and Back to Tab end in. |
 | `now-playing` | — | `MPNowPlayingInfoCenter` title, artist, rate, elapsed, `playbackState`, and whether the remote play, pause, toggle, next and previous commands are enabled (read in-process; Chromium's system media controls own them). |
 | `sleep-visibility` | — | The media sleep feed (§4.10): `pictureInPicture`, `mediaControls`, the resulting `visible` set and window states, from `MediaCoordinator.visibility`. |
 
 The App accepts `--pip-site-rules=FILE` in Debug and automation builds; the `media` suite writes a rules file that disallows `blocked.localhost` and gives `inaudible.localhost` `activatesWhenInaudible` (Chromium maps `*.localhost` to the loopback server).
+
+## Notifications (page-platform Step 7)
+
+Commands in `App/Automation/AutomationNotifications.swift`.
+
+| Command | Args | Result |
+|---|---|---|
+| `notifications` | — | `authorization` (macOS status for Open.app: `notDetermined`, `denied`, `authorized`, `provisional`, `ephemeral`), `delivered` (`UNUserNotificationCenter.getDeliveredNotifications` of Open.app: `id`, `title`, `subtitle`, `body`, `thread`; banners only, because alerts come from the Alerts helper's own bundle), and `engine` (the engine list; `BLOCKED` until EP-7, fork patch 0504). |
+| `notification-click` | `id` | EP-7 simulated click. Returns `BLOCKED` until EP-7. |
+| `notification-authorization` | — | `status` (read now), `denied`, `requests` (one entry per Allow: `requested`, `suppressed`, or `skipped:<status>`), `suppressed`, `settingsURL` (System Settings ▸ Notifications for Open). |
+| `window-miniaturize` | — | Minimizes the front window, as its yellow button does. |
+
+`OPEN_AUTOMATION_NOTIFICATION_AUTHORIZATION=record` (automation builds only): when the user allows a site's notifications and macOS has not been asked yet, the App logs `suppressed` instead of showing the macOS prompt. The `page` suite sets it, so a normal run needs no person. For U-N1 (page-platform §8.4), run the suite once with `OPEN_E2E_NOTIFICATION_PROMPT=1` and click Allow in the macOS prompt:
+
+```sh
+OPEN_E2E_NOTIFICATION_PROMPT=1 /usr/bin/lockf /tmp/open-onscreen-e2e.lock python3 tools/e2e/engine_e2e.py --only page --style chrome
+```
 
 ## Tab sleep (app-shell Step G)
 

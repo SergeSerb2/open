@@ -109,6 +109,8 @@ final class EngineWebProfile: WebProfile {
   func setPermission(_ state: SitePermissionState, for permission: SitePermission, origin: URL) {
     let s: OEPermissionState = state == .allow ? .allow : state == .block ? .block : .ask
     context.setPermissionState(s, for: Self.kind(permission), origin: origin)
+    // Site Control's Allow: ask macOS once (page-platform §4.5.3).
+    if state == .allow, permission == .notifications { NotificationAuthorization.shared.userAllowedNotifications() }
     Self.onPermissionChange?(context)
   }
 

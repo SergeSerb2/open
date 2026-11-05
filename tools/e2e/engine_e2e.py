@@ -5066,7 +5066,10 @@ def media_checks(factory, results, tmp):
     """media-pip §8.4 E-M1…E-M15 in the real App (phase 1: Chromium's own PiP window)."""
     server, port = _media_server()
     base = "http://127.0.0.1:%d/" % port
-    app = factory(urls=(base + "plain.html",), fresh=True)
+    # Chromium's fake capture devices (recording card): no system camera or microphone is opened, so
+    # macOS shows no permission prompt. The permission itself goes through Open's real request path
+    # (automation policy "grant"); Chromium's fake permission UI would skip the capture indicator.
+    app = factory(urls=(base + "plain.html",), fresh=True, extra_args=["--use-fake-device-for-media-stream"])
     def m(tab): return app.call("media", tab=tab)
     def players(window=None):
         return app.call("mini-players", **({"window": window} if window else {}))
@@ -5356,6 +5359,74 @@ def media_checks(factory, results, tmp):
             "playback": after["playback"], "pagePlaying": vt_playing, "elementVolume": vt_element, "reset": reset["volume"]}
         close_tab(vt)
 
+        # Step 8 volume drawer (§13.7 O2): Volume on an expanded card opens a 33 pt drawer row (card 66 -> 99);
+        # a click on the slider sets the engine's tab volume, the high end sets 100 %, the low end toggles
+        # mute; moving off the stack collapses it and closes the drawer. Real mouse events on the card.
+        dv = open_tab(base + "audio.html"); start(dv); select(home)
+        wait_until(lambda: dv in ids(), timeout=2, step=.01)
+        def dcard(): return next((c for c in players()["cards"] if c["tab"] == dv), None)
+        def settled(pred): return wait_until(lambda: (lambda c: c if c and pred(c) and not players()["animations"] else None)(dcard()), timeout=2, step=.02)
+        closed_height = (dcard() or {}).get("height")
+        app.call("media-click", tab=dv, target="volume")
+        drawer = settled(lambda c: c["drawerOpen"] and abs(c["height"] - 99) < .5)
+        slid = app.call("media-click", tab=dv, target="slider", fraction=0.25)
+        quarter = wait_until(lambda: (lambda x: x if x["volume"] is not None and abs(x["volume"] - 0.25) < 1e-9 else None)(m(dv)), timeout=2, step=.02) or m(dv)
+        dv_element = app.eval(dv, "document.getElementById('tone').volume")
+        dv_playing = app.eval(dv, "!document.getElementById('tone').paused")
+        app.call("media-click", tab=dv, target="volumeHigh")
+        full = wait_until(lambda: m(dv)["volume"] == 1 and (dcard() or {}).get("slider") == "100%", timeout=2, step=.02)
+        app.call("media-click", tab=dv, target="volumeLow")
+        low_muted = wait_until(lambda: m(dv)["modelMuted"] is True and m(dv)["muted"] is True, timeout=2, step=.02)
+        app.call("media-click", tab=dv, target="volumeLow")
+        low_unmuted = wait_until(lambda: m(dv)["modelMuted"] is False, timeout=2, step=.02)
+        off = drawer["frame"] if drawer else [0, 0, 0, 0]
+        app.call("mouse", action="hover", x=off[0] + 40, y=160)
+        collapsed = wait_until(lambda: (lambda c: c if c and not c["drawerOpen"] and not c["expanded"] and not players()["animations"] else None)(dcard()), timeout=3, step=.02)
+        results["media_volume_drawer"] = {"ok": bool(drawer) and slid.get("value") == "25%" and quarter["volume"] is not None
+            and abs(quarter["volume"] - 0.25) < 1e-9 and abs(quarter["pageVolume"] - 0.25) < 1e-9 and dv_element == 1 and dv_playing is True
+            and bool(full) and bool(low_muted) and bool(low_unmuted) and bool(collapsed),
+            "closedHeight": closed_height, "drawer": {k: drawer[k] for k in ("height", "drawerOpen", "slider", "buttons")} if drawer else None,
+            "slider": slid, "volumeAfterSlider": quarter["volume"], "pageVolume": quarter["pageVolume"], "elementVolume": dv_element,
+            "playing": dv_playing, "full": bool(full), "lowMutes": bool(low_muted), "lowUnmutes": bool(low_unmuted),
+            "collapsed": {k: collapsed[k] for k in ("height", "drawerOpen", "expanded")} if collapsed else dcard()}
+        close_tab(dv)
+
+        # Step 8 recording card (Q13, PP-19): a meeting-like page (fake camera and microphone, MediaStream
+        # players only, so never controllable) gets a card with its microphone and camera toggles; the
+        # toggles reach the page's own handlers; the card goes when capture stops.
+        # Auto-PiP is off for this row: the playing preview would otherwise open a PiP window on the leave,
+        # and a source in PiP has no card (rule 3).
+        app.call("policy", permissions="grant")
+        app.call("defaults", key="open.advanced.enablePictureInPictureOnLeave", value=False)
+        rec = open_tab(base + "recording.html")
+        rec_started = app.eval(rec, "start()")
+        rec_capturing = wait_until(lambda: m(rec)["capturing"] is True, timeout=5, step=.05)
+        rec_state = m(rec)
+        rec_audible = is_audible(rec)
+        select(home)
+        def rcard(): return next((c for c in players()["cards"] if c["tab"] == rec), None)
+        rec_card = wait_until(lambda: (lambda c: c if c and c["kind"] == "recording" else None)(rcard()), timeout=3, step=.02)
+        app.call("media-click", tab=rec, target="microphone")
+        mic_off = wait_until(lambda: (lambda c: c if c and c["microphoneOn"] is False else None)(rcard()), timeout=2, step=.02)
+        app.call("media-click", tab=rec, target="camera")
+        cam_off = wait_until(lambda: (lambda c: c if c and c["cameraOn"] is False else None)(rcard()), timeout=2, step=.02)
+        rec_page = app.eval(rec, "state()")
+        still_capturing = m(rec)["capturing"]
+        app.eval(rec, "stop()")
+        rec_gone = wait_until(lambda: rec not in ids(), timeout=5, step=.05)
+        app.call("defaults", key="open.advanced.enablePictureInPictureOnLeave", value=None)
+        app.call("policy", permissions="")
+        results["media_recording_card"] = {"ok": rec_started is True and bool(rec_capturing) and rec_state["controllable"] is False
+            and bool(rec_card) and {"favicon", "microphone", "camera"} <= set(rec_card["buttons"])
+            and not ({"play", "previous", "next", "volume"} & set(rec_card["buttons"])) and rec_card["microphoneOn"] is True
+            and rec_card["cameraOn"] is True and bool(mic_off) and bool(cam_off) and rec_page["counts"]["togglemicrophone"] == 1
+            and rec_page["counts"]["togglecamera"] == 1 and rec_page["mic"] is False and rec_page["cam"] is False
+            and still_capturing is True and bool(rec_gone),
+            "started": rec_started, "state": {k: rec_state.get(k) for k in ("capturing", "controllable", "playback", "actions", "source")},
+            "card": rec_card, "page": rec_page, "stillCapturing": still_capturing, "gone": bool(rec_gone), "audibleAtLeave": rec_audible,
+            "decision": m(rec)["decision"]}
+        close_tab(rec)
+
         # EM-5: PiP from the browser needs no user gesture, and the browser enforces disablePictureInPicture
         # (Blink's browser-initiated path skips that check). Page reads go through Runtime.evaluate without
         # a gesture, so they do not grant one.
@@ -5397,7 +5468,36 @@ def media_checks(factory, results, tmp):
         results["media_pip_minimize"] = {"status": "BLOCKED", "reason": "EM-4: phase 1 uses Chromium's PiP window, which has no Minimize"}
         results["media_pip_keep_on_top"] = {"status": "BLOCKED", "reason": "EM-4: the Keep Window on Top menu is in Open's own PiP window"}
         results["media_document_pip"] = {"status": "BLOCKED", "reason": "EM-7: Document PiP disposition"}
-        results["media_sleep_adapter"] = {"status": "BLOCKED", "reason": "section 8: the App sleep adapter; the feed is checked above"}
+        # Item 16 (criterion 6) with section 8's sleep controller (#156): a paused tab whose mini player
+        # shows survives a pass that sleeps an idle background tab; after Close (the card goes) the same
+        # pass may sleep it. The controller's clock moves; no wall-clock wait.
+        def sstate(tab): return next(iter(app.call("sleep-state", tab=tab)["tabs"]), {})
+        held = open_tab(base + "audio.html"); start(held)
+        idle = open_tab(base + "plain.html")
+        select(home)
+        wait_until(lambda: held in ids(), timeout=2, step=.02)
+        app.call("media-click", tab=held, target="play")
+        held_paused = wait_until(lambda: app.eval(held, "document.getElementById('tone').paused"), timeout=3, step=.05)
+        wait_until(lambda: not is_audible(held), timeout=5, step=.05)
+        app.call("sleep-start")
+        app.call("sleep-clock", advance=86400.0)
+        app.call("sleep-tick")
+        held_after, idle_after = sstate(held), sstate(idle)
+        feed_has = held in app.call("sleep-visibility")["mediaControls"]
+        app.call("media-click", tab=held, target="close")
+        wait_until(lambda: held not in ids(), timeout=3, step=.02)
+        wait_until(lambda: held not in app.call("sleep-visibility")["mediaControls"], timeout=3, step=.02)
+        app.call("sleep-clock", advance=86400.0)
+        app.call("sleep-tick")
+        held_closed = sstate(held)
+        results["media_sleep_adapter"] = {"ok": bool(held_paused) and feed_has and held_after.get("phase") == "live"
+            and held_after.get("freezeGate") is not None and idle_after.get("phase") in ("frozen", "sleeping")
+            and held_closed.get("phase") in ("frozen", "sleeping"),
+            "held": {k: held_after.get(k) for k in ("phase", "freezeGate", "discardGate", "audible")},
+            "idle": {k: idle_after.get(k) for k in ("phase", "freezeGate")},
+            "afterClose": {k: held_closed.get(k) for k in ("phase", "freezeGate")}, "feedHadTab": feed_has}
+        app.call("sleep-clock", reset=True)
+        close_tab(held); close_tab(idle)
         # E-M1 persistence: a muted tab stays muted after relaunch.
         app.call("media-action", tab=a1, action="toggle-mute")
         app.call("save"); app.quit()
@@ -8865,6 +8965,263 @@ def page_tools_quit_with_devtools_check(app, results, saved):
                                              and not crashes, "devtools": bool(opened), "quit": report, "crashReports": crashes}
 
 
+def page_notification_checks(factory, results, tmp):
+    """page-platform §8.3 N1–N4, N6: web notifications in the real App (Steps 7 and 16).
+
+    macOS delivery needs the user's one-time Allow (U-N1). A normal run starts the App with
+    OPEN_AUTOMATION_NOTIFICATION_AUTHORIZATION=record: the App logs its authorization request
+    instead of showing the macOS prompt, so no human is needed, and the macOS-delivery rows
+    report BLOCKED: U-N1 until macOS has authorized Open. For U-N1, run the suite once with
+    OPEN_E2E_NOTIFICATION_PROMPT=1 and click Allow in the macOS prompt. The engine's own list and
+    clicks come from EP-7 (fork patch 0504, `--open-automation` builds only). This suite writes no
+    preferences keys.
+    """
+    import http.server
+    import threading
+    folder = os.path.join(ROOT, 'tools', 'e2e', 'fixtures', 'page-platform')
+
+    class Handler(http.server.SimpleHTTPRequestHandler):
+        def __init__(self, *a, **kw):
+            super().__init__(*a, directory=folder, **kw)
+        def log_message(self, *args): pass
+    server = http.server.ThreadingHTTPServer(('127.0.0.1', 0), Handler)
+    threading.Thread(target=server.serve_forever, daemon=True).start()
+    origin = 'http://127.0.0.1:%d' % server.server_address[1]
+    prompt = os.environ.get('OPEN_E2E_NOTIFICATION_PROMPT') == '1'
+    app = factory(urls=(origin + '/notify.html',), fresh=True,
+                  extra_env={} if prompt else {'OPEN_AUTOMATION_NOTIFICATION_AUTHORIZATION': 'record'})
+    pages = []
+
+    def live_tab(url):
+        def find():
+            rows = [t for t in app.call('tabs') if t['url'] == url and t.get('page') and t['page']['live']]
+            return rows[0] if rows else None
+        tab = wait_until(find, timeout=20, step=.2)
+        if not tab:
+            raise AssertionError('no live tab for ' + url)
+        wait_until(lambda: app.eval(tab['page']['identifier'], 'document.readyState') == 'complete', timeout=20, step=.2)
+        pages.append(tab['page']['identifier'])
+        return tab
+
+    def sheet():
+        try:
+            return app.call('alert')
+        except RuntimeError:
+            return None
+
+    def blocked(reason, **evidence):
+        return dict(evidence, status='BLOCKED', reason=reason)
+
+    try:
+        app.call('window-frame', frame=[80, 60, 1360, 860])
+        tab = live_tab(origin + '/notify.html')
+        page = tab['page']['identifier']
+
+        # N1: the user allows the site in Open's prompt (the real sheet button), Chromium shows
+        # the banner, and the Allow asks macOS once (§4.5.3).
+        before = app.call('notification-authorization')
+        app.call('click', tab=page, selector='#ask')
+        prompt_sheet = wait_until(sheet, timeout=10, step=.1)
+        if prompt_sheet:
+            app.call('alert', button='Allow')
+        granted = wait_until(lambda: 'permission:granted' in app.eval(page, 'log'), timeout=10, step=.1)
+        after = wait_until(lambda: (lambda s: s if len(s['requests']) > len(before['requests']) else None)(
+            app.call('notification-authorization')), timeout=10, step=.1) or app.call('notification-authorization')
+        entry = after['requests'][len(before['requests'])] if len(after['requests']) > len(before['requests']) else None
+        expected = (('requested' if prompt else 'suppressed') if before['status'] == 'notDetermined'
+                    else 'skipped:' + before['status'])
+        results['N1_allow_asks_macos'] = {
+            'ok': bool(prompt_sheet) and any(origin.split('//')[1].split(':')[0] in t for t in prompt_sheet['texts'])
+                  and bool(granted) and entry == expected and len(after['requests']) == len(before['requests']) + 1,
+            'sheet': prompt_sheet, 'granted': bool(granted), 'statusBefore': before['status'],
+            'request': entry, 'expected': expected, 'requests': after['requests']}
+        if prompt and before['status'] == 'notDetermined':
+            print('U-N1: click Allow in the macOS notification prompt for Open (waiting up to 120 s)', flush=True)
+            wait_until(lambda: app.call('notification-authorization')['status'] != 'notDetermined', timeout=120, step=1)
+        app.call('click', tab=page, selector='#banner')
+        shown = wait_until(lambda: app.eval(page, 'shown["Open N1 banner"] === true'), timeout=10, step=.1)
+        results['N1_engine_display'] = {'ok': bool(shown), 'log': app.eval(page, 'log')}
+        listed = app.call('notifications')
+        if listed['authorization'] in ('authorized', 'provisional', 'ephemeral'):
+            delivered = wait_until(lambda: [n for n in app.call('notifications')['delivered'] if n['title'] == 'Open N1 banner'],
+                                   timeout=10, step=.2)
+            if delivered:
+                results['N1_macos_delivered'] = {'ok': True, 'delivered': delivered, 'authorization': listed['authorization']}
+            else:
+                # Seen on the M5 (2026-11-02): macOS reports Open authorized, Chromium shows the
+                # banner (N1_engine_display), yet Notification Center's delivered list for Open.app
+                # stays empty. Open cannot see why from inside the app (docs/followups.md); the
+                # user confirms delivery by eye (U-N1). Never counted as a pass.
+                results['N1_macos_delivered'] = blocked('U-N1: authorized, but macOS lists no delivered banner for Open.app; '
+                                                        'the user confirms delivery (followups)', delivered=listed['delivered'],
+                                                        authorization=listed['authorization'])
+        else:
+            results['N1_macos_delivered'] = blocked('U-N1: macOS has not authorized Open (status %s)' % listed['authorization'],
+                                                    delivered=listed['delivered'])
+        engine_titles = lambda: [n['title'] for n in app.call('notifications')['engine']]
+        n1_listed = wait_until(lambda: 'Open N1 banner' in engine_titles() or None, timeout=5, step=.1)
+        results['N1_engine_list'] = {'ok': bool(n1_listed), 'engine': app.call('notifications')['engine']}
+
+        # N2: requireInteraction goes to the Alerts helper, whose bundle has the alert style and
+        # shows as "Open" (§4.5.2).
+        bundle = os.path.join(ROOT, 'build', app.config, 'Open.app', 'Contents')
+        def plist(path):
+            out = subprocess.run(['plutil', '-convert', 'json', '-o', '-', path], capture_output=True, text=True)
+            return json.loads(out.stdout) if out.returncode == 0 else {}
+        main_info = plist(os.path.join(bundle, 'Info.plist'))
+        alerts_info = plist(os.path.join(bundle, 'Frameworks', 'Open Helper (Alerts).app', 'Contents', 'Info.plist'))
+        helper_info = plist(os.path.join(bundle, 'Frameworks', 'Open Helper.app', 'Contents', 'Info.plist'))
+        results['N2_bundles'] = {
+            'ok': main_info.get('NSUserNotificationAlertStyle') == 'banner'
+                  and alerts_info.get('NSUserNotificationAlertStyle') == 'alert'
+                  and alerts_info.get('CFBundleDisplayName') == 'Open'
+                  and alerts_info.get('CFBundleIdentifier') == 'io.github.sergeserb2.open.helper.alerts'
+                  and 'NSUserNotificationAlertStyle' not in helper_info,
+            'main': main_info.get('NSUserNotificationAlertStyle'),
+            'alerts': {k: alerts_info.get(k) for k in ('NSUserNotificationAlertStyle', 'CFBundleDisplayName', 'CFBundleIdentifier')},
+            'helper': helper_info.get('NSUserNotificationAlertStyle')}
+
+        def alerts_helpers():
+            app.discover_owned_processes()
+            return sorted(pid for pid, path in app.owned_processes.items()
+                          if path.endswith('Open Helper (Alerts).app/Contents/MacOS/Open Helper (Alerts)')
+                          and app.process_path(pid) == path)
+        before_helpers = alerts_helpers()
+        app.call('click', tab=page, selector='#alert')
+        alert_shown = wait_until(lambda: app.eval(page, 'shown["Open N2 alert"] === true'), timeout=10, step=.1)
+        helpers = wait_until(alerts_helpers, timeout=15, step=.2)
+        results['N2_alerts_helper'] = {'ok': bool(alert_shown) and bool(helpers) and not before_helpers,
+                                       'shown': bool(alert_shown), 'helpersBefore': before_helpers, 'helpers': helpers or []}
+        # EP-7: Chromium's own list has the alert too (macOS's list for Open.app does not: the
+        # Alerts helper posts from its own bundle).
+        n2_listed = wait_until(lambda: 'Open N2 alert' in engine_titles() or None, timeout=5, step=.1)
+        results['N2_listed'] = {'ok': bool(n2_listed), 'engine': engine_titles()}
+
+        # N3: a page in Space 2 asks to be shown while Space 1 is focused and the window is
+        # minimized. DevTools Page.bringToFront calls the same WebContents::Activate →
+        # ActivateContents as window.focus() in a notification click or a worker's
+        # client.focus() (P1 path, §4.5.4).
+        if app.style != 'chrome':
+            results['N3_activation'] = {'status': 'SKIP', 'reason': 'P1 activation needs hosted tabs: run --style chrome (the App default)'}
+        else:
+            space1 = [s for s in app.call('spaces') if s['focused']][0]['id']
+            space2 = app.call('space-create', title='Notify Space 2', profile='Default')
+            url2 = origin + '/notify.html?space2'
+            tab2 = app.call('open', url=url2)
+            tab2_page = live_tab(url2)['page']
+            app.call('space', space=space1)
+            prepared = {'space1Focused': [s for s in app.call('spaces') if s['focused']][0]['id'] == space1,
+                        'tabSelected': app.call('tab-state', tab=tab2['id'])['selected'], 'style': tab2_page['style']}
+            app.call('window-miniaturize')
+            prepared['miniaturized'] = bool(state_when(app, lambda st: st['miniaturized'], timeout=5, step=.1))
+            app.call('events')
+            app.call('devtools', tab=tab2_page['identifier'], method='Page.bringToFront')
+            shown_state = state_when(app, lambda st: not st['miniaturized'] and st['isKeyWindow'], timeout=5, step=.05)
+            # The Space switch lands on the next model turn after the activation request.
+            focused = wait_until(lambda: (lambda f: f if f == space2 else None)([s for s in app.call('spaces') if s['focused']][0]['id']),
+                                 timeout=5, step=.05) or [s for s in app.call('spaces') if s['focused']][0]['id']
+            selected = app.call('tab-state', tab=tab2['id'])['selected']
+            requests = [e for e in app.call('events') if e['type'] == 'tab-request' and e.get('request') == 'activate']
+            results['N3_activation'] = {
+                'ok': prepared['space1Focused'] and not prepared['tabSelected'] and prepared['miniaturized']
+                      and prepared['style'] == 'chrome' and bool(shown_state) and focused == space2 and selected
+                      and any(e['tab'] == tab2['id'] and e.get('space') == space2 for e in requests),
+                'prepared': prepared, 'windowRestoredAndKey': bool(shown_state), 'focusedSpace': focused, 'space2': space2,
+                'selected': selected, 'requests': requests}
+            # N3 click: the banner's click (EP-7's real click path) runs the page's onclick, whose
+            # focus() selects the tab through P1; Open's fallback sees the page answered.
+            app.call('space', space=space1)
+            other_n3 = app.call('open', url=origin + '/links.html')['id']
+            wait_until(lambda: not app.call('tab-state', tab=tab['id'])['selected'] or None, timeout=5, step=.05)
+            banner = next((n for n in app.call('notifications')['engine'] if n['title'] == 'Open N1 banner'), None)
+            clicked = app.call('notification-click', id=banner['id']) if banner else {'clicked': False}
+            via_page = wait_until(lambda: app.call('tab-state', tab=tab['id'])['selected'] or None, timeout=5, step=.05)
+            time.sleep(0.8)
+            clicks = app.call('notifications')['clicks']
+            results['N3_notification_click'] = {
+                'ok': bool(banner) and clicked['clicked'] and 'click:Open N1 banner' in app.eval(page, 'log') and bool(via_page)
+                      and bool(clicks) and clicks[-1]['action'] == 'page',
+                'clicked': clicked, 'selected': bool(via_page), 'router': clicks[-1:] if clicks else []}
+            app.call('close', tab=other_n3)
+
+        # N4: a page whose click handler does not call focus(): after 500 ms Open selects the
+        # most recently active tab with the notification's origin (§4.5.4 fallback, EP-6).
+        nf_url = origin + '/notify.html?nofocus'
+        nf_tab = app.call('open', url=nf_url)
+        nf_page = live_tab(nf_url)['page']['identifier']
+        wait_until(lambda: app.eval(nf_page, "!!document.getElementById('banner') || null"), timeout=10, step=.1)
+        app.call('click', tab=nf_page, selector='#banner')
+        wait_until(lambda: app.eval(nf_page, 'shown["Open N1 banner"] === true'), timeout=10, step=.1)
+        # Another origin (localhost, not 127.0.0.1), so the fallback has one candidate tab.
+        away = app.call('open', url=origin.replace('127.0.0.1', 'localhost') + '/links.html')['id']
+        wait_until(lambda: not app.call('tab-state', tab=nf_tab['id'])['selected'] or None, timeout=5, step=.05)
+        nf_ids = [n['id'] for n in app.call('notifications')['engine'] if n['title'] == 'Open N1 banner']
+        # The same tag replaces the first page's banner: the newest id belongs to this page.
+        clicked4 = app.call('notification-click', id=nf_ids[-1]) if nf_ids else {'clicked': False}
+        early = app.call('tab-state', tab=nf_tab['id'])['selected']
+        time.sleep(0.2)
+        before_deadline = app.call('tab-state', tab=nf_tab['id'])['selected']
+        fallback = wait_until(lambda: app.call('tab-state', tab=nf_tab['id'])['selected'] or None, timeout=3, step=.05)
+        clicks4 = app.call('notifications')['clicks']
+        results['N4_click_fallback_selects_tab'] = {
+            'ok': clicked4['clicked'] and 'click:Open N1 banner' in app.eval(nf_page, 'log') and not early and not before_deadline
+                  and bool(fallback) and bool(clicks4) and clicks4[-1]['action'] == 'fallback' and clicks4[-1]['tab'] == nf_tab['id'],
+            'selectedAtClick': early, 'selectedAt200ms': before_deadline, 'selectedAfter': bool(fallback), 'router': clicks4[-1:]}
+        app.call('close', tab=away)
+
+        # N6: a service worker notification outlives its tab (the engine still lists it with
+        # no tab of its page open); its click opens the target in a new Today tab.
+        sw_url = origin + '/notify-sw.html'
+        sw_tab = app.call('open', url=sw_url)
+        sw_page = live_tab(sw_url)['page']['identifier']
+        ready = app.eval(sw_page, 'workerReady')
+        titles = app.eval(sw_page, 'showWorkerNotification(%s)' % json.dumps(origin + '/notify.html?from=worker'))
+        app.call('close', tab=sw_tab['id'])
+        gone = wait_until(lambda: not [t for t in app.call('tabs') if t['url'] == sw_url], timeout=10, step=.2)
+        script = ('navigator.serviceWorker.getRegistration("/").then(r => r ? r.getNotifications() : [])'
+                  '.then(list => list.map(n => n.title))')
+        later = app.eval(page, script)
+        # The worker's notification outlives its tab in Chromium's own list (EP-7). The page-side
+        # getNotifications() is macOS's list: it can only see it once macOS authorized Open (U-N1).
+        authorized = app.call('notifications')['authorization'] in ('authorized', 'provisional', 'ephemeral')
+        engine_after = [n['title'] for n in app.call('notifications')['engine']]
+        results['N6_engine_display'] = {'ok': ready is True and bool(gone) and 'Open N6 worker' in engine_after,
+                                        'ready': ready, 'titles': titles, 'tabClosed': bool(gone), 'engineAfterClose': engine_after,
+                                        'pageListAfterClose': later,
+                                        'note': "getNotifications() reads macOS's delivered list (see N1_macos_delivered); not asserted"}
+        # Its click (EP-7) reaches the worker, whose clients.openWindow opens a new tab (P1 didOpen).
+        worker_note = next((n for n in app.call('notifications')['engine'] if n['title'] == 'Open N6 worker'), None)
+        target = origin + '/notify.html?from=worker'
+        clicked6 = app.call('notification-click', id=worker_note['id']) if worker_note else {'clicked': False}
+        opened6 = wait_until(lambda: [t for t in app.call('tabs') if 'from=worker' in t['url']], timeout=20, step=.2)
+        n6 = {'ok': bool(worker_note) and clicked6['clicked'] and bool(opened6),
+                                         'notification': worker_note, 'clicked': clicked6, 'opened': opened6,
+                                         'tabs': [t['url'] for t in app.call('tabs')], 'pages': [p['url'] for p in app.call('pages')],
+                                         'events': [e for e in app.call('events') if e['type'] in ('tab-request', 'open', 'didOpen')][-5:]}
+        if not n6['ok'] and worker_note and clicked6['clicked']:
+            # The click reaches Chromium (EP-7's real click path) and the worker's notificationclick,
+            # but clients.openWindow() creates no page Open hosts (2026-11-02: no OEWebContent, no
+            # tab-strip request). page-platform §2.2 assumed P1 handles it; it does not
+            # (docs/followups.md, "Notifications (clients.openWindow)"). Never counted as a pass.
+            n6 = dict(n6, status='BLOCKED', reason='P1: clients.openWindow from a service worker opens no page in Open (followups)')
+            n6.pop('ok')
+        results['N6_click_opens_tab'] = n6
+        for t in opened6 or []:
+            app.call('close', tab=t['id'])
+    finally:
+        # Close what the suite showed (Notification Center keeps delivered banners after U-N1).
+        for identifier in pages:
+            try:
+                app.eval(identifier, 'typeof closeAll === "function" ? closeAll() : 0', timeout=5)
+                app.eval(identifier, 'navigator.serviceWorker.getRegistration("/").then(r => r ? r.getNotifications() : [])'
+                                     '.then(list => { list.forEach(n => n.close()); return list.length; })', timeout=5)
+            except Exception:
+                pass  # The page may be closed already; quit ends the rest.
+        app.quit()
+        server.shutdown()
+        server.server_close()
+
+
 PAGE_FIXTURES = os.path.join(ROOT, 'tools', 'e2e', 'fixtures', 'page-platform')
 
 
@@ -9148,6 +9505,7 @@ def page_checks(factory, results, tmp, style="alloy"):
     """page-platform §8.3 `--only page`: one suite, one row group per feature."""
     capture_checks(factory, results, tmp)
     page_engine_checks(factory, results, tmp)
+    page_notification_checks(factory, results, tmp)
     page_translate_checks(factory, results, tmp)
     page_tools_checks(factory, results, tmp, style)
 
@@ -9243,14 +9601,14 @@ def main():
     tracker = FocusTracker()
     _ACTIVE_FOCUS_TRACKER = tracker
 
-    def factory(urls=("about:blank",), fresh=False, snapshot=None, extra_env=None):
+    def factory(urls=("about:blank",), fresh=False, snapshot=None, extra_env=None, extra_args=None):
         if fresh or snapshot:
             shutil.rmtree(user_data, ignore_errors=True)
             shutil.rmtree(user_caches, ignore_errors=True)
         if snapshot:
             os.makedirs(os.path.join(user_data, "State"), exist_ok=True)
             shutil.copyfile(snapshot, os.path.join(user_data, "State", "browser.json"))
-        app = Open(opts.config, opts.style, user_data, extra, log, urls=urls, extra_env=extra_env)
+        app = Open(opts.config, opts.style, user_data, extra + list(extra_args or []), log, urls=urls, extra_env=extra_env)
         app.focus_tracker = tracker
         tracker.apps.append(app)
         return app

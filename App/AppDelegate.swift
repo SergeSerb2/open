@@ -437,6 +437,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate, OEEngineDelegate, OEBr
   func browserContext(_ context: OEBrowserContext, downloadDidUpdate download: OEDownload) {
     downloadOwner(download)?.browserContext(context, downloadDidUpdate: download)
   }
+
+  /// A web notification was clicked (EP-6); §4.5.4's 500 ms fallback selects its tab.
+  func browserContext(_ context: OEBrowserContext, didClickNotification identifier: String, origin: URL, persistent: Bool) {
+    NotificationClickRouter.shared.clicked(app: self, context: context, identifier: identifier, origin: origin, persistent: persistent)
+  }
 }
 
 extension AppDelegate: CommandDispatcher {

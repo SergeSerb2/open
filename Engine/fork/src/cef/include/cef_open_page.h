@@ -199,8 +199,10 @@ class CefNotificationListCallback : public virtual CefBaseRefCounted {
 
 ///
 /// Test hook, active only when the browser process runs with the
-/// --open-automation switch: lists the web notifications Chromium shows for
-/// |request_context|. Otherwise the list is empty. |callback| runs exactly
+/// --open-automation switch: lists the web notifications Chromium showed for
+/// |request_context| (its display service; not the operating system's list, so
+/// the hook works without notification authorization). A notification closed
+/// by its page stays listed. Otherwise the list is empty. |callback| runs exactly
 /// once on the UI thread. Must be called on the browser process UI thread.
 ///
 /*--cef(added=experimental)--*/
