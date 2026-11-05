@@ -6,21 +6,21 @@
         "forced": false,
         "ok": true,
         "owned_pids": [
-          18345,
-          18476,
-          18477,
-          18478,
-          18481,
-          18482,
-          18606,
-          18623,
-          18714,
-          18718,
-          18764,
-          19336,
-          19344,
-          19345,
-          19381
+          88210,
+          88243,
+          88244,
+          88245,
+          88246,
+          88249,
+          88288,
+          88297,
+          88327,
+          88338,
+          88353,
+          88553,
+          88558,
+          88559,
+          88568
         ],
         "remaining_processes": [],
         "reply": true,
@@ -34,15 +34,15 @@
   },
   "config": "Release",
   "engine": {
-    "distributionCodeSHA256": "0d78c64d7a1037569b075286817487080bded30c3e76f88ef93dbf77a5903352",
-    "distributionSHA256": "e65426c9ffa518d7cae75479c4ede2aa189f87ff8ec78ba5fec3c3dcfa2c7415",
-    "distributionUUID": "4C4C4453-5555-3144-A1C6-D913A1F69CD2",
-    "embeddedCodeSHA256": "0d78c64d7a1037569b075286817487080bded30c3e76f88ef93dbf77a5903352",
-    "embeddedSHA256": "01dde3b1c3e248f8652ec42b54d0646df246f96893c7d340e259863a28dd34b7",
-    "embeddedUUID": "4C4C4453-5555-3144-A1C6-D913A1F69CD2",
-    "requiredSHA256": "e65426c9ffa518d7cae75479c4ede2aa189f87ff8ec78ba5fec3c3dcfa2c7415",
+    "distributionCodeSHA256": "7979934c0d84f4d9fedb3859826d0c7c65919834fc904ec2aee00a0b4e4dd8f2",
+    "distributionSHA256": "7b49090502568f8189aa0e94f7cf23344beec5bed537136eff5f7fce573ad35a",
+    "distributionUUID": "4C4C446F-5555-3144-A1AB-0A55260E4EBE",
+    "embeddedCodeSHA256": "7979934c0d84f4d9fedb3859826d0c7c65919834fc904ec2aee00a0b4e4dd8f2",
+    "embeddedSHA256": "ec8cdb8039674748940441956a1ae529423ae15c05ac972a806a9afb12a657c0",
+    "embeddedUUID": "4C4C446F-5555-3144-A1AB-0A55260E4EBE",
+    "requiredSHA256": "7b49090502568f8189aa0e94f7cf23344beec5bed537136eff5f7fce573ad35a",
     "source": "fork",
-    "stamp": "fork /Users/serge/Developer/open-engine-s8/chromium_git/chromium/src/cef/binary_distrib/cef_binary_156.0.14+g4fa4ab5+chromium-156.0.8078.48_macosarm64_minimal 1793912762"
+    "stamp": "fork /Users/serge/Developer/open-engine-s8/chromium_git/chromium/src/cef/binary_distrib/cef_binary_156.0.14+g4fa4ab5+chromium-156.0.8078.48_macosarm64_minimal 1793918995"
   },
   "extensions-p3": {
     "X14_permissions_deny_allow": {
@@ -97,10 +97,10 @@
               {
                 "byUser": true,
                 "event": "installed",
-                "id": "pfokeeaamoamcolcaggopjliflbfkgem"
+                "id": "mmgdmdbhjppngenbpdkkmlkpodflmeck"
               }
             ],
-            "extension": "pfokeeaamoamcolcaggopjliflbfkgem",
+            "extension": "mmgdmdbhjppngenbpdkkmlkpodflmeck",
             "handler": true,
             "name": "Open action probe",
             "pending": true,
@@ -172,10 +172,10 @@
               {
                 "byUser": true,
                 "event": "installed",
-                "id": "pfokeeaamoamcolcaggopjliflbfkgem"
+                "id": "mmgdmdbhjppngenbpdkkmlkpodflmeck"
               }
             ],
-            "extension": "pfokeeaamoamcolcaggopjliflbfkgem",
+            "extension": "mmgdmdbhjppngenbpdkkmlkpodflmeck",
             "handler": true,
             "name": "Open action probe",
             "pending": true,
@@ -252,7 +252,7 @@
           {
             "byUser": true,
             "event": "installed",
-            "id": "pfokeeaamoamcolcaggopjliflbfkgem"
+            "id": "mmgdmdbhjppngenbpdkkmlkpodflmeck"
           },
           {
             "context": "Default",
@@ -287,7 +287,7 @@
             "event": "commands"
           }
         ],
-        "extension": "pfokeeaamoamcolcaggopjliflbfkgem",
+        "extension": "mmgdmdbhjppngenbpdkkmlkpodflmeck",
         "handler": true,
         "name": "Open action probe",
         "pending": true,
@@ -330,7 +330,7 @@
             "event": "ready"
           }
         ],
-        "extension": "pfokeeaamoamcolcaggopjliflbfkgem",
+        "extension": "mmgdmdbhjppngenbpdkkmlkpodflmeck",
         "handler": true,
         "injectedCancel": false,
         "name": "Open action probe",
@@ -381,7 +381,7 @@
             "event": "ready"
           }
         ],
-        "extension": "pfokeeaamoamcolcaggopjliflbfkgem",
+        "extension": "mmgdmdbhjppngenbpdkkmlkpodflmeck",
         "handler": true,
         "name": "Open action probe",
         "pending": true,
@@ -411,7 +411,7 @@
         "commands": [
           "probe-named"
         ],
-        "lastCommandTab": 1672900063
+        "lastCommandTab": 67692781
       },
       "ok": true,
       "unknownRefused": true
@@ -422,7 +422,7 @@
       "commands": [
         {
           "actionCommand": true,
-          "extension": "pfokeeaamoamcolcaggopjliflbfkgem",
+          "extension": "mmgdmdbhjppngenbpdkkmlkpodflmeck",
           "global": false,
           "keyEquivalent": "Y",
           "modifierFlags": 1048576,
@@ -431,7 +431,7 @@
         },
         {
           "actionCommand": false,
-          "extension": "pfokeeaamoamcolcaggopjliflbfkgem",
+          "extension": "mmgdmdbhjppngenbpdkkmlkpodflmeck",
           "global": false,
           "keyEquivalent": "U",
           "modifierFlags": 1048576,
@@ -444,7 +444,7 @@
     "disable_enable_with_popup": {
       "actionGone": true,
       "disabled": {
-        "directory": "/Users/serge/Library/Application Support/Open-E2E-extensions-p3-chrome-18195-c69c4cd2/Engine/Default/Extensions/pfokeeaamoamcolcaggopjliflbfkgem/1.0_0",
+        "directory": "/Users/serge/Library/Application Support/Open-E2E-extensions-p3-chrome-88166-9eb0914d/Engine/Default/Extensions/mmgdmdbhjppngenbpdkkmlkpodflmeck/1.0_0",
         "disableReasons": 1,
         "enabled": false,
         "fromWebStore": false,
@@ -452,7 +452,7 @@
         "homepage": "",
         "hostPermissions": [],
         "icon": "128x128",
-        "id": "pfokeeaamoamcolcaggopjliflbfkgem",
+        "id": "mmgdmdbhjppngenbpdkkmlkpodflmeck",
         "manifestVersion": 3,
         "name": "Open action probe",
         "omniboxKeyword": "probe",
@@ -477,7 +477,7 @@
           "frame": "{{640, 666}, {448, 196}}",
           "key": true,
           "level": 0,
-          "number": 29904,
+          "number": 48940,
           "parent": 0,
           "sheet": false,
           "text": [
@@ -495,7 +495,7 @@
     },
     "live_metadata": {
       "extension": {
-        "directory": "/Users/serge/Library/Application Support/Open-E2E-extensions-p3-chrome-18195-c69c4cd2/Engine/Default/Extensions/pfokeeaamoamcolcaggopjliflbfkgem/1.0_0",
+        "directory": "/Users/serge/Library/Application Support/Open-E2E-extensions-p3-chrome-88166-9eb0914d/Engine/Default/Extensions/mmgdmdbhjppngenbpdkkmlkpodflmeck/1.0_0",
         "disableReasons": 0,
         "enabled": true,
         "fromWebStore": false,
@@ -503,7 +503,7 @@
         "homepage": "",
         "hostPermissions": [],
         "icon": "128x128",
-        "id": "pfokeeaamoamcolcaggopjliflbfkgem",
+        "id": "mmgdmdbhjppngenbpdkkmlkpodflmeck",
         "manifestVersion": 3,
         "name": "Open action probe",
         "omniboxKeyword": "probe",
@@ -617,7 +617,7 @@
         {
           "byUser": true,
           "event": "installed",
-          "id": "pfokeeaamoamcolcaggopjliflbfkgem"
+          "id": "mmgdmdbhjppngenbpdkkmlkpodflmeck"
         }
       ],
       "ok": true
@@ -644,10 +644,10 @@
       "AttributeGraph",
       "AttributeGraph graph data"
     ],
-    "pid": 18345,
-    "root": "/Users/serge/Library/Application Support/Open-E2E-extensions-p3-chrome-18195-c69c4cd2",
-    "userData": "/Users/serge/Library/Application Support/Open-E2E-extensions-p3-chrome-18195-c69c4cd2/Engine"
+    "pid": 88210,
+    "root": "/Users/serge/Library/Application Support/Open-E2E-extensions-p3-chrome-88166-9eb0914d",
+    "userData": "/Users/serge/Library/Application Support/Open-E2E-extensions-p3-chrome-88166-9eb0914d/Engine"
   },
-  "started": "2026-11-05 14:42:07",
+  "started": "2026-11-05 16:11:44",
   "style": "chrome"
 }

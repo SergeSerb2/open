@@ -259,9 +259,9 @@ Deviations and limits:
 
 Verification: the local-CRX `extensions-p3` suite passes all 14 feature rows,
 including the unchanged native-dialog fallback; its deliberate install-cancel
-fault fails X-1 and the restored run passes. Engine status is 8/8 with 19
+fault fails X-1 and the restored run passes. Engine status is 8/8 with 20
 patches and distribution SHA-256
-`e65426c9ffa518d7cae75479c4ede2aa189f87ff8ec78ba5fec3c3dcfa2c7415`.
+`7b49090502568f8189aa0e94f7cf23344beec5bed537136eff5f7fce573ad35a`.
 See the [P3 receipt](engine-spike/extensions-p3-receipt.md) and the PR's final
 regression/full-verification tables.
 
