@@ -212,7 +212,7 @@ import OpenStore
         if path.hasPrefix(snapshot.root.path + "/") { return "Open Data/" + String(path.dropFirst(snapshot.root.path.count + 1)) }
         return (path as NSString).abbreviatingWithTildeInPath
     }
-    public func fileAvailable(_ item: DownloadItemSnapshot) -> Bool { item.filePath.map { FileManager.default.fileExists(atPath: $0) } ?? false }
+    public func fileAvailable(_ item: DownloadItemSnapshot) -> Bool { item.fileExists ?? (item.filePath.map { FileManager.default.fileExists(atPath: $0) } ?? false) }
     public func revealDownload(_ item: DownloadItemSnapshot) { guard fileAvailable(item) else { statusText = "File moved or deleted."; return }; actions.revealDownload(id: item.id) }
     public func retryDownload(_ item: DownloadItemSnapshot) { guard item.state == .failed else { return }; actions.retryDownload(id: item.id) }
     public var captureItems: [CaptureItemSnapshot] {

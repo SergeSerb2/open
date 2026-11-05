@@ -754,3 +754,29 @@ the real key path for Esc, and the result card's own buttons.
 
 The page context menu event (`policy contextMenu=record`) also lists `open` (Open's own
 items, "Capture" and "Capture Full Page") and `shown` (the whole menu as it would show).
+
+## Session downloads (S11)
+
+`--only downloads` in `tools/e2e/engine_e2e.py` serves known-length, unknown-length,
+interrupted and fast transfers on an ephemeral loopback port. It uses real engine
+callbacks, Profile settings, Library rows, save sheets and the app-modal quit
+warning. Run with the on-screen lock, one suite per invocation.
+
+| Command | Arguments / behavior |
+|---|---|
+| `downloads-state` | Session items, actual visible native row subtitles/buttons, real Home badge layers, queued publications, pending save sheets, recorded file actions and actual quit-alert strings. |
+| `download-settings` | `profile`, optional `directory`, `ask`; changes the real Profiles settings model in the disposable data root. |
+| `download-row` | `id`, `action=Pause|Resume|Cancel|Retry|Show in Finder`; presses the visible row's actual `NSButton`. |
+| `download-menu` | `id`, optional exact `select` title; reads/performs the same native `NSMenu` returned for a row right-click. Disabled or invisible items fail. |
+| `download-save` | Pending sheet `id`; `action=cancel` or destination `path`. Sets `NSSavePanel.directoryURL` and filename, then presses the sheet's real Save/Cancel accessibility button. Does not call the engine completion. |
+| `download-policy` | `quit=close|keep|record` answers the real app-modal alert with its native button (`record` records and keeps browsing); `recordFiles=true` records Open/Show in Finder URLs instead of opening another application. Copy and Trash still run. |
+| `download-home` | Presses the browser's actual Home accessibility control. |
+| `download-library-close` | Uses the Library window's normal close action. |
+| `download-idle` | S8 observer actions `begin|reset|canary|end` and counts. Available only when the runner injects `feature-idle-probe.m`. Canary is a real repeating timer that is then invalidated. |
+
+The suite restores each shared `open.*` preference it changes in `finally`, and
+cancels pending save sheets before verified-PID cleanup, including forced early
+failure (`OPEN_DOWNLOADS_FAIL_IN_SHEET=1`). Open/Finder dispatch recording avoids
+opening user applications. It proves the dispatched URL, not external-app file
+rendering. Home geometry and the 60-second recent-download click rule remain the
+lead's marked guesses. No Little Open tray is added.

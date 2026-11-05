@@ -23,6 +23,8 @@ public enum OriginFilter: String, CaseIterable, Sendable { case all, spaces, lit
     func pauseDownload(id: String)
     func resumeDownload(id: String)
     func openDownload(id: String)
+    func copyDownload(id: String)
+    func trashDownload(id: String)
     func removeDownload(id: String)
     func deleteCapture(id: UUID)
     func revealCapture(id: UUID)
@@ -61,4 +63,10 @@ public enum OriginFilter: String, CaseIterable, Sendable { case all, spaces, lit
         captures = next
         if exists { try? FileManager.default.removeItem(at: tombstone) }
     }
+}
+
+// Existing render fixtures do not own downloadable files.
+public extension LibraryActions {
+    func copyDownload(id: String) {}
+    func trashDownload(id: String) {}
 }

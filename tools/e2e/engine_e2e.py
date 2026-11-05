@@ -121,7 +121,8 @@ class Open:
         self.user_data = user_data
         self.config, self.style = config, style
         self.sock = os.path.join(user_data, "automation.sock")
-        app = os.path.join(ROOT, "build", config, "Open.app", "Contents", "MacOS", "Open")
+        bundle_override = (extra_env or {}).get("OPEN_E2E_APP_BUNDLE")
+        app = os.path.join(bundle_override or os.path.join(ROOT, "build", config, "Open.app"), "Contents", "MacOS", "Open")
         self.executable = app
         self.bundle = os.path.dirname(os.path.dirname(os.path.dirname(app)))
         activator_source = os.path.join(ROOT, "tools", "e2e", "activate-own-app.swift")
@@ -9506,6 +9507,7 @@ def page_tools_checks(factory, results, tmp, style):
 def _restore_defaults(app, saved):
     """Restores keys of the shared io.github.sergeserb2.open domain through the App, or
     with `defaults` when the App can no longer answer (a crash must not leave keys behind)."""
+    domain = getattr(app, "preferences_domain", "io.github.sergeserb2.open")
     for key, value in saved.items():
         restored = False
         if not app.closed:
@@ -9516,11 +9518,11 @@ def _restore_defaults(app, saved):
                 pass
         if not restored:
             if value is None:
-                subprocess.run(["defaults", "delete", "io.github.sergeserb2.open", key], capture_output=True)
+                subprocess.run(["defaults", "delete", domain, key], capture_output=True)
             elif isinstance(value, bool):
-                subprocess.run(["defaults", "write", "io.github.sergeserb2.open", key, "-bool", "true" if value else "false"], capture_output=True)
+                subprocess.run(["defaults", "write", domain, key, "-bool", "true" if value else "false"], capture_output=True)
             else:
-                subprocess.run(["defaults", "write", "io.github.sergeserb2.open", key, "-string", str(value)], capture_output=True)
+                subprocess.run(["defaults", "write", domain, key, "-string", str(value)], capture_output=True)
 
 
 def page_tools_quit_with_devtools_check(app, results, saved):
@@ -10092,7 +10094,7 @@ def main():
     ap.add_argument("--extensions", default=os.path.join(ROOT, ".re", "ext", "unpacked"))
     ap.add_argument("--only", choices=["shell", "extensions", "features", "measure", "tabstrip", "window", "sidebar", "peek",
                                        "commandbar", "app-actions", "actions", "profiles", "sidebar-completion", "toolbar", "numbering", "media", "relaunch", "page",
-                                       "sleep"])
+                                       "sleep", "downloads"])
     ap.add_argument("--window-chrome-only", action="store_true", help="run only the window-chrome follow-up flows in the window suite")
     ap.add_argument("--keep", action="store_true",
                     help="keep this run's data root, cache root and scratch folder (paths printed at the end)")
@@ -10280,6 +10282,10 @@ def main():
         elif opts.only == "media":
             results["media"] = CheckedResults(tracker)
             media_checks(factory, results["media"], tmp)
+        elif opts.only == "downloads":
+            import downloads
+            results["downloads"] = CheckedResults(tracker)
+            downloads.checks(factory, results["downloads"], tmp, opts.config)
         elif opts.only == "sleep":
             results["sleep"] = CheckedResults(tracker)
             sleep_checks(factory, results["sleep"], tmp, opts.style)
@@ -10365,14 +10371,14 @@ def main():
                                     else opts.config.lower()))
     with open(os.path.join(OUT, name), "w") as f:
         json.dump(results, f, indent=2, sort_keys=True)
-    for group in ("shell", "extensions", "features", "measure", "tabstrip", "window", "sidebar", "peek", "commandbar", "app-actions", "actions", "profiles", "sidebar-completion", "toolbar", "numbering", "media", "relaunch", "page", "sleep"):
+    for group in ("shell", "extensions", "features", "measure", "tabstrip", "window", "sidebar", "peek", "commandbar", "app-actions", "actions", "profiles", "sidebar-completion", "toolbar", "numbering", "media", "relaunch", "page", "sleep", "downloads"):
         for k, v in results.get(group, {}).items():
             if isinstance(v, dict) and "ok" in v:
                 print("%-24s %s" % (k, "PASS" if v.get("ok") else "FAIL"))
             elif isinstance(v, dict) and v.get("status") in ("SKIP", "BLOCKED", "INTERRUPTED", "DEFERRED"):
                 print("%-24s %s: %s" % (k, v["status"], v.get("reason", "")))
     print("wrote", os.path.join(OUT, name))
-    failures = [k for group in ("shell", "extensions", "features", "measure", "tabstrip", "window", "sidebar", "peek", "commandbar", "app-actions", "actions", "sidebar-completion", "toolbar", "numbering", "media", "relaunch", "page", "sleep")
+    failures = [k for group in ("shell", "extensions", "features", "measure", "tabstrip", "window", "sidebar", "peek", "commandbar", "app-actions", "actions", "sidebar-completion", "toolbar", "numbering", "media", "relaunch", "page", "sleep", "downloads")
                 for k, v in results.get(group, {}).items() if isinstance(v, dict) and v.get("ok") is False]
     if failures or not results["cleanup"]["ok"]:
         sys.exit(1)
