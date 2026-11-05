@@ -43,6 +43,15 @@ static BOOL executableTimerCaller(void) {
         if (strstr(path, "idle-probe.dylib") || strstr(path, "/Foundation.framework/") ||
             strstr(path, "/CoreFoundation.framework/") || strstr(path, "/libswift") ||
             strstr(path, "/libdispatch.dylib")) continue;
+        // The split suite injects this observer into its own real Open instance.
+        // Keep the original harness attribution unchanged unless explicitly selected.
+        BOOL split = getenv("OPEN_IDLE_OWNER") && !strcmp(getenv("OPEN_IDLE_OWNER"), "split");
+        if (split) {
+            if (!strstr(path, "/Open") || strstr(path, ".framework/")) return NO;
+            if (!info.dli_sname) return YES;
+            return strstr(info.dli_sname, "SplitViewController") || strstr(info.dli_sname, "SplitDividerView") ||
+                strstr(info.dli_sname, "WebContentContainer") || strstr(info.dli_sname, "PaneSlotView");
+        }
         if (!strstr(path, "/features-render")) return NO;
         // Async harness waits can create transient Foundation timers too.
         // Attribute the first executable frame to the product or the canary.
@@ -255,6 +264,7 @@ void open_idle_reset_events(void) {
     for (int i = 0; i < 5; i++) atomic_store(&events[i], 0);
     pthread_mutex_unlock(&guard);
 }
+int open_idle_ready(void) { return armed && views != nil && layers != nil && displayLinks != nil; }
 // 0...5 event counts; 6 live CF timers in any mode; 7 uncancelled dispatch
 // timers; 8 running CV links; 9 registered CA/NSView links (even if offscreen-paused).
 uint64_t open_idle_count(int index) {

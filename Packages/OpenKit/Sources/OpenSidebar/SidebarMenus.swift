@@ -287,9 +287,17 @@ struct SidebarMenus {
 
     func plus() -> NSMenu {
         let space = context.focusedSpace
+        let canSplit: Bool = {
+            guard let tab = context.currentTab, let parent = context.model.parent(of: tab.id) else { return false }
+            switch parent {
+            case .favorites: return false
+            case .splitPane(let id): return (context.model.node(id: id)?.split?.panes.count ?? 4) < 4
+            default: return true
+            }
+        }()
         return menu([
             item("New Tab", .newTab),
-            item("New Split View", .newSplitView),
+            item("New Split View", enabled: canSplit, .newSplitView),
             space.map { item("New Folder", .newFolder(in: .spacePinned($0.id))) } ?? .separator(),
             .separator(),
             item("New Space…", .newSpace),
