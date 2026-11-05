@@ -1647,3 +1647,22 @@ The engine side of E1–E7 is in (docs/engine-patches.md, P2 status; docs/engine
   - Manage Extension: opens `chrome://extensions/?id=…` as a new tab.
   - View Web Permissions: opens `chrome://settings/content/siteDetails?site=…` as a new tab.
   - Remove: shows Chrome's own uninstall dialog until P3 (E10).
+
+## Verification notes
+
+PR: TBD (`s6/ui-kit`). Steps 1 and 4, plus the engine-free menu, popup-panel,
+and prompt-sheet parts of Steps 3 and 6, land in `OpenExtensionsUI` and
+`extensions-render`. `OpenWeb` retains the old App bridge API with compatibility
+defaults. App wiring, engine adapters, popup lifecycle observers, and real-browser
+X-1–X-27 acceptance remain for the App step; this PR changes no `App/` source.
+
+The toolbar style uses x 115 as its host-group left limit and reserves 36 pt
+for Site Control Center plus its gap. Its capped-host capacities are 22 slots at
+w 984 (160 pt host) and 9 at w 600 (120 pt host). This is **guess (lead), capture
+C1**. The URL strip remains hover-only, with explicit forced-visibility flags.
+The existing §3 guesses still need the S-2–S-7, S-10 and S-11 captures.
+
+Use `extensions-render all --scale 1|2 --appearance light|dark --out DIR`,
+`extensions-render check`, and `extensions-render menus --out DIR` for the
+engine-free surfaces. Generated PNGs and JSON stay in `.re/extensions-ui/`,
+following the sidebar render receipt convention; no new baseline is committed.

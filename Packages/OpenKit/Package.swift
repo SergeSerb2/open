@@ -5,6 +5,8 @@ let package = Package(
     name: "OpenKit",
     platforms: [.macOS(.v26)],
     products: [
+        .library(name: "OpenExtensionsUI", targets: ["OpenExtensionsUI"]),
+        .executable(name: "extensions-render", targets: ["extensions-render"]),
         .library(name: "OpenSiteControl", targets: ["OpenSiteControl"]),
         .executable(name: "sitecontrol-render", targets: ["sitecontrol-render"]),
         .library(name: "OpenMedia", targets: ["OpenMedia"]),
@@ -35,6 +37,8 @@ let package = Package(
         .executable(name: "commandbar-render", targets: ["commandbar-render"]),
     ],
     targets: [
+        .target(name: "OpenExtensionsUI", dependencies: ["OpenModel", "OpenDesign", "OpenWeb"]),
+        .executableTarget(name: "extensions-render", dependencies: ["OpenModel", "OpenDesign", "OpenWeb", "OpenExtensionsUI", "OpenSidebar", "OpenFeatures"]),
         .target(name: "OpenSiteControl", dependencies: ["OpenModel", "OpenDesign", "OpenBoosts", "OpenAdBlock", "OpenWeb"]),
         .executableTarget(name: "sitecontrol-render", dependencies: ["OpenSiteControl", "OpenModel", "OpenDesign", "OpenBoosts", "OpenWeb"], resources: [.copy("Fixtures")]),
         .target(name: "OpenMedia", dependencies: ["OpenModel", "OpenWeb"], resources: [.copy("Resources/pip-site-rules.json")]),
