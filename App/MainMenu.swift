@@ -34,13 +34,21 @@ enum MainMenu {
 @MainActor
 enum AppCommand {
   static let helpURL = URL(string: "https://github.com/SergeSerb2/open/blob/main/docs/commands.md")!
+  static func helpURL(for id: String) -> URL {
+    switch id {
+    case "getting-started": URL(string: "https://github.com/SergeSerb2/open#readme")!
+    case "release-notes": URL(string: "https://github.com/SergeSerb2/open/releases")!
+    case "contact-team": URL(string: "https://github.com/SergeSerb2/open/issues/new")!
+    default: helpURL
+    }
+  }
   /// Settings ▸ Advanced "Show full URL when Toolbar is enabled" (CC-37).
   static let showFullURLKey = "open.advanced.showFullURLWithToolbar"
   static let featureIDs: Set<String> = ["add-split-view", "close-split-pane", "expand-current-split", "separate-from-split-view", "next-split-pane", "previous-split-pane", "open-in-current-space"]
   static func canonicalID(_ id: String) -> String {
     ["reveal-tab-in-sidebar": "reveal-current-tab", "keyboard-shortcuts": "keyboard-shortcuts-edu"][id] ?? id
   }
-  static let implemented: Set<String> = ["new-tab", "open-command-bar", "search-tabs", "search-actions", "new-window", "blank-window", "archive-tab", "restore-last-closed-tab", "pin-unpin-tab", "pin-tab", "unpin-tab", "duplicate-tab", "rename-tab", "reset-tab", "replace-pinned-url", "clear-unpinned-tabs", "next-tab", "previous-tab", "cycle-tab-forward", "cycle-tab-backward", "tab-switcher-forward", "tab-switcher-backward", "next-space", "previous-space", "new-space", "new-folder", "focus-space", "reload", "force-reload", "stop-loading", "go-back", "go-forward", "zoom-in", "zoom-out", "zoom-actual-size", "print", "save-page-as", "share-page", "copy-url", "copy-url-markdown", "copy-url-quote", "developer-tools", "javascript-console", "view-source", "inspect-elements", "toggle-sidebar", "toggle-toolbar", "reveal-current-tab", "expand-pinned-section", "collapse-pinned-section", "settings", "search-settings", "air-traffic-control", "import-from-browser", "set-default-browser", "check-for-updates", "view-archive", "view-history", "view-downloads", "view-library", "view-media", "view-boosts", "manage-extensions", "add-extension", "new-little-open-window", "little-open-global", "help-center", "keyboard-shortcuts-edu", "getting-started", "release-notes", "contact-team", "expand-all-folders", "collapse-all-folders", "add-to-favorites", "remove-from-favorites", "mute-all-tabs", "unmute-all-tabs", "reset-all-tabs-in-space", "manage-spaces", "rename-space", "change-profile", "clear-archive", "capture-page", "capture-full-page", "capture-portrait"]
+  static let implemented: Set<String> = ["peek-email", "new-tab", "open-command-bar", "search-tabs", "search-actions", "new-window", "blank-window", "archive-tab", "restore-last-closed-tab", "pin-unpin-tab", "pin-tab", "unpin-tab", "duplicate-tab", "rename-tab", "reset-tab", "replace-pinned-url", "clear-unpinned-tabs", "next-tab", "previous-tab", "cycle-tab-forward", "cycle-tab-backward", "tab-switcher-forward", "tab-switcher-backward", "next-space", "previous-space", "new-space", "new-folder", "focus-space", "reload", "force-reload", "stop-loading", "go-back", "go-forward", "zoom-in", "zoom-out", "zoom-actual-size", "print", "save-page-as", "share-page", "copy-url", "copy-url-markdown", "copy-url-quote", "developer-tools", "javascript-console", "view-source", "inspect-elements", "toggle-sidebar", "toggle-toolbar", "reveal-current-tab", "expand-pinned-section", "collapse-pinned-section", "settings", "search-settings", "air-traffic-control", "import-from-browser", "set-default-browser", "check-for-updates", "view-archive", "view-history", "view-downloads", "view-library", "view-media", "view-boosts", "manage-extensions", "add-extension", "new-little-open-window", "little-open-global", "help-center", "keyboard-shortcuts-edu", "getting-started", "release-notes", "contact-team", "expand-all-folders", "collapse-all-folders", "add-to-favorites", "remove-from-favorites", "mute-all-tabs", "unmute-all-tabs", "reset-all-tabs-in-space", "manage-spaces", "rename-space", "change-profile", "clear-archive", "capture-page", "capture-full-page", "capture-portrait"]
 }
 
 import OpenEngine
@@ -70,6 +78,9 @@ extension EngineWebContentHostFactory {
 
   func isAppCommandEnabled(_ original: String, enabledKey: String? = nil, payload: String? = nil) -> Bool {
     let id = AppCommand.canonicalID(original)
+    if id == "peek-email" { return controller != nil && peekEmailTab != nil }
+    // Post-v1: Join Meeting needs calendar live data (lead decision S2 on live-data sources).
+    if id == "join-meeting" { return false }
     if let context = selectionCommandContext(for: id) { return context.isSelectionCommandEnabled(id) }
     if let enabled = isPageToolEnabled(id) { return enabled }  // App/Page/PageToolsCommands.swift
     if SystemCommandActions.selectors[id] != nil { return SystemCommandActions.isEnabled(id) }
@@ -142,6 +153,7 @@ extension EngineWebContentHostFactory {
       selectNumberedItem(payload.flatMap(UUID.init(uuidString:)).map { ItemID(rawValue: $0) } ?? item); return true
     }
     switch id {
+    case "peek-email": return peekEmail()
     case "new-tab": newTab(nil)
     case "open-command-bar": focusAddressBar(nil)
     case "search-tabs": showCommandBar(.searchTabs)
