@@ -1289,7 +1289,7 @@ numbers only here — the same discipline as routing.md and sleep.md.
 | 7 | 2026-10-25 | PASS: V1; visible split/Peek/Little Open and minimized/PiP states; sleep-demo 105/105. |
 | 8 | 2026-10-25 | OUT OF SCOPE: App-target intake/default browser/global hotkey. |
 | 9 | 2026-10-25 | OUT OF SCOPE: real engine adapter. A1–A7 remain UNVERIFIED for the real engine. |
-| 10 | 2026-10-25 | Not requested as a separate step. Static/fake-host checks and render limits are recorded in docs/m4.md. |
+| 10 | 2026-11-05 | Split real-App proof: `split` covers C1–C5, two/four live pages, app-route focus and Esc, native divider movement, four-pane orientations, below 800 pt equal scaling, close/separate collapse selection, relaunch orientation/fractions/focus, E5 sleep/wake, real PNG and speed gates. OpenFeatures retains split dispatch. Plus enablement and repeated chrome work fixed; pane chrome cache bounded to eight parked views. Destination-callback drag fallback and unchanged motion/narrow-bar visual limits: `docs/split-app.md`. Peek/Little Open acceptance is separate; old static results remain in `docs/m4.md`. |
 
 
 

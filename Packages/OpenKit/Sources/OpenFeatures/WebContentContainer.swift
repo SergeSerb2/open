@@ -32,11 +32,11 @@ public final class PaneSlotView: NSView {
         if split || toolbar {
             if paneChrome == nil { let chrome = PaneChromeView(); paneChrome = chrome; clip.addSubview(chrome) }
             paneChrome?.role = split ? .pane : .toolbar; paneChrome?.showsFullURL = fullURL; paneChrome?.toolbarMenu = split ? nil : toolbarMenu
+            // isFocused updates the bar, including when its value is unchanged.
+            // Set every display input first so configuration needs one update.
+            paneChrome?.fallbackColor = style.lightPalette?.background.nsColor ?? .white
             paneChrome?.host = host; paneChrome?.isFocused = focused; paneChrome?.onClose = close; paneChrome?.onMenu = menu
             paneChrome?.onURL = url; paneChrome?.onCopy = copy
-            // The bar takes the page's color (host.pageBackgroundColor); the Space's light background is the fallback.
-            paneChrome?.fallbackColor = style.lightPalette?.background.nsColor ?? .white
-            paneChrome?.update()
         } else { paneChrome?.removeFromSuperview(); paneChrome = nil }
         // A sleeping tab whose page was discarded in place keeps its page object: showing it
         // reloads its entry (memory-fork §5.5), and the phase turns live at that commit.
@@ -181,10 +181,11 @@ public final class WebContentContainer: NSView {
         hiddenLRU.removeAll { tabIDs.contains($0) }
         ensureHost(focusedTabID); updateSlots(); trimCache(); layoutPanes(animated: old != ids)
         if previousFocus != focusedTabID { cache[focusedTabID]?.focus() }
-        if tabIDs.count > 1 {
+        let pending = tabIDs.filter { $0 != focusedTabID && cache[$0] == nil }
+        if !pending.isEmpty {
             DispatchQueue.main.async { [weak self] in
                 guard let self, self.showGeneration == generation else { return }
-                for id in tabIDs where id != focusedTabID { self.ensureHost(id) }
+                for id in pending { self.ensureHost(id) }
                 self.updateSlots()
             }
         }
@@ -237,6 +238,7 @@ public final class WebContentContainer: NSView {
     /// them after takeHost invalidated a cached host's generation.
     public func connectPreviewHost(_ host: any WebContentHost, for id: ItemID) {
         bind(host, as: id)
+        parkedSlots[id] = nil
         previewHosts[id] = cache.removeValue(forKey: id)
         hiddenLRU.removeAll { $0 == id }
     }
@@ -280,7 +282,7 @@ public final class WebContentContainer: NSView {
     }
     public func host(for tabID: ItemID) -> (any WebContentHost)? { cache[tabID] }
     public func takeHost(for id: ItemID) -> (any WebContentHost)? {
-        generations[id] = nil; hiddenLRU.removeAll { $0 == id }; return cache.removeValue(forKey: id)
+        generations[id] = nil; parkedSlots[id] = nil; hiddenLRU.removeAll { $0 == id }; return cache.removeValue(forKey: id)
     }
     public func adopt(_ host: any WebContentHost, for id: ItemID) {
         previewHosts[id] = nil
@@ -361,7 +363,9 @@ public final class WebContentContainer: NSView {
             for (slot, frame) in zip(slots, frames) {
                 slot.isHidden = maximizedTabID != nil && maximizedTabID != slot.tabID
                 let target = maximizedTabID == slot.tabID ? bounds : frame
-                if animate { slot.animator().frame = target } else { slot.frame = target }
+                if slot.frame != target {
+                    if animate { slot.animator().frame = target } else { slot.frame = target }
+                }
             }
         } completionHandler: { [weak self] in MainActor.assumeIsolated { self?.transitioning = false } }
         layoutDividers()

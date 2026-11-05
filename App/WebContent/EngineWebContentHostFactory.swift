@@ -455,7 +455,7 @@ final class EngineWebContentHostFactory: NSResponder, WebContentHostFactory {
     case .toggleSidebar: controller?.toggleSidebar(); return true
     case .select(let id, let spaceID):
       guard model.space(id: spaceID) != nil, model.node(id: id) != nil else { return false }
-      withoutUndo { model.focusSpace(windowID: windowState.id, spaceID: spaceID) }
+      if focusedSpace?.id != spaceID { withoutUndo { model.focusSpace(windowID: windowState.id, spaceID: spaceID) } }
       select(nodeID: id); return true
     case .selectFavorite(let id): guard model.tab(id: id) != nil else { return false }; select(nodeID: id); return true
     case .switchSpace(let id): guard let space = model.space(id: id) else { return false }; focus(space: space); return true

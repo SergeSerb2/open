@@ -97,6 +97,7 @@ extension AutomationController {
             _ = try await select(selected)
             return ["single": single, "split": multiple, "singleNative": singleNative, "splitNative": multipleNative]
         case "observe", "idle":
+            guard ProcessInfo.processInfo.environment["OPEN_IDLE_OWNER"] == "split" else { throw Failure(message: "split idle observer ownership is not configured") }
             typealias Action = @convention(c) () -> Void
             typealias Watch = @convention(c) (UnsafeMutableRawPointer) -> Void
             typealias Count = @convention(c) (Int32) -> UInt64
@@ -124,7 +125,8 @@ extension AutomationController {
             try await Task.sleep(for: .seconds(5))
             let after = (0..<10).map { count(Int32($0)) }
             return ["before": before, "after": after, "animationsBefore": animationsBefore,
-                "animationsAfter": animations(container.layer), "seconds": CACurrentMediaTime() - start] as [String: Any]
+                "animationsAfter": animations(container.layer), "unownedDisplayLinks": count(10),
+                "seconds": CACurrentMediaTime() - start] as [String: Any]
         default: throw Failure(message: "unknown split operation")
         }
     }

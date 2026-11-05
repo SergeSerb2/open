@@ -98,7 +98,7 @@ def split_checks(factory, results, tmp, h):
             x, y, w, height_pt = pane['frame']
             color = pixel((x+.75)*scale, (y+60)*scale)
             error = h.chrome_delta_e(color, [49, 57, 255])  # F0081 measured 2 pt accent ring.
-            ring_pixels.append(dict(focused=pane['ring'], rgb=color, delta_e00=error))
+            ring_pixels.append(dict(focused=pane['id'] == captured['focused'], rgb=color, delta_e00=error))
         pixel_ok = all((p['delta_e00'] <= 2 if p['focused'] else p['delta_e00'] > 10) for p in ring_pixels)
         row('snapshot_two_panes', geometry(captured, 'horizontal', 2) and pixel_ok and abs(height/scale-860) <= 1,
             path=str(png), snapshot=snapshot, ringPixels=ring_pixels, scale=scale)
@@ -127,6 +127,7 @@ def split_checks(factory, results, tmp, h):
         app.call('mouse', action='down', x=point[0], y=point[1], clickCount=2)
         app.call('mouse', action='up', x=point[0], y=point[1], clickCount=2); equal = settled(2)
         row('divider_horizontal_double_click', changed['fractions'] != s['fractions']
+            and abs(changed['panes'][0]['frame'][2]-s['panes'][0]['frame'][2]-45) <= 1
             and abs(equal['panes'][0]['frame'][2]-equal['panes'][1]['frame'][2]) <= 1, changed=changed, equal=equal)
         c = opened('c', background=True); s = state(); x, y, w, height = s['container']
         combined = drop(c, [x+w*.6, y+height/2]); s = settled(3)
@@ -191,6 +192,8 @@ def split_checks(factory, results, tmp, h):
         app.call('mouse', action='up', x=point[0], y=point[1]+35)
         after = settled(4)
         row('divider_drag_commit', before['fractions'] == during['fractions'] and before['fractions'] != after['fractions']
+            and abs(during['panes'][0]['frame'][3]-before['panes'][0]['frame'][3]-35) <= 1
+            and abs(after['panes'][0]['frame'][3]-before['panes'][0]['frame'][3]-35) <= 1
             and geometry(after, 'vertical', 4) and [p['frame'] for p in before['panes'][2:]] == [p['frame'] for p in after['panes'][2:]],
             before=before, during=during, after=after)
         idle = app.call('split', op='idle')
@@ -203,6 +206,7 @@ def split_checks(factory, results, tmp, h):
         app.call('menu-perform', id='expand-current-split'); settled(4); key('1'); focused = settled(4)
         row('expand_escape_focus_restore', bool(expanded['maximized']) and sum(not p['hidden'] for p in expanded['panes']) == 1
             and not restored['maximized'] and restored['fractions'] == original['fractions'] and not focused['maximized']
+            and geometry(restored, original['orientation'], 4) and geometry(focused, original['orientation'], 4)
             and focused['focused'] == ids[0] and all(p['host'] for p in expanded['panes']), expanded=expanded, restored=restored)
         # Relaunch >=3 panes with nonuniform fractions, vertical layout and non-first focus.
         key('3'); persisted = settled(4); app.call('menu-perform', id='expand-current-split'); settled(4); app.call('save'); app.quit()

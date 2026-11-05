@@ -56,6 +56,7 @@ public final class PaneChromeView: NSView {
     var fallbackColor: NSColor = .white
     let label = NSTextField(labelWithString: "")
     private var buttons: [ActionButton] = []
+    private var reloadShowsStop: Bool?
     public var isFocused = false { didSet { update() } }
     /// F0081: the focused pane shows every control; an unfocused pane shows back,
     /// forward, the copy button, the host, and Close (AX and pixels).
@@ -82,16 +83,28 @@ public final class PaneChromeView: NSView {
     @available(*, unavailable) required init?(coder: NSCoder) { fatalError() }
     public override var isFlipped: Bool { true }
     func update() {
-        layer?.backgroundColor = (host?.pageBackgroundColor ?? fallbackColor).cgColor
-        label.stringValue = role == .toolbar && showsFullURL ? host?.currentURL?.absoluteString ?? ""
+        let background = (host?.pageBackgroundColor ?? fallbackColor).cgColor
+        if layer?.backgroundColor != background { layer?.backgroundColor = background }
+        let text = role == .toolbar && showsFullURL ? host?.currentURL?.absoluteString ?? ""
             : host?.currentURL?.host()?.replacingOccurrences(of: "www.", with: "") ?? ""
+        var layoutChanged = false
+        if label.stringValue != text { label.stringValue = text; layoutChanged = true }
         for (i, b) in buttons.enumerated() {
-            b.isHidden = role == .toolbar ? i >= 5 : !isFocused && !Self.unfocusedControls.contains(i)
+            let hidden = role == .toolbar ? i >= 5 : !isFocused && !Self.unfocusedControls.contains(i)
+            if b.isHidden != hidden { b.isHidden = hidden; layoutChanged = true }
         }
-        buttons[0].isEnabled = host?.canGoBack ?? false; buttons[1].isEnabled = host?.canGoForward ?? false
-        buttons[4].isEnabled = false
-        buttons[2].image = NSImage(systemSymbolName: host?.isLoading == true ? "xmark" : "arrow.clockwise", accessibilityDescription: "Reload or Stop")
-        needsLayout = true
+        let back = host?.canGoBack ?? false, forward = host?.canGoForward ?? false
+        if buttons[0].isEnabled != back { buttons[0].isEnabled = back }
+        if buttons[1].isEnabled != forward { buttons[1].isEnabled = forward }
+        if buttons[4].isEnabled { buttons[4].isEnabled = false }
+        let loading = host?.isLoading == true
+        if reloadShowsStop != loading {
+            buttons[2].image = NSImage(systemSymbolName: loading ? "xmark" : "arrow.clockwise", accessibilityDescription: "Reload or Stop")
+            reloadShowsStop = loading
+        }
+        // Metadata and warm selections often repeat identical inputs. Keep the
+        // same pixels without rebuilding symbols or invalidating layout again.
+        if layoutChanged { needsLayout = true }
     }
     public override func layout() {
         super.layout(); let w = bounds.width
