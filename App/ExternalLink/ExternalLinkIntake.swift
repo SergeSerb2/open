@@ -56,7 +56,7 @@ final class ExternalLinkIntake {
     for request in queued { route(request); drainedCount += 1 }
   }
 
-  private func route(_ request: RoutingRequest) {
+  private func route(_ request: RoutingRequest, afterBootstrap: Bool = false) {
     // Build inside the loop: executing one queued link changes window order
     // and the most recent Space used to resolve the next queued link.
     let decision = evaluator.evaluate(request, in: snapshot())
@@ -65,9 +65,12 @@ final class ExternalLinkIntake {
     case .space(let id, _): executor.openInSpace(request.url, spaceID: id)
     case .littleOpen(let hint): executor.openInLittleOpen(request.url, profileHint: hint)
     case nil:
-      if case .noSpaces = decision.via {
-        _ = executor.bootstrapFirstSpace()
-        // Lead's Step 5 decision: bootstrap once, then Little Open without a hint.
+      guard case .noSpaces = decision.via else { return }
+      // Routing plan §8.7: bootstrap the first Space, then evaluate once more
+      // with a fresh snapshot. A second noSpaces opens Little Open with no hint.
+      if !afterBootstrap, executor.bootstrapFirstSpace() { route(request, afterBootstrap: true) }
+      else {
+        AppDelegate.commandLog("External link found no Space after bootstrap; opening Little Open.")
         executor.openInLittleOpen(request.url, profileHint: nil)
       }
     }
