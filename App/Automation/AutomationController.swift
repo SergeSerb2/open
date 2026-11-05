@@ -192,6 +192,7 @@
       case "defaults":
         // Reads (and with `value`, writes) one Open preference in this app's own domain.
         guard let key = a["key"] as? String, key.hasPrefix("open.") else { throw Failure(message: "defaults key must start with open.") }
+        if a["persistent"] as? Bool == true { return UserDefaults.standard.persistentDomain(forName: "io.github.sergeserb2.open")?[key] ?? NSNull() }
         if let value = a["value"] { UserDefaults.standard.set(value is NSNull ? nil : value, forKey: key); app.scheduleMenuRebuild() }
         return UserDefaults.standard.object(forKey: key) ?? NSNull()
       case "tab-switcher-state":

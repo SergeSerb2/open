@@ -63,7 +63,7 @@ def history_checks(factory, results, tmp, wait_until, restore_defaults):
         return [r for r in state.get('rows', []) if r.get('url') == base + '/link' and r.get('kind') == 'history']
     try:
         app = factory(urls=(base + '/start',), fresh=True)
-        saved = {key: app.call('defaults', key=key) for key in keys}
+        saved = {key: app.call('defaults', key=key, persistent=True) for key in keys}
         for key in keys: app.call('defaults', key=key, value=None)
         app.call('defaults', key='open.search.hasSeenSuggestionsNotice', value=True)
         app.call('suggest-remote', enabled=False)
