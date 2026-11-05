@@ -50,11 +50,11 @@ final class SitePermissionStore {
     remember(origin)
     return Self.canPersist(kind) ? context?.permissionState(for: kind, origin: origin) ?? .ask : .ask
   }
-  func set(origin: URL, kind: OEPermissionKind, state: OEPermissionState) {
+  func set(origin: URL, kind: OEPermissionKind, state: OEPermissionState, requestSystemAuthorization: Bool = true) {
     guard Self.canPersist(kind), let context else { return }
     remember(origin)
     context.setPermissionState(state, for: kind, origin: origin)
-    if kind == .notifications, state == .allow { NotificationAuthorization.shared.userAllowedNotifications() }
+    if requestSystemAuthorization, kind == .notifications, state == .allow { NotificationAuthorization.shared.userAllowedNotifications() }
     EngineWebProfile.onPermissionChange?(context)
     NotificationCenter.default.post(name: Self.didChange, object: self)
   }

@@ -1093,7 +1093,7 @@
         let kind = OEPermissionKind(rawValue: bits)
         guard SitePermissionStore.canPersist(kind) else { throw Failure(message: "no persistent setting for permission kind") }
         if let state = a["state"] as? Int, let s = OEPermissionState(rawValue: state) {
-          SitePermissionStore.forContext(context).set(origin: origin, kind: kind, state: s)
+          SitePermissionStore.forContext(context).set(origin: origin, kind: kind, state: s, requestSystemAuthorization: false)
         }
         return SitePermissionStore.forContext(context).state(origin: origin, kind: kind).rawValue
       case "download-dir":
