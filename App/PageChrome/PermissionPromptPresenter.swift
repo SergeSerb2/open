@@ -89,6 +89,9 @@ final class PermissionPromptPresenter: NSObject, NSPopoverDelegate {
           owner.window?.attachedSheet == nil, NSApp.isActive,
           let index = entries.firstIndex(where: { owner.pageChrome.isVisible($0.page) }) else { return }
     let entry = entries[index]
+    // A permission can arrive in the same turn that creates the toolbar.
+    // Resolve native geometry before NSPopover validates the anchor rect.
+    owner.controller?.contentView.layoutSubtreeIfNeeded()
     guard let anchor = anchorProvider?(entry.page) ?? defaultAnchor(for: entry.page), anchor.view.window != nil else { return }
     entries.remove(at: index); current = entry
     view.question.stringValue = Self.question(origin: entry.request.origin, kinds: entry.request.kinds)
