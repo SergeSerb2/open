@@ -115,3 +115,15 @@ The corrected production library receives a new Debug build before publication.
 
 After the first run, main advanced to `b913e127` (PR #170, docs only). That main
 was merged before PR publication; a second full gate checks the merged head.
+
+
+Final geometry audit: the Profile icon now owns an explicit `[97,17,14,14]`
+view and the name starts at x114. Two-Profile checks at W=1185 and W=800 also
+assert centered 13 Regular host text. The focused flow passes **47/47**.
+Deliberately restoring a 15 pt icon produces **45 PASS / 2 expected FAIL**;
+source was restored byte-for-byte. The page PNG above was regenerated and
+inspected after this correction.
+
+The fresh Debug App build on `d6c94a36` **passed** with the final production
+source. Its initial load was **29.44 / 19.97 / 14.26**. The final full run is
+on this merged production source; its complete table is included in the PR.
