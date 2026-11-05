@@ -1318,6 +1318,14 @@ def tabstrip_checks(app, results):
     # object stays until the controller's later destroy deadline.
     bg = f2
     bg_cid = chrome_id(bg)
+    def ready_to_discard():
+        state = next(iter(app.call("sleep-state", tab=bg).get("tabs", [])), {})
+        # A recent network commit has the controller's existing 10 s loading
+        # grace. Establish an eligible background tab before sending one
+        # discard request; a correct refusal during that grace is not failure.
+        return state if state.get("content") and state.get("phase") == "live" \
+            and state.get("discardGate") is None else None
+    discard_ready = wait_until(ready_to_discard, timeout=20)
     discard_bg = ext_call(pop, "chrome.tabs.discard(%d).then(t => ({id: t.id, discarded: t.discarded}))" % bg_cid)
     def discarded_in_place():
         state = app.call("sleep-state", tab=bg)
@@ -1329,10 +1337,11 @@ def tabstrip_checks(app, results):
     discard_visible = ext_call(pop, "chrome.tabs.discard(%d)" % visible["page"]["chromeTabId"])
     time.sleep(0.5)
     results["tabs_discard"] = {
-        "ok": "ok" in discard_bg and bool(asleep) and bool(row(bg))
+        "ok": bool(discard_ready) and "ok" in discard_bg and bool(asleep) and bool(row(bg))
               and chromium_after.get("ok", {}).get("id") == bg_cid and "error" in discard_visible
               and bool(row(visible["id"])) and row(visible["id"])["loaded"],
         "background": discard_bg, "background_sleeping_in_place": bool(asleep),
+        "eligible_before_request": discard_ready,
         "sleep_state": asleep or app.call("sleep-state", tab=bg), "chromium_after": chromium_after,
         "visible": discard_visible,
         "note": "P1 returns discarded:false in desktop chrome.tabs metadata; the engine's renderer-discard flag and sleeping phase prove the discard."}
