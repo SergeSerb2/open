@@ -527,9 +527,9 @@ except the struck one, and adds hover expand and collapse.
 | `tabID` | `ItemID?` | App; nil for an auxiliary page |
 | `pageID` | `UUID?` | Runtime auxiliary-page identity; nil for a tab |
 | `windowID` | `WindowID` | the window whose `OEBrowser` holds the content |
-| `kind` | `.audioVideo` / `.recording` | `.recording` when capturing and no playing session (PP-15) |
+| `kind` | `.audioVideo` / `.recording` | `.recording` when capturing and no playing controllable session (PP-15; Step 8: a meeting page plays remote audio through MediaStream players, which are never controllable) |
 | `playback` | `.playing` / `.paused` / `.none` | `WebMediaState.playback` |
-| `isControllable` | `Bool` | engine; false suppresses the audio/video card, but not session sleep protection |
+| `isControllable` | `Bool` | engine; false suppresses the audio/video card, but not session sleep protection. A recording source with a microphone or camera toggle gets its card anyway (Step 8, PP-19) |
 | `hasVideo`, `largestVideoArea` | `Bool`, `Double` (CSS px²) | engine |
 | `actions` | `WebMediaActions` | engine |
 | `isMuted` | `Bool` | `tab.isMuted` |
@@ -2566,6 +2566,43 @@ sleep adapter). At load 8–10: card 1.7 ms after the leave, auto-PiP entered 65
 after the request, gesture-free PiP 27 ms, Web Audio audible 86 ms after start
 (also in a background tab), inaudible 2–4 ms after suspend or close, tab volume
 0.3 read back with the page still playing at element volume 1.
+
+### 14.4 Step 8: previous/next, the volume drawer and recording cards
+
+Branch `s3/media-step8`. Previous/next already go through Chromium's media session since
+Step 7. This step turns on the parts that waited for the fork:
+
+- **Volume drawer** (§13.7 O2): every fork session reports a volume, so Volume on an
+  expanded card opens the 33 pt drawer row (card 66 → 99). The slider sets the
+  engine's tab volume (`mediaVolume`), the high end sets 100 %, the low end toggles
+  mute. Collapsing the stack closes the drawer. The drawer design is still the §13.7
+  guess (no capture; S5).
+- **Recording cards** (Q13, PP-19). Section 3 decisions: a source is `.recording` when
+  it captures and is not a controllable playing session (a meeting page plays remote
+  audio through MediaStream players, which Chromium never makes controllable). A
+  recording source gets its card when the page offers a microphone or camera toggle,
+  controllable or not. A capture with no toggle gets no card (guess: the card would have
+  no control). The toggles reach the page's handlers through the Step 7 routing
+  (meeting actions always go to the session).
+- Automation: `media-click` targets `volumeLow`, `volumeHigh`, `slider` (`fraction`);
+  `mini-players` cards report `drawerOpen`, `height`, `slider`, `volume`,
+  `microphoneOn`, `cameraOn` (`docs/automation.md`).
+
+Verification: `media-demo` 102/102 (new: "uncontrollable meeting with toggles has a
+recording card", "meeting card leaves when capture stops"; with the old card rule the
+first fails, 101/102). e2e `--only media --style chrome`: `media_volume_drawer` and
+`media_recording_card` PASS with every earlier row. The recording row runs Chromium's fake
+capture devices (`--use-fake-device-for-media-stream`). The permission goes through
+Open's real request path (automation policy `grant`), so macOS shows no prompt.
+Chromium's fake permission UI is not used: it skips the capture indicator, and
+`capturing` then stays false. With auto-PiP on, the playing preview opens a PiP window on
+the leave, and the card then stays away (rule 3), so the row turns auto-PiP off.
+
+Sleep (item 16, criterion 6): section 8's App sleep controller (#156) reads
+`MediaCoordinator.visibility`. `media_sleep_adapter` (was BLOCKED): a paused tab whose card
+shows stays live through a controller pass (its freeze gate is `visible`), while an idle
+background tab in the same pass freezes. After Close the card goes, and the next pass
+freezes that tab too. The controller's clock moves (`sleep-clock`); there is no wall-clock wait.
 
 ## Appendix — Lead decisions (2026-10-25)
 
