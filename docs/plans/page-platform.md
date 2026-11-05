@@ -1652,6 +1652,13 @@ These replace the plan text where they differ; each cites its evidence.
 
 - The zoom percent is `round(100 × 1.2^zoomLevel)` read from the page right after the CEF zoom command (`App/Page/PageCommands.swift`); `WebContentHost.zoomPercent` is not added yet (no OpenKit caller needs it).
 - The copy toast's Share button opens the window's one `NSSharingServicePicker` (the sidebar Share uses the same one), anchored to the button; `ToastHandle.hold` keeps the toast until the picker closes.
-- Quote links (interim until EP-2): `String(getSelection())` in the main frame; an exact `#:~:text=` directive (ASCII letters, digits and `._~` stay, everything else is percent-encoded); more than 300 characters or no selection: Copy URL.
+- Quote links before EP-2 (replaced in Step 15): `String(getSelection())` in the main frame; an exact `#:~:text=` directive (ASCII letters, digits and `._~` stay, everything else is percent-encoded); more than 300 characters or no selection: Copy URL.
 - EP-5 needs no code: CEF's `CEF_ZOOM_COMMAND_RESET` runs `zoom::PageZoom::Zoom` (`cef/libcef/browser/browser_host_base.cc:397`), and its `PAGE_ZOOM_RESET` calls `WebContents::SetPageScale(1)` (`components/zoom/page_zoom.cc:81-83`). A build with `Emulation.resetPageScaleFactor` removed still passed Z2 on a sidebar tab and a Peek page, so the DevTools call was dropped (no DevTools session per Actual Size).
-- e2e `page`: T-E1, T-E2, Q1, Q3, Q4, Z1, Z2 (tab and Peek), Z4 pass; Q2 reports `BLOCKED: EP-2`, Z3 `DEFERRED` (U-S1).
+- e2e `page`: T-E1, T-E2, Q1, Q3, Q4, Z1, Z2 (tab and Peek), Z4 pass; Z3 `DEFERRED` (U-S1).
+
+### Step 15 notes (Section 8)
+
+- `copyURLQuote` asks the engine (`requestSelection`, EP-2) for the focused frame's selection and Chromium's text-fragment link, and puts that fragment on the cleaned URL (`withFragment(of:on:)`). No link from the generator (error, child frame) and at most 300 characters: the exact `#:~:text=` directive from Step 3. Else Copy URL.
+- The copy toast's quote offer reads `hasSelection` (EP-3): no page round trip, so the offer is decided at once.
+- Share Quote: the status button under the URL field (`TranslateAdapter.syncStatus`, the same slot as "Translation Available") shows while the selected tab has a selection; the host forwards `.selection` changes. Pressing it runs Copy URL as Quote.
+- e2e `page`: Q1–Q5 and EP3 pass. Break-and-revert (M1, head `86054b9c`): with `hasSelection` forced false and the engine link dropped, `Q2_quote_context` and `Q4_copy_url_offers_quote` FAIL; restored, PASS.
