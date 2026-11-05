@@ -258,6 +258,7 @@ final class EngineWebContentHost: NSObject, WebContentHost, WebContentProviding,
   }
   func webContent(_ page: OEWebContent, shouldNavigateTo url: URL, userGesture: Bool, modifiers: NSEvent.ModifierFlags) -> Bool {
     guard !closed else { return false }
+    owner?.record("navigationPolicy", page, ["url": url.absoluteString, "modifiers": modifiers.rawValue, "userGesture": userGesture])
     return !userGesture || shouldNavigate?(url, modifiers) != false
   }
   func webContentDidRequestClose(_ page: OEWebContent) {

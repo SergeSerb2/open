@@ -182,7 +182,7 @@ class Open:
     def call(self, cmd, timeout=120, **args):
         if cmd in ("window-close", "popup-close", "quit") or (cmd == "devtools" and args.get("method") == "Page.crash"):
             self.discover_owned_processes()
-        foreground_input = cmd in ("key", "focus") or (cmd == "window-focus" and args.get("activate"))
+        foreground_input = cmd in ("key", "focus", "little-open-link-click") or (cmd == "window-focus" and args.get("activate"))
         if cmd in ("space-manager-drag", "sidebar-click", "sidebar-key", "hover"): foreground_input = True
         if foreground_input and self.pid and not self.call("native-focus-state").get("active", False):
             # `NSApp.activate()` is a request, not a grant. Renew the explicit
@@ -6935,7 +6935,7 @@ def littleopen_checks(factory, results, tmp):
     domain = 'io.github.sergeserb2.open'
     keys = ('open.links.externalInLittleOpen', 'open.links.littleOpenHotkeyEnabled',
             'open.links.optionCommandClickLittleOpen', 'open.links.littleOpenNUXSeen',
-            'open.links.littleOpenProfileSwitchConfirmed', 'open.sidebar.autoArchiveBannerDismissed')
+            'open.links.littleOpenProfileSwitchConfirmed', 'open.sidebar.autoArchiveBannerDismissed', 'open.library.lastSection')
     exported = subprocess.run(['defaults', 'export', domain, '-'], capture_output=True)
     saved_domain = plistlib.loads(exported.stdout) if exported.returncode == 0 else {}
     server, port = _sleep_server()
@@ -7041,16 +7041,31 @@ def littleopen_checks(factory, results, tmp):
         expected = {'capsule': [84, 8, w-289, 31], 'pill': [w-196, 8, 188, 30],
                     'copy': [w-228, 16, 16, 16], 'chevron': [w-29, 15, 16, 16]}
         geometry = all(rect_equal(elements[k], v) for k, v in expected.items())
+        geometry = geometry and all(rect_equal(a, b) for a, b in zip(loaded['trafficLights'], [[9,16,16,16],[32,16,16,16],[55,16,16,16]]))
         width_px, _, px = read_image(png, srgb=True); scale = width_px / w
-        samples = {'bar': px(80*scale, 4*scale), 'capsule': px(90*scale, 12*scale), 'pill': px((w-188)*scale, 22*scale)}
+        samples = {'bar': px(80*scale, 4*scale), 'capsule': px(90*scale, 12*scale), 'pill': px((w-100)*scale, 10*scale)}
         bands = {'bar': ((0x20, 0x23, 0x35), (0x2f, 0x2b, 0x38)),
                  'capsule': ((0x38, 0x39, 0x48), (0x42, 0x41, 0x4d))}
         colors = all(all(lo[i]-4 <= samples[k][i] <= hi[i]+4 for i in range(3)) for k, (lo, hi) in bands.items())
         pill_delta = chrome_delta_e(samples['pill'], (5, 6, 39))
-        captures = glob.glob(os.path.join(ROOT, '.re/runtime/sessions/20261026-103403-19-little-arc/**/*0011*.png'), recursive=True)
-        record('B10_title_bar', geometry and colors and pill_delta <= 2 and rect_equal(loaded['contentFrame'], [0, 47, w, h-47]),
-               frames=elements, expected=expected, samples=samples, pillDeltaE00=pill_delta, png=png,
-               comparison='S2 capture present; measured section 9.3 geometry/colors' if captures else 'S2 frames absent; section 9.3 measured numbers')
+        capture_roots = [os.path.join(ROOT, '.re/runtime/sessions/20261026-103403-19-little-arc'),
+                         '/Users/serge/.t3/projects/open/.re/runtime/sessions/20261026-103403-19-little-arc']
+        captures = [path for root in capture_roots for path in glob.glob(os.path.join(root, '0011*/win-*.png'))]
+        reference = {'status': 'ABSENT', 'comparison': 'section 9.3 measured numbers'}
+        reference_ok = True
+        if captures:
+            # Read a private copy. Never change the recorded capture or expose its page/Profile text.
+            reference_png = os.path.join(shot_dir, 'reference-private.png')
+            shutil.copyfile(captures[0], reference_png)
+            ref_w, ref_h, ref_px = read_image(reference_png, srgb=True)
+            ref_samples = {'bar': ref_px(80, 4), 'capsule': ref_px(90, 12), 'pill': ref_px(1185-100, 10)}
+            reference_delta = chrome_delta_e(samples['pill'], ref_samples['pill'])
+            reference_ok = (ref_w, ref_h) == (1185, 832) and reference_delta <= 2
+            reference = {'status': 'PRESENT', 'capture': 'S2 19/0011', 'size': [ref_w, ref_h],
+                         'samples': ref_samples, 'pillDeltaE00': reference_delta,
+                         'masks': 'page, Profile name, host text, controls and traffic lights; measured element frames from section 9.3'}
+        record('B10_title_bar', geometry and colors and pill_delta <= 2 and reference_ok and rect_equal(loaded['contentFrame'], [0, 47, w, h-47]),
+               frames=elements, expected=expected, samples=samples, pillDeltaE00=pill_delta, png=png, reference=reference)
 
         idle_with = state()
         record('sweeper_no_poll_never', base['featureTimers'] == idle_with['featureTimers'] == 0
@@ -7120,13 +7135,16 @@ def littleopen_checks(factory, results, tmp):
         action(expiring['id'], 'archive-policy', interval='oneHour')
         app.call('archive-sweep', offsetSeconds=3601)
         archived = app.call('archive-list')
-        record('B7_one_hour_archive', not sessions() and archived['count'] == archive_before+1, archive=archived)
+        record('B7_one_hour_archive', not sessions() and archived['count'] == archive_before+1
+               and archived['rows'][0]['originalLocation'].startswith('littleOpen:')
+               and archived['rows'][0]['reason'] == 'autoArchived'
+               and app.call('archive-state')['lastSweep']['archivedCount'] == 0, archive=archived)
         app.call('archive-clock', reset=True)
         app.call('library-open', section='archive')
         restored_id = archived['rows'][0]['id']
-        wait_until(lambda: app.call('library-restore', id=restored_id), timeout=5)
+        restored = wait_until(lambda: (lambda message: message if message.startswith('Restored to ') else None)(app.call('library-restore', id=restored_id)), timeout=5)
         tabs = app.call('tabs')
-        record('B7_restore_focused_today', any(t['id'] == restored_id and t['section'] == 'today' for t in tabs)
+        record('B7_restore_focused_today', restored and any(t['id'] == restored_id and t['section'] == 'today' for t in tabs)
                and app.call('archive-list')['count'] == archive_before, tabs=tabs)
         app.call('library-close')
         kept = page(origin + '/archive-never')
@@ -7135,17 +7153,98 @@ def littleopen_checks(factory, results, tmp):
         record('B7_never', len(sessions()) == 1 and app.call('archive-list')['count'] == archive_before, state=state())
         menu('close-little-open-windows')
         record('close_all_no_archive', not sessions() and app.call('archive-list')['count'] == archive_before, state=state())
-        # The remaining no-main and modifier-aware rows run below once their engine seam lands.
-        results['history'] = {'status': 'SKIP', 'reason': 's11/history is not on main; S11-HISTORY-HOOK in LittleOpenWebContent.swift'}
+        history_url = origin + '/history-littleopen'
+        history_page = page(history_url)
+        app.call('little-open-eval', id=history_page['id'], js="document.title='Little Open history title'; true")
+        wait_until(lambda: session(history_page['id'])['title'] == 'Little Open history title', timeout=5)
+        action(history_page['id'], 'close')
+        history = app.call('history-state', query=history_url)
+        record('history', any(r['url'] == history_url and r['title'] == 'Little Open history title' for r in history['rows']), history=history)
+
+        app.call('defaults', key=keys[3], value=False)
+        intro = page(origin + '/intro-first')
+        action(intro['id'], 'dismiss-intro')
+        dismissed = not session(intro['id'])['intro']
+        next_intro = page(origin + '/intro-second')
+        record('NUX_once', intro['intro'] and dismissed and not next_intro['intro'] and app.call('defaults', key=keys[3]) is True,
+               first=intro, second=next_intro)
+        close_all()
+
+        source = new_tab(app, origin + '/option-command-source')
+        original_url = app.eval(source, 'location.href')
+        def modifier_click(target):
+            point = app.eval(source, """(() => { const a=document.createElement('a'); a.textContent='Little Open link';
+                a.href=%s; document.body.replaceChildren(a); const r=a.getBoundingClientRect(); return [r.x+r.width/2,r.y+r.height/2] })()""" % json.dumps(target))
+            app.call('little-open-link-click', tab=source, x=point[0], y=point[1])
+        target_url = origin + '/option-command-little'
+        modifier_click(target_url)
+        clicked = wait_until(lambda: any(r['url'] == target_url and r['state'] == 'page' for r in sessions()), timeout=10)
+        record('option_command_click', clicked and app.eval(source, 'location.href') == original_url,
+               state=state(), source=app.eval(source, 'location.href'), events=app.call('events'))
+        close_all()
+        app.call('defaults', key=keys[2], value=False)
+        off_target = origin + '/option-command-off'
+        modifier_click(off_target)
+        in_place = wait_until(lambda: app.eval(source, 'location.href') == off_target, timeout=10)
+        record('option_command_toggle_off', in_place and not sessions(), source=app.eval(source, 'location.href'), state=state(), events=app.call('events'))
+        app.call('defaults', key=keys[2], value=True)
+
+        # Both domains share the same native timer. Sweep reports keep the Today
+        # education count separate from the Little Open archive count.
+        new_tab(app, origin + '/today-expiring-peer')
+        new_tab(app, origin + '/today-visible-peer')
+        app.call('profile-archive-setting', profile=seed['profiles'][0]['id'], interval='oneHour', scope='profile')
+        main_timer = wait_until(lambda: (lambda st: st if st['expiry']['armedTimerCount'] == 1 else None)(state()), timeout=4)
+        combined = page(origin + '/combined-expiry')
+        action(combined['id'], 'archive-policy', interval='oneHour')
+        both_timer = state()
+        before_combined = app.call('archive-list')['count']
+        swept = app.call('archive-sweep', offsetSeconds=3601)
+        archive_combined = app.call('archive-list')
+        record('sweeper_shared_today_timer', main_timer and main_timer['featureTimers'] == both_timer['featureTimers'] == 1
+               and not sessions() and swept['lastSweep']['archivedCount'] > 0
+               and swept['archivedCount'] == swept['lastSweep']['archivedCount'] + 1
+               and archive_combined['count'] - before_combined == swept['archivedCount'],
+               mainOnly=main_timer, withLittleOpen=both_timer, sweep=swept)
+        app.call('archive-clock', reset=True)
+        app.call('profile-archive-setting', profile=seed['profiles'][0]['id'], interval='never', scope='profile')
+
+        # No main window: blank, bar Cmd+O, external intake, and quit/relaunch.
+        for main in app.call('shell-windows'): app.call('window-close', id=main['id'])
+        app.call('little-open-action', action='blank', timestamp=time.monotonic())
+        blank = sessions()[0]
+        app.call('key', window=blank['window'], key='o', modifiers=['cmd'])
+        record('B6_blank_no_main_bar_cmd_o', state()['mainWindows'] == 0 and len(sessions()) == 1 and sessions()[0]['state'] == 'bar', state=state())
+        close_all()
+        delivery_url = origin + '/no-main-external'
+        deliver(delivery_url)
+        reached = wait_until(lambda: any(r['url'] == delivery_url and r['state'] == 'page' for r in sessions()), timeout=10)
+        record('B6_external_no_main', reached and state()['mainWindows'] == 0, state=state())
+        app.quit()
+        app = factory(urls=(), extra_env=env)
+        record('B6_quit_no_restore', not sessions(), state=state())
+        app.quit()
+        cold_url = origin + '/cold-littleopen'
+        app = factory(urls=(), snapshot=fixture_path, extra_env=env, delivery_urls=(cold_url,))
+        cold_reached = wait_until(lambda: any(r['url'] == cold_url and r['state'] == 'page' for r in sessions()), timeout=12)
+        record('B6_cold_external_only_little', cold_reached and state()['mainWindows'] == 0, state=state(), routing=app.call('routing-log'))
     finally:
         saved = {key: saved_domain.get(key) for key in keys}
         if app:
+            if not app.closed:
+                try: app.call('little-open-profile-alert', action='cancel')
+                except Exception: pass
             _restore_defaults(app, saved)
             app.quit()
         else:
             for key, value in saved.items():
                 if value is None: subprocess.run(['defaults', 'delete', domain, key], capture_output=True)
-                else: subprocess.run(['defaults', 'write', domain, key, '-bool', str(value).lower()], check=True)
+                elif isinstance(value, bool): subprocess.run(['defaults', 'write', domain, key, '-bool', str(value).lower()], check=True)
+                else: subprocess.run(['defaults', 'write', domain, key, '-string', str(value)], check=True)
+        evidence = os.path.join(ROOT, '.re', 'littleopen', 'logs-' + str(os.getpid()))
+        os.makedirs(evidence, exist_ok=True)
+        for path in glob.glob(os.path.join(tmp, 'open.log*')):
+            if os.path.isfile(path): shutil.copyfile(path, os.path.join(evidence, os.path.basename(path)))
         server.shutdown(); server.server_close()
 
 

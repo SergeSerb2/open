@@ -25,6 +25,13 @@ final class ExternalLinkIntake {
   private(set) var queuedCount = 0
   private(set) var drainedCount = 0
   var pendingCount: Int { pending.count }
+  /// A cold link routed only to Little Open does not restore a main window.
+  var pendingOpensOnlyLittleOpen: Bool {
+    !pending.isEmpty && pending.allSatisfy { request in
+      if case .littleOpen? = evaluator.evaluate(request, in: snapshot()).resolved { return true }
+      return false
+    }
+  }
 
   init(executor: any LinkDestinationExecutor, snapshot: @escaping () -> RoutingSnapshot) {
     self.executor = executor; self.snapshot = snapshot
@@ -78,16 +85,30 @@ final class ExternalLinkIntake {
 }
 
 extension AppDelegate {
+  func consumeColdExternalLaunch(opensLittleOpen: Bool) {
+    executedExternalLink = true
+    defer { coldExternalLaunchPending = false }
+    if coldExternalLaunchPending, opensLittleOpen {
+      for controller in Array(windowControllers) { controller.window?.close() }
+    }
+  }
   func completeLinkRestoration() {
     #if OPEN_AUTOMATION
     // Guess (verification fixture): LaunchServices can deliver after a fast
     // launch is ready. Delay only this handoff to exercise a genuinely pending
     // AppleEvent through the same intake, executor and model. No URL injection.
     if ProcessInfo.processInfo.environment["OPEN_AUTOMATION_ROUTING_SLOW_READY"] == "1" {
-      DispatchQueue.main.asyncAfter(deadline: .now() + 2) { [weak self] in self?.linkIntake.markReady() }
+      DispatchQueue.main.asyncAfter(deadline: .now() + 2) { [weak self] in self?.finishExternalLinkRestoration() }
       return
     }
     #endif
+    finishExternalLinkRestoration()
+  }
+
+  private func finishExternalLinkRestoration() {
+    if linkIntake.pendingOpensOnlyLittleOpen {
+      for controller in Array(windowControllers) { controller.window?.close() }
+    }
     linkIntake.markReady()
   }
 

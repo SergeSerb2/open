@@ -82,5 +82,17 @@ final class AppHistoryRecorder {
   }
 
   func flush() async { await titleTask?.value }
+  /// Closing a standalone window must destroy its engine page immediately.
+  /// Queue the last accepted title before close cancels the coalescing task.
+  func flushBeforeClose() {
+    guard titleTask != nil, let visit, !latestTitle.isEmpty,
+      let store = stores.history(for: profileID) else { return }
+    let title = latestTitle, time = visitTime
+    titleTask?.cancel(); titleTask = nil
+    stores.enqueueHistoryWrite {
+      guard let id = await visit.value else { return }
+      await store.updateTitle(title, visitID: id, time: time)
+    }
+  }
   func close() { titleTask?.cancel(); titleTask = nil; revision += 1 }
 }

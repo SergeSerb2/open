@@ -53,6 +53,12 @@ NSErrorDomain const OEErrorDomain = @"app.open.engine";
 
 #pragma mark - OEApplication
 
+static __weak NSWindow* navigationMouseWindow;
+static NSEventModifierFlags navigationMouseModifiers;
+NSEventModifierFlags OENavigationModifiersForWindow(NSWindow* window) {
+  return window && window == navigationMouseWindow ? navigationMouseModifiers : 0;
+}
+
 @interface OEApplication () <CefAppProtocol>
 @end
 
@@ -72,6 +78,13 @@ NSErrorDomain const OEErrorDomain = @"app.open.engine";
 
 - (void)sendEvent:(NSEvent*)event {
   CefScopedSendingEvent sendingEventScoper;
+  if (event.type == NSEventTypeLeftMouseDown || event.type == NSEventTypeLeftMouseUp) {
+    navigationMouseWindow = event.window;
+    navigationMouseModifiers = event.modifierFlags;
+  } else if (event.type == NSEventTypeKeyDown) {
+    navigationMouseWindow = nil;
+    navigationMouseModifiers = 0;
+  }
   // App shortcuts that must beat the page. AppKit would otherwise send the
   // key-down to Chromium's RenderWidgetHostViewCocoa first, and the page can
   // swallow it.

@@ -50,7 +50,7 @@
         else { throw Failure(message: "expected {\"cmd\": …}") }
         id = request["id"] ?? NSNull()
         let args = request["args"] as? [String: Any] ?? [:]
-        inputCommand = cmd == "key" || cmd == "focus" || (cmd == "window-focus" && args["activate"] as? Bool == true)
+        inputCommand = cmd == "key" || cmd == "focus" || cmd == "little-open-link-click" || (cmd == "window-focus" && args["activate"] as? Bool == true)
         if ["space-manager-drag", "sidebar-click", "sidebar-key", "hover"].contains(cmd) { inputCommand = true }
         if inputCommand { nativeInputStart = 0 }
         let result = try await run(cmd, args)
@@ -1773,7 +1773,7 @@
         fullscreenTransition: app.windowControllers.first { $0.window === target }?.isChangingFullScreen ?? false)
     }
 
-    private func activateForInput(_ target: NSWindow, timeout: Double = 5) async throws {
+    func activateForInput(_ target: NSWindow, timeout: Double = 5) async throws {
       // Activation is asynchronous. Never inject into an inactive app after a
       // fixed grace period: its production router correctly declines the key.
       // Make the requested window key again once activation has completed.
@@ -1782,6 +1782,17 @@
       while true {
         // Retain the same predicate values for the grant and any refusal.
         let readiness = inputReadiness(target)
+        // AppKit keeps the Little Open parent as NSApp.keyWindow while its
+        // native NSPopoverWindow reports isKeyWindow and owns the field editor.
+        // Accept only that exact, visible picker and its key parent.
+        let littlePicker = app.littleOpenCoordinator?.controllers.values.first {
+          $0.spacePicker?.view.window === target && $0.window === NSApp.keyWindow
+        }
+        if readiness.active, readiness.targetIsKey, target.isVisible,
+          littlePicker?.window?.isKeyWindow == true, !readiness.fullscreenTransition {
+          nativeInputStart = ProcessInfo.processInfo.systemUptime
+          return
+        }
         if readiness.ready {
           nativeInputStart = ProcessInfo.processInfo.systemUptime
           return

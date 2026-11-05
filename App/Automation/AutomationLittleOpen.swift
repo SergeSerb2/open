@@ -15,7 +15,7 @@ extension AppDelegate {
 }
 
 extension AutomationController {
-  static let littleOpenCommands: Set<String> = ["little-open-state", "little-open-action", "little-open-eval", "little-open-profile-alert", "little-open-dock-menu"]
+  static let littleOpenCommands: Set<String> = ["little-open-state", "little-open-action", "little-open-eval", "little-open-profile-alert", "little-open-dock-menu", "little-open-link-click"]
 
   private func littleOpenState() -> [String: Any] {
     func frame(_ rect: CGRect) -> [Double] { [rect.minX, rect.minY, rect.width, rect.height] }
@@ -24,8 +24,14 @@ extension AutomationController {
       let window = state.window
       let controller = app.littleOpenCoordinator.controllers[state.id]!
       let page = OEEngine.shared.allWebContents.first { $0.view.window === window }
+      window.layoutIfNeeded()
       let contentRect = window.convertToScreen(controller.container.convert(controller.container.bounds, to: nil))
       controller.contentView.layoutSubtreeIfNeeded()
+      let lights = [NSWindow.ButtonType.closeButton, .miniaturizeButton, .zoomButton].compactMap { kind -> [Double]? in
+        guard let button = window.standardWindowButton(kind), let parent = button.superview else { return nil }
+        let rect = controller.contentView.convert(button.frame, from: parent)
+        return frame(CGRect(x: rect.minX, y: controller.contentView.bounds.height - rect.maxY, width: rect.width, height: rect.height))
+      }
       return ["id": state.id.description, "window": window.windowNumber, "frame": frame(window.frame),
         "state": state.state.rawValue, "url": state.currentURL.absoluteString, "title": window.title,
         "profile": state.profileID.description, "pillSpace": state.pillSpaceID?.description ?? "",
@@ -36,6 +42,8 @@ extension AutomationController {
         "tabID": controller.session.tab.id.description, "sidebarTab": app.model.tab(id: controller.session.tab.id) != nil,
         "content": page?.identifier ?? 0, "runtimeStyle": page?.runtimeStyle == .alloy ? "alloy" : "chrome",
         "loading": page?.isLoading ?? false, "firstResponder": window.firstResponder.map { String(describing: type(of: $0)) } ?? "",
+        "barPresented": controller.commandBar.isPresented, "barInput": controller.urlField.stringValue,
+        "trafficLights": lights,
         "fieldFocused": (window.firstResponder as? NSTextView)?.delegate as AnyObject? === controller.urlField,
         "contentFrame": frame(CGRect(x: contentRect.minX - window.frame.minX,
           y: window.frame.maxY - contentRect.maxY, width: contentRect.width, height: contentRect.height)),
@@ -54,6 +62,15 @@ extension AutomationController {
 
   func runLittleOpenCommand(_ cmd: String, _ args: [String: Any]) async throws -> Any {
     if cmd == "little-open-state" { return littleOpenState() }
+    if cmd == "little-open-link-click" {
+      let factory = try window
+      guard let page = factory.content(forAutomationHandle: args["tab"]), let target = page.view.window,
+        let x = args["x"] as? Double, let y = args["y"] as? Double else { throw Failure(message: "missing link page or point") }
+      try await activateForInput(target)
+      let point = page.view.convert(NSPoint(x: x, y: page.view.isFlipped ? y : page.view.bounds.height - y), to: nil)
+      return try await mouse(["window": target.windowNumber, "action": "click", "x": point.x,
+        "y": target.frame.height - point.y, "modifiers": ["command", "option"]], factory)
+    }
     if cmd == "little-open-dock-menu" {
       return app.applicationDockMenu(NSApp)?.items.map { ["id": $0.identifier?.rawValue ?? "", "title": $0.title] } ?? []
     }
@@ -80,7 +97,7 @@ extension AutomationController {
       guard let js = args["js"] as? String,
         let page = OEEngine.shared.allWebContents.first(where: { $0.view.window === controller.window })
       else { throw Failure(message: "missing Little Open page or js") }
-      return try await page.evaluateJavaScript(js) ?? NSNull()
+      return try await page.evaluateJavaScript(js)
     }
     guard let action = args["action"] as? String else { throw Failure(message: "missing Little Open action") }
     switch action {
@@ -88,6 +105,7 @@ extension AutomationController {
     case "miniaturize": controller.window?.miniaturize(nil)
     case "deminiaturize": controller.window?.deminiaturize(nil)
     case "focus": app.littleOpenCoordinator.resurface(controller.session.id); NSApp.activate()
+    case "dismiss-intro": controller.dismissIntro()
     case "picker": controller.showSpacePicker()
     case "picker-search":
       controller.spacePicker?.searchField.stringValue = args["text"] as? String ?? ""

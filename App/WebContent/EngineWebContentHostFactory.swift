@@ -132,6 +132,21 @@ final class EngineWebContentHostFactory: NSResponder, WebContentHostFactory {
       self?.commandBarSession?.controller?.editingUndoManager(for: window.firstResponder)
     }
     controller.keyBindingOverrides = app.keyBindings
+    let previousLinkPolicy = controller.container.onLinkClicked
+    controller.container.onLinkClicked = { [weak self] id, url, flags in
+      guard let self else { return false }
+      if flags.contains([.command, .option]) {
+        if UserDefaults.standard.object(forKey: "open.links.optionCommandClickLittleOpen") as? Bool ?? true {
+          self.app.openLittleOpen(url: url, profileHint: self.profile(for: id)?.id ?? self.focusedProfile?.id)
+        } else {
+          // The toggle-off contract is in-place navigation, including engines
+          // that classify this modifier pair as a new-tab/download request.
+          DispatchQueue.main.async { [weak self] in self?.hosts[id]?.load(url) }
+        }
+        return false
+      }
+      return previousLinkPolicy?(id, url, flags) ?? true
+    }
     controller.isApplicationActive = { [weak self] in NSApp.isActive || self?.window?.isKeyWindow == true }
     controller.ownsAdditionalKeyWindow = { [weak self] in self?.ownsKeyWindow($0) == true }
     controller.onCommand = { [weak self] in self?.performAppCommand($0) == true }

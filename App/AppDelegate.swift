@@ -49,6 +49,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, OEEngineDelegate, OEBr
   lazy var linkExecutor = AppLinkExecutor(app: self)
   lazy var linkIntake = ExternalLinkIntake(executor: linkExecutor, snapshot: { [unowned self] in self.linkExecutor.snapshot() })
   var lastLittleOpenRequest: LittleOpenRequest?
+  var coldExternalLaunchPending = false
+  var executedExternalLink = false
   /// Library ▸ Captures writer (page-platform §4.6.6); one per app, shared by every window.
   lazy var captureLibrary = CaptureLibraryWriter(app: self, root: directories.root)
   var keyBindings = KeyBindingStore.empty
@@ -61,6 +63,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, OEEngineDelegate, OEBr
   var afterPaintTask: Task<Void, Never>?
   var littleOpenCoordinator: LittleOpenCoordinator!
   var littleOpenProfileAlert: NSAlert?
+  var littleOpenHosts: [ItemID: EngineWebContentHost] = [:]
   var commandWindowObserver: NSObjectProtocol?
   var commandDefaultsObserver: NSObjectProtocol?
   private var numberedShortcutOptions = ""
@@ -80,6 +83,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, OEEngineDelegate, OEBr
   }
 
   func applicationDidFinishLaunching(_ notification: Notification) {
+    coldExternalLaunchPending = !executedExternalLink &&
+      (notification.userInfo?[NSApplication.launchIsDefaultUserInfoKey] as? Bool == false)
     LaunchTiming.shared.mark("didFinishLaunching")
     NSApp.mainMenu = MainMenu.build()
     MainMenu.targetWindowCommands(frontWindowController.flatMap { hostFactories[$0.windowID] })
@@ -92,7 +97,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, OEEngineDelegate, OEBr
 
   func applicationShouldHandleReopen(_ sender: NSApplication, hasVisibleWindows flag: Bool) -> Bool {
     if let frontWindowController { frontWindowController.showWindow(nil) }
-    else { showWindowsIfNeeded() }
+    else { showWindowsIfNeeded(ignoringLittleOpen: true) }
     return false
   }
 
@@ -214,9 +219,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate, OEEngineDelegate, OEBr
 
   /// Runs at the first of applicationDidFinishLaunching and
   /// engineDidInitialize (their order is not fixed).
-  private func showWindowsIfNeeded() {
+  private func showWindowsIfNeeded(ignoringLittleOpen: Bool = false) {
     prepareData()
     guard windowControllers.isEmpty else { return }
+    guard ignoringLittleOpen || littleOpenCoordinator.sessions.isEmpty else { return }
     let states = model.windows.filter { $0.style == .standard }
     for state in states.isEmpty ? Array(model.windows.prefix(1)) : states {
       createWindowController(state: state)

@@ -7,6 +7,7 @@ import OpenModel
 /// and its transient id never enters BrowserModel or a Chromium tab strip.
 @MainActor
 final class LittleOpenWebContent: LittleOpenWebContentProviding, WebContentHost {
+  private unowned let app: AppDelegate
   private let factory: EngineWebContentHostFactory
   let host: EngineWebContentHost
   var tabID: ItemID { host.tabID }
@@ -27,10 +28,12 @@ final class LittleOpenWebContent: LittleOpenWebContentProviding, WebContentHost 
   var onLiveStateChange: ((WebContentLiveState) -> Void)? { get { host.onLiveStateChange } set { host.onLiveStateChange = newValue } }
 
   init(app: AppDelegate, profileID: ProfileID) {
-    let space = app.model.mostRecentlyFocusedSpace(profileID: profileID) ?? app.model.spaces.first!
-    factory = EngineWebContentHostFactory(app: app, state: BrowserWindowState(focusedSpaceID: space.id))
+    self.app = app
+    let spaceID = app.model.mostRecentlyFocusedSpace(profileID: profileID)?.id ?? app.model.spaces.first?.id ?? SpaceID()
+    factory = EngineWebContentHostFactory(app: app, state: BrowserWindowState(focusedSpaceID: spaceID))
     host = factory.makeHost(tabID: ItemID(), profileID: profileID, url: nil) as! EngineWebContentHost
     host.rebind(tabID: host.tabID, spaceID: nil)
+    app.littleOpenHosts[host.tabID] = host
     host.content.drawsEngineHistorySwipeOverlay = true
     host.additionalKeyHandler = { [weak app] in app?.handleLittleOpenKey($0) ?? false }
     host.onCloseRequest = { [weak app, weak host] in
@@ -38,8 +41,8 @@ final class LittleOpenWebContent: LittleOpenWebContentProviding, WebContentHost 
         let session = app.littleOpenCoordinator.stateForAutomation.first(where: { $0.window === window }) else { return }
       app.littleOpenCoordinator.close(sessionID: session.id, archiveReason: nil)
     }
-    // S11-HISTORY-HOOK: forward commit, URL/loading/title to AppHistoryRecorder;
-    // flush on session close/Profile switch and quit when s11/history is on main.
+    // EngineWebContentHost forwards commit, URL/loading and title to the
+    // per-Profile AppHistoryRecorder, exactly as it does for Peek.
   }
   func load(_ url: URL) { host.load(url) }
   func reload() { host.reload() }
@@ -47,5 +50,9 @@ final class LittleOpenWebContent: LittleOpenWebContentProviding, WebContentHost 
   func goBack() { host.goBack() }
   func goForward() { host.goForward() }
   func focus() { host.focus() }
-  func close() { factory.closeAll() }
+  func close() {
+    host.historyRecorder.flushBeforeClose()
+    factory.closeAll()
+    app.littleOpenHosts[host.tabID] = nil
+  }
 }
