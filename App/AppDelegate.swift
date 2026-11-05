@@ -52,8 +52,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, OEEngineDelegate, OEBr
   var menuRebuildTask: Task<Void, Never>?
   var afterPaintTask: Task<Void, Never>?
   var littleOpenStub: NSWindowController?
-  var commandWindowObserver: NSObjectProtocol?
-  var commandDefaultsObserver: NSObjectProtocol?
+  var commandWindowObserver: (any NSObjectProtocol)?
+  var commandDefaultsObserver: (any NSObjectProtocol)?
   private var numberedShortcutOptions = ""
   private var currentNumberedShortcutOptions: String {
     "\(UserDefaults.standard.bool(forKey: "open.shortcuts.includeFavoritesInTabNumbering")):\(UserDefaults.standard.bool(forKey: "open.shortcuts.switchToNinthEnabled"))"
@@ -79,6 +79,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, OEEngineDelegate, OEBr
     // engine (docs/architecture.md, launch tactics). Pages created before
     // the engine is ready wait inside OpenEngine.
     showWindowsIfNeeded()
+    installScripting()
   }
 
   func applicationShouldHandleReopen(_ sender: NSApplication, hasVisibleWindows flag: Bool) -> Bool {
@@ -184,7 +185,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, OEEngineDelegate, OEBr
         model.selectNode(windowID: state.id, spaceID: space.id, nodeID: tab.id)
       }
     }
-    model.addObserver { [weak self] _ in self?.scheduleSave(); self?.scheduleMenuRebuild() }
+    model.addObserver { [weak self] _ in self?.scheduleSave(); self?.scheduleMenuRebuild(); self?.purgeScriptingWrappers() }
     self.model = model
     self.directories = directories
     startAutoArchiveIfNeeded()
@@ -296,6 +297,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, OEEngineDelegate, OEBr
       model.setWindowContentVisible(windowID: id, visible: false)
     }
     windowControllers.removeAll { $0.windowID == id }; hostFactories[id] = nil
+    purgeScriptingWrappers()
     media.windowClosed(id)
     tabSleep.visibilityChanged()
     if activeWindowID == id { activeWindowID = windowControllers.last?.windowID }
@@ -343,6 +345,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, OEEngineDelegate, OEBr
     LaunchTiming.shared.mark("engineInitialized")
     engineReady = true
     showWindowsIfNeeded()
+    refreshScriptingEngine()
     for factory in hostFactories.values { factory.engineDidBecomeReady() }
     EngineWebProfile.onPermissionChange = { [weak self] context in self?.tabSleep.permissionsChanged(context: context) }
     scheduleMenuRebuild()
@@ -383,6 +386,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, OEEngineDelegate, OEBr
     afterPaintTask?.cancel(); afterPaintTask = nil
     menuRebuildTask?.cancel(); menuRebuildTask = nil
     engineReady = false
+    refreshScriptingEngine()
     for factory in Array(hostFactories.values) { factory.closeAll() }
     recordShutdownPhase("hostsClosed")
   }

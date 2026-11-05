@@ -1,15 +1,15 @@
-# Open scripting core (M7, Steps 1–4)
+# Open AppleScript (M7, Steps 1–7)
 
 `OpenScripting` implements the dictionary, live-model wrappers, KVC accessors,
 creation helpers, and command handlers from [the AppleScript plan](plans/applescript.md).
-The appendix “Lead decisions” sets the scope. App wiring and the real Apple-event
-acceptance pass (Steps 5–7) are separate work. This is not full scripting release acceptance.
+The App hosts it through H1–H4. The appendix “Lead decisions” sets the scope.
+External sender consent and the Script Editor hand check remain separate acceptance items.
 
 `App/Resources/Open.sdef` is the only dictionary source. It was written from the
 plan, without reading or copying another application's dictionary. Its application-tab
-description uses “Little Open” per the lead decision. The package adds one product
-and one target, with direct dependencies on `OpenModel` and `OpenCommands` only.
-No existing target's source changed. No unit tests or third-party dependencies were added.
+description uses “Little Open” per the lead decision. The library depends directly
+on `OpenModel` and `OpenCommands`, with no engine dependency. No unit tests or
+third-party dependencies were added.
 
 ## API summary
 
@@ -70,14 +70,13 @@ or code was added to the dictionary. The application getter also guards command 
 while allowing the system creation path to inspect the empty collection.
 
 The scratch NSApplication probe now verifies these Apple-event paths with the actual
-Open.sdef. Production App wiring, window lifecycle, and live engine acceptance remain
-with Steps 5–7.
+Open.sdef. Steps 5–7 add production App wiring and real-engine Apple-event checks, described below.
 
 ## App hooks (H1–H4)
 
 | Hook | App responsibility |
 |---|---|
-| H1 | In `applicationDidFinishLaunching`, fill the providers below after the model and window registry exist. Keep them current across model replacement. |
+| H1 | In `applicationDidFinishLaunching`, install the providers below after the model and window registry exist. Keep them current across model replacement. |
 | H2 | Add `App/Scripting/AppScriptEngineBridge.swift`. It alone imports both `OpenScripting` and `OpenEngine`. Implement the protocol below. |
 | H3 | Adopt `App/Resources/Open.sdef` and copy it to `Open.app/Contents/Resources/Open.sdef` through Copy Bundle Resources. Do not add a package copy. |
 | H4 | Set `NSAppleScriptEnabled=true`, `OSAScriptingDefinition=Open.sdef`, and `NSAppleEventsUsageDescription="Scripts control Open windows, spaces, and tabs."` in the App Info.plist. Confirm `CFBundleName=Open` and the App's own bundle identifier. |
@@ -99,7 +98,7 @@ fallback for scratch checks; production must use AppKit windows in front-to-back
 The lead's earlier `windowProvider` name is superseded by the concrete §5.1/§7.1
 closures `windowStateID` and `windowForState`.
 
-The App-owned model observer must call `ScriptHost.shared.purgeRemovedWrappers()`
+The App-owned model observer calls `ScriptHost.shared.purgeRemovedWrappers()`
 on external removals and after model replacement. Scripting installs no observers.
 The App window close observer removes `BrowserWindowState`. Window creation receives
 the incognito Boolean; until supported, return nil for incognito (1010). Little Open
@@ -117,18 +116,124 @@ func stopLoading(tabID: ItemID)
 func executeJavaScript(tabID: ItemID, script: String) throws -> String
 ```
 
-Navigation is fire-and-forget. Wake sleeping content as needed. JavaScript must enforce
+Navigation is fire-and-forget. Wake sleeping content as needed. JavaScript enforces
 a ten-second timeout without pumping the main run loop. Throw `ScriptEngineError`
 (`javascriptError(String)`, `timedOut`, `noLiveContent`). The protocol returns text,
 so H2 owns value conversion. Scripts run with page privileges and can read tab titles
-and URLs. Standard system Automation consent is the v1 gate; there is no extra
-in-app permission prompt or speculative JavaScript toggle. Do not log script text.
+and URLs. External senders need standard macOS Automation consent. View ▸ Developer ▸ Allow
+JavaScript from Apple Events is also required and defaults to off. Off returns 1013
+with `JavaScript from Apple Events is off. Turn it on in View ▸ Developer.`
+The setting uses `open.developer.allowJavaScriptFromAppleEvents` (the page-platform
+lead decision supersedes the original Q5 default). Script text is never logged.
 
-After the App exists, run Steps 5–7, including `sdef Open.app`, Script Editor,
+For a fresh App build, repeat Steps 5–7, including `sdef Open.app`, Script Editor,
 A1–A14/A16/A17 and R1–R3, then cold-relaunch/ID checks. A15 may report 1011 per the lead.
 After dictionary changes, refresh the development bundle's registration as described
-in plan §9.4, or remove and rebuild the development app. This task did not change
-LaunchServices registration or run the App.
+in plan §9.4, or remove and rebuild the development app. The Step 1–4 task did not change
+LaunchServices registration or run the App. See the App verification below for Steps 5–7.
+
+## App hosting and verification (2026-11-05, America/Vancouver)
+
+`App/Scripting/AppScriptEngineBridge.swift` is the only file importing both
+OpenScripting and OpenEngine. H1 is installed after window composition from
+`applicationDidFinishLaunching`. Weak closures read the current App model and window
+registry, skip panels, and create real normal windows. The existing App observer purges
+removed wrappers. The bundle copies the one `App/Resources/Open.sdef` through
+`project.yml`, links OpenScripting, and sets all H4 Info.plist keys.
+
+OpenEngine completes JavaScript on the main thread. A semaphore wait from a Cocoa
+scripting handler would deadlock. H2 therefore calls `NSScriptCommand.suspendExecution`,
+returns from the handler, and resumes the reply once on completion or after ten seconds.
+The public protocol is unchanged. The AppleScript sender still waits for its text or
+error. There is no nested run-loop pump. See Apple's
+[resumeExecution contract](https://developer.apple.com/documentation/foundation/nsscriptcommand/resumeexecution(withresult:)).
+The deadline runs only while a request is active. CDP's evaluation timeout bounds
+synchronous loops; a page-side deadline bounds unresolved promises. H2 wakes the named
+tab through its host/history map, including hidden tabs, without changing selection.
+Engine events still own model URL updates and pinned URLs are preserved.
+
+A held Space-contained tab reference must remain valid after `set location` moves it
+to Favorites. Space unique-ID lookup now resolves a live model tab by stable ID;
+Space enumeration still returns only its own tabs. The first real A12 run exposed this
+bug. Closed IDs still return 1000. Application-tab read/count messages match plan §8.
+
+The `applescript` e2e suite uses a fresh data/cache root, local HTTP fixtures, the real
+bundled dictionary, real App windows and pages, and actual Apple events. It runs the
+A-checks and Raycast query shapes, then quits, relaunches, and repeats them while
+checking restored IDs. Provider-unavailability fixtures cover 1005/1006/1012 without
+replacing the engine. Every shared preference is reset and restored in `finally`.
+The `page` suite D4 uses the same Apple-event check for off → on → off.
+
+External `osascript` was attempted against this build's exact bundle path and timed
+out after 12 seconds. Read-only `AEDeterminePermissionToAutomateTarget` with
+`askUserIfNeeded=false` returned **-1744** (consent required). No `tccutil`, consent DB,
+signing workaround, or system settings change was used. Apple's
+[Automation consent guidance](https://developer.apple.com/videos/play/wwdc2019/701/?time=2199)
+requires consent for control of another app. Its
+[entitlement exception](https://developer.apple.com/documentation/bundleresources/entitlements/com.apple.security.automation.apple-events)
+for self/same-team events is not an external TCC grant.
+
+The authorized fallback is automation-build-only `applescript`: an in-process
+`NSAppleScript` on a serial queue sends events to **current application**, so another
+Open instance cannot be addressed. It compiles using this bundle's terminology and
+executes through normal Cocoa scripting handlers. It does not call wrappers or the
+engine directly. External osascript/JXA and the Script Editor check stay BLOCKED until
+the user supplies consent. A self-scripting PASS is not an external-sender PASS.
+
+Known limits: incognito creation returns 1010. Main has only `showLittleOpenStub`, so
+app-level tab creation returns 1011; no real section 9 executor was available. Window
+index supports bringing a window to front with 1 and returns 1007 for other values.
+
+Verified in this worktree with engine `f34400e7` (M5 built-in 2x main display):
+
+| Check | Result | Local receipt |
+|---|---|---|
+| Debug build + `sdef` + H3/H4 bundle values | PASS; four class codes and ten command codes match | `.re/scripting-final-debug-build.log`, `.re/results-applescript-final-debug.json` |
+| Debug `applescript`, warm + cold | 90 PASS, 0 FAIL; external osascript/JXA 2 BLOCKED | `.re/results-applescript-final-debug.json` |
+| Release build (`OPEN_AUTOMATION=1`) + `applescript`, warm + cold | 90 PASS, 0 FAIL; external osascript/JXA 2 BLOCKED | `.re/scripting-release-build.log`, `.re/results-applescript-final-release.json` |
+| `features` Chrome | 19 PASS, 0 FAIL | `.re/results-features-final-chrome.json` |
+| `shell` Chrome | 7 PASS, 0 FAIL | `.re/results-shell-final-debug.json` |
+| `page` Chrome | 85 PASS, 0 FAIL, 4 existing BLOCKED, 1 DEFERRED; no focus interruptions; D4 PASS via self Apple events | `.re/results-page-final-chrome.json` |
+| Negative gates | H1 absent → window count 0 (A1 fails); gate bypassed → off/on/off returns NO ERROR/3/NO ERROR (D4 fails) | `.re/scripting-negative-results.json` |
+| Automation input / failed-flow cleanup | 1 MiB accepted, one byte over refused; script failure after two real windows → 0 windows / 0 processes | `.re/scripting-negative-results.json` |
+
+Timeout receipts: Debug 10.016 s at load 11.64/10.61/12.74; Release 10.019 s at load 12.80/14.44/14.58.
+The configured reply deadline is ten seconds. Source text stayed out of App logs.
+Hidden frozen and discarded tabs returned the expected page title without changing
+selection. All five suite receipts report clean owned-process cleanup. The four `page`
+blocks are notification delivery, clients.openWindow, translation assets, and incognito
+Capture; smart zoom is deferred. These remain separate from the scripting result.
+Full package/release CLI verification is recorded in this change's PR.
+
+A7/R3 now use Raycast's `first space … whose title …` query form. Both final
+90-check Debug/Release runs include those variants. They also restore a typed
+1,000-entry host array (253 characters per entry) through the closed-App fallback,
+then read it through UserDefaults after relaunch. The fallback uses per-key
+CFPreferences with in-process binary property-list data; values stay out of argv
+and are not limited by exec's argument ceiling. Array/dictionary negative proofs
+show the previous string fallback fails the type check.
+
+Full verification: 18 PASS, 3 known built-in-display FAILs, 1 INTERRUPTED on the
+first run. The focused Site Control rerun passed after the foreground hold cleared,
+so the accepted combined result is **19 PASS, 3 FAIL (machine: built-in display main)**.
+The interrupted attempt is retained separately. The package build reports 0 warnings
+and 0 errors. `commands-dump` remains missing/extra/different 0/0/0, allowedMissing 11.
+Receipts: `.re/verify-all-final/summary.txt`, `.re/verify-sitecontrol-rerun/summary.txt`.
+
+Hand checks for the user (no agent desktop input):
+
+1. In Script Editor, choose File ▸ Open Dictionary and select the built
+   `build/Debug/Open.app`. Confirm Standard Suite, window/tab/space, and all ten
+   commands, including execute/javascript and go forward.
+2. Launch a separate instance with a fresh data directory. In Script Editor use
+   `tell application "/absolute/path/to/build/Debug/Open.app"` and run A1–A14,
+   A16–A18 and R1–R3 from plan §11. Allow the macOS Automation prompt if desired.
+   Address this bundle path, not an installed app by name.
+3. With Allow JavaScript from Apple Events off, `execute active tab of window 1
+   javascript "1 + 2"` must error 1013 with the exact off message above. Turn the
+   setting on in the test App; the same event must return text `3`. Restore the setting.
+4. Quit only the test instance. Confirm Script Editor/JXA results separately from
+   the automated self-scripting receipts. A15 and incognito remain 1011/1010 limits.
 
 ## Step 1–4 verification (2026-10-25, America/Vancouver)
 
@@ -270,7 +375,7 @@ Open dictionary. It was executed directly; no LaunchServices registration was ch
 - Indexed KVC getters return optional wrappers so invalid indices can return nil and error 1000 without a crash. Explicit Objective-C insertion/removal names follow `NSScriptKeyValueCoding.h` (`insertIn<Key>:atIndex:` and `removeFrom<Key>AtIndex:`); the Swift names stay as specified. The final probe calls Cocoa `insertValue`/`removeValue`, not only the Swift methods.
 - `removeFavorite` inserts at the start of Today. A second `moveNode(..., at: nil)` enforces the plan's end-of-destination rule for `topApp → unpinned` without editing OpenModel.
 - Direct pin/unpin of a split pane remains refused by OpenModel; the plan gives no pane-separation sequence or dedicated error text for that case. No OpenModel source was changed.
-- Q1–Q3 use the lead-approved defaults. Only index 1 is supported for window ordering. Little Open may return 1011; incognito creation may return 1010. The review required §6.7's custom make/count classes now; the Cocoa probe also required interception of the existing implicit get command. Production App acceptance remains separate.
+- Q1–Q3 use the lead-approved defaults. Only index 1 is supported for window ordering. Little Open may return 1011; incognito creation may return 1010. The review required §6.7's custom make/count classes now; the Cocoa probe also required interception of the existing implicit get command. App acceptance is recorded below; external Automation consent remains separate.
 - The review supersedes §5.4's proposed no-window name fallback: the application has no Space relationship, so a Space now returns its last valid specifier or nil. A retained specifier can still refer to a closed window; no alternate application-level container is fabricated.
 
 During development, compiler failures exposed the Foundation isolation restrictions

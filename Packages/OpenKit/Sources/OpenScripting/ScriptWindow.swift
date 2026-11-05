@@ -2,7 +2,8 @@ import AppKit
 import Foundation
 import OpenModel
 
-/// Window KVC reads use the current model and AppKit chrome. Its specifier is application → window ID.
+/// Window properties, activeTab/activeSpace, and appleScriptTabs/appleScriptSpaces use
+/// the current model and AppKit chrome. Specifiers resolve application → window ID.
 @MainActor
 @objc(ScriptWindow)
 public final class ScriptWindow: NSObject {
