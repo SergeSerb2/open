@@ -85,9 +85,10 @@ final class FindController {
     selectionGeneration += 1; let token = selectionGeneration
     let state = state(id), revision = state.revision
     selectionTask = Task { @MainActor [weak self, weak page, weak state, factory] in
-      guard let self, let page, let state else { return }
-      defer { withExtendedLifetime(factory) {} }
+      guard let self else { return }
       defer { if self.selectionGeneration == token { self.selectionTask = nil } }
+      defer { withExtendedLifetime(factory) {} }
+      guard let page, let state else { return }
       await self.factory.app.deferAsyncEngineWorkForAutomation()
       guard !Task.isCancelled, !self.factory.isClosing, !self.factory.app.terminationRequested else { return }
       self.factory.app.noteAsyncEngineCall("findSelection")
@@ -284,9 +285,10 @@ final class FindController {
     selectionTask?.cancel()
     selectionGeneration += 1; let token = selectionGeneration
     selectionTask = Task { @MainActor [weak self, weak page, factory] in
-      guard let self, let page, !Task.isCancelled, !self.factory.isClosing, !self.factory.app.terminationRequested else { return }
-      defer { withExtendedLifetime(factory) {} }
+      guard let self else { return }
       defer { if self.selectionGeneration == token { self.selectionTask = nil } }
+      defer { withExtendedLifetime(factory) {} }
+      guard let page, !Task.isCancelled, !self.factory.isClosing, !self.factory.app.terminationRequested else { return }
       self.factory.app.noteAsyncEngineCall("findSelection")
       _ = try? await page.evaluateJavaScript("""
         (() => { const s = window.getSelection(); if (!s || !s.rangeCount) return false;
