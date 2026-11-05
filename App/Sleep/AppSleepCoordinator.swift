@@ -62,6 +62,7 @@ final class AppSleepCoordinator {
     controller.onLog = { [weak self] in self?.record($0) }
     adapter.controller = controller
     self.adapter = adapter; self.store = store; self.controller = controller
+    Task { await store.loadKnownStored() }
     // Pages made before the controller existed (selected tabs at T4, automation pages).
     for factory in app.hostFactories.values {
       for (id, host) in factory.hosts where !host.closed && model.tab(id: id) != nil {
@@ -218,6 +219,36 @@ final class AppSleepCoordinator {
     }
     if tab.live.notificationsAllowed != allowed { tab.live.notificationsAllowed = allowed; controller?.setNeedsPass() }
   }
+
+  /// A shown tab the controller wakes itself (memory-fork §9.4): frozen (unfreeze), discarded in
+  /// place (reload of its entry), or without a page but with a stored back/forward list (restore
+  /// with no renderer first, §5.2). The window neither marks it live nor makes a plain page.
+  func wakesThroughController(_ tab: Tab, hasHost: Bool) -> Bool {
+    guard isStarted, controller != nil else { return false }
+    switch tab.live.sleepPhase {
+    case .frozen, .sleeping: return true
+    default: return !hasHost && store?.knownStored.contains(tab.id) == true
+    }
+  }
+
+  func wake(_ id: ItemID) {
+    guard let controller, !wakeRequests.contains(id) else { return }
+    // Selection shows a retained page before the queued wake task runs. Chromium
+    // can finish its discard reload in that gap, so arm the first-commit record
+    // now, while the tab still carries its sleeping phase.
+    if controller.liveContent.contains(id), controller.visibleTabIDs().contains(id),
+       app.model.tab(id: id)?.live.sleepPhase == .sleeping {
+      controller.wakeStarted(tabID: id, kind: "discard")
+    }
+    wakeRequests.insert(id)
+    Task { @MainActor [weak self] in
+      await controller.tabBecameVisible(id)
+      guard let self else { return }
+      self.wakeRequests.remove(id)
+      for factory in self.app.hostFactories.values { factory.controller?.container.refreshPlaceholders() }
+    }
+  }
+  private var wakeRequests: Set<ItemID> = []
 
   /// Settings or another input changed a Profile's sleep mode.
   func modeChanged() { controller?.setNeedsPass() }
