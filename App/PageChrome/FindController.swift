@@ -11,6 +11,12 @@ final class FindController {
     var open = false
     var revision = 0
     var acceptsResults = false
+    var total = 0
+    var hasCount = false
+    var active = 0
+    var final = false
+    var requestedActivation = false
+    var needsNewSession = true
     var overlay: FindPaneOverlay?
     weak var page: OEWebContent?
   }
@@ -22,7 +28,10 @@ final class FindController {
   private var editScheduled = false
   private(set) var requestCount = 0
   private(set) var resultCount = 0
+  private(set) var typedRequests = 0
+  private(set) var activationRequests = 0
   private(set) var lastPresentationMilliseconds = 0.0
+  private(set) var presentationPhases: [String: Double] = [:]
   var hasSelectionTask: Bool { selectionTask != nil }
   var query: String { focusedID.flatMap { states[$0]?.query } ?? "" }
   var visible: Bool { focusedID.flatMap { states[$0]?.overlay }.map { !$0.isHiddenOrHasHiddenAncestor } ?? false }
@@ -41,12 +50,18 @@ final class FindController {
     guard !factory.isClosing, factory.app.engineReady, !factory.app.terminationRequested,
           let id = focusedID, let page = factory.selectedContent else { return }
     let start = ProcessInfo.processInfo.systemUptime
+    let requestedAt = factory.findKeyRequestedAt ?? start
     let state = state(id), wasEditing = owns(factory.window?.firstResponder)
-    state.open = true; sync(refreshResults: false); state.overlay?.bar.focusQuery()
-    if !state.query.isEmpty { run(id, forward: true) }
+    state.open = true; sync(refreshResults: false)
+    // Commit the visible bar before the native text-input context's first-use
+    // setup. The editor stays lazy and focus still completes in this action.
+    state.overlay?.displayIfNeeded(); CATransaction.flush()
+    let visibleAt = ProcessInfo.processInfo.systemUptime
+    state.overlay?.bar.focusQuery()
+    presentationPhases = ["commit": (visibleAt - requestedAt) * 1000, "view": (visibleAt - start) * 1000, "focus": (ProcessInfo.processInfo.systemUptime - visibleAt) * 1000]
     lastPresentationMilliseconds = (ProcessInfo.processInfo.systemUptime - start) * 1000
-    guard seedSelection, !wasEditing else { return }
-    readSelection(id, page: page, opening: true)
+    if seedSelection, !wasEditing { readSelection(id, page: page, opening: true) }
+    else if !state.query.isEmpty { run(id, forward: true) }
   }
   func perform(tag: Int) {
     switch tag {
@@ -75,10 +90,9 @@ final class FindController {
       let value = try? await page.evaluateJavaScript("window.getSelection().toString().slice(0,4001)") as? String
       guard !Task.isCancelled, !self.factory.isClosing, !self.factory.app.terminationRequested,
             self.factory.selectedContent === page, self.states[id] === state,
-            state.revision == revision, !opening || state.open, let value else { return }
-      let normalized = value.components(separatedBy: .newlines).joined(separator: " ").trimmingCharacters(in: .whitespacesAndNewlines)
-      guard !normalized.isEmpty, !opening || normalized.count <= 40 else { return }
-      self.setQuery(Self.bounded(normalized), id: id)
+            state.revision == revision, !opening || state.open else { return }
+      let normalized = (value ?? "").components(separatedBy: .newlines).joined(separator: " ").trimmingCharacters(in: .whitespacesAndNewlines)
+      if !normalized.isEmpty, !opening || normalized.count <= 40 { self.setQuery(Self.bounded(normalized), id: id) }
       if opening { self.run(id, forward: true); if state.overlay?.bar.owns(self.factory.window?.firstResponder) == true { state.overlay?.bar.focusQuery() } }
     }
   }
@@ -93,18 +107,23 @@ final class FindController {
     return String(text[..<end])
   }
   private func setQuery(_ value: String, id: ItemID) {
-    let state = state(id); state.query = value; state.revision += 1; state.acceptsResults = false
+    let state = state(id)
+    guard state.query != value else { state.overlay?.bar.setQuery(value); return }
+    state.query = value; state.revision += 1; state.acceptsResults = false
+    resetResult(state)
     state.overlay?.bar.setQuery(value); state.overlay?.bar.update(active: 0, total: 0, final: false)
   }
   private func edit(_ value: String, id: ItemID) {
-    setQuery(Self.bounded(value), id: id)
+    let bounded = Self.bounded(value)
+    guard state(id).query != bounded else { states[id]?.overlay?.bar.setQuery(bounded); return }
+    setQuery(bounded, id: id)
     pendingEdits.insert(id)
     guard !editScheduled else { return }; editScheduled = true
     DispatchQueue.main.async { [weak self] in
       guard let self else { return }
       self.editScheduled = false
       let pending = self.pendingEdits; self.pendingEdits.removeAll()
-      for id in pending where self.states[id]?.open == true { self.run(id, forward: true) }
+      for id in pending where self.states[id]?.open == true { self.typedRequests += 1; self.run(id, forward: true) }
     }
   }
   private func run(_ id: ItemID, forward: Bool) {
@@ -115,6 +134,7 @@ final class FindController {
       state.acceptsResults = false; page.stopFinding(clearSelection: true)
       state.overlay?.bar.update(active: 0, total: 0, final: false)
     } else {
+      if state.needsNewSession { page.stopFinding(clearSelection: true); state.needsNewSession = false }
       state.acceptsResults = true; requestCount += 1
       page.find(state.query, forward: forward, caseSensitive: false)
     }
@@ -128,6 +148,7 @@ final class FindController {
   func close(_ id: ItemID) {
     guard let state = states[id] else { return }
     state.open = false; state.revision += 1; state.acceptsResults = false; pendingEdits.remove(id)
+    resetResult(state)
     selectionTask?.cancel(); selectionTask = nil
     factory.hosts[id]?.content.stopFinding(clearSelection: false)
     // End field editing before hiding its ancestor, then focus the actual page.
@@ -172,7 +193,7 @@ final class FindController {
       state.page = page; overlay.topInset = top; overlay.isHidden = false
       overlay.layoutSubtreeIfNeeded()
       if changed, refreshResults, !state.query.isEmpty {
-        page.stopFinding(clearSelection: true); run(id, forward: true)
+        resetResult(state); page.stopFinding(clearSelection: true); run(id, forward: true)
       }
     }
   }
@@ -180,11 +201,32 @@ final class FindController {
     guard let id = factory.hosts.values.first(where: { $0.content === page })?.tabID,
           let state = states[id], state.open, state.acceptsResults else { return }
     resultCount += 1
-    state.overlay?.bar.update(active: result.activeMatchIndex, total: result.matchCount, final: result.isFinal)
+    // Chromium can report count and ordinal separately; -1 means unchanged.
+    if result.matchCount >= 0 { state.total = result.matchCount; state.hasCount = true }
+    if result.activeMatchIndex > 0 { state.active = result.activeMatchIndex }
+    if state.hasCount, state.total == 0 { state.active = 0 }
+    state.final = state.final || result.isFinal
+    state.overlay?.bar.update(active: state.active, total: state.total, final: state.final && state.hasCount)
+    // Ask Chromium to select its first match once. Never invent an ordinal.
+    if result.isFinal, state.total > 0, state.active == 0, !state.requestedActivation {
+      state.requestedActivation = true
+      let revision = state.revision
+      DispatchQueue.main.async { [weak self, weak state, weak page] in
+        guard let self, let state, let page, self.states[id] === state, state.revision == revision,
+          state.open, state.acceptsResults, state.active == 0, self.factory.hosts[id]?.content === page,
+          !self.factory.isClosing, !self.factory.app.terminationRequested else { return }
+        self.activationRequests += 1; self.run(id, forward: true)
+      }
+    }
+  }
+  private func resetResult(_ state: State) {
+    state.total = 0; state.hasCount = false; state.active = 0; state.final = false; state.requestedActivation = false
+    state.needsNewSession = true
   }
   func didNavigate(_ page: OEWebContent) {
     guard let id = factory.hosts.values.first(where: { $0.content === page })?.tabID, let state = states[id] else { return }
     state.revision += 1; state.acceptsResults = false; pendingEdits.remove(id)
+    resetResult(state)
     page.stopFinding(clearSelection: true)
     state.overlay?.bar.update(active: 0, total: 0, final: false)
   }
@@ -222,6 +264,9 @@ final class FindController {
   }
 
   #if OPEN_AUTOMATION
+  func observeIdleViews(_ observe: (NSView) -> Void) {
+    for state in states.values { if let bar = state.overlay?.bar { observe(bar) } }
+  }
   func automationState() -> [String: Any] {
     let panes: [[String: Any]] = states.map { id, state in
       let bar = state.overlay?.bar
@@ -240,7 +285,8 @@ final class FindController {
         "layouts": bar?.layoutCount ?? 0]
     }
     return ["created": true, "panes": panes, "focusedTab": focusedID?.description ?? "", "requests": requestCount, "results": resultCount,
-      "pending": editScheduled || selectionTask != nil, "presentationMilliseconds": lastPresentationMilliseconds]
+      "typedRequests": typedRequests, "activationRequests": activationRequests,
+      "pending": editScheduled || selectionTask != nil, "presentationMilliseconds": lastPresentationMilliseconds, "presentationPhases": presentationPhases]
   }
   #endif
 }

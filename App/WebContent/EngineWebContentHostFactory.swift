@@ -51,6 +51,7 @@ final class EngineWebContentHostFactory: NSResponder, WebContentHostFactory {
   var saveCaptureTasks: [UUID: Task<Void, Never>] = [:]
   var pendingSaveChoice: ((URL?) -> Void)?
   var findController: FindController?
+  var findKeyRequestedAt: TimeInterval?
   var hasFindSelectionTask: Bool { findController?.hasSelectionTask == true }
   var pendingRenameAlert: NSAlert?
   var sidebarSharePicker: NSSharingServicePicker?
@@ -1239,7 +1240,6 @@ extension EngineWebContentHostFactory: OEWebContentDelegate {
   }
 
   func webContent(_ webContent: OEWebContent, didFinishLoadWithStatus status: Int) {
-    findController?.didNavigate(webContent)
     finishCommandBarNavigation(webContent)
     app.prepareCommandsAfterPaint(webContent)
     if tabID(for: webContent) != nil { LaunchTiming.shared.mark("firstLoadEnd"); translate.pageDidFinishLoad(webContent, status: status) }

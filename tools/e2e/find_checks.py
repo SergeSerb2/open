@@ -2,10 +2,22 @@
 import os
 import time
 import subprocess
+from pathlib import Path
 
 
 def run(h, factory, results, tmp):
     server, origin = h._static_server(os.path.join(h.ROOT, 'tools/e2e/fixtures/find'))
+    # Reuse the real S8 scheduler/view observer, scoped to Find's executable
+    # frames. This does not attach to a process or request macOS authorization.
+    probe_source = Path(h.ROOT, 'tools/verification/feature-idle-probe.m').read_text()
+    probe_source = probe_source.replace('if (!strstr(path, "/features-render")) return NO;',
+        'if (!strstr(path, "/Open.app/Contents/MacOS/Open")) return NO;')
+    probe_source = probe_source.replace('return strstr(info.dli_sname, "OpenFeatures") || strstr(info.dli_sname, "observerProof");',
+        'return strstr(info.dli_sname, "FindController") || strstr(info.dli_sname, "FindBarView") || strstr(info.dli_sname, "FindPaneOverlay") || strstr(info.dli_sname, "FindResultsView");')
+    source = os.path.join(tmp, 'find-idle-probe.m'); Path(source).write_text(probe_source)
+    probe = os.path.join(tmp, 'idle-probe.dylib')
+    subprocess.run(['xcrun', 'clang', '-dynamiclib', '-fblocks', '-fobjc-arc', '-Wno-deprecated-declarations', source,
+                    '-framework', 'AppKit', '-framework', 'QuartzCore', '-framework', 'CoreVideo', '-o', probe], check=True, timeout=30)
     app = factory(urls=(origin + '/index.html',), fresh=True)
     saved = {}
     private = os.path.join(h.ROOT, '.re', 'find')
@@ -45,11 +57,15 @@ def run(h, factory, results, tmp):
         row('F02_open_focus_placeholder', p['visible'] and p['focused'] and p['placeholder'] == 'Find in page...', pane=p)
         row('F03_frame', rect_ok(p) and p['radius'] == 5, pane=p)
         load = subprocess.check_output(['uptime'], text=True).strip()
-        row('F04_one_frame', p['visible'] and opening_key.get('dispatchMilliseconds', 999) <= 1000/120,
-            milliseconds=opening_key.get('dispatchMilliseconds'), viewMilliseconds=state().get('presentationMilliseconds'), deadline=1000/120, load=load)
-        requests_before = state().get('requests', 0)
+        row('F04_one_frame', p['visible'] and state().get('presentationPhases', {}).get('commit', 999) <= 1000/120,
+            commitMilliseconds=state().get('presentationPhases', {}).get('commit'), dispatchMilliseconds=opening_key.get('dispatchMilliseconds'), scope='native key event timestamp to flushed visible Find layer; native field-editor focus completes in the same action', viewMilliseconds=state().get('presentationMilliseconds'), phases=state().get('presentationPhases'), deadline=1000/120, load=load)
+        requests_before = state()
         key(text='quasar'); p = settled(tab, '1/5')
-        row('F05_coalescing', p['query'] == 'quasar' and state().get('requests', 0) - requests_before == 1, requests=state().get('requests', 0)-requests_before)
+        after_typing = state()
+        typed = after_typing.get('typedRequests', 0)-requests_before.get('typedRequests', 0)
+        activated = after_typing.get('activationRequests', 0)-requests_before.get('activationRequests', 0)
+        requests = after_typing.get('requests', 0)-requests_before.get('requests', 0)
+        row('F05_coalescing', p['query'] == 'quasar' and typed == 1 and requests == typed+activated and activated <= 1, typedRequests=typed, activationRequests=activated, engineRequests=requests)
         row('F05_incremental_count', p['visible'] and p['query'] == 'quasar' and p['countText'] == '1/5' and p['navigationVisible'] and p['separatorVisible'], pane=p)
         for name, k, mods, expected in [('return', 'return', [], '2/5'), ('shift_return', 'return', ['shift'], '1/5'),
                                         ('down', 'down', [], '2/5'), ('up', 'up', [], '1/5'), ('wrap_previous', 'up', [], '5/5'), ('wrap_next', 'down', [], '1/5')]:
@@ -58,7 +74,8 @@ def run(h, factory, results, tmp):
         seen = app.eval(tab, 'window.findKeys')
         row('F07_field_keys_stay_native', pane(tab)['visible'] and seen == [], pageKeys=seen)
         key('f', ['cmd']); p = pane(tab)
-        row('F08_select_all', p['querySelection'] == [0, 6], pane=p)
+        find_menu = next(m for m in app.call('menu-state') if m['id'] == 'find')
+        row('F08_select_all', p['querySelection'] == [0, 6] and find_menu['enabled'], pane=p, menu=find_menu)
         app.call('focus', tab=tab)
         key('g', ['cmd']); p = settled(tab, '3/5')  # repeated Cmd+F runs the retained query once
         row('F09_page_cmd_g', p['countText'] == '3/5', pane=p)
@@ -94,6 +111,7 @@ def run(h, factory, results, tmp):
         app.call('navigate', tab=other, url=origin + '/index.html?new=document'); app.call('wait', tab=other)
         p = pane(other)
         row('F18_navigation_clears', p['visible'] and p['query'] == 'orbit' and p['countText'] == '' and not p['navigationVisible'], pane=p)
+        f = p['frame']; app.call('mouse', action='click', x=f[0]+45, y=app.call('window-state')['frame'][3]-f[1]-16)
         key('return'); p = settled(other, '1/2')
         row('F19_return_after_navigation', p['visible'] and p['countText'] == '1/2', pane=p)
         app.call('menu-perform', id='reload'); app.call('wait', tab=other)
@@ -102,6 +120,8 @@ def run(h, factory, results, tmp):
         # Use the real native menu action as well as its key binding.
         key('escape'); app.call('menu-perform', id='find-and-replace'); p = pane(other)
         row('F20_find_replace_opens', p['visible'] and p['focused'], pane=p)
+        key('escape'); key('f', ['cmd','option']); p=pane(other)
+        row('F20_find_replace_key', p['visible'] and p['focused'], pane=p)
         key('escape'); app.call('focus', tab=other)
         app.eval(other, "window.selectFindText('far');window.scrollTo(0,0)")
         key('j', ['cmd']); jumped = h.wait_until(lambda: app.eval(other, 'window.scrollY') > 1000, timeout=3, step=.05)
@@ -120,10 +140,10 @@ def run(h, factory, results, tmp):
         row('F24_over_cap_utf8', p['visible'] and p['query'] == 'é'*500, bytes=len(p['query'].encode()))
         # A split's pane bars each own Find. Focus through the app's real pane command.
         key('escape'); app.call('select', tab=tab); app.call('split')
-        h.wait_until(lambda: len(app.call('window-state')['shown']) == 2, timeout=5, step=.05)
-        app.call('menu-perform', id='focus-split-pane-1'); key('f', ['cmd']); key('a', ['cmd']); key(text='quasar')
+        h.wait_until(lambda: len(app.call('window-state')['shownPages']) == 2, timeout=5, step=.05)
+        app.call('focus', tab=tab); key('1', ['ctrl','shift']); key('f', ['cmd']); key('a', ['cmd']); key(text='quasar')
         left_id = state().get('focusedTab'); left = settled(left_id, '1/5')
-        app.call('menu-perform', id='focus-split-pane-2'); key('f', ['cmd']); key('a', ['cmd']); key(text='orbit')
+        app.call('focus', tab=left_id); key('2', ['ctrl','shift']); key('f', ['cmd']); key('a', ['cmd']); key(text='orbit')
         right_id = state().get('focusedTab'); right = settled(right_id, '1/2'); left2 = pane(left_id)
         row('F25_split_focused_only', left_id != right_id and left['query'] == left2['query'] == 'quasar' and left2['total'] == 5 and right['query'] == 'orbit' and right['total'] == 2 and left2['visible'] and right['visible'], left=left2, right=right)
         # The toolbar is tested on a single pane, at a 50 pt top inset.
@@ -140,7 +160,7 @@ def run(h, factory, results, tmp):
         app.call('split'); app.call('window-frame', frame=[100,70,1100,760]); app.call('select', tab=tab)
         # Peek keeps its own bar; Esc closes Find before closing Peek.
         app.call('peek-open', tab=tab, url=origin + '/index.html?peek=1')
-        peek = app.call('peek-state')['stack'][-1]['content']; app.call('wait', tab=peek)
+        app.call('wait'); peek = app.call('peek-state')['stack'][-1]['content']
         key('f', ['cmd']); key(text='quasar'); p = settled(count='1/5')
         row('F28_peek', p['visible'] and p['total'] == 5 and p['tab'] not in (tab, other) and rect_ok(p), pane=p)
         if os.environ.get('OPEN_FIND_FAIL_AT_PEEK') == '1': raise RuntimeError('intentional Find cleanup proof with Peek open')
@@ -149,8 +169,10 @@ def run(h, factory, results, tmp):
         app.call('peek-close'); h.wait_until(lambda: not app.call('peek-state')['shown'], timeout=3, step=.05)
         app.call('select', tab=tab); app.call('focus', tab=tab)
         app.eval(tab, 'getSelection().removeAllRanges()'); key('f', ['cmd']); key('a', ['cmd']); key(text='quasar'); settled(tab, '1/5')
-        # Own-window image color comparison, in sRGB after ColorSync converts P3.
-        for appearance, expected in [('light', (250,251,255)), ('dark', (16,28,49))]:
+        # Own-window colors in sRGB. Expected 8-bit values independently use
+        # NSColor(displayP3Red: ...) -> usingColorSpace(.sRGB), then round.
+        # Spec light (.980,.984,1), dark (.082,.110,.188).
+        for appearance, expected in [('light', (250,251,255)), ('dark', (19,28,50))]:
             app.call('appearance', name=appearance)
             path = os.path.join(private, 'find-'+appearance+'.png'); app.call('snapshot', path=path)
             p = pane(tab); f=p['frame']; width,height,pixel=h.read_image(path, srgb=True)
@@ -163,15 +185,38 @@ def run(h, factory, results, tmp):
                 row('F30_radius_pixels', p['visible'] and p['radius'] == 5 and h.chrome_delta_e(edge, expected) <= 2 and h.chrome_delta_e(corner, expected) > 5, corner=corner, edge=edge, file=path)
             row('F30_color_'+appearance, p['visible'] and delta <= 2, rgb=rgb, expected=expected, deltaE00=delta, file=path)
         app.call('appearance', name='system')
-        # Observe the real coordinator and view over an idle interval. System
-        # field-editor caret blinking does not schedule Find requests or layout.
+        # A separate real App keeps observer overhead out of the timing gate.
+        # The observer is armed before the lazy Find view exists, so a leaked
+        # initialization timer remains visible to the zero-resource gate.
+        app.quit()
+        app = factory(urls=(origin + '/index.html',), fresh=True, extra_env={'DYLD_INSERT_LIBRARIES': probe})
+        tab = app.call('tabs')[0]['id']; app.call('wait', tab=tab); app.call('focus', tab=tab)
+        app.call('find-idle', action='begin')
+        key('f', ['cmd']); key(text='quasar'); settled(tab, '1/5')
         app.call('focus', tab=tab); time.sleep(.5)
+        app.call('find-idle', action='watch'); app.call('find-idle', action='reset')
         before=state(); p0=pane(tab); time.sleep(2); after=state(); p1=pane(tab)
+        observed=app.call('find-idle', action='read')
         row('F31_idle', p1['visible'] and not before.get('pending') and not after.get('pending') and before.get('requests') == after.get('requests')
-            and before.get('results') == after.get('results') and p0['layouts'] == p1['layouts'], before=before, after=after, load=load)
+            and before.get('results') == after.get('results') and p0['layouts'] == p1['layouts'] and all(v == 0 for v in observed.values()), before=before, after=after, observer=observed, load=load)
+        app.call('find-idle', action='invalidate'); canary=app.call('find-idle', action='read')
+        row('F31_observer_canary', any(canary[k] > 0 for k in ('invalidations','layout')), observer=canary)
+        app.call('find-idle', action='end')
+        # Browser keys must keep their real owners from this new field editor.
+        for name, k in [('address', 'l'), ('new_tab', 't')]:
+            app.call('select', tab=tab); key('f', ['cmd']); key(k, ['cmd'])
+            commandbar = app.call('commandbar-state')
+            row('F32_'+name, bool(commandbar.get('presented')), bar=commandbar)
+            key('escape')
+        app.call('open', url=origin + '/index.html?survivor=1', background=True)
+        app.call('select', tab=tab); key('f', ['cmd']); key('w', ['cmd'])
+        remaining=app.call('tabs')
+        row('F32_close_tab', tab not in [t['id'] for t in remaining] and not any(p['tab'] == tab for p in state().get('panes', [])), tabs=len(remaining))
     finally:
         try:
             app.call('appearance', name='system')
+            try: app.call('find-idle', action='end')
+            except Exception: pass
             for key_name, value in saved.items(): app.call('defaults', key=key_name, value=value)
         finally:
             app.quit(); server.shutdown(); server.server_close()

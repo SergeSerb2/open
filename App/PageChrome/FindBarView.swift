@@ -6,11 +6,9 @@ import CoreText
 @MainActor
 final class FindBarView: NSView, NSTextFieldDelegate {
   let field = NSTextField()
-  private let editor = FindFieldEditor(usingTextLayoutManager: false)
+  private var editorStorage: FindFieldEditor?
   private let search = NSImageView()
-  private let count = NSTextField(labelWithString: "")
-  private let previous = FindButton(symbol: "chevron.up", title: "Previous Match")
-  private let next = FindButton(symbol: "chevron.down", title: "Next Match")
+  private var results: FindResultsView?
   private let close = FindButton(symbol: "xmark", title: "Close Find")
   private let separator = CALayer()
   var onEdit: ((String) -> Void)?
@@ -21,8 +19,8 @@ final class FindBarView: NSView, NSTextFieldDelegate {
   private(set) var notFound = false
   private(set) var hasResult = false
   private(set) var layoutCount = 0
-  var countText: String { count.stringValue }
-  var navigationVisible: Bool { !next.isHidden }
+  var countText: String { hasResult ? results?.text ?? "" : "" }
+  var navigationVisible: Bool { hasResult && results?.navigationVisible == true }
   var separatorVisible: Bool { !separator.isHidden }
   override var isFlipped: Bool { true }
 
@@ -33,7 +31,7 @@ final class FindBarView: NSView, NSTextFieldDelegate {
     layer?.shadowRadius = 5
     layer?.shadowOffset = CGSize(width: 0, height: -3)
     layer?.addSublayer(separator)
-    let cell = FindTextCell(textCell: ""); cell.editor = editor; field.cell = cell
+    let cell = FindTextCell(textCell: ""); cell.editorProvider = { [weak self] in self?.makeEditor() }; field.cell = cell
     field.isEditable = true; field.isSelectable = true
     field.isBezeled = false; field.isBordered = false; field.drawsBackground = false
     field.focusRingType = .none; field.font = .systemFont(ofSize: 13)
@@ -41,6 +39,18 @@ final class FindBarView: NSView, NSTextFieldDelegate {
     field.cell?.isScrollable = true; field.cell?.wraps = false
     field.usesSingleLineMode = true; field.delegate = self
     field.setAccessibilityLabel("Find in page")
+    search.image = NSImage(systemSymbolName: "magnifyingglass", accessibilityDescription: nil)?
+      .withSymbolConfiguration(.init(pointSize: 15, weight: .regular))
+    search.imageScaling = .scaleNone
+    for view in [search, field, close] { addSubview(view) }
+    close.onPress = { [weak self] in self?.onClose?() }
+    update(active: 0, total: 0, final: false)
+  }
+  @available(*, unavailable) required init?(coder: NSCoder) { fatalError() }
+
+  private func makeEditor() -> FindFieldEditor {
+    if let editorStorage { return editorStorage }
+    let editor = FindFieldEditor(usingTextLayoutManager: false); editorStorage = editor
     editor.isFieldEditor = true; editor.isRichText = false; editor.allowsUndo = true
     editor.drawsBackground = false
     editor.isAutomaticQuoteSubstitutionEnabled = false; editor.isAutomaticDashSubstitutionEnabled = false
@@ -48,21 +58,8 @@ final class FindBarView: NSView, NSTextFieldDelegate {
     editor.isContinuousSpellCheckingEnabled = false
     editor.onAction = { [weak self] in self?.onAction?($0) }
     editor.onClose = { [weak self] in self?.onClose?() }
-    let features: [[NSFontDescriptor.FeatureKey: Int]] = [
-      [.typeIdentifier: 37, .selectorIdentifier: 1], [.typeIdentifier: 38, .selectorIdentifier: 1]]
-    count.font = NSFont(descriptor: NSFont.systemFont(ofSize: 12).fontDescriptor.addingAttributes([.featureSettings: features]), size: 12)
-    count.setAccessibilityLabel("Find matches")
-    search.image = NSImage(systemSymbolName: "magnifyingglass", accessibilityDescription: nil)?
-      .withSymbolConfiguration(.init(pointSize: 15, weight: .regular))
-    search.imageScaling = .scaleNone
-    for view in [search, field, count, previous, next, close] { addSubview(view) }
-    previous.onPress = { [weak self] in self?.onAction?(3) }
-    next.onPress = { [weak self] in self?.onAction?(2) }
-    close.onPress = { [weak self] in self?.onClose?() }
-    update(active: 0, total: 0, final: false)
-    applyColors()
+    return editor
   }
-  @available(*, unavailable) required init?(coder: NSCoder) { fatalError() }
 
   override func viewDidChangeEffectiveAppearance() { super.viewDidChangeEffectiveAppearance(); applyColors() }
   private func applyColors() {
@@ -75,8 +72,7 @@ final class FindBarView: NSView, NSTextFieldDelegate {
       : NSColor(displayP3Red: 0.0549, green: 0.0588, blue: 0.0627, alpha: 0.90)
     let tint = NSColor(displayP3Red: dark ? 0.980 : 0.055, green: dark ? 0.984 : 0.059, blue: dark ? 1 : 0.063, alpha: dark ? 0.90 : 0.80)
     search.contentTintColor = tint
-    for button in [previous, next, close] { button.contentTintColor = tint }
-    count.textColor = notFound ? NSColor(displayP3Red: 0.788, green: 0.2, blue: 0.2, alpha: 1) : tint
+    close.contentTintColor = tint; results?.applyTint(tint)
     separator.backgroundColor = NSColor(displayP3Red: 0, green: 0, blue: 0, alpha: 0.10).cgColor
   }
   override func layout() {
@@ -85,13 +81,10 @@ final class FindBarView: NSView, NSTextFieldDelegate {
     close.frame = CGRect(x: bounds.width - 29, y: 3, width: 26, height: 26)
     separator.frame = CGRect(x: close.frame.minX - 1.5, y: 7, width: 1, height: 18)
     var trailing = close.frame.minX - 5
-    if navigationVisible {
-      next.frame = CGRect(x: trailing - 26, y: 3, width: 26, height: 26); trailing -= 26
-      previous.frame = CGRect(x: trailing - 26, y: 3, width: 26, height: 26); trailing -= 26
-    }
-    if !count.isHidden {
-      let width = min(100, ceil(count.intrinsicContentSize.width))
-      count.frame = CGRect(x: trailing - width, y: 8, width: width, height: 17); trailing -= width
+    if hasResult, let results {
+      let width = results.preferredWidth
+      results.frame = CGRect(x: trailing - width, y: 3, width: width, height: 26)
+      results.needsLayout = true; trailing -= width
     }
     field.frame = CGRect(x: 32, y: 7, width: max(0, trailing - 4 - 32), height: 18)
     layer?.shadowPath = CGPath(roundedRect: bounds, cornerWidth: 5, cornerHeight: 5, transform: nil)
@@ -100,19 +93,26 @@ final class FindBarView: NSView, NSTextFieldDelegate {
     self.active = max(0, active); self.total = max(0, total)
     hasResult = final && !field.stringValue.isEmpty
     notFound = hasResult && total == 0
-    count.stringValue = hasResult ? (notFound ? "Not Found" : "\(self.active)/\(self.total)") : ""
-    count.isHidden = !hasResult
-    previous.isHidden = !hasResult || notFound; next.isHidden = previous.isHidden
+    if hasResult {
+      if results == nil {
+        let group = FindResultsView(frame: .zero); results = group
+        group.onAction = { [weak self] in self?.onAction?($0) }; addSubview(group)
+      }
+      results?.update(text: notFound ? "Not Found" : "\(self.active)/\(self.total)", notFound: notFound)
+    }
+    results?.isHidden = !hasResult
     separator.isHidden = !hasResult
-    count.setAccessibilityValue(count.stringValue)
     applyColors(); needsLayout = true
   }
   func setQuery(_ value: String) {
     guard field.stringValue != value else { return }
     field.stringValue = value; field.currentEditor()?.string = value
-    editor.undoManager?.removeAllActions()
+    editorStorage?.undoManager?.removeAllActions()
   }
-  func focusQuery() { window?.makeFirstResponder(field); field.selectText(nil) }
+  func focusQuery() {
+    window?.makeFirstResponder(field); field.selectText(nil)
+    (field.currentEditor() as? NSTextView)?.setSelectedRange(NSRange(location: 0, length: field.stringValue.utf16.count))
+  }
   func owns(_ responder: NSResponder?) -> Bool {
     guard let responder else { return false }
     return responder === field || responder === field.currentEditor()
@@ -127,6 +127,47 @@ final class FindBarView: NSView, NSTextFieldDelegate {
     default: return false
     }
     return true
+  }
+}
+
+/// Results are absent from the empty state, so their controls and small-caps
+/// font are created on the first result, outside the first Cmd+F commit.
+@MainActor
+private final class FindResultsView: NSView {
+  private let count = NSTextField(labelWithString: "")
+  private let previous = FindButton(symbol: "chevron.up", title: "Previous Match")
+  private let next = FindButton(symbol: "chevron.down", title: "Next Match")
+  private var notFound = false
+  var onAction: ((Int) -> Void)?
+  var text: String { count.stringValue }
+  var navigationVisible: Bool { !next.isHidden }
+  var preferredWidth: CGFloat { min(100, ceil(count.intrinsicContentSize.width)) + (navigationVisible ? 52 : 0) }
+  override var isFlipped: Bool { true }
+  override init(frame: NSRect) {
+    super.init(frame: frame)
+    let features: [[NSFontDescriptor.FeatureKey: Int]] = [
+      [.typeIdentifier: 37, .selectorIdentifier: 1], [.typeIdentifier: 38, .selectorIdentifier: 1]]
+    count.font = NSFont(descriptor: NSFont.systemFont(ofSize: 12).fontDescriptor.addingAttributes([.featureSettings: features]), size: 12)
+    count.setAccessibilityLabel("Find matches")
+    for view in [count, previous, next] { addSubview(view) }
+    previous.onPress = { [weak self] in self?.onAction?(3) }
+    next.onPress = { [weak self] in self?.onAction?(2) }
+  }
+  @available(*, unavailable) required init?(coder: NSCoder) { fatalError() }
+  func update(text: String, notFound: Bool) {
+    self.notFound = notFound; count.stringValue = text; count.setAccessibilityValue(text)
+    previous.isHidden = notFound; next.isHidden = notFound; needsLayout = true
+  }
+  func applyTint(_ tint: NSColor) {
+    previous.contentTintColor = tint; next.contentTintColor = tint
+    count.textColor = notFound ? NSColor(displayP3Red: 0.788, green: 0.2, blue: 0.2, alpha: 1) : tint
+  }
+  override func layout() {
+    super.layout()
+    let width = min(100, ceil(count.intrinsicContentSize.width))
+    count.frame = CGRect(x: 0, y: 5, width: width, height: 17)
+    previous.frame = CGRect(x: width, y: 0, width: 26, height: 26)
+    next.frame = CGRect(x: width + 26, y: 0, width: 26, height: 26)
   }
 }
 
@@ -146,8 +187,8 @@ private final class FindButton: NSButton {
 
 @MainActor
 private final class FindTextCell: NSTextFieldCell {
-  weak var editor: NSTextView?
-  override func fieldEditor(for controlView: NSView) -> NSTextView? { editor }
+  var editorProvider: (() -> NSTextView?)?
+  override func fieldEditor(for controlView: NSView) -> NSTextView? { editorProvider?() }
 }
 
 @MainActor
@@ -170,6 +211,10 @@ private final class FindFieldEditor: NSTextView {
   }
   override func performFindPanelAction(_ sender: Any?) { onAction?((sender as? NSMenuItem)?.tag ?? 1) }
   override func performTextFinderAction(_ sender: Any?) { onAction?(1) }
+  override func validateUserInterfaceItem(_ item: any NSValidatedUserInterfaceItem) -> Bool {
+    if item.action == #selector(performFindPanelAction(_:)) || item.action == #selector(performTextFinderAction(_:)) { return true }
+    return super.validateUserInterfaceItem(item)
+  }
 }
 
 /// A transparent, autoresizing overlay in the pane's coordinates. Empty space
@@ -179,9 +224,12 @@ final class FindPaneOverlay: NSView {
   let bar = FindBarView(frame: .zero)
   var topInset: CGFloat = 10 { didSet { if topInset != oldValue { needsLayout = true } } }
   override init(frame: NSRect) {
-    super.init(frame: frame); autoresizingMask = [.width, .height]; addSubview(bar)
+    super.init(frame: frame); autoresizingMask = [.width, .height]; addSubview(bar); needsLayout = true
   }
   @available(*, unavailable) required init?(coder: NSCoder) { fatalError() }
+  override func setFrameSize(_ newSize: NSSize) {
+    super.setFrameSize(newSize); needsLayout = true
+  }
   override func layout() {
     super.layout()
     let width = min(300, max(0, bounds.width - 20))

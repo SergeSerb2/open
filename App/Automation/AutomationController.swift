@@ -646,6 +646,8 @@
         return w.drainEvents()
       case "find-state":
         return w.findController?.automationState() ?? ["panes": [], "created": false, "pending": false]
+      case "find-idle":
+        return try FindIdleProbe.perform(a["action"] as? String ?? "read", factory: w)
       case "find":
         let page = try content(a, w)
         page.find(a["text"] as? String ?? "", forward: true, caseSensitive: false)

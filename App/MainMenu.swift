@@ -21,6 +21,8 @@ enum MainMenu {
     guard event.type == .keyDown, let app = NSApp.delegate as? AppDelegate else { return false }
     app.prepareCommandServices()
     if let window = event.window, let factory = app.factory(forKeyWindow: window) {
+      factory.findKeyRequestedAt = event.timestamp
+      defer { factory.findKeyRequestedAt = nil }
       return factory.controller?.handleKeyDown(event) == true
     }
     let context = RoutingContext(isAppActive: NSApp.isActive,
@@ -70,6 +72,7 @@ extension EngineWebContentHostFactory {
 
   func isAppCommandEnabled(_ original: String, enabledKey: String? = nil, payload: String? = nil) -> Bool {
     let id = AppCommand.canonicalID(original)
+    if ["find", "find-next", "find-previous", "find-and-replace", "use-selection-to-find", "jump-to-selection"].contains(id) { return selectedContent != nil }
     if let context = selectionCommandContext(for: id) { return context.isSelectionCommandEnabled(id) }
     if let enabled = isPageToolEnabled(id) { return enabled }  // App/Page/PageToolsCommands.swift
     if SystemCommandActions.selectors[id] != nil { return SystemCommandActions.isEnabled(id) }
