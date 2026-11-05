@@ -38,7 +38,9 @@ Preferences use the shared application domain. The suite saves persistent values
 
 The starting production code, restored for the audit with observation hooks only, produced 20 PASS and 10 FAIL in the 30 new Chrome rows. Cleanup passed. The failures are the fresh-window Shift trigger, pinned/favorite/Today Shift triggers, native nesting and nested visibility, Exit menu priority, native Peek shown-state, swipe indicator, and Chrome saved page state. Both Exit and visibility therefore have an old-code negative proof. A separate mutation removed only `peek.insert(id)` from the provider. `peek_visibility_ticker` and `peek_nested_visibility` FAIL (the remaining 28 rows PASS). Both transient-set checks therefore detect a missing feed. The provider was restored byte for byte.
 
-Final acceptance counts are recorded below after the runs. Raw logs and JSON copies: `.re/s9-peek/` in this worktree. The final snapshot is saved there for the lead.
+Final `peek` acceptance: **42/42 PASS in three consecutive Chrome runs**, then **42/42 PASS in Alloy**, all after the system prompt cleared at 14:30. Each run has zero interruptions and passes owned-process cleanup. All eight existing rows remain; the suite adds 30 App audit rows and four Find-priority rows. `acceptance-peek.json` and `peek-{chrome,alloy}-*.{log,json}` retain the results. `peek-open.png` is the real-window snapshot for the lead. Raw evidence stays in `.re/s9-peek/` in this worktree.
+
+The full verification table and surrounding-suite results are included in the PR. The offscreen `commands-dump` check reports missing/extra/different **0/0/0**, with the same **11** allowed-missing rows; no allowlist changes.
 
 ## Find first refusal (lead update)
 

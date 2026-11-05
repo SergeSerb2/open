@@ -947,7 +947,7 @@ This appendix is the first audit's table. It is history. Section 8 current dispa
 | View | Expand Pinned Section | — | `expand-pinned-section` | — | — | app-shell §4.3 |
 | View | Collapse Pinned Section | — | `collapse-pinned-section` | — | — | app-shell §4.3 |
 | View | Cast… | — | `cast` | — | — | none |
-| View | Exit | Esc | `exit-modal` | Y (s9) | — | `s9/peek-app`: key standard window; top Peek (Undo) → maximized split restore → disabled. e2e menu priority, App Esc and plain Esc to page; negative proof in [receipt](plans/s9-peek-receipt.md). |
+| View | Exit | Esc | `exit-modal` | Y (s9) | — | `s9/peek-app`: key standard window; Find keeps Esc first, then top Peek (Undo) → maximized split restore → disabled. e2e menu priority, App Esc and plain Esc to page; negative proof in [receipt](plans/s9-peek-receipt.md). |
 | View > Appearance | Automatic | — | `appearance-automatic` | — | — | none |
 | View > Appearance | Light | — | `appearance-light` | — | — | none |
 | View > Appearance | Dark | — | `appearance-dark` | — | — | none |
