@@ -1733,6 +1733,19 @@ Acceptance: §12 B1, B2, B3, B8 (B8's Little Open leg may assert the log line
 until Step 6 lands the window). Cold-launch delivery (Open quit → click →
 link lands) is part of B1 and is not optional.
 
+Verification update (2026-11-05, Section 9): Step 5 App code and the `routing`
+suite are implemented; see [the App receipt](../routing.md#phase-b-step-5--app-intake-2026-11-05).
+B1 uses `open -a <exact built bundle>` in both warm and cold cases; cold uses
+`-n` plus this suite's data-root arguments. The test covers normal fast cold
+launch and a test-only two-second slow-readiness handoff to observe pending →
+drained state. Queue and dedupe have intentional break-and-revert proofs.
+B3 proves the actual sender PID; `open` has often exited before bundle-id
+lookup, so a real Mail/Messages click and known-bundle rule matching remain
+user hand checks. B8 covers two-window front-to-back order and both toggle
+states. B2 is user-only: no test invokes the default setter. Little Open still
+uses the small recorded stub seam until Step 6. The lead's `.noSpaces` choice
+for Step 5 is bootstrap once, then Little Open with a nil hint.
+
 ### Step 6 — Little Open window (§9.1–§9.5)
 
 Files (2026-10-26, F7: the first three already exist in `OpenFeatures`;
