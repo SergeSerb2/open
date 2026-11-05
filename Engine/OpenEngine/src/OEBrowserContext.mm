@@ -430,6 +430,12 @@ class OENotificationListCallback : public CefNotificationListCallback {
   return self;
 }
 
+- (void)dealloc {
+  // A presenter may retain the manager after this context goes away. Its
+  // CEF profile/observers must still close with the owning context.
+  [_extensions oe_contextClosed];
+}
+
 - (CefRefPtr<CefRequestContext>)oe_requestContext {
   return _context;
 }

@@ -444,6 +444,7 @@ def wav_data_uri(seconds=2, freq=440, rate=22050):
 
 
 def extension_checks(app, style, results):
+    app.call("ext-prompt", handler=False)
     def ext_list():
         lst = app.call("extensions")
         return lst if len(lst["installed"]) >= 4 else None
@@ -4201,6 +4202,7 @@ ACTION_PROBE_COPY = None
 
 
 def actions_checks(app, results):
+    app.call("ext-prompt", handler=False)
     try:
         _actions_checks(app, results)
     finally:
@@ -10091,7 +10093,7 @@ def main():
     ap.add_argument("--engine-fingerprint-only", action="store_true", help="verify built engine artifacts and exit without launching Open")
     ap.add_argument("--extensions", default=os.path.join(ROOT, ".re", "ext", "unpacked"))
     ap.add_argument("--only", choices=["shell", "extensions", "features", "measure", "tabstrip", "window", "sidebar", "peek",
-                                       "commandbar", "app-actions", "actions", "profiles", "sidebar-completion", "toolbar", "numbering", "media", "relaunch", "page",
+                                       "commandbar", "app-actions", "actions", "extensions-p3", "profiles", "sidebar-completion", "toolbar", "numbering", "media", "relaunch", "page",
                                        "sleep"])
     ap.add_argument("--window-chrome-only", action="store_true", help="run only the window-chrome follow-up flows in the window suite")
     ap.add_argument("--keep", action="store_true",
@@ -10299,7 +10301,7 @@ def main():
             results["measure"] = CheckedResults(tracker)
             measure(factory, results["measure"], tmp)
         else:
-            app = factory(urls=("https://example.com/",))
+            app = factory(urls=("about:blank" if opts.only == "extensions-p3" else "https://example.com/",))
             try:
                 results["ping"] = app.call("ping")
                 app.call("window-frame", frame=[80, 60, 1360, 860])
@@ -10314,6 +10316,9 @@ def main():
                     tabstrip_checks(app, results["tabstrip"])
                 elif opts.only == "actions":
                     actions_checks(app, results["actions"])
+                elif opts.only == "extensions-p3":
+                    import extensions_p3
+                    extensions_p3.run(app, results["extensions-p3"], tmp, ROOT, wait_until, new_tab)
                 else:
                     feature_checks(app, opts.style, results["features"], tmp)
             finally:
@@ -10365,14 +10370,14 @@ def main():
                                     else opts.config.lower()))
     with open(os.path.join(OUT, name), "w") as f:
         json.dump(results, f, indent=2, sort_keys=True)
-    for group in ("shell", "extensions", "features", "measure", "tabstrip", "window", "sidebar", "peek", "commandbar", "app-actions", "actions", "profiles", "sidebar-completion", "toolbar", "numbering", "media", "relaunch", "page", "sleep"):
+    for group in ("shell", "extensions", "features", "measure", "tabstrip", "window", "sidebar", "peek", "commandbar", "app-actions", "actions", "extensions-p3", "profiles", "sidebar-completion", "toolbar", "numbering", "media", "relaunch", "page", "sleep"):
         for k, v in results.get(group, {}).items():
             if isinstance(v, dict) and "ok" in v:
                 print("%-24s %s" % (k, "PASS" if v.get("ok") else "FAIL"))
             elif isinstance(v, dict) and v.get("status") in ("SKIP", "BLOCKED", "INTERRUPTED", "DEFERRED"):
                 print("%-24s %s: %s" % (k, v["status"], v.get("reason", "")))
     print("wrote", os.path.join(OUT, name))
-    failures = [k for group in ("shell", "extensions", "features", "measure", "tabstrip", "window", "sidebar", "peek", "commandbar", "app-actions", "actions", "sidebar-completion", "toolbar", "numbering", "media", "relaunch", "page", "sleep")
+    failures = [k for group in ("shell", "extensions", "features", "measure", "tabstrip", "window", "sidebar", "peek", "commandbar", "app-actions", "actions", "extensions-p3", "sidebar-completion", "toolbar", "numbering", "media", "relaunch", "page", "sleep")
                 for k, v in results.get(group, {}).items() if isinstance(v, dict) and v.get("ok") is False]
     if failures or not results["cleanup"]["ok"]:
         sys.exit(1)

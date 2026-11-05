@@ -1,213 +1,81 @@
-// Installed-extension model for our own toolbar UI.
-//
-// CEF has no extension API since M128 (CefExtension and
-// CefRequestContext::LoadExtension were removed with the Alloy runtime). The
-// Chrome extension system still runs inside every context, so until fork
-// patch P3 we read its state from the profile on disk: "extensions.settings"
-// in Preferences / Secure Preferences, plus each extension's manifest.json
-// and _locales. Dynamic action state (badge, setIcon, setTitle) is not on
-// disk; patch P2 adds it.
-
+// Live per-profile extension registry and consent. Swift sees only OpenEngine.
 #import "OEInternal.h"
+#import <ImageIO/ImageIO.h>
 
 namespace {
-
-// extensions::mojom::ManifestLocation values written to Preferences.
-enum Location {
-  kInternal = 1,
-  kExternalPref = 2,
-  kUnpacked = 4,
-  kComponent = 5,
-  kExternalPrefDownload = 6,
-  kExternalPolicyDownload = 7,
-  kCommandLine = 8,
-  kExternalPolicy = 9,
-  kExternalComponent = 10,
-};
-
-NSDictionary* ReadJSON(NSURL* url) {
-  NSData* data = [NSData dataWithContentsOfURL:url];
-  if (!data) {
-    return nil;
-  }
-  id obj = [NSJSONSerialization JSONObjectWithData:data options:0 error:nil];
-  return [obj isKindOfClass:NSDictionary.class] ? obj : nil;
+NSArray<NSString*>* OEStrings(CefRefPtr<CefListValue> list) {
+  NSMutableArray* result = [NSMutableArray array];
+  if (list) for (size_t i = 0; i < list->GetSize(); ++i) [result addObject:OEString(list->GetString(i))];
+  return result;
+}
+NSImage* OEManifestIcon(NSURL* url) {
+  NSFileHandle* file = [NSFileHandle fileHandleForReadingFromURL:url error:nil];
+  NSData* data = [file readDataUpToLength:4 * 1024 * 1024 + 1 error:nil];
+  [file closeFile];
+  if (!data.length || data.length > 4 * 1024 * 1024) return nil;
+  CGImageSourceRef source = CGImageSourceCreateWithData((__bridge CFDataRef)data, nullptr);
+  if (!source) return nil;
+  NSDictionary* properties = CFBridgingRelease(CGImageSourceCopyPropertiesAtIndex(source, 0, nullptr));
+  const long long width = [properties[(__bridge NSString*)kCGImagePropertyPixelWidth] longLongValue];
+  const long long height = [properties[(__bridge NSString*)kCGImagePropertyPixelHeight] longLongValue];
+  const long long depth = [properties[(__bridge NSString*)kCGImagePropertyDepth] longLongValue];
+  NSString* model = properties[(__bridge NSString*)kCGImagePropertyColorModel];
+  const BOOL knownModel = [@[ @"RGB", @"Gray", @"CMYK", @"Lab", @"Indexed" ] containsObject:model ?: @""];
+  // guess (child): safety caps for manifest metadata icons. At most four
+  // 8-bit components: 2048 * 2048 * 4 = 16 MiB. Reject before decode.
+  CGImageRef image = width > 0 && height > 0 && width <= 2048 && height <= 2048
+      && depth > 0 && depth <= 8 && knownModel
+      ? CGImageSourceCreateImageAtIndex(source, 0, nullptr) : nullptr;
+  CFRelease(source);
+  if (!image) { NSLog(@"OpenEngine: extension icon refused (2048 px/8-bit limit or invalid image)"); return nil; }
+  NSImage* result = [[NSImage alloc] initWithCGImage:image size:NSMakeSize(width, height)];
+  CGImageRelease(image);
+  return result;
 }
 
-}  // namespace
-
-#pragma mark - OEExtension
+NSImage* OEPromptImage(CefRefPtr<CefImage> image) {
+  if (!image) return nil;
+  int width, height;
+  auto bytes = image->GetAsPNG(1, true, width, height);
+  if (!bytes || bytes->GetSize() > 4 * 1024 * 1024) return nil;
+  NSMutableData* data = [NSMutableData dataWithLength:bytes->GetSize()];
+  bytes->GetData(data.mutableBytes, data.length, 0);
+  return [[NSImage alloc] initWithData:data];
+}
+}
 
 @interface OEExtension ()
-- (nullable instancetype)initOEWithIdentifier:(NSString*)identifier
-                                      settings:(NSDictionary*)settings
-                                    profileDir:(NSURL*)profileDir;
+- (instancetype)initOEWithState:(CefRefPtr<CefDictionaryValue>)d;
 @end
-
-@implementation OEExtension {
-  NSDictionary* _messages;
-}
-
-- (nullable instancetype)initOEWithIdentifier:(NSString*)identifier
-                                      settings:(NSDictionary*)settings
-                                    profileDir:(NSURL*)profileDir {
-  if (!(self = [super init])) {
-    return nil;
+@implementation OEExtension
+- (instancetype)initOEWithState:(CefRefPtr<CefDictionaryValue>)d {
+  if ((self = [super init])) {
+    _identifier = OEString(d->GetString("id"));
+    _name = OEString(d->GetString("name"));
+    _version = OEString(d->GetString("version"));
+    _summary = OEString(d->GetString("summary"));
+    _manifestVersion = d->GetInt("manifestVersion");
+    _enabled = d->GetBool("enabled"); _unpacked = d->GetBool("unpacked");
+    _hasAction = _oe_hasAction = d->GetBool("hasAction");
+    _fromWebStore = d->GetBool("fromWebStore");
+    _disableReasons = static_cast<uint32_t>(d->GetInt("disableReasons"));
+    _homepageURL = OEURL(d->GetString("homepage"));
+    NSString* keyword = OEString(d->GetString("omniboxKeyword"));
+    _omniboxKeyword = keyword.length ? keyword : nil;
+    _installDirectory = [NSURL fileURLWithPath:OEString(d->GetString("path")) isDirectory:YES];
+    _optionsURL = OEURL(d->GetString("options"));
+    _permissions = OEStrings(d->GetList("permissions"));
+    _hostPermissions = OEStrings(d->GetList("hostPermissions"));
+    _oe_actionTitle = OEString(d->GetString("actionTitle"));
+    _oe_actionPopupURL = OEURL(d->GetString("actionPopup"));
+    // Chromium resolved and validated the manifest path. Bound encoded bytes
+    // before AppKit decodes the image. Toolbar images come from Chromium.
+    NSURL* iconURL = [NSURL fileURLWithPath:OEString(d->GetString("iconPath"))];
+    _icon = OEManifestIcon(iconURL);
+    _oe_actionIcon = _icon;
   }
-  NSInteger location = [settings[@"location"] integerValue];
-  if (location == kComponent || location == kExternalComponent) {
-    return nil;
-  }
-  NSString* path = settings[@"path"];
-  if (![path isKindOfClass:NSString.class] || path.length == 0) {
-    return nil;
-  }
-  _identifier = [identifier copy];
-  _unpacked = location == kUnpacked || location == kCommandLine;
-  _installDirectory =
-      path.isAbsolutePath
-          ? [NSURL fileURLWithPath:path isDirectory:YES]
-          : [[profileDir URLByAppendingPathComponent:@"Extensions"]
-                URLByAppendingPathComponent:path
-                                isDirectory:YES];
-  NSDictionary* manifest =
-      ReadJSON([_installDirectory URLByAppendingPathComponent:@"manifest.json"]);
-  if (!manifest) {
-    manifest = [settings[@"manifest"] isKindOfClass:NSDictionary.class]
-                   ? settings[@"manifest"]
-                   : nil;
-  }
-  if (!manifest) {
-    return nil;
-  }
-  [self oe_loadMessages:manifest[@"default_locale"]];
-
-  _name = [self oe_localize:manifest[@"name"]] ?: identifier;
-  _version = manifest[@"version"] ?: @"";
-  _summary = [self oe_localize:manifest[@"description"]] ?: @"";
-  _manifestVersion = [manifest[@"manifest_version"] integerValue];
-
-  id reasons = settings[@"disable_reasons"];
-  BOOL disabled = NO;
-  if ([reasons isKindOfClass:NSArray.class]) {
-    disabled = [reasons count] > 0;
-  } else if ([reasons isKindOfClass:NSNumber.class]) {
-    disabled = [reasons integerValue] != 0;
-  }
-  if (settings[@"state"] && [settings[@"state"] integerValue] == 0) {
-    disabled = YES;
-  }
-  _enabled = !disabled;
-
-  NSDictionary* action = manifest[@"action"] ?: manifest[@"browser_action"]
-                                                   ?: manifest[@"page_action"];
-  _oe_hasAction = [action isKindOfClass:NSDictionary.class];
-  NSString* base =
-      [NSString stringWithFormat:@"chrome-extension://%@/", identifier];
-  if (_oe_hasAction) {
-    _oe_actionTitle = [self oe_localize:action[@"default_title"]];
-    NSString* popup = action[@"default_popup"];
-    if ([popup isKindOfClass:NSString.class] && popup.length) {
-      _oe_actionPopupURL =
-          [NSURL URLWithString:[base stringByAppendingString:popup]];
-    }
-  }
-  NSDictionary* optionsUI = manifest[@"options_ui"];
-  NSString* options = [optionsUI isKindOfClass:NSDictionary.class]
-                          ? optionsUI[@"page"]
-                          : manifest[@"options_page"];
-  if ([options isKindOfClass:NSString.class] && options.length) {
-    _optionsURL = [NSURL URLWithString:[base stringByAppendingString:options]];
-  }
-  _icon = [self oe_bestIcon:manifest[@"icons"]];
-  _oe_actionIcon =
-      (_oe_hasAction ? [self oe_bestIcon:action[@"default_icon"]] : nil)
-          ?: _icon;
-
-  NSMutableArray* perms = [NSMutableArray array];
-  NSMutableArray* hosts = [NSMutableArray array];
-  for (id p in manifest[@"permissions"] ?: @[]) {
-    if (![p isKindOfClass:NSString.class]) continue;
-    if ([p containsString:@"://"] || [p isEqualToString:@"<all_urls>"]) {
-      [hosts addObject:p];
-    } else {
-      [perms addObject:p];
-    }
-  }
-  for (id p in manifest[@"host_permissions"] ?: @[]) {
-    if ([p isKindOfClass:NSString.class]) [hosts addObject:p];
-  }
-  _permissions = perms;
-  _hostPermissions = hosts;
   return self;
 }
-
-- (void)oe_loadMessages:(NSString*)defaultLocale {
-  NSMutableArray* candidates = [NSMutableArray array];
-  for (NSString* lang in NSLocale.preferredLanguages) {
-    NSString* l = [lang stringByReplacingOccurrencesOfString:@"-"
-                                                  withString:@"_"];
-    [candidates addObject:l];
-    NSArray* parts = [l componentsSeparatedByString:@"_"];
-    if (parts.count > 1) [candidates addObject:parts[0]];
-  }
-  if ([defaultLocale isKindOfClass:NSString.class]) {
-    [candidates addObject:defaultLocale];
-  }
-  for (NSString* locale in candidates) {
-    NSURL* url = [[[_installDirectory URLByAppendingPathComponent:@"_locales"]
-        URLByAppendingPathComponent:locale]
-        URLByAppendingPathComponent:@"messages.json"];
-    NSDictionary* messages = ReadJSON(url);
-    if (messages) {
-      NSMutableDictionary* lower = [NSMutableDictionary dictionary];
-      [messages enumerateKeysAndObjectsUsingBlock:^(NSString* k, id v,
-                                                    BOOL* stop) {
-        lower[k.lowercaseString] = v;
-      }];
-      _messages = lower;
-      return;
-    }
-  }
-}
-
-- (nullable NSString*)oe_localize:(id)value {
-  if (![value isKindOfClass:NSString.class]) {
-    return nil;
-  }
-  NSString* s = value;
-  if ([s hasPrefix:@"__MSG_"] && [s hasSuffix:@"__"] && s.length > 8) {
-    NSString* key = [[s substringWithRange:NSMakeRange(6, s.length - 8)]
-        lowercaseString];
-    NSString* message = _messages[key][@"message"];
-    return message ?: s;
-  }
-  return s;
-}
-
-- (nullable NSImage*)oe_bestIcon:(id)icons {
-  NSString* path = nil;
-  if ([icons isKindOfClass:NSString.class]) {
-    path = icons;
-  } else if ([icons isKindOfClass:NSDictionary.class]) {
-    NSInteger best = 0;
-    for (NSString* size in icons) {
-      if (size.integerValue > best && [icons[size] isKindOfClass:NSString.class]) {
-        best = size.integerValue;
-        path = icons[size];
-      }
-    }
-  }
-  if (!path.length) {
-    return nil;
-  }
-  if ([path hasPrefix:@"/"]) {
-    path = [path substringFromIndex:1];
-  }
-  return [[NSImage alloc]
-      initWithContentsOfURL:[_installDirectory URLByAppendingPathComponent:path]];
-}
-
 @end
 
 #pragma mark - OEExtensionAction
@@ -268,6 +136,10 @@ static NSColor* OEColorFromARGB(int argb) {
     _siteAccess = static_cast<OEExtensionSiteAccess>(state->GetInt("siteAccess"));
     _showingPopup = state->GetBool("showingPopup");
     _live = state->GetBool("live");
+    NSString* key = OEString(state->GetString("shortcutKeyEquivalent"));
+    _shortcutKeyEquivalent = key.length ? key : nil;
+    _shortcutModifierFlags = state->GetInt("shortcutModifierFlags");
+
   }
   return self;
 }
@@ -279,155 +151,201 @@ static NSColor* OEColorFromARGB(int argb) {
 
 @end
 
-#pragma mark - OEExtensionManager
 
-@implementation OEExtensionManager {
-  NSArray<OEExtension*>* _installed;
-  dispatch_source_t _watcher;
-  BOOL _reloadScheduled;
-}
-
-- (instancetype)initOEWithContext:(OEBrowserContext*)context {
+@interface OEExtensionCommand ()
+- (instancetype)initOEWithState:(CefRefPtr<CefDictionaryValue>)d;
+@end
+@implementation OEExtensionCommand
+- (instancetype)initOEWithState:(CefRefPtr<CefDictionaryValue>)d {
   if ((self = [super init])) {
-    _context = context;
-    _installed = @[];
-    [self reload];
-    [self oe_watch];
+    _extensionIdentifier = OEString(d->GetString("id"));
+    _name = OEString(d->GetString("name")); _summary = OEString(d->GetString("summary"));
+    _keyEquivalent = OEString(d->GetString("keyEquivalent"));
+    _modifierFlags = d->GetInt("modifierFlags");
+    _global = d->GetBool("global"); _actionCommand = d->GetBool("actionCommand");
   }
   return self;
 }
+@end
 
-- (void)dealloc {
-  if (_watcher) {
-    dispatch_source_cancel(_watcher);
-  }
+@interface OEExtensionPermissionMessage ()
+- (instancetype)initOEWithState:(CefRefPtr<CefDictionaryValue>)d;
+@end
+@implementation OEExtensionPermissionMessage
+- (instancetype)initOEWithState:(CefRefPtr<CefDictionaryValue>)d {
+  if ((self = [super init])) { _message = OEString(d->GetString("message")); _details = OEStrings(d->GetList("details")); }
+  return self;
 }
+@end
 
-+ (NSURL*)managementPageURL {
-  return [NSURL URLWithString:@"chrome://extensions"];
+@interface OEExtensionPrompt ()
+- (instancetype)initOEWithPrompt:(CefRefPtr<CefExtensionPrompt>)prompt;
+@end
+@implementation OEExtensionPrompt {
+  CefRefPtr<CefExtensionPrompt> _prompt;
 }
-
-+ (NSURL*)webStorePageURLForExtensionIdentifier:(NSString*)identifier {
-  return [NSURL
-      URLWithString:[@"https://chromewebstore.google.com/detail/"
-                        stringByAppendingString:identifier]];
-}
-
-- (NSArray<OEExtension*>*)installedExtensions {
-  return _installed;
-}
-
-- (nullable OEExtension*)extensionWithIdentifier:(NSString*)identifier {
-  for (OEExtension* e in _installed) {
-    if ([e.identifier isEqualToString:identifier]) {
-      return e;
+- (instancetype)initOEWithPrompt:(CefRefPtr<CefExtensionPrompt>)prompt {
+  if ((self = [super init])) {
+    _prompt = prompt;
+    auto d = prompt->GetData();
+    switch (d->GetInt("type")) {
+      case 3: _type = OEExtensionPromptTypeReEnable; break;
+      case 4: _type = OEExtensionPromptTypePermissions; break;
+      case 5: _type = OEExtensionPromptTypeExternalInstall; break;
+      case 8: _type = OEExtensionPromptTypeRemoteInstall; break;
+      case 9: _type = OEExtensionPromptTypeRepair; break;
+      case 100: _type = OEExtensionPromptTypeUninstall; break;
+      default: _type = OEExtensionPromptTypeInstall; break;
     }
-  }
-  return nil;
-}
-
-- (void)reload {
-  NSURL* dir = _context.directory;
-  if (!dir) {
-    // Ephemeral contexts have no folder (patch P3 reads the live registry).
-    return;
-  }
-  NSMutableDictionary* settings = [NSMutableDictionary dictionary];
-  // Secure Preferences holds MAC-protected entries; Preferences holds the
-  // rest. Merge both, Secure Preferences winning.
-  for (NSString* file in @[ @"Preferences", @"Secure Preferences" ]) {
-    NSDictionary* prefs = ReadJSON([dir URLByAppendingPathComponent:file]);
-    NSDictionary* s = prefs[@"extensions"][@"settings"];
-    if ([s isKindOfClass:NSDictionary.class]) {
-      [s enumerateKeysAndObjectsUsingBlock:^(NSString* key, NSDictionary* value,
-                                             BOOL* stop) {
-        if (![value isKindOfClass:NSDictionary.class]) {
-          return;
-        }
-        NSMutableDictionary* merged =
-            [settings[key] mutableCopy] ?: [NSMutableDictionary dictionary];
-        [merged addEntriesFromDictionary:value];
-        settings[key] = merged;
-      }];
-    }
-  }
-  NSMutableArray* out = [NSMutableArray array];
-  [settings enumerateKeysAndObjectsUsingBlock:^(NSString* key,
-                                                NSDictionary* value,
-                                                BOOL* stop) {
-    OEExtension* e = [[OEExtension alloc] initOEWithIdentifier:key
-                                                       settings:value
-                                                     profileDir:dir];
-    if (e) {
-      [out addObject:e];
-    }
-  }];
-  [out sortUsingComparator:^NSComparisonResult(OEExtension* a, OEExtension* b) {
-    return [a.name localizedCaseInsensitiveCompare:b.name];
-  }];
-  BOOL changed = ![[_installed valueForKey:@"identifier"]
-      isEqualToArray:[out valueForKey:@"identifier"]];
-  if (!changed) {
-    for (NSUInteger i = 0; i < out.count; ++i) {
-      if ([out[i] isEnabled] != [_installed[i] isEnabled]) {
-        changed = YES;
-        break;
+    _extensionIdentifier = OEString(d->GetString("id"));
+    _extensionName = OEString(d->GetString("name"));
+    _chromiumTitle = OEString(d->GetString("title"));
+    _chromiumAcceptLabel = OEString(d->GetString("acceptLabel"));
+    _chromiumCancelLabel = OEString(d->GetString("cancelLabel"));
+    NSString* triggering = OEString(d->GetString("triggeringExtensionName"));
+    _triggeringExtensionName = triggering.length ? triggering : nil;
+    _icon = OEPromptImage(prompt->GetIcon());
+    NSMutableArray* permissions = [NSMutableArray array];
+    auto list = d->GetList("permissions");
+    if (list) for (size_t i = 0; i < list->GetSize(); ++i)
+      [permissions addObject:[[OEExtensionPermissionMessage alloc] initOEWithState:list->GetDictionary(i)]];
+    _permissions = permissions;
+    _retainedFiles = OEStrings(d->GetList("retainedFiles"));
+    _retainedDevices = OEStrings(d->GetList("retainedDevices"));
+    auto source = prompt->GetBrowser();
+    if (source) for (OEWebContent* content in OEEngine.shared.allWebContents) {
+      if (content.oe_browser && content.oe_browser->IsSame(source)) {
+        // permissions.request and uninstall supply a native window only.
+        // Its CEF lookup identifies the owning browser, not a requesting page.
+        if (d->GetBool("hasRequestingPage")) _webContent = content;
+        _browser = content.oe_hostBrowser; break;
       }
     }
   }
+  return self;
+}
+- (void)accept { if (_prompt) { _prompt->Answer(true); _prompt = nullptr; } }
+- (void)cancel { if (_prompt) { _prompt->Answer(false); _prompt = nullptr; } }
+@end
+
+@interface OEExtensionManager ()
+- (void)oe_changed:(BOOL)commands;
+- (void)oe_ready;
+- (void)oe_installed:(CefRefPtr<CefDictionaryValue>)state byUser:(BOOL)user;
+- (void)oe_failed:(NSString*)path error:(NSString*)error;
+@end
+namespace {
+class OEExtensionsHandler : public CefExtensionManagerHandler {
+ public:
+  explicit OEExtensionsHandler(OEExtensionManager* manager) : manager_(manager) {}
+  void OnChanged(bool commands) override { [manager_ oe_changed:commands]; }
+  void OnReady() override { [manager_ oe_ready]; }
+  void OnInstalled(CefRefPtr<CefDictionaryValue> e, bool user) override { [manager_ oe_installed:e byUser:user]; }
+  void OnLoadFailed(const CefString& path, const CefString& error) override { [manager_ oe_failed:OEString(path) error:OEString(error)]; }
+  bool CanShowPrompt() override { return [manager_.delegate respondsToSelector:@selector(extensionManager:showPrompt:)]; }
+  void OnPrompt(CefRefPtr<CefExtensionPrompt> prompt) override {
+    OEExtensionManager* manager = manager_;
+    id<OEExtensionManagerDelegate> delegate = manager.delegate;
+    if ([delegate respondsToSelector:@selector(extensionManager:showPrompt:)])
+      [delegate extensionManager:manager showPrompt:[[OEExtensionPrompt alloc] initOEWithPrompt:prompt]];
+  }
+ private:
+  __weak OEExtensionManager* manager_;
+  IMPLEMENT_REFCOUNTING(OEExtensionsHandler);
+};
+class OEInstallCompletion : public CefExtensionInstallCallback {
+ public:
+  explicit OEInstallCompletion(void (^completion)(BOOL, NSString*)) : completion_([completion copy]) {}
+  void OnComplete(bool installed, const CefString& error) override {
+    auto completion = completion_; completion_ = nil;
+    if (completion) completion(installed, error.empty() ? nil : OEString(error));
+  }
+ private:
+  void (^completion_)(BOOL, NSString*);
+  IMPLEMENT_REFCOUNTING(OEInstallCompletion);
+};
+}
+@implementation OEExtensionManager {
+  CefRefPtr<CefExtensionManager> _manager;
+  NSArray<OEExtension*>* _installed;
+  NSArray<OEExtensionCommand*>* _commands;
+}
+- (instancetype)initOEWithContext:(OEBrowserContext*)context {
+  if ((self = [super init])) {
+    _context = context;
+    __weak OEExtensionManager* weakSelf = self;
+    [context oe_whenReady:^{
+      OEExtensionManager* s = weakSelf;
+      if (s) s->_manager = CefExtensionManager::Create(context.oe_requestContext, new OEExtensionsHandler(s));
+    }];
+  }
+  return self;
+}
+- (void)dealloc { [self oe_contextClosed]; }
+- (void)oe_contextClosed {
+  if (_manager) { _manager->Close(); _manager = nullptr; }
+  _installed = nil; _commands = nil;
+}
+- (CefRefPtr<CefExtensionManager>)oe_manager { return _manager; }
+- (BOOL)isReady { return _manager && _manager->IsReady(); }
+- (NSArray<OEExtension*>*)installedExtensions {
+  if (_installed) return _installed;
+  NSMutableArray* out = [NSMutableArray array];
+  auto list = _manager ? _manager->GetInstalled() : nullptr;
+  if (list) for (size_t i = 0; i < list->GetSize(); ++i)
+    [out addObject:[[OEExtension alloc] initOEWithState:list->GetDictionary(i)]];
+  [out sortUsingComparator:^NSComparisonResult(OEExtension* a, OEExtension* b) { return [a.name localizedCaseInsensitiveCompare:b.name]; }];
   _installed = out;
-  if (changed) {
-    if ([_delegate respondsToSelector:@selector(extensionManagerDidChange)]) {
-      [_delegate extensionManagerDidChange];
-    }
-    OEBrowserContext* context = _context;
-    if (context) {
-      [OEEngine.shared oe_extensionsChangedInContext:context];
-    }
+  return out;
+}
+- (NSArray<OEExtensionCommand*>*)commands {
+  if (_commands) return _commands;
+  NSMutableArray* out = [NSMutableArray array];
+  auto list = _manager ? _manager->GetCommands() : nullptr;
+  if (list) for (size_t i = 0; i < list->GetSize(); ++i)
+    [out addObject:[[OEExtensionCommand alloc] initOEWithState:list->GetDictionary(i)]];
+  _commands = out;
+  return out;
+}
+- (OEExtension*)extensionWithIdentifier:(NSString*)identifier {
+  for (OEExtension* e in self.installedExtensions) if ([e.identifier isEqualToString:identifier]) return e;
+  return nil;
+}
+- (void)setEnabled:(BOOL)enabled forExtension:(NSString*)identifier { if (_manager) _manager->SetEnabled(OECef(identifier), enabled); }
+- (void)uninstallExtension:(NSString*)identifier window:(NSWindow*)window { if (_manager) _manager->Uninstall(OECef(identifier), (__bridge void*)window); }
+- (void)reloadExtension:(NSString*)identifier { if (_manager) _manager->Reload(OECef(identifier)); }
+- (void)installFromWebStore:(NSString*)identifier window:(NSWindow*)window completion:(void (^)(BOOL, NSString*))completion {
+  if (_manager) _manager->InstallFromWebStore(OECef(identifier), (__bridge void*)window, new OEInstallCompletion(completion));
+  else completion(NO, @"Extension system is not ready");
+}
+- (BOOL)installLocalCRX:(NSURL*)file webContent:(OEWebContent*)content {
+  return _manager && _manager->InstallLocalCrx(OECef(file.path), content.oe_browser);
+}
+- (void)reload { [self oe_changed:NO]; }
+- (void)oe_changed:(BOOL)commands {
+  _commands = nil;
+  if (!commands) _installed = nil;
+  [OEEngine.shared oe_extensionsChangedInContext:_context];
+  if (commands) {
+    if ([_delegate respondsToSelector:@selector(extensionManagerDidChangeCommands:)]) [_delegate extensionManagerDidChangeCommands:self];
+  } else {
+    if ([_delegate respondsToSelector:@selector(extensionManagerDidChange:)]) [_delegate extensionManagerDidChange:self];
   }
 }
-
-// Chromium rewrites Preferences atomically (write + rename) a few seconds
-// after a change, so watch the directory and debounce.
-- (void)oe_watch {
-  NSURL* dir = _context.directory;
-  if (!dir) {
-    return;
-  }
-  int fd = open(dir.fileSystemRepresentation, O_EVTONLY);
-  if (fd < 0) {
-    [NSFileManager.defaultManager createDirectoryAtURL:dir
-                           withIntermediateDirectories:YES
-                                            attributes:nil
-                                                 error:nil];
-    fd = open(dir.fileSystemRepresentation, O_EVTONLY);
-    if (fd < 0) {
-      return;
-    }
-  }
-  _watcher = dispatch_source_create(DISPATCH_SOURCE_TYPE_VNODE, fd,
-                                    DISPATCH_VNODE_WRITE,
-                                    dispatch_get_main_queue());
-  __weak OEExtensionManager* weakSelf = self;
-  dispatch_source_set_event_handler(_watcher, ^{
-    OEExtensionManager* strongSelf = weakSelf;
-    if (!strongSelf || strongSelf->_reloadScheduled) {
-      return;
-    }
-    strongSelf->_reloadScheduled = YES;
-    dispatch_after(dispatch_time(DISPATCH_TIME_NOW, NSEC_PER_SEC / 2),
-                   dispatch_get_main_queue(), ^{
-                     OEExtensionManager* s = weakSelf;
-                     if (s) {
-                       s->_reloadScheduled = NO;
-                       [s reload];
-                     }
-                   });
-  });
-  dispatch_source_set_cancel_handler(_watcher, ^{
-    close(fd);
-  });
-  dispatch_resume(_watcher);
+- (void)oe_ready {
+  [self oe_changed:NO]; [self oe_changed:YES];
+  if ([_delegate respondsToSelector:@selector(extensionManagerDidBecomeReady:)]) [_delegate extensionManagerDidBecomeReady:self];
 }
-
+- (void)oe_installed:(CefRefPtr<CefDictionaryValue>)state byUser:(BOOL)user {
+  if ([_delegate respondsToSelector:@selector(extensionManager:didInstallExtension:byUser:)])
+    [_delegate extensionManager:self didInstallExtension:[[OEExtension alloc] initOEWithState:state] byUser:user];
+}
+- (void)oe_failed:(NSString*)path error:(NSString*)error {
+  if ([_delegate respondsToSelector:@selector(extensionManager:didFailToLoadExtensionAt:error:)])
+    [_delegate extensionManager:self didFailToLoadExtensionAt:[NSURL fileURLWithPath:path] error:error];
+}
++ (NSURL*)managementPageURL { return [NSURL URLWithString:@"chrome://extensions"]; }
++ (NSURL*)webStorePageURLForExtensionIdentifier:(NSString*)identifier {
+  return [NSURL URLWithString:[@"https://chromewebstore.google.com/detail/" stringByAppendingString:identifier]];
+}
 @end
