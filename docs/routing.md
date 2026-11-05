@@ -201,3 +201,27 @@ then `ready=true`, pending 0, queued 1, drained 1, one decision and one selected
 Today tab. The dedupe receipt shows one drop inside two seconds and a second
 landing after the window. [Both final runs and the negative summary](engine-spike/routing-step5-receipt.json),
 [last full routing result](engine-spike/results-routing-debug.json).
+
+The final reviewed App source (`d7e62082`) repeated the 9/9 routing suite twice
+with zero focus interruptions and cleanup PASS. Release verify-all `route`
+also passed A1–A17 (the runner now includes A11–A17). Additional real-App
+deliveries verified zero Spaces → bootstrap one Space → Little Open with nil
+hint, then a second URL → that same Space in a new main window.
+
+Shortcut-file observations: `open -a` resolves valid `.webloc` files to a
+`kAEGetURL` delivery before the App's file reader, including a 65,537-byte
+fixture. A small `.url` shortcut opens and an invalid `.webloc` is refused.
+The 65,536-byte `.url` fixture returned LaunchServices error −10400 and its
+target URL did not reach `routing-log`; the 65,537-byte fixture was refused
+too. **UNVERIFIED:** those OS-command refusals do not prove the App reader's
+at-limit boundary. The 64 KiB metadata guard and bounded 65,537-byte read are
+source-verified. No isolated delegate test replaces this gap.
+
+Final App regressions: `commandbar --style chrome` passed 63/63; `window`
+passed 72 rows with only the four TANDEM-RULES §4 display failures:
+`chrome_dark_rings` (worst ΔE00 6.71), `traffic_light_look` (dark card ring
+errors 4.3/6.4/6.7), `traffic_light_stale_hover`, and `comparison` (worst
+position 1 pt, ΔE00 3.65). These are **FAIL (machine: built-in display main)**,
+not visual acceptance. Both final runs had zero focus interruptions and
+cleanup PASS. An earlier window attempt interrupted by UserNotificationCenter
+and the preliminary run missing the release renderer are not accepted receipts.

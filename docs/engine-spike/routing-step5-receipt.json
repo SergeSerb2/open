@@ -1,8 +1,9 @@
 {
   "routing": [
     {
-      "run": "final-1",
-      "started": "2026-11-05 13:43:22",
+      "run": "routing-reviewed-1",
+      "sourceHead": "d7e620821ca3bb33afb28bc0824d6db3b5e37ae6",
+      "started": "2026-11-05 14:16:23",
       "results": {
         "routing_cold_launch_queue": true,
         "routing_dedupe_2s": true,
@@ -15,11 +16,18 @@
         "routing_warm_space_rule": true
       },
       "cleanup": true,
+      "interruptions": 0,
+      "loadAverage": [
+        7.79931640625,
+        7.12060546875,
+        7.7744140625
+      ],
       "engine": "f34400e71412d87a0b268fcd5658a8563cca34f600c8dd17b534a63e76aa7939"
     },
     {
-      "run": "final-2",
-      "started": "2026-11-05 13:44:20",
+      "run": "routing-reviewed-2",
+      "sourceHead": "d7e620821ca3bb33afb28bc0824d6db3b5e37ae6",
+      "started": "2026-11-05 14:18:13",
       "results": {
         "routing_cold_launch_queue": true,
         "routing_dedupe_2s": true,
@@ -32,10 +40,17 @@
         "routing_warm_space_rule": true
       },
       "cleanup": true,
+      "interruptions": 0,
+      "loadAverage": [
+        19.849609375,
+        10.66943359375,
+        9.021484375
+      ],
       "engine": "f34400e71412d87a0b268fcd5658a8563cca34f600c8dd17b534a63e76aa7939"
     },
     {
-      "run": "negative",
+      "run": "routing-negative",
+      "sourceHead": null,
       "started": "2026-11-05 13:41:42",
       "results": {
         "routing_cold_launch_queue": false,
@@ -49,10 +64,175 @@
         "routing_warm_space_rule": true
       },
       "cleanup": true,
+      "interruptions": 0,
+      "loadAverage": [
+        9.31787109375,
+        11.6572265625,
+        11.208984375
+      ],
       "engine": "f34400e71412d87a0b268fcd5658a8563cca34f600c8dd17b534a63e76aa7939"
     }
   ],
-  "negativeMutation": "Temporarily disabled pending.append and dedupe guard; restored byte-for-byte before final-1/final-2",
+  "negativeMutation": "Temporarily removed pending.append and bypassed the dedupe guard; restored and rebuilt before passing runs.",
   "systemDefaultSetterCalled": false,
-  "lsregisterUsed": false
+  "lsregisterUsed": false,
+  "additionalAppChecks": {
+    "webloc_65536_ls_resolved": {
+      "ok": true,
+      "exit": 0,
+      "entries": [
+        {
+          "decision": {
+            "evaluatedAt": 815606195.350274,
+            "normalizedHost": "127.0.0.1",
+            "request": {
+              "receivedAt": 815606195.350274,
+              "source": {
+                "pid": 49770
+              },
+              "url": "http://127.0.0.1:65421/webloc-boundary"
+            },
+            "resolved": {
+              "space": {
+                "profileID": "2EFBDBF3-D3A7-43CF-8948-E5D538E21514",
+                "spaceID": "7A917FBB-CF15-4243-A22F-E89F6241EBE4"
+              }
+            },
+            "standardWindowCount": 1,
+            "traces": [],
+            "via": {
+              "defaultSuppressedByToggle": {}
+            }
+          },
+          "sourceBundleID": null,
+          "sourcePID": 49770,
+          "summary": "http://127.0.0.1:65421/webloc-boundary \u2192 Space \u201cSpace\u201d via default (Little Open off \u2192 most recent Space)"
+        }
+      ]
+    },
+    "webloc_65537_ls_resolved": {
+      "ok": true,
+      "exit": 0,
+      "entries": [
+        {
+          "decision": {
+            "evaluatedAt": 815606195.435756,
+            "normalizedHost": "127.0.0.1",
+            "request": {
+              "receivedAt": 815606195.435756,
+              "source": {
+                "pid": 49774
+              },
+              "url": "http://127.0.0.1:65421/webloc-over-limit"
+            },
+            "resolved": {
+              "space": {
+                "profileID": "2EFBDBF3-D3A7-43CF-8948-E5D538E21514",
+                "spaceID": "7A917FBB-CF15-4243-A22F-E89F6241EBE4"
+              }
+            },
+            "standardWindowCount": 1,
+            "traces": [],
+            "via": {
+              "defaultSuppressedByToggle": {}
+            }
+          },
+          "sourceBundleID": null,
+          "sourcePID": 49774,
+          "summary": "http://127.0.0.1:65421/webloc-over-limit \u2192 Space \u201cSpace\u201d via default (Little Open off \u2192 most recent Space)"
+        }
+      ]
+    },
+    "url_shortcut_accepted": {
+      "ok": true,
+      "exit": 0
+    },
+    "url_65536_app_boundary": {
+      "status": "UNVERIFIED",
+      "reason": "open -a returned LaunchServices error -10400 and the target URL did not reach routing-log; the App reader boundary is not proved.",
+      "exit": 1,
+      "stderr": "_LSOpenURLsWithCompletionHandler() failed for the application /Users/serge/.t3/worktrees/open/t3-f50ee562/build/Debug/Open.app with error -10400 for the file /var/folders/s6/_07cr4w13vsg_myjkv9ldpqc0000gn/T/open-routing-extra-4sn_9lnc/boundary-65536.url."
+    },
+    "url_65537_launchservices_refused": {
+      "ok": true,
+      "exit": 1
+    },
+    "invalid_webloc_refused": {
+      "ok": true,
+      "exit": 1
+    },
+    "no_spaces_bootstrap_little_open": {
+      "ok": true,
+      "log": {
+        "drainedCount": 0,
+        "duplicatesDropped": 0,
+        "entries": [
+          {
+            "decision": {
+              "evaluatedAt": 815606205.931912,
+              "normalizedHost": "127.0.0.1",
+              "request": {
+                "receivedAt": 815606205.931912,
+                "source": {
+                  "displayName": "open",
+                  "pid": 50414
+                },
+                "url": "http://127.0.0.1:65421/bootstrap"
+              },
+              "standardWindowCount": 0,
+              "traces": [],
+              "via": {
+                "noSpaces": {}
+              }
+            },
+            "sourceBundleID": null,
+            "sourcePID": 50414,
+            "summary": "http://127.0.0.1:65421/bootstrap \u2192 none via no Spaces"
+          }
+        ],
+        "lastLittleOpenRequest": {
+          "profileHint": null,
+          "url": "http://127.0.0.1:65421/bootstrap"
+        },
+        "pendingCount": 0,
+        "queuedCount": 0,
+        "ready": true
+      }
+    },
+    "bootstrap_once_then_space": {
+      "ok": true,
+      "exit": 0
+    },
+    "cleanup": {
+      "ok": true
+    }
+  },
+  "cliRoute": "verify-all --only route: release build and A1-A17 PASS",
+  "regressions": {
+    "window": {
+      "sourceHead": "d7e620821ca3bb33afb28bc0824d6db3b5e37ae6",
+      "passed": 72,
+      "failedRows": [
+        "chrome_dark_rings",
+        "comparison",
+        "traffic_light_look",
+        "traffic_light_stale_hover"
+      ],
+      "interruptions": 0,
+      "cleanup": true,
+      "classification": "FAIL (machine: built-in display main), only TANDEM section 4 rows",
+      "comparisonWorst": {
+        "positionPt": 1.0,
+        "deltaE00": 3.65
+      },
+      "darkRingWorstDeltaE00": 6.712091005637776
+    },
+    "commandbar": {
+      "sourceHead": "d7e620821ca3bb33afb28bc0824d6db3b5e37ae6",
+      "passed": 63,
+      "failedRows": [],
+      "interruptions": 0,
+      "cleanup": true
+    }
+  }
 }
