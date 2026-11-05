@@ -127,4 +127,101 @@ Additional real CLI checks passed: missing snapshot (1), invalid arguments/URL/S
 - The review fixes supersede the plan's Unicode-pattern limitation (§5.1/Q5) and stale-rule `via` override (§5.5 R7). Host spellings now share Unicode NFC, and only an actually missing default Space causes `fallbackMissingSpace`.
 - The plan's broad `Little Arc` grep also finds its required legacy menu-title allowlist and existing search aliases. These are intentional compatibility/evidence/alias strings allowed by the repository rules. Product titles and routing output use Little Open.
 
-No unit tests, desktop automation, Arc launch, Chromium build/sync, or Phase B implementation ran.
+No unit tests, desktop automation, Arc launch, Chromium build/sync, or Phase B implementation ran in that Phase A verification.
+
+## Phase B Step 5 — App intake (2026-11-05)
+
+`App/ExternalLink/ExternalLinkIntake.swift` installs the `kAEGetURL` handler in
+`applicationWillFinishLaunching`. The AppleEvent path resolves the sender PID;
+`application(_:open:)` and the small `.webloc`/`.url` reader use unknown source.
+Only HTTP(S) is routed. Rejected schemes get a decision without entering the
+queue or dedupe table. The URL registration is one Viewer entry for HTTP and
+HTTPS, named `io.github.sergeserb2.open`, with `LSHandlerRank = Default`.
+
+Intake queues arrivals until the restored windows and engine are ready. It
+deduplicates for two seconds using the canonical URL (which already includes
+the original query) and source bundle id. Each accepted URL gets one bounded,
+memory-only `RoutingDecisionLog` entry; duplicates increment a counter. Each
+evaluation copies current model values and managed `NSApp.orderedWindows`, in
+front-to-back order. Space execution focuses the front standard window,
+creates one when needed, inserts at Today index zero, selects and activates.
+For `.noSpaces`, the lead's Step 5 choice supersedes §8.7's re-evaluation:
+bootstrap once, then open Little Open with a nil hint.
+
+Little Open execution calls only `AppDelegate.openLittleOpen(url:profileHint:)`
+in `App/LittleOpen/AppLittleOpen.swift`. That seam records
+`lastLittleOpenRequest` and shows the existing stub. Real Little Open page
+hosting is Step 6, so this receipt makes no page-lifecycle claim for that half.
+
+`DefaultBrowserService` is the single App API for default-browser state. It
+compares bundle ids for both schemes, observes activation for state changes,
+and calls the async SDK setter once per scheme, sequentially and with separate
+error handling, only after a user action. Settings and the existing menu
+command use this service. Launch never calls its setter. The SDK typecheck
+confirmed the async setter and `keySenderPIDAttr`; it did not execute a setter.
+
+Automation commands (also available with no standard window):
+
+| Command | Read-only result |
+|---|---|
+| `routing-log` | Decision JSON, source bundle id/PID, formatter summary, `duplicatesDropped`, `pendingCount`, `ready`, cumulative `queuedCount`/`drainedCount`, last Little Open seam request |
+| `default-browser-state` | Per-scheme `isDefault` and the combined `isDefaultBrowser` |
+
+The `routing` e2e suite uses only `open -a <exact built Open.app> URL` for
+delivery. Cold launch uses `open -n -a <exact built Open.app> URL --args …`
+with its own data root and socket. A normal fast cold launch proves landing.
+It also uses the automation-only `OPEN_AUTOMATION_ROUTING_SLOW_READY=1` fixture
+to delay the readiness handoff by two seconds, observe a genuinely pending
+AppleEvent, and then observe the drain. **Guess:** this delayed handoff is the
+test fixture for a slow restoration; it changes no delivery, evaluation or
+execution path. A fast normal launch on this machine receives its URL after
+readiness and cannot, by itself, prove the pending branch.
+
+Observed source for `open -a`: a positive sender PID, often no bundle id
+because the command already exited; a cold launcher held with `-W` can also
+report display name `open`. No Terminal bundle id is inferred. LaunchServices
+delivers `ftp://` to an explicitly named Open bundle here (exit 0); intake logs
+`rejectedNonHTTP` and creates no tab or Little Open request. No `lsregister`
+command was needed. Tests restore the exact persisted values (including
+absence) of `open.links.externalInLittleOpen` and
+`open.links.littleOpenHotkeyEnabled` in `finally`.
+
+System prompt B2 and a real Mail/Messages click remain user hand checks in
+`docs/followups.md`. No test invokes `makeDefault` or `setDefaultApplication`.
+
+Verification: `heavy.sh tools/build.sh Debug` passed against the recorded main
+distribution `f34400e71412d87a0b268fcd5658a8563cca34f600c8dd17b534a63e76aa7939`.
+The final `routing --style chrome` suite passed **9/9 twice in a row**, with
+owned-process cleanup PASS in both runs. The deliberate negative build removed
+the pending append and bypassed the dedupe guard: exactly
+`routing_cold_launch_queue` and `routing_dedupe_2s` failed (7/9 passed).
+The intake source was restored byte-for-byte, rebuilt, then run twice.
+The slow-ready receipt shows `ready=false`, pending 1, drained 0 before release;
+then `ready=true`, pending 0, queued 1, drained 1, one decision and one selected
+Today tab. The dedupe receipt shows one drop inside two seconds and a second
+landing after the window. [Both final runs and the negative summary](engine-spike/routing-step5-receipt.json),
+[last full routing result](engine-spike/results-routing-debug.json).
+
+The final reviewed App source (`d7e62082`) repeated the 9/9 routing suite twice
+with zero focus interruptions and cleanup PASS. Release verify-all `route`
+also passed A1–A17 (the runner now includes A11–A17). Additional real-App
+deliveries verified zero Spaces → bootstrap one Space → Little Open with nil
+hint, then a second URL → that same Space in a new main window.
+
+Shortcut-file observations: `open -a` resolves valid `.webloc` files to a
+`kAEGetURL` delivery before the App's file reader, including a 65,537-byte
+fixture. A small `.url` shortcut opens and an invalid `.webloc` is refused.
+The 65,536-byte `.url` fixture returned LaunchServices error −10400 and its
+target URL did not reach `routing-log`; the 65,537-byte fixture was refused
+too. **UNVERIFIED:** those OS-command refusals do not prove the App reader's
+at-limit boundary. The 64 KiB metadata guard and bounded 65,537-byte read are
+source-verified. No isolated delegate test replaces this gap.
+
+Final App regressions: `commandbar --style chrome` passed 63/63; `window`
+passed 72 rows with only the four TANDEM-RULES §4 display failures:
+`chrome_dark_rings` (worst ΔE00 6.71), `traffic_light_look` (dark card ring
+errors 4.3/6.4/6.7), `traffic_light_stale_hover`, and `comparison` (worst
+position 1 pt, ΔE00 3.65). These are **FAIL (machine: built-in display main)**,
+not visual acceptance. Both final runs had zero focus interruptions and
+cleanup PASS. An earlier window attempt interrupted by UserNotificationCenter
+and the preliminary run missing the release renderer are not accepted receipts.
