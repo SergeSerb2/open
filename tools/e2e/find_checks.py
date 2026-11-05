@@ -110,6 +110,7 @@ def run(h, factory, results, tmp):
         click_closed=h.wait_until(lambda: not pane(tab)['visible'] and app.call('focus-state')['owner'] == 'page' and app.eval(tab, 'document.hasFocus()'), timeout=3, step=.05)
         key(text='-close'); closed_text=app.eval(tab, "document.getElementById('input').value")
         row('F13_escape_focus', editing_before_escape and escaped and bool(click_closed) and not pane(tab)['visible'] and app.call('focus-state')['owner'] == 'page' and closed_text == 'page-typing-close', text=text, closeText=closed_text, closePane=pane(tab), closeFocus=app.call('focus-state'))
+        if os.environ.get('OPEN_FIND_FOCUS_ONLY') == '1': return
         for name, element, expected in [('trim_newline', 'lines', 'alpha beta'), ('short', 'seed', 'A short selection'), ('40', 'forty', '1234567890123456789012345678901234567890'), ('41_keeps', 'fortyone', '1234567890123456789012345678901234567890')]:
             select(tab, element); key('f', ['cmd'])
             h.wait_until(lambda: not state().get('pending'), timeout=3, step=.05)
@@ -196,12 +197,13 @@ def run(h, factory, results, tmp):
             p = pane(tab); f=p['frame']; width,height,pixel=h.read_image(path, srgb=True)
             ws=app.call('window-state'); scale=width/ws['frame'][2]
             rgb=pixel(round((f[0]+75)*scale), round(height-(f[1]+f[3]-3)*scale)) if f else (0,0,0)
-            delta=h.chrome_delta_e(rgb,expected)
+            middle=pixel(round((f[0]+125)*scale), round(height-(f[1]+16)*scale)) if f else (0,0,0)
+            delta=max(h.chrome_delta_e(rgb,expected),h.chrome_delta_e(middle,expected))
             if appearance == 'dark':
                 corner = pixel(round((f[0]+.5)*scale), round(height-(f[1]+f[3]-.5)*scale)) if f else (0,0,0)
                 edge = pixel(round((f[0]+5)*scale), round(height-(f[1]+f[3]-1)*scale)) if f else (0,0,0)
                 row('F30_radius_pixels', capture.get('method') == 'windowserver+devtools' and p['visible'] and p['radius'] == 5 and h.chrome_delta_e(edge, expected) <= 2 and h.chrome_delta_e(corner, expected) > 5, corner=corner, edge=edge, file=path, capture=capture)
-            row('F30_color_'+appearance, capture.get('method') == 'windowserver+devtools' and p['visible'] and delta <= 2, rgb=rgb, expected=expected, deltaE00=delta, file=path, capture=capture)
+            row('F30_color_'+appearance, capture.get('method') == 'windowserver+devtools' and p['visible'] and delta <= 2, rgb=rgb, middle=middle, expected=expected, deltaE00=delta, file=path, capture=capture)
         app.call('appearance', name='system')
         # A separate real App keeps observer overhead out of the timing gate.
         # The observer is armed before the lazy Find view exists, so a leaked

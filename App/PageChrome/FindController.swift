@@ -317,6 +317,7 @@ final class FindController {
         "separatorVisible": bar?.separatorVisible ?? false, "frame": frame(bar), "paneFrame": frame(state.overlay?.superview),
         "topInset": state.overlay?.topInset ?? 10, "focused": bar?.owns(factory.window?.firstResponder) ?? false,
         "placeholder": bar?.field.placeholderString ?? "", "radius": bar?.layer?.cornerRadius ?? 0,
+        "controls": bar?.controlGeometry ?? [:],
         "querySelection": (bar?.field.currentEditor() as? NSTextView).map { [$0.selectedRange().location, $0.selectedRange().length] } ?? [],
         "layouts": bar?.layoutCount ?? 0]
     }

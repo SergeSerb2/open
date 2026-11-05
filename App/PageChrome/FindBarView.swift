@@ -124,6 +124,19 @@ final class FindBarView: NSView, NSTextFieldDelegate {
     guard let responder else { return false }
     return responder === field || responder === field.currentEditor()
   }
+  #if OPEN_AUTOMATION
+  var controlGeometry: [String: Any] {
+    func frame(_ view: NSView?) -> [CGFloat] {
+      guard let view, view.window != nil else { return [] }
+      let rect = view.convert(view.bounds, to: nil)
+      return [rect.minX, rect.minY, rect.width, rect.height]
+    }
+    let rect = close.convert(close.bounds, to: nil)
+    let hit = window?.contentView.map { $0.hitTest($0.convert(NSPoint(x: rect.midX, y: rect.midY), from: nil)) } ?? nil
+    return ["close": frame(close), "query": frame(field), "editor": frame(field.currentEditor()),
+      "closeHit": hit.map { String(describing: type(of: $0)) } ?? "none", "closeHitMatches": hit === close]
+  }
+  #endif
   func controlTextDidChange(_ obj: Notification) { onEdit?(field.stringValue) }
   func control(_ control: NSControl, textView: NSTextView, doCommandBy selector: Selector) -> Bool {
     switch selector {
