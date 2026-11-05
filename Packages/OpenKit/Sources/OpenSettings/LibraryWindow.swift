@@ -29,6 +29,7 @@ public struct LibraryContent:View {
     }.font(Font(SettingsTokens.label.font)).controlSize(.regular).background(Color(nsColor:SettingsTokens.content.nsColor)).ignoresSafeArea()
     .accessibilityElement(children:.contain).accessibilityLabel("Library")
     .task(id:viewModel.filterIdentity){await viewModel.reload()}
+    .task(id:viewModel.filterIdentity){await viewModel.watchHistory()}
     .background(WindowTitle(title:viewModel.section.title).frame(width:0,height:0))}
 }
 private struct WindowTitle:NSViewRepresentable {
