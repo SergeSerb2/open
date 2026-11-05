@@ -21,6 +21,8 @@
       switch action {
       case "state": return adapter.stateForAutomation()
       case "offer": _ = try ensurePopover(); return adapter.stateForAutomation()
+      // The status button's real press path (Share Quote, page-platform §4.2.5).
+      case "press-status": return ["pressed": w.controller?.sidebar.pressURLStatus() ?? false]
       case "translate", "revert", "never", "choose", "settings":
         let p = try ensurePopover()
         let pressed: TranslatePopoverAction

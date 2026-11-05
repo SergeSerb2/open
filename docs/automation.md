@@ -447,7 +447,8 @@ no remote debugging port. It never opens or copies Arc.
 | `space-manager-intent` | `kind=openURL space=<ID> url=<URL> [section=pinned]` sends the production intent that a URL drop on that Manager column sends (index 0 of Today, or Pinned). The native drop mapping itself is checked offscreen by `sidebar-render`. |
 | `sidebar-menu` | `item=<A/B path> [node=<ID>] [alternate=true]` builds the same `NSMenu` a right-click shows on that row (no `node`: the Space menu) in the front browser window and performs the item. |
 | `sidebar-menu-state` | Same `item=<A/B path> [node=<ID>] [alternate=true]` lookup as `sidebar-menu`, without performing an action. Reports title, enabled state and key, including disabled entries such as Share Space. |
-| `sidebar-share` | `[dismiss=true|false] [close=true] [waitClosed=true]` controls the automation-only cancel policy and reads the actual `NSSharingServicePicker` request: URL, node, row anchor, service-query callback, close callback and pending state. The menu action calls the real picker; `dismiss=true` closes it without choosing a service. Always close/reset in `finally`. |
+| `sidebar-share` | `[dismiss=true|false] [close=true] [waitClosed=true]` controls the automation-only cancel policy and reads the actual `NSSharingServicePicker` request: URL, node, row anchor, service-query callback, close callback and pending state. The menu action calls the real picker; `dismiss=true` closes it without choosing a service. Always close/reset in `finally`. The copy toast's Share button (page-platform §4.2.2) uses the same picker; its request reports `node: "toast"` and the anchor is the toast's button. |
+| `quote-offer` | The front window's last Shared Quotes offer after Copy URL (page-platform §4.2.2): `elapsed` (seconds until the page answered `getSelection()`; the budget is 0.150), `selected`, `shown`. |
 | `profile-menu` | `[response=cancel|<existing Profile name>] [close=true] [waitClosed=true]` controls an automation-only response for the actual Set Profile menu opened by `menu-perform id=change-profile`. Reports menu-open callback, native tracking, checked choices, chosen Profile, closure and pending state. A choice performs the existing menu item after ending tracking. Always close in `finally`. |
 | `alert` | `[window=library] [button=<title>]` reads the texts and buttons of the alert sheet attached to a browser (or the Library) window; with `button`, clicks it. |
 | `toast-undo` | Clicks the newest visible toast's Undo button in the front browser window (its real `ToastCenter` button). |
@@ -722,6 +723,17 @@ domain is shared between runs.
 The trace toasts are ToastCenter toasts: the H2 row reads them with `toasts` and presses Stop and Show in Finder with `toast-action` (the real buttons).
 The existing `appearance name=light|dark|system` command is the plan's
 `app-appearance` (it sets `NSApp.appearance`).
+
+## Page engine (page-platform EP-1, EP-2, EP-3; Step 12)
+
+Automation builds pass `--open-automation` to the engine, which turns on the engine's test hooks.
+`--only page` runs the rows SW1–SW4 (history swipe and Open's indicator) and Q2 (selection).
+
+| Command | Args | Does |
+|---|---|---|
+| `page-selection` | `tab` | The page's selection through `requestSelection` (EP-2): `text`, `link` (Chromium's text-fragment link, or null), and `hasSelection` (EP-3). |
+| `swipe` | `tab`, `direction` (`back`, `forward`), `progress` (0…2, default 1.2; ≥ 1 navigates), `enabled`, `engineOverlay` | Sets `historySwipeEnabled` / `drawsEngineHistorySwipeOverlay` when given, then replays one history swipe through Chromium's overlay controller (`simulateHistorySwipe`). Phases arrive as `historySwipe` events. Without `direction`, returns the two flags only. Returns `ran`, the flags, and `indicator` (as `swipe-indicator`). It replays the controller sequence and the navigation, not gesture recognition. |
+| `swipe-indicator` | `tab` | Open's indicator over the pane that shows the tab: `pane`, `made` (the view is made on the first swipe), `active`, `hidden`, `circle` and `page` frames, `opacity`, `scale`, and `last` (`phase`, `direction`, `progress`). |
 
 ## Capture tool (page-platform Step 13)
 

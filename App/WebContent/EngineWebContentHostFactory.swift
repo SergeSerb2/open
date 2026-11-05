@@ -33,6 +33,9 @@ final class EngineWebContentHostFactory: NSResponder, WebContentHostFactory {
   var contentContainer: NSView { controller!.container }
   private(set) var hosts: [ItemID: EngineWebContentHost] = [:]
   private var developerModeObserver: (any NSObjectProtocol)?
+  /// The Capture overlay is up in this window: history swipes pause (§4.4.1).
+  private(set) var captureOverlayUp = false
+  private var swipeActivationObserver: (any NSObjectProtocol)?
   private var modelHostIDs: Set<ItemID> = []
   private(set) var contentCreationCount = 0
   private var queuedNavigations: [ItemID: URL] = [:]
@@ -51,10 +54,16 @@ final class EngineWebContentHostFactory: NSResponder, WebContentHostFactory {
   var hasFindSelectionTask: Bool { findSelectionTask != nil }
   var pendingRenameAlert: NSAlert?
   var sidebarSharePicker: NSSharingServicePicker?
+  /// The copy toast whose Share picker is open: it stays until the picker closes (page-platform §4.2.2).
+  var shareToastHandle: ToastHandle?
+  /// Page-command engine work (selection reads for the quote offer and Copy URL as Quote).
+  var pageTasks: [UUID: Task<Void, Never>] = [:]
   var spaceProfileMenu: NSMenu?
   #if OPEN_AUTOMATION
   var dismissSidebarShareForAutomation = false
   var sidebarShareRequest: [String: Any] = [:]
+  /// The last Shared Quotes offer: how long the page took to answer, whether it showed.
+  var lastQuoteOffer: [String: Any] = [:]
   var sidebarShareDismissTimerForAutomation: Timer?
   var sidebarShareDismissAttemptsForAutomation = 0
   var profileMenuResponseForAutomation: String?
@@ -152,6 +161,12 @@ final class EngineWebContentHostFactory: NSResponder, WebContentHostFactory {
       self.mirror.sync(); self.commandBarSession?.contextDidChange(); self.app.scheduleMenuRebuild()
       self.app.media.windowChanged(self)
       self.translate.focusDidChange()
+    }
+    // History swipes (page-platform §4.4.1): macOS's "Swipe between pages" setting, re-read when
+    // Open becomes active, and paused while the Capture overlay is up.
+    controller.onCaptureOverlayChange = { [weak self] up in self?.captureOverlayUp = up; self?.syncHistorySwipe() }
+    swipeActivationObserver = NotificationCenter.default.addObserver(forName: NSApplication.didBecomeActiveNotification, object: nil, queue: .main) { [weak self] _ in
+      MainActor.assumeIsolated { self?.syncHistorySwipe() }
     }
     // Chained: MediaCoordinator.attach wraps this hook later and keeps it.
     let previousVisibility = controller.onVisibilityChange
@@ -456,7 +471,7 @@ final class EngineWebContentHostFactory: NSResponder, WebContentHostFactory {
     case .reload: guard let page = selectedContent else { return false }; page.reload(); return true
     case .stopLoading: guard let page = selectedContent else { return false }; page.stopLoading(); return true
     case .copyCurrentURL:
-      guard let url = selectedContent?.url ?? selectedTab?.url else { return false }; copyCleanURL(url); return true
+      return copyURL()
     case .toggleMute(let id):
       guard let tab = model.tab(id: id) else { return false }; model.setMuted(tabID: id, muted: !tab.isMuted); hosts[id]?.content.isMuted = tab.isMuted; app.scheduleSave(); return true
     case .media(let intent): return app.media.perform(intent)
@@ -492,7 +507,7 @@ final class EngineWebContentHostFactory: NSResponder, WebContentHostFactory {
     case .setShowFullURL(let full): app.settingsPresenter.settings.set(full, for: AppCommand.showFullURLKey); app.applyToolbarSettings(); return true
     case .manageExtensions: openExtensionsPage(nil); return true
     case .showTranslation(let anchor): return translate.showPopover(anchor: anchor)
-    case .shareQuote: return false // Share Quote is page-platform Step 15.
+    case .shareQuote: return copyURLQuote()
     case .manageSpaces:
       app.settingsPresenter.showLibrary(section: .spaces); return true
     case .editPinnedURL(let id):
@@ -568,6 +583,9 @@ final class EngineWebContentHostFactory: NSResponder, WebContentHostFactory {
     translate.closeAll()
     for task in saveCaptureTasks.values { task.cancel() }
     saveCaptureTasks.removeAll()
+    for task in pageTasks.values { task.cancel() }
+    pageTasks.removeAll()
+    shareToastHandle = nil
     findSelectionTask?.cancel(); findSelectionTask = nil
     pendingSaveChoice = nil
     if let panel = pendingSavePanel { window?.endSheet(panel, returnCode: .cancel); panel.orderOut(nil) }
@@ -945,15 +963,29 @@ extension EngineWebContentHostFactory: NSSearchFieldDelegate {
 extension EngineWebContentHostFactory: OEWebContentDelegate {
   func webContent(_ webContent: OEWebContent, didChange changes: OEWebContentChange) {
     if changes.contains(.title), let popup = auxiliaryPages.first(where: { $0.content === webContent }) { popup.panel.title = webContent.title }
+    // Share Quote follows the focused page's selection (page-platform §4.2.5, EP-3).
+    if changes.contains(.selection) { translate.syncStatus() }
     record("change", webContent, ["changes": changes.rawValue])
   }
 
   /// Chromium's history swiper (page-platform EP-1). Recorded for automation; Step 12 draws
   /// Open's indicator from it.
   func webContent(_ webContent: OEWebContent, historySwipe phase: OEHistorySwipePhase, direction: OEHistorySwipeDirection, progress: Double) {
-    let phases = ["began", "changed", "completed", "cancelled"]
-    record("historySwipe", webContent, ["phase": phases[max(0, min(3, phase.rawValue))],
-      "direction": direction == .forward ? "forward" : "back", "progress": progress])
+    let phases: [SwipeIndicatorView.Phase] = [.began, .changed, .completed, .cancelled]
+    let event = SwipeIndicatorView.Event(phase: phases[max(0, min(3, phase.rawValue))],
+      direction: direction == .forward ? .forward : .back, progress: progress)
+    var shown = false
+    if let id = tabID(for: webContent) { shown = controller?.container.showHistorySwipe(tabID: id, event) ?? false }
+    record("historySwipe", webContent, ["phase": event.phase.rawValue, "direction": event.direction.rawValue,
+      "progress": progress, "indicator": shown])
+  }
+
+  /// Whether pages of this window may start a history swipe now (page-platform §4.4.1).
+  var historySwipeAllowed: Bool { NSEvent.isSwipeTrackingFromScrollEventsEnabled && !captureOverlayUp }
+
+  func syncHistorySwipe() {
+    let allowed = historySwipeAllowed
+    for host in hosts.values where host.content.historySwipeEnabled != allowed { host.content.historySwipeEnabled = allowed }
   }
 
   static func pngData(_ image: NSImage) -> Data? {
