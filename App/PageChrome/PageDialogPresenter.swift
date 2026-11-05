@@ -90,6 +90,11 @@ final class PageDialogPresenter {
     let key = ObjectIdentifier(page)
     cancel(page: page); documentCounts[key] = nil; suppressed.remove(key)
   }
+  func blocksBrowserShortcut(_ event: NSEvent) -> Bool {
+    guard let window = event.window, entries.contains(where: { $0.alert?.window === window }),
+          event.modifierFlags.contains(.command) else { return false }
+    return ["w", "t", "l"].contains(event.charactersIgnoringModifiers ?? "")
+  }
   func hasPending(_ page: OEWebContent) -> Bool { entries.contains { $0.page === page } }
   var pendingDialogs: [OEJavaScriptDialog] { entries.map(\.dialog) }
   @discardableResult

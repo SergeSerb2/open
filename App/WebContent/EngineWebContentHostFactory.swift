@@ -1102,6 +1102,7 @@ extension EngineWebContentHostFactory: OEWebContentDelegate {
   /// Key events that reach the page view directly (not through
   /// NSApplication.sendEvent) still get the reserved app shortcuts.
   func webContent(_ webContent: OEWebContent, handleKeyEventBeforePage event: NSEvent) -> Bool {
+    if pageChrome.handleKey(event) { return true }
     // An action popup's keys arrive here too (Chrome's ExtensionViewHost
     // pre-handles them through the hidden window, whose delegate is CEF's).
     // Cmd+W closes the popup, not the tab (extensions plan §3.7 F2).

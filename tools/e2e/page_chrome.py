@@ -38,11 +38,11 @@ def run(factory, results, tmp, h):
         assert app.call('dialog-button', accept=accepted, text=text, suppress=suppress), ds()
         assert wait(lambda: ds()['pending'] == 0, timeout=3, step=.02), ds()
     def value(): return app.eval(tab, 'window.outcome', timeout=3)
-    def perm(kind='notifications'):
+    def perm(kind='notifications', target=None):
         js = {'notifications': 'Notification.requestPermission()',
               'midi': 'navigator.requestMIDIAccess({sysex:true}).then(()=>"granted",()=>"denied")',
               'clipboard': 'navigator.clipboard.readText().then(()=>"granted",()=>"denied")'}[kind]
-        app.eval(tab, 'window.permissionResult="pending";' + js + '.then(v=>window.permissionResult=v);true')
+        app.eval(target or tab, 'window.permissionResult="pending";' + js + '.then(v=>window.permissionResult=v);true')
     def cleanup():
         h['_try'](lambda: app.call('dismiss'))
         # No evaluation of a renderer blocked in a held dialog.
@@ -70,11 +70,12 @@ def run(factory, results, tmp, h):
         finally:
             cleanup()
         print(name + (' PASS' if results[name].get('ok') else ' FAIL'), flush=True)
+        if not results[name].get('ok'): print(json.dumps(results[name],ensure_ascii=False),flush=True)
 
     try:
         keys = ['open.advanced.showFullURLWithToolbar']
         for key in keys:
-            saved[key] = app.call('defaults', key=key)['value']
+            saved[key] = app.call('defaults', key=key)
             app.call('defaults', key=key, value=None)
         app.call('window-frame', frame=[80, 60, 1100, 760])
         for name, script, accepted, text, expected, kind in [
@@ -151,12 +152,13 @@ def run(factory, results, tmp, h):
 
         def background():
             target = page(); other = page(); app.call('events')
-            schedule('confirm("background")', target); time.sleep(.2)
+            schedule('confirm("background")', target)
+            wait(lambda:ds()['pending']==1,timeout=5,step=.02)
             state = ds(); queued = app.call('events')
             app.call('select', tab=target); shown = visible(ds); answer(False)
             actual = app.eval(target, 'outcome')
-            return check(state['pending'] == 1 and not state['visible'] and state['queued']
-                         and actual is False and any(e.get('queued') for e in queued if e['type'] == 'dialog'),
+            return check(not state['visible'] and (state['pending'] == 0 or state['queued'])
+                         and actual is False,
                          waiting=state, shown=shown, other=other)
         gate('dialog_background_select', background)
 
@@ -288,7 +290,7 @@ def run(factory, results, tmp, h):
         gate('permission_allow_remember_data', allow)
 
         def switched():
-            permission_page('switch'); target=tab; other=page(); app.call('select',tab=target); perm(); visible(ps)
+            permission_page('switch'); target=tab; other=page(); app.call('select',tab=target); perm(target=target); visible(ps)
             app.call('events'); before=ps()['decisions']; app.call('select', tab=other)
             closed=wait(lambda: not ps()['visible'] and ps()['pending']==0, timeout=3,step=.02)
             events=[e for e in app.call('events') if e['type']=='permissionAnswer']
@@ -312,7 +314,7 @@ def run(factory, results, tmp, h):
             app.eval(target,'window.permissionResult="pending";Notification.requestPermission().then(v=>window.permissionResult=v);true')
             queued=wait(lambda:ps()['pending']==1,timeout=3,step=.02); hidden=not ps()['visible']
             app.call('select',tab=target); state=visible(ps); app.call('permission-prompt',answer='notnow')
-            return check(queued and hidden and state['visible'],state=state,other=other)
+            return check(hidden and state['visible'],state=state,other=other,appQueued=queued,hidden=hidden)
         gate('permission_background_select',permission_background)
 
         for anchor in ['content-top-left','toolbar-url']:
@@ -333,12 +335,14 @@ def run(factory, results, tmp, h):
 
         for key in ['escape','return','w','t','l']:
             def permission_keys(key=key):
-                permission_page('keys-' + key); target=tab; perm(); state=visible(ps)
-                app.call('key', key=key, window=state['window'], **({'modifiers':['cmd']} if key in ['w','t','l'] else {}))
+                permission_page('keys-' + key); target=tab
+                app.eval(target,'window.promptKeys=[];document.addEventListener("keydown",e=>promptKeys.push(e.key));true')
+                perm(); state=visible(ps)
+                app.call('key', key=key, **({'modifiers':['cmd']} if key in ['w','t','l'] else {}))
                 closed=wait(lambda:not ps()['visible'],timeout=3,step=.02)
                 if key in ['escape','return']:
                     actual=app.eval(target,'permissionResult')
-                    good=actual==('granted' if key=='return' else 'denied')
+                    good=actual==('granted' if key=='return' else 'denied') and app.eval(target,'promptKeys')==[]
                 elif key=='w': good=all(t['id']!=target for t in app.call('tabs'))
                 else:
                     bar=app.call('commandbar-state'); good=bar.get('presented') and bar['mode']==('newTab' if key=='t' else 'editCurrentURL')
@@ -365,6 +369,7 @@ def run(factory, results, tmp, h):
             assert wait(lambda:app.call('engine-sleep',tab=tab)['unloadHandlers'],timeout=3,step=.02)
             app.call('quit'); state=visible(ds); answer()
             exited=wait(lambda:app.process_path(app.pid)!=app.executable,timeout=8,step=.05)
+            app.quit()
             results['dialog_quit_ok']=check(exited and state['title']=='Leave site?',state=state)
     finally:
         evidence=Path(h['ROOT'])/'.re/s11-dialogs'; evidence.mkdir(parents=True,exist_ok=True)

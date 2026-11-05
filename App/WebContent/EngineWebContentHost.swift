@@ -247,6 +247,7 @@ final class EngineWebContentHost: NSObject, WebContentHost, WebContentProviding,
   func webContentDidRequestClose(_ page: OEWebContent) { if !closed { owner?.webContentDidRequestClose(page) } }
   func webContent(_ page: OEWebContent, handleKeyEventBeforePage event: NSEvent) -> Bool {
     guard !closed else { return false }
+    if owner?.pageChrome.handleKey(event) == true { return true }
     if owner?.controller?.handleKeyDown(event) == true { return true }
     // A key the page receives: tab sleep's form proxy (discard waits 5 min after typing).
     if event.type == .keyDown { owner?.app.tabSleep.pageKeyDown(tabID: tabID) }

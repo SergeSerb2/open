@@ -97,12 +97,28 @@ final class PermissionPromptPresenter: NSObject, NSPopoverDelegate {
     let screen = anchor.view.window!.convertToScreen(anchor.view.convert(anchor.rect, to: nil))
     anchorState = ["name": anchor.name, "frame": [screen.minX, screen.minY, screen.width, screen.height], "edge": anchor.edge.rawValue]
     popover.show(relativeTo: anchor.rect, of: anchor.view, preferredEdge: anchor.edge)
-    view.window?.makeFirstResponder(view)
+    if let promptWindow = view.window {
+      if promptWindow.parent == nil { anchor.view.window?.addChildWindow(promptWindow, ordered: .above) }
+      promptWindow.makeKeyAndOrderFront(nil)
+      promptWindow.makeFirstResponder(view)
+    }
     view.window?.defaultButtonCell = view.allow.cell as? NSButtonCell
   }
   func visibilityChanged() {
     if let current, owner?.selectedContent !== current.page { finish(nil) }
     presentPending()
+  }
+  /// AppKit keeps the parent as NSApp.keyWindow for this NSPopover. Plain
+  /// keys arriving at the page's native pre-key hook belong to the prompt.
+  func handleKey(_ event: NSEvent) -> Bool {
+    guard popover.isShown, current != nil,
+          event.window === owner?.window || event.window === view.window,
+          event.modifierFlags.intersection([.command, .control, .option]).isEmpty else { return false }
+    switch event.keyCode {
+    case 53: view.notNow.performClick(nil); return true
+    case 36, 76: view.allow.performClick(nil); return true
+    default: return false
+    }
   }
   func owns(_ window: NSWindow) -> Bool { popover.isShown && view.window === window }
   private func finish(_ decision: OEPermissionState?) {
@@ -151,7 +167,9 @@ final class PermissionPromptPresenter: NSObject, NSPopoverDelegate {
     ["visible": popover.isShown, "pending": entries.count + (current == nil ? 0 : 1), "decisions": decisions,
      "question": current == nil ? "" : view.question.stringValue, "kinds": current?.request.kinds.rawValue ?? 0,
      "origin": current?.request.origin.absoluteString ?? "", "anchor": anchorState,
-     "buttons": [view.notNow.title, view.allow.title], "help": view.help.stringValue, "window": view.window?.windowNumber ?? 0]
+     "keyWindow": NSApp.keyWindow?.windowNumber ?? 0, "promptKey": view.window?.isKeyWindow == true,
+     "parent": view.window?.parent?.windowNumber ?? 0, "selectedPage": owner?.selectedContent?.identifier ?? 0,
+     "pendingPage": current?.page.identifier ?? 0, "buttons": [view.notNow.title, view.allow.title], "help": view.help.stringValue, "window": view.window?.windowNumber ?? 0]
   }
   isolated deinit { observers.forEach(NotificationCenter.default.removeObserver) }
 }

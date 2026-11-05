@@ -14,8 +14,9 @@ final class PageChromeCoordinator {
   }
   func owns(_ window: NSWindow) -> Bool { existingPermissions?.owns(window) == true }
   func permissionPage(in window: NSWindow) -> OEWebContent? {
-    existingPermissions?.owns(window) == true ? existingPermissions?.presentedPage : nil
+    window === owner.window || existingPermissions?.owns(window) == true ? existingPermissions?.presentedPage : nil
   }
+  func handleKey(_ event: NSEvent) -> Bool { existingPermissions?.handleKey(event) == true }
   private var observed: Set<ObjectIdentifier> = []
   private var closeRequests: [ObjectIdentifier: (Bool) -> Void] = [:]
   init(owner: EngineWebContentHostFactory) {
