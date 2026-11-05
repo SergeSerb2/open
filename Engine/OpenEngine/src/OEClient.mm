@@ -334,6 +334,22 @@ void OEClient::OnMediaAccessChange(CefRefPtr<CefBrowser> browser,
 
 #pragma mark Load
 
+void OEClient::OnLoadStart(CefRefPtr<CefBrowser> browser,
+                           CefRefPtr<CefFrame> frame,
+                           TransitionType transition_type) {
+  OEWebContent* view = view_;
+  if (frame->IsMain() &&
+      [view.delegate respondsToSelector:@selector(webContent:didCommitNavigationToURL:isReload:)]) {
+    if (NSURL* url = OEURL(frame->GetURL())) {
+      // A traversal can retain the entry's original reload source. Its
+      // forward/back qualifier makes this a new visit, not another reload.
+      const bool reload = (transition_type & TT_SOURCE_MASK) == TT_RELOAD &&
+                          !(transition_type & TT_FORWARD_BACK_FLAG);
+      [view.delegate webContent:view didCommitNavigationToURL:url isReload:reload];
+    }
+  }
+}
+
 void OEClient::OnLoadingStateChange(CefRefPtr<CefBrowser> browser,
                                     bool isLoading,
                                     bool canGoBack,
