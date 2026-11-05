@@ -43,7 +43,6 @@ final class SitePermissionStore {
       guard let self else { return }
       self.origins = Set(self.origins.union(saved).sorted().prefix(SitePermissionOriginIndex.limit)); self.indexReady = true
       await index.write(self.origins)
-      self.persistenceTask = nil
     }
   }
   func state(origin: URL, kind: OEPermissionKind) -> OEPermissionState {

@@ -169,7 +169,7 @@ def run(factory, results, tmp, h):
             gone = wait(lambda: ds()['pending'] == 0, timeout=3, step=.02)
             answers = [e for e in app.call('events') if e['type'] == 'dialogAnswer']
             return check(gone and sum(e['tab'] == target for e in answers) == 1
-                         and all(t['id'] != target for t in app.call('tabs')), answers=answers)
+                         and all(e['accepted'] is False for e in answers) and all(t['id'] != target for t in app.call('tabs')), answers=answers)
         gate('dialog_close_once', close_pending)
 
         for policy in ['accept', 'dismiss', 'hold']:
@@ -364,13 +364,19 @@ def run(factory, results, tmp, h):
         results['permission_remember_relaunch']=check(actual=='granted' and not ps()['visible'] and ready
             and any(d['origin']==remembered and d['kind']==8 and d['state']==1 for d in decisions['decisions']),result=actual,decisions=decisions)
         if not only:
-            cleanup(); page(); app.eval(tab,'document.body.innerHTML="<button id=arm>Arm</button>";document.querySelector("#arm").onclick=()=>{onbeforeunload=e=>{e.preventDefault();e.returnValue="unsaved"}};true')
-            app.call('click',tab=tab,selector='#arm')
-            assert wait(lambda:app.call('engine-sleep',tab=tab)['unloadHandlers'],timeout=3,step=.02)
-            app.call('quit'); state=visible(ds); answer()
-            exited=wait(lambda:app.process_path(app.pid)!=app.executable,timeout=8,step=.05)
-            app.quit()
-            results['dialog_quit_ok']=check(exited and state['title']=='Leave site?',state=state)
+            try:
+                cleanup(); page(); app.eval(tab,'document.body.innerHTML="<button id=arm>Arm</button>";document.querySelector("#arm").onclick=()=>{onbeforeunload=e=>{e.preventDefault();e.returnValue="unsaved"}};true')
+                app.call('click',tab=tab,selector='#arm')
+                assert wait(lambda:app.call('engine-sleep',tab=tab)['unloadHandlers'],timeout=3,step=.02)
+                app.call('quit'); state=visible(ds); answer()
+                exited=wait(lambda:app.process_path(app.pid)!=app.executable,timeout=8,step=.05)
+                app.quit()
+                results['dialog_quit_ok']=check(exited and state['title']=='Leave site?',state=state)
+            except h['FocusInterruption']:
+                raise
+            except Exception as error:
+                app.quit()
+                results['dialog_quit_ok']=check(False,error=str(error))
     finally:
         evidence=Path(h['ROOT'])/'.re/s11-dialogs'; evidence.mkdir(parents=True,exist_ok=True)
         for name in ['dialog-0.png','dialog-2.png','permission.png']:
