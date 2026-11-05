@@ -101,7 +101,12 @@ def run(h, factory, results, tmp):
         key('f', ['cmd']); editing_before_escape = pane(tab)['focused']
         key('escape'); key(text='page-typing')
         text = h.wait_until(lambda: app.eval(tab, "document.getElementById('input').value"), timeout=3, step=.05)
-        row('F13_escape_focus', editing_before_escape and not pane(tab)['visible'] and app.call('focus-state')['owner'] == 'page' and text == 'page-typing', text=text)
+        escaped = not pane(tab)['visible'] and app.call('focus-state')['owner'] == 'page' and text == 'page-typing'
+        key('f', ['cmd']); p=pane(tab); f=p['frame']
+        app.call('mouse', action='click', x=f[0]+f[2]-16, y=app.call('window-state')['frame'][3]-f[1]-16)
+        click_closed=h.wait_until(lambda: not pane(tab)['visible'] and app.call('focus-state')['owner'] == 'page' and app.eval(tab, 'document.hasFocus()'), timeout=3, step=.05)
+        key(text='-close'); closed_text=app.eval(tab, "document.getElementById('input').value")
+        row('F13_escape_focus', editing_before_escape and escaped and bool(click_closed) and not pane(tab)['visible'] and app.call('focus-state')['owner'] == 'page' and closed_text == 'page-typing-close', text=text, closeText=closed_text, closePane=pane(tab), closeFocus=app.call('focus-state'))
         for name, element, expected in [('trim_newline', 'lines', 'alpha beta'), ('short', 'seed', 'A short selection'), ('40', 'forty', '1234567890123456789012345678901234567890'), ('41_keeps', 'fortyone', '1234567890123456789012345678901234567890')]:
             select(tab, element); key('f', ['cmd'])
             h.wait_until(lambda: not state().get('pending'), timeout=3, step=.05)
@@ -209,7 +214,7 @@ def run(h, factory, results, tmp):
         observed=app.call('find-idle', action='read')
         row('F31_idle', p1['visible'] and not before.get('pending') and not after.get('pending') and before.get('requests') == after.get('requests')
             and before.get('results') == after.get('results') and p0['layouts'] == p1['layouts'] and all(v == 0 for v in observed.values()), before=before, after=after, observer=observed, load=load)
-        app.call('find-idle', action='invalidate'); canary=app.call('find-idle', action='read')
+        canary=app.call('find-idle', action='invalidate')
         row('F31_observer_canary', any(canary[k] > 0 for k in ('invalidations','layout')), observer=canary)
         app.call('find-idle', action='end')
         # Browser keys must keep their real owners from this new field editor.

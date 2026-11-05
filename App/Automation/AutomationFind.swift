@@ -23,6 +23,7 @@ enum FindIdleProbe {
     case "invalidate":
       // Observer canary: invalidate the actual Find view, then use the same
       // zero-work predicate as the idle interval. This is never a fake count.
+      unsafeBitCast(try symbol("open_idle_reset_events"), to: (@convention(c) () -> Void).self)()
       factory.findController?.observeIdleViews { $0.needsLayout = true }
     case "read": break
     default: throw AutomationController.Failure(message: "Unknown Find idle observer action")
