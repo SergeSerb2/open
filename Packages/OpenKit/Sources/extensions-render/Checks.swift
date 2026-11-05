@@ -259,7 +259,7 @@ import OpenExtensionsUI
         promptReceipts.append("3-line title height=\(permissionsTitle.frame.height),needed=\(permissionTitleHeight)")
         var iconFrames = true
         let renderer = ExtensionsRenderer()
-        for sourceSize: CGFloat in [16, 128] { for scale: CGFloat in [1, 2] {
+        for sourceSize: CGFloat in [16, 48, 128] { for scale: CGFloat in [1, 2] {
             let fixture = SyntheticPrompt(.install); fixture.icon = Synthetic.image(index: 0, size: sourceSize)
             let image = renderer.render(ExtensionPromptView(model: fixture), scale: scale)
             let data = image.dataProvider!.data! as Data
@@ -270,9 +270,16 @@ import OpenExtensionsUI
             let center = pixel(48, 48), background = pixel(23, 48)
             iconFrames = iconFrames && pixel(26, 48) == center && pixel(70, 48) == center && pixel(73, 48) == background
                 && zip(center.prefix(3), background.prefix(3)).map { abs(Int($0) - Int($1)) }.reduce(0, +) > 100
+            if sourceSize == 48 {
+                // A doubled fixture CTM clips three rounded corners at 2x.
+                // Check all four corners through the real rendered prompt.
+                iconFrames = iconFrames && [(24, 24), (71, 24), (24, 71), (71, 71)].allSatisfy {
+                    pixel($0.0, $0.1) == background
+                }
+            }
         } }
         texts = texts && iconFrames
-        promptReceipts.append("48pt icon pixels from16/128pt sources at1x/2x=\(iconFrames)")
+        promptReceipts.append("48pt icon pixels from16/48/128pt sources at1x/2x, all rounded corners=\(iconFrames)")
         let noPermissions = SyntheticPrompt(.install), byOther = SyntheticPrompt(.uninstall)
         byOther.triggeringExtensionName = "Other"; byOther.chromiumTitle = "Other wants to remove Sample from Chrome"
         texts = texts && ExtensionPromptText(noPermissions).bodyHeading == "This extension requires no special permissions."

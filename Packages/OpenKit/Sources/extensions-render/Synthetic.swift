@@ -10,7 +10,8 @@ import OpenExtensionsUI
             bitmap.size = CGSize(width: size, height: size)
             NSGraphicsContext.saveGraphicsState()
             NSGraphicsContext.current = NSGraphicsContext(bitmapImageRep: bitmap)
-            NSGraphicsContext.current?.cgContext.scaleBy(x: scale, y: scale)
+            // The bitmap's point size already supplies the backing-scale CTM.
+            // Scaling it again crops the 2x icon and badge to one quadrant.
             let iconSize: CGFloat = size == 28 ? 16 : size
             let icon = CGRect(x: (size - iconSize) / 2, y: (size - iconSize) / 2, width: iconSize, height: iconSize)
             let colors: [NSColor] = [.systemBlue, .systemOrange, .systemPurple, .systemGreen, .systemPink, .systemTeal]
