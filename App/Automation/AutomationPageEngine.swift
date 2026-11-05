@@ -1,6 +1,7 @@
 #if OPEN_AUTOMATION
 import AppKit
 import OpenEngine
+import OpenFeatures
 
 /// Engine page API automation (page-platform §6 EP-1, EP-2, EP-3; docs/automation.md "Page engine").
 /// `page-selection` reads the page's selection through `OEWebContent.requestSelection` (EP-2) and
@@ -24,10 +25,26 @@ extension AutomationController {
       let progress = a["progress"] as? Double ?? 1.2
       guard progress.isFinite, (0...2).contains(progress) else { throw Failure(message: "progress must be 0...2") }
       let ran = page.simulateHistorySwipe(direction: raw == "back" ? .back : .forward, progress: progress)
-      return ["ran": ran, "enabled": page.historySwipeEnabled, "engineOverlay": page.drawsEngineHistorySwipeOverlay]
+      return ["ran": ran, "enabled": page.historySwipeEnabled, "engineOverlay": page.drawsEngineHistorySwipeOverlay,
+              "indicator": swipeIndicatorState(page)]
+    case "swipe-indicator":
+      return swipeIndicatorState(page)
     default:
       throw Failure(message: "unknown command \(cmd)")
     }
+  }
+
+  /// Open's indicator over the pane that shows `page` (page-platform §4.4.2).
+  private func swipeIndicatorState(_ page: OEWebContent) -> [String: Any] {
+    guard let w = try? window, let id = w.tabID(for: page),
+      let slot = w.controller?.container.slots.first(where: { $0.tabID == id }) else { return ["pane": false] }
+    guard let indicator = slot.swipeIndicator else { return ["pane": true, "made": false] }
+    let f = indicator.circleFrame, pf = indicator.frame
+    var out: [String: Any] = ["pane": true, "made": true, "active": indicator.isActive, "hidden": indicator.isHidden,
+      "circle": [f.minX, f.minY, f.width, f.height], "page": [pf.minX, pf.minY, pf.width, pf.height],
+      "opacity": indicator.circleOpacity, "scale": indicator.circleScale]
+    if let last = indicator.last { out["last"] = ["phase": last.phase.rawValue, "direction": last.direction.rawValue, "progress": last.progress] }
+    return out
   }
 }
 #endif

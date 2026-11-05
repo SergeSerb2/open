@@ -32,6 +32,9 @@ final class EngineWebContentHostFactory: NSResponder, WebContentHostFactory {
   var model: BrowserModel { app.model }
   var contentContainer: NSView { controller!.container }
   private(set) var hosts: [ItemID: EngineWebContentHost] = [:]
+  /// The Capture overlay is up in this window: history swipes pause (§4.4.1).
+  private(set) var captureOverlayUp = false
+  private var swipeActivationObserver: (any NSObjectProtocol)?
   private var modelHostIDs: Set<ItemID> = []
   private(set) var contentCreationCount = 0
   private var queuedNavigations: [ItemID: URL] = [:]
@@ -141,6 +144,12 @@ final class EngineWebContentHostFactory: NSResponder, WebContentHostFactory {
       self.mirror.sync(); self.commandBarSession?.contextDidChange(); self.app.scheduleMenuRebuild()
       self.app.media.windowChanged(self)
       self.translate.focusDidChange()
+    }
+    // History swipes (page-platform §4.4.1): macOS's "Swipe between pages" setting, re-read when
+    // Open becomes active, and paused while the Capture overlay is up.
+    controller.onCaptureOverlayChange = { [weak self] up in self?.captureOverlayUp = up; self?.syncHistorySwipe() }
+    swipeActivationObserver = NotificationCenter.default.addObserver(forName: NSApplication.didBecomeActiveNotification, object: nil, queue: .main) { [weak self] _ in
+      MainActor.assumeIsolated { self?.syncHistorySwipe() }
     }
     // Chained: MediaCoordinator.attach wraps this hook later and keeps it.
     let previousVisibility = controller.onVisibilityChange
@@ -938,9 +947,21 @@ extension EngineWebContentHostFactory: OEWebContentDelegate {
   /// Chromium's history swiper (page-platform EP-1). Recorded for automation; Step 12 draws
   /// Open's indicator from it.
   func webContent(_ webContent: OEWebContent, historySwipe phase: OEHistorySwipePhase, direction: OEHistorySwipeDirection, progress: Double) {
-    let phases = ["began", "changed", "completed", "cancelled"]
-    record("historySwipe", webContent, ["phase": phases[max(0, min(3, phase.rawValue))],
-      "direction": direction == .forward ? "forward" : "back", "progress": progress])
+    let phases: [SwipeIndicatorView.Phase] = [.began, .changed, .completed, .cancelled]
+    let event = SwipeIndicatorView.Event(phase: phases[max(0, min(3, phase.rawValue))],
+      direction: direction == .forward ? .forward : .back, progress: progress)
+    var shown = false
+    if let id = tabID(for: webContent) { shown = controller?.container.showHistorySwipe(tabID: id, event) ?? false }
+    record("historySwipe", webContent, ["phase": event.phase.rawValue, "direction": event.direction.rawValue,
+      "progress": progress, "indicator": shown])
+  }
+
+  /// Whether pages of this window may start a history swipe now (page-platform §4.4.1).
+  var historySwipeAllowed: Bool { NSEvent.isSwipeTrackingFromScrollEventsEnabled && !captureOverlayUp }
+
+  func syncHistorySwipe() {
+    let allowed = historySwipeAllowed
+    for host in hosts.values where host.content.historySwipeEnabled != allowed { host.content.historySwipeEnabled = allowed }
   }
 
   static func pngData(_ image: NSImage) -> Data? {
