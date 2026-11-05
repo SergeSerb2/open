@@ -418,7 +418,7 @@ DevTools front end ([#164](https://github.com/SergeSerb2/open/pull/164)). EP-5 n
 
 [#158](https://github.com/SergeSerb2/open/pull/158) records engine-status 8/8, page SW1/SW2/SW4/Q2/EP3, and tabstrip
 sleep_hosted_visibility/freeze/unload_flag/capture/discard/discard_keeps_tab_id PASS.
-S2 App restore acceptance remains G2. [#160](https://github.com/SergeSerb2/open/pull/160) updates the notification overlay
+S2 App restore acceptance passes in [#165](https://github.com/SergeSerb2/open/pull/165) (`sleep` F4 restore and F5 destroyed wake). [#160](https://github.com/SergeSerb2/open/pull/160) updates the notification overlay
 `Engine/fork/src/open/browser/page/open_notifications.cc`: EP-7 lists the display
 service observer's set, independent of native macOS delivery. It adds no series
 entry. Its distribution receipt is `e949ff69`; N1 macOS delivery and N6

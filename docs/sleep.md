@@ -2,8 +2,8 @@
 
 The Swift policy and store layer is in `Packages/OpenKit/Sources/OpenSleep/`
 and `OpenStore/SleepStore.swift`. App G1 merged in [#156](https://github.com/SergeSerb2/open/pull/156). Engine S1–S5
-merged in [#158](https://github.com/SergeSerb2/open/pull/158). The App still uses the stock fallbacks listed below;
-engine-backed freeze/discard/history integration (G2) is not merged here.
+merged in [#158](https://github.com/SergeSerb2/open/pull/158). App G2 merged in [#165](https://github.com/SergeSerb2/open/pull/165).
+The App uses the fork API for renderer freeze, in-place discard and history restore.
 
 `TabLiveState` holds runtime sleep phase, capture/PiP, DevTools, and form
 protection. Per-profile `sleepMode` and `keepAliveSites` live in the JSON snapshot.
@@ -81,7 +81,7 @@ real capture protection remains BLOCKED without the fixture.
 
 ## App wiring (S6, app-shell Step G)
 
-[#156](https://github.com/SergeSerb2/open/pull/156) runs the controller in the App on the stock engine API. Files:
+[#156](https://github.com/SergeSerb2/open/pull/156) wires the controller; [#165](https://github.com/SergeSerb2/open/pull/165) connects the fork sleep API. Files:
 `App/Sleep/AppSleepCoordinator.swift` (one controller, events, quit capture,
 Battery Saver), `App/Sleep/RoutingSleepStore.swift` (one `SleepStore` per
 Profile), `App/WebContent/EngineSleepAdapter.swift` (`SleepEngine` over the
@@ -128,12 +128,30 @@ window factories' existing hosts; never a second page per tab), and
   `captureAllForQuit()` (bounded at 3 s; a save error is logged and quit goes
   on), then terminates again: snapshot save, archive flush, engine shutdown.
 
-Stock fallbacks, each marked `// Until P-MEM-0x` for PR G2: discard closes
-the page (the renderer exits; the wake creates a page and loads the URL);
-freeze records the phase only (a hidden view is already throttled);
-`setVisible` does nothing (the container owns the view); capture returns a
-minimal one-entry container with the current URL and no page state, because
-a nil capture keeps every tab frozen forever; `hasUnloadHandlers` is false.
+Fork API wiring in `App/WebContent/EngineSleepAdapter.swift` (#165):
+
+- `freeze` calls `setPageFrozen(true)` on each existing host. Showing the
+  engine view unfreezes it. Visibility stays owned by the container's pane slots.
+- `discard` awaits the engine's completion and re-check. It keeps the page
+  object, Back/Forward list and tab identity while releasing the renderer.
+  Showing it reloads its current entry with `document.wasDiscarded`.
+- `captureHistory` uses `captureNavigationHistory`, including scroll/form
+  state and the Chromium version tag. `hasUnloadHandlers` reads the engine flag.
+- A destroyed host is recreated with `OENavigationHistory` before its renderer
+  loads. `createContent` waits at most 3 s for the restore verdict. A refused
+  container or failed restore returns false. `SleepController.makeVisible`
+  logs `sleep-restore-fallback`, destroys the failed host and retries the
+  envelope's current URL without history. Back/Forward flags reset on fallback.
+
+Wake paths (`AppSleepCoordinator.wakesThroughController` and `wake`,
+`SleepController.makeVisible`): a frozen page unfreezes; a retained discarded
+page reloads its entry; a destroyed page restores stored history in a new host.
+A plain placeholder can also create a page. The coordinator records the discard
+wake start before selection can commit; `wakeStarted` preserves the first start
+for that kind. Commit logs distinguish `discard`, `destroyed` and `placeholder`.
+Unfreeze has no navigation commit and is measured in the page with visibilitychange.
+The #165 Alloy bridge replays `WasHidden(false)` for a visible restored page,
+so a no-renderer page starts loading after creation, window move or unhide.
 
 ## Keep-alive sites
 
@@ -417,12 +435,24 @@ Verified final release `openkit` SHA-256:
 
 ## Verification (Section 8)
 
-[#156](https://github.com/SergeSerb2/open/pull/156) records real-App `sleep` results: start after paint, parked idle pass,
-timed ladder, URL-reload wake, mode changes, keep-alive, notification permission
-gate, media protection, Battery Saver, hosted tabs.discard and quit capture PASS.
-The capture fixture and real history/form/scroll restore and unfreeze rows remain
-BLOCKED in that receipt. Engine-only `tabstrip` rows in [#158](https://github.com/SergeSerb2/open/pull/158) prove visibility,
-freeze, capture, in-place discard and stable tab IDs. They do not prove G2 App wiring.
-`tools/e2e/engine_e2e.py` defines these rows. Wake through selection creates a new
-host for a G1 discarded tab and loads its current URL; it does not restore the Back
-list. Quit capture stores the G1 one-entry envelope before snapshot save and shutdown.
+[#156](https://github.com/SergeSerb2/open/pull/156) records start after paint, parked
+pass, timed ladder, modes, keep-alive, notification permission gate, media protection,
+Battery Saver and quit capture. [#158](https://github.com/SergeSerb2/open/pull/158)
+records direct engine visibility, freeze, capture, in-place discard and stable tab IDs.
+
+[#165](https://github.com/SergeSerb2/open/pull/165) records App `sleep` F0 effective switches, F2 history/scroll/form,
+F4 history restore and corrupt-container fallback, and F5 discard/destroyed/unfreeze
+PASS. `sleep_f3_capture` stays BLOCKED without a camera/mic grant;
+`sleep_tabs_discard` is SKIP in its Alloy run. `tools/e2e/engine_e2e.py`
+defines these rows. Quit capture now stores the real history envelope before
+snapshot save and shutdown.
+
+Saved [#165](https://github.com/SergeSerb2/open/pull/165) M5 receipt (head `6f6d3303`, engine `f34400e7`):
+
+| Wake kind | Samples | p50 | p95 |
+|---|---|---|---|
+| Discard in place | 20 | 19.5 ms | 25.0 ms |
+| Destroyed with history | 10 | 82.4 ms | 92.7 ms |
+
+Load: 9.2/8.4/7.4. These are saved PR measurements, not a new runtime run.
+Idle CPU, RSS scaling and other speed gates remain separate acceptance work.

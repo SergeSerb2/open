@@ -324,4 +324,5 @@ are in `Engine/OpenEngine/src/`. The tables above give behavior and limits.
 [#163](https://github.com/SergeSerb2/open/pull/163) uses existing `resetZoom` for EP-5: it already resets pinch scale.
 [#152](https://github.com/SergeSerb2/open/pull/152)/[#153](https://github.com/SergeSerb2/open/pull/153)/[#156](https://github.com/SergeSerb2/open/pull/156)/[#162](https://github.com/SergeSerb2/open/pull/162)/[#163](https://github.com/SergeSerb2/open/pull/163) add App/OpenKit behavior over these APIs.
 [#149](https://github.com/SergeSerb2/open/pull/149) adds relaunch evidence, not a public API. G2 App sleep integration
-remains separate from the engine API's availability.
+merged in [#165](https://github.com/SergeSerb2/open/pull/165); e2e `sleep` F0/F2/F4/F5 prove the App paths.
+`sleep_f3_capture` remains BLOCKED without a camera/mic grant.

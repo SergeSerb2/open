@@ -611,7 +611,7 @@ user clicks
   `deniedLine`, `openSettingsTitle`, `openSystemSettings()`,
   `didChangeNotification`.
 - Activation (§4.5.4): `browser(_:requestsActivationOf:)` focuses the tab's
-  Space in its window and selects the tab; selecting wakes it (G1 selection recreates a discarded host; #156). The window comes front through Chromium's `ActivateContents` →
+  Space in its window and selects the tab; selecting wakes it (#165 routes sleep wakes through the controller: unfreeze, retained discard reload, or destroyed history restore). The window comes front through Chromium's `ActivateContents` →
   `OpenBrowserWindow::Activate` (`[NSApp activate]`, `makeKeyAndOrderFront:`),
   which also restores a minimized window (N3). #160 adds
   `NotificationClicks.swift`: the shell also raises/restores the window for fallback activation.
