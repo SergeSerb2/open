@@ -9453,6 +9453,9 @@ def page_notification_checks(factory, results, tmp):
         sw_url = origin + '/notify-sw.html'
         sw_tab = app.call('open', url=sw_url)
         sw_page = live_tab(sw_url)['page']['identifier']
+        # The fixture defines workerReady in its script: wait for the load before reading it.
+        app.call('wait', tab=sw_tab['id'])
+        wait_until(lambda: app.eval(sw_page, 'typeof workerReady') == 'object' or None, timeout=10, step=.1)
         ready = app.eval(sw_page, 'workerReady')
         titles = app.eval(sw_page, 'showWorkerNotification(%s)' % json.dumps(origin + '/notify.html?from=worker'))
         app.call('close', tab=sw_tab['id'])
