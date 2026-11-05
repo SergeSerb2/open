@@ -70,34 +70,53 @@ struct LaunchOptions {
 @MainActor
 final class LaunchTiming {
   static let shared = LaunchTiming()
-  let processStartTicks: UInt64
-  let hasKernelProcessStart: Bool
-  private let millisecondsPerTick: Double
+  private struct ClockOrigin {
+    let ticks: UInt64
+    let millisecondsPerTick: Double
+    let hasKernelProcessStart: Bool
+  }
+  private let continuousOffset: UInt64
+  private let fallbackStartTicks: UInt64
+  private lazy var origin = loadClockOrigin()
+  var processStartTicks: UInt64 { origin.ticks }
+  var hasKernelProcessStart: Bool { origin.hasKernelProcessStart }
   private(set) var marks: [(String, UInt64)] = []
   private var firstFrameConfirmed: Bool?
 
   private init() {
+    // Capture the absolute/continuous offset before a possible sleep. Kernel
+    // metadata can wait until reporting; recording a mark only reads the clock.
+    let absolute = mach_absolute_time(), continuous = mach_continuous_time()
+    continuousOffset = continuous - absolute
+    fallbackStartTicks = continuous
+  }
+
+  private func loadClockOrigin() -> ClockOrigin {
     var timebase = mach_timebase_info_data_t()
     mach_timebase_info(&timebase)
-    millisecondsPerTick = Double(timebase.numer) / Double(timebase.denom) / 1_000_000
     var info = rusage_info_v4()
     let status = withUnsafeMutablePointer(to: &info) {
       $0.withMemoryRebound(to: rusage_info_t?.self, capacity: 1) { proc_pid_rusage(getpid(), RUSAGE_INFO_V4, $0) }
     }
-    // The kernel supplies mach_absolute_time ticks. Translate once to the
-    // continuous clock; marks then remain monotonic across sleep as well.
-    let absolute = mach_absolute_time(), continuous = mach_continuous_time()
-    hasKernelProcessStart = status == 0 && info.ri_proc_start_abstime > 0
-    processStartTicks = hasKernelProcessStart ? info.ri_proc_start_abstime + (continuous - absolute) : continuous
+    let hasStart = status == 0 && info.ri_proc_start_abstime > 0
+    return ClockOrigin(
+      ticks: hasStart ? info.ri_proc_start_abstime + continuousOffset : (marks.first?.1 ?? fallbackStartTicks),
+      millisecondsPerTick: Double(timebase.numer) / Double(timebase.denom) / 1_000_000,
+      hasKernelProcessStart: hasStart)
   }
 
-  var elapsedMilliseconds: Double { Double(mach_continuous_time() - processStartTicks) * millisecondsPerTick }
+  var elapsedMilliseconds: Double {
+    let clock = origin
+    return Double(mach_continuous_time() - clock.ticks) * clock.millisecondsPerTick
+  }
   func mark(_ name: String) {
     if !marks.contains(where: { $0.0 == name }) { marks.append((name, mach_continuous_time())) }
   }
+  func recordProcessEntry(_ ticks: UInt64) { marks.append(("processMain", ticks)) }
   func recordFirstFrame(confirmed: Bool) { firstFrameConfirmed = confirmed }
   var report: [String: Any] {
-    var result: [String: Any] = Dictionary(uniqueKeysWithValues: marks.map { ($0.0, (Double($0.1 - processStartTicks) * millisecondsPerTick).rounded() as Any) })
+    let clock = origin
+    var result: [String: Any] = Dictionary(uniqueKeysWithValues: marks.map { ($0.0, (Double($0.1 - clock.ticks) * clock.millisecondsPerTick).rounded() as Any) })
     if let firstFrameConfirmed { result["firstFrameConfirmed"] = firstFrameConfirmed }
     return result
   }

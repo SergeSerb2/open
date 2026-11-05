@@ -5,7 +5,8 @@ import QuartzCore
 
 // Chromium's message pump needs the CefAppProtocol NSApplication subclass,
 // created before anything else touches AppKit.
-LaunchTiming.shared.mark("processMain")
+let processEntryTicks = mach_continuous_time()
+LaunchTiming.shared.recordProcessEntry(processEntryTicks)
 let app = OEApplication.shared as! OEApplication
 LaunchTiming.shared.mark("main")
 // Open restores windows from its own snapshot (OpenStore), never through
