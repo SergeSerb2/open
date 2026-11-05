@@ -82,6 +82,8 @@
     private func run(_ cmd: String, _ a: [String: Any]) async throws -> Any {
       // App lifecycle commands remain available after the final window closes.
       switch cmd {
+      case "routing-log": return routingLog()
+      case "default-browser-state": return defaultBrowserState()
       case "archive-sweep", "archive-clock", "archive-state", "archive-wake", "profile-archive-setting", "archive-list", "archive-banner-state", "archive-banner-action":
         return try await runArchiveCommand(cmd, a)
       case "metrics": return await metrics(interval: a["interval"] as? Double ?? 1)
