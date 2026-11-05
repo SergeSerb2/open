@@ -189,7 +189,9 @@ final class FindController {
     state.overlay?.bar.update(active: 0, total: 0, final: false)
   }
   func forget(_ id: ItemID) {
-    pendingEdits.remove(id); states.removeValue(forKey: id)?.overlay?.removeFromSuperview()
+    guard let state = states.removeValue(forKey: id) else { return }
+    if state.overlay?.bar.owns(factory.window?.firstResponder) == true { factory.window?.makeFirstResponder(nil) }
+    pendingEdits.remove(id); state.overlay?.removeFromSuperview()
   }
   func hostClosed(_ id: ItemID) {
     states[id]?.overlay?.removeFromSuperview(); states[id]?.page = nil
@@ -198,6 +200,7 @@ final class FindController {
   }
   func closeAll() {
     selectionTask?.cancel(); selectionTask = nil; pendingEdits.removeAll()
+    if owns(factory.window?.firstResponder) { factory.window?.makeFirstResponder(nil) }
     states.values.forEach { $0.overlay?.removeFromSuperview() }; states.removeAll()
   }
   func jumpToSelection() {

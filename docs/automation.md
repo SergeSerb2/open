@@ -98,6 +98,7 @@ Arguments are `key=value`; values that parse as JSON are sent as JSON.
 | `mouse` | `window`, `x`, `y`; `action=move`, `action=hover`, `action=down`, `action=drag`, `action=up`, or `action=click` with `clickCount` and `modifiers` (`option`, `command`, `shift`, `control`); or `from` / `to` point pairs | Own-window click, queued pointer motion, or native resize drag; system cursor stays unchanged. Down/drag/up and the from/to drag send real NSEvents through `OEApplication.sendEvent`; separate actions let a check inspect or snapshot a held drag. The resize handle uses AppKit mouse callbacks, so the socket stays responsive. A double-click uses `clickCount=2` (the suite also sends the first click). `click` runs the window's layout pass first (as real input follows a display cycle) and queues the mouse-up before sending the mouse-down, so controls that track the mouse (the window buttons) finish. Motion events carry a tag; from the first one on, pointer-driven window logic (the sidebar hover reveal) ignores the hardware pointer, so someone using the Mac cannot disturb a check. `move` and `click` also set the automation pointer at once (`BrowserWindowController.automationPointer`), and `hover` sets it after it has delivered enter, move, and exit (it rebuilds every tracking area first, and those rebuilds must still see the old point). A `move` delivers no enter or exit, so it clears `hover`'s record of entered owners and the next `hover` enters the owners under its point again; state that reads where the pointer is, not an event (the window buttons' hover after a full-screen exit, a restore, or a show), reads it instead of the hardware pointer. `hover` also delivers enter, move, and exit to the owners of the tracking areas under the point, title bar included (tracking areas follow the hardware pointer), and returns the owners it found. macOS's own window-button glyphs and tiling menu follow only the hardware pointer |
 | `focus` | `tab` | Give the page keyboard focus |
 | `find` / `zoom` / `mute` | `tab`, … | Find in page, zoom level, mute |
+| `find-state` | — | Read-only lazy Find state: `created`, focused tab, and one row per used pane (`visible`, `query`, `countText`, `active`, `total`, `notFound`, native field focus/selection, placeholder, navigation/separator visibility, bar/pane frames in window coordinates with a bottom-left origin). Also request/result/layout counters, pending work, and synchronous presentation time. Reading it creates no Find controller. |
 | `print-pdf` | `tab`, `path` | Print to a PDF file |
 | `devtools-open`, `fullscreen-exit` | `tab` | — |
 | `extensions` | — | Installed extensions and the window's toolbar actions (through the OpenWeb `ExtensionHost` protocol) |
@@ -754,3 +755,22 @@ the real key path for Esc, and the result card's own buttons.
 
 The page context menu event (`policy contextMenu=record`) also lists `open` (Open's own
 items, "Capture" and "Capture Full Page") and `shown` (the whole menu as it would show).
+
+## Find in page (Section 11)
+
+Run `--only find --style chrome` through the on-screen lock. The suite serves
+`tools/e2e/fixtures/find/` on a unique loopback port and drives the native
+application event route. It covers the field editor, page shortcuts, tab
+state, navigation, Split View, Peek, selection seeding, query limits, pane
+frames, light/dark window pixels (ΔE00 ≤ 2), and idle request/result/layout
+counters. PNGs stay in `.re/find/`; JSON uses the ordinary suite receipt.
+No shared defaults are changed by this suite. The toolbar toggle changes
+only its disposable browser model, and app appearance is restored in `finally`.
+`OPEN_FIND_FAIL_AT_PEEK=1` forces an early failure with Peek and Find open;
+the normal owned-process cleanup must still pass.
+
+Find and Replace opens Find in web pages. Jump to Selection scrolls the
+selection's containing element to the center via the existing main-world
+JavaScript API; this API does not provide an isolated world. Use Selection
+to Find uses the native menu action and has the 1,000-byte query cap without
+the 40-character seed limit. This work changes no command bindings.
