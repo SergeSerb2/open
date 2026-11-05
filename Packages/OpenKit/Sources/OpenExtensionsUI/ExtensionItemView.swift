@@ -57,8 +57,10 @@ public enum ExtensionItemIntent {
         let imageRect = style == .row ? CGRect(x: 2, y: 2, width: 28, height: 28) : CGRect(x: 8, y: 8, width: 28, height: 28)
         if let image = item.toolbarImage { ExtensionActionButton.draw(image, centeredIn: imageRect, scale: window?.backingScaleFactor ?? 2) }
         if isAdd {
-            let image = NSImage(systemSymbolName: "plus", accessibilityDescription: nil)
-            image?.draw(in: imageRect.insetBy(dx: 6, dy: 6))
+            if let image = NSImage(systemSymbolName: "plus", accessibilityDescription: nil) {
+                ExtensionsPlateButton.drawTemplate(image, in: imageRect.insetBy(dx: 6, dy: 6),
+                    color: SidebarRole.toolbarGlyph.resolved(contentAppearance).nsColor)
+            }
         }
         if style == .row {
             let paragraph = NSMutableParagraphStyle(); paragraph.lineBreakMode = .byTruncatingTail

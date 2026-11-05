@@ -135,6 +135,7 @@ public enum ExtensionActionIntent {
     private var hovered = false
     public override init(frame: NSRect) {
         super.init(frame: frame); title = ""; isBordered = false; wantsLayer = true
+        layerContentsRedrawPolicy = .onSetNeedsDisplay
         layer?.cornerRadius = ChromeMetrics.buttonPlateRadius
         contentTintColor = SidebarRole.toolbarGlyph.nsColor
     }
@@ -154,7 +155,20 @@ public enum ExtensionActionIntent {
     }
     public override func mouseExited(with event: NSEvent) { setHovered(false); TooltipController.shared.cancel(for: self) }
     public override var isHighlighted: Bool { didSet { plate() } }
-    public override func viewDidChangeEffectiveAppearance() { super.viewDidChangeEffectiveAppearance(); plate(animated: false) }
+    public override func viewDidChangeEffectiveAppearance() { super.viewDidChangeEffectiveAppearance(); plate(animated: false); needsDisplay = true }
+    public override func draw(_ dirtyRect: NSRect) {
+        guard let image else { return }
+        let rect = CGRect(x: bounds.midX - image.size.width / 2, y: bounds.midY - image.size.height / 2,
+                          width: image.size.width, height: image.size.height)
+        Self.drawTemplate(image, in: rect, color: SidebarRole.toolbarGlyph.resolved(contentAppearance).nsColor)
+    }
+    static func drawTemplate(_ image: NSImage, in rect: CGRect, color: NSColor) {
+        guard let context = NSGraphicsContext.current?.cgContext else { return }
+        context.saveGState(); context.beginTransparencyLayer(in: rect, auxiliaryInfo: nil)
+        image.draw(in: rect, from: .zero, operation: .sourceOver, fraction: 1, respectFlipped: true, hints: nil)
+        context.setBlendMode(.sourceIn); context.setFillColor(color.cgColor); context.fill(rect)
+        context.endTransparencyLayer(); context.restoreGState()
+    }
     private func plate(animated: Bool = true) {
         guard layer != nil else { return }
         let overlay = (isHighlighted ? SidebarRole.buttonPressed : hovered ? SidebarRole.buttonHover : DesignColor(.clear)).resolved(contentAppearance)
