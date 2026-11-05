@@ -1,6 +1,8 @@
 # Memory fork — implementation plan for Open (tab sleeping on the Chromium fork)
 
-Status: plan for implementation. Implementer: follow this file top to bottom.
+Status: implementation plan with merged Section 8 results in §12.1 (2026-11-05).
+The original step instructions remain below; §12.1 records deviations and open App gates.
+Implementer: follow this file top to bottom.
 Do not spawn subagents (AGENTS.md rule 8). Do not write unit tests (rule 6).
 Verify end to end only: real build, real `cefsimple`, real app, `ps`, and the
 `openkit` CLI. This file is the complete context. You have no other context.
@@ -1351,7 +1353,26 @@ harmless (nothing reads them without the controller).
 
 ### 12.1 Verification (Section 8, 2026-11-02)
 
-S1–S5 are built (docs/engine-patches.md, "Tab sleeping") and proven on Track B, the real App, instead of the `cefsimple` Track A: e2e `tabstrip --style chrome` rows `sleep_hosted_visibility` (S1: a background hosted tab is HIDDEN, show/hide through 0302's path), `sleep_hosted_freeze` (S4: refused while visible; the hidden ticker stops for 6 s and runs again after unfreeze), `sleep_hosted_unload_flag` (S5: `HasUnloadHandlers` true with `beforeunload`, false without), `sleep_hosted_capture` (S3: ≥ 3 entries, current index, page state, title, OPNH round trip), `sleep_hosted_discard` (S4: renderer count drops; the woken page has `document.wasDiscarded`, the form value and the scroll position), `sleep_hosted_discard_keeps_tab_id` (the `chrome.tabs` id stays; 0303 untouched) and `sleep_hosted_cleanup`. `engine-status` 8/8 and `expected-symbols.txt` cover the C API. F0 (§10 switches) is in `OEApp.mm`; its App rows run with the App wiring (app-shell Step G, PR G2). S2's no-renderer creation is exercised by the App's restore path in G2.
+S1–S5 are built (docs/engine-patches.md, "Tab sleeping") and proven on Track B, the real App, instead of the `cefsimple` Track A: e2e `tabstrip --style chrome` rows `sleep_hosted_visibility` (S1: a background hosted tab is HIDDEN, show/hide through 0302's path), `sleep_hosted_freeze` (S4: refused while visible; the hidden ticker stops for 6 s and runs again after unfreeze), `sleep_hosted_unload_flag` (S5: `HasUnloadHandlers` true with `beforeunload`, false without), `sleep_hosted_capture` (S3: ≥ 3 entries, current index, page state, title, OPNH round trip), `sleep_hosted_discard` (S4: renderer count drops; the woken page has `document.wasDiscarded`, the form value and the scroll position), `sleep_hosted_discard_keeps_tab_id` (the `chrome.tabs` id stays; 0303 untouched) and `sleep_hosted_cleanup`. `engine-status` 8/8 and `expected-symbols.txt` cover the C API. F0 (§10 switches) is in `OEApp.mm`; its App acceptance remains open for G2 after the G1 merge (#156). S2's App no-renderer restore path remains unverified until G2.
+
+#### Verification (Section 8, merged steps)
+
+These are saved PR receipts, not new runtime runs. Engine work merged in [#158](https://github.com/SergeSerb2/open/pull/158).
+App G1 merged in [#156](https://github.com/SergeSerb2/open/pull/156). G2 is not included here.
+
+| Step | Code on main | Evidence and limits |
+|---|---|---|
+| S0 | `Packages/OpenKit/Sources/OpenSleep/`, `OpenStore/SleepStore.swift` | Existing library layer; [#156](https://github.com/SergeSerb2/open/pull/156) extends `sleep-demo` to 172/172. |
+| S1 | CEF `0101-mem-visibility.patch`, `0302-open-hosted-tabs.patch` | [#158](https://github.com/SergeSerb2/open/pull/158) `tabstrip` sleep_hosted_visibility PASS. Track B replaces the planned cefsimple Track A. |
+| S2 | CEF `0105-mem-no-renderer-create.patch`; `OpenTabStrip::CreateTab`; `OEWebContent` history initializer | [#158](https://github.com/SergeSerb2/open/pull/158) engine-status 8/8 and expected-symbols verify build/API presence. App no-renderer restore acceptance remains G2. |
+| S3 | CEF `0104-mem-navigation-history.patch`; overlay `open/browser/memory/`; `OENavigationHistory` | [#158](https://github.com/SergeSerb2/open/pull/158) sleep_hosted_capture PASS (entries, index, page state and OPNH); full App F2/F4 restore remains G2. |
+| S4 | overlay `cef_page_lifecycle.h` and `open/browser/memory/` | [#158](https://github.com/SergeSerb2/open/pull/158) sleep_hosted_freeze, sleep_hosted_discard, sleep_hosted_discard_keeps_tab_id PASS. Free functions and WebContentsUserData replace planned host methods; no 0102/0103 patch. |
+| S5 | `Engine/OpenEngine/src/OEApp.mm`; lifecycle overlay | [#158](https://github.com/SergeSerb2/open/pull/158) sleep_hosted_unload_flag PASS; engine-status 8/8. No separate 0106 patch. App F0 receipt remains G2. |
+| S6 G1 | `App/Sleep/{AppSleepCoordinator,RoutingSleepStore}.swift`; `App/WebContent/EngineSleepAdapter.swift` | [#156](https://github.com/SergeSerb2/open/pull/156) sleep_started_after_paint, sleep_idle_parked, sleep_timed_ladder, sleep_wake_recreates, sleep_modes, sleep_keep_alive, sleep_n5_notifications, sleep_media_protection, sleep_battery_saver, sleep_tabs_discard, sleep_f4_quit_capture PASS. Stock fallbacks remain: bookkeeping freeze, close/reload discard, one-URL capture, false unload flag. |
+| S6 G2 | Not merged in this scope | F2 history/scroll/form, F4 history/corrupt fallback and F5 unfreeze remain unaccepted for the App. Capture protection fixture remains BLOCKED. Do not infer App acceptance from the direct engine rows. |
+
+Battery Saver's Settings toast migration completed in [#153](https://github.com/SergeSerb2/open/pull/153) (`AppSleepCoordinator.showToast`).
+See [engine-patches.md](../engine-patches.md#tab-sleeping-memory-fork-section-8-pr-158) for engine deviations.
 
 ## 13. Risks and open questions
 

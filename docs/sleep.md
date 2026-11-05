@@ -1,11 +1,9 @@
-# OpenSleep S0
+# Tab sleep on main
 
-S0 implements the Swift data and policy layer from
-[`plans/memory-fork.md`](plans/memory-fork.md), including its lead appendix.
-`OpenSleep` depends only on `OpenModel`. The app will supply the engine and
-store adapters in S6. S1–S6, CEF APIs, Chromium patches, switches, and app
-wiring remain outside this change. The CEF patch series has no active
-patches; main now supplies its comment header.
+The Swift policy and store layer is in `Packages/OpenKit/Sources/OpenSleep/`
+and `OpenStore/SleepStore.swift`. App G1 merged in [#156](https://github.com/SergeSerb2/open/pull/156). Engine S1–S5
+merged in [#158](https://github.com/SergeSerb2/open/pull/158). The App still uses the stock fallbacks listed below;
+engine-backed freeze/discard/history integration (G2) is not merged here.
 
 `TabLiveState` holds runtime sleep phase, capture/PiP, DevTools, and form
 protection. Per-profile `sleepMode` and `keepAliveSites` live in the JSON snapshot.
@@ -32,7 +30,7 @@ flags, zero reserved bytes, exact lengths, and a 2 MiB total cap. It does
 not parse Chromium pickles. Its capture helper retries by rebuilding the
 entries without page state when the first container exceeds the cap. A
 second over-cap result fails capture; the controller keeps the tab frozen.
-The future OpenEngine bridge must enforce the same contract at the CEF
+The OpenEngine bridge enforces the same contract at the CEF
 boundary.
 
 The app must supply `SleepVisibilityProviding`. Each pass reads one snapshot
@@ -48,8 +46,9 @@ records `hiddenAt`; showing clears it. Freeze/discard ages use hide time.
 Only tabs never shown this session fall back to persisted `lastActiveAt`.
 Model split selection and focus stamp every pane's activity time.
 
-One global five-second task and one OS memory-pressure source start and
-stop together. Each pass builds profile policies once. Tab ownership uses
+One global pass task and one OS memory-pressure source start and stop
+together. Passes use five-second intervals only while hidden tabs can change
+phase; the controller parks when it must wait for an event. Each pass builds profile policies once. Tab ownership uses
 the model index/parent map, memoized by the model's structural revision;
 normal ticks do not walk each tab's ancestors. Unload queries run in stable
 round-robin order, capped at 32 per pass. Unknown unload state blocks
@@ -77,11 +76,12 @@ between ticks. Deliver capture, PiP, download, loading, DevTools, form,
 and unload-handler changes on every event. Report user interaction and
 visibility transitions immediately. Sampling alone is forbidden. The
 contract is also on the `SleepEngine` protocol in source. S0 CLI checks
-exercise these callbacks; live engine delivery remains an S6 gate.
+exercise these callbacks. #156 verifies App audio events and media protection;
+real capture protection remains BLOCKED without the fixture.
 
 ## App wiring (S6, app-shell Step G)
 
-PR G1 runs the controller in the App on the stock engine API. Files:
+[#156](https://github.com/SergeSerb2/open/pull/156) runs the controller in the App on the stock engine API. Files:
 `App/Sleep/AppSleepCoordinator.swift` (one controller, events, quit capture,
 Battery Saver), `App/Sleep/RoutingSleepStore.swift` (one `SleepStore` per
 Profile), `App/WebContent/EngineSleepAdapter.swift` (`SleepEngine` over the
@@ -117,7 +117,9 @@ window factories' existing hosts; never a second page per tab), and
 - Battery Saver: macOS Low Power Mode (`NSProcessInfoPowerStateDidChange`, no
   polling) makes Automatic (balanced) act as Aggressive; other modes keep
   their delays. A change while Open runs shows "Battery Saver Mode
-  Activated" / "Battery Saver Mode Deactivated".
+  Activated" / "Battery Saver Mode Deactivated" through the front window’s
+  ToastCenter, with a Settings button that opens Settings ▸ Advanced
+  (`AppSleepCoordinator.showToast`, [#153](https://github.com/SergeSerb2/open/pull/153)).
 - `chrome.tabs.discard` of a hosted tab runs debug sleep and honors every
   gate; the visible tab and protected tabs are refused.
 - The window's hidden-host cache (8 per window) skips pages a gate protects,
@@ -380,10 +382,11 @@ server afterward. Their default future invocation remains:
 python3 -m http.server 8765 --bind 127.0.0.1 --directory Engine/fork/verification/fixtures
 ```
 
-This is S0 acceptance. Native freeze, real capture/PiP callbacks, actual
+This paragraph records historical S0 acceptance. Native freeze, real capture/PiP callbacks, actual
 EXCLUDE_PAGE_STATE serialization, Chromium history/scroll/form restoration,
 `document.wasDiscarded`, renderer/RSS scaling, idle CPU, and wake p50/p95
-remain unverified until the engine and app steps. The fixtures are ready
+were unverified in S0. The Section 8 notes above and below give the merged
+engine and App evidence; RSS, idle CPU and wake speed acceptance remain separate. The fixtures are ready
 for those checks. The existing routing and scripting targets were kept;
 the plan's earlier target inventory predates them.
 
@@ -411,3 +414,15 @@ document text; routing source was unchanged.
 
 Verified final release `openkit` SHA-256:
 `098826ae5d70f4f78c8bf331af244f7c150744a82aeda21f485453e967e36f0b`.
+
+## Verification (Section 8)
+
+[#156](https://github.com/SergeSerb2/open/pull/156) records real-App `sleep` results: start after paint, parked idle pass,
+timed ladder, URL-reload wake, mode changes, keep-alive, notification permission
+gate, media protection, Battery Saver, hosted tabs.discard and quit capture PASS.
+The capture fixture and real history/form/scroll restore and unfreeze rows remain
+BLOCKED in that receipt. Engine-only `tabstrip` rows in [#158](https://github.com/SergeSerb2/open/pull/158) prove visibility,
+freeze, capture, in-place discard and stable tab IDs. They do not prove G2 App wiring.
+`tools/e2e/engine_e2e.py` defines these rows. Wake through selection creates a new
+host for a G1 discarded tab and loads its current URL; it does not restore the Back
+list. Quit capture stores the G1 one-entry envelope before snapshot save and shutdown.

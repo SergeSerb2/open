@@ -98,7 +98,7 @@ The shell follows the profile layout of [plans/profiles.md](plans/profiles.md) Â
 | `requestFilter` | `(OEResourceRequest) -> OERequestDecision`, called on the network thread for every request of the context, including service workers. Allowed requests get no per-request handler. |
 | `permissionState(for:origin:)`, `setPermissionState(_:for:origin:)` | Chromium content settings for Site Control Center |
 | `clearBrowsingData(origin:)` | With an origin: the host cookies of that URL's host, any path (`CefCookieManager::DeleteCookies` with a URL and no name; `Domain=` cookies stay), and nothing else: the HTTP cache is untouched. With nil: every cookie and the whole HTTP cache. Per-site cache clearing (Site Control E2) needs a fork patch: DevTools `Storage.clearDataForOrigin` has no HTTP cache type and CEF's `ClearHttpCache` clears every site. |
-| `websiteColorScheme` | `.automatic`, `.light`, `.dark` (EP-9a): Chrome's browser color scheme of the context's profile (`CefRequestContext::SetChromeColorScheme`, user color transparent). Chrome derives `prefers-color-scheme` from it (`GetPreferredColorScheme` in `chrome_content_browser_client.cc`); open pages update without a reload. Chrome keeps the value in the profile's prefs, so the first set always reaches Chromium, later sets only on a change. Incognito pages follow the device appearance in Chrome. If a page style ignores it, fork patch 0505 (EP-9b) sets the web preference directly. |
+| `websiteColorScheme` | `.automatic`, `.light`, `.dark` (EP-9a): Chrome's browser color scheme of the context's profile (`CefRequestContext::SetChromeColorScheme`, user color transparent). Chrome derives `prefers-color-scheme` from it (`GetPreferredColorScheme` in `chrome_content_browser_client.cc`); open pages update without a reload. Chrome keeps the value in the profile's prefs, so the first set always reaches Chromium, later sets only on a change. Chrome's default incognito policy follows device appearance. The setter also calls `CefSetWebsiteColorScheme` (fork 0505, EP-9b, #158/#164), which sets the web preference on both styles and after navigation. |
 | `downloads`, `delegate` | `browserContext(_:decideDestinationFor:suggestedFilename:completion:)`, `browserContext(_:downloadDidUpdate:)`; `OEDownload` has state, bytes, speed, `cancel/pause/resume` |
 
 ## OEBrowser (window tab strip)
@@ -207,7 +207,7 @@ Fork API `cef/include/cef_open_page.h` (docs/engine-patches.md, "Page platform")
 ### Notifications (page-platform EP-6, EP-7)
 
 - `OEBrowserContextDelegate.browserContext(_:didClickNotification:origin:persistent:)`: a web notification of the context was clicked (body or button), before Chromium dispatches the click to the page. No page is reported; find the tab by origin.
-- `OEBrowserContext.displayedNotifications(completion:)` and `simulateClickOnNotification(identifier:)`: test hooks, active only with `--open-automation` (otherwise an empty list and NO). The list is Chromium's displayed set (`NotificationDisplayService::GetDisplayed`) with id, origin, title and body.
+- `OEBrowserContext.displayedNotifications(completion:)` and `simulateClickOnNotification(identifier:)`: test hooks, active only with `--open-automation` (otherwise an empty list and NO). The list is the display-service observer's set (`Engine/fork/src/open/browser/page/open_notifications.cc`, #160), independent of macOS delivery. Each item has id, origin, title and body.
 
 ### Context menu items
 
@@ -305,3 +305,23 @@ Chrome page-menu filtering removes invisible items before delivery. The executio
 allowlist contains only delivered, enabled leaf commands and does not descend
 through a disabled submenu. An invisible item or an enabled child under a
 disabled parent therefore cannot be selected through OpenEngine.
+
+## Section 8 API index (merged)
+
+The public contract is `Engine/OpenEngine/include/OpenEngine/`. Implementations
+are in `Engine/OpenEngine/src/`. The tables above give behavior and limits.
+
+| PR | Header | Added surface |
+|---|---|---|
+| [#154](https://github.com/SergeSerb2/open/pull/154) | `OEWebContent.h` | `captureFullPage(maxDevicePixels:completion:)`: tiled PNG and truncation result (EP-8). |
+| [#158](https://github.com/SergeSerb2/open/pull/158) | `OENavigationHistory.h`, `OEWebContent.h` | OPNH container/metadata; history initializer, `navigationHistoryRestore`, `captureNavigationHistory`, `setPageHidden`, `setPageFrozen`, `isPageFrozen`, `discard(completion:)`, `isDiscarded`, `hasUnloadHandlers`. |
+| [#158](https://github.com/SergeSerb2/open/pull/158) | `OEWebContent.h` | `OEWebContentChangeSelection`, `hasSelection`, `requestSelection(completion:)`; swipe direction/phase enums, `historySwipeEnabled`, `drawsEngineHistorySwipeOverlay`, historySwipe delegate and `simulateHistorySwipe`. |
+| [#158](https://github.com/SergeSerb2/open/pull/158) + [#160](https://github.com/SergeSerb2/open/pull/160) | `OEBrowserContext.h` | Notification click delegate, `displayedNotifications(completion:)`, `simulateClickOnNotification(identifier:)`. Test hooks require `--open-automation`. [#160](https://github.com/SergeSerb2/open/pull/160) fixes the observer list and persistent kind; no new public method. |
+| [#164](https://github.com/SergeSerb2/open/pull/164) | `OEWebContent.h` | `OEDevToolsPanel`, `showDevTools(panel:)`, `evaluateInDevToolsFrontend(_:completion:)`; front-end client tracking, bounded panel selection retries. |
+| [#164](https://github.com/SergeSerb2/open/pull/164) | `OEBrowserContext.h` | `OEColorSchemePreference`, `websiteColorScheme` (wired to fork 0505), `clearBrowsingData(origin:completion:)` (host cookies; nil clears all cookies/cache). |
+| [#164](https://github.com/SergeSerb2/open/pull/164) | `OEEngine.h` | `showTaskManager`, `isTracing`, `beginTracing(categories:)`, `endTracing(to:completion:)`, `cancelTracing`; MediaRouter always disabled in additionalSwitches handling. |
+
+[#163](https://github.com/SergeSerb2/open/pull/163) uses existing `resetZoom` for EP-5: it already resets pinch scale.
+[#152](https://github.com/SergeSerb2/open/pull/152)/[#153](https://github.com/SergeSerb2/open/pull/153)/[#156](https://github.com/SergeSerb2/open/pull/156)/[#162](https://github.com/SergeSerb2/open/pull/162)/[#163](https://github.com/SergeSerb2/open/pull/163) add App/OpenKit behavior over these APIs.
+[#149](https://github.com/SergeSerb2/open/pull/149) adds relaunch evidence, not a public API. G2 App sleep integration
+remains separate from the engine API's availability.
