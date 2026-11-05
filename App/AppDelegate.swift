@@ -29,7 +29,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate, OEEngineDelegate, OEBr
   private(set) var terminationRequested = false
   private var faviconShutdownTask: Task<Void, Never>?
   private var historyQuitTask: Task<Void, Never>?
-  private var historyQuitFlushed = false
+  /// Uptime of the last quit-time history flush. A quit cancelled later (downloads alert,
+  /// beforeunload) must flush again on the next attempt, so the flush is valid only briefly.
+  private var historyQuitFlushedAt: TimeInterval?
   private(set) var shutdownPrepared = false
   private var lateAsyncEngineCalls = 0
   private var asyncEngineCalls: [String: Int] = [:]
@@ -91,10 +93,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate, OEEngineDelegate, OEBr
 
   func applicationShouldTerminate(_ sender: NSApplication) -> NSApplication.TerminateReply {
     if historyQuitTask != nil { return .terminateCancel }
-    if !historyQuitFlushed, !shutdownPrepared {
+    let now = ProcessInfo.processInfo.systemUptime
+    if !shutdownPrepared, historyQuitFlushedAt.map({ now - $0 > 5 }) ?? true {
       historyQuitTask = Task { @MainActor in
         await self.stores.flushHistory()
-        self.historyQuitFlushed = true; self.historyQuitTask = nil
+        self.historyQuitFlushedAt = ProcessInfo.processInfo.systemUptime; self.historyQuitTask = nil
         NSApp.terminate(nil)
       }
       return .terminateCancel
