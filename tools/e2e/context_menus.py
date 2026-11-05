@@ -48,12 +48,17 @@ def context_menu_checks(factory, results, tmp, h):
                   extra_args=['--host-resolver-rules=' + resolver, '--ignore-certificate-errors', '--no-proxy-server', '--load-extension=' + os.path.join(h.ROOT, 'tools/e2e/fixtures/context-menu-probe'),
                               '--disable-features=DisableLoadExtensionCommandLineSwitch'])
     saved = {}
+    only_case = os.environ.get('OPEN_CONTEXT_MENU_CASE')
+    ran_cases = set()
     tab = app.call('tabs')[0]['id']
     home = app.call('window-state')['id']
     space = next(x['id'] for x in app.call('spaces') if x['focused'])
     wait = h.wait_until
 
     def run(name, fn):
+        if only_case and name != only_case:
+            return
+        ran_cases.add(name)
         try:
             value = fn()
             results[name] = value
@@ -66,7 +71,13 @@ def context_menu_checks(factory, results, tmp, h):
         app.call('window-focus', id=home, activate=True)
         app.call('peek-close')
         app.call('space', space=space)
-        app.call('select', tab=tab)
+        visible = [t for t in app.call('tabs') if t['visible']]
+        if len(visible) > 1 and any(t['id'] == tab for t in visible):
+            # Pane tabs have no sidebar row. Focus through the real split-pane shortcut.
+            app.call('focus')
+            app.call('key', key='1', modifiers=['control', 'shift'], route='app')
+        else:
+            app.call('select', tab=tab)
         app.call('wait', tab=tab)
         app.call('focus', tab=tab)
 
@@ -261,11 +272,36 @@ def context_menu_checks(factory, results, tmp, h):
             ids = [p['id'] for p in made.get('panes', [])]
             target = next((p for p in panes if p['id'] != tab), {})
             ok = len(panes) == 2 and target.get('url') == origin + '/target.html' and ids == [tab, target.get('id')]
+            stages = {'initial': made}
             if made:
-                app.call('menu-perform', id='separate-from-split-view')
-            if target:
-                app.call('close', tab=target['id'])
-            return {'ok': ok, 'panes': panes, 'split': made, 'shown': event.get('shown')}
+                app.call('sidebar-menu', node=made['id'], item='Convert to Vertical Split View')
+                with open(app.call('save')) as stream:
+                    stages['vertical'] = find_split(json.load(stream)) or {}
+                focus()
+                menu('#link', 'run-open:Open Link in Split View')
+                wait(lambda: len([t for t in app.call('tabs') if t['visible']]) == 3, timeout=5)
+                with open(app.call('save')) as stream:
+                    stages['third'] = find_split(json.load(stream)) or {}
+                third = stages['third']
+                third_ids = [p['id'] for p in third.get('panes', [])]
+                ok = ok and stages['vertical'].get('orientation') == 'vertical' and len(third_ids) == 3 \
+                    and third.get('orientation') == 'horizontal' and third_ids[0] == tab and third_ids[2] == target.get('id')
+                focus()
+                menu('#link', 'run-open:Open Link in Split View')
+                wait(lambda: len([t for t in app.call('tabs') if t['visible']]) == 4, timeout=5)
+                before = {t['id'] for t in app.call('tabs')}
+                focus()
+                full, _ = menu('#link', 'run-open:Open Link in Split View')
+                capacity = next((r['enabled'] is False for r in full.get('rows', []) if r['key'] == 'link-split'), False)
+                ok = ok and capacity and len([t for t in app.call('tabs') if t['visible']]) == 4 and {t['id'] for t in app.call('tabs')} == before
+                stages['fullCapacityDisabled'] = capacity
+                with open(app.call('save')) as stream:
+                    current_split = find_split(json.load(stream)) or {}
+                extra = [p['id'] for p in current_split.get('panes', []) if p['id'] != tab]
+                app.call('sidebar-menu', node=made['id'], item='Separate All Tabs')
+                for identifier in extra:
+                    app.call('close', tab=identifier)
+            return {'ok': bool(ok), 'panes': panes, 'split': made, 'stages': stages, 'shown': event.get('shown')}
         run('cm_split', split)
 
         def new_window():
@@ -537,6 +573,8 @@ def context_menu_checks(factory, results, tmp, h):
                                  ('release-notes', '/releases'), ('contact-team', '/issues/new')]:
             run('cm_help_' + identifier, lambda i=identifier, p=path: help_item(i, 'https://github.com/SergeSerb2/open' + p))
         run('cm_join_meeting_disabled', lambda: {'ok': row_enabled('join-meeting') is False})
+        if only_case and not ran_cases:
+            raise RuntimeError('Unknown context-menu case: ' + only_case)
     finally:
         try:
             if not app.closed:

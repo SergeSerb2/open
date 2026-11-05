@@ -162,7 +162,14 @@ final class PageContextMenuBuilder {
         let split = controller.splitController
         guard split.canAddPane, let tab = owner.openNewTab(url: link, background: true, opener: opener) else { return }
         let index = split.split?.panes.firstIndex { $0.id == opener }.map { $0 + 1 }
-        if !split.drop(tab.id, zone: .right, paneIndex: index) { owner.model.closeTab(id: tab.id) }
+        if split.drop(tab.id, zone: .right, paneIndex: index) {
+          // An insertion index preserves the old axis in the public drop API. This menu
+          // explicitly opens to the right, including when the source split was vertical.
+          if let current = split.split, current.orientation != .horizontal {
+            owner.model.setSplitOrientation(splitID: current.id, orientation: .horizontal)
+            split.refresh()
+          }
+        } else { owner.model.closeTab(id: tab.id) }
       },
       openItem("link-peek", "Open Link in Peek", enabled: peekSource != nil && owner.controller != nil) { [weak owner] in
         if let peekSource { owner?.controller?.peekController.open(url: link, sourceTabID: peekSource) }
