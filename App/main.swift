@@ -13,6 +13,9 @@ LaunchTiming.shared.mark("main")
 UserDefaults.standard.register(defaults: ["ApplePersistenceIgnoreState": true])
 let appDelegate = AppDelegate()
 app.delegate = appDelegate
+#if OPEN_AUTOMATION
+AutomationOwnerWatch.install()
+#endif
 // Reserved app shortcuts beat the page (Cmd-T, Cmd-W, Cmd-L, ...).
 app.keyEquivalentHandler = { event in MainMenu.performReservedShortcut(event) }
 

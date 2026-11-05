@@ -144,7 +144,7 @@ class Open:
         self.observation_steps = []
         self.activation_trace = []
         self.focus_tracker = None
-        env = dict(os.environ, OPEN_USER_DATA=user_data)
+        env = dict(os.environ, OPEN_USER_DATA=user_data, OPEN_E2E_OWNER_PID=str(os.getpid()))
         env.update(extra_env or {})
         args = [app, "--user-data-dir=" + user_data, "--style=%s" % style] + list(urls) + extra_args
         self.log = open(log_path, "a")
