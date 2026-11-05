@@ -37,6 +37,8 @@
 	<true/>
 	<key>NSSupportsAutomaticGraphicsSwitching</key>
 	<true/>
+	<key>NSUserNotificationAlertStyle</key>
+	<string>banner</string>
 	<key>NSCameraUsageDescription</key>
 	<string>Websites you visit can ask to use your camera.</string>
 	<key>NSMicrophoneUsageDescription</key>

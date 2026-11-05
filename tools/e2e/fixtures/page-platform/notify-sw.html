@@ -1,0 +1,21 @@
+<!doctype html>
+<meta charset="utf-8">
+<title>Notify worker fixture</title>
+<!-- page-platform §8.3 N6: a service worker notification whose click opens or focuses a tab. -->
+<body style="font: 14px -apple-system, sans-serif; background: #fff; color: #222">
+<p>Service worker notification fixture.</p>
+<script>
+window.log = [];
+window.workerReady = navigator.serviceWorker.register('sw.js')
+  .then(() => navigator.serviceWorker.ready)
+  .then(() => { log.push('ready'); return true; }, error => { log.push('error:' + error); return false; });
+// Shows the persistent notification; resolves with the titles the worker's registration lists.
+window.showWorkerNotification = async (target) => {
+  const registration = await navigator.serviceWorker.ready;
+  await registration.showNotification('Open N6 worker', {
+    body: 'Click opens ' + target, tag: 'open-n6', data: {url: target},
+  });
+  return (await registration.getNotifications()).map(n => n.title);
+};
+</script>
+</body>
