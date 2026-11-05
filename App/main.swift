@@ -22,12 +22,9 @@ appDelegate.options = options
 // The model comes first: the window can be built from it at once, and the
 // engine needs the default profile's folder (docs/plans/profiles.md §6.2).
 let directories = appDelegate.prepareData()
-// Finish AppKit launch and draw the snapshot-backed sidebar before loading
+// Draw the snapshot-backed sidebar before finishing AppKit launch or loading
 // Chromium. The same sidebar survives engine readiness; no page exists yet.
 app.setActivationPolicy(.regular)
-LaunchTiming.shared.mark("appKitLaunchStart")
-app.finishLaunching()
-LaunchTiming.shared.mark("appKitLaunchEnd")
 appDelegate.drawWindowsBeforeEngine()
 
 // Wait for a display callback whose last refresh is later than the flushed
@@ -60,6 +57,12 @@ if firstFrame.presented {
   LaunchTiming.shared.mark("firstFrameWaitTimedOut")
   FileHandle.standardError.write(Data("Open: first window frame unconfirmed; continuing engine startup\n".utf8))
 }
+
+// The final menu and window already exist. Finish AppKit launch after the
+// presented sidebar, so its default-menu setup cannot delay that frame.
+LaunchTiming.shared.mark("appKitLaunchStart")
+app.finishLaunching()
+LaunchTiming.shared.mark("appKitLaunchEnd")
 
 // Initialize outside the temporary AppKit runloop. Chromium installs native
 // runloop observers during start; those must first run in CefRunMessageLoop.

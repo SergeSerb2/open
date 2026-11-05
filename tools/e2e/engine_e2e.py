@@ -2167,6 +2167,8 @@ def launch_checks(app_factory, results, tmp, config, samples=5):
             runs["cold_fresh_profile"].append(timing)
             menu_builds = sum(bool(re.fullmatch(r"menuBuild[0-9]+Start", key)) for key in timing)
             results["startup_menu_once_%d" % i] = {"ok": menu_builds == 1, "builds": menu_builds}
+            results["sidebar_before_appkit_finish_%d" % i] = {
+                "ok": timing.get("sidebarDrawn") is not None and timing["sidebarDrawn"] <= timing.get("appKitLaunchStart", -1)}
             evidence = app.call("startup")
             results["window_before_engine_%d" % i] = {
                 "ok": evidence["pagesBeforeEngine"] == 0 and evidence["contextsBeforeEngine"] == 0
