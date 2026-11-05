@@ -88,6 +88,8 @@ public final class ToastHandle {
     /// Keeps the toast while something it opened is up (the share picker), then restarts its
     /// timer like the pointer leaving it.
     public func hold(_ held: Bool) { center?.hold(id, held) }
+    /// The toast's button while it shows (the share picker anchors to it).
+    public var accessoryButton: NSView? { center?.entry(id).flatMap { $0.isExiting ? nil : $0.view.accessoryButton } }
 }
 
 /// One per browser window and per Little Open window (page-platform D-1, §4.1). Toasts are views

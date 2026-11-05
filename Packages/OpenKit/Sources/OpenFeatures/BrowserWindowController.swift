@@ -102,10 +102,13 @@ public final class BrowserWindowController: NSWindowController, NSWindowDelegate
     private var captureMonitor: Any?
     private var captureStorage: CaptureController?
     /// The Capture tool (page-platform §4.6), made on first use.
+    /// The Capture tool's selection overlay came up or went away (page swipes pause meanwhile).
+    public var onCaptureOverlayChange: ((Bool) -> Void)?
     public var capture: CaptureController {
         if let captureStorage { return captureStorage }
         let capture = CaptureController(root: root, defaults: defaults)
         captureStorage = capture
+        capture.onOverlayChange = { [weak self] up in self?.onCaptureOverlayChange?(up) }
         capture.library = captureLibrary
         capture.pageTarget = { [weak self] in self?.capturePageTarget() }
         capture.anchor = { [weak self] in

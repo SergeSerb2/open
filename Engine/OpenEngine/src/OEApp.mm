@@ -176,7 +176,8 @@ class OEApp : public CefApp,
     // Chromium services Open does not use (memory-fork §10; each string was
     // read from its BASE_FEATURE in this Chromium tree): optimization guide
     // hints, models and page-content extraction, the segmentation platform,
-    // Cast discovery, and the translate ranker (manual translate stays).
+    // Cast discovery (MediaRouter: Cast is out of v1, page-platform §4.12, EP-12),
+    // and the translate ranker (manual translate stays).
     std::string disabled = command_line->GetSwitchValue("disable-features");
     for (const char* feature :
          {"OptimizationHints", "OptimizationTargetPrediction",

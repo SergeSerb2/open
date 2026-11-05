@@ -55,6 +55,9 @@ final class EngineWebContentHost: NSObject, WebContentHost, WebContentProviding,
     self.tabID = tabID; self.profileID = profileID; self.content = content; self.owner = owner
     spaceID = owner.space(for: tabID)?.id ?? owner.focusedSpace?.id
     super.init(); content.delegate = self
+    // Tab pages draw Open's own swipe indicator (page-platform §4.4.3), not Chromium's arrow.
+    content.drawsEngineHistorySwipeOverlay = false
+    content.historySwipeEnabled = owner.historySwipeAllowed
     observeMute()
   }
   /// The engine follows the tab's mute, including Undo/Redo and Mute All (media-pip §7.2).
@@ -122,6 +125,8 @@ final class EngineWebContentHost: NSObject, WebContentHost, WebContentProviding,
     // Same-document History API path changes do not emit another load finish.
     if !page.isLoading, !changes.isDisjoint(with: [.URL, .loading]) { confirmFaviconForDocument(page, owner: owner) }
     if !changes.isDisjoint(with: [.URL, .title]) { owner.app.scheduleSave() }
+    // Share Quote follows the focused page's selection (page-platform §4.2.5, EP-3).
+    if changes.contains(.selection) { owner.translate.syncStatus() }
     // Tab sleep's hard event contract: every change of every page, background tabs included.
     if !closed, generation == token { owner.app.tabSleep.pageChanged(self, changes: changes) }
     owner.record("change", page, ["changes": changes.rawValue])

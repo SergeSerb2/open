@@ -60,15 +60,6 @@ extension EngineWebContentHostFactory {
     return controller.context
   }
 
-  /// Copy URL (Cmd+Shift+C, the sidebar and pane-bar copy buttons): Arc copies the URL without trackers
-  /// (CC-31a, `URLCleaner`) and says which it copied ("Copied a clean link without trackers" /
-  /// "Copied Current URL", PG-1.10) in the window's toast (page-platform §4.1).
-  func copyCleanURL(_ url: URL) {
-    let (clean, removed) = URLCleaner.clean(url)
-    NSPasteboard.general.clearContents(); NSPasteboard.general.setString(clean.absoluteString, forType: .string)
-    controller?.toasts.show(ToastContent(title: URLCleaner.toastTitle(removed: removed)))
-  }
-
   private func performSelectionAppCommand(_ id: String) -> Bool? {
     guard let context = selectionCommandContext(for: id) else { return nil }
     guard context.isSelectionCommandEnabled(id) else { return false }
@@ -80,6 +71,7 @@ extension EngineWebContentHostFactory {
   func isAppCommandEnabled(_ original: String, enabledKey: String? = nil, payload: String? = nil) -> Bool {
     let id = AppCommand.canonicalID(original)
     if let context = selectionCommandContext(for: id) { return context.isSelectionCommandEnabled(id) }
+    if let enabled = isPageToolEnabled(id) { return enabled }  // App/Page/PageToolsCommands.swift
     if SystemCommandActions.selectors[id] != nil { return SystemCommandActions.isEnabled(id) }
     if AppCommand.featureIDs.contains(id) || id.hasPrefix("focus-split-pane-") {
       return controller?.isCommandEnabled(id, enabledKey: enabledKey ?? EnabledKey.currentTabInSplit) == true
@@ -125,9 +117,10 @@ extension EngineWebContentHostFactory {
     case EnabledKey.webPage:
       // A live http(s), file, or data page in the focused host (page-platform §7.1).
       return ["http", "https", "file", "data"].contains(selectedContent?.url?.scheme?.lowercased() ?? "")
-    // Per-site cache clearing waits for Site Control E2; no trace recording exists before Step 5.
-    case EnabledKey.siteDataClearAvailable, EnabledKey.isTracing: return false
-    case EnabledKey.notTracing: return true
+    // Per-site cache clearing waits for Site Control E2 (App/Page/PageToolsCommands.swift).
+    case EnabledKey.siteDataClearAvailable: return PageTools.siteDataClearAvailable && PageTools.isSitePage(selectedContent?.url)
+    case EnabledKey.isTracing: return TroubleshootingActions.shared.isRecording
+    case EnabledKey.notTracing: return !OEEngine.shared.isTracing
     default: return true
     }
   }
@@ -137,6 +130,7 @@ extension EngineWebContentHostFactory {
     if SystemCommandActions.selectors[id] != nil { return SystemCommandActions.perform(id) }
     if AppCommand.featureIDs.contains(id) || id.hasPrefix("focus-split-pane-") { return false }
     if let result = performSelectionAppCommand(id) { return result }
+    if let result = performPageTool(id) { app.scheduleMenuRebuild(); return result }  // App/Page/PageToolsCommands.swift
     guard isAppCommandEnabled(id, payload: payload) else { return false }
     if id.hasPrefix("go-to-space-"), let n = Int(id.split(separator: "-").last ?? ""), n <= model.spaces.count {
       if let uuid = payload.flatMap(UUID.init(uuidString:)), let space = model.space(id: SpaceID(rawValue: uuid)) { focus(space: space) }
@@ -212,18 +206,15 @@ extension EngineWebContentHostFactory {
     case "stop-loading": selectedContent?.stopLoading()
     case "go-back": selectedContent?.goBack()
     case "go-forward": selectedContent?.goForward()
-    case "zoom-in": selectedContent?.zoomIn()
-    case "zoom-out": selectedContent?.zoomOut()
-    case "zoom-actual-size": selectedContent?.resetZoom()
+    case "zoom-in", "zoom-out", "zoom-actual-size": guard zoomPage(id) else { return false }
     case "print": selectedContent?.showPrintPanel()
     case "save-page-as": savePage()
     case "share-page": if let url = selectedContent?.url { NSSharingServicePicker(items: [url]).show(relativeTo: controller?.container.bounds ?? .zero, of: controller!.container, preferredEdge: .maxY) }
-    case "copy-url": guard let url = selectedContent?.url ?? selectedTab?.url else { return false }; copyCleanURL(url)
-    case "copy-url-markdown", "copy-url-quote":
-      guard let url = selectedContent?.url ?? selectedTab?.url else { return false }
-      let title = selectedContent?.title ?? selectedTab?.displayTitle ?? ""
-      NSPasteboard.general.clearContents(); NSPasteboard.general.setString(id == "copy-url" ? url.absoluteString : "[\(title)](\(url.absoluteString))", forType: .string)
-    case "developer-tools", "javascript-console", "inspect-elements": selectedContent?.showDevTools()
+    // The Copy URL family and its toasts (page-platform §4.2, `App/Page/PageCommands.swift`).
+    case "copy-url": guard copyURL() else { return false }
+    case "copy-url-markdown": guard copyURLMarkdown() else { return false }
+    case "copy-url-quote": guard copyURLQuote() else { return false }
+    case "developer-tools": selectedContent?.showDevTools()
     case "view-source": if let url = selectedContent?.url { _ = openNewTab(url: URL(string: "view-source:\(url.absoluteString)")!, background: false) }
     case "toggle-sidebar": controller?.toggleSidebar()
     case "toggle-toolbar": return controller?.toggleToolbar() != nil
