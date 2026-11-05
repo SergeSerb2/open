@@ -153,7 +153,7 @@ static NSView* OEParkingView() {
 - (void)oe_viewWillMoveToWindow:(nullable NSWindow*)window;
 - (void)oe_viewDidMoveToWindow;
 - (void)oe_viewGeometryChanged;
-- (void)oe_showHostedPageIfVisible;
+- (void)oe_showPageIfVisible;
 @end
 
 // The page's view. CEF's host NSView becomes its only subview (Alloy), or a
@@ -197,7 +197,7 @@ static NSView* OEParkingView() {
 - (void)viewDidUnhide {
   [super viewDidUnhide];
   [_content oe_viewGeometryChanged];
-  [_content oe_showHostedPageIfVisible];
+  [_content oe_showPageIfVisible];
 }
 
 @end
@@ -462,7 +462,7 @@ typedef void (^OEDevToolsCompletion)(NSDictionary* _Nullable, NSError* _Nullable
     }
   });
   [self oe_syncChromeWindow];
-  [self oe_showHostedPageIfVisible];
+  [self oe_showPageIfVisible];
 }
 
 - (void)oe_createBrowser {
@@ -639,7 +639,7 @@ typedef void (^OEDevToolsCompletion)(NSDictionary* _Nullable, NSError* _Nullable
     [self oe_layoutBrowserView];
   }
   [_oe_hostBrowser oe_setNeedsTabStripSync];
-  [self oe_showHostedPageIfVisible];
+  [self oe_showPageIfVisible];
   [self oe_notify:OEWebContentChangeLive | OEWebContentChangeURL |
                   OEWebContentChangeLoading];
 }
@@ -682,13 +682,14 @@ typedef void (^OEDevToolsCompletion)(NSDictionary* _Nullable, NSError* _Nullable
   [self oe_syncChromeWindow];
 }
 
-// Hosted tabs (P1) that Chromium created in the background start hidden; a
-// view that becomes visible in a window shows its page, as a Chrome
-// BrowserView does for the active tab. Hiding (and window occlusion) is
-// Chromium's own WebContents view logic.
-- (void)oe_showHostedPageIfVisible {
-  if (_browser && _oe_hostBrowser && _view.window &&
-      !_view.isHiddenOrHasHiddenAncestor) {
+// Hosted tabs (P1) and Alloy pages restored with no_renderer start hidden.
+// The view may already be visible when the browser is created, so replay its
+// show after history restore as well as on later window/unhide events. Hiding
+// and window occlusion still follow Chromium's WebContents view logic.
+- (void)oe_showPageIfVisible {
+  if (_browser &&
+      (_oe_hostBrowser || _configuration.runtimeStyle == OERuntimeStyleAlloy) &&
+      _view.window && !_view.isHiddenOrHasHiddenAncestor) {
     _browser->GetHost()->WasHidden(false);
   }
 }
