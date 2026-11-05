@@ -127,12 +127,18 @@ final class PermissionPromptPresenter: NSObject, NSPopoverDelegate {
   }
   func cancel(page: OEWebContent) {
     let removed = entries.filter { $0.page === page }; entries.removeAll { $0.page === page }
-    for entry in removed { entry.request.dismiss(); decisions += 1 }
+    for entry in removed {
+      entry.request.dismiss(); decisions += 1
+      owner?.record("permissionAnswer", entry.page, ["decision": "dismiss"])
+    }
     if current?.page === page { finish(nil) }
   }
   func close() {
     closed = true
-    for entry in entries { entry.request.dismiss(); decisions += 1 }; entries.removeAll()
+    for entry in entries {
+      entry.request.dismiss(); decisions += 1
+      owner?.record("permissionAnswer", entry.page, ["decision": "dismiss"])
+    }; entries.removeAll()
     finish(nil)
     observers.forEach(NotificationCenter.default.removeObserver); observers.removeAll()
   }
