@@ -142,6 +142,8 @@ targets:
       - package: OpenKit
         product: OpenModel
       - package: OpenKit
+        product: OpenRouting
+      - package: OpenKit
         product: OpenStore
       - package: OpenKit
         product: OpenWeb
