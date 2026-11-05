@@ -16,9 +16,9 @@ final class SitePermissionStore {
     (.camera, "camera", "video"), (.microphone, "microphone", "mic"),
     (.geolocation, "location", "location"), (.notifications, "notifications", "bell"),
     (.clipboard, "clipboard", "doc.on.clipboard"), (.MIDI, "MIDI devices", "pianokeys"),
-    (.screenCapture, "screen", "video"), (.multipleDownloads, "multiple files", "arrow.down.circle"),
-    (.storageAccess, "storage", "externaldrive"), (.windowManagement, "windows", "macwindow"),
-    (.localFonts, "fonts", "textformat"), (.idleDetection, "activity", "figure.stand"), (.other, "permissions", "lock")]
+    (.screenCapture, "screen", "lock"), (.multipleDownloads, "multiple files", "arrow.down.circle"),
+    (.storageAccess, "storage", "externaldrive"), (.windowManagement, "windows", "lock"),
+    (.localFonts, "fonts", "lock"), (.idleDetection, "activity", "figure.stand"), (.other, "permissions", "lock")]
   private static var stores: [ObjectIdentifier: SitePermissionStore] = [:]
   static func forContext(_ context: OEBrowserContext) -> SitePermissionStore {
     stores = stores.filter { $0.value.context != nil }
