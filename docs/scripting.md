@@ -240,6 +240,22 @@ errors. Never-settling promise: 10.013 s at load 8.22/8.62/12.00. Stuck serializ
 (after a 250 ms awaited promise): 10.005 s at load 8.21/8.60/11.95. Both returned
 1014, and the next execute returned `42`. The configured deadline stays ten seconds.
 
+Other review-round Debug acceptance on the same App source:
+
+| Suite | Result | Local receipt |
+|---|---|---|
+| `page` Chrome | 85 PASS, 0 FAIL; 4 existing BLOCKED, 1 DEFERRED; all D4 rows PASS | `.re/review-174/final-page.json` |
+| `features` Chrome, candidate attempts 1 and 2 | 18 PASS, 1 FAIL: Widevine CDM unavailable | `.re/review-174/first-features.json`, `.re/review-174/final-features.json` |
+| `features` Chrome, unchanged `origin/main` at `8bd3aadb` | 17 PASS, 2 FAIL: identical Widevine result plus PiP gesture refusal | `.re/review-174/main-features.json` |
+
+All runs had clean owned-process cleanup and no focus interruptions. Both candidate
+attempts and unchanged main reported no downloaded CDM, unsupported key system, and
+no playback. The `feature_checks` function is byte-identical between the candidate
+and main; both used engine `f34400e7`. Widevine remains a FAIL. Main also refused Picture-in-Picture for a missing user gesture;
+both candidate runs passed that row.
+Full `verify-all` and Release verification were not rerun for this review fix; the
+lead owns the merge gate. No new shared-file hook or open design question remains.
+
 Original hosting verification at `8f5b6aea`, before the review fix, with engine
 `f34400e7` (M5 built-in 2x main display):
 
