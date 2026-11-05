@@ -5402,36 +5402,47 @@ def media_checks(factory, results, tmp):
         # toggles reach the page's own handlers; the card goes when capture stops.
         # Auto-PiP is off for this row: the playing preview would otherwise open a PiP window on the leave,
         # and a source in PiP has no card (rule 3).
-        app.call("policy", permissions="grant")
-        app.call("defaults", key="open.advanced.enablePictureInPictureOnLeave", value=False)
-        rec = open_tab(base + "recording.html")
-        rec_started = app.eval(rec, "start()")
-        rec_capturing = wait_until(lambda: m(rec)["capturing"] is True, timeout=5, step=.05)
-        rec_state = m(rec)
-        rec_audible = is_audible(rec)
-        select(home)
-        def rcard(): return next((c for c in players()["cards"] if c["tab"] == rec), None)
-        rec_card = wait_until(lambda: (lambda c: c if c and c["kind"] == "recording" else None)(rcard()), timeout=3, step=.02)
-        app.call("media-click", tab=rec, target="microphone")
-        mic_off = wait_until(lambda: (lambda c: c if c and c["microphoneOn"] is False else None)(rcard()), timeout=2, step=.02)
-        app.call("media-click", tab=rec, target="camera")
-        cam_off = wait_until(lambda: (lambda c: c if c and c["cameraOn"] is False else None)(rcard()), timeout=2, step=.02)
-        rec_page = app.eval(rec, "state()")
-        still_capturing = m(rec)["capturing"]
-        app.eval(rec, "stop()")
-        rec_gone = wait_until(lambda: rec not in ids(), timeout=5, step=.05)
-        app.call("defaults", key="open.advanced.enablePictureInPictureOnLeave", value=None)
-        app.call("policy", permissions="")
-        results["media_recording_card"] = {"ok": rec_started is True and bool(rec_capturing) and rec_state["controllable"] is False
-            and bool(rec_card) and {"favicon", "microphone", "camera"} <= set(rec_card["buttons"])
-            and not ({"play", "previous", "next", "volume"} & set(rec_card["buttons"])) and rec_card["microphoneOn"] is True
-            and rec_card["cameraOn"] is True and bool(mic_off) and bool(cam_off) and rec_page["counts"]["togglemicrophone"] == 1
-            and rec_page["counts"]["togglecamera"] == 1 and rec_page["mic"] is False and rec_page["cam"] is False
-            and still_capturing is True and bool(rec_gone),
-            "started": rec_started, "state": {k: rec_state.get(k) for k in ("capturing", "controllable", "playback", "actions", "source")},
-            "card": rec_card, "page": rec_page, "stillCapturing": still_capturing, "gone": bool(rec_gone), "audibleAtLeave": rec_audible,
-            "decision": m(rec)["decision"]}
-        close_tab(rec)
+        def recording_card_row(results):
+            app.call("policy", permissions="grant")
+            app.call("defaults", key="open.advanced.enablePictureInPictureOnLeave", value=False)
+            rec = open_tab(base + "recording.html")
+            rec_started = app.eval(rec, "start()")
+            rec_capturing = wait_until(lambda: m(rec)["capturing"] is True, timeout=5, step=.05)
+            rec_state = m(rec)
+            rec_audible = is_audible(rec)
+            select(home)
+            def rcard(): return next((c for c in players()["cards"] if c["tab"] == rec), None)
+            rec_card = wait_until(lambda: (lambda c: c if c and c["kind"] == "recording" else None)(rcard()), timeout=3, step=.02)
+            app.call("media-click", tab=rec, target="microphone")
+            mic_off = wait_until(lambda: (lambda c: c if c and c["microphoneOn"] is False else None)(rcard()), timeout=2, step=.02)
+            app.call("media-click", tab=rec, target="camera")
+            cam_off = wait_until(lambda: (lambda c: c if c and c["cameraOn"] is False else None)(rcard()), timeout=2, step=.02)
+            rec_page = app.eval(rec, "state()")
+            still_capturing = m(rec)["capturing"]
+            app.eval(rec, "stop()")
+            rec_gone = wait_until(lambda: rec not in ids(), timeout=5, step=.05)
+            app.call("defaults", key="open.advanced.enablePictureInPictureOnLeave", value=None)
+            app.call("policy", permissions="")
+            results["media_recording_card"] = {"ok": rec_started is True and bool(rec_capturing) and rec_state["controllable"] is False
+                and bool(rec_card) and {"favicon", "microphone", "camera"} <= set(rec_card["buttons"])
+                and not ({"play", "previous", "next", "volume"} & set(rec_card["buttons"])) and rec_card["microphoneOn"] is True
+                and rec_card["cameraOn"] is True and bool(mic_off) and bool(cam_off) and rec_page["counts"]["togglemicrophone"] == 1
+                and rec_page["counts"]["togglecamera"] == 1 and rec_page["mic"] is False and rec_page["cam"] is False
+                and still_capturing is True and bool(rec_gone),
+                "started": rec_started, "state": {k: rec_state.get(k) for k in ("capturing", "controllable", "playback", "actions", "source")},
+                "card": rec_card, "page": rec_page, "stillCapturing": still_capturing, "gone": bool(rec_gone), "audibleAtLeave": rec_audible,
+                "decision": m(rec)["decision"]}
+            close_tab(rec)
+
+        # Chromium asks macOS for camera and microphone access while their status is undetermined, even
+        # with fake devices; that prompt lands on the user's screen. The row runs only when macOS has
+        # already granted both and never asks.
+        capture_permission = app.call("capture-permission")
+        if capture_permission != {"camera": "authorized", "microphone": "authorized"}:
+            results["media_recording_card"] = {"status": "BLOCKED", "permission": capture_permission,
+                "reason": "macOS camera/microphone access is not granted to this build; the suite does not ask (a system prompt)"}
+        else:
+            recording_card_row(results)
 
         # EM-5: PiP from the browser needs no user gesture, and the browser enforces disablePictureInPicture
         # (Blink's browser-initiated path skips that check). Page reads go through Runtime.evaluate without
@@ -5491,11 +5502,11 @@ def media_checks(factory, results, tmp):
             def grid(path):
                 w, h, px = read_image(path)
                 return (w, h), [px(w * (i + .5) / 8, h * (j + .5) / 6) for i in range(8) for j in range(6)]
-            (size0, a0), (size1, a1) = grid(shots[0][0]), grid(shots[1][0])
-            lit = sum(1 for c in a0 if max(c) > 40)
-            moved = sum(1 for c, d in zip(a0, a1) if max(abs(c[k] - d[k]) for k in range(3)) > 12)
+            (size0, px0), (size1, px1) = grid(shots[0][0]), grid(shots[1][0])
+            lit = sum(1 for c in px0 if max(c) > 40)
+            moved = sum(1 for c, d in zip(px0, px1) if max(abs(c[k] - d[k]) for k in range(3)) > 12)
             results["media_pip_frames"] = {"ok": bool(ow) and lit >= 24 and moved >= 24 and not pip()["windows"],
-                "lit": lit, "moved": moved, "of": len(a0), "size": [size0, size1], "bytes": [b for _, b in shots],
+                "lit": lit, "moved": moved, "of": len(px0), "size": [size0, size1], "bytes": [b for _, b in shots],
                 "window": ow, "chromiumWindows": pip()["windows"], "load": os.getloadavg()}
             # E-M8: Minimize hides the window, keeps playing and leaves a card that reopens PiP.
             app.call("pip-action", action="minimize")

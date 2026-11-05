@@ -1,5 +1,6 @@
 #if OPEN_AUTOMATION
 import AppKit
+import AVFoundation
 import MediaPlayer
 import OpenDesign
 import OpenEngine
@@ -13,7 +14,7 @@ import OpenWeb
 /// Media automation commands (media-pip §8.4, docs/automation.md "Media").
 extension AutomationController {
   static let mediaCommands: Set<String> = ["media", "media-action", "mini-players", "media-click", "pip", "pip-action", "pip-frame",
-                                           "now-playing", "sleep-visibility", "library-section"]
+                                           "now-playing", "sleep-visibility", "library-section", "capture-permission"]
 
   func runMediaCommand(_ cmd: String, _ a: [String: Any]) async throws -> Any {
     let media = app.media
@@ -110,6 +111,21 @@ extension AutomationController {
       return ["clicked": target, "at": [center.x, center.y]]
     case "pip":
       return describePiP()
+    case "capture-permission":
+      // macOS camera and microphone authorization for this app. Reading it never prompts. Chromium
+      // asks macOS while the status is notDetermined even for fake devices
+      // (permission_bubble_media_access_handler.cc), so a suite checks this before it captures.
+      func name(_ s: AVAuthorizationStatus) -> String {
+        switch s {
+        case .authorized: "authorized"
+        case .denied: "denied"
+        case .restricted: "restricted"
+        case .notDetermined: "notDetermined"
+        @unknown default: "unknown"
+        }
+      }
+      return ["camera": name(AVCaptureDevice.authorizationStatus(for: .video)),
+              "microphone": name(AVCaptureDevice.authorizationStatus(for: .audio))]
     case "pip-frame":
       // Phase 2: the engine's composited picture of Open's PiP video view (not the screen; the
       // window server leaves out GPU-process layers on macOS 26).
