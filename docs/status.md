@@ -430,7 +430,7 @@ Columns: feature · RE doc + section · plan · library code · App wiring · ve
 | Find in page: bar, count, next, previous, Esc | MH Find | app-shell §4.9 (Step D, in flight) | plain `NSSearchField` in the factory | main (partial) | e2e `features` "Find in page" | planned | Find keys route as system items (§2). The Arc-style bar with a count is Step D work. |
 | Page context menu: link, image, selection, spelling; Open in Peek, Little Open, Split | MH "Context menus" | app-shell §4.9; allowlist in PR #94 | in PR #94 | main: Chromium items plus "Open Link in New Tab" | e2e `features` "Context menu hook" | in PR (partial) | PR #94 adds Open's allowlist of Chrome's items. Peek, Little Open, and Split entries are later work. |
 | Permission prompts (Arc style, remember) | FA SC-2 | app-shell §4.9; site-control-boost-editor | — | main: `NSAlert` sheet | e2e `features` "Permission prompts" | planned | |
-| Web notifications delivered to macOS Notification Center | — | page-platform (#73) | Helper "Alerts" app exists | — | not verified (only the permission grant is tested) | planned (verify) | Was unplanned. The plan adds an end-to-end check. See §3, gap 12. |
+| Web notifications delivered to macOS Notification Center | — | page-platform (#73) Step 7 | `App/Page/NotificationAuthorization.swift`, `Helper/Info-Alerts.plist`, factory `requestsActivationOf` | s8/notifications | e2e `page` N1, N2, N3, N6 | done (partial) | Banners reach Notification Center; `requireInteraction` runs the Alerts helper; a page's focus() selects its tab in its Space and restores the window. Notification click rows wait for EP-6/EP-7 (Step 16). See §3, gap 12. |
 | JavaScript dialogs: alert, confirm, prompt, beforeunload | — | app-shell §4.9 | — | main | e2e `features` "JS dialogs" | done | Plain `NSAlert` sheets. |
 | History recording per profile (FTS) | FC §4.2 | app-shell §4.8 (Step H) | `OpenStore/HistoryStore.swift` | main (typed only) | `suggest-check`; `openkit bench` | done (partial) | Spot-check: Step C records typed navigations only (`App/Stores/AppStores.swift:36` `recordTyped`, called from the factory). Link clicks and redirects do not write history. Full recording is still open. |
 | History view (Cmd+Y) | MH Archive | settings Library History | `OpenSettings/HistorySection.swift` | main | `settings-preview` | done | Cmd+Y opens Library ▸ History (#85). It shows typed visits and imports. |
@@ -649,7 +649,7 @@ Ranking is by user impact for an Arc user who switches to Open. **P0** blocks da
 9. **Open — two-finger swipe back and forward on the page.** Now planned in page-platform (#73). No e2e check proves OpenEngine support yet.
 10. **Closed in PR #126 — Delete Space confirmation.** System sheet with Arc's copy; Cancel changes nothing; Delete archives with one undo step. Capture C3 remains open for Arc's alert/Return behavior.
 11. **Closed in PR #126 — Delete folder confirmation.** One alert for one or several folders, then "Folder deleted" / "Folders deleted" with Undo. Capture C3 remains open.
-12. **Open — web notifications are not verified end to end.** Only the permission grant is tested. Now planned in page-platform (#73) with an end-to-end check.
+12. **Partly closed (page-platform Step 7, s8/notifications) — web notifications end to end.** e2e `page` N1 (banner in macOS's delivered list), N2 (Alerts helper), N3 (activation path), N6 (worker notification). Open: the notification click itself (EP-6/EP-7, Step 16) and the sleep gate (Step 8).
 
 ### 3.3 P2
 
