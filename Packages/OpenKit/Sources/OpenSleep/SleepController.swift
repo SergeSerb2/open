@@ -177,10 +177,19 @@ public final class SleepController {
                     if waitsForEvent(tab, state: state, policy: policy) { continue }
                     return Self.passInterval
                 case .frozen:
-                    guard policy.mode.discardDelay != nil, !waitsForEvent(tab, state: state, policy: policy),
+                    guard let discardDelay = policy.mode.discardDelay, !waitsForEvent(tab, state: state, policy: policy),
                           state.unload != true else { continue }
-                    if let retry = state.retryAfter, retry > date { deadline = min(deadline ?? retry, retry); continue }
-                    return Self.passInterval
+                    // A frozen page cannot change by itself. Sleep until its
+                    // discard deadline and any known grace/retry deadline,
+                    // rather than scanning every five seconds for minutes.
+                    // Event hooks still pull the next pass forward to 5 s.
+                    var due = hiddenSince(tab, state: state, at: date)
+                        .addingTimeInterval(max(policy.freezeDelay, discardDelay))
+                    if let audible = state.lastAudibleAt { due = max(due, audible.addingTimeInterval(policy.audioProtection)) }
+                    if let commit = state.lastCommitAt { due = max(due, commit.addingTimeInterval(policy.loadProtection)) }
+                    if let form = tab.live.lastFormInteractionAt { due = max(due, form.addingTimeInterval(policy.formProtection)) }
+                    if let retry = state.retryAfter { due = max(due, retry) }
+                    deadline = min(deadline ?? due, due)
                 case .sleeping:
                     if let slept = state.sleptAt {
                         let due = slept.addingTimeInterval(policy.destroyDelay)
