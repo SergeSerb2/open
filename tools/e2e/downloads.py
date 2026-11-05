@@ -58,7 +58,8 @@ def checks(factory, results, tmp, config, harness):
                     str(Path(E.ROOT) / 'tools/verification/feature-idle-probe.m'), '-framework', 'AppKit',
                     '-framework', 'QuartzCore', '-framework', 'CoreVideo', '-o', str(probe)], check=True)
     bundle = root / 'Open.app'
-    subprocess.run(['cp', '-cR', str(Path(E.ROOT) / 'build' / config / 'Open.app'), str(bundle)], check=True)
+    source_app = os.environ.get('OPEN_DOWNLOADS_SOURCE_APP') or str(Path(E.ROOT) / 'build' / config / 'Open.app')
+    subprocess.run(['cp', '-cR', source_app, str(bundle)], check=True)
     info_file = bundle / 'Contents/Info.plist'
     info = plistlib.loads(info_file.read_bytes())
     domain = 'io.github.sergeserb2.open.downloads-e2e.' + str(os.getpid()) + '.' + os.urandom(4).hex()

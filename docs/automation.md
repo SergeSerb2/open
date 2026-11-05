@@ -768,15 +768,16 @@ warning. Run with the on-screen lock, one suite per invocation.
 | `download-settings` | `profile`, optional `directory`, `ask`; changes the real Profiles settings model in the disposable data root. |
 | `download-row` | `id`, `action=Pause|Resume|Cancel|Retry|Show in Finder`; presses the visible row's actual `NSButton`. |
 | `download-menu` | `id`, optional exact `select` title; reads/performs the same native `NSMenu` returned for a row right-click. Disabled or invisible items fail. |
-| `download-save` | Pending sheet `id`; `action=cancel` or destination `path`. Sets `NSSavePanel.directoryURL` and filename, then presses the sheet's real Save/Cancel accessibility button. Does not call the engine completion. |
-| `download-policy` | `quit=close|keep|record` answers the real app-modal alert with its native button (`record` records and keeps browsing); `recordFiles=true` records Open/Show in Finder URLs instead of opening another application. Copy and Trash still run. |
+| `download-save` | Pending sheet `id`; `action=cancel` or destination `path`. Sets `NSSavePanel.directoryURL` and filename, then presses an exposed native Save/Cancel button. For a remote panel with hidden buttons, supplies the URL through its native response method (ABI checked). The existing sheet completion answers the engine. |
+| `download-policy` | `quit=close|keep|record` answers the real app-modal alert with its native button (`record` records and keeps browsing); `recordFiles=true` records file-action URLs and suppresses Finder/external default-app launch; `openApp=<bundle path>` runs real NSWorkspace document delivery to the disposable background receiver instead. Copy and Trash still run. |
 | `download-home` | Presses the browser's actual Home accessibility control. |
 | `download-library-close` | Uses the Library window's normal close action. |
 | `download-idle` | S8 observer actions `begin|reset|canary|end` and counts. Available only when the runner injects `feature-idle-probe.m`. Canary is a real repeating timer that is then invalidated. |
 
-The suite restores each shared `open.*` preference it changes in `finally`, and
+The suite gives its cloned App a unique preferences domain and restores each
+`open.*` preference it changes in `finally`. It
 cancels pending save sheets before verified-PID cleanup, including forced early
-failure (`OPEN_DOWNLOADS_FAIL_IN_SHEET=1`). Open/Finder dispatch recording avoids
-opening user applications. It proves the dispatched URL, not external-app file
-rendering. Home geometry and the 60-second recent-download click rule remain the
+failure (`OPEN_DOWNLOADS_FAIL_IN_SHEET=1`). The receiver verifies the real Open
+document URL, bytes and SHA-256. Finder dispatch is recorded without opening a
+Finder window. Home geometry and the 60-second recent-download click rule remain the
 lead's marked guesses. No Little Open tray is added.

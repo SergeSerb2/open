@@ -50,7 +50,7 @@ final class HomeDownloadButton: PlateButton, CAAnimationDelegate {
         super.updateLayer()
         let state = tracked({ context?.downloadBadge }) { [weak self] in self?.needsDisplay = true }
         let dark = effectiveAppearance.bestMatch(from: [.darkAqua, .aqua]) == .darkAqua
-        let tint = glyphView.tint()
+        let tint = glyphView.tint() ?? glyphTint(true)
         CATransaction.begin(); CATransaction.setDisableActions(true)
         track.strokeColor = (dark ? NSColor(srgbRed: 0.443, green: 0.467, blue: 0.510, alpha: 1) : NSColor(srgbRed: 0.808, green: 0.843, blue: 0.906, alpha: 1)).cgColor
         ring.strokeColor = tint.cgColor; check.contentTintColor = tint
