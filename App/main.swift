@@ -5,6 +5,7 @@ import QuartzCore
 
 // Chromium's message pump needs the CefAppProtocol NSApplication subclass,
 // created before anything else touches AppKit.
+LaunchTiming.shared.mark("processMain")
 let app = OEApplication.shared as! OEApplication
 LaunchTiming.shared.mark("main")
 // Open restores windows from its own snapshot (OpenStore), never through
@@ -24,7 +25,9 @@ let directories = appDelegate.prepareData()
 // Finish AppKit launch and draw the snapshot-backed sidebar before loading
 // Chromium. The same sidebar survives engine readiness; no page exists yet.
 app.setActivationPolicy(.regular)
+LaunchTiming.shared.mark("appKitLaunchStart")
 app.finishLaunching()
+LaunchTiming.shared.mark("appKitLaunchEnd")
 appDelegate.drawWindowsBeforeEngine()
 
 // Wait for a display callback whose last refresh is later than the flushed

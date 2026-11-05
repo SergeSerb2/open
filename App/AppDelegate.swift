@@ -59,6 +59,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, OEEngineDelegate, OEBr
     "\(UserDefaults.standard.bool(forKey: "open.shortcuts.includeFavoritesInTabNumbering")):\(UserDefaults.standard.bool(forKey: "open.shortcuts.switchToNinthEnabled"))"
   }
   private var activeWindowID: WindowID?
+  private var composingStartupWindows = false
   private(set) var startupEvidence: [String: Any] = [:]
   #if OPEN_AUTOMATION
     let activationTrace = ActivationTrace()
@@ -72,9 +73,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate, OEEngineDelegate, OEBr
 
   func applicationDidFinishLaunching(_ notification: Notification) {
     LaunchTiming.shared.mark("didFinishLaunching")
-    NSApp.mainMenu = MainMenu.build()
-    MainMenu.targetWindowCommands(frontWindowController.flatMap { hostFactories[$0.windowID] })
-    NSApp.setActivationPolicy(.regular)
     // The window and sidebar come from the snapshot and do not wait for the
     // engine (docs/architecture.md, launch tactics). Pages created before
     // the engine is ready wait inside OpenEngine.
@@ -139,6 +137,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, OEEngineDelegate, OEBr
       FileHandle.standardError.write(Data("Open: data root \(root.path) unavailable: \(error)\n".utf8))
       exit(1)
     }
+    LaunchTiming.shared.mark("dataRootPrepared")
     let layout = engine.result
     if !layout.report.moved.isEmpty || !layout.report.skipped.isEmpty || layout.problem != nil {
       FileHandle.standardError.write(Data(
@@ -198,21 +197,30 @@ final class AppDelegate: NSObject, NSApplicationDelegate, OEEngineDelegate, OEBr
     prepareData()
     guard windowControllers.isEmpty else { return }
     let states = model.windows.filter { $0.style == .standard }
+    composingStartupWindows = true
     for state in states.isEmpty ? Array(model.windows.prefix(1)) : states {
       createWindowController(state: state)
     }
     todayAutoArchive?.finishStartupComposition()
+    composingStartupWindows = false
+    // Composition can change selection and focus several times. Install one
+    // menu for the final state, before any window transaction is submitted.
+    menuRebuildTask?.cancel(); menuRebuildTask = nil
+    MainMenu.targetWindowCommands(frontWindowController.flatMap { hostFactories[$0.windowID] })
     LaunchTiming.shared.mark("windowShown")
   }
 
   func drawWindowsBeforeEngine() {
     showWindowsIfNeeded()
+    LaunchTiming.shared.mark("windowDisplayStart")
     for controller in windowControllers {
       controller.prepareForInitialDisplay()
       controller.window?.contentView?.layoutSubtreeIfNeeded()
       controller.window?.displayIfNeeded()
     }
+    LaunchTiming.shared.mark("windowDisplayEnd")
     CATransaction.flush()
+    LaunchTiming.shared.mark("windowFlushed")
     startupEvidence = [
       "sidebarClass": windowControllers.first.map { String(reflecting: type(of: $0.sidebar)) } ?? "",
       "pagesBeforeEngine": OEEngine.shared.allWebContents.count,
@@ -227,14 +235,17 @@ final class AppDelegate: NSObject, NSApplicationDelegate, OEEngineDelegate, OEBr
     let factory = EngineWebContentHostFactory(app: self, state: state)
     hostFactories[state.id] = factory
     let controller = BrowserWindowController(model: model, windowID: state.id, factory: factory, snapshotStore: snapshotStore)
+    LaunchTiming.shared.mark("windowControllerBuilt")
     controller.context.storedFavicons = stores.sidebarFavicons
+    LaunchTiming.shared.mark("faviconsAttached")
     factory.attach(controller)
     windowControllers.append(controller)
     media.attach(factory)
     tabSleep.attach(factory)
     activeWindowID = state.id
-    MainMenu.targetWindowCommands(factory)
+    if !composingStartupWindows { MainMenu.targetWindowCommands(factory) }
     todayAutoArchive?.attach(context: controller.context)
+    LaunchTiming.shared.mark("windowWillShow")
     controller.showWindow(nil)
     if engineReady { factory.engineDidBecomeReady() }
     return controller
@@ -284,7 +295,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, OEEngineDelegate, OEBr
   func didFocusWindow(_ id: WindowID) {
     activeWindowID = id
     for (otherID, factory) in hostFactories where otherID != id { factory.commandBarSession?.dismiss() }
-    MainMenu.targetWindowCommands(hostFactories[id])
+    if !composingStartupWindows { MainMenu.targetWindowCommands(hostFactories[id]) }
     settingsPresenter.refreshSpaceManagerContext()
   }
 
@@ -449,7 +460,7 @@ extension AppDelegate: CommandDispatcher {
     hostFactories.values.first { $0.ownsKeyWindow(window) }
   }
   func scheduleMenuRebuild() {
-    guard !shutdownPrepared, menuRebuildTask == nil else { return }
+    guard !shutdownPrepared, !composingStartupWindows, menuRebuildTask == nil else { return }
     menuRebuildTask = Task { @MainActor [weak self] in
       try? await Task.sleep(for: .milliseconds(30))
       guard let self, !Task.isCancelled else { return }

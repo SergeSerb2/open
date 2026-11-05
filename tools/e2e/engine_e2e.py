@@ -2147,23 +2147,26 @@ def shutdown_order_checks(factory, results, tmp):
         and not os.path.exists(destination), 'pendingBeforeQuit': pending, 'quit': app.quit_report, 'trace': trace}
 
 
-def window_checks(app_factory, results, tmp, config, chrome_only=False):
-    window_chrome_followup_checks(app_factory, results, tmp)
-    if chrome_only: return
+def launch_checks(app_factory, results, tmp, config, samples=5):
     # Local deterministic text paints without DNS, TLS, or external requests.
     fixture = "data:text/html,<title>Open launch fixture</title><h1>Open launch fixture</h1>"
     runs = {"cold_fresh_profile": [], "warm_existing_profile": []}
     results["load_average"] = list(os.getloadavg())
     results["cpu_count"] = os.cpu_count()
-    for i in range(5):
+    for i in range(samples):
         # Clear only this suite's own data root. Warm launches then restore a
         # selected tab plus an unselected tab from the real saved snapshot.
+        load_before = list(os.getloadavg())
         app = app_factory(urls=(fixture,), fresh=True)
         try:
             tab = app.call("tabs")[0]
             app.call("wait", tab=tab["id"])
             wait_until(lambda: "firstContentfulPaint" in app.call("timing"), timeout=10, step=0.1)
-            runs["cold_fresh_profile"].append(app.call("timing"))
+            timing = app.call("timing")
+            timing.update(load_average_before=load_before, load_average_after=list(os.getloadavg()))
+            runs["cold_fresh_profile"].append(timing)
+            menu_builds = sum(bool(re.fullmatch(r"menuBuild[0-9]+Start", key)) for key in timing)
+            results["startup_menu_once_%d" % i] = {"ok": menu_builds == 1, "builds": menu_builds}
             evidence = app.call("startup")
             results["window_before_engine_%d" % i] = {
                 "ok": evidence["pagesBeforeEngine"] == 0 and evidence["contextsBeforeEngine"] == 0
@@ -2181,12 +2184,15 @@ def window_checks(app_factory, results, tmp, config, chrome_only=False):
                 results["window_png"] = {"ok": True, "file": shot(app, "window-startup.png", max_px=2560)}
         finally:
             app.quit()
+        load_before = list(os.getloadavg())
         app = app_factory(urls=())
         try:
             selected = next(t for t in app.call("tabs") if t["selected"])
             app.call("wait", tab=selected["id"])
             wait_until(lambda: "firstContentfulPaint" in app.call("timing"), timeout=10, step=0.1)
-            runs["warm_existing_profile"].append(app.call("timing"))
+            timing = app.call("timing")
+            timing.update(load_average_before=load_before, load_average_after=list(os.getloadavg()))
+            runs["warm_existing_profile"].append(timing)
             tabs = app.call("tabs")
             results["selected_only_%d" % i] = {
                 "ok": len(tabs) == 2 and len([t for t in tabs if t["loaded"]]) == 1
@@ -2206,6 +2212,14 @@ def window_checks(app_factory, results, tmp, config, chrome_only=False):
         else:
             results[label].update(status="SKIP", reason="Release timing budgets are not evaluated in Debug")
         print(label, medians)
+
+
+def window_checks(app_factory, results, tmp, config, chrome_only=False, launch_only=False, launch_samples=5):
+    if not launch_only:
+        window_chrome_followup_checks(app_factory, results, tmp)
+    if chrome_only: return
+    launch_checks(app_factory, results, tmp, config, samples=launch_samples)
+    if launch_only: return
     # A never-loaded pinned row must never pass through selection while
     # closing or unloading. The counter is cumulative, so create-then-drop
     # cannot look like zero retained hosts.
@@ -9365,11 +9379,17 @@ def main():
                                        "commandbar", "app-actions", "actions", "profiles", "sidebar-completion", "toolbar", "numbering", "media", "relaunch", "page",
                                        "sleep"])
     ap.add_argument("--window-chrome-only", action="store_true", help="run only the window-chrome follow-up flows in the window suite")
+    ap.add_argument("--window-launch-only", action="store_true", help="run only the real-window launch budgets and restore checks")
+    ap.add_argument("--launch-samples", type=int, default=5, help="fresh/warm launch pairs (5–50; default 5)")
     ap.add_argument("--keep", action="store_true",
                     help="keep this run's data root, cache root and scratch folder (paths printed at the end)")
     ap.add_argument("--focus-retry-delay-seconds", type=int, default=0,
                     help="wait between interrupted foreground attempts (0–600 seconds)")
     opts = ap.parse_args()
+    if not 5 <= opts.launch_samples <= 50:
+        ap.error("--launch-samples must be between 5 and 50")
+    if opts.window_launch_only and (opts.only != "window" or opts.window_chrome_only):
+        ap.error("--window-launch-only requires --only window and excludes --window-chrome-only")
     if not 0 <= opts.focus_retry_delay_seconds <= 600:
         ap.error("--focus-retry-delay-seconds must be between 0 and 600")
     if opts.only is None and not opts.engine_fingerprint_only:
@@ -9556,7 +9576,8 @@ def main():
             sleep_checks(factory, results["sleep"], tmp, opts.style)
         elif opts.only == "window":
             results["window"] = CheckedResults(tracker)
-            window_checks(factory, results["window"], tmp, opts.config, chrome_only=opts.window_chrome_only)
+            window_checks(factory, results["window"], tmp, opts.config, chrome_only=opts.window_chrome_only,
+                          launch_only=opts.window_launch_only, launch_samples=opts.launch_samples)
         elif opts.only == "sidebar":
             results["sidebar"] = CheckedResults(tracker)
             sidebar_checks(factory, results["sidebar"], tmp)

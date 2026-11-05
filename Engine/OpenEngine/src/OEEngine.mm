@@ -1,6 +1,7 @@
 #import "OEInternal.h"
 
 #include <crt_externs.h>
+#include <time.h>
 
 #include <set>
 
@@ -241,6 +242,7 @@ class OEDefaultClient : public CefClient,
 
 @implementation OEEngine {
   CefScopedLibraryLoader* _loader;
+  NSDictionary<NSString*, NSNumber*>* _startupDurations;
   OEEngineConfiguration* _configuration;
   NSPointerArray* _webContents;  // weak, creation order
   NSPointerArray* _browsers;     // weak, creation order
@@ -267,12 +269,17 @@ class OEDefaultClient : public CefClient,
     _webContents = [NSPointerArray weakObjectsPointerArray];
     _browsers = [NSPointerArray weakObjectsPointerArray];
     _contexts = [NSMutableDictionary dictionary];
+    _startupDurations = @{};
   }
   return self;
 }
 
 - (OEEngineConfiguration*)configuration {
   return [_configuration copy];
+}
+
+- (NSDictionary<NSString*, NSNumber*>*)startupDurations {
+  return _startupDurations;
 }
 
 - (NSString*)chromiumVersion {
@@ -299,6 +306,7 @@ class OEDefaultClient : public CefClient,
            @"NSApp must be an OEApplication (CefAppProtocol)");
   _configuration = [configuration copy];
 
+  const uint64_t loadStart = clock_gettime_nsec_np(CLOCK_MONOTONIC_RAW);
   _loader = new CefScopedLibraryLoader();
   if (!_loader->LoadInMain()) {
     if (error) {
@@ -313,6 +321,7 @@ class OEDefaultClient : public CefClient,
     return NO;
   }
 
+  const uint64_t loadEnd = clock_gettime_nsec_np(CLOCK_MONOTONIC_RAW);
   [NSFileManager.defaultManager
             createDirectoryAtURL:_configuration.userDataDirectory
       withIntermediateDirectories:YES
@@ -371,7 +380,15 @@ class OEDefaultClient : public CefClient,
     switches = [switches arrayByAddingObject:@"--use-mock-keychain"];
   }
   CefRefPtr<CefApp> app = OECreateApp(switches);
-  if (!CefInitialize(args, settings, app, nullptr)) {
+  const uint64_t initializeStart = clock_gettime_nsec_np(CLOCK_MONOTONIC_RAW);
+  const bool initialized = CefInitialize(args, settings, app, nullptr);
+  const uint64_t initializeEnd = clock_gettime_nsec_np(CLOCK_MONOTONIC_RAW);
+  _startupDurations = @{
+    @"frameworkLoadMs" : @((loadEnd - loadStart) / 1e6),
+    @"configurationMs" : @((initializeStart - loadEnd) / 1e6),
+    @"cefInitializeMs" : @((initializeEnd - initializeStart) / 1e6),
+  };
+  if (!initialized) {
     if (error) {
       *error = [NSError
           errorWithDomain:OEErrorDomain

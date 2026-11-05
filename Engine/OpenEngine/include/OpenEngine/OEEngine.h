@@ -164,6 +164,9 @@ OE_EXPORT @interface OEEngine : NSObject
 
 #pragma mark Diagnostics
 
+/// Startup phase durations in milliseconds on a monotonic clock. Empty before start.
+@property(nonatomic, readonly, copy) NSDictionary<NSString*, NSNumber*>* startupDurations;
+
 /// Samples Chromium's task manager (one entry per process) and calls back
 /// after `interval` seconds, so CPU usage has a measurement window.
 - (void)sampleProcessMetricsAfter:(NSTimeInterval)interval

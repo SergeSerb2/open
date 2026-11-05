@@ -5,16 +5,24 @@ import OpenSettings
 /// The registry owns titles, ordering, shortcuts and menu actions.
 @MainActor
 enum MainMenu {
+  private static var launchBuildCount = 0
   static func build(factoryOverride: EngineWebContentHostFactory? = nil) -> NSMenu {
     guard let app = NSApp.delegate as? AppDelegate, app.model != nil else { return NSMenu() }
     let owner = NSApp.keyWindow.flatMap { app.factory(forKeyWindow: $0) }
     let factory = factoryOverride ?? owner ?? (NSApp.keyWindow == nil ? app.frontWindowController.flatMap { app.hostFactories[$0.windowID] } : nil)
     let dispatcher: any CommandDispatcher
     if let controller = factory?.controller { dispatcher = controller } else { dispatcher = app }
-    return MenuBuilder.buildMainMenu(dispatcher: dispatcher,
+    if !app.engineReady, launchBuildCount < 16 {
+      launchBuildCount += 1
+      LaunchTiming.shared.mark("menuBuild\(launchBuildCount)Start")
+    }
+    LaunchTiming.shared.mark("menuBuildStart")
+    let menu = MenuBuilder.buildMainMenu(dispatcher: dispatcher,
       spaces: app.model.spaces.map { SpaceMenuEntry(id: $0.id.description, title: app.model.displayTitle(for: $0)) },
       tabs: (factory.map { f in f.numberedItems.map { TabMenuEntry(id: $0.description, title: f.numberedTitle($0)) } } ?? []),
       overrides: app.keyBindings, switchToNinth: UserDefaults.standard.bool(forKey: "open.shortcuts.switchToNinthEnabled"))
+    LaunchTiming.shared.mark("menuBuildEnd")
+    return menu
   }
   static func targetWindowCommands(_ target: EngineWebContentHostFactory?) { NSApp.mainMenu = build(factoryOverride: target) }
   static func performReservedShortcut(_ event: NSEvent) -> Bool {

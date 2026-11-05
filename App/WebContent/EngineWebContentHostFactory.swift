@@ -170,7 +170,9 @@ final class EngineWebContentHostFactory: NSResponder, WebContentHostFactory {
   func engineDidBecomeReady() {
     for (id, url) in queuedNavigations { model.tab(id: id)?.url = url }
     queuedNavigations.removeAll()
+    LaunchTiming.shared.mark("selectionRestoreStart")
     showSelection(focus: false)
+    LaunchTiming.shared.mark("selectionRestoreEnd")
   }
   #if OPEN_AUTOMATION
   func navigateBeforeEngineForAutomation(_ input: String) {
