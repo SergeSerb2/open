@@ -168,8 +168,8 @@ import OpenExtensionsUI
                     && (g.frames.isEmpty || scc.maxX + 4 == g.frames[0].minX)
             }
         }
-        check("toolbar.nmax", toolbar.map(\.nMax) == [22, 9] && noOverlap,
-              "left115; right=w−5; SCC36 reserve; 984/host160=\(toolbar[0].nMax), 600/host120=\(toolbar[1].nMax); 164 frame sets do not overlap SCC")
+        check("toolbar.nmax", toolbar.map(\.nMax) == [23, 10] && noOverlap,
+              "left115; right=w−5, minus nothing; 984/host160=\(toolbar[0].nMax), 600/host120=\(toolbar[1].nMax); 164 frame sets do not overlap SCC")
         let screen = CGRect(x: 0, y: 0, width: 1600, height: 1200), anchor = CGRect(x: 200, y: 900, width: 28, height: 28)
         let below = ExtensionPopupPlacement.frame(anchor: anchor, requestedSize: CGSize(width: 320, height: 480), visibleFrame: screen)
         check("placement.below", below.minX == 200 && below.maxY == 894 && below.size == CGSize(width: 320, height: 480), "left200, top894; gap6")

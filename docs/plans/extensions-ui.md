@@ -1656,10 +1656,10 @@ and prompt-sheet parts of Steps 3 and 6, land in `OpenExtensionsUI` and
 defaults. App wiring, engine adapters, popup lifecycle observers, and real-browser
 X-1–X-27 acceptance remain for the App step; this PR changes no `App/` source.
 
-The toolbar style uses x 115 as its host-group left limit and reserves 36 pt
-for Site Control Center plus its gap. Its capped-host capacities are 22 slots at
-w 984 (160 pt host) and 9 at w 600 (120 pt host). This is **guess (lead), capture
-C1**. The URL strip remains hover-only, with explicit forced-visibility flags.
+The toolbar style uses x 115 as its host-group left limit and w − 5 as its
+right limit, minus nothing. Its capacities are 23 slots at w 984 (160 pt host)
+and 10 at w 600 (120 pt host). Site Control Center stays 4 pt left of the strip.
+This is **guess (lead), capture C1**. The URL strip remains hover-only, with explicit forced-visibility flags.
 The existing §3 guesses still need the S-2–S-7, S-10 and S-11 captures.
 
 Use `extensions-render all --scale 1|2 --appearance light|dark --out DIR`,

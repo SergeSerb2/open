@@ -24,13 +24,12 @@ public struct ExtensionStripLayout: Sendable {
             // PaneChromeView.layout: reload.maxX + barControlGap = 115.
             let left = SplitMetrics.reload.maxX + SplitMetrics.barControlGap
             right = style == .toolbar ? ToolbarMetrics.extensionsSlot(width: w).maxX : w - 105
-            // guess (lead), capture C1: toolbar reserves SCC (32) plus its gap (4)
-            // to the left of the strip. Right remains w - 5, with no trailing reserve.
-            let controls: CGFloat = style == .toolbar ? 36 : 0
+            // guess (lead), capture C1: toolbar right is w - 5, minus nothing.
+            // ToolbarMetrics places SCC 4 pt left of the complete strip.
             let text = hostTextWidth.isFinite ? max(0, hostTextWidth) : 0
             let host = 2 * SplitMetrics.hostSlot + min(ExtensionsMetrics.paneHostCap, max(SplitMetrics.hostMinimumWidth, text + 4))
-            available = right - left - host - controls
-            minimumAvailable = right - left - (2 * SplitMetrics.hostSlot + SplitMetrics.hostMinimumWidth) - controls
+            available = right - left - host
+            minimumAvailable = right - left - (2 * SplitMetrics.hostSlot + SplitMetrics.hostMinimumWidth)
         }
         let maxCount = style == .paneBar && !focused ? 0 : max(0, Int(floor(max(0, available) / pitch)))
         nMax = maxCount
