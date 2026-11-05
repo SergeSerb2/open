@@ -198,8 +198,12 @@ final class PageContextMenuBuilder {
       openItem("link-peek", "Open Link in Peek", enabled: peekSource != nil && owner.controller != nil) { [weak owner] in
         if let peekSource { owner?.controller?.peekController.open(url: link, sourceTabID: peekSource) }
       },
-      // TODO(section 9): File ▸ New Little Open Window has no public URL entry point yet.
-      openItem("link-little-open", "Open Link in Little Open", enabled: false) {},
+      // Section 9's URL seam currently records the request and opens the File-menu stub.
+      // Step 6 replaces that seam with the real page without changing this caller.
+      openItem("link-little-open", "Open Link in Little Open") { [weak owner] in
+        guard let owner else { return }
+        owner.app.openLittleOpen(url: link, profileHint: owner.focusedProfile?.id)
+      },
       openItem("link-window", "Open Link in New Window") { [weak owner] in
         guard let owner, let window = owner.app.makeUserWindow(), let target = owner.app.hostFactories[window.windowID] else { return }
         target.commandBarSession?.dismiss()

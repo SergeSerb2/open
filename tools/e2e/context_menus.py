@@ -176,7 +176,7 @@ def context_menu_checks(factory, results, tmp, h):
                 ok = ok and all(shown.count(t) == 1 for t in LINK_ITEMS)
                 anchor = shown.index(LINK_ITEMS[0]) if LINK_ITEMS[0] in shown else -1
                 ok = ok and shown[anchor:anchor + 6] == LINK_ITEMS + ['-']
-                ok = ok and next((r['enabled'] for r in event.get('rows', []) if r['key'] == 'link-little-open'), None) is False
+                ok = ok and next((r['enabled'] for r in event.get('rows', []) if r['key'] == 'link-little-open'), None) is True
                 if name == 'mailto':
                     ok = ok and any('Copy Email Address' in t or 'Copy Link' in t for t in shown)
             else:
@@ -365,14 +365,22 @@ def context_menu_checks(factory, results, tmp, h):
             return {'ok': bool(event) and bool(again) and len(decisions) == 2 and all(e['key'] == 'cancel' for e in decisions), 'decisions': decisions}
         run('cm_cancel_once', cancellation)
 
-        def disabled_little():
+        def little_entry():
             focus()
-            before = app.call('shell-windows')
+            windows = app.call('shell-windows')
+            profile = app.call('tab-state', tab=tab)['profile']
             event, events = menu('#link', 'run-open:Open Link in Little Open')
-            return {'ok': app.call('shell-windows') == before and any(r['key'] == 'link-little-open' and not r['enabled'] for r in event.get('rows', []))
-                    and len([e for e in events if e['type'] == 'contextMenuDecision' and e['key'] == 'cancel']) == 1,
-                    'shown': event.get('shown'), 'events': events}
-        run('cm_little_open_disabled', disabled_little)
+            request = wait(lambda: app.call('routing-log').get('lastLittleOpenRequest'), timeout=5) or {}
+            number = app.call('native-focus-state')['keyWindow']
+            shown = number != 0 and number not in {w['number'] for w in windows}
+            if shown:
+                # Native Close Window on the stub itself, never the source page/tab.
+                app.call('key', key='w', modifiers=['command', 'shift'], route='app', window=number)
+            focus()
+            return {'ok': shown and request.get('url') == origin + '/target.html' and request.get('profileHint') == profile
+                    and any(r['key'] == 'link-little-open' and r['enabled'] for r in event.get('rows', [])),
+                    'request': request, 'stubWindow': number if shown else None, 'shown': event.get('shown')}
+        run('cm_little_open_entry', little_entry)
 
         def translate():
             focus()
