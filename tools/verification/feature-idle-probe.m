@@ -43,7 +43,11 @@ static BOOL executableTimerCaller(void) {
         if (strstr(path, "idle-probe.dylib") || strstr(path, "/Foundation.framework/") ||
             strstr(path, "/CoreFoundation.framework/") || strstr(path, "/libswift") ||
             strstr(path, "/libdispatch.dylib")) continue;
+#ifdef OPEN_APP_TIMER_PROBE
+        if (!strstr(path, "/Open.app/Contents/MacOS/Open")) return NO;
+#else
         if (!strstr(path, "/features-render")) return NO;
+#endif
         // Async harness waits can create transient Foundation timers too.
         // Attribute the first executable frame to the product or the canary.
         if (!info.dli_sname) return YES; // unresolved application frame: fail closed

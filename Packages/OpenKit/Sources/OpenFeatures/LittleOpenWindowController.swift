@@ -235,6 +235,7 @@ public final class LittleOpenWindowController: NSWindowController, NSWindowDeleg
     func updateVisibility() { session.windowIsVisible = window.map { $0.isVisible && !$0.isMiniaturized && $0.occlusionState.contains(.visible) } ?? false }
     public func windowDidResize(_ notification: Notification) { layoutContent() }
     public func windowDidBecomeKey(_ notification: Notification) { updateVisibility(); coordinator?.recordActivity(session.id) }
+    public func windowDidResignKey(_ notification: Notification) { updateVisibility(); coordinator?.onChange?() }
     public func windowDidMiniaturize(_ notification: Notification) { updateVisibility(); coordinator?.onChange?() }
     public func windowDidDeminiaturize(_ notification: Notification) { updateVisibility(); coordinator?.onChange?() }
     public func windowDidChangeOcclusionState(_ notification: Notification) { updateVisibility(); coordinator?.onChange?() }

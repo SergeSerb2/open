@@ -55,7 +55,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, OEEngineDelegate, OEBr
   var hotkeyAttempts = 0
   var menuRebuildTask: Task<Void, Never>?
   var afterPaintTask: Task<Void, Never>?
-  var littleOpenStub: NSWindowController?
+  var littleOpenCoordinator: LittleOpenCoordinator!
+  var littleOpenProfileAlert: NSAlert?
   var commandWindowObserver: NSObjectProtocol?
   var commandDefaultsObserver: NSObjectProtocol?
   private var numberedShortcutOptions = ""
@@ -191,6 +192,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, OEEngineDelegate, OEBr
     model.addObserver { [weak self] _ in self?.scheduleSave(); self?.scheduleMenuRebuild() }
     self.model = model
     self.directories = directories
+    prepareLittleOpen()
     startAutoArchiveIfNeeded()
     LaunchTiming.shared.mark("modelLoaded")
     return directories
@@ -387,6 +389,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, OEEngineDelegate, OEBr
     recordShutdownPhase("prepare")
     afterPaintTask?.cancel(); afterPaintTask = nil
     menuRebuildTask?.cancel(); menuRebuildTask = nil
+    littleOpenCoordinator?.closeAll()
     engineReady = false
     for factory in Array(hostFactories.values) { factory.closeAll() }
     recordShutdownPhase("hostsClosed")
@@ -539,27 +542,19 @@ extension AppDelegate: CommandDispatcher {
       let shortcut = keyBindings.effectiveShortcuts(for: command).first else { return }
     if hotkeyService == nil { hotkeyService = GlobalHotkeyService() }
     hotkeyAttempts += 1
-    do { try hotkeyService?.register(shortcut: shortcut) { [weak self] in Task { @MainActor in self?.showLittleOpenStub() } } }
+    do { try hotkeyService?.register(shortcut: shortcut, actionWithTimestamp: { [weak self] timestamp in
+      Task { @MainActor in self?.openBlankLittleOpen(timestamp: timestamp) }
+    }) }
     catch { hotkeyError = String(describing: error); Self.commandLog("Little Open hotkey registration failed: \(error)") }
   }
   static func commandLog(_ message: String) { FileHandle.standardError.write(Data("Open: \(message)\n".utf8)) }
-  func showLittleOpenStub() {
-    if littleOpenStub == nil {
-      let window = NSWindow(contentRect: NSRect(x: 0, y: 0, width: 720, height: 540), styleMask: [.titled, .closable, .resizable], backing: .buffered, defer: false)
-      window.title = "Little Open"; window.isReleasedWhenClosed = false
-      let label = NSTextField(labelWithString: "Little Open is not available in this build.")
-      label.frame = NSRect(x: 28, y: 260, width: 650, height: 24); window.contentView?.addSubview(label)
-      window.center(); littleOpenStub = NSWindowController(window: window)
-    }
-    littleOpenStub?.showWindow(nil); littleOpenStub?.window?.makeKeyAndOrderFront(nil); NSApp.activate()
-    scheduleMenuRebuild()
-  }
   func menuState(for id: String) -> CommandMenuState? {
     if id == "set-default-browser" { return CommandMenuState(isChecked: defaultBrowserService.isDefaultBrowser) }
     if id == "toggle-developer-mode" { return DeveloperMode.menuState(for: frontWindowController.flatMap { hostFactories[$0.windowID] }?.selectedContent?.url) }
     return PageTools.menuState(for: id)
   }
   func isCommandEnabled(_ id: String, enabledKey: String) -> Bool {
+    if let enabled = littleOpenCommandEnabled(id) { return enabled }
     if SystemCommandActions.selectors[id] != nil { return SystemCommandActions.isEnabled(id) }
     if let enabled = PageTools.isAppCommandEnabled(id) { return enabled }  // App/Page/PageToolsCommands.swift
     if ["archive-tab", "close-window"].contains(id) { return NSApp.keyWindow != nil }
@@ -578,6 +573,7 @@ extension AppDelegate: CommandDispatcher {
     performCommand(id)
   }
   func performCommand(_ id: String) {
+    if performLittleOpenCommand(id) { return }
     if SystemCommandActions.selectors[id] != nil { _ = SystemCommandActions.perform(id); return }
     if PageTools.isAppCommandEnabled(id) == true, PageTools.performAppCommand(id) { return }
     switch id {
@@ -604,7 +600,9 @@ extension AppDelegate: CommandDispatcher {
       EssentialShortcutsWindowController.shared.show(near: frontWindowController?.window ?? NSApp.keyWindow, store: keyBindings)
     case "archive-tab": NSApp.keyWindow?.performClose(nil)
     case "manage-spaces": settingsPresenter.showLibrary(section: .spaces)
-    case "new-little-open-window", "little-open-global": showLittleOpenStub()
+    case "new-little-open-window", "little-open-global": openBlankLittleOpen(timestamp: NSApp.currentEvent.flatMap { event in
+      event.type == .keyDown && ProcessInfo.processInfo.systemUptime - event.timestamp < 0.1 ? event.timestamp : nil
+    })
     case "help-center", "getting-started", "release-notes", "contact-team":
       let controller = frontWindowController ?? makeWindow()
       _ = controller.flatMap { hostFactories[$0.windowID] }?.openNewTab(url: AppCommand.helpURL, background: false)

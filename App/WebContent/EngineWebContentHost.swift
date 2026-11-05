@@ -20,6 +20,8 @@ final class EngineWebContentHost: NSObject, WebContentHost, WebContentProviding,
   var onTitleChange: ((String) -> Void)?
   var onLoadingChange: ((Bool) -> Void)?
   var onFaviconChange: ((Data?) -> Void)?
+  var additionalKeyHandler: ((NSEvent) -> Bool)?
+  var onCloseRequest: (() -> Void)?
   var shouldNavigate: ((URL, NSEvent.ModifierFlags) -> Bool)?
   private(set) var pageBackgroundColor: NSColor?
   var onPageBackgroundChange: ((NSColor?) -> Void)?
@@ -90,6 +92,7 @@ final class EngineWebContentHost: NSObject, WebContentHost, WebContentProviding,
     cancelBackgroundRead(); faviconProbe?.cancel(); faviconProbe = nil
     onURLChange = nil; onTitleChange = nil; onLoadingChange = nil; onFaviconChange = nil; shouldNavigate = nil
     onPageBackgroundChange = nil; onLiveStateChange = nil
+    additionalKeyHandler = nil; onCloseRequest = nil
     cachedFaviconImage = nil; cachedFaviconPNG = nil; cachedFaviconURL = nil; faviconImagePageURL = nil; lastReportedFavicon = nil
     content.delegate = nil; content.close(); content.view.removeFromSuperview()
     owner?.hostDidClose(self)
@@ -243,16 +246,20 @@ final class EngineWebContentHost: NSObject, WebContentHost, WebContentProviding,
   func webContent(_ page: OEWebContent, createWebContentFor request: OEOpenRequest) -> OEWebContent? {
     guard !closed else { return nil }; return owner?.webContent(page, createWebContentFor: request)
   }
-  func webContentDidRequestClose(_ page: OEWebContent) { if !closed { owner?.close(page: page) } }
+  func webContentDidRequestClose(_ page: OEWebContent) {
+    guard !closed else { return }
+    if let onCloseRequest { onCloseRequest() } else { owner?.close(page: page) }
+  }
   func webContent(_ page: OEWebContent, handleKeyEventBeforePage event: NSEvent) -> Bool {
     guard !closed else { return false }
+    if additionalKeyHandler?(event) == true { return true }
     if owner?.controller?.handleKeyDown(event) == true { return true }
     // A key the page receives: tab sleep's form proxy (discard waits 5 min after typing).
     if event.type == .keyDown { owner?.app.tabSleep.pageKeyDown(tabID: tabID) }
     return false
   }
   func webContent(_ page: OEWebContent, handleUnconsumedKeyEvent event: NSEvent) -> Bool {
-    !closed && owner?.controller?.handleKeyDown(event, unconsumed: true) == true
+    !closed && (additionalKeyHandler?(event) == true || owner?.controller?.handleKeyDown(event, unconsumed: true) == true)
   }
   func webContent(_ page: OEWebContent, runJavaScriptDialog dialog: OEJavaScriptDialog) -> Bool {
     !closed && owner?.webContent(page, runJavaScriptDialog: dialog) == true

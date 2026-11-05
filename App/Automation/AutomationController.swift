@@ -82,6 +82,9 @@
     private func run(_ cmd: String, _ a: [String: Any]) async throws -> Any {
       // App lifecycle commands remain available after the final window closes.
       switch cmd {
+      case _ where Self.littleOpenCommands.contains(cmd): return try await runLittleOpenCommand(cmd, a)
+      case "key": return try await sendKey(a, app.frontWindowController.flatMap { app.hostFactories[$0.windowID] })
+      case "snapshot": return try await snapshot(a, app.frontWindowController.flatMap { app.hostFactories[$0.windowID] })
       case "routing-log": return routingLog()
       case "default-browser-state": return defaultBrowserState()
       case "archive-sweep", "archive-clock", "archive-state", "archive-wake", "profile-archive-setting", "archive-list", "archive-banner-state", "archive-banner-action":
@@ -1789,9 +1792,9 @@
     /// sends it straight to the window's first responder (the page view when
     /// it has focus), which exercises the engine's pre-key hook. In-process
     /// only: the system keyboard is never touched.
-    private func sendKey(_ a: [String: Any], _ w: EngineWebContentHostFactory) async throws -> Any {
-      guard let target = a["window"] as? String == "popup" ? w.popupPanel :
-        (a["window"] as? Int).flatMap({ n in NSApp.windows.first { $0.windowNumber == n } }) ?? w.window
+    private func sendKey(_ a: [String: Any], _ w: EngineWebContentHostFactory?) async throws -> Any {
+      guard let target = a["window"] as? String == "popup" ? w?.popupPanel :
+        (a["window"] as? Int).flatMap({ n in NSApp.windows.first { $0.windowNumber == n } }) ?? w?.window
       else { throw Failure(message: "no window") }
       try await activateForInput(target)
       if let text = a["text"] as? String {
@@ -1848,21 +1851,22 @@
       // turn, as a user-facing automation caller expects.
       try? await Task.sleep(for: .milliseconds(20))
       return ["firstResponder": target.firstResponder.map { String(describing: type(of: $0)) } ?? "none",
-        "sidebarMode": w.windowState.sidebarMode.rawValue, "barPresented": w.commandBarSession?.isPresented == true,
+        "sidebarMode": w?.windowState.sidebarMode.rawValue ?? "", "barPresented": w?.commandBarSession?.isPresented == true,
         "keyWindow": NSApp.keyWindow?.windowNumber ?? 0] as [String: Any]
     }
 
-    private func snapshot(_ a: [String: Any], _ w: EngineWebContentHostFactory) async throws -> Any {
+    private func snapshot(_ a: [String: Any], _ w: EngineWebContentHostFactory?) async throws -> Any {
       let path = a["path"] as? String ?? NSTemporaryDirectory() + "open-snapshot.png"
       let url = URL(fileURLWithPath: path)
       if a["tab"] != nil || a["page"] as? Bool == true {
+        guard let w else { throw Failure(message: "no browser window") }
         let page: any WebContent = try content(a, w)
         try await page.snapshotPNG().write(to: url)
         return ["path": path, "method": "devtools"]
       }
       if a["window"] as? String == "library", app.settingsPresenter.libraryPresenter?.window == nil { throw Failure(message: "no Library window") }
       let number = a["window"] as? String == "library" ? app.settingsPresenter.libraryPresenter?.window?.windowNumber : a["window"] as? Int
-      guard let target = number.flatMap({ n in NSApp.windows.first { $0.windowNumber == n } }) ?? w.window
+      guard let target = number.flatMap({ n in NSApp.windows.first { $0.windowNumber == n } }) ?? w?.window
       else { throw Failure(message: "no window") }
       var keyTime: Double?
       var capturedAfterKey: Double?

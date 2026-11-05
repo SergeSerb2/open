@@ -11,15 +11,29 @@ enum MainMenu {
     let factory = factoryOverride ?? owner ?? (NSApp.keyWindow == nil ? app.frontWindowController.flatMap { app.hostFactories[$0.windowID] } : nil)
     let dispatcher: any CommandDispatcher
     if let controller = factory?.controller { dispatcher = controller } else { dispatcher = app }
-    return MenuBuilder.buildMainMenu(dispatcher: dispatcher,
+    let menu = MenuBuilder.buildMainMenu(dispatcher: dispatcher,
       spaces: app.model.spaces.map { SpaceMenuEntry(id: $0.id.description, title: app.model.displayTitle(for: $0)) },
       tabs: (factory.map { f in f.numberedItems.map { TabMenuEntry(id: $0.description, title: f.numberedTitle($0)) } } ?? []),
       overrides: app.keyBindings, switchToNinth: UserDefaults.standard.bool(forKey: "open.shortcuts.switchToNinthEnabled"))
+    if let windowMenu = menu.items.first(where: { $0.title == "Window" })?.submenu { app.appendLittleOpenMenuItems(to: windowMenu, sessions: true) }
+    #if DEBUG || OPEN_AUTOMATION
+    if let help = menu.items.first(where: { $0.title == "Help" })?.submenu,
+      let troubleshooting = help.items.first(where: { $0.title == "Troubleshooting" })?.submenu {
+      let archive = ClosureMenuItem(title: "Archive Expired Little Open Windows Now") { [weak app] in
+        _ = app?.littleOpenCoordinator.archiveExpired(now: Date().addingTimeInterval(31 * 24 * 3600))
+        app?.archiveSink.flushAll()
+      }
+      archive.identifier = NSUserInterfaceItemIdentifier("archive-expired-little-open-now")
+      troubleshooting.addItem(archive)
+    }
+    #endif
+    return menu
   }
   static func targetWindowCommands(_ target: EngineWebContentHostFactory?) { NSApp.mainMenu = build(factoryOverride: target) }
   static func performReservedShortcut(_ event: NSEvent) -> Bool {
     guard event.type == .keyDown, let app = NSApp.delegate as? AppDelegate else { return false }
     app.prepareCommandServices()
+    if app.handleLittleOpenKey(event) { return true }
     if let window = event.window, let factory = app.factory(forKeyWindow: window) {
       return factory.controller?.handleKeyDown(event) == true
     }

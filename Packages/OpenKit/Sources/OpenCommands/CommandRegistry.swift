@@ -376,6 +376,9 @@ public enum CommandRegistry {
     // MARK: - Code-only commands (no menu item; keys live in code, not in the nib)
 
     static let codeOnly: [CommandDefinition] = [
+        // Runtime App menus only, like dynamic window rows; the RE menu dump stays static.
+        CommandDefinition(id: "show-little-open-windows", title: "Show Little Open Windows"),
+        CommandDefinition(id: "close-little-open-windows", title: "Close Little Open Windows"),
         CommandDefinition(id: "add-to-favorites", title: "Add to Favorites",
                           enabledKey: EnabledKey.currentTabNotFavorite, aliases: ["Favorite", "Move to Favorites"]),
         CommandDefinition(id: "remove-from-favorites", title: "Remove from Favorites",
