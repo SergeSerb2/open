@@ -909,7 +909,7 @@ Section 8 decisions, where this section left a choice open:
 
 | Command | With Site Control E2 | Before E2 |
 |---|---|---|
-| `clear-cookies-and-refresh` | `clearSiteData(origin:kinds:[.cookies])` for the focused page's origin, then `reload()` | `clearBrowsingData(origin:)`, then `reload()`; this also drops every site's HTTP cache (state it in the PR) |
+| `clear-cookies-and-refresh` | `clearSiteData(origin:kinds:[.cookies])` for the focused page's origin, then `reload()` | `clearBrowsingData(origin:)`, then `reload()` (shipped in Section 8: it clears the host cookies of the page's host only; `Domain=` cookies stay and the HTTP cache is untouched, OEBrowserContext.mm `DeleteCookies(url, "")`; the earlier note that it drops every site's cache was wrong) |
 | `clear-cache-and-refresh` | `clearSiteData(origin:kinds:[.cache])`, then `reloadIgnoringCache()` | disabled (enabled key `siteDataClearAvailable`), like the Site Control panel's Clear Cache |
 
 Scope follows Chromium's Clear-Site-Data rules for the origin's site

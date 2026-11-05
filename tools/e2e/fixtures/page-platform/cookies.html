@@ -1,0 +1,13 @@
+<!doctype html>
+<meta charset="utf-8">
+<title>cookies</title>
+<body>
+<p>Cookie fixture (page-platform K1). The check sets one cookie per host and reads it back.</p>
+<script>
+  // A reload drops this marker.
+  window.cookieLoadId = Math.random().toString(36).slice(2);
+  window.setFixtureCookie = (name) => {
+    document.cookie = name + '=' + location.hostname + '; max-age=3600; path=/';
+    return document.cookie;
+  };
+</script>

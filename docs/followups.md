@@ -170,6 +170,13 @@ Arc's tracker cleaner (RE CC-31a, `0x100826084`) has six callers in the main bin
 
 The gate "inline completion adds ≤ 0.3 ms p95" read +0.301 ms in one full `verify-all` at load 12.0 (Section 2 item 13 PR) and +0.170 ms on the rerun at load 9.0 (earlier Section 2 runs: well under). The gate converts main-thread cycles at the off run's rate, so heavy machine load still moves it. If it trips again under load only, consider pairing more keystrokes or reporting the paired median beside the p95.
 
+## Page tools: engine items left after Section 8 page-platform Steps 4–6
+
+- **Closed — EP-9b, website appearance.** Fork patch `0505` (#158) plus `OEBrowserContext.websiteColorScheme` → `CefSetWebsiteColorScheme` (Section 8 `s8/devmode`): e2e `page` A1/A2 pass on both styles, also after a navigation.
+- **Closed without a patch — EP-4b, Network panel.** No `0503`: `OEWebContent.showDevToolsPanel` selects Network (and Console/Elements where Chrome's command cannot run, or when DevTools is already open) through the front end's `DevToolsAPI.showPanel`, retried until selected (≤ 15 s). e2e `page` D1/D2 pass on both styles. If a future front end drops `DevToolsAPI.showPanel`, `panel_id` in CEF's show-DevTools parameters is the patch route.
+- **Site Control E2, per-site HTTP cache.** Clear Cache and Refresh stays disabled (`PageTools.siteDataClearAvailable`). Clear Cookies and Refresh clears the host cookies of the page's host only (`Domain=` cookies stay). Needs `BrowsingDataRemover` with a site filter for cookies and cache (DevTools `Storage.clearDataForOrigin` has no HTTP cache type; CEF's `ClearHttpCache` clears every site).
+- **AppleScript `execute` gate.** The 1013 gate is in `OpenScripting` but the App does not host OpenScripting yet (applescript plan Steps 5–7); e2e D4's osascript half is blocked until then.
+
 ## Capture tool leftovers (page-platform Step 13, Section 8)
 
 - Toasts: "Capture in Progress", "Copied Image", the keycap hint, and capture errors use the window's single old toast until `ToastCenter` (page-platform Step 1) lands; then `CaptureToastHooks` in `BrowserWindowController.capture` moves onto it (sticky progress toast, keycap plates ⌘ ⇧).

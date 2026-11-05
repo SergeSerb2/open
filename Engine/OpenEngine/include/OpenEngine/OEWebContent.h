@@ -173,6 +173,15 @@ NS_SWIFT_UI_ACTOR
     NS_SWIFT_NAME(webContent(_:didLogConsoleMessage:level:source:line:));
 @end
 
+/// The DevTools panel -showDevToolsPanel: opens.
+typedef NS_ENUM(NSInteger, OEDevToolsPanel) {
+  OEDevToolsPanelDefault = 0,
+  OEDevToolsPanelElements,
+  OEDevToolsPanelConsole,
+  OEDevToolsPanelNetwork,
+  OEDevToolsPanelInspectMode,
+};
+
 /// One page (ADK "WebContent"). Its `view` can go anywhere: several per
 /// window (Split View), or a floating panel (Peek, Little Open, extension
 /// popups). The view can move between windows.
@@ -284,8 +293,33 @@ OE_EXPORT @interface OEWebContent : NSObject
 #pragma mark Tools
 /// Opens DevTools in a separate window.
 - (void)showDevTools;
+/// Opens DevTools on one panel (plans/page-platform.md EP-4a). Chrome style
+/// pages run Chrome's own command: Console is IDC_DEV_TOOLS_CONSOLE (shows
+/// the Console panel, opening DevTools if needed) and InspectMode is
+/// IDC_DEV_TOOLS_INSPECT (opens DevTools with the element picker on; a second
+/// call turns the picker off, as in Chrome). Elements and Network (EP-4b),
+/// and Console where Chrome's command cannot run (Alloy pages, and a hosted
+/// tab that is not Chromium's active tab in its window's hidden strip, and
+/// any page whose DevTools is already open), open
+/// DevTools and select the panel through the front end's
+/// DevToolsAPI.showPanel, the call Chrome makes for its own Console command;
+/// it retries until the panel is selected (at most 15 s). Default opens
+/// DevTools as -showDevTools does; so does InspectMode where Chrome's command
+/// cannot run. Returns NO only for that plain fallback.
+- (BOOL)showDevToolsPanel:(OEDevToolsPanel)panel
+    NS_SWIFT_NAME(showDevTools(panel:));
 - (void)closeDevTools;
 @property(nonatomic, readonly) BOOL hasDevTools;
+/// Diagnostics (automation checks): evaluates `script` in the page of this
+/// page's open DevTools window (the DevTools front end, not the inspected
+/// page), awaiting promises; the result is the JSON value. Fails when no
+/// DevTools window of this page is open.
+- (void)evaluateJavaScriptInDevToolsFrontend:(NSString*)script
+                                  completion:
+                                      (void (^NS_SWIFT_UI_ACTOR)(
+                                          id _Nullable result,
+                                          NSError* _Nullable error))completion
+    NS_SWIFT_NAME(evaluateInDevToolsFrontend(_:completion:));
 /// Shows the system print panel for the page.
 - (void)print NS_SWIFT_NAME(showPrintPanel());
 - (void)printToPDFAtURL:(NSURL*)fileURL
