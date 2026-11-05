@@ -10,6 +10,7 @@ final class PageDialogPresenter {
     let page: OEWebContent
     let dialog: OEJavaScriptDialog
     let held: Bool
+    weak var parentWindow: NSWindow?
     var alert: NSAlert?
     var field: NSTextField?
     var suppression: NSButton?
@@ -81,7 +82,9 @@ final class PageDialogPresenter {
       record?("pageChromeRefused", page, ["reason": "Page dialog queue exceeds 8 requests."])
       dialog.complete(accepted: false, text: nil); return
     }
-    entries.append(Entry(page: page, dialog: dialog, held: held, suppressible: suppressible)); presentNext()
+    let entry = Entry(page: page, dialog: dialog, held: held, suppressible: suppressible)
+    entry.parentWindow = page.view.window ?? window
+    entries.append(entry); presentNext()
   }
   func navigated(_ page: OEWebContent) {
     let key = ObjectIdentifier(page)
@@ -125,10 +128,10 @@ final class PageDialogPresenter {
   }
   func presentNext() {
     guard !closed, !entries.contains(where: { $0.alert != nil }),
-          let entry = entries.first(where: { !$0.held && isVisible($0.page) }), let window else { return }
+          let entry = entries.first(where: { !$0.held && isVisible($0.page) }), let window = entry.parentWindow ?? window else { return }
     if window.attachedSheet != nil {
       if sheetObserver == nil {
-        sheetObserver = NotificationCenter.default.addObserver(forName: NSWindow.didEndSheetNotification, object: window, queue: .main) { [weak self] _ in
+        sheetObserver = NotificationCenter.default.addObserver(forName: NSWindow.didEndSheetNotification, object: nil, queue: .main) { [weak self] _ in
           MainActor.assumeIsolated { DispatchQueue.main.async { self?.presentNext() } }
         }
       }

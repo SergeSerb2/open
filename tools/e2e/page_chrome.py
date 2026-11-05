@@ -72,7 +72,7 @@ def run(factory, results, tmp, h):
         print(name + (' PASS' if results[name].get('ok') else ' FAIL'), flush=True)
 
     try:
-        keys = ['open.advanced.showToolbar', 'open.advanced.showFullURLWithToolbar']
+        keys = ['open.advanced.showFullURLWithToolbar']
         for key in keys:
             saved[key] = app.call('defaults', key=key)['value']
             app.call('defaults', key=key, value=None)
