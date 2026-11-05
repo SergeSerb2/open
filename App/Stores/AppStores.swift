@@ -38,8 +38,9 @@ final class AppStores {
   private(set) var historyEnqueueSamples: [Double] = []
   private(set) var historyWriteCount = 0
   func noteHistoryEnqueue(milliseconds: Double) {
-    guard app.options.automationSocket != nil else { return }
+    #if OPEN_AUTOMATION
     if historyEnqueueSamples.count < 4_096 { historyEnqueueSamples.append(milliseconds) }
+    #endif
   }
   func enqueueHistoryVisit(store: HistoryStore, url: URL, time: Date, typed: Bool) -> Task<Int64?, Never> {
     let previous = historyTail

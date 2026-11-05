@@ -43,7 +43,8 @@ final class AppSettingsActions: SettingsActions, LibraryActions, DownloadsProvid
     if library == nil {
       let vm = LibraryViewModel(model: app.model, defaults: .standard, actions: self,
         downloads: self, captures: captures, archives: archives, histories: histories,
-        snapshot: app.snapshotStore, faviconStore: app.stores.favicons, settingsActions: self)
+        snapshot: app.snapshotStore, faviconStore: app.stores.favicons, settingsActions: self,
+        historyResolver: { [weak app] in app?.stores.history(for: $0) })
       library = vm; libraryPresenter = LibraryPresenter(viewModel: vm)
     }
     library?.registerStores(archives: archives, histories: histories)

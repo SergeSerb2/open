@@ -251,6 +251,10 @@ Additional socket commands:
 | `settings-state`, `settings-toggle name=hotkey\|external` | Read the shared real presenters; commit the live Links settings model. |
 | `settings-custom-engine template=…` | Save a custom engine through the live Profiles settings model. |
 | `library-restore id=…`, `library-history-open url=…` | Exercise the live Library restore transaction or its profile-scoped history action. |
+| `history-state` | Optional `profile` UUID and `query`. Drains accepted history writes, then returns the Profile store path, search rows, commit-to-enqueue samples (ms, automation only, bounded at 4,096) and writer operation count. Store opens/searches stay on the HistoryStore actor. |
+| `history-clear` | Optional `profile` UUID and `range` (`Last hour`, `Last 24 hours`, `Last 7 days`, `All time`, default All time). Calls the real Settings History-only clear-data adapter and returns `error`. |
+| `library-history-state` | Returns the current Library Profile and displayed History rows without reloading. Optional `profile` plus `selectProfile=true` changes the History Profile and reloads it explicitly. |
+| `library-history-delete` | `urls` selects row URLs, or `all=true` selects all-time clearing. Calls the Library's confirmed delete/clear handler for its selected Profile. |
 | `hotkey-state` | Read Carbon registration, attempts, and any nonfatal registration error. Does not send a global key. |
 | `save-page-state` | Read the real Save panel request and pending state. |
 

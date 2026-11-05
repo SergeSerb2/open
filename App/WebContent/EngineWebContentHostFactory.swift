@@ -733,10 +733,11 @@ extension EngineWebContentHostFactory {
   }
   func navigateFromCommandBar(_ url: URL, current: Bool, background: Bool = false) {
     if current, selectedContent != nil || selectedTab != nil {
-      if let id = selectedTab?.id {
+      if let page = selectedContent, let host = hosts.values.first(where: { $0.content === page }) {
+        commandBarNavigationFocus.insert(host.tabID); host.historyRecorder.markTyped()
+      } else if let id = selectedTab?.id {
         commandBarNavigationFocus.insert(id)
-        if let host = hosts[id] { host.historyRecorder.markTyped() }
-        else { typedNavigationTabs.insert(id) }
+        typedNavigationTabs.insert(id)
       }
       if !app.engineReady, let tab = selectedTab {
         queuedNavigations[tab.id] = url; tab.url = url; app.scheduleSave()
@@ -990,9 +991,11 @@ extension EngineWebContentHostFactory: NSSearchFieldDelegate {
 extension EngineWebContentHostFactory: OEWebContentDelegate {
   func webContent(_ webContent: OEWebContent, didChange changes: OEWebContentChange) {
     if let popup = auxiliaryPages.first(where: { $0.content === webContent }) {
-      if changes.contains(.URL), !webContent.isLoading, let url = webContent.url {
-        popup.historyRecorder?.committed(url: url, isReload: false, ephemeral: webContent.context.isEphemeral)
+      if changes.contains(.loading), webContent.isLoading { popup.historyRecorder?.loadingChanged(true) }
+      if changes.contains(.URL), let url = webContent.url {
+        popup.historyRecorder?.addressChanged(url, isLoading: webContent.isLoading, ephemeral: webContent.context.isEphemeral, title: webContent.title)
       }
+      if changes.contains(.loading), !webContent.isLoading { popup.historyRecorder?.loadingChanged(false); popup.historyRecorder?.titleChanged(webContent.title) }
       if changes.contains(.title) { popup.panel.title = webContent.title; popup.historyRecorder?.titleChanged(webContent.title) }
     }
     // Share Quote follows the focused page's selection (page-platform §4.2.5, EP-3).

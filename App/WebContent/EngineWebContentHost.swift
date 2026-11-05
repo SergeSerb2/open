@@ -101,6 +101,7 @@ final class EngineWebContentHost: NSObject, WebContentHost, WebContentProviding,
   func webContent(_ page: OEWebContent, didChange changes: OEWebContentChange) {
     guard !closed, let owner else { return }
     let token = generation
+    if changes.contains(.loading), page.isLoading { historyRecorder.loadingChanged(true) }
     if changes.contains(.URL), let url = page.url, url.absoluteString != "about:blank" {
       // OEWebContent still exposes the previous document's favicon here.
       // A committed URL alone never proves ownership of those pixels.
@@ -111,10 +112,10 @@ final class EngineWebContentHost: NSObject, WebContentHost, WebContentProviding,
     guard !closed, generation == token else { return }
     // CEF's OnLoadStart excludes same-document commits. Address changes outside
     // a document load cover pushState/fragments without duplicating that hook.
-    if changes.contains(.URL), !page.isLoading, let url = page.url {
-      historyRecorder.committed(url: url, isReload: false, ephemeral: page.context.isEphemeral)
-      historyRecorder.titleChanged(page.title)
+    if changes.contains(.URL), let url = page.url {
+      historyRecorder.addressChanged(url, isLoading: page.isLoading, ephemeral: page.context.isEphemeral, title: page.title)
     }
+    if changes.contains(.loading), !page.isLoading { historyRecorder.loadingChanged(false); historyRecorder.titleChanged(page.title) }
     if changes.contains(.title), !page.title.isEmpty { onTitleChange?(page.title); historyRecorder.titleChanged(page.title) }
     if changes.contains(.loading) || changes.contains(.live) { onLoadingChange?(page.isLoading) }
     guard !closed, generation == token else { return }
@@ -282,6 +283,7 @@ final class EngineWebContentHost: NSObject, WebContentHost, WebContentProviding,
   func webContent(_ page: OEWebContent, didCommitNavigationTo url: URL, isReload: Bool) {
     guard !closed else { return }
     historyRecorder.committed(url: url, isReload: isReload, ephemeral: page.context.isEphemeral)
+    owner?.record("historyCommit", page, ["url": url.absoluteString, "reload": isReload])
   }
   func webContent(_ page: OEWebContent, didFinishLoadWithStatus status: Int) { if !closed { historyRecorder.titleChanged(page.title); refreshPageBackground(); if let owner { confirmFaviconForDocument(page, owner: owner) }; owner?.webContent(page, didFinishLoadWithStatus: status) } }
   func webContent(_ page: OEWebContent, didFailLoadWithError error: any Error) { if !closed { historyRecorder.navigationFailed(); owner?.webContent(page, didFailLoadWithError: error) } }
