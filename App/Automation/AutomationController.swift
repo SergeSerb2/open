@@ -145,7 +145,10 @@
         if a["name"] as? String == "hotkey" { settings.links.littleOpenHotkeyEnabled.toggle() }
         else { settings.links.externalLinksInLittleOpen.toggle() }
         return settings.commitLinks()
-      case "pasteboard": return NSPasteboard.general.string(forType: .string) ?? ""
+      case "pasteboard":
+        // `text`: replace the contents first (checks that must see a fresh copy).
+        if let text = a["text"] as? String { NSPasteboard.general.clearContents(); NSPasteboard.general.setString(text, forType: .string) }
+        return NSPasteboard.general.string(forType: .string) ?? ""
       case "pasteboard-write":
         guard let value = a["text"] as? String else { throw Failure(message: "missing clipboard text") }
         NSPasteboard.general.clearContents(); return NSPasteboard.general.setString(value, forType: .string)
@@ -276,6 +279,10 @@
              "age": s.age, "lifetime": s.lifetime ?? NSNull(), "sticky": s.content.isSticky,
              "exiting": s.isExiting, "hovered": s.isHovered]
           }] as [String: Any]
+      case "quote-offer":
+        // The last Shared Quotes offer of the key window: page answer time (s) and whether it showed.
+        guard let controller = app.frontWindowController, let factory = app.hostFactories[controller.windowID] else { throw Failure(message: "no browser window") }
+        return factory.lastQuoteOffer
       case "toast-hover":
         // The pointer enters (`inside` true) or leaves the visible toast at `index` (newest first).
         guard let controller = app.frontWindowController else { throw Failure(message: "no browser window") }

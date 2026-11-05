@@ -3713,6 +3713,234 @@ def peek_checks(factory, results, tmp):
         app.quit()
 
 
+def page_fixture_server():
+    """Serves tools/e2e/fixtures/page-platform on an ephemeral 127.0.0.1 port (no external network)."""
+    import http.server
+    import threading
+    root = os.path.join(ROOT, "tools", "e2e", "fixtures", "page-platform")
+
+    class Handler(http.server.SimpleHTTPRequestHandler):
+        def __init__(self, *a, **kw):
+            super().__init__(*a, directory=root, **kw)
+
+        def log_message(self, *a):
+            pass
+
+    server = http.server.ThreadingHTTPServer(("127.0.0.1", 0), Handler)
+    threading.Thread(target=server.serve_forever, daemon=True).start()
+    return server, "http://127.0.0.1:%d" % server.server_port
+
+
+def page_newest_toast(app, title=None, timeout=3):
+    """The newest toast that is not leaving (with the anchor `panel`), once its title matches."""
+    def probe():
+        state = app.call("toasts")
+        live = [t for t in state["toasts"] if not t["exiting"]]
+        if live and (title is None or live[0]["title"] == title):
+            return dict(live[0], panel=state["panel"])
+        return None
+    return wait_until(probe, timeout=timeout, step=0.05)
+
+
+def page_toast_inset(toast):
+    """Top inset 8 and trailing inset 10 inside the web panel (PG-1.1)."""
+    panel, frame = toast["panel"], toast["frame"]
+    return abs(frame[1] - (panel[1] + 8)) < 0.5 and abs(frame[0] + frame[2] - (panel[0] + panel[2] - 10)) < 0.5
+
+
+def page_select(app, tab, selector, index=0):
+    """Selects one element's text the way a user does: scroll it into view, then triple-click it
+    with DevTools Input mouse events (the page's real input path). The engine's selection state
+    (EP-3) and text (EP-2) follow input selections, not script-only ones."""
+    r = app.eval(tab, "(() => { const e = document.querySelectorAll(%s)[%d]; e.scrollIntoView({block: 'center'});"
+                      " const b = e.getBoundingClientRect(); return [b.left + 12, b.top + b.height / 2]; })()" % (json.dumps(selector), index))
+    for count in (1, 2, 3):
+        for kind in ("mousePressed", "mouseReleased"):
+            app.call("devtools", tab=tab, method="Input.dispatchMouseEvent",
+                     params={"type": kind, "x": r[0], "y": r[1], "button": "left", "clickCount": count})
+    wait_until(lambda: app.call("page-selection", tab=tab)["hasSelection"] or None, timeout=3, step=0.05)
+    return app.eval(tab, "String(getSelection())")
+
+
+def page_clear_selection(app, tab):
+    """A click on the empty page corner, as a user clears a selection."""
+    for kind in ("mousePressed", "mouseReleased"):
+        app.call("devtools", tab=tab, method="Input.dispatchMouseEvent",
+                 params={"type": kind, "x": 4, "y": 4, "button": "left", "clickCount": 1})
+    wait_until(lambda: (not app.call("page-selection", tab=tab)["hasSelection"]) or None, timeout=3, step=0.05)
+
+
+def page_copy_rows(app, results, origin):
+    """T-E1, T-E2 (page-platform §8.3): Copy URL strips trackers, names what it copied, and shares."""
+    tab = new_tab(app, origin + "/en.html?utm_source=x&id=1#top")
+    app.call("wait", tab=tab)
+    app.call("menu-perform", id="copy-url")
+    copied = wait_until(lambda: app.call("pasteboard") == origin + "/en.html?id=1#top", timeout=3, step=0.05)
+    toast = page_newest_toast(app, "Copied a clean link without trackers") or {}
+    results["T-E1_copy_url_clean"] = {"ok": bool(copied) and toast.get("accessory") == "share"
+        and toast.get("frame", [0, 0, 0, 0])[3] == 46 and page_toast_inset(toast) if toast else False,
+        "pasteboard": app.call("pasteboard"), "toast": toast}
+    app.call("navigate", tab=tab, url=origin + "/en.html?id=1")
+    app.call("wait", tab=tab)
+    app.call("menu-perform", id="copy-url")
+    plain = wait_until(lambda: app.call("pasteboard") == origin + "/en.html?id=1", timeout=3, step=0.05)
+    toast = page_newest_toast(app, "Copied Current URL") or {}
+    # The real Share button opens the system picker anchored to it; the automation-only dismissal
+    # policy closes it again (the picker is a native menu no check may leave open).
+    app.call("sidebar-share", dismiss=True)
+    try:
+        acted = app.call("toast-action", index=0)
+        share = app.call("sidebar-share", waitClosed=True)
+    finally:
+        app.call("sidebar-share", dismiss=False, close=True)
+    results["T-E2_copy_url_share"] = {"ok": bool(plain) and bool(toast) and acted and share.get("node") == "toast"
+        and share.get("url") == origin + "/en.html?id=1" and share.get("servicesRequested") is True
+        and share.get("closed") is True and not share.get("pending"), "toast": toast, "share": share}
+    app.call("close", tab=tab)
+
+
+def page_quote_rows(app, results, origin):
+    """Q1–Q5 (page-platform §8.3): Copy URL as Quote through the engine's selection and
+    text-fragment generator (EP-2), the Copy URL offer (EP-3), and Share Quote (§4.2.5)."""
+    tab = new_tab(app, origin + "/quote.html")
+    app.call("wait", tab=tab)
+    page_clear_selection(app, tab)
+    # Q3: no selection behaves as Copy URL (lead Q11).
+    app.call("menu-perform", id="copy-url-quote")
+    plain = wait_until(lambda: app.call("pasteboard") == origin + "/quote.html", timeout=3, step=0.05)
+    toast = page_newest_toast(app, "Copied Current URL") or {}
+    results["Q3_quote_without_selection"] = {"ok": bool(plain) and toast.get("accessory") == "share",
+        "pasteboard": app.call("pasteboard"), "toast": toast}
+    # Q1: a unique sentence gives a #:~:text= link that scrolls to it in a new tab.
+    selected = page_select(app, tab, "#unique")
+    app.call("menu-perform", id="copy-url-quote")
+    link = wait_until(lambda: (lambda p: p if "#:~:text=" in p else None)(app.call("pasteboard")), timeout=3, step=0.05) or ""
+    toast = page_newest_toast(app, "Copied Quote Link") or {}
+    opened = new_tab(app, link) if link else None
+    landed = None
+    if opened:
+        app.call("wait", tab=opened)
+        landed = wait_until(lambda: (lambda s: s if s["scrollY"] > 3000 and s["visible"] else None)(app.eval(opened,
+            "(() => { const r = document.getElementById('unique').getBoundingClientRect();"
+            " return {scrollY: scrollY, visible: r.top >= 0 && r.bottom <= innerHeight, hash: location.hash}; })()")),
+            timeout=5, step=0.1)
+        app.call("close", tab=opened)
+    results["Q1_quote_link_scrolls"] = {"ok": selected.strip() == "A unique sentence far down the page for the quote link."
+        and link.startswith(origin + "/quote.html#:~:text=") and toast.get("symbol") == "quote.bubble.fill"
+        and toast.get("accessory") == "none" and bool(landed) and landed.get("hash") == "",
+        "link": link, "toast": toast, "landed": landed}
+    # Q2: the second of two identical sentences needs prefix/suffix context from Chromium's
+    # generator (EP-2); the link lands on that second sentence, not the first.
+    app.call("pasteboard", text="")
+    second = page_select(app, tab, ".repeated", 1)
+    app.call("menu-perform", id="copy-url-quote")
+    ctx_link = wait_until(lambda: (lambda p: p if "#:~:text=" in p else None)(app.call("pasteboard")), timeout=3, step=0.05) or ""
+    directive = ctx_link.split("#:~:text=", 1)[1] if ctx_link else ""
+    ctx_landed = None
+    if ctx_link:
+        opened = new_tab(app, ctx_link)
+        app.call("wait", tab=opened)
+        ctx_landed = wait_until(lambda: (lambda s: s if s["second"] else None)(app.eval(opened,
+            "(() => { const r = document.querySelectorAll('.repeated'); const a = r[0].getBoundingClientRect(), b = r[1].getBoundingClientRect();"
+            " return {scrollY: scrollY, second: b.top >= 0 && b.bottom <= innerHeight, first: a.bottom > 0 && a.top < innerHeight}; })()")),
+            timeout=5, step=0.1)
+        app.call("close", tab=opened)
+    results["Q2_quote_context"] = {"ok": second.strip() == "The same sentence appears twice on this page."
+        and ("-," in directive or ",-" in directive) and bool(ctx_landed) and not ctx_landed.get("first"),
+        "link": ctx_link, "landed": ctx_landed}
+    # Q4: with Shared Quotes on (the default) and a selection, Copy URL offers the quote link in place.
+    # The engine keeps the selection state (EP-3), so the offer needs no page round trip.
+    page_select(app, tab, "#unique")
+    app.call("menu-perform", id="copy-url")
+    offered = wait_until(lambda: (lambda t: t if t and t.get("subtitle") else None)(page_newest_toast(app, timeout=0.2)), timeout=2, step=0.05)
+    report = app.call("quote-offer")
+    acted = app.call("toast-action", index=0) if offered else False
+    quote = wait_until(lambda: (lambda p: p if "#:~:text=" in p else None)(app.call("pasteboard")), timeout=3, step=0.05)
+    results["Q4_copy_url_offers_quote"] = {"ok": bool(offered) and offered.get("subtitle") == "Share a link directly to this text instead?"
+        and offered.get("accessory") == "copy quote link" and acted and bool(quote) and report.get("shown") is True,
+        "toast": offered, "offer": report, "pasteboard": app.call("pasteboard")}
+    # Q5: Share Quote under the URL field while the page has a selection (§4.2.5); its press copies
+    # the quote link. Without a selection the button goes away.
+    state = lambda: app.call("translate", action="state")["button"]
+    shown = wait_until(lambda: (lambda b: b if b["shown"] and b["title"] == "Share Quote" else None)(state()), timeout=3, step=0.05)
+    app.call("pasteboard", text="")
+    pressed = app.call("translate", action="press-status")
+    via_button = wait_until(lambda: (lambda p: p if "#:~:text=" in p else None)(app.call("pasteboard")), timeout=3, step=0.05)
+    page_clear_selection(app, tab)
+    hidden = wait_until(lambda: (not state()["shown"]) or None, timeout=3, step=0.05)
+    results["Q5_share_quote_button"] = {"ok": bool(shown) and pressed.get("pressed") is True and bool(via_button) and bool(hidden),
+        "button": shown, "pasteboard": via_button, "hiddenAfterClear": bool(hidden)}
+    app.call("close", tab=tab)
+
+
+def page_zoom_rows(app, results, origin):
+    """Z1–Z4 (page-platform §8.3): zoom toasts, pinch reset on Actual Size (EP-5), no Chromium zoom bubble."""
+    tab = new_tab(app, origin + "/zoom.html")
+    app.call("wait", tab=tab)
+    windows_before = {w.get("number") for w in app.call("windows")}
+    titles = []
+    for command in ("zoom-in", "zoom-in", "zoom-actual-size"):
+        app.call("menu-perform", id=command)
+        expected = {"zoom-in": ["110%", "125%"][len(titles) % 2], "zoom-actual-size": "100%"}[command]
+        toast = page_newest_toast(app, expected) or {}
+        titles.append(toast.get("title"))
+    results["Z1_zoom_toasts"] = {"ok": titles == ["110%", "125%", "100%"], "titles": titles}
+    # Z4: Chrome's own zoom bubble never opens a window (hosted tabs have no location bar).
+    new_windows = [w for w in app.call("windows") if w.get("number") not in windows_before and w.get("visible")]
+    results["Z4_no_chromium_zoom_bubble"] = {"ok": not new_windows, "newWindows": new_windows}
+    # Z2: a synthetic pinch scales the visual viewport; Actual Size resets it (EP-5).
+    app.call("devtools", tab=tab, method="Input.synthesizePinchGesture",
+             params={"x": 200, "y": 200, "scaleFactor": 2, "relativeSpeed": 800, "gestureSourceType": "touch"})
+    pinched = wait_until(lambda: (lambda s: s if s > 1.5 else None)(app.eval(tab, "visualViewport.scale")), timeout=5, step=0.1)
+    # Control: the pinch scale stays until a command resets it.
+    time.sleep(1)
+    held = app.eval(tab, "visualViewport.scale")
+    app.call("menu-perform", id="zoom-actual-size")
+    reset = wait_until(lambda: abs(app.eval(tab, "visualViewport.scale") - 1) < 0.01, timeout=5, step=0.1)
+    results["Z2_pinch_then_actual_size"] = {"ok": bool(pinched) and held > 1.5 and bool(reset), "pinched": pinched, "heldAfter1s": held,
+        "after": app.eval(tab, "visualViewport.scale")}
+    results["Z3_smart_zoom"] = {"status": "DEFERRED", "reason": "no synthetic smart-zoom path; user check U-S1"}
+    # Z2 on a Peek page (an Alloy page in a Chrome-style window): Actual Size targets the top Peek page.
+    app.call("pin", tab=tab)
+    app.call("peek-open", tab=tab, url=origin + "/zoom.html#peek")
+    peek = wait_until(lambda: (lambda s: s["stack"][-1]["content"] if s["stack"] and s["stack"][-1]["content"] else None)(app.call("peek-state")), timeout=5, step=0.05)
+    peek_pinched = peek_reset = None
+    peek_held = 0
+    if peek:
+        app.call("wait", tab=peek)
+        app.call("devtools", tab=peek, method="Input.synthesizePinchGesture",
+                 params={"x": 200, "y": 200, "scaleFactor": 2, "relativeSpeed": 800, "gestureSourceType": "touch"})
+        peek_pinched = wait_until(lambda: (lambda s: s if s > 1.5 else None)(app.eval(peek, "visualViewport.scale")), timeout=5, step=0.1)
+        time.sleep(1)
+        peek_held = app.eval(peek, "visualViewport.scale")
+        app.call("menu-perform", id="zoom-actual-size")
+        peek_reset = wait_until(lambda: abs(app.eval(peek, "visualViewport.scale") - 1) < 0.01, timeout=5, step=0.1)
+    app.call("peek-close")
+    results["Z2_peek_pinch_then_actual_size"] = {"ok": bool(peek) and bool(peek_pinched) and peek_held > 1.5 and bool(peek_reset),
+        "pinched": peek_pinched, "heldAfter1s": peek_held, "reset": bool(peek_reset)}
+    app.call("close", tab=tab)
+
+
+def page_commands_checks(factory, results, tmp):
+    """Copy URL family, quote and zoom rows (page-platform §8.3 T-E1, T-E2, Q1–Q4, Z1–Z4)."""
+    server, origin = page_fixture_server()
+    app = factory(urls=(), fresh=True)
+    shared_quotes = None
+    try:
+        # Shared defaults domain: set the one key this suite reads, restore it in `finally`.
+        shared_quotes = app.call("defaults", key="open.advanced.enableSharedQuotes")
+        app.call("defaults", key="open.advanced.enableSharedQuotes", value=True)
+        page_copy_rows(app, results, origin)
+        page_quote_rows(app, results, origin)
+        page_zoom_rows(app, results, origin)
+    finally:
+        try:
+            app.call("defaults", key="open.advanced.enableSharedQuotes", value=shared_quotes)
+        finally:
+            app.quit()
+            server.shutdown()
+
+
 def sidebar_checks(factory, results, tmp):
     app = factory(urls=(), fresh=True)
     try:
@@ -5921,6 +6149,15 @@ def _static_server(folder):
 # long.html band colors, top to bottom (one per 1,000 CSS px).
 CAPTURE_BANDS = [(224, 64, 64), (64, 176, 80), (48, 96, 224), (224, 192, 48), (160, 64, 192), (48, 192, 192),
                  (240, 128, 32), (32, 32, 32), (128, 224, 128), (224, 128, 192), (64, 128, 160), (192, 160, 128)]
+
+
+def page_checks(factory, results, tmp):
+    """page-platform §8.3 `--only page`: one suite, one row group per feature."""
+    capture_checks(factory, results, tmp)
+    page_commands_checks(factory, results, tmp)
+    page_engine_checks(factory, results, tmp)
+    page_notification_checks(factory, results, tmp)
+    page_translate_checks(factory, results, tmp)
 
 
 def page_engine_checks(factory, results, tmp):
@@ -9114,12 +9351,6 @@ def page_translate_checks(factory, results, tmp):
             server.shutdown()
 
 
-def page_checks(factory, results, tmp):
-    """page-platform §8.3 `--only page`: one suite, one row group per feature."""
-    capture_checks(factory, results, tmp)
-    page_engine_checks(factory, results, tmp)
-    page_notification_checks(factory, results, tmp)
-    page_translate_checks(factory, results, tmp)
 
 
 def main():
