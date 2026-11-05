@@ -37,6 +37,28 @@ final class PageContextMenuBuilder {
   private weak var page: OEWebContent?
   private var openKeys: Set<String> = []
   private var engineAliases: [String: String] = [:]
+  // Opaque identifiers delivered by OpenEngine's pinned Chromium 156 model (the symbols
+  // in Vendor/cef/include/cef_command_ids.h). No CEF API is called by the shell. Identity
+  // matters: extensions can use exactly the same English titles as a browser command.
+  private enum ChromeCommand {
+    static let linkOpen: Set<Int> = [50100, 50101, 50102, 50111, 57316]
+    static let linkAliases = [50100: "link-new-tab", 50101: "link-window", 50111: "link-split"]
+    static let copy = 50150, goToURL = 50190, source = 35002
+    static let inspect: Set<Int> = [50162, 50171]
+    static let media: Set<Int> = [50120, 50121, 50122, 50123, 50125, 50126, 50129, 50130,
+      50131, 50132, 50133, 50136, 50137, 50140, 50141, 50142, 50143, 50170]
+  }
+  private var chromeModel: Bool { page?.runtimeStyle == .chrome }
+  private func engineItem(_ item: NSMenuItem, in identifiers: Set<Int>) -> Bool {
+    guard let key = item.identifier?.rawValue, key.hasPrefix("engine:"), let id = Int(key.dropFirst(7)) else { return false }
+    return identifiers.contains(id)
+  }
+  private func isInspect(_ item: NSMenuItem) -> Bool {
+    chromeModel ? engineItem(item, in: ChromeCommand.inspect) : item.title.hasPrefix("Inspect")
+  }
+  private func isSource(_ item: NSMenuItem) -> Bool {
+    chromeModel ? engineItem(item, in: [ChromeCommand.source]) : item.title.hasPrefix("View Page Source")
+  }
   private(set) var completed = false
 
   init(request: OEContextMenu, page: OEWebContent, owner: EngineWebContentHostFactory) {
@@ -56,7 +78,7 @@ final class PageContextMenuBuilder {
     // Inspect, so insert before source to keep Translate → Capture → Source → Inspect.
     if request.linkURL == nil, request.mediaType == .none, request.selectionText.isEmpty,
       !request.targets.contains(.editable) {
-      var index = menu.items.firstIndex { Self.title($0).hasPrefix("View Page Source") || Self.title($0).hasPrefix("Inspect") } ?? menu.items.count
+      var index = menu.items.firstIndex { isSource($0) || isInspect($0) } ?? menu.items.count
       var additions: [NSMenuItem] = []
       if let translation = owner.translate.contextMenuItem(for: page) {
         additions.append(openItem("translate", translation.title) { [weak owner] in owner?.translate.perform(translation.action) })
@@ -109,8 +131,10 @@ final class PageContextMenuBuilder {
 
   private static func title(_ item: NSMenuItem) -> String { normalized(item.title) }
   private static func normalized(_ value: String) -> String { value }
-  private static func isLinkOpen(_ value: String) -> Bool {
-    let title = normalized(value)
+  private func isLinkOpen(_ item: OEContextMenuItem) -> Bool {
+    if chromeModel { return ChromeCommand.linkOpen.contains(item.commandIdentifier) }
+    // Alloy has CEF's short menu model and no Chrome extension menu entries.
+    let title = item.title
     return ["Open Link in New Tab", "Open Link in New Window", "Open Link in Incognito Window",
       "Open Link in Split View", "Open Link in Left View", "Open Link in Right View",
       "Open Link in Top View", "Open Link in Bottom View", "Open Link With…", "Open Link With"].contains(title)
@@ -119,14 +143,14 @@ final class PageContextMenuBuilder {
   private func append(_ sources: [OEContextMenuItem], to destination: NSMenu) {
     for source in sources {
       if source.isSeparator { destination.addItem(.separator()); continue }
-      if request.linkURL != nil, Self.isLinkOpen(source.title) {
+      if request.linkURL != nil, isLinkOpen(source) {
         let aliases = ["Open Link in New Tab": "link-new-tab", "Open Link in New Window": "link-window", "Open Link in Split View": "link-split"]
-        engineAliases["engine:\(source.commandIdentifier)"] = aliases[Self.normalized(source.title)]
+        engineAliases["engine:\(source.commandIdentifier)"] = chromeModel ? ChromeCommand.linkAliases[source.commandIdentifier] : aliases[source.title]
         continue
       }
       let title = Self.normalized(source.title)
       let item: NSMenuItem
-      if !request.targets.contains(.editable), !request.selectionText.isEmpty, title.hasPrefix("Go to ") {
+      if !request.targets.contains(.editable), !request.selectionText.isEmpty, (chromeModel ? source.commandIdentifier == ChromeCommand.goToURL : title.hasPrefix("Go to ")) {
         // Reinsert the Open URL-selection action after Copy, never duplicate Chromium's Go to.
         continue
       } else {
@@ -152,8 +176,8 @@ final class PageContextMenuBuilder {
     let canSplit = owner.windowState.style == .standard && peekItem == nil
       && opener.flatMap { owner.model.tab(id: $0) } != nil && split?.canAddPane == true
     // Count only surviving rows before the first replaced Chromium link-open row.
-    let anchor = request.items.firstIndex { Self.isLinkOpen($0.title) } ?? 0
-    let survivingBefore = request.items.prefix(anchor).filter { $0.isSeparator || !Self.isLinkOpen($0.title) }.count
+    let anchor = request.items.firstIndex { isLinkOpen($0) } ?? 0
+    let survivingBefore = request.items.prefix(anchor).filter { $0.isSeparator || !isLinkOpen($0) }.count
     let items = [
       openItem("link-new-tab", "Open Link in New Tab") { [weak owner] in _ = owner?.openNewTab(url: link, background: true, opener: opener) },
       openItem("link-split", "Open Link in Split View", enabled: canSplit) { [weak owner] in
@@ -195,7 +219,7 @@ final class PageContextMenuBuilder {
     let display = String(text.prefix(32)) + (text.count > 32 ? "…" : "")
     let title = url.map { _ in "Go to \(text)" } ?? "Search \(engine.name) for “\(display)”"
     guard let target = url ?? engine.searchURL(for: text) else { return }
-    let index = menu.items.firstIndex { Self.title($0) == "Copy" }.map { $0 + 1 } ?? menu.items.count
+    let index = menu.items.firstIndex { chromeModel ? engineItem($0, in: [ChromeCommand.copy]) : $0.title == "Copy" }.map { $0 + 1 } ?? menu.items.count
     menu.insertItem(openItem("selection-search", title) { [weak owner] in _ = owner?.openNewTab(url: target, background: false) }, at: index)
   }
 
@@ -210,11 +234,12 @@ final class PageContextMenuBuilder {
     let media = hooks.mediaItems(request), extensions = hooks.extensionItems(request)
     guard media.count + extensions.count <= 32 else { return false }
     let mediaIndex = menu.items.lastIndex { item in
+      if chromeModel { return engineItem(item, in: ChromeCommand.media) }
       let title = Self.title(item)
       return title.contains("Image") || title.contains("Video") || title.contains("Audio") || title == "Loop" || title == "Show Controls"
     }.map { $0 + 1 } ?? menu.items.count
     insert(media, prefix: "media", at: mediaIndex)
-    let extensionIndex = menu.items.firstIndex { Self.title($0).hasPrefix("Inspect") } ?? menu.items.count
+    let extensionIndex = menu.items.firstIndex { isInspect($0) } ?? menu.items.count
     insert(extensions, prefix: "extension", at: extensionIndex)
     return true
   }

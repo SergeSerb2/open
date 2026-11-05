@@ -447,9 +447,9 @@ def context_menu_checks(factory, results, tmp, h):
                 if not result.get('ok'):
                     raise RuntimeError(str(result))
                 focus()
-            def observed():
+            def observed(selector='#page'):
                 app.call('policy', contextMenu='record'); app.call('events')
-                x, y = point('#page'); app.call('rightclick', tab=tab, x=x, y=y)
+                x, y = point(selector); app.call('rightclick', tab=tab, x=x, y=y)
                 seen = []
                 def received():
                     seen.extend(app.call('events'))
@@ -486,6 +486,19 @@ def context_menu_checks(factory, results, tmp, h):
                 refused = observed()
                 checks['depth'] = {'ok': accepted.get('type') == 'contextMenu' and refused.get('type') == 'contextMenuRefused',
                                    'acceptedNodes': accepted.get('incomingNodes'), 'refused': refused}
+                configure(count=1, title='Go to fixture')
+                select('#selection', 'Extension collision selection')
+                go = observed('#selection')
+                custom_go = next((c for c in go.get('commands', []) if c['title'] == 'Go to fixture'), None)
+                go_kept = custom_go is not None and any(r['key'] == 'engine:' + str(custom_go['id']) for r in go.get('rows', []))
+                configure(count=1, title='Open Link in New Tab')
+                link = observed('#link')
+                native = h._command_id('IDC_CONTENT_CONTEXT_OPENLINKNEWTAB')
+                custom_link = next((c for c in link.get('commands', []) if c['title'] == 'Open Link in New Tab' and c['id'] != native), None)
+                link_kept = custom_link is not None and any(r['key'] == 'engine:' + str(custom_link['id']) for r in link.get('rows', []))
+                checks['extension_title_collisions'] = {'ok': go_kept and link_kept,
+                                                        'goKept': go_kept, 'linkKept': link_kept,
+                                                        'goShown': go.get('shown'), 'linkShown': link.get('shown')}
                 return {'ok': all(c.get('ok', c.get('upstreamElision', False)) for c in checks.values()), 'limits': checks}
             finally:
                 configure(count=0)
