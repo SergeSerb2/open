@@ -156,7 +156,7 @@ final class EngineWebContentHostFactory: NSResponder, WebContentHostFactory {
     controller.showsFullURLWithToolbar = UserDefaults.standard.bool(forKey: AppCommand.showFullURLKey)
     controller.onStateChange = { [weak self] in
       guard let self else { return }
-      if self.app.engineReady { for tab in self.visibleTabs { tab.live.sleepPhase = .live }; self.controller?.container.refreshPlaceholders() }
+      if self.app.engineReady { self.markVisibleTabsLive(); self.controller?.container.refreshPlaceholders() }
       // BrowserWindowController schedules its SnapshotStore once per committed change.
       self.mirror.sync(); self.commandBarSession?.contextDidChange(); self.app.scheduleMenuRebuild()
       self.app.media.windowChanged(self)
@@ -285,6 +285,12 @@ final class EngineWebContentHostFactory: NSResponder, WebContentHostFactory {
   }
 
   func makeHost(tabID: ItemID, profileID: ProfileID, url: URL?) -> (any WebContentHost)? {
+    makeHost(tabID: tabID, profileID: profileID, url: url, history: nil)
+  }
+  /// `history`: a sleeping tab's stored back/forward list (memory-fork §5.2–§5.3). The page is
+  /// created without a renderer and gets the history before it is shown; it loads the current
+  /// entry when it shows, or `url` (the fallback) if the engine refuses the history.
+  func makeHost(tabID: ItemID, profileID: ProfileID, url: URL?, history: OENavigationHistory?) -> (any WebContentHost)? {
     guard let context = context(for: profileID) else {
       if let url, model.tab(id: tabID) != nil { queuedNavigations[tabID] = url }
       return nil
@@ -299,14 +305,15 @@ final class EngineWebContentHostFactory: NSResponder, WebContentHostFactory {
     config.showsChromeToolbar = app.options.chromeToolbar
     if isModelTab, model.tab(id: tabID)?.url.scheme == "chrome" { config.runtimeStyle = .chrome }
     contentCreationCount += 1
-    let content = OEWebContent(configuration: config, url: nil)
+    let content = history.map { OEWebContent(configuration: config, navigationHistory: $0, fallbackURL: url) }
+      ?? OEWebContent(configuration: config, url: nil)
     content.isMuted = model.tab(id: tabID)?.isMuted ?? false
     content.view.isHidden = true
     let host = EngineWebContentHost(tabID: tabID, profileID: profileID, content: content, owner: self)
     hosts[tabID] = host
     if model.tab(id: tabID) != nil { modelHostIDs.insert(tabID) }
     mirror.sync()
-    if let url { host.load(url) }
+    if let url, history == nil { host.load(url) }
     app.tabSleep.contentCreated(tabID: tabID, host: host)
     return host
   }
@@ -344,15 +351,16 @@ final class EngineWebContentHostFactory: NSResponder, WebContentHostFactory {
   }
   func tabStripState() -> [[String: Any]] { mirror.snapshot() }
   @discardableResult
-  func ensureContent(for tab: Tab) -> OEWebContent? {
+  func ensureContent(for tab: Tab, history: OENavigationHistory? = nil) -> OEWebContent? {
     guard app.engineReady else { queuedNavigations[tab.id] = tab.url; return nil }
     if let host = hosts[tab.id] { return host.content }
     guard let profileID = profile(for: tab.id)?.id else { return nil }
     tab.live.sleepPhase = .live
-    guard let host = makeHost(tabID: tab.id, profileID: profileID, url: nil) as? EngineWebContentHost else { return nil }
+    guard let host = makeHost(tabID: tab.id, profileID: profileID, url: history == nil ? nil : tab.url, history: history)
+      as? EngineWebContentHost else { return nil }
     controller?.container.adopt(host, for: tab.id)
     if host.view.superview == nil { host.view.frame = contentContainer.bounds; contentContainer.addSubview(host.view) }
-    host.load(tab.url)
+    if history == nil { host.load(tab.url) }
     return host.content
   }
   private func makeContent(for tab: Tab, url: URL?, requestContext: OEBrowserContext? = nil) -> OEWebContent? {
@@ -389,9 +397,17 @@ final class EngineWebContentHostFactory: NSResponder, WebContentHostFactory {
     if case .spaceProfileChanged(let id, _, _) = change, focusedSpace?.id == id { showSelection(focus: false) }
     else { controller?.refresh(); mirror.sync() }
   }
+  /// Shown tabs become live; the sleep controller wakes the ones it put to sleep (or can restore
+  /// from a stored back list), so their wake kind and history are right (memory-fork §9.4).
+  func markVisibleTabsLive() {
+    for tab in visibleTabs {
+      if app.tabSleep.wakesThroughController(tab, hasHost: hosts[tab.id].map { !$0.closed } ?? false) { app.tabSleep.wake(tab.id) }
+      else { tab.live.sleepPhase = .live }
+    }
+  }
   func showSelection(focus: Bool = true) {
     guard let controller else { return }
-    if app.engineReady { for tab in visibleTabs { tab.live.sleepPhase = .live } }
+    if app.engineReady { markVisibleTabsLive() }
     controller.refresh(); mirror.sync()
     window?.title = selectedTab?.displayTitle.isEmpty == false ? selectedTab!.displayTitle : "Open"
     if focus { selectedContent?.focusPage() }
