@@ -10186,6 +10186,9 @@ def main():
         return app
 
     results = {"style": opts.style, "config": opts.config, "started": time.strftime("%Y-%m-%d %H:%M:%S")}
+    source_diff = subprocess.check_output(["git", "diff", "HEAD", "--", "App", "Packages/OpenKit/Sources", "tools/e2e"], cwd=ROOT)
+    results["source"] = {"head": subprocess.check_output(["git", "rev-parse", "HEAD"], cwd=ROOT, text=True).strip(),
+                         "clean": not source_diff, "diffSHA256": hashlib.sha256(source_diff).hexdigest()}
     def framework_uuid(path):
         proc = subprocess.run(['dwarfdump', '--uuid', path], capture_output=True, text=True)
         match = re.search(r'UUID: ([0-9A-F-]+)', proc.stdout)
