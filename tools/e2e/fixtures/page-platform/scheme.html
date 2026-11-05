@@ -13,6 +13,8 @@
   window.schemeChanges = [];
   const query = matchMedia('(prefers-color-scheme: dark)');
   query.addEventListener('change', (event) => window.schemeChanges.push(event.matches ? 'dark' : 'light'));
-  window.schemeState = () => ({ dark: query.matches, background: getComputedStyle(document.body).backgroundColor,
+  // Read a fresh list: reading `query.matches` would update the listened list's stored value, and
+  // Chromium then fires no change event for that switch at the next frame.
+  window.schemeState = () => ({ dark: matchMedia('(prefers-color-scheme: dark)').matches, background: getComputedStyle(document.body).backgroundColor,
     loadId: window.schemeLoadId, changes: window.schemeChanges.slice() });
 </script>

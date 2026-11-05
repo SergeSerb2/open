@@ -299,7 +299,8 @@ OE_EXPORT @interface OEWebContent : NSObject
 /// IDC_DEV_TOOLS_INSPECT (opens DevTools with the element picker on; a second
 /// call turns the picker off, as in Chrome). Elements and Network (EP-4b),
 /// and Console where Chrome's command cannot run (Alloy pages, and a hosted
-/// tab that is not Chromium's active tab in its window's hidden strip), open
+/// tab that is not Chromium's active tab in its window's hidden strip, and
+/// any page whose DevTools is already open), open
 /// DevTools and select the panel through the front end's
 /// DevToolsAPI.showPanel, the call Chrome makes for its own Console command;
 /// it retries until the panel is selected (at most 15 s). Default opens

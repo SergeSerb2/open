@@ -1525,7 +1525,13 @@ static double OEPNGPixelWidth(NSData* png) {
   // commands act on Chromium's active tab, not necessarily this page.
   OEBrowser* strip = _oe_hostBrowser;
   BOOL targetsThisPage = !strip || [strip oe_isChromiumActiveTab:self];
-  if (command >= 0 && targetsThisPage &&
+  // Every request ends an older panel retry (a Network request still retrying
+  // must not switch back after a later Console request).
+  _devToolsPanelRequest += 1;
+  // DevTools already open (for example from Network Inspector): Chrome's
+  // Console command does not switch that window's panel, so use the front end.
+  BOOL useFrontend = frontendPanel && [self hasDevTools];
+  if (command >= 0 && targetsThisPage && !useFrontend &&
       host->GetRuntimeStyle() == CEF_RUNTIME_STYLE_CHROME &&
       host->CanExecuteChromeCommand(command)) {
     host->ExecuteChromeCommand(command, CEF_WOD_CURRENT_TAB);
@@ -1537,7 +1543,6 @@ static double OEPNGPixelWidth(NSData* png) {
     // DevToolsAPI.showPanel, the call Chrome itself makes for its Console
     // command (DevToolsWindow::DoAction). The front end exists and loads a
     // moment after showDevTools; retry until the panel's tab is selected.
-    _devToolsPanelRequest += 1;
     [self oe_selectFrontendPanel:frontendPanel
                          request:_devToolsPanelRequest
                          attempt:0];

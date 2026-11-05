@@ -8586,8 +8586,11 @@ def page_tools_appearance_checks(app, results, port, style):
     tab = app.call("open", url="http://127.0.0.1:%d/scheme.html" % port)["id"]
     app.call("wait", tab=tab)
     state = lambda: app.eval(tab, "window.schemeState()")
-    def until_dark(value):
-        return wait_until(lambda: (lambda s: s if s["dark"] is value else None)(state()), timeout=8, step=.2) or state()
+    def until_dark(value, event=False):
+        # event: also wait for the page's change event for this switch (it fires at the next frame).
+        want = "dark" if value else "light"
+        return wait_until(lambda: (lambda s: s if s["dark"] is value and (not event or s["changes"][-1:] == [want])
+                                   else None)(state()), timeout=8, step=.2) or state()
     ids = ("appearance-automatic", "appearance-light", "appearance-dark")
     def checks():
         return {i: (_menu_row(app, i) or {}).get("checked") for i in ids}
@@ -8623,11 +8626,11 @@ def page_tools_appearance_checks(app, results, port, style):
         # A2: Automatic follows the app's effective appearance, each time, without a reload.
         app.call("command", id="appearance-automatic")
         app.call("appearance", name="dark")
-        follow_dark = until_dark(True)
+        follow_dark = until_dark(True, event=True)
         app.call("appearance", name="light")
-        follow_light = until_dark(False)
+        follow_light = until_dark(False, event=True)
         app.call("appearance", name="dark")
-        follow_dark2 = until_dark(True)
+        follow_dark2 = until_dark(True, event=True)
         auto_checks = checks()
         want_auto = {"appearance-automatic": True, "appearance-light": False, "appearance-dark": False}
         results["A2_appearance_automatic_follows_app_" + style] = {
