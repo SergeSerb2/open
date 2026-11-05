@@ -6,7 +6,7 @@ import OpenSuggest
 
 /// Bounds copied from the page-chrome checkpoint. The App copies at most 128 nodes,
 /// eight levels, 1 KiB per title, 16 KiB selection and 64 KiB per URL. No buffer here
-/// approaches PartitionAlloc's single-allocation ceiling; the largest text is 64 KiB.
+/// approaches PartitionAlloc's single-allocation ceiling; the largest accepted external text is 64 KiB.
 @MainActor
 enum PageContextMenuLimits {
   static func failure(_ request: OEContextMenu) -> String? {
@@ -83,7 +83,7 @@ final class PageContextMenuBuilder {
       items.flatMap { item -> [[String: Any]] in
         if item.isSeparator { return [] }
         if !item.submenu.isEmpty { return commands(item.submenu, parent: item.title) }
-        return [["id": item.commandIdentifier, "title": item.title, "enabled": item.isEnabled, "submenu": parent]]
+        return [["id": item.commandIdentifier, "title": item.title, "enabled": item.isEnabled, "checked": item.isChecked, "submenu": parent]]
       }
     }
     func nodeCount(_ items: [OEContextMenuItem]) -> Int { items.reduce(0) { $0 + 1 + nodeCount($1.submenu) } }

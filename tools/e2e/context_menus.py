@@ -155,6 +155,9 @@ def context_menu_checks(factory, results, tmp, h):
                 ok = ok and shown.count(title) == 1 and shown.index(title) == shown.index('Copy') + 1
             if name == 'editable':
                 ok = ok and shown == [t or '-' for t in raw] and not any(t.startswith('Search ') for t in shown)
+                source = [{key: c[key] for key in ('title', 'enabled', 'checked', 'submenu')} for c in event.get('commands', [])]
+                native = [{key: r[key] for key in ('title', 'enabled', 'checked', 'submenu')} for r in event.get('rows', [])]
+                ok = ok and source == native
             # Compare the complete native order with Chromium's delivered base plus the
             # lead's fixed insertions. These are real engine/native menu rows, not mocks.
             expected = [title or '-' for title in raw]
