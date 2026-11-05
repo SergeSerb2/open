@@ -126,6 +126,10 @@ def context_menu_checks(factory, results, tmp, h):
             event, events = menu(selector, clear=not selection)
             shown = event.get('shown', [])
             raw = event.get('items', [])
+            selection_text = app.eval(tab, 'getSelection().toString()').strip()
+            # macOS can supply the clicked link's text as the engine selection.
+            if event.get('selectionBytes', 0) and name in ('link', 'mailto'):
+                selection_text = {'link': 'Fixture link', 'mailto': 'Fixture email'}[name]
             ok = bool(shown) and shown[0] != '-' and shown[-1] != '-' and not any(a == b == '-' for a, b in zip(shown, shown[1:]))
             if name in ('link', 'mailto', 'linked_image'):
                 ok = ok and all(shown.count(t) == 1 for t in LINK_ITEMS)
@@ -168,6 +172,9 @@ def context_menu_checks(factory, results, tmp, h):
                 anchor = next((i for i, title in enumerate(expected) if title in link_open), 0)
                 expected = [title for title in expected if title not in link_open]
                 expected[anchor:anchor] = LINK_ITEMS + ['-']
+            if name in ('link', 'mailto', 'linked_image') and selection_text and 'Copy' in expected:
+                display = selection_text[:32] + ('…' if len(selection_text) > 32 else '')
+                expected.insert(expected.index('Copy') + 1, 'Search Local Search for “' + display + '”')
             if name in ('selection', 'url'):
                 expected = [title for title in expected if not title.startswith('Go to ')]
                 addition = ('Search Local Search for “bonjour menu contextuel”' if name == 'selection'
@@ -189,7 +196,7 @@ def context_menu_checks(factory, results, tmp, h):
             if trimmed and trimmed[-1] == '-':
                 trimmed.pop()
             ok = ok and shown == trimmed
-            return {'ok': bool(ok), 'shown': shown, 'expected': trimmed, 'engine': raw, 'rows': event.get('rows'),
+            return {'ok': bool(ok), 'shown': shown, 'expected': trimmed, 'selection': selection_text, 'engine': raw, 'rows': event.get('rows'),
                     'decisions': [e for e in events if e['type'] == 'contextMenuDecision']}
 
         for name, selector, selection in [('page', '#page', False), ('link', '#link', False), ('mailto', '#mailto', False),
@@ -388,8 +395,16 @@ def context_menu_checks(factory, results, tmp, h):
                 accepted = observed()
                 configure(count=1, title='x' * 1025)
                 refused = observed()
-                checks['title'] = {'ok': accepted.get('type') == 'contextMenu' and refused.get('type') == 'contextMenuRefused',
-                                   'acceptedNodes': accepted.get('incomingNodes'), 'refused': refused}
+                titles = [c['title'] for e in (accepted, refused) for c in e.get('commands', []) if c['id'] >= 49000 and c['title'].startswith('x')]
+                if len(titles) == 2 and all(len(t.encode()) < 1024 for t in titles):
+                    # Chrome elides extension labels before OEContextMenu exists. Do not claim
+                    # an App boundary proof from data the App never receives.
+                    results['cm_title_boundary'] = {'status': 'BLOCKED', 'reason': 'Chromium elides both requested 1024/1025-byte extension titles before the App callback',
+                                                    'deliveredBytes': [len(t.encode()) for t in titles]}
+                    checks['title'] = {'upstreamElision': True, 'deliveredBytes': [len(t.encode()) for t in titles]}
+                else:
+                    checks['title'] = {'ok': accepted.get('type') == 'contextMenu' and refused.get('type') == 'contextMenuRefused',
+                                       'acceptedNodes': accepted.get('incomingNodes'), 'refused': refused}
                 configure(count=2)
                 base = observed().get('incomingNodes', 0) - 3  # extension wrapper + two leaves
                 count = 128 - base - 1
@@ -405,7 +420,7 @@ def context_menu_checks(factory, results, tmp, h):
                 refused = observed()
                 checks['depth'] = {'ok': accepted.get('type') == 'contextMenu' and refused.get('type') == 'contextMenuRefused',
                                    'acceptedNodes': accepted.get('incomingNodes'), 'refused': refused}
-                return {'ok': all(c['ok'] for c in checks.values()), 'limits': checks}
+                return {'ok': all(c.get('ok', c.get('upstreamElision', False)) for c in checks.values()), 'limits': checks}
             finally:
                 configure(count=0)
                 app.call('close', tab=probe)
@@ -465,10 +480,15 @@ def context_menu_checks(factory, results, tmp, h):
                 app.call('pin', tab=candidate); app.call('close', tab=candidate)
             # A Favorite is eligible without a pinned row.
             candidate = app.call('open', url='https://app.hey.com/', background=False)['id']
-            app.call('menu-perform', id='add-to-favorites')
+            app.call('favorite', tab=candidate)
             favorite = row_enabled('peek-email')
-            app.call('menu-perform', id='remove-from-favorites')
-            app.call('close', tab=candidate)
+            favorite_url = app.call('tab-state', tab=candidate)['url']
+            app.call('key', key='e', modifiers=['command', 'shift'], route='app')
+            state = wait(lambda: (lambda s: s if s['shown'] else None)(app.call('peek-state')), timeout=5) or {}
+            content = state.get('stack', [{}])[-1].get('content')
+            favorite_urls = wait(lambda: [p['url'] for p in app.call('pages') if p['identifier'] == content and p['url'].startswith('https://')], timeout=5) or []
+            app.call('peek-close')
+            favorite = favorite and favorite_urls == [favorite_url]
             return {'ok': all(actual[h] for h in accepted) and not any(actual[h] for h in rejected) and favorite,
                     'hosts': actual, 'favorite': favorite}
         run('cm_peek_email_hosts', email_hosts)
