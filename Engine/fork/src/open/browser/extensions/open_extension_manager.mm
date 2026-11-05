@@ -265,6 +265,12 @@ class Manager : public CefExtensionManager,
       callback->OnComplete(false, "Extension system is not ready or id is invalid");
       return;
     }
+    // CrxInstaller requires a persistent profile; preserve Chrome's refusal
+    // instead of entering its CHECK for an off-the-record context.
+    if (profile_->IsOffTheRecord()) {
+      callback->OnComplete(false, "Extensions cannot be installed in an ephemeral profile");
+      return;
+    }
     const std::string item_id = id;
     if (webstore_requestors_.size() >= kMaxPendingInstalls || webstore_requestors_.contains(item_id)) {
       callback->OnComplete(false, "A Web Store install is already pending or the 32-install limit was reached");
@@ -309,7 +315,8 @@ class Manager : public CefExtensionManager,
   }
   bool InstallLocalCrx(const CefString& path, CefRefPtr<CefBrowser> browser) override {
     CEF_REQUIRE_UIT_RETURN(false);
-    if (!ready_ || !base::CommandLine::ForCurrentProcess()->HasSwitch("open-automation") ||
+    if (!ready_ || profile_->IsOffTheRecord() ||
+        !base::CommandLine::ForCurrentProcess()->HasSwitch("open-automation") ||
         path.length() > 4096) return false;
     auto host = CefBrowserHostBase::FromBrowser(browser);
     auto* contents = host ? host->GetWebContents() : nullptr;
