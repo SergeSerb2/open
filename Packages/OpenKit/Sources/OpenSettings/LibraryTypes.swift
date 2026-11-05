@@ -32,8 +32,10 @@ public enum OriginFilter: String, CaseIterable, Sendable { case all, spaces, lit
     func copyCapture(id: UUID)
     func saveCapture(id: UUID, to: URL) -> String?
     func openHistoryItem(url: URL)
+    func flushHistoryWrites() async
     func viewSpace(id: SpaceID)
 }
+extension LibraryActions { public func flushHistoryWrites() async {} }
 
 /// The capture feature writes the same epoch-based index. No filesystem folder sources.
 @MainActor @Observable public final class FileCapturesProvider: CapturesProvider {
