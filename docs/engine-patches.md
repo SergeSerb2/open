@@ -29,7 +29,7 @@ For this plan:
 | P7 | Isolated-world scripts for Open's page runtimes | Zap picker and Boost applier out of the page's reach | 3–5 days | — |
 | P8 | Native ad-block engine | Already planned in [plans/adblock-fork.md](plans/adblock-fork.md); listed here only for order | see that plan | — |
 
-The series as built (P1 and P2). Two series with their own numbers:
+The extension series as built (P1–P3; excerpt). Two series with their own numbers:
 `Engine/fork/patches/chromium/series` for files outside `src/cef/`, and
 `Engine/fork/patches/cef/series` for files under it. New classes are overlay
 files (`Engine/fork/src/`), not patches; that includes the whole
@@ -42,6 +42,7 @@ wrappers `engine-apply` regenerates.
 0302-open-hidden-browser-ui.patch              # P1: Chrome UI that assumes "no BrowserView => unit test"
 0303-open-hosted-tab-lifecycle.patch           # P1: hosted tabs are never discarded or moved
 0304-open-hidden-browser-no-tab-groups.patch    # P1: hidden Browsers have no tab group model
+0305-open-extension-prompts.patch              # P3: install and uninstall consent, native fallback
 0401-open-media-session.patch                   # Media: tab volume; per-player PiP availability
 0402-open-video-pip-window.patch                # Media EM-4: Open's own video PiP window
 # cef/series (starts at 0302)
@@ -50,11 +51,10 @@ wrappers `engine-apply` regenerates.
 0304-open-extension-popups.patch               # P2: popup browser hosts (ChromeBrowserDelegate friend)
 ```
 
-A new patch takes the next free number of its series, counting open PRs:
-#64 adds `chromium/0304-open-hidden-browser-no-tab-groups.patch`. Still
-planned: P3 (extension management API in the overlay; the install and
-uninstall prompts patch `chrome/browser/ui/views/extensions/`, so a
-Chromium series entry). P6 (audible state) landed without a patch of its
+A new patch takes the next free number of its series, counting open PRs.
+P3's management API is in the overlay; its two install/uninstall platform
+hooks are `chromium/0305-open-extension-prompts.patch`.
+P6 (audible state) landed without a patch of its
 own, inside the media controller overlay (Section 3, "Media"). Section 3
 uses `04xx`, Section 8 `05xx`.
 

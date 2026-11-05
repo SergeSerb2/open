@@ -4203,10 +4203,18 @@ ACTION_PROBE_COPY = None
 
 def actions_checks(app, results):
     app.call("ext-prompt", handler=False)
+    # Popup key routing must not depend on the user's per-site mode state.
+    # This App key lives in the shared defaults domain, even with a test root.
+    key = "open.developer.modeHosts"
+    previous = app.call("defaults", key=key)
     try:
+        app.call("defaults", key=key, value=None)
         _actions_checks(app, results)
     finally:
-        app.cleanup_surfaces()
+        try:
+            app.call("defaults", key=key, value=previous)
+        finally:
+            app.cleanup_surfaces()
 
 
 def _actions_checks(app, results):
@@ -4572,7 +4580,10 @@ def popup_key_checks(app, results, open_popup, close_popup):
         if state:
             app.call("focus", tab=state["page"]["identifier"])
             app.call("events")
-            app.call("key", key="d", modifiers=["ctrl"], window="popup", route="window")
+            # Ctrl-D is Toggle Developer Mode in the current App and is
+            # correctly consumed before the page. Use an unbound chord to
+            # exercise the unconsumed callback (the original P2 contract).
+            app.call("key", key="d", modifiers=["ctrl", "shift"], window="popup", route="window")
             # The socket drains events. CEF can deliver the before-page and
             # unconsumed callbacks in separate polls; retain both observations.
             observed = []
@@ -4580,7 +4591,7 @@ def popup_key_checks(app, results, open_popup, close_popup):
                 observed.extend(x for x in app.call("events") if x["type"] == "popupKey")
                 return observed if {"beforePage", "unconsumed"} <= {x.get("phase") for x in observed} else None
             stages = wait_until(key_stages, timeout=5)
-            keys["ctrl_d_stages"] = sorted({x.get("phase") for x in stages or []})
+            keys["unbound_key_stages"] = sorted({x.get("phase") for x in stages or []})
             keys["events"] = observed
             keys["still_open"] = bool(app.call("ext-popup").get("open"))
             app.call("key", key="w", modifiers=["cmd"], window="popup", route="app")
@@ -4589,7 +4600,7 @@ def popup_key_checks(app, results, open_popup, close_popup):
             if not keys["closed"]:
                 close_popup()
         results["popup_keys"] = {
-            "ok": keys["opened"] and keys.get("ctrl_d_stages") == ["beforePage", "unconsumed"] and keys.get("still_open")
+            "ok": keys["opened"] and keys.get("unbound_key_stages") == ["beforePage", "unconsumed"] and keys.get("still_open")
                   and keys.get("closed") and keys.get("tabs_kept"), **keys}
     finally:
         app.cleanup_surfaces()
