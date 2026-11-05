@@ -67,6 +67,8 @@ public final class PeekController {
     public static let undoWindow: TimeInterval = 5
     /// The top Peek's URL, history, loading state, or favicon changed (sidebar badge, URL field, toolbar).
     public var onPageChange: (() -> Void)?
+    /// App-owned page overlays can consume Esc before the Peek itself closes.
+    public var onPageEscape: (() -> Bool)?
     public var peekBadgeTabIDs: Set<ItemID> { Set(stack.map(\.sourceTabID)) }
     public init(model: BrowserModel, splitController: SplitViewController, factory: any WebContentHostFactory, defaults: UserDefaults) {
         self.model = model; self.splitController = splitController; self.factory = factory; self.defaults = defaults
@@ -133,7 +135,7 @@ public final class PeekController {
         keyMonitor = NSEvent.addLocalMonitorForEvents(matching: .keyDown) { [weak self] event in
             let consumed = MainActor.assumeIsolated {
                 guard let self, event.window === self.overlay.window, self.isShown else { return false }
-                if event.keyCode == 53 { self.escape(); return true }
+                if event.keyCode == 53 { if self.onPageEscape?() != true { self.escape() }; return true }
                 if event.modifierFlags.contains(.command) {
                     if event.charactersIgnoringModifiers == "[" { self.stack.last?.host?.goBack(); return true }
                     if event.charactersIgnoringModifiers == "]" { self.stack.last?.host?.goForward(); return true }

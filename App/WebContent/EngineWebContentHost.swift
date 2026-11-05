@@ -97,6 +97,7 @@ final class EngineWebContentHost: NSObject, WebContentHost, WebContentProviding,
 
   func webContent(_ page: OEWebContent, didChange changes: OEWebContentChange) {
     guard !closed, let owner else { return }
+    if changes.contains(.loading), page.isLoading { owner.findController?.didNavigate(page) }
     let token = generation
     if changes.contains(.URL), let url = page.url, url.absoluteString != "about:blank" {
       // OEWebContent still exposes the previous document's favicon here.

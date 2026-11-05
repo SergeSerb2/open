@@ -50,8 +50,8 @@ final class EngineWebContentHostFactory: NSResponder, WebContentHostFactory {
   private(set) var isClosing = false
   var saveCaptureTasks: [UUID: Task<Void, Never>] = [:]
   var pendingSaveChoice: ((URL?) -> Void)?
-  private var findSelectionTask: Task<Void, Never>?
-  var hasFindSelectionTask: Bool { findSelectionTask != nil }
+  var findController: FindController?
+  var hasFindSelectionTask: Bool { findController?.hasSelectionTask == true }
   var pendingRenameAlert: NSAlert?
   var sidebarSharePicker: NSSharingServicePicker?
   /// The copy toast whose Share picker is open: it stays until the picker closes (page-platform §4.2.2).
@@ -100,9 +100,7 @@ final class EngineWebContentHostFactory: NSResponder, WebContentHostFactory {
   func releaseBrowsersForAutomation() -> [String: Any] { mirror.releaseWithoutClosingForAutomation() }
   #endif
   private lazy var extensionBar = makeExtensionBar()
-  private lazy var findField = makeFindField()
   private var extensionBarCreated = false
-  private var findFieldCreated = false
 
   var dialogPolicy: String?
   var permissionPolicy: String?
@@ -126,6 +124,11 @@ final class EngineWebContentHostFactory: NSResponder, WebContentHostFactory {
 
   func attach(_ controller: BrowserWindowController) {
     self.controller = controller
+    controller.shouldDeferKeyToFirstResponder = { [weak self] event in
+      guard let self, event.window === self.window, self.findController?.owns(self.window?.firstResponder) == true,
+        event.modifierFlags.intersection([.command, .control, .option]).isEmpty else { return false }
+      return [36, 76, 53, 125, 126].contains(event.keyCode)
+    }
     controller.onTextUndoManager = { [weak self] window in
       self?.commandBarSession?.controller?.editingUndoManager(for: window.firstResponder)
     }
@@ -161,6 +164,7 @@ final class EngineWebContentHostFactory: NSResponder, WebContentHostFactory {
       self.mirror.sync(); self.commandBarSession?.contextDidChange(); self.app.scheduleMenuRebuild()
       self.app.media.windowChanged(self)
       self.translate.focusDidChange()
+      self.findController?.sync()
     }
     // History swipes (page-platform §4.4.1): macOS's "Swipe between pages" setting, re-read when
     // Open becomes active, and paused while the Capture overlay is up.
@@ -319,6 +323,7 @@ final class EngineWebContentHostFactory: NSResponder, WebContentHostFactory {
   }
   func hostDidClose(_ host: EngineWebContentHost) {
     translate.contentDidClose(host.content)
+    findController?.hostClosed(host.tabID)
     commandBarNavigationFocus.remove(host.tabID)
     app.media.hostClosed(tabID: host.tabID)
     if hosts[host.tabID] === host { hosts[host.tabID] = nil }
@@ -580,6 +585,7 @@ final class EngineWebContentHostFactory: NSResponder, WebContentHostFactory {
   /// unload; Today tabs close (archived).
   func closeTab(id: ItemID) {
     guard model.tab(id: id) != nil else { return }
+    findController?.forget(id)
     let order = orderedTabs.map(\.id), index = order.firstIndex(of: id) ?? 0
     let wasSelected = selectedTab?.id == id
     var isFavorite = false
@@ -602,7 +608,7 @@ final class EngineWebContentHostFactory: NSResponder, WebContentHostFactory {
     for task in pageTasks.values { task.cancel() }
     pageTasks.removeAll()
     shareToastHandle = nil
-    findSelectionTask?.cancel(); findSelectionTask = nil
+    findController?.closeAll()
     pendingSaveChoice = nil
     if let panel = pendingSavePanel { window?.endSheet(panel, returnCode: .cancel); panel.orderOut(nil) }
     pendingSavePanel = nil
@@ -638,18 +644,13 @@ final class EngineWebContentHostFactory: NSResponder, WebContentHostFactory {
   func completePendingDialog(accept: Bool, text: String?) -> Bool {
     guard !pendingDialogs.isEmpty else { return false }; pendingDialogs.removeFirst().complete(accepted: accept, text: text); return true
   }
-  private func makeFindField() -> NSSearchField {
-    let field = NSSearchField(); field.placeholderString = "Find in page"; field.target = self; field.delegate = self
-    field.action = #selector(findFieldChanged(_:)); field.isHidden = true
-    controller?.contentView.addSubview(field); findFieldCreated = true; return field
-  }
   private func makeExtensionBar() -> NSStackView {
     let bar = NSStackView(); bar.orientation = .horizontal; bar.spacing = 4
     controller?.contentView.addSubview(bar); extensionBarCreated = true; return bar
   }
   private func layoutViews() {
     guard let controller else { return }; let panel = controller.container.frame
-    if findFieldCreated { findField.frame = CGRect(x: panel.maxX - 268, y: panel.minY + 8, width: 260, height: 24) }
+    findController?.sync()
     if extensionBarCreated { extensionBar.frame = CGRect(x: panel.maxX - 210, y: panel.minY + 8, width: 200, height: 26) }
   }
   private func updateChrome() { window?.title = selectedTab?.displayTitle ?? "Open" }
@@ -770,7 +771,7 @@ extension EngineWebContentHostFactory {
     let view = responder as? NSView
     var owner = "other"
     if responder == nil || responder === window { owner = "window" }
-    else if findFieldCreated, responder === findField || responder === findField.currentEditor() { owner = "find" }
+    else if findController?.owns(responder) == true { owner = "find" }
     else if commandBarSession?.controller?.editingUndoManager(for: responder) != nil { owner = "commandbar" }
     else if let view, let sidebar = controller?.sidebar,
             view === sidebar || view.isDescendant(of: sidebar)
@@ -778,8 +779,8 @@ extension EngineWebContentHostFactory {
     else if let page = selectedContent, let view, view === page.view || view.isDescendant(of: page.view) { owner = "page" }
     return ["owner": owner, "responder": responder.map { String(describing: type(of: $0)) } ?? "none",
       "navigationDecisions": navigationFocusDecisions, "lastNavigationRestored": lastNavigationFocusRestored,
-      "findVisible": findFieldCreated && !findField.isHidden,
-      "findText": findFieldCreated ? findField.stringValue : "", "sheet": window?.attachedSheet != nil]
+      "findVisible": findController?.visible == true,
+      "findText": findController?.query ?? "", "sheet": window?.attachedSheet != nil]
   }
   func selectTabForCommand(_ id: ItemID, spaceID: SpaceID? = nil) {
     guard let tab = model.tab(id: id) else { return }
@@ -905,30 +906,9 @@ extension EngineWebContentHostFactory {
     focus(space: model.spaces[(i + delta + model.spaces.count) % model.spaces.count])
   }
 
-  @objc func showFind(_ sender: Any?) {
-    _ = findField; layoutViews(); findField.isHidden = false
-    window?.makeFirstResponder(findField)
-  }
-
-  func findPrevious() {
-    guard findFieldCreated, !findField.stringValue.isEmpty else { return }
-    selectedContent?.find(findField.stringValue, forward: false, caseSensitive: false)
-  }
-
-  @objc func findNext(_ sender: Any?) {
-    guard !findField.stringValue.isEmpty else { return }
-    selectedContent?.find(findField.stringValue, forward: true, caseSensitive: false)
-  }
-
-  @objc private func findFieldChanged(_ sender: NSSearchField) {
-    if sender.stringValue.isEmpty {
-      selectedContent?.stopFinding(clearSelection: true)
-      findField.isHidden = true
-      selectedContent?.focusPage()
-    } else {
-      selectedContent?.find(sender.stringValue, forward: true, caseSensitive: false)
-    }
-  }
+  @objc func showFind(_ sender: Any?) { ensureFindController().show() }
+  func findPrevious() { ensureFindController().advance(forward: false) }
+  @objc func findNext(_ sender: Any?) { ensureFindController().advance(forward: true) }
 
   /// URL for address-field input: a URL, a host, or a search.
   static func url(forInput text: String, profile: Profile?) -> URL? {
@@ -962,15 +942,6 @@ extension EngineWebContentHostFactory {
     page.closeObserver = nil
     page.content.close()
     page.panel.orderOut(nil)
-  }
-}
-
-extension EngineWebContentHostFactory: NSSearchFieldDelegate {
-  func control(_ control: NSControl, textView: NSTextView, doCommandBy commandSelector: Selector) -> Bool {
-    if control === findField, commandSelector == #selector(NSResponder.cancelOperation(_:)) {
-      findField.isHidden = true; selectedContent?.stopFinding(clearSelection: true); selectedContent?.focusPage(); return true
-    }
-    return false
   }
 }
 
@@ -1243,9 +1214,7 @@ extension EngineWebContentHostFactory: OEWebContentDelegate {
 
   func webContent(_ webContent: OEWebContent, didUpdateFindResult result: OEFindResult) {
     lastFindResult = result
-    if result.isFinal {
-      if findFieldCreated { findField.placeholderString = "\(result.activeMatchIndex)/\(result.matchCount)" }
-    }
+    findController?.didUpdate(result, page: webContent)
   }
 
   func webContent(_ webContent: OEWebContent, didRequestFullscreen fullscreen: Bool) {
@@ -1270,6 +1239,7 @@ extension EngineWebContentHostFactory: OEWebContentDelegate {
   }
 
   func webContent(_ webContent: OEWebContent, didFinishLoadWithStatus status: Int) {
+    findController?.didNavigate(webContent)
     finishCommandBarNavigation(webContent)
     app.prepareCommandsAfterPaint(webContent)
     if tabID(for: webContent) != nil { LaunchTiming.shared.mark("firstLoadEnd"); translate.pageDidFinishLoad(webContent, status: status) }
@@ -1602,28 +1572,12 @@ final class ClosureMenuItem: NSMenuItem {
 // Undo/Redo use AppKit itself and the window delegate's selected UndoManager.
 extension EngineWebContentHostFactory: NSMenuItemValidation {
   @objc func performFindPanelAction(_ sender: Any?) {
-    switch (sender as? NSMenuItem)?.tag ?? 1 {
-    case 1: showFind(nil)
-    case 2: findNext(nil)
-    case 3: findPrevious()
-    case 7:
-      guard !isClosing, app.engineReady, !app.terminationRequested, let page = selectedContent else { return }
-      findSelectionTask?.cancel()
-      findSelectionTask = Task { @MainActor [weak self, weak page] in
-        guard let self, let page, !Task.isCancelled, !self.isClosing,
-              self.app.engineReady, !self.app.terminationRequested else { return }
-        self.app.noteAsyncEngineCall("findSelection")
-        let value = try? await page.evaluateJavaScript("window.getSelection().toString()") as? String
-        guard !Task.isCancelled, !self.isClosing, self.app.engineReady, !self.app.terminationRequested else { return }
-        self.findSelectionTask = nil
-        if let value, !value.isEmpty { self.findField.stringValue = value; self.findNext(nil) }
-      }
-    default: break
-    }
+    ensureFindController().perform(tag: (sender as? NSMenuItem)?.tag ?? 1)
   }
+
   func validateMenuItem(_ item: NSMenuItem) -> Bool {
     switch item.action {
-    case #selector(performFindPanelAction(_:)): return selectedContent != nil
+    case #selector(performFindPanelAction(_:)), #selector(performTextFinderAction(_:)), #selector(centerSelectionInVisibleArea(_:)): return selectedContent != nil
     default: return true
     }
   }

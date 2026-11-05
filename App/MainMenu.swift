@@ -127,6 +127,12 @@ extension EngineWebContentHostFactory {
   @discardableResult
   func performAppCommand(_ original: String, payload: String? = nil) -> Bool {
     let id = AppCommand.canonicalID(original)
+    // Find owns its pane even when AppKit's field editor implements the native selector.
+    if let tag = ["find": 1, "find-next": 2, "find-previous": 3, "find-and-replace": 12, "use-selection-to-find": 7][id] {
+      guard selectedContent != nil else { return false }
+      ensureFindController().perform(tag: tag); return true
+    }
+    if id == "jump-to-selection", selectedContent != nil { ensureFindController().jumpToSelection(); return true }
     if SystemCommandActions.selectors[id] != nil { return SystemCommandActions.perform(id) }
     if AppCommand.featureIDs.contains(id) || id.hasPrefix("focus-split-pane-") { return false }
     if let result = performSelectionAppCommand(id) { return result }
