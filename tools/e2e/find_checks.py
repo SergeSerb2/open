@@ -47,8 +47,11 @@ def run(h, factory, results, tmp):
     try:
         tab = app.call('tabs')[0]['id']
         app.call('wait', tab=tab)
-        app.call('window-frame', frame=[100, 70, 1100, 760])
-        app.call('window-focus', id=app.call('window-state')['id'], activate=True)
+        window_ready = app.call('window-state')
+        app.call('window-focus', id=window_ready['id'], activate=True)
+        viewport = window_ready['toolbar']['page'][2:]
+        ready = h.wait_until(lambda: app.eval(tab, '[window.innerWidth,window.innerHeight,document.readyState]') == viewport+['complete'], timeout=5, step=.05)
+        if not ready: raise RuntimeError('Find fixture viewport did not settle before the timing input')
         cold = state()
         row('F01_lazy', not cold.get('created', bool(cold.get('panes'))), state=cold)
         app.call('focus', tab=tab)
@@ -58,7 +61,8 @@ def run(h, factory, results, tmp):
         row('F03_frame', rect_ok(p) and p['radius'] == 5, pane=p)
         load = subprocess.check_output(['uptime'], text=True).strip()
         row('F04_one_frame', p['visible'] and state().get('presentationPhases', {}).get('commit', 999) <= 1000/120,
-            commitMilliseconds=state().get('presentationPhases', {}).get('commit'), dispatchMilliseconds=opening_key.get('dispatchMilliseconds'), scope='native key event timestamp to flushed visible Find layer; native field-editor focus completes in the same action', viewMilliseconds=state().get('presentationMilliseconds'), phases=state().get('presentationPhases'), deadline=1000/120, load=load)
+            commitMilliseconds=state().get('presentationPhases', {}).get('commit'), dispatchMilliseconds=opening_key.get('dispatchMilliseconds'), scope='native key event timestamp to flushed visible Find layer in the initial settled window, with no Find warm-up; native field-editor focus completes in the same action', viewMilliseconds=state().get('presentationMilliseconds'), phases=state().get('presentationPhases'), deadline=1000/120, load=load)
+        if os.environ.get('OPEN_FIND_TIMING_ONLY') == '1': return
         requests_before = state()
         key(text='quasar'); p = settled(tab, '1/5')
         after_typing = state()
@@ -81,6 +85,12 @@ def run(h, factory, results, tmp):
         row('F09_page_cmd_g', p['countText'] == '3/5', pane=p)
         key('g', ['cmd', 'shift']); p = settled(tab, '2/5')
         row('F10_page_cmd_shift_g', p['countText'] == '2/5', pane=p)
+        key('f', ['cmd']); settled(tab, '3/5'); key('escape')
+        kept = app.eval(tab, 'window.getSelection().toString()')
+        key('g', ['cmd']); p = settled(tab, '4/5')
+        row('F10_closed_cmd_g', kept == 'quasar' and p['visible'] and p['countText'] == '4/5', pane=p, keptSelection=kept)
+        key('escape'); key('g', ['cmd','shift']); p = settled(tab, '3/5')
+        row('F10_closed_previous', p['visible'] and p['countText'] == '3/5', pane=p)
         key('f', ['cmd']); key('a', ['cmd']); key(text='no-such-match'); p = settled(tab, 'Not Found')
         row('F11_not_found', p['visible'] and p['notFound'] and p['total'] == 0 and not p['navigationVisible'], pane=p)
         key('a', ['cmd']); key('delete'); p = settled(tab, '')
@@ -131,7 +141,7 @@ def run(h, factory, results, tmp):
         select(other, 'long'); app.call('menu-perform', id='use-selection-to-find')
         h.wait_until(lambda: not state().get('pending'), timeout=3, step=.05)
         p = pane(other)
-        row('F22_use_selection', not p['visible'] and len(p['query']) > 40, pane=p,
+        row('F22_use_selection', not p['visible'] and p['query'] == app.eval(other, "document.getElementById('long').textContent") and len(p['query']) > 40, pane=p,
             menu=next(m for m in app.call('menu-state') if m['id'] == 'use-selection-to-find'))
         app.eval(other, 'getSelection().removeAllRanges()')
         query('x'*1000); p = pane(other)
@@ -174,7 +184,7 @@ def run(h, factory, results, tmp):
         # Spec light (.980,.984,1), dark (.082,.110,.188).
         for appearance, expected in [('light', (250,251,255)), ('dark', (19,28,50))]:
             app.call('appearance', name=appearance)
-            path = os.path.join(private, 'find-'+appearance+'.png'); app.call('snapshot', path=path)
+            path = os.path.join(private, 'find-'+appearance+'.png'); capture = app.call('snapshot', path=path)
             p = pane(tab); f=p['frame']; width,height,pixel=h.read_image(path, srgb=True)
             ws=app.call('window-state'); scale=width/ws['frame'][2]
             rgb=pixel(round((f[0]+75)*scale), round(height-(f[1]+f[3]-3)*scale)) if f else (0,0,0)
@@ -182,8 +192,8 @@ def run(h, factory, results, tmp):
             if appearance == 'dark':
                 corner = pixel(round((f[0]+.5)*scale), round(height-(f[1]+f[3]-.5)*scale)) if f else (0,0,0)
                 edge = pixel(round((f[0]+5)*scale), round(height-(f[1]+f[3]-1)*scale)) if f else (0,0,0)
-                row('F30_radius_pixels', p['visible'] and p['radius'] == 5 and h.chrome_delta_e(edge, expected) <= 2 and h.chrome_delta_e(corner, expected) > 5, corner=corner, edge=edge, file=path)
-            row('F30_color_'+appearance, p['visible'] and delta <= 2, rgb=rgb, expected=expected, deltaE00=delta, file=path)
+                row('F30_radius_pixels', capture.get('method') == 'windowserver+devtools' and p['visible'] and p['radius'] == 5 and h.chrome_delta_e(edge, expected) <= 2 and h.chrome_delta_e(corner, expected) > 5, corner=corner, edge=edge, file=path, capture=capture)
+            row('F30_color_'+appearance, capture.get('method') == 'windowserver+devtools' and p['visible'] and delta <= 2, rgb=rgb, expected=expected, deltaE00=delta, file=path, capture=capture)
         app.call('appearance', name='system')
         # A separate real App keeps observer overhead out of the timing gate.
         # The observer is armed before the lazy Find view exists, so a leaked

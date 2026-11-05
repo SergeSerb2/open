@@ -17,6 +17,7 @@ final class FindController {
     var final = false
     var requestedActivation = false
     var needsNewSession = true
+    var forward = true
     var overlay: FindPaneOverlay?
     weak var page: OEWebContent?
   }
@@ -53,12 +54,17 @@ final class FindController {
     let requestedAt = factory.findKeyRequestedAt ?? start
     let state = state(id), wasEditing = owns(factory.window?.firstResponder)
     state.open = true; sync(refreshResults: false)
+    let layoutAt = ProcessInfo.processInfo.systemUptime
     // Commit the visible bar before the native text-input context's first-use
     // setup. The editor stays lazy and focus still completes in this action.
-    state.overlay?.displayIfNeeded(); CATransaction.flush()
+    state.overlay?.displayIfNeeded()
+    let drawAt = ProcessInfo.processInfo.systemUptime
+    CATransaction.flush()
     let visibleAt = ProcessInfo.processInfo.systemUptime
     state.overlay?.bar.focusQuery()
-    presentationPhases = ["commit": (visibleAt - requestedAt) * 1000, "view": (visibleAt - start) * 1000, "focus": (ProcessInfo.processInfo.systemUptime - visibleAt) * 1000]
+    presentationPhases = ["commit": (visibleAt - requestedAt) * 1000, "view": (visibleAt - start) * 1000,
+      "layout": (layoutAt - start) * 1000, "draw": (drawAt - layoutAt) * 1000, "flush": (visibleAt - drawAt) * 1000,
+      "focus": (ProcessInfo.processInfo.systemUptime - visibleAt) * 1000]
     lastPresentationMilliseconds = (ProcessInfo.processInfo.systemUptime - start) * 1000
     if seedSelection, !wasEditing { readSelection(id, page: page, opening: true) }
     else if !state.query.isEmpty { run(id, forward: true) }
@@ -87,12 +93,35 @@ final class FindController {
       self.factory.app.noteAsyncEngineCall("findSelection")
       // Bound the decoded result before it crosses the engine bridge. A query
       // owns at most 1,000 UTF-8 bytes (largest explicit query buffer: 1 KB).
-      let value = try? await page.evaluateJavaScript("window.getSelection().toString().slice(0,4001)") as? String
+      let script = #"""
+        (() => { try {
+          const selection = window.getSelection();
+          let text = selection ? selection.toString() : '';
+          if (typeof text !== 'string') return '';
+          if (\#(opening ? "true" : "false")) {
+            text = text.replace(/[\u000A-\u000D\u0085\u2028\u2029]/g, ' ');
+            if (typeof text !== 'string') return '';
+            text = text.replace(/^[\u0009-\u000D\u0020\u0085\u00A0\u1680\u2000-\u200B\u2028\u2029\u202F\u205F\u3000]+|[\u0009-\u000D\u0020\u0085\u00A0\u1680\u2000-\u200B\u2028\u2029\u202F\u205F\u3000]+$/g, '');
+            if (typeof text !== 'string') return '';
+            let count = 0;
+            for (const segment of new Intl.Segmenter('und', {granularity:'grapheme'}).segment(text)) {
+              if (++count > 40) return '';
+            }
+          }
+          const bounded = text.slice(0, 4001);
+          return typeof bounded === 'string' && bounded.length <= 4001 ? bounded : '';
+        } catch { return ''; } })()
+        """#
+      let value = try? await page.evaluateJavaScript(script) as? String
       guard !Task.isCancelled, !self.factory.isClosing, !self.factory.app.terminationRequested,
             self.factory.selectedContent === page, self.states[id] === state,
             state.revision == revision, !opening || state.open else { return }
-      let normalized = (value ?? "").components(separatedBy: .newlines).joined(separator: " ").trimmingCharacters(in: .whitespacesAndNewlines)
-      if !normalized.isEmpty, !opening || normalized.count <= 40 { self.setQuery(Self.bounded(normalized), id: id) }
+      let raw = value ?? ""
+      let normalized = opening ? raw.components(separatedBy: .newlines).joined(separator: " ").trimmingCharacters(in: .whitespacesAndNewlines) : raw
+      if !normalized.isEmpty, !opening || normalized.count <= 40 {
+        self.setQuery(Self.bounded(normalized), id: id)
+        if !opening { self.run(id, forward: true) } // Preserve the existing tag-7 search, without presenting UI.
+      }
       if opening { self.run(id, forward: true); if state.overlay?.bar.owns(self.factory.window?.firstResponder) == true { state.overlay?.bar.focusQuery() } }
     }
   }
@@ -135,6 +164,7 @@ final class FindController {
       state.overlay?.bar.update(active: 0, total: 0, final: false)
     } else {
       if state.needsNewSession { page.stopFinding(clearSelection: true); state.needsNewSession = false }
+      state.forward = forward
       state.acceptsResults = true; requestCount += 1
       page.find(state.query, forward: forward, caseSensitive: false)
     }
@@ -149,6 +179,9 @@ final class FindController {
     guard let state = states[id] else { return }
     state.open = false; state.revision += 1; state.acceptsResults = false; pendingEdits.remove(id)
     resetResult(state)
+    // stopFinding(false) keeps the native match selected. A closed-bar Cmd+G
+    // starts from that selection; do not clear it again when reopening.
+    state.needsNewSession = false
     selectionTask?.cancel(); selectionTask = nil
     factory.hosts[id]?.content.stopFinding(clearSelection: false)
     // End field editing before hiding its ancestor, then focus the actual page.
@@ -178,7 +211,7 @@ final class FindController {
         state.overlay?.removeFromSuperview(); continue
       }
       if state.overlay == nil {
-        let overlay = FindPaneOverlay(frame: parent.bounds); state.overlay = overlay
+        let overlay = FindPaneOverlay(frame: .zero); state.overlay = overlay
         overlay.bar.onEdit = { [weak self] in self?.edit($0, id: id) }
         overlay.bar.onAction = { [weak self] tag in
           guard let self else { return }
@@ -189,8 +222,9 @@ final class FindController {
       }
       guard let overlay = state.overlay else { continue }
       let changed = overlay.superview !== parent || state.page !== page
-      if overlay.superview !== parent { overlay.removeFromSuperview(); overlay.frame = parent.bounds; parent.addSubview(overlay) }
-      state.page = page; overlay.topInset = top; overlay.isHidden = false
+      overlay.topInset = top
+      if overlay.superview !== parent { overlay.removeFromSuperview(); parent.addSubview(overlay) }
+      state.page = page; overlay.isHidden = false; overlay.updatePlacement()
       overlay.layoutSubtreeIfNeeded()
       if changed, refreshResults, !state.query.isEmpty {
         resetResult(state); page.stopFinding(clearSelection: true); run(id, forward: true)
@@ -215,7 +249,7 @@ final class FindController {
         guard let self, let state, let page, self.states[id] === state, state.revision == revision,
           state.open, state.acceptsResults, state.active == 0, self.factory.hosts[id]?.content === page,
           !self.factory.isClosing, !self.factory.app.terminationRequested else { return }
-        self.activationRequests += 1; self.run(id, forward: true)
+        self.activationRequests += 1; self.run(id, forward: state.forward)
       }
     }
   }
@@ -278,7 +312,7 @@ final class FindController {
       return ["tab": id.description, "visible": state.open && state.overlay?.superview != nil && state.overlay?.isHiddenOrHasHiddenAncestor == false,
         "query": state.query, "countText": bar?.countText ?? "", "active": bar?.active ?? 0, "total": bar?.total ?? 0,
         "notFound": bar?.notFound ?? false, "navigationVisible": bar?.navigationVisible ?? false,
-        "separatorVisible": bar?.separatorVisible ?? false, "frame": frame(bar), "paneFrame": frame(state.overlay),
+        "separatorVisible": bar?.separatorVisible ?? false, "frame": frame(bar), "paneFrame": frame(state.overlay?.superview),
         "topInset": state.overlay?.topInset ?? 10, "focused": bar?.owns(factory.window?.firstResponder) ?? false,
         "placeholder": bar?.field.placeholderString ?? "", "radius": bar?.layer?.cornerRadius ?? 0,
         "querySelection": (bar?.field.currentEditor() as? NSTextView).map { [$0.selectedRange().location, $0.selectedRange().length] } ?? [],

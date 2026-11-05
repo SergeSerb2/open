@@ -11,6 +11,8 @@ final class FindBarView: NSView, NSTextFieldDelegate {
   private var results: FindResultsView?
   private let close = FindButton(symbol: "xmark", title: "Close Find")
   private let separator = CALayer()
+  private var appliedDark: Bool?
+  private var cachedTint: NSColor?
   var onEdit: ((String) -> Void)?
   var onAction: ((Int) -> Void)?
   var onClose: (() -> Void)?
@@ -56,6 +58,8 @@ final class FindBarView: NSView, NSTextFieldDelegate {
     editor.isAutomaticQuoteSubstitutionEnabled = false; editor.isAutomaticDashSubstitutionEnabled = false
     editor.isAutomaticTextReplacementEnabled = false; editor.isAutomaticSpellingCorrectionEnabled = false
     editor.isContinuousSpellCheckingEnabled = false
+    editor.isAutomaticTextCompletionEnabled = false; editor.inlinePredictionType = .no
+    editor.writingToolsBehavior = .none
     editor.onAction = { [weak self] in self?.onAction?($0) }
     editor.onClose = { [weak self] in self?.onClose?() }
     return editor
@@ -64,6 +68,8 @@ final class FindBarView: NSView, NSTextFieldDelegate {
   override func viewDidChangeEffectiveAppearance() { super.viewDidChangeEffectiveAppearance(); applyColors() }
   private func applyColors() {
     let dark = effectiveAppearance.bestMatch(from: [.aqua, .darkAqua]) == .darkAqua
+    if appliedDark == dark, let cachedTint { results?.applyTint(cachedTint); return }
+    appliedDark = dark
     let background = NSColor(displayP3Red: dark ? 0.082 : 0.980, green: dark ? 0.110 : 0.984, blue: dark ? 0.188 : 1, alpha: 1)
     layer?.backgroundColor = background.cgColor
     layer?.shadowColor = NSColor(displayP3Red: 0.082, green: 0.110, blue: 0.196, alpha: 1).cgColor
@@ -71,6 +77,7 @@ final class FindBarView: NSView, NSTextFieldDelegate {
     field.textColor = dark ? NSColor.white.withAlphaComponent(0.80)
       : NSColor(displayP3Red: 0.0549, green: 0.0588, blue: 0.0627, alpha: 0.90)
     let tint = NSColor(displayP3Red: dark ? 0.980 : 0.055, green: dark ? 0.984 : 0.059, blue: dark ? 1 : 0.063, alpha: dark ? 0.90 : 0.80)
+    cachedTint = tint
     search.contentTintColor = tint
     close.contentTintColor = tint; results?.applyTint(tint)
     separator.backgroundColor = NSColor(displayP3Red: 0, green: 0, blue: 0, alpha: 0.10).cgColor
@@ -217,23 +224,44 @@ private final class FindFieldEditor: NSTextView {
   }
 }
 
-/// A transparent, autoresizing overlay in the pane's coordinates. Empty space
-/// passes through to the page. No window event monitor or idle scheduler.
+/// A bar-sized pane overlay. Parent frame notifications keep it anchored
+/// without a page-sized backing surface, timers, or a display link.
 @MainActor
 final class FindPaneOverlay: NSView {
   let bar = FindBarView(frame: .zero)
-  var topInset: CGFloat = 10 { didSet { if topInset != oldValue { needsLayout = true } } }
+  private var parentObserver: (any NSObjectProtocol)?
+  var topInset: CGFloat = 10 { didSet { if topInset != oldValue { updatePlacement() } } }
+  override var wantsDefaultClipping: Bool { false }
+  override var isHidden: Bool {
+    didSet { if isHidden { stopObserving() } else { observeParent(); updatePlacement() } }
+  }
   override init(frame: NSRect) {
-    super.init(frame: frame); autoresizingMask = [.width, .height]; addSubview(bar); needsLayout = true
+    super.init(frame: frame); addSubview(bar); needsLayout = true
   }
   @available(*, unavailable) required init?(coder: NSCoder) { fatalError() }
-  override func setFrameSize(_ newSize: NSSize) {
-    super.setFrameSize(newSize); needsLayout = true
+  isolated deinit { if let parentObserver { NotificationCenter.default.removeObserver(parentObserver) } }
+  override func viewDidMoveToSuperview() {
+    super.viewDidMoveToSuperview(); stopObserving(); observeParent(); updatePlacement()
+  }
+  private func stopObserving() {
+    if let parentObserver { NotificationCenter.default.removeObserver(parentObserver); self.parentObserver = nil }
+  }
+  private func observeParent() {
+    guard parentObserver == nil, !isHidden, let parent = superview else { return }
+    parent.postsFrameChangedNotifications = true
+    parentObserver = NotificationCenter.default.addObserver(forName: NSView.frameDidChangeNotification, object: parent, queue: .main) { [weak self] _ in
+      MainActor.assumeIsolated { self?.updatePlacement() }
+    }
+  }
+  func updatePlacement() {
+    guard let parent = superview else { return }
+    let width = min(300, max(0, parent.bounds.width - 20))
+    let y = parent.isFlipped ? parent.bounds.minY + topInset : parent.bounds.maxY - topInset - 32
+    let target = CGRect(x: parent.bounds.maxX - 10 - width, y: y, width: width, height: 32)
+    if frame != target { frame = target; needsLayout = true }
   }
   override func layout() {
-    super.layout()
-    let width = min(300, max(0, bounds.width - 20))
-    bar.frame = CGRect(x: bounds.width - 10 - width, y: bounds.height - topInset - 32, width: width, height: 32)
+    super.layout(); if bar.frame != bounds { bar.frame = bounds }
   }
   override func hitTest(_ point: NSPoint) -> NSView? {
     let hit = super.hitTest(point); return hit === self ? nil : hit
