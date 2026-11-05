@@ -162,7 +162,7 @@ final class PermissionPromptPresenter: NSObject, NSPopoverDelegate {
     finish(nil)
     observers.forEach(NotificationCenter.default.removeObserver); observers.removeAll()
   }
-  func popoverDidClose(_ notification: Notification) { if !finishing { finish(nil) } }
+  func popoverDidClose(_ notification: Notification) { if !finishing, !popover.isShown { finish(nil) } }
   @discardableResult func press(_ answer: String) -> Bool {
     guard popover.isShown, current != nil, ["allow", "notnow"].contains(answer) else { return false }
     (answer == "allow" ? view.allow : view.notNow).performClick(nil); return true
