@@ -4,6 +4,7 @@ import QuartzCore
 import OpenFeatures
 import OpenModel
 import Darwin
+import OpenEngine
 
 extension AutomationController {
     /// Real App surfaces, separate from the legacy `split` toggle used by older suites.
@@ -69,33 +70,142 @@ extension AutomationController {
                 guard let uuid = UUID(uuidString: value), factory.model.node(id: ItemID(rawValue: uuid)) != nil else { throw Failure(message: "unknown bench node") }
                 return ItemID(rawValue: uuid)
             }
-            var single: [Double] = [], multiple: [Double] = [], singleNative: [Double] = [], multipleNative: [Double] = []
-            func select(_ id: ItemID) async throws -> Double {
+            var samples = Dictionary(uniqueKeysWithValues: ["single", "split", "singleNative", "splitNative",
+                "singleSynchronous", "splitSynchronous", "singleRenderer", "splitRenderer", "singleAcknowledged", "splitAcknowledged"].map { ($0, [Double]()) })
+            func pages(_ id: ItemID) throws -> [OEWebContent] {
+                let tabs = factory.model.node(id: id)?.split?.panes.map(\.id) ?? [id]
+                return try tabs.map { tab in
+                    guard let page = factory.hosts[tab]?.content else { throw Failure(message: "benchmark host is missing") }
+                    return page
+                }
+            }
+            func focusedPage(_ id: ItemID) throws -> OEWebContent {
+                let tab = factory.model.node(id: id)?.split?.focusedPaneID ?? id
+                guard let page = factory.hosts[tab]?.content else { throw Failure(message: "focused benchmark host is missing") }
+                return page
+            }
+            let read = "({hidden:document.hidden,sequence:window.__openSplitVisible.sequence,painted:window.__openSplitVisible.painted,callback:window.__openSplitVisible.callback})"
+            for id in ids {
+                for page in try pages(id) {
+                    let before = Date().timeIntervalSince1970 * 1000
+                    let epoch = try await page.evaluateJavaScript("""
+                        (() => {
+                          const probe = window.__openSplitVisible = {sequence:0,painted:0,callback:0};
+                          document.addEventListener('visibilitychange', () => {
+                            if (!document.hidden) {
+                              const sequence = ++probe.sequence;
+                              probe.painted = 0;
+                              requestAnimationFrame(time => {
+                                if (!document.hidden && probe.sequence === sequence) {
+                                  probe.painted = performance.timeOrigin + time;
+                                  probe.callback = performance.timeOrigin + performance.now();
+                                }
+                              });
+                            }
+                          });
+                          return performance.timeOrigin + performance.now();
+                        })()
+                        """) as? Double
+                    let after = Date().timeIntervalSince1970 * 1000
+                    guard let epoch, epoch >= before - 1, epoch <= after + 1 else { throw Failure(message: "renderer/native clocks do not share the measured epoch") }
+                }
+            }
+            func show(_ id: ItemID) -> Double {
                 let start = CACurrentMediaTime()
                 _ = controller.sidebar(controller.sidebar, didRequest: .select(nodeID: id, space: space.id))
                 controller.contentView.layoutSubtreeIfNeeded(); CATransaction.flush()
-                let native = (CACurrentMediaTime() - start) * 1000
-                let focused = factory.model.node(id: id)?.split?.focusedPaneID ?? id
-                guard let page = factory.hosts[focused]?.content,
-                      try await page.evaluateJavaScript("!document.hidden") as? Bool == true else {
+                return (CACurrentMediaTime() - start) * 1000
+            }
+            func select(_ id: ItemID) async throws {
+                _ = show(id)
+                guard try await focusedPage(id).evaluateJavaScript("!document.hidden") as? Bool == true else {
                     throw Failure(message: "selected benchmark page is not visible in the renderer")
                 }
-                return native
             }
-            // Warm hosts first. Measured scope: production selection through native layout
-            // and focused renderer visibility acknowledgement, excluding socket transport
-            // and physical presentation. This is the plan's live focused-pane budget.
-            for id in ids { _ = try await select(id) }
+            for id in ids { try await select(id) }
+            if args["motionOnly"] as? Bool == true {
+                func animations() throws -> [[String: Any]] {
+                    var result: [[String: Any]] = []
+                    var roles: [ObjectIdentifier: String] = [:]
+                    for (index, slot) in controller.container.slots.enumerated() {
+                        roles[ObjectIdentifier(slot.focusRing)] = "pane\(index).focusRing"
+                        if let layer = slot.layer { roles[ObjectIdentifier(layer)] = "pane\(index).slot" }
+                        if let layer = slot.paneChrome?.layer { roles[ObjectIdentifier(layer)] = "pane\(index).chrome" }
+                    }
+                    func collect(_ layer: CALayer?, _ path: String, _ depth: Int) throws {
+                        guard let layer else { return }
+                        guard depth < 64, result.count < 256 else { throw Failure(message: "motion probe layer limit exceeded") }
+                        for key in layer.animationKeys() ?? [] {
+                            if let animation = layer.animation(forKey: key) {
+                                result.append(["layer": roles[ObjectIdentifier(layer)] ?? path, "key": key,
+                                    "keyPath": (animation as? CAPropertyAnimation)?.keyPath ?? "",
+                                    "duration": animation.duration, "beginTime": animation.beginTime,
+                                    "repeatCount": animation.repeatCount])
+                            }
+                        }
+                        for (index, child) in (layer.sublayers ?? []).enumerated() { try collect(child, path + ".\(index)", depth + 1) }
+                    }
+                    try collect(controller.container.layer, "container", 0)
+                    return result
+                }
+                var proof: [[String: Any]] = []
+                for wrapped in [false, true] {
+                    for (target, path) in [(ids[1], "single"), (ids[2], "split")] {
+                        try await select(ids[0]); try await Task.sleep(for: .milliseconds(350))
+                        if wrapped { CATransaction.begin() }
+                        _ = show(target)
+                        if wrapped { CATransaction.commit(); CATransaction.flush() }
+                        proof.append(["path": path, "addedTransaction": wrapped, "animations": try animations()])
+                        try await Task.sleep(for: .milliseconds(350))
+                    }
+                }
+                try await select(selected)
+                return ["motion": proof]
+            }
             for _ in 0..<40 {
-                for (target, isSplit) in [(ids[1], false), (ids[2], true)] {
-                    _ = try await select(ids[0]); let start = CACurrentMediaTime(); let native = try await select(target)
-                    let ms = (CACurrentMediaTime() - start) * 1000
-                    if isSplit { multiple.append(ms); multipleNative.append(native) }
-                    else { single.append(ms); singleNative.append(native) }
+                for (target, prefix) in [(ids[1], "single"), (ids[2], "split")] {
+                    try await select(ids[0])
+                    let targetPages = try pages(target)
+                    var previous: [Double] = []
+                    for page in targetPages {
+                        guard let value = try await page.evaluateJavaScript(read) as? [String: Any],
+                              value["hidden"] as? Bool == true, let sequence = value["sequence"] as? Double else {
+                            throw Failure(message: "every benchmark target pane must be hidden before selection")
+                        }
+                        previous.append(sequence)
+                    }
+                    let start = CACurrentMediaTime(), epoch = Date().timeIntervalSince1970 * 1000
+                    // show() returns after native layout and its existing CA flush.
+                    // Do not add a transaction: its completion block waits for animations.
+                    let synchronous = show(target)
+                    guard try await focusedPage(target).evaluateJavaScript("!document.hidden") as? Bool == true else {
+                        throw Failure(message: "focused benchmark page did not become visible")
+                    }
+                    let acknowledged = (CACurrentMediaTime() - start) * 1000
+                    var frames: [Double] = []
+                    while true {
+                        frames.removeAll(keepingCapacity: true)
+                        for (index, page) in targetPages.enumerated() {
+                            if let value = try await page.evaluateJavaScript(read) as? [String: Any],
+                               value["hidden"] as? Bool == false, let next = value["sequence"] as? Double, next > previous[index],
+                               let frame = value["painted"] as? Double, frame > 0,
+                               let callback = value["callback"] as? Double, callback >= epoch - 1, frame <= callback + 1 {
+                                frames.append(frame)
+                            }
+                        }
+                        if frames.count == targetPages.count { break }
+                        guard CACurrentMediaTime() - start < 2 else { throw Failure(message: "missing fresh pane rAF") }
+                        try await Task.sleep(for: .milliseconds(1))
+                    }
+                    let native = synchronous
+                    let ready = max(native, frames.max()! - epoch)
+                    samples[prefix]!.append(ready); samples[prefix + "Native"]!.append(native)
+                    samples[prefix + "Synchronous"]!.append(synchronous); samples[prefix + "Renderer"]!.append(frames.max()! - epoch)
+                    samples[prefix + "Acknowledged"]!.append(acknowledged)
                 }
             }
-            _ = try await select(selected)
-            return ["single": single, "split": multiple, "singleNative": singleNative, "splitNative": multipleNative]
+            try await select(selected)
+            return samples
         case "observe", "idle":
             guard ProcessInfo.processInfo.environment["OPEN_IDLE_OWNER"] == "split" else { throw Failure(message: "split idle observer ownership is not configured") }
             typealias Action = @convention(c) () -> Void

@@ -257,12 +257,13 @@ def split_checks(factory, results, tmp, h):
         first = opened('bench-first'); second = opened('bench-second')
         third = opened('bench-third'); app.call('sidebar-menu', node=b, item='Open in Split View'); s = settled(2)
         live([p['id'] for p in s['panes']])
+        app.begin_timing('split switch benchmark')
         measured = app.call('split', op='bench', nodes=[first, second, s['id']])
         summaries = {}
         for name, values in measured.items():
             summaries[name] = dict(median=statistics.median(values), p95=sorted(values)[math.ceil(len(values)*.95)-1])
-        row('speed_tab_switch', all(s['p95'] <= 16 for s in summaries.values()), loadAverage=list(os.getloadavg()), uptime=subprocess.check_output(['uptime'], text=True).strip(),
-            milliseconds=summaries, samples=measured, scope='production sidebar selection through native layout, CA submission and focused renderer visibility acknowledgement; excludes physical presentation')
+        row('speed_tab_switch', all(summaries[name]['p95'] <= 16 for name in ('single', 'split', 'singleNative', 'splitNative')), loadAverage=list(os.getloadavg()), uptime=subprocess.check_output(['uptime'], text=True).strip(),
+            milliseconds=summaries, samples=measured, scope='production sidebar selection through native layout/CA submission and first rAF after fresh visibilitychange in every shown pane (last pane wins), native CA completion; query return retained separately; excludes physical presentation')
         # E5: the production sleep controller protects shown panes, freezes and
         # discards a hidden split, then wakes both real pages with history intact.
         sleep_split = state(); sleep_ids = [p['id'] for p in sleep_split['panes']]; focus = sleep_split['focused']
