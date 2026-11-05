@@ -26,6 +26,9 @@
 #include "chrome/common/extensions/api/omnibox/omnibox_handler.h"
 #include "chrome/grit/generated_resources.h"
 #include "components/crx_file/id_util.h"
+#include "components/download/public/common/download_item.h"
+#include "components/download/public/common/download_source.h"
+#include "content/public/browser/download_item_utils.h"
 #include "content/public/browser/web_contents.h"
 #include "extensions/browser/crx_installer.h"
 #include "extensions/browser/event_router.h"
@@ -61,6 +64,8 @@ auto& Managers() {
 constexpr size_t kMaxExtensions = 1024;
 constexpr size_t kMaxItems = 1024;
 constexpr size_t kMaxText = 65536;
+// guess (child): bound concurrent management requests and their dummy pages.
+constexpr size_t kMaxPendingInstalls = 32;
 // Bridges never decode arbitrary manifests. Chromium validates and localizes
 // them first. Refuse oversized UI payloads; at most 1024 x 64 Ki UTF-16 per
 // list (128 MiB plus bounded dictionaries), below the allocator ceiling.
@@ -139,6 +144,12 @@ CefRefPtr<CefDictionaryValue> PromptData(const Extension* extension, int type) {
   return data;
 }
 
+class ManagedWebstoreInstaller : public extensions::WebstoreInstallWithPrompt {
+ public:
+  using WebstoreInstallWithPrompt::WebstoreInstallWithPrompt;
+  content::WebContents* Requestor() const { return GetWebContents(); }
+};
+
 class Manager : public CefExtensionManager,
                 public extensions::ExtensionRegistryObserver,
                 public extensions::CommandService::Observer,
@@ -161,6 +172,7 @@ class Manager : public CefExtensionManager,
     handler_ = nullptr;
     for (auto& prompt : prompts_) if (prompt) prompt->Answer(false);
     prompts_.clear();
+    webstore_requestors_.clear();
     uninstall_.reset();
     errors_.Reset();
     commands_.Reset();
@@ -253,12 +265,20 @@ class Manager : public CefExtensionManager,
       callback->OnComplete(false, "Extension system is not ready or id is invalid");
       return;
     }
-    auto installer = base::MakeRefCounted<extensions::WebstoreInstallWithPrompt>(
+    const std::string item_id = id;
+    if (webstore_requestors_.size() >= kMaxPendingInstalls || webstore_requestors_.contains(item_id)) {
+      callback->OnComplete(false, "A Web Store install is already pending or the 32-install limit was reached");
+      return;
+    }
+    auto installer = base::MakeRefCounted<ManagedWebstoreInstaller>(
         id, profile_, gfx::NativeWindow((__bridge NSWindow*)window), base::BindOnce(
-            [](CefRefPtr<CefExtensionInstallCallback> callback, bool success,
+            [](base::WeakPtr<Manager> owner, std::string id,
+                CefRefPtr<CefExtensionInstallCallback> callback, bool success,
                 const std::string& error, extensions::webstore_install::Result) {
+              if (owner) owner->webstore_requestors_.erase(id);
               callback->OnComplete(success, error);
-            }, callback));
+            }, weak_.GetWeakPtr(), item_id, callback));
+    webstore_requestors_.emplace(item_id, installer->Requestor());
     installer->BeginInstall();
   }
   bool ExecuteCommand(const CefString& id, const CefString& name,
@@ -362,6 +382,7 @@ class Manager : public CefExtensionManager,
     auto& hooks = GetExtensionHooks();
     hooks.show_install = &ShowInstall;
     hooks.create_uninstall = &CreateUninstall;
+    hooks.allow_download_without_browser = &AllowWebstoreDownload;
     extensions::ExtensionSystem::Get(profile_)->ready().Post(FROM_HERE,
         base::BindOnce(&Manager::Ready, weak_.GetWeakPtr()));
   }
@@ -446,12 +467,25 @@ class Manager : public CefExtensionManager,
       ExtensionInstallPrompt::DoneCallback& done, std::unique_ptr<InstallPromptData>& data);
   static std::unique_ptr<extensions::ExtensionUninstallDialog> CreateUninstall(
       Profile*, gfx::NativeWindow, extensions::ExtensionUninstallDialog::Delegate*);
+  static bool AllowWebstoreDownload(download::DownloadItem* item) {
+    if (!item || item->GetDownloadSource() != download::DownloadSource::EXTENSION_INSTALLER) return false;
+    auto* contents = content::DownloadItemUtils::GetWebContents(item);
+    if (!contents) return false;
+    auto found = Managers().find(Profile::FromBrowserContext(contents->GetBrowserContext()));
+    if (found == Managers().end()) return false;
+    for (const auto& [id, requestor] : found->second->webstore_requestors_)
+      if (requestor == contents) return true;
+    return false;
+  }
  private:
   CefRefPtr<CefRequestContext> context_;
   CefRefPtr<CefExtensionManagerHandler> handler_;
   raw_ptr<Profile> profile_ = nullptr;
   bool ready_ = false;
   std::vector<base::WeakPtr<Prompt>> prompts_;
+  // Installer-owned, UI-thread only; erased before its completion callback.
+  // No real browsing page is used as a referrer for a management install.
+  std::map<std::string, content::WebContents*> webstore_requestors_;
   std::unique_ptr<extensions::ExtensionUninstallDialog> uninstall_;
   base::ScopedObservation<Profile, ProfileObserver> profile_observation_{this};
   base::ScopedObservation<extensions::ExtensionRegistry, extensions::ExtensionRegistryObserver> registry_{this};
