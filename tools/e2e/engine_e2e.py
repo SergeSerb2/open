@@ -9579,11 +9579,9 @@ def page_notification_checks(factory, results, tmp):
         pages.append(tab['page']['identifier'])
         return tab
 
-    def sheet():
-        try:
-            return app.call('alert')
-        except RuntimeError:
-            return None
+    def permission_prompt():
+        state = app.call('permission-prompt')
+        return state if state['visible'] else None
 
     def blocked(reason, **evidence):
         return dict(evidence, status='BLOCKED', reason=reason)
@@ -9593,13 +9591,13 @@ def page_notification_checks(factory, results, tmp):
         tab = live_tab(origin + '/notify.html')
         page = tab['page']['identifier']
 
-        # N1: the user allows the site in Open's prompt (the real sheet button), Chromium shows
+        # N1: the user allows the site in Open's popover (the real Allow button), Chromium shows
         # the banner, and the Allow asks macOS once (§4.5.3).
         before = app.call('notification-authorization')
         app.call('click', tab=page, selector='#ask')
-        prompt_sheet = wait_until(sheet, timeout=10, step=.1)
-        if prompt_sheet:
-            app.call('alert', button='Allow')
+        permission_view = wait_until(permission_prompt, timeout=10, step=.1)
+        if permission_view:
+            app.call('permission-prompt', answer='allow')
         granted = wait_until(lambda: 'permission:granted' in app.eval(page, 'log'), timeout=10, step=.1)
         after = wait_until(lambda: (lambda s: s if len(s['requests']) > len(before['requests']) else None)(
             app.call('notification-authorization')), timeout=10, step=.1) or app.call('notification-authorization')
@@ -9607,9 +9605,10 @@ def page_notification_checks(factory, results, tmp):
         expected = (('requested' if prompt else 'suppressed') if before['status'] == 'notDetermined'
                     else 'skipped:' + before['status'])
         results['N1_allow_asks_macos'] = {
-            'ok': bool(prompt_sheet) and any(origin.split('//')[1].split(':')[0] in t for t in prompt_sheet['texts'])
+            'ok': bool(permission_view) and permission_view['question'] == 'Allow 127.0.0.1 to send you notifications?'
+                  and permission_view['buttons'] == ['Not Now', 'Allow']
                   and bool(granted) and entry == expected and len(after['requests']) == len(before['requests']) + 1,
-            'sheet': prompt_sheet, 'granted': bool(granted), 'statusBefore': before['status'],
+            'prompt': permission_view, 'granted': bool(granted), 'statusBefore': before['status'],
             'request': entry, 'expected': expected, 'requests': after['requests']}
         if prompt and before['status'] == 'notDetermined':
             print('U-N1: click Allow in the macOS notification prompt for Open (waiting up to 120 s)', flush=True)
