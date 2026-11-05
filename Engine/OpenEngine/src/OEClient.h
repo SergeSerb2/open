@@ -92,6 +92,9 @@ class OEClient : public CefClient,
                            bool has_audio_access) override;
 
   // CefLoadHandler
+  void OnLoadStart(CefRefPtr<CefBrowser> browser,
+                   CefRefPtr<CefFrame> frame,
+                   TransitionType transition_type) override;
   void OnLoadingStateChange(CefRefPtr<CefBrowser> browser,
                             bool isLoading,
                             bool canGoBack,
