@@ -5223,8 +5223,12 @@ def process_cpu_window(app, seconds=60):
                 continue
             values = struct.unpack('=16s10Q', usage.raw)
             stamp = time.monotonic_ns()
-            args = subprocess.run(['ps', '-p', str(pid), '-o', 'args='],
-                                  capture_output=True, text=True, check=False).stdout
+            process = subprocess.run(['ps', '-p', str(pid), '-o', 'time=,args='],
+                                     capture_output=True, text=True, check=False).stdout.strip().split(maxsplit=1)
+            if len(process) != 2:
+                continue
+            clock, args = process
+            ps_seconds = sum(float(v) * 60 ** i for i, v in enumerate(reversed(clock.split(':'))))
             kind = ('browser' if pid == app.pid else
                     'gpu' if '--type=gpu-process' in args else
                     'renderer' if '--type=renderer' in args else
@@ -5232,7 +5236,7 @@ def process_cpu_window(app, seconds=60):
                     'utility' if '--type=utility' in args else 'other')
             rows[pid] = {'kind': kind, 'cpu_ticks': values[1] + values[2],
                          'idle_wakeups': values[3], 'interrupt_wakeups': values[4],
-                         'start': values[9], 'stamp': stamp}
+                         'start': values[9], 'stamp': stamp, 'ps_seconds': ps_seconds}
         if app.pid not in rows:
             raise RuntimeError('idle CPU sample could not read the Open process')
         return rows
@@ -5250,6 +5254,8 @@ def process_cpu_window(app, seconds=60):
         cpu = (b['cpu_ticks'] - a['cpu_ticks']) * ns_per_tick / 1e9 / elapsed * 100
         by_kind[b['kind']] = by_kind.get(b['kind'], 0) + cpu
         by_process.append({'pid': pid, 'kind': b['kind'], 'seconds': round(elapsed, 3),
+                           'cpu_time_ticks': b['cpu_ticks'] - a['cpu_ticks'],
+                           'ps_cpu_seconds_delta': round(b['ps_seconds'] - a['ps_seconds'], 2),
                            'cpu_percent': round(cpu, 4),
                            'package_idle_wakeups_per_second': round((b['idle_wakeups'] - a['idle_wakeups']) / elapsed, 3),
                            'interrupt_wakeups_per_second': round((b['interrupt_wakeups'] - a['interrupt_wakeups']) / elapsed, 3)})
@@ -5276,6 +5282,7 @@ def measure(app_factory, results, tmp):
     app = app_factory(urls=('about:blank',), fresh=True)
     try:
         time.sleep(30)
+        results['idle_cpu_empty_startup_tail'] = process_cpu_window(app)
         results['idle_cpu_empty_window'] = process_cpu_window(app)
         results['idle_empty_tabs'] = app.call('tabs')
         results['idle_cpu_empty_task_manager'] = app.call('metrics', interval=10)
@@ -5317,6 +5324,7 @@ def measure(app_factory, results, tmp):
         time.sleep(30)
         m10 = app.call("metrics", interval=2)
         results['idle_10_tabs_sleep_before'] = app.call('sleep-state')
+        results['idle_cpu_10_tabs_startup_tail'] = process_cpu_window(app)
         results['idle_cpu_10_tabs_os'] = process_cpu_window(app)
         results['idle_10_tabs'] = app.call('tabs')
         results['idle_10_tabs_sleep'] = app.call('sleep-state')
