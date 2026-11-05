@@ -9,6 +9,7 @@ from pathlib import Path
 import shutil
 import struct
 import subprocess
+import time
 import zipfile
 import zlib
 
@@ -69,7 +70,15 @@ def run(app, results, tmp, root, wait_until, new_tab):
             p = app.call("ext-popup")
             if p.get("open") and p["page"]["live"]:
                 try:
-                    if app.eval(p["page"]["identifier"], "document.readyState") == "complete": return p
+                    # The new popup first has a complete about:blank document.
+                    # Wait for its extension document and API bindings, including
+                    # after closing the last hosted tab and creating a browser.
+                    if app.eval(p["page"]["identifier"],
+                        "location.protocol === 'chrome-extension:' && "
+                        "location.hostname === " + json.dumps(identifier) + " && "
+                        "document.readyState === 'complete' && "
+                        "typeof chrome.permissions?.request === 'function'"):
+                        return p
                 except RuntimeError: pass
         return wait_until(ready, timeout=15)
     def close_popup():
@@ -260,6 +269,10 @@ def run(app, results, tmp, root, wait_until, new_tab):
             if w["number"] not in before and w["visible"] and w["class"].startswith("NativeWidget")
             and "Open action probe" in ' '.join([w["title"]] + w.get("text", []))], timeout=15)
         if native:
+            # Chromium deliberately disables Add for its first 500 ms
+            # (extension_install_dialog_view.cc:g_install_delay_in_ms).
+            # This row checks fallback installation, not the timer deadline.
+            time.sleep(1)
             # Establish the exact-PID native focus precondition through a
             # real in-process key route, then click the native accept button.
             app.call("key", key="tab", window=native[0]["number"], route="app")
