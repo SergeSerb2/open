@@ -114,7 +114,8 @@ final class EngineWebContentHostFactory: NSResponder, WebContentHostFactory {
   var downloadDirectory: URL?
   private(set) var events: [[String: Any]] = []
   private(set) var lastFindResult: OEFindResult?
-  private(set) var pendingDialogs: [OEJavaScriptDialog] = []
+  lazy var pageChrome = PageChromeCoordinator(owner: self)
+  var pendingDialogs: [OEJavaScriptDialog] { pageChrome.dialogs.pendingDialogs }
 
   init(app: AppDelegate, state: BrowserWindowState) {
     self.app = app; windowState = state
@@ -161,6 +162,7 @@ final class EngineWebContentHostFactory: NSResponder, WebContentHostFactory {
       self.mirror.sync(); self.commandBarSession?.contextDidChange(); self.app.scheduleMenuRebuild()
       self.app.media.windowChanged(self)
       self.translate.focusDidChange()
+      self.pageChrome.visibilityChanged()
     }
     // History swipes (page-platform §4.4.1): macOS's "Swipe between pages" setting, re-read when
     // Open becomes active, and paused while the Capture overlay is up.
@@ -170,7 +172,7 @@ final class EngineWebContentHostFactory: NSResponder, WebContentHostFactory {
     }
     // Chained: MediaCoordinator.attach wraps this hook later and keeps it.
     let previousVisibility = controller.onVisibilityChange
-    controller.onVisibilityChange = { [weak self] in previousVisibility?(); self?.translate.visibilityDidChange() }
+    controller.onVisibilityChange = { [weak self] in previousVisibility?(); self?.translate.visibilityDidChange(); self?.pageChrome.visibilityChanged() }
     controller.onOpenCommandBar = { [weak self] source, _ in
       if source == .urlField { self?.focusAddressBar(nil) } else { self?.newTab(nil) }
     }
@@ -318,6 +320,7 @@ final class EngineWebContentHostFactory: NSResponder, WebContentHostFactory {
     return host
   }
   func hostDidClose(_ host: EngineWebContentHost) {
+    pageChrome.cancel(host.content)
     translate.contentDidClose(host.content)
     commandBarNavigationFocus.remove(host.tabID)
     app.media.hostClosed(tabID: host.tabID)
@@ -579,6 +582,12 @@ final class EngineWebContentHostFactory: NSResponder, WebContentHostFactory {
   /// chrome.tabs.remove: pinned tabs and favorites stay in the sidebar and
   /// unload; Today tabs close (archived).
   func closeTab(id: ItemID) {
+    if let page = hosts[id]?.content, pageChrome.requestClose(page, completion: { [weak self] accepted in
+      if accepted { self?.finishClosingTab(id: id) }
+    }) { return }
+    finishClosingTab(id: id)
+  }
+  private func finishClosingTab(id: ItemID) {
     guard model.tab(id: id) != nil else { return }
     let order = orderedTabs.map(\.id), index = order.firstIndex(of: id) ?? 0
     let wasSelected = selectedTab?.id == id
@@ -595,6 +604,7 @@ final class EngineWebContentHostFactory: NSResponder, WebContentHostFactory {
   func closeAll() {
     guard !isClosing else { return }
     isClosing = true
+    pageChrome.close()
     controller?.existingTabSwitcher?.cancel()
     translate.closeAll()
     for task in saveCaptureTasks.values { task.cancel() }
@@ -636,7 +646,7 @@ final class EngineWebContentHostFactory: NSResponder, WebContentHostFactory {
   }
   func drainEvents() -> [[String: Any]] { defer { events.removeAll() }; return events }
   func completePendingDialog(accept: Bool, text: String?) -> Bool {
-    guard !pendingDialogs.isEmpty else { return false }; pendingDialogs.removeFirst().complete(accepted: accept, text: text); return true
+    pageChrome.dialogs.answer(accepted: accept, text: text)
   }
   private func makeFindField() -> NSSearchField {
     let field = NSSearchField(); field.placeholderString = "Find in page"; field.target = self; field.delegate = self
@@ -722,7 +732,7 @@ extension EngineWebContentHostFactory {
   @objc func focusAddressBar(_ sender: Any?) { showCommandBar(.editCurrentURL) }
 
   func ownsKeyWindow(_ candidate: NSWindow) -> Bool {
-    candidate === window || candidate === popupPanel || auxiliaryPages.contains { $0.panel === candidate }
+    candidate === window || candidate === popupPanel || auxiliaryPages.contains { $0.panel === candidate } || pageChrome.owns(candidate)
   }
   func navigateFromCommandBar(_ url: URL, current: Bool, background: Bool = false) {
     if current, selectedContent != nil || selectedTab != nil {
@@ -943,6 +953,7 @@ extension EngineWebContentHostFactory {
 
   /// Closes one page wherever it lives.
   func close(page: OEWebContent) {
+    if pageChrome.pageRequestedClose(page) { return }
     if let aux = auxiliaryPages.first(where: { $0.content === page }) {
       closeAuxiliary(aux)
     } else if page.extensionPopupIdentifier != nil {
@@ -956,6 +967,7 @@ extension EngineWebContentHostFactory {
   }
 
   func closeAuxiliary(_ page: AuxiliaryPage) {
+    pageChrome.cancel(page.content)
     guard auxiliaryPages.contains(where: { $0 === page }) else { return }
     auxiliaryPages.removeAll { $0 === page }
     if let observer = page.closeObserver { NotificationCenter.default.removeObserver(observer) }
@@ -1104,73 +1116,22 @@ extension EngineWebContentHostFactory: OEWebContentDelegate {
   }
 
   func webContentDidRequestClose(_ webContent: OEWebContent) {
-    if let page = auxiliaryPages.first(where: { $0.content === webContent }) {
-      closeAuxiliary(page)
-    } else if let id = tabID(for: webContent) {
-      closeTab(id: id)
+    if pageChrome.pageRequestedClose(webContent) { return }
+    // Chromium has already accepted beforeunload. Do not ask it to close
+    // again, or destroy its host from inside the engine delegate callback.
+    DispatchQueue.main.async { [weak self, weak webContent] in
+      guard let self, let webContent else { return }
+      if let id = self.tabID(for: webContent) { self.finishClosingTab(id: id) }
+      else { self.close(page: webContent) }
     }
   }
 
   func webContent(_ webContent: OEWebContent, runJavaScriptDialog dialog: OEJavaScriptDialog) -> Bool {
-    record(
-      "dialog", webContent,
-      ["kind": dialog.kind.rawValue, "message": dialog.message, "default": dialog.defaultPromptText])
-    switch dialogPolicy {
-    case "accept":
-      dialog.complete(accepted: true, text: promptText ?? dialog.defaultPromptText)
-      return true
-    case "dismiss":
-      dialog.complete(accepted: false, text: nil)
-      return true
-    case "hold":
-      pendingDialogs.append(dialog)
-      return true
-    default:
-      guard let window = webContent.view.window else { return false }
-      let alert = NSAlert()
-      alert.messageText = webContent.url?.host() ?? "This page says"
-      alert.informativeText = dialog.message
-      alert.addButton(withTitle: "OK")
-      if dialog.kind != .alert { alert.addButton(withTitle: "Cancel") }
-      let field = NSTextField(frame: NSRect(x: 0, y: 0, width: 260, height: 24))
-      if dialog.kind == .prompt {
-        field.stringValue = dialog.defaultPromptText
-        alert.accessoryView = field
-      }
-      alert.beginSheetModal(for: window) { response in
-        dialog.complete(accepted: response == .alertFirstButtonReturn, text: field.stringValue)
-      }
-      return true
-    }
+    pageChrome.run(dialog, page: webContent)
   }
 
   func webContent(_ webContent: OEWebContent, decidePermissionRequest request: OEPermissionRequest) -> Bool {
-    record("permission", webContent, ["origin": request.origin.absoluteString, "kinds": request.kinds.rawValue])
-    switch permissionPolicy {
-    case "grant":
-      request.grant(); app.tabSleep.permissionsChanged(context: webContent.context)
-      return true
-    case "deny":
-      request.deny(); app.tabSleep.permissionsChanged(context: webContent.context)
-      return true
-    default:
-      guard let window = webContent.view.window else { return false }
-      let alert = NSAlert()
-      alert.messageText = "\(request.origin.host() ?? "This site") wants permission"
-      alert.informativeText = "Requested: \(request.kinds.rawValue)"
-      alert.addButton(withTitle: "Allow")
-      alert.addButton(withTitle: "Block")
-      alert.beginSheetModal(for: window) { [weak self, weak webContent] response in
-        guard response == .alertFirstButtonReturn else {
-          request.deny(); self?.app.tabSleep.permissionsChanged(context: webContent?.context); return
-        }
-        request.grant()
-        self?.app.tabSleep.permissionsChanged(context: webContent?.context)
-        // The user allowed a site's notifications: ask macOS once (page-platform §4.5.3).
-        if request.kinds.contains(.notifications) { NotificationAuthorization.shared.userAllowedNotifications() }
-      }
-      return true
-    }
+    pageChrome.request(request, page: webContent)
   }
 
   func webContent(_ webContent: OEWebContent, showContextMenu menu: OEContextMenu) -> Bool {
@@ -1282,6 +1243,7 @@ extension EngineWebContentHostFactory: OEWebContentDelegate {
   }
 
   func webContent(_ webContent: OEWebContent, didReceiveDevToolsEvent method: String, parameters: [String: Any]) {
+    pageChrome.event(method, parameters: parameters, page: webContent)
     record("devtools", webContent, ["method": method, "params": parameters])
   }
 
@@ -1348,6 +1310,7 @@ extension EngineWebContentHostFactory: OEBrowserDelegate {
   }
 
   func browser(_ browser: OEBrowser, didCloseExtensionPopup popup: OEWebContent) {
+    pageChrome.cancel(popup)
     popup.view.removeFromSuperview()
     popupPanel?.orderOut(nil)
     popupPanel = nil

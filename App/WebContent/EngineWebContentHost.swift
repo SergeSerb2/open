@@ -91,6 +91,7 @@ final class EngineWebContentHost: NSObject, WebContentHost, WebContentProviding,
     onURLChange = nil; onTitleChange = nil; onLoadingChange = nil; onFaviconChange = nil; shouldNavigate = nil
     onPageBackgroundChange = nil; onLiveStateChange = nil
     cachedFaviconImage = nil; cachedFaviconPNG = nil; cachedFaviconURL = nil; faviconImagePageURL = nil; lastReportedFavicon = nil
+    owner?.pageChrome.cancel(content)
     content.delegate = nil; content.close(); content.view.removeFromSuperview()
     owner?.hostDidClose(self)
   }
@@ -243,7 +244,7 @@ final class EngineWebContentHost: NSObject, WebContentHost, WebContentProviding,
   func webContent(_ page: OEWebContent, createWebContentFor request: OEOpenRequest) -> OEWebContent? {
     guard !closed else { return nil }; return owner?.webContent(page, createWebContentFor: request)
   }
-  func webContentDidRequestClose(_ page: OEWebContent) { if !closed { owner?.close(page: page) } }
+  func webContentDidRequestClose(_ page: OEWebContent) { if !closed { owner?.webContentDidRequestClose(page) } }
   func webContent(_ page: OEWebContent, handleKeyEventBeforePage event: NSEvent) -> Bool {
     guard !closed else { return false }
     if owner?.controller?.handleKeyDown(event) == true { return true }

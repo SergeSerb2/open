@@ -87,8 +87,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate, OEEngineDelegate, OEBr
     return false
   }
 
+  private lazy var pageQuit = PageQuitCoordinator(app: self)
+
   func applicationShouldTerminate(_ sender: NSApplication) -> NSApplication.TerminateReply {
     if faviconShutdownTask != nil || sleepQuitTask != nil { return .terminateCancel }
+    if engineReady, !shutdownPrepared, !pageQuit.shouldTerminate() { return .terminateCancel }
     if !sleepQuitCaptured, engineReady, !shutdownPrepared, tabSleep.controller != nil {
       // OEApplication has no terminateLater: capture sleep history first (bounded at 3 s),
       // then ask again. The snapshot save and engine shutdown follow below.

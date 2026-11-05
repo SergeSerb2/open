@@ -1043,6 +1043,15 @@
         return true
       case "dialog":
         return w.completePendingDialog(accept: a["accept"] as? Bool ?? true, text: a["text"] as? String)
+      case "dialog-state": return w.pageChrome.dialogs.state
+      case "dialog-button":
+        return w.pageChrome.dialogs.press(accepted: a["accept"] as? Bool ?? true, text: a["text"] as? String, suppress: a["suppress"] as? Bool ?? false)
+      case "permission-prompt":
+        if let answer = a["answer"] as? String { return w.pageChrome.permissions.press(answer) }
+        return w.pageChrome.permissions.state
+      case "permission-decisions":
+        let store = SitePermissionStore.forContext(try focusedBrowser(w).context)
+        return ["ready": store.indexReady, "decisions": store.allDecisions().map { ["origin": $0.origin.absoluteString, "kind": $0.kind.rawValue, "state": $0.state.rawValue] }]
       case "script-add":
         let profile = EngineWebProfile(try focusedBrowser(w).context)
         profile.addUserScript(
@@ -1079,12 +1088,14 @@
       case "permission":
         let origin = try url(a, "origin")
         let context = try focusedBrowser(w).context
-        let kind = OEPermissionKind(rawValue: UInt32(a["kind"] as? Int ?? 0))
+        let rawKind = a["kind"] as? Int ?? 0
+        guard let bits = UInt32(exactly: rawKind) else { throw Failure(message: "invalid permission kind") }
+        let kind = OEPermissionKind(rawValue: bits)
+        guard SitePermissionStore.canPersist(kind) else { throw Failure(message: "no persistent setting for permission kind") }
         if let state = a["state"] as? Int, let s = OEPermissionState(rawValue: state) {
-          context.setPermissionState(s, for: kind, origin: origin)
-          app.tabSleep.permissionsChanged(context: context)
+          SitePermissionStore.forContext(context).set(origin: origin, kind: kind, state: s)
         }
-        return context.permissionState(for: kind, origin: origin).rawValue
+        return SitePermissionStore.forContext(context).state(origin: origin, kind: kind).rawValue
       case "download-dir":
         w.downloadDirectory = URL(fileURLWithPath: a["path"] as? String ?? NSTemporaryDirectory())
         return true
