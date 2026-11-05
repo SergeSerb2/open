@@ -21,6 +21,7 @@
 #include "content/public/browser/render_frame_host.h"
 #include "content/public/browser/web_contents.h"
 #include "content/public/browser/web_contents_user_data.h"
+#include "open/browser/media/open_media_hooks.h"
 
 namespace open_engine {
 
@@ -100,8 +101,34 @@ double Seconds(base::TimeDelta delta) {
 // static
 CefRefPtr<OpenMediaController> OpenMediaController::GetOrCreate(
     content::WebContents* contents) {
+  // EM-4: Chrome's video Picture in Picture window factory asks Open first.
+  GetMediaHooks().create_video_overlay_window = &MaybeCreateVideoOverlayWindow;
   MediaControllerHolder::CreateForWebContents(contents);
   return MediaControllerHolder::FromWebContents(contents)->controller();
+}
+
+// static
+OpenMediaController* OpenMediaController::FromWebContents(
+    content::WebContents* contents) {
+  MediaControllerHolder* holder =
+      contents ? MediaControllerHolder::FromWebContents(contents) : nullptr;
+  return holder ? holder->controller() : nullptr;
+}
+
+bool OpenMediaController::GetPictureInPictureHost(
+    CefRefPtr<CefMediaControllerHandler>* handler,
+    CefRefPtr<CefBrowser>* browser) {
+  CEF_REQUIRE_UIT_RETURN(false);
+  if (!IsValid() || !handler_) {
+    return false;
+  }
+  auto host = CefBrowserHostBase::GetBrowserForContents(web_contents());
+  if (!host || !handler_->ShouldHostPictureInPicture(host.get())) {
+    return false;
+  }
+  *handler = handler_;
+  *browser = host.get();
+  return true;
 }
 
 OpenMediaController::OpenMediaController(content::WebContents* contents)

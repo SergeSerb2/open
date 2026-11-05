@@ -7,4 +7,5 @@
 #import <OpenEngine/OENavigationHistory.h>
 #import <OpenEngine/OEWebContent.h>
 #import <OpenEngine/OEMediaSession.h>
+#import <OpenEngine/OEPictureInPicture.h>
 #import <OpenEngine/OEExtension.h>

@@ -50,6 +50,17 @@ import OpenWeb
         window?.orderOut(nil); window?.close(); onClosed?()
     }
     public func makeMenu() -> NSMenu { menuBuilder.build(document: true) }
+    /// The page's requested size arrives after the panel exists (EM-7); same limits as init.
+    public func resize(requestedSize: CGSize, screenVisibleFrame: CGRect? = nil) {
+        guard !closing, let window, requestedSize.width > 0, requestedSize.height > 0,
+              requestedSize.width.isFinite, requestedSize.height.isFinite else { return }
+        let screen = screenVisibleFrame ?? window.screen?.visibleFrame ?? NSScreen.main?.visibleFrame ?? .zero
+        let maximum = CGSize(width: screen.width * PiPMetrics.maximumScreenFraction, height: screen.height * PiPMetrics.maximumScreenFraction)
+        let size = CGSize(width: min(maximum.width, max(PiPMetrics.minimum.width, requestedSize.width)),
+                          height: min(maximum.height, max(PiPMetrics.minimum.height, requestedSize.height + PiPMetrics.documentTopBar)))
+        let frame = CGRect(x: screen.maxX - size.width - PiPMetrics.documentScreenInset, y: screen.minY + PiPMetrics.documentScreenInset, width: size.width, height: size.height)
+        window.setFrame(frame, display: true); host.windowFrame = frame
+    }
     public func windowShouldClose(_ sender: NSWindow) -> Bool { close(); return false }
     public func windowWillClose(_ notification: Notification) { if !closing { closing = true; host.closePausingVideo(false); host.windowVisible = false; onClosed?() } }
     public func windowDidResize(_ notification: Notification) { if let window { host.windowFrame = window.frame } }
