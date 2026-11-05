@@ -1,6 +1,10 @@
 """S11 real App menu flows. Called by engine_e2e.py; no isolated or mocked tests."""
+import http.server
 import json
 import os
+import ssl
+import subprocess
+import threading
 import time
 import traceback
 import urllib.parse
@@ -13,9 +17,35 @@ LINK_ITEMS = ['Open Link in New Tab', 'Open Link in Split View', 'Open Link in P
 def context_menu_checks(factory, results, tmp, h):
     folder = os.path.join(h.ROOT, 'tools', 'e2e', 'fixtures', 'context-menus')
     server, origin = h._static_server(folder)
+    # Keep provider-shaped URLs local. The private App process resolves these names to
+    # a loopback TLS server; no system DNS, trust store, credentials, or mail data change.
+    cert, key = os.path.join(tmp, 'webmail-cert.pem'), os.path.join(tmp, 'webmail-key.pem')
+    subprocess.run(['openssl', 'req', '-x509', '-newkey', 'rsa:2048', '-nodes', '-days', '1',
+                    '-subj', '/CN=Open context menu fixture', '-keyout', key, '-out', cert],
+                   stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, check=True)
+    class MailHandler(http.server.BaseHTTPRequestHandler):
+        def do_GET(self):
+            payload = b'<!doctype html><title>Local webmail fixture</title><p>Webmail fixture</p>'
+            self.send_response(200)
+            self.send_header('Content-Type', 'text/html; charset=utf-8')
+            self.send_header('Content-Length', str(len(payload)))
+            self.end_headers()
+            self.wfile.write(payload)
+        def log_message(self, *args):
+            pass
+    mail_server = http.server.ThreadingHTTPServer(('127.0.0.1', 0), MailHandler)
+    tls = ssl.SSLContext(ssl.PROTOCOL_TLS_SERVER)
+    tls.load_cert_chain(cert, key)
+    mail_server.socket = tls.wrap_socket(mail_server.socket, server_side=True)
+    threading.Thread(target=mail_server.serve_forever, daemon=True).start()
+    def webmail(host, path='/'):
+        return 'https://' + host + ':' + str(mail_server.server_port) + path
+    mail_hosts = ['mail.google.com', 'outlook.live.com', 'outlook.office.com', 'outlook.office365.com',
+                  'app.fastmail.com', 'mail.proton.me', 'mail.yahoo.com', 'www.icloud.com', 'app.hey.com']
+    resolver = ', '.join('MAP ' + host + ' 127.0.0.1' for host in mail_hosts)
     app = factory(urls=(origin + '/index.html',), fresh=True,
                   extra_env={'OPEN_AUTOMATION_TRANSLATE_BACKEND': 'fixture'},
-                  extra_args=['--load-extension=' + os.path.join(h.ROOT, 'tools/e2e/fixtures/context-menu-probe'),
+                  extra_args=['--host-resolver-rules=' + resolver, '--ignore-certificate-errors', '--no-proxy-server', '--load-extension=' + os.path.join(h.ROOT, 'tools/e2e/fixtures/context-menu-probe'),
                               '--disable-features=DisableLoadExtensionCommandLineSwitch'])
     saved = {}
     tab = app.call('tabs')[0]['id']
@@ -429,7 +459,7 @@ def context_menu_checks(factory, results, tmp, h):
         def email():
             focus()
             empty = not row_enabled('peek-email')
-            today = app.call('open', url='https://mail.google.com/mail/u/0/', background=True)['id']
+            today = app.call('open', url=webmail('mail.google.com', '/mail/u/0/'), background=True)['id']
             ignored_today = not row_enabled('peek-email')
             app.call('pin', tab=today)
             enabled = row_enabled('peek-email')
@@ -441,7 +471,7 @@ def context_menu_checks(factory, results, tmp, h):
             app.call('peek-close')
             app.call('pin', tab=today); app.call('close', tab=today)
             disabled = not row_enabled('peek-email')
-            return {'ok': empty and ignored_today and enabled and disabled and urls == ['https://mail.google.com/mail/u/0/'],
+            return {'ok': empty and ignored_today and enabled and disabled and urls == [webmail('mail.google.com', '/mail/u/0/')],
                     'empty': empty, 'ignoredToday': ignored_today, 'enabled': enabled, 'disabledAgain': disabled, 'peek': state, 'urls': urls}
         run('cm_peek_email', email)
 
@@ -449,11 +479,11 @@ def context_menu_checks(factory, results, tmp, h):
             focus()
             second = app.call('space-create', title='Other mail Space', profile='Default')
             app.call('space', space=second)
-            other = app.call('open', url='https://app.fastmail.com/mail/', background=True)['id']
+            other = app.call('open', url=webmail('app.fastmail.com', '/mail/'), background=True)['id']
             app.call('pin', tab=other)
             app.call('space', space=space); app.call('select', tab=tab)
             from_other = row_enabled('peek-email')
-            near = app.call('open', url='https://mail.proton.me/u/0/inbox', background=True)['id']
+            near = app.call('open', url=webmail('mail.proton.me', '/u/0/inbox'), background=True)['id']
             app.call('pin', tab=near)
             app.call('key', key='e', modifiers=['command', 'shift'], route='app')
             state = wait(lambda: (lambda s: s if s['shown'] else None)(app.call('peek-state')), timeout=5) or {}
@@ -463,7 +493,7 @@ def context_menu_checks(factory, results, tmp, h):
             app.call('space-profile', space=second, profile='Unrelated')
             app.call('pin', tab=near); app.call('close', tab=near)
             unrelated = not row_enabled('peek-email')
-            return {'ok': from_other and urls == ['https://mail.proton.me/u/0/inbox'] and unrelated,
+            return {'ok': from_other and urls == [webmail('mail.proton.me', '/u/0/inbox')] and unrelated,
                     'otherSpaceEnabled': from_other, 'focusedSpaceURL': urls, 'otherProfileIgnored': unrelated}
         run('cm_peek_email_scope', email_scope)
 
@@ -474,12 +504,13 @@ def context_menu_checks(factory, results, tmp, h):
             rejected = ['www.icloud.com', 'www.icloud.com/mailish', 'evil.mail.google.com', 'mail.google.com.evil.invalid']
             actual = {}
             for value in accepted + rejected:
-                candidate = app.call('open', url='https://' + value, background=True)['id']
+                host, slash, path = value.partition('/')
+                candidate = app.call('open', url=webmail(host, '/' + path if slash else '/'), background=True)['id']
                 app.call('pin', tab=candidate)
                 actual[value] = row_enabled('peek-email')
                 app.call('pin', tab=candidate); app.call('close', tab=candidate)
             # A Favorite is eligible without a pinned row.
-            candidate = app.call('open', url='https://app.hey.com/', background=False)['id']
+            candidate = app.call('open', url=webmail('app.hey.com'), background=False)['id']
             app.call('favorite', tab=candidate)
             favorite = row_enabled('peek-email')
             favorite_url = app.call('tab-state', tab=candidate)['url']
@@ -519,3 +550,5 @@ def context_menu_checks(factory, results, tmp, h):
             finally:
                 server.shutdown()
                 server.server_close()
+                mail_server.shutdown()
+                mail_server.server_close()
