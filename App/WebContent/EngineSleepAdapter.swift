@@ -6,13 +6,15 @@ import OpenSleep
 /// `SleepEngine` over the App's existing page hosts (app-shell §4.7 table, memory-fork §8.1).
 /// It owns no page: every call goes to the `EngineWebContentHost` the window factories
 /// already hold for the tab, so a tab never gets a second page object from sleep.
-/// Stock-engine fallbacks are marked `// Until P-MEM-0x`; PR G2 replaces them with the
-/// fork's freeze, in-place discard and history capture/restore.
+/// The fork's sleep API (memory-fork §5, OpenEngine "Tab sleeping"): renderer freeze, discard in
+/// place (the page object and its tab identity stay), and back/forward history capture and
+/// restore (OPNH v1, the same bytes as `SleepHistoryContainer`).
 @MainActor
 final class EngineSleepAdapter: SleepEngine {
   unowned let app: AppDelegate
   weak var controller: SleepController?
-  /// Tabs whose page this adapter closed for a discard; `wasDiscarded` reads it.
+  /// Tabs this adapter discarded in place (the engine's own flag clears when the page loads
+  /// again; this set tells the wake kind apart).
   private(set) var discarded: Set<ItemID> = []
   /// Discarded tabs whose retained shell the controller then destroyed (24 h or critical).
   private(set) var destroyed: Set<ItemID> = []
@@ -65,18 +67,39 @@ final class EngineSleepAdapter: SleepEngine {
   }
 
   func createContent(tabID: ItemID, url: URL, history: SleepHistoryEnvelope?) async -> Bool {
-    // Until P-MEM-04: validate the stored container like the fork bridge will (a bad one makes
-    // the controller retry without history), then load its URL. Back/Forward are not restored.
-    if let history, (try? SleepHistoryContainer(data: history.container)) == nil { return false }
-    if !hosts(tabID).isEmpty { return true }
+    // A page discarded in place still exists: it reloads its current entry when shown.
+    if !hosts(tabID).isEmpty { _ = contentReturned(tabID); return true }
+    // A bad container makes the controller retry without history (memory-fork §7.3).
+    var restore: OENavigationHistory?
+    if let history {
+      guard (try? SleepHistoryContainer(data: history.container)) != nil,
+            let decoded = OENavigationHistory(container: history.container) else { return false }
+      restore = decoded
+    }
     guard let tab = app.model.tab(id: tabID), let factory = owningFactory(for: tabID) else { return false }
     creating.insert(tabID); defer { creating.remove(tabID) }
     if tab.url != url { tab.url = url }
     tab.live.sleepPhase = .live
-    guard factory.ensureContent(for: tab) != nil else { return false }
+    // No renderer until the page shows; the history goes in first (memory-fork §5.2).
+    guard let content = factory.ensureContent(for: tab, history: restore) else { return false }
+    if restore != nil {
+      // The engine installs the history when it creates the page (the view enters the window).
+      // Wait for its verdict, at most 3 s, in 20 ms steps (one wake, never while idle).
+      for _ in 0..<150 where content.navigationHistoryRestore == .pending {
+        try? await Task.sleep(nanoseconds: 20_000_000)
+      }
+      if content.navigationHistoryRestore == .failed {
+        // The page loads the fallback URL with no back list. False makes the controller log
+        // `sleep-restore-fallback` and retry without history; the retry finds this page.
+        restoreFallbacks += 1
+        return false
+      }
+    }
     _ = contentReturned(tabID)
     return true
   }
+  /// Restores that fell back to the URL (corrupt or unreadable history; F4).
+  private(set) var restoreFallbacks = 0
 
   func destroyContent(tabID: ItemID) {
     if discarded.remove(tabID) != nil { destroyed.insert(tabID) }
@@ -89,54 +112,58 @@ final class EngineSleepAdapter: SleepEngine {
   }
 
   func setVisible(tabID: ItemID, visible: Bool) {
-    // Until P-MEM-01: no call. The container hides the view of every tab that leaves a pane
-    // slot (Chromium throttles hidden views), and the window server hides minimized and
-    // occluded windows. Toggling `isHidden` here would fight the container's slots.
+    // No call: the container shows and hides each page's view, and the engine follows the
+    // view (P-MEM-01 makes Chromium see HIDDEN for a hidden hosted or Alloy view). Toggling
+    // `isHidden` here would fight the container's pane slots.
   }
 
   func freeze(tabID: ItemID) -> Bool {
-    // Until P-MEM-02: no renderer freeze. A hidden page is already throttled by its hidden
-    // view; "frozen" records the phase only. True only if the page exists.
+    // The renderer stops its timers, tasks and loads and keeps its memory (P-MEM-02). The
+    // engine refuses a visible page; showing the page unfreezes it.
     let open = hosts(tabID)
     guard !open.isEmpty else { contentVanished(tabID); return false }
     if refuseForDevTools(tabID) { return false }
-    for (_, host) in open where host.view.superview == nil { host.view.isHidden = true }
-    return true
+    return open.allSatisfy { $0.1.content.setPageFrozen(true) }
   }
 
   func discard(tabID: ItemID) async -> Bool {
-    // Until P-MEM-03: close the page (renderer released), keep the sidebar row. The tab
-    // wakes by a new host that loads `tab.url` when it is shown again.
+    // In place (P-MEM-03): the renderer and frame tree go; the page object, its back/forward
+    // list and its chrome.tabs identity stay. It reloads its entry when shown, with
+    // `document.wasDiscarded`. The answer is the engine's re-check after it settled.
     let open = hosts(tabID)
     guard !open.isEmpty else { contentVanished(tabID); return false }
     if refuseForDevTools(tabID) { return false }
-    close(open)
-    discarded.insert(tabID)
-    return true
+    var all = true
+    for (_, host) in open {
+      let done = await withCheckedContinuation { (c: CheckedContinuation<Bool, Never>) in
+        host.content.discard { c.resume(returning: $0) }
+      }
+      all = all && done
+    }
+    if all { discarded.insert(tabID) }
+    return all
   }
 
   func wasDiscarded(tabID: ItemID) -> Bool {
-    // Until P-MEM-03: the adapter's own record, not an engine flag.
-    discarded.contains(tabID)
+    hosts(tabID).contains { $0.1.content.isDiscarded } || destroyed.contains(tabID)
   }
 
   func captureHistory(tabID: ItemID) -> SleepHistoryEnvelope? {
-    // Until P-MEM-04: OpenEngine has no navigation-history capture. A nil capture would keep
-    // every tab frozen (the controller backs off and retries), so this returns a minimal
-    // envelope: one opaque entry with the current URL, no page state. Wake loads that URL.
+    // The page's whole back/forward list with scroll and form state (P-MEM-04), packed as
+    // OPNH v1. Nil (a page with only its initial entry, or over a container limit) makes the
+    // controller back off and retry.
     guard let (_, host) = hosts(tabID).first, let tab = app.model.tab(id: tabID) else { contentVanished(tabID); return nil }
-    let url = host.content.url ?? tab.url
-    guard let container = try? SleepHistoryContainer(entries: [Data(url.absoluteString.utf8)], currentIndex: 0, hasPageState: false)
-    else { return nil }
+    guard let history = host.content.captureNavigationHistory() else { return nil }
     return SleepHistoryEnvelope(
-      container: container.encoded(), currentIndex: 0, entryCount: 1, currentURL: url,
-      currentTitle: host.content.title.isEmpty ? tab.title : host.content.title, faviconURL: host.content.faviconURL,
-      hasPageState: false, chromiumTag: "", capturedAt: Date())
+      container: history.container, currentIndex: history.currentIndex, entryCount: history.entryCount,
+      currentURL: history.currentURL ?? host.content.url ?? tab.url,
+      currentTitle: history.title.isEmpty ? tab.title : history.title, faviconURL: history.faviconURL,
+      hasPageState: history.hasPageState, chromiumTag: OEEngine.shared.chromiumVersion, capturedAt: Date())
   }
 
   func hasUnloadHandlers(tabID: ItemID) -> Bool {
-    // Until P-MEM-06: unknown on stock CEF. Never guess true (app-shell §4.7).
-    false
+    // beforeunload or unload handlers in any frame (P-MEM-06).
+    hosts(tabID).contains { $0.1.content.hasUnloadHandlers }
   }
 
   func handleCriticalPressure() {
