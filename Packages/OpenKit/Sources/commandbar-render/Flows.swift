@@ -261,6 +261,7 @@ enum Flows {
         checks += CompletionFlows.run(env)
         checks += SplitFlows.run(env)
         checks += ScopeFlows.run(env)
+        checks += ExtensionFlows.run(env)
         return checks
     }
 

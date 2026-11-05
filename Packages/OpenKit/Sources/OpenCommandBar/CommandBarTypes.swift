@@ -29,6 +29,7 @@ public enum CommandBarMode: String, Sendable, Hashable, CaseIterable {
 /// A scope: the chip in the input and what the engine searches (commandbar-completion §4.3.1).
 public enum CommandBarScope: Sendable, Hashable {
     case site(SiteSearch)
+    case `extension`(ExtensionKeyword)
     case actions
     case tabs
 
@@ -36,6 +37,7 @@ public enum CommandBarScope: Sendable, Hashable {
     public var title: String {
         switch self {
         case .site(let s): s.name
+        case .extension(let e): e.name
         case .actions: CommandBarText.actionsScope
         case .tabs: CommandBarText.tabsScope
         }
@@ -113,6 +115,8 @@ public enum CommandBarIntent: Sendable, Hashable {
     /// target of "Focus on <Space>".
     case runAction(id: String, spaceID: SpaceID?)
     /// Calculator row: copy the answer.
+    case runExtensionAction(extensionID: String)
+    case extensionOmnibox(extensionID: String, content: String, destination: CommandBarDestination, modifiers: CommandBarModifiers)
     case copy(String)
     /// "Search Settings…" in the (i) privacy footer (CC-42): the bar closed; show the search
     /// engine settings of this Profile (the request's Profile; nil when the request had none).

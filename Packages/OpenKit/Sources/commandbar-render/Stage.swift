@@ -63,6 +63,16 @@ final class Stage {
     let root: StageRoot
     let controller: CommandBarController
     let recorder = IntentRecorder()
+    /// New extension-scope scenes: AppKit draws the query correctly through cacheDisplay,
+    /// but a plain copy of its private text backing store can lose the glyphs.
+    var capturesNativeField = false
+
+    func nativeFieldSnapshot() -> NativeLayerSnapshot? {
+        guard let editor = fieldEditor, let layer = editor.layer,
+              let rep = editor.bitmapImageRepForCachingDisplay(in: editor.bounds) else { return nil }
+        editor.cacheDisplay(in: editor.bounds, to: rep)
+        return rep.cgImage.map { NativeLayerSnapshot(layer: layer, image: $0) }
+    }
 
     init(size: CGSize, scale: CGFloat, engine: SuggestEngine, backdrop: CommandBarBackdrop, beforeAttach: ((CommandBarController) -> Void)? = nil) {
         root = StageRoot(frame: CGRect(origin: .zero, size: size))
@@ -168,12 +178,13 @@ final class Stage {
     /// renderer reads it. So: redraw every view right before the snapshot, check the result
     /// (the page corner and the panel fill must look like a page and a panel), and retry.
     func render(scale: CGFloat) -> CGImage {
-        var image = OffscreenRenderer().snapshot(root, scale: scale)
+        let nativeField = capturesNativeField ? nativeFieldSnapshot() : nil
+        var image = OffscreenRenderer().snapshot(root, scale: scale, nativeLayer: nativeField)
         for _ in 0..<5 {
             func mark(_ v: NSView) { v.needsDisplay = true; v.subviews.forEach(mark) }
             mark(root)
             OffscreenRenderer.settle(root)
-            image = OffscreenRenderer().snapshot(root, scale: scale)
+            image = OffscreenRenderer().snapshot(root, scale: scale, nativeLayer: nativeField)
             if looksValid(image, scale: scale) { return image }
             FileHandle.standardError.write(Data("commandbar-render: render did not validate; retrying\n".utf8))
         }

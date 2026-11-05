@@ -17,7 +17,7 @@ MainActor.assumeIsolated {
 enum CLI {
     static let usage = """
     usage:
-      commandbar-render render (--state NAME | --scene FILE.json) --out FILE.png [--scale 1|2] [--size WxH] [--backdrop-color #RRGGBB]
+      commandbar-render render (--state NAME | --scene FILE.json) --out FILE.png [--scale 1|2] [--size WxH] [--backdrop-color #RRGGBB] [--appearance light|dark]
           states: \(Scenes.names.joined(separator: ", "))
       commandbar-render compare --arc CAPTURE.png --ours RENDER.png --scene FILE.json --out DIR [--title TEXT] [--space srgb|p3]
       commandbar-render ax [--state NAME]           # dump the rendered overlay accessibility tree
@@ -88,19 +88,34 @@ enum CLI {
     static func renderSmoke() -> [Flows.Check] {
         let env = Scenes.env()
         var checks: [Flows.Check] = []
-        for state in Scenes.names {
+        for (state, backdrop, appearance) in Scenes.names.map({ ($0, CommandBarBackdrop.darkPage, "dark") })
+            + ["extension-action-row", "extension-scope"].map({ ($0, CommandBarBackdrop(color: .white(1)), "light") }) {
             var pass = false, detail = ""
             do {
-                let stage = try Scenes.run(state, env: env, size: CGSize(width: 1100, height: 760), scale: 2, backdrop: .darkPage)
+                let previousAppearance = NSApp.appearance
+                if state.hasPrefix("extension-") { NSApp.appearance = NSAppearance(named: appearance == "light" ? .aqua : .darkAqua) }
+                defer { NSApp.appearance = previousAppearance }
+                let stage = try Scenes.run(state, env: env, size: CGSize(width: 1100, height: 760), scale: 2, backdrop: backdrop)
                 let image = stage.render(scale: 2)
                 let panel = stage.controller.view.panelFrame
                 let probe = CGPoint(x: (panel.minX + 300) * 2, y: (panel.minY + 8) * 2)
                 let fill = pixel(image, probe), page = pixel(image, CGPoint(x: 10, y: 10))
                 pass = image.width == 2200 && fill != page && stage.controller.isPresented
                 detail = "\(image.width)×\(image.height), panel fill \(fill), page \(page), rows \(stage.controller.rows.count)"
+                if state == "extension-scope" {
+                    let field = stage.controller.view.debugFieldFrame
+                    var ink = 0
+                    for y in 3..<22 { for x in 2..<17 {
+                        let color = pixel(image, CGPoint(x: (panel.minX + field.minX + CGFloat(x)) * 2,
+                                                         y: (panel.minY + field.minY + CGFloat(y)) * 2))
+                        if color.count == 3 && color.allSatisfy({ $0 > 160 }) { ink += 1 }
+                    } }
+                    pass = pass && ink > 5 // text ink, excluding the blue caret and the chip
+                    detail += "; query glyph pixels \(ink)"
+                }
             } catch { detail = "\(error)" }
-            checks.append(Flows.Check(name: "render \(state) at 2x", pass: pass, detail: detail))
-            print("\(pass ? "PASS" : "FAIL")  render \(state) at 2x  —  \(detail)")
+            checks.append(Flows.Check(name: "render \(state) \(appearance) at 2x", pass: pass, detail: detail))
+            print("\(pass ? "PASS" : "FAIL")  render \(state) \(appearance) at 2x  —  \(detail)")
         }
         return checks
     }
@@ -114,6 +129,12 @@ enum CLI {
     static func render(_ args: [String]) throws {
         guard let out = value(args, "--out") else { throw CLIError(description: usage) }
         let scale = CGFloat(Double(value(args, "--scale") ?? "1") ?? 1)
+        let previousAppearance = NSApp.appearance
+        if let appearance = value(args, "--appearance") {
+            guard ["light", "dark"].contains(appearance) else { throw CLIError(description: "appearance must be light or dark") }
+            NSApp.appearance = NSAppearance(named: appearance == "light" ? .aqua : .darkAqua)
+        }
+        defer { NSApp.appearance = previousAppearance }
         let image: CGImage
         if let scenePath = value(args, "--scene") {
             let scene = try SceneFile.load(scenePath)
@@ -128,6 +149,19 @@ enum CLI {
             if args.contains("--debug") {
                 let c = stage.controller
                 print("text \"\(c.text)\" scope \(c.siteScope?.id ?? "-") input \(c.view.debugInput)")
+                if let editor = stage.fieldEditor {
+                    func dumpLayer(_ layer: CALayer, depth: Int = 0) {
+                        guard depth < 5 else { return }
+                        print("layer \(depth) \(type(of: layer)) bounds=\(layer.bounds) position=\(layer.position) anchor=\(layer.anchorPoint) rect=\(layer.contentsRect) contentsDescription=\(String(describing: layer.contents)) contents=\(layer.contents.map { String(describing: type(of: $0)) } ?? "nil") filters=\(String(describing: layer.filters)) composite=\(String(describing: layer.compositingFilter)) flipped=\(layer.isGeometryFlipped) hidden=\(layer.isHidden) alpha=\(layer.opacity)")
+                        layer.sublayers?.forEach { dumpLayer($0, depth: depth + 1) }
+                    }
+                    print("editor layer \(String(describing: editor.layer))")
+                    if let layer = editor.layer ?? editor.superview?.layer { dumpLayer(layer) }
+                    if let target = value(args, "--dump-field"), let rep = editor.bitmapImageRepForCachingDisplay(in: editor.bounds) {
+                        editor.cacheDisplay(in: editor.bounds, to: rep)
+                        if let data = rep.representation(using: .png, properties: [:]) { try data.write(to: URL(fileURLWithPath: target)) }
+                    }
+                }
                 for r in c.rows { print("  \(r.kind.rawValue) \(r.title) | \(r.subtitle) | \(r.icon) | \(r.accessory)") }
             }
         } else {
