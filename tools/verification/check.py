@@ -808,6 +808,8 @@ def main():
         run("python3", str(root / "tools/generate-sounds.py"), "--check")
         text = run(str(root / "Packages/OpenKit/.build/release/features-render"), "check")
         matches(r"features-render check: [1-9]\d* passed, 0 failed", text)
+        idle = run(sys.executable, str(root / "tools/verification/features-idle.py"))
+        matches(r"features-render idle check: [1-9]\d* passed, 0 failed", idle)
         require("SE1 capture" in text and "SE1 event" in text and "SE2 disabled" in text and "SE3 enabled" in text, "missing sound flow receipts")
     elif name in ("sidebar-render", "commandbar-render", "sitecontrol-render"):
         command = [str(root / "Packages/OpenKit/.build/release" / name), "check"]

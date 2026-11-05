@@ -32,7 +32,15 @@ enum FeatureCLI {
             return
         }
         if cmd == "check" {
-            if args == ["check", "--only", "auto-archive"] {
+            if args == ["check", "--only", "idle"] {
+                var passed = 0, failed = 0
+                try await IdleChecks.run { ok, label in
+                    print("\(ok ? "PASS" : "FAIL") \(label)")
+                    if ok { passed += 1 } else { failed += 1 }
+                }
+                print("features-render idle check: \(passed) passed, \(failed) failed")
+                if failed > 0 { throw CLIError(description: "idle work detected") }
+            } else if args == ["check", "--only", "auto-archive"] {
                 var passed = 0, failed = 0
                 try await AutoArchiveChecks.run { condition, label in
                     if condition { passed += 1 } else { failed += 1 }

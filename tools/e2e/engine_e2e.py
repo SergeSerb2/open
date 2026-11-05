@@ -6658,7 +6658,7 @@ def commandbar_checks(factory, results, tmp, config):
         app.call('focus', tab=tab)
         opened = bar('t', 'window')
         first_open = wait_until(lambda: state() if state().get('openFirstResultsMs',-1) >= 0 else None, step=.02)
-        results['first_open_results_budget'] = {'ok': bool(first_open) and first_open['openFirstResultsMs'] <= 50, 'milliseconds': first_open.get('openFirstResultsMs') if first_open else None, 'scope': 'showCommandBar entry to first snapshot applied; excludes preceding key routing, socket transport and frame presentation'}
+        results['first_open_results_budget'] = {'loadAverage': list(os.getloadavg()), 'ok': bool(first_open) and first_open['openFirstResultsMs'] <= 50, 'milliseconds': first_open.get('openFirstResultsMs') if first_open else None, 'scope': 'showCommandBar entry to first snapshot applied; excludes preceding key routing, socket transport and frame presentation'}
         switcher_after = app.call('tab-switcher-state')
         results['lazy_tab_switcher'] = {'ok': switcher_before['created'] is False and switcher_after['created'] is False and not switcher_after['monitoringModifiers'], 'before': switcher_before, 'after': switcher_after}
         results['cmd_t_mode'] = {'ok': opened['mode'] == 'newTab' and opened['newTabHighlighted'], 'state': opened}
@@ -6775,7 +6775,7 @@ def commandbar_checks(factory, results, tmp, config):
         switched = wait_until(lambda: app.call('window-state') if app.call('window-state')['space'] == second_space and app.call('window-state')['selected'] == target else None, timeout=3, step=.1)
         results['switch_tab_across_spaces'] = {'ok': bool(switched) and app.eval(target, 'document.title') == 'Shell C /cross', 'state': app.call('window-state'), 'expectedSpace': second_space, 'expectedTab': target, 'rows': cross['rows'], 'barAfterReturn':state(), 'returnRouting':return_routing}
         bar('t'); timings = wait_until(lambda: state() if state().get('openFirstResultsMs', -1) >= 0 else None, step=.02)
-        results['first_results_budget'] = {'ok': bool(timings) and timings['openFirstResultsMs'] <= 50, 'milliseconds': timings.get('openFirstResultsMs') if timings else None, 'scope': 'showCommandBar entry to first snapshot applied; excludes preceding key routing, socket transport and frame presentation'}
+        results['first_results_budget'] = {'loadAverage': list(os.getloadavg()), 'ok': bool(timings) and timings['openFirstResultsMs'] <= 50, 'milliseconds': timings.get('openFirstResultsMs') if timings else None, 'scope': 'showCommandBar entry to first snapshot applied; excludes preceding key routing, socket transport and frame presentation'}
         shot(app, 'commandbar-live-%s.png' % config.lower(), window=app.call('window-state')['number'])
         press('escape'); time.sleep(.3)
         other_profile_space = app.call('space-create', title='Isolated profile', profile='Commandbar Isolated')
