@@ -48,7 +48,11 @@ enum FeatureCLI {
                 }
                 print("features-render auto-archive check: \(passed) passed, \(failed) failed")
                 if failed > 0 { throw CLIError(description: "\(failed) auto-archive scenarios failed") }
-            } else { try await FeatureChecks.run() }
+            } else if args == ["check"] {
+                try await FeatureChecks.run()
+            } else {
+                throw CLIError(description: "check accepts only --only auto-archive or --only idle (use tools/verification/features-idle.py for idle)")
+            }
             return
         }
         if cmd == "pip" { try PiPScene.run(args); return }
