@@ -121,10 +121,6 @@ subprocess.Popen = popen
                         os.kill(int(row.split()[0]), signal.SIGKILL)
                     except ProcessLookupError:
                         pass
-                try:
-                    os.killpg(runner.pid, signal.SIGKILL)  # reap open -W, after proof
-                except ProcessLookupError:
-                    pass
             for root in roots:
                 shutil.rmtree(root, ignore_errors=True)
                 shutil.rmtree(Path.home() / 'Library/Caches' / root.name, ignore_errors=True)
