@@ -2604,6 +2604,42 @@ shows stays live through a controller pass (its freeze gate is `visible`), while
 background tab in the same pass freezes. After Close the card goes, and the next pass
 freezes that tab too. The controller's clock moves (`sleep-clock`); there is no wall-clock wait.
 
+### 14.5 Steps 9–10: Open's own Picture in Picture window (EM-4, phase 2)
+
+Branch `s3/em4-pip-window`. Video Picture in Picture now opens in the App's own window
+(§6, #101's `OpenFeatures` window) and not in Chromium's.
+
+- **Engine.** Patch `chromium/0402` adds one hook to `CreateVideoOverlayWindow`
+  (Mac only): when the embedder fills `open_engine::GetMediaHooks()`, the fork's
+  `OpenVideoOverlayWindow` takes the place of `VideoOverlayWindowViews`. Chromium's
+  controller still owns the window and keeps its rules (one PiP app-wide, close on
+  navigation, crash and destruction). The overlay window only puts the video surface
+  into an `NSView` (its own compositor, a black root layer and a letterboxed surface
+  layer) and reports the controller's state. Chromium's `IsVisible` means "the session
+  is shown" (from `ShowInactive` to `Hide`), not the App window's visibility: with the
+  other meaning, `Close` returns early and the page stays in PiP. The CA layer tree
+  goes on the view's layer before the view sizes it; in the other order the flipped
+  child layer stays 0 × 0 and the video is black.
+- **OpenEngine.** `OEPictureInPicture` is real: the App's delegate gets the session,
+  places `videoView` in its window, and reports the window frame (top-left screen
+  coordinates for the engine). `supportsShellPictureInPicture` is YES. Without a
+  delegate Chromium's own window is used (phase 1).
+  `captureVideoFrameWithCompletion:` returns a PNG of the composited video from the
+  engine (a copy-output request): a window-server capture of our own windows omits
+  GPU-process layers on macOS 26, so it cannot prove frames.
+- **App.** The user's Close always pauses (Q5) and snoozes; Back to Tab focuses the
+  opener. The 400 ms exit grace of §14.3 stays for the paths that are still exits.
+- Automation: `pip-frame` (a PNG of the engine's video picture) and phase-2 `pip-action` (`docs/automation.md`).
+  `media-click` moves the pointer off the card before it hovers it: an earlier hover can
+  leave the stack "entered" after the card collapsed under it, and a second hover at the
+  same place then sends no `mouseEntered`.
+- e2e: the phase-2 rows `media_pip_frames` (frames are lit and change),
+  `media_pip_minimize` (Minimize shows the source's card; the card's PiP button opens
+  PiP again) and `media_pip_keep_on_top` (window level follows the menu setting) were
+  BLOCKED in phase 1. They use the fixture `video-file.html`: a MediaStream player is
+  never controllable, so it gets no card; the fixture records 3 s of WebM in `start()`
+  and plays it from a file.
+
 ## Appendix — Lead decisions (2026-10-25)
 
 - Approved as the media controls + Picture in Picture plan. Steps 1–5 start now: they need no App window. Step 6 and later App steps wait for app-shell Step B (#52) and Step G (sleep).

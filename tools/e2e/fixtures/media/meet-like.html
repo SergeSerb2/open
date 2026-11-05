@@ -1,0 +1,14 @@
+<!doctype html><meta charset="utf-8"><title>Media meet-like</title>
+<body style="background:#fff;margin:0">
+<script src="common.js"></script>
+<script>
+// Registers "enterpictureinpicture" like Meet: Chromium's own auto-PiP path (EM-6) opens Document PiP.
+window.__auto = { entered: 0 };
+const v = makeVideo('main', 640, 360, true);
+navigator.mediaSession.setActionHandler('enterpictureinpicture', async () => {
+  __auto.entered++;
+  const w = await documentPictureInPicture.requestWindow({ width: 320, height: 240 });
+  w.document.body.append(v);
+});
+window.start = () => v.play().then(() => true);
+</script>
