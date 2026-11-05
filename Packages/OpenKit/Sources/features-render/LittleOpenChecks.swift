@@ -97,6 +97,18 @@ enum LittleOpenChecks {
               && clampedWindow.animationBehavior == .none, "L4 screen clamp [120,220,860,610], min 360×240, no autosave/animation")
         clamped.closeAll()
         let otherProfile = model.createProfile(name: "Work")!
+        for width: CGFloat in [1185, 800] {
+            page.window!.setFrame(CGRect(x: 0, y: 0, width: width, height: 832), display: false)
+            pump(page); try await Task.sleep(for: .milliseconds(20)); pump(page)
+            let frames = page.titleBar.elementFrames
+            check(frames["profileIcon"] == CGRect(x: 97, y: 17, width: 14, height: 14)
+                  && frames["profile"]?.minX == 114 && frames["profile"]?.minY == 15.5 && frames["profile"]?.height == 16
+                  && !page.titleBar.profileButton.isHidden, "L4 measured Profile icon [97,17,14,14] and name at x114, W=\(width)")
+            let host = frames["host"]!, profile = frames["profile"]!, copy = frames["copy"]!
+            let font = page.titleBar.hostButton.attributedTitle.attribute(.font, at: 0, effectiveRange: nil) as? NSFont
+            check(abs(host.midX - (profile.maxX + 8 + copy.minX - 8) / 2) <= 0.5 && font == NSFont.systemFont(ofSize: 13),
+                  "L4 host centered between Profile and copy, 13 Regular, W=\(width)")
+        }
         model.focusSpace(windowID: model.createWindow(focusedSpaceID: model.spaces[0].id)!.id, spaceID: model.spaces[0].id)
         let destination = model.createSpace(title: "Reading", profileID: page.session.profileID, icon: .emoji("📘"))
         let third = model.createSpace(title: "Studio", profileID: page.session.profileID, icon: .emoji("🌿"))

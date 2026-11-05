@@ -8,6 +8,7 @@ public final class LittleOpenTitleBarView: NSView {
     private let capsule = NSView()
     private let pill = NSView()
     private let divider = NSView()
+    private let profileIconButton: NSButton
     public let profileButton: NSButton
     public let hostButton: NSButton
     public let copyButton: NSButton
@@ -33,7 +34,8 @@ public final class LittleOpenTitleBarView: NSView {
             }
             b.setAccessibilityLabel(title); return b
         }
-        profileButton = button("Profile", symbol: "person.crop.circle")
+        profileIconButton = button("Profile", symbol: "person.crop.circle")
+        profileButton = button("Profile")
         hostButton = button("")
         copyButton = button("Copy Current URL", symbol: "link")
         pillButton = button("Open in Space")
@@ -46,8 +48,8 @@ public final class LittleOpenTitleBarView: NSView {
             view.layer?.cornerRadius = radius; view.layer?.cornerCurve = .continuous; addSubview(view)
         }
         divider.wantsLayer = true; divider.layer?.backgroundColor = LittleOpenMetrics.text.withAlpha(LittleOpenMetrics.dividerAlpha).cgColor; addSubview(divider)
-        for (i, b) in [profileButton, hostButton, copyButton, pillButton, chevronButton].enumerated() {
-            b.tag = i; b.target = self; b.action = #selector(press(_:)); addSubview(b)
+        for (b, tag) in [(profileIconButton, 0), (profileButton, 0), (hostButton, 1), (copyButton, 2), (pillButton, 3), (chevronButton, 4)] {
+            b.tag = tag; b.target = self; b.action = #selector(press(_:)); addSubview(b)
         }
         chevronButton.toolTip = "More Spaces"
         keycap.font = .systemFont(ofSize: LittleOpenMetrics.fontSize); keycap.textColor = LittleOpenMetrics.text.nsColor
@@ -75,10 +77,11 @@ public final class LittleOpenTitleBarView: NSView {
         hostButton.title = host; hostButton.setAccessibilityLabel(host)
         hostButton.attributedTitle = NSAttributedString(string: host, attributes: [.font: NSFont.systemFont(ofSize: m.fontSize), .foregroundColor: m.text.nsColor])
         let name = profile?.name ?? "Profile"
-        profileButton.title = name; profileButton.imagePosition = .imageLeading
+        profileButton.title = name; profileButton.imagePosition = .noImage
         profileButton.attributedTitle = NSAttributedString(string: name, attributes: [.font: NSFont.systemFont(ofSize: m.fontSize, weight: .medium), .foregroundColor: m.text.nsColor])
         profileButton.setAccessibilityLabel("Profile: \(name)"); profileButton.isHidden = !showsProfile
-        profileWidth = showsProfile ? min(m.maximumProfileWidth, ceil(profileButton.attributedTitle.size().width) + m.profileIcon.width + m.hostGap) : 0
+        profileIconButton.isHidden = !showsProfile
+        profileWidth = showsProfile ? min(m.maximumProfileWidth, ceil(profileButton.attributedTitle.size().width) + m.profileTextX - m.profileIcon.minX) : 0
         self.spaceTitle = spaceTitle ?? ""
         let title = "Open in \(self.spaceTitle)"
         let text = NSMutableAttributedString(string: title, attributes: [.font: NSFont.systemFont(ofSize: m.fontSize), .foregroundColor: m.text.nsColor])
@@ -98,7 +101,9 @@ public final class LittleOpenTitleBarView: NSView {
         let available = max(0, copyButton.frame.minX - m.hostGap - chipX)
         let chipWidth = min(profileWidth, max(0, available - m.minimumHostWidth))
         profileButton.isHidden = profileWidth == 0 || chipWidth == 0
-        profileButton.frame = CGRect(x: chipX, y: m.hostY, width: chipWidth, height: m.hostHeight)
+        profileIconButton.isHidden = profileButton.isHidden
+        profileIconButton.frame = m.profileIcon
+        profileButton.frame = CGRect(x: m.profileTextX, y: m.hostY, width: max(0, chipWidth - (m.profileTextX - chipX)), height: m.hostHeight)
         let left = profileButton.isHidden ? capsule.frame.minX + m.hostGap : profileButton.frame.maxX + m.hostGap
         let right = copyButton.frame.minX - m.hostGap
         let width = min(ceil(hostButton.attributedTitle.size().width), max(0, right - left))
@@ -106,7 +111,7 @@ public final class LittleOpenTitleBarView: NSView {
     }
     /// Frames in the measured top-left coordinate system, shared by automation and L4.
     public var elementFrames: [String: CGRect] {
-        ["capsule": capsule.frame, "profile": profileButton.frame, "host": hostButton.frame,
+        ["capsule": capsule.frame, "profileIcon": profileIconButton.frame, "profile": profileButton.frame, "host": hostButton.frame,
          "copy": copyButton.frame, "pill": pill.frame, "open": LittleOpenMetrics.pillButton(width: bounds.width),
          "chevron": chevronButton.frame, "divider": divider.frame]
     }

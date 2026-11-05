@@ -27,10 +27,10 @@ they do not claim native pixel acceptance against the Arc capture.
 
 ## Focused verification
 
-`features-render check --only little-open`: **43 passed, 0 failed**. L1 checks
+`features-render check --only little-open`: **47 passed, 0 failed**. L1 checks
 the injected AppKit frame `[2050,1061,490,329]`, focus, window controls, new blank
 windows and URL resurface without reload. L4 checks the 1185×832 transition,
-fixed top-right, full-bleed page, title controls at W=1185 and W=800, the smaller
+fixed top-right, full-bleed page, title controls at W=1185 and W=800, including the exact 14 pt Profile icon, name origin and 13 Regular host centering with two Profiles, the smaller
 screen clamp `[120,220,860,610]`, minimum size, no autosave/animation, 32 pt NUX
 band and automation state. L5 covers recent Profile Space, focus Undo/Redo,
 pill/command moves, Profile filtering, typing, Up/Down, Return and Escape. L6
@@ -46,13 +46,14 @@ contract: the title-bar button writes the URL without creating a library toast.
 The production source was deliberately changed, built and run through the same
 CLI. All changed files were then restored byte-for-byte. No baseline or limit
 was changed. The combined negative run failed 16 of 42 Little Open assertions;
-the additional focus proof failed 1 of 43. The command-bar negative run failed
+the additional focus proof failed 1 of 43. The 15 pt Profile-icon mutation failed 2 of 47. The command-bar negative run failed
 2 of 113 flows.
 
 | Gate | Broken production behavior | Expected failures |
 |---|---|---|
 | L1 | screen inset 20→21 | 2 |
 | L4 | title-bar height 47→48, plus inset above | 3 |
+| L4 Profile | Profile icon width 14→15 | 2 |
 | L5 | case-insensitive filter→literal comparison | 4, including dependent moves |
 | L5 focus | skip focus-history updates during Undo/Redo | 1 |
 | L6 | same-press tolerance 0.05→0 | 2 |
@@ -109,8 +110,8 @@ command-bar PNGs were rerendered on the final source and remain byte-identical
 to the initial `7254c0a3` exports.
 
 Debug App build passed against `open-engine-s8-main`'s recorded distribution;
-load at start **5.67 / 7.69 / 9.20**. That build includes the final production
-library source; later changes affect only harness cleanup and this receipt.
+load at start **5.67 / 7.69 / 9.20**. That build checked the implementation before the final Profile-icon frame correction.
+The corrected production library receives a new Debug build before publication.
 
 After the first run, main advanced to `b913e127` (PR #170, docs only). That main
 was merged before PR publication; a second full gate checks the merged head.
