@@ -5,7 +5,7 @@ import CoreText
 /// editor consumes navigation keys before the embedded page can see them.
 @MainActor
 final class FindBarView: NSView, NSTextFieldDelegate {
-  let field = NSTextField()
+  let field: NSTextField = FindQueryField()
   private var editorStorage: FindFieldEditor?
   private let search = NSImageView()
   private var results: FindResultsView?
@@ -33,7 +33,7 @@ final class FindBarView: NSView, NSTextFieldDelegate {
     layer?.shadowRadius = 5
     layer?.shadowOffset = CGSize(width: 0, height: -3)
     layer?.addSublayer(separator)
-    let cell = FindTextCell(textCell: ""); cell.editorProvider = { [weak self] in self?.makeEditor() }; field.cell = cell
+    (field.cell as? FindTextCell)?.editorProvider = { [weak self] in self?.makeEditor() }
     field.isEditable = true; field.isSelectable = true
     field.isBezeled = false; field.isBordered = false; field.drawsBackground = false
     field.focusRingType = .none; field.font = .systemFont(ofSize: 13)
@@ -190,6 +190,13 @@ private final class FindButton: NSButton {
   }
   @available(*, unavailable) required init?(coder: NSCoder) { fatalError() }
   @objc private func pressed() { onPress?() }
+}
+
+@MainActor
+private final class FindQueryField: NSTextField {
+  // Construct the right cell once; replacing a stock cell on first Cmd+F
+  // would perform the native cell's initialization twice.
+  override class var cellClass: AnyClass? { get { FindTextCell.self } set {} }
 }
 
 @MainActor

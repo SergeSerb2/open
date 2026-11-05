@@ -20,9 +20,9 @@ The draft is **not accepted**. Current evidence before the final-head run:
 
 | Required evidence | State |
 |---|---|
-| Find flow, per-pane/tab/Peek state, selection, menu actions | Earlier full flow passed; stronger closed-bar next/previous checks pending |
-| Own-window light/dark ΔE00 ≤ 2, corner pixels, frame checks | Earlier pixel gates passed at 2x; final capture method and native editor cleanup pending |
-| Cmd+F within one 120 Hz frame | FAIL on the latest measured version: 9.489 ms layer commit, deadline 8.333 ms, load 14.97; no current speed acceptance |
+| Find flow, per-pane/tab/Peek state, selection, menu actions | Closed-bar next/previous checks passed (4/5 then 3/5); native close-button typing check pending |
+| Own-window light/dark ΔE00 ≤ 2, corner pixels, frame checks | 2x WindowServer captures passed: light/dark background ΔE00 0; final native editor cleanup pending |
+| Cmd+F within one 120 Hz frame | FAIL on the latest measured version: 8.735 ms layer commit, deadline 8.333 ms, load 8.22; no current speed acceptance |
 | Coalescing and idle work | Earlier full flow passed: one typed request and at most one engine activation; all ten idle observer counters zero over two seconds |
 | Negative proof for every new gate; forced early-Peek-failure cleanup | Pending |
 | e2e features, shell, window, commandbar, page | Pending |
