@@ -264,6 +264,11 @@ def split_checks(factory, results, tmp, h):
             summaries[name] = dict(median=statistics.median(values), p95=sorted(values)[math.ceil(len(values)*.95)-1])
         row('speed_tab_switch', all(summaries[name]['p95'] <= 16 for name in ('single', 'split', 'singleNative', 'splitNative')), loadAverage=list(os.getloadavg()), uptime=subprocess.check_output(['uptime'], text=True).strip(),
             milliseconds=summaries, samples=measured, scope='production sidebar selection through native layout/CA submission and first rAF after fresh visibilitychange in every shown pane (last pane wins), native CA completion; query return retained separately; excludes physical presentation')
+        app.begin_timing('split motion probe')
+        motion = app.call('split', op='bench', nodes=[first, second, s['id']], motionOnly=True)
+        unexpected = [animation for case in motion['motion'] for animation in case['animations']
+                      if animation['layer'].endswith('.focusRing') and animation['keyPath'] in ('bounds', 'position')]
+        row('pane_motion_no_extra_ring_animation', not unexpected, motion=motion, unexpected=unexpected)
         # E5: the production sleep controller protects shown panes, freezes and
         # discards a hidden split, then wakes both real pages with history intact.
         sleep_split = state(); sleep_ids = [p['id'] for p in sleep_split['panes']]; focus = sleep_split['focused']

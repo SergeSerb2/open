@@ -84,7 +84,11 @@ def main():
             totals[label] = {key:summary([v for run in runs for v in run['samples'][key]]) for key in runs[0]['samples']}
         ok = all(totals['branch'][key]['p95'] <= 16 and totals['branch'][key]['p95'] <= totals['main'][key]['p95']
                  for key in ('single','split')) and all(r['cleanup']['ok'] for r in receipts)
-        result = dict(ok=ok, runs=receipts, milliseconds=totals,
+        motion_ok = not any(animation['layer'].endswith('.focusRing') and animation['keyPath'] in ('bounds','position')
+                            for run in receipts if run['revision']=='branch' for case in run['motion']['motion']
+                            for animation in case['animations'])
+        ok = ok and motion_ok
+        result = dict(ok=ok, motion_ok=motion_ok, runs=receipts, milliseconds=totals,
                       gate='p95 <=16ms and branch no slower than main, both paths; 3 interleaved pairs, 40 samples/path/run, all retained')
         args.output.write_text(json.dumps(result,indent=2)+'\n')
         print('Split App paired gate', 'PASS' if ok else 'FAIL', totals, flush=True)

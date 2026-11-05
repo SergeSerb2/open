@@ -77,7 +77,13 @@ public final class PaneSlotView: NSView {
         let page = CGRect(x: 0, y: 0, width: bounds.width, height: max(0, bounds.height - bar))
         contentHostView?.frame = page; placeholderView?.frame = page
         swipeIndicator?.frame = page
-        focusRing.frame = bounds
+        if focusRing.frame != bounds {
+            // The ring follows the slot's 0.22 s view motion. A reused layer must
+            // not add its own default 0.25 s bounds/position animation.
+            CATransaction.begin(); CATransaction.setDisableActions(true)
+            focusRing.frame = bounds
+            CATransaction.commit()
+        }
         focusRing.path = CGPath(roundedRect: bounds.insetBy(dx: 1, dy: 1), cornerWidth: PanelMetrics.cornerRadius - 1,
                                cornerHeight: PanelMetrics.cornerRadius - 1, transform: nil)
         focusRing.isHidden = !isFocused

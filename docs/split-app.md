@@ -52,6 +52,19 @@ The native endpoint does not add an explicit CA transaction or a completion bloc
 
 `tools/verification/split-app-speed.py` interleaves main, branch, main, branch, main, branch under one quiet/on-screen session. Each process has fresh data and 40 samples per path. Every sample and query-return diagnostic is retained. The branch must meet 16 ms and be no slower than main on both paths. Main is an archive of `495a47d3` with only the identical benchmark observer and one automation dispatch hook; its production selection, container and chrome sources match the commit byte for byte (`timing-main-manifest.json`). The quiet lock is acquired before the on-screen lock, using the priority flag while waiting. Before launching a timing receipt, the runner waits for load1 ≤12; no measured sample is discarded.
 
+## Motion investigation
+
+The 30 ms difference was a real cache-reuse defect, not noise. Every one of the three interleaved pairs showed the same result, both during ordinary selection and with the diagnostic transaction wrapper:
+
+| Layer/property | Unchanged main | Branch before fix |
+|---|---|---|
+| Slot bounds/position | 0.22 s | 0.22 s |
+| Focus ring bounds/position | No independent animation | 0.25 s |
+
+Reused `PaneSlotView` layers already have geometry. Assigning the ring's new frame added default CA `bounds` and `position` animations. Fresh main layers did not add those animations. The fix disables implicit CA actions only while assigning the ring frame. The ring follows the slot's existing layout; the slot keeps `Motion.splitExpand` at 0.22 s. No measured color, frame or motion token changes. `pane_motion_no_extra_ring_animation` checks the real native animation records, including the diagnostic wrapped case. The new gate's negative proof also restores the old implicit-action behavior.
+
+Before this fix, the correctly scoped every-pane rAF comparison failed: main single/split p95 14.606/24.265 ms; branch 16.084/20.249 ms. These remain `app-paired-ring-before.json`, with all samples and per-run loads. The later comparison below must prove both the timing limit and removal of the extra ring animations.
+
 ## Sidebar speed
 
 The unchanged 1,000-row native sidebar workload runs from base and branch binaries in three paired runs, AB/BA/AB, under the quiet lock. It compares the median of each revision's three p95 values with ±10%, retaining every run.
