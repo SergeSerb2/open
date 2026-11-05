@@ -22,6 +22,7 @@ final class PermissionPromptPresenter: NSObject, NSPopoverDelegate {
   weak var owner: EngineWebContentHostFactory?
   private var entries: [Entry] = []
   private var current: Entry?
+  var presentedPage: OEWebContent? { current?.page }
   private let popover = NSPopover()
   private let view = PermissionPromptView()
   private var finishing = false

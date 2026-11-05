@@ -13,6 +13,9 @@ final class PageChromeCoordinator {
     let presenter = PermissionPromptPresenter(owner: owner); existingPermissions = presenter; return presenter
   }
   func owns(_ window: NSWindow) -> Bool { existingPermissions?.owns(window) == true }
+  func permissionPage(in window: NSWindow) -> OEWebContent? {
+    existingPermissions?.owns(window) == true ? existingPermissions?.presentedPage : nil
+  }
   private var observed: Set<ObjectIdentifier> = []
   private var closeRequests: [ObjectIdentifier: (Bool) -> Void] = [:]
   init(owner: EngineWebContentHostFactory) {
@@ -108,6 +111,18 @@ final class PageQuitCoordinator {
     guard !remaining.isEmpty else { running = false; accepted = true; NSApp.terminate(nil); return }
     let (owner, page) = remaining.removeFirst()
     if let id = owner.tabID(for: page), let space = owner.space(containing: id) { owner.focus(space: space); owner.select(nodeID: id) }
+    // Page.close destroys an accepted page before the normal quit snapshot.
+    // Preserve its browser-owned history first, without stopping tab sleep
+    // (the user may still cancel this quit).
+    Task { @MainActor [weak self, weak owner, weak page] in
+      guard let self, let owner, let page else { return }
+      if let id = owner.tabID(for: page), let envelope = self.app.tabSleep.adapter?.captureHistory(tabID: id) {
+        try? await self.app.tabSleep.store?.save(tabID: id, envelope: envelope)
+      }
+      self.askClose(owner: owner, page: page)
+    }
+  }
+  private func askClose(owner: EngineWebContentHostFactory, page: OEWebContent) {
     let waits = owner.pageChrome.requestClose(page) { [weak self, weak owner, weak page] allowed in
       guard let self else { return }
       if allowed {

@@ -807,6 +807,11 @@ extension EngineWebContentHostFactory {
   }
 
   @objc func closeTab(_ sender: Any?) {
+    if let key = NSApp.keyWindow, let page = pageChrome.permissionPage(in: key) {
+      pageChrome.permissions.cancel(page: page)
+      if let id = tabID(for: page) { closeTab(id: id) } else { close(page: page) }
+      return
+    }
     // Cmd+W in the Essential Keyboard Shortcuts window closes that window, never a tab (§4.5.1).
     if let edu = EssentialShortcutsWindowController.shared.window, NSApp.keyWindow === edu { edu.close(); return }
     if let popupPanel, NSApp.keyWindow === popupPanel {
