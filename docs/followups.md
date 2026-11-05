@@ -195,3 +195,7 @@ The gate "inline completion adds ≤ 0.3 ms p95" read +0.301 ms in one full `ver
 ## Sleep: intermittent F4 corrupt-fallback log line (from Section 8, filed by Section 11)
 
 - `sleep_f4_corrupt_fallback` (e2e `sleep`) is intermittent: the fallback itself works (the tab restores from its URL), but the suite misses the fallback's log line after the relaunch in about 2 of 9 runs (`08-engine-basics-done.md`). Owner: the lead (section 16 hardening if not sooner). Next step: read the log from the relaunched process's own stderr capture instead of the shared log, or wait for the line with a bounded retry, and rerun ×10.
+
+## Verification: settings-preview adblock-readiness is intermittent (filed by Section 11 for the lead)
+
+- `settings-preview`'s adblock-readiness row sometimes fails with "successful open did not enable edits". It failed once on unchanged `main` `b913e127` (2026-11-05 about 15:10, M5, load about 10, the M5 on a different network) and passed at `7254c0a3` and at about 15:00 the same day. Suspected cause (not proven): the check's `AdBlockStore` download policy (one attempt, 2 s request and 3 s resource timeouts) makes the result depend on the network and the machine load. Next step: give the check a local list fixture so it needs no network. Owner: section 13 (ad blocking) or section 7 (settings). The check itself is unchanged.
