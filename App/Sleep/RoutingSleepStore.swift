@@ -16,6 +16,9 @@ final class RoutingSleepStore: SleepHistoryStoring {
   /// still deletes from the right store.
   private var savedIn: [ItemID: String] = [:]
   var onError: ((String) -> Void)?
+  /// Tabs with a stored back/forward list (this launch's saves plus the rows found at start).
+  private(set) var knownStored: Set<ItemID> = []
+  func loadKnownStored() async { knownStored.formUnion(await storedTabIDs()) }
 
   init(model: BrowserModel, directories: ProfileDirectories) {
     self.model = model; self.directories = directories
@@ -56,6 +59,7 @@ final class RoutingSleepStore: SleepHistoryStoring {
       hasPageState: e.hasPageState, containerVersion: e.containerVersion, chromiumTag: e.chromiumTag,
       capturedAt: e.capturedAt))
     savedIn[tabID] = name
+    knownStored.insert(tabID)
   }
 
   func flush() async throws {
@@ -73,6 +77,7 @@ final class RoutingSleepStore: SleepHistoryStoring {
   func deleteSleepHistory(tabID: ItemID) {
     store(named: directoryName(for: tabID)).delete(tabID: tabID)
     savedIn[tabID] = nil
+    knownStored.remove(tabID)
   }
 
   /// Every stored row of every Profile's store (automation evidence).

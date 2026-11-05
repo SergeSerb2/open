@@ -219,10 +219,11 @@ public final class SleepController {
         return gate(tab, policy: policy, visible: visibleTabIDs(), at: now(), discard: forDiscard)
     }
 
-    /// The App made content for a wake outside the controller (selection recreated a
-    /// discarded page). The wake latency logs at that page's first commit.
+    /// The App is showing retained discarded content or made replacement content
+    /// outside the controller's wake task. Latency logs at the page's first commit.
     public func wakeStarted(tabID: ItemID, kind: String) {
-        if wakeStartedAt[tabID] == nil { wakeStartedAt[tabID] = (now(), kind) }
+        // An unfreeze has no commit; a later discard/destroy wake replaces it.
+        if wakeStartedAt[tabID]?.1 != kind { wakeStartedAt[tabID] = (now(), kind) }
     }
 
     /// Call when the app creates initial engine content outside the wake path.
@@ -261,7 +262,9 @@ public final class SleepController {
         if liveContent.contains(tabID) {
             let phase = tab.live.sleepPhase
             if phase == .frozen { wakeStartedAt[tabID] = (now(), "unfreeze"); tab.live.sleepPhase = .live }
-            if phase == .sleeping { wakeStartedAt[tabID] = (now(), "discard") }
+            // The App may already have armed this discard wake before attaching
+            // the retained view. Keep that start across repeated visibility hooks.
+            if phase == .sleeping { wakeStarted(tabID: tabID, kind: "discard") }
             show(tabID)
             return
         }
