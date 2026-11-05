@@ -699,6 +699,17 @@ behind a nested tracking loop. The Profile observer is removed when the menu
 or browser window closes. The share check verifies the picker’s own query
 and close callbacks; it chooses no service.
 
+## Page engine (page-platform EP-1, EP-2, EP-3; Step 12)
+
+Automation builds pass `--open-automation` to the engine, which turns on the engine's test hooks.
+`--only page` runs the rows SW1–SW4 (history swipe and Open's indicator) and Q2 (selection).
+
+| Command | Args | Does |
+|---|---|---|
+| `page-selection` | `tab` | The page's selection through `requestSelection` (EP-2): `text`, `link` (Chromium's text-fragment link, or null), and `hasSelection` (EP-3). |
+| `swipe` | `tab`, `direction` (`back`, `forward`), `progress` (0…2, default 1.2; ≥ 1 navigates), `enabled`, `engineOverlay` | Sets `historySwipeEnabled` / `drawsEngineHistorySwipeOverlay` when given, then replays one history swipe through Chromium's overlay controller (`simulateHistorySwipe`). Phases arrive as `historySwipe` events. Without `direction`, returns the two flags only. Returns `ran`, the flags, and `indicator` (as `swipe-indicator`). It replays the controller sequence and the navigation, not gesture recognition. |
+| `swipe-indicator` | `tab` | Open's indicator over the pane that shows the tab: `pane`, `made` (the view is made on the first swipe), `active`, `hidden`, `circle` and `page` frames, `opacity`, `scale`, and `last` (`phase`, `direction`, `progress`). |
+
 ## Capture tool (page-platform Step 13)
 
 `--only page` runs the capture rows C1–C7, then the translation rows X1–X6 (page-platform §8.3), against
