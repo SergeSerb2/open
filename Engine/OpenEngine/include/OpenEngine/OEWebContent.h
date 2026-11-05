@@ -149,6 +149,12 @@ NS_SWIFT_UI_ACTOR
     didRequestContentSize:(NSSize)size
     NS_SWIFT_NAME(webContent(_:didRequestContentSize:));
 
+/// A main-frame document committed, including same-URL loads. Server redirects
+/// have resolved. `isReload` comes from CEF's navigation transition, not URL equality.
+- (void)webContent:(OEWebContent*)webContent
+    didCommitNavigationToURL:(NSURL*)URL
+                  isReload:(BOOL)isReload
+    NS_SWIFT_NAME(webContent(_:didCommitNavigationTo:isReload:));
 /// Main-frame navigation finished or failed.
 - (void)webContent:(OEWebContent*)webContent
     didFinishLoadWithStatus:(NSInteger)status

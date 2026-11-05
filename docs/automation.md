@@ -252,6 +252,10 @@ Additional socket commands:
 | `settings-state`, `settings-toggle name=hotkey\|external` | Read the shared real presenters; commit the live Links settings model. |
 | `settings-custom-engine template=…` | Save a custom engine through the live Profiles settings model. |
 | `library-restore id=…`, `library-history-open url=…` | Exercise the live Library restore transaction or its profile-scoped history action. |
+| `history-state` | Optional `profile` UUID and `query`. Drains accepted history writes, then returns the Profile store path, search rows, commit-to-enqueue samples (ms, automation only, bounded at 4,096) and writer operation count. Store opens/searches stay on the HistoryStore actor. |
+| `history-clear` | Optional `profile` UUID and `range` (`Last hour`, `Last 24 hours`, `Last 7 days`, `All time`, default All time). Calls the real Settings History-only clear-data adapter and returns `error`. |
+| `library-history-state` | Returns the current Library Profile and displayed History rows without reloading. Optional `profile` plus `selectProfile=true` changes the History Profile and reloads it explicitly. |
+| `library-history-delete` | `urls` selects row URLs, or `all=true` selects all-time clearing. Calls the Library's confirmed delete/clear handler for its selected Profile. |
 | `hotkey-state` | Read Carbon registration, attempts, and any nonfatal registration error. Does not send a global key. |
 | `save-page-state` | Read the real Save panel request and pending state. |
 
@@ -457,7 +461,7 @@ no remote debugging port. It never opens or copies Arc.
 | `toast-undo` | Clicks the newest visible toast's Undo button in the front browser window (its real `ToastCenter` button). |
 | `toasts` | The front browser window's toasts, newest first (page-platform §8.3): `title`, `subtitle`, `symbol`, `accessory` (`none`, `keycaps`, or the button's label in lower case: `undo`, `share`, …), `coalescingKey`, `frame` and `accessoryFrame` (window content, top-left origin), `age` and `lifetime` (seconds), `sticky`, `exiting`, `hovered`; plus `panel` (the anchor) and `shown` (toasts shown so far in the window). Exiting toasts stay listed until their exit animation ends. |
 | `toast-action` | `[index=<n>]` (default 0, newest first, visible toasts only) clicks that toast's button through the real `NSButton` (Share, Undo, …). Returns false when the toast has no button. |
-| `defaults` | `key=open.… [value=…]` reads (and writes) one Open preference in the app's own domain (run suites on a cloned bundle ID). |
+| `defaults` | `key=open.… [value=…]` reads (and writes) one Open preference. The App suites use the shared domain `io.github.sergeserb2.open`: reset used keys at start and restore them in `finally`. `persistent=true` reads the saved value only (`null` if absent), so suites can restore absence without persisting a registered default. |
 | `sound-effect` | `effect=capture|event` calls `SoundEffects.shared.play`; reports `played`, the resource name, and counts. Call it only with `open.advanced.playSoundEffects` off: it plays audio otherwise. |
 
 `window-state` also reports `toolbarButtons` (visible toolbar buttons in order), `hint` (shows, visible, frame, keys, plate), `toast` (title of the newest toast shown in the window, also after it left), and `confirmation` (the pending delete alert's title, text, buttons).

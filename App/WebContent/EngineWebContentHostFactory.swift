@@ -16,6 +16,7 @@ typealias BrowserWindowController = OpenFeatures.BrowserWindowController
 final class AuxiliaryPage {
   let content: OEWebContent
   let panel: NSPanel
+  var historyRecorder: AppHistoryRecorder?
   /// The panel's close button closes the page too.
   var closeObserver: NSObjectProtocol?
   init(content: OEWebContent, panel: NSPanel) { self.content = content; self.panel = panel }
@@ -47,6 +48,7 @@ final class EngineWebContentHostFactory: NSResponder, WebContentHostFactory {
   private var observerID: UUID?
   private(set) var commandBarSession: AppCommandBarSession?
   private var commandBarNavigationFocus: Set<ItemID> = []
+  private var typedNavigationTabs: Set<ItemID> = []
   private(set) var isClosing = false
   var saveCaptureTasks: [UUID: Task<Void, Never>] = [:]
   var pendingSaveChoice: ((URL?) -> Void)?
@@ -316,6 +318,7 @@ final class EngineWebContentHostFactory: NSResponder, WebContentHostFactory {
     content.view.isHidden = true
     let host = EngineWebContentHost(tabID: tabID, profileID: profileID, content: content, owner: self)
     hosts[tabID] = host
+    if typedNavigationTabs.remove(tabID) != nil { host.historyRecorder.markTyped() }
     if model.tab(id: tabID) != nil { modelHostIDs.insert(tabID) }
     mirror.sync()
     if let url, history == nil { host.load(url) }
@@ -326,6 +329,7 @@ final class EngineWebContentHostFactory: NSResponder, WebContentHostFactory {
     translate.contentDidClose(host.content)
     findController?.hostClosed(host.tabID)
     commandBarNavigationFocus.remove(host.tabID)
+    typedNavigationTabs.remove(host.tabID)
     app.media.hostClosed(tabID: host.tabID)
     if hosts[host.tabID] === host { hosts[host.tabID] = nil }
     modelHostIDs.remove(host.tabID)
@@ -430,10 +434,11 @@ final class EngineWebContentHostFactory: NSResponder, WebContentHostFactory {
     showSelection(focus: focus); app.scheduleSave()
   }
   @discardableResult
-  func openNewTab(url: URL, background: Bool, opener: ItemID? = nil) -> Tab? {
+  func openNewTab(url: URL, background: Bool, opener: ItemID? = nil, typed: Bool = false) -> Tab? {
     guard let space = focusedSpace else { return nil }
     // Lead Q11: a tab opened in the background is unread until it is selected.
     let tab = model.newTab(in: space.id, url: url, at: 0, unread: background); tab.openerID = opener
+    if typed { typedNavigationTabs.insert(tab.id) }
     if !background { select(nodeID: tab.id) }
     app.scheduleSave(); return tab
   }
@@ -622,6 +627,7 @@ final class EngineWebContentHostFactory: NSResponder, WebContentHostFactory {
     stopObservingSidebarMenusForAutomation()
     #endif
     commandBarNavigationFocus.removeAll()
+    typedNavigationTabs.removeAll()
     commandBarSession?.dismiss()
     controller?.container.closeAll(); for host in Array(hosts.values) { host.close() }
     for page in auxiliaryPages { closeAuxiliary(page); page.panel.close() }
@@ -658,6 +664,7 @@ final class EngineWebContentHostFactory: NSResponder, WebContentHostFactory {
 }
 
 extension EngineWebContentHostFactory {
+  // Mark before starting a command-bar navigation; redirect commits retain it.
   private func reloadExtensionBar() {
     guard app.engineReady else { return }
     extensionBar.arrangedSubviews.forEach { $0.removeFromSuperview() }
@@ -728,15 +735,19 @@ extension EngineWebContentHostFactory {
   }
   func navigateFromCommandBar(_ url: URL, current: Bool, background: Bool = false) {
     if current, selectedContent != nil || selectedTab != nil {
-      if let id = selectedTab?.id { commandBarNavigationFocus.insert(id) }
+      if let page = selectedContent, let host = hosts.values.first(where: { $0.content === page }) {
+        commandBarNavigationFocus.insert(host.tabID); host.historyRecorder.markTyped()
+      } else if let id = selectedTab?.id {
+        commandBarNavigationFocus.insert(id)
+        typedNavigationTabs.insert(id)
+      }
       if !app.engineReady, let tab = selectedTab {
         queuedNavigations[tab.id] = url; tab.url = url; app.scheduleSave()
       } else { selectedContent?.load(url); selectedContent?.focusPage() }
-    } else if let tab = openNewTab(url: url, background: background) {
+    } else if let tab = openNewTab(url: url, background: background, typed: true) {
       if background { _ = ensureContent(for: tab) }
       else { commandBarNavigationFocus.insert(tab.id) }
     }
-    if let profile = focusedProfile { app.stores.recordTyped(url: url, title: url.host() ?? url.absoluteString, profileID: profile.id) }
   }
   private func finishCommandBarNavigation(_ page: OEWebContent) {
     guard let id = tabID(for: page), commandBarNavigationFocus.remove(id) != nil else { return }
@@ -941,6 +952,7 @@ extension EngineWebContentHostFactory {
     auxiliaryPages.removeAll { $0 === page }
     if let observer = page.closeObserver { NotificationCenter.default.removeObserver(observer) }
     page.closeObserver = nil
+    page.historyRecorder?.close()
     page.content.close()
     page.panel.orderOut(nil)
   }
@@ -950,10 +962,20 @@ extension EngineWebContentHostFactory {
 
 extension EngineWebContentHostFactory: OEWebContentDelegate {
   func webContent(_ webContent: OEWebContent, didChange changes: OEWebContentChange) {
-    if changes.contains(.title), let popup = auxiliaryPages.first(where: { $0.content === webContent }) { popup.panel.title = webContent.title }
+    if let popup = auxiliaryPages.first(where: { $0.content === webContent }) {
+      if changes.contains(.loading), webContent.isLoading { popup.historyRecorder?.loadingChanged(true) }
+      if changes.contains(.URL), let url = webContent.url {
+        popup.historyRecorder?.addressChanged(url, isLoading: webContent.isLoading, ephemeral: webContent.context.isEphemeral, title: webContent.title)
+      }
+      if changes.contains(.loading), !webContent.isLoading { popup.historyRecorder?.loadingChanged(false); popup.historyRecorder?.titleChanged(webContent.title) }
+      if changes.contains(.title) { popup.panel.title = webContent.title; popup.historyRecorder?.titleChanged(webContent.title) }
+    }
     // Share Quote follows the focused page's selection (page-platform §4.2.5, EP-3).
     if changes.contains(.selection) { translate.syncStatus() }
     record("change", webContent, ["changes": changes.rawValue])
+  }
+  func webContent(_ page: OEWebContent, didCommitNavigationTo url: URL, isReload: Bool) {
+    auxiliaryPages.first { $0.content === page }?.historyRecorder?.committed(url: url, isReload: isReload, ephemeral: page.context.isEphemeral)
   }
 
   /// Chromium's history swiper (page-platform EP-1). Recorded for automation; Step 12 draws
@@ -1008,6 +1030,7 @@ extension EngineWebContentHostFactory: OEWebContentDelegate {
       panel.center()
       present(panel)
       let page = AuxiliaryPage(content: popup, panel: panel)
+      if let profile = profile(for: request.context) { page.historyRecorder = AppHistoryRecorder(stores: app.stores, profileID: profile.id) }
       page.closeObserver = NotificationCenter.default.addObserver(
         forName: NSWindow.willCloseNotification, object: panel, queue: .main
       ) { [weak self, weak page] _ in
