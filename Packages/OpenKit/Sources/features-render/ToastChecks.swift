@@ -239,6 +239,17 @@ enum ToastChecks {
         defer { little.closeAll() }
         guard let lc = little.sessions.first.flatMap({ little.controllers[$0.id] }) else { check(false, "R-T5 Little Open session"); return }
         pump(lc.contentView)
+        let saved = NSPasteboard.general.pasteboardItems?.map { item in
+            item.types.compactMap { type in item.data(forType: type).map { (type, $0) } }
+        } ?? []
+        defer {
+            NSPasteboard.general.clearContents()
+            NSPasteboard.general.writeObjects(saved.map { pairs in
+                let item = NSPasteboardItem()
+                for (type, data) in pairs { item.setData(data, forType: type) }
+                return item
+            })
+        }
         lc.titleBar.copyButton.performClick(nil)
         check(NSPasteboard.general.string(forType: .string) == "https://example.com" && !lc.contentView.subviews.contains { $0 is ToastOverlayView },
               "R-T5 Little Open copy uses the pasteboard without a library toast (Step 6a)")
