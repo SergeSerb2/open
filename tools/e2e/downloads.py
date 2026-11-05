@@ -231,10 +231,13 @@ def checks(factory, results, tmp, config, harness):
         dismiss_library()
         original_window = app.call('windows')[0]['id']
         app.call('command', id='new-window')
+        new_window = next(v['id'] for v in app.call('windows') if v['id'] != original_window)
+        app.call('window-focus', id=new_window, activate=True)
         app.call('library-open', section='archive')
         app.call('download-home')
         check('home_recent_new_window', app.call('settings-state')['librarySection'] == 'downloads')
         dismiss_library()
+        app.call('window-focus', id=new_window, activate=True)
         app.call('window-close')
         app.call('window-focus', id=original_window, activate=True)
         app.call('library-open', section='archive')

@@ -43,7 +43,7 @@ was verified by the real-App runner as distribution SHA-256
 | Gate | Result / evidence |
 |---|---|
 | Debug app | Final run pending; engine distribution is pinned above. |
-| Real-App `downloads` | Final 32-gate run pending. Covers known/unknown totals, partial failure, folders, save acceptance/cancellation, native controls/menus, file actions, Profile isolation, fallback, Home navigation/motion, shortcut and quit. |
+| Real-App `downloads` | Final 33-gate run pending. Covers known/unknown totals, partial failure, folders, save acceptance/cancellation, native controls/menus, file actions, Profile isolation, fallback, Home navigation/motion, shortcut and quit. |
 | Native idle observer | S8 observer is reused with a Downloads ownership filter. A real repeating timer canary proves the observer is live; settled counts, publication count and CA keys must remain zero. |
 | Negative proofs | Grouped real behavior mutations run outside committed code; final coverage pending. The source is restored before the final build. |
 | `features` | 19 PASS, 0 FAIL: `.re/downloads/regression-features.json`. |
