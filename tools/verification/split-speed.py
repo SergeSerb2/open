@@ -15,12 +15,14 @@ import subprocess
 
 def run(binary):
     before = list(os.getloadavg())
+    uptime_before = subprocess.check_output(['uptime'], text=True).strip()
     result = subprocess.run([str(binary), 'bench', '--rows', '1000'], text=True, capture_output=True, timeout=120)
     after = list(os.getloadavg())
+    uptime_after = subprocess.check_output(['uptime'], text=True).strip()
     match = re.search(r'scroll \d+ steps.*?p95 ([0-9.]+) ms', result.stdout)
     if result.returncode or not match:
         raise RuntimeError('sidebar bench failed: ' + result.stdout[-2000:] + result.stderr[-1000:])
-    return dict(p95_ms=float(match[1]), load_before=before, load_after=after, output=result.stdout)
+    return dict(p95_ms=float(match[1]), load_before=before, load_after=after, uptime_before=uptime_before, uptime_after=uptime_after, output=result.stdout)
 
 
 def main():

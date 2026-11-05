@@ -19,6 +19,8 @@ def split_checks(factory, results, tmp, h):
     def row(name, ok, **evidence):
         results[name] = dict(ok=bool(ok), **evidence)
         print('split %-34s %s' % (name, 'PASS' if ok else 'FAIL'), flush=True)
+        if name.startswith('speed_'):
+            print('  speed receipt:', {k: v for k, v in evidence.items() if k not in ('samples', 'scope')}, flush=True)
     def state(): return app.call('split', op='state')
     def settled(count=None):
         value = h.wait_until(lambda: (lambda s: s if count is None or len(s['panes']) == count else None)(state()), timeout=5, step=.02)
@@ -67,14 +69,15 @@ def split_checks(factory, results, tmp, h):
         for name, value in {'open.advanced.showFullURLWithToolbar': False}.items():
             saved[name] = app.call('defaults', key=name)
             app.call('defaults', key=name, value=value)
+        app.call('suggest-remote', enabled=False)
         app.call('split', op='observe')
         app.call('window-frame', frame=[60, 60, 1360, 860])
         empty_menu = app.call('split', op='plus')
         row('empty_split_disabled', not next(r['enabled'] for r in empty_menu if r['title'] == 'New Split View'), menu=empty_menu)
-        a = opened('a'); app.call('focus', tab=a)
+        a = opened('a'); original_page = app.page(a)['identifier']; app.call('focus', tab=a)
         key('='); s = settled(2)
         b = next(p['id'] for p in s['panes'] if p['id'] != a)
-        row('C1_shortcut', s['orientation'] == 'horizontal' and s['focused'] == b and len(app.call('tabs')) == 2, state=s)
+        row('C1_shortcut', s['orientation'] == 'horizontal' and s['focused'] == b and len(app.call('tabs')) == 2 and app.page(a)['identifier'] == original_page, state=s)
         app.call('navigate', tab=b, url=origin+'/b'); app.call('wait', tab=b)
         ok, pages = live([a, b]); row('E1_two_live_pages', ok, pages=pages)
         # Real page focus and input, plus independent navigation histories.
@@ -161,13 +164,13 @@ def split_checks(factory, results, tmp, h):
         row('fifth_drop_refused', not refused['accepted'] and len(state()['panes']) == 4, transport=refused)
         plus_enabled = next(r['enabled'] for r in app.call('split', op='plus') if r['title'] == 'New Split View')
         row('add_up_to_four', not disabled['enabled'] and not enabled and not plus_enabled and [p['id'] for p in after['panes']] == ids, state=after, plusEnabled=plus_enabled)
-        for i, tid in enumerate(ids): app.call('navigate', tab=tid, url=origin+'/four-'+str(i))
+        for i, tid in enumerate(ids): app.call('navigate', tab=tid, url=origin.replace('127.0.0.1', 'pane%d.localhost' % (i+1))+'/four-'+str(i))
         ok, pages = live(ids); row('E1_four_live_pages', ok, pages=pages)
         focus_rows = []
         for i, tid in enumerate(ids):
             app.call('focus', tab=state()['focused']); key(str(i+1)); s = settled(4)
             focus_rows.append(dict(key=i+1, state=s, ok=s['focused'] == tid and [p['id'] for p in s['panes'] if p['ring']] == [tid]
-                                  and s['sidebarCurrent'] and s['selected'] == split_id and s['sidebarURL'] == '127.0.0.1'))
+                                  and s['sidebarCurrent'] and s['selected'] == split_id and s['sidebarURL'] == 'pane%d.localhost' % (i+1) and s['title'] == 'Split /four-'+str(i)))
         key('}'); next_focus = state()['focused']; key('{'); previous = state()['focused']
         row('focus_keys_ring_sidebar', all(r['ok'] for r in focus_rows) and next_focus == ids[0] and previous == ids[3], keys=focus_rows)
         # Queue a native click at a page, so the production NSEvent local monitor observes it.
@@ -193,7 +196,7 @@ def split_checks(factory, results, tmp, h):
         idle = app.call('split', op='idle')
         row('speed_idle_after_drag', all(v == 0 for v in idle['before'][5:]) and all(v == 0 for v in idle['after'])
             and idle['animationsBefore'] == idle['animationsAfter'] == 0,
-            loadAverage=list(os.getloadavg()), **idle)
+            loadAverage=list(os.getloadavg()), uptime=subprocess.check_output(['uptime'], text=True).strip(), **idle)
         # Maximizing keeps hosts alive. Esc and a focus key both restore the stored layout.
         original = state(); app.call('menu-perform', id='expand-current-split'); expanded = settled(4)
         key('escape', ()); restored = settled(4)
@@ -203,7 +206,10 @@ def split_checks(factory, results, tmp, h):
             and focused['focused'] == ids[0] and all(p['host'] for p in expanded['panes']), expanded=expanded, restored=restored)
         # Relaunch >=3 panes with nonuniform fractions, vertical layout and non-first focus.
         key('3'); persisted = settled(4); app.call('menu-perform', id='expand-current-split'); settled(4); app.call('save'); app.quit()
-        app = factory(urls=(), extra_env=environment); relaunched = settled(4)
+        # The idle observer is only for the pre-quit work-count gate. A new
+        # observer starts armed to catch eager work; do not inject it into the
+        # relaunched process used for uninstrumented Release latency.
+        app = factory(urls=()); relaunched = settled(4)
         ok, pages = live(ids)
         row('relaunch_orientation_fractions_focus', ok and relaunched['id'] == persisted['id']
             and relaunched['orientation'] == 'vertical' and relaunched['fractions'] == persisted['fractions']
@@ -251,7 +257,7 @@ def split_checks(factory, results, tmp, h):
         summaries = {}
         for name, values in measured.items():
             summaries[name] = dict(median=statistics.median(values), p95=sorted(values)[math.ceil(len(values)*.95)-1])
-        row('speed_tab_switch', all(s['p95'] <= 16 for s in summaries.values()), loadAverage=list(os.getloadavg()),
+        row('speed_tab_switch', all(s['p95'] <= 16 for s in summaries.values()), loadAverage=list(os.getloadavg()), uptime=subprocess.check_output(['uptime'], text=True).strip(),
             milliseconds=summaries, samples=measured, scope='production sidebar selection through native layout, CA submission and focused renderer visibility acknowledgement; excludes physical presentation')
         # E5: the production sleep controller protects shown panes, freezes and
         # discards a hidden split, then wakes both real pages with history intact.
@@ -275,13 +281,17 @@ def split_checks(factory, results, tmp, h):
         app.call('menu-perform', id='go-back'); app.call('wait', tab=focus)
         row('E5_wake_keeps_history', woke and restored_urls == urls and app.tab(focus)['url'].endswith('/sleep-back'), pages=pages, urls=restored_urls)
         app.call('sleep-clock', reset=True)
-        unsplit(); favorite = opened('favorite'); app.call('menu-perform', id='add-to-favorites'); settled(1)
+        unsplit(); favorite = opened('favorite'); app.call('favorite', tab=favorite); settled(1)
         favorite_menu = app.call('split', op='plus'); before = len(app.call('tabs'))
         app.call('focus', tab=favorite); key('='); s = settled(1)
         row('favorite_split_disabled_no_orphan', not next(r['enabled'] for r in favorite_menu if r['title'] == 'New Split View')
             and len(app.call('tabs')) == before and not s['id'], menu=favorite_menu, state=s)
+        retained = []
+        for i in range(12):
+            opened('slot-cache-'+str(i)); retained.append(state()['retainedSlots'])
+        row('slot_cache_bounded', max(retained) <= 9, retainedSlots=retained, hiddenLimit=8)
     finally:
         try:
-            for name, value in saved.items(): app.call('defaults', key=name, value=value)
+            h._restore_defaults(app, saved)
         finally:
             app.quit(); server.shutdown(); server.server_close()

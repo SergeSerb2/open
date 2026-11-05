@@ -1,4 +1,4 @@
-// Harness-only observation. Loaded by features-idle.py, never linked into Open.
+// Harness-only observation. Injected by feature and App e2e gates, never linked into Open.
 #import <AppKit/AppKit.h>
 #import <QuartzCore/QuartzCore.h>
 #import <CoreVideo/CoreVideo.h>

@@ -100,6 +100,12 @@ public final class WebContentContainer: NSView {
     public var tabProvider: ((ItemID) -> Tab?) = { _ in nil }
     public var style = SpaceThemeStyle.defaultTheme(system: .dark)
     public private(set) var slots: [PaneSlotView] = []
+    // Reuse the chrome with its cached host. Rebuilding fourteen AppKit buttons
+    // on every single→split switch exceeded the live-tab budget (s9 sample).
+    // closeHost evicts the matching parked slot. The host LRU also limits parked
+    // views to eight, including when protected hosts must remain alive.
+    private var parkedSlots: [ItemID: PaneSlotView] = [:]
+    public var retainedSlotCount: Int { slots.count + parkedSlots.count }
     private var cache: [ItemID: any WebContentHost] = [:]
     // Preview hosts leave the display cache, but retain the same metadata bridge.
     private var previewHosts: [ItemID: any WebContentHost] = [:]
@@ -115,7 +121,7 @@ public final class WebContentContainer: NSView {
     private var focused: ItemID?
     private var orientation: SplitOrientation = .horizontal
     private var fractions: [Double] = []
-    public var maximizedTabID: ItemID? { didSet { needsLayout = true } }
+    public var maximizedTabID: ItemID? { didSet { if maximizedTabID != oldValue { needsLayout = true } } }
     /// The optional content toolbar on a single pane (§4.6.2). A split keeps its pane bars.
     public var showsToolbar = false { didSet { if showsToolbar != oldValue { updateSlots(); for slot in slots { slot.needsLayout = true } } } }
     /// Toolbar text: the full URL instead of the host (CC-37).
@@ -160,9 +166,15 @@ public final class WebContentContainer: NSView {
         self.currentProfile = profileID; currentSpace = spaceID; showGeneration += 1; let generation = showGeneration
         let old = ids, previousFocus = focused
         for id in old where !tabIDs.contains(id) { cache[id]?.view.isHidden = true; cache[id]?.view.removeFromSuperview(); hiddenLRU.removeAll { $0 == id }; hiddenLRU.append(id) }
-        for slot in slots where !tabIDs.contains(slot.tabID) { slot.removeFromSuperview() }
+        for slot in slots where !tabIDs.contains(slot.tabID) {
+            slot.removeFromSuperview()
+            if cache[slot.tabID] != nil { parkedSlots[slot.tabID] = slot }
+        }
         let byID = Dictionary(uniqueKeysWithValues: slots.map { ($0.tabID, $0) })
-        slots = tabIDs.map { id in byID[id] ?? PaneSlotView(tabID: id) }
+        slots = tabIDs.map { id in
+            let parked = parkedSlots.removeValue(forKey: id)
+            return byID[id] ?? parked ?? PaneSlotView(tabID: id)
+        }
         for slot in slots where slot.superview == nil { addSubview(slot, positioned: .below, relativeTo: dropOverlay) }
         ids = tabIDs; focused = focusedTabID; self.orientation = orientation
         self.fractions = fractions.count == ids.count ? fractions : Array(repeating: 1 / Double(ids.count), count: ids.count)
@@ -258,7 +270,10 @@ public final class WebContentContainer: NSView {
             cache[id]?.view.isHidden = true; cache[id]?.view.removeFromSuperview()
             hiddenLRU.removeAll { $0 == id }; hiddenLRU.append(id)
         }
-        for slot in slots { slot.removeFromSuperview() }
+        for slot in slots {
+            slot.removeFromSuperview()
+            if cache[slot.tabID] != nil { parkedSlots[slot.tabID] = slot }
+        }
         slots.removeAll(); ids.removeAll(); focused = nil
         for divider in dividers { divider.removeFromSuperview() }; dividers.removeAll()
         trimCache()
@@ -279,6 +294,7 @@ public final class WebContentContainer: NSView {
     }
     public func closeHost(for id: ItemID) {
         if previewHosts[id] != nil { onReturnPreviewHost?() }
+        parkedSlots[id] = nil
         generations[id] = nil
         let host = cache.removeValue(forKey: id) ?? previewHosts.removeValue(forKey: id)
         hiddenLRU.removeAll { $0 == id }
@@ -301,11 +317,14 @@ public final class WebContentContainer: NSView {
     public func closeAll() {
         if !previewHosts.isEmpty { onReturnPreviewHost?() }
         for id in Set(cache.keys).union(previewHosts.keys) { closeHost(for: id) }
+        parkedSlots.removeAll()
     }
     private func trimCache() {
         guard hiddenLRU.count > Self.maxCachedHiddenHosts else { return }
         var unprotected = hiddenLRU.filter { retainsHiddenHost?($0) != true }
         while unprotected.count > Self.maxCachedHiddenHosts { closeHost(for: unprotected.removeFirst()) }
+        let recent = Set(hiddenLRU.suffix(Self.maxCachedHiddenHosts))
+        parkedSlots = parkedSlots.filter { recent.contains($0.key) }
     }
     public func focus(tabID: ItemID) {
         guard ids.contains(tabID) else { return }; focused = tabID; updateSlots(); cache[tabID]?.focus(); metadataChanged(tabID)

@@ -20,8 +20,8 @@ extension AutomationController {
             return ["id": split.split?.id.description ?? "", "orientation": split.split?.orientation.rawValue ?? "",
                 "fractions": split.split?.fractions ?? [], "focused": split.focusedTab?.id.description ?? "",
                 "selected": controller.context.window?.selectedNodeBySpace[controller.context.window!.focusedSpaceID]?.description ?? "",
-                "maximized": split.maximizedPaneID?.description ?? "", "container": frame(container),
-                "sidebarURL": controller.sidebar.urlFieldText, "sidebarText": controller.sidebar.displayedURLText,
+                "maximized": split.maximizedPaneID?.description ?? "", "container": frame(container), "retainedSlots": container.retainedSlotCount,
+                "sidebarURL": controller.sidebar.urlFieldText, "sidebarText": controller.sidebar.displayedURLText, "title": window.title,
                 "sidebarCurrent": split.split.map { controller.sidebar.isCurrentRow(nodeID: $0.id) } ?? false,
                 "panes": container.slots.map { slot -> [String: Any] in
                     ["id": slot.tabID.description, "frame": frame(slot), "hidden": slot.isHidden,
@@ -69,29 +69,33 @@ extension AutomationController {
                 guard let uuid = UUID(uuidString: value), factory.model.node(id: ItemID(rawValue: uuid)) != nil else { throw Failure(message: "unknown bench node") }
                 return ItemID(rawValue: uuid)
             }
-            var single: [Double] = [], multiple: [Double] = []
-            func select(_ id: ItemID) async throws {
+            var single: [Double] = [], multiple: [Double] = [], singleNative: [Double] = [], multipleNative: [Double] = []
+            func select(_ id: ItemID) async throws -> Double {
+                let start = CACurrentMediaTime()
                 _ = controller.sidebar(controller.sidebar, didRequest: .select(nodeID: id, space: space.id))
                 controller.contentView.layoutSubtreeIfNeeded(); CATransaction.flush()
+                let native = (CACurrentMediaTime() - start) * 1000
                 let focused = factory.model.node(id: id)?.split?.focusedPaneID ?? id
                 guard let page = factory.hosts[focused]?.content,
                       try await page.evaluateJavaScript("!document.hidden") as? Bool == true else {
                     throw Failure(message: "selected benchmark page is not visible in the renderer")
                 }
+                return native
             }
             // Warm hosts first. Measured scope: production selection through native layout
             // and focused renderer visibility acknowledgement, excluding socket transport
             // and physical presentation. This is the plan's live focused-pane budget.
-            for id in ids { try await select(id) }
+            for id in ids { _ = try await select(id) }
             for _ in 0..<40 {
                 for (target, isSplit) in [(ids[1], false), (ids[2], true)] {
-                    try await select(ids[0]); let start = CACurrentMediaTime(); try await select(target)
+                    _ = try await select(ids[0]); let start = CACurrentMediaTime(); let native = try await select(target)
                     let ms = (CACurrentMediaTime() - start) * 1000
-                    if isSplit { multiple.append(ms) } else { single.append(ms) }
+                    if isSplit { multiple.append(ms); multipleNative.append(native) }
+                    else { single.append(ms); singleNative.append(native) }
                 }
             }
-            try await select(selected)
-            return ["single": single, "split": multiple]
+            _ = try await select(selected)
+            return ["single": single, "split": multiple, "singleNative": singleNative, "splitNative": multipleNative]
         case "observe", "idle":
             typealias Action = @convention(c) () -> Void
             typealias Watch = @convention(c) (UnsafeMutableRawPointer) -> Void
