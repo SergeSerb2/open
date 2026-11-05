@@ -33,7 +33,12 @@ import OpenStore
     public var downloadProfileFilter: ProfileID?
     public var captureSort = "Newest"
     public var mediaKind = "All"
-    public var historyProfileID: ProfileID
+    public var historyProfileID: ProfileID { didSet {
+        if oldValue != historyProfileID { pendingHistoryDeletes = []; confirmsClearHistory = false; selectedIDs = [] }
+    } }
+    private var historyLoadRevision = 0
+    public var confirmsClearHistory = false
+    public var pendingHistoryDeletes: [URL] = []
     public private(set) var historyRows: [HistoryMatch] = []
     public private(set) var historyFavicons: [URL: Data] = [:]
     public private(set) var thumbnailImages: [UUID: NSImage] = [:]
@@ -242,5 +247,5 @@ import OpenStore
         catch { statusText = "Could not delete the capture. \(error.localizedDescription)" }
     }
     public func saveCapture(_ item: CaptureItemSnapshot, to url: URL) { statusText = actions.saveCapture(id: item.id, to: url) ?? "Saved." }
-    public func reloadHistory() async { let profile = historyProfileID, text = query; let rows = await histories[profile]?.search(text, limit: 100) ?? []; guard profile == historyProfileID, text == query, !Task.isCancelled else { return }; historyRows = rows; if historyFaviconImages.count > 512 {historyFavicons=[:];historyFaviconImages=[:]}; if let faviconStore { for row in rows { let data = await faviconStore.icon(for: row.url)?.png32; guard profile == historyProfileID, text == query, !Task.isCancelled else {return}; if historyFavicons[row.url] != data {historyFaviconImages[row.url]=data.flatMap{NSImage(data:$0)}};historyFavicons[row.url] = data } } }
+    public func reloadHistory() async { historyLoadRevision += 1; let revision = historyLoadRevision, profile = historyProfileID, text = query; let rows: [HistoryMatch]; if text.isEmpty { rows = await histories[profile]?.recent() ?? [] } else { rows = await histories[profile]?.search(text, limit: 100) ?? [] }; guard revision == historyLoadRevision, profile == historyProfileID, text == query, !Task.isCancelled else { return }; historyRows = rows; if historyFaviconImages.count > 512 {historyFavicons=[:];historyFaviconImages=[:]}; if let faviconStore { for row in rows { let data = await faviconStore.icon(for: row.url)?.png32; guard revision == historyLoadRevision, profile == historyProfileID, text == query, !Task.isCancelled else {return}; if historyFavicons[row.url] != data {historyFaviconImages[row.url]=data.flatMap{NSImage(data:$0)}};historyFavicons[row.url] = data } } }
 }

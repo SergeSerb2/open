@@ -307,6 +307,19 @@ void OEClient::OnMediaAccessChange(CefRefPtr<CefBrowser> browser,
 
 #pragma mark Load
 
+void OEClient::OnLoadStart(CefRefPtr<CefBrowser> browser,
+                           CefRefPtr<CefFrame> frame,
+                           TransitionType transition_type) {
+  OEWebContent* view = view_;
+  if (frame->IsMain() &&
+      [view.delegate respondsToSelector:@selector(webContent:didCommitNavigationToURL:isReload:)]) {
+    if (NSURL* url = OEURL(frame->GetURL())) {
+      [view.delegate webContent:view didCommitNavigationToURL:url
+          isReload:(transition_type & TT_SOURCE_MASK) == TT_RELOAD];
+    }
+  }
+}
+
 void OEClient::OnLoadingStateChange(CefRefPtr<CefBrowser> browser,
                                     bool isLoading,
                                     bool canGoBack,

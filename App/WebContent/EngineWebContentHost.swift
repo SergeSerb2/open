@@ -16,6 +16,7 @@ final class EngineWebContentHost: NSObject, WebContentHost, WebContentProviding,
   weak var owner: EngineWebContentHostFactory?
   private(set) var closed = false
   private(set) var generation = 0
+  let historyRecorder: AppHistoryRecorder
   var onURLChange: ((URL) -> Void)?
   var onTitleChange: ((String) -> Void)?
   var onLoadingChange: ((Bool) -> Void)?
@@ -53,6 +54,7 @@ final class EngineWebContentHost: NSObject, WebContentHost, WebContentProviding,
 
   init(tabID: ItemID, profileID: ProfileID, content: OEWebContent, owner: EngineWebContentHostFactory) {
     self.tabID = tabID; self.profileID = profileID; self.content = content; self.owner = owner
+    historyRecorder = AppHistoryRecorder(stores: owner.app.stores, profileID: profileID)
     spaceID = owner.space(for: tabID)?.id ?? owner.focusedSpace?.id
     super.init(); content.delegate = self
     // Tab pages draw Open's own swipe indicator (page-platform §4.4.3), not Chromium's arrow.
@@ -87,6 +89,7 @@ final class EngineWebContentHost: NSObject, WebContentHost, WebContentProviding,
   }
   func close() {
     guard !closed else { return }; closed = true; generation += 1; muteObservation += 1
+    historyRecorder.close()
     cancelBackgroundRead(); faviconProbe?.cancel(); faviconProbe = nil
     onURLChange = nil; onTitleChange = nil; onLoadingChange = nil; onFaviconChange = nil; shouldNavigate = nil
     onPageBackgroundChange = nil; onLiveStateChange = nil
@@ -106,7 +109,13 @@ final class EngineWebContentHost: NSObject, WebContentHost, WebContentProviding,
       onURLChange?(url); cancelBackgroundRead(); pageBackgroundColor = nil; onPageBackgroundChange?(nil)
     }
     guard !closed, generation == token else { return }
-    if changes.contains(.title), !page.title.isEmpty { onTitleChange?(page.title) }
+    // CEF's OnLoadStart excludes same-document commits. Address changes outside
+    // a document load cover pushState/fragments without duplicating that hook.
+    if changes.contains(.URL), !page.isLoading, let url = page.url {
+      historyRecorder.committed(url: url, isReload: false, ephemeral: page.context.isEphemeral)
+      historyRecorder.titleChanged(page.title)
+    }
+    if changes.contains(.title), !page.title.isEmpty { onTitleChange?(page.title); historyRecorder.titleChanged(page.title) }
     if changes.contains(.loading) || changes.contains(.live) { onLoadingChange?(page.isLoading) }
     guard !closed, generation == token else { return }
     if changes.contains(.favicon) {
@@ -270,8 +279,12 @@ final class EngineWebContentHost: NSObject, WebContentHost, WebContentProviding,
   func webContent(_ page: OEWebContent, historySwipe phase: OEHistorySwipePhase, direction: OEHistorySwipeDirection, progress: Double) {
     if !closed { owner?.webContent(page, historySwipe: phase, direction: direction, progress: progress) }
   }
-  func webContent(_ page: OEWebContent, didFinishLoadWithStatus status: Int) { if !closed { refreshPageBackground(); if let owner { confirmFaviconForDocument(page, owner: owner) }; owner?.webContent(page, didFinishLoadWithStatus: status) } }
-  func webContent(_ page: OEWebContent, didFailLoadWithError error: any Error) { if !closed { owner?.webContent(page, didFailLoadWithError: error) } }
+  func webContent(_ page: OEWebContent, didCommitNavigationTo url: URL, isReload: Bool) {
+    guard !closed else { return }
+    historyRecorder.committed(url: url, isReload: isReload, ephemeral: page.context.isEphemeral)
+  }
+  func webContent(_ page: OEWebContent, didFinishLoadWithStatus status: Int) { if !closed { historyRecorder.titleChanged(page.title); refreshPageBackground(); if let owner { confirmFaviconForDocument(page, owner: owner) }; owner?.webContent(page, didFinishLoadWithStatus: status) } }
+  func webContent(_ page: OEWebContent, didFailLoadWithError error: any Error) { if !closed { historyRecorder.navigationFailed(); owner?.webContent(page, didFailLoadWithError: error) } }
   func webContent(_ page: OEWebContent, didReceiveDevToolsEvent method: String, parameters: [String: Any]) { if !closed { owner?.webContent(page, didReceiveDevToolsEvent: method, parameters: parameters) } }
   func webContent(_ page: OEWebContent, didLogConsoleMessage message: String, level: Int, source: String, line: Int) { if !closed { owner?.webContent(page, didLogConsoleMessage: message, level: level, source: source, line: line) } }
 }

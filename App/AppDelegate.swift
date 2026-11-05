@@ -28,6 +28,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, OEEngineDelegate, OEBr
   private(set) var engineReady = false
   private(set) var terminationRequested = false
   private var faviconShutdownTask: Task<Void, Never>?
+  private var historyQuitTask: Task<Void, Never>?
+  private var historyQuitFlushed = false
   private(set) var shutdownPrepared = false
   private var lateAsyncEngineCalls = 0
   private var asyncEngineCalls: [String: Int] = [:]
@@ -88,6 +90,15 @@ final class AppDelegate: NSObject, NSApplicationDelegate, OEEngineDelegate, OEBr
   }
 
   func applicationShouldTerminate(_ sender: NSApplication) -> NSApplication.TerminateReply {
+    if historyQuitTask != nil { return .terminateCancel }
+    if !historyQuitFlushed, !shutdownPrepared {
+      historyQuitTask = Task { @MainActor in
+        await self.stores.flushHistory()
+        self.historyQuitFlushed = true; self.historyQuitTask = nil
+        NSApp.terminate(nil)
+      }
+      return .terminateCancel
+    }
     if faviconShutdownTask != nil || sleepQuitTask != nil { return .terminateCancel }
     if !sleepQuitCaptured, engineReady, !shutdownPrepared, tabSleep.controller != nil {
       // OEApplication has no terminateLater: capture sleep history first (bounded at 3 s),

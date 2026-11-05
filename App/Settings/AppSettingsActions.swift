@@ -242,10 +242,26 @@ final class AppSettingsActions: SettingsActions, LibraryActions, DownloadsProvid
   }
   func clearBrowsingData(profileID: ProfileID, kinds: ClearDataKinds) async -> String? { await clearBrowsingData(profileID: profileID, kinds: kinds, range: .all) }
   func clearBrowsingData(profileID: ProfileID, kinds: ClearDataKinds, range: ClearDataRange) async -> String? {
-    // Today's engine can only clear cookies + cache together, for all time.
-    guard range == .all, !kinds.contains(.history), !kinds.contains(.downloads), kinds.contains([.cookies, .cache]) else { return "This engine can clear cookies and cache together for All time. Other ranges and history clearing are not available yet." }
-    guard let context = app.hostFactories.values.compactMap({ $0.context(for: profileID) }).first else { return "This profile is not open." }
-    await withCheckedContinuation { continuation in context.clearBrowsingData(origin: nil) { continuation.resume() } }; return nil
+    // Validate the entire selection before changing any data.
+    let engineKinds = kinds.intersection([.cookies, .cache])
+    guard !kinds.isEmpty, !kinds.contains(.downloads),
+          engineKinds.isEmpty || (range == .all && engineKinds == [.cookies, .cache]) else {
+      return "History supports every time range. Cookies and cache must be cleared together for All time. Download history clearing is not available yet."
+    }
+    let context = app.hostFactories.values.compactMap { $0.context(for: profileID) }.first
+    if !engineKinds.isEmpty, context == nil { return "This profile is not open." }
+    if kinds.contains(.history) {
+      guard let history = app.stores.history(for: profileID) else { return "This profile is no longer available." }
+      let end = Date()
+      let seconds: TimeInterval? = switch range { case .lastHour: 3_600; case .lastDay: 86_400; case .lastWeek: 604_800; case .all: nil }
+      await app.stores.flushHistory()
+      do { try await history.deleteVisits(since: seconds.map { end.addingTimeInterval(-$0) }, through: end) }
+      catch { return error.localizedDescription }
+    }
+    if !engineKinds.isEmpty, let context {
+      await withCheckedContinuation { continuation in context.clearBrowsingData(origin: nil) { continuation.resume() } }
+    }
+    return nil
   }
   func openProfileSubpage(profileID: ProfileID, page: ProfilePage) {
     let path = [ProfilePage.privacy: "privacy", .passwords: "passwords", .paymentMethods: "payments", .notifications: "content/notifications"][page] ?? "privacy"
@@ -293,6 +309,7 @@ final class AppSettingsActions: SettingsActions, LibraryActions, DownloadsProvid
   func copyCapture(id: UUID) { if let url = captureURL(id), let image = NSImage(contentsOf: url) { NSPasteboard.general.clearContents(); NSPasteboard.general.writeObjects([image]) } }
   func saveCapture(id: UUID, to: URL) -> String? { guard let url = captureURL(id) else { return "This capture is no longer available." }; do { try FileManager.default.copyItem(at: url, to: to); return nil } catch { return "The capture could not be saved. \(error.localizedDescription)" } }
   func openHistoryItem(url: URL) { if let profileID = library?.historyProfileID { openURL(url, profileID: profileID) } }
+  func flushHistoryWrites() async { await app.stores.flushHistory() }
   func viewSpace(id: SpaceID) {
     guard let controller = app.frontWindowController ?? app.makeWindow(focusedSpaceID: id), let space = app.model.space(id: id), let factory = app.hostFactories[controller.windowID] else { return }
     app.focusWindow(controller.windowID, activate: true); factory.focus(space: space)
