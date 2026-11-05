@@ -705,7 +705,7 @@ and close callbacks; it chooses no service.
 Suite `page` (`--only page`, both `--style chrome` and `--style alloy`) runs the
 rows of `docs/plans/page-platform.md` §8.3 against fixtures in
 `tools/e2e/fixtures/page-platform/`, served from 127.0.0.1 by
-`page_fixture_server()` (no external network). One function per row group;
+`page_tools_fixture_server()` (no external network). One function per row group;
 `page_checks` calls every group. A row that waits for an engine item reports
 `BLOCKED: <item>` and never counts as a pass. The group saves and restores the
 two preferences it writes (`open.web.colorScheme`,

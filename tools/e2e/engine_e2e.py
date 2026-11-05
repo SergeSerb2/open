@@ -8823,8 +8823,8 @@ def space_manager_checks(results, tmp, config, style):
 PAGE_FIXTURES = os.path.join(ROOT, "tools", "e2e", "fixtures", "page-platform")
 
 
-def page_fixture_server():
-    """Serves tools/e2e/fixtures/page-platform on 127.0.0.1 (no external network)."""
+def page_tools_fixture_server():
+    """Serves tools/e2e/fixtures/page-platform on 127.0.0.1 with no-store caching (page tools rows; no external network)."""
     import http.server
     import threading
     class Handler(http.server.SimpleHTTPRequestHandler):
@@ -9177,7 +9177,7 @@ def _try(fn):
 
 def page_tools_checks(factory, results, tmp, style):
     """Section 8 helper B rows of the `page` suite."""
-    server, port = page_fixture_server()
+    server, port = page_tools_fixture_server()
     app = factory(urls=("http://127.0.0.1:%d/cookies.html" % port,), fresh=True)
     # Open's preferences domain is shared with other runs: restore what this group writes.
     keys = ("open.web.colorScheme", "open.developer.allowJavaScriptFromAppleEvents", "open.developer.modeHosts")
