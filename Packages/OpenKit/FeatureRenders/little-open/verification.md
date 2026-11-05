@@ -127,3 +127,62 @@ inspected after this correction.
 The fresh Debug App build on `d6c94a36` **passed** with the final production
 source. Its initial load was **29.44 / 19.97 / 14.26**. The final full run is
 on this merged production source; its complete table is included in the PR.
+
+
+## Final merged-source gate
+
+Production source and PNGs checked at `edd5118069d63fba0a093ae83497a02b6ecd12a4`,
+after merging main `b913e127`. This receipt-only update changes neither.
+
+The full run started with load **44.01 / 30.54 / 19.76**. Raw result:
+**18 PASS, 4 FAIL, 0 SKIP**. The ad-block failure was timing only (matches
+5000/10000, configuration verified): lookup p95 **1.652 ms > 1 ms**.
+Per CHILD-RULES item 4, only `adblock-perf` was rerun under the quiet lock.
+That run started with load **10.31 / 10.00 / 13.17** and passed: lookup p95
+**0.277 ms**, Profile open/integrity p95 **3.9316 ms < 10 ms**. Neither source
+nor thresholds changed between the two runs.
+
+| Check | Result | Seconds |
+|---|---|---|
+| build | PASS | 20 |
+| commands-demo | PASS | 1 |
+| roundtrip | PASS | 0 |
+| space-legacy | FAIL | 1 |
+| space-editor | FAIL | 3 |
+| space-pad-compare | PASS | 3 |
+| suggest-check | PASS | 14 |
+| commands-dump | PASS | 0 |
+| route | PASS | 0 |
+| favicons | PASS | 1 |
+| media-demo | PASS | 0 |
+| sleep-demo | PASS | 1 |
+| adblock-perf | FAIL | 2 |
+| adblock-catalog | PASS | 0 |
+| profiles | PASS | 1 |
+| settings-preview | PASS | 86 |
+| sidebar-render | PASS | 113 |
+| sidebar-compare | FAIL | 103 |
+| commandbar-render | PASS | 33 |
+| features-render | PASS | 289 |
+| sitecontrol-render | PASS | 239 |
+| boosts | PASS | 9 |
+
+Quiet rerun (`lockf quiet` outside `heavy.sh`, `--only adblock-perf`):
+
+| Check | Result | Seconds |
+|---|---|---|
+| build | PASS | 3 |
+| adblock-perf | PASS | 6 |
+
+All functional gates pass. The remaining three failures are
+**FAIL (machine: built-in display main)**, with the same rows/numbers listed
+above. Features pass **560/560**, including **47/47** Little Open flows, plus
+idle **19/19**. Command bar passes **136/136** (CPU p95 **3.17 ms**, completion
+overhead **+0.024 ms**). Sidebar passes **624/624**; Site Control **1469/1469**.
+`commands-dump` remains **0/0/0**, allowed missing **11**.
+
+The 289 s features receipt includes the wait for another run's on-screen
+priority flag; its offscreen child completed normally. The 239 s Site Control
+receipt includes lock queue time. Native cleanup reaped its renderer, found
+zero surviving owned apps and removed its private root. Cancelled/incomplete
+pre-final runs are not counted. No privileged process inspector was used.
