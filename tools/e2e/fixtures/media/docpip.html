@@ -1,0 +1,13 @@
+<!doctype html><meta charset="utf-8"><title>Media Document PiP</title>
+<body style="background:#fff;font:14px sans-serif">
+<div id="player" style="width:400px;height:300px;background:#246;color:#fff">Document PiP content</div>
+<script>
+window.__pip = { opened: 0, closed: 0, width: 0, height: 0 };
+window.start = async () => {
+  const w = await documentPictureInPicture.requestWindow({ width: 400, height: 300 });
+  __pip.opened++; __pip.width = w.innerWidth; __pip.height = w.innerHeight;
+  w.document.body.append(document.getElementById('player'));
+  w.addEventListener('pagehide', () => { __pip.closed++; document.body.append(w.document.getElementById('player')); });
+  return true;
+};
+</script>

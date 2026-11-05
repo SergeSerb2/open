@@ -1,0 +1,25 @@
+<!doctype html><meta charset="utf-8"><title>Media video file</title>
+<body style="background:#fff;margin:0">
+<script src="common.js"></script>
+<script>
+// A file-backed video (a normal media player, so Chromium's session is controllable), made in the
+// page: 3 s of the canvas and a tone recorded to WebM (VP8 + Opus), then played from a blob URL.
+// No binary media in the repo. The recording runs inside start(), which the driver calls with a
+// user gesture: without one the autoplay policy keeps the tone's AudioContext suspended and
+// MediaRecorder gets no audio.
+const v = document.createElement('video'); v.id = 'main'; v.width = 640; v.height = 360; v.loop = true; v.playsInline = true;
+document.body.appendChild(v);
+async function prepare() {
+  if (v.src) return;
+  const canvas = canvasStream(640, 360, 'file'), tone = toneStream(330);
+  await window.__audioContext.resume();
+  const rec = new MediaRecorder(new MediaStream([...canvas.getVideoTracks(), ...tone.getAudioTracks()]), { mimeType: 'video/webm;codecs=vp8,opus' });
+  const parts = []; rec.ondataavailable = (e) => parts.push(e.data);
+  const done = new Promise((r) => { rec.onstop = r; });
+  rec.start(250); await new Promise((r) => setTimeout(r, 3000)); rec.stop(); await done;
+  canvas.getTracks().forEach((t) => t.stop()); tone.getTracks().forEach((t) => t.stop());
+  v.src = URL.createObjectURL(new Blob(parts, { type: 'video/webm' }));
+  await new Promise((r, j) => { v.onloadedmetadata = r; v.onerror = () => j(v.error); });
+}
+window.start = () => prepare().then(() => v.play()).then(() => true);
+</script>

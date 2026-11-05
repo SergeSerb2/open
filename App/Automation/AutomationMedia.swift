@@ -1,5 +1,6 @@
 #if OPEN_AUTOMATION
 import AppKit
+import AVFoundation
 import MediaPlayer
 import OpenDesign
 import OpenEngine
@@ -12,8 +13,8 @@ import OpenWeb
 
 /// Media automation commands (media-pip §8.4, docs/automation.md "Media").
 extension AutomationController {
-  static let mediaCommands: Set<String> = ["media", "media-action", "mini-players", "media-click", "pip", "pip-action",
-                                           "now-playing", "sleep-visibility", "library-section"]
+  static let mediaCommands: Set<String> = ["media", "media-action", "mini-players", "media-click", "pip", "pip-action", "pip-frame",
+                                           "now-playing", "sleep-visibility", "library-section", "capture-permission"]
 
   func runMediaCommand(_ cmd: String, _ a: [String: Any]) async throws -> Any {
     let media = app.media
@@ -81,6 +82,11 @@ extension AutomationController {
       // The volume drawer opens only on an expanded card (a pointer over the card expands it).
       if ["title", "pip", "close", "volume", "volumeLow", "volumeHigh", "slider"].contains(target) && !card.isExpanded {
         let center = point(of: card, in: window)
+        // A pointer that comes from elsewhere, as a real one does: an earlier hover may have left the stack
+        // "entered" (the card collapsed under it since, for example when a PiP window took over), and a
+        // hover at the same place then delivers no new mouseEntered.
+        _ = try await mouse(["action": "hover", "x": Double(window.frame.width) - 20, "y": Double(window.frame.height) / 2,
+                             "window": window.windowNumber], factory)
         _ = try await mouse(["action": "hover", "x": center.x, "y": center.y, "window": window.windowNumber], factory)
         let deadline = ContinuousClock.now.advanced(by: .seconds(2))
         while !card.isExpanded || card.layer?.animationKeys()?.isEmpty == false || control()?.isHiddenOrHasHiddenAncestor != false {
@@ -105,7 +111,51 @@ extension AutomationController {
       return ["clicked": target, "at": [center.x, center.y]]
     case "pip":
       return describePiP()
+    case "capture-permission":
+      // macOS camera and microphone authorization for this app. Reading it never prompts. Chromium
+      // asks macOS while the status is notDetermined even for fake devices
+      // (permission_bubble_media_access_handler.cc), so a suite checks this before it captures.
+      func name(_ s: AVAuthorizationStatus) -> String {
+        switch s {
+        case .authorized: "authorized"
+        case .denied: "denied"
+        case .restricted: "restricted"
+        case .notDetermined: "notDetermined"
+        @unknown default: "unknown"
+        }
+      }
+      return ["camera": name(AVCaptureDevice.authorizationStatus(for: .video)),
+              "microphone": name(AVCaptureDevice.authorizationStatus(for: .audio))]
+    case "pip-frame":
+      // Phase 2: the engine's composited picture of Open's PiP video view (not the screen; the
+      // window server leaves out GPU-process layers on macOS 26).
+      guard let pip = media.pipHost?.pip else { throw Failure(message: "no Open PiP window") }
+      let path = a["path"] as? String ?? NSTemporaryDirectory() + "open-pip-frame.png"
+      let png: Data? = await withCheckedContinuation { continuation in
+        pip.captureVideoFrame { continuation.resume(returning: $0) }
+      }
+      guard let png else { throw Failure(message: "no frame") }
+      try png.write(to: URL(fileURLWithPath: path))
+      return ["path": path, "bytes": png.count]
     case "pip-action":
+      // Phase 2: Open's own window, through its real controls' paths.
+      if let window = media.pipWindow {
+        switch a["action"] as? String ?? "" {
+        case "close": window.dismiss(reason: .userClosed); return true
+        case "minimize": window.dismiss(reason: .minimized); return true
+        case "back-to-tab": window.dismiss(reason: .backToTab); return true
+        case "menu":
+          let menu = window.menuBuilder.build()
+          guard let title = a["item"] as? String else {
+            return menu.items.map { $0.isSeparatorItem ? "-" : $0.title + ($0.state == .on ? " ✓" : "") }
+          }
+          guard let index = menu.items.firstIndex(where: { $0.title == title }), menu.items[index].isEnabled else {
+            throw Failure(message: "no enabled PiP menu item \(title)")
+          }
+          menu.performActionForItem(at: index); return true
+        default: throw Failure(message: "unknown pip action")
+        }
+      }
       // Phase 1 has Chromium's own PiP window; these run the same session paths its controls end in.
       guard let source = media.session.activeSource else { throw Failure(message: "no active PiP") }
       switch a["action"] as? String ?? "" {
@@ -259,6 +309,12 @@ extension AutomationController {
       ["number": w.windowNumber, "class": NSStringFromClass(type(of: w)), "frame": [w.frame.minX, w.frame.minY, w.frame.width, w.frame.height],
        "level": w.level.rawValue] as [String: Any]
     }
+    if let window = media.pipWindow?.window {
+      state["openWindow"] = ["number": window.windowNumber, "frame": [window.frame.minX, window.frame.minY, window.frame.width, window.frame.height],
+                             "level": window.level.rawValue, "visible": window.isVisible, "closing": media.pipWindow?.isClosing ?? false,
+                             "tab": media.pipHost?.tabID.description ?? ""] as [String: Any]
+    }
+    state["phase"] = media.hostsPictureInPicture ? 2 : 1
     state["snoozed"] = media.session.snoozed.map(\.description).sorted()
     state["requests"] = media.pipRequests
     if let tab = media.session.activeSource?.tabID ?? {

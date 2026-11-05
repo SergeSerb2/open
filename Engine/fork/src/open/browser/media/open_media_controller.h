@@ -58,6 +58,16 @@ class OpenMediaController : public CefMediaController,
 
   void SetHandler(CefRefPtr<CefMediaControllerHandler> handler);
 
+  // EM-4 (open_video_overlay_window.mm): the controller of |contents| if one
+  // exists, nullptr otherwise. Never creates one.
+  static OpenMediaController* FromWebContents(content::WebContents* contents);
+  // If the handler shows this page's video Picture in Picture in the
+  // embedder's own window (ShouldHostPictureInPicture), returns true with the
+  // handler and the browser. The window keeps both for its session, so it can
+  // report the close also after this controller let go of the page.
+  bool GetPictureInPictureHost(CefRefPtr<CefMediaControllerHandler>* handler,
+                               CefRefPtr<CefBrowser>* browser);
+
   // CefMediaController:
   bool IsValid() override;
   bool IsAudible() override;
