@@ -1,10 +1,13 @@
 """Real Cocoa Apple-event checks. Imported by engine_e2e.py, never a unit test."""
 import ctypes
+import http.server
 import json
 import os
 import plistlib
 import subprocess
+import threading
 import time
+import urllib.request
 import xml.etree.ElementTree as ET
 
 KEY = 'open.developer.allowJavaScriptFromAppleEvents'
@@ -12,6 +15,51 @@ MODE_KEY = 'open.developer.modeHosts'
 OFF = 'JavaScript from Apple Events is off. Turn it on in View ▸ Developer.'
 WRITE_ONLY = ('tabs of application is write-only; make a new tab on application to create a Little Open window, '
               'or read tabs of a window or space.')
+
+
+def csp_fixture_server():
+    class Handler(http.server.BaseHTTPRequestHandler):
+        def do_GET(self):
+            body = b'<!doctype html><title>AppleScript CSP fixture</title><body>CSP fixture'
+            self.send_response(200)
+            self.send_header('Content-Type', 'text/html')
+            self.send_header('Content-Security-Policy', "script-src 'self'")
+            self.end_headers()
+            self.wfile.write(body)
+
+        def log_message(self, *args): pass
+    server = http.server.ThreadingHTTPServer(('127.0.0.1', 0), Handler)
+    threading.Thread(target=server.serve_forever, daemon=True).start()
+    return server, 'http://127.0.0.1:%d/' % server.server_address[1]
+
+
+def csp_checks(app, script, results):
+    """Real execute commands on a response that forbids page-side eval."""
+    server, url = csp_fixture_server()
+    tab = None
+    try:
+        with urllib.request.urlopen(url, timeout=5) as response:
+            policy = response.headers.get('Content-Security-Policy')
+        tab = app.call('open', url=url)['id']
+        app.call('wait', tab=tab)
+        target = 'tab id %s of window 1' % quote(tab)
+        values, errors = {}, {}
+        for label, source in [('title', 'document.title'), ('number', '1+1')]:
+            try:
+                values[label] = script('return execute '+target+' javascript '+quote(source))
+            except RuntimeError as error:
+                errors[label] = str(error)
+        results['A16_CSP_execute'] = {'ok': policy == "script-src 'self'" and not errors
+            and values == {'title': 'AppleScript CSP fixture', 'number': '2'},
+            'policy': policy, 'values': values, 'errors': errors, 'sender': script.mode}
+        blocked = script.error('execute '+target+' javascript '+quote("eval('1+1')"), 1013)
+        blocked['ok'] = blocked['ok'] and 'EvalError' in blocked['reply']
+        results['A16_CSP_nested_eval_blocked'] = blocked
+    finally:
+        try:
+            if tab is not None: app.call('close', tab=tab)
+        finally:
+            server.shutdown(); server.server_close()
 
 
 def quote(value):
@@ -209,10 +257,33 @@ def run(factory, results, tmp, fixture_server, restore_defaults, wait_until):
             app.call('wait',tab=today)
             checks = [('number','1 + 2','3'),('title','document.title','AppleScript /research-today'),
                       ('undefined','undefined',''),('null','null',''),('boolean','true','true'),
-                      ('object','({a:1,b:[2]})','{"a":1,"b":[2]}'),('promise','Promise.resolve(42)','42')]
+                      ('object','({a:1,b:[2]})','{"a":1,"b":[2]}'),('promise','Promise.resolve(42)','42'),
+                      ('false','false','false'),('string',"'hello / é'",'hello / é'),
+                      ('fraction','1.25','1.25'),('large_fixed','1e20','100000000000000000000'),
+                      ('large_exponent','1e21','1e+21'),('small_fixed','1e-6','0.000001'),
+                      ('small_exponent','1e-7','1e-7'),('negative_zero','-0','0'),
+                      ('nan','NaN','NaN'),('infinity','Infinity','Infinity'),('negative_infinity','-Infinity','-Infinity'),
+                      ('bigint','123456789012345678901234567890n','123456789012345678901234567890'),
+                      ('symbol',"Symbol('fixture')",'Symbol(fixture)'),
+                      ('function','(function scriptingFixture() {})','function scriptingFixture() {}'),
+                      ('array','[null,true,1.25,1e-7,1e20]','[null,true,1.25,1e-7,100000000000000000000]'),
+                      ('object_evaluated_once','globalThis.scriptFixtureRuns = (globalThis.scriptFixtureRuns || 0) + 1; ({runs:globalThis.scriptFixtureRuns})','{"runs":1}'),
+                      ('object_order','({z:1,a:2})','{"z":1,"a":2}'),
+                      ('toJSON','({toJSON() { return {converted:true}; }})','{"converted":true}')]
             for label,source,expected in checks:
                 check('A16_'+label,'return execute '+target+' javascript '+quote(source),expected)
+            # Other automation paths use the engine's gesture-granting convenience
+            # evaluator. Observe with raw CDP (no gesture) until that activation
+            # expires, then check whether this actual Apple event grants a new one.
+            inactive = wait_until(lambda: {'inactive': True} if app.call('devtools', tab=today,
+                method='Runtime.evaluate', params={'expression':'navigator.userActivation.isActive',
+                'returnByValue':True, 'userGesture':False})['result'].get('value') is False else None,
+                timeout=10, step=.1)
+            actual = script('return execute '+target+' javascript "navigator.userActivation.isActive"')
+            results[prefix+'A16_no_user_gesture'] = {'ok':bool(inactive) and actual=='false',
+                'inactiveBefore':bool(inactive), 'actual':actual, 'expected':'false'}
             if not cold:
+                csp_checks(app, script, results)
                 app.call('select',tab=pinned)
                 hidden=app.call('engine-sleep',tab=today,op='freeze')
                 value=script('return execute '+target+' javascript '+quote('document.title'))
@@ -227,6 +298,8 @@ def run(factory, results, tmp, fixture_server, restore_defaults, wait_until):
                 value=script('return execute '+target+' javascript '+quote('(() => { const privateSource = '+json.dumps(marker)+'; return 9; })()'))
                 results['A16_script_source_not_logged']={'ok':value=='9' and marker not in app.log_text()}
             results[prefix+'error_1013'] = script.error('execute '+target+' javascript "throw new Error(\'boom\')"',1013,'JavaScript error: Error: boom')
+            results[prefix+'error_1013_cyclic_result'] = script.error('execute '+target+' javascript '+quote('(() => { const v = {}; v.self = v; return v; })()'),1013)
+            results[prefix+'error_1013_nested_bigint'] = script.error('execute '+target+' javascript '+quote('({value:1n})'),1013)
             results[prefix+'error_1002_execute'] = script.error('execute '+target+' javascript ""',1002,'execute needs a javascript string.')
             if not cold:
                 started=time.monotonic()
@@ -235,6 +308,12 @@ def run(factory, results, tmp, fixture_server, restore_defaults, wait_until):
                 results['error_1014']['loadAverage']=list(os.getloadavg())
                 # A late page resolution cannot resume an already-completed reply.
                 check('after_timeout','return execute '+target+' javascript "6 * 7"','42')
+                started=time.monotonic()
+                source='new Promise(resolve => setTimeout(() => resolve({toJSON() { while (true) {} }}), 250))'
+                results['serializer_error_1014'] = script.error('execute '+target+' javascript '+quote(source),1014,'JavaScript did not finish in 10 seconds.')
+                results['serializer_error_1014']['elapsedSeconds']=time.monotonic()-started
+                results['serializer_error_1014']['loadAverage']=list(os.getloadavg())
+                check('after_serializer_timeout','return execute '+target+' javascript "6 * 7"','42')
             javascript_gate_checks(app, results if not cold else {})
             app.call('defaults',key=KEY,value=None)
             check('A17_counts','return ((count tabs of space 1 of window 1) as text) & "|" & (count spaces of window 1)','2|2')

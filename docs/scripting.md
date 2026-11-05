@@ -148,9 +148,56 @@ The public protocol is unchanged. The AppleScript sender still waits for its tex
 error. There is no nested run-loop pump. See Apple's
 [resumeExecution contract](https://developer.apple.com/documentation/foundation/nsscriptcommand/resumeexecution(withresult:)).
 The deadline runs only while a request is active. CDP's evaluation timeout bounds
-synchronous loops; a page-side deadline bounds unresolved promises. H2 wakes the named
+synchronous loops; the Swift reply deadline also bounds unresolved promises. The reply
+owns its readiness task and cancels it and its deadline on every finish path. Its
+20 ms readiness wait also stops if the host closes or the App starts shutting down.
+The engine callback holds the reply weakly, so a late or unresolved evaluation cannot
+retain the command or resume it twice. H2 wakes the named
 tab through its host/history map, including hidden tabs, without changing selection.
 Engine events still own model URL updates and pinned URLs are preserved.
+
+`execute` sends the script itself as CDP `Runtime.evaluate.expression`, with
+`awaitPromise=true`, `returnByValue=false`, `timeout=10000`, and `userGesture=false`,
+under a dedicated object group. The source is evaluated exactly once.
+It does not use page-side `eval`, which fails under a strict Content-Security-Policy.
+It sets `allowUnsafeEvalBlockedByCSP=false`: direct DevTools evaluation still works,
+but an explicit `eval` inside the user's script must obey the page's policy. CDP
+[defaults that bypass to true](https://github.com/ChromeDevTools/devtools-protocol/blob/master/pdl/js_protocol.pdl).
+AppleScript execution grants no user activation; the plan requires none. The existing
+Allow JavaScript from Apple Events setting still gates execution.
+
+H2 converts primitives directly from the first CDP RemoteObject in Swift:
+null/undefined become empty text; strings pass through; booleans become `true`/`false`.
+Numbers use the shortest decimal form with JavaScript's decimal/exponent thresholds
+and integer formatting. CDP's `unserializableValue` preserves NaN and infinities;
+negative zero becomes `0`, as in JavaScript `String(-0)`. BigInt drops its trailing `n`.
+
+CDP rejects symbols when `returnByValue=true` before exposing a description. Per the
+lead's review-round decision, only object/function/symbol results take a second CDP
+call, `Runtime.callFunctionOn` on the first result's `objectId`, with
+`returnByValue=true` and no user gesture. Its fixed serializer returns
+`JSON.stringify(this)` for objects/arrays and `String(this)` for symbols/functions.
+It does not run the submitted source again or call the returned function. JSON
+serialization preserves property order and has its normal `toJSON`/getter behavior.
+Unserializable values (including cycles and nested BigInt) fail with plan error 1013.
+The §8 error numbers stay unchanged.
+
+Both calls share the original ten-second reply deadline. Since `callFunctionOn`
+has no CDP timeout, the deadline also sends `Runtime.terminateExecution` if the
+serializer is still running (for example a stuck `toJSON`). Every success, error,
+and timeout releases the request's group with `Runtime.releaseObjectGroup`.
+There is no second call for primitives and no second deadline task.
+
+Review round 1 CSP proof: the exact `8f5b6aea` bridge unexpectedly passed
+`document.title` and `1+1` on the `script-src 'self'` fixture with this engine.
+CDP's default unsafe-eval bypass explains that result. A controlled run kept the old
+wrapper and changed only `allowUnsafeEvalBlockedByCSP` to false; both expressions
+then failed with error 1013 and `EvalError`. The final bridge uses that same false
+setting and evaluates the source directly. The suite also checks that explicit
+`eval` in the user's script remains blocked. These are separate receipts, not a
+claim that the unmodified head failed the plain-execution CSP row:
+`.re/review-174/negative-applescript.json` and
+`.re/review-174/controlled-old-applescript.json`.
 
 A held Space-contained tab reference must remain valid after `set location` moves it
 to Favorites. Space unique-ID lookup now resolves a live model tab by stable ID;
@@ -184,7 +231,17 @@ Known limits: incognito creation returns 1010. Main has only `showLittleOpenStub
 app-level tab creation returns 1011; no real section 9 executor was available. Window
 index supports bringing a window to front with 1 and returns 1007 for other values.
 
-Verified in this worktree with engine `f34400e7` (M5 built-in 2x main display):
+Review-round Debug scripting acceptance: **136 PASS, 0 FAIL, 2 TCC BLOCKED**,
+with no focus interruptions and clean owned-process cleanup. Receipt:
+`.re/review-174/final-applescript.json`. This includes strict-CSP execution, blocked
+explicit eval, both gesture checks with inactive preconditions, single source
+evaluation, property order, `toJSON`, symbol/function text, and cyclic/nested-BigInt
+errors. Never-settling promise: 10.013 s at load 8.22/8.62/12.00. Stuck serializer
+(after a 250 ms awaited promise): 10.005 s at load 8.21/8.60/11.95. Both returned
+1014, and the next execute returned `42`. The configured deadline stays ten seconds.
+
+Original hosting verification at `8f5b6aea`, before the review fix, with engine
+`f34400e7` (M5 built-in 2x main display):
 
 | Check | Result | Local receipt |
 |---|---|---|

@@ -45,6 +45,15 @@ final class AppScriptEngineBridge: ScriptEngineBridge {
   func reload(tabID: ItemID) { perform(tabID: tabID) { $0.reload() } }
   func stopLoading(tabID: ItemID) { perform(tabID: tabID) { $0.stopLoading() } }
 
+  private func owns(_ page: OEWebContent, tabID: ItemID) -> Bool {
+    guard let app, app.engineReady, !app.shutdownPrepared, !app.terminationRequested,
+          app.model?.tab(id: tabID) != nil else { return false }
+    return app.hostFactories.values.contains { factory in
+      guard let host = factory.hosts[tabID] else { return false }
+      return !host.closed && host.content === page
+    }
+  }
+
   func executeJavaScript(tabID: ItemID, script: String) throws -> String {
     guard let app, app.engineReady, !app.shutdownPrepared,
           let command = NSScriptCommand.current() else { throw ScriptEngineError.noLiveContent }
@@ -53,24 +62,25 @@ final class AppScriptEngineBridge: ScriptEngineBridge {
     command.suspendExecution()
     let reply = ScriptJavaScriptReply(command: command)
     reply.startTimeout()
-    Task { @MainActor [weak self] in
+    reply.readiness = Task { @MainActor [weak self] in
       guard let page = await self?.content(tabID: tabID) else {
         reply.finish(error: .noLiveContent); return
       }
-      // A newly created or restored renderer needs a live main frame. This wait exists
-      // only for this request, is cancelled by the reply deadline, and does no idle work.
-      while !reply.finished && (!page.isLive || page.isLoading) {
-        try? await Task.sleep(for: .milliseconds(20))
+      // Request-only: finish cancels the sleep, and a closed/replaced host ends the
+      // wait even if the page never becomes live. There is no polling while idle.
+      while !reply.finished && !Task.isCancelled {
+        guard self?.owns(page, tabID: tabID) == true else {
+          reply.finish(error: .noLiveContent); return
+        }
+        if page.isLive && !page.isLoading {
+          reply.readiness = nil
+          reply.evaluate(page, expression: script)
+          return
+        }
+        do { try await Task.sleep(for: .milliseconds(20)) } catch { return }
       }
-      guard !reply.finished else { return }
-      do {
-        // Conversion happens in the page to preserve JS booleans, non-finite numbers,
-        // negative zero and BigInt text. Objects/arrays use JSON, null/undefined empty text.
-        let literal = String(decoding: try JSONSerialization.data(withJSONObject: script, options: [.fragmentsAllowed]), as: UTF8.self)
-        let expression = "new Promise((resolve, reject) => { const timer = setTimeout(() => resolve(null), 10000); Promise.resolve().then(() => (0, eval)(\(literal))).then(v => { clearTimeout(timer); resolve({text: v == null ? '' : typeof v === 'object' ? JSON.stringify(v) : String(v)}); }, e => { clearTimeout(timer); reject(e); }); })"
-        reply.evaluate(page, expression: expression)
-      } catch { reply.finish(error: .javascriptError("JavaScript execution failed.")) }
     }
+
     // Cocoa ignores the immediate handler result while suspended. The sender still waits
     // synchronously for the final text or plan error supplied by ScriptJavaScriptReply.
     return ""
@@ -82,33 +92,137 @@ final class AppScriptEngineBridge: ScriptEngineBridge {
 private final class ScriptJavaScriptReply {
   private var command: NSScriptCommand?
   private var timeout: Task<Void, Never>?
+  var readiness: Task<Void, Never>?
+  private weak var page: OEWebContent?
+  private let objectGroup = "open-applescript-" + UUID().uuidString
+  private var serializing = false
   var finished: Bool { command == nil }
   init(command: NSScriptCommand) { self.command = command }
   func startTimeout() {
-    timeout = Task { @MainActor [weak self] in
+    // Retain the reply until completion/deadline; finish breaks this ownership.
+    // The engine callback is weak because an awaited promise may never settle.
+    timeout = Task { @MainActor in
       do { try await Task.sleep(for: .seconds(10)) } catch { return }
-      self?.finish(error: .timedOut)
+      self.finish(error: .timedOut)
     }
   }
   func evaluate(_ page: OEWebContent, expression: String) {
-    // CDP's timeout stops synchronous infinite loops; the Promise deadline also
-    // releases its callback for a never-settling promise. Both are request-only.
+    self.page = page
+    // Evaluate the source directly: nested eval is blocked by a page's CSP.
+    // Keep explicit eval inside user source subject to the page policy, too.
+    // AppleScript grants no user gesture. Swift owns the promise reply deadline;
+    // CDP's timeout also stops synchronous loops. Late callbacks cannot retain us.
     page.sendDevToolsMethod("Runtime.evaluate", parameters: ["expression": expression,
-      "awaitPromise": true, "returnByValue": true, "userGesture": true, "timeout": 10_000]) { result, error in
-      if let error { self.finish(error: .javascriptError(error.localizedDescription)); return }
-      if let exception = result?["exceptionDetails"] as? [String: Any] {
-        let detail = exception["exception"] as? [String: Any]
-        self.finish(error: .javascriptError(detail?["description"] as? String ?? exception["text"] as? String ?? "JavaScript exception"))
-      } else if let remote = result?["result"] as? [String: Any],
-                let value = remote["value"] as? [String: Any], let text = value["text"] as? String {
-        self.finish(text: text)
-      } else { self.finish(error: .timedOut) }
+      "awaitPromise": true, "returnByValue": false, "userGesture": false, "timeout": 10_000,
+      "allowUnsafeEvalBlockedByCSP": false,
+      "objectGroup": objectGroup]) { [weak self, weak page] result, error in
+      guard let self, !self.finished else { return }
+      guard let remote = self.remoteObject(result, error: error) else { return }
+      let type = remote["type"] as? String
+      if (type == "object" && remote["subtype"] as? String != "null") || type == "function" || type == "symbol" {
+        guard let page else { self.finish(error: .noLiveContent); return }
+        self.serialize(page, remote: remote)
+      } else {
+        do { self.finish(text: try Self.text(remote)) }
+        catch { self.finish(error: .javascriptError("JavaScript result is not serializable.")) }
+      }
     }
   }
+
+  private func remoteObject(_ result: [String: Any]?, error: (any Error)?) -> [String: Any]? {
+    if let error { finish(error: .javascriptError(error.localizedDescription)); return nil }
+    if let exception = result?["exceptionDetails"] as? [String: Any] {
+      let detail = exception["exception"] as? [String: Any]
+      finish(error: .javascriptError(detail?["description"] as? String ?? exception["text"] as? String ?? "JavaScript exception"))
+      return nil
+    }
+    guard let remote = result?["result"] as? [String: Any] else {
+      finish(error: .javascriptError("JavaScript result is not serializable.")); return nil
+    }
+    return remote
+  }
+
+  private func serialize(_ page: OEWebContent, remote: [String: Any]) {
+    guard !finished, let objectID = remote["objectId"] as? String else {
+      finish(error: .javascriptError("JavaScript result is not serializable.")); return
+    }
+    // Never evaluate the source again. Only stringify the captured result. Strict
+    // this preserves symbol primitives. JSON.stringify has its normal toJSON/getter
+    // behavior. The original reply deadline covers this call too; no second timer.
+    let serializer = remote["type"] as? String == "object"
+      ? "function() { 'use strict'; return JSON.stringify(this); }"
+      : "function() { 'use strict'; return String(this); }"
+    serializing = true
+    page.sendDevToolsMethod("Runtime.callFunctionOn", parameters: ["objectId": objectID,
+      "functionDeclaration": serializer, "returnByValue": true, "userGesture": false,
+      "objectGroup": objectGroup]) { [weak self] result, error in
+      guard let self, !self.finished, let value = self.remoteObject(result, error: error) else { return }
+      if let text = value["value"] as? String { self.finish(text: text) }
+      else { self.finish(error: .javascriptError("JavaScript result is not serializable.")) }
+    }
+  }
+
+  private static func text(_ remote: [String: Any]) throws -> String {
+    switch remote["type"] as? String {
+    case "undefined": return ""
+    case "string":
+      if let value = remote["value"] as? String { return value }
+    case "boolean":
+      if let value = remote["value"] as? NSNumber { return value.boolValue ? "true" : "false" }
+    case "number":
+      if let value = remote["unserializableValue"] as? String {
+        return value == "-0" ? "0" : value
+      }
+      if let value = remote["value"] as? NSNumber { return numberText(value) }
+    case "bigint":
+      if let value = remote["unserializableValue"] as? String, value.hasSuffix("n") {
+        return String(value.dropLast())
+      }
+    case "object":
+      if remote["subtype"] as? String == "null" { return "" }
+    default: break
+    }
+    throw ScriptEngineError.javascriptError("JavaScript result is not serializable.")
+  }
+
+  /// Swift supplies shortest round-trip digits. JS uses fixed notation in
+  /// [1e-6, 1e21), no redundant .0, and no leading zero in an exponent.
+  private static func numberText(_ number: NSNumber) -> String {
+    let value = number.doubleValue
+    if value == 0 { return "0" }
+    let parts = String(value).lowercased().split(separator: "e")
+    var coefficient = String(parts[0])
+    if coefficient.hasSuffix(".0") { coefficient.removeLast(2) }
+    guard parts.count == 2, let exponent = Int(parts[1]) else { return coefficient }
+    if abs(value) < 1e-6 || abs(value) >= 1e21 {
+      return coefficient + "e" + (exponent >= 0 ? "+" : "") + String(exponent)
+    }
+    let sign = coefficient.hasPrefix("-") ? "-" : ""
+    if !sign.isEmpty { coefficient.removeFirst() }
+    let decimal = coefficient.split(separator: ".")
+    let digits = decimal.joined()
+    let point = decimal[0].count + exponent
+    if point <= 0 { return sign + "0." + String(repeating: "0", count: -point) + digits }
+    if point >= digits.count { return sign + digits + String(repeating: "0", count: point - digits.count) }
+    let index = digits.index(digits.startIndex, offsetBy: point)
+    return sign + String(digits[..<index]) + "." + String(digits[index...])
+  }
+
   func finish(text: String? = nil, error: ScriptEngineError? = nil) {
     guard let command else { return }
     self.command = nil
     timeout?.cancel(); timeout = nil
+    readiness?.cancel(); readiness = nil
+    // callFunctionOn has no CDP timeout. Stop a stuck toJSON/getter at the shared
+    // deadline before releasing its handles. No user source is evaluated again.
+    if serializing, case .timedOut? = error {
+      page?.sendDevToolsMethod("Runtime.terminateExecution", parameters: nil, completion: nil)
+    }
+    serializing = false
+    // Release the first call's handles on success, error and timeout, without
+    // holding the page or reply in a pending callback.
+    page?.sendDevToolsMethod("Runtime.releaseObjectGroup", parameters: ["objectGroup": objectGroup], completion: nil)
+    page = nil
     if let error {
       switch error {
       case .timedOut:
