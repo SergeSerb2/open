@@ -6,13 +6,13 @@
         "forced": false,
         "ok": true,
         "owned_pids": [
-          41779,
-          41857,
-          41858,
-          41859,
-          41860,
-          41863,
-          41864
+          25381,
+          25404,
+          25405,
+          25406,
+          25407,
+          25409,
+          25411
         ],
         "remaining_processes": [],
         "reply": true,
@@ -26,14 +26,14 @@
         "forced": false,
         "ok": true,
         "owned_pids": [
-          42128,
-          42132,
-          42133,
-          42134,
-          42135,
-          42137,
-          42139,
-          42140
+          25764,
+          25779,
+          25780,
+          25781,
+          25782,
+          25784,
+          25787,
+          25788
         ],
         "remaining_processes": [],
         "reply": true,
@@ -47,13 +47,13 @@
         "forced": false,
         "ok": true,
         "owned_pids": [
-          42168,
-          42172,
-          42173,
-          42174,
-          42175,
-          42179,
-          42180
+          25814,
+          25817,
+          25818,
+          25819,
+          25820,
+          25825,
+          25826
         ],
         "remaining_processes": [],
         "reply": true,
@@ -67,15 +67,14 @@
         "forced": false,
         "ok": true,
         "owned_pids": [
-          42202,
-          42210,
-          42211,
-          42212,
-          42213,
-          42215,
-          42216,
-          42219,
-          42220
+          25843,
+          25855,
+          25856,
+          25858,
+          25859,
+          25861,
+          25867,
+          25868
         ],
         "remaining_processes": [],
         "reply": true,
@@ -89,13 +88,13 @@
         "forced": false,
         "ok": true,
         "owned_pids": [
-          42229,
-          42237,
-          42238,
-          42239,
-          42240,
-          42242,
-          42243
+          25884,
+          25892,
+          25893,
+          25894,
+          25895,
+          25897,
+          25898
         ],
         "remaining_processes": [],
         "reply": true,
@@ -109,15 +108,14 @@
         "forced": false,
         "ok": true,
         "owned_pids": [
-          42258,
-          42280,
-          42281,
-          42282,
-          42283,
-          42284,
-          42285,
-          42287,
-          42288
+          25916,
+          25931,
+          25933,
+          25936,
+          25937,
+          25938,
+          25941,
+          25942
         ],
         "remaining_processes": [],
         "reply": true,
@@ -131,13 +129,13 @@
         "forced": false,
         "ok": true,
         "owned_pids": [
-          42296,
-          42299,
-          42300,
-          42301,
-          42302,
-          42304,
-          42305
+          25951,
+          25959,
+          25960,
+          25961,
+          25962,
+          25966,
+          25968
         ],
         "remaining_processes": [],
         "reply": true,
@@ -151,15 +149,14 @@
         "forced": false,
         "ok": true,
         "owned_pids": [
-          42313,
-          42316,
-          42317,
-          42318,
-          42319,
-          42320,
-          42321,
-          42323,
-          42324
+          25985,
+          26006,
+          26007,
+          26008,
+          26009,
+          26012,
+          26015,
+          26018
         ],
         "remaining_processes": [],
         "reply": true,
@@ -173,13 +170,13 @@
         "forced": false,
         "ok": true,
         "owned_pids": [
-          42332,
-          42338,
-          42339,
-          42340,
-          42341,
-          42343,
-          42344
+          26031,
+          26039,
+          26040,
+          26041,
+          26042,
+          26044,
+          26045
         ],
         "remaining_processes": [],
         "reply": true,
@@ -193,15 +190,15 @@
         "forced": false,
         "ok": true,
         "owned_pids": [
-          42368,
-          42372,
-          42373,
-          42374,
-          42375,
-          42376,
-          42378,
-          42383,
-          42384
+          26062,
+          26093,
+          26094,
+          26095,
+          26096,
+          26099,
+          26101,
+          26109,
+          26110
         ],
         "remaining_processes": [],
         "reply": true,
@@ -215,13 +212,13 @@
         "forced": false,
         "ok": true,
         "owned_pids": [
-          42399,
-          42414,
-          42415,
-          42416,
-          42417,
-          42418,
-          42419
+          26125,
+          26137,
+          26138,
+          26139,
+          26140,
+          26141,
+          26142
         ],
         "remaining_processes": [],
         "reply": true,
@@ -235,13 +232,13 @@
         "forced": false,
         "ok": true,
         "owned_pids": [
-          42428,
-          42431,
-          42432,
-          42436,
-          42437,
-          42439,
-          42440
+          26151,
+          26169,
+          26170,
+          26171,
+          26172,
+          26174,
+          26175
         ],
         "remaining_processes": [],
         "reply": true,
@@ -255,11 +252,11 @@
         "forced": false,
         "ok": true,
         "owned_pids": [
-          42448,
-          42451,
-          42452,
-          42453,
-          42454
+          26198,
+          26265,
+          26266,
+          26269,
+          26271
         ],
         "remaining_processes": [],
         "reply": true,
@@ -273,13 +270,13 @@
         "forced": false,
         "ok": true,
         "owned_pids": [
-          42464,
-          42553,
-          42554,
-          42555,
-          42556,
-          42557,
-          42558
+          26281,
+          26331,
+          26332,
+          26333,
+          26334,
+          26337,
+          26338
         ],
         "remaining_processes": [],
         "reply": true,
@@ -293,13 +290,13 @@
         "forced": false,
         "ok": true,
         "owned_pids": [
-          42581,
-          42588,
-          42589,
-          42590,
-          42591,
-          42592,
-          42593
+          26396,
+          26410,
+          26411,
+          26412,
+          26413,
+          26415,
+          26416
         ],
         "remaining_processes": [],
         "reply": true,
@@ -313,16 +310,16 @@
         "forced": false,
         "ok": true,
         "owned_pids": [
-          42609,
-          42612,
-          42613,
-          42614,
-          42615,
-          42629,
-          42636,
-          42674,
-          42677,
-          42678
+          26464,
+          26469,
+          26470,
+          26471,
+          26472,
+          26493,
+          26503,
+          26575,
+          26591,
+          26592
         ],
         "remaining_processes": [],
         "reply": true,
@@ -336,11 +333,11 @@
         "forced": false,
         "ok": true,
         "owned_pids": [
-          42639,
-          42643,
-          42644,
-          42645,
-          42646
+          26519,
+          26531,
+          26532,
+          26533,
+          26534
         ],
         "remaining_processes": [],
         "reply": true,
@@ -354,20 +351,19 @@
         "forced": false,
         "ok": true,
         "owned_pids": [
-          42737,
-          42740,
-          42741,
-          42742,
-          42743,
-          42745,
-          42746,
-          42748,
-          42750,
-          42780,
-          42781,
-          42791,
-          42793,
-          42794
+          26665,
+          26681,
+          26682,
+          26685,
+          26686,
+          26692,
+          26693,
+          26703,
+          26707,
+          26708,
+          26720,
+          26722,
+          26723
         ],
         "remaining_processes": [],
         "reply": true,
@@ -381,13 +377,13 @@
         "forced": false,
         "ok": true,
         "owned_pids": [
-          42805,
-          42813,
-          42814,
-          42817,
-          42818,
-          42820,
-          42821
+          26737,
+          26760,
+          26761,
+          26762,
+          26763,
+          26764,
+          26766
         ],
         "remaining_processes": [],
         "reply": true,
@@ -401,13 +397,13 @@
         "forced": false,
         "ok": true,
         "owned_pids": [
-          42833,
-          42836,
-          42837,
-          42838,
-          42839,
-          42840,
-          42841
+          26786,
+          26804,
+          26805,
+          26807,
+          26808,
+          26823,
+          26824
         ],
         "remaining_processes": [],
         "reply": true,
@@ -421,13 +417,13 @@
         "forced": false,
         "ok": true,
         "owned_pids": [
-          42852,
-          42855,
-          42856,
-          42857,
-          42858,
-          42859,
-          42860
+          26847,
+          26915,
+          26916,
+          26918,
+          26919,
+          26922,
+          26923
         ],
         "remaining_processes": [],
         "reply": true,
@@ -441,13 +437,13 @@
         "forced": false,
         "ok": true,
         "owned_pids": [
-          42896,
-          42901,
-          42902,
-          42903,
-          42904,
-          42906,
-          42907
+          26951,
+          26966,
+          26967,
+          26970,
+          26971,
+          26974,
+          26975
         ],
         "remaining_processes": [],
         "reply": true,
@@ -461,11 +457,11 @@
         "forced": false,
         "ok": true,
         "owned_pids": [
-          42930,
-          42951,
-          42952,
-          42954,
-          42955
+          26987,
+          26999,
+          27000,
+          27003,
+          27004
         ],
         "remaining_processes": [],
         "reply": true,
@@ -479,13 +475,13 @@
         "forced": false,
         "ok": true,
         "owned_pids": [
-          42987,
-          42991,
-          42992,
-          42993,
-          42994,
-          42995,
-          42996
+          27052,
+          27083,
+          27084,
+          27085,
+          27086,
+          27092,
+          27093
         ],
         "remaining_processes": [],
         "reply": true,
@@ -499,11 +495,11 @@
         "forced": false,
         "ok": true,
         "owned_pids": [
-          43021,
-          43031,
-          43032,
-          43033,
-          43034
+          27115,
+          27122,
+          27123,
+          27125,
+          27126
         ],
         "remaining_processes": [],
         "reply": true,
@@ -517,13 +513,13 @@
         "forced": false,
         "ok": true,
         "owned_pids": [
-          43128,
-          43148,
-          43149,
-          43150,
-          43151,
-          43153,
-          43154
+          27161,
+          27171,
+          27172,
+          27173,
+          27174,
+          27180,
+          27181
         ],
         "remaining_processes": [],
         "reply": true,
@@ -537,11 +533,11 @@
         "forced": false,
         "ok": true,
         "owned_pids": [
-          43537,
-          43543,
-          43544,
-          43545,
-          43546
+          27643,
+          27657,
+          27658,
+          27659,
+          27660
         ],
         "remaining_processes": [],
         "reply": true,
@@ -555,11 +551,11 @@
         "forced": false,
         "ok": true,
         "owned_pids": [
-          43808,
-          43811,
-          43812,
-          43813,
-          43814
+          27819,
+          27836,
+          27837,
+          27840,
+          27841
         ],
         "remaining_processes": [],
         "reply": true,
@@ -573,15 +569,15 @@
   },
   "config": "Debug",
   "engine": {
-    "distributionCodeSHA256": "1bc8b6044b77d53d46d76745a39b029e9709dbeb00fd31d08870ed0a38dd576a",
-    "distributionSHA256": "f34400e71412d87a0b268fcd5658a8563cca34f600c8dd17b534a63e76aa7939",
-    "distributionUUID": "4C4C4465-5555-3144-A1AB-FCF4EA280540",
-    "embeddedCodeSHA256": "1bc8b6044b77d53d46d76745a39b029e9709dbeb00fd31d08870ed0a38dd576a",
-    "embeddedSHA256": "7965fb82d3670f2824f8657069fcb816cb10fa70c82dd4260a575eb46c395359",
-    "embeddedUUID": "4C4C4465-5555-3144-A1AB-FCF4EA280540",
-    "requiredSHA256": "",
+    "distributionCodeSHA256": "7979934c0d84f4d9fedb3859826d0c7c65919834fc904ec2aee00a0b4e4dd8f2",
+    "distributionSHA256": "7b49090502568f8189aa0e94f7cf23344beec5bed537136eff5f7fce573ad35a",
+    "distributionUUID": "4C4C446F-5555-3144-A1AB-0A55260E4EBE",
+    "embeddedCodeSHA256": "7979934c0d84f4d9fedb3859826d0c7c65919834fc904ec2aee00a0b4e4dd8f2",
+    "embeddedSHA256": "ec8cdb8039674748940441956a1ae529423ae15c05ac972a806a9afb12a657c0",
+    "embeddedUUID": "4C4C446F-5555-3144-A1AB-0A55260E4EBE",
+    "requiredSHA256": "7b49090502568f8189aa0e94f7cf23344beec5bed537136eff5f7fce573ad35a",
     "source": "fork",
-    "stamp": "fork $HOME/Developer/open-engine-s8-main/chromium_git/chromium/src/cef/binary_distrib/cef_binary_156.0.14+g4fa4ab5+chromium-156.0.8078.48_macosarm64_minimal 1793841834"
+    "stamp": "fork $HOME/Developer/open-engine-s8-main/chromium_git/chromium/src/cef/binary_distrib/cef_binary_156.0.14+g4fa4ab5+chromium-156.0.8078.48_macosarm64_minimal 1793940850"
   },
   "interrupted_attempts": [],
   "pathRedactions": [
@@ -592,15 +588,15 @@
   "source": {
     "clean": true,
     "diffSHA256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
-    "head": "6eb7dcdf874c3a4dfa8092937d2aeb3b01b07b94"
+    "head": "a7e73498c3e68336217d8db40fbebe6ce6b89773"
   },
-  "started": "2026-11-05 21:40:12",
+  "started": "2026-11-05 22:19:15",
   "style": "chrome",
   "window": {
     "all_spaces_strip_order": {
       "first_after": [
         {
-          "active": "ABE621DA-5F03-42F6-A5B7-816B0D93945E",
+          "active": "056B3A8E-B0B4-4585-89FC-943A14D64494",
           "activeIsMember": true,
           "contents": [
             2,
@@ -609,24 +605,24 @@
           "context": "Default",
           "pinStates": [
             {
-              "id": "ABE621DA-5F03-42F6-A5B7-816B0D93945E",
+              "id": "056B3A8E-B0B4-4585-89FC-943A14D64494",
               "pinned": false
             },
             {
-              "id": "2C2E1706-F889-454F-AB97-C180C799D93E",
+              "id": "AAB51A79-BC83-45F0-BFD8-64B6A88D76FD",
               "pinned": false
             }
           ],
-          "profile": "6C983D7B-8C8F-404D-B91A-C102A2D59BC9",
+          "profile": "EA440F24-9224-4E53-8FB0-D8454999131A",
           "tabs": [
-            "ABE621DA-5F03-42F6-A5B7-816B0D93945E",
-            "2C2E1706-F889-454F-AB97-C180C799D93E"
+            "056B3A8E-B0B4-4585-89FC-943A14D64494",
+            "AAB51A79-BC83-45F0-BFD8-64B6A88D76FD"
           ]
         }
       ],
       "first_before": [
         {
-          "active": "ABE621DA-5F03-42F6-A5B7-816B0D93945E",
+          "active": "056B3A8E-B0B4-4585-89FC-943A14D64494",
           "activeIsMember": true,
           "contents": [
             2,
@@ -635,25 +631,25 @@
           "context": "Default",
           "pinStates": [
             {
-              "id": "ABE621DA-5F03-42F6-A5B7-816B0D93945E",
+              "id": "056B3A8E-B0B4-4585-89FC-943A14D64494",
               "pinned": false
             },
             {
-              "id": "2C2E1706-F889-454F-AB97-C180C799D93E",
+              "id": "AAB51A79-BC83-45F0-BFD8-64B6A88D76FD",
               "pinned": false
             }
           ],
-          "profile": "6C983D7B-8C8F-404D-B91A-C102A2D59BC9",
+          "profile": "EA440F24-9224-4E53-8FB0-D8454999131A",
           "tabs": [
-            "ABE621DA-5F03-42F6-A5B7-816B0D93945E",
-            "2C2E1706-F889-454F-AB97-C180C799D93E"
+            "056B3A8E-B0B4-4585-89FC-943A14D64494",
+            "AAB51A79-BC83-45F0-BFD8-64B6A88D76FD"
           ]
         }
       ],
       "ok": true,
       "second_after": [
         {
-          "active": "5ABE825D-DF4B-4A01-B1F8-C98D7983D5F8",
+          "active": "16D79698-FA1B-4A18-99D8-87B55821519B",
           "activeIsMember": true,
           "contents": [
             4,
@@ -662,24 +658,24 @@
           "context": "Default",
           "pinStates": [
             {
-              "id": "2C2E1706-F889-454F-AB97-C180C799D93E",
+              "id": "AAB51A79-BC83-45F0-BFD8-64B6A88D76FD",
               "pinned": false
             },
             {
-              "id": "5ABE825D-DF4B-4A01-B1F8-C98D7983D5F8",
+              "id": "16D79698-FA1B-4A18-99D8-87B55821519B",
               "pinned": false
             }
           ],
-          "profile": "6C983D7B-8C8F-404D-B91A-C102A2D59BC9",
+          "profile": "EA440F24-9224-4E53-8FB0-D8454999131A",
           "tabs": [
-            "2C2E1706-F889-454F-AB97-C180C799D93E",
-            "5ABE825D-DF4B-4A01-B1F8-C98D7983D5F8"
+            "AAB51A79-BC83-45F0-BFD8-64B6A88D76FD",
+            "16D79698-FA1B-4A18-99D8-87B55821519B"
           ]
         }
       ],
       "second_before": [
         {
-          "active": "2C2E1706-F889-454F-AB97-C180C799D93E",
+          "active": "AAB51A79-BC83-45F0-BFD8-64B6A88D76FD",
           "activeIsMember": true,
           "contents": [
             4,
@@ -688,18 +684,18 @@
           "context": "Default",
           "pinStates": [
             {
-              "id": "2C2E1706-F889-454F-AB97-C180C799D93E",
+              "id": "AAB51A79-BC83-45F0-BFD8-64B6A88D76FD",
               "pinned": false
             },
             {
-              "id": "5ABE825D-DF4B-4A01-B1F8-C98D7983D5F8",
+              "id": "16D79698-FA1B-4A18-99D8-87B55821519B",
               "pinned": false
             }
           ],
-          "profile": "6C983D7B-8C8F-404D-B91A-C102A2D59BC9",
+          "profile": "EA440F24-9224-4E53-8FB0-D8454999131A",
           "tabs": [
-            "2C2E1706-F889-454F-AB97-C180C799D93E",
-            "5ABE825D-DF4B-4A01-B1F8-C98D7983D5F8"
+            "AAB51A79-BC83-45F0-BFD8-64B6A88D76FD",
+            "16D79698-FA1B-4A18-99D8-87B55821519B"
           ]
         }
       ]
@@ -3629,9 +3625,9 @@
         "active": true,
         "event": "NSApplicationDidBecomeActiveNotification",
         "frontmostApp": "Open",
-        "frontmostPID": 43128,
-        "keyWindow": 121367,
-        "uptime": 44693.175959
+        "frontmostPID": 27161,
+        "keyWindow": 129411,
+        "uptime": 47036.45724954167
       }
     ],
     "chrome_capture_compare": {
@@ -3961,11 +3957,11 @@
     },
     "chrome_snapshot_files": {
       "files": [
-        "$TMPDIR/Open-E2E-window-chrome-41736-8f2a6b85-scratch-6p1i3lei/window-chrome-104-ta_8xfkp/rest-364.png",
-        "$TMPDIR/Open-E2E-window-chrome-41736-8f2a6b85-scratch-6p1i3lei/window-chrome-104-ta_8xfkp/mid-drag-164.png",
-        "$TMPDIR/Open-E2E-window-chrome-41736-8f2a6b85-scratch-6p1i3lei/window-chrome-104-ta_8xfkp/hidden-held.png",
-        "$TMPDIR/Open-E2E-window-chrome-41736-8f2a6b85-scratch-6p1i3lei/window-chrome-104-ta_8xfkp/cmd-s-restored.png",
-        "$TMPDIR/Open-E2E-window-chrome-41736-8f2a6b85-scratch-6p1i3lei/window-chrome-104-ta_8xfkp/card-revealed.png"
+        "$TMPDIR/Open-E2E-window-chrome-25323-118ab78c-scratch-g21ymy_m/window-chrome-104-shs_wu32/rest-364.png",
+        "$TMPDIR/Open-E2E-window-chrome-25323-118ab78c-scratch-g21ymy_m/window-chrome-104-shs_wu32/mid-drag-164.png",
+        "$TMPDIR/Open-E2E-window-chrome-25323-118ab78c-scratch-g21ymy_m/window-chrome-104-shs_wu32/hidden-held.png",
+        "$TMPDIR/Open-E2E-window-chrome-25323-118ab78c-scratch-g21ymy_m/window-chrome-104-shs_wu32/cmd-s-restored.png",
+        "$TMPDIR/Open-E2E-window-chrome-25323-118ab78c-scratch-g21ymy_m/window-chrome-104-shs_wu32/card-revealed.png"
       ],
       "methods": {
         "card-revealed": "windowserver+devtools",
@@ -3998,12 +3994,12 @@
     },
     "cold_fresh_profile": {
       "median_ms": {
-        "engineStart": 563,
-        "engineStarted": 677,
-        "firstContentfulPaint": 896,
-        "main": 331,
-        "modelLoaded": 336,
-        "sidebarDrawn": 561
+        "engineStart": 580,
+        "engineStarted": 697,
+        "firstContentfulPaint": 942,
+        "main": 345,
+        "modelLoaded": 350,
+        "sidebarDrawn": 579
       },
       "reason": "Release timing budgets are not evaluated in Debug",
       "samples": 5,
@@ -4188,20 +4184,20 @@
       "ok": true,
       "timing": {
         "clock": "mach_continuous_time; kernel ri_proc_start_abstime",
-        "didFinishLaunching": 3712,
-        "engineInitialized": 3699,
-        "engineStart": 3566,
-        "engineStarted": 3683,
-        "firstContentfulPaint": 3917,
+        "didFinishLaunching": 3672,
+        "engineInitialized": 3662,
+        "engineStart": 3545,
+        "engineStarted": 3654,
+        "firstContentfulPaint": 3869,
         "firstFrameConfirmed": false,
-        "firstFrameWaitTimedOut": 3563,
-        "firstLoadEnd": 3899,
-        "firstPaintClockUncertaintyMs": 0.3,
+        "firstFrameWaitTimedOut": 3542,
+        "firstLoadEnd": 3856,
+        "firstPaintClockUncertaintyMs": 0.29,
         "kernelProcessStart": true,
-        "main": 341,
-        "modelLoaded": 346,
-        "sleepStarted": 4024,
-        "windowShown": 484
+        "main": 348,
+        "modelLoaded": 353,
+        "sleepStarted": 3976,
+        "windowShown": 479
       }
     },
     "focus_preserves_find": {
@@ -4235,9 +4231,9 @@
       "native": {
         "active": true,
         "frontmostApp": "Open",
-        "frontmostPID": 42852,
-        "keyWindow": 121317,
-        "uptime": 44684.987323416666
+        "frontmostPID": 26847,
+        "keyWindow": 129350,
+        "uptime": 47028.49470366667
       },
       "ok": true,
       "peerPID": null
@@ -4273,12 +4269,12 @@
       "native": {
         "active": false,
         "frontmostApp": "Open",
-        "frontmostPID": 43021,
+        "frontmostPID": 27115,
         "keyWindow": 0,
-        "uptime": 44691.28629358333
+        "uptime": 47034.60763329167
       },
       "ok": true,
-      "peerPID": 43021
+      "peerPID": 27115
     },
     "focus_preserves_inactive_load": {
       "after": {
@@ -4311,12 +4307,12 @@
       "native": {
         "active": false,
         "frontmostApp": "Open",
-        "frontmostPID": 42930,
+        "frontmostPID": 26987,
         "keyWindow": 0,
-        "uptime": 44687.88591866667
+        "uptime": 47031.127231000006
       },
       "ok": true,
-      "peerPID": 42930
+      "peerPID": 26987
     },
     "focus_preserves_sidebar": {
       "after": {
@@ -4349,9 +4345,9 @@
       "native": {
         "active": true,
         "frontmostApp": "Open",
-        "frontmostPID": 42833,
-        "keyWindow": 121306,
-        "uptime": 44682.75045216667
+        "frontmostPID": 26786,
+        "keyWindow": 129336,
+        "uptime": 47026.373025375
       },
       "ok": true,
       "peerPID": null
@@ -4384,16 +4380,16 @@
       "ok": true
     },
     "fullscreen_hover_reveal": {
-      "dismissed_on_selection_s": 0.116,
+      "dismissed_on_selection_s": 0.142,
       "hidden": "hidden",
       "ok": true,
-      "revealed_s": 0.437
+      "revealed_s": 0.418
     },
     "fullscreen_key_readiness": {
       "load_average": [
-        15.45166015625,
-        12.658203125,
-        11.3466796875
+        20.67626953125,
+        20.07177734375,
+        18.7373046875
       ],
       "ok": true,
       "other_error": "window-focus: unknown window",
@@ -4413,19 +4409,19 @@
           "fullscreenTransition": true,
           "key": true,
           "keySameObject": true,
-          "keyWindow": 121367
+          "keyWindow": 129411
         },
         "status": "observed"
       }
     },
     "hide_reveal": {
-      "dismissed_s": 0.114,
+      "dismissed_s": 0.135,
       "hidden": "hidden",
-      "left_s": 0.274,
+      "left_s": 0.298,
       "ok": true,
       "panel_x": 10,
-      "revealed_again_s": 0.4,
-      "revealed_s": 0.407,
+      "revealed_again_s": 0.397,
+      "revealed_s": 0.404,
       "selected": true
     },
     "html_fullscreen_from_window": {
@@ -4492,8 +4488,8 @@
         },
         "confirmation": null,
         "cursor": [
-          2243,
-          270
+          2209,
+          225
         ],
         "engineSelected": 3,
         "engineURL": "data:text/html,%3Ctitle%3EWindow%20C%3C/title%3E%3Ch1%3EWindow%20C%3C/h1%3E",
@@ -4515,24 +4511,24 @@
           "shows": 0,
           "visible": false
         },
-        "id": "53FF8F6D-7891-4818-BB9F-30B7FFEE91CB",
+        "id": "514C9530-1917-4B5C-B6D7-4D1694D4E125",
         "isKeyWindow": true,
         "key": true,
         "keySameObject": true,
-        "keyWindow": 121265,
-        "layoutPasses": 444,
+        "keyWindow": 129282,
+        "layoutPasses": 267,
         "menuTitles": {
           "toggle-sidebar": "Hide Sidebar",
           "toggle-toolbar": "Show Toolbar"
         },
         "miniaturized": false,
-        "number": 121265,
+        "number": 129282,
         "onActiveSpace": true,
         "pageFullscreen": false,
         "paneBackgrounds": [
           {
             "color": [],
-            "tab": "5ABE825D-DF4B-4A01-B1F8-C98D7983D5F8"
+            "tab": "16D79698-FA1B-4A18-99D8-87B55821519B"
           }
         ],
         "panel": [
@@ -4549,7 +4545,7 @@
             0,
             0
           ],
-          "dwell": 0.16154791666485835,
+          "dwell": 0.15936254167172592,
           "hides": 1,
           "offset": null,
           "phase": "idle",
@@ -4564,9 +4560,9 @@
           2560,
           1440
         ],
-        "selected": "5ABE825D-DF4B-4A01-B1F8-C98D7983D5F8",
+        "selected": "16D79698-FA1B-4A18-99D8-87B55821519B",
         "shownPages": [
-          "5ABE825D-DF4B-4A01-B1F8-C98D7983D5F8"
+          "16D79698-FA1B-4A18-99D8-87B55821519B"
         ],
         "sidebarClass": "OpenSidebar.SidebarView",
         "sidebarFrame": [
@@ -4583,16 +4579,16 @@
         "sidebarVisible": true,
         "sidebarWidth": 228,
         "sidebarWidthCommits": 0,
-        "space": "76EE6118-5840-4E15-A6B6-AE025A8593FA",
+        "space": "18907E0C-17E4-4C2F-8248-34F9B78807BB",
         "spaceSwitcherFrames": {
-          "4B53C457-7C07-4F34-AB60-9FCBF25B0356": [
-            79,
+          "18907E0C-17E4-4C2F-8248-34F9B78807BB": [
+            113,
             558,
             36,
             34
           ],
-          "76EE6118-5840-4E15-A6B6-AE025A8593FA": [
-            113,
+          "912FE56E-1A5D-49BA-88BF-7E50C3072DC0": [
+            79,
             558,
             36,
             34
@@ -4755,7 +4751,7 @@
         ],
         "canBecomeKey": true,
         "childWindows": [
-          121280
+          129301
         ],
         "chrome": {
           "favorites": [
@@ -4788,8 +4784,8 @@
         },
         "confirmation": null,
         "cursor": [
-          2543,
-          910
+          2509,
+          865
         ],
         "engineSelected": 3,
         "engineURL": "data:text/html,%3Ctitle%3EWindow%20C%3C/title%3E%3Ch1%3EWindow%20C%3C/h1%3E",
@@ -4811,24 +4807,24 @@
           "shows": 0,
           "visible": false
         },
-        "id": "53FF8F6D-7891-4818-BB9F-30B7FFEE91CB",
+        "id": "514C9530-1917-4B5C-B6D7-4D1694D4E125",
         "isKeyWindow": true,
         "key": true,
         "keySameObject": true,
-        "keyWindow": 121265,
-        "layoutPasses": 410,
+        "keyWindow": 129282,
+        "layoutPasses": 233,
         "menuTitles": {
           "toggle-sidebar": "Hide Sidebar",
           "toggle-toolbar": "Show Toolbar"
         },
         "miniaturized": false,
-        "number": 121265,
+        "number": 129282,
         "onActiveSpace": true,
         "pageFullscreen": true,
         "paneBackgrounds": [
           {
             "color": [],
-            "tab": "5ABE825D-DF4B-4A01-B1F8-C98D7983D5F8"
+            "tab": "16D79698-FA1B-4A18-99D8-87B55821519B"
           }
         ],
         "panel": [
@@ -4845,7 +4841,7 @@
             0,
             0
           ],
-          "dwell": 0.16154791666485835,
+          "dwell": 0.15936254167172592,
           "hides": 1,
           "offset": null,
           "phase": "idle",
@@ -4860,9 +4856,9 @@
           2560,
           1440
         ],
-        "selected": "5ABE825D-DF4B-4A01-B1F8-C98D7983D5F8",
+        "selected": "16D79698-FA1B-4A18-99D8-87B55821519B",
         "shownPages": [
-          "5ABE825D-DF4B-4A01-B1F8-C98D7983D5F8"
+          "16D79698-FA1B-4A18-99D8-87B55821519B"
         ],
         "sidebarClass": "OpenSidebar.SidebarView",
         "sidebarFrame": [
@@ -4879,16 +4875,16 @@
         "sidebarVisible": false,
         "sidebarWidth": 228,
         "sidebarWidthCommits": 0,
-        "space": "76EE6118-5840-4E15-A6B6-AE025A8593FA",
+        "space": "18907E0C-17E4-4C2F-8248-34F9B78807BB",
         "spaceSwitcherFrames": {
-          "4B53C457-7C07-4F34-AB60-9FCBF25B0356": [
-            79,
+          "18907E0C-17E4-4C2F-8248-34F9B78807BB": [
+            113,
             1398,
             36,
             34
           ],
-          "76EE6118-5840-4E15-A6B6-AE025A8593FA": [
-            113,
+          "912FE56E-1A5D-49BA-88BF-7E50C3072DC0": [
+            79,
             1398,
             36,
             34
@@ -5052,7 +5048,7 @@
         ],
         "canBecomeKey": true,
         "childWindows": [
-          121272
+          129290
         ],
         "chrome": {
           "favorites": [
@@ -5085,8 +5081,8 @@
         },
         "confirmation": null,
         "cursor": [
-          2543,
-          910
+          2509,
+          865
         ],
         "engineSelected": 3,
         "engineURL": "data:text/html,%3Ctitle%3EWindow%20C%3C/title%3E%3Ch1%3EWindow%20C%3C/h1%3E",
@@ -5108,24 +5104,24 @@
           "shows": 0,
           "visible": false
         },
-        "id": "53FF8F6D-7891-4818-BB9F-30B7FFEE91CB",
+        "id": "514C9530-1917-4B5C-B6D7-4D1694D4E125",
         "isKeyWindow": true,
         "key": true,
         "keySameObject": true,
-        "keyWindow": 121265,
-        "layoutPasses": 366,
+        "keyWindow": 129282,
+        "layoutPasses": 189,
         "menuTitles": {
           "toggle-sidebar": "Hide Sidebar",
           "toggle-toolbar": "Show Toolbar"
         },
         "miniaturized": false,
-        "number": 121265,
+        "number": 129282,
         "onActiveSpace": true,
         "pageFullscreen": false,
         "paneBackgrounds": [
           {
             "color": [],
-            "tab": "5ABE825D-DF4B-4A01-B1F8-C98D7983D5F8"
+            "tab": "16D79698-FA1B-4A18-99D8-87B55821519B"
           }
         ],
         "panel": [
@@ -5142,7 +5138,7 @@
             0,
             0
           ],
-          "dwell": 0.16154791666485835,
+          "dwell": 0.15936254167172592,
           "hides": 1,
           "offset": null,
           "phase": "idle",
@@ -5157,9 +5153,9 @@
           2560,
           1440
         ],
-        "selected": "5ABE825D-DF4B-4A01-B1F8-C98D7983D5F8",
+        "selected": "16D79698-FA1B-4A18-99D8-87B55821519B",
         "shownPages": [
-          "5ABE825D-DF4B-4A01-B1F8-C98D7983D5F8"
+          "16D79698-FA1B-4A18-99D8-87B55821519B"
         ],
         "sidebarClass": "OpenSidebar.SidebarView",
         "sidebarFrame": [
@@ -5176,16 +5172,16 @@
         "sidebarVisible": true,
         "sidebarWidth": 228,
         "sidebarWidthCommits": 0,
-        "space": "76EE6118-5840-4E15-A6B6-AE025A8593FA",
+        "space": "18907E0C-17E4-4C2F-8248-34F9B78807BB",
         "spaceSwitcherFrames": {
-          "4B53C457-7C07-4F34-AB60-9FCBF25B0356": [
-            79,
+          "18907E0C-17E4-4C2F-8248-34F9B78807BB": [
+            113,
             1398,
             36,
             34
           ],
-          "76EE6118-5840-4E15-A6B6-AE025A8593FA": [
-            113,
+          "912FE56E-1A5D-49BA-88BF-7E50C3072DC0": [
+            79,
             1398,
             36,
             34
@@ -5348,7 +5344,7 @@
         ],
         "canBecomeKey": true,
         "childWindows": [
-          121272
+          129290
         ],
         "chrome": {
           "favorites": [
@@ -5381,8 +5377,8 @@
         },
         "confirmation": null,
         "cursor": [
-          2543,
-          910
+          2509,
+          865
         ],
         "engineSelected": 3,
         "engineURL": "data:text/html,%3Ctitle%3EWindow%20C%3C/title%3E%3Ch1%3EWindow%20C%3C/h1%3E",
@@ -5404,24 +5400,24 @@
           "shows": 0,
           "visible": false
         },
-        "id": "53FF8F6D-7891-4818-BB9F-30B7FFEE91CB",
+        "id": "514C9530-1917-4B5C-B6D7-4D1694D4E125",
         "isKeyWindow": true,
         "key": true,
         "keySameObject": true,
-        "keyWindow": 121265,
-        "layoutPasses": 355,
+        "keyWindow": 129282,
+        "layoutPasses": 178,
         "menuTitles": {
           "toggle-sidebar": "Hide Sidebar",
           "toggle-toolbar": "Show Toolbar"
         },
         "miniaturized": false,
-        "number": 121265,
+        "number": 129282,
         "onActiveSpace": true,
         "pageFullscreen": true,
         "paneBackgrounds": [
           {
             "color": [],
-            "tab": "5ABE825D-DF4B-4A01-B1F8-C98D7983D5F8"
+            "tab": "16D79698-FA1B-4A18-99D8-87B55821519B"
           }
         ],
         "panel": [
@@ -5438,7 +5434,7 @@
             0,
             0
           ],
-          "dwell": 0.16154791666485835,
+          "dwell": 0.15936254167172592,
           "hides": 1,
           "offset": null,
           "phase": "idle",
@@ -5453,9 +5449,9 @@
           2560,
           1440
         ],
-        "selected": "5ABE825D-DF4B-4A01-B1F8-C98D7983D5F8",
+        "selected": "16D79698-FA1B-4A18-99D8-87B55821519B",
         "shownPages": [
-          "5ABE825D-DF4B-4A01-B1F8-C98D7983D5F8"
+          "16D79698-FA1B-4A18-99D8-87B55821519B"
         ],
         "sidebarClass": "OpenSidebar.SidebarView",
         "sidebarFrame": [
@@ -5472,16 +5468,16 @@
         "sidebarVisible": false,
         "sidebarWidth": 228,
         "sidebarWidthCommits": 0,
-        "space": "76EE6118-5840-4E15-A6B6-AE025A8593FA",
+        "space": "18907E0C-17E4-4C2F-8248-34F9B78807BB",
         "spaceSwitcherFrames": {
-          "4B53C457-7C07-4F34-AB60-9FCBF25B0356": [
-            79,
+          "18907E0C-17E4-4C2F-8248-34F9B78807BB": [
+            113,
             1398,
             36,
             34
           ],
-          "76EE6118-5840-4E15-A6B6-AE025A8593FA": [
-            113,
+          "912FE56E-1A5D-49BA-88BF-7E50C3072DC0": [
+            79,
             1398,
             36,
             34
@@ -5629,11 +5625,11 @@
           1000,
           700
         ],
-        "id": "15668BBB-52E2-4EBA-A15D-1170F5240686",
-        "selected": "5ABE825D-DF4B-4A01-B1F8-C98D7983D5F8",
+        "id": "3DC8C815-E678-44EC-8D0C-E834EF014A02",
+        "selected": "16D79698-FA1B-4A18-99D8-87B55821519B",
         "sidebarMode": "hidden",
         "sidebarWidth": 300,
-        "space": "76EE6118-5840-4E15-A6B6-AE025A8593FA"
+        "space": "18907E0C-17E4-4C2F-8248-34F9B78807BB"
       },
       "ok": true,
       "restored": {
@@ -5643,11 +5639,11 @@
           1000,
           700
         ],
-        "id": "15668BBB-52E2-4EBA-A15D-1170F5240686",
-        "selected": "5ABE825D-DF4B-4A01-B1F8-C98D7983D5F8",
+        "id": "3DC8C815-E678-44EC-8D0C-E834EF014A02",
+        "selected": "16D79698-FA1B-4A18-99D8-87B55821519B",
         "sidebarMode": "hidden",
         "sidebarWidth": 300,
-        "space": "76EE6118-5840-4E15-A6B6-AE025A8593FA"
+        "space": "18907E0C-17E4-4C2F-8248-34F9B78807BB"
       }
     },
     "last_window_reopen": {
@@ -5659,11 +5655,11 @@
           1000,
           700
         ],
-        "id": "15668BBB-52E2-4EBA-A15D-1170F5240686",
-        "selected": "5ABE825D-DF4B-4A01-B1F8-C98D7983D5F8",
+        "id": "3DC8C815-E678-44EC-8D0C-E834EF014A02",
+        "selected": "16D79698-FA1B-4A18-99D8-87B55821519B",
         "sidebarMode": "hidden",
         "sidebarWidth": 300,
-        "space": "76EE6118-5840-4E15-A6B6-AE025A8593FA"
+        "space": "18907E0C-17E4-4C2F-8248-34F9B78807BB"
       },
       "no_windows_after_close": true,
       "ok": true,
@@ -5674,197 +5670,196 @@
           1000,
           700
         ],
-        "id": "15668BBB-52E2-4EBA-A15D-1170F5240686",
-        "selected": "5ABE825D-DF4B-4A01-B1F8-C98D7983D5F8",
+        "id": "3DC8C815-E678-44EC-8D0C-E834EF014A02",
+        "selected": "16D79698-FA1B-4A18-99D8-87B55821519B",
         "sidebarMode": "hidden",
         "sidebarWidth": 300,
-        "space": "76EE6118-5840-4E15-A6B6-AE025A8593FA"
+        "space": "18907E0C-17E4-4C2F-8248-34F9B78807BB"
       }
     },
     "launch_runs": {
       "cold_fresh_profile": [
         {
           "clock": "mach_continuous_time; kernel ri_proc_start_abstime",
-          "didFinishLaunching": 696,
-          "engineInitialized": 686,
-          "engineStart": 555,
-          "engineStarted": 677,
-          "firstContentfulPaint": 896,
+          "didFinishLaunching": 725,
+          "engineInitialized": 712,
+          "engineStart": 580,
+          "engineStarted": 697,
+          "firstContentfulPaint": 948,
           "firstFrameConfirmed": true,
-          "firstLoadEnd": 880,
+          "firstLoadEnd": 930,
+          "firstPaintClockUncertaintyMs": 0.19,
+          "kernelProcessStart": true,
+          "main": 345,
+          "modelLoaded": 350,
+          "sidebarDrawn": 579,
+          "windowShown": 499
+        },
+        {
+          "clock": "mach_continuous_time; kernel ri_proc_start_abstime",
+          "didFinishLaunching": 681,
+          "engineInitialized": 673,
+          "engineStart": 558,
+          "engineStarted": 665,
+          "firstContentfulPaint": 882,
+          "firstFrameConfirmed": true,
+          "firstLoadEnd": 865,
+          "firstPaintClockUncertaintyMs": 0.17,
+          "kernelProcessStart": true,
+          "main": 339,
+          "modelLoaded": 343,
+          "sidebarDrawn": 557,
+          "sleepStarted": 994,
+          "windowShown": 469
+        },
+        {
+          "clock": "mach_continuous_time; kernel ri_proc_start_abstime",
+          "didFinishLaunching": 680,
+          "engineInitialized": 669,
+          "engineStart": 554,
+          "engineStarted": 655,
+          "firstContentfulPaint": 891,
+          "firstFrameConfirmed": true,
+          "firstLoadEnd": 870,
           "firstPaintClockUncertaintyMs": 0.16,
           "kernelProcessStart": true,
-          "main": 318,
-          "modelLoaded": 322,
+          "main": 329,
+          "modelLoaded": 334,
           "sidebarDrawn": 553,
-          "windowShown": 461
+          "sleepStarted": 998,
+          "windowShown": 465
         },
         {
           "clock": "mach_continuous_time; kernel ri_proc_start_abstime",
-          "didFinishLaunching": 731,
-          "engineInitialized": 720,
-          "engineStart": 592,
-          "engineStarted": 709,
-          "firstContentfulPaint": 945,
+          "didFinishLaunching": 730,
+          "engineInitialized": 714,
+          "engineStart": 587,
+          "engineStarted": 698,
+          "firstContentfulPaint": 942,
           "firstFrameConfirmed": true,
           "firstLoadEnd": 921,
-          "firstPaintClockUncertaintyMs": 0.21,
+          "firstPaintClockUncertaintyMs": 0.18,
           "kernelProcessStart": true,
-          "main": 362,
-          "modelLoaded": 366,
-          "sidebarDrawn": 591,
-          "sleepStarted": 1046,
-          "windowShown": 512
+          "main": 350,
+          "modelLoaded": 356,
+          "sidebarDrawn": 586,
+          "windowShown": 489
         },
         {
           "clock": "mach_continuous_time; kernel ri_proc_start_abstime",
-          "didFinishLaunching": 696,
-          "engineInitialized": 682,
-          "engineStart": 563,
-          "engineStarted": 677,
-          "firstContentfulPaint": 880,
+          "didFinishLaunching": 826,
+          "engineInitialized": 807,
+          "engineStart": 662,
+          "engineStarted": 797,
+          "firstContentfulPaint": 1237,
           "firstFrameConfirmed": true,
-          "firstLoadEnd": 847,
-          "firstPaintClockUncertaintyMs": 0.14,
+          "firstLoadEnd": 1218,
+          "firstPaintClockUncertaintyMs": 0.19,
           "kernelProcessStart": true,
-          "main": 331,
-          "modelLoaded": 336,
-          "sidebarDrawn": 562,
-          "sleepStarted": 974,
-          "windowShown": 460
-        },
-        {
-          "clock": "mach_continuous_time; kernel ri_proc_start_abstime",
-          "didFinishLaunching": 692,
-          "engineInitialized": 678,
-          "engineStart": 551,
-          "engineStarted": 669,
-          "firstContentfulPaint": 883,
-          "firstFrameConfirmed": true,
-          "firstLoadEnd": 849,
-          "firstPaintClockUncertaintyMs": 0.2,
-          "kernelProcessStart": true,
-          "main": 327,
-          "modelLoaded": 332,
-          "sidebarDrawn": 549,
-          "sleepStarted": 974,
-          "windowShown": 478
-        },
-        {
-          "clock": "mach_continuous_time; kernel ri_proc_start_abstime",
-          "didFinishLaunching": 693,
-          "engineInitialized": 680,
-          "engineStart": 563,
-          "engineStarted": 674,
-          "firstContentfulPaint": 916,
-          "firstFrameConfirmed": true,
-          "firstLoadEnd": 891,
-          "firstPaintClockUncertaintyMs": 0.38,
-          "kernelProcessStart": true,
-          "main": 348,
-          "modelLoaded": 352,
-          "sidebarDrawn": 561,
-          "sleepStarted": 1013,
-          "windowShown": 477
+          "main": 386,
+          "modelLoaded": 393,
+          "sidebarDrawn": 660,
+          "sleepStarted": 1344,
+          "windowShown": 552
         }
       ],
       "warm_existing_profile": [
         {
           "clock": "mach_continuous_time; kernel ri_proc_start_abstime",
-          "didFinishLaunching": 702,
-          "engineInitialized": 690,
-          "engineStart": 556,
-          "engineStarted": 682,
-          "firstContentfulPaint": 943,
-          "firstFrameConfirmed": true,
-          "firstLoadEnd": 923,
-          "firstPaintClockUncertaintyMs": 0.23,
-          "kernelProcessStart": true,
-          "main": 336,
-          "modelLoaded": 342,
-          "sidebarDrawn": 555,
-          "windowShown": 473
-        },
-        {
-          "clock": "mach_continuous_time; kernel ri_proc_start_abstime",
-          "didFinishLaunching": 701,
-          "engineInitialized": 684,
-          "engineStart": 563,
-          "engineStarted": 674,
-          "firstContentfulPaint": 900,
-          "firstFrameConfirmed": true,
-          "firstLoadEnd": 884,
-          "firstPaintClockUncertaintyMs": 0.2,
-          "kernelProcessStart": true,
-          "main": 325,
-          "modelLoaded": 329,
-          "sidebarDrawn": 562,
-          "sleepStarted": 1011,
-          "windowShown": 471
-        },
-        {
-          "clock": "mach_continuous_time; kernel ri_proc_start_abstime",
-          "didFinishLaunching": 697,
-          "engineInitialized": 682,
+          "didFinishLaunching": 691,
+          "engineInitialized": 675,
           "engineStart": 557,
-          "engineStarted": 674,
-          "firstContentfulPaint": 928,
+          "engineStarted": 668,
+          "firstContentfulPaint": 872,
           "firstFrameConfirmed": true,
-          "firstLoadEnd": 909,
-          "firstPaintClockUncertaintyMs": 0.21,
+          "firstLoadEnd": 846,
+          "firstPaintClockUncertaintyMs": 0.39,
           "kernelProcessStart": true,
-          "main": 329,
-          "modelLoaded": 333,
+          "main": 333,
+          "modelLoaded": 338,
           "sidebarDrawn": 556,
-          "sleepStarted": 1028,
-          "windowShown": 481
+          "sleepStarted": 964,
+          "windowShown": 470
         },
         {
           "clock": "mach_continuous_time; kernel ri_proc_start_abstime",
-          "didFinishLaunching": 598,
-          "engineInitialized": 588,
-          "engineStart": 471,
-          "engineStarted": 583,
-          "firstContentfulPaint": 776,
+          "didFinishLaunching": 700,
+          "engineInitialized": 683,
+          "engineStart": 566,
+          "engineStarted": 674,
+          "firstContentfulPaint": 897,
           "firstFrameConfirmed": true,
-          "firstLoadEnd": 761,
-          "firstPaintClockUncertaintyMs": 0.19,
-          "kernelProcessStart": true,
-          "main": 312,
-          "modelLoaded": 315,
-          "sidebarDrawn": 470,
-          "sleepStarted": 889,
-          "windowShown": 405
-        },
-        {
-          "clock": "mach_continuous_time; kernel ri_proc_start_abstime",
-          "didFinishLaunching": 693,
-          "engineInitialized": 682,
-          "engineStart": 558,
-          "engineStarted": 673,
-          "firstContentfulPaint": 880,
-          "firstFrameConfirmed": true,
-          "firstLoadEnd": 852,
-          "firstPaintClockUncertaintyMs": 0.26,
+          "firstLoadEnd": 877,
+          "firstPaintClockUncertaintyMs": 0.16,
           "kernelProcessStart": true,
           "main": 343,
           "modelLoaded": 348,
-          "sidebarDrawn": 557,
-          "sleepStarted": 982,
-          "windowShown": 477
+          "sidebarDrawn": 565,
+          "windowShown": 479
+        },
+        {
+          "clock": "mach_continuous_time; kernel ri_proc_start_abstime",
+          "didFinishLaunching": 687,
+          "engineInitialized": 674,
+          "engineStart": 552,
+          "engineStarted": 665,
+          "firstContentfulPaint": 893,
+          "firstFrameConfirmed": true,
+          "firstLoadEnd": 873,
+          "firstPaintClockUncertaintyMs": 0.15,
+          "kernelProcessStart": true,
+          "main": 325,
+          "modelLoaded": 329,
+          "sidebarDrawn": 551,
+          "sleepStarted": 997,
+          "windowShown": 476
+        },
+        {
+          "clock": "mach_continuous_time; kernel ri_proc_start_abstime",
+          "didFinishLaunching": 687,
+          "engineInitialized": 671,
+          "engineStart": 551,
+          "engineStarted": 661,
+          "firstContentfulPaint": 886,
+          "firstFrameConfirmed": true,
+          "firstLoadEnd": 870,
+          "firstPaintClockUncertaintyMs": 0.43,
+          "kernelProcessStart": true,
+          "main": 319,
+          "modelLoaded": 324,
+          "sidebarDrawn": 550,
+          "sleepStarted": 988,
+          "windowShown": 457
+        },
+        {
+          "clock": "mach_continuous_time; kernel ri_proc_start_abstime",
+          "didFinishLaunching": 753,
+          "engineInitialized": 738,
+          "engineStart": 601,
+          "engineStarted": 730,
+          "firstContentfulPaint": 978,
+          "firstFrameConfirmed": true,
+          "firstLoadEnd": 918,
+          "firstPaintClockUncertaintyMs": 0.17,
+          "kernelProcessStart": true,
+          "main": 350,
+          "modelLoaded": 354,
+          "sidebarDrawn": 599,
+          "sleepStarted": 1131,
+          "windowShown": 479
         }
       ]
     },
     "launch_waiter_early_exit": {
-      "actualAppPID": 42464,
+      "actualAppPID": 26281,
       "launcherExit": 0,
       "ok": true,
       "waiterEndedBeforeAutomation": true
     },
     "load_average": [
-      16.5068359375,
-      12.2998046875,
-      11.14599609375
+      24.90087890625,
+      20.884765625,
+      18.9287109375
     ],
     "malloc_zones_early": {
       "ok": true,
@@ -5897,7 +5892,7 @@
       "ok": true,
       "scheduled": {
         "card": {
-          "beginTime": 44630.59695979168,
+          "beginTime": 46973.14688429168,
           "damping": 0.81,
           "duration": 0.2505534459648313,
           "from": -223,
@@ -5905,7 +5900,7 @@
           "keyPath": "transform.translation.x",
           "mass": 1,
           "physicalDamping": 62.06561096116421,
-          "requestedAt": 44630.59695975001,
+          "requestedAt": 46973.14688425001,
           "response": 0.164,
           "scheduledDelay": 4.166940925642848e-08,
           "settlingDuration": 0.2505534459648313,
@@ -5914,7 +5909,7 @@
           "type": "CASpringAnimation"
         },
         "shadow": {
-          "beginTime": 44630.59700883334,
+          "beginTime": 46973.14690962501,
           "damping": 0.81,
           "duration": 0.2505534459648313,
           "from": -223,
@@ -5922,9 +5917,9 @@
           "keyPath": "transform.translation.x",
           "mass": 1,
           "physicalDamping": 62.06561096116421,
-          "requestedAt": 44630.59700883334,
+          "requestedAt": 46973.146909583345,
           "response": 0.164,
-          "scheduledDelay": 0,
+          "scheduledDelay": 4.16621332988143e-08,
           "settlingDuration": 0.2505534459648313,
           "stiffness": 1467.8174302631407,
           "to": 0,
@@ -5933,15 +5928,15 @@
       }
     },
     "motion_card_out_token": {
-      "interrupted_from": -215.93057431280613,
+      "interrupted_from": -216.87468842417002,
       "ok": true,
       "scheduled": {
-        "beginTime": 44631.32030170834,
+        "beginTime": 46973.86121887501,
         "duration": 0.105,
         "from": 0,
         "keyPath": "transform.translation.x",
-        "requestedAt": 44631.320301666674,
-        "scheduledDelay": 4.166940925642848e-08,
+        "requestedAt": 46973.86121887501,
+        "scheduledDelay": 0,
         "timing": [
           [
             0,
@@ -5966,249 +5961,257 @@
     },
     "motion_card_real_peak": {
       "load_average": [
-        11.8916015625,
-        11.26220703125,
-        10.77099609375
+        26.37255859375,
+        21.1025390625,
+        18.9931640625
       ],
       "ok": true,
       "past_rest_pt": 2.9073498249053955,
-      "peak_lateness_s": -0.0011762499931501358,
+      "peak_lateness_s": -0.0011471666663419589,
       "samples": [
         {
-          "offset": -220.14910849370062,
-          "time": 0.0042896250015473925
+          "offset": -221.48481078306213,
+          "time": 0.003087958335527219
         },
         {
-          "offset": -210.66750910878181,
-          "time": 0.009498625004198402
+          "offset": -213.33659945428371,
+          "time": 0.008319541666423902
         },
         {
-          "offset": -196.33257491141558,
-          "time": 0.014816916671406943
+          "offset": -197.8879290446639,
+          "time": 0.014340916670334991
         },
         {
-          "offset": -180.0207991451025,
-          "time": 0.019868541668984108
+          "offset": -181.32380113005638,
+          "time": 0.019517416665621568
         },
         {
-          "offset": -161.71478113532066,
-          "time": 0.02510979166981997
+          "offset": -162.93588879704475,
+          "time": 0.024780833336990327
         },
         {
-          "offset": -143.01183900237083,
-          "time": 0.030313041672343388
+          "offset": -144.17222955822945,
+          "time": 0.030009041664015967
         },
         {
-          "offset": -124.82221427559853,
-          "time": 0.03546866666874848
+          "offset": -125.89658671617508,
+          "time": 0.03519554166996386
         },
         {
-          "offset": -107.20948845148087,
-          "time": 0.04067758333985694
+          "offset": -110.97119760513306,
+          "time": 0.03958324999985052
         },
         {
-          "offset": -92.70595562458038,
-          "time": 0.04529091667063767
+          "offset": -94.48113346099854,
+          "time": 0.04474904167000204
         },
         {
-          "offset": -77.55649274587631,
-          "time": 0.05054129166819621
+          "offset": -80.93023979663849,
+          "time": 0.04933850000088569
         },
         {
-          "offset": -63.999644339084625,
-          "time": 0.05575620833405992
+          "offset": -66.99715268611908,
+          "time": 0.05457970833231229
         },
         {
-          "offset": -51.973829329013824,
-          "time": 0.060989750003500376
+          "offset": -54.606729328632355,
+          "time": 0.05981174999760697
         },
         {
-          "offset": -41.66892158985138,
-          "time": 0.06612779167335248
+          "offset": -42.89489406347275,
+          "time": 0.06551066666725092
         },
         {
-          "offset": -33.11696773767471,
-          "time": 0.07109291666711215
+          "offset": -33.76953041553497,
+          "time": 0.0707006666707457
         },
         {
-          "offset": -25.39160656929016,
-          "time": 0.07634675000008428
+          "offset": -25.999668180942535,
+          "time": 0.07592966666561551
         },
         {
-          "offset": -19.457147479057312,
-          "time": 0.08113783333828906
+          "offset": -19.509862899780273,
+          "time": 0.08112112500384683
         },
         {
-          "offset": -14.73074346780777,
-          "time": 0.08567850000690669
+          "offset": -14.841584086418152,
+          "time": 0.08558087499841349
         },
         {
-          "offset": -11.495603680610657,
-          "time": 0.09106916667224141
+          "offset": -10.619618535041809,
+          "time": 0.09044708333385643
         },
         {
-          "offset": -6.925298988819122,
-          "time": 0.09566612500202609
+          "offset": -7.252411067485809,
+          "time": 0.09517262499866774
         },
         {
-          "offset": -4.3620482087135315,
-          "time": 0.10022683333954774
+          "offset": -5.181144297122955,
+          "time": 0.0998031249982887
         },
         {
-          "offset": -2.0149226784706116,
-          "time": 0.10555220833339263
+          "offset": -2.276785135269165,
+          "time": 0.10492470833560219
         },
         {
-          "offset": -0.3365625739097595,
-          "time": 0.11158737500227289
+          "offset": -0.6205692291259766,
+          "time": 0.10968720833625412
         },
         {
-          "offset": 0.953370213508606,
-          "time": 0.11592858333460754
+          "offset": 0.6952693462371826,
+          "time": 0.1147460833308287
         },
         {
-          "offset": 1.7656608819961548,
-          "time": 0.1206768333358923
+          "offset": 1.1583303213119507,
+          "time": 0.11994112499814946
         },
         {
-          "offset": 2.3663986921310425,
-          "time": 0.12589550000120653
+          "offset": 2.247117757797241,
+          "time": 0.1246640416648006
         },
         {
-          "offset": 2.8190122842788696,
-          "time": 0.13364304167043883
+          "offset": 2.605093479156494,
+          "time": 0.12906883333198493
+        },
+        {
+          "offset": 2.835733413696289,
+          "time": 0.13423433333082357
         },
         {
           "offset": 2.9073498249053955,
-          "time": 0.13882375000684988
+          "time": 0.13885283333365805
         },
         {
-          "offset": 2.880048394203186,
-          "time": 0.14357650000602007
+          "offset": 2.8774166107177734,
+          "time": 0.14379883333458565
         },
         {
-          "offset": 2.7635587453842163,
-          "time": 0.14881129167042673
+          "offset": 2.7597572803497314,
+          "time": 0.14897391666454496
         },
         {
-          "offset": 2.5700827836990356,
-          "time": 0.15444283333636122
+          "offset": 2.5817264318466187,
+          "time": 0.15415962500264868
         },
         {
-          "offset": 2.3539575338363647,
-          "time": 0.15958983333985088
+          "offset": 2.3294739723205566,
+          "time": 0.16017283333349042
         },
         {
-          "offset": 2.1139601469039917,
-          "time": 0.16482812500180444
+          "offset": 2.0941553115844727,
+          "time": 0.16529287500452483
         },
         {
-          "offset": 1.8627976179122925,
-          "time": 0.17018766667024465
+          "offset": 1.8636482954025269,
+          "time": 0.1701959166675806
         },
         {
-          "offset": 1.5643161535263062,
-          "time": 0.17673237500275718
+          "offset": 1.6208596229553223,
+          "time": 0.1754762083364767
         },
         {
-          "offset": 1.3347927331924438,
-          "time": 0.1820362500002375
+          "offset": 1.4123904705047607,
+          "time": 0.18023687499953667
         },
         {
-          "offset": 1.13876473903656,
-          "time": 0.18693287500354927
+          "offset": 1.2250819206237793,
+          "time": 0.18476150000060443
         },
         {
-          "offset": 0.9678583145141602,
-          "time": 0.1916023333396879
+          "offset": 1.0467586517333984,
+          "time": 0.18942654167040018
         },
         {
-          "offset": 0.7627387046813965,
-          "time": 0.19791662500210805
+          "offset": 0.8655111789703369,
+          "time": 0.19466116666444577
         },
         {
-          "offset": 0.6258327960968018,
-          "time": 0.20272125000337837
+          "offset": 0.7063015699386597,
+          "time": 0.19984779166406952
         },
         {
-          "offset": 0.5079607963562012,
-          "time": 0.2074674583345768
+          "offset": 0.5494844913482666,
+          "time": 0.2057648749978398
         },
         {
-          "offset": 0.393810510635376,
-          "time": 0.2127894166696933
+          "offset": 0.43012380599975586,
+          "time": 0.21102470833284315
         },
         {
-          "offset": 0.3053932189941406,
-          "time": 0.2200743333378341
+          "offset": 0.3345820903778076,
+          "time": 0.21601312499842606
         },
         {
-          "offset": 0.19501781463623047,
-          "time": 0.2252797500041197
+          "offset": 0.2494877576828003,
+          "time": 0.22127912499854574
         },
         {
-          "offset": 0.13517796993255615,
-          "time": 0.23056783333595376
+          "offset": 0.18084871768951416,
+          "time": 0.22644920833408833
         },
         {
-          "offset": 0.09139466285705566,
-          "time": 0.23536675000650575
+          "offset": 0.12794721126556396,
+          "time": 0.23132991667080205
         },
         {
-          "offset": 0.05885624885559082,
-          "time": 0.2397641666684649
+          "offset": 0.0842968225479126,
+          "time": 0.23629000000073574
         },
         {
-          "offset": 0.02676975727081299,
-          "time": 0.24529550000443123
+          "offset": 0.05130648612976074,
+          "time": 0.24096816666860832
         },
         {
-          "offset": 0.004359722137451172,
-          "time": 0.25057050000032177
-        },
-        {
-          "offset": 0,
-          "time": 0.25568654167000204
+          "offset": 0.022463202476501465,
+          "time": 0.24620074999984354
         },
         {
           "offset": 0,
-          "time": 0.26087291666772217
+          "time": 0.25144404167076573
         },
         {
           "offset": 0,
-          "time": 0.2660772083399934
+          "time": 0.2566119166658609
         },
         {
           "offset": 0,
-          "time": 0.2713000000003376
+          "time": 0.26144787500379607
         },
         {
           "offset": 0,
-          "time": 0.27650591667043045
+          "time": 0.26663337500212947
         },
         {
           "offset": 0,
-          "time": 0.2811349583353149
+          "time": 0.271975833333272
         },
         {
           "offset": 0,
-          "time": 0.2864041250068112
+          "time": 0.27643583333701827
         },
         {
           "offset": 0,
-          "time": 0.29162175000237767
+          "time": 0.28133420833182754
         },
         {
           "offset": 0,
-          "time": 0.2969228333386127
+          "time": 0.2864659999977448
         },
         {
           "offset": 0,
-          "time": 0.30178191667073406
+          "time": 0.29149762500310317
         },
         {
           "offset": 0,
-          "time": 0.30704562500613974
+          "time": 0.29661337500147056
+        },
+        {
+          "offset": 0,
+          "time": 0.3017421250042389
+        },
+        {
+          "offset": 0,
+          "time": 0.3062312916663359
         }
       ]
     },
@@ -6216,7 +6219,7 @@
       "injected_begin_time_delay": 0.29,
       "ok": true,
       "scheduled": {
-        "beginTime": 44629.64161612501,
+        "beginTime": 46972.169688750015,
         "children": [
           {
             "beginTime": 0,
@@ -6250,8 +6253,8 @@
           }
         ],
         "duration": 0.13912826706998516,
-        "requestedAt": 44629.35131550001,
-        "scheduledDelay": 0.29030062499805354,
+        "requestedAt": 46971.87937237501,
+        "scheduledDelay": 0.2903163750015665,
         "type": "CAAnimationGroup"
       }
     },
@@ -6288,20 +6291,20 @@
       "space": {}
     },
     "motion_show_panel_right_edge": {
-      "capture_lateness_s": 0.007034500000008846,
-      "left_pt": 131.0,
+      "capture_lateness_s": 0.006999749997339676,
+      "left_pt": 153.0,
       "load_average": [
-        11.8916015625,
-        11.26220703125,
-        10.77099609375
+        28.05908203125,
+        21.3408203125,
+        19.06396484375
       ],
       "ok": true,
       "requested_after_key_s": 0.025,
       "right_pt": 1718.0,
       "snapshot": {
-        "capturedAfterKey": 0.03203450000000885,
+        "capturedAfterKey": 0.03199974999733968,
         "method": "windowserver+devtools",
-        "path": "$TMPDIR/Open-E2E-window-chrome-41736-8f2a6b85-scratch-6p1i3lei/window-chrome-104-ta_8xfkp/show-25ms.png"
+        "path": "$TMPDIR/Open-E2E-window-chrome-25323-118ab78c-scratch-g21ymy_m/window-chrome-104-shs_wu32/show-25ms.png"
       }
     },
     "motion_sidebar_toggle": {
@@ -6309,7 +6312,7 @@
       "scheduled": [
         {
           "emptyPanel": {
-            "beginTime": 44627.23342179168,
+            "beginTime": 46969.783959708344,
             "children": [
               {
                 "beginTime": 0,
@@ -6343,12 +6346,12 @@
               }
             ],
             "duration": 0.13912826706998516,
-            "requestedAt": 44627.23298325001,
-            "scheduledDelay": 0.0004385416687000543,
+            "requestedAt": 46969.783516291674,
+            "scheduledDelay": 0.0004434166694409214,
             "type": "CAAnimationGroup"
           },
           "panel": {
-            "beginTime": 44627.23338554168,
+            "beginTime": 46969.783925166674,
             "children": [
               {
                 "beginTime": 0,
@@ -6382,12 +6385,12 @@
               }
             ],
             "duration": 0.13912826706998516,
-            "requestedAt": 44627.23298325001,
-            "scheduledDelay": 0.00040229166916105896,
+            "requestedAt": 46969.783516291674,
+            "scheduledDelay": 0.0004088749992661178,
             "type": "CAAnimationGroup"
           },
           "sidebar": {
-            "beginTime": 44627.23321708334,
+            "beginTime": 46969.783760041675,
             "damping": 0.95,
             "duration": 0.13912826706998516,
             "from": 0,
@@ -6395,9 +6398,9 @@
             "keyPath": "transform.translation.x",
             "mass": 1,
             "physicalDamping": 119.38052083641213,
-            "requestedAt": 44627.23298325001,
+            "requestedAt": 46969.783516291674,
             "response": 0.1,
-            "scheduledDelay": 0.00023383332882076502,
+            "scheduledDelay": 0.00024375000066356733,
             "settlingDuration": 0.13912826706998516,
             "stiffness": 3947.8417604357433,
             "to": -164,
@@ -6406,7 +6409,7 @@
         },
         {
           "emptyPanel": {
-            "beginTime": 44627.797129041675,
+            "beginTime": 46970.34319604168,
             "children": [
               {
                 "beginTime": 0,
@@ -6440,12 +6443,12 @@
               }
             ],
             "duration": 0.13912826706998516,
-            "requestedAt": 44627.79580258334,
-            "scheduledDelay": 0.0013264583321870305,
+            "requestedAt": 46970.34148175001,
+            "scheduledDelay": 0.0017142916694865562,
             "type": "CAAnimationGroup"
           },
           "panel": {
-            "beginTime": 44627.797113958346,
+            "beginTime": 46970.34318387501,
             "children": [
               {
                 "beginTime": 0,
@@ -6479,12 +6482,12 @@
               }
             ],
             "duration": 0.13912826706998516,
-            "requestedAt": 44627.79580258334,
-            "scheduledDelay": 0.0013113750028423965,
+            "requestedAt": 46970.34148175001,
+            "scheduledDelay": 0.0017021250023390166,
             "type": "CAAnimationGroup"
           },
           "sidebar": {
-            "beginTime": 44627.79705795834,
+            "beginTime": 46970.34313375001,
             "damping": 0.95,
             "duration": 0.13912826706998516,
             "from": -364,
@@ -6492,9 +6495,9 @@
             "keyPath": "transform.translation.x",
             "mass": 1,
             "physicalDamping": 119.38052083641213,
-            "requestedAt": 44627.79580258334,
+            "requestedAt": 46970.34148175001,
             "response": 0.1,
-            "scheduledDelay": 0.0012553749984363094,
+            "scheduledDelay": 0.0016519999990123324,
             "settlingDuration": 0.13912826706998516,
             "stiffness": 3947.8417604357433,
             "to": 0,
@@ -6503,7 +6506,7 @@
         },
         {
           "emptyPanel": {
-            "beginTime": 44629.05431158334,
+            "beginTime": 46971.55376095834,
             "children": [
               {
                 "beginTime": 0,
@@ -6537,12 +6540,12 @@
               }
             ],
             "duration": 0.13912826706998516,
-            "requestedAt": 44629.053672666676,
-            "scheduledDelay": 0.0006389166665030643,
+            "requestedAt": 46971.553513041676,
+            "scheduledDelay": 0.00024791666510282084,
             "type": "CAAnimationGroup"
           },
           "panel": {
-            "beginTime": 44629.05429158334,
+            "beginTime": 46971.55374937501,
             "children": [
               {
                 "beginTime": 0,
@@ -6576,12 +6579,12 @@
               }
             ],
             "duration": 0.13912826706998516,
-            "requestedAt": 44629.053672666676,
-            "scheduledDelay": 0.0006189166670083068,
+            "requestedAt": 46971.553513041676,
+            "scheduledDelay": 0.00023633333330508322,
             "type": "CAAnimationGroup"
           },
           "sidebar": {
-            "beginTime": 44629.05421183334,
+            "beginTime": 46971.55370629168,
             "damping": 0.95,
             "duration": 0.13912826706998516,
             "from": 0,
@@ -6589,9 +6592,9 @@
             "keyPath": "transform.translation.x",
             "mass": 1,
             "physicalDamping": 119.38052083641213,
-            "requestedAt": 44629.053672666676,
+            "requestedAt": 46971.553513041676,
             "response": 0.1,
-            "scheduledDelay": 0.0005391666636569425,
+            "scheduledDelay": 0.0001932500017574057,
             "settlingDuration": 0.13912826706998516,
             "stiffness": 3947.8417604357433,
             "to": -228,
@@ -6600,7 +6603,7 @@
         },
         {
           "emptyPanel": {
-            "beginTime": 44629.20393775001,
+            "beginTime": 46971.727254333346,
             "children": [
               {
                 "beginTime": 0,
@@ -6634,12 +6637,12 @@
               }
             ],
             "duration": 0.13912826706998516,
-            "requestedAt": 44629.20198570834,
-            "scheduledDelay": 0.001952041668118909,
+            "requestedAt": 46971.72596500001,
+            "scheduledDelay": 0.001289333333261311,
             "type": "CAAnimationGroup"
           },
           "panel": {
-            "beginTime": 44629.20392345834,
+            "beginTime": 46971.72724020835,
             "children": [
               {
                 "beginTime": 0,
@@ -6673,12 +6676,12 @@
               }
             ],
             "duration": 0.13912826706998516,
-            "requestedAt": 44629.20198570834,
-            "scheduledDelay": 0.0019377499993424863,
+            "requestedAt": 46971.72596500001,
+            "scheduledDelay": 0.0012752083348459564,
             "type": "CAAnimationGroup"
           },
           "sidebar": {
-            "beginTime": 44629.20387000001,
+            "beginTime": 46971.727169208345,
             "damping": 0.95,
             "duration": 0.13912826706998516,
             "from": -228,
@@ -6686,9 +6689,9 @@
             "keyPath": "transform.translation.x",
             "mass": 1,
             "physicalDamping": 119.38052083641213,
-            "requestedAt": 44629.20198570834,
+            "requestedAt": 46971.72596500001,
             "response": 0.1,
-            "scheduledDelay": 0.0018842916688299738,
+            "scheduledDelay": 0.0012042083326377906,
             "settlingDuration": 0.13912826706998516,
             "stiffness": 3947.8417604357433,
             "to": 0,
@@ -6700,17 +6703,17 @@
     "motion_space_switch": {
       "ok": true,
       "scheduled": {
-        "beginTime": 44631.937185416675,
+        "beginTime": 46974.44871658334,
         "damping": 1,
         "duration": 0.30000000000000004,
-        "from": 0,
+        "from": -228,
         "initialVelocity": 0,
         "keyPath": "position.x",
         "mass": 1,
         "physicalDamping": 62.83185307179586,
-        "requestedAt": 44631.93495741668,
+        "requestedAt": 46974.44662295834,
         "response": 0.2,
-        "scheduledDelay": 0.002227999997558072,
+        "scheduledDelay": 0.002093625000270549,
         "settlingDuration": 0.30000000000000004,
         "stiffness": 986.9604401089358,
         "to": -228,
@@ -6725,12 +6728,12 @@
       "ok": true,
       "windows": [
         {
-          "id": "15668BBB-52E2-4EBA-A15D-1170F5240686",
-          "number": 121259
+          "id": "3DC8C815-E678-44EC-8D0C-E834EF014A02",
+          "number": 129269
         },
         {
-          "id": "53FF8F6D-7891-4818-BB9F-30B7FFEE91CB",
-          "number": 121265
+          "id": "514C9530-1917-4B5C-B6D7-4D1694D4E125",
+          "number": 129282
         }
       ]
     },
@@ -6796,8 +6799,8 @@
         },
         "confirmation": null,
         "cursor": [
-          2443,
-          370
+          2409,
+          325
         ],
         "engineSelected": 0,
         "engineURL": "",
@@ -6819,18 +6822,18 @@
           "shows": 0,
           "visible": false
         },
-        "id": "15668BBB-52E2-4EBA-A15D-1170F5240686",
+        "id": "3DC8C815-E678-44EC-8D0C-E834EF014A02",
         "isKeyWindow": true,
         "key": true,
         "keySameObject": true,
-        "keyWindow": 121259,
+        "keyWindow": 129269,
         "layoutPasses": 8,
         "menuTitles": {
           "toggle-sidebar": "Hide Sidebar",
           "toggle-toolbar": "Show Toolbar"
         },
         "miniaturized": false,
-        "number": 121259,
+        "number": 129269,
         "onActiveSpace": true,
         "pageFullscreen": false,
         "paneBackgrounds": [],
@@ -6880,9 +6883,9 @@
         "sidebarVisible": true,
         "sidebarWidth": 228,
         "sidebarWidthCommits": 0,
-        "space": "4B53C457-7C07-4F34-AB60-9FCBF25B0356",
+        "space": "912FE56E-1A5D-49BA-88BF-7E50C3072DC0",
         "spaceSwitcherFrames": {
-          "4B53C457-7C07-4F34-AB60-9FCBF25B0356": [
+          "912FE56E-1A5D-49BA-88BF-7E50C3072DC0": [
             96,
             758,
             36,
@@ -7088,8 +7091,8 @@
         },
         "confirmation": null,
         "cursor": [
-          2463,
-          230
+          2429,
+          185
         ],
         "engineSelected": 1,
         "engineURL": "data:text/html,%3Ctitle%3EWindow%20A%3C/title%3E%3Ch1%3EWindow%20A%3C/h1%3E",
@@ -7111,24 +7114,24 @@
           "shows": 0,
           "visible": false
         },
-        "id": "15668BBB-52E2-4EBA-A15D-1170F5240686",
+        "id": "3DC8C815-E678-44EC-8D0C-E834EF014A02",
         "isKeyWindow": true,
         "key": true,
         "keySameObject": true,
-        "keyWindow": 121259,
-        "layoutPasses": 193,
+        "keyWindow": 129269,
+        "layoutPasses": 155,
         "menuTitles": {
           "toggle-sidebar": "Hide Sidebar",
           "toggle-toolbar": "Show Toolbar"
         },
         "miniaturized": false,
-        "number": 121259,
+        "number": 129269,
         "onActiveSpace": true,
         "pageFullscreen": false,
         "paneBackgrounds": [
           {
             "color": [],
-            "tab": "2C2E1706-F889-454F-AB97-C180C799D93E"
+            "tab": "AAB51A79-BC83-45F0-BFD8-64B6A88D76FD"
           }
         ],
         "panel": [
@@ -7160,9 +7163,9 @@
           2560,
           1440
         ],
-        "selected": "2C2E1706-F889-454F-AB97-C180C799D93E",
+        "selected": "AAB51A79-BC83-45F0-BFD8-64B6A88D76FD",
         "shownPages": [
-          "2C2E1706-F889-454F-AB97-C180C799D93E"
+          "AAB51A79-BC83-45F0-BFD8-64B6A88D76FD"
         ],
         "sidebarClass": "OpenSidebar.SidebarView",
         "sidebarFrame": [
@@ -7179,9 +7182,9 @@
         "sidebarVisible": true,
         "sidebarWidth": 300,
         "sidebarWidthCommits": 1,
-        "space": "4B53C457-7C07-4F34-AB60-9FCBF25B0356",
+        "space": "912FE56E-1A5D-49BA-88BF-7E50C3072DC0",
         "spaceSwitcherFrames": {
-          "4B53C457-7C07-4F34-AB60-9FCBF25B0356": [
+          "912FE56E-1A5D-49BA-88BF-7E50C3072DC0": [
             132,
             658,
             36,
@@ -7323,7 +7326,7 @@
         228,
         790
       ],
-      "dwell_s": 0.159,
+      "dwell_s": 0.152,
       "edge_walk": [
         [
           2,
@@ -7431,7 +7434,7 @@
           2
         ]
       ],
-      "exit_to_idle_s": 0.165,
+      "exit_to_idle_s": 0.169,
       "held": {
         "card": [
           5,
@@ -7439,7 +7442,7 @@
           228,
           790
         ],
-        "dwell": 0.15879529166704742,
+        "dwell": 0.1524209166673245,
         "hides": 2,
         "offset": 0,
         "phase": "shown",
@@ -7470,7 +7473,7 @@
       },
       "ok": true,
       "pass_by_without_reveal": true,
-      "settled_s": 0.421,
+      "settled_s": 0.418,
       "slide_out_s": 0.129
     },
     "selected_only_0": {
@@ -8517,20 +8520,20 @@
             "miniaturized": false,
             "trafficLightFrames": [
               [
-                13,
-                17,
+                9,
+                9,
                 14,
                 14
               ],
               [
-                36,
-                17,
+                32,
+                9,
                 14,
                 14
               ],
               [
-                59,
-                17,
+                55,
+                9,
                 14,
                 14
               ]
@@ -9059,10 +9062,10 @@
     "warm_existing_profile": {
       "median_ms": {
         "engineStart": 557,
-        "engineStarted": 674,
-        "firstContentfulPaint": 900,
-        "main": 329,
-        "modelLoaded": 333,
+        "engineStarted": 668,
+        "firstContentfulPaint": 893,
+        "main": 333,
+        "modelLoaded": 338,
         "sidebarDrawn": 556
       },
       "reason": "Release timing budgets are not evaluated in Debug",
@@ -9169,8 +9172,8 @@
         },
         "confirmation": null,
         "cursor": [
-          2503,
-          594
+          2469,
+          549
         ],
         "engineSelected": 1,
         "engineURL": "data:text/html,%3Ctitle%3EWindow%20chrome%3C/title%3E%3Cbody%20style='margin:0;background:white'%3E%3Ch1%20style='margin:40px'%3EWindow%20chrome%3C/h1%3E",
@@ -9192,24 +9195,24 @@
           "shows": 0,
           "visible": false
         },
-        "id": "E0E0B8D2-61BA-4848-9BB8-45E8B76682BD",
+        "id": "D5880AA0-7CA8-4538-8B3C-59EDD31CC403",
         "isKeyWindow": true,
         "key": true,
         "keySameObject": true,
-        "keyWindow": 121160,
-        "layoutPasses": 88,
+        "keyWindow": 129168,
+        "layoutPasses": 94,
         "menuTitles": {
           "toggle-sidebar": "Show Sidebar",
           "toggle-toolbar": "Show Toolbar"
         },
         "miniaturized": false,
-        "number": 121160,
+        "number": 129168,
         "onActiveSpace": true,
         "pageFullscreen": false,
         "paneBackgrounds": [
           {
             "color": [],
-            "tab": "F3BFB549-8280-482F-B563-DECD425C2D83"
+            "tab": "A66AD6A6-FD18-4C43-BE37-5DE30F76D7A9"
           }
         ],
         "panel": [
@@ -9241,9 +9244,9 @@
           2560,
           1440
         ],
-        "selected": "F3BFB549-8280-482F-B563-DECD425C2D83",
+        "selected": "A66AD6A6-FD18-4C43-BE37-5DE30F76D7A9",
         "shownPages": [
-          "F3BFB549-8280-482F-B563-DECD425C2D83"
+          "A66AD6A6-FD18-4C43-BE37-5DE30F76D7A9"
         ],
         "sidebarClass": "OpenSidebar.SidebarView",
         "sidebarFrame": [
@@ -9260,9 +9263,9 @@
         "sidebarVisible": true,
         "sidebarWidth": 364,
         "sidebarWidthCommits": 1,
-        "space": "512D3204-4BEC-4697-860A-E5BF5BCE972B",
+        "space": "54BCFE28-032F-4607-AD32-340822D824B1",
         "spaceSwitcherFrames": {
-          "512D3204-4BEC-4697-860A-E5BF5BCE972B": [
+          "54BCFE28-032F-4607-AD32-340822D824B1": [
             64,
             1042,
             36,
@@ -9500,13 +9503,13 @@
         "canGoBack": false,
         "canGoForward": false,
         "crashed": false,
-        "createdAt": 1793940057.342339,
+        "createdAt": 1793942401.17696,
         "favicon": false,
         "faviconReportsCompleted": 0,
         "faviconReportsRejected": 0,
         "hasWebContent": true,
-        "id": "2C2E1706-F889-454F-AB97-C180C799D93E",
-        "lastActiveAt": 1793940068.4521399,
+        "id": "AAB51A79-BC83-45F0-BFD8-64B6A88D76FD",
+        "lastActiveAt": 1793942412.2041922,
         "loaded": true,
         "loading": false,
         "page": {
@@ -9515,15 +9518,15 @@
           "browserIndex": 1,
           "browserPinned": false,
           "canGoBack": false,
-          "chromeTabId": 1226616464,
-          "chromeWindowId": 1226616456,
+          "chromeTabId": 2125600521,
+          "chromeWindowId": 2125600513,
           "context": "Default",
           "crash": 0,
           "extension": "",
           "favicon": false,
           "fullscreen": false,
           "hidden": true,
-          "hostTab": "2C2E1706-F889-454F-AB97-C180C799D93E",
+          "hostTab": "AAB51A79-BC83-45F0-BFD8-64B6A88D76FD",
           "identifier": 3,
           "kind": "tab",
           "live": true,
@@ -9542,14 +9545,14 @@
           "zoom": 0
         },
         "pinnedURL": "",
-        "profile": "6C983D7B-8C8F-404D-B91A-C102A2D59BC9",
+        "profile": "EA440F24-9224-4E53-8FB0-D8454999131A",
         "progress": 1,
         "rowFaviconHash": "",
         "rowFaviconSource": "",
         "section": "today",
         "selected": false,
         "sleepPhase": "live",
-        "space": "4B53C457-7C07-4F34-AB60-9FCBF25B0356",
+        "space": "912FE56E-1A5D-49BA-88BF-7E50C3072DC0",
         "title": "Window A",
         "unread": false,
         "url": "data:text/html,%3Ctitle%3EWindow%20A%3C/title%3E%3Ch1%3EWindow%20A%3C/h1%3E",
@@ -9558,56 +9561,56 @@
     },
     "window_persistence": {
       "expected": {
-        "15668BBB-52E2-4EBA-A15D-1170F5240686": {
+        "3DC8C815-E678-44EC-8D0C-E834EF014A02": {
           "frame": [
             80,
             60,
             1000,
             700
           ],
-          "selected": "ABE621DA-5F03-42F6-A5B7-816B0D93945E",
+          "selected": "056B3A8E-B0B4-4585-89FC-943A14D64494",
           "sidebarMode": "hidden",
           "sidebarWidth": 300,
-          "space": "4B53C457-7C07-4F34-AB60-9FCBF25B0356"
+          "space": "912FE56E-1A5D-49BA-88BF-7E50C3072DC0"
         },
-        "53FF8F6D-7891-4818-BB9F-30B7FFEE91CB": {
+        "514C9530-1917-4B5C-B6D7-4D1694D4E125": {
           "frame": [
             300,
             200,
             900,
             600
           ],
-          "selected": "5ABE825D-DF4B-4A01-B1F8-C98D7983D5F8",
+          "selected": "16D79698-FA1B-4A18-99D8-87B55821519B",
           "sidebarMode": "anchored",
           "sidebarWidth": 228,
-          "space": "76EE6118-5840-4E15-A6B6-AE025A8593FA"
+          "space": "18907E0C-17E4-4C2F-8248-34F9B78807BB"
         }
       },
       "ok": true,
       "restored": {
-        "15668BBB-52E2-4EBA-A15D-1170F5240686": {
+        "3DC8C815-E678-44EC-8D0C-E834EF014A02": {
           "frame": [
             80,
             60,
             1000,
             700
           ],
-          "selected": "ABE621DA-5F03-42F6-A5B7-816B0D93945E",
+          "selected": "056B3A8E-B0B4-4585-89FC-943A14D64494",
           "sidebarMode": "hidden",
           "sidebarWidth": 300,
-          "space": "4B53C457-7C07-4F34-AB60-9FCBF25B0356"
+          "space": "912FE56E-1A5D-49BA-88BF-7E50C3072DC0"
         },
-        "53FF8F6D-7891-4818-BB9F-30B7FFEE91CB": {
+        "514C9530-1917-4B5C-B6D7-4D1694D4E125": {
           "frame": [
             300,
             200,
             900,
             600
           ],
-          "selected": "5ABE825D-DF4B-4A01-B1F8-C98D7983D5F8",
+          "selected": "16D79698-FA1B-4A18-99D8-87B55821519B",
           "sidebarMode": "anchored",
           "sidebarWidth": 228,
-          "space": "76EE6118-5840-4E15-A6B6-AE025A8593FA"
+          "space": "18907E0C-17E4-4C2F-8248-34F9B78807BB"
         }
       }
     },

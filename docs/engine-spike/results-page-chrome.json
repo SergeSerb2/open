@@ -6,15 +6,16 @@
         "forced": false,
         "ok": true,
         "owned_pids": [
-          44272,
-          44280,
-          44281,
-          44282,
-          44283,
-          44286,
-          44414,
-          44415,
-          44419
+          35154,
+          35162,
+          35163,
+          35164,
+          35165,
+          35166,
+          35167,
+          35218,
+          35222,
+          35240
         ],
         "remaining_processes": [],
         "reply": true,
@@ -28,14 +29,14 @@
         "forced": false,
         "ok": true,
         "owned_pids": [
-          44433,
-          44445,
-          44446,
-          44447,
-          44448,
-          44452,
-          44453,
-          44479
+          35257,
+          35261,
+          35262,
+          35263,
+          35264,
+          35265,
+          35266,
+          35298
         ],
         "remaining_processes": [],
         "reply": true,
@@ -49,12 +50,12 @@
         "forced": false,
         "ok": true,
         "owned_pids": [
-          44523,
-          44532,
-          44533,
-          44534,
-          44535,
-          44572
+          35402,
+          35418,
+          35419,
+          35420,
+          35421,
+          35447
         ],
         "remaining_processes": [],
         "reply": true,
@@ -68,14 +69,14 @@
         "forced": false,
         "ok": true,
         "owned_pids": [
-          44596,
-          44660,
-          44661,
-          44662,
-          44663,
-          44664,
-          44665,
-          44691
+          35462,
+          35467,
+          35468,
+          35469,
+          35470,
+          35471,
+          35472,
+          35540
         ],
         "remaining_processes": [],
         "reply": true,
@@ -89,17 +90,17 @@
         "forced": false,
         "ok": true,
         "owned_pids": [
-          44699,
-          44703,
-          44704,
-          44705,
-          44706,
-          44707,
-          44708,
-          44809,
-          44830,
-          44862,
-          44863
+          35562,
+          35565,
+          35566,
+          35567,
+          35568,
+          35570,
+          35571,
+          35743,
+          35752,
+          35760,
+          35775
         ],
         "remaining_processes": [],
         "reply": true,
@@ -113,14 +114,14 @@
         "forced": false,
         "ok": true,
         "owned_pids": [
-          45089,
-          45101,
-          45102,
-          45103,
-          45104,
-          45106,
-          45107,
-          45120
+          35977,
+          35982,
+          35983,
+          35984,
+          35985,
+          35986,
+          35987,
+          36000
         ],
         "remaining_processes": [],
         "reply": true,
@@ -134,15 +135,15 @@
   },
   "config": "Debug",
   "engine": {
-    "distributionCodeSHA256": "1bc8b6044b77d53d46d76745a39b029e9709dbeb00fd31d08870ed0a38dd576a",
-    "distributionSHA256": "f34400e71412d87a0b268fcd5658a8563cca34f600c8dd17b534a63e76aa7939",
-    "distributionUUID": "4C4C4465-5555-3144-A1AB-FCF4EA280540",
-    "embeddedCodeSHA256": "1bc8b6044b77d53d46d76745a39b029e9709dbeb00fd31d08870ed0a38dd576a",
-    "embeddedSHA256": "7965fb82d3670f2824f8657069fcb816cb10fa70c82dd4260a575eb46c395359",
-    "embeddedUUID": "4C4C4465-5555-3144-A1AB-FCF4EA280540",
-    "requiredSHA256": "",
+    "distributionCodeSHA256": "7979934c0d84f4d9fedb3859826d0c7c65919834fc904ec2aee00a0b4e4dd8f2",
+    "distributionSHA256": "7b49090502568f8189aa0e94f7cf23344beec5bed537136eff5f7fce573ad35a",
+    "distributionUUID": "4C4C446F-5555-3144-A1AB-0A55260E4EBE",
+    "embeddedCodeSHA256": "7979934c0d84f4d9fedb3859826d0c7c65919834fc904ec2aee00a0b4e4dd8f2",
+    "embeddedSHA256": "ec8cdb8039674748940441956a1ae529423ae15c05ac972a806a9afb12a657c0",
+    "embeddedUUID": "4C4C446F-5555-3144-A1AB-0A55260E4EBE",
+    "requiredSHA256": "7b49090502568f8189aa0e94f7cf23344beec5bed537136eff5f7fce573ad35a",
     "source": "fork",
-    "stamp": "fork $HOME/Developer/open-engine-s8-main/chromium_git/chromium/src/cef/binary_distrib/cef_binary_156.0.14+g4fa4ab5+chromium-156.0.8078.48_macosarm64_minimal 1793841834"
+    "stamp": "fork $HOME/Developer/open-engine-s8-main/chromium_git/chromium/src/cef/binary_distrib/cef_binary_156.0.14+g4fa4ab5+chromium-156.0.8078.48_macosarm64_minimal 1793940850"
   },
   "interrupted_attempts": [],
   "page": {
@@ -188,7 +189,7 @@
         "background": "rgb(17, 17, 17)",
         "changes": [],
         "dark": true,
-        "loadId": "v38hy3xxpn"
+        "loadId": "f6xabomos6"
       },
       "ok": true,
       "start": {
@@ -197,19 +198,19 @@
           "light"
         ],
         "dark": false,
-        "loadId": "kbl6n3vc02f"
+        "loadId": "41gixbcxqyi"
       },
       "websitesDark": {
         "background": "rgb(17, 17, 17)",
         "changes": [],
         "dark": true,
-        "loadId": "4kegtyuxcmv"
+        "loadId": "jt8xamv4sp"
       },
       "websitesLight": {
         "background": "rgb(255, 255, 255)",
         "changes": [],
         "dark": false,
-        "loadId": "4kegtyuxcmv"
+        "loadId": "jt8xamv4sp"
       }
     },
     "A1_appearance_stored_chrome": {
@@ -229,7 +230,7 @@
             "dark"
           ],
           "dark": true,
-          "loadId": "4kegtyuxcmv"
+          "loadId": "jt8xamv4sp"
         },
         {
           "background": "rgb(255, 255, 255)",
@@ -239,7 +240,7 @@
             "light"
           ],
           "dark": false,
-          "loadId": "4kegtyuxcmv"
+          "loadId": "jt8xamv4sp"
         },
         {
           "background": "rgb(17, 17, 17)",
@@ -250,7 +251,7 @@
             "dark"
           ],
           "dark": true,
-          "loadId": "4kegtyuxcmv"
+          "loadId": "jt8xamv4sp"
         }
       ]
     },
@@ -261,7 +262,7 @@
       ],
       "windows": [
         "cookies",
-        "DevTools"
+        "DevTools - 127.0.0.1:63806/cookies.html"
       ]
     },
     "D1_key_cmd_opt_j_chrome": {
@@ -279,15 +280,16 @@
         "forced": false,
         "ok": true,
         "owned_pids": [
-          44272,
-          44280,
-          44281,
-          44282,
-          44283,
-          44286,
-          44414,
-          44415,
-          44419
+          35154,
+          35162,
+          35163,
+          35164,
+          35165,
+          35166,
+          35167,
+          35218,
+          35222,
+          35240
         ],
         "remaining_processes": [],
         "reply": true,
@@ -314,7 +316,7 @@
     "D3_developer_mode": {
       "fields": [
         "127.0.0.1",
-        "127.0.0.1:54171/cookies.html?dev=1",
+        "127.0.0.1:63806/cookies.html?dev=1",
         "localhost",
         "127.0.0.1"
       ],
@@ -345,7 +347,7 @@
         "reason": "read-only AEDeterminePermissionToAutomateTarget, askUserIfNeeded=false",
         "status": "BLOCKED",
         "targetBundle": "$WORKTREE/build/Debug/Open.app",
-        "targetPID": 44272
+        "targetPID": 35154
       },
       "off": {
         "number": 1013,
@@ -390,7 +392,7 @@
         "frame": "{{960, 765}, {640, 390}}",
         "key": true,
         "level": 0,
-        "number": 121585,
+        "number": 130407,
         "parent": 0,
         "sheet": false,
         "title": "Task Manager",
@@ -399,13 +401,13 @@
     },
     "H2_cancel_trace": {
       "files": [
-        "Open Trace 2026-11-05 21.42.25.json"
+        "Open Trace 2026-11-05 22.24.56.json"
       ],
       "ok": true
     },
     "H2_record_trace_stop": {
       "error": "",
-      "file": "$TMPDIR/Open-E2E-page-chrome-44237-b351628d-scratch-au000fwz/traces/Open Trace 2026-11-05 21.42.25.json",
+      "file": "$TMPDIR/Open-E2E-page-chrome-35116-eeefd5b0-scratch-hgvmrt67/traces/Open Trace 2026-11-05 22.24.56.json",
       "menu": [
         {
           "cancel-trace": false,
@@ -429,7 +431,7 @@
           32,
           27
         ],
-        "age": 2.015555083336949,
+        "age": 2.017071208334528,
         "coalescingKey": "trace",
         "exiting": false,
         "frame": [
@@ -453,7 +455,7 @@
           32,
           27
         ],
-        "age": 0.07725795832811855,
+        "age": 0.07660475000011502,
         "coalescingKey": "trace",
         "exiting": false,
         "frame": [
@@ -470,7 +472,7 @@
         "title": "Trace Saved"
       },
       "showInFinder": true,
-      "traceEvents": 7844
+      "traceEvents": 6565
     },
     "H3_copy_open_info": {
       "ok": true,
@@ -508,10 +510,10 @@
     "H_reveal_open_data": {
       "ok": true,
       "reveals": [
-        "$TMPDIR/Open-E2E-page-chrome-44237-b351628d-scratch-au000fwz/traces/Open Trace 2026-11-05 21.42.25.json",
-        "$HOME/Library/Application Support/Open-E2E-page-chrome-44237-b351628d"
+        "$TMPDIR/Open-E2E-page-chrome-35116-eeefd5b0-scratch-hgvmrt67/traces/Open Trace 2026-11-05 22.24.56.json",
+        "$HOME/Library/Application Support/Open-E2E-page-chrome-35116-eeefd5b0"
       ],
-      "root": "$HOME/Library/Application Support/Open-E2E-page-chrome-44237-b351628d"
+      "root": "$HOME/Library/Application Support/Open-E2E-page-chrome-35116-eeefd5b0"
     },
     "K1_clear_cookies_and_refresh_chrome": {
       "after": [
@@ -563,17 +565,17 @@
         ],
         "decisions": 0,
         "help": "Click the lock to change this any time",
-        "keyWindow": 121654,
+        "keyWindow": 130482,
         "kinds": 8,
-        "origin": "http://127.0.0.1:54543/",
-        "parent": 121654,
+        "origin": "http://127.0.0.1:64269/",
+        "parent": 130482,
         "pending": 1,
         "pendingPage": 1,
         "promptKey": true,
         "question": "Allow 127.0.0.1 to send you notifications?",
         "selectedPage": 1,
         "visible": true,
-        "window": 121658
+        "window": 130483
       },
       "request": "skipped:authorized",
       "requests": [
@@ -592,8 +594,8 @@
       "engine": [
         {
           "body": "Banner from notify.html",
-          "id": "n#http://127.0.0.1:54543#open-n1",
-          "origin": "http://127.0.0.1:54543/",
+          "id": "n#http://127.0.0.1:64269#open-n1",
+          "origin": "http://127.0.0.1:64269/",
           "title": "Open N1 banner"
         }
       ],
@@ -607,7 +609,7 @@
     },
     "N2_alerts_helper": {
       "helpers": [
-        44809
+        35743
       ],
       "helpersBefore": [],
       "ok": true,
@@ -631,7 +633,7 @@
       "ok": true
     },
     "N3_activation": {
-      "focusedSpace": "27922C71-5E62-4FA2-B122-00D5F556C509",
+      "focusedSpace": "732DC2B2-30B6-4D6E-966B-A70A89343D21",
       "ok": true,
       "prepared": {
         "miniaturized": true,
@@ -643,14 +645,14 @@
         {
           "content": 2,
           "request": "activate",
-          "space": "27922C71-5E62-4FA2-B122-00D5F556C509",
-          "tab": "214B3DC0-E5C4-4E3C-BA79-403D4300D48D",
-          "time": 1793940186.800194,
+          "space": "732DC2B2-30B6-4D6E-966B-A70A89343D21",
+          "tab": "8387D8D7-78DA-4FA9-B87D-6A5C5B590684",
+          "time": 1793942737.242594,
           "type": "tab-request"
         }
       ],
       "selected": true,
-      "space2": "27922C71-5E62-4FA2-B122-00D5F556C509",
+      "space2": "732DC2B2-30B6-4D6E-966B-A70A89343D21",
       "windowRestoredAndKey": true
     },
     "N3_notification_click": {
@@ -661,10 +663,10 @@
       "router": [
         {
           "action": "page",
-          "id": "n#http://127.0.0.1:54543#open-n1",
-          "origin": "http://127.0.0.1:54543/",
+          "id": "n#http://127.0.0.1:64269#open-n1",
+          "origin": "http://127.0.0.1:64269/",
           "persistent": false,
-          "tab": "948F028F-5560-4BC0-A528-77D87ADAE636"
+          "tab": "A65760DE-CE15-42DD-95B0-1E1DC3E532BC"
         }
       ],
       "selected": true
@@ -674,10 +676,10 @@
       "router": [
         {
           "action": "fallback",
-          "id": "n#http://127.0.0.1:54543#open-n1",
-          "origin": "http://127.0.0.1:54543/",
+          "id": "n#http://127.0.0.1:64269#open-n1",
+          "origin": "http://127.0.0.1:64269/",
           "persistent": false,
-          "tab": "25BBC69E-8C2C-4A7C-9D5E-9ED4D04D5429"
+          "tab": "4FDD73F1-BBE0-496B-B94F-98F206B12854"
         }
       ],
       "selectedAfter": true,
@@ -692,29 +694,29 @@
         {
           "content": 1,
           "request": "activate",
-          "space": "2782E0C3-C01C-4C89-83E9-D69455218232",
-          "tab": "948F028F-5560-4BC0-A528-77D87ADAE636",
-          "time": 1793940186.906763,
+          "space": "65438611-37C5-4F40-AF85-5BFC967066C2",
+          "tab": "A65760DE-CE15-42DD-95B0-1E1DC3E532BC",
+          "time": 1793942737.3014,
           "type": "tab-request"
         }
       ],
       "notification": {
-        "body": "Click opens http://127.0.0.1:54543/notify.html?from=worker",
-        "id": "p#http://127.0.0.1:54543/#1open-n6",
-        "origin": "http://127.0.0.1:54543/",
+        "body": "Click opens http://127.0.0.1:64269/notify.html?from=worker",
+        "id": "p#http://127.0.0.1:64269/#1open-n6",
+        "origin": "http://127.0.0.1:64269/",
         "title": "Open N6 worker"
       },
       "opened": [],
       "pages": [
-        "http://127.0.0.1:54543/notify.html",
-        "http://127.0.0.1:54543/notify.html?space2",
-        "http://127.0.0.1:54543/notify.html?nofocus"
+        "http://127.0.0.1:64269/notify.html",
+        "http://127.0.0.1:64269/notify.html?space2",
+        "http://127.0.0.1:64269/notify.html?nofocus"
       ],
       "reason": "P1: clients.openWindow from a service worker opens no page in Open (followups)",
       "status": "BLOCKED",
       "tabs": [
-        "http://127.0.0.1:54543/notify.html?nofocus",
-        "http://127.0.0.1:54543/notify.html"
+        "http://127.0.0.1:64269/notify.html?nofocus",
+        "http://127.0.0.1:64269/notify.html"
       ]
     },
     "N6_engine_display": {
@@ -736,12 +738,12 @@
         "scrollY": 5843,
         "visible": true
       },
-      "link": "http://127.0.0.1:54420/quote.html#:~:text=A%20unique%20sentence%20far%20down%20the%20page%20for%20the%20quote%20link.",
+      "link": "http://127.0.0.1:64070/quote.html#:~:text=A%20unique%20sentence%20far%20down%20the%20page%20for%20the%20quote%20link.",
       "ok": true,
       "toast": {
         "accessory": "none",
         "accessoryFrame": null,
-        "age": 0.0493620416673366,
+        "age": 0.052233624999644235,
         "coalescingKey": null,
         "exiting": false,
         "frame": [
@@ -770,7 +772,7 @@
         "scrollY": 2793,
         "second": true
       },
-      "link": "http://127.0.0.1:54420/quote.html#:~:text=on%20this%20page.-,The%20same%20sentence%20appears%20twice%20on%20this%20page.,-A%20unique%20sentence",
+      "link": "http://127.0.0.1:64070/quote.html#:~:text=on%20this%20page.-,The%20same%20sentence%20appears%20twice%20on%20this%20page.,-A%20unique%20sentence",
       "ok": true
     },
     "Q2_selection_and_link": {
@@ -787,13 +789,13 @@
       },
       "picked": {
         "hasSelection": true,
-        "link": "http://127.0.0.1:54494/quote.html#:~:text=The%20quick%20brown%20fox%20studies%20the%20lazy%20dog%20before%20every%20jump.",
+        "link": "http://127.0.0.1:64145/quote.html#:~:text=The%20quick%20brown%20fox%20studies%20the%20lazy%20dog%20before%20every%20jump.",
         "text": "The quick brown fox studies the lazy dog before every jump.\n\n"
       }
     },
     "Q3_quote_without_selection": {
       "ok": true,
-      "pasteboard": "http://127.0.0.1:54420/quote.html",
+      "pasteboard": "http://127.0.0.1:64070/quote.html",
       "toast": {
         "accessory": "share",
         "accessoryFrame": [
@@ -802,7 +804,7 @@
           32,
           27
         ],
-        "age": 0.004509166668867692,
+        "age": 0.0031299166730605066,
         "coalescingKey": null,
         "exiting": false,
         "frame": [
@@ -832,7 +834,7 @@
         "shown": true
       },
       "ok": true,
-      "pasteboard": "http://127.0.0.1:54420/quote.html#:~:text=A%20unique%20sentence%20far%20down%20the%20page%20for%20the%20quote%20link.",
+      "pasteboard": "http://127.0.0.1:64070/quote.html#:~:text=A%20unique%20sentence%20far%20down%20the%20page%20for%20the%20quote%20link.",
       "toast": {
         "accessory": "copy quote link",
         "accessoryFrame": [
@@ -841,7 +843,7 @@
           32,
           27
         ],
-        "age": 0.004502124997088686,
+        "age": 0.0011561666688066907,
         "coalescingKey": null,
         "exiting": false,
         "frame": [
@@ -877,7 +879,7 @@
       },
       "hiddenAfterClear": true,
       "ok": true,
-      "pasteboard": "http://127.0.0.1:54420/quote.html#:~:text=A%20unique%20sentence%20far%20down%20the%20page%20for%20the%20quote%20link."
+      "pasteboard": "http://127.0.0.1:64070/quote.html#:~:text=A%20unique%20sentence%20far%20down%20the%20page%20for%20the%20quote%20link."
     },
     "SW1_indicator_hides_after_completion": {
       "ok": true,
@@ -990,7 +992,7 @@
         "changed",
         "cancelled"
       ],
-      "url": "http://127.0.0.1:54494/links-target.html"
+      "url": "http://127.0.0.1:64145/links-target.html"
     },
     "SW3_split_pane_swipe": {
       "ok": true,
@@ -1023,10 +1025,10 @@
         "made": false,
         "pane": true
       },
-      "tabURL": "http://127.0.0.1:54494/links-target.html",
+      "tabURL": "http://127.0.0.1:64145/links-target.html",
       "visible": [
-        "272F097D-01A2-48B7-A337-72CDBF6D3C4F",
-        "3EA9341D-857A-4EE3-A168-4B81B247DD0F"
+        "CE97217C-CDFC-49B0-9655-5146845DD002",
+        "79CC494F-9B5C-43A3-91B8-10A1EB3FFDD8"
       ]
     },
     "SW4_capture_overlay_pauses_swipes": {
@@ -1073,7 +1075,7 @@
     },
     "T-E1_copy_url_clean": {
       "ok": true,
-      "pasteboard": "http://127.0.0.1:54420/en.html?id=1#top",
+      "pasteboard": "http://127.0.0.1:64070/en.html?id=1#top",
       "toast": {
         "accessory": "share",
         "accessoryFrame": [
@@ -1082,7 +1084,7 @@
           32,
           27
         ],
-        "age": 0.003952541665057652,
+        "age": 0.00820029166789027,
         "coalescingKey": null,
         "exiting": false,
         "frame": [
@@ -1120,7 +1122,7 @@
         "pending": false,
         "requested": true,
         "servicesRequested": true,
-        "url": "http://127.0.0.1:54420/en.html?id=1"
+        "url": "http://127.0.0.1:64070/en.html?id=1"
       },
       "toast": {
         "accessory": "share",
@@ -1130,7 +1132,7 @@
           32,
           27
         ],
-        "age": 0.006919166669831611,
+        "age": 0.005564416671404615,
         "coalescingKey": null,
         "exiting": false,
         "frame": [
@@ -1234,7 +1236,7 @@
           4
         ],
         "title": "Translate this page to English?",
-        "window": 121842
+        "window": 130491
       },
       "tipY": 802,
       "window": [
@@ -1447,16 +1449,16 @@
       ]
     },
     "Z2_peek_pinch_then_actual_size": {
-      "heldAfter1s": 1.9999990463256836,
+      "heldAfter1s": 1.9999998807907104,
       "ok": true,
-      "pinched": 1.9999990463256836,
+      "pinched": 1.9999998807907104,
       "reset": true
     },
     "Z2_pinch_then_actual_size": {
       "after": 1,
-      "heldAfter1s": 1.999999761581421,
+      "heldAfter1s": 2.000000476837158,
       "ok": true,
-      "pinched": 1.999999761581421
+      "pinched": 2.000000476837158
     },
     "Z3_smart_zoom": {
       "reason": "no synthetic smart-zoom path; user check U-S1",
@@ -1471,10 +1473,10 @@
       "ok": true,
       "row": {
         "bytes": 4311,
-        "createdAt": 1793940153.7366729,
-        "fileName": "67FFD9B2-004C-47B4-926E-21C8BED00051.png",
+        "createdAt": 1793942704.457965,
+        "fileName": "8A720BEE-4C73-4CED-8643-7A87CB7692B9.png",
         "height": 400,
-        "id": "67FFD9B2-004C-47B4-926E-21C8BED00051",
+        "id": "8A720BEE-4C73-4CED-8643-7A87CB7692B9",
         "kind": "area",
         "sourceHost": "127.0.0.1",
         "width": 600
@@ -1573,10 +1575,10 @@
       ],
       "row": {
         "bytes": 978563,
-        "createdAt": 1793940154.94298,
-        "fileName": "8350899D-6E2B-4EAD-99CA-591316519240.png",
+        "createdAt": 1793942705.476777,
+        "fileName": "2769198E-E42F-47D9-9785-E7B6C398070F.png",
         "height": 24000,
-        "id": "8350899D-6E2B-4EAD-99CA-591316519240",
+        "id": "2769198E-E42F-47D9-9785-E7B6C398070F",
         "kind": "fullPage",
         "sourceHost": "127.0.0.1",
         "width": 2084
@@ -1586,10 +1588,10 @@
       "ok": true,
       "row": {
         "bytes": 162958,
-        "createdAt": 1793940159.001744,
-        "fileName": "CB3BB95D-9BA3-47BD-BCB0-8E6CFCB4C455.png",
+        "createdAt": 1793942710.077812,
+        "fileName": "0F7711D9-7646-4936-81FB-6B858C0475C7.png",
         "height": 3029,
-        "id": "CB3BB95D-9BA3-47BD-BCB0-8E6CFCB4C455",
+        "id": "0F7711D9-7646-4936-81FB-6B858C0475C7",
         "kind": "portrait",
         "sourceHost": "127.0.0.1",
         "width": 2423
@@ -1622,10 +1624,10 @@
       "ok": true,
       "row": {
         "bytes": 1270742,
-        "createdAt": 1793940157.3530989,
-        "fileName": "935356F8-EB61-4B79-AE3E-8EE4FA4F87FF.png",
+        "createdAt": 1793942708.2502131,
+        "fileName": "467AC940-B5D1-4598-84D8-BBF60DEAEAB3.png",
         "height": 32768,
-        "id": "935356F8-EB61-4B79-AE3E-8EE4FA4F87FF",
+        "id": "467AC940-B5D1-4598-84D8-BBF60DEAEAB3",
         "kind": "fullPage",
         "sourceHost": "127.0.0.1",
         "width": 2084
@@ -1656,7 +1658,7 @@
             780
           ],
           "paused": false,
-          "remaining": 7.998726708334289,
+          "remaining": 7.986013916663069,
           "savedLine": true
         },
         "completed": 7,
@@ -1669,11 +1671,11 @@
         "replays": 1,
         "result": {
           "bytes": 1270742,
-          "fileName": "Tall page 11-05 at 9.42PM.png",
+          "fileName": "Tall page 11-05 at 10.25PM.png",
           "height": 32768,
           "host": "127.0.0.1",
           "kind": "fullPage",
-          "saved": "935356F8-EB61-4B79-AE3E-8EE4FA4F87FF",
+          "saved": "467AC940-B5D1-4598-84D8-BBF60DEAEAB3",
           "truncated": true,
           "width": 2084
         }
@@ -1684,10 +1686,10 @@
       "row": [
         {
           "bytes": 1663,
-          "createdAt": 1793940150.51141,
-          "fileName": "86396A31-754A-4A92-B65F-974BE5066652.png",
+          "createdAt": 1793942701.373158,
+          "fileName": "5DA798C4-E8D8-4A01-93A9-0DF72B2661E8.png",
           "height": 200,
-          "id": "86396A31-754A-4A92-B65F-974BE5066652",
+          "id": "5DA798C4-E8D8-4A01-93A9-0DF72B2661E8",
           "kind": "area",
           "sourceHost": "127.0.0.1",
           "width": 300
@@ -1721,7 +1723,7 @@
             780
           ],
           "paused": false,
-          "remaining": 7.995228250001674,
+          "remaining": 7.98654766666732,
           "savedLine": true
         },
         "completed": 1,
@@ -1734,11 +1736,11 @@
         "replays": 0,
         "result": {
           "bytes": 1663,
-          "fileName": "Long page 11-05 at 9.42PM.png",
+          "fileName": "Long page 11-05 at 10.25PM.png",
           "height": 200,
           "host": "127.0.0.1",
           "kind": "area",
-          "saved": "86396A31-754A-4A92-B65F-974BE5066652",
+          "saved": "5DA798C4-E8D8-4A01-93A9-0DF72B2661E8",
           "truncated": false,
           "width": 300
         }
@@ -1889,10 +1891,10 @@
       ],
       "row": {
         "bytes": 270568,
-        "createdAt": 1793940152.663766,
-        "fileName": "4ED8247B-74EC-4209-BFF1-E7DC23D9D33C.png",
+        "createdAt": 1793942703.451462,
+        "fileName": "D1B79407-3D49-4124-9258-2C4CC7BAD8DE.png",
         "height": 12000,
-        "id": "4ED8247B-74EC-4209-BFF1-E7DC23D9D33C",
+        "id": "D1B79407-3D49-4124-9258-2C4CC7BAD8DE",
         "kind": "fullPage",
         "sourceHost": "127.0.0.1",
         "width": 1042
@@ -1924,7 +1926,7 @@
             780
           ],
           "paused": false,
-          "remaining": 7.988955624998198,
+          "remaining": 7.991663416665688,
           "savedLine": true
         },
         "completed": 3,
@@ -1937,11 +1939,11 @@
         "replays": 0,
         "result": {
           "bytes": 270568,
-          "fileName": "Long page 11-05 at 9.42PM.png",
+          "fileName": "Long page 11-05 at 10.25PM.png",
           "height": 12000,
           "host": "127.0.0.1",
           "kind": "fullPage",
-          "saved": "4ED8247B-74EC-4209-BFF1-E7DC23D9D33C",
+          "saved": "D1B79407-3D49-4124-9258-2C4CC7BAD8DE",
           "truncated": false,
           "width": 1042
         }
@@ -1951,10 +1953,10 @@
       "ok": true,
       "row": {
         "bytes": 51314,
-        "createdAt": 1793940152.299171,
-        "fileName": "F58344D8-BCE2-4F97-9035-995F5A47B790.png",
+        "createdAt": 1793942703.0978842,
+        "fileName": "FC859D0B-AA75-46C7-9B13-60E454F62F69.png",
         "height": 1515,
-        "id": "F58344D8-BCE2-4F97-9035-995F5A47B790",
+        "id": "FC859D0B-AA75-46C7-9B13-60E454F62F69",
         "kind": "portrait",
         "sourceHost": "127.0.0.1",
         "width": 1212
@@ -1995,11 +1997,11 @@
         "replays": 0,
         "result": {
           "bytes": 1663,
-          "fileName": "Long page 11-05 at 9.42PM.png",
+          "fileName": "Long page 11-05 at 10.25PM.png",
           "height": 200,
           "host": "127.0.0.1",
           "kind": "area",
-          "saved": "86396A31-754A-4A92-B65F-974BE5066652",
+          "saved": "5DA798C4-E8D8-4A01-93A9-0DF72B2661E8",
           "truncated": false,
           "width": 300
         }
@@ -2009,10 +2011,10 @@
       "ok": true,
       "row": {
         "bytes": 1224,
-        "createdAt": 1793940153.174541,
-        "fileName": "BA4210B5-E5F2-4453-9CF4-683102DF08E5.png",
+        "createdAt": 1793942703.924584,
+        "fileName": "A24C4855-E28B-4737-8F02-FAD78D3E97A0.png",
         "height": 160,
-        "id": "BA4210B5-E5F2-4453-9CF4-683102DF08E5",
+        "id": "A24C4855-E28B-4737-8F02-FAD78D3E97A0",
         "kind": "area",
         "sourceHost": "127.0.0.1",
         "width": 240
@@ -2051,13 +2053,13 @@
         "canGoBack": false,
         "canGoForward": false,
         "crashed": false,
-        "createdAt": 1793940153.233073,
+        "createdAt": 1793942703.977551,
         "favicon": false,
         "faviconReportsCompleted": 0,
         "faviconReportsRejected": 0,
         "hasWebContent": true,
-        "id": "E50E7054-8DC1-479A-8248-DC3E88E8717D",
-        "lastActiveAt": 1793940153.26061,
+        "id": "5AE9CCDF-0C9D-4AEF-AD6C-2F1CA03DBCB8",
+        "lastActiveAt": 1793942703.992475,
         "loaded": true,
         "loading": false,
         "page": {
@@ -2066,15 +2068,15 @@
           "browserIndex": 0,
           "browserPinned": false,
           "canGoBack": false,
-          "chromeTabId": 964248785,
-          "chromeWindowId": 964248783,
+          "chromeTabId": 751261594,
+          "chromeWindowId": 751261592,
           "context": "Default",
           "crash": 0,
           "extension": "",
           "favicon": false,
           "fullscreen": false,
           "hidden": false,
-          "hostTab": "E50E7054-8DC1-479A-8248-DC3E88E8717D",
+          "hostTab": "5AE9CCDF-0C9D-4AEF-AD6C-2F1CA03DBCB8",
           "identifier": 2,
           "kind": "tab",
           "live": true,
@@ -2089,21 +2091,21 @@
           "popup": false,
           "style": "chrome",
           "title": "Link target",
-          "url": "http://127.0.0.1:54306/links-target.html",
+          "url": "http://127.0.0.1:63940/links-target.html",
           "zoom": 0
         },
         "pinnedURL": "",
-        "profile": "7914AAF5-8234-4BF6-96DB-710DF16B1142",
+        "profile": "04E933C6-054D-4DD9-A0F1-5CAFBD91F3E4",
         "progress": 1,
         "rowFaviconHash": "",
         "rowFaviconSource": "placeholder",
         "section": "today",
         "selected": true,
         "sleepPhase": "live",
-        "space": "9BD7CA74-99D8-4706-B209-2AC2B5ED012F",
+        "space": "691AF58C-8565-4D94-BD71-B318D2B708D8",
         "title": "Link target",
         "unread": false,
-        "url": "http://127.0.0.1:54306/links-target.html",
+        "url": "http://127.0.0.1:63940/links-target.html",
         "visible": true
       },
       "replays": 1
@@ -2136,7 +2138,7 @@
         "frame": "{{555, 409}, {370, 182}}",
         "key": true,
         "level": 0,
-        "number": 121593,
+        "number": 130443,
         "parent": 0,
         "sheet": true,
         "title": "Save",
@@ -2145,11 +2147,11 @@
     },
     "capture_card_lifetime": {
       "ok": true,
-      "paused": 7.744861250001122,
-      "resumed": 7.7439235000056215,
+      "paused": 7.765728333331936,
+      "resumed": 7.7652217083305,
       "scheduled": [
         8,
-        7.995228250001674
+        7.98654766666732
       ]
     },
     "capture_context_menu": {
@@ -2217,7 +2219,7 @@
     "capture_shortcut_hint": {
       "hintShows": 1,
       "ok": true,
-      "stored": 1793940151.961182
+      "stored": 1793942702.757674
     },
     "capture_shortcut_hint_once": {
       "hintShows": 1,
@@ -2232,8 +2234,8 @@
   "source": {
     "clean": true,
     "diffSHA256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
-    "head": "6eb7dcdf874c3a4dfa8092937d2aeb3b01b07b94"
+    "head": "a7e73498c3e68336217d8db40fbebe6ce6b89773"
   },
-  "started": "2026-11-05 21:42:15",
+  "started": "2026-11-05 22:24:48",
   "style": "chrome"
 }

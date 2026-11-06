@@ -6,18 +6,19 @@
         "forced": false,
         "ok": true,
         "owned_pids": [
-          61165,
-          61240,
-          61241,
-          61244,
-          61245,
-          61250,
-          61253,
-          61391,
-          61396,
-          61652,
-          62024,
-          62192
+          49274,
+          49281,
+          49282,
+          49285,
+          49286,
+          49291,
+          49292,
+          49294,
+          49336,
+          49340,
+          49427,
+          49655,
+          49667
         ],
         "remaining_processes": [],
         "reply": true,
@@ -36,15 +37,15 @@
         {
           "content": 1,
           "key": "cancel",
-          "tab": "5ECBC466-B202-4B26-B103-BD4D3344F073",
-          "time": 1793940867.980822,
+          "tab": "13BCE166-FB95-4AAC-9E6E-F962567A459D",
+          "time": 1793943115.024651,
           "type": "contextMenuDecision"
         },
         {
           "content": 1,
           "key": "cancel",
-          "tab": "5ECBC466-B202-4B26-B103-BD4D3344F073",
-          "time": 1793940867.985281,
+          "tab": "13BCE166-FB95-4AAC-9E6E-F962567A459D",
+          "time": 1793943115.032403,
           "type": "contextMenuDecision"
         }
       ],
@@ -143,7 +144,7 @@
             980
           ],
           "paused": false,
-          "remaining": 7.554562625002291,
+          "remaining": 7.553471958337468,
           "savedLine": true
         },
         "completed": 1,
@@ -156,11 +157,11 @@
         "replays": 0,
         "result": {
           "bytes": 40478,
-          "fileName": "Context menu fixture 11-05 at 9.54PM.png",
+          "fileName": "Context menu fixture 11-05 at 10.31PM.png",
           "height": 980,
           "host": "127.0.0.1",
           "kind": "fullPage",
-          "saved": "0246B676-D5B6-48D4-AB04-0A5FCDF54F40",
+          "saved": "C5191903-473D-4696-BAAE-799EB176C644",
           "truncated": false,
           "width": 1122
         }
@@ -174,8 +175,8 @@
           "refused": {
             "content": 1,
             "reason": "Menu exceeds 128 nodes, 8 levels or a 1024-byte title.",
-            "tab": "5ECBC466-B202-4B26-B103-BD4D3344F073",
-            "time": 1793940872.555634,
+            "tab": "13BCE166-FB95-4AAC-9E6E-F962567A459D",
+            "time": 1793943119.49444,
             "type": "contextMenuRefused"
           }
         },
@@ -225,8 +226,8 @@
           "refused": {
             "content": 1,
             "reason": "Menu exceeds 128 nodes, 8 levels or a 1024-byte title.",
-            "tab": "5ECBC466-B202-4B26-B103-BD4D3344F073",
-            "time": 1793940872.1735349,
+            "tab": "13BCE166-FB95-4AAC-9E6E-F962567A459D",
+            "time": 1793943119.124968,
             "type": "contextMenuRefused"
           }
         },
@@ -247,13 +248,13 @@
         "canGoBack": false,
         "canGoForward": false,
         "crashed": false,
-        "createdAt": 1793940867.389532,
+        "createdAt": 1793943114.473887,
         "favicon": false,
         "faviconReportsCompleted": 0,
         "faviconReportsRejected": 0,
         "hasWebContent": true,
-        "id": "945BA295-E9FE-4CF1-8C97-4B45D43BE6CA",
-        "lastActiveAt": 1793940867.408288,
+        "id": "383302CA-D033-4918-94A3-3B8566931D70",
+        "lastActiveAt": 1793943114.489932,
         "loaded": true,
         "loading": false,
         "page": {
@@ -262,15 +263,15 @@
           "browserIndex": 0,
           "browserPinned": false,
           "canGoBack": false,
-          "chromeTabId": 1239483683,
-          "chromeWindowId": 1239483665,
+          "chromeTabId": 1586912266,
+          "chromeWindowId": 1586912248,
           "context": "Default",
           "crash": 0,
           "extension": "",
           "favicon": false,
           "fullscreen": false,
           "hidden": false,
-          "hostTab": "945BA295-E9FE-4CF1-8C97-4B45D43BE6CA",
+          "hostTab": "383302CA-D033-4918-94A3-3B8566931D70",
           "identifier": 10,
           "kind": "tab",
           "live": true,
@@ -280,28 +281,28 @@
           "popup": false,
           "style": "chrome",
           "title": "Context target",
-          "url": "http://127.0.0.1:61101/target.html",
+          "url": "http://127.0.0.1:55001/target.html",
           "zoom": 0
         },
         "pinnedURL": "",
-        "profile": "4235AA56-95E3-4A6D-9B1E-AE49985E09B8",
+        "profile": "2326C6CC-662D-41B4-B668-62816EC05E2A",
         "progress": 1,
         "rowFaviconHash": "",
         "rowFaviconSource": "placeholder",
         "section": "today",
         "selected": true,
         "sleepPhase": "live",
-        "space": "D8650520-A127-48EA-8A22-F0EE39F51291",
+        "space": "E92535B8-54A5-445D-918A-080D550AAD88",
         "title": "Context target",
         "unread": false,
-        "url": "http://127.0.0.1:61101/target.html",
+        "url": "http://127.0.0.1:55001/target.html",
         "visible": true
       },
       "shown": [
-        "Look Up “http://127.0.0.1:61101/target.html”",
+        "Look Up “http://127.0.0.1:55001/target.html”",
         "-",
         "Copy",
-        "Go to http://127.0.0.1:61101/target.html",
+        "Go to http://127.0.0.1:55001/target.html",
         "Copy Link to Highlight",
         "Print…",
         "-",
@@ -317,13 +318,13 @@
         "canGoBack": false,
         "canGoForward": false,
         "crashed": false,
-        "createdAt": 1793940878.17233,
+        "createdAt": 1793943125.018506,
         "favicon": false,
         "faviconReportsCompleted": 0,
         "faviconReportsRejected": 0,
         "hasWebContent": true,
-        "id": "929E62D2-F729-4DC6-9290-AB8168B8D875",
-        "lastActiveAt": 1793940878.197525,
+        "id": "010DAB61-4D2F-46A8-AEF2-AD45D5CBD6A2",
+        "lastActiveAt": 1793943125.039978,
         "loaded": true,
         "loading": true,
         "page": {
@@ -332,15 +333,15 @@
           "browserIndex": 1,
           "browserPinned": false,
           "canGoBack": false,
-          "chromeTabId": 1239483704,
-          "chromeWindowId": 1239483665,
+          "chromeTabId": 1586912287,
+          "chromeWindowId": 1586912248,
           "context": "Default",
           "crash": 0,
           "extension": "",
           "favicon": false,
           "fullscreen": false,
           "hidden": false,
-          "hostTab": "929E62D2-F729-4DC6-9290-AB8168B8D875",
+          "hostTab": "010DAB61-4D2F-46A8-AEF2-AD45D5CBD6A2",
           "identifier": 23,
           "kind": "tab",
           "live": true,
@@ -354,14 +355,14 @@
           "zoom": 0
         },
         "pinnedURL": "",
-        "profile": "4235AA56-95E3-4A6D-9B1E-AE49985E09B8",
+        "profile": "2326C6CC-662D-41B4-B668-62816EC05E2A",
         "progress": 0.1,
         "rowFaviconHash": "",
         "rowFaviconSource": "placeholder",
         "section": "today",
         "selected": true,
         "sleepPhase": "live",
-        "space": "D8650520-A127-48EA-8A22-F0EE39F51291",
+        "space": "E92535B8-54A5-445D-918A-080D550AAD88",
         "title": "",
         "unread": false,
         "url": "https://github.com/SergeSerb2/open/issues/new",
@@ -375,13 +376,13 @@
         "canGoBack": false,
         "canGoForward": false,
         "crashed": false,
-        "createdAt": 1793940877.635998,
+        "createdAt": 1793943124.519781,
         "favicon": false,
         "faviconReportsCompleted": 0,
         "faviconReportsRejected": 0,
         "hasWebContent": true,
-        "id": "47077F4D-C5D6-4F2B-945C-AB7194EC6F21",
-        "lastActiveAt": 1793940877.657294,
+        "id": "582EA02E-AF6E-46D1-83C4-F4F782E2364B",
+        "lastActiveAt": 1793943124.536819,
         "loaded": true,
         "loading": true,
         "page": {
@@ -390,15 +391,15 @@
           "browserIndex": 1,
           "browserPinned": false,
           "canGoBack": false,
-          "chromeTabId": 1239483700,
-          "chromeWindowId": 1239483665,
+          "chromeTabId": 1586912283,
+          "chromeWindowId": 1586912248,
           "context": "Default",
           "crash": 0,
           "extension": "",
           "favicon": false,
           "fullscreen": false,
           "hidden": false,
-          "hostTab": "47077F4D-C5D6-4F2B-945C-AB7194EC6F21",
+          "hostTab": "582EA02E-AF6E-46D1-83C4-F4F782E2364B",
           "identifier": 21,
           "kind": "tab",
           "live": true,
@@ -412,14 +413,14 @@
           "zoom": 0
         },
         "pinnedURL": "",
-        "profile": "4235AA56-95E3-4A6D-9B1E-AE49985E09B8",
+        "profile": "2326C6CC-662D-41B4-B668-62816EC05E2A",
         "progress": 0.1,
         "rowFaviconHash": "",
         "rowFaviconSource": "placeholder",
         "section": "today",
         "selected": true,
         "sleepPhase": "live",
-        "space": "D8650520-A127-48EA-8A22-F0EE39F51291",
+        "space": "E92535B8-54A5-445D-918A-080D550AAD88",
         "title": "",
         "unread": false,
         "url": "https://github.com/SergeSerb2/open#readme",
@@ -433,13 +434,13 @@
         "canGoBack": false,
         "canGoForward": false,
         "crashed": false,
-        "createdAt": 1793940877.3649979,
+        "createdAt": 1793943124.274178,
         "favicon": false,
         "faviconReportsCompleted": 0,
         "faviconReportsRejected": 0,
         "hasWebContent": true,
-        "id": "A51A0CC8-5390-4D4C-A1DA-DA81235C536A",
-        "lastActiveAt": 1793940877.386849,
+        "id": "DB2F077B-0293-4B53-A632-AE95BE9130E6",
+        "lastActiveAt": 1793943124.2924352,
         "loaded": true,
         "loading": true,
         "page": {
@@ -448,15 +449,15 @@
           "browserIndex": 1,
           "browserPinned": false,
           "canGoBack": false,
-          "chromeTabId": 1239483698,
-          "chromeWindowId": 1239483665,
+          "chromeTabId": 1586912281,
+          "chromeWindowId": 1586912248,
           "context": "Default",
           "crash": 0,
           "extension": "",
           "favicon": false,
           "fullscreen": false,
           "hidden": false,
-          "hostTab": "A51A0CC8-5390-4D4C-A1DA-DA81235C536A",
+          "hostTab": "DB2F077B-0293-4B53-A632-AE95BE9130E6",
           "identifier": 20,
           "kind": "tab",
           "live": true,
@@ -470,14 +471,14 @@
           "zoom": 0
         },
         "pinnedURL": "",
-        "profile": "4235AA56-95E3-4A6D-9B1E-AE49985E09B8",
+        "profile": "2326C6CC-662D-41B4-B668-62816EC05E2A",
         "progress": 0.1,
         "rowFaviconHash": "",
         "rowFaviconSource": "placeholder",
         "section": "today",
         "selected": true,
         "sleepPhase": "live",
-        "space": "D8650520-A127-48EA-8A22-F0EE39F51291",
+        "space": "E92535B8-54A5-445D-918A-080D550AAD88",
         "title": "",
         "unread": false,
         "url": "https://github.com/SergeSerb2/open/blob/main/docs/commands.md",
@@ -491,13 +492,13 @@
         "canGoBack": false,
         "canGoForward": false,
         "crashed": false,
-        "createdAt": 1793940877.898569,
+        "createdAt": 1793943124.769588,
         "favicon": false,
         "faviconReportsCompleted": 0,
         "faviconReportsRejected": 0,
         "hasWebContent": true,
-        "id": "424A7943-7751-4389-A638-54BBA543C9C4",
-        "lastActiveAt": 1793940877.9221249,
+        "id": "D80A5183-0FDA-4BAA-B0CF-0186D46247B0",
+        "lastActiveAt": 1793943124.787853,
         "loaded": true,
         "loading": true,
         "page": {
@@ -506,15 +507,15 @@
           "browserIndex": 1,
           "browserPinned": false,
           "canGoBack": false,
-          "chromeTabId": 1239483702,
-          "chromeWindowId": 1239483665,
+          "chromeTabId": 1586912285,
+          "chromeWindowId": 1586912248,
           "context": "Default",
           "crash": 0,
           "extension": "",
           "favicon": false,
           "fullscreen": false,
           "hidden": false,
-          "hostTab": "424A7943-7751-4389-A638-54BBA543C9C4",
+          "hostTab": "D80A5183-0FDA-4BAA-B0CF-0186D46247B0",
           "identifier": 22,
           "kind": "tab",
           "live": true,
@@ -528,14 +529,14 @@
           "zoom": 0
         },
         "pinnedURL": "",
-        "profile": "4235AA56-95E3-4A6D-9B1E-AE49985E09B8",
+        "profile": "2326C6CC-662D-41B4-B668-62816EC05E2A",
         "progress": 0.1,
         "rowFaviconHash": "",
         "rowFaviconSource": "placeholder",
         "section": "today",
         "selected": true,
         "sleepPhase": "live",
-        "space": "D8650520-A127-48EA-8A22-F0EE39F51291",
+        "space": "E92535B8-54A5-445D-918A-080D550AAD88",
         "title": "",
         "unread": false,
         "url": "https://github.com/SergeSerb2/open/releases",
@@ -647,67 +648,67 @@
             "-",
             "Inspect"
           ],
-          "tab": "5ECBC466-B202-4B26-B103-BD4D3344F073",
+          "tab": "13BCE166-FB95-4AAC-9E6E-F962567A459D",
           "targets": 11,
-          "time": 1793940856.726466,
+          "time": 1793943103.863546,
           "type": "contextMenu"
         },
         {
           "content": 0,
           "disposition": 2,
-          "tab": "53DF07C1-E05C-4692-AE37-77A2E51C8936",
-          "time": 1793940856.728405,
+          "tab": "D36A70B0-616B-40F0-A620-E886DF1405FE",
+          "time": 1793943103.8661098,
           "type": "open",
-          "url": "http://127.0.0.1:61101/image.svg"
+          "url": "http://127.0.0.1:55001/image.svg"
         },
         {
           "content": 1,
           "key": "engine:50123",
-          "tab": "5ECBC466-B202-4B26-B103-BD4D3344F073",
-          "time": 1793940856.7284331,
+          "tab": "13BCE166-FB95-4AAC-9E6E-F962567A459D",
+          "time": 1793943103.86614,
           "type": "contextMenuDecision"
         },
         {
           "changes": 4105,
           "content": 2,
-          "tab": "53DF07C1-E05C-4692-AE37-77A2E51C8936",
-          "time": 1793940856.737674,
+          "tab": "D36A70B0-616B-40F0-A620-E886DF1405FE",
+          "time": 1793943103.877166,
           "type": "change"
         },
         {
           "changes": 8,
           "content": 2,
-          "tab": "53DF07C1-E05C-4692-AE37-77A2E51C8936",
-          "time": 1793940856.739171,
+          "tab": "D36A70B0-616B-40F0-A620-E886DF1405FE",
+          "time": 1793943103.8785372,
           "type": "change"
         },
         {
           "changes": 16,
           "content": 2,
-          "tab": "53DF07C1-E05C-4692-AE37-77A2E51C8936",
-          "time": 1793940856.739387,
+          "tab": "D36A70B0-616B-40F0-A620-E886DF1405FE",
+          "time": 1793943103.878727,
           "type": "change"
         },
         {
           "content": 2,
           "reload": false,
-          "tab": "53DF07C1-E05C-4692-AE37-77A2E51C8936",
-          "time": 1793940856.7456598,
+          "tab": "D36A70B0-616B-40F0-A620-E886DF1405FE",
+          "time": 1793943103.885967,
           "type": "historyCommit",
-          "url": "http://127.0.0.1:61101/image.svg"
+          "url": "http://127.0.0.1:55001/image.svg"
         },
         {
           "changes": 1,
           "content": 2,
-          "tab": "53DF07C1-E05C-4692-AE37-77A2E51C8936",
-          "time": 1793940856.7457771,
+          "tab": "D36A70B0-616B-40F0-A620-E886DF1405FE",
+          "time": 1793943103.886075,
           "type": "change"
         },
         {
           "changes": 2048,
           "content": 2,
-          "tab": "53DF07C1-E05C-4692-AE37-77A2E51C8936",
-          "time": 1793940856.746049,
+          "tab": "D36A70B0-616B-40F0-A620-E886DF1405FE",
+          "time": 1793943103.8863091,
           "type": "change"
         },
         {
@@ -715,50 +716,50 @@
           "content": 0,
           "ready": true,
           "tab": "",
-          "time": 1793940856.746533,
+          "time": 1793943103.886876,
           "type": "extensionActions"
         },
         {
           "content": 2,
           "status": 200,
-          "tab": "53DF07C1-E05C-4692-AE37-77A2E51C8936",
-          "time": 1793940856.750918,
+          "tab": "D36A70B0-616B-40F0-A620-E886DF1405FE",
+          "time": 1793943103.890655,
           "type": "load",
-          "url": "http://127.0.0.1:61101/image.svg"
+          "url": "http://127.0.0.1:55001/image.svg"
         },
         {
           "changes": 16,
           "content": 2,
-          "tab": "53DF07C1-E05C-4692-AE37-77A2E51C8936",
-          "time": 1793940856.750982,
+          "tab": "D36A70B0-616B-40F0-A620-E886DF1405FE",
+          "time": 1793943103.890773,
           "type": "change"
         },
         {
           "changes": 16,
           "content": 2,
-          "tab": "53DF07C1-E05C-4692-AE37-77A2E51C8936",
-          "time": 1793940856.7510061,
+          "tab": "D36A70B0-616B-40F0-A620-E886DF1405FE",
+          "time": 1793943103.890809,
           "type": "change"
         },
         {
           "changes": 8,
           "content": 2,
-          "tab": "53DF07C1-E05C-4692-AE37-77A2E51C8936",
-          "time": 1793940856.751116,
+          "tab": "D36A70B0-616B-40F0-A620-E886DF1405FE",
+          "time": 1793943103.8909369,
           "type": "change"
         },
         {
           "changes": 2,
           "content": 2,
-          "tab": "53DF07C1-E05C-4692-AE37-77A2E51C8936",
-          "time": 1793940856.751365,
+          "tab": "D36A70B0-616B-40F0-A620-E886DF1405FE",
+          "time": 1793943103.891243,
           "type": "change"
         },
         {
           "changes": 4,
           "content": 2,
-          "tab": "53DF07C1-E05C-4692-AE37-77A2E51C8936",
-          "time": 1793940856.751441,
+          "tab": "D36A70B0-616B-40F0-A620-E886DF1405FE",
+          "time": 1793943103.891333,
           "type": "change"
         }
       ],
@@ -768,13 +769,13 @@
           "canGoBack": false,
           "canGoForward": false,
           "crashed": false,
-          "createdAt": 1793940856.726876,
+          "createdAt": 1793943103.8638659,
           "favicon": false,
           "faviconReportsCompleted": 0,
           "faviconReportsRejected": 0,
           "hasWebContent": true,
-          "id": "53DF07C1-E05C-4692-AE37-77A2E51C8936",
-          "lastActiveAt": 1793940856.726876,
+          "id": "D36A70B0-616B-40F0-A620-E886DF1405FE",
+          "lastActiveAt": 1793943103.8638659,
           "loaded": true,
           "loading": false,
           "page": {
@@ -783,15 +784,15 @@
             "browserIndex": 0,
             "browserPinned": false,
             "canGoBack": false,
-            "chromeTabId": 1239483667,
-            "chromeWindowId": 1239483665,
+            "chromeTabId": 1586912250,
+            "chromeWindowId": 1586912248,
             "context": "Default",
             "crash": 0,
             "extension": "",
             "favicon": false,
             "fullscreen": false,
             "hidden": true,
-            "hostTab": "53DF07C1-E05C-4692-AE37-77A2E51C8936",
+            "hostTab": "D36A70B0-616B-40F0-A620-E886DF1405FE",
             "identifier": 2,
             "kind": "tab",
             "live": true,
@@ -800,22 +801,22 @@
             "pageBackground": [],
             "popup": false,
             "style": "chrome",
-            "title": "127.0.0.1:61101/image.svg",
-            "url": "http://127.0.0.1:61101/image.svg",
+            "title": "127.0.0.1:55001/image.svg",
+            "url": "http://127.0.0.1:55001/image.svg",
             "zoom": 0
           },
           "pinnedURL": "",
-          "profile": "4235AA56-95E3-4A6D-9B1E-AE49985E09B8",
+          "profile": "2326C6CC-662D-41B4-B668-62816EC05E2A",
           "progress": 1,
           "rowFaviconHash": "",
           "rowFaviconSource": "placeholder",
           "section": "today",
           "selected": false,
           "sleepPhase": "live",
-          "space": "D8650520-A127-48EA-8A22-F0EE39F51291",
-          "title": "127.0.0.1:61101/image.svg",
+          "space": "E92535B8-54A5-445D-918A-080D550AAD88",
+          "title": "127.0.0.1:55001/image.svg",
           "unread": true,
-          "url": "http://127.0.0.1:61101/image.svg",
+          "url": "http://127.0.0.1:55001/image.svg",
           "visible": false
         }
       ],
@@ -924,7 +925,7 @@
             "",
             "Speech"
           ],
-          "link": "http://127.0.0.1:61101/target.html",
+          "link": "http://127.0.0.1:55001/target.html",
           "open": [],
           "openItems": [
             "Open Link in New Tab",
@@ -1061,16 +1062,16 @@
             "-",
             "Speech"
           ],
-          "tab": "5ECBC466-B202-4B26-B103-BD4D3344F073",
+          "tab": "13BCE166-FB95-4AAC-9E6E-F962567A459D",
           "targets": 23,
-          "time": 1793940856.5048919,
+          "time": 1793943103.661905,
           "type": "contextMenu"
         },
         {
           "content": 1,
           "key": "link-new-tab",
-          "tab": "5ECBC466-B202-4B26-B103-BD4D3344F073",
-          "time": 1793940856.5052629,
+          "tab": "13BCE166-FB95-4AAC-9E6E-F962567A459D",
+          "time": 1793943103.6621609,
           "type": "contextMenuDecision"
         }
       ],
@@ -1080,27 +1081,27 @@
           "canGoBack": false,
           "canGoForward": false,
           "crashed": false,
-          "createdAt": 1793940856.505274,
+          "createdAt": 1793943103.662167,
           "favicon": false,
           "faviconReportsCompleted": 0,
           "faviconReportsRejected": 0,
           "hasWebContent": false,
-          "id": "CCB8B0F4-3F9A-47A5-B8AC-6F675D46EDF5",
-          "lastActiveAt": 1793940856.505274,
+          "id": "D74D6D8E-FA06-404A-B979-57A4AA0161E4",
+          "lastActiveAt": 1793943103.662167,
           "loaded": false,
           "loading": false,
           "pinnedURL": "",
-          "profile": "4235AA56-95E3-4A6D-9B1E-AE49985E09B8",
+          "profile": "2326C6CC-662D-41B4-B668-62816EC05E2A",
           "progress": 0,
           "rowFaviconHash": "",
           "rowFaviconSource": "placeholder",
           "section": "today",
           "selected": false,
           "sleepPhase": "placeholder",
-          "space": "D8650520-A127-48EA-8A22-F0EE39F51291",
+          "space": "E92535B8-54A5-445D-918A-080D550AAD88",
           "title": "",
           "unread": true,
-          "url": "http://127.0.0.1:61101/target.html",
+          "url": "http://127.0.0.1:55001/target.html",
           "visible": false
         }
       ],
@@ -1128,8 +1129,8 @@
     "cm_little_open_entry": {
       "ok": true,
       "request": {
-        "profileHint": "4235AA56-95E3-4A6D-9B1E-AE49985E09B8",
-        "url": "http://127.0.0.1:61101/target.html"
+        "profileHint": "2326C6CC-662D-41B4-B668-62816EC05E2A",
+        "url": "http://127.0.0.1:55001/target.html"
       },
       "shown": [
         "Open Link in New Tab",
@@ -1150,12 +1151,12 @@
         "-",
         "Speech"
       ],
-      "stubWindow": 123777
+      "stubWindow": 131554
     },
     "cm_new_window": {
       "new": {
-        "id": "9D8C1EC6-DBFC-4697-9DD0-2072326A74D7",
-        "number": 123774
+        "id": "9C917E2E-D0A9-489F-9ED7-95D014FE4F92",
+        "number": 131551
       },
       "ok": true,
       "shown": null,
@@ -1164,13 +1165,13 @@
         "canGoBack": false,
         "canGoForward": false,
         "crashed": false,
-        "createdAt": 1793940858.132053,
+        "createdAt": 1793943105.248487,
         "favicon": false,
         "faviconReportsCompleted": 0,
         "faviconReportsRejected": 0,
         "hasWebContent": true,
-        "id": "D10F0B8F-00F1-45BB-8139-DA97BFD0327F",
-        "lastActiveAt": 1793940858.191298,
+        "id": "FFB72817-5ACB-40BB-9C4E-3CA157A53D8D",
+        "lastActiveAt": 1793943105.297179,
         "loaded": true,
         "loading": false,
         "page": {
@@ -1179,15 +1180,15 @@
           "browserIndex": 0,
           "browserPinned": false,
           "canGoBack": false,
-          "chromeTabId": 1239483676,
-          "chromeWindowId": 1239483675,
+          "chromeTabId": 1586912259,
+          "chromeWindowId": 1586912258,
           "context": "Default",
           "crash": 0,
           "extension": "",
           "favicon": false,
           "fullscreen": false,
           "hidden": false,
-          "hostTab": "D10F0B8F-00F1-45BB-8139-DA97BFD0327F",
+          "hostTab": "FFB72817-5ACB-40BB-9C4E-3CA157A53D8D",
           "identifier": 6,
           "kind": "tab",
           "live": true,
@@ -1202,21 +1203,21 @@
           "popup": false,
           "style": "chrome",
           "title": "Context target",
-          "url": "http://127.0.0.1:61101/target.html",
+          "url": "http://127.0.0.1:55001/target.html",
           "zoom": 0
         },
         "pinnedURL": "",
-        "profile": "4235AA56-95E3-4A6D-9B1E-AE49985E09B8",
+        "profile": "2326C6CC-662D-41B4-B668-62816EC05E2A",
         "progress": 1,
         "rowFaviconHash": "",
         "rowFaviconSource": "placeholder",
         "section": "today",
         "selected": true,
         "sleepPhase": "live",
-        "space": "D8650520-A127-48EA-8A22-F0EE39F51291",
+        "space": "E92535B8-54A5-445D-918A-080D550AAD88",
         "title": "Context target",
         "unread": false,
-        "url": "http://127.0.0.1:61101/target.html",
+        "url": "http://127.0.0.1:55001/target.html",
         "visible": true
       }
     },
@@ -1225,8 +1226,8 @@
         {
           "content": 1,
           "key": "cancel",
-          "tab": "5ECBC466-B202-4B26-B103-BD4D3344F073",
-          "time": 1793940856.316834,
+          "tab": "13BCE166-FB95-4AAC-9E6E-F962567A459D",
+          "time": 1793943103.482383,
           "type": "contextMenuDecision"
         }
       ],
@@ -1327,7 +1328,7 @@
         },
         {
           "checked": false,
-          "enabled": true,
+          "enabled": false,
           "key": "engine:50157",
           "submenu": "",
           "title": "Paste and Match Style"
@@ -1418,8 +1419,8 @@
         {
           "content": 1,
           "key": "cancel",
-          "tab": "5ECBC466-B202-4B26-B103-BD4D3344F073",
-          "time": 1793940855.553657,
+          "tab": "13BCE166-FB95-4AAC-9E6E-F962567A459D",
+          "time": 1793943102.7421188,
           "type": "contextMenuDecision"
         }
       ],
@@ -1492,8 +1493,8 @@
         {
           "content": 1,
           "key": "cancel",
-          "tab": "5ECBC466-B202-4B26-B103-BD4D3344F073",
-          "time": 1793940855.188933,
+          "tab": "13BCE166-FB95-4AAC-9E6E-F962567A459D",
+          "time": 1793943102.356542,
           "type": "contextMenuDecision"
         }
       ],
@@ -1658,8 +1659,8 @@
         {
           "content": 1,
           "key": "cancel",
-          "tab": "5ECBC466-B202-4B26-B103-BD4D3344F073",
-          "time": 1793940855.747158,
+          "tab": "13BCE166-FB95-4AAC-9E6E-F962567A459D",
+          "time": 1793943102.926969,
           "type": "contextMenuDecision"
         }
       ],
@@ -1805,8 +1806,8 @@
         {
           "content": 1,
           "key": "cancel",
-          "tab": "5ECBC466-B202-4B26-B103-BD4D3344F073",
-          "time": 1793940855.378837,
+          "tab": "13BCE166-FB95-4AAC-9E6E-F962567A459D",
+          "time": 1793943102.55404,
           "type": "contextMenuDecision"
         }
       ],
@@ -1971,8 +1972,8 @@
         {
           "content": 1,
           "key": "cancel",
-          "tab": "5ECBC466-B202-4B26-B103-BD4D3344F073",
-          "time": 1793940854.988821,
+          "tab": "13BCE166-FB95-4AAC-9E6E-F962567A459D",
+          "time": 1793943102.175092,
           "type": "contextMenuDecision"
         }
       ],
@@ -2097,8 +2098,8 @@
         {
           "content": 1,
           "key": "cancel",
-          "tab": "5ECBC466-B202-4B26-B103-BD4D3344F073",
-          "time": 1793940855.936298,
+          "tab": "13BCE166-FB95-4AAC-9E6E-F962567A459D",
+          "time": 1793943103.112339,
           "type": "contextMenuDecision"
         }
       ],
@@ -2203,8 +2204,8 @@
         {
           "content": 1,
           "key": "cancel",
-          "tab": "5ECBC466-B202-4B26-B103-BD4D3344F073",
-          "time": 1793940856.127931,
+          "tab": "13BCE166-FB95-4AAC-9E6E-F962567A459D",
+          "time": 1793943103.295722,
           "type": "contextMenuDecision"
         }
       ],
@@ -2321,14 +2322,14 @@
         "shown": true,
         "stack": [
           {
-            "boundTab": "A9B20132-410C-4DFD-8074-110C334AC37E",
+            "boundTab": "EB699D5F-4924-458F-93C6-D45051D2F437",
             "content": 7,
-            "originalHostTab": "A9B20132-410C-4DFD-8074-110C334AC37E",
-            "source": "5ECBC466-B202-4B26-B103-BD4D3344F073"
+            "originalHostTab": "EB699D5F-4924-458F-93C6-D45051D2F437",
+            "source": "13BCE166-FB95-4AAC-9E6E-F962567A459D"
           }
         ]
       },
-      "url": "http://127.0.0.1:61101/target.html"
+      "url": "http://127.0.0.1:55001/target.html"
     },
     "cm_peek_email": {
       "disabledAgain": true,
@@ -2341,15 +2342,15 @@
         "shown": true,
         "stack": [
           {
-            "boundTab": "1ECFBE19-1AF5-4B6B-91C9-367717DA1939",
+            "boundTab": "DBD6A78F-DF91-46CC-BB5C-1F5C7CE784AB",
             "content": 13,
-            "originalHostTab": "1ECFBE19-1AF5-4B6B-91C9-367717DA1939",
-            "source": "5ECBC466-B202-4B26-B103-BD4D3344F073"
+            "originalHostTab": "DBD6A78F-DF91-46CC-BB5C-1F5C7CE784AB",
+            "source": "13BCE166-FB95-4AAC-9E6E-F962567A459D"
           }
         ]
       },
       "urls": [
-        "https://mail.google.com:61104/mail/u/0/"
+        "https://mail.google.com:55002/mail/u/0/"
       ]
     },
     "cm_peek_email_hosts": {
@@ -2373,7 +2374,7 @@
     },
     "cm_peek_email_scope": {
       "focusedSpaceURL": [
-        "https://mail.proton.me:61104/u/0/inbox"
+        "https://mail.proton.me:55002/u/0/inbox"
       ],
       "ok": true,
       "otherProfileIgnored": true,
@@ -2386,13 +2387,13 @@
           "canGoBack": false,
           "canGoForward": false,
           "crashed": false,
-          "createdAt": 1793940875.123513,
+          "createdAt": 1793943122.06827,
           "favicon": false,
           "faviconReportsCompleted": 0,
           "faviconReportsRejected": 0,
           "hasWebContent": true,
-          "id": "085EA1CC-1A49-48C9-A826-3B98D82D02B6",
-          "lastActiveAt": 1793940875.308429,
+          "id": "2EBD6FF1-5322-4B1F-A6AC-BE4D11841D31",
+          "lastActiveAt": 1793943122.2181978,
           "loaded": true,
           "loading": false,
           "page": {
@@ -2401,15 +2402,15 @@
             "browserIndex": 0,
             "browserPinned": true,
             "canGoBack": false,
-            "chromeTabId": 1239483692,
-            "chromeWindowId": 1239483665,
+            "chromeTabId": 1586912275,
+            "chromeWindowId": 1586912248,
             "context": "Default",
             "crash": 0,
             "extension": "",
             "favicon": false,
             "fullscreen": false,
             "hidden": false,
-            "hostTab": "085EA1CC-1A49-48C9-A826-3B98D82D02B6",
+            "hostTab": "2EBD6FF1-5322-4B1F-A6AC-BE4D11841D31",
             "identifier": 16,
             "kind": "tab",
             "live": true,
@@ -2424,21 +2425,21 @@
             "popup": false,
             "style": "chrome",
             "title": "Local webmail fixture",
-            "url": "https://mail.google.com:61104/mail/u/0/",
+            "url": "https://mail.google.com:55002/mail/u/0/",
             "zoom": 0
           },
-          "pinnedURL": "https://mail.google.com:61104/mail/u/0/",
-          "profile": "4235AA56-95E3-4A6D-9B1E-AE49985E09B8",
+          "pinnedURL": "https://mail.google.com:55002/mail/u/0/",
+          "profile": "2326C6CC-662D-41B4-B668-62816EC05E2A",
           "progress": 1,
           "rowFaviconHash": "",
           "rowFaviconSource": "placeholder",
           "section": "pinned",
           "selected": true,
           "sleepPhase": "live",
-          "space": "11822478-1CF3-4574-9441-CFC554120ECE",
+          "space": "1DAD3CAA-B360-4068-909B-7947BEE6FE33",
           "title": "Local webmail fixture",
           "unread": false,
-          "url": "https://mail.google.com:61104/mail/u/0/",
+          "url": "https://mail.google.com:55002/mail/u/0/",
           "visible": true
         },
         {
@@ -2446,13 +2447,13 @@
           "canGoBack": false,
           "canGoForward": false,
           "crashed": false,
-          "createdAt": 1793940875.105338,
+          "createdAt": 1793943122.044619,
           "favicon": false,
           "faviconReportsCompleted": 0,
           "faviconReportsRejected": 0,
           "hasWebContent": true,
-          "id": "FFB9A3F9-3249-4760-8AA9-957D2BF1DEAC",
-          "lastActiveAt": 1793940875.308435,
+          "id": "2FFC217B-090B-4127-BCD5-4B1BD240470C",
+          "lastActiveAt": 1793943122.2182078,
           "loaded": true,
           "loading": false,
           "page": {
@@ -2461,15 +2462,15 @@
             "browserIndex": 1,
             "browserPinned": true,
             "canGoBack": false,
-            "chromeTabId": 1239483691,
-            "chromeWindowId": 1239483665,
+            "chromeTabId": 1586912274,
+            "chromeWindowId": 1586912248,
             "context": "Default",
             "crash": 0,
             "extension": "",
             "favicon": false,
             "fullscreen": false,
             "hidden": false,
-            "hostTab": "FFB9A3F9-3249-4760-8AA9-957D2BF1DEAC",
+            "hostTab": "2FFC217B-090B-4127-BCD5-4B1BD240470C",
             "identifier": 15,
             "kind": "tab",
             "live": true,
@@ -2484,44 +2485,44 @@
             "popup": false,
             "style": "chrome",
             "title": "Context target",
-            "url": "http://127.0.0.1:61101/target.html",
+            "url": "http://127.0.0.1:55001/target.html",
             "zoom": 0
           },
-          "pinnedURL": "http://127.0.0.1:61101/target.html",
-          "profile": "4235AA56-95E3-4A6D-9B1E-AE49985E09B8",
+          "pinnedURL": "http://127.0.0.1:55001/target.html",
+          "profile": "2326C6CC-662D-41B4-B668-62816EC05E2A",
           "progress": 1,
           "rowFaviconHash": "",
           "rowFaviconSource": "placeholder",
           "section": "pinned",
           "selected": false,
           "sleepPhase": "live",
-          "space": "11822478-1CF3-4574-9441-CFC554120ECE",
+          "space": "1DAD3CAA-B360-4068-909B-7947BEE6FE33",
           "title": "Context target",
           "unread": false,
-          "url": "http://127.0.0.1:61101/target.html",
+          "url": "http://127.0.0.1:55001/target.html",
           "visible": true
         }
       ],
       "before": [],
-      "emptySpace": "0A33A53C-3F3C-412F-A3D6-E81C83926DD3",
+      "emptySpace": "99E495C3-3BC4-486E-8755-3E609378B91D",
       "enabled": true,
-      "mailSpace": "11822478-1CF3-4574-9441-CFC554120ECE",
+      "mailSpace": "1DAD3CAA-B360-4068-909B-7947BEE6FE33",
       "ok": true,
       "peek": {
         "expanding": false,
         "shown": true,
         "stack": [
           {
-            "boundTab": "8EA70559-DDD0-46BF-B8C8-985858B3B603",
+            "boundTab": "C08D8DEB-FB93-43F7-A0B0-C9D66B0486FA",
             "content": 17,
-            "originalHostTab": "8EA70559-DDD0-46BF-B8C8-985858B3B603",
-            "source": "085EA1CC-1A49-48C9-A826-3B98D82D02B6"
+            "originalHostTab": "C08D8DEB-FB93-43F7-A0B0-C9D66B0486FA",
+            "source": "2EBD6FF1-5322-4B1F-A6AC-BE4D11841D31"
           }
         ]
       },
-      "split": "75E7A1BA-4FCA-49C9-91CF-EB9709A33858",
+      "split": "135A5B54-0885-44E6-8DA9-42F259FE9DCC",
       "urls": [
-        "https://mail.google.com:61104/mail/u/0/"
+        "https://mail.google.com:55002/mail/u/0/"
       ]
     },
     "cm_search": {
@@ -2531,13 +2532,13 @@
         "canGoBack": false,
         "canGoForward": false,
         "crashed": false,
-        "createdAt": 1793940867.092385,
+        "createdAt": 1793943114.17324,
         "favicon": false,
         "faviconReportsCompleted": 0,
         "faviconReportsRejected": 0,
         "hasWebContent": true,
-        "id": "BD19523E-E588-4EC2-B241-ACD79453D2F2",
-        "lastActiveAt": 1793940867.11359,
+        "id": "174CACDF-4C92-468F-9EEA-208A5D406304",
+        "lastActiveAt": 1793943114.188343,
         "loaded": true,
         "loading": false,
         "page": {
@@ -2546,15 +2547,15 @@
           "browserIndex": 0,
           "browserPinned": false,
           "canGoBack": false,
-          "chromeTabId": 1239483680,
-          "chromeWindowId": 1239483665,
+          "chromeTabId": 1586912263,
+          "chromeWindowId": 1586912248,
           "context": "Default",
           "crash": 0,
           "extension": "",
           "favicon": false,
           "fullscreen": false,
           "hidden": false,
-          "hostTab": "BD19523E-E588-4EC2-B241-ACD79453D2F2",
+          "hostTab": "174CACDF-4C92-468F-9EEA-208A5D406304",
           "identifier": 8,
           "kind": "tab",
           "live": true,
@@ -2564,21 +2565,21 @@
           "popup": false,
           "style": "chrome",
           "title": "Context target",
-          "url": "http://127.0.0.1:61101/target.html?q=bonjour%20menu%20contextuel",
+          "url": "http://127.0.0.1:55001/target.html?q=bonjour%20menu%20contextuel",
           "zoom": 0
         },
         "pinnedURL": "",
-        "profile": "4235AA56-95E3-4A6D-9B1E-AE49985E09B8",
+        "profile": "2326C6CC-662D-41B4-B668-62816EC05E2A",
         "progress": 1,
         "rowFaviconHash": "",
         "rowFaviconSource": "placeholder",
         "section": "today",
         "selected": true,
         "sleepPhase": "live",
-        "space": "D8650520-A127-48EA-8A22-F0EE39F51291",
+        "space": "E92535B8-54A5-445D-918A-080D550AAD88",
         "title": "Context target",
         "unread": false,
-        "url": "http://127.0.0.1:61101/target.html?q=bonjour%20menu%20contextuel",
+        "url": "http://127.0.0.1:55001/target.html?q=bonjour%20menu%20contextuel",
         "visible": true
       },
       "shown": [
@@ -2601,13 +2602,13 @@
         "canGoBack": false,
         "canGoForward": false,
         "crashed": false,
-        "createdAt": 1793940867.672713,
+        "createdAt": 1793943114.734658,
         "favicon": false,
         "faviconReportsCompleted": 0,
         "faviconReportsRejected": 0,
         "hasWebContent": true,
-        "id": "D9305CDA-0F60-4A6E-9F9A-120A41A70486",
-        "lastActiveAt": 1793940867.693863,
+        "id": "1BBCCF2B-DC0A-4642-8F59-981DDD1C6914",
+        "lastActiveAt": 1793943114.758465,
         "loaded": true,
         "loading": false,
         "page": {
@@ -2616,15 +2617,15 @@
           "browserIndex": 0,
           "browserPinned": false,
           "canGoBack": false,
-          "chromeTabId": 1239483685,
-          "chromeWindowId": 1239483665,
+          "chromeTabId": 1586912268,
+          "chromeWindowId": 1586912248,
           "context": "Default",
           "crash": 0,
           "extension": "",
           "favicon": false,
           "fullscreen": false,
           "hidden": false,
-          "hostTab": "D9305CDA-0F60-4A6E-9F9A-120A41A70486",
+          "hostTab": "1BBCCF2B-DC0A-4642-8F59-981DDD1C6914",
           "identifier": 11,
           "kind": "tab",
           "live": true,
@@ -2634,21 +2635,21 @@
           "popup": false,
           "style": "chrome",
           "title": "Context target",
-          "url": "http://127.0.0.1:61101/target.html?q=xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx",
+          "url": "http://127.0.0.1:55001/target.html?q=xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx",
           "zoom": 0
         },
         "pinnedURL": "",
-        "profile": "4235AA56-95E3-4A6D-9B1E-AE49985E09B8",
+        "profile": "2326C6CC-662D-41B4-B668-62816EC05E2A",
         "progress": 1,
         "rowFaviconHash": "",
         "rowFaviconSource": "placeholder",
         "section": "today",
         "selected": true,
         "sleepPhase": "live",
-        "space": "D8650520-A127-48EA-8A22-F0EE39F51291",
+        "space": "E92535B8-54A5-445D-918A-080D550AAD88",
         "title": "Context target",
         "unread": false,
-        "url": "http://127.0.0.1:61101/target.html?q=xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx",
+        "url": "http://127.0.0.1:55001/target.html?q=xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx",
         "visible": true
       },
       "shown": [
@@ -2813,16 +2814,16 @@
             "-",
             "Speech"
           ],
-          "tab": "5ECBC466-B202-4B26-B103-BD4D3344F073",
+          "tab": "13BCE166-FB95-4AAC-9E6E-F962567A459D",
           "targets": 19,
-          "time": 1793940870.558189,
+          "time": 1793943117.57092,
           "type": "contextMenu"
         },
         {
           "content": 1,
           "reason": "Menu selection exceeds 16384 UTF-8 bytes.",
-          "tab": "5ECBC466-B202-4B26-B103-BD4D3344F073",
-          "time": 1793940870.5682201,
+          "tab": "13BCE166-FB95-4AAC-9E6E-F962567A459D",
+          "time": 1793943117.583712,
           "type": "contextMenuRefused"
         }
       ],
@@ -2836,13 +2837,13 @@
           "canGoBack": false,
           "canGoForward": false,
           "crashed": false,
-          "createdAt": 1793940851.908365,
+          "createdAt": 1793943101.277238,
           "favicon": false,
           "faviconReportsCompleted": 0,
           "faviconReportsRejected": 0,
           "hasWebContent": true,
-          "id": "5ECBC466-B202-4B26-B103-BD4D3344F073",
-          "lastActiveAt": 1793940856.9690971,
+          "id": "13BCE166-FB95-4AAC-9E6E-F962567A459D",
+          "lastActiveAt": 1793943104.1108398,
           "loaded": true,
           "loading": false,
           "page": {
@@ -2851,15 +2852,15 @@
             "browserIndex": 0,
             "browserPinned": false,
             "canGoBack": false,
-            "chromeTabId": 1239483666,
-            "chromeWindowId": 1239483665,
+            "chromeTabId": 1586912249,
+            "chromeWindowId": 1586912248,
             "context": "Default",
             "crash": 0,
             "extension": "",
             "favicon": false,
             "fullscreen": false,
             "hidden": false,
-            "hostTab": "5ECBC466-B202-4B26-B103-BD4D3344F073",
+            "hostTab": "13BCE166-FB95-4AAC-9E6E-F962567A459D",
             "identifier": 1,
             "kind": "tab",
             "live": true,
@@ -2874,21 +2875,21 @@
             "popup": false,
             "style": "chrome",
             "title": "Context menu fixture",
-            "url": "http://127.0.0.1:61101/index.html",
+            "url": "http://127.0.0.1:55001/index.html",
             "zoom": 0
           },
           "pinnedURL": "",
-          "profile": "4235AA56-95E3-4A6D-9B1E-AE49985E09B8",
+          "profile": "2326C6CC-662D-41B4-B668-62816EC05E2A",
           "progress": 1,
           "rowFaviconHash": "",
           "rowFaviconSource": "placeholder",
           "section": "today",
           "selected": false,
           "sleepPhase": "live",
-          "space": "D8650520-A127-48EA-8A22-F0EE39F51291",
+          "space": "E92535B8-54A5-445D-918A-080D550AAD88",
           "title": "Context menu fixture",
           "unread": false,
-          "url": "http://127.0.0.1:61101/index.html",
+          "url": "http://127.0.0.1:55001/index.html",
           "visible": true
         },
         {
@@ -2896,13 +2897,13 @@
           "canGoBack": false,
           "canGoForward": false,
           "crashed": false,
-          "createdAt": 1793940856.966704,
+          "createdAt": 1793943104.108813,
           "favicon": false,
           "faviconReportsCompleted": 0,
           "faviconReportsRejected": 0,
           "hasWebContent": true,
-          "id": "A5CDFD32-B6B2-40D6-A961-1A24BAD6C167",
-          "lastActiveAt": 1793940856.999772,
+          "id": "FDB6FC64-BB90-49BE-8168-567B8ECDC9E8",
+          "lastActiveAt": 1793943104.138455,
           "loaded": true,
           "loading": true,
           "page": {
@@ -2911,15 +2912,15 @@
             "browserIndex": 1,
             "browserPinned": false,
             "canGoBack": false,
-            "chromeTabId": 1239483669,
-            "chromeWindowId": 1239483665,
+            "chromeTabId": 1586912252,
+            "chromeWindowId": 1586912248,
             "context": "Default",
             "crash": 0,
             "extension": "",
             "favicon": false,
             "fullscreen": false,
             "hidden": false,
-            "hostTab": "A5CDFD32-B6B2-40D6-A961-1A24BAD6C167",
+            "hostTab": "FDB6FC64-BB90-49BE-8168-567B8ECDC9E8",
             "identifier": 3,
             "kind": "tab",
             "live": true,
@@ -2933,17 +2934,17 @@
             "zoom": 0
           },
           "pinnedURL": "",
-          "profile": "4235AA56-95E3-4A6D-9B1E-AE49985E09B8",
+          "profile": "2326C6CC-662D-41B4-B668-62816EC05E2A",
           "progress": 0.1,
           "rowFaviconHash": "",
           "rowFaviconSource": "placeholder",
           "section": "today",
           "selected": true,
           "sleepPhase": "live",
-          "space": "D8650520-A127-48EA-8A22-F0EE39F51291",
+          "space": "E92535B8-54A5-445D-918A-080D550AAD88",
           "title": "",
           "unread": false,
-          "url": "http://127.0.0.1:61101/target.html",
+          "url": "http://127.0.0.1:55001/target.html",
           "visible": true
         }
       ],
@@ -2967,126 +2968,126 @@
         "Speech"
       ],
       "split": {
-        "focusedPaneID": "A5CDFD32-B6B2-40D6-A961-1A24BAD6C167",
+        "focusedPaneID": "FDB6FC64-BB90-49BE-8168-567B8ECDC9E8",
         "fractions": [],
-        "id": "8F3BB656-8F35-4E88-AACB-2DBDFB74A99C",
+        "id": "EE85D473-0564-42E3-9B78-68E8326AD3AB",
         "orientation": "horizontal",
         "panes": [
           {
-            "createdAt": 1793940851.908365,
-            "id": "5ECBC466-B202-4B26-B103-BD4D3344F073",
+            "createdAt": 1793943101.277238,
+            "id": "13BCE166-FB95-4AAC-9E6E-F962567A459D",
             "isMuted": false,
             "isUnread": false,
-            "lastActiveAt": 1793940856.9690971,
+            "lastActiveAt": 1793943104.1108398,
             "title": "Context menu fixture",
-            "url": "http://127.0.0.1:61101/index.html"
+            "url": "http://127.0.0.1:55001/index.html"
           },
           {
-            "createdAt": 1793940856.966704,
-            "id": "A5CDFD32-B6B2-40D6-A961-1A24BAD6C167",
+            "createdAt": 1793943104.108813,
+            "id": "FDB6FC64-BB90-49BE-8168-567B8ECDC9E8",
             "isMuted": false,
             "isUnread": false,
-            "lastActiveAt": 1793940856.999772,
-            "openerID": "5ECBC466-B202-4B26-B103-BD4D3344F073",
+            "lastActiveAt": 1793943104.138455,
+            "openerID": "13BCE166-FB95-4AAC-9E6E-F962567A459D",
             "title": "",
-            "url": "http://127.0.0.1:61101/target.html"
+            "url": "http://127.0.0.1:55001/target.html"
           }
         ]
       },
       "stages": {
         "fullCapacityDisabled": true,
         "initial": {
-          "focusedPaneID": "A5CDFD32-B6B2-40D6-A961-1A24BAD6C167",
+          "focusedPaneID": "FDB6FC64-BB90-49BE-8168-567B8ECDC9E8",
           "fractions": [],
-          "id": "8F3BB656-8F35-4E88-AACB-2DBDFB74A99C",
+          "id": "EE85D473-0564-42E3-9B78-68E8326AD3AB",
           "orientation": "horizontal",
           "panes": [
             {
-              "createdAt": 1793940851.908365,
-              "id": "5ECBC466-B202-4B26-B103-BD4D3344F073",
+              "createdAt": 1793943101.277238,
+              "id": "13BCE166-FB95-4AAC-9E6E-F962567A459D",
               "isMuted": false,
               "isUnread": false,
-              "lastActiveAt": 1793940856.9690971,
+              "lastActiveAt": 1793943104.1108398,
               "title": "Context menu fixture",
-              "url": "http://127.0.0.1:61101/index.html"
+              "url": "http://127.0.0.1:55001/index.html"
             },
             {
-              "createdAt": 1793940856.966704,
-              "id": "A5CDFD32-B6B2-40D6-A961-1A24BAD6C167",
+              "createdAt": 1793943104.108813,
+              "id": "FDB6FC64-BB90-49BE-8168-567B8ECDC9E8",
               "isMuted": false,
               "isUnread": false,
-              "lastActiveAt": 1793940856.999772,
-              "openerID": "5ECBC466-B202-4B26-B103-BD4D3344F073",
+              "lastActiveAt": 1793943104.138455,
+              "openerID": "13BCE166-FB95-4AAC-9E6E-F962567A459D",
               "title": "",
-              "url": "http://127.0.0.1:61101/target.html"
+              "url": "http://127.0.0.1:55001/target.html"
             }
           ]
         },
         "third": {
-          "focusedPaneID": "666E7D9C-C7EB-4453-A36C-A86108033350",
+          "focusedPaneID": "3827314D-42F3-4E1D-B272-850662911342",
           "fractions": [
             0.3333333333333333,
             0.3333333333333333,
             0.3333333333333333
           ],
-          "id": "8F3BB656-8F35-4E88-AACB-2DBDFB74A99C",
+          "id": "EE85D473-0564-42E3-9B78-68E8326AD3AB",
           "orientation": "horizontal",
           "panes": [
             {
-              "createdAt": 1793940851.908365,
-              "id": "5ECBC466-B202-4B26-B103-BD4D3344F073",
+              "createdAt": 1793943101.277238,
+              "id": "13BCE166-FB95-4AAC-9E6E-F962567A459D",
               "isMuted": false,
               "isUnread": false,
-              "lastActiveAt": 1793940857.275473,
+              "lastActiveAt": 1793943104.4010038,
               "title": "Context menu fixture",
-              "url": "http://127.0.0.1:61101/index.html"
+              "url": "http://127.0.0.1:55001/index.html"
             },
             {
-              "createdAt": 1793940857.276115,
-              "id": "666E7D9C-C7EB-4453-A36C-A86108033350",
+              "createdAt": 1793943104.401548,
+              "id": "3827314D-42F3-4E1D-B272-850662911342",
               "isMuted": false,
               "isUnread": true,
-              "lastActiveAt": 1793940857.2847362,
-              "openerID": "5ECBC466-B202-4B26-B103-BD4D3344F073",
-              "title": "Context target",
-              "url": "http://127.0.0.1:61101/target.html"
+              "lastActiveAt": 1793943104.4193292,
+              "openerID": "13BCE166-FB95-4AAC-9E6E-F962567A459D",
+              "title": "",
+              "url": "http://127.0.0.1:55001/target.html"
             },
             {
-              "createdAt": 1793940856.966704,
-              "id": "A5CDFD32-B6B2-40D6-A961-1A24BAD6C167",
+              "createdAt": 1793943104.108813,
+              "id": "FDB6FC64-BB90-49BE-8168-567B8ECDC9E8",
               "isMuted": false,
               "isUnread": false,
-              "lastActiveAt": 1793940857.275473,
-              "openerID": "5ECBC466-B202-4B26-B103-BD4D3344F073",
+              "lastActiveAt": 1793943104.4010038,
+              "openerID": "13BCE166-FB95-4AAC-9E6E-F962567A459D",
               "title": "Context target",
-              "url": "http://127.0.0.1:61101/target.html"
+              "url": "http://127.0.0.1:55001/target.html"
             }
           ]
         },
         "vertical": {
-          "focusedPaneID": "A5CDFD32-B6B2-40D6-A961-1A24BAD6C167",
+          "focusedPaneID": "FDB6FC64-BB90-49BE-8168-567B8ECDC9E8",
           "fractions": [],
-          "id": "8F3BB656-8F35-4E88-AACB-2DBDFB74A99C",
+          "id": "EE85D473-0564-42E3-9B78-68E8326AD3AB",
           "orientation": "vertical",
           "panes": [
             {
-              "createdAt": 1793940851.908365,
-              "id": "5ECBC466-B202-4B26-B103-BD4D3344F073",
+              "createdAt": 1793943101.277238,
+              "id": "13BCE166-FB95-4AAC-9E6E-F962567A459D",
               "isMuted": false,
               "isUnread": false,
-              "lastActiveAt": 1793940856.9690971,
+              "lastActiveAt": 1793943104.1108398,
               "title": "Context menu fixture",
-              "url": "http://127.0.0.1:61101/index.html"
+              "url": "http://127.0.0.1:55001/index.html"
             },
             {
-              "createdAt": 1793940856.966704,
-              "id": "A5CDFD32-B6B2-40D6-A961-1A24BAD6C167",
+              "createdAt": 1793943104.108813,
+              "id": "FDB6FC64-BB90-49BE-8168-567B8ECDC9E8",
               "isMuted": false,
               "isUnread": false,
-              "lastActiveAt": 1793940856.999772,
-              "openerID": "5ECBC466-B202-4B26-B103-BD4D3344F073",
-              "title": "Context target",
-              "url": "http://127.0.0.1:61101/target.html"
+              "lastActiveAt": 1793943104.138455,
+              "openerID": "13BCE166-FB95-4AAC-9E6E-F962567A459D",
+              "title": "",
+              "url": "http://127.0.0.1:55001/target.html"
             }
           ]
         }
@@ -3182,15 +3183,15 @@
     }
   },
   "engine": {
-    "distributionCodeSHA256": "1bc8b6044b77d53d46d76745a39b029e9709dbeb00fd31d08870ed0a38dd576a",
-    "distributionSHA256": "f34400e71412d87a0b268fcd5658a8563cca34f600c8dd17b534a63e76aa7939",
-    "distributionUUID": "4C4C4465-5555-3144-A1AB-FCF4EA280540",
-    "embeddedCodeSHA256": "1bc8b6044b77d53d46d76745a39b029e9709dbeb00fd31d08870ed0a38dd576a",
-    "embeddedSHA256": "7965fb82d3670f2824f8657069fcb816cb10fa70c82dd4260a575eb46c395359",
-    "embeddedUUID": "4C4C4465-5555-3144-A1AB-FCF4EA280540",
-    "requiredSHA256": "",
+    "distributionCodeSHA256": "7979934c0d84f4d9fedb3859826d0c7c65919834fc904ec2aee00a0b4e4dd8f2",
+    "distributionSHA256": "7b49090502568f8189aa0e94f7cf23344beec5bed537136eff5f7fce573ad35a",
+    "distributionUUID": "4C4C446F-5555-3144-A1AB-0A55260E4EBE",
+    "embeddedCodeSHA256": "7979934c0d84f4d9fedb3859826d0c7c65919834fc904ec2aee00a0b4e4dd8f2",
+    "embeddedSHA256": "ec8cdb8039674748940441956a1ae529423ae15c05ac972a806a9afb12a657c0",
+    "embeddedUUID": "4C4C446F-5555-3144-A1AB-0A55260E4EBE",
+    "requiredSHA256": "7b49090502568f8189aa0e94f7cf23344beec5bed537136eff5f7fce573ad35a",
     "source": "fork",
-    "stamp": "fork $HOME/Developer/open-engine-s8-main/chromium_git/chromium/src/cef/binary_distrib/cef_binary_156.0.14+g4fa4ab5+chromium-156.0.8078.48_macosarm64_minimal 1793841834"
+    "stamp": "fork $HOME/Developer/open-engine-s8-main/chromium_git/chromium/src/cef/binary_distrib/cef_binary_156.0.14+g4fa4ab5+chromium-156.0.8078.48_macosarm64_minimal 1793940850"
   },
   "interrupted_attempts": [],
   "pathRedactions": [
@@ -3201,8 +3202,8 @@
   "source": {
     "clean": true,
     "diffSHA256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
-    "head": "6eb7dcdf874c3a4dfa8092937d2aeb3b01b07b94"
+    "head": "a7e73498c3e68336217d8db40fbebe6ce6b89773"
   },
-  "started": "2026-11-05 21:54:09",
+  "started": "2026-11-05 22:31:39",
   "style": "chrome"
 }

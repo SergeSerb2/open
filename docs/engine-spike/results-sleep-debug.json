@@ -6,30 +6,30 @@
         "forced": false,
         "ok": true,
         "owned_pids": [
-          48261,
-          48265,
-          48266,
-          48267,
-          48268,
-          48271,
-          48272,
-          48606,
-          48644,
-          48649,
-          48651,
-          48652,
-          48654,
-          48657,
-          48659,
-          48660,
-          48718,
-          48719,
-          48888,
-          49068,
-          49104,
-          49110,
-          49111,
-          49116
+          37569,
+          37613,
+          37614,
+          37615,
+          37617,
+          37618,
+          37620,
+          38137,
+          38285,
+          38302,
+          38318,
+          38329,
+          38341,
+          38352,
+          38369,
+          38378,
+          38608,
+          38614,
+          38970,
+          39075,
+          39080,
+          39101,
+          39103,
+          39106
         ],
         "remaining_processes": [],
         "reply": true,
@@ -43,15 +43,15 @@
         "forced": false,
         "ok": true,
         "owned_pids": [
-          49132,
-          49138,
-          49139,
-          49140,
-          49141,
-          49143,
-          49144,
-          49145,
-          49179
+          39116,
+          39157,
+          39158,
+          39159,
+          39160,
+          39165,
+          39166,
+          39167,
+          39189
         ],
         "remaining_processes": [],
         "reply": true,
@@ -65,15 +65,15 @@
         "forced": false,
         "ok": true,
         "owned_pids": [
-          49198,
-          49203,
-          49204,
-          49205,
-          49206,
-          49209,
-          49210,
-          49211,
-          49215
+          39211,
+          39218,
+          39219,
+          39221,
+          39222,
+          39224,
+          39225,
+          39226,
+          39232
         ],
         "remaining_processes": [],
         "reply": true,
@@ -87,15 +87,15 @@
   },
   "config": "Debug",
   "engine": {
-    "distributionCodeSHA256": "1bc8b6044b77d53d46d76745a39b029e9709dbeb00fd31d08870ed0a38dd576a",
-    "distributionSHA256": "f34400e71412d87a0b268fcd5658a8563cca34f600c8dd17b534a63e76aa7939",
-    "distributionUUID": "4C4C4465-5555-3144-A1AB-FCF4EA280540",
-    "embeddedCodeSHA256": "1bc8b6044b77d53d46d76745a39b029e9709dbeb00fd31d08870ed0a38dd576a",
-    "embeddedSHA256": "7965fb82d3670f2824f8657069fcb816cb10fa70c82dd4260a575eb46c395359",
-    "embeddedUUID": "4C4C4465-5555-3144-A1AB-FCF4EA280540",
-    "requiredSHA256": "",
+    "distributionCodeSHA256": "7979934c0d84f4d9fedb3859826d0c7c65919834fc904ec2aee00a0b4e4dd8f2",
+    "distributionSHA256": "7b49090502568f8189aa0e94f7cf23344beec5bed537136eff5f7fce573ad35a",
+    "distributionUUID": "4C4C446F-5555-3144-A1AB-0A55260E4EBE",
+    "embeddedCodeSHA256": "7979934c0d84f4d9fedb3859826d0c7c65919834fc904ec2aee00a0b4e4dd8f2",
+    "embeddedSHA256": "ec8cdb8039674748940441956a1ae529423ae15c05ac972a806a9afb12a657c0",
+    "embeddedUUID": "4C4C446F-5555-3144-A1AB-0A55260E4EBE",
+    "requiredSHA256": "7b49090502568f8189aa0e94f7cf23344beec5bed537136eff5f7fce573ad35a",
     "source": "fork",
-    "stamp": "fork $HOME/Developer/open-engine-s8-main/chromium_git/chromium/src/cef/binary_distrib/cef_binary_156.0.14+g4fa4ab5+chromium-156.0.8078.48_macosarm64_minimal 1793841834"
+    "stamp": "fork $HOME/Developer/open-engine-s8-main/chromium_git/chromium/src/cef/binary_distrib/cef_binary_156.0.14+g4fa4ab5+chromium-156.0.8078.48_macosarm64_minimal 1793940850"
   },
   "interrupted_attempts": [],
   "pathRedactions": [
@@ -121,18 +121,18 @@
     "sleep_f1_renderers": {
       "nineSleeping": {
         "count": 3,
-        "rssKB": 425744
+        "rssKB": 420992
       },
       "note": "discard in place: the page objects stay, their renderers go",
       "ok": true,
       "oneTab": {
         "count": 3,
-        "rssKB": 422208
+        "rssKB": 416352
       },
       "refused": [],
       "tenTabsLoaded": {
         "count": 11,
-        "rssKB": 1766528
+        "rssKB": 1760464
       }
     },
     "sleep_f2_history_scroll_form": {
@@ -168,8 +168,8 @@
       "historyLength": 1,
       "landed": true,
       "log": [
-        "sleep-restore-fallback CF5C54E0",
-        "sleep-wake placeholder CF5C54E0 ms=84.95199680328369"
+        "sleep-restore-fallback 17D0D1A2",
+        "sleep-wake placeholder 17D0D1A2 ms=71.2430477142334"
       ],
       "ok": true,
       "victimStored": true
@@ -177,7 +177,7 @@
     "sleep_f4_history_restore": {
       "back": true,
       "log": [
-        "sleep-wake placeholder A9D844E2 ms=145.46000957489014"
+        "sleep-wake placeholder C979B8A9 ms=123.15309047698975"
       ],
       "ok": true,
       "restored": {
@@ -188,24 +188,24 @@
     "sleep_f4_quit_capture": {
       "hostedAfterRelaunch": 1,
       "load": [
-        16.3544921875,
-        12.4482421875,
-        11.47021484375
+        16.1884765625,
+        16.1328125,
+        17.0498046875
       ],
       "ok": true,
       "phasesBeforeQuit": {
-        "0898A5D2-0770-4E26-BA5C-E0279C40FFAB": "live",
-        "A96EA327-4ACE-42E4-9A3E-488BF30EA384": "placeholder",
-        "A9D844E2-047C-4398-8299-AAADD6557F9A": "sleeping",
-        "CF5C54E0-4EF8-478B-9DDA-2066ECBFBAC2": "frozen"
+        "124EFA2A-A6D5-430D-A831-52A7941A4057": "live",
+        "17D0D1A2-9A09-4D1A-A280-CAD25FBA52E7": "frozen",
+        "93FF8706-62DD-4048-88D5-A453C8EAB105": "placeholder",
+        "C979B8A9-2821-4EBF-A0BB-FA0930E73649": "sleeping"
       },
       "quitCaptureMs": [
-        2.1429061889648438
+        2.6760101318359375
       ],
-      "quitSeconds": 0.56,
+      "quitSeconds": 0.6,
       "renderersAfterRelaunch": {
         "count": 3,
-        "rssKB": 421200
+        "rssKB": 419952
       },
       "storedRows": 24
     },
@@ -213,49 +213,49 @@
       "cache": "warm (same fixture page each wake)",
       "destroyed": {
         "n": 10,
-        "p50ms": 129.7450065612793,
-        "p95ms": 159.10100936889648
+        "p50ms": 113.5629415512085,
+        "p95ms": 122.56097793579102
       },
       "load": [
-        14.2958984375,
-        11.93505859375,
-        11.28125
+        15.2919921875,
+        15.966796875,
+        17.00390625
       ],
       "n": 20,
       "note": "in-place discard reload; budget 700 ms first paint on a cached page",
       "ok": true,
-      "p50ms": 43.18702220916748,
-      "p95ms": 52.51598358154297
+      "p50ms": 20.810961723327637,
+      "p95ms": 35.156965255737305
     },
     "sleep_f5_unfreeze": {
       "frozenBeforeWake": 20,
       "load": [
-        14.2958984375,
-        11.93505859375,
-        11.28125
+        15.2919921875,
+        15.966796875,
+        17.00390625
       ],
       "measure": "select call → the page's visibilitychange to visible (includes the automation round trip)",
       "n": 20,
       "ok": true,
-      "p50ms": 3.566162109375,
-      "p95ms": 4.39501953125
+      "p50ms": 2.4189453125,
+      "p95ms": 3.826904296875
     },
     "sleep_frozen_deadline": {
       "discardDelay": 300,
       "hiddenElapsed": 30,
       "load": [
-        11.3896484375,
-        11.22265625,
-        11.017578125
+        15.9140625,
+        16.166015625,
+        17.10546875
       ],
-      "nextPassDelay": 269.93696308135986,
+      "nextPassDelay": 269.97354996204376,
       "ok": true
     },
     "sleep_idle_parked": {
       "load": [
-        11.3896484375,
-        11.22265625,
-        11.017578125
+        15.9140625,
+        16.166015625,
+        17.10546875
       ],
       "ok": true,
       "passesAfter": 1,
@@ -308,21 +308,21 @@
       "ok": true
     },
     "sleep_started_after_paint": {
-      "firstContentfulPaint": 966,
+      "firstContentfulPaint": 871,
       "ok": true,
-      "sidebarDrawn": 535,
-      "sleepStarted": 1084
+      "sidebarDrawn": 486,
+      "sleepStarted": 984
     },
     "sleep_tabs_discard": {
       "background": {
         "ok": {
-          "id": 1069444356
+          "id": 1058073791
         }
       },
       "backgroundSlept": true,
       "ok": true,
       "visible": {
-        "error": "Cannot discard tab with id: 1069444293."
+        "error": "Cannot discard tab with id: 1058073728."
       }
     },
     "sleep_timed_ladder": {
@@ -335,16 +335,16 @@
         "discarded": true,
         "downloading": false,
         "freezeGate": null,
-        "hiddenAt": 1793940385.9311972,
+        "hiddenAt": 1793942869.6186008,
         "hosts": 1,
-        "id": "15F40482-1B3C-49CD-988D-0A1DFC547BD9",
+        "id": "230427A4-06CC-494E-B89F-D587A703AD5F",
         "lastFormInteractionAt": null,
         "notificationsAllowed": false,
         "phase": "sleeping",
         "retryAfter": null,
-        "sleptAt": 1793940686.014641,
+        "sleptAt": 1793943169.6546621,
         "title": "Open freeze ticker",
-        "url": "http://t1.localhost:56379/ticker.html"
+        "url": "http://t1.localhost:50667/ticker.html"
       },
       "ok": true,
       "phases": [
@@ -361,18 +361,18 @@
         "loaded": true,
         "sleepPhase": "live",
         "title": "Open freeze ticker",
-        "url": "http://t1.localhost:56379/ticker.html"
+        "url": "http://t1.localhost:50667/ticker.html"
       },
       "wakeLog": [
-        "sleep-wake discard 15F40482 ms=53.91800403594971"
+        "sleep-wake discard 230427A4 ms=37.81390190124512"
       ]
     }
   },
   "source": {
     "clean": true,
     "diffSHA256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
-    "head": "6eb7dcdf874c3a4dfa8092937d2aeb3b01b07b94"
+    "head": "a7e73498c3e68336217d8db40fbebe6ce6b89773"
   },
-  "started": "2026-11-05 21:46:04",
+  "started": "2026-11-05 22:27:28",
   "style": "chrome"
 }

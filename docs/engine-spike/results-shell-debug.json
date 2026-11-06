@@ -6,16 +6,16 @@
         "forced": false,
         "ok": true,
         "owned_pids": [
-          40406,
-          40416,
-          40417,
-          40418,
-          40419,
-          40422,
-          40423,
-          40432,
-          40453,
-          40470
+          24231,
+          24242,
+          24243,
+          24244,
+          24245,
+          24247,
+          24248,
+          24310,
+          24325,
+          24391
         ],
         "remaining_processes": [],
         "reply": true,
@@ -29,13 +29,13 @@
         "forced": false,
         "ok": true,
         "owned_pids": [
-          40503,
-          40506,
-          40507,
-          40508,
-          40509,
-          40510,
-          40511
+          24497,
+          24514,
+          24515,
+          24516,
+          24517,
+          24522,
+          24523
         ],
         "remaining_processes": [],
         "reply": true,
@@ -49,13 +49,13 @@
         "forced": false,
         "ok": true,
         "owned_pids": [
-          40544,
-          40584,
-          40585,
-          40586,
-          40587,
-          40605,
-          40607
+          24575,
+          24591,
+          24592,
+          24593,
+          24594,
+          24596,
+          24597
         ],
         "remaining_processes": [],
         "reply": true,
@@ -69,15 +69,15 @@
   },
   "config": "Debug",
   "engine": {
-    "distributionCodeSHA256": "1bc8b6044b77d53d46d76745a39b029e9709dbeb00fd31d08870ed0a38dd576a",
-    "distributionSHA256": "f34400e71412d87a0b268fcd5658a8563cca34f600c8dd17b534a63e76aa7939",
-    "distributionUUID": "4C4C4465-5555-3144-A1AB-FCF4EA280540",
-    "embeddedCodeSHA256": "1bc8b6044b77d53d46d76745a39b029e9709dbeb00fd31d08870ed0a38dd576a",
-    "embeddedSHA256": "7965fb82d3670f2824f8657069fcb816cb10fa70c82dd4260a575eb46c395359",
-    "embeddedUUID": "4C4C4465-5555-3144-A1AB-FCF4EA280540",
-    "requiredSHA256": "",
+    "distributionCodeSHA256": "7979934c0d84f4d9fedb3859826d0c7c65919834fc904ec2aee00a0b4e4dd8f2",
+    "distributionSHA256": "7b49090502568f8189aa0e94f7cf23344beec5bed537136eff5f7fce573ad35a",
+    "distributionUUID": "4C4C446F-5555-3144-A1AB-0A55260E4EBE",
+    "embeddedCodeSHA256": "7979934c0d84f4d9fedb3859826d0c7c65919834fc904ec2aee00a0b4e4dd8f2",
+    "embeddedSHA256": "ec8cdb8039674748940441956a1ae529423ae15c05ac972a806a9afb12a657c0",
+    "embeddedUUID": "4C4C446F-5555-3144-A1AB-0A55260E4EBE",
+    "requiredSHA256": "7b49090502568f8189aa0e94f7cf23344beec5bed537136eff5f7fce573ad35a",
     "source": "fork",
-    "stamp": "fork $HOME/Developer/open-engine-s8-main/chromium_git/chromium/src/cef/binary_distrib/cef_binary_156.0.14+g4fa4ab5+chromium-156.0.8078.48_macosarm64_minimal 1793841834"
+    "stamp": "fork $HOME/Developer/open-engine-s8-main/chromium_git/chromium/src/cef/binary_distrib/cef_binary_156.0.14+g4fa4ab5+chromium-156.0.8078.48_macosarm64_minimal 1793940850"
   },
   "interrupted_attempts": [],
   "pathRedactions": [
@@ -91,9 +91,9 @@
       "spaces": [
         {
           "focused": true,
-          "id": "204D7307-52A8-44A1-9970-9642BE2384CD",
+          "id": "957F9762-0BB0-47DC-A30F-5A195B484329",
           "pinned": 0,
-          "profile": "D87D8A32-B9D7-4099-A68C-EB457813946D",
+          "profile": "489CA6F0-2B07-4AB2-864D-F06ADC847560",
           "title": "Space",
           "today": 0
         }
@@ -131,13 +131,13 @@
         "forced": false,
         "ok": true,
         "owned_pids": [
-          40544,
-          40584,
-          40585,
-          40586,
-          40587,
-          40605,
-          40607
+          24575,
+          24591,
+          24592,
+          24593,
+          24594,
+          24596,
+          24597
         ],
         "remaining_processes": [],
         "reply": true,
@@ -158,7 +158,7 @@
           "lateAsyncEngineCalls": 0,
           "phase": "prepare",
           "selectionTasks": 0,
-          "uptime": 44547.70030404167
+          "uptime": 46943.53500891667
         },
         {
           "asyncEngineCalls": {},
@@ -170,7 +170,7 @@
           "lateAsyncEngineCalls": 0,
           "phase": "hostsClosed",
           "selectionTasks": 0,
-          "uptime": 44547.70520979167
+          "uptime": 46943.539560958336
         },
         {
           "asyncEngineCalls": {},
@@ -182,7 +182,7 @@
           "lateAsyncEngineCalls": 0,
           "phase": "engineShutdownBegin",
           "selectionTasks": 0,
-          "uptime": 44547.715486333334
+          "uptime": 46943.55291141667
         },
         {
           "asyncEngineCalls": {},
@@ -194,7 +194,7 @@
           "lateAsyncEngineCalls": 0,
           "phase": "engineShutdownEnd",
           "selectionTasks": 0,
-          "uptime": 44547.74566666667
+          "uptime": 46943.62096458334
         }
       ]
     },
@@ -225,15 +225,15 @@
       "strip": [
         [
           0,
-          "697180FD-470D-4B13-99D7-B728779C8591"
+          "8A0C4134-0327-4A11-860C-9345B112656D"
         ],
         [
           1,
-          "272F0E8E-D235-4782-A942-C3DBF988DCD4"
+          "B5364ABF-0042-4AD3-A146-3ED7FD3B277D"
         ],
         [
           2,
-          "F4EEFC64-E3C3-4CE5-829D-4F7404821777"
+          "06D243A6-407D-4E90-A4D9-1692C082FA8D"
         ]
       ]
     },
@@ -246,8 +246,8 @@
   "source": {
     "clean": true,
     "diffSHA256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
-    "head": "6eb7dcdf874c3a4dfa8092937d2aeb3b01b07b94"
+    "head": "a7e73498c3e68336217d8db40fbebe6ce6b89773"
   },
-  "started": "2026-11-05 21:38:39",
+  "started": "2026-11-05 22:18:35",
   "style": "chrome"
 }

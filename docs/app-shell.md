@@ -1333,19 +1333,24 @@ and microphone still uses the shared list-joining code when the engine asks.
 `dialogPolicy` accept/dismiss/hold and `permissionPolicy` grant/deny remain.
 `dialog-button` and `permission-prompt` answers click the real AppKit buttons.
 The [S11 runtime report](engine-spike/s11-dialogs-permissions.md) records
-completed App source `6eb7dcdf`, including main #178/#182/#181/#179/#176,
-with recorded engine `f34400e7`: 316 PASS across eight complete suites
+completed App source `a7e73498`, including main `e4d40ce0`
+(#177/#178/#182/#181/#179/#176), with required engine `7b490905`:
+316 PASS across eight complete suites
 (page-chrome 41, features 19, shell 7, window 76, page 85, sleep 20,
-downloads 34, context-menus 34). Full verification passes 23/23, including
-all restored-display gates. All four native Window pixel/color rows pass on
-the 1x `AW2726DM`. Features passes after one excluded foreground-interrupted
-attempt; every other suite completes without interruption. All teardown
+downloads 34, context-menus 34). All restored-display verifier gates and all
+four native Window pixel/color rows pass on the 1x `AW2726DM`.
+Downloads passes after one excluded foreground-interrupted attempt;
+every other suite completes without interruption. All teardown
 checks pass. The runner-lifetime proof passes all four cases, including
-normal beforeunload cancellation followed by prompt-free owner shutdown.
+normal beforeunload cancellation followed by prompt-free owner shutdown
+in 0.202 s.
 
-These are pre-#177 engine-update results. Main `e4d40ce0` now records engine
-`7b490905`; its merge, build and final reruns remain pending. The PR stays a
-draft. Window's two launch-budget rows are SKIP in Debug; its card-material
+The full verifier records 22 PASS and one command-bar timing FAIL under load
+(CPU p95 9.98 ms at load1 26.4). One targeted quiet rerun passes strictly
+(CPU p95 4.29 ms, inline delta +0.179 ms, load1 5.5), clearing all 23 gates
+without a timing exception. The report keeps both results and their load
+readings. The PR stays a draft for lead review.
+Window's two launch-budget rows are SKIP in Debug; its card-material
 row is DEFERRED. Page's four BLOCKED / one DEFERRED and Sleep's one BLOCKED
 row retain their explicit status. Sleep N5 passes through the permission
 hook. The report retains source-qualified earlier checkpoints, all timing
