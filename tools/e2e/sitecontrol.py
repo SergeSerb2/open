@@ -41,7 +41,8 @@ def run(factory, results, tmp, env):
             try: app.call('site-controls', **args); return False
             except RuntimeError: return True
         try:
-            for key, value in {'open.advanced.playSoundEffects': False, 'open.advanced.showToolbar': False}.items():
+            for key, value in {'open.advanced.playSoundEffects': False, 'open.advanced.showToolbar': False,
+                               'open.settings.lastPane': 'general'}.items():
                 saved[key] = app.call('defaults', key=key, persistent=True)
                 app.call('defaults', key=key, value=value)
             app.call('appearance', name='dark')
