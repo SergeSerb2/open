@@ -82,6 +82,7 @@ def onscreen_suite(command):
     """Own lockf's shared FD; keep the 180 s execution budget after acquisition."""
     termination_signals = (signal.SIGTERM, signal.SIGINT, signal.SIGHUP)
     cancelled = None
+    waiting_for_lock = False
     directory = job = lock_file = None
     cleanup_complete = False
     output = ""
@@ -141,6 +142,10 @@ def onscreen_suite(command):
             cancelled = signum
         if cleanup_complete:
             exit_cancelled()
+        if waiting_for_lock:
+            # Raising prevents Python from restarting the blocking flock after
+            # the signal. Setup and child assignment still use deferred cancel.
+            raise InterruptedError("on-screen lock wait cancelled")
         # Do not raise asynchronously across TemporaryDirectory/Popen assignment:
         # a spawned child must be recorded before cancellation can unwind setup.
 
@@ -153,12 +158,14 @@ def onscreen_suite(command):
         lock_path = "/tmp/open-onscreen-e2e.lock"
         while cancelled is None:
             lock_file = open(lock_path, "a+")
-            while cancelled is None:
-                try:
-                    fcntl.flock(lock_file.fileno(), fcntl.LOCK_EX | fcntl.LOCK_NB)
-                    break
-                except BlockingIOError:
-                    time.sleep(0.25)
+            waiting_for_lock = True
+            try:
+                if cancelled is None:
+                    # Join the kernel's queue alongside lockf waiters. Polling
+                    # with LOCK_NB can starve behind already-blocked waiters.
+                    fcntl.flock(lock_file.fileno(), fcntl.LOCK_EX)
+            finally:
+                waiting_for_lock = False
             if cancelled is not None:
                 break
             # An older lockf user or external replacement may unlink the path.
