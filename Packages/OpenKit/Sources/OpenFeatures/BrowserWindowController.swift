@@ -342,9 +342,8 @@ public final class BrowserWindowController: NSWindowController, NSWindowDelegate
         peekStorage?.overlay.controlsFill = style.lightPalette?.title.nsColor ?? PeekMetrics.defaultControls.nsColor
         peekStorage?.overlay.scrimColor = style.darkPalette?.background.withAlpha(PeekMetrics.scrimAlpha).nsColor ?? PeekMetrics.defaultScrim.nsColor
         splitController.refresh()
-        // M4 refresh guarantees that every visible split pane is bound. Keep
-        // the single-pane path free of its former duplicate refresh.
-        if container.slots.count > 1 { container.refreshPlaceholders() }
+        // show() binds the focused host now and defers other panes one turn (§5.4).
+        // Refreshing placeholders here repeats every pane's chrome/layout work.
         peekStorage?.refresh(); layoutContent(); syncPeekSidebar(); onVisibilityChange?()
     }
     private func syncPeekSidebar() {

@@ -184,9 +184,11 @@ enum FeatureCLI {
     static func waitForLoads(_ factory: FakeWebContentHostFactory, root: NSView) async throws {
         let deadline = ContinuousClock.now + .seconds(5)
         repeat {
+            // show() creates nonfocused split hosts on the next main-queue turn.
+            // Yield before inspecting an empty/already-loaded factory, too.
+            try await Task.sleep(for: .milliseconds(20))
             OffscreenRenderer.settle(root, runLoop: 0.01)
             if factory.made.filter({ !$0.isClosed }).allSatisfy({ !$0.isLoading }) { return }
-            try await Task.sleep(for: .milliseconds(20))
         } while ContinuousClock.now < deadline
         throw CLIError(description: "fake host did not finish loading within 5 seconds")
     }
