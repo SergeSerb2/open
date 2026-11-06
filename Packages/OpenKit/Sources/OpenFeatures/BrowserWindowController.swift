@@ -1032,8 +1032,8 @@ public final class BrowserWindowController: NSWindowController, NSWindowDelegate
     public var onTextUndoManager: ((NSWindow) -> UndoManager?)?
     private lazy var nativeTextUndoManager = UndoManager()
     public func windowWillReturnUndoManager(_ window: NSWindow) -> UndoManager? {
-        if let creation = spaceCreationController { return creation.localUndoManager }
         if let editor = onTextUndoManager?(window) { return editor }
+        if let creation = spaceCreationController { return creation.localUndoManager }
         if window.firstResponder is NSTextView || window.firstResponder is NSTextField { return nativeTextUndoManager }
         return model.undoManager
     }
