@@ -789,7 +789,11 @@ def main():
         legacy_space_fixture(cli, root)
         space_icon_import(cli)
     elif name == "space-editor":
-        all_passed(run(str(root / "Packages/OpenKit/.build/release/space-editor-render"), "check"))
+        # The icon-picker checks send native events to real windows. Use the
+        # existing screen worker so another suite cannot take their focus.
+        all_passed(run(sys.executable, str(Path(__file__).resolve()), "onscreen-suite",
+                       str(root / "Packages/OpenKit/.build/release/space-editor-render"), "check",
+                       timeout=None, interrupted_exit=2))
     elif name == "space-pad-compare":
         text = run(sys.executable, str(root / "tools/verification/space-pad-compare.py"))
         matches(r"session2-pad: [1-9]\d* gate rows PASS", text)

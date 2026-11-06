@@ -53,6 +53,8 @@ Little Open resurfaces an existing page only when both its canonical URL and res
 
 With one Profile, both destination pickers keep Little Open, Most Recent Space, a separator, then Spaces. With two or more Profiles, they group Profile-specific destinations and Spaces under disabled Profile-name labels. Missing Profile copy is “This Profile is no longer available.”; a Profile without Spaces shows “This Profile has no Spaces.” Rule rows use the same destination labels.
 
+Synthetic Open rule-sheet renders show the Work destination at [1x](routing-atc/profile-destination@1x.png) and [2x](routing-atc/profile-destination@2x.png). The preview check inspects the native menu's item order, separators, and disabled Profile labels. These renders are review evidence, not Arc comparisons.
+
 The Air Traffic Control command opens Settings ▸ Links and targets the rules section. Its search aliases are Link Routing, Link Preferences, and Air Traffic Controller. The section heading uses the shared Settings heading style.
 
 ### Arc import: facts and explicit guesses
