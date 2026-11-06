@@ -300,7 +300,7 @@ struct BarSpec {
                 if selected {
                     e.append(E(name: "\(tag) favicon plate", region: plate.insetBy(dx: -3, dy: -3), kind: .fill(sample: CGRect(x: plate.minX + 4, y: plate.minY + 1, width: 16, height: 2))))
                 }
-            case .emoji:
+            case .emoji, .extension:
                 break
             case .split(let panes, _):
                 // Plate (CC-13): fill, edges, and the 1 pt gap between the cells; pane icons are masked.

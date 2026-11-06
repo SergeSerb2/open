@@ -177,6 +177,7 @@ final class CommandBarFieldEditor: NSTextView {
         compositionDepth -= 1
     }
 
+    var onShiftDelete: ((NSEvent.ModifierFlags) -> Bool)?
     var onModifiedReturn: ((NSEvent.ModifierFlags) -> Bool)?
     private func handleHelpKey(_ event: NSEvent) -> Bool {
         if [36, 76].contains(event.keyCode), event.modifierFlags.contains(.command), !hasMarkedText(), !isUpdatingComposition, onModifiedReturn?(event.modifierFlags) == true { return true }
@@ -192,6 +193,8 @@ final class CommandBarFieldEditor: NSTextView {
     }
 
     override func keyDown(with event: NSEvent) {
+        if [51, 117].contains(event.keyCode), event.modifierFlags.intersection([.shift, .command, .option, .control]) == .shift,
+           !hasMarkedText(), !isUpdatingComposition, onShiftDelete?(event.modifierFlags) == true { return }
         if !handleHelpKey(event) { super.keyDown(with: event) }
     }
 }
@@ -227,6 +230,7 @@ final class InputRowView: NSView {
             chipView.needsDisplay = true
         }
     }
+    var extensionIcon: (@MainActor (String) -> NSImage?)? { didSet { iconView.needsDisplay = true; chipView.needsDisplay = true } }
     weak var favicons: CommandBarFaviconSource?
     /// While the privacy footer shows, the (i) button hides and the field takes its place (CC-42).
     var showsFooter = false { didSet { if showsFooter != oldValue { needsLayout = true } } }
@@ -362,7 +366,7 @@ final class InputRowView: NSView {
         guard let chip = input.chip else { return 0 }
         let m = CommandBarMetrics.self
         return (TextLine(chip.name, font: BarFont.chip, color: CGColor(gray: 1, alpha: 1)).width).rounded() + 2 * m.chipPaddingX
-            + (chipHovered ? m.chipCloseGrowth : 0)
+            + (chipHovered ? m.chipCloseGrowth : 0) + (chip.extensionID == nil ? 0 : 20)
     }
 
     var trailingWidth: CGFloat {
@@ -416,6 +420,9 @@ final class InputRowView: NSView {
     private func drawLeadingIcon(in ctx: CGContext) {
         let f = CommandBarMetrics.leadingIconFrame
         switch input.leadingIcon {
+        case .extension(let id):
+            if let image = extensionIcon?(id) { image.drawFlipped(in: f.insetBy(dx: 1, dy: 1)) }
+            else { drawSymbol("puzzlepiece.extension", in: f) }
         case .favicon(let url, let fallback):
             if let image = favicons?.favicon(for: url, loaded: { [weak self] _ in self?.iconView.needsDisplay = true }) {
                 image.drawFlipped(in: f.insetBy(dx: 1, dy: 1))
@@ -457,6 +464,11 @@ final class InputRowView: NSView {
             let s = x.size
             x.drawFlipped(in: CGRect(x: (textX + (m.chipCloseSize - s.width) / 2).rounded(), y: (rect.midY - s.height / 2).rounded(), width: s.width, height: s.height))
             textX += m.chipCloseGrowth
+        }
+        if let id = chip.extensionID {
+            if let image = extensionIcon?(id) { image.drawFlipped(in: CGRect(x: textX, y: rect.midY - 8, width: 16, height: 16)) }
+            else if let image = SymbolCache.image("puzzlepiece.extension", size: 14, color: .white(1)) { image.drawFlipped(in: CGRect(x: textX, y: rect.midY - 8, width: 16, height: 16)) }
+            textX += 20 // guess (child): 4 pt after the specified 16 pt extension icon
         }
         let line = TextLine(chip.name, font: BarFont.chip, color: CGColor(gray: 1, alpha: 1))
         line.draw(at: textX, baseline: (rect.midY + BarFont.chip.capHeight / 2).rounded(), in: ctx)

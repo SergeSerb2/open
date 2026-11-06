@@ -161,6 +161,10 @@ public enum MenuBuilder {
         var info: [String: String] = ["command": commandID]
         if let payload { info["payload"] = payload }
         item.representedObject = info
+        if commandID == "open-extensions-picker" {
+            item.isHidden = true
+            item.allowsKeyEquivalentWhenHidden = true
+        }
         item.identifier = NSUserInterfaceItemIdentifier(commandID)
         return item
     }
@@ -361,7 +365,7 @@ public enum MenuBuilder {
 
     private static func buildExtensionsMenu(target: MenuCommandTarget, overrides: KeyBindingStore) -> NSMenu {
         let menu = NSMenu(title: "Extensions")
-        add(menu, ["manage-extensions", "add-extension"], target: target, overrides: overrides)
+        add(menu, ["open-extensions-picker", "manage-extensions", "add-extension"], target: target, overrides: overrides)
         return menu
     }
 
