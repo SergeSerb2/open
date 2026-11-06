@@ -1,5 +1,6 @@
 #if OPEN_AUTOMATION
 import AppKit
+import ImageIO
 import OpenModel
 import OpenSettings
 
@@ -42,8 +43,9 @@ extension AutomationController {
   }
 
   private func iconCGImage(_ image: NSImage) -> CGImage? {
-    guard let tiff = image.tiffRepresentation else { return nil }
-    return NSBitmapImageRep(data: tiff)?.cgImage
+    guard let tiff = image.tiffRepresentation,
+      let source = CGImageSourceCreateWithData(tiff as CFData, nil) else { return nil }
+    return CGImageSourceCreateImageAtIndex(source, 0, nil)
   }
 
   private func iconPixels(_ image: CGImage, space: CGColorSpace) -> Data? {
