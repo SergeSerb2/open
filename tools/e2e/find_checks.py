@@ -199,7 +199,10 @@ def run(h, factory, results, tmp):
         row('F28_peek', p['visible'] and p['total'] == 5 and p['tab'] not in (tab, other) and rect_ok(p), pane=p)
         if os.environ.get('OPEN_FIND_FAIL_AT_PEEK') == '1': raise RuntimeError('intentional Find cleanup proof with Peek open')
         key('escape')
-        row('F29_peek_escape', not pane()['visible'] and app.call('peek-state')['shown'], pane=pane())
+        field_escape = not pane()['visible'] and app.call('peek-state')['shown']
+        key('f', ['cmd']); app.call('focus'); key('escape')
+        page_escape = not pane()['visible'] and app.call('peek-state')['shown']
+        row('F29_peek_escape', field_escape and page_escape, fieldEscape=field_escape, pageEscape=page_escape, pane=pane())
         app.call('peek-close'); h.wait_until(lambda: not app.call('peek-state')['shown'], timeout=3, step=.05)
         app.call('select', tab=tab); app.call('focus', tab=tab)
         app.eval(tab, 'getSelection().removeAllRanges()'); key('f', ['cmd']); key('a', ['cmd']); key(text='quasar'); settled(tab, '1/5')
