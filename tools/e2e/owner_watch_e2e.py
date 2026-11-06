@@ -121,6 +121,10 @@ subprocess.Popen = popen
                         os.kill(int(row.split()[0]), signal.SIGKILL)
                     except ProcessLookupError:
                         pass
+            cleanup_deadline = time.monotonic() + 5
+            while matches(BUNDLE) and time.monotonic() < cleanup_deadline:
+                time.sleep(.05)
+            assert not matches(BUNDLE), 'cleanup left app helpers'
             for root in roots:
                 shutil.rmtree(root, ignore_errors=True)
                 shutil.rmtree(Path.home() / 'Library/Caches' / root.name, ignore_errors=True)
