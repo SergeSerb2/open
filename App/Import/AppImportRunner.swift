@@ -218,6 +218,13 @@ final class AppImportRunner {
           do {
             _ = try await ArcHistoryReader(historyFileURL: file).readBatches { batch in
               guard succeeded, !Task.isCancelled else { return }
+              #if OPEN_AUTOMATION
+              // Hold the real pending batch before its transaction so the
+              // suite proves browsing while imported visits are still absent.
+              if let raw = ProcessInfo.processInfo.environment["OPEN_AUTOMATION_HISTORY_DELAY_MS"], let ms = Int(raw), ms > 0 {
+                try? await Task.sleep(for: .milliseconds(min(ms, 10_000)))
+              }
+              #endif
               let visits = batch.map { ImportedHistoryVisit(chromiumVisitID: $0.chromiumVisitID,
                 urlString: $0.urlString, title: $0.title, time: $0.time, transition: $0.transition, isTyped: $0.isTyped) }
               let result = await store.importHistoryBatch(visits, sourceProfileKey: directory)
@@ -229,13 +236,6 @@ final class AppImportRunner {
                 let fraction = estimate > 0 ? min(1, Double(self.historyProcessed) / Double(estimate)) : 0
                 flow?.progress = fraction; wizard.progress = fraction
               }
-              #if OPEN_AUTOMATION
-              // A bounded, opt-in pause exercises the real reader/store while
-              // the suite browses before the next batch finishes. No fake rows.
-              if let raw = ProcessInfo.processInfo.environment["OPEN_AUTOMATION_HISTORY_DELAY_MS"], let ms = Int(raw), ms > 0 {
-                try? await Task.sleep(for: .milliseconds(min(ms, 10_000)))
-              }
-              #endif
             }
             // Validate an empty import too; a broken destination must not look
             // like a successful zero-visit source.

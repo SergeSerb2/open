@@ -76,12 +76,15 @@ pathlib.Path(sys.argv[2]).touch(); time.sleep(180)
         opened = app.call('open', url='https://example.org')
         loaded = app.call('wait', tab=opened['id'], timeout=30)
         browsing = state()
+        pending_visits = imports()
         app.call('snapshot', path=str(Path(h.OUT)/'firstrun/progress-history-landed.png'))
         app.call('save')
         saved = json.loads((Path(app.user_data)/'State/browser.json').read_text())
         row('F9_browse_during_history', before['browserHasLanded'] and before['progress'] is not None
+            and browsing['progress'] < 1 and pending_visits == 0
             and not before['importInProgress'] and browsing['historyInProgress'] and bool(loaded)
-            and 'https://example.org' in json.dumps(saved), before=before, after=browsing)
+            and 'https://example.org' in json.dumps(saved), before=before, after=browsing,
+            importedVisitsWhileBrowsing=pending_visits)
         # Close the real progress window, then let its already-owned import finish.
         app.call('first-run', action='focus')
         app.call('key', key='w', modifiers=['command'])
