@@ -97,6 +97,19 @@ public extension AutoArchiveInterval {
         "open.developer.allowJavaScriptFromAppleEvents": false, "open.developer.modeHosts": [String](),
     ]
     public static func register(in defaults: UserDefaults) {
+        // Ignore registered fallbacks when deciding whether to migrate a stored choice.
+        let peekKeys = [("open.links.openPeekShiftClick", "open.peek.shiftClick"),
+                        ("open.links.openPeekOtherSites", "open.peek.otherSites")]
+        let registeredPeek = defaults.volatileDomain(forName: UserDefaults.registrationDomain)
+        var inspectionPeek = registeredPeek
+        for (key, _) in peekKeys { inspectionPeek.removeValue(forKey: key) }
+        defaults.setVolatileDomain(inspectionPeek, forName: UserDefaults.registrationDomain)
+        let migrated = peekKeys.compactMap { key, legacy -> (String, Bool)? in
+            guard defaults.object(forKey: key) == nil, let value = defaults.object(forKey: legacy) as? Bool else { return nil }
+            return (key, value)
+        }
+        defaults.setVolatileDomain(registeredPeek, forName: UserDefaults.registrationDomain)
+        for (key, value) in migrated { defaults.set(value, forKey: key) }
         // Registration fallbacks can already exist from another Settings or
         // Library instance. Inspect stored choices without those two fallbacks;
         // this synchronous main-actor operation never removes persistent values.
