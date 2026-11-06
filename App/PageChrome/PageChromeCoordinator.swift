@@ -102,6 +102,11 @@ final class PageQuitCoordinator {
   private var remaining: [(EngineWebContentHostFactory, OEWebContent)] = []
   init(app: AppDelegate) { self.app = app }
   func shouldTerminate() -> Bool {
+    #if OPEN_AUTOMATION
+    // A dead runner cannot answer a new beforeunload request. Normal quit
+    // still runs the page preflight; owner shutdown closes hosts directly.
+    if AutomationOwnerWatch.quittingWithoutPrompts { return true }
+    #endif
     if accepted { return true }
     if running { return false }
     remaining = app.hostFactories.values.flatMap { owner in owner.contents.values.filter(\.hasUnloadHandlers).map { (owner, $0) } }
