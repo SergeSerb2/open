@@ -770,6 +770,12 @@ application event route. It covers the field editor, page shortcuts, tab
 state, navigation, Split View, Peek, selection seeding, query limits, pane
 frames, light/dark window pixels (ΔE00 ≤ 2), and idle request/result/layout
 counters. PNGs stay in `.re/find/`; JSON uses the ordinary suite receipt.
+The Find timing gate uses the project's 120 Hz reference: 8.33 ms from the
+native Cmd+F timestamp to the visible layer commit. It reports separate
+first-open (including lazy creation) and repeat-open medians and nearest-rank
+p95 from twenty fresh windows. Both p95 values must pass. The 240 Hz interval is
+printed for information. Take timing receipts with the quiet lock first,
+wait for low load while holding only that lock, then take the screen lock.
 No shared defaults are changed by this suite. The toolbar toggle changes
 only its disposable browser model, and app appearance is restored in `finally`.
 `OPEN_FIND_FAIL_AT_PEEK=1` forces an early failure with Peek and Find open;

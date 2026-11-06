@@ -65,7 +65,7 @@ def run(h, factory, results, tmp):
         return len(f) == 4 and len(area) == 4 and p['visible'] and abs(f[2]-width)<.1 and f[3] == 32 and abs(area[0]+area[2]-f[0]-f[2]-10)<.1 and abs(area[1]+area[3]-f[1]-f[3]-top)<.1
     try:
         samples = []
-        for sample in range(10):
+        for sample in range(20):
             if app is not None: app.quit()
             app = factory(urls=(origin + '/index.html',), fresh=True)
             tab = app.call('tabs')[0]['id']
@@ -100,9 +100,9 @@ def run(h, factory, results, tmp):
             values=sorted(s[name] for s in samples)
             return dict(median=statistics.median(values), p95=values[math.ceil(.95*len(values))-1], samples=len(values))
         first, repeat = distribution('first'), distribution('repeat')
-        row('F04_one_frame', all(s['visible'] for s in samples) and first['median'] <= deadline and repeat['median'] <= deadline,
+        row('F04_one_frame', all(s['visible'] for s in samples) and first['p95'] <= deadline and repeat['p95'] <= deadline,
             firstMilliseconds=first, repeatMilliseconds=repeat, samples=samples,
-            scope='native key timestamp to flushed visible Find layer; first open includes lazy creation; repeat reuses the same window; ten fresh App windows; focus completes in each action',
+            scope='native key timestamp to flushed visible Find layer; first open includes lazy creation; repeat reuses the same window; twenty fresh App windows; focus completes in each action',
             deadline=deadline, informational240HzDeadline=1000/240, load=load)
         print('Find timing first median/p95 %.4f/%.4f ms; repeat %.4f/%.4f ms; 120 Hz gate %.4f ms; 240 Hz information %.4f ms' %
               (first['median'], first['p95'], repeat['median'], repeat['p95'], deadline, 1000/240), flush=True)
