@@ -2,12 +2,32 @@
 import AppKit
 import OpenBoosts
 import OpenModel
+import OpenSettings
 import OpenSiteControl
 
 extension AutomationController {
   func runBoostCommand(_ command: String, _ args: [String: Any]) async throws -> Any {
     let factory = try window
     let boosts = app.stores.boosts
+    if command == "boost-library" {
+      guard let library = app.settingsPresenter.library, library.section == .boosts,
+            app.settingsPresenter.libraryPresenter?.window?.isVisible == true,
+            let raw = args["boost"] as? String, UUID(uuidString: raw) != nil,
+            let row = library.boostItems.first(where: { $0.id == raw }) else { throw Failure(message: "no visible Library Boost") }
+      // The real LibraryActions caller boundary, after its confirmation UI.
+      // Automation never writes BoostStore or the editor's session directly.
+      switch args["action"] as? String {
+      case "rename":
+        guard let name = args["name"] as? String, name.utf8.count <= 16_384 else { throw Failure(message: "Boost name exceeds 16 KiB") }
+        library.actions.renameBoost(id: row.id, to: name, profileID: library.historyProfileID)
+      case "enabled":
+        guard let enabled = args["enabled"] as? Bool else { throw Failure(message: "missing enabled flag") }
+        library.actions.setBoostEnabled(id: row.id, enabled: enabled, profileID: library.historyProfileID)
+      case "delete": library.actions.deleteBoost(id: row.id, profileID: library.historyProfileID)
+      default: throw Failure(message: "unknown Library Boost action")
+      }
+      return true
+    }
     if command == "boosts" {
       if let raw = args["profile"] as? String, UUID(uuidString: raw) == nil { throw Failure(message: "invalid Profile ID") }
       let profile = (args["profile"] as? String).flatMap(UUID.init(uuidString:)).map { ProfileID(rawValue: $0) } ?? factory.focusedProfile?.id
@@ -100,7 +120,11 @@ extension AutomationController {
   }
   private func boostEditorState(_ editor: BoostEditorController?) throws -> [String: Any] {
     let runtime = app.stores.boosts.adapter
-    guard let editor, let session = editor.session, let panel = editor.panel, let view = editor.view else { return ["open": false, "refreshMs": runtime.lastRefreshMilliseconds, "refreshPages": runtime.lastRefreshPageCount] }
+    guard let editor, let session = editor.session, let panel = editor.panel, let view = editor.view else {
+      return ["open": false, "refreshMs": runtime.lastRefreshMilliseconds, "refreshPages": runtime.lastRefreshPageCount,
+        "refreshSkippedPages": runtime.lastRefreshSkippedPageCount, "deliveryCount": runtime.javaScriptDeliveryCount,
+        "applyFailures": runtime.applyFailureCount, "refreshCount": runtime.refreshCount, "completedRefreshCount": runtime.completedRefreshCount]
+    }
     let rect = view.pad.frame
     return ["open": true, "boost": try boostJSON(session.boost), "profile": session.context.profileID.description,
       "tab": session.context.tabID.description, "mode": "simple", "zap": false, "zapCount": session.boost.zaps.count,
@@ -112,6 +136,8 @@ extension AutomationController {
       "alert": editor.activeAlert.map { ["title": $0.messageText, "message": $0.informativeText, "buttons": $0.buttons.map(\.title)] as [String: Any] } ?? [:],
       "controls": view.controls.map { ["id": $0.controlID, "enabled": $0.isEnabled, "visible": !$0.isHiddenOrHasHiddenAncestor] },
       "refreshMs": runtime.lastRefreshMilliseconds, "refreshPages": runtime.lastRefreshPageCount,
+      "refreshSkippedPages": runtime.lastRefreshSkippedPageCount, "deliveryCount": runtime.javaScriptDeliveryCount,
+      "applyFailures": runtime.applyFailureCount,
       "refreshCount": runtime.refreshCount, "completedRefreshCount": runtime.completedRefreshCount]
   }
 }

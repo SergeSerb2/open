@@ -79,11 +79,17 @@ final class AppBoosts: BoostsProvider {
   }
   /// All App mutations, including the editor's commits/undo/delete, end here.
   func refresh(profile: ProfileID) {
+    let start = ProcessInfo.processInfo.systemUptime
     guard app.model.profile(id: profile) != nil else { return }
     let store = store(for: profile)
     profiles[profile]?.rebuild(values: store.allBoosts())
+    for factory in app.hostFactories.values {
+      if let session = factory.controller?.boostEditor?.session, session.context.profileID == profile {
+        session.reconcileStoreMetadata()
+      }
+    }
     revision &+= 1
-    adapter.refresh(profile: profile)
+    adapter.refresh(profile: profile, startedAt: start)
     for observer in Array(observers.values) { observer() }
   }
   private func preferencesChanged() {

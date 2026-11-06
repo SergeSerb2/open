@@ -23,6 +23,9 @@ final class BoostEngineAdapter {
   private(set) var completedRefreshCount = 0
   private(set) var lastRefreshMilliseconds = 0.0
   private(set) var lastRefreshPageCount = 0
+  private(set) var lastRefreshSkippedPageCount = 0
+  private(set) var javaScriptDeliveryCount = 0
+  private(set) var applyFailureCount = 0
   init(boosts: AppBoosts) { self.boosts = boosts }
 
   func prepare(_ context: OEBrowserContext, profile: ProfileID) {
@@ -36,8 +39,7 @@ final class BoostEngineAdapter {
     let plan = plan(url: url, profile: host.profileID, ephemeral: host.content.context.isEphemeral)
     deliver(plan, to: host, url: url)
   }
-  func refresh(profile: ProfileID) {
-    let start = ProcessInfo.processInfo.systemUptime
+  func refresh(profile: ProfileID, startedAt start: TimeInterval) {
     for registration in Array(registrations.values) where registration.profile == profile {
       if let context = registration.context { replaceScripts(context, profile: profile) }
     }
@@ -65,13 +67,18 @@ final class BoostEngineAdapter {
   }
   private func refreshPages(profile: ProfileID?, start: TimeInterval) {
     let pages = boosts.app.hostFactories.values.flatMap { Array($0.hosts.values) } + Array(boosts.app.littleOpenHosts.values)
-    let hosts = Dictionary(pages.map { (ObjectIdentifier($0), $0) }, uniquingKeysWith: { first, _ in first }).values.filter { !$0.closed && (profile == nil || $0.profileID == profile) }
-    lastRefreshPageCount = hosts.count; refreshCount += 1
+    let hosts = Dictionary(pages.map { (ObjectIdentifier($0), $0) }, uniquingKeysWith: { first, _ in first }).values.filter { profile == nil || $0.profileID == profile }
+    lastRefreshPageCount = 0; lastRefreshSkippedPageCount = 0; refreshCount += 1
     let generation = refreshCount
     // Dispatch all page requests in this actor turn; no serial per-tab round trips.
     let tasks = hosts.compactMap { host -> Task<Void, Never>? in
+      guard canDeliver(to: host) else {
+        closed(host); lastRefreshSkippedPageCount += 1; return nil
+      }
       guard let url = host.content.url else { return nil }
-      return deliver(plan(url: url, profile: host.profileID, ephemeral: host.content.context.isEphemeral), to: host, url: url)
+      let task = deliver(plan(url: url, profile: host.profileID, ephemeral: host.content.context.isEphemeral), to: host, url: url)
+      if task != nil { lastRefreshPageCount += 1 }
+      return task
     }
     Task { [weak self] in
       for task in tasks { await task.value }
@@ -79,6 +86,9 @@ final class BoostEngineAdapter {
       self.lastRefreshMilliseconds = (ProcessInfo.processInfo.systemUptime - start) * 1_000
       self.completedRefreshCount = generation
     }
+  }
+  private func canDeliver(to host: EngineWebContentHost) -> Bool {
+    !host.closed && host.content.isLive && !host.content.isDiscarded
   }
   private func replaceScripts(_ context: OEBrowserContext, profile: ProfileID) {
     let web = EngineWebProfile(context), key = ObjectIdentifier(context)
@@ -136,18 +146,32 @@ final class BoostEngineAdapter {
   }
   @discardableResult private func deliver(_ plan: InjectionPlan, to host: EngineWebContentHost, url: URL) -> Task<Void, Never>? {
     let key = ObjectIdentifier(host)
+    // A discarded page has no renderer. Its Profile scripts are already current;
+    // document start and the normal commit hook apply them when it wakes/reloads.
+    // Forget the old document, without waking the tab or scheduling a retry.
+    guard canDeliver(to: host) else { closed(host); return nil }
     // The unmatched-page fast path creates no runtime, observer, or engine request.
     if plan.isEmpty && livePlans[key] == nil { return nil }
     deliveries[key]?.cancel()
     if plan.isEmpty { livePlans[key] = nil } else { livePlans[key] = plan.planID }
     let source = plan.isEmpty ? "window.__openBoosts?.clear();" : BoostResources.applierJS + "\n" + Self.applySource(plan)
     let task = Task { [weak self, weak host] in
-      guard let self, let host, !host.closed, !Task.isCancelled, !self.boosts.app.shutdownPrepared else { return }
+      guard let self, let host, !Task.isCancelled, !self.boosts.app.shutdownPrepared else { return }
+      guard self.canDeliver(to: host) else { self.closed(host); return }
       do {
         // Do not deliver an old document's plan into a newly navigated page.
+        self.javaScriptDeliveryCount += 1
         _ = try await host.content.evaluateJavaScript("(() => { if (location.href !== \(Self.json(url.absoluteString))) return false; \(source) return true; })()")
       } catch {
-        guard !host.closed, !Task.isCancelled, !self.boosts.app.shutdownPrepared else { return }
+        guard !Task.isCancelled, !self.boosts.app.shutdownPrepared else { return }
+        let failure = error as NSError
+        // Close/discard can race the async engine reply. These are lifecycle
+        // events, including OEErrorWebContentClosed, rather than apply failures.
+        guard self.canDeliver(to: host),
+          !(failure.domain == OEErrorDomain && failure.code == OEError.Code.webContentClosed.rawValue) else {
+          self.closed(host); return
+        }
+        self.applyFailureCount += 1
         host.owner?.controller?.toasts.show(ToastContent(title: plan.isEmpty ? "Could not clear Boosts." : "Could not apply Boosts."))
       }
     }

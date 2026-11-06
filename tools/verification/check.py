@@ -839,15 +839,12 @@ def main():
         profiles(cli)
     elif name == "settings-preview":
         preview = str(root / "Packages/OpenKit/.build/release/settings-preview")
-        # CHILD-RULES serializes settings-preview too, even its offscreen paths.
-        # Reuse the worker's priority, lock lifetime, deadline and owned cleanup.
-        locked_preview = [sys.executable, str(Path(__file__).resolve()), "onscreen-suite", preview]
-        all_passed(run(*locked_preview, "check", timeout=None, interrupted_exit=2))
+        all_passed(run(preview, "check"))
         output = Path("settings-panes").resolve()
-        rendered = run(*locked_preview, "render", "--out", str(output), timeout=None, interrupted_exit=2)
+        rendered = run(preview, "render", "--out", str(output))
         require("PREVIEWS-CONTROLS delay=absent popups=0 expected-labels=present" in rendered,
                 "missing rendered Previews control evidence")
-        dump = run(*locked_preview, "dump-keys", "--root", str(output / "fixture"), timeout=None, interrupted_exit=2)
+        dump = run(preview, "dump-keys", "--root", str(output / "fixture"))
         require("snapshot profile Personal searchEngineID = google" in dump, "missing settings store receipt")
         require(not any(line.startswith("default open.general.previewsDelaySeconds =") for line in dump.splitlines()),
                 "removed preview delay default was registered")

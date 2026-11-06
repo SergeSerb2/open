@@ -506,7 +506,7 @@
         guard let profile = app.model.profiles.first(where: { $0.name == name }) ?? app.model.createProfile(name: name) else { throw Failure(message: "unknown Profile") }
         try app.directories.ensureProfileDirectories(for: profile)
         return w.controller?.sidebar(w.controller!.sidebar, didRequest: .setSpaceProfile(space: space.id, profile: profile.id)) == true
-      case "boost-editor", "boosts":
+      case "boost-editor", "boosts", "boost-library":
         return try await runBoostCommand(cmd, a)
       case "peek-ui", "peek-button", "peek-move-arm", "peek-move-state":
         return try runPeekAppCommand(cmd, a)

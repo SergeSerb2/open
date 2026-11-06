@@ -125,7 +125,15 @@ public final class BoostEditorSession {
         change("Reset colors") { $0.colorWheel = nil; $0.colorAdjustment = nil }
         restartColorSampling()
     }
-    public func rename(_ name: String) { change("Rename Boost") { $0.name = name } }
+    public func rename(_ name: String) { change("Rename Boost", restoresName: true) { $0.name = name } }
+    /// Library metadata changes do not add an editor undo step or end a gesture.
+    /// Content edits remain local; the store owns the current name/enabled flag.
+    public func reconcileStoreMetadata() {
+        guard !isClosed, let stored = store.boost(id: boost.id),
+              boost.name != stored.name || boost.isEnabled != stored.isEnabled else { return }
+        boost.name = stored.name; boost.isEnabled = stored.isEnabled
+        onChange?()
+    }
     public func setScope(_ match: SiteMatch) { change("Change scope") { $0.siteMatch = match } }
     public func setFont(_ family: String?) { change("Change font") { $0.fontFamily = family } }
     public static let textSizes: [Double?] = [0.9, nil, 1.1, 1.25, 1.5]
@@ -199,34 +207,43 @@ public final class BoostEditorSession {
         }
         return choices
     }
-    private func change(_ name: String, edit: (inout Boost) -> Void) {
+    private func change(_ name: String, restoresName: Bool = false, edit: (inout Boost) -> Void) {
         guard isEditable else { return }
         if interactiveBefore != nil { endInteractive() }
+        reconcileStoreMetadata()
         let before = boost; var candidate = boost; edit(&candidate); boost = BoostStore.normalizedForPreview(candidate)
-        commit(before: before, name: name)
+        commit(before: before, name: name, restoresName: restoresName)
     }
-    private func commit(before: Boost, name: String) {
+    private func commit(before: Boost, name: String, restoresName: Bool = false) {
         guard boost != before, isEditable else { return }
-        registerRestore(before, name: name)
+        registerRestore(before, name: name, restoresName: restoresName)
         boost = store.upsert(boost)
         host.refresh(profile: context.profileID); onChange?()
     }
-    private func registerRestore(_ value: Boost, name: String) {
+    private func registerRestore(_ value: Boost, name: String, restoresName: Bool) {
         undoManager.beginUndoGrouping()
         undoManager.registerUndo(withTarget: self) { target in
-            MainActor.assumeIsolated { target.restore(value, name: name) }
+            MainActor.assumeIsolated { target.restore(value, name: name, restoresName: restoresName) }
         }
         undoManager.setActionName(name); undoManager.endUndoGrouping()
     }
-    private func restore(_ value: Boost, name: String) {
+    private func restore(_ value: Boost, name: String, restoresName: Bool) {
         guard isEditable else { return }
         previewWork?.cancel(); previewWork = nil; interactiveBefore = nil; interactiveOwner = nil
+        reconcileStoreMetadata()
         let inverse = boost
         undoManager.registerUndo(withTarget: self) { target in
-            MainActor.assumeIsolated { target.restore(inverse, name: name) }
+            MainActor.assumeIsolated { target.restore(inverse, name: name, restoresName: restoresName) }
         }
         undoManager.setActionName(name)
-        boost = store.upsert(value)
+        var restored = value
+        // Undo/Redo always retain the current enabled flag. Only the editor's
+        // own Rename step may restore a name from its history snapshot.
+        if let stored = store.boost(id: boost.id) {
+            restored.isEnabled = stored.isEnabled
+            if !restoresName { restored.name = stored.name }
+        }
+        boost = store.upsert(restored)
         host.refresh(profile: context.profileID); onChange?()
     }
     private func schedulePreview() {

@@ -180,6 +180,9 @@ def run(factory, results, tmp, env):
                     peer=app.call("window-state")["id"]
                     other=new_tab(app,origin+"/boost.html?peer=1")
                     handles.append(next(t["page"]["identifier"] for t in app.call("tabs") if t["id"] == other))
+                    # Retain the peer page in its background Space, so it is
+                    # hidden too: one foreground page and nine background pages.
+                    app.call("space-create",title="Boost background retention")
                     assert len(handles) == 10 and len(set(handles)) == 10
                     app.call("window-focus",id=original,activate=True)
                     app.call("select",tab=tab);app.call("wait",tab=tab);call("open",boost=items()[0]["id"])
@@ -187,11 +190,20 @@ def run(factory, results, tmp, env):
                     negative=bool(wait_until(lambda: all(probe(t)["filter"] == "none" for t in handles),timeout=5,step=.02))
                     app.call("defaults",key="open.advanced.enableBoosts",value=True)
                     wait_until(lambda: all("hue-rotate" in probe(t)["filter"] for t in handles),timeout=5,step=.02)
+                    def page_counts():
+                        pages=[p for p in app.call("pages") if p["identifier"] in handles]
+                        return dict(live=sum(p["live"] for p in pages),background=sum(p["hidden"] for p in pages),
+                                    matching=sum(p["url"].startswith(origin+"/") for p in pages))
+                    counts=page_counts()
+                    discarded=sum(app.call("engine-sleep",tab=h)["discarded"] for h in handles)
+                    assert counts == {"live":10,"background":9,"matching":10} and discarded == 0, counts
                     before=call()["refreshCount"]
                     tap("font.Avenir")
                     wait_until(lambda: call()["completedRefreshCount"] > before and all(probe(t)["font"].startswith("Avenir") for t in handles),timeout=5,step=.02)
                     state=call()
-                    return dict(positive=state["refreshPages"] == 10 and state["refreshMs"] < 100,negative=negative,refreshMs=state["refreshMs"],pages=state["refreshPages"])
+                    after=page_counts()
+                    return dict(positive=state["refreshPages"] == 10 and state["refreshSkippedPages"] == 0 and state["refreshMs"] < 100 and after == counts,
+                                negative=negative,refreshMs=state["refreshMs"],pages=state["refreshPages"],counts=counts,afterCounts=after,discarded=discarded)
                 finally:
                     if peer:
                         app.call("window-focus",id=peer,activate=True);app.call("window-close")
@@ -308,6 +320,41 @@ def run(factory, results, tmp, env):
                 app.call("little-open-action",id=sid,action="close")
                 return dict(positive=bool(ok) and initial.startswith("Avenir") and editorClosed,negative=negative)
             row("B18_little_open_live",b18)
+            def b21():
+                nonlocal tab
+                close()
+                # Use the broad match only; the earlier /docs Boost must not
+                # override the component whose change this row observes.
+                app.call("select",tab=tab);app.call("navigate",tab=tab,url=origin+"/boost.html");app.call("wait",tab=tab)
+                sleeper=new_tab(app,origin+"/boost.html?discard-wake=1")
+                app.call("select",tab=tab);app.call("wait",tab=tab)
+                previous=app.call("sleep-clock")["offset"]
+                try:
+                    app.call("sleep-clock",advance=11)
+                    wait_until(lambda: not app.call("sleep-state",tab=sleeper)["tabs"][0]["discardGate"],timeout=5,step=.05)
+                    slept=app.call("sleep-now",tab=sleeper)["tab"]
+                    assert slept["discarded"] and slept["phase"] == "sleeping", slept
+                    engine=app.call("engine-sleep",tab=sleeper)
+                    assert engine["discarded"] and engine["live"]
+                    call("open",boost=next(b["id"] for b in items() if not b["siteMatch"].get("pathPrefix")))
+                    before=call();oldFont=probe(tab)["font"]
+                    tap("font.Courier")
+                    assert wait_until(lambda: call()["completedRefreshCount"] > before["refreshCount"],timeout=5,step=.02)
+                    after=call()
+                    still=app.call("engine-sleep",tab=sleeper)
+                    noToast=after["applyFailures"] == before["applyFailures"] and not any("Boosts." in t["title"] for t in app.call("toasts")["toasts"])
+                    negative=still["discarded"] and still["identifier"] == engine["identifier"] and not oldFont.startswith("Courier")
+                    assert after["refreshSkippedPages"] >= 1 and after["deliveryCount"]-before["deliveryCount"] == after["refreshPages"], after
+                    close();app.call("select",tab=sleeper);app.call("wait",tab=sleeper)
+                    awake=app.eval(sleeper,"({discarded:document.wasDiscarded,font:getComputedStyle(document.querySelector('h1')).fontFamily,atStart:window.styleAtDOMContentLoaded})")
+                    state=app.call("sleep-state",tab=sleeper)["tabs"][0]
+                    return dict(positive=noToast and awake["discarded"] and awake["font"].startswith("Courier") and awake["atStart"] and state["phase"] == "live" and not state["discarded"],
+                                negative=negative,skipped=after["refreshSkippedPages"],delivered=after["refreshPages"],applyFailures=after["applyFailures"]-before["applyFailures"],wake=awake)
+                finally:
+                    app.call("sleep-clock",reset=True)
+                    if previous:app.call("sleep-clock",advance=previous)
+                    app.call("select",tab=tab);app.call("close",tab=sleeper)
+            row("B21_discard_wake_refresh",b21)
             def b20():
                 nonlocal app,tab
                 close();app.quit()
@@ -325,8 +372,38 @@ def run(factory, results, tmp, env):
                 return dict(positive=state.get("open") and state["boost"]["id"] == disabled["id"] and not state["boost"]["isEnabled"] and len(items()) == 1,
                             negative=negative,storedEnabled=items()[0]["isEnabled"],disabledRuntimeAbsent=negative)
             row("B20_edit_disabled_match",b20)
+            def b22():
+                boostID=call()["boost"]["id"];original=call()["boost"].get("fontFamily")
+                font="Avenir" if original != "Avenir" else "Courier"
+                tap("font."+font)
+                app.call("command",id="view-boosts")
+                app.call("boost-library",action="rename",boost=boostID,name="Library rename")
+                app.call("boost-library",action="enabled",boost=boostID,enabled=True)
+                synced=call()
+                assert synced["open"] and synced["boost"]["name"] == "Library rename" and synced["boost"]["isEnabled"]
+                call("key",key="z",modifiers=["cmd"])
+                undone=call()["boost"]
+                # One editor edit existed; Library changes add no undo step.
+                assert not call()["canUndo"]
+                call("key",key="z",modifiers=["cmd","shift"])
+                redone=call()["boost"]
+                tap("case");edited=call()["boost"]
+                return dict(positive=undone.get("fontFamily") == original and redone.get("fontFamily") == font and all(b["name"] == "Library rename" and b["isEnabled"] for b in [undone,redone,edited]),
+                            negative=synced["boost"]["name"] != "Disabled Boost" and synced["boost"]["isEnabled"],editorStayedOpen=synced["open"],libraryAddedUndo=False)
+            row("B22_library_reconcile_undo",b22)
+            def b23():
+                boostID=call()["boost"]["id"]
+                tap("menu.Rename this Boost…");call("type",text="Editor rename");tap("alert.Done")
+                app.call("boost-library",action="enabled",boost=boostID,enabled=False)
+                call("key",key="z",modifiers=["cmd"]);undone=call()["boost"]
+                call("key",key="z",modifiers=["cmd","shift"]);redone=call()["boost"]
+                app.call("boost-library",action="delete",boost=boostID)
+                return dict(positive=undone["name"] == "Library rename" and redone["name"] == "Editor rename" and not undone["isEnabled"] and not redone["isEnabled"] and not active() and not items(),
+                            negative=undone["name"] != redone["name"],libraryDeleteClosedEditor=not active())
+            row("B23_editor_rename_library_delete",b23)
             def b19():
-                call("open",boost=items()[0]["id"])
+                if items():call("open",boost=items()[0]["id"])
+                else:call("open");ready();tap("font.Avenir")
                 tap("menu.Rename this Boost…")
                 caught=False
                 try:
