@@ -73,7 +73,7 @@ After this change: 8 PASS, 21 patches, 50 overlays, 25 symbols; distribution
 The engine build uses the `open-engine-s8` root, `nice`, the engine lock,
 and 10 jobs. The main distribution root is not changed.
 
-Release `extensions-e2`: 25/25 rows PASS, including the three-action pin sequence. Deliberately removing the popup's
+Release `extensions-e2`: 26/26 rows PASS, including repeated pin/move/unpin and the 15-stage native drag and persisted-profile repair sequence. Deliberately removing the popup's
 resizable style, action keycaps, default-suggestion mapping, and exact moved-tab
 hint produced FAILs in their matching rows. Restoring the implementation and
 rebuilding returned all rows to PASS. Both failing runs and the restored run
