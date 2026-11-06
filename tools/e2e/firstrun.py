@@ -222,7 +222,9 @@ def run(factory, results, tmp, h):
         browser_id = app.call('shell-windows')[0]['id']
         app.call('window-focus', id=browser_id, activate=True)
         undo_before = app.call('space-manager-state')
-        undo_key = app.call('key', key='z', modifiers=['command'])
+        # Focus the sidebar before the native App key path. A page owns its
+        # own Undo action while its RenderWidgetHostViewCocoa is first responder.
+        undo_key = app.call('sidebar-key', key='z', modifiers=['command'])
         undone_tabs = {t['id'] for t in app.call('tabs')}
         row('settings_merge_one_undo', undone_tabs == before_tabs,
             before=undo_before, key=undo_key, after=app.call('space-manager-state'),
