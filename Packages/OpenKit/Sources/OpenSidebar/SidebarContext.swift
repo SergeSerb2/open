@@ -24,6 +24,9 @@ public final class SidebarContext {
     public var forcedMediaHover: SidebarMediaHover?
     public var mediaDrawers: Set<ItemID> = []
     public let selection = SidebarSelection()
+    /// Shared across every window; transient and never saved.
+    public var livePreviewSpaces: Set<SpaceID> { ThemePreviewRegistry.shared.livePreviewSpaces }
+    public func isLiveThemePreview(_ spaceID: SpaceID) -> Bool { livePreviewSpaces.contains(spaceID) }
     /// Preview/banner preferences; the App uses .standard, harnesses use a suite.
     @ObservationIgnored public let previewPreferences: UserDefaults
     @ObservationIgnored private var hoverPreviewStorage: HoverPreviewTracker?

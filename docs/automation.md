@@ -1012,6 +1012,39 @@ row requires ten live matching pages with nine hidden pages. B4 is blocked by P7
 Code mode. Every row includes a real negative control. The suite restores all
 preference keys in `finally` and uses
 an ephemeral local fixture server plus the runner's isolated roots/cleanup.
+## Space editors (Section 4)
+
+Theme commands use the real App model and the same window controller as the
+menu and command bar. Coordinates for `editor-act` are panel content points
+from its top-left (including the transparent 13 pt band). Named controls use
+`control` with the names returned by `editor-state.controls`.
+
+| Command | Arguments | Result |
+|---|---|---|
+| `theme-get` | optional `space` (focused by default) | stored `style` or null, derived light/dark palette hex, `contentAppearance` |
+| `theme-set` | optional `space`, `style` object or null | session preview/commit, one Update Theme undo step and save |
+| `editor-open` | `kind=theme/icon`, optional `space`; icon also accepts `node` | true; unknown kinds return false |
+| `editor-act` | `action=click/hover`, `x/y` or named `control` | own-panel NSEvents |
+| `editor-act` | `action=drag`, `from/to` point arrays, optional `steps` (1–240) | own-panel mouse down, drag frames, up |
+| `editor-act` | `action=down/drag/up`, `x/y` | one event, for interrupted gestures |
+| `editor-act` | `action=key`, `key`, optional `modifiers` | `NSApplication.sendEvent`, app routing |
+| `editor-state` | — | kind, Space, frame, scale, controls, knob, commit/preview/frame counters, pending frame and process-wide editor display-link count |
+| `editor-close` | — | flush and close; safe when already closed |
+| `snapshot` | `window=editor`, `path` | real panel PNG |
+
+`command id=edit-theme` reuses the generic menu command runner. The native
+`space-editor` e2e suite runs both theme and icon row sets; creation can extend
+the kind switch and suite. Model reads can precede a pending display frame: wait
+for `editor-state.pendingFrame=false` after a completed gesture before
+asserting its committed value. Snapshot checks use empty background regions,
+so the auto-archive education banner is not mistaken for a theme pixel.
+
+`editor-state` also exposes the theme session commit ledger: `commitSequence`,
+`committedStyle`, `commitPreviews`, `sessionPreviews`, and `undoActionName`.
+The committed value is captured in the same MainActor call as the model
+undo registration. `A3_committed_style_stable` compares it with the model
+after the final frame and after idle, rejects later previews, and checks
+the Update Theme action name. A3 undo/redo compares against that ledger.
 
 ## Section 7 Settings flows
 
