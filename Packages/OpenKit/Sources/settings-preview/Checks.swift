@@ -34,7 +34,7 @@ func require(_ condition: @autoclosure () throws -> Bool, _ message: String) thr
         try FileManager.default.createDirectory(at: root.appendingPathComponent("State"), withIntermediateDirectories: true)
         settings = SettingsViewModel(model: SyntheticData.model(), actions: actions, defaults: defaults, root: root, snapshot: SnapshotStore(root: root))
         downloadFeed = PreviewDownloads(try SyntheticData.downloads(root: root, profiles: settings.model.profiles))
-        captures = try FileCapturesProvider(root: root)
+        captures = FileCapturesProvider(root: root)
         libraryActions = PreviewLibraryActions(model: settings.model, downloads: downloadFeed, captures: captures, snapshot: settings.snapshot)
         let directories = ProfileDirectories(root: root)
         archives = Dictionary(uniqueKeysWithValues: settings.model.profiles.map { ($0.id, ArchiveStore(fileURL: directories.archiveFileURL(for: $0))) })
@@ -57,14 +57,16 @@ func require(_ condition: @autoclosure () throws -> Bool, _ message: String) thr
         await library.reloadArchive(); await library.reloadHistory()
         for item in captures.captures { await library.loadThumbnail(item) }
     }
+    private(set) var listServer: SyntheticListServer?
     func prepareAdBlock() async throws {
+        if listServer == nil { listServer = try SyntheticListServer() }
         var policy = AdBlockDownloadPolicy(); policy.attempts = 1; policy.requestTimeout = 2; policy.resourceTimeout = 3
         let store = try AdBlockStore(root: root, policy: policy)
         for profile in settings.model.profiles { try await store.openProfile(profile.id, scheduleUpdates: false) }
         settings.attach(adBlockStore: store)
         await settings.adBlock?.openSelectedProfile()
     }
-    func close() { defaults.removePersistentDomain(forName: suite); defaults.synchronize(); try? FileManager.default.removeItem(at: root) }
+    func close() { listServer?.stop(); defaults.removePersistentDomain(forName: suite); defaults.synchronize(); try? FileManager.default.removeItem(at: root) }
     /// Read the real CFPreferences file after synchronize, not a second cached defaults object.
     func diskDefaults() throws -> [String: Any] {
         try require(defaults.synchronize(), "UserDefaults synchronize failed")
@@ -500,7 +502,6 @@ func require(_ condition: @autoclosure () throws -> Bool, _ message: String) thr
                 vm.shortcuts.resetAll(confirmed: false); try require(vm.shortcuts.confirmsReset, "reset needs confirm")
                 vm.shortcuts.resetAll(confirmed: true); try require(try KeyBindingStore.load(from: vm.shortcuts.fileURL).bindings.isEmpty, "reset not saved")
             case "adblock":
-                let server = try SyntheticListServer(); defer { server.stop() }
                 try await env.prepareAdBlock(); let ad = vm.adBlock!
                 ad.setEnabled(false)
                 let regional = ad.store.catalog.lists.first { $0.category == "regional" && !$0.urls.isEmpty }!
@@ -658,7 +659,7 @@ func require(_ condition: @autoclosure () throws -> Bool, _ message: String) thr
                 let item = library.captureItems[0], output = env.root.appendingPathComponent("Example Saved.png")
                 library.saveCapture(item, to: output); try require(FileManager.default.fileExists(atPath: output.path), "Save As did not write")
                 library.pendingCaptureDelete = item.id; library.deleteCaptureConfirmed()
-                let reloaded = try FileCapturesProvider(root: env.root)
+                let reloaded = FileCapturesProvider(root: env.root)
                 try require(reloaded.captures.count == 2 && !FileManager.default.fileExists(atPath: env.captures.directory.appendingPathComponent(item.fileName).path), "capture index/file deletion")
                 library.section = .history; library.query = "Example"; await library.reloadHistory()
                 try require(library.historyRows.count == 3, "profile history isolation")
@@ -677,7 +678,7 @@ func require(_ condition: @autoclosure () throws -> Bool, _ message: String) thr
                     let labels = try await render(LibraryContent(viewModel: env.library), size: CGSize(width: 960, height: 640), scale: 1, dark: false, to: env.root.appendingPathComponent("empty-\(section.rawValue).png"))
                     try require(labels.contains(title), "empty label missing from hosted accessibility tree: \(title) — \(labels)")
                 }
-                let emptyCount = await countArchive(env.archives); try require(emptyCount == 0 && (try FileCapturesProvider(root: env.root)).captures.isEmpty, "empty stores not on disk")
+                let emptyCount = await countArchive(env.archives); try require(emptyCount == 0 && (FileCapturesProvider(root: env.root)).captures.isEmpty, "empty stores not on disk")
             case "archive-save-failure":
                 try await env.prepareLibrary();let library=env.library
                 let row=library.archiveRows[0];let before=try Data(contentsOf:vm.snapshot.fileURL)
@@ -813,6 +814,9 @@ func require(_ condition: @autoclosure () throws -> Bool, _ message: String) thr
                 try require(vm.linkTestSummary == "Opens in Office · matched “guide” (Host contains)","plain test summary differs from evaluator")
             case "adblock-readiness":
                 try await env.prepareAdBlock();let ad=vm.adBlock!
+                if ProcessInfo.processInfo.environment["OPEN_SETTINGS_CORRUPT_LIST_FIXTURE"] == "1" {
+                    try env.listServer!.corruptFixture()
+                }
                 let created=vm.profiles.create(name:"Example Loading Profile")!
                 let calls=env.actions.log.count
                 try require(!ad.isReady && !ad.openedProfiles.contains(created.id),"new Profile was ready before open")
@@ -820,6 +824,16 @@ func require(_ condition: @autoclosure () throws -> Bool, _ message: String) thr
                 try require(ad.errorText == "Ad block settings are still loading for this Profile." && env.actions.log.count == calls,"loading host control wrote or showed an internal fault")
                 await ad.openSelectedProfile()
                 try require(ad.isReady && ad.openedProfiles.contains(created.id),"successful open did not enable edits")
+                let directory = ad.store.listDirectory(for: created.id)
+                let state = try JSONDecoder().decode(AdBlockProfileState.self, from: Data(contentsOf: directory.appendingPathComponent("catalog-state.json")))
+                try require(Set(state.enabledBlockLists) == Set(["EasyList", "EasyPrivacy"]) && Set(state.lists.keys) == Set(state.enabledBlockLists) && state.lists.values.allSatisfy { !$0.sources.isEmpty && $0.bytes > 0 }, "ready Profile did not publish downloaded filter receipts")
+                struct Current: Decodable { struct Reference: Decodable { let generation: Int }; let live: Reference }
+                let current = try JSONDecoder().decode(Current.self, from: Data(contentsOf: directory.appendingPathComponent("current.json")))
+                try require(current.live.generation > 0, "ready Profile has no current filter generation")
+                for id in state.enabledBlockLists {
+                    let list = try Data(contentsOf: directory.appendingPathComponent("generations/\(current.live.generation)/\(id).txt"))
+                    try require(list == SyntheticListServer.validFixture, "ready Profile did not use the local filter fixture")
+                }
                 ad.setExcluded("example.org",excluded:true)
                 let file=ad.store.listDirectory(for:created.id).appendingPathComponent("exclusions.json")
                 try require(try JSONDecoder().decode([String].self,from:Data(contentsOf:file)).contains("example.org"),"ready host change did not persist")
@@ -850,21 +864,25 @@ func require(_ condition: @autoclosure () throws -> Bool, _ message: String) thr
 /// A real loopback HTTP server feeds synthetic filter text through URLSession and generation IO.
 /// It exercises the existing explicit debug-source override; no store or downloader is replaced.
 @MainActor final class SyntheticListServer {
+    static let validFixture = Data("[Adblock Plus 2.0]\n! Example synthetic regional list\n||example.org/ad^\n".utf8)
     let process = Process()
+    private let fixture = FileManager.default.temporaryDirectory.appendingPathComponent("open-filter-fixture-\(UUID().uuidString).txt")
     private let previous = ProcessInfo.processInfo.environment["OPEN_ADBLOCK_DEBUG_SOURCE_ROOT"]
     init() throws {
+        try Self.validFixture.write(to: fixture)
         process.executableURL = URL(fileURLWithPath: "/usr/bin/python3")
         process.arguments = ["-u", "-c", """
-import http.server
+import http.server, pathlib, sys
+fixture=pathlib.Path(sys.argv[1])
 class Handler(http.server.BaseHTTPRequestHandler):
  def do_GET(self):
-  data=b'[Adblock Plus 2.0]\\n! Example synthetic regional list\\n||example.org/ad^\\n'
+  data=fixture.read_bytes()
   self.send_response(200); self.send_header('Content-Type','text/plain'); self.send_header('ETag','synthetic-v1'); self.send_header('Content-Length',str(len(data))); self.end_headers(); self.wfile.write(data)
  def log_message(self,*args): pass
 server=http.server.HTTPServer(('127.0.0.1',0),Handler)
 print(server.server_port,flush=True)
 server.serve_forever()
-"""]
+""", fixture.path]
         let output = Pipe(); process.standardOutput = output; process.standardError = FileHandle.nullDevice
         try process.run()
         var line = Data()
@@ -872,7 +890,8 @@ server.serve_forever()
         guard let port = Int(String(decoding: line, as: UTF8.self)) else { process.terminate(); throw CheckFailure(description: "could not start synthetic list server") }
         setenv("OPEN_ADBLOCK_DEBUG_SOURCE_ROOT", "http://127.0.0.1:\(port)", 1)
     }
-    func stop() { if process.isRunning { process.terminate(); process.waitUntilExit() }; if let previous { setenv("OPEN_ADBLOCK_DEBUG_SOURCE_ROOT", previous, 1) } else { unsetenv("OPEN_ADBLOCK_DEBUG_SOURCE_ROOT") } }
+    func corruptFixture() throws { try Data("<html>invalid filter fixture</html>".utf8).write(to: fixture, options: .atomic) }
+    func stop() { try? FileManager.default.removeItem(at: fixture); if process.isRunning { process.terminate(); process.waitUntilExit() }; if let previous { setenv("OPEN_ADBLOCK_DEBUG_SOURCE_ROOT", previous, 1) } else { unsetenv("OPEN_ADBLOCK_DEBUG_SOURCE_ROOT") } }
 }
 
 @MainActor func countArchive(_ stores: [ProfileID: ArchiveStore]) async -> Int {

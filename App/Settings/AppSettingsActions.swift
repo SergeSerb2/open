@@ -30,7 +30,7 @@ final class AppSettingsActions: SettingsActions, LibraryActions, DownloadsProvid
     return vm
   }()
   @ObservationIgnored lazy var settingsPresenter = SettingsPresenter(viewModel: settings)
-  @ObservationIgnored lazy var captures = try? FileCapturesProvider(root: app.directories.root)
+  @ObservationIgnored lazy var captures = FileCapturesProvider(root: app.directories.root)
   @ObservationIgnored private(set) var library: LibraryViewModel?
   @ObservationIgnored private(set) var libraryPresenter: LibraryPresenter?
   func show(pane: PaneID? = nil) { settingsPresenter.show(pane: pane); NSApp.activate(); app.scheduleMenuRebuild() }
@@ -40,7 +40,6 @@ final class AppSettingsActions: SettingsActions, LibraryActions, DownloadsProvid
   }
   func showLibrary(section: LibrarySection? = nil) {
     app.downloadsCenter.refreshFiles()
-    guard let captures else { settings.statusText = "Captures could not be opened."; show(); return }
     let archives = Dictionary(uniqueKeysWithValues: app.model.profiles.map { ($0.id, app.archiveSink.store(for: $0.id)) })
     let histories = Dictionary(uniqueKeysWithValues: app.model.profiles.compactMap { profile in app.stores.history(for: profile.id).map { (profile.id, $0) } })
     if library == nil {
@@ -292,9 +291,23 @@ final class AppSettingsActions: SettingsActions, LibraryActions, DownloadsProvid
   func trashDownload(id: String) { app.downloadsCenter.fileAction("trash", key: id) }
   func removeDownload(id: String) { app.downloadsCenter.remove(id) }
   func deleteCapture(id: UUID) {} // Library already removed the file and index.
-  private func captureURL(_ id: UUID) -> URL? { captures?.captures.first { $0.id == id }.flatMap { captures?.directory.appendingPathComponent($0.fileName) } }
+  private func captureURL(_ id: UUID) -> URL? { captures.captures.first { $0.id == id }.flatMap { library?.captureURL($0) } }
   func revealCapture(id: UUID) { if let url = captureURL(id) { NSWorkspace.shared.activateFileViewerSelecting([url]) } }
-  func openCapture(id: UUID) { if let url = captureURL(id) { NSWorkspace.shared.open(url) } }
+  #if OPEN_AUTOMATION
+  var recordCaptureFileActions = false
+  var captureFileActions: [String] = []
+  #endif
+  func openCapture(id: UUID) {
+    guard let url = captureURL(id) else { return }
+    #if OPEN_AUTOMATION
+    // Same OS-handoff receipt as Downloads: never launch the user's Preview in a suite.
+    if recordCaptureFileActions {
+      if captureFileActions.count >= 32 { captureFileActions.removeFirst() }
+      captureFileActions.append(url.lastPathComponent); return
+    }
+    #endif
+    NSWorkspace.shared.open(url)
+  }
   func copyCapture(id: UUID) { if let url = captureURL(id), let image = NSImage(contentsOf: url) { NSPasteboard.general.clearContents(); NSPasteboard.general.writeObjects([image]) } }
   func saveCapture(id: UUID, to: URL) -> String? { guard let url = captureURL(id) else { return "This capture is no longer available." }; do { try FileManager.default.copyItem(at: url, to: to); return nil } catch { return "The capture could not be saved. \(error.localizedDescription)" } }
   func openHistoryItem(url: URL) { if let profileID = library?.historyProfileID { openURL(url, profileID: profileID) } }
