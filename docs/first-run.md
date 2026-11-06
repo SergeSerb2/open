@@ -108,7 +108,7 @@ The seven remaining Settings default buttons use prominent SettingsButtonStyle. 
 `App/FirstRun` hosts the shared design-reviewed view. `AppImportRunner` runs
 sidebar/archive import for both first run and Settings. Import save failure
 keeps the landed browser behind the panel; Try Again saves that pending model.
-Start Fresh and Not Now save the default model. Unfinished first run cannot
+Start Fresh, Not Now and all-failed Continue save the default model. Unfinished first run cannot
 autosave it. Existing harness launches pass `--skip-first-run`.
 
 The `firstrun` real-App suite builds its source in a private temporary folder.
