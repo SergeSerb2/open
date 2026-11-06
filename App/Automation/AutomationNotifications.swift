@@ -17,6 +17,9 @@ extension AutomationController {
   }
 
   func runNotificationCommand(_ cmd: String, _ a: [String: Any]) async throws -> Any {
+    if AutomationNotificationSetup.suppressesSystemSetup, ["notifications", "notification-click"].contains(cmd) {
+      throw Failure(message: "macOS notification setup is disabled for this automation launch")
+    }
     let authorization = NotificationAuthorization.shared
     switch cmd {
     case "notifications":
@@ -39,6 +42,7 @@ extension AutomationController {
       let status = await authorization.readStatus()
       return ["status": status.rawValue, "denied": authorization.isDenied, "requests": authorization.requestLog,
               "suppressed": authorization.suppressesRequests,
+              "setupSuppressed": AutomationNotificationSetup.suppressesSystemSetup,
               "settingsURL": NotificationAuthorization.systemSettingsURL.absoluteString] as [String: Any]
     case "window-miniaturize":
       // What a click on the yellow button does.

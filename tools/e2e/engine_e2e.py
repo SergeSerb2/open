@@ -146,7 +146,8 @@ class Open:
         self.observation_steps = []
         self.activation_trace = []
         self.focus_tracker = None
-        env = dict(os.environ, OPEN_USER_DATA=user_data, OPEN_E2E_OWNER_PID=str(os.getpid()))
+        env = dict(os.environ, OPEN_USER_DATA=user_data, OPEN_E2E_OWNER_PID=str(os.getpid()),
+                   OPEN_AUTOMATION_SKIP_MAC_NOTIFICATIONS="1")
         env.update(extra_env or {})
         args = [app, "--user-data-dir=" + user_data, "--style=%s" % style] + list(urls) + extra_args
         self.log = open(log_path, "a")
@@ -5087,7 +5088,9 @@ def profiles_checks(factory, results, tmp, config):
 
     def run_binary(label, **env_extra):
         """One launch of the real app; returns its exit code and output."""
-        env = dict(os.environ, OPEN_USER_DATA=root, OPEN_E2E_OWNER_PID=str(os.getpid()), **env_extra)
+        env = dict(os.environ, OPEN_USER_DATA=root, OPEN_E2E_OWNER_PID=str(os.getpid()),
+                   OPEN_AUTOMATION_SKIP_MAC_NOTIFICATIONS="1")
+        env.update(env_extra)
         path = os.path.join(tmp, "migration-%s.log" % label)
         with open(path, "w") as log:
             code = subprocess.run([binary, "--use-mock-keychain"], env=env, stdout=log, stderr=subprocess.STDOUT,
@@ -6017,7 +6020,9 @@ def sleep_checks(factory, results, tmp, style):
     server, port = _sleep_server()
     base = "http://127.0.0.1:%d/" % port
     def site(n, path="a.html"): return "http://t%d.localhost:%d/%s" % (n, port, path)
-    app = factory(urls=(base + "a.html",), fresh=True)
+    app = factory(urls=(base + "a.html",), fresh=True,
+                  extra_env={"OPEN_AUTOMATION_SKIP_MAC_NOTIFICATIONS": "0",
+                             "OPEN_AUTOMATION_NOTIFICATION_AUTHORIZATION": "record"})
     def state(tab=None): return app.call("sleep-state", **({"tab": tab} if tab else {}))
     def ts(tab): return state(tab)["tabs"][0]
     def tick(**kw): return app.call("sleep-tick", **kw)
@@ -10303,10 +10308,11 @@ def page_tools_quit_with_devtools_check(app, results, saved):
 def page_notification_checks(factory, results, tmp):
     """page-platform §8.3 N1–N4, N6: web notifications in the real App (Steps 7 and 16).
 
-    macOS delivery needs the user's one-time Allow (U-N1). A normal run starts the App with
-    OPEN_AUTOMATION_NOTIFICATION_AUTHORIZATION=record: the App logs its authorization request
-    instead of showing the macOS prompt, so no human is needed, and the macOS-delivery rows
-    report BLOCKED: U-N1 until macOS has authorized Open. For U-N1, run the suite once with
+    These fixtures explicitly opt into macOS notification setup. The record-only guard
+    suppresses the App's authorization request, but Chromium's Alerts helper registration
+    can still show a disclosure after an ad-hoc signature change (R-4). Under a no-system-
+    prompts rule, native setup/delivery verification is BLOCKED on U-N1 for that identity.
+    Only a user-operated U-N1 run may show or answer the system prompt. Run it once with
     OPEN_E2E_NOTIFICATION_PROMPT=1 and click Allow in the macOS prompt. The engine's own list and
     clicks come from EP-7 (fork patch 0504, `--open-automation` builds only). This suite writes no
     preferences keys.
@@ -10324,7 +10330,8 @@ def page_notification_checks(factory, results, tmp):
     origin = 'http://127.0.0.1:%d' % server.server_address[1]
     prompt = os.environ.get('OPEN_E2E_NOTIFICATION_PROMPT') == '1'
     app = factory(urls=(origin + '/notify.html',), fresh=True,
-                  extra_env={} if prompt else {'OPEN_AUTOMATION_NOTIFICATION_AUTHORIZATION': 'record'})
+                  extra_env={'OPEN_AUTOMATION_SKIP_MAC_NOTIFICATIONS': '0',
+                             **({} if prompt else {'OPEN_AUTOMATION_NOTIFICATION_AUTHORIZATION': 'record'})})
     pages = []
 
     def live_tab(url):
