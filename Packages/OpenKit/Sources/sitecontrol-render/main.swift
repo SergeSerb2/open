@@ -22,7 +22,7 @@ enum CLI {
         guard let i = args.firstIndex(of: name), i + 1 < args.count else { return nil }; return args[i + 1]
     }
     static func run(_ args: [String]) throws {
-        guard let command = args.first else { throw CLIError(description: "usage: sitecontrol-render render|ax|flows|code-flows|code-bench|extensions-check|check|bench|screens|motion|compare [--state scc-no-boosts] [--out FILE.png] [--scale 1|2] [--appearance light|dark]") }
+        guard let command = args.first else { throw CLIError(description: "usage: sitecontrol-render render|ax|flows|code-flows|code-review-flows|code-bench|extensions-check|check|bench|screens|motion|compare [--state scc-no-boosts] [--out FILE.png] [--scale 1|2] [--appearance light|dark]") }
         if command == "compare",!(value(args,"--state") ?? "").hasPrefix("editor-") { try MaterialFallback.configure(args) }
         let state = value(args, "--state") ?? "scc-no-boosts"
         guard names.contains(state) else { throw CLIError(description: "unknown state \(state)") }
@@ -45,6 +45,7 @@ enum CLI {
         case "extensions-check": report(SectionFlows.extensions())
         case "code-bench": report(CodeFlows.bench())
         case "code-flows": report(CodeFlows.run())
+        case "code-review-flows": report(CodeFlows.reviewFlows())
         case "flows": report(value(args,"--group") == "editor" ? EditorFlows.run() : Flows.run()+EditorFlows.run())
         case "cold-measure":
             guard args == ["cold-measure","--thread-instructions"] else { throw CLIError(description: "usage: sitecontrol-render cold-measure --thread-instructions") }

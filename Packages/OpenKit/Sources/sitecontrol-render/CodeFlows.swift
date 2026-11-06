@@ -105,11 +105,70 @@ import OpenBoosts
         let ended = stage.view.isCodeMode && !(stage.panel.firstResponder is NSTextView)
         stage.key(53,"\u{1b}");stage.settle(0.3)
         check("F17 first Esc ends text editing; second Esc returns to simple mode",ended && !stage.view.isCodeMode && stage.controller.panel != nil)
-        let fresh = EditorStage(isNew:true);fresh.controller.setCodeMode(true,animated:false)
-        if let input = fresh.view.codeView?.editor { fresh.panel.makeKey();fresh.panel.makeFirstResponder(input);typeJS(fresh," ");fresh.controller.close() }
-        let loaded = BoostStore(root:fresh.host.root,profileID:fresh.host.profileID).load()
-        check("F16 code edit counts as changed even when whitespace-only; close flushes the draft",loaded.contains { $0.css == " " })
-        return checks+renders()
+        return checks+reviewFlows()+renders()
+    }
+    /// Real native field editing and window key dispatch, including hidden siblings.
+    static func reviewFlows() -> [Flows.Check] {
+        var checks: [Flows.Check] = []
+        autoreleasepool {
+            let stage = EditorStage(state:"editor-code-css")
+            defer { stage.controller.close() }
+            let code = stage.view.codeView!,css = code.editor
+            stage.panel.makeKey();stage.panel.makeFirstResponder(css)
+            typeJS(stage,"/* keep CSS */")
+            let cssBefore = css.string
+            stage.controller.setCodeMode(false,animated:false)
+            // A real Edit menu lets the native rename field own Undo through the
+            // responder chain. Restore it even if the rename sheet fails.
+            let previousMenu = NSApp.mainMenu
+            let menu = NSMenu(),edit = NSMenu(title:"Edit"),item = NSMenuItem(title:"Edit",action:nil,keyEquivalent:"")
+            item.submenu = edit;menu.addItem(item)
+            edit.addItem(withTitle:"Undo",action:Selector(("undo:")),keyEquivalent:"z")
+            NSApp.mainMenu = menu
+            defer { NSApp.mainMenu = previousMenu }
+            stage.menu("Rename this Boost…")
+            var renameUndo = false
+            if let alert = stage.controller.activeAlert,let field = alert.accessoryView as? NSTextField,let input = field.currentEditor() as? NSTextView {
+                let original = input.string
+                input.setSelectedRange(NSRange(location:(original as NSString).length,length:0));input.breakUndoCoalescing()
+                stage.key(0,"x",window:alert.window);input.breakUndoCoalescing()
+                let typed = input.string == original+"x"
+                stage.key(6,"z",modifiers:.command,window:alert.window)
+                renameUndo = typed && input.string == original && css.string == cssBefore
+            }
+            stage.alert("Cancel")
+            stage.controller.setCodeMode(true,animated:false);code.select(.js)
+            let js = code.editor
+            stage.panel.makeKey();stage.panel.makeFirstResponder(js);typeJS(stage,"const kept = 1;")
+            js.setSelectedRange(NSRange(location:0,length:(js.string as NSString).length))
+            stage.key(44,"/",modifiers:.command)
+            let onlyJS = js.string == "// const kept = 1;" && css.string == cssBefore && css.enclosingScrollView?.isHidden == true
+            print("R1-1 native rename Undo=\(renameUndo), hidden CSS unchanged and only JS commented=\(onlyJS)")
+            checks.append(.init(name:"R1-1 rename field owns Cmd+Z; hidden CSS cannot steal JS Cmd+/",pass:renameUndo && onlyJS))
+        }
+        var emptyDeleted = true,nonemptySaved = true
+        for language in [BoostCodeLanguage.css,.js] {
+            for finalText in [""," ","kept"] {
+                autoreleasepool {
+                    let stage = EditorStage(isNew:true)
+                    stage.controller.setCodeMode(true,animated:false)
+                    let code = stage.view.codeView!;code.select(language)
+                    let input = code.editor
+                    stage.panel.makeKey();stage.panel.makeFirstResponder(input)
+                    typeJS(stage,"temporary code")
+                    input.setSelectedRange(NSRange(location:0,length:(input.string as NSString).length))
+                    stage.key(51,"\u{7f}")
+                    typeJS(stage,finalText)
+                    stage.controller.close()
+                    let loaded = BoostStore(root:stage.host.root,profileID:stage.host.profileID).load()
+                    if finalText.trimmingCharacters(in:.whitespaces).isEmpty { emptyDeleted = emptyDeleted && loaded.isEmpty }
+                    else { nonemptySaved = nonemptySaved && loaded.count == 1 && (language == .css ? loaded[0].css : loaded[0].js) == finalText }
+                }
+            }
+        }
+        print("R1-2 CSS/JS erased or whitespace-only new Boost deleted=\(emptyDeleted); pending nonempty code saved=\(nonemptySaved)")
+        checks.append(.init(name:"F16 erased CSS/JS and whitespace-only new Boosts delete on close; nonempty code flushes",pass:emptyDeleted && nonemptySaved))
+        return checks
     }
     private static func typeJS(_ stage: EditorStage,_ value: String) { for c in value { stage.key(c == "\n" ? 36 : 0,c == "\n" ? "\r" : String(c)) } }
     static func renders() -> [Flows.Check] {

@@ -45,7 +45,6 @@ public final class BoostEditorSession {
     private var codeWork: [BoostCodeLanguage: DispatchWorkItem] = [:]
     private var codeBefore: [BoostCodeLanguage: Boost] = [:]
     private var codeDrafts: [BoostCodeLanguage: String] = [:]
-    private var didEditCode = false
     public private(set) var devToolsVisible = false
     public var showsJSNotice: Bool { !(codeDrafts[.js] ?? boost.js).isEmpty && !defaults.bool(forKey: "open.boosts.hasDismissedJSNotice") }
     public var needsJSReload: Bool { boost.js != (host.loadedJS(boostID: boost.id,tabID: context.tabID) ?? "") }
@@ -54,7 +53,7 @@ public final class BoostEditorSession {
         guard isEditable else { return }
         if codeBefore[language] == nil { codeBefore[language] = boost }
         let noticeBefore = showsJSNotice
-        didEditCode = true;codeDrafts[language] = text;codeWork[language]?.cancel()
+        codeDrafts[language] = text;codeWork[language]?.cancel()
         let work = DispatchWorkItem { [weak self] in MainActor.assumeIsolated { self?.flushCode(language) } }
         codeWork[language] = work
         let delay = language == .css ? BoostEditorMetrics.cssSaveDelay : BoostEditorMetrics.jsSaveDelay
@@ -220,7 +219,7 @@ public final class BoostEditorSession {
         flushCode()
         previewWork?.cancel(); previewWork = nil; sampleTask?.cancel()
         host.exitZap(tabID: context.tabID)
-        if isNew && boost.isEmpty && !didEditCode && !deleted {
+        if isNew && boost.isEmpty && !deleted {
             _ = store.delete(id: boost.id); host.refresh(profile: context.profileID)
         }
         store.saveNow()

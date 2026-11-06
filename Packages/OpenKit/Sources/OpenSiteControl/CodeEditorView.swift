@@ -92,6 +92,7 @@ public enum BoostCodeLanguage: String, Sendable { case css, js }
         super.keyDown(with: event)
     }
     public override func performKeyEquivalent(with event: NSEvent) -> Bool {
+        guard window?.firstResponder === self else { return super.performKeyEquivalent(with: event) }
         let flags = event.modifierFlags.intersection([.command,.control,.option,.shift])
         if flags == .command || flags == [.command,.shift],event.charactersIgnoringModifiers?.lowercased() == "z" {
             breakUndoCoalescing();if flags.contains(.shift) { textUndo.redo() } else { textUndo.undo() };return true
