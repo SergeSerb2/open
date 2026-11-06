@@ -7103,14 +7103,16 @@ def littleopen_checks(factory, results, tmp):
         old_content = session(bar['id'])['content']
         action(bar['id'], 'switch-profile', profile=second_profile['id'])
         alert = app.call('little-open-profile-alert')
-        app.call('little-open-profile-alert', action='cancel')
-        cancelled = session(bar['id'])['content'] == old_content and session(bar['id'])['profile'] == seed['profiles'][0]['id']
+        app.call('little-open-profile-alert', action='cancel', suppress=True)
+        cancelled = session(bar['id'])['content'] == old_content and session(bar['id'])['profile'] == seed['profiles'][0]['id'] and not app.call('defaults', key=keys[4])
         action(bar['id'], 'switch-profile', profile=second_profile['id'])
         app.call('little-open-profile-alert', action='confirm', suppress=True)
         switched = wait_until(lambda: (lambda s: s if s['profile'] == second_profile['id'] and s['content'] != old_content and not s['loading'] else None)(session(bar['id'])), timeout=10)
         record('profile_confirm_cancel', cancelled and switched and alert['visible']
                and alert['message'] == 'Open this page in another Profile?'
                and alert['buttons'] == ['Switch Profile', 'Cancel']
+               and alert['informative'] == 'Each Profile has different browser data, so this webpage might look a little different.'
+               and alert['suppression'] == "Don't ask again"
                and app.call('defaults', key=keys[4]) is True, alert=alert, switched=switched)
         close_all()
 
