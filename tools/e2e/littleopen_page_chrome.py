@@ -214,6 +214,7 @@ def run(factory, results, tmp, h):
                 results['little_quit_ok']=dict(ok=bool(exited) and state['parent']==row['window'],state=state)
             except h['FocusInterruption']: raise
             except Exception as error:
+                h['_try'](cleanup)
                 app.quit()
                 results['little_quit_ok']=dict(ok=False,error=str(error))
             print('little_quit_ok ' + ('PASS' if results['little_quit_ok']['ok'] else 'FAIL'),flush=True)
