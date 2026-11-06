@@ -48,15 +48,15 @@ Approved in this task on 2026-11-05, subject to the main comparison and negative
 
 The new endpoint is the maximum of native selection/layout through the existing `CATransaction.flush()` return and the first `requestAnimationFrame` timestamp after a fresh `visibilitychange` in **every** shown pane. The last pane wins. The renderer timestamp uses `performance.timeOrigin`; the probe checks its epoch against native time. The 16 ms p95 **target remains NOT MET** (historical same-session split main 24.3 ms, branch 20.2 ms). The approved gate is branch p95 ≤ interleaved main p95 + 1 ms, with an absolute 25 ms ceiling, on both single→single and single→split paths. Physical presentation is out of scope. This is the approved renderer frame endpoint, not a screenshot/monitor measurement. See [High Resolution Time](https://www.w3.org/TR/hr-time-3/) and [page visibility](https://html.spec.whatwg.org/multipage/interaction.html#page-visibility).
 
-The native endpoint does not add an explicit CA transaction or a completion block. A diagnostic observer did so and waited for animations: main single/split p95 **233.392/242.181 ms**, branch **266.130/270.870 ms**, across three interleaved pairs. Those rejected samples stay in `app-paired-animation-end.json`. Apple's [completion-block documentation](https://developer.apple.com/documentation/quartzcore/catransaction/setcompletionblock%28_%3A%29) defines that callback as animation completion. The motion probe compares ordinary selections with this added transaction and records layer keys/durations to explain the extra time; its result is reported below.
+The native endpoint does not add an explicit CA transaction or a completion block. A diagnostic observer did so and waited for animations: main single/split p95 **233.392/242.181 ms**, branch **266.130/270.870 ms**, across three interleaved pairs. Those rejected samples stay in `app-paired-animation-end.json`. Apple's [completion-block documentation](https://developer.apple.com/documentation/quartzcore/catransaction/setcompletionblock%28_%3A%29) defines that callback as animation completion. The diagnostic motion probe compares ordinary selections with this added transaction and records layer keys/durations to explain the extra time; it does not count as root-tab selection acceptance.
 
-`tools/verification/split-app-speed.py` interleaves main, branch, main, branch, main, branch under one quiet/on-screen session. Each process has fresh data and 40 samples per path. Every sample and query-return diagnostic is retained. The branch must meet the relative main + 1 ms gate and absolute 25 ms ceiling on both paths. The standalone `split` row enforces the ceiling and reports the 16 ms target; the separate interleaved tool enforces the relative gate. Main is an archive of `8db4ac86` with only the identical benchmark observer and one automation dispatch hook; its production selection, container and chrome sources match the commit byte for byte (`timing-main-manifest.json`). Both locks use `lockf -k`. The quiet lock is acquired before the on-screen lock, using the priority flag while waiting. Before launching a timing receipt, the runner waits for load1 ≤12; no measured sample is discarded.
+`tools/verification/split-app-speed.py` interleaves main, branch, main, branch, main, branch under one quiet/on-screen session. Each process has fresh data and 40 samples per path. Every sample and query-return diagnostic is retained. The branch must meet the relative main + 1 ms gate and absolute 25 ms ceiling on both paths. The standalone `split` row enforces the ceiling and reports the 16 ms target; the separate interleaved tool enforces the relative gate. Main is an archive of `ebcf08d2` with only the identical benchmark observer and one automation dispatch hook; its production selection, container and chrome sources match the commit byte for byte (`timing-main-manifest.json`). Both locks use `lockf -k`. The quiet lock is acquired before the on-screen lock, using the priority flag while waiting. Before launching a timing receipt, the runner waits for load1 ≤12; no measured sample is discarded.
 
-The first `ebcf08d2` comparison failed the single relative gate: main/branch p95 19.151/20.448 ms (split 29.083/24.743 ms passed). It is retained, with all samples and loads, as `beforeFrameGuardFailedComparison` in the committed artifact. The final comparison below follows the geometry guard; no sample or threshold was removed.
+The first `ebcf08d2` comparison failed the nominal single relative gate: main/branch p95 19.151/20.448 ms (split 29.083/24.743 ms). Its three-tab setup selected a split pane ID as the single target. That showed one page but was not a selectable root single row. All earlier paired results are therefore diagnostic for that fixture, including the historical budget-decision numbers. The final comparison uses four tabs: two root singles disjoint from a separate two-pane split, asserted through the actual sidebar tree. All earlier samples remain labelled superseded; no threshold changes.
 
 ## Motion investigation
 
-The 30 ms difference was a real cache-reuse defect, not noise. Every one of the three interleaved pairs showed the same result, both during ordinary selection and with the diagnostic transaction wrapper:
+The 30 ms difference in that diagnostic workload came from cache reuse. The invalid single target changed a cached pane between single and split roles, which exposed extra implicit ring motion. The same frame-assignment fix protects normal pane relayouts too. Every one of the three interleaved pairs showed the same result, both during ordinary selection and with the diagnostic transaction wrapper:
 
 | Layer/property | Unchanged main | Branch before fix |
 |---|---|---|
@@ -65,7 +65,7 @@ The 30 ms difference was a real cache-reuse defect, not noise. Every one of the 
 
 Reused `PaneSlotView` layers already have geometry. Assigning the ring's new frame added default CA `bounds` and `position` animations. Fresh main layers did not add those animations. The fix disables implicit CA actions only while assigning the ring frame. The ring follows the slot's existing layout; the slot keeps `Motion.splitExpand` at 0.22 s. No measured color, frame or motion token changes. `pane_motion_no_extra_ring_animation` checks the real native animation records, including the diagnostic wrapped case. A separate negative proof adds a real 0.25-second ring geometry animation and requires the new motion gate to fail.
 
-Before this fix, the correctly scoped every-pane rAF comparison failed: main single/split p95 14.606/24.265 ms; branch 16.084/20.249 ms. These remain `app-paired-ring-before.json`, with all samples and per-run loads. The later comparison below must prove the approved relative/25 ms gate and removal of the extra ring animations. The 16 ms target is tracked separately in `docs/followups.md`.
+Before this fix, the older diagnostic comparison used the every-pane rAF endpoint but the superseded pane-ID fixture: main single/split p95 14.606/24.265 ms; branch 16.084/20.249 ms. These remain `app-paired-ring-before.json`, with all samples and per-run loads. The corrected root-row comparison below proves the approved relative/25 ms gate and absence of independent ring animations. The 16 ms target is tracked separately in `docs/followups.md`.
 
 ## Sidebar speed
 
@@ -74,7 +74,7 @@ The unchanged 1,000-row native sidebar workload runs from base and branch binari
 | Receipt | Main p95 ms | Branch p95 ms | Median change | Load range (1/5/15) | Result |
 |---|---|---|---|---|---|
 | Initial | 4.12/5.20/3.01 | 4.32/3.34/5.89 | 4.12→4.32, +4.85% | 10.96–11.59 / 11.72–11.86 / 11.28–11.33 | PASS |
-| Final, with literal uptime per run | 5.23/9.15/6.12 | 6.35/6.32/6.00 | 6.12→6.32, +3.27% | 14.17–15.23 / 17.37–17.50 / 16.88–16.93 | PASS |
+| Final, persistent quiet lock and literal uptime | 2.89/3.92/3.41 | 2.85/3.18/4.28 | 3.41→3.18, -6.74% | 9.11–9.58 / 9.47–9.58 / 10.34–10.38 | PASS |
 
 Raw receipts are `sidebar-speed.json` and `sidebar-final.json`. No sidebar rendering work is added.
 
@@ -102,22 +102,43 @@ Earlier instrumented latency runs accidentally re-injected a startup-armed idle 
 
 ## Final interleaved receipt (1× display)
 
-Main is `8db4ac86`; the branch includes the accepted cached-ring fix and the merged Little Open full-bleed path. The relative gate **PASSes**. Target 16 ms is **NOT MET**. Physical presentation is out of scope. [All synthetic samples, diagnostics and native motion records](split-app-timings.json) are committed; raw process logs stay in `.re/s9-split/`.
+Main is `ebcf08d2`; the branch includes its Peek Exit/expanded-split restore path and the accepted cached-ring fix. Both locks use `lockf -k`. The fixture keeps two root single rows disjoint from a separate two-pane split, checked through the actual sidebar tree. The relative gate **PASSes**. The branch meets 16 ms in this controlled two-pane comparison; unchanged main does not. The target is **NOT MET consistently** across full acceptance runs: run 3 reaches 16.581 ms at load 14.24/16.03/14.24. Physical presentation is out of scope. [All synthetic samples, diagnostics, negative proofs and native motion records](split-app-timings.json) are committed; raw process logs stay in `.re/s9-split/`.
 
-| Revision | Single median / p95 ms | Split median / p95 ms | Old query p95 single / split ms | Native p95 single / split ms |
-|---|---:|---:|---:|---:|
-| main | 8.910 / 13.147 | 17.382 / 20.815 | 18.143 / 25.445 | 9.549 / 17.212 |
-| branch | 9.060 / 13.000 | 13.372 / 17.269 | 13.957 / 22.354 | 8.993 / 13.549 |
-
-The branch is −0.147 ms on single p95 and −3.546 ms on split p95. Both are within main + 1 ms and below 25 ms. All three ordinary/wrapped motion cohorts show only the existing 0.22-second slot animations; no independent ring bounds/position animation remains.
+| Revision | Single median / p95 ms | Split median / p95 ms | Old query p95 single / split ms | Native p95 single / split ms | Renderer p95 single / split ms |
+|---|---:|---:|---:|---:|---:|
+| main | 8.153 / 12.387 | 15.911 / 18.864 | 12.303 / 24.308 | 8.535 / 15.214 | 12.387 / 18.864 |
+| branch | 8.332 / 11.242 | 10.263 / 12.453 | 13.169 / 16.438 | 7.968 / 9.476 | 11.242 / 12.453 |
 
 | Pair | Revision | Single p95 ms | Split p95 ms | Load before → after (1/5/15) |
 |---|---|---:|---:|---|
-| 1 | main | 14.852 | 20.815 | 10.72/12.21/15.33 → 11.27/12.28/15.32 |
-| 1 | branch | 13.612 | 18.332 | 11.73/12.36/15.33 → 11.27/12.25/15.27 |
-| 2 | main | 12.942 | 21.043 | 11.27/12.25/15.27 → 11.40/12.25/15.24 |
-| 2 | branch | 11.753 | 16.090 | 11.40/12.25/15.24 → 11.60/12.27/15.23 |
-| 3 | main | 12.361 | 20.144 | 11.60/12.27/15.23 → 14.08/12.78/15.37 |
-| 3 | branch | 12.217 | 15.352 | 14.08/12.78/15.37 → 14.39/12.86/15.39 |
+| 1 | main | 12.170 | 19.176 | 8.77/12.12/13.12 → 8.51/11.95/13.05 |
+| 1 | branch | 11.441 | 12.593 | 8.51/11.95/13.05 → 8.79/11.95/13.04 |
+| 2 | main | 12.387 | 18.061 | 8.64/11.87/13.01 → 8.43/11.77/12.96 |
+| 2 | branch | 11.037 | 12.152 | 8.43/11.77/12.96 → 8.75/11.73/12.94 |
+| 3 | main | 12.120 | 19.176 | 8.75/11.73/12.94 → 8.77/11.68/12.91 |
+| 3 | branch | 11.045 | 12.379 | 8.77/11.68/12.91 → 9.75/11.79/12.94 |
 
-The 17:27 receipt was repeated after the persistent `lockf -k` rule. Runs with known overlap or foreground interruption do not count toward acceptance. Historical diagnostic samples are kept.
+All three ordinary/wrapped motion cohorts have no independent ring bounds/position animation. Existing changed-frame slot motion keeps its 0.22-second duration; cached unchanged frames need no new animation. The 17:27 comparison was repeated after the persistent-lock fix; known overlap/interrupted runs do not count.
+
+The approved 16 ms target decision used this earlier honest-endpoint comparison. These historical samples and all loads remain in the committed artifact:
+
+| Historical receipt before ring fix | Split p95 ms | Load range, before/after all runs (1/5/15) |
+|---|---:|---|
+| main | 24.265 | 9.64–11.87 / 48.65–55.13 / 68.39–71.62 |
+| branch | 20.249 | 9.64–11.87 / 48.02–53.85 / 68.05–70.97 |
+
+
+## Final real-App acceptance
+
+| Real-App receipt | Result |
+|---|---|
+| `split` Chrome Release run 1 | 40/40 PASS; cleanup PASS |
+| `split` Chrome Release run 2 | 40/40 PASS; cleanup PASS |
+| `split` Chrome Release run 3 | 40/40 PASS; cleanup PASS |
+| `window` Chrome Release | 76 PASS; 2 launch-budget FAIL also on unchanged main; cleanup PASS |
+| `sidebar` Chrome Release | 19 PASS; cleanup PASS |
+| `sidebar-completion` Chrome Release | 193 PASS; cleanup PASS |
+
+Window launch baseline: sidebar drawn medians cold/warm branch384/367ms, unchanged main344/337ms against250ms. Actual launch-phase load branch5.15/7.08/9.60; main17.06/9.74/9.62. Both main launch rows completed; its later capture comparison lacked the archive sidebar-render CLI. All four branch1xwindow pixel rows pass.
+
+The suite runs use fresh data roots and the final merged App. Three consecutive `split` runs include the native idle gate, every-pane rAF timing, motion records and window ring pixels. The five-second idle counters stay exactly zero. Full verify results are pasted in the PR. The two-pane PNG is copied to the shared Section 9 handoff.
