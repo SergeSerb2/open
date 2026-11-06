@@ -9969,6 +9969,10 @@ def space_editor_creation_checks(factory, results, tmp):
                 app.call('key', text='word', route='app'); key('z', ['cmd'])
                 require('A5_bar_text_undo_keeps_form_draft', app.call('commandbar-state')['text'] == ''
                         and state()['name'] == 'Created Space' and spaces() == before)
+                key('z', ['cmd', 'shift'])
+                require('A5_bar_text_native_redo_keeps_form_draft', app.call('commandbar-state')['text'] == 'word'
+                        and state()['name'] == 'Created Space' and spaces() == before)
+                key('z', ['cmd'])
             key('escape')
             after_bar = app.call('commandbar-state'); after_form = state()
             require('A5_bar_escape_keeps_form_' + shortcut, not after_bar['presented'] and after_form['open'], bar=after_bar, form=after_form)

@@ -58,22 +58,6 @@ public final class SpaceCreationController {
         refreshProfiles()
     }
     public func focus() { creationView.focusName(); creationView.animateEntrance() }
-    /// Like the theme panel, the form owns draft undo while one of its controls
-    /// has focus. Keep these keys away from the model and other text editors.
-    public func handleKeyDown(_ event: NSEvent) -> Bool {
-        guard !isFinished, let window = view.window, event.window === window,
-              event.modifierFlags.intersection([.command, .control, .option]) == .command,
-              event.charactersIgnoringModifiers?.lowercased() == "z",
-              let responder = window.firstResponder else { return false }
-        let ownsResponder = creationView.nameField.currentEditor() === responder
-            || creationView.profileNameField.currentEditor() === responder
-            || (responder as? NSView).map { $0 === view || $0.isDescendant(of: view) } == true
-        guard ownsResponder else { return false }
-        creationView.breakTextUndoCoalescing()
-        if event.modifierFlags.contains(.shift) { localUndoManager.redo() }
-        else { localUndoManager.undo() }
-        return true
-    }
     public func setDraftStyle(_ style: SpaceStyle?) {
         guard !isFinished else { return }
         draftStyle = style; updatePreview()

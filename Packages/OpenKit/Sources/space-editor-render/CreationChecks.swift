@@ -36,7 +36,12 @@ final class CreationScene: NSObject, NSWindowDelegate {
         let event = NSEvent.keyEvent(with: .keyDown, location: .zero, modifierFlags: modifiers, timestamp: 0,
                                     windowNumber: window.windowNumber, context: nil, characters: characters,
                                     charactersIgnoringModifiers: characters, isARepeat: false, keyCode: code)!
-        if !controller.handleKeyDown(event) { window.sendEvent(event) }
+        window.sendEvent(event)
+    }
+    func edit(_ action: String) {
+        // Offscreen windows have no key-window menu target. Exercise the native
+        // field editor action here; App A5 covers the full key/menu route.
+        _ = window.firstResponder?.tryToPerform(NSSelectorFromString(action), with: nil)
     }
     func close() { if !controller.isFinished { controller.cancel() }; window.contentView = nil; window.close() }
 }
@@ -94,16 +99,16 @@ final class CreationScene: NSObject, NSWindowDelegate {
                      "C1 native Name editor shares the draft undo manager")
         fieldEditor.insertText("abc", replacementRange: fieldEditor.selectedRange())
         OffscreenRenderer.settle(editing.scene, runLoop: 0.01)
-        editing.key(6, characters: "z", modifiers: .command)
+        editing.edit("undo:")
         Checks.check(editing.controller.creationView.nameField.stringValue.isEmpty && editing.controller.draftStyle == typingTheme,
                      "C1 typing undo precedes the earlier theme edit")
-        editing.key(6, characters: "Z", modifiers: [.command, .shift])
+        editing.edit("redo:")
         Checks.check(editing.controller.creationView.nameField.stringValue == "abc" && editing.controller.draftStyle == typingTheme,
-                     "C1 Shift Command Z restores typing before theme undo")
-        editing.key(6, characters: "z", modifiers: .command); editing.key(6, characters: "z", modifiers: .command)
+                     "C1 native redo restores typing before theme undo")
+        editing.edit("undo:"); editing.edit("undo:")
         Checks.check(editing.controller.creationView.nameField.stringValue.isEmpty && editing.controller.draftStyle == nil,
                      "C1 one stack undoes typing then theme")
-        editing.key(6, characters: "Z", modifiers: [.command, .shift]); editing.key(6, characters: "Z", modifiers: [.command, .shift])
+        editing.edit("redo:"); editing.edit("redo:")
         Checks.check(editing.controller.creationView.nameField.stringValue == "abc" && editing.controller.draftStyle == typingTheme,
                      "C1 one stack redoes theme then typing without a lost step")
         let scene = try CreationScene(); defer { scene.close() }
