@@ -1356,7 +1356,7 @@ def tabstrip_checks(app, results):
     open_window = live()[0][1]["chromeWindowId"]
     some = chrome_id(b)
     create_with_tab = ext_call(pop, "chrome.windows.create({tabId: %d}).then(w => w.id)" % some)
-    other = ext_call(pop, "chrome.windows.create({url: 'about:blank', focused: false})"
+    other = ext_call(pop, "chrome.windows.create({type: 'popup', url: 'about:blank', focused: false})"
                           ".then(w => ({id: w.id, tab: w.tabs[0].id}))")
     out_move = into_move = group_here = other_group = group_move_in = None
     strip_before = strip_ids(pop)
@@ -10724,7 +10724,7 @@ def main():
     ap.add_argument("--engine-fingerprint-only", action="store_true", help="verify built engine artifacts and exit without launching Open")
     ap.add_argument("--extensions", default=os.path.join(ROOT, ".re", "ext", "unpacked"))
     ap.add_argument("--only", choices=["shell", "extensions", "features", "measure", "tabstrip", "window", "sidebar", "peek", "split",
-                                       "commandbar", "app-actions", "actions", "extensions-p3", "profiles", "sidebar-completion", "toolbar", "numbering", "media", "relaunch", "page", "page-chrome",
+                                       "commandbar", "app-actions", "actions", "extensions-p3", "extensions-e2", "profiles", "sidebar-completion", "toolbar", "numbering", "media", "relaunch", "page", "page-chrome",
                                        "sleep", "context-menus", "routing", "littleopen", "history", "applescript", "downloads"])
     ap.add_argument("--window-chrome-only", action="store_true", help="run only the window-chrome follow-up flows in the window suite")
     ap.add_argument("--keep", action="store_true",
@@ -10770,6 +10770,10 @@ def main():
     for sig in (signal.SIGTERM, signal.SIGHUP):
         signal.signal(sig, lambda *_: sys.exit(128 + 15))
     extra = ["--use-mock-keychain"]
+    if opts.only == "extensions-e2":
+        import extensions_e2
+        dirs = extensions_e2.fixtures(ROOT, tmp, opts.extensions)
+        extra += ["--load-extension=" + ",".join(dirs), "--disable-features=DisableLoadExtensionCommandLineSwitch"]
     if opts.only == "media":
         rules_path = os.path.join(tmp, "pip-site-rules.json")
         with open(rules_path, "w") as f:
@@ -10990,6 +10994,9 @@ def main():
                 elif opts.only == "extensions-p3":
                     import extensions_p3
                     extensions_p3.run(app, results["extensions-p3"], tmp, ROOT, wait_until, new_tab)
+                elif opts.only == "extensions-e2":
+                    import extensions_e2
+                    extensions_e2.run(app, results["extensions-e2"], tmp, ROOT, wait_until, new_tab, factory, _restore_defaults)
                 else:
                     feature_checks(app, opts.style, results["features"], tmp)
             finally:
@@ -11041,14 +11048,14 @@ def main():
                                     else opts.config.lower()))
     with open(os.path.join(OUT, name), "w") as f:
         json.dump(results, f, indent=2, sort_keys=True)
-    for group in ("shell", "extensions", "features", "measure", "tabstrip", "window", "sidebar", "peek", "split", "commandbar", "app-actions", "actions", "extensions-p3", "profiles", "sidebar-completion", "toolbar", "numbering", "media", "relaunch", "page", "page-chrome", "sleep", "context-menus", "routing", "littleopen", "history", "applescript", "downloads"):
+    for group in ("shell", "extensions", "features", "measure", "tabstrip", "window", "sidebar", "peek", "split", "commandbar", "app-actions", "actions", "extensions-p3", "extensions-e2", "profiles", "sidebar-completion", "toolbar", "numbering", "media", "relaunch", "page", "page-chrome", "sleep", "context-menus", "routing", "littleopen", "history", "applescript", "downloads"):
         for k, v in results.get(group, {}).items():
             if isinstance(v, dict) and "ok" in v:
                 print("%-24s %s" % (k, "PASS" if v.get("ok") else "FAIL"))
             elif isinstance(v, dict) and v.get("status") in ("SKIP", "BLOCKED", "INTERRUPTED", "DEFERRED"):
                 print("%-24s %s: %s" % (k, v["status"], v.get("reason", "")))
     print("wrote", os.path.join(OUT, name))
-    failures = [k for group in ("shell", "extensions", "features", "measure", "tabstrip", "window", "sidebar", "peek", "split", "commandbar", "app-actions", "actions", "extensions-p3", "sidebar-completion", "toolbar", "numbering", "media", "relaunch", "page", "page-chrome", "sleep", "context-menus", "routing", "littleopen", "history", "applescript", "downloads")
+    failures = [k for group in ("shell", "extensions", "features", "measure", "tabstrip", "window", "sidebar", "peek", "split", "commandbar", "app-actions", "actions", "extensions-p3", "extensions-e2", "sidebar-completion", "toolbar", "numbering", "media", "relaunch", "page", "page-chrome", "sleep", "context-menus", "routing", "littleopen", "history", "applescript", "downloads")
                 for k, v in results.get(group, {}).items() if isinstance(v, dict) and v.get("ok") is False]
     if failures or not results["cleanup"]["ok"]:
         sys.exit(1)

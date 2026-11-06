@@ -9,6 +9,7 @@ final class AutomationExtensionHandler: NSObject, OEExtensionManagerDelegate {
   var handlesPrompts = true
   var pending: [OEExtensionPrompt] = []
   var events: [[String: Any]] = []
+  var omniboxReply: [String: Any]?
 
   func registerContexts() {
     for context in OEEngine.shared.contexts {
@@ -83,6 +84,25 @@ final class AutomationExtensionHandler: NSObject, OEExtensionManagerDelegate {
 
 extension AutomationController {
   func runExtensionCommand(_ cmd: String, _ args: [String: Any]) async throws -> Any {
+    if cmd == "ext-windows" {
+      let key = "NSWindow Frame ExtensionPopupWindow"
+      if args["preference"] as? Bool == true {
+        if let value = args["value"] { UserDefaults.standard.set(value is NSNull ? nil : value, forKey: key) }
+        return UserDefaults.standard.object(forKey: key) ?? NSNull()
+      }
+      return ExtensionWindowController.windows.values.map { controller in
+        let window = controller.window!
+        let frame = window.frame
+        return ["browser": controller.browser.identifier, "chromeWindowId": controller.browser.chromeWindowIdentifier,
+          "page": controller.content.identifier, "extension": controller.extensionID,
+          "number": window.windowNumber, "title": window.title, "visible": window.isVisible,
+          "controller": String(describing: type(of: controller)),
+          "frame": [frame.minX, frame.minY, frame.width, frame.height],
+          "autosave": window.frameAutosaveName, "style": window.styleMask.rawValue,
+          "pageIsContentView": window.contentView === controller.content.view,
+          "hasToolbar": window.toolbar != nil] as [String: Any]
+      }
+    }
     if cmd == "ext-prompt" {
       if let enabled = args["handler"] as? Bool {
         extensionAutomation.cancelAll()
@@ -117,6 +137,24 @@ extension AutomationController {
     let factory = try window
     let browser = try focusedBrowser(factory)
     let manager = browser.context.extensions
+    if cmd == "ext-omnibox" {
+      guard let id = args["extension"] as? String else { throw Failure(message: "missing extension") }
+      switch args["op"] as? String {
+      case "start": browser.omniboxStartSession(forExtension: id); return true
+      case "cancel": browser.omniboxInputCancelled(forExtension: id); return true
+      case "default":
+        guard let row = browser.omniboxDefaultSuggestion(forExtension: id) else { return ["present": false] }
+        return ["present": true, "titleUTF16": row.descriptionText.utf16.count, "contentUTF16": row.content.utf16.count,
+          "matchRanges": row.matchRanges.count] as [String: Any]
+      case "input":
+        extensionAutomation.omniboxReply = nil
+        return browser.omniboxInputChanged(args["text"] as? String ?? "", forExtension: id) { [weak extensionAutomation] rows in
+          extensionAutomation?.omniboxReply = ["count": rows.count]
+        }
+      case "reply": return extensionAutomation.omniboxReply ?? [:]
+      default: throw Failure(message: "unknown omnibox operation")
+      }
+    }
     if cmd == "ext-commands" {
       return ["ready": manager.isReady, "context": browser.context.identifier,
         "commands": manager.commands.map { command in

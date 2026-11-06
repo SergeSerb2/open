@@ -4,6 +4,7 @@
 NS_HEADER_AUDIT_BEGIN(nullability, sendability)
 
 @class OEBrowser;
+@class OEEngine;
 @class OEBrowserContext;
 @class OEWebContent;
 @class OEOpenRequest;
@@ -68,6 +69,18 @@ NS_SWIFT_UI_ACTOR
 /// The browser process finished initialization. Create web contents after
 /// this (earlier ones wait for it).
 - (void)engineDidInitialize;
+
+/// A TYPE_POPUP hidden Browser with its own strip. Host content.view in a
+/// native window, set window.window, and retain both objects. Frame is Cocoa
+/// screen coordinates; NSZeroRect means no explicit frame. Delivered outside
+/// Chromium observers; closing from this callback is safe.
+- (void)engine:(OEEngine*)engine didOpenExtensionWindow:(OEBrowser*)window
+        content:(OEWebContent*)content requestedFrame:(NSRect)frame
+      extension:(NSString*)extensionIdentifier
+    NS_SWIFT_NAME(engine(_:didOpenExtensionWindow:content:requestedFrame:extension:));
+/// chrome.windows.update bounds/focus request. The frame uses Cocoa coordinates.
+- (void)engine:(OEEngine*)engine extensionWindow:(OEBrowser*)window
+    requestsFrame:(NSRect)frame focused:(BOOL)focused;
 
 /// Chromium opened a page that no OEWebContent asked for: chrome.tabs.create()
 /// from an extension service worker, chrome.runtime.openOptionsPage(), or a

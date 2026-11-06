@@ -1,0 +1,101 @@
+diff --git a/chrome/browser/extensions/api/tabs/tabs_api.cc b/chrome/browser/extensions/api/tabs/tabs_api.cc
+index bd5ca463750334a5359289cb3206df31e0976941..6e8f77a13d72ddc1aef166cd87dbc6e65c22679d 100644
+--- a/chrome/browser/extensions/api/tabs/tabs_api.cc
++++ b/chrome/browser/extensions/api/tabs/tabs_api.cc
+@@ -113,6 +113,11 @@
+ #include "chrome/browser/safe_browsing/extension_telemetry/extension_telemetry_service.h"
+ #endif
+ 
++#if BUILDFLAG(IS_MAC)
++#include "open/browser/tab_strip/hidden_browser.h"
++#include "open/browser/extensions/open_extension_window_hooks.h"
++#endif
++
+ static_assert(BUILDFLAG(ENABLE_EXTENSIONS_CORE));
+ 
+ namespace extensions {
+@@ -135,6 +140,11 @@ constexpr char kInvalidWindowTypeError[] = "Invalid value for type";
+ constexpr char kNoHighlightedTabError[] = "No highlighted tab";
+ constexpr char kTabIndexNotFoundError[] = "No tab at index: *.";
+ constexpr char kCannotFindTabToDiscard[] = "Cannot find a tab to discard.";
++#if BUILDFLAG(IS_MAC)
++// Open: each Open window owns its tabs (hidden tab-strip Browsers).
++constexpr char kOpenCannotMoveTabBetweenWindowsError[] =
++    "Tabs cannot be moved between windows in this browser.";
++#endif
+ constexpr char kCannotUnhighlightAllTabsError[] =
+     "Cannot unhighlight all tabs.";
+ 
+@@ -465,6 +475,12 @@ int MoveTabToWindow(ExtensionFunction* function,
+     *error = std::move(validation_result.error());
+     return -1;
+   }
++#if BUILDFLAG(IS_MAC)
++  if (open_engine::IsHiddenTabStripBrowser(target_browser)) {
++    *error = kOpenCannotMoveTabBetweenWindowsError;
++    return -1;
++  }
++#endif
+ 
+   // TODO(crbug.com/40638654): Rather than calling checking against
+   // TYPE_NORMAL, should this call
+@@ -1135,6 +1151,26 @@ ExtensionFunction::ResponseAction WindowsCreateFunction::Run() {
+       BrowserWindowInterface::CreationStatus::kOk) {
+     return RespondNow(Error(ExtensionTabUtil::kBrowserWindowNotAllowed));
+   }
++#if BUILDFLAG(IS_MAC)
++  // Open hosts extension windows in AppKit, preserving Chrome window/tab ids.
++  if (extension()) {
++    if (!open_engine::GetExtensionWindowHooks().create)
++      return RespondNow(Error("No Open window is available for this profile."));
++    if (urls_.size() > 1024) return RespondNow(Error("Too many window URLs."));
++    const bool popup = window_type == BrowserWindowInterface::TYPE_POPUP;
++    if (popup && urls_.size() > 1)
++      return RespondNow(Error("Popup windows support one tab in this browser."));
++    const bool explicit_bounds = create_data_ && (create_data_->left || create_data_->top ||
++        create_data_->width || create_data_->height);
++    const bool focused = !create_data_ || !create_data_->focused || *create_data_->focused;
++    if (auto* window = open_engine::GetExtensionWindowHooks().create(window_profile,
++            popup, explicit_bounds ? window_bounds : gfx::Rect(), extension()->id(), urls_, focused)) {
++      return RespondNow(WithArguments(ExtensionTabUtil::CreateWindowValueForExtension(
++          *window, extension(), WindowController::kPopulateTabs, source_context_type())));
++    }
++    return RespondNow(Error("No Open window is available for this profile."));
++  }
++#endif
+   BrowserWindowCreateParams create_params(window_type, *window_profile,
+                                           user_gesture());
+ 
+@@ -1464,6 +1500,12 @@ base::expected<void, std::string> WindowsCreateFunction::ValidateTab(
+     return base::unexpected(
+         ExtensionTabUtil::kCanOnlyMoveTabsWithinNormalWindowsError);
+   }
++#if BUILDFLAG(IS_MAC)
++  if (open_engine::IsHiddenTabStripBrowser(
++          source_window->GetBrowserWindowInterface())) {
++    return base::unexpected(kOpenCannotMoveTabBetweenWindowsError);
++  }
++#endif
+ #if !BUILDFLAG(IS_ANDROID)
+   BrowserWindowInterface* source_browser = source_window->GetBrowser();
+   CHECK(source_browser);
+@@ -4338,6 +4380,19 @@ ExtensionFunction::ResponseAction TabsDiscardFunction::Run() {
+       return RespondNow(Error(ExtensionTabUtil::kNoCurrentWindowError));
+     }
+ 
++#if BUILDFLAG(IS_MAC)
++    // Open: its tab sleep unloads hosted tabs; Chrome does not discard them.
++    if (open_engine::IsHiddenTabStripBrowser(browser_window)) {
++      if (!open_engine::RequestHostedTabDiscard(contents)) {
++        return RespondNow(Error(ErrorUtils::FormatErrorMessage(
++            tabs_constants::kCannotDiscardTab, base::NumberToString(tab_id))));
++      }
++      return RespondNow(ArgumentList(
++          tabs::Discard::Results::Create(tabs_internal::CreateTabObjectHelper(
++              contents, extension(), source_context_type(), nullptr, -1))));
++    }
++#endif
++
+     TabListInterface* tab_list = TabListInterface::From(browser_window);
+     CHECK(tab_list);
+ 

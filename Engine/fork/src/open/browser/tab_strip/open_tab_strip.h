@@ -22,6 +22,8 @@ class CefBrowserPlatformDelegate;
 class CefBrowserPlatformDelegateNative;
 class CefRequestContextImpl;
 struct CefBrowserCreateParams;
+class GURL;
+namespace gfx { class Rect; }
 
 namespace content {
 class WebContents;
@@ -84,6 +86,8 @@ class OpenTabStrip : public CefTabStrip, public TabStripModelObserver {
   // OpenBrowserWindow::Close for a window that still has tabs and is not
   // closing (chrome.windows.remove): asks the handler instead.
   void RequestClose();
+  bool is_extension_window() const { return extension_window_; }
+  void RequestFrame(const gfx::Rect& frame, bool focused);
 
   int id() const { return id_; }
   // True once Close() was called: the Browser may close for real.
@@ -94,6 +98,7 @@ class OpenTabStrip : public CefTabStrip, public TabStripModelObserver {
   content::WebContents* ActiveContents() const;
 
   // CefTabStrip:
+  void SetHandler(CefRefPtr<CefTabStripHandler> handler) override { handler_ = handler; }
   bool IsValid() override;
   int GetWindowId() override;
   void SetHostView(CefWindowHandle view) override;
@@ -178,7 +183,9 @@ class OpenTabStrip : public CefTabStrip, public TabStripModelObserver {
   void DeliverRequest(Request request,
                       base::WeakPtr<content::WebContents> contents,
                       int index,
-                      bool flag);
+                      bool flag,
+                      base::WeakPtr<content::WebContents> previous,
+                      base::WeakPtr<content::WebContents> next);
   void DeliverCloseRequest();
   // A hosted tab of this strip left for another window's strip (an
   // extension API this fork does not refuse): moves it back to |index|.
@@ -199,6 +206,10 @@ class OpenTabStrip : public CefTabStrip, public TabStripModelObserver {
   // embedder; those changes are not requests.
   int applying_ = 0;
   bool closed_ = false;
+  bool extension_window_ = false;
+  static BrowserWindowInterface* CreateExtensionWindow(Profile* profile,
+      bool popup, const gfx::Rect& frame, const std::string& extension_id,
+      const std::vector<GURL>& urls, bool focused);
   // Chrome's toolbar action model for the Browser (fork patch P2); exists
   // with the Browser. The embedder hears when it comes and goes.
   std::unique_ptr<OpenExtensionsToolbar> toolbar_;
