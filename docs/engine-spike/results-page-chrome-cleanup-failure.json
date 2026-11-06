@@ -34,16 +34,21 @@
     "embeddedUUID": "4C4C4465-5555-3144-A1AB-FCF4EA280540",
     "requiredSHA256": "",
     "source": "fork",
-    "stamp": "fork /Users/serge/Developer/open-engine-s8-main/chromium_git/chromium/src/cef/binary_distrib/cef_binary_156.0.14+g4fa4ab5+chromium-156.0.8078.48_macosarm64_minimal 1793841834"
+    "stamp": "fork $HOME/Developer/open-engine-s8-main/chromium_git/chromium/src/cef/binary_distrib/cef_binary_156.0.14+g4fa4ab5+chromium-156.0.8078.48_macosarm64_minimal 1793841834"
   },
   "interrupted_attempts": [],
   "page-chrome": {
     "dialog_alert": {
       "error": "intentional failure with a visible sheet",
       "ok": false,
-      "trace": "Traceback (most recent call last):\n  File \"/Users/serge/.t3/worktrees/open/t3-53a73f99/tools/e2e/page_chrome.py\", line 65, in gate\n    results[name] = fn()\n  File \"/Users/serge/.t3/worktrees/open/t3-53a73f99/tools/e2e/page_chrome.py\", line 90, in replies\n    raise RuntimeError('intentional failure with a visible sheet')\nRuntimeError: intentional failure with a visible sheet\n"
+      "trace": "Traceback (most recent call last):\n  File \"$WORKTREE/tools/e2e/page_chrome.py\", line 65, in gate\n    results[name] = fn()\n  File \"$WORKTREE/tools/e2e/page_chrome.py\", line 90, in replies\n    raise RuntimeError('intentional failure with a visible sheet')\nRuntimeError: intentional failure with a visible sheet\n"
     }
   },
+  "pathRedactions": [
+    "$WORKTREE",
+    "$HOME",
+    "$TMPDIR"
+  ],
   "started": "2026-11-05 14:59:47",
   "style": "chrome"
 }

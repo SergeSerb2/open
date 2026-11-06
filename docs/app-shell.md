@@ -1312,7 +1312,10 @@ Section 12 integration hooks:
   index lets `allDecisions()` enumerate settings read/written through this
   hook across relaunch. Settings written outside this hook before this change
   become enumerable when their origin is first read; OpenEngine has no API
-  to enumerate all older settings. Ephemeral Profiles keep the index in memory.
+  to enumerate all older settings. On initial use, await the store's
+  `persistenceTask?.value` before enumerating the asynchronous origin index;
+  `state(origin:kind:)` reads the engine immediately. Ephemeral Profiles
+  keep the index in memory.
 - `PaneChromeView.urlAreaFrame` exposes only the toolbar anchor geometry.
 
 The public engine API has no graceful close method; the App uses its existing
@@ -1325,7 +1328,17 @@ and microphone still uses the shared list-joining code when the engine asks.
 `page-chrome` e2e uses real loopback requests and the automation socket.
 `dialogPolicy` accept/dismiss/hold and `permissionPolicy` grant/deny remain.
 `dialog-button` and `permission-prompt` answers click the real AppKit buttons.
-The PR's result table records runtime evidence and remaining gates.
+The [S11 runtime report](engine-spike/s11-dialogs-permissions.md) records the
+final Chrome-style Debug runs on source `deeec4c3`, with NSScreen main
+`AW2726DM` at 1x: page-chrome 41 PASS, features 19, shell 7, window 76,
+page 85, and sleep 20, all with zero FAIL and clean owned-process teardown.
+The four window display rows pass. Page's four BLOCKED / one DEFERRED rows,
+window's existing deferred/measurement rows, and sleep's capture BLOCKED
+row retain their explicit status. Sleep N5 passes through the permission
+hook. Earlier foreground-interrupted runs are excluded from these counts.
+The broken variant fails the same 41 new gates; an intentional failure with
+a visible sheet also completes cleanup. The report and PR body retain the
+full verifier summary, load readings, and open capture/API limits.
 
 User captures still needed (`docs/re/page-chrome.md` §7): light/dark 2x
 JavaScript sheets, prompt default/selection, repeat suppression, close/reload

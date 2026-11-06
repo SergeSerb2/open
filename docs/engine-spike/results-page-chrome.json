@@ -1,0 +1,2241 @@
+{
+  "cleanup": {
+    "ok": true,
+    "processes": [
+      {
+        "forced": false,
+        "ok": true,
+        "owned_pids": [
+          16497,
+          16504,
+          16505,
+          16506,
+          16507,
+          16510,
+          16639,
+          16640,
+          16676
+        ],
+        "remaining_processes": [],
+        "reply": true,
+        "windows_after_quit": {
+          "count": 0,
+          "windows": []
+        },
+        "windows_before_quit": 2
+      },
+      {
+        "forced": false,
+        "ok": true,
+        "owned_pids": [
+          16702,
+          16716,
+          16717,
+          16720,
+          16721,
+          16735,
+          16736,
+          16871
+        ],
+        "remaining_processes": [],
+        "reply": true,
+        "windows_after_quit": {
+          "count": 0,
+          "windows": []
+        },
+        "windows_before_quit": 1
+      },
+      {
+        "forced": false,
+        "ok": true,
+        "owned_pids": [
+          16994,
+          17012,
+          17013,
+          17014,
+          17015,
+          17118
+        ],
+        "remaining_processes": [],
+        "reply": true,
+        "windows_after_quit": {
+          "count": 0,
+          "windows": []
+        },
+        "windows_before_quit": 1
+      },
+      {
+        "forced": false,
+        "ok": true,
+        "owned_pids": [
+          17170,
+          17183,
+          17184,
+          17187,
+          17188,
+          17189,
+          17190,
+          17307
+        ],
+        "remaining_processes": [],
+        "reply": true,
+        "windows_after_quit": {
+          "count": 0,
+          "windows": []
+        },
+        "windows_before_quit": 1
+      },
+      {
+        "forced": false,
+        "ok": true,
+        "owned_pids": [
+          17328,
+          17336,
+          17337,
+          17341,
+          17343,
+          17344,
+          17628,
+          17665,
+          17669,
+          17687
+        ],
+        "remaining_processes": [],
+        "reply": true,
+        "windows_after_quit": {
+          "count": 0,
+          "windows": []
+        },
+        "windows_before_quit": 1
+      },
+      {
+        "forced": false,
+        "ok": true,
+        "owned_pids": [
+          18400,
+          18451,
+          18452,
+          18453,
+          18454,
+          18455,
+          18456,
+          18470
+        ],
+        "remaining_processes": [],
+        "reply": true,
+        "windows_after_quit": {
+          "count": 0,
+          "windows": []
+        },
+        "windows_before_quit": 1
+      }
+    ]
+  },
+  "config": "Debug",
+  "engine": {
+    "distributionCodeSHA256": "1bc8b6044b77d53d46d76745a39b029e9709dbeb00fd31d08870ed0a38dd576a",
+    "distributionSHA256": "f34400e71412d87a0b268fcd5658a8563cca34f600c8dd17b534a63e76aa7939",
+    "distributionUUID": "4C4C4465-5555-3144-A1AB-FCF4EA280540",
+    "embeddedCodeSHA256": "1bc8b6044b77d53d46d76745a39b029e9709dbeb00fd31d08870ed0a38dd576a",
+    "embeddedSHA256": "7965fb82d3670f2824f8657069fcb816cb10fa70c82dd4260a575eb46c395359",
+    "embeddedUUID": "4C4C4465-5555-3144-A1AB-FCF4EA280540",
+    "requiredSHA256": "",
+    "source": "fork",
+    "stamp": "fork $HOME/Developer/open-engine-s8-main/chromium_git/chromium/src/cef/binary_distrib/cef_binary_156.0.14+g4fa4ab5+chromium-156.0.8078.48_macosarm64_minimal 1793841834"
+  },
+  "interrupted_attempts": [],
+  "page": {
+    "A1_appearance_checkmarks_chrome": {
+      "expected": [
+        {
+          "appearance-automatic": false,
+          "appearance-dark": true,
+          "appearance-light": false
+        },
+        {
+          "appearance-automatic": false,
+          "appearance-dark": false,
+          "appearance-light": true
+        },
+        {
+          "appearance-automatic": true,
+          "appearance-dark": false,
+          "appearance-light": false
+        }
+      ],
+      "menu": [
+        {
+          "appearance-automatic": false,
+          "appearance-dark": true,
+          "appearance-light": false
+        },
+        {
+          "appearance-automatic": false,
+          "appearance-dark": false,
+          "appearance-light": true
+        },
+        {
+          "appearance-automatic": true,
+          "appearance-dark": false,
+          "appearance-light": false
+        }
+      ],
+      "ok": true
+    },
+    "A1_appearance_light_dark_chrome": {
+      "afterNavigation": {
+        "background": "rgb(17, 17, 17)",
+        "changes": [],
+        "dark": true,
+        "loadId": "rj4d7z1h45"
+      },
+      "ok": true,
+      "start": {
+        "background": "rgb(255, 255, 255)",
+        "changes": [
+          "light"
+        ],
+        "dark": false,
+        "loadId": "xyn9gjzem3m"
+      },
+      "websitesDark": {
+        "background": "rgb(17, 17, 17)",
+        "changes": [],
+        "dark": true,
+        "loadId": "915iegukxzt"
+      },
+      "websitesLight": {
+        "background": "rgb(255, 255, 255)",
+        "changes": [
+          "light"
+        ],
+        "dark": false,
+        "loadId": "915iegukxzt"
+      }
+    },
+    "A1_appearance_stored_chrome": {
+      "ok": true,
+      "stored": [
+        "dark",
+        "light"
+      ]
+    },
+    "A2_appearance_automatic_follows_app_chrome": {
+      "ok": true,
+      "states": [
+        {
+          "background": "rgb(17, 17, 17)",
+          "changes": [
+            "light",
+            "dark"
+          ],
+          "dark": true,
+          "loadId": "915iegukxzt"
+        },
+        {
+          "background": "rgb(255, 255, 255)",
+          "changes": [
+            "light",
+            "dark",
+            "light"
+          ],
+          "dark": false,
+          "loadId": "915iegukxzt"
+        },
+        {
+          "background": "rgb(17, 17, 17)",
+          "changes": [
+            "light",
+            "dark",
+            "light",
+            "dark"
+          ],
+          "dark": true,
+          "loadId": "915iegukxzt"
+        }
+      ]
+    },
+    "D1_javascript_console_panel_chrome": {
+      "ok": true,
+      "selectedTabs": [
+        "tab-console"
+      ],
+      "windows": [
+        "cookies",
+        "DevTools - 127.0.0.1:54754/cookies.html"
+      ]
+    },
+    "D1_key_cmd_opt_j_chrome": {
+      "devtoolsClosedFirst": true,
+      "ok": true,
+      "selectedTabs": [
+        "tab-console"
+      ]
+    },
+    "D1_quit_with_devtools_open": {
+      "crashReports": [],
+      "devtools": true,
+      "ok": true,
+      "quit": {
+        "forced": false,
+        "ok": true,
+        "owned_pids": [
+          16497,
+          16504,
+          16505,
+          16506,
+          16507,
+          16510,
+          16639,
+          16640,
+          16676
+        ],
+        "remaining_processes": [],
+        "reply": true,
+        "windows_after_quit": {
+          "count": 0,
+          "windows": []
+        },
+        "windows_before_quit": 2
+      }
+    },
+    "D2_network_inspector_panel_chrome": {
+      "consoleAfter": [
+        "tab-console"
+      ],
+      "first": [
+        "tab-network"
+      ],
+      "method": "DevToolsAPI.showPanel in the DevTools front end (no fork patch; Chrome's own Console command path)",
+      "networkWhileOpen": [
+        "tab-network"
+      ],
+      "ok": true
+    },
+    "D3_developer_mode": {
+      "fields": [
+        "127.0.0.1",
+        "127.0.0.1:54754/cookies.html?dev=1",
+        "localhost",
+        "127.0.0.1"
+      ],
+      "hiddenOnBlank": true,
+      "ok": true,
+      "stored": [],
+      "titles": [
+        "Turn on Developer Mode for this site",
+        "Turn off Developer Mode for this site"
+      ]
+    },
+    "D4_allow_js_apple_events_checkmark": {
+      "expected": [
+        false,
+        true,
+        false
+      ],
+      "menu": [
+        false,
+        true,
+        false
+      ],
+      "ok": true
+    },
+    "D4_allow_js_apple_events_osascript": {
+      "external": {
+        "permissionStatus": -1744,
+        "reason": "read-only AEDeterminePermissionToAutomateTarget, askUserIfNeeded=false",
+        "status": "BLOCKED",
+        "targetBundle": "$WORKTREE/build/Debug/Open.app",
+        "targetPID": 16497
+      },
+      "off": {
+        "number": 1013,
+        "ok": true,
+        "reply": "1013|JavaScript from Apple Events is off. Turn it on in View ▸ Developer.",
+        "sender": "self NSAppleScript"
+      },
+      "offAgain": {
+        "number": 1013,
+        "ok": true,
+        "reply": "1013|JavaScript from Apple Events is off. Turn it on in View ▸ Developer.",
+        "sender": "self NSAppleScript"
+      },
+      "ok": true,
+      "on": "3",
+      "sender": "self NSAppleScript"
+    },
+    "D4_allow_js_apple_events_setting": {
+      "ok": true,
+      "stored": [
+        false,
+        true,
+        false
+      ]
+    },
+    "EP3_selection_change_bit": {
+      "changeEvents": 1,
+      "cleared": true,
+      "ok": true
+    },
+    "H1_task_manager_window": {
+      "ok": true,
+      "shown": "yes",
+      "titles": [
+        "cookies",
+        "Task Manager"
+      ],
+      "window": {
+        "attachedSheet": 0,
+        "class": "NativeWidgetMacNSWindow",
+        "firstResponder": "BridgedContentView",
+        "frame": "{{960, 765}, {640, 390}}",
+        "key": true,
+        "level": 0,
+        "number": 86338,
+        "parent": 0,
+        "sheet": false,
+        "title": "Task Manager",
+        "visible": true
+      }
+    },
+    "H2_cancel_trace": {
+      "files": [
+        "Open Trace 2026-11-05 19.03.04.json"
+      ],
+      "ok": true
+    },
+    "H2_record_trace_stop": {
+      "error": "",
+      "file": "$TMPDIR/Open-E2E-page-chrome-16391-4b50125c-scratch-i0lwsfk4/traces/Open Trace 2026-11-05 19.03.04.json",
+      "menu": [
+        {
+          "cancel-trace": false,
+          "record-trace": true
+        },
+        {
+          "cancel-trace": true,
+          "record-trace": false
+        },
+        {
+          "cancel-trace": false,
+          "record-trace": true
+        }
+      ],
+      "ok": true,
+      "recordingToast": {
+        "accessory": "stop",
+        "accessoryFrame": [
+          1298,
+          35,
+          32,
+          27
+        ],
+        "age": 2.01611050000065,
+        "coalescingKey": "trace",
+        "exiting": false,
+        "frame": [
+          1158,
+          18,
+          182,
+          60
+        ],
+        "hovered": false,
+        "lifetime": null,
+        "sticky": true,
+        "subtitle": "0:01",
+        "symbol": null,
+        "title": "Recording Trace…"
+      },
+      "savedToast": {
+        "accessory": "show in finder",
+        "accessoryFrame": [
+          1298,
+          28,
+          32,
+          27
+        ],
+        "age": 0.08112999999866588,
+        "coalescingKey": "trace",
+        "exiting": false,
+        "frame": [
+          1196,
+          18,
+          144,
+          46
+        ],
+        "hovered": false,
+        "lifetime": 5,
+        "sticky": false,
+        "subtitle": null,
+        "symbol": null,
+        "title": "Trace Saved"
+      },
+      "showInFinder": true,
+      "traceEvents": 6434
+    },
+    "H3_copy_open_info": {
+      "ok": true,
+      "text": "Open 0.1.0 (1)\nEngine: Chromium 156.0.8078.48, CEF 156.0.14+g4fa4ab5+chromium-156.0.8078.48\nmacOS Version 27.2 (Build 26B123)\nMac: Mac17,8 (arm64)",
+      "toast": "Copied Open Info"
+    },
+    "H4_cast_menu_hidden": {
+      "cast": {
+        "action": "openCommandAction:",
+        "checked": false,
+        "enabled": false,
+        "hidden": true,
+        "id": "cast",
+        "key": "",
+        "payload": "",
+        "tag": 0,
+        "targetNil": false,
+        "title": "Cast…"
+      },
+      "expected": [
+        true,
+        false
+      ],
+      "menu": [
+        true,
+        false
+      ],
+      "ok": true
+    },
+    "H4_media_router_off": {
+      "helpers": 7,
+      "helpersWithMediaRouterOff": 7,
+      "ok": true
+    },
+    "H_reveal_open_data": {
+      "ok": true,
+      "reveals": [
+        "$TMPDIR/Open-E2E-page-chrome-16391-4b50125c-scratch-i0lwsfk4/traces/Open Trace 2026-11-05 19.03.04.json",
+        "$HOME/Library/Application Support/Open-E2E-page-chrome-16391-4b50125c"
+      ],
+      "root": "$HOME/Library/Application Support/Open-E2E-page-chrome-16391-4b50125c"
+    },
+    "K1_clear_cookies_and_refresh_chrome": {
+      "after": [
+        "",
+        "k2=localhost"
+      ],
+      "before": [
+        "k1=127.0.0.1",
+        "k2=localhost"
+      ],
+      "enabled": true,
+      "interim": "host cookies of the page's host via clearBrowsingData(origin:); Site Control E2 pending",
+      "ok": true,
+      "reloaded": true
+    },
+    "K2_clear_cache_disabled_before_E2_chrome": {
+      "ok": true,
+      "row": {
+        "action": "openCommandAction:",
+        "checked": false,
+        "enabled": false,
+        "hidden": false,
+        "id": "clear-cache-and-refresh",
+        "key": "",
+        "payload": "",
+        "tag": 0,
+        "targetNil": false,
+        "title": "Clear Cache and Refresh"
+      }
+    },
+    "N1_allow_asks_macos": {
+      "expected": "skipped:authorized",
+      "granted": true,
+      "ok": true,
+      "prompt": {
+        "anchor": {
+          "edge": 3,
+          "frame": [
+            88,
+            838,
+            212,
+            36
+          ],
+          "name": "sidebar-url"
+        },
+        "buttons": [
+          "Not Now",
+          "Allow"
+        ],
+        "decisions": 0,
+        "help": "Click the lock to change this any time",
+        "keyWindow": 86369,
+        "kinds": 8,
+        "origin": "http://127.0.0.1:55029/",
+        "parent": 86369,
+        "pending": 1,
+        "pendingPage": 1,
+        "promptKey": true,
+        "question": "Allow 127.0.0.1 to send you notifications?",
+        "selectedPage": 1,
+        "visible": true,
+        "window": 86370
+      },
+      "request": "skipped:authorized",
+      "requests": [
+        "skipped:authorized"
+      ],
+      "statusBefore": "authorized"
+    },
+    "N1_engine_display": {
+      "log": [
+        "permission:granted",
+        "show:Open N1 banner"
+      ],
+      "ok": true
+    },
+    "N1_engine_list": {
+      "engine": [
+        {
+          "body": "Banner from notify.html",
+          "id": "n#http://127.0.0.1:55029#open-n1",
+          "origin": "http://127.0.0.1:55029/",
+          "title": "Open N1 banner"
+        }
+      ],
+      "ok": true
+    },
+    "N1_macos_delivered": {
+      "authorization": "authorized",
+      "delivered": [],
+      "reason": "U-N1: authorized, but macOS lists no delivered banner for Open.app; the user confirms delivery (followups)",
+      "status": "BLOCKED"
+    },
+    "N2_alerts_helper": {
+      "helpers": [
+        17628
+      ],
+      "helpersBefore": [],
+      "ok": true,
+      "shown": true
+    },
+    "N2_bundles": {
+      "alerts": {
+        "CFBundleDisplayName": "Open",
+        "CFBundleIdentifier": "io.github.sergeserb2.open.helper.alerts",
+        "NSUserNotificationAlertStyle": "alert"
+      },
+      "helper": null,
+      "main": "banner",
+      "ok": true
+    },
+    "N2_listed": {
+      "engine": [
+        "Open N1 banner",
+        "Open N2 alert"
+      ],
+      "ok": true
+    },
+    "N3_activation": {
+      "focusedSpace": "F7F50A72-A48F-4C22-B731-1DB0418C25BF",
+      "ok": true,
+      "prepared": {
+        "miniaturized": true,
+        "space1Focused": true,
+        "style": "chrome",
+        "tabSelected": false
+      },
+      "requests": [
+        {
+          "content": 2,
+          "request": "activate",
+          "space": "F7F50A72-A48F-4C22-B731-1DB0418C25BF",
+          "tab": "1A1DF72F-0654-4851-8CB0-99BB90BC4B5F",
+          "time": 1793930622.043,
+          "type": "tab-request"
+        }
+      ],
+      "selected": true,
+      "space2": "F7F50A72-A48F-4C22-B731-1DB0418C25BF",
+      "windowRestoredAndKey": true
+    },
+    "N3_notification_click": {
+      "clicked": {
+        "clicked": true
+      },
+      "ok": true,
+      "router": [
+        {
+          "action": "page",
+          "id": "n#http://127.0.0.1:55029#open-n1",
+          "origin": "http://127.0.0.1:55029/",
+          "persistent": false,
+          "tab": "860EB485-1D1C-410A-8E3B-D41F1CD7AA31"
+        }
+      ],
+      "selected": true
+    },
+    "N4_click_fallback_selects_tab": {
+      "ok": true,
+      "router": [
+        {
+          "action": "fallback",
+          "id": "n#http://127.0.0.1:55029#open-n1",
+          "origin": "http://127.0.0.1:55029/",
+          "persistent": false,
+          "tab": "7DEBE791-DB79-418B-A36E-254BF1F40639"
+        }
+      ],
+      "selectedAfter": true,
+      "selectedAt200ms": false,
+      "selectedAtClick": false
+    },
+    "N6_click_opens_tab": {
+      "clicked": {
+        "clicked": true
+      },
+      "events": [
+        {
+          "content": 1,
+          "request": "activate",
+          "space": "82679E51-C18F-44A8-A4A2-C80C308F1550",
+          "tab": "860EB485-1D1C-410A-8E3B-D41F1CD7AA31",
+          "time": 1793930622.118007,
+          "type": "tab-request"
+        }
+      ],
+      "notification": {
+        "body": "Click opens http://127.0.0.1:55029/notify.html?from=worker",
+        "id": "p#http://127.0.0.1:55029/#1open-n6",
+        "origin": "http://127.0.0.1:55029/",
+        "title": "Open N6 worker"
+      },
+      "opened": [],
+      "pages": [
+        "http://127.0.0.1:55029/notify.html",
+        "http://127.0.0.1:55029/notify.html?space2",
+        "http://127.0.0.1:55029/notify.html?nofocus"
+      ],
+      "reason": "P1: clients.openWindow from a service worker opens no page in Open (followups)",
+      "status": "BLOCKED",
+      "tabs": [
+        "http://127.0.0.1:55029/notify.html?nofocus",
+        "http://127.0.0.1:55029/notify.html"
+      ]
+    },
+    "N6_engine_display": {
+      "engineAfterClose": [
+        "Open N1 banner",
+        "Open N2 alert",
+        "Open N6 worker"
+      ],
+      "note": "getNotifications() reads macOS's delivered list (see N1_macos_delivered); not asserted",
+      "ok": true,
+      "pageListAfterClose": [],
+      "ready": true,
+      "tabClosed": true,
+      "titles": []
+    },
+    "Q1_quote_link_scrolls": {
+      "landed": {
+        "hash": "",
+        "scrollY": 5843,
+        "visible": true
+      },
+      "link": "http://127.0.0.1:54933/quote.html#:~:text=A%20unique%20sentence%20far%20down%20the%20page%20for%20the%20quote%20link.",
+      "ok": true,
+      "toast": {
+        "accessory": "none",
+        "accessoryFrame": null,
+        "age": 0.05274104166892357,
+        "coalescingKey": null,
+        "exiting": false,
+        "frame": [
+          1093,
+          18,
+          167,
+          42
+        ],
+        "hovered": false,
+        "lifetime": 3,
+        "panel": [
+          228,
+          10,
+          1042,
+          780
+        ],
+        "sticky": false,
+        "subtitle": null,
+        "symbol": "quote.bubble.fill",
+        "title": "Copied Quote Link"
+      }
+    },
+    "Q2_quote_context": {
+      "landed": {
+        "first": false,
+        "scrollY": 2883,
+        "second": true
+      },
+      "link": "http://127.0.0.1:54933/quote.html#:~:text=on%20this%20page.-,The%20same%20sentence%20appears%20twice%20on%20this%20page.,-A%20unique%20sentence",
+      "ok": true
+    },
+    "Q2_selection_and_link": {
+      "empty": {
+        "hasSelection": false,
+        "link": null,
+        "text": ""
+      },
+      "ok": true,
+      "opened": {
+        "hash": "",
+        "highlights": [],
+        "y": 0
+      },
+      "picked": {
+        "hasSelection": true,
+        "link": "http://127.0.0.1:54987/quote.html#:~:text=The%20quick%20brown%20fox%20studies%20the%20lazy%20dog%20before%20every%20jump.",
+        "text": "The quick brown fox studies the lazy dog before every jump.\n\n"
+      }
+    },
+    "Q3_quote_without_selection": {
+      "ok": true,
+      "pasteboard": "http://127.0.0.1:54933/quote.html",
+      "toast": {
+        "accessory": "share",
+        "accessoryFrame": [
+          1218,
+          28,
+          32,
+          27
+        ],
+        "age": 0.0035866249963873997,
+        "coalescingKey": null,
+        "exiting": false,
+        "frame": [
+          1065,
+          18,
+          195,
+          46
+        ],
+        "hovered": false,
+        "lifetime": 5,
+        "panel": [
+          228,
+          10,
+          1042,
+          780
+        ],
+        "sticky": false,
+        "subtitle": null,
+        "symbol": null,
+        "title": "Copied Current URL"
+      }
+    },
+    "Q4_copy_url_offers_quote": {
+      "offer": {
+        "elapsed": 0,
+        "selected": true,
+        "shown": true
+      },
+      "ok": true,
+      "pasteboard": "http://127.0.0.1:54933/quote.html#:~:text=A%20unique%20sentence%20far%20down%20the%20page%20for%20the%20quote%20link.",
+      "toast": {
+        "accessory": "copy quote link",
+        "accessoryFrame": [
+          1218,
+          35,
+          32,
+          27
+        ],
+        "age": 0.0033098749991040677,
+        "coalescingKey": null,
+        "exiting": false,
+        "frame": [
+          972,
+          18,
+          288,
+          60
+        ],
+        "hovered": false,
+        "lifetime": 5,
+        "panel": [
+          228,
+          10,
+          1042,
+          780
+        ],
+        "sticky": false,
+        "subtitle": "Share a link directly to this text instead?",
+        "symbol": null,
+        "title": "Copied Current URL"
+      }
+    },
+    "Q5_share_quote_button": {
+      "button": {
+        "frame": [
+          8,
+          88,
+          212,
+          28
+        ],
+        "shown": true,
+        "title": "Share Quote"
+      },
+      "hiddenAfterClear": true,
+      "ok": true,
+      "pasteboard": "http://127.0.0.1:54933/quote.html#:~:text=A%20unique%20sentence%20far%20down%20the%20page%20for%20the%20quote%20link."
+    },
+    "SW1_indicator_hides_after_completion": {
+      "ok": true,
+      "state": {
+        "active": false,
+        "circle": [
+          986,
+          370,
+          40,
+          40
+        ],
+        "hidden": true,
+        "last": {
+          "direction": "forward",
+          "phase": "completed",
+          "progress": 1
+        },
+        "made": true,
+        "opacity": 0,
+        "page": [
+          0,
+          0,
+          1042,
+          780
+        ],
+        "pane": true,
+        "scale": 1
+      }
+    },
+    "SW1_swipe_back_forward": {
+      "back": [
+        "began",
+        "changed",
+        "changed",
+        "changed",
+        "changed",
+        "changed",
+        "completed"
+      ],
+      "forward": [
+        "began",
+        "changed",
+        "changed",
+        "changed",
+        "changed",
+        "changed",
+        "completed"
+      ],
+      "indicator": {
+        "active": false,
+        "circle": [
+          16,
+          370,
+          40,
+          40
+        ],
+        "hidden": false,
+        "last": {
+          "direction": "back",
+          "phase": "completed",
+          "progress": 1
+        },
+        "made": true,
+        "opacity": 0,
+        "page": [
+          0,
+          0,
+          1042,
+          780
+        ],
+        "pane": true,
+        "scale": 1
+      },
+      "ok": true,
+      "urls": [
+        true,
+        true
+      ]
+    },
+    "SW2_partial_swipe_cancels": {
+      "indicator": {
+        "active": false,
+        "circle": [
+          -40,
+          370,
+          40,
+          40
+        ],
+        "hidden": true,
+        "last": {
+          "direction": "back",
+          "phase": "cancelled",
+          "progress": 0.5
+        },
+        "made": true,
+        "opacity": 0,
+        "page": [
+          0,
+          0,
+          1042,
+          780
+        ],
+        "pane": true,
+        "scale": 1
+      },
+      "ok": true,
+      "phases": [
+        "began",
+        "changed",
+        "changed",
+        "cancelled"
+      ],
+      "url": "http://127.0.0.1:54987/links-target.html"
+    },
+    "SW3_split_pane_swipe": {
+      "ok": true,
+      "otherIndicator": {
+        "active": false,
+        "circle": [
+          16,
+          354,
+          40,
+          40
+        ],
+        "hidden": false,
+        "last": {
+          "direction": "back",
+          "phase": "completed",
+          "progress": 1
+        },
+        "made": true,
+        "opacity": 0,
+        "page": [
+          0,
+          0,
+          516,
+          748
+        ],
+        "pane": true,
+        "scale": 1
+      },
+      "tabIndicator": {
+        "made": false,
+        "pane": true
+      },
+      "tabURL": "http://127.0.0.1:54987/links-target.html",
+      "visible": [
+        "0199C5B1-E6BF-4DA3-A16A-F8493F2FAE2E",
+        "B369DDD2-61BE-40FE-838E-94F1505B9219"
+      ]
+    },
+    "SW4_capture_overlay_pauses_swipes": {
+      "after": {
+        "enabled": true,
+        "engineOverlay": false
+      },
+      "during": {
+        "enabled": false,
+        "engineOverlay": false,
+        "indicator": {
+          "active": false,
+          "circle": [
+            -40,
+            370,
+            40,
+            40
+          ],
+          "hidden": true,
+          "last": {
+            "direction": "back",
+            "phase": "cancelled",
+            "progress": 0.5
+          },
+          "made": true,
+          "opacity": 0,
+          "page": [
+            0,
+            0,
+            1042,
+            780
+          ],
+          "pane": true,
+          "scale": 1
+        },
+        "ran": false
+      },
+      "ok": true
+    },
+    "SW4_swipe_disabled": {
+      "events": 0,
+      "ok": true,
+      "ran": false
+    },
+    "T-E1_copy_url_clean": {
+      "ok": true,
+      "pasteboard": "http://127.0.0.1:54933/en.html?id=1#top",
+      "toast": {
+        "accessory": "share",
+        "accessoryFrame": [
+          1218,
+          28,
+          32,
+          27
+        ],
+        "age": 0.007009000000834931,
+        "coalescingKey": null,
+        "exiting": false,
+        "frame": [
+          962,
+          18,
+          298,
+          46
+        ],
+        "hovered": false,
+        "lifetime": 5,
+        "panel": [
+          228,
+          10,
+          1042,
+          780
+        ],
+        "sticky": false,
+        "subtitle": null,
+        "symbol": null,
+        "title": "Copied a clean link without trackers"
+      }
+    },
+    "T-E2_copy_url_share": {
+      "ok": true,
+      "share": {
+        "anchor": [
+          1218,
+          28,
+          32,
+          27
+        ],
+        "choseService": false,
+        "closed": true,
+        "node": "toast",
+        "pending": false,
+        "requested": true,
+        "servicesRequested": true,
+        "url": "http://127.0.0.1:54933/en.html?id=1"
+      },
+      "toast": {
+        "accessory": "share",
+        "accessoryFrame": [
+          1218,
+          28,
+          32,
+          27
+        ],
+        "age": 0.005309791667968966,
+        "coalescingKey": null,
+        "exiting": false,
+        "frame": [
+          1065,
+          18,
+          195,
+          46
+        ],
+        "hovered": false,
+        "lifetime": 5,
+        "panel": [
+          228,
+          10,
+          1042,
+          780
+        ],
+        "sticky": false,
+        "subtitle": null,
+        "symbol": null,
+        "title": "Copied Current URL"
+      }
+    },
+    "X1_apple_backend": {
+      "reason": "U-X1: French → English is supported, not installed on this Mac",
+      "status": "BLOCKED"
+    },
+    "X1_context_menu_item": {
+      "ok": true,
+      "openItems": [
+        "Back",
+        "Forward",
+        "Reload",
+        "Save As…",
+        "Print…",
+        "Translate to English",
+        "View Page Source",
+        "Capture",
+        "Capture Full Page",
+        "Inspect"
+      ]
+    },
+    "X1_marker_fallback": {
+      "fallbackUnits": 1,
+      "italic": "sometimes",
+      "ok": true
+    },
+    "X1_offer": {
+      "ok": true,
+      "state": {
+        "backend": "fixture",
+        "batches": 0,
+        "button": {
+          "frame": [
+            8,
+            88,
+            212,
+            28
+          ],
+          "shown": true,
+          "title": "Translation Available"
+        },
+        "document": 1,
+        "fallbackUnits": 0,
+        "host": "127.0.0.1",
+        "loopRunning": false,
+        "neverTranslateHosts": [],
+        "popover": {
+          "presented": false
+        },
+        "probedDocument": 1,
+        "pulls": 0,
+        "sessions": 1,
+        "source": "fr",
+        "state": "offered",
+        "sticky": "",
+        "target": "en",
+        "targetIdentifier": "en-CA",
+        "toasts": [],
+        "undoTitle": ""
+      }
+    },
+    "X1_popover_offer_and_escape": {
+      "buttonBottom": 804,
+      "ok": true,
+      "popover": {
+        "aboveWindow": true,
+        "buttons": [
+          "Translate",
+          "Options"
+        ],
+        "error": null,
+        "frame": [
+          74,
+          690,
+          328,
+          126
+        ],
+        "presented": true,
+        "stacking": [
+          3,
+          4
+        ],
+        "title": "Translate this page to English?",
+        "window": 86377
+      },
+      "tipY": 802,
+      "window": [
+        80,
+        60,
+        1360,
+        860
+      ]
+    },
+    "X1_translate": {
+      "detected": {
+        "confidence": 0.9775675535202026,
+        "language": "en"
+      },
+      "ok": true,
+      "state": {
+        "backend": "fixture",
+        "batches": 2,
+        "button": {
+          "frame": [
+            8,
+            88,
+            212,
+            28
+          ],
+          "shown": true,
+          "title": "Translated"
+        },
+        "document": 1,
+        "fallbackUnits": 1,
+        "host": "127.0.0.1",
+        "loopRunning": true,
+        "neverTranslateHosts": [],
+        "popover": {
+          "aboveWindow": false,
+          "buttons": [
+            "Translate",
+            "Options"
+          ],
+          "error": null,
+          "presented": false,
+          "stacking": [
+            -1,
+            -1
+          ],
+          "title": "Translate this page to English?",
+          "window": 0
+        },
+        "probedDocument": 1,
+        "pulls": 2,
+        "sessions": 1,
+        "source": "fr",
+        "state": "translated",
+        "sticky": "127.0.0.1",
+        "target": "en",
+        "targetIdentifier": "en-CA",
+        "toasts": [
+          "Translated to English"
+        ],
+        "undoTitle": "Translate"
+      },
+      "texts": {
+        "boldSame": true,
+        "brand": "Maison Dupont",
+        "p1": "This is the first sentence of this page. We avons a cat and a dog in the house.",
+        "p2": "This second sentence is <b id=\"bold\">very important</b> for we and for you.",
+        "p3": "The garden is small, mais <i>sometimes</i> the cat is in the garden with the dog.",
+        "placeholder": "Your address",
+        "send": "Send",
+        "title": "Title of the page",
+        "value": "Search"
+      }
+    },
+    "X2_revert": {
+      "equal": true,
+      "ok": true,
+      "state": {
+        "backend": "fixture",
+        "batches": 2,
+        "button": {
+          "frame": [
+            8,
+            88,
+            212,
+            28
+          ],
+          "shown": true,
+          "title": "Translation Available"
+        },
+        "document": 1,
+        "fallbackUnits": 1,
+        "host": "127.0.0.1",
+        "loopRunning": false,
+        "neverTranslateHosts": [],
+        "popover": {
+          "aboveWindow": false,
+          "buttons": [
+            "Show Original",
+            "Options"
+          ],
+          "error": null,
+          "presented": false,
+          "stacking": [
+            -1,
+            -1
+          ],
+          "title": "Translated from French.",
+          "window": 0
+        },
+        "probedDocument": 1,
+        "pulls": 2,
+        "sessions": 1,
+        "source": "fr",
+        "state": "offered",
+        "sticky": "",
+        "target": "en",
+        "targetIdentifier": "en-CA",
+        "toasts": [
+          "Translated to English",
+          "Translated back to French"
+        ],
+        "undoTitle": "Translate"
+      }
+    },
+    "X2_revert_keeps_page_structure": {
+      "ok": true,
+      "p1": "Ceci est la première phrase de cette page. Nous avons un chat et un chien dans la maison.",
+      "p2": "Nouveau contenu de la page."
+    },
+    "X3_same_document": {
+      "added": "A new paragraph is added after a second with of the content dynamic.",
+      "ok": true,
+      "state": "translated"
+    },
+    "X3_same_host_auto_translate": {
+      "ok": true,
+      "p1": "This is the first sentence of this page. We avons a cat and a dog in the house.",
+      "state": "translated"
+    },
+    "X4_never_and_reset": {
+      "afterReload": "idle",
+      "again": true,
+      "hosts": [
+        "127.0.0.1"
+      ],
+      "ok": true,
+      "reset": {
+        "neverTranslateHosts": [],
+        "result": "Done"
+      }
+    },
+    "X5_no_network": {
+      "filterStats": {
+        "blocked": 0,
+        "recent": []
+      },
+      "method": "profile request filter on translate/googleapis/gstatic installed before the page loaded",
+      "ok": true
+    },
+    "X6_redo": {
+      "ok": true,
+      "state": "translated"
+    },
+    "X6_undo": {
+      "menuTitle": "Undo Translate",
+      "ok": true,
+      "state": "offered",
+      "undoTitle": "Translate"
+    },
+    "X_idle_no_polling": {
+      "ok": true,
+      "pulls": [
+        9,
+        9
+      ]
+    },
+    "X_offer_after_minimized_load": {
+      "hidden": {
+        "document": 7,
+        "probedDocument": -1,
+        "state": "idle"
+      },
+      "offered": true,
+      "ok": true
+    },
+    "X_root_notranslate": {
+      "after": "\n<p id=\"p1\">Ceci est la première phrase de cette page. Nous avons un chat et un chien dans la maison.</p>\n<p id=\"p2\">Cette deuxième phrase est très importante pour nous et pour vous.</p>\n\n\n",
+      "before": "\n<p id=\"p1\">Ceci est la première phrase de cette page. Nous avons un chat et un chien dans la maison.</p>\n<p id=\"p2\">Cette deuxième phrase est très importante pour nous et pour vous.</p>\n\n\n",
+      "equal": true,
+      "navigated": true,
+      "ok": true,
+      "state": "offered"
+    },
+    "X_stale_result_dropped": {
+      "ok": true,
+      "result": {
+        "applied": 8,
+        "hadUnit": true,
+        "p1": "Texte changé par la page.",
+        "title": "TRANSLATED Bonjour le monde",
+        "units": 9
+      }
+    },
+    "Z1_zoom_toasts": {
+      "ok": true,
+      "titles": [
+        "110%",
+        "125%",
+        "100%"
+      ]
+    },
+    "Z2_peek_pinch_then_actual_size": {
+      "heldAfter1s": 1.999999761581421,
+      "ok": true,
+      "pinched": 1.999999761581421,
+      "reset": true
+    },
+    "Z2_pinch_then_actual_size": {
+      "after": 1,
+      "heldAfter1s": 2.000000238418579,
+      "ok": true,
+      "pinched": 2.000000238418579
+    },
+    "Z3_smart_zoom": {
+      "reason": "no synthetic smart-zoom path; user check U-S1",
+      "status": "DEFERRED"
+    },
+    "Z4_no_chromium_zoom_bubble": {
+      "newWindows": [],
+      "ok": true
+    },
+    "capture_2x_c1_area": {
+      "devicePixelRatio": 2,
+      "ok": true,
+      "row": {
+        "bytes": 4310,
+        "createdAt": 1793930591.668891,
+        "fileName": "A8F93049-DCA1-4E07-910E-8630E48D4576.png",
+        "height": 400,
+        "id": "A8F93049-DCA1-4E07-910E-8630E48D4576",
+        "kind": "area",
+        "sourceHost": "127.0.0.1",
+        "width": 600
+      }
+    },
+    "capture_2x_c2_full_page": {
+      "bands": [
+        0,
+        1,
+        2,
+        3,
+        4,
+        5,
+        6,
+        7,
+        8,
+        9,
+        10,
+        11
+      ],
+      "cssWidth": 1042,
+      "ok": true,
+      "probe": [
+        [
+          224,
+          65,
+          64,
+          255
+        ],
+        [
+          64,
+          176,
+          80,
+          255
+        ],
+        [
+          48,
+          96,
+          224,
+          255
+        ],
+        [
+          224,
+          192,
+          47,
+          255
+        ],
+        [
+          161,
+          64,
+          192,
+          255
+        ],
+        [
+          50,
+          192,
+          192,
+          255
+        ],
+        [
+          240,
+          128,
+          33,
+          255
+        ],
+        [
+          32,
+          32,
+          32,
+          255
+        ],
+        [
+          129,
+          224,
+          128,
+          255
+        ],
+        [
+          225,
+          127,
+          192,
+          255
+        ],
+        [
+          66,
+          128,
+          159,
+          255
+        ],
+        [
+          192,
+          160,
+          128,
+          255
+        ]
+      ],
+      "row": {
+        "bytes": 978563,
+        "createdAt": 1793930592.614254,
+        "fileName": "9D629C3D-525F-498C-B444-4334305FFA28.png",
+        "height": 24000,
+        "id": "9D629C3D-525F-498C-B444-4334305FFA28",
+        "kind": "fullPage",
+        "sourceHost": "127.0.0.1",
+        "width": 2084
+      }
+    },
+    "capture_2x_c3_portrait": {
+      "ok": true,
+      "row": {
+        "bytes": 162958,
+        "createdAt": 1793930596.06424,
+        "fileName": "443704CC-D73D-4705-AE5B-75FFD259EA13.png",
+        "height": 3029,
+        "id": "443704CC-D73D-4705-AE5B-75FFD259EA13",
+        "kind": "portrait",
+        "sourceHost": "127.0.0.1",
+        "width": 2423
+      },
+      "view": [
+        1042,
+        780
+      ]
+    },
+    "capture_2x_full_page_cap": {
+      "bands": [
+        0,
+        1,
+        2,
+        3,
+        4,
+        5,
+        6,
+        7,
+        8,
+        9,
+        10,
+        11,
+        0,
+        1,
+        2,
+        3
+      ],
+      "error": "",
+      "ok": true,
+      "row": {
+        "bytes": 1270742,
+        "createdAt": 1793930594.623133,
+        "fileName": "841E58EE-000E-4F37-ACB1-B44B4EB425DB.png",
+        "height": 32768,
+        "id": "841E58EE-000E-4F37-ACB1-B44B4EB425DB",
+        "kind": "fullPage",
+        "sourceHost": "127.0.0.1",
+        "width": 2084
+      },
+      "state": {
+        "cancelled": 1,
+        "card": {
+          "actions": [
+            "copy",
+            "save",
+            "share",
+            "library",
+            "delete"
+          ],
+          "frame": [
+            1012,
+            18,
+            248,
+            264
+          ],
+          "hovered": false,
+          "lifetime": 8,
+          "note": "Page cut at 32,768 px.",
+          "panel": [
+            228,
+            10,
+            1042,
+            780
+          ],
+          "paused": false,
+          "remaining": 7.9902864583345945,
+          "savedLine": true
+        },
+        "completed": 7,
+        "entry": "command",
+        "error": "",
+        "held": false,
+        "hintShows": 1,
+        "overlayActive": false,
+        "phase": "showing",
+        "replays": 1,
+        "result": {
+          "bytes": 1270742,
+          "fileName": "Tall page 11-05 at 7.03PM.png",
+          "height": 32768,
+          "host": "127.0.0.1",
+          "kind": "fullPage",
+          "saved": "841E58EE-000E-4F37-ACB1-B44B4EB425DB",
+          "truncated": true,
+          "width": 2084
+        }
+      }
+    },
+    "capture_c1_area": {
+      "ok": true,
+      "row": [
+        {
+          "bytes": 1662,
+          "createdAt": 1793930588.719746,
+          "fileName": "02FD2403-371E-4FD1-96F6-12236CD5FF42.png",
+          "height": 200,
+          "id": "02FD2403-371E-4FD1-96F6-12236CD5FF42",
+          "kind": "area",
+          "sourceHost": "127.0.0.1",
+          "width": 300
+        }
+      ],
+      "scale": 1,
+      "state": {
+        "cancelled": 0,
+        "card": {
+          "actions": [
+            "copy",
+            "save",
+            "share",
+            "library",
+            "retake",
+            "delete"
+          ],
+          "frame": [
+            1012,
+            18,
+            248,
+            231
+          ],
+          "hovered": false,
+          "lifetime": 8,
+          "note": "",
+          "panel": [
+            228,
+            10,
+            1042,
+            780
+          ],
+          "paused": false,
+          "remaining": 7.989403541665524,
+          "savedLine": true
+        },
+        "completed": 1,
+        "entry": "command",
+        "error": "",
+        "held": false,
+        "hintShows": 0,
+        "overlayActive": false,
+        "phase": "showing",
+        "replays": 0,
+        "result": {
+          "bytes": 1662,
+          "fileName": "Long page 11-05 at 7.03PM.png",
+          "height": 200,
+          "host": "127.0.0.1",
+          "kind": "area",
+          "saved": "02FD2403-371E-4FD1-96F6-12236CD5FF42",
+          "truncated": false,
+          "width": 300
+        }
+      },
+      "steps": [
+        {
+          "after": "command",
+          "state": {
+            "cancelled": 0,
+            "completed": 0,
+            "entry": "command",
+            "error": "",
+            "held": false,
+            "hintShows": 0,
+            "overlay": {
+              "anchor": [],
+              "firstResponder": true,
+              "frame": [
+                228,
+                10,
+                1042,
+                780
+              ],
+              "hint": "Drag to capture. Press Esc to cancel.",
+              "hintHidden": false,
+              "pageFrame": [
+                228,
+                10,
+                1042,
+                780
+              ],
+              "selection": [],
+              "sizeLabel": [],
+              "sizeText": ""
+            },
+            "overlayActive": true,
+            "phase": "selecting",
+            "replays": 0
+          }
+        },
+        {
+          "after": "drag",
+          "hintHidden": true,
+          "selection": [
+            100,
+            100,
+            150,
+            100
+          ],
+          "sizeLabel": [
+            142,
+            206,
+            67,
+            20
+          ]
+        }
+      ]
+    },
+    "capture_c2_full_page": {
+      "bands": [
+        0,
+        1,
+        2,
+        3,
+        4,
+        5,
+        6,
+        7,
+        8,
+        9,
+        10,
+        11
+      ],
+      "ok": true,
+      "probe": [
+        [
+          224,
+          65,
+          64,
+          255
+        ],
+        [
+          64,
+          176,
+          80,
+          255
+        ],
+        [
+          48,
+          96,
+          224,
+          255
+        ],
+        [
+          224,
+          192,
+          47,
+          255
+        ],
+        [
+          161,
+          64,
+          192,
+          255
+        ],
+        [
+          50,
+          192,
+          192,
+          255
+        ],
+        [
+          240,
+          128,
+          33,
+          255
+        ],
+        [
+          32,
+          32,
+          32,
+          255
+        ],
+        [
+          129,
+          224,
+          128,
+          255
+        ],
+        [
+          225,
+          127,
+          192,
+          255
+        ],
+        [
+          66,
+          128,
+          159,
+          255
+        ],
+        [
+          192,
+          160,
+          128,
+          255
+        ]
+      ],
+      "row": {
+        "bytes": 270568,
+        "createdAt": 1793930590.6744962,
+        "fileName": "97F25A7E-95DD-4C32-BD18-CA0B6A8F3E87.png",
+        "height": 12000,
+        "id": "97F25A7E-95DD-4C32-BD18-CA0B6A8F3E87",
+        "kind": "fullPage",
+        "sourceHost": "127.0.0.1",
+        "width": 1042
+      },
+      "scrollAfter": 3000,
+      "state": {
+        "cancelled": 1,
+        "card": {
+          "actions": [
+            "copy",
+            "save",
+            "share",
+            "library",
+            "delete"
+          ],
+          "frame": [
+            1012,
+            18,
+            248,
+            242
+          ],
+          "hovered": false,
+          "lifetime": 8,
+          "note": "",
+          "panel": [
+            228,
+            10,
+            1042,
+            780
+          ],
+          "paused": false,
+          "remaining": 7.99906104166439,
+          "savedLine": true
+        },
+        "completed": 3,
+        "entry": "command",
+        "error": "",
+        "held": false,
+        "hintShows": 1,
+        "overlayActive": false,
+        "phase": "showing",
+        "replays": 0,
+        "result": {
+          "bytes": 270568,
+          "fileName": "Long page 11-05 at 7.03PM.png",
+          "height": 12000,
+          "host": "127.0.0.1",
+          "kind": "fullPage",
+          "saved": "97F25A7E-95DD-4C32-BD18-CA0B6A8F3E87",
+          "truncated": false,
+          "width": 1042
+        }
+      }
+    },
+    "capture_c3_portrait": {
+      "ok": true,
+      "row": {
+        "bytes": 51314,
+        "createdAt": 1793930590.346126,
+        "fileName": "2A026143-3994-4064-979C-701F9BDFEEDB.png",
+        "height": 1515,
+        "id": "2A026143-3994-4064-979C-701F9BDFEEDB",
+        "kind": "portrait",
+        "sourceHost": "127.0.0.1",
+        "width": 1212
+      }
+    },
+    "capture_c4_escape": {
+      "ok": true,
+      "overlay": {
+        "anchor": [],
+        "firstResponder": true,
+        "frame": [
+          228,
+          10,
+          1042,
+          780
+        ],
+        "hint": "Drag to capture. Press Esc to cancel.",
+        "hintHidden": false,
+        "pageFrame": [
+          228,
+          10,
+          1042,
+          780
+        ],
+        "selection": [],
+        "sizeLabel": [],
+        "sizeText": ""
+      },
+      "state": {
+        "cancelled": 1,
+        "completed": 1,
+        "entry": "command",
+        "error": "",
+        "held": false,
+        "hintShows": 1,
+        "overlayActive": false,
+        "phase": "idle",
+        "replays": 0,
+        "result": {
+          "bytes": 1662,
+          "fileName": "Long page 11-05 at 7.03PM.png",
+          "height": 200,
+          "host": "127.0.0.1",
+          "kind": "area",
+          "saved": "02FD2403-371E-4FD1-96F6-12236CD5FF42",
+          "truncated": false,
+          "width": 300
+        }
+      }
+    },
+    "capture_c5_drag": {
+      "ok": true,
+      "row": {
+        "bytes": 1223,
+        "createdAt": 1793930591.124922,
+        "fileName": "1BDBF564-12C4-4D0A-B40C-D280EB5A52DE.png",
+        "height": 160,
+        "id": "1BDBF564-12C4-4D0A-B40C-D280EB5A52DE",
+        "kind": "area",
+        "sourceHost": "127.0.0.1",
+        "width": 240
+      },
+      "steps": [
+        {
+          "after": "down",
+          "held": true,
+          "overlay": false
+        },
+        {
+          "after": "move 2.2 pt",
+          "held": true,
+          "overlay": false
+        },
+        {
+          "after": "drag",
+          "anchor": [
+            500,
+            300
+          ],
+          "overlay": true,
+          "selection": [
+            500,
+            300,
+            120,
+            80
+          ]
+        }
+      ]
+    },
+    "capture_c6_click_replay": {
+      "ok": true,
+      "opened": {
+        "audible": false,
+        "canGoBack": false,
+        "canGoForward": false,
+        "crashed": false,
+        "createdAt": 1793930591.1709728,
+        "favicon": false,
+        "faviconReportsCompleted": 0,
+        "faviconReportsRejected": 0,
+        "hasWebContent": true,
+        "id": "EF0AEA06-7B4B-4FAB-85C8-FF263266D6D9",
+        "lastActiveAt": 1793930591.194738,
+        "loaded": true,
+        "loading": false,
+        "page": {
+          "audible": false,
+          "browser": 1,
+          "browserIndex": 0,
+          "browserPinned": false,
+          "canGoBack": false,
+          "chromeTabId": 896214093,
+          "chromeWindowId": 896214091,
+          "context": "Default",
+          "crash": 0,
+          "extension": "",
+          "favicon": false,
+          "fullscreen": false,
+          "hidden": false,
+          "hostTab": "EF0AEA06-7B4B-4FAB-85C8-FF263266D6D9",
+          "identifier": 2,
+          "kind": "tab",
+          "live": true,
+          "loading": false,
+          "muted": false,
+          "pageBackground": [
+            255,
+            255,
+            255,
+            255
+          ],
+          "popup": false,
+          "style": "chrome",
+          "title": "Link target",
+          "url": "http://127.0.0.1:54854/links-target.html",
+          "zoom": 0
+        },
+        "pinnedURL": "",
+        "profile": "B46DB4E5-0658-443E-9BE8-65518735F20E",
+        "progress": 1,
+        "rowFaviconHash": "",
+        "rowFaviconSource": "placeholder",
+        "section": "today",
+        "selected": true,
+        "sleepPhase": "live",
+        "space": "7B3EDC32-A73D-4370-A77B-E0754C668B49",
+        "title": "Link target",
+        "unread": false,
+        "url": "http://127.0.0.1:54854/links-target.html",
+        "visible": true
+      },
+      "replays": 1
+    },
+    "capture_c7_incognito": {
+      "reason": "no incognito window in Open yet (app-shell 4.8); the ephemeral-context path is covered offscreen (features-render C3/C7)",
+      "status": "BLOCKED"
+    },
+    "capture_card_anchor": {
+      "card": [
+        1012,
+        18,
+        248,
+        231
+      ],
+      "ok": true,
+      "panel": [
+        228,
+        10,
+        1042,
+        780
+      ]
+    },
+    "capture_card_copy_save_escape": {
+      "ok": true,
+      "sheet": {
+        "attachedSheet": 0,
+        "class": "NSSavePanel",
+        "firstResponder": "NSRemoteView",
+        "frame": "{{555, 409}, {370, 182}}",
+        "key": true,
+        "level": 0,
+        "number": 86346,
+        "parent": 0,
+        "sheet": true,
+        "title": "Save",
+        "visible": true
+      }
+    },
+    "capture_card_lifetime": {
+      "ok": true,
+      "paused": 7.776245499997458,
+      "resumed": 7.7758252499988885,
+      "scheduled": [
+        8,
+        7.989403541665524
+      ]
+    },
+    "capture_context_menu": {
+      "ok": true,
+      "shown": [
+        "Back",
+        "Forward",
+        "Reload",
+        "-",
+        "Save As…",
+        "Print…",
+        "-",
+        "View Page Source",
+        "-",
+        "Capture",
+        "Capture Full Page",
+        "-",
+        "Inspect"
+      ]
+    },
+    "capture_delete": {
+      "ok": true,
+      "rows": 2
+    },
+    "capture_menu_enabled": {
+      "menu": {
+        "capture-full-page": {
+          "action": "openCommandAction:",
+          "checked": false,
+          "enabled": true,
+          "hidden": false,
+          "id": "capture-full-page",
+          "key": "",
+          "payload": "",
+          "tag": 0,
+          "targetNil": false,
+          "title": "Capture Full Page"
+        },
+        "capture-page": {
+          "action": "openCommandAction:",
+          "checked": false,
+          "enabled": true,
+          "hidden": false,
+          "id": "capture-page",
+          "key": "2",
+          "payload": "",
+          "tag": 0,
+          "targetNil": false,
+          "title": "Capture…"
+        },
+        "capture-portrait": {
+          "action": "openCommandAction:",
+          "checked": false,
+          "enabled": true,
+          "hidden": false,
+          "id": "capture-portrait",
+          "key": "",
+          "payload": "",
+          "tag": 0,
+          "targetNil": false,
+          "title": "Capture in Portrait Mode"
+        }
+      },
+      "ok": true
+    },
+    "capture_shortcut_hint": {
+      "hintShows": 1,
+      "ok": true,
+      "stored": 1793930590.025653
+    },
+    "capture_shortcut_hint_once": {
+      "hintShows": 1,
+      "ok": true
+    }
+  },
+  "pathRedactions": [
+    "$WORKTREE",
+    "$HOME",
+    "$TMPDIR"
+  ],
+  "source": {
+    "clean": true,
+    "diffSHA256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "head": "deeec4c34f7f6ad2a8355c9ba0599cbe64358996"
+  },
+  "started": "2026-11-05 19:02:56",
+  "style": "chrome"
+}

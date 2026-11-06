@@ -6,29 +6,30 @@
         "forced": false,
         "ok": true,
         "owned_pids": [
-          72418,
-          72682,
-          72683,
-          72684,
-          72685,
-          72700,
-          72701,
-          74777,
-          74962,
-          74978,
-          74987,
-          75002,
-          75017,
-          75033,
-          75041,
-          75060,
-          75391,
-          75392,
-          75657,
-          76182,
-          76254,
-          76261,
-          76276
+          22157,
+          22202,
+          22203,
+          22205,
+          22206,
+          22211,
+          22212,
+          22791,
+          22855,
+          22856,
+          22857,
+          22858,
+          22859,
+          22861,
+          22862,
+          22863,
+          22878,
+          22879,
+          22925,
+          23164,
+          23168,
+          23172,
+          23173,
+          23177
         ],
         "remaining_processes": [],
         "reply": true,
@@ -42,14 +43,15 @@
         "forced": false,
         "ok": true,
         "owned_pids": [
-          76354,
-          76432,
-          76433,
-          76435,
-          76436,
-          76446,
-          76447,
-          76796
+          23185,
+          23198,
+          23199,
+          23200,
+          23201,
+          23204,
+          23206,
+          23207,
+          23251
         ],
         "remaining_processes": [],
         "reply": true,
@@ -63,14 +65,15 @@
         "forced": false,
         "ok": true,
         "owned_pids": [
-          76855,
-          76916,
-          76917,
-          76918,
-          76919,
-          76927,
-          76928,
-          76953
+          23264,
+          23276,
+          23277,
+          23280,
+          23281,
+          23286,
+          23287,
+          23288,
+          23296
         ],
         "remaining_processes": [],
         "reply": true,
@@ -92,9 +95,14 @@
     "embeddedUUID": "4C4C4465-5555-3144-A1AB-FCF4EA280540",
     "requiredSHA256": "",
     "source": "fork",
-    "stamp": "fork /Users/serge/Developer/open-engine-s8-main/chromium_git/chromium/src/cef/binary_distrib/cef_binary_156.0.14+g4fa4ab5+chromium-156.0.8078.48_macosarm64_minimal 1793841834"
+    "stamp": "fork $HOME/Developer/open-engine-s8-main/chromium_git/chromium/src/cef/binary_distrib/cef_binary_156.0.14+g4fa4ab5+chromium-156.0.8078.48_macosarm64_minimal 1793841834"
   },
   "interrupted_attempts": [],
+  "pathRedactions": [
+    "$WORKTREE",
+    "$HOME",
+    "$TMPDIR"
+  ],
   "sleep": {
     "sleep_battery_saver": {
       "ok": true,
@@ -112,19 +120,19 @@
     },
     "sleep_f1_renderers": {
       "nineSleeping": {
-        "count": 2,
-        "rssKB": 270784
+        "count": 3,
+        "rssKB": 424624
       },
       "note": "discard in place: the page objects stay, their renderers go",
       "ok": true,
       "oneTab": {
-        "count": 2,
-        "rssKB": 281984
+        "count": 3,
+        "rssKB": 421296
       },
       "refused": [],
       "tenTabsLoaded": {
-        "count": 10,
-        "rssKB": 1562080
+        "count": 11,
+        "rssKB": 1764912
       }
     },
     "sleep_f2_history_scroll_form": {
@@ -134,13 +142,13 @@
       ],
       "forward": true,
       "ok": true,
-      "scrollBefore": 2094,
+      "scrollBefore": 1600,
       "woke": {
         "d": true,
         "n": 3,
         "path": "/c.html",
         "q": "open-sleep-check",
-        "y": 2094
+        "y": 1600
       }
     },
     "sleep_f3_audio": {
@@ -152,7 +160,7 @@
       "ok": true
     },
     "sleep_f3_capture": {
-      "reason": "unverified: no capture fixture without a camera or microphone grant (memory-fork \u00a711 F3 records capture as unverified, not passed)",
+      "reason": "unverified: no capture fixture without a camera or microphone grant (memory-fork §11 F3 records capture as unverified, not passed)",
       "status": "BLOCKED"
     },
     "sleep_f4_corrupt_fallback": {
@@ -160,8 +168,8 @@
       "historyLength": 1,
       "landed": true,
       "log": [
-        "sleep-restore-fallback A0D8179A",
-        "sleep-wake placeholder A0D8179A ms=47.48094081878662"
+        "sleep-restore-fallback 5DA2C0E9",
+        "sleep-wake placeholder 5DA2C0E9 ms=62.9199743270874"
       ],
       "ok": true,
       "victimStored": true
@@ -169,7 +177,7 @@
     "sleep_f4_history_restore": {
       "back": true,
       "log": [
-        "sleep-wake placeholder BF6BB5EB ms=87.12303638458252"
+        "sleep-wake placeholder E25EB4F1 ms=107.51605033874512"
       ],
       "ok": true,
       "restored": {
@@ -180,63 +188,74 @@
     "sleep_f4_quit_capture": {
       "hostedAfterRelaunch": 1,
       "load": [
-        9.21044921875,
-        8.451171875,
-        7.453125
+        4.73779296875,
+        7.1357421875,
+        9.6787109375
       ],
       "ok": true,
       "phasesBeforeQuit": {
-        "23A47FCC-D88B-45E0-AF01-ED7B2A7A4711": "placeholder",
-        "5431B0E4-2781-47ED-8377-D50E75F44D01": "live",
-        "A0D8179A-0835-45BB-B1F0-84E4C410FCAF": "frozen",
-        "BF6BB5EB-3483-4411-9587-87C0C7160BB6": "sleeping"
+        "1C2DA93E-046C-4370-A2CE-E83B4C207844": "placeholder",
+        "5DA2C0E9-197A-4796-9AE3-0ECC56343FEB": "frozen",
+        "94B4951F-0FD6-4556-B6D1-EE79EA6CD757": "live",
+        "E25EB4F1-8EC6-4B67-A54C-3E3801F0208C": "sleeping"
       },
       "quitCaptureMs": [
-        2.3970603942871094
+        2.0400285720825195
       ],
-      "quitSeconds": 0.48,
+      "quitSeconds": 0.44,
       "renderersAfterRelaunch": {
-        "count": 2,
-        "rssKB": 287248
+        "count": 3,
+        "rssKB": 419888
       },
-      "storedRows": 23
+      "storedRows": 24
     },
     "sleep_f5_discard_wake": {
       "cache": "warm (same fixture page each wake)",
       "destroyed": {
         "n": 10,
-        "p50ms": 82.42809772491455,
-        "p95ms": 92.67306327819824
+        "p50ms": 84.18703079223633,
+        "p95ms": 110.29207706451416
       },
       "load": [
-        9.22900390625,
-        8.4423828125,
-        7.4443359375
+        4.50146484375,
+        7.17431640625,
+        9.72265625
       ],
       "n": 20,
       "note": "in-place discard reload; budget 700 ms first paint on a cached page",
       "ok": true,
-      "p50ms": 19.547104835510254,
-      "p95ms": 25.004029273986816
+      "p50ms": 33.468008041381836,
+      "p95ms": 43.89297962188721
     },
     "sleep_f5_unfreeze": {
       "frozenBeforeWake": 20,
       "load": [
-        9.22900390625,
-        8.4423828125,
-        7.4443359375
+        4.541015625,
+        7.13818359375,
+        9.69482421875
       ],
-      "measure": "select call \u2192 the page's visibilitychange to visible (includes the automation round trip)",
+      "measure": "select call → the page's visibilitychange to visible (includes the automation round trip)",
       "n": 20,
       "ok": true,
-      "p50ms": 1.672119140625,
-      "p95ms": 2.35693359375
+      "p50ms": 2.10400390625,
+      "p95ms": 2.422119140625
+    },
+    "sleep_frozen_deadline": {
+      "discardDelay": 300,
+      "hiddenElapsed": 30,
+      "load": [
+        4.6279296875,
+        7.4345703125,
+        9.888671875
+      ],
+      "nextPassDelay": 269.9745479822159,
+      "ok": true
     },
     "sleep_idle_parked": {
       "load": [
-        9.9072265625,
-        8.46923828125,
-        7.423828125
+        4.6279296875,
+        7.4345703125,
+        9.888671875
       ],
       "ok": true,
       "passesAfter": 1,
@@ -289,14 +308,22 @@
       "ok": true
     },
     "sleep_started_after_paint": {
-      "firstContentfulPaint": 3100,
+      "firstContentfulPaint": 830,
       "ok": true,
-      "sidebarDrawn": 478,
-      "sleepStarted": 3193
+      "sidebarDrawn": 460,
+      "sleepStarted": 941
     },
     "sleep_tabs_discard": {
-      "reason": "chrome.tabs sees sidebar tabs only in Chrome style (--style chrome)",
-      "status": "SKIP"
+      "background": {
+        "ok": {
+          "id": 166091353
+        }
+      },
+      "backgroundSlept": true,
+      "ok": true,
+      "visible": {
+        "error": "Cannot discard tab with id: 166091290."
+      }
     },
     "sleep_timed_ladder": {
       "after": {
@@ -308,16 +335,16 @@
         "discarded": true,
         "downloading": false,
         "freezeGate": null,
-        "hiddenAt": 1793900535.443361,
+        "hiddenAt": 1793930794.9463658,
         "hosts": 1,
-        "id": "909D9667-8450-4544-A424-0839B077E93F",
+        "id": "C932A2F7-0395-4366-B7AA-A0786092044E",
         "lastFormInteractionAt": null,
         "notificationsAllowed": false,
         "phase": "sleeping",
         "retryAfter": null,
-        "sleptAt": 1793900835.4670238,
+        "sleptAt": 1793931094.977606,
         "title": "Open freeze ticker",
-        "url": "http://t1.localhost:56053/ticker.html"
+        "url": "http://t1.localhost:56023/ticker.html"
       },
       "ok": true,
       "phases": [
@@ -334,13 +361,18 @@
         "loaded": true,
         "sleepPhase": "live",
         "title": "Open freeze ticker",
-        "url": "http://t1.localhost:56053/ticker.html"
+        "url": "http://t1.localhost:56023/ticker.html"
       },
       "wakeLog": [
-        "sleep-wake discard 909D9667 ms=28.566956520080566"
+        "sleep-wake discard C932A2F7 ms=32.27198123931885"
       ]
     }
   },
-  "started": "2026-11-05 10:41:51",
-  "style": "alloy"
+  "source": {
+    "clean": true,
+    "diffSHA256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "head": "deeec4c34f7f6ad2a8355c9ba0599cbe64358996"
+  },
+  "started": "2026-11-05 19:06:13",
+  "style": "chrome"
 }

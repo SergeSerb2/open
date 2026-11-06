@@ -1,19 +1,99 @@
 {
+  "cleanup": {
+    "ok": true,
+    "processes": [
+      {
+        "forced": false,
+        "ok": true,
+        "owned_pids": [
+          6288,
+          6306,
+          6307,
+          6308,
+          6309,
+          6311,
+          6313,
+          6329,
+          6365,
+          6455
+        ],
+        "remaining_processes": [],
+        "reply": true,
+        "windows_after_quit": {
+          "count": 0,
+          "windows": []
+        },
+        "windows_before_quit": 1
+      },
+      {
+        "forced": false,
+        "ok": true,
+        "owned_pids": [
+          6562,
+          6569,
+          6570,
+          6571,
+          6572,
+          6574,
+          6575
+        ],
+        "remaining_processes": [],
+        "reply": true,
+        "windows_after_quit": {
+          "count": 0,
+          "windows": []
+        },
+        "windows_before_quit": 1
+      },
+      {
+        "forced": false,
+        "ok": true,
+        "owned_pids": [
+          6707,
+          6712,
+          6713,
+          6714,
+          6715,
+          6716,
+          6717
+        ],
+        "remaining_processes": [],
+        "reply": true,
+        "windows_after_quit": {
+          "count": 0,
+          "windows": []
+        },
+        "windows_before_quit": 1
+      }
+    ]
+  },
   "config": "Debug",
   "engine": {
-    "distributionUUID": "4C4C44FE-5555-3144-A175-7398C5A1D4B4",
-    "embeddedUUID": "4C4C44FE-5555-3144-A175-7398C5A1D4B4",
+    "distributionCodeSHA256": "1bc8b6044b77d53d46d76745a39b029e9709dbeb00fd31d08870ed0a38dd576a",
+    "distributionSHA256": "f34400e71412d87a0b268fcd5658a8563cca34f600c8dd17b534a63e76aa7939",
+    "distributionUUID": "4C4C4465-5555-3144-A1AB-FCF4EA280540",
+    "embeddedCodeSHA256": "1bc8b6044b77d53d46d76745a39b029e9709dbeb00fd31d08870ed0a38dd576a",
+    "embeddedSHA256": "7965fb82d3670f2824f8657069fcb816cb10fa70c82dd4260a575eb46c395359",
+    "embeddedUUID": "4C4C4465-5555-3144-A1AB-FCF4EA280540",
+    "requiredSHA256": "",
     "source": "fork",
-    "stamp": "fork /Users/serge/Developer/open-engine/chromium_git/chromium/src/cef/binary_distrib/cef_binary_156.0.14+g4fa4ab5+chromium-156.0.8078.48_macosarm64_minimal 1792989125"
+    "stamp": "fork $HOME/Developer/open-engine-s8-main/chromium_git/chromium/src/cef/binary_distrib/cef_binary_156.0.14+g4fa4ab5+chromium-156.0.8078.48_macosarm64_minimal 1793841834"
   },
+  "interrupted_attempts": [],
+  "pathRedactions": [
+    "$WORKTREE",
+    "$HOME",
+    "$TMPDIR"
+  ],
   "shell": {
     "fresh_model": {
       "ok": true,
       "spaces": [
         {
           "focused": true,
-          "id": "4A5ABB3F-7DAB-4E18-8DB5-E38EF223A642",
+          "id": "3E68A2E6-D713-4F81-9AC8-70A258CBB436",
           "pinned": 0,
+          "profile": "76B3877D-E9AE-4201-9003-4FAE5F1FFAA0",
           "title": "Space",
           "today": 0
         }
@@ -24,8 +104,8 @@
       "ok": true,
       "restored_same_id": true,
       "routes": {
-        "cmd_l_window": "NSTextView",
-        "cmd_t_app": "NSTextView"
+        "cmd_l_window": "CommandBarFieldEditor",
+        "cmd_t_app": "CommandBarFieldEditor"
       },
       "tabs": [
         3,
@@ -40,6 +120,83 @@
       "ok": true,
       "snapshot": "State/browser.json",
       "tabs": 4
+    },
+    "quit_order_owned_work": {
+      "ok": true,
+      "pendingBeforeQuit": {
+        "background": 1,
+        "captures": 1
+      },
+      "quit": {
+        "forced": false,
+        "ok": true,
+        "owned_pids": [
+          6707,
+          6712,
+          6713,
+          6714,
+          6715,
+          6716,
+          6717
+        ],
+        "remaining_processes": [],
+        "reply": true,
+        "windows_after_quit": {
+          "count": 0,
+          "windows": []
+        },
+        "windows_before_quit": 1
+      },
+      "trace": [
+        {
+          "asyncEngineCalls": {},
+          "backgroundTasks": 1,
+          "captureTasks": 1,
+          "closedFactories": 0,
+          "factories": 1,
+          "hosts": 1,
+          "lateAsyncEngineCalls": 0,
+          "phase": "prepare",
+          "selectionTasks": 0,
+          "uptime": 34912.972498166666
+        },
+        {
+          "asyncEngineCalls": {},
+          "backgroundTasks": 0,
+          "captureTasks": 0,
+          "closedFactories": 1,
+          "factories": 1,
+          "hosts": 0,
+          "lateAsyncEngineCalls": 0,
+          "phase": "hostsClosed",
+          "selectionTasks": 0,
+          "uptime": 34912.976614625004
+        },
+        {
+          "asyncEngineCalls": {},
+          "backgroundTasks": 0,
+          "captureTasks": 0,
+          "closedFactories": 1,
+          "factories": 1,
+          "hosts": 0,
+          "lateAsyncEngineCalls": 0,
+          "phase": "engineShutdownBegin",
+          "selectionTasks": 0,
+          "uptime": 34912.98696529167
+        },
+        {
+          "asyncEngineCalls": {},
+          "backgroundTasks": 0,
+          "captureTasks": 0,
+          "closedFactories": 1,
+          "factories": 1,
+          "hosts": 0,
+          "lateAsyncEngineCalls": 0,
+          "phase": "engineShutdownEnd",
+          "selectionTasks": 0,
+          "uptime": 34913.021326375005
+        }
+      ]
     },
     "split_view": {
       "ok": true,
@@ -68,15 +225,15 @@
       "strip": [
         [
           0,
-          "92763B7E-7A11-40A3-A65A-2F6DC696FDEC"
+          "3E11501F-D9D4-442F-B8AD-1803AEB272E9"
         ],
         [
           1,
-          "91F94C6E-4D68-4F55-B751-8C44C89C2156"
+          "1B2B10F8-958C-482A-AEC8-D28E9BB6706A"
         ],
         [
           2,
-          "6C1A9DDF-BB22-4311-8922-128D225B2EC9"
+          "63202E19-420A-4027-9D13-6D0418053116"
         ]
       ]
     },
@@ -86,6 +243,11 @@
       "ok": true
     }
   },
-  "started": "2026-10-25 23:28:09",
-  "style": "alloy"
+  "source": {
+    "clean": true,
+    "diffSHA256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "head": "deeec4c34f7f6ad2a8355c9ba0599cbe64358996"
+  },
+  "started": "2026-11-05 18:58:04",
+  "style": "chrome"
 }

@@ -1,0 +1,283 @@
+{
+  "cleanup": {
+    "ok": true,
+    "processes": [
+      {
+        "forced": false,
+        "ok": true,
+        "owned_pids": [
+          161,
+          459,
+          2053,
+          2198,
+          99905,
+          99916,
+          99917,
+          99919,
+          99920,
+          99923,
+          99924
+        ],
+        "remaining_processes": [],
+        "reply": true,
+        "windows_after_quit": {
+          "count": 0,
+          "windows": []
+        },
+        "windows_before_quit": 1
+      }
+    ]
+  },
+  "config": "Debug",
+  "engine": {
+    "distributionCodeSHA256": "1bc8b6044b77d53d46d76745a39b029e9709dbeb00fd31d08870ed0a38dd576a",
+    "distributionSHA256": "f34400e71412d87a0b268fcd5658a8563cca34f600c8dd17b534a63e76aa7939",
+    "distributionUUID": "4C4C4465-5555-3144-A1AB-FCF4EA280540",
+    "embeddedCodeSHA256": "1bc8b6044b77d53d46d76745a39b029e9709dbeb00fd31d08870ed0a38dd576a",
+    "embeddedSHA256": "7965fb82d3670f2824f8657069fcb816cb10fa70c82dd4260a575eb46c395359",
+    "embeddedUUID": "4C4C4465-5555-3144-A1AB-FCF4EA280540",
+    "requiredSHA256": "",
+    "source": "fork",
+    "stamp": "fork $HOME/Developer/open-engine-s8-main/chromium_git/chromium/src/cef/binary_distrib/cef_binary_156.0.14+g4fa4ab5+chromium-156.0.8078.48_macosarm64_minimal 1793841834"
+  },
+  "features": {
+    "adblock_control": {
+      "ok": true,
+      "without_extensions": {
+        "https://pagead2.googlesyndication.com/pagead/js/adsbygoogle.js": "loaded",
+        "https://securepubads.g.doubleclick.net/tag/js/gpt.js": "loaded"
+      }
+    },
+    "audio_state": {
+      "audible_after_pause": false,
+      "audible_while_playing": true,
+      "muted": {
+        "audible": true,
+        "muted": true
+      },
+      "ok": true
+    },
+    "codecs": {
+      "ok": true,
+      "support": {
+        "aac": true,
+        "av1": true,
+        "h264": true,
+        "hevc": true,
+        "mp3": "probably",
+        "opus": true,
+        "vp9": true
+      }
+    },
+    "context_menu": {
+      "items": [
+        "Copy",
+        "Copy Link to Highlight",
+        "Print…",
+        "",
+        "Inspect"
+      ],
+      "ok": true
+    },
+    "crash_recovery": {
+      "after_reload": {
+        "crash": 0,
+        "url": "https://example.com/"
+      },
+      "crash_state": 1,
+      "model_crashed": true,
+      "ok": true
+    },
+    "downloads": {
+      "events": [
+        [
+          1,
+          0
+        ],
+        [
+          1,
+          10
+        ],
+        [
+          1,
+          10
+        ],
+        [
+          1,
+          10
+        ],
+        [
+          1,
+          10
+        ],
+        [
+          1,
+          10
+        ],
+        [
+          2,
+          10
+        ]
+      ],
+      "ok": true
+    },
+    "find_in_page": {
+      "active": 0,
+      "final": true,
+      "matches": 134,
+      "ok": true
+    },
+    "fullscreen": {
+      "document_fullscreen": true,
+      "events": [
+        true
+      ],
+      "ok": true
+    },
+    "js_dialogs": {
+      "events": [
+        0,
+        1,
+        2
+      ],
+      "ok": true,
+      "result": [
+        true,
+        "hello"
+      ]
+    },
+    "pdf_viewer": {
+      "document": {
+        "body": "\n    \n  \n\n",
+        "embed": false,
+        "iframe": false,
+        "type": "application/pdf"
+      },
+      "ok": true,
+      "screenshot": "chrome-pdf-viewer.png",
+      "viewer_targets": [
+        "chrome-extension://mhjfbmdgcfjbbpaeojofohoefgiehjai/index.html"
+      ]
+    },
+    "permissions": {
+      "events": [
+        {
+          "kinds": 8,
+          "origin": "https://en.wikipedia.org/"
+        }
+      ],
+      "geolocation": "not tested",
+      "notification": "granted",
+      "ok": true
+    },
+    "picture_in_picture": {
+      "ok": true,
+      "result": true,
+      "visible_windows": [
+        [
+          "BrowserWindow",
+          "{{80, 60}, {1360, 860}}"
+        ],
+        [
+          "PiPPanel",
+          "{{2230, 10}, {320, 180}}"
+        ]
+      ]
+    },
+    "popups_new_tabs": {
+      "new_sidebar_tabs": [
+        "https://example.com/"
+      ],
+      "ok": true,
+      "page_kinds": [
+        "popup",
+        "tab",
+        "tab",
+        "tab"
+      ]
+    },
+    "print_to_pdf": {
+      "bytes": 395562,
+      "ok": true
+    },
+    "profiles": {
+      "ok": true,
+      "work_engine_dir_exists": true,
+      "work_profile_sees": {
+        "cookie": "",
+        "storage": null
+      },
+      "work_space": "ED3BF295-E63E-4833-B6F7-F0C38EC02B0D",
+      "work_tab_context": "Profile-FEAC6BAF"
+    },
+    "request_filter": {
+      "ok": true,
+      "stats": {
+        "blocked": 1,
+        "recent": [
+          "https://example.org/?x=1"
+        ]
+      },
+      "with_filter": "blocked",
+      "without_filter": "loaded"
+    },
+    "user_scripts": {
+      "matched": {
+        "boost": "number",
+        "early": true,
+        "outline": "rgb(255, 0, 0)"
+      },
+      "ok": true,
+      "unmatched_site": "undefined"
+    },
+    "widevine": {
+      "cdm_versions": [
+        "4.10.3112.0"
+      ],
+      "eme": "available: com.widevine.alpha",
+      "ok": true,
+      "playback": {
+        "currentTime": 4.958246,
+        "frames": 123,
+        "keySystem": "com.widevine.alpha",
+        "track": "vp09.00.41.08"
+      }
+    },
+    "zoom": {
+      "innerWidth_100": 1122,
+      "innerWidth_zoomed": 935,
+      "level": 1,
+      "ok": true
+    }
+  },
+  "interrupted_attempts": [],
+  "pathRedactions": [
+    "$WORKTREE",
+    "$HOME",
+    "$TMPDIR"
+  ],
+  "ping": {
+    "cef": "156.0.14+g4fa4ab5+chromium-156.0.8078.48",
+    "chromium": "156.0.8078.48",
+    "mallocZones": [
+      "PartitionAlloc",
+      "objc-class_rw_t",
+      "DefaultMallocZone",
+      "DefaultPurgeableMallocZone",
+      "QuartzCore",
+      "LSBindingEvaluator",
+      "AttributeGraph",
+      "AttributeGraph graph data"
+    ],
+    "pid": 99905,
+    "root": "$HOME/Library/Application Support/Open-E2E-features-chrome-99851-b83beecd",
+    "userData": "$HOME/Library/Application Support/Open-E2E-features-chrome-99851-b83beecd/Engine"
+  },
+  "source": {
+    "clean": true,
+    "diffSHA256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "head": "deeec4c34f7f6ad2a8355c9ba0599cbe64358996"
+  },
+  "started": "2026-11-05 18:55:02",
+  "style": "chrome"
+}
