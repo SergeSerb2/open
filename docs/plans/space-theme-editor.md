@@ -1048,7 +1048,8 @@ space-editor-render bench    # B1
 
 **Step 5 hard gate:** do not ship `edit-theme` wiring until E8 verifies
 outside click, app deactivation, Space switch, and Space delete all close
-the panel. These triggers remain deferred here, not waived.
+the panel. Their real-App receipts are required; offscreen notification
+checks alone do not satisfy this gate.
 | C1 | Form at widths 180 / 200 / 228 / 300 / 500: width class, card frames, submit placement. Return creates (title, icon, style, Profile, focus); Esc cancels with no model change and no undo step; undo of create removes the Space. "Move to ▸ New Space…" moves the tab; "Turn into Space" moves children and removes the folder in one step. |
 | I1 | Picker: pages, search filter, a pick stores `.emoji` / `.named`, "Remove icon" stores nil, folder default page Icons. |
 | P1 | Persistence: snapshot round trip with `style` and `iconOverride`; a fixture snapshot written before Step 1 decodes and renders byte-identical PNGs (`window` scene) before and after this plan. |
