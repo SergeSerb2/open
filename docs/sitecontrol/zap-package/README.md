@@ -14,7 +14,8 @@ the on-screen lock.
 Negative proof: `negative-browser.txt` records 40 independent mutations of copied
 runtime resources, each rejected by the real Chrome flow. The working source was
 never changed by those mutations. Native break-and-restore results are recorded in `negative-native.txt`
-(11 behavior mutations, including every new F13/selector flow row). No baseline, comparator, threshold, or allowlist was changed.
+(11 behavior mutations, including every new F13/selector flow row). The new `editor-zap-on` scene has new 1x/2x render receipts. Existing baseline
+images, comparators, thresholds, and allowlists were not regenerated or changed.
 
 The original A7 blue-hover-outline expectation changes to the specified yellow
 hover tint plus the blue content frame. A11 keeps its precise-commit, two live
