@@ -92,7 +92,15 @@ register no undo.
 and valid placement) and an explicit index in `0...spaces.count` before any
 write. A refusal returns
 nil with no mutation, event, undo, or save. Success inserts the Space and
-moves the nodes into Pinned, in order, as one undo step. Folder children,
+moves the nodes into Pinned by default, in order, as one undo step.
+The New Space form uses `placement: .preserveSection` for tab and selection
+moves: Pinned stays Pinned and Today stays Today, including nodes in folders.
+Folder conversion passes `placement: .today` and `removingEmptyFolder:`;
+the model validates the exact ordered children, moves them, and removes the
+empty folder in that same transaction. An optional `creatingProfileNamed:`
+creates the inline Profile in that transaction too; invalid names or moves
+create neither object. Undo removes both and refocuses each window's previous
+Space; redo preserves object IDs. Folder children,
 object identities, source positions, and pinned URLs restore on undo. The
 model buffers TreeChange events until every relocation succeeds. A late
 failure reverses all earlier moves and removes the inserted Space, then
@@ -361,7 +369,7 @@ Implemented the non-engine steps of [profiles.md](plans/profiles.md), including 
 
 `deleteProfile` refuses the default Profile and any Profile with assigned Spaces. It calls the throwing `archiveForProfileDeletion` path and waits for the FULL-synchronous SQLite commit before removing any model entries. An archive failure throws and keeps the Profile, Favorites, events, and undo stack unchanged. Redo failures reach `onArchiveError`. Undo restores the same Profile and Favorites and discards their archive rows. The model never deletes disk data. An explicit disk wipe is separate; after engine teardown, the App can call `ProfileDirectories.deleteProfileData`. Undo after a wipe restores the sidebar, with empty browsing data.
 
-`moveSpace(id:toProfile:)` changes only the Space's Profile reference. Tabs keep their IDs, URLs and pinned URLs; Favorites remain with their owner Profile. It emits one `.spaceProfileChanged`, with an inverse event on undo. The combined `updateSpace` editor emits the same event and retains one undo step for all four edited values. A missing target Profile refuses the entire edit, with no event or undo step. `createSpace` falls back to the default for a missing Profile. `repairMissingProfileReferences` repairs dangling references in Space order, emits each change, and registers no undo. Snapshot mapping stays lossless; bootstrap/CLI maintenance owns repair.
+`moveSpace(id:toProfile:)` changes only the Space's Profile reference. Tabs keep their IDs, URLs and pinned URLs; Favorites remain with their owner Profile. It emits one `.spaceProfileChanged`, with an inverse event on undo. The combined `updateSpace` editor emits the same event and retains one undo step for all four edited values. A missing target Profile refuses the entire edit, with no event or undo step. `createSpace(...at:moving:)` refuses a missing Profile; the nonoptional overload requires a live Profile ID. `repairMissingProfileReferences` repairs dangling references in Space order, emits each change, and registers no undo. Snapshot mapping stays lossless; bootstrap/CLI maintenance owns repair.
 
 `ProfilesSettingsModel` exposes ordered rows, name and delete reasons, command wrappers, the Profile indicator, and App-owned pending disk-wipe data. `spaceProfileChoices`, `SpaceCreationProfilePickerModel`, and `ChangeProfileRequest` supply the creation picker and confirm-before-move data. The picker starts with the window's focused Space Profile, then falls back to default. Failed Profile creation creates no Space. These types contain no views, persistence, engine calls, or UserDefaults writes.
 

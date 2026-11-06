@@ -48,6 +48,8 @@ public final class SidebarView: NSView {
     public var spaceSlideAnimation: CAAnimation? { pager.lastSlideAnimation }
     let bottomBar: BottomBarView
     public let mediaControls: MediaControlsView
+    private var creationDraft: SpaceThemeStyle?
+    public private(set) var isCreatingSpace = false
     private var cardBackground: ThemeBackgroundView?
     private var pointerTracking: NSTrackingArea?
     private var observerID: UUID?
@@ -150,7 +152,8 @@ public final class SidebarView: NSView {
         let oldFavorites = favorites.frame, oldPagerFrame = pager.frame
         if statusShown || urlStatusButtonIfMade != nil { urlStatusButton.frame = URLStatusMetrics.frame(sidebarWidth: w) }
         let favTop = toolbarShown ? URLFieldMetrics.y : FavoritesMetrics.sectionTop + (statusShown ? URLStatusMetrics.pushDown : 0)
-        let favH = favoritesHeight
+        favorites.isHidden = isCreatingSpace
+        let favH = isCreatingSpace ? 0 : favoritesHeight
         favorites.frame = CGRect(x: 0, y: favTop, width: w, height: favH)
         let bottom = h - BottomBarMetrics.height
         let mediaHeight = mediaControls.requiredHeight
@@ -255,6 +258,12 @@ public final class SidebarView: NSView {
 
     /// Theme, appearance, and the window background.
     private func syncTheme() {
+        if let draft = creationDraft {
+            appearance = draft.resolvedAppearance(system: context.systemAppearance).nsAppearance
+            let bg = presentation == .floatingCard ? cardBackground : themeBackground
+            if bg?.targetStyle != draft { bg?.crossfade(to: draft, animated: false) }
+            return
+        }
         guard let space = context.focusedSpace else { return }
         appearance = context.appearance(for: space).nsAppearance
         let bg = presentation == .floatingCard ? cardBackground : themeBackground
@@ -355,6 +364,17 @@ public final class SidebarView: NSView {
     @discardableResult
     public func perform(_ intent: SidebarIntent) -> Bool { context.send(intent) }
 
+    public func beginSpaceCreation(page: NSView) {
+        isCreatingSpace = true; context.existingHoverPreviews?.dismiss()
+        needsLayout = true; layoutSubtreeIfNeeded(); pager.beginCreation(page: page)
+    }
+    public func previewSpaceCreation(_ style: SpaceThemeStyle) {
+        creationDraft = style; syncTheme()
+    }
+    public func endSpaceCreation(focus: SpaceID?) {
+        isCreatingSpace = false; creationDraft = nil
+        pager.endCreation(); needsLayout = true; layoutSubtreeIfNeeded(); syncTheme()
+    }
     /// Starts inline rename of a row (or of the Space title when `nodeID` is nil).
     public func beginRename(nodeID: ItemID?) {
         pager.currentPage?.beginRename(nodeID: nodeID)

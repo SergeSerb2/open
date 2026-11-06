@@ -113,6 +113,7 @@
           // system zone stays second (docs/engine-fork.md).
           "mallocZones": Self.mallocZoneNames(),
         ]
+      case "editor-open", "editor-close", "editor-act", "creation-state", "theme-get": return try await runSpaceEditorCommand(cmd, a)
       case "menu-context":
         return ["services": NSApp.servicesMenu?.title == "Services", "window": NSApp.windowsMenu?.title == "Window",
           "font": NSFontManager.shared.fontMenu(false)?.title == "Font"]
@@ -655,6 +656,7 @@
         }
         return true
       case "type":
+        if w.controller?.spaceCreationController != nil { return try await sendKey(["text": a["text"] as? String ?? ""], w) }
         _ = try await content(a, w).sendDevToolsMethod(
           "Input.insertText", parameters: ["text": a["text"] as? String ?? ""])
         return true

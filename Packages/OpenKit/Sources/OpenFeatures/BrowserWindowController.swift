@@ -3,6 +3,7 @@ import Observation
 import OpenModel
 import OpenDesign
 import OpenSidebar
+import OpenSpaceEditor
 import OpenCommands
 import OpenStore
 
@@ -13,6 +14,8 @@ public final class BrowserWindowController: NSWindowController, NSWindowDelegate
     public let model: BrowserModel
     let root: BrowserRootView
     public let background = ThemeBackgroundView(frame: .zero)
+    public private(set) var spaceCreationController: SpaceCreationController?
+    public var onSpaceCreationIcon: (@MainActor (SpaceIcon?, CGRect, @escaping @MainActor (SpaceIcon?) -> Void) -> Void)?
     public let sidebar: SidebarView
     public let context: SidebarContext
     public let container: WebContentContainer
@@ -257,7 +260,7 @@ public final class BrowserWindowController: NSWindowController, NSWindowDelegate
         }
         reveal.isEnabled = { [weak self] in
             guard let self else { return false }
-            return !self.isPageFullscreen && self.context.window?.sidebarMode == .hidden && self.peekStorage?.isShown != true
+            return self.spaceCreationController == nil && !self.isPageFullscreen && self.context.window?.sidebarMode == .hidden && self.peekStorage?.isShown != true
                 && !self.context.isNewTabCommandBarOpen && !self.resizingSidebar
         }
         reveal.onChange = { [weak self] shown in self?.setRevealCard(shown) }
@@ -339,7 +342,7 @@ public final class BrowserWindowController: NSWindowController, NSWindowDelegate
         } onChange: { [weak self] in Task { @MainActor [weak self] in self?.observationArmed = false; self?.scheduleRefresh() } }
         }
         // Sidebar's pager owns theme transitions. Never reset its cross-fade here.
-        if background.targetStyle != context.style(for: space) { background.crossfade(to: context.style(for: space), animated: window?.isVisible == true && !Motion.reducesMotion) }
+        if spaceCreationController == nil, background.targetStyle != context.style(for: space) { background.crossfade(to: context.style(for: space), animated: window?.isVisible == true && !Motion.reducesMotion) }
         container.style = context.style(for: space)
         container.showsToolbar = context.window?.showsToolbar == true
         let style = context.style(for: space)
@@ -367,7 +370,7 @@ public final class BrowserWindowController: NSWindowController, NSWindowDelegate
         background.prepareForSnapshot()
     }
     public func layoutContent(animated: Bool = false) {
-        let size = root.bounds.size, hidden = isPageFullscreen || context.window?.sidebarMode == .hidden
+        let size = root.bounds.size, hidden = isPageFullscreen || (spaceCreationController == nil && context.window?.sidebarMode == .hidden)
         let width = context.sidebarWidth
         let panelFrame = isPageFullscreen ? root.bounds : PanelMetrics.frame(windowSize: size, sidebarWidth: width, sidebarHidden: hidden)
         if background.frame != root.bounds { background.frame = root.bounds }
@@ -501,7 +504,7 @@ public final class BrowserWindowController: NSWindowController, NSWindowDelegate
     private func positionTrafficLights() {
         guard let window, !window.styleMask.contains(.fullScreen) else { return }
         observeTrafficLights(window)
-        let hidden = isPageFullscreen || (cardState == .off && context.window?.sidebarMode == .hidden && !anchoredSliding)
+        let hidden = isPageFullscreen || (spaceCreationController == nil && cardState == .off && context.window?.sidebarMode == .hidden && !anchoredSliding)
         for kind in Self.trafficLightKinds {
             guard let button = window.standardWindowButton(kind) else { continue }
             if button.isHidden != hidden { button.isHidden = hidden }
@@ -1017,6 +1020,8 @@ public final class BrowserWindowController: NSWindowController, NSWindowDelegate
         refresh(); changed(); return true
     }
     public func windowWillClose(_ notification: Notification) {
+        spaceCreationController?.onFinish = nil
+        spaceCreationController?.cancel(); spaceCreationController = nil
         existingTabSwitcher?.cancel()
         saveWindowState(); visibilityOverride = .closed; removeRevealCard(); hintWork?.cancel(); hintWork = nil
         hoverPreview.hide(animated: false); captureStorage?.tearDown()
@@ -1025,6 +1030,7 @@ public final class BrowserWindowController: NSWindowController, NSWindowDelegate
     public var onTextUndoManager: ((NSWindow) -> UndoManager?)?
     private lazy var nativeTextUndoManager = UndoManager()
     public func windowWillReturnUndoManager(_ window: NSWindow) -> UndoManager? {
+        if let creation = spaceCreationController { return creation.localUndoManager }
         if let editor = onTextUndoManager?(window) { return editor }
         if window.firstResponder is NSTextView || window.firstResponder is NSTextField { return nativeTextUndoManager }
         return model.undoManager
@@ -1277,5 +1283,39 @@ extension BrowserWindowController {
         }
         hintWork = work
         DispatchQueue.main.asyncAfter(deadline: .now() + HintToastMetrics.outDuration, execute: work)
+    }
+}
+
+
+extension BrowserWindowController {
+    @discardableResult
+    public func beginSpaceCreation(options: SpaceCreationOptions = SpaceCreationOptions()) -> Bool {
+        if let creation = spaceCreationController { creation.focus(); return true }
+        guard let window, model.canCreateSpace(at: options.insertionIndex, moving: options.moving,
+                                               removingEmptyFolder: options.removingEmptyFolder) else { return false }
+        dismissSidebarReveal()
+        let previousSpaceID = context.focusedSpace?.id
+        let creation = SpaceCreationController(model: model, windowID: windowID, options: options)
+        creation.creationView.systemAppearance = context.systemAppearance
+        creation.onPickIcon = { [weak self] icon, rect, pick in
+            // TODO(Section 4 child C): wire IconPickerController after it merges.
+            self?.onSpaceCreationIcon?(icon, rect, pick)
+        }
+        creation.onDraftStyle = { [weak self] style in self?.sidebar.previewSpaceCreation(style) }
+        creation.onFinish = { [weak self, weak creation] space in
+            guard let self, self.spaceCreationController === creation else { return }
+            if space == nil, let previousSpaceID, self.model.space(id: previousSpaceID) != nil,
+               self.context.focusedSpace?.id != previousSpaceID {
+                self.model.undoManager?.disableUndoRegistration()
+                self.model.focusSpace(windowID: self.windowID, spaceID: previousSpaceID)
+                self.model.undoManager?.enableUndoRegistration()
+            }
+            self.sidebar.endSpaceCreation(focus: space?.id ?? previousSpaceID)
+            self.spaceCreationController = nil; window.makeFirstResponder(nil)
+            self.refresh(); if space != nil { self.changed() }
+        }
+        spaceCreationController = creation; layoutContent(animated: true)
+        sidebar.beginSpaceCreation(page: creation.view); creation.updatePreview(); creation.focus()
+        return true
     }
 }

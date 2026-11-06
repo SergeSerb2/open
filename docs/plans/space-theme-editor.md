@@ -1241,7 +1241,7 @@ on both pages; the same editor in macOS Light.
 | 4 R3 | 2026-10-26 | Full code head `cbac12b`: plain verify-all through heavy.sh, 20 PASS, import-arc not selected without per-run opt-in. Editor 151/151; sidebar 429/429; 13 capture tables byte-identical and CU5 2/2. F0137/F0138 and session-2 slider/page-two/preview compares PASS. Final fit check confirms zero changed pixels outside glyph host frames, but Light 0159 crosses ΔE00 1.75→4.36; candidate refused as required. Only Open render refreshes and this log follow the code gate; Steps 5–8 remain deferred. |
 | 5 | | |
 | 6 | | |
-| 7 | | |
+| 7 | 2026-11-06 | New Space sidebar page and C1 implemented. All five widths render in both appearances; Name-card 44→45 pt negative proof fails all ten geometry rows, restored C1 passes. Tab moves preserve Pinned/Today (lead decision, changes main’s Pinned-only helper); folder children use Today and the empty folder is removed atomically. Hidden rename uses Rename/Cancel; Profile picks use ChangeProfileRequest. Final App and regression receipts are recorded in the PR body. |
 | 8 | | |
 | 9 | 2026-10-26 | §17: 29/29 session2-pad rows; color max ΔE00 1.034, preset raster max 1 pt, texture L* sd errors ≤0.042. Editor 172/172, including exact range/saturation/knob undo and redo. Break proofs: old laws fail 31 native and 26 capture rows; missing paired undo fails the existing redo-knob and new state-restoration rows; restored source passes. Merged focused build, space-legacy, space-editor, sidebar-render, and all 13 byte-identical sidebar tables PASS. F0069 legacy/diagnostic 2.38/2.29, legacy retained; F0139 editor-style diagnostic 0.84→1.89 reported below. Full verification and review-checklist receipts are in the PR body. Steps 5–8 remain deferred. |
 
