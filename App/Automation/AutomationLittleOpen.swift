@@ -24,9 +24,16 @@ extension AutomationController {
       let window = state.window
       let controller = app.littleOpenCoordinator.controllers[state.id]!
       let page = OEEngine.shared.allWebContents.first { $0.view.window === window }
+      let surface = app.littleOpenHosts.values.first { $0.view.window === window }?.owner?.standaloneSurface
       window.layoutIfNeeded()
       let contentRect = window.convertToScreen(controller.container.convert(controller.container.bounds, to: nil))
       controller.contentView.layoutSubtreeIfNeeded()
+      let anchor = surface?.surfaceAnchor()
+      let surfaceState: [String: Any] = [
+        "registered": surface != nil,
+        "visible": surface?.isSurfaceVisible ?? false,
+        "anchorName": anchor.map { $0.view === controller.titleBar.urlCapsuleView ? "url-capsule" : "content-top-left" } as Any? ?? NSNull(),
+        "anchorRectInWindow": anchor.map { frame($0.view.convert($0.rect, to: nil)) } as Any? ?? NSNull()]
       let lights = [NSWindow.ButtonType.closeButton, .miniaturizeButton, .zoomButton].compactMap { kind -> [Double]? in
         guard let button = window.standardWindowButton(kind), let parent = button.superview else { return nil }
         let rect = controller.contentView.convert(button.frame, from: parent)
@@ -43,7 +50,12 @@ extension AutomationController {
         "content": page?.identifier ?? 0, "runtimeStyle": page?.runtimeStyle == .alloy ? "alloy" : "chrome",
         "loading": page?.isLoading ?? false, "firstResponder": window.firstResponder.map { String(describing: type(of: $0)) } ?? "",
         "barPresented": controller.commandBar.isPresented, "barInput": controller.urlField.stringValue,
-        "trafficLights": lights,
+        "trafficLights": lights, "surface": surfaceState,
+        "browser": page?.browser.map { browser in
+          ["id": browser.identifier, "chromeWindowID": browser.chromeWindowIdentifier,
+           "tabs": browser.webContents.map(\.identifier), "active": browser.activeWebContent?.identifier ?? 0,
+           "windowMatches": browser.window === window, "context": browser.context.identifier] as [String: Any]
+        } as Any? ?? NSNull(),
         "fieldFocused": (window.firstResponder as? NSTextView)?.delegate as AnyObject? === controller.urlField,
         "contentFrame": frame(CGRect(x: contentRect.minX - window.frame.minX,
           y: window.frame.maxY - contentRect.maxY, width: contentRect.width, height: contentRect.height)),
@@ -57,6 +69,11 @@ extension AutomationController {
     }
     return ["sessions": sessions, "hotkeyRegistered": app.hotkeyService?.isRegistered ?? false,
       "expiry": archiveState(), "mainWindows": app.windowControllers.count,
+      "browserCount": OEEngine.shared.browsers.count,
+      "browserIDs": OEEngine.shared.browsers.map(\.identifier),
+      "mainBrowserIDs": OEEngine.shared.browsers.filter { browser in
+        app.windowControllers.contains { $0.window === browser.window }
+      }.map(\.identifier),
       "autoCreatedLaunchWindow": app.autoCreatedLaunchWindowID?.description ?? "",
       "featureTimers": count.map { $0(6) } ?? NSNull()]
   }

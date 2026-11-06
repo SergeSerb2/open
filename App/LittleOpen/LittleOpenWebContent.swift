@@ -3,13 +3,31 @@ import OpenEngine
 import OpenFeatures
 import OpenModel
 
-/// One standalone Alloy page per session. This factory owns no sidebar window,
-/// and its transient id never enters BrowserModel or a Chromium tab strip.
+/// One Chrome tab in its own hidden Browser per session. Its transient id
+/// never enters BrowserModel; extension APIs see the standalone window.
 @MainActor
-final class LittleOpenWebContent: LittleOpenWebContentProviding, WebContentHost {
+final class LittleOpenWebContent: LittleOpenWebContentProviding, WebContentHost, StandalonePageSurface {
   private unowned let app: AppDelegate
   private let factory: EngineWebContentHostFactory
   let host: EngineWebContentHost
+  private let browser: OEBrowser
+  var surfaceWindow: NSWindow? { host.view.window }
+  var surfacePage: OEWebContent? { host.closed ? nil : host.content }
+  var isSurfaceVisible: Bool {
+    guard let window = surfaceWindow, !host.closed else { return false }
+    return window.isVisible && !window.isMiniaturized && window.occlusionState.contains(.visible)
+  }
+  func surfaceAnchor() -> (view: NSView, rect: CGRect)? {
+    guard let window = surfaceWindow, !host.closed else { return nil }
+    if let controller = app.littleOpenCoordinator?.controllers.values.first(where: { $0.window === window }),
+      controller.state == .page, !controller.titleBar.isHidden,
+      let capsule = controller.titleBar.urlCapsuleView {
+      return (capsule, capsule.bounds)
+    }
+    let view = host.view
+    return (view, CGRect(x: view.bounds.minX + 24,
+      y: view.isFlipped ? view.bounds.minY : view.bounds.maxY - 1, width: 1, height: 1))
+  }
   var tabID: ItemID { host.tabID }
   var view: NSView { host.view }
   var currentURL: URL? { host.currentURL }
@@ -31,7 +49,12 @@ final class LittleOpenWebContent: LittleOpenWebContentProviding, WebContentHost 
     self.app = app
     let spaceID = app.model.mostRecentlyFocusedSpace(profileID: profileID)?.id ?? app.model.spaces.first?.id ?? SpaceID()
     factory = EngineWebContentHostFactory(app: app, state: BrowserWindowState(focusedSpaceID: spaceID))
-    host = factory.makeHost(tabID: ItemID(), profileID: profileID, url: nil) as! EngineWebContentHost
+    // Same P1 path as the main window: context, Browser, Chrome host, strip insertion.
+    browser = OEBrowser(context: factory.context(for: profileID)!)
+    browser.context.delegate = app
+    factory.standaloneBrowser = browser
+    host = factory.makeHost(tabID: ItemID(), profileID: profileID, url: nil, history: nil, browser: browser) as! EngineWebContentHost
+    factory.standaloneSurface = self
     host.rebind(tabID: host.tabID, spaceID: nil)
     app.littleOpenHosts[host.tabID] = host
     host.content.drawsEngineHistorySwipeOverlay = true
@@ -52,7 +75,11 @@ final class LittleOpenWebContent: LittleOpenWebContentProviding, WebContentHost 
   func focus() { host.focus() }
   func close() {
     host.historyRecorder.flushBeforeClose()
+    factory.standaloneSurface = nil
+    factory.standaloneSurfaceVisibilityChanged()
     factory.closeAll()
+    browser.close()
+    factory.standaloneBrowser = nil
     app.littleOpenHosts[host.tabID] = nil
   }
 }

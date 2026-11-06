@@ -1,0 +1,155 @@
+#!/usr/bin/env python3
+"""Paired real-app Little Open receipts; run under quiet then on-screen lock.
+
+Example: littleopen_bench.py --main-bundle /path/to/main/Open.app --output /tmp/receipt.json
+Both apps must use the same configuration, engine and display. No desktop input.
+"""
+import argparse
+import json
+import math
+import os
+from pathlib import Path
+import plistlib
+import shutil
+import socket
+import statistics
+import subprocess
+import tempfile
+import time
+import engine_e2e as e
+
+
+def raw_call(app, cmd, **args):
+    with socket.socket(socket.AF_UNIX, socket.SOCK_STREAM) as sock:
+        sock.settimeout(30)
+        sock.connect(app.sock)
+        sock.sendall((json.dumps({'id': 1, 'cmd': cmd, 'args': args}) + '\n').encode())
+        data = b''
+        while not data.endswith(b'\n'):
+            chunk = sock.recv(1 << 20)
+            if not chunk:
+                raise RuntimeError('automation socket closed before response')
+            data += chunk
+            if len(data) > 8 * 1024 * 1024:
+                raise RuntimeError('automation response exceeds 8 MiB')
+    response = json.loads(data)
+    if not response['ok']:
+        raise RuntimeError(response)
+    return response
+
+
+def main():
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument('--main-bundle', required=True)
+    parser.add_argument('--branch-bundle', default=str(Path(e.ROOT) / 'build/Debug/Open.app'))
+    parser.add_argument('--config', default='Debug')
+    parser.add_argument('--samples', type=int, default=10)
+    parser.add_argument('--output', required=True)
+    args = parser.parse_args()
+    if not 10 <= args.samples <= 100:
+        parser.error('10 to 100 samples per build are required')
+    scratch = Path(tempfile.mkdtemp(prefix='open-lo-bench-'))
+    probe = scratch / 'frame.dylib'
+    subprocess.run(['xcrun', 'clang', '-dynamiclib', '-fobjc-arc', '-Wno-deprecated-declarations',
+                    str(Path(e.ROOT) / 'tools/verification/littleopen-frame-probe.m'),
+                    '-framework', 'AppKit', '-framework', 'QuartzCore', '-o', str(probe)], check=True)
+    domain = 'io.github.sergeserb2.open'
+    key = 'open.links.littleOpenNUXSeen'
+    exported = subprocess.run(['defaults', 'export', domain, '-'], capture_output=True)
+    saved = plistlib.loads(exported.stdout) if exported.returncode == 0 else {}
+    server, port = e._sleep_server()
+    rows = []
+    receipt = {'configuration': args.config, 'samples': rows,
+               'method': 'automation request start to first native display-link tick; page submit to loading=false plus document complete and first contentful paint',
+               'memory': 'App metrics totalRSS: App and owned helpers; one loaded window minus baseline',
+               'mainBundle': str(Path(args.main_bundle).resolve()), 'branchBundle': str(Path(args.branch_bundle).resolve())}
+    try:
+        subprocess.run(['defaults', 'write', domain, key, '-bool', 'true'], check=True)
+        for index in range(args.samples):
+            # Alternate the first build of each pair to bound order/cache bias.
+            for label in (('main', 'branch') if index % 2 == 0 else ('branch', 'main')):
+                if os.getloadavg()[0] > 12:
+                    raise RuntimeError('load1 exceeded 12; release screen lock and retry the receipt')
+                root = Path.home() / 'Library/Application Support' / ('Open-LOBench-%d-%d-%s' % (os.getpid(), index, label))
+                frame_log = scratch / ('frames-%d-%s.jsonl' % (index, label))
+                frame_log.touch()
+                bundle = args.main_bundle if label == 'main' else args.branch_bundle
+                app = None
+                try:
+                    app = e.Open(args.config, 'chrome', str(root), ['--use-mock-keychain'], str(scratch / (label + '.log')),
+                                 urls=(), extra_env={'OPEN_E2E_APP_BUNDLE': str(Path(bundle).resolve()),
+                                                    'DYLD_INSERT_LIBRARIES': str(probe), 'OPEN_LITTLEOPEN_FRAME_LOG': str(frame_log)})
+                    tracker = e.FocusTracker(); tracker.apps.append(app); app.focus_tracker = tracker
+                    window = app.call('shell-windows')[0]
+                    app.call('window-focus', id=window['id'], activate=True)
+                    tracker.checkpoint()
+                    before = app.call('metrics', interval=0.1)
+                    load = os.getloadavg()
+                    app.begin_timing('Little Open first frame')
+                    opened = raw_call(app, 'little-open-action', action='blank')
+                    session = opened['result']['sessions'][0]
+                    frame = e.wait_until(lambda: next((row for row in [json.loads(line) for line in frame_log.read_text().splitlines()]
+                                                     if row['window'] == session['window']), None), timeout=5, step=.002)
+                    if not frame:
+                        raise RuntimeError('no first-display-link receipt')
+                    first_ms = (frame['uptime'] - opened['observationStart']) * 1000
+                    app.begin_timing('Little Open page load')
+                    target = 'http://127.0.0.1:%d/plain.html?sample=%d' % (port, index)
+                    submitted = raw_call(app, 'key', window=session['window'], text=target + '\r')
+                    def page_loaded():
+                        current = app.call('little-open-state')['sessions'][0]
+                        if current['state'] != 'page' or current['loading']:
+                            return None
+                        ready = raw_call(app, 'little-open-eval', id=session['id'], js='({ready:document.readyState,url:location.href,fcp:performance.getEntriesByName("first-contentful-paint")[0]?.startTime ?? null})')
+                        result = ready['result']
+                        return ready if result['ready'] == 'complete' and result['url'] == target and result['fcp'] is not None else None
+                    completed = e.wait_until(page_loaded, timeout=15, step=.002)
+                    if not completed:
+                        raise RuntimeError('page did not finish loading')
+                    page_ms = (completed['observationStart'] - submitted['observationStart']) * 1000
+                    time.sleep(.5)
+                    after = app.call('metrics', interval=0.1)
+                    end_load = os.getloadavg()
+                    if end_load[0] > 12:
+                        raise RuntimeError('load1 exceeded 12 during sample')
+                    if tracker.loss():
+                        raise RuntimeError('foreground interrupted: ' + json.dumps(tracker.loss()))
+                    row = {'build': label, 'pair': index, 'load': load, 'endLoad': end_load, 'firstFrameMs': first_ms, 'pageLoadMs': page_ms,
+                           'firstContentfulPaintMs': completed['result']['fcp'], 'baselineRSS': before['totalRSS'], 'loadedRSS': after['totalRSS'],
+                           'windowRSS': after['totalRSS'] - before['totalRSS'],
+                           'processCount': len(after['processes'])}
+                    rows.append(row)
+                    print(json.dumps(row), flush=True)
+                finally:
+                    if app:
+                        app.quit()
+                        if not app.quit_report.get('ok'):
+                            raise RuntimeError('owned process cleanup failed')
+                    shutil.rmtree(root, ignore_errors=True)
+                    shutil.rmtree(Path.home() / 'Library/Caches' / root.name, ignore_errors=True)
+        def summary(label):
+            selected = [r for r in rows if r['build'] == label]
+            result = {}
+            for metric in ('firstFrameMs', 'pageLoadMs', 'windowRSS', 'loadedRSS'):
+                values = sorted(r[metric] for r in selected)
+                result[metric] = {'median': statistics.median(values), 'p95': values[math.ceil(len(values) * .95)-1]}
+            return result
+        receipt['summary'] = {label: summary(label) for label in ('main', 'branch')}
+        receipt['noSlower'] = all(receipt['summary']['branch'][metric][pct] <= receipt['summary']['main'][metric][pct]
+                                 for metric in ('firstFrameMs', 'pageLoadMs') for pct in ('median', 'p95'))
+        receipt['extraHiddenBrowserRSS'] = receipt['summary']['branch']['windowRSS']['median'] - receipt['summary']['main']['windowRSS']['median']
+        print(json.dumps({k: v for k, v in receipt.items() if k not in ('samples', 'mainBundle', 'branchBundle')}, indent=2))
+    finally:
+        Path(args.output).write_text(json.dumps(receipt, indent=2) + '\n')
+        server.shutdown()
+        if key in saved:
+            subprocess.run(['defaults', 'write', domain, key, '-bool', str(saved[key]).lower()], check=True)
+        else:
+            subprocess.run(['defaults', 'delete', domain, key], capture_output=True)
+        shutil.rmtree(scratch, ignore_errors=True)
+    if not receipt.get('noSlower', False):
+        raise SystemExit(1)
+
+
+if __name__ == '__main__':
+    main()

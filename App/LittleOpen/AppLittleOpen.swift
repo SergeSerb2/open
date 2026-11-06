@@ -27,7 +27,8 @@ extension AppDelegate {
     littleOpenCoordinator = coordinator
     coordinator.onSwitchToTab = { [weak self] id, space in self?.selectLittleOpenDestination(tabID: id, spaceID: space) }
     coordinator.onOpenInMain = { [weak self] windowID, tabID, host in
-      // Standalone Alloy pages are recreated through the sidebar's factory.
+      // Recreate through the sidebar's factory: host ownership stays local.
+      // A live cross-factory transfer needs a separate ownership handoff.
       host?.close()
       self?.selectLittleOpenDestination(tabID: tabID, windowID: windowID)
     }
@@ -40,6 +41,9 @@ extension AppDelegate {
     coordinator.onChange = { [weak self] in
       guard let self else { return }
       self.media.visibility.visibilityChanged()
+      for host in self.littleOpenHosts.values {
+        host.owner?.standaloneSurfaceVisibilityChanged()
+      }
       self.expirySweeper?.rearm()
       self.scheduleMenuRebuild()
     }

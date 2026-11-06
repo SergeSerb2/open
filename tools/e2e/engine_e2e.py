@@ -7044,6 +7044,7 @@ def littleopen_checks(factory, results, tmp):
         fixture_path = os.path.join(tmp, 'littleopen-snapshot.json')
         with open(fixture_path, 'w') as stream: json.dump(seed, stream)
         app.quit(); app = factory(urls=(), snapshot=fixture_path, extra_env=env)
+        app.call('open', url=origin + '/main-browser-control')
         base = state()
         menu('new-little-open-window')
         bar = sessions()[0]
@@ -7052,6 +7053,7 @@ def littleopen_checks(factory, results, tmp):
         record('B9_bar_frame', bar['state'] == 'bar' and rect_equal(bar['frame'], expected_bar), session=bar)
         record('B4_field_and_hotkey', bar['fieldFocused'] and state()['hotkeyRegistered']
                and app.call('hotkey-state')['registered'], session=bar, hotkey=app.call('hotkey-state'))
+        surface_bar = wait_until(lambda: (lambda s: s if s.get('surface', {}).get('visible') else None)(session(bar['id'])), timeout=4) or session(bar['id'])
         url = origin + '/ticker.html?littleopen=first'
         app.call('key', window=bar['window'], text=url + '\r')
         loaded = wait_until(lambda: (lambda s: s if s and s['state'] == 'page' and not s['loading'] else None)(session(bar['id'])), timeout=12)
@@ -7059,13 +7061,19 @@ def littleopen_checks(factory, results, tmp):
         w, h = min(1185, vf[2]-40), min(832, vf[3]-40)
         expected_page = [vf[0]+vf[2]-20-w, vf[1]+vf[3]-20-h, w, h]
         record('B9_page_frame', loaded['window'] == bar['window'] and rect_equal(loaded['frame'], expected_page), session=loaded)
-        record('B4_real_engine', loaded['url'] == url and loaded['runtimeStyle'] == 'alloy' and not loaded['sidebarTab']
+        record('B4_real_engine', loaded['url'] == url and loaded['runtimeStyle'] == 'chrome' and not loaded['sidebarTab']
                and loaded['content'] > 0, session=loaded)
         menu('new-little-open-window')
         second = next(s for s in sessions() if s['id'] != bar['id'])
         record('B9_second_first_frame', rect_equal(second['frame'], expected_bar)
                and rect_equal(session(bar['id'])['frame'], expected_page), session=second)
+        second_browser = second.get('browser') or {}
+        second_browser_id = second_browser.get('id')
         action(second['id'], 'close')
+        second_browser_gone = wait_until(lambda: second_browser_id not in state()['browserIDs'], timeout=4)
+        page_browser = loaded.get('browser') or {}
+        bar_browser = bar.get('browser') or {}
+        main_browser_ids = state()['mainBrowserIDs']
 
         before = len(sessions()); timestamp = time.monotonic() - 5
         app.call('little-open-action', action='blank', timestamp=timestamp)
@@ -7129,6 +7137,18 @@ def littleopen_checks(factory, results, tmp):
         record('B10_title_bar', geometry and colors and pill_delta <= 2 and reference_ok and rect_equal(loaded['contentFrame'], [0, 47, w, h-47]),
                frames=elements, expected=expected, samples=samples, pillDeltaE00=pill_delta, png=png, reference=reference)
 
+        surface_page = loaded
+        capsule = elements['capsule']
+        # Automation reports native NSWindow coordinates (bottom-left origin).
+        expected_anchor = [capsule[0], h - 47 + capsule[1], capsule[2], capsule[3]]
+        anchor = surface_page.get('surface', {}).get('anchorRectInWindow') or []
+        surface_page_ok = (surface_page.get('surface', {}).get('registered') is True
+                           and surface_page['surface']['visible'] is True
+                           and surface_page['surface']['anchorName'] == 'url-capsule'
+                           and rect_equal(anchor, expected_anchor)
+                           and len(anchor) == 4 and h - 47 <= anchor[1]
+                           and anchor[1] + anchor[3] <= h)
+
         idle_with = state()
         record('sweeper_no_poll_never', base['featureTimers'] == idle_with['featureTimers'] == 0
                and idle_with['expiry']['armedTimerCount'] == 0, baseline=base, withSession=idle_with)
@@ -7147,6 +7167,7 @@ def littleopen_checks(factory, results, tmp):
         hidden = wait_until(lambda: (lambda s: s if s and s['miniaturized'] and not s['visibilityProtected'] else None)(session(bar['id'])), timeout=4)
         action(bar['id'], 'deminiaturize'); action(bar['id'], 'focus')
         again = wait_until(lambda: session(bar['id'])['visibilityProtected'], timeout=4)
+        surface_restored = session(bar['id'])
         record('visibility_feed_and_ticker', visible['visibilityProtected'] and tick_after > tick and hidden and again,
                visible=visible, hidden=hidden, tickBefore=tick, tickAfter=tick_after, freezeDelay=30)
         app.call('sleep-clock', reset=True)
@@ -7167,14 +7188,47 @@ def littleopen_checks(factory, results, tmp):
         cancelled = session(bar['id'])['content'] == old_content and session(bar['id'])['profile'] == seed['profiles'][0]['id'] and not app.call('defaults', key=keys[4])
         action(bar['id'], 'switch-profile', profile=second_profile['id'])
         app.call('little-open-profile-alert', action='confirm', suppress=True)
-        switched = wait_until(lambda: (lambda s: s if s['profile'] == second_profile['id'] and s['content'] != old_content and not s['loading'] else None)(session(bar['id'])), timeout=10)
+        switched = wait_until(lambda: (lambda s: s if s['profile'] == second_profile['id'] and s['content'] > 0 and s['content'] != old_content and not s['loading'] else None)(session(bar['id'])), timeout=10)
         record('profile_confirm_cancel', cancelled and switched and alert['visible']
                and alert['message'] == 'Open this page in another Profile?'
                and alert['buttons'] == ['Switch Profile', 'Cancel']
                and alert['informative'] == 'Each Profile has different browser data, so this webpage might look a little different.'
                and alert['suppression'] == "Don't ask again"
                and app.call('defaults', key=keys[4]) is True, alert=alert, switched=switched)
+        switched_browser = switched.get('browser') if switched else None
+        old_browser_gone = page_browser.get('id') not in state()['browserIDs']
         close_all()
+        browsers_closed = wait_until(lambda: state()['browserCount'] == base['browserCount'], timeout=4)
+        record('littleopen_chrome_window', loaded['runtimeStyle'] == 'chrome'
+               and page_browser.get('id') == bar_browser.get('id')
+               and (surface_page.get('browser') or {}).get('id') == page_browser.get('id')
+               and page_browser.get('id') != second_browser_id
+               and main_browser_ids and page_browser.get('id') not in main_browser_ids and second_browser_id not in main_browser_ids
+               and page_browser.get('tabs') == [loaded['content']]
+               and page_browser.get('active') == loaded['content']
+               and page_browser.get('chromeWindowID', -1) >= 0 and page_browser.get('windowMatches') is True
+               and second_browser.get('tabs') == [second['content']]
+               and second_browser_gone and old_browser_gone and browsers_closed
+               and switched_browser and switched_browser['id'] != page_browser['id']
+               and switched_browser['context'] != page_browser['context'],
+               bar=bar_browser, page=page_browser, second=second_browser, mainBrowserIDs=main_browser_ids,
+               switched=switched_browser, oldBrowserGone=old_browser_gone,
+               closedBrowserCount=state()['browserCount'], baselineBrowserCount=base['browserCount'],
+               proof='OpenEngine P1 strip state; Section 6 owns real extension X-19 checks')
+        surface_closed = session(bar['id']) is None
+        bar_surface = surface_bar.get('surface', {})
+        bar_anchor = bar_surface.get('anchorRectInWindow') or []
+        bar_content = surface_bar['contentFrame']
+        expected_bar_anchor = [24, surface_bar['frame'][3] - bar_content[1] - 1, 1, 1]
+        record('littleopen_surface_hook', bar_surface.get('registered') is True
+               and bar_surface.get('visible') is True
+               and bar_surface.get('anchorName') == 'content-top-left'
+               and rect_equal(bar_anchor, expected_bar_anchor) and surface_page_ok
+               and hidden and hidden.get('surface', {}).get('visible') is False
+               and surface_restored.get('surface', {}).get('visible') is True and surface_closed,
+               bar=bar_surface, page=surface_page.get('surface'), expectedPageAnchor=expected_anchor,
+               hidden=hidden.get('surface') if hidden else None,
+               restored=surface_restored.get('surface'), closed=surface_closed)
 
         moved = page(origin + '/move-current')
         archive_before = app.call('archive-list')['count']
