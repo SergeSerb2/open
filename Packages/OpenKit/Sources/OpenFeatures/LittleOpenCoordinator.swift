@@ -47,6 +47,8 @@ public final class LittleOpenCoordinator {
     @ObservationIgnored public var isActionEnabled: ((String, SpaceID?) -> Bool)?
     @ObservationIgnored public var presentWindows = true
     @ObservationIgnored public var onChange: (() -> Void)?
+    /// Return true while the App's page-close preflight owns the request.
+    @ObservationIgnored public var requestPageClose: ((WindowID, @escaping (Bool) -> Void) -> Bool)?
     @ObservationIgnored public var onOpenInMain: ((WindowID, ItemID, (any WebContentHost)?) -> Void)?
     @ObservationIgnored public var confirmProfileSwitch: ((ProfileID, @escaping (Bool) -> Void) -> Void)?
     @ObservationIgnored public var defaults = UserDefaults.standard
@@ -136,8 +138,11 @@ public final class LittleOpenCoordinator {
     public func close(sessionID: WindowID, archiveReason: ArchiveReason?) {
         close(sessionID: sessionID, archiveReason: archiveReason, now: Date())
     }
-    private func close(sessionID: WindowID, archiveReason: ArchiveReason?, now: Date) {
+    private func close(sessionID: WindowID, archiveReason: ArchiveReason?, now: Date, preflight: Bool = true) {
         guard let session = sessions.first(where: { $0.id == sessionID }) else { return }
+        if preflight, archiveReason == nil, requestPageClose?(sessionID, { [weak self] allowed in
+            if allowed { self?.close(sessionID: sessionID, archiveReason: archiveReason, now: now, preflight: false) }
+        }) == true { return }
         if let reason = archiveReason { archiveSink?.archive([ArchiveEntry(tab: session.tab, reason: reason, originalLocation: "littleOpen:\(session.id)", spaceID: nil, profileID: session.profileID, archivedAt: now)]) }
         session.windowIsVisible = false
         sessions.removeAll { $0.id == sessionID }
