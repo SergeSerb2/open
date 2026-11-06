@@ -9966,7 +9966,8 @@ def space_editor_creation_checks(factory, results, tmp):
             key(shortcut, ['cmd'])
             require('A5_form_cmd_' + shortcut, bool(wait_until(lambda: app.call('commandbar-state')['presented'], timeout=5)) and state()['open'])
             key('escape')
-            require('A5_bar_escape_keeps_form_' + shortcut, not app.call('commandbar-state')['presented'] and state()['open'])
+            after_bar = app.call('commandbar-state'); after_form = state()
+            require('A5_bar_escape_keeps_form_' + shortcut, not after_bar['presented'] and after_form['open'], bar=after_bar, form=after_form)
             app.call('editor-open', kind='create')
             require('A5_form_refocus_' + shortcut, state()['nameFocused'] and state()['name'] == 'Created Space' and spaces() == before)
         # Theme input goes through the actual card and panel swatch, local undo.
