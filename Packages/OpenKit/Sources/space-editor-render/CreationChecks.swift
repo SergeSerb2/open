@@ -191,6 +191,7 @@ final class CreationScene: NSObject, NSWindowDelegate {
         rollback.controller.submit()
         rollback.model.diagnosticRollbackFailureAtMove = nil
         let rollbackAfter = try encoder.encode(SnapshotMapper.dto(from: rollback.model))
+        print("C1 late refusal snapshotSame=\(rollbackBefore == rollbackAfter) profiles=\(announcedProfiles) events=\(changes) generation=\(generation)/\(rollback.model.undoGeneration) revision=\(revision)/\(rollback.model.treeRevision) canUndo=\(rollback.undo.canUndo) finished=\(rollback.controller.isFinished)")
         Checks.check(rollbackBefore == rollbackAfter && announcedProfiles == 0 && changes == 0
             && rollback.model.undoGeneration == generation && rollback.model.treeRevision == revision
             && !rollback.undo.canUndo && !rollback.controller.isFinished,

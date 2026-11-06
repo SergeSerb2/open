@@ -109,15 +109,29 @@ public final class SpaceCreationController {
             }
         } else if picker.selectedProfileID.flatMap({ model.profile(id: $0) }) == nil { refreshProfiles(); return }
         let undo = model.undoManager
-        undo?.beginUndoGrouping()
+        let actionName: String = "New Space"
+        // The model opens a group only after the failable transaction succeeds.
+        // Name that group while it is open; creating an outer group here would
+        // leave an empty Undo step on refusal. Never name a closed group.
+        let namingObserver = undo.map { manager in
+            NotificationCenter.default.addObserver(forName: .NSUndoManagerDidOpenUndoGroup,
+                object: manager, queue: nil) { _ in
+                MainActor.assumeIsolated {
+                    if manager.groupingLevel > 0 { manager.setActionName(actionName) }
+                }
+            }
+        }
+        defer { if let namingObserver { NotificationCenter.default.removeObserver(namingObserver) } }
         // The model creates an inline Profile and Space as one atomic command.
         guard let profileID = picker.selectedProfileID, let space = model.createSpace(title: creationView.nameField.stringValue, profileID: profileID,
             icon: draftIcon, theme: SpaceTheme(style: draftStyle), at: options.insertionIndex, moving: options.moving,
             placement: options.placement, removingEmptyFolder: options.removingEmptyFolder,
             creatingProfileNamed: picker.isCreatingProfile ? picker.newProfileName : nil) else {
-            undo?.endUndoGrouping(); return
+            return
         }
-        undo?.setActionName("New Space"); undo?.endUndoGrouping()
+        // A caller may already have an open event group, so no open-group
+        // notification was needed. A missing name is a harness FAIL, not a trap.
+        if let undo, undo.groupingLevel > 0 { undo.setActionName(actionName) }
         isFinished = true; localUndoManager.removeAllActions()
         undo?.disableUndoRegistration(); model.focusSpace(windowID: windowID, spaceID: space.id); undo?.enableUndoRegistration()
         splash { [weak self] in self?.onFinish?(space) }

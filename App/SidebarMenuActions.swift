@@ -164,8 +164,10 @@ extension EngineWebContentHostFactory {
     field.frame = NSRect(x: 0, y: 0, width: 260, height: 24); field.placeholderString = "Space name"
     // A single-line field consumes Return to send its action. Forward that
     // native action to the alert's Rename button so Return confirms the sheet.
+    field.cell?.sendsActionOnEndEditing = false
     field.target = alert.buttons[0]; field.action = #selector(NSButton.performClick(_:))
     alert.accessoryView = field; pendingRenameAlert = alert
+    alert.window.initialFirstResponder = field
     alert.beginSheetModal(for: window) { [weak self] response in
       guard let self else { return }; self.pendingRenameAlert = nil
       guard !self.isClosing, !self.app.terminationRequested, response == .alertFirstButtonReturn,
@@ -177,7 +179,6 @@ extension EngineWebContentHostFactory {
       self.app.undoManager.setActionName("Rename Space"); self.app.undoManager.endUndoGrouping()
       self.app.scheduleSave()
     }
-    alert.window.makeFirstResponder(field)
     return true
   }
 }
