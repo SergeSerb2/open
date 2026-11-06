@@ -1,6 +1,8 @@
 # Extension engine P3 receipt
 
-2026-11-05, M5 Pro, macOS built-in 2× display. Branch `s6/engine-p3`.
+2026-11-05, M5 Pro, macOS. Initial work used the built-in 2× display.
+The accepted reruns use the restored 1× AW2726DM main display
+(2560×1440 at 240 Hz). Branch `s6/engine-p3`.
 The engine root is `~/Developer/open-engine-s8`; the main distribution view
 `~/Developer/open-engine-s8-main` was not changed.
 
@@ -54,7 +56,7 @@ Chromium dialog files and the CEF download file.
 ## P3 end to end
 
 Each App launch passes `--use-mock-keychain`. Plain suites wait for a foreign
-timing-priority flag, then take `/tmp/open-onscreen-e2e.lock`. They run one
+timing-priority flag, then use `/usr/bin/lockf -k /tmp/open-onscreen-e2e.lock`. They run one
 suite per call, without an engine or App build from this child in parallel.
 The P3 suite requires no network. It signs an ephemeral local CRX3 and sends
 it through Chromium's real `CrxInstaller`, validation, consent and registrar.
@@ -120,10 +122,11 @@ All required suites passed on distribution `7b490905…`:
 | `features` | 19/19 PASS | PASS | 0 |
 | `shell` | 7/7 PASS | PASS | 0 |
 
-The final three suites used the Release App rebuilt after merging external-link
-intake from main `8bd3aadb`; earlier suites used the History merge `495a47d3`.
-Both Apps have the same verified engine code. The PR records the full
-verification summary on the final merged source head.
+All six accepted suites were repeated after the 17:35 kept-lock rule, using
+the Release App rebuilt after main `8db4ac86` (Little Open and AppleScript).
+The negative/restore pair and both real Web Store rows were repeated too.
+Earlier runs using the old lock form remain historical evidence. The PR
+records later main merges and full verification on the final source head.
 
 The tabstrip setup waits for Bitwarden's welcome tab before asserting the
 selected tab. Its discard row waits for the sleep controller's actual

@@ -6,21 +6,21 @@
         "forced": false,
         "ok": true,
         "owned_pids": [
-          88210,
-          88243,
-          88244,
-          88245,
-          88246,
-          88249,
-          88288,
-          88297,
-          88327,
-          88338,
-          88353,
-          88553,
-          88558,
-          88559,
-          88568
+          3066,
+          3185,
+          3186,
+          3187,
+          3188,
+          3191,
+          3207,
+          3211,
+          3274,
+          3277,
+          3286,
+          3517,
+          3521,
+          3522,
+          3531
         ],
         "remaining_processes": [],
         "reply": true,
@@ -97,10 +97,10 @@
               {
                 "byUser": true,
                 "event": "installed",
-                "id": "mmgdmdbhjppngenbpdkkmlkpodflmeck"
+                "id": "bbigffjpbmidlpbaomdcefefbmpaembp"
               }
             ],
-            "extension": "mmgdmdbhjppngenbpdkkmlkpodflmeck",
+            "extension": "bbigffjpbmidlpbaomdcefefbmpaembp",
             "handler": true,
             "name": "Open action probe",
             "pending": true,
@@ -172,10 +172,10 @@
               {
                 "byUser": true,
                 "event": "installed",
-                "id": "mmgdmdbhjppngenbpdkkmlkpodflmeck"
+                "id": "bbigffjpbmidlpbaomdcefefbmpaembp"
               }
             ],
-            "extension": "mmgdmdbhjppngenbpdkkmlkpodflmeck",
+            "extension": "bbigffjpbmidlpbaomdcefefbmpaembp",
             "handler": true,
             "name": "Open action probe",
             "pending": true,
@@ -252,7 +252,7 @@
           {
             "byUser": true,
             "event": "installed",
-            "id": "mmgdmdbhjppngenbpdkkmlkpodflmeck"
+            "id": "bbigffjpbmidlpbaomdcefefbmpaembp"
           },
           {
             "context": "Default",
@@ -287,7 +287,7 @@
             "event": "commands"
           }
         ],
-        "extension": "mmgdmdbhjppngenbpdkkmlkpodflmeck",
+        "extension": "bbigffjpbmidlpbaomdcefefbmpaembp",
         "handler": true,
         "name": "Open action probe",
         "pending": true,
@@ -330,7 +330,7 @@
             "event": "ready"
           }
         ],
-        "extension": "mmgdmdbhjppngenbpdkkmlkpodflmeck",
+        "extension": "bbigffjpbmidlpbaomdcefefbmpaembp",
         "handler": true,
         "injectedCancel": false,
         "name": "Open action probe",
@@ -381,7 +381,7 @@
             "event": "ready"
           }
         ],
-        "extension": "mmgdmdbhjppngenbpdkkmlkpodflmeck",
+        "extension": "bbigffjpbmidlpbaomdcefefbmpaembp",
         "handler": true,
         "name": "Open action probe",
         "pending": true,
@@ -411,7 +411,7 @@
         "commands": [
           "probe-named"
         ],
-        "lastCommandTab": 67692781
+        "lastCommandTab": 270230567
       },
       "ok": true,
       "unknownRefused": true
@@ -422,7 +422,7 @@
       "commands": [
         {
           "actionCommand": true,
-          "extension": "mmgdmdbhjppngenbpdkkmlkpodflmeck",
+          "extension": "bbigffjpbmidlpbaomdcefefbmpaembp",
           "global": false,
           "keyEquivalent": "Y",
           "modifierFlags": 1048576,
@@ -431,7 +431,7 @@
         },
         {
           "actionCommand": false,
-          "extension": "mmgdmdbhjppngenbpdkkmlkpodflmeck",
+          "extension": "bbigffjpbmidlpbaomdcefefbmpaembp",
           "global": false,
           "keyEquivalent": "U",
           "modifierFlags": 1048576,
@@ -444,7 +444,7 @@
     "disable_enable_with_popup": {
       "actionGone": true,
       "disabled": {
-        "directory": "/Users/serge/Library/Application Support/Open-E2E-extensions-p3-chrome-88166-9eb0914d/Engine/Default/Extensions/mmgdmdbhjppngenbpdkkmlkpodflmeck/1.0_0",
+        "directory": "/Users/serge/Library/Application Support/Open-E2E-extensions-p3-chrome-2909-a175ab4f/Engine/Default/Extensions/bbigffjpbmidlpbaomdcefefbmpaembp/1.0_0",
         "disableReasons": 1,
         "enabled": false,
         "fromWebStore": false,
@@ -452,7 +452,7 @@
         "homepage": "",
         "hostPermissions": [],
         "icon": "128x128",
-        "id": "mmgdmdbhjppngenbpdkkmlkpodflmeck",
+        "id": "bbigffjpbmidlpbaomdcefefbmpaembp",
         "manifestVersion": 3,
         "name": "Open action probe",
         "omniboxKeyword": "probe",
@@ -474,10 +474,10 @@
           "attachedSheet": 0,
           "class": "NativeWidgetMacNSWindow",
           "firstResponder": "BridgedContentView",
-          "frame": "{{640, 666}, {448, 196}}",
+          "frame": "{{1056, 910}, {448, 196}}",
           "key": true,
           "level": 0,
-          "number": 48940,
+          "number": 67609,
           "parent": 0,
           "sheet": false,
           "text": [
@@ -495,7 +495,7 @@
     },
     "live_metadata": {
       "extension": {
-        "directory": "/Users/serge/Library/Application Support/Open-E2E-extensions-p3-chrome-88166-9eb0914d/Engine/Default/Extensions/mmgdmdbhjppngenbpdkkmlkpodflmeck/1.0_0",
+        "directory": "/Users/serge/Library/Application Support/Open-E2E-extensions-p3-chrome-2909-a175ab4f/Engine/Default/Extensions/bbigffjpbmidlpbaomdcefefbmpaembp/1.0_0",
         "disableReasons": 0,
         "enabled": true,
         "fromWebStore": false,
@@ -503,7 +503,7 @@
         "homepage": "",
         "hostPermissions": [],
         "icon": "128x128",
-        "id": "mmgdmdbhjppngenbpdkkmlkpodflmeck",
+        "id": "bbigffjpbmidlpbaomdcefefbmpaembp",
         "manifestVersion": 3,
         "name": "Open action probe",
         "omniboxKeyword": "probe",
@@ -617,7 +617,7 @@
         {
           "byUser": true,
           "event": "installed",
-          "id": "mmgdmdbhjppngenbpdkkmlkpodflmeck"
+          "id": "bbigffjpbmidlpbaomdcefefbmpaembp"
         }
       ],
       "ok": true
@@ -644,10 +644,10 @@
       "AttributeGraph",
       "AttributeGraph graph data"
     ],
-    "pid": 88210,
-    "root": "/Users/serge/Library/Application Support/Open-E2E-extensions-p3-chrome-88166-9eb0914d",
-    "userData": "/Users/serge/Library/Application Support/Open-E2E-extensions-p3-chrome-88166-9eb0914d/Engine"
+    "pid": 3066,
+    "root": "/Users/serge/Library/Application Support/Open-E2E-extensions-p3-chrome-2909-a175ab4f",
+    "userData": "/Users/serge/Library/Application Support/Open-E2E-extensions-p3-chrome-2909-a175ab4f/Engine"
   },
-  "started": "2026-11-05 16:11:44",
+  "started": "2026-11-05 17:44:48",
   "style": "chrome"
 }
