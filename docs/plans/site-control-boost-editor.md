@@ -1434,6 +1434,23 @@ paste the summary (`AGENTS.md` rule 10). Steps 1, 2, and 4 are open PRs that are
 
 ---
 
+
+Step 3 verification (child A, 2026-11-06; PR pending): Release `sitecontrol` records
+20 PASS, 2 FAIL (S11/S12), 3 BLOCKED (S2 Section 13 adapter, S4 Boost runtime,
+S10 incognito), cleanup PASS, no interruptions. The lead's interim S1 ruling verifies
+an unavailable ad-block row, its Advanced Settings action, and unchanged settings;
+opening the store alone never claims that an engine adapter exists. `extensions-ui`
+passes 56/56 including real-App X13. The first-draw p95 is 4.797 ms over all 35 opens
+(4.762 ms after 5 declared warm-ups; first cold open 21.851 ms), load 15.09/13.92/17.40.
+A real native delayed-draw canary measures 35.506 ms and is rejected. SCC idle has ten
+zero scheduler/view counters (timer canary 1 then 0); total App CPU is 1.75%, not zero.
+Scroll closed/open p95 is 4.5/4.3 ms with no dropped frames, load 12.41/13.39/17.28;
+a bounded slow-frame page canary is rejected at 12.6 ms. S11 retains the four measured
+values in `docs/followups.md`; S12 is 22/40 at unchanged limits. R7's child-window
+fallback remains a lead design decision. This is implemented App wiring, not visual
+acceptance. Full verification and regression results are recorded in the PR.
+
+
 ## 11. Risks and open questions
 
 ### 11.1 Risks
