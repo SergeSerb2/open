@@ -33,59 +33,58 @@ def run(factory, results, origin, tmp, env):
         def reads(): return app.call('site-controls', action='state')['sourceReads']
         def delta(before, after): return {key: after[key] - before[key] for key in before}
         before = reads()
-        app.call('navigate', tab=tab, url=origin + '/boost.html'); app.call('wait', tab=tab)
+        app.call('navigate', tab=tab, url=origin + '/heavy.html'); app.call('wait', tab=tab)
         time.sleep(.2)
         closed = delta(before, reads())
         app.call('site-controls', action='open')
         before = reads()
-        app.call('navigate', tab=tab, url=origin + '/ads.html'); app.call('wait', tab=tab)
+        app.call('navigate', tab=tab, url=origin + '/heavy.html?panel=open'); app.call('wait', tab=tab)
         time.sleep(.2)
         opened = delta(before, reads())
         before = reads()
         app.eval(tab, "for(let i=0;i<250;i++)document.title='SCC title '+i;true")
         time.sleep(.2)
         titles = delta(before, reads())
-        data['sourceRefresh'] = dict(closedPageLoad=closed, openPageLoad=opened,
+        data['sourceRefresh'] = dict(fixture='heavy.html (2000 cards)', closedPageLoad=closed, openPageLoad=opened,
             titleChanges=titles, load=list(os.getloadavg()))
         app.call('site-controls', action='close')
     finally:
         env['_restore_defaults'](app, saved)
         app.quit()
 
-    # Inject a delay into the real native SCC display call. This proves that
-    # the first-draw receipt includes display work, not just data construction.
-    delay_source = Path(tmp, 'sitecontrol-delay.m')
-    delay_source.write_text('''#import <AppKit/AppKit.h>
-#import <objc/runtime.h>
-#import <unistd.h>
-@interface NSView (SCCDelay)
-- (void)openSCCDelayedDisplay;
-@end
-@implementation NSView (SCCDelay)
-+ (void)load {
-    method_exchangeImplementations(class_getInstanceMethod(self,@selector(displayIfNeeded)),
-                                   class_getInstanceMethod(self,@selector(openSCCDelayedDisplay)));
-}
-- (void)openSCCDelayedDisplay {
-    if ([NSStringFromClass(self.class) hasSuffix:@".SiteControlView"]) usleep(12000);
-    [self openSCCDelayedDisplay];
-}
-@end
-''')
+    # Delay each native phase in a separate real-App run. Counters sampled by
+    # the receipt callback exclude any AppKit work that happens after timing.
+    delay_source = Path(env['ROOT'], 'tools/e2e/sitecontrol_draw_probe.m')
     delay_probe = str(Path(tmp, 'sitecontrol-delay.dylib'))
     subprocess.run(['xcrun','clang','-dynamiclib','-fobjc-arc',str(delay_source),
-                    '-framework','AppKit','-o',delay_probe],check=True,timeout=30)
-    app = factory(urls=(origin + '/ads.html',), extra_env={'DYLD_INSERT_LIBRARIES': delay_probe})
-    try:
-        tab=app.call('tabs')[0]['id']; app.call('wait',tab=tab)
-        app.call('site-controls',action='open')
-        delayed=app.call('site-controls',action='state')['firstDrawMilliseconds'][-1]
-        results['P1_first_draw']['negativeRejected']=delayed>=12
-        results['P1_first_draw']['negativeMilliseconds']=delayed
-        if 'ok' in results['P1_first_draw']:
-            results['P1_first_draw']['ok']=results['P1_first_draw']['ok'] and delayed>=12
-    finally:
-        app.quit()
+                    '-framework','AppKit','-framework','QuartzCore','-o',delay_probe],check=True,timeout=30)
+    phase_proofs = []
+    for index, phase in enumerate(['layout', 'display', 'flush']):
+        app = factory(urls=(origin + '/ads.html',), extra_env={
+            'DYLD_INSERT_LIBRARIES': delay_probe, 'OPEN_SCC_DELAY_PHASE': phase})
+        try:
+            tab=app.call('tabs')[0]['id']; app.call('wait',tab=tab)
+            app.call('window-focus', id=app.call('window-state')['id'], activate=True)
+            app.begin_timing('SCC '+phase+' negative control')
+            before=app.call('site-controls',action='state')['drawNativeProbe']
+            app.call('site-controls',action='open')
+            shown=app.call('site-controls',action='state')
+            delayed=shown['firstDrawMilliseconds'][-1]
+            measured=shown['firstDrawNativeProbe'][-1]
+            delta=[a-b for a,b in zip(measured,before)]
+            rejected=len(delta)==6 and all(n>0 for n in delta[:3]) and delta[index+3]>0 and delayed>=12
+            interruptions=results.tracker.loss()
+            if interruptions:
+                raise env['FocusInterruption']('foreground lost during P1 '+phase+' negative control', interruptions)
+            phase_proofs.append(dict(phase=phase, negativeRejected=rejected,
+                milliseconds=delayed, nativeCalls=delta[:3], nativeDelays=delta[3:], load=list(os.getloadavg())))
+        finally:
+            app.quit()
+    proof=results['P1_first_draw']
+    proof['nativePhaseProofs']=phase_proofs
+    proof['negativeRejected']=all(p['negativeRejected'] for p in phase_proofs)
+    proof['negativeMilliseconds']=max(p['milliseconds'] for p in phase_proofs)
+    if 'ok' in proof: proof['ok']=proof['ok'] and proof['negativeRejected']
 
     # Observe real view invalidation and native schedulers. The observer is
     # injected before SCC initialization; it never ships in the App.

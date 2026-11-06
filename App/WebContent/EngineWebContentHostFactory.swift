@@ -122,6 +122,7 @@ final class EngineWebContentHostFactory: NSResponder, WebContentHostFactory {
   private(set) lazy var siteControlSource = AppSiteControlSource(factory: self)
   #if OPEN_AUTOMATION
   var siteControlDrawSamples: [Double] = []
+  var siteControlDrawNativeProbeSamples: [[UInt64]] = []
   var popupCallbackClose: (phase: String, toggle: Bool)?
   func releaseBrowsersForAutomation() -> [String: Any] {
     extensions.releaseBrowserOwnershipForAutomation(); return mirror.releaseWithoutClosingForAutomation()
@@ -228,7 +229,10 @@ final class EngineWebContentHostFactory: NSResponder, WebContentHostFactory {
     controller.siteControl?.onFirstDraw = { [weak self] ms in
       guard let self else { return }
       self.siteControlDrawSamples.append(ms)
-      if self.siteControlDrawSamples.count > 128 { self.siteControlDrawSamples.removeFirst() }
+      self.siteControlDrawNativeProbeSamples.append(siteControlNativeDrawProbe())
+      if self.siteControlDrawSamples.count > 128 {
+        self.siteControlDrawSamples.removeFirst(); self.siteControlDrawNativeProbeSamples.removeFirst()
+      }
     }
     #endif
     pageChrome.permissions.anchorProvider = { [weak self] page in

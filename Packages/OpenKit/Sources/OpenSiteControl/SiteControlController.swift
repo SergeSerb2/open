@@ -124,8 +124,8 @@ public final class SiteControlController: NSObject, NSMenuDelegate {
         let requestedAt = CACurrentMediaTime()
         let signpost = OSSignpostID(log: Self.performanceLog)
         let measureFirstDraw = onFirstDraw
-        if measureFirstDraw != nil { os_signpost(.begin, log: Self.performanceLog, name: "ClickToFirstDraw", signpostID: signpost) }
-        defer { if measureFirstDraw != nil { os_signpost(.end, log: Self.performanceLog, name: "ClickToFirstDraw", signpostID: signpost) } }
+        os_signpost(.begin, log: Self.performanceLog, name: "ClickToFirstDraw", signpostID: signpost)
+        defer { os_signpost(.end, log: Self.performanceLog, name: "ClickToFirstDraw", signpostID: signpost) }
         guard let snapshot = source.snapshot(for: tabID), geometry?(anchor) != nil else { reportUnavailable(tabID); return }
         if isPresented && self.anchor != anchor { dismiss(reason: .anchor,animated: false) }
         if !isPresented { previousResponder = view.window?.firstResponder }

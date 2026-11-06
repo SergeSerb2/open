@@ -193,6 +193,13 @@ diagnostic does not change the S11/S12 acceptance limits or turn a FAIL into PAS
 The `split` suite also records the frontmost PID's command line on focus loss
 when the process still exists. An exited process is reported as unavailable;
 the suite retains its INTERRUPTED result.
+
+P1's native negative controls inject a 12 ms delay into layout, display and
+flush in three separate real-App launches. `drawNativeProbe` returns the injected
+probe's live call/delay counters; `firstDrawNativeProbe` records those counters
+at each first-draw callback, before later AppKit work. Both are empty without
+the injected probe. The source-refresh diagnostic loads SCC's 2000-card
+`heavy.html` with the panel closed and open, then changes the title 250 times.
 | `pasteboard` | optional `text` | Reads the general pasteboard string. `text` sets a sentinel for Copy URL negative controls. |
 | `actions` | — | The focused window's toolbar actions from Chrome's model (fork patch P2): `ready`, and per action id, name, title, tooltip, accessible name, badge and colors, enabled, has popup, pinned and pinned index, wants to run, site access, showing popup, `live` (from the live model, else the profile's list), and the toolbar image and plain icon (PNG byte count, hash, point width, `pixels`: each representation's pixel size, and `object`: the image object's identity) |
 | `ext-pin` | `extension`, `pinned` (default `true`), optional `index` | Pin or unpin an action; optionally move it through the guarded App host. |

@@ -1494,6 +1494,20 @@ for an open page load, and 0/6/0 for 250 title changes. Button reads avoid permi
 and ad-block rows; source changes coalesce per visible tab on the next main-queue
 turn. Title, favicon and loading changes do not invalidate SCC rows.
 
+Review R1-1 retains the signposts in every build and limits forced synchronous
+layout/display/flush to the installed `onFirstDraw` callback (automation only).
+The new negative-control code delays layout, display and flush separately;
+native counters sampled at that callback prove each delayed phase is inside the
+receipt. R1-2 keeps the source/window coalescing and lightweight button query;
+its fresh counter receipt now loads the 2000-card heavy fixture with the panel
+closed and open. The earlier counts above used the smaller fixtures and do not
+replace this required heavy-fixture receipt. R1-3 follows §3.6.1 lines 365–367:
+with no extensions, Cmd+E focuses the "+" tile and Return runs `add-extension`.
+The real-key empty-picker flow is implemented. Fresh P1/native-negative,
+heavy-fixture, `window` Cmd+T, `commandbar` keystroke and empty-picker receipts
+remain pending the screen hold; these code changes alone do not prove runtime
+performance or physical display presentation.
+
 P2 has ten zero scheduler/view counters and a timer canary of 1 then 0. Total App
 CPU is 2.283%, not zero (load 16.19/11.96/12.76). S13 scroll p95 is 4.9 ms closed and
 open, with zero dropped frames (load 13.62/11.26/12.54); the slow-frame canary is

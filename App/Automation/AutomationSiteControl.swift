@@ -5,6 +5,15 @@ import OpenModel
 import OpenSiteControl
 import Darwin
 
+/// Empty unless the e2e runner injected its native draw probe. Read at the
+/// receipt callback, so later AppKit work cannot count as measured work.
+func siteControlNativeDrawProbe() -> [UInt64] {
+  typealias Count = @convention(c) (Int32) -> UInt64
+  guard let address = dlsym(UnsafeMutableRawPointer(bitPattern: -2), "open_scc_draw_probe_count") else { return [] }
+  let count = unsafeBitCast(address, to: Count.self)
+  return (0..<6).map { count(Int32($0)) }
+}
+
 extension AutomationController {
   func siteControlIdle(_ args: [String: Any]) throws -> Any {
     typealias Action = @convention(c) () -> Void
@@ -101,6 +110,8 @@ extension AutomationController {
       "security": controls.first(where: { $0["id"] as? String == "security" }) ?? [:],
       "focusedControl": (owner.window?.firstResponder as? SiteControlButton)?.controlID ?? "",
       "firstDrawMilliseconds": (try? window.siteControlDrawSamples) ?? [],
+      "firstDrawNativeProbe": (try? window.siteControlDrawNativeProbeSamples) ?? [],
+      "drawNativeProbe": siteControlNativeDrawProbe(),
       "sourceReads": ["snapshots": (try? window.siteControlSource.snapshotReadCount) ?? 0,
         "buttons": (try? window.siteControlSource.buttonReadCount) ?? 0,
         "changeDeliveries": (try? window.siteControlSource.changeDeliveryCount) ?? 0],
