@@ -47,6 +47,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, OEEngineDelegate, OEBr
   private var sleepQuitTask: Task<Void, Never>?
   private var sleepQuitCaptured = false
   lazy var settingsPresenter = AppSettingsActions(app: self)
+  lazy var applicationIcon = ApplicationIconController(app: self)
   lazy var downloadsCenter = DownloadsCenter(app: self)
   let defaultBrowserService = DefaultBrowserService()
   lazy var linkExecutor = AppLinkExecutor(app: self)
@@ -91,6 +92,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, OEEngineDelegate, OEBr
 
   func applicationDidFinishLaunching(_ notification: Notification) {
     LaunchTiming.shared.mark("didFinishLaunching")
+    SettingsDefaults.register(in: .standard)
     NSApp.mainMenu = MainMenu.build()
     MainMenu.targetWindowCommands(frontWindowController.flatMap { hostFactories[$0.windowID] })
     NSApp.setActivationPolicy(.regular)
@@ -98,6 +100,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, OEEngineDelegate, OEBr
     // engine (docs/architecture.md, launch tactics). Pages created before
     // the engine is ready wait inside OpenEngine.
     showWindowsIfNeeded()
+    tabSleep.installSettingsPolicy()
     installScripting()
   }
 
@@ -545,6 +548,7 @@ extension AppDelegate: CommandDispatcher {
           // Startup T5: the sleep controller starts after first paint, never before.
           self.tabSleep.start()
           FindBarPrewarm.schedule(afterPaintIn: self)
+          self.applicationIcon.restoreAfterContent()
           return
         }
         try? await Task.sleep(for: .milliseconds(50))
@@ -552,6 +556,7 @@ extension AppDelegate: CommandDispatcher {
       // A page that never reports a paint (about:blank): start sleep after the same 2 s budget.
       guard let self, self.engineReady, !self.shutdownPrepared, !self.terminationRequested, !Task.isCancelled else { return }
       self.tabSleep.start()
+      self.applicationIcon.restoreAfterContent()
     }
   }
   func prepareCommandServices() {
@@ -618,12 +623,19 @@ extension AppDelegate: CommandDispatcher {
     if id == "toggle-developer-mode" { return DeveloperMode.menuState(for: frontWindowController.flatMap { hostFactories[$0.windowID] }?.selectedContent?.url) }
     return PageTools.menuState(for: id)
   }
+  var settingsShortcutCaptured: Bool {
+    hostFactories.values.contains { factory in
+      factory.commandBarSession?.isPresented == true &&
+        factory.commandBarSession?.controller?.editingUndoManager(for: NSApp.keyWindow?.firstResponder) != nil
+    }
+  }
   func isCommandEnabled(_ id: String, enabledKey: String) -> Bool {
+    if id == "settings", settingsShortcutCaptured { return false }
     if let enabled = littleOpenCommandEnabled(id) { return enabled }
     if SystemCommandActions.selectors[id] != nil { return SystemCommandActions.isEnabled(id) }
     if let enabled = PageTools.isAppCommandEnabled(id) { return enabled }  // App/Page/PageToolsCommands.swift
     if ["archive-tab", "close-window"].contains(id) { return NSApp.keyWindow != nil }
-    return ["new-window", "blank-window", "new-tab", "settings", "search-settings", "air-traffic-control", "import-from-browser", "set-default-browser", "check-for-updates", "view-archive", "view-history", "view-library", "view-downloads", "view-media", "view-boosts", "quit-open", "new-little-open-window", "little-open-global", "about-open", "hide-open", "hide-others", "show-all", "help-center", "keyboard-shortcuts-edu", "getting-started", "release-notes", "contact-team", "manage-spaces"].contains(id)
+    return ["new-window", "blank-window", "new-tab", "new-profile", "settings", "search-settings", "air-traffic-control", "import-from-browser", "set-default-browser", "check-for-updates", "view-archive", "view-history", "view-library", "view-downloads", "view-media", "view-boosts", "quit-open", "new-little-open-window", "little-open-global", "about-open", "hide-open", "hide-others", "show-all", "help-center", "keyboard-shortcuts-edu", "getting-started", "release-notes", "contact-team", "manage-spaces"].contains(id)
   }
   func performCommand(_ id: String, payload: String?) {
     // Search engines live in Settings ▸ Profiles: open the named Profile, else the front window's.
@@ -650,7 +662,8 @@ extension AppDelegate: CommandDispatcher {
     case "new-tab":
       let controller = frontWindowController ?? makeWindow()
       controller.flatMap { hostFactories[$0.windowID] }?.newTab(nil)
-    case "settings": settingsPresenter.show()
+    case "settings": if !settingsShortcutCaptured { settingsPresenter.show() }
+    case "new-profile": settingsPresenter.showNewProfile()
     case "search-settings": performCommand(id, payload: nil)
     case "air-traffic-control": settingsPresenter.show(pane: .links)
     case "import-from-browser": settingsPresenter.show(pane: .general); settingsPresenter.settings.showsImport = true
@@ -663,7 +676,7 @@ extension AppDelegate: CommandDispatcher {
     case "view-media": settingsPresenter.showLibrary(section: .media)
     case "view-archive": settingsPresenter.showLibrary(section: .archive)
     case "view-history": settingsPresenter.showLibrary(section: .history)
-    case "view-boosts": settingsPresenter.show(); settingsPresenter.settings.statusText = "Boost editing is not available in this build."
+    case "view-boosts": settingsPresenter.show(pane: .advanced); settingsPresenter.settings.advanced.statusText = "Boost editing is not available in this build."
     case "keyboard-shortcuts-edu":
       // Help ▸ Essential Keyboard Shortcuts: Arc's floating EDU window (commandbar-completion §4.5, CC-27).
       EssentialShortcutsWindowController.shared.show(near: frontWindowController?.window ?? NSApp.keyWindow, store: keyBindings)

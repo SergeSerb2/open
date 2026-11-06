@@ -27,8 +27,8 @@ public enum FeatureSite {
         guard ["http", "https"].contains(target.scheme?.lowercased() ?? ""), !flags.contains(.command),
               !flags.contains(.option), !fragmentOnly(source, target) else { return false }
         return PeekPolicy.decision(for: .init(sourceIsPinnedOrFavorite: pinned, sourceHost: domain(source), targetHost: domain(target),
-                                              shiftHeld: flags.contains(.shift), peekOtherSitesEnabled: defaults.bool(forKey: "open.peek.otherSites"),
-                                              peekShiftEnabled: defaults.bool(forKey: "open.peek.shiftClick"))) == .peek
+                                              shiftHeld: flags.contains(.shift), peekOtherSitesEnabled: defaults.object(forKey: "open.links.openPeekOtherSites") as? Bool ?? true,
+                                              peekShiftEnabled: defaults.object(forKey: "open.links.openPeekShiftClick") as? Bool ?? true)) == .peek
     }
 }
 
@@ -72,7 +72,7 @@ public final class PeekController {
     public var peekBadgeTabIDs: Set<ItemID> { Set(stack.map(\.sourceTabID)) }
     public init(model: BrowserModel, splitController: SplitViewController, factory: any WebContentHostFactory, defaults: UserDefaults) {
         self.model = model; self.splitController = splitController; self.factory = factory; self.defaults = defaults
-        defaults.register(defaults: ["open.peek.otherSites": true, "open.peek.shiftClick": true])
+        defaults.register(defaults: ["open.links.openPeekOtherSites": true, "open.links.openPeekShiftClick": true])
         overlay.isHidden = true; overlay.onDismiss = { [weak self] in self?.dismissTop() }
         overlay.onExpand = { [weak self] in self?.expandTop() }; overlay.onSplit = { [weak self] in self?.openInSplitTop() }
     }

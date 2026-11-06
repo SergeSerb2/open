@@ -1,18 +1,20 @@
 import Foundation
 import Observation
 import SwiftUI
+import AppKit
 import OpenDesign
 
 @MainActor @Observable public final class AppIconViewModel {
     unowned let root: SettingsViewModel
     public init(root: SettingsViewModel) { self.root = root }
+    public var errorText = ""
     public var selected: String { root.string("open.appIcon.selectedID") }
     public func select(_ option: AppIconOption) { root.set(option.rawValue, for: "open.appIcon.selectedID"); root.actions.setApplicationIcon(id: option.rawValue) }
 }
 public struct AppIconPane:View {
     let model:AppIconViewModel
     public init(model:AppIconViewModel) {self.model=model}
-    public var body:some View {SettingsGroup {
+    public var body:some View {VStack(alignment:.leading) {SettingsGroup {
         ForEach(Array(AppIconOption.allCases.enumerated()),id:\.element) {index,option in
             SettingsRow(height:80,divider:index != AppIconOption.allCases.count-1) {Button {model.select(option)} label:{HStack(spacing:0) {
                 ZStack {Circle().stroke(Color.secondary,lineWidth:1).frame(width:20,height:20);if model.selected == option.rawValue {Circle().fill(Color(nsColor:SettingsTokens.link.nsColor)).frame(width:12,height:12)}}.frame(width:22).padding(.leading,6).padding(.trailing,25)
@@ -20,7 +22,24 @@ public struct AppIconPane:View {
                 VStack(alignment:.leading,spacing:4) {Text(option.title).font(.system(size:13,weight:.semibold));if model.selected == option.rawValue {Text("CURRENT ICON").font(.system(size:10,weight:.bold)).foregroundStyle(Color(nsColor:SettingsTokens.link.nsColor))}};Spacer()
             }}.buttonStyle(.plain).accessibilityLabel(option.title).accessibilityAddTraits(model.selected == option.rawValue ? .isSelected:[]) }
         }
-    }}
+    };SettingsError(text:model.errorText)}}
+}
+/// Reuses the picker artwork. Six cached 1024 px RGBA images: at most 24 MiB;
+/// the largest bitmap allocation is 1024 * 1024 * 4 = 4,194,304 bytes.
+@MainActor public enum AppIconArtwork {
+    private static var images: [AppIconOption: NSImage] = [:]
+    public static func image(for option: AppIconOption) -> NSImage? {
+        if let cached = images[option] { return cached }
+        guard let index = AppIconOption.allCases.firstIndex(of: option) else { return nil }
+        let renderer = ImageRenderer(content: OriginalOpenIcon(index: index)
+            .frame(width: 1024, height: 1024).environment(\.colorScheme, .light))
+        renderer.scale = 1
+        guard let cgImage = renderer.cgImage, cgImage.width == 1024, cgImage.height == 1024 else { return nil }
+        let image = NSImage(size: .init(width: 1024, height: 1024))
+        image.addRepresentation(NSBitmapImageRep(cgImage: cgImage))
+        images[option] = image
+        return image
+    }
 }
 /// Original doorway and sun artwork, drawn in normalized coordinates. No reference art.
 struct OriginalOpenIcon:View {

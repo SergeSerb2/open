@@ -168,6 +168,7 @@ public final class SleepController {
         var deadline: Date?
         for (owner, entries) in groups {
             let policy = owner.flatMap { policies[$0] } ?? SleepPolicy()
+            guard policy.mode != .off else { continue }
             for entry in entries where entry.state.hasContent && !visible.contains(entry.tab.id) {
                 let tab = entry.tab, state = entry.state
                 if state.busy { return Self.passInterval }
@@ -500,6 +501,8 @@ public final class SleepController {
             var currentVisible = visible
             let critical = level == .critical
             for (tab, policy, action) in actions {
+                // An earlier discard can suspend while Settings changes modes.
+                guard !neverSleeps(tab.id) else { continue }
                 guard model.tab(id: tab.id) === tab, liveContent.contains(tab.id),
                       gate(tab, policy: policy, visible: currentVisible, at: now(), discard: action == .discard, critical: critical) == nil else { continue }
                 switch action {
@@ -546,6 +549,19 @@ public final class SleepController {
         onLog?("sleep-discard-backoff \(id.rawValue.uuidString.prefix(8)) seconds=\(Int(delay))")
     }
 
+    private func neverSleeps(_ id: ItemID) -> Bool {
+        var owner = model.parentByID[id]
+        while let parent = owner {
+            switch parent {
+            case .favorites(let id): return model.profile(id: id)?.settings.sleepMode == .off
+            case .spacePinned(let id), .spaceToday(let id):
+                return model.space(id: id).flatMap { model.profile(id: $0.profileID) }?.settings.sleepMode == .off
+            case .folder(let id), .splitPane(let id): owner = model.parentByID[id]
+            }
+        }
+        return false
+    }
+
     private func discard(_ tab: Tab, policy: SleepPolicy, visible: Set<ItemID>, critical: Bool = false) async {
         let id = tab.id
         let state = state(id)
@@ -560,7 +576,7 @@ public final class SleepController {
         catch { onLog?("sleep-save-failed \(id.rawValue.uuidString.prefix(8))"); failedDiscard(id); return }
         // A permanent purge can race an in-flight save. Remove its row again.
         if purged.contains(id) { store.deleteSleepHistory(tabID: id); return }
-        guard model.tab(id: id) === tab, liveContent.contains(id), tab.live.sleepPhase == .frozen,
+        guard !neverSleeps(id), model.tab(id: id) === tab, liveContent.contains(id), tab.live.sleepPhase == .frozen,
               gate(tab, policy: policy, visible: visibleTabIDs(), at: now(), discard: true, critical: critical) == nil else { return }
         let discarded = await engine.discard(tabID: id)
         guard model.tab(id: id) === tab, liveContent.contains(id) else { return }
