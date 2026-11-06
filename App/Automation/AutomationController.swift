@@ -89,7 +89,7 @@
       case _ where Self.littleOpenCommands.contains(cmd): return try await runLittleOpenCommand(cmd, a)
       case "key": return try await sendKey(a, app.frontWindowController.flatMap { app.hostFactories[$0.windowID] })
       case "snapshot": return try await snapshot(a, app.frontWindowController.flatMap { app.hostFactories[$0.windowID] })
-      case "ext-prompt", "ext-manage", "ext-commands", "ext-run-command", "ext-windows", "ext-omnibox", "ext-strip", "ext-click", "ext-popup-state", "ext-picker", "ext-hover", "ext-ui-menu", "ext-redraw-measure":
+      case "ext-prompt", "ext-manage", "ext-commands", "ext-run-command", "ext-windows", "ext-omnibox", "ext-strip", "ext-click", "ext-popup-state", "ext-picker", "ext-hover", "ext-ui-menu", "ext-redraw-measure", "ext-shortcuts":
         return try await runExtensionCommand(cmd, a)
       case "applescript": return try await runAppleScript(a)
       case "routing-log": return routingLog()

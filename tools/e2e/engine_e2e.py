@@ -10814,7 +10814,12 @@ def main():
             sys.exit("missing extensions: %s" % dirs)
         extra += ["--load-extension=" + ",".join(dirs), "--disable-features=DisableLoadExtensionCommandLineSwitch"]
     if opts.only == "extensions-ui":
-        dirs = [os.path.join(ROOT, "tools/e2e/fixtures/action-probe")] + [os.path.join(opts.extensions, d) for d in ("ublock-lite", "darkreader", "bitwarden")]
+        probe_copy = Path(tmp) / "action-probe-ui"
+        shutil.copytree(Path(ROOT) / "tools/e2e/fixtures/action-probe", probe_copy)
+        probe_manifest = json.loads((probe_copy / "manifest.json").read_text())
+        probe_manifest["name"] = "Action Probe"  # Same display name as extensions-e2 / X-27.
+        (probe_copy / "manifest.json").write_text(json.dumps(probe_manifest))
+        dirs = [str(probe_copy)] + [os.path.join(opts.extensions, d) for d in ("ublock-lite", "darkreader", "bitwarden")]
         if not all(os.path.isdir(d) for d in dirs):
             sys.exit("missing unpacked extensions in %s" % opts.extensions)
         extra += ["--load-extension=" + ",".join(dirs), "--disable-features=DisableLoadExtensionCommandLineSwitch"]
