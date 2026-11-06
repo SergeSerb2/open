@@ -28,7 +28,7 @@ Base audit: `main` at `7254c0a3`, 2026-11-05. The table distinguishes source wir
 
 Paths without a prefix in the evidence column are under `Packages/OpenKit/Sources/` beside their named module. These findings use Open source only; they add no reverse-engineering claims.
 
-The measured sidebar specification supersedes the old plan's focus-cell guess. F0081 has equal cell fills and no separate focused-cell mark (`docs/re/interaction-states.md` §7). The suite checks the selected split row, focused pane ring and sidebar URL. No visual or metric change is part of this work.
+The measured sidebar specification supersedes the old plan's focus-cell guess. F0081 has equal cell fills and no separate focused-cell mark (`docs/re/interaction-states.md` §7). The suite checks the selected split row, focused pane ring and sidebar URL. No visual metric changes. The focus-ring motion fix below removes an extra animation introduced by view reuse.
 
 The new drag checks exercise the real `WebContentContainer` destination callbacks with an `NSDraggingInfo` object and a unique pasteboard containing `com.open.sidebar.node`. `SplitDropOverlayView` is the drawing child, not the registered destination. The virtual pointer does not supply the WindowServer drag loop consumed synchronously by `NSOutlineView.mouseDown`. This is the permitted destination-callback fallback; it does not prove a real `NSDraggingSession` or an external drag.
 
@@ -50,7 +50,7 @@ The new endpoint is the maximum of native selection/layout through the existing 
 
 The native endpoint does not add an explicit CA transaction or a completion block. A diagnostic observer did so and waited for animations: main single/split p95 **233.392/242.181 ms**, branch **266.130/270.870 ms**, across three interleaved pairs. Those rejected samples stay in `app-paired-animation-end.json`. Apple's [completion-block documentation](https://developer.apple.com/documentation/quartzcore/catransaction/setcompletionblock%28_%3A%29) defines that callback as animation completion. The motion probe compares ordinary selections with this added transaction and records layer keys/durations to explain the extra time; its result is reported below.
 
-`tools/verification/split-app-speed.py` interleaves main, branch, main, branch, main, branch under one quiet/on-screen session. Each process has fresh data and 40 samples per path. Every sample and query-return diagnostic is retained. The branch must meet the relative main + 1 ms gate and absolute 25 ms ceiling on both paths. The standalone `split` row enforces the ceiling and reports the 16 ms target; the separate interleaved tool enforces the relative gate. Main is an archive of `495a47d3` with only the identical benchmark observer and one automation dispatch hook; its production selection, container and chrome sources match the commit byte for byte (`timing-main-manifest.json`). The quiet lock is acquired before the on-screen lock, using the priority flag while waiting. Before launching a timing receipt, the runner waits for load1 ≤12; no measured sample is discarded.
+`tools/verification/split-app-speed.py` interleaves main, branch, main, branch, main, branch under one quiet/on-screen session. Each process has fresh data and 40 samples per path. Every sample and query-return diagnostic is retained. The branch must meet the relative main + 1 ms gate and absolute 25 ms ceiling on both paths. The standalone `split` row enforces the ceiling and reports the 16 ms target; the separate interleaved tool enforces the relative gate. Main is an archive of `8db4ac86` with only the identical benchmark observer and one automation dispatch hook; its production selection, container and chrome sources match the commit byte for byte (`timing-main-manifest.json`). Both locks use `lockf -k`. The quiet lock is acquired before the on-screen lock, using the priority flag while waiting. Before launching a timing receipt, the runner waits for load1 ≤12; no measured sample is discarded.
 
 ## Motion investigation
 
@@ -115,3 +115,5 @@ The branch is −0.147 ms on single p95 and −3.546 ms on split p95. Both are w
 | 2 | branch | 11.753 | 16.090 | 11.40/12.25/15.24 → 11.60/12.27/15.23 |
 | 3 | main | 12.361 | 20.144 | 11.60/12.27/15.23 → 14.08/12.78/15.37 |
 | 3 | branch | 12.217 | 15.352 | 14.08/12.78/15.37 → 14.39/12.86/15.39 |
+
+The 17:27 receipt was repeated after the persistent `lockf -k` rule. Runs with known overlap or foreground interruption do not count toward acceptance. Historical diagnostic samples are kept.

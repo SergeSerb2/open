@@ -2,7 +2,7 @@
 """Interleave unchanged-main and branch live App switches under quiet + on-screen locks.
 
 Both apps need the identical automation-only `split op=bench` observer. Production
-main stays unchanged. The first rAF in EVERY pane and native CA completion determine
+main stays unchanged. The first rAF in EVERY pane and native layout/CA flush return determine
 readiness. All query-return diagnostics and all samples are retained.
 """
 import argparse
