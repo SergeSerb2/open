@@ -19,9 +19,10 @@ def run(factory, results, origin, tmp, env):
             app.call('site-controls', action='open')
             time.sleep(.3)
             app.call('site-controls', action='close')
-        samples = app.call('site-controls', action='state')['firstDrawMilliseconds'][-30:]
+        all_samples = app.call('site-controls', action='state')['firstDrawMilliseconds']
+        samples = all_samples[-30:]
         p95 = sorted(samples)[int(.95 * (len(samples) - 1))]
-        data = dict(milliseconds=samples, p95=p95, limit=8, warmups=5,
+        data = dict(milliseconds=samples, p95=p95, limit=8, warmups=5,coldMilliseconds=all_samples[0],
                     load=list(os.getloadavg()))
         if app.config == 'Release': data['ok'] = len(samples) == 30 and p95 < 8
         else: data.update(status='BLOCKED', reason='Release required for first-draw budget')
