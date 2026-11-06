@@ -1,0 +1,56 @@
+diff --git a/chrome/browser/ui/extensions/extension_uninstall_dialog_impl.cc b/chrome/browser/ui/extensions/extension_uninstall_dialog_impl.cc
+index 9bc109815092ea77bb4266a9ca5f28d7973a272f..a7120a942a494b990e6b373ae15915b7a3155534 100644
+--- a/chrome/browser/ui/extensions/extension_uninstall_dialog_impl.cc
++++ b/chrome/browser/ui/extensions/extension_uninstall_dialog_impl.cc
+@@ -2,6 +2,8 @@
+ // Use of this source code is governed by a BSD-style license that can be
+ // found in the LICENSE file.
+ 
++#include "open/browser/extensions/open_extension_hooks.h"
++
+ #include <memory>
+ #include <string>
+ 
+@@ -163,6 +165,12 @@ std::unique_ptr<extensions::ExtensionUninstallDialog>
+ extensions::ExtensionUninstallDialog::Create(Profile* profile,
+                                              gfx::NativeWindow parent,
+                                              Delegate* delegate) {
++  auto hook = open_engine::GetExtensionHooks().create_uninstall;
++  if (hook) {
++    if (auto dialog = hook(profile, parent, delegate)) {
++      return dialog;
++    }
++  }
+   return std::make_unique<ExtensionUninstallDialogImpl>(profile, parent,
+                                                         delegate);
+ }
+diff --git a/chrome/browser/ui/views/extensions/extension_install_dialog_view.cc b/chrome/browser/ui/views/extensions/extension_install_dialog_view.cc
+index 83ce5b59c1e6b0f11e4c54e2cb6b39835d5989e8..079cae510fda51de301bb034bfa5b28db5332317 100644
+--- a/chrome/browser/ui/views/extensions/extension_install_dialog_view.cc
++++ b/chrome/browser/ui/views/extensions/extension_install_dialog_view.cc
+@@ -4,6 +4,8 @@
+ 
+ #include "chrome/browser/ui/views/extensions/extension_install_dialog_view.h"
+ 
++#include "open/browser/extensions/open_extension_hooks.h"
++
+ #include <memory>
+ #include <string>
+ #include <utility>
+@@ -732,5 +734,15 @@ END_METADATA
+ // static
+ ExtensionInstallPrompt::ShowDialogCallback
+ ExtensionInstallPrompt::GetDefaultShowDialogCallback() {
+-  return base::BindRepeating(&ShowExtensionInstallDialogImpl);
++  return base::BindRepeating([](
++      std::unique_ptr<ExtensionInstallPromptShowParams> params,
++      DoneCallback done,
++      std::unique_ptr<extensions::InstallPromptData> prompt) {
++    auto hook = open_engine::GetExtensionHooks().show_install;
++    if (hook && hook(params, done, prompt)) {
++      return;
++    }
++    ShowExtensionInstallDialogImpl(std::move(params), std::move(done),
++                                  std::move(prompt));
++  });
+ }

@@ -419,11 +419,7 @@ consumed the execution deadline. It failed after 180 s and left renderer PID
 resume audit; no owned renderer or harness app remained.
 
 `check.py` now runs an internal worker that **retains the shared lock itself**.
-It opens `/tmp/open-onscreen-e2e.lock` and passes that descriptor to
-`/usr/bin/lockf -s <fd>` using `pass_fds`. FD mode locks the shared open-file
-description, so the worker keeps the lock after the acquisition helper exits.
-It verifies that the locked inode still matches the path, reopening if a default
-lockf user unlinked the previous inode. No renderer or private suite root starts
+It opens `/tmp/open-onscreen-e2e.lock` and waits in a blocking `fcntl.flock(fd, LOCK_EX)`, joining the kernel queue alongside `lockf` waiters without polling. While blocked, a cancellation signal raises out of `flock`; setup and child assignment still defer cancellation until their owned resources are recorded. This uses the same shared open-file-description lock as `lockf`, without a spinning child. Default-mode callers use `lockf -k` to preserve the lock path. After acquisition, the worker checks that its inode still matches the current path and retries if an older caller unlinked or replaced it. No renderer or private suite root starts
 before acquisition; lock queue time has no suite deadline. The worker keeps the
 unchanged **180-second** renderer deadline, starts the renderer in a fresh process
 group, and terminates that group and reaps the renderer on timeout, exception or
@@ -759,7 +755,7 @@ fail and must clean all owned hosts/processes. Proof output directories must be
 new. The proof tool bounds runs to 1…5, reaps only its recorded children and
 records cleanup in `receipt.json`. Its `--load high` mode starts owned burners;
 use it only for an explicitly authorized load proof. A full `--case check` run
-also needs `/usr/bin/lockf /tmp/open-onscreen-e2e.lock`, with no concurrent build.
+also needs `/usr/bin/lockf -k /tmp/open-onscreen-e2e.lock`, with no concurrent build.
 
 M5 review r2 (section 1, 2026-10-27, M5 Pro / 26B5112a, built-in 2x panel as the
 main display, load1 4.5–5.2). The sampler is stable: three `sm6-cost` runs gave
@@ -885,7 +881,7 @@ alone after a Release harness build:
 
 ```sh
 ~/Library/Caches/OpenRE/scripts/heavy.sh swift build --package-path Packages/OpenKit -c release -j 6 --product features-render
-/usr/bin/lockf /tmp/open-m5-quiet.lock python3 tools/verification/features-idle.py
+/usr/bin/lockf -k /tmp/open-m5-quiet.lock python3 tools/verification/features-idle.py
 ```
 
 Use a separate session for long jobs. The helper compiles a temporary native

@@ -110,6 +110,8 @@ final class EngineWebContentHostFactory: NSResponder, WebContentHostFactory {
   var permissionPolicy: String?
   var promptText: String?
   var contextMenuPolicy: String?
+  var pageContextMenu: PageContextMenuBuilder?
+  var pageContextMenuHooks = PageContextMenuHooks()
   var fullscreenPolicy: String?
   var pendingSavePanel: NSSavePanel?
   var savePageRequestCount = 0
@@ -321,6 +323,7 @@ final class EngineWebContentHostFactory: NSResponder, WebContentHostFactory {
     return host
   }
   func hostDidClose(_ host: EngineWebContentHost) {
+    if pageContextMenu?.belongs(to: host.content) == true { pageContextMenu?.cancel(); pageContextMenu = nil }
     translate.contentDidClose(host.content)
     commandBarNavigationFocus.remove(host.tabID)
     typedNavigationTabs.remove(host.tabID)
@@ -526,7 +529,8 @@ final class EngineWebContentHostFactory: NSResponder, WebContentHostFactory {
       focus(space: space); app.scheduleSave(); app.scheduleMenuRebuild(); return true
     case .share(let id): return shareSidebarTab(id)
     case .duplicate(let id): return model.duplicateNode(id: id) != nil
-    case .showLibrary: app.settingsPresenter.showLibrary(); return true
+    case .showLibrary:
+      app.settingsPresenter.showLibrary(section: controller.map { app.downloadsCenter.opensDownloads(in: $0.context) } == true ? .downloads : nil); return true
     // The content toolbar (commandbar-completion §4.6): the setting is Settings ▸ Advanced's
     // "Show full URL when Toolbar is enabled"; every window follows it (AppDelegate's defaults observer).
     case .setShowFullURL(let full): app.settingsPresenter.settings.set(full, for: AppCommand.showFullURLKey); app.applyToolbarSettings(); return true
@@ -604,6 +608,7 @@ final class EngineWebContentHostFactory: NSResponder, WebContentHostFactory {
   func closeAll() {
     guard !isClosing else { return }
     isClosing = true
+    pageContextMenu?.cancel(); pageContextMenu = nil
     controller?.existingTabSwitcher?.cancel()
     translate.closeAll()
     for task in saveCaptureTasks.values { task.cancel() }
@@ -1213,70 +1218,10 @@ extension EngineWebContentHostFactory: OEWebContentDelegate {
   }
 
   func webContent(_ webContent: OEWebContent, showContextMenu menu: OEContextMenu) -> Bool {
-    let ns = NSMenu()
-    if let link = menu.linkURL {
-      let opener = tabID(for: webContent)
-      ns.addItem(
-        ClosureMenuItem(title: "Open Link in New Tab") { [weak self] in
-          self?.openNewTab(url: link, background: true, opener: opener)
-        })
-      ns.addItem(.separator())
-    }
-    // Translate: Open's own item (Chromium's needs a Google API key, page-platform §2.1 T-1).
-    let translateItem = translate.contextMenuItem(for: webContent)
-    for item in menu.items {
-      if item.isSeparator {
-        ns.addItem(.separator())
-        continue
-      }
-      let command = item.commandIdentifier
-      let mi = ClosureMenuItem(title: item.title) { menu.select(command: command) }
-      mi.isEnabled = item.isEnabled
-      ns.addItem(mi)
-    }
-    if let translateItem, menu.linkURL == nil {
-      let mi = ClosureMenuItem(title: translateItem.title) { [weak self] in self?.translate.perform(translateItem.action) }
-      // After Chromium's page items, before its last group (Inspect).
-      if let last = ns.items.lastIndex(where: \.isSeparatorItem) { ns.insertItem(mi, at: last) } else { ns.addItem(mi) }
-    }
-    let openItems = addCaptureItems(to: ns, for: webContent)
-    func commands(_ items: [OEContextMenuItem], in submenu: String = "") -> [[String: Any]] {
-      items.flatMap { item -> [[String: Any]] in
-        if item.isSeparator { return [] }
-        if !item.submenu.isEmpty { return commands(item.submenu, in: item.title) }
-        return [["id": item.commandIdentifier, "title": item.title, "enabled": item.isEnabled, "submenu": submenu]]
-      }
-    }
-    record(
-      "contextMenu", webContent,
-      [
-        "items": menu.items.map(\.title), "commands": commands(menu.items),
-        "link": menu.linkURL?.absoluteString ?? "", "targets": menu.targets.rawValue,
-        "openItems": ns.items.filter { !$0.isSeparatorItem }.map(\.title),
-        "open": openItems, "shown": ns.items.map { $0.isSeparatorItem ? "-" : $0.title },
-      ])
-    if contextMenuPolicy == "record" {
-      menu.cancel()
-      return true
-    }
-    if let policy = contextMenuPolicy, policy.hasPrefix("run-open:") {
-      // Runs one of Open's own items by title, after the right click returns.
-      let title = String(policy.dropFirst(9))
-      menu.cancel()
-      DispatchQueue.main.async { if let index = ns.items.firstIndex(where: { $0.title == title }) { ns.performActionForItem(at: index) } }
-      return true
-    }
-    if let policy = contextMenuPolicy, policy.hasPrefix("run:"), let command = Int(policy.dropFirst(4)) {
-      // After the right click returns, as a picked menu item would.
-      DispatchQueue.main.async { menu.select(command: command) }
-      return true
-    }
-    let point = menu.location
-    let view = webContent.view
-    DispatchQueue.main.async {
-      let picked = ns.popUp(positioning: nil, at: point, in: view)
-      if !picked { menu.cancel() }
-    }
+    pageContextMenu?.cancel()
+    let session = PageContextMenuBuilder(request: menu, page: webContent, owner: self)
+    pageContextMenu = session
+    session.buildAndShow()
     return true
   }
 
@@ -1604,12 +1549,10 @@ extension EngineWebContentHostFactory: OEBrowserContextDelegate {
     _ context: OEBrowserContext, decideDestinationFor download: OEDownload, suggestedFilename: String,
     completion: @escaping @MainActor (URL?) -> Void
   ) {
-    let dir = downloadDirectory ?? FileManager.default.urls(for: .downloadsDirectory, in: .userDomainMask)[0]
-    completion(dir.appendingPathComponent(suggestedFilename.isEmpty ? "download" : suggestedFilename))
+    app.downloadsCenter.decide(download, context: context, filename: suggestedFilename, window: window, directoryOverride: downloadDirectory, completion: completion)
   }
 
   func browserContext(_ context: OEBrowserContext, downloadDidUpdate download: OEDownload) {
-    app.settingsPresenter.noteDownload(download, context: context)
     app.tabSleep.downloadUpdated(download, factory: self)
     record(
       "download", download.webContent,

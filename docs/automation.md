@@ -6,7 +6,7 @@ Every agent command that opens Open on screen must hold the machine-wide lock
 for one suite or diagnostic invocation, including launch and cleanup:
 
 ```sh
-/usr/bin/lockf /tmp/open-onscreen-e2e.lock python3 tools/e2e/engine_e2e.py --config Debug --style chrome --only window
+/usr/bin/lockf -k /tmp/open-onscreen-e2e.lock python3 tools/e2e/engine_e2e.py --config Debug --style chrome --only window
 ```
 
 Release the lock between suite invocations. Do not hold it during builds,
@@ -107,6 +107,10 @@ Arguments are `key=value`; values that parse as JSON are sent as JSON.
 | `actions` | — | The focused window's toolbar actions from Chrome's model (fork patch P2): `ready`, and per action id, name, title, tooltip, accessible name, badge and colors, enabled, has popup, pinned and pinned index, wants to run, site access, showing popup, `live` (from the live model, else the profile's list), and the toolbar image and plain icon (PNG byte count, hash, point width, `pixels`: each representation's pixel size, and `object`: the image object's identity) |
 | `ext-pin` | `extension`, `pinned` (default `true`) | Pin or unpin an action |
 | `ext-move` | `extension`, `index` | Move a pinned action to a pinned index |
+| `ext-prompt` | `answer` (`accept`/`cancel`), `hold`, `handler`, `clear`, `twice` | Pending consent: type, extension/name, Open title/buttons (§3.11), `chromiumTitle`/`chromiumButtons`, permissions/details/lines, retained files/devices and weak page/browser ids. Holds by default; `hold=false` releases without answering. `handler=false` preserves Chromium's dialogs. `clear` cancels the queue; `twice` checks duplicate-answer safety. Also returns registry events. |
+| `ext-manage` | `extension`, `action` (`enable`, `disable`, `uninstall`, `reload`, `install-webstore`, `install-crx`), `path` | Live per-profile management. Remove always prompts. Web Store completion is recorded in `ext-prompt.events`, leaving the socket free to answer consent. Local CRX is guarded by `--open-automation` and uses the real installer/prompt. |
+| `ext-commands` | — | `{ready, context, commands}`. Each command has extension, name, summary, Cocoa key equivalent/modifier flags, global and action-command flags. Uppercase letters encode Shift in Cocoa's pair. |
+| `ext-run-command` | `extension`, `name` | `executeExtensionCommand`: named event with active tab, or action with source command; unknown/inactive commands return false. |
 | `ext-run` | `extension`, `source` (`toolbar` default, `menu`, `command`) | Run the action as the user would; returns whether it ran (a popup opens, or `chrome.action.onClicked` fires) |
 | `ext-menu` | `extension`, `source` (`toolbar` default, `menu`), `select`, `keep`, `stale` | The action's context menu items (title, command, enabled, checked, separator, submenu); with `select`, run the item with that title and return `items` and `ran`. `keep` keeps this menu open (not cancelled); `select` with `stale` then runs the item on that kept menu and cancels the new one |
 | `ext-popup` | — | The open popup: `open`, its page, its extension, its source (`user`, `command`, `api`), and `staysOpenOnBlur` |
@@ -159,22 +163,23 @@ Arguments are `key=value`; values that parse as JSON are sent as JSON.
 
 ```sh
 ~/Library/Caches/OpenRE/scripts/heavy.sh nice -n 10 tools/build.sh Debug
-/usr/bin/lockf /tmp/open-onscreen-e2e.lock python3 tools/e2e/engine_e2e.py --only shell                       # model, keyboard, split, persistence
-/usr/bin/lockf /tmp/open-onscreen-e2e.lock python3 tools/e2e/engine_e2e.py --only window --config Release     # startup, lifecycle failures, real window, persistence, static comparison
-/usr/bin/lockf /tmp/open-onscreen-e2e.lock python3 tools/e2e/engine_e2e.py --only window --window-chrome-only # focused §3.3 widths, motion, session-2 live pixels
-/usr/bin/lockf /tmp/open-onscreen-e2e.lock python3 tools/e2e/engine_e2e.py --only sidebar                     # intents, correct live page, cache eviction, static comparison
-/usr/bin/lockf /tmp/open-onscreen-e2e.lock python3 tools/e2e/engine_e2e.py --only peek                        # promotion identity, cleanup, model strip, live pane color
-/usr/bin/lockf /tmp/open-onscreen-e2e.lock python3 tools/e2e/engine_e2e.py --only features --style alloy      # engine features
-/usr/bin/lockf /tmp/open-onscreen-e2e.lock python3 tools/e2e/engine_e2e.py --only extensions --style alloy    # needs .re/ext/unpacked/*
-/usr/bin/lockf /tmp/open-onscreen-e2e.lock python3 tools/e2e/engine_e2e.py --only extensions --style chrome
-/usr/bin/lockf /tmp/open-onscreen-e2e.lock python3 tools/e2e/engine_e2e.py --only tabstrip --style chrome     # fork patch P1: chrome.tabs sees Open's tabs
-/usr/bin/lockf /tmp/open-onscreen-e2e.lock python3 tools/e2e/engine_e2e.py --only page                       # page-platform §8.3: capture C1–C7, then translation X1–X6
-/usr/bin/lockf /tmp/open-onscreen-e2e.lock python3 tools/e2e/engine_e2e.py --only actions --style chrome      # fork patch P2: toolbar actions and popups
-/usr/bin/lockf /tmp/open-onscreen-e2e.lock python3 tools/e2e/engine_e2e.py --only media --style chrome        # media-pip §8.4: mini players, auto-PiP, Now Playing, sleep feed
-/usr/bin/lockf /tmp/open-onscreen-e2e.lock python3 tools/e2e/engine_e2e.py --only sleep --style chrome        # app-shell Step G: tab sleep, memory-fork §11 F0–F5
+/usr/bin/lockf -k /tmp/open-onscreen-e2e.lock python3 tools/e2e/engine_e2e.py --only shell                       # model, keyboard, split, persistence
+/usr/bin/lockf -k /tmp/open-onscreen-e2e.lock python3 tools/e2e/engine_e2e.py --only window --config Release     # startup, lifecycle failures, real window, persistence, static comparison
+/usr/bin/lockf -k /tmp/open-onscreen-e2e.lock python3 tools/e2e/engine_e2e.py --only window --window-chrome-only # focused §3.3 widths, motion, session-2 live pixels
+/usr/bin/lockf -k /tmp/open-onscreen-e2e.lock python3 tools/e2e/engine_e2e.py --only sidebar                     # intents, correct live page, cache eviction, static comparison
+/usr/bin/lockf -k /tmp/open-onscreen-e2e.lock python3 tools/e2e/engine_e2e.py --only peek                        # promotion identity, cleanup, model strip, live pane color
+/usr/bin/lockf -k /tmp/open-onscreen-e2e.lock python3 tools/e2e/engine_e2e.py --only features --style alloy      # engine features
+/usr/bin/lockf -k /tmp/open-onscreen-e2e.lock python3 tools/e2e/engine_e2e.py --only extensions --style alloy    # needs .re/ext/unpacked/*
+/usr/bin/lockf -k /tmp/open-onscreen-e2e.lock python3 tools/e2e/engine_e2e.py --only extensions --style chrome
+/usr/bin/lockf -k /tmp/open-onscreen-e2e.lock python3 tools/e2e/engine_e2e.py --only extensions-p3 --style chrome --config Release # local signed CRX3, no network dependency
+/usr/bin/lockf -k /tmp/open-onscreen-e2e.lock python3 tools/e2e/engine_e2e.py --only tabstrip --style chrome     # fork patch P1: chrome.tabs sees Open's tabs
+/usr/bin/lockf -k /tmp/open-onscreen-e2e.lock python3 tools/e2e/engine_e2e.py --only page                       # page-platform §8.3: capture C1–C7, then translation X1–X6
+/usr/bin/lockf -k /tmp/open-onscreen-e2e.lock python3 tools/e2e/engine_e2e.py --only actions --style chrome      # fork patch P2: toolbar actions and popups
+/usr/bin/lockf -k /tmp/open-onscreen-e2e.lock python3 tools/e2e/engine_e2e.py --only media --style chrome        # media-pip §8.4: mini players, auto-PiP, Now Playing, sleep feed
+/usr/bin/lockf -k /tmp/open-onscreen-e2e.lock python3 tools/e2e/engine_e2e.py --only sleep --style chrome        # app-shell Step G: tab sleep, memory-fork §11 F0–F5
 OPEN_AUTOMATION=1 ~/Library/Caches/OpenRE/scripts/heavy.sh nice -n 10 tools/build.sh Release
-/usr/bin/lockf /tmp/open-onscreen-e2e.lock python3 tools/e2e/engine_e2e.py --only measure --config Release    # launch, memory, idle CPU
-/usr/bin/lockf /tmp/open-onscreen-e2e.lock python3 tools/e2e/engine_e2e.py --only relaunch --config Release   # N same-profile relaunches (OPEN_E2E_RELAUNCH_COUNT, default 20)
+/usr/bin/lockf -k /tmp/open-onscreen-e2e.lock python3 tools/e2e/engine_e2e.py --only measure --config Release    # launch, memory, idle CPU
+/usr/bin/lockf -k /tmp/open-onscreen-e2e.lock python3 tools/e2e/engine_e2e.py --only relaunch --config Release   # N same-profile relaunches (OPEN_E2E_RELAUNCH_COUNT, default 20)
 ```
 
 The `relaunch` suite (section 8 item 14) builds one profile with three local file tabs, then relaunches it `OPEN_E2E_RELAUNCH_COUNT` times (default 20). Each launch must reach automation, restore the same tabs, load only the selected tab, quit with no owned process left, and write no `No zone found` allocator FATAL to its launch log. The suite also fails on any new `Open*`/`cefsimple*` report in `~/Library/Logs/DiagnosticReports`. It is the regression check for the PartitionAlloc launch-zone race (`docs/engine-fork.md`, "PartitionAlloc and the launch race").
@@ -414,7 +419,7 @@ Commands in `App/Automation/AutomationNotifications.swift`.
 `OPEN_AUTOMATION_NOTIFICATION_AUTHORIZATION=record` (automation builds only): when the user allows a site's notifications and macOS has not been asked yet, the App logs `suppressed` instead of showing the macOS prompt. The `page` suite sets it, so a normal run needs no person. For U-N1 (page-platform §8.4), run the suite once with `OPEN_E2E_NOTIFICATION_PROMPT=1` and click Allow in the macOS prompt:
 
 ```sh
-OPEN_E2E_NOTIFICATION_PROMPT=1 /usr/bin/lockf /tmp/open-onscreen-e2e.lock python3 tools/e2e/engine_e2e.py --only page --style chrome
+OPEN_E2E_NOTIFICATION_PROMPT=1 /usr/bin/lockf -k /tmp/open-onscreen-e2e.lock python3 tools/e2e/engine_e2e.py --only page --style chrome
 ```
 
 ## Tab sleep (app-shell Step G)
@@ -477,7 +482,7 @@ On M1, hold the outer validation lock once per job, plus the on-screen lock
 for one suite invocation:
 
 ```sh
-/usr/bin/lockf /tmp/open-m1-validation.lock /usr/bin/lockf /tmp/open-onscreen-e2e.lock python3 tools/e2e/engine_e2e.py --only sidebar-completion
+/usr/bin/lockf -k /tmp/open-m1-validation.lock /usr/bin/lockf -k /tmp/open-onscreen-e2e.lock python3 tools/e2e/engine_e2e.py --only sidebar-completion
 ```
 
 The suite saves rest/hover PNGs, its App log, and `cleanup.json` in
@@ -759,3 +764,42 @@ the real key path for Esc, and the result card's own buttons.
 
 The page context menu event (`policy contextMenu=record`) also lists `open` (Open's own
 items, "Capture" and "Capture Full Page") and `shown` (the whole menu as it would show).
+
+P3 negative proof: `OPEN_E2E_P3_CANCEL_INSTALL=1` (automation builds only)
+forces the prompt handler to cancel an install acceptance. The
+`extensions-p3` X1 row must FAIL. Unset the flag and rerun for PASS. The
+suite restores no shared defaults because it changes none; every install,
+profile and Chromium preference lives in its fresh data root. Its `finally`
+answers pending prompts and closes all owned auxiliary surfaces; the harness
+then quits and checks every process it started.
+
+## Runner lifetime
+
+E2e launchers pass `OPEN_E2E_OWNER_PID`: the shared `Open` launcher supplies it through LaunchServices, and the direct migration fixture sets it in its subprocess environment. Automation builds watch that runner with a process exit dispatch source before preparing data or windows. A missing owner exits immediately; owner death logs `Open: e2e owner <pid> exited; quitting` and requests normal shutdown (engine close skips beforeunload, download quit confirmation is skipped, active transfers and save choices are cancelled, and new download destination prompts are refused). A background deadline forces exit after five seconds if shutdown stalls. There is no polling or idle timer. Normal builds compile out the watcher and environment handling.
+
+## Session downloads (S11)
+
+`--only downloads` in `tools/e2e/engine_e2e.py` serves known-length, unknown-length,
+interrupted and fast transfers on an ephemeral loopback port. It uses real engine
+callbacks, Profile settings, Library rows, save sheets and the app-modal quit
+warning. Run with the on-screen lock, one suite per invocation.
+
+| Command | Arguments / behavior |
+|---|---|
+| `downloads-state` | Session items, actual visible native row subtitles/buttons, real Home badge layers, queued publications, pending save sheets, recorded file actions and actual quit-alert strings. |
+| `download-settings` | `profile`, optional `directory`, `ask`; changes the real Profiles settings model in the disposable data root. |
+| `download-row` | `id`, `action=Pause|Resume|Cancel|Retry|Show in Finder`; presses the visible row's actual `NSButton`. |
+| `download-menu` | `id`, optional exact `select` title; reads/performs the same native `NSMenu` returned for a row right-click. Disabled or invisible items fail. |
+| `download-save` | Pending sheet `id`; `action=cancel` or destination `path`. Sets `NSSavePanel.directoryURL` and filename, then presses an exposed native Save/Cancel button. For a remote panel with hidden buttons, supplies the URL through its native response method (ABI checked). The existing sheet completion answers the engine. |
+| `download-policy` | `quit=close|keep|record` answers the real app-modal alert with its native button (`record` records and keeps browsing); `recordFiles=true` records file-action URLs and suppresses Finder/external default-app launch; `openApp=<bundle path>` runs real NSWorkspace document delivery to the disposable background receiver instead. Copy and Trash still run. |
+| `download-home` | Presses the browser's actual Home accessibility control. |
+| `download-library-close` | Uses the Library window's normal close action. |
+| `download-idle` | S8 observer actions `begin|reset|canary|end` and counts. Available only when the runner injects `feature-idle-probe.m`. Canary is a real repeating timer that is then invalidated. |
+
+The suite gives its cloned App a unique preferences domain and restores each
+`open.*` preference it changes in `finally`. It
+cancels pending save sheets before verified-PID cleanup, including forced early
+failure (`OPEN_DOWNLOADS_FAIL_IN_SHEET=1`). The receiver verifies the real Open
+document URL, bytes and SHA-256. Finder dispatch is recorded without opening a
+Finder window. Home geometry and the 60-second recent-download click rule remain the
+lead's marked guesses. No Little Open tray is added.

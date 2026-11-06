@@ -55,8 +55,8 @@ The release harness gate passed: build, `sidebar-render` (564/564), and
 ```sh
 ~/Library/Caches/OpenRE/scripts/heavy.sh tools/verify-all.sh --only sidebar-render,features-render
 ~/Library/Caches/OpenRE/scripts/heavy.sh tools/build.sh
-/usr/bin/lockf /tmp/open-onscreen-e2e.lock python3 tools/e2e/engine_e2e.py --style chrome --only window
-/usr/bin/lockf /tmp/open-onscreen-e2e.lock python3 tools/e2e/engine_e2e.py --style chrome --only sidebar
+/usr/bin/lockf -k /tmp/open-onscreen-e2e.lock python3 tools/e2e/engine_e2e.py --style chrome --only window
+/usr/bin/lockf -k /tmp/open-onscreen-e2e.lock python3 tools/e2e/engine_e2e.py --style chrome --only sidebar
 ```
 
 The installed Cmd+S spring has m=1, k=3947.8417604357433,
@@ -79,8 +79,8 @@ Final foreground results:
 |---|---|
 | `heavy.sh tools/verify-all.sh --only sidebar-render,features-render` | PASS: build + 564 sidebar + 303 features checks; 0 failed |
 | `heavy.sh tools/build.sh` | PASS: real Debug `Open.app` |
-| `lockf … engine_e2e.py --style chrome --only window` | PASS: 74 checks, 0 failed; 2 SKIP (Release timing budgets in Debug), 1 DEFERRED (card material, outside Part A) |
-| `lockf … engine_e2e.py --style chrome --only sidebar` | PASS: 19 checks, 0 failed; 1 SKIP (durable profile storage belongs to the profiles suite) |
+| `lockf -k … engine_e2e.py --style chrome --only window` | PASS: 74 checks, 0 failed; 2 SKIP (Release timing budgets in Debug), 1 DEFERRED (card material, outside Part A) |
+| `lockf -k … engine_e2e.py --style chrome --only sidebar` | PASS: 19 checks, 0 failed; 1 SKIP (durable profile storage belongs to the profiles suite) |
 
 The final window command retried once after a fullscreen focus interruption;
 the completed attempt passed. Sidebar had no interruption. Both report owned
