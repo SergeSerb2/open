@@ -600,6 +600,7 @@ def context_menu_checks(factory, results, tmp, h):
                 if split_id:
                     h._try(lambda: app.call('sidebar-menu', node=split_id, item='Separate All Tabs'))
                 for identifier in (mail, companion):
+                    h._try(lambda i=identifier: app.call('pin', tab=i))
                     h._try(lambda i=identifier: app.call('close', tab=i))
                 focus()
         run('cm_peek_email_split', email_split)
