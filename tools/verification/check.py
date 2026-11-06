@@ -160,7 +160,7 @@ def onscreen_suite(command):
         lock_path = "/tmp/open-onscreen-e2e.lock"
         while cancelled is None:
             lock_file = open(lock_path, "a+")
-            lock_job = subprocess.Popen(["/usr/bin/lockf", "-s", str(lock_file.fileno())],
+            lock_job = subprocess.Popen(["/usr/bin/lockf", "-k", "-s", str(lock_file.fileno())],
                                         pass_fds=(lock_file.fileno(),),
                                         stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
             while cancelled is None:
@@ -172,7 +172,7 @@ def onscreen_suite(command):
             if cancelled is not None:
                 break
             require(lock_job.returncode == 0, "cannot acquire the on-screen lock")
-            # Another default-mode lockf user may unlink the path at release.
+            # Every named caller must use -k. An older caller may still unlink it.
             # Never start a suite on a locked inode that is no longer current.
             held = os.fstat(lock_file.fileno())
             try:
