@@ -64,6 +64,9 @@ extension AppDelegate {
   }
 
   func openBlankLittleOpen(timestamp: TimeInterval? = nil) {
+    // The File menu can run during the shell's first frame, before CEF is ready.
+    // Keep the press stamp and create the real host at engine initialization.
+    guard engineReady else { pendingLittleOpenBlankStamps.append(timestamp); return }
     littleOpenCoordinator.openBlank(focusURLField: true, keyDownTimestamp: timestamp)
     NSApp.activate()
   }
@@ -134,7 +137,7 @@ extension AppDelegate {
       isTextFocused: controller.window?.firstResponder is NSTextView || controller.window?.firstResponder is NSTextField)
     guard case .browserCommand(let id)? = fallbackKeyboard.route(event: event, context: context, overrides: keyBindings),
       isCommandEnabled(id, enabledKey: CommandRegistry.byID[id]?.enabledKey ?? EnabledKey.always) else { return false }
-    performCommand(id); return true
+    performCommand(id, keyDownTimestamp: event.timestamp); return true
   }
 
   func littleOpenCommandEnabled(_ id: String) -> Bool? {

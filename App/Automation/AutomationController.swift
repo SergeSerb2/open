@@ -1858,10 +1858,12 @@
       let route = a["route"] as? String ?? "app"
       // Modifier keys alone post one flagsChanged event (down: pass the modifier; up: none).
       let types: [NSEvent.EventType] = code == 59 || code == 55 ? [.flagsChanged] : [.keyDown, .keyUp]
+      let eventTimestamp = a["eventTimestamp"] as? Double ?? ProcessInfo.processInfo.systemUptime
+      guard eventTimestamp.isFinite else { throw Failure(message: "eventTimestamp must be finite") }
       for type in types {
         guard
           let event = NSEvent.keyEvent(
-            with: type, location: .zero, modifierFlags: mods, timestamp: ProcessInfo.processInfo.systemUptime,
+            with: type, location: .zero, modifierFlags: mods, timestamp: eventTimestamp,
             windowNumber: target.windowNumber, context: nil, characters: chars, charactersIgnoringModifiers: chars,
             isARepeat: false, keyCode: code)
         else { continue }

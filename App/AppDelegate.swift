@@ -65,6 +65,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, OEEngineDelegate, OEBr
   var menuRebuildTask: Task<Void, Never>?
   var afterPaintTask: Task<Void, Never>?
   var littleOpenCoordinator: LittleOpenCoordinator!
+  var pendingLittleOpenBlankStamps: [TimeInterval?] = []
   var littleOpenProfileAlert: NSAlert?
   var littleOpenHosts: [ItemID: EngineWebContentHost] = [:]
   var commandWindowObserver: (any NSObjectProtocol)?
@@ -396,6 +397,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate, OEEngineDelegate, OEBr
     // A fresh empty Space has no web paint to start T5. Register its shortcut
     // after the native first frame without creating Settings or SuggestEngine.
     reloadKeyBindings()
+    let pendingLittleOpen = pendingLittleOpenBlankStamps
+    pendingLittleOpenBlankStamps.removeAll()
+    for timestamp in pendingLittleOpen { openBlankLittleOpen(timestamp: timestamp) }
     completeLinkRestoration()
     EngineWebProfile.onPermissionChange = { [weak self] context in self?.tabSleep.permissionsChanged(context: context) }
     scheduleMenuRebuild()
@@ -620,6 +624,9 @@ extension AppDelegate: CommandDispatcher {
     performCommand(id)
   }
   func performCommand(_ id: String) {
+    performCommand(id, keyDownTimestamp: nil)
+  }
+  func performCommand(_ id: String, keyDownTimestamp: TimeInterval?) {
     noteLaunchWindowInput(NSApp.keyWindow)
     if performLittleOpenCommand(id) { return }
     if SystemCommandActions.selectors[id] != nil { _ = SystemCommandActions.perform(id); return }
@@ -648,9 +655,7 @@ extension AppDelegate: CommandDispatcher {
       EssentialShortcutsWindowController.shared.show(near: frontWindowController?.window ?? NSApp.keyWindow, store: keyBindings)
     case "archive-tab": NSApp.keyWindow?.performClose(nil)
     case "manage-spaces": settingsPresenter.showLibrary(section: .spaces)
-    case "new-little-open-window", "little-open-global": openBlankLittleOpen(timestamp: NSApp.currentEvent.flatMap { event in
-      event.type == .keyDown && ProcessInfo.processInfo.systemUptime - event.timestamp < 0.1 ? event.timestamp : nil
-    })
+    case "new-little-open-window", "little-open-global": openBlankLittleOpen(timestamp: keyDownTimestamp)
     case "help-center", "getting-started", "release-notes", "contact-team":
       let controller = frontWindowController ?? makeWindow()
       _ = controller.flatMap { hostFactories[$0.windowID] }?.openNewTab(url: AppCommand.helpURL, background: false)

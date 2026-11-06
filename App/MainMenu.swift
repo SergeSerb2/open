@@ -33,6 +33,16 @@ enum MainMenu {
   static func performReservedShortcut(_ event: NSEvent) -> Bool {
     guard event.type == .keyDown, let app = NSApp.delegate as? AppDelegate else { return false }
     app.prepareCommandServices()
+    // Preserve the initiating timestamp even if Carbon/menu delivery was delayed.
+    // Pointer and programmatic menu actions call performCommand without a key stamp.
+    let littleContext = RoutingContext(isAppActive: NSApp.isActive, isTextFocused: false)
+    if case .browserCommand(let id)? = app.fallbackKeyboard.route(event: event, context: littleContext, overrides: app.keyBindings),
+      ["new-little-open-window", "little-open-global"].contains(id),
+      app.isCommandEnabled(id, enabledKey: CommandRegistry.byID[id]?.enabledKey ?? EnabledKey.always) {
+      app.noteLaunchWindowInput(event.window ?? NSApp.keyWindow)
+      app.performCommand(id, keyDownTimestamp: event.timestamp)
+      return true
+    }
     if app.handleLittleOpenKey(event) { return true }
     if let window = event.window, let factory = app.factory(forKeyWindow: window) {
       return factory.controller?.handleKeyDown(event) == true
@@ -41,7 +51,7 @@ enum MainMenu {
       isTextFocused: NSApp.keyWindow?.firstResponder is NSTextView || NSApp.keyWindow?.firstResponder is NSTextField)
     guard case .browserCommand(let id)? = app.fallbackKeyboard.route(event: event, context: context, overrides: app.keyBindings),
           app.isCommandEnabled(id, enabledKey: CommandRegistry.byID[id]?.enabledKey ?? EnabledKey.always) else { return false }
-    app.performCommand(id); return true
+    app.performCommand(id, keyDownTimestamp: event.timestamp); return true
   }
 }
 

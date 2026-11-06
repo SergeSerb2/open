@@ -6977,6 +6977,14 @@ def littleopen_checks(factory, results, tmp):
         for key in keys: subprocess.run(['defaults', 'delete', domain, key], capture_output=True)
         for key, value in ((keys[0], True), (keys[1], True), (keys[3], True), (keys[5], True)):
             subprocess.run(['defaults', 'write', domain, key, '-bool', str(value).lower()], check=True)
+        app = factory(urls=(), fresh=True, extra_env={'OPEN_AUTOMATION_EARLY_LITTLE_OPEN': '1'})
+        early = sessions()
+        startup = app.call('startup')
+        record('startup_deferred_little_open', len(early) == 1 and early[0]['state'] == 'bar'
+               and early[0]['fieldFocused'] and not early[0]['sidebarTab']
+               and startup['pagesBeforeEngine'] == startup['contextsBeforeEngine'] == 0,
+               state=state(), startup=startup)
+        app.quit()
         app = factory(urls=(), fresh=True)
         seed = snapshot_model()
         # Two real Profiles, with separate engine directories, plus a second Space.
@@ -7015,13 +7023,19 @@ def littleopen_checks(factory, results, tmp):
                and rect_equal(session(bar['id'])['frame'], expected_page), session=second)
         action(second['id'], 'close')
 
-        before = len(sessions()); timestamp = time.monotonic()
+        before = len(sessions()); timestamp = time.monotonic() - 5
         app.call('little-open-action', action='blank', timestamp=timestamp)
         app.call('little-open-action', action='blank', timestamp=timestamp)
         same = len(sessions())
-        app.call('little-open-action', action='blank', timestamp=timestamp + .2)
-        record('same_press_guard', same == before + 1 and len(sessions()) == before + 2,
-               before=before, samePress=same, nextPress=len(sessions()))
+        # The Carbon delivery above and this real App key route carry the same
+        # old stamp. Queue age must never turn the menu twin into another press.
+        main_number = app.call('shell-windows')[0]['number']
+        app.call('key', window=main_number, key='n', modifiers=['cmd', 'option'], eventTimestamp=timestamp)
+        twin = len(sessions())
+        app.call('key', window=main_number, key='n', modifiers=['cmd', 'option'], eventTimestamp=time.monotonic())
+        record('same_press_guard', same == twin == before + 1 and len(sessions()) == before + 2,
+               before=before, samePress=same, delayedMenuTwin=twin, nextPress=len(sessions()),
+               route='OEApplication.sendEvent with a five-second-old key-down stamp')
         for row in sessions():
             if row['id'] != bar['id']: action(row['id'], 'close')
 
@@ -7041,7 +7055,9 @@ def littleopen_checks(factory, results, tmp):
         app.call('snapshot', window=bar['window'], path=png)
         loaded = session(bar['id']); elements = loaded['titleElements']
         expected = {'capsule': [84, 8, w-289, 31], 'pill': [w-196, 8, 188, 30],
-                    'copy': [w-228, 16, 16, 16], 'chevron': [w-29, 15, 16, 16]}
+                    'copy': [w-228, 16, 16, 16], 'chevron': [w-29, 15, 16, 16],
+                    'profileIcon': [97, 17, 14, 14], 'open': [w-191, 15, 148, 17],
+                    'divider': [w-37, 14, 1, 18]}
         geometry = all(rect_equal(elements[k], v) for k, v in expected.items())
         geometry = geometry and all(rect_equal(a, b) for a, b in zip(loaded['trafficLights'], [[9,16,16,16],[32,16,16,16],[55,16,16,16]]))
         width_px, _, px = read_image(png, srgb=True); scale = width_px / w
@@ -7372,7 +7388,10 @@ def routing_checks(factory, results, tmp):
         default_url = origin.replace('127.0.0.1', 'localhost') + '/default-little'
         before = tab_count()
         sent = deliver(default_url)
-        seen = wait_until(lambda: (log()['lastLittleOpenRequest'] or {}).get('url') == default_url, timeout=8, step=.05)
+        seen = wait_until(lambda: (log()['lastLittleOpenRequest'] or {}).get('url') == default_url
+                          and any(row['state'] == 'page' and row['url'] == default_url and row['visible']
+                                  and not row['loading'] and row['content'] > 0 and not row['sidebarTab']
+                                  for row in app.call('little-open-state')['sessions']), timeout=12, step=.05)
         record('routing_warm_default_little_open', sent.returncode == 0 and seen
                and tab_count() == before and len(entries(default_url)) == 1
                and any(row['state'] == 'page' and row['url'] == default_url and row['visible']
@@ -7412,7 +7431,9 @@ def routing_checks(factory, results, tmp):
         within = wait_until(lambda: log()['duplicatesDropped'] == dropped + 1, timeout=1, step=.02)
         first_log = log()
         # A genuine second click after the fixed window must create another tab.
-        time.sleep(max(0, 2.15 - (time.monotonic() - started)))
+        # Start after observing the first intake, not before LaunchServices
+        # starts its process. OS launch latency is outside the fixed dedupe window.
+        time.sleep(2.15)
         again = deliver(duplicate)
         second = landed(duplicate, 2)
         record('routing_dedupe_2s', sent.returncode == 0 and again.returncode == 0 and first and within and second
