@@ -43,6 +43,10 @@ enum SectionFlows {
         updated.badgeText = "9"; updated.accessibleName = "Second, 9"
         _ = context.updateAction(updated); stage.controller.refreshExtensions()
         check("action refresh retains hosted picker focus", body.focusedID == "second" && stage.window.firstResponder === body && body.items.first(where: { $0.item.id == "second" })?.item.badgeText == "9")
+        // A site snapshot change rebuilds the body (refreshView → apply); the picker must keep its keys.
+        // apply() skips an equal snapshot, so change one field (a tile subtitle) to force the rebuild.
+        stage.source.value?.tiles[0].subtitle = "Off"; stage.source.changed()
+        check("site snapshot refresh retains hosted picker focus", stage.controller.view.panel.snapshot?.tiles.first?.subtitle == "Off" && body.focusedID == "second" && stage.window.firstResponder === body)
         stage.key(code: 6, characters: "z")
         check("hosted picker type-select reaches an unpinned item", body.focusedID == "zulu")
         stage.key(code: 36, characters: "\r")

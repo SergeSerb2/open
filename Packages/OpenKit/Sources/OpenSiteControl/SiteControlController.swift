@@ -245,6 +245,9 @@ public final class SiteControlController: NSObject, NSMenuDelegate {
         guard let tabID else { return }
         guard let snapshot = source.snapshot(for: tabID) else { reportUnavailable(tabID); return }
         let focused = view.window?.firstResponder as? SiteControlButton
+        // apply() rebuilds the document and reinserts the shared extensions body, which makes
+        // AppKit drop its responder (as in refreshExtensions). The body keeps its focused ID.
+        let extensionsFocused = extensionsUIContext != nil && view.window?.firstResponder === view.panel.extensionsBody
         let oldHeight = view.panel.frame.height
         let structure = view.panel.captureStructure(extra: [view.panelShadow])
         CATransaction.begin(); CATransaction.setDisableActions(true)
@@ -254,6 +257,8 @@ public final class SiteControlController: NSObject, NSMenuDelegate {
             if let control = view.panel.focusableControls.first(where: { $0.controlID == focused.controlID }) {
                 view.panel.focus(control,keyboard: focused.showsKeyboardFocus)
             } else { view.window?.makeFirstResponder(view) }
+        } else if extensionsFocused, view.panel.extensionsBody.superview != nil {
+            view.window?.makeFirstResponder(view.panel.extensionsBody)
         }
         view.prepareAnimationAnchor()
         if animated,oldHeight != view.panel.frame.height {
