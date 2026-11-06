@@ -302,6 +302,18 @@ def run(factory, results, tmp, h):
         app.call('first-run', action='notnow')
         row('notnow_finish', not state()['active'] and state()['completed'] and app.call('tabs') == [])
         app.quit()
+        partial = Path(tmp) / 'arc-partial'
+        shutil.rmtree(partial, ignore_errors=True); shutil.copytree(source, partial)
+        (partial/'StorableArchiveItems.json').write_text('{}')
+        app = launch(fresh=True, directory=partial)
+        app.call('defaults', key='open.firstRun.completed', value=None)
+        app.call('first-run', action='import'); app.call('first-run', action='continue')
+        s = until('report')
+        row('partial_archive_failure', s['completed'] and s['outcome'].get('Imported Spaces') == 2
+            and s['failures'].get('Archive') == 'Could not be read' and archives()['count'] == 0,
+            failures=s['failures'], outcome=s['outcome'])
+        app.call('first-run', action='continue'); app.call('first-run', action='finish')
+        app.quit()
         timings = []
         for _ in range(5):
             app = launch(fresh=True)

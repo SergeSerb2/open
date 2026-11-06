@@ -47,13 +47,14 @@ final class AppImportRunner {
         directoryNamesToAvoid: app.model.unavailableProfileDirectoryNames,
         existingDirectories: Dictionary(uniqueKeysWithValues: app.model.profiles.map { ($0.id, $0.dataDirectoryName) }))
       guard imported.report.accountedTotal == imported.report.totalItems,
-            imported.report.archiveAccounted == imported.report.archiveTotal else { throw ImportError.malformedSidebar }
+            !plan.archive || imported.report.archiveAccounted == imported.report.archiveTotal else { throw ImportError.malformedSidebar }
     } catch {
       for kind in ["Spaces", "Pinned and Today tabs", "Favorites", "Folders", "Archive"] { failures[kind] = "Could not be read" }
       return result("Open could not read your Arc data.")
     }
     let report = imported.report
     guard !app.terminationRequested, !Task.isCancelled else { return result("Import stopped because Open is quitting.") }
+    if plan.archive && report.archiveStatus == "present but unreadable" { failures["Archive"] = "Could not be read" }
     counts["Sidebar accounted"] = report.accountedTotal; counts["Sidebar total"] = report.totalItems
     counts["Archive accounted"] = report.archiveAccounted; counts["Archive total"] = report.archiveTotal
     counts["Skipped easels"] = report.skippedEasels + (plan.archive ? report.archiveSkippedEasels : 0)
