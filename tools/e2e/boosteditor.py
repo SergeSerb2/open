@@ -308,6 +308,23 @@ def run(factory, results, tmp, env):
                 app.call("little-open-action",id=sid,action="close")
                 return dict(positive=bool(ok) and initial.startswith("Avenir") and editorClosed,negative=negative)
             row("B18_little_open_live",b18)
+            def b20():
+                nonlocal app,tab
+                close();app.quit()
+                files=list(pathlib.Path(app.user_data).glob("Profiles/*/Boosts/boosts.json"))
+                source=next(p for p in files if json.loads(p.read_text())["boosts"])
+                dto=json.loads(source.read_text())
+                disabled=next(b for b in dto["boosts"] if not b["siteMatch"].get("pathPrefix"))
+                disabled["isEnabled"]=False;disabled["name"]="Disabled Boost"
+                dto["boosts"]=[disabled];source.write_text(json.dumps(dto))
+                app=factory(urls=(origin+"/boost.html",));tab=app.call("tabs")[0]["id"]
+                app.call("wait",tab=tab)
+                negative=app.eval(tab,"typeof window.__openBoosts") == "undefined"
+                app.call("menu-perform",id="edit-boost")
+                state=call()
+                return dict(positive=state.get("open") and state["boost"]["id"] == disabled["id"] and not state["boost"]["isEnabled"] and len(items()) == 1,
+                            negative=negative,storedEnabled=items()[0]["isEnabled"],disabledRuntimeAbsent=negative)
+            row("B20_edit_disabled_match",b20)
             def b19():
                 call("open",boost=items()[0]["id"])
                 tap("menu.Rename this Boost…")

@@ -11,7 +11,23 @@ import OpenSiteControl
 @MainActor @Observable
 final class AppBoosts: BoostsProvider {
   unowned let app: AppDelegate
-  private struct State { let store: BoostStore; var matcher: BoostMatcher }
+  private struct State {
+    let store: BoostStore
+    var matcher: BoostMatcher
+    var allBoostsMatcher: BoostMatcher
+    init(store: BoostStore, values: [Boost]) {
+      self.store = store
+      matcher = BoostMatcher(boosts: values)
+      allBoostsMatcher = BoostMatcher(boosts: Self.enabledCopies(values))
+    }
+    mutating func rebuild(values: [Boost]) {
+      matcher.rebuild(boosts: values)
+      allBoostsMatcher.rebuild(boosts: Self.enabledCopies(values))
+    }
+    private static func enabledCopies(_ values: [Boost]) -> [Boost] {
+      values.map { var boost = $0; boost.isEnabled = true; return boost }
+    }
+  }
   @ObservationIgnored private var profiles: [ProfileID: State] = [:]
   @ObservationIgnored private var observers: [SiteControlObservationToken: @MainActor () -> Void] = [:]
   @ObservationIgnored private var defaultsObserver: (any NSObjectProtocol)?
@@ -46,11 +62,18 @@ final class AppBoosts: BoostsProvider {
     guard let profile = app.model.profile(id: id) else { preconditionFailure("Boost Profile is not loaded") }
     let store = BoostStore(root: app.directories.root, profileID: id, fileURL: app.directories.boostsFileURL(for: profile))
     let values = store.load() // Exactly once, before editor or Library mutations.
-    profiles[id] = State(store: store, matcher: BoostMatcher(boosts: values))
+    profiles[id] = State(store: store, values: values)
     return store
   }
   func matcher(for id: ProfileID) -> BoostMatcher { _ = store(for: id); return profiles[id]!.matcher }
-  func matchingBoosts(url: URL, profileID: ProfileID) -> [Boost] { matcher(for: profileID).matching(url: url) }
+  func matchingBoosts(url: URL, profileID: ProfileID) -> [Boost] {
+    guard app.model.profile(id: profileID) != nil else { return [] }
+    _ = store(for: profileID)
+    guard let state = profiles[profileID] else { return [] }
+    // Site Control and Edit Boost must also find disabled rows. Return the
+    // stored values, keeping their flags, in the all-Boost matcher order.
+    return state.allBoostsMatcher.matching(url: url).compactMap { state.store.boost(id: $0.id) }
+  }
   func setBoostEnabled(_ id: BoostID, enabled: Bool, profileID: ProfileID) {
     if store(for: profileID).setEnabled(id: id, enabled: enabled) { refresh(profile: profileID) }
   }
@@ -58,7 +81,7 @@ final class AppBoosts: BoostsProvider {
   func refresh(profile: ProfileID) {
     guard app.model.profile(id: profile) != nil else { return }
     let store = store(for: profile)
-    profiles[profile]?.matcher.rebuild(boosts: store.allBoosts())
+    profiles[profile]?.rebuild(values: store.allBoosts())
     revision &+= 1
     adapter.refresh(profile: profile)
     for observer in Array(observers.values) { observer() }
