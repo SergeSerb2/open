@@ -1831,7 +1831,7 @@
         "return": ("\r", 36), "escape": ("\u{1b}", 53), "tab": ("\t", 48), "space": (" ", 49),
         "delete": ("\u{7f}", 51), "forward-delete": (String(Character(UnicodeScalar(NSDeleteFunctionKey)!)), 117),
         "o": ("o", 31), ",": (",", 43), "z": ("z", 6), "n": ("n", 45), "t": ("t", 17), "w": ("w", 13), "l": ("l", 37), "f": ("f", 3), "s": ("s", 1), "a": ("a", 0),
-        "v": ("v", 9), "x": ("x", 7), "c": ("c", 8), "d": ("d", 2), "i": ("i", 34), "j": ("j", 38), "y": ("y", 16), "1": ("1", 18), "2": ("2", 19), "9": ("9", 25), "=": ("=", 24),
+        "e": ("e", 14), "v": ("v", 9), "x": ("x", 7), "c": ("c", 8), "d": ("d", 2), "i": ("i", 34), "j": ("j", 38), "y": ("y", 16), "1": ("1", 18), "2": ("2", 19), "9": ("9", 25), "=": ("=", 24),
         "control": ("", 59), "command": ("", 55),
         "down": (String(Character(UnicodeScalar(NSDownArrowFunctionKey)!)), 125),
         "up": (String(Character(UnicodeScalar(NSUpArrowFunctionKey)!)), 126),
