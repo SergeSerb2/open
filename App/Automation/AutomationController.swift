@@ -378,7 +378,11 @@
         return spaceManagerLifecycle()
       default: break
       }
-      let w = try window
+      let w: EngineWebContentHostFactory
+      if let number = a["window"] as? Int,
+         let owner = app.littleOpenHosts.values.first(where: { $0.view.window?.windowNumber == number })?.owner {
+        w = owner
+      } else { w = try window }
       switch cmd {
 
       case "sidebar-share":
