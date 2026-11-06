@@ -938,3 +938,26 @@ Example: add an Open script containing
 `__openNative.postMessage("picker:ready", JSON.stringify({boostID:"fixture"}))`,
 navigate to a matching page, then read `open-world-messages`. Page and extension
 worlds see `typeof __openNative === "undefined"`.
+
+
+## Site settings, data and security (E1/E2/E3)
+
+All four commands use the selected page's OpenWeb profile/content; optional
+`tab` selects another page. These commands do not open Site Control UI.
+
+| Command | Arguments | Result |
+|---|---|---|
+| `site-settings` | `origin` HTTP(S) URL | `[{kind,state}]` effective exceptions that differ from the global default |
+| `site-setting` | `origin`, `kind` Chromium name, `state:allow\|block\|ask\|session` | Boolean acceptance; each kind supports only registered states |
+| `site-data-clear` | `origin`, `kinds:[cookies,cache,storage]` (any subset) | Waits for every backend, then returns true or an error. Empty kinds is valid. HTTP cache eviction is origin-specific. |
+| `security-state` | Optional `tab` | `{level,certificates:[{bytes,sha256}]}`; leaf first, no certificate subject or private data |
+
+`events` records change bit 16 for visible security/certificate updates.
+The `sitedata` suite uses isolated loopback HTTP origins and a temporary
+self-signed TLS server; valid HTTPS uses a public control because no new local
+trust root is installed. Run it under the on-screen lock after the lead clears
+any screen HOLD:
+
+```sh
+/usr/bin/lockf -k /tmp/open-onscreen-e2e.lock python3 tools/e2e/engine_e2e.py --style chrome --only sitedata
+```

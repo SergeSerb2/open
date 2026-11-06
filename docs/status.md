@@ -360,8 +360,8 @@ Columns: feature · RE doc + section · plan · library code · App wiring · ve
 | Footer: Copy URL, Share | FA SC-5 | site-control-boost-editor | in PR #69, #96 | none | none | in PR | Session 2: 4 action buttons (Share, New Boost, two Capture). Copy URL moved to the ⋯ menu (#107). |
 | Footer: Capture, Capture in Portrait Mode, Capture Full Page | FA SC-5, §9.1 | page-platform (#73) | none | none | none | planned | See Capture in §1.17. |
 | Ad-block per-site toggle with reload | FA SC-6, AD-7 | site-control-boost-editor; `docs/adblock-lists.md` | `OpenAdBlock/SiteRules.swift` (`setExcluded`) | none | `openkit adblock` | planned | The toggle needs the panel (PR #69, #96) and blocking (§1.14). |
-| Security state (secure or not) | FA SC-7 | site-control-boost-editor | in PR #96 | none | none | in PR | |
-| Clear cookies and cache for the site; zoom reset | app-shell §4.9 | app-shell §4.9; site-control-boost-editor E2 | engine `clearBrowsingData(origin:)` | none | none | planned | Whole-profile clear works from Settings (§1.10). Per-site clear waits for the panel. |
+| Security state (secure or not) | FA SC-7 | site-control-boost-editor E3 | native/OpenWeb connection and certificate APIs | Section 12 engine branch | `sitedata` prepared; screen proof held | implemented (unverified) | UI consumption remains separate. |
+| Clear cookies and cache for the site; zoom reset | app-shell §4.9 | app-shell §4.9; site-control-boost-editor E2 | engine `clearSiteData(origin:types:)` | Section 12 engine branch | `sitedata` prepared; screen proof held | implemented (unverified) | Origin-filtered HTTP cache/storage; host cookies. Panel consumption remains separate. |
 
 ### 1.14 Ad blocking
 

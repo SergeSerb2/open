@@ -52,6 +52,8 @@ typedef NS_OPTIONS(NSUInteger, OEWebContentChange) {
   /// The page's text selection became empty or non-empty (`hasSelection`);
   /// not sent for caret moves that keep that state (page-platform EP-3).
   OEWebContentChangeSelection = 1u << 15,
+  /// Visible connection security or certificate chain changed.
+  OEWebContentChangeSecurity = 1u << 16,
 };
 
 /// Phases of Chromium's history swipe (page-platform EP-1).

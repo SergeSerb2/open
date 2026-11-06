@@ -637,6 +637,8 @@
       // Pages (any live web content).
       case "pages":
         return OEEngine.shared.allWebContents.map { describe($0, in: w) }
+      case "site-settings", "site-setting", "site-data-clear", "security-state":
+        return try await runSiteDataCommand(cmd, a, page: try content(a, w))
       case "eval":
         guard let js = a["js"] as? String else { throw Failure(message: "missing js") }
         // Through the OpenWeb protocol, as OpenKit features will call it.

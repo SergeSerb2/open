@@ -206,8 +206,8 @@ OE_EXPORT @interface OEBrowserContext : NSObject
 /// Deletes cookies: with a non-nil `origin`, the host cookies of that URL's
 /// host, any path (not Domain= cookies; CefCookieManager::DeleteCookies with
 /// a URL and no name); with nil, every cookie and also the whole HTTP cache. A per-origin call
-/// does not touch the HTTP cache (per-site cache clearing is Site Control
-/// E2, which needs a fork patch).
+/// does not touch the HTTP cache (per-site clearing with explicit data kinds is
+/// -clearSiteDataForOrigin:types:completion:).
 - (void)clearBrowsingDataForOrigin:(nullable NSURL*)origin
                         completion:(void (^NS_SWIFT_UI_ACTOR _Nullable)(void))
                                        completion

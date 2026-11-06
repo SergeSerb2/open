@@ -218,6 +218,11 @@ class OEPageHandler : public CefOpenPageHandler {
                           bool has_selection) override {
     [content_ oe_selectionChanged:has_selection];
   }
+  void OnSecurityStateChanged(CefRefPtr<CefBrowser> browser) override {
+    // Defer delegate work; it may close the WebContents observing this event.
+    OEWebContent* content = content_;
+    dispatch_async(dispatch_get_main_queue(), ^{ [content oe_notify:OEWebContentChangeSecurity]; });
+  }
   void OnHistorySwipe(CefRefPtr<CefBrowser> browser,
                       int phase,
                       int direction,
@@ -656,7 +661,7 @@ typedef void (^OEOpenWorldCompletion)(id _Nullable, NSError* _Nullable);
   [_oe_hostBrowser oe_setNeedsTabStripSync];
   [self oe_showPageIfVisible];
   [self oe_notify:OEWebContentChangeLive | OEWebContentChangeURL |
-                  OEWebContentChangeLoading];
+                  OEWebContentChangeLoading | OEWebContentChangeSecurity];
 }
 
 - (void)oe_browserClosed {
@@ -679,7 +684,7 @@ typedef void (^OEOpenWorldCompletion)(id _Nullable, NSError* _Nullable);
   _closeRequested = YES;
   [self oe_resetMediaDetaching:YES];
   [[OEEngine shared] oe_unregisterWebContent:self];
-  [self oe_notify:OEWebContentChangeLive];
+  [self oe_notify:OEWebContentChangeLive | OEWebContentChangeSecurity];
   _closingSelf = nil;
 }
 
