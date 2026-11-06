@@ -9,6 +9,13 @@ import CryptoKit
 
 @MainActor final class PreviewActions: SettingsActions {
     var log: [String] = []
+    var extensionConflicts: [ExtensionShortcutConflict] = []
+    var openedURLs: [(URL, ProfileID)] = []
+    func extensionShortcutConflicts(profileID: ProfileID) -> [ExtensionShortcutConflict] { extensionConflicts }
+    static let sampleExtensionConflicts: [ExtensionShortcutConflict] = [
+        .init(extensionName: "Action Probe", commandDescription: "Open action", shortcut: .init(key: "y", modifiers: [.shift, .command]), openCommandID: "copy-url"),
+        .init(extensionName: "Search Probe", commandDescription: "Search", shortcut: .cmd("t"), openCommandID: "new-tab")
+    ]
     var defaultError: String?
     var canImportPasswordsAndCookies = false
     var importHandler: (@MainActor (ImportPlan) async -> ImportOutcome)?
@@ -34,7 +41,7 @@ import CryptoKit
     func setTabSleepMode(_ mode: TabSleepMode) { record("setTabSleepMode \(mode.rawValue)") }
     func setApplicationIcon(id: String) { record("setApplicationIcon \(id)") }
     func resetTranslatePrompts(profileID: ProfileID) -> String? { record("resetTranslatePrompts \(profileID)"); return nil }
-    func openURL(_ url: URL, profileID: ProfileID) { record("openURL host=\(url.host() ?? "") \(profileID)") }
+    func openURL(_ url: URL, profileID: ProfileID) { openedURLs.append((url, profileID)); record("openURL host=\(url.host() ?? "") \(profileID)") }
     func openHelp(topic: String) { record("openHelp \(topic)") }
     func copyText(_ text: String) { record("copyText") }
     func openLibrary() { record("openLibrary") }
@@ -125,6 +132,14 @@ import CryptoKit
         guard ["1", "2", "both"].contains(rawScale) else { throw NSError(domain: "invalid scale", code: 2) }
         let scales = rawScale == "both" ? [1,2] : [Int(rawScale)!]
         if args.contains("--first-run-only") {try await renderFirstRunScreens(output:output,scales:scales);return}
+        settings.selectedPane = .shortcuts
+        env.actions.extensionConflicts = PreviewActions.sampleExtensionConflicts
+        for dark in [false,true] { for scale in scales {
+            try await render(SettingsContent(viewModel: settings), size: CGSize(width: 684, height: 650), scale: scale, dark: dark,
+                             to: output.appendingPathComponent("shortcuts-extension-conflicts-\(dark ? "dark" : "light")@\(scale)x.png"))
+        } }
+        env.actions.extensionConflicts = []
+        if args.contains("--extension-shortcuts-only") { return }
         for pane in PaneID.allCases {
             settings.selectedPane = pane
             for scale in scales { try await render(SettingsContent(viewModel: settings), size: CGSize(width: 684, height: 650), scale: scale, dark: true, to: output.appendingPathComponent("\(pane == .appIcon ? "app-icon" : pane.rawValue)@\(scale)x.png")) }

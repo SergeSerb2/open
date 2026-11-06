@@ -11,6 +11,9 @@ final class ResultsView: NSView {
     private var rowViews: [ResultRowView] = []
     private let selectionLayer = CALayer()
     private(set) var scrollOffset: CGFloat = 0
+    var extensionIcon: (@MainActor (String) -> NSImage?)? {
+        didSet { for v in rowViews { v.extensionIcon = extensionIcon; v.needsDisplay = true } }
+    }
     weak var favicons: CommandBarFaviconSource? {
         didSet { for v in rowViews { v.favicons = favicons } }
     }
@@ -76,6 +79,7 @@ final class ResultsView: NSView {
         while rowViews.count < rows.count {
             let v = ResultRowView(frame: .zero)
             v.favicons = favicons
+            v.extensionIcon = extensionIcon
             v.theme = theme
             let index = rowViews.count
             v.onPress = { [weak self] in self?.onClick?(index, []) }

@@ -82,7 +82,7 @@ public extension CommandRegistry {
     private static let suggestOnlyIDs: Set<String> = [
         "add-to-favorites", "remove-from-favorites", "replace-pinned-url",
         "mute-all-tabs", "unmute-all-tabs", "air-traffic-control",
-        "manage-passwords", "search-settings",
+        "manage-passwords", "search-settings", "extension-shortcuts",
     ]
 
     /// Menu commands with no command-bar row (text, spelling, chrome, help detail).
@@ -105,6 +105,7 @@ public extension CommandRegistry {
     ]
 
     private static let symbols: [String: String] = [
+        "open-extensions-picker": "puzzlepiece.extension", "extension-shortcuts": "command",
         "new-tab": "plus", "contact-team": "ellipsis.bubble", "new-window": "macwindow.badge.plus", "new-incognito-window": "eyeglasses",
         "new-little-open-window": "macwindow.on.rectangle", "archive-tab": "archivebox",
         "restore-last-closed-tab": "arrow.uturn.backward", "print": "printer", "save-page-as": "square.and.arrow.down",
