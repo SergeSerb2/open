@@ -16,7 +16,8 @@ name against existing files and concurrent requests, and lets Chromium resolve
 any external filesystem race. It creates `~/Downloads` when needed. A missing
 custom folder falls back there and records `download-directory-fallback`. Ask
 mode queues a real save sheet behind the requesting window's existing sheet;
-window close and quit cancel outstanding choices exactly once.
+Library Cancel, window close and quit cancel outstanding choices exactly once.
+Library Cancel also closes an already visible save sheet.
 
 The Home control observes `SidebarContext.downloadBadge`. Known totals use a
 weighted byte fraction; an unknown total uses a 25% arc with a one-second CA
@@ -42,16 +43,40 @@ was verified by the real-App runner as distribution SHA-256
 
 | Gate | Result / evidence |
 |---|---|
-| Debug app | Final run pending; engine distribution is pinned above. |
-| Real-App `downloads` | Final 33-gate run pending. Covers known/unknown totals, partial failure, folders, save acceptance/cancellation, native controls/menus, file actions, Profile isolation, fallback, Home navigation/motion, shortcut and quit. |
-| Native idle observer | S8 observer is reused with a Downloads ownership filter. A real repeating timer canary proves the observer is live; settled counts, publication count and CA keys must remain zero. |
-| Negative proofs | Grouped real behavior mutations run outside committed code; final coverage pending. The source is restored before the final build. |
-| `features` | 19 PASS, 0 FAIL: `.re/downloads/regression-features.json`. |
-| `shell` | 7 PASS, 0 FAIL: `.re/downloads/regression-shell.json`. |
-| `app-actions` | 63 PASS, 0 FAIL: `.re/downloads/regression-app-actions-recovered.json`. |
-| `window` | 72 PASS, 4 FAIL (machine: built-in display main): `.re/downloads/regression-window.json`. Only `chrome_dark_rings`, `traffic_light_look`, `traffic_light_stale_hover`, `comparison`; comparison worst ΔE00 3.65, position 1 pt, dark ring rows ΔE00 6.21–6.71. |
-| Focused verify-all | `build`, `settings-preview`, `sidebar-render` PASS (78/84/113 s): `.re/downloads/verify-focused/summary.txt`. |
-| Full verify-all | Final run pending after merging current `origin/main`. |
+| Debug app | PASS after merging `origin/main` `ebcf08d2` (#176 Peek, includes #174 AppleScript / #173 Little Open): `.re/downloads/build-final-head.log`. No new Swift warnings. |
+| Real-App `downloads` | **34 PASS, 0 FAIL, 0 INTERRUPTED**, cleanup PASS: `.re/downloads/positive-final.json`. Known/unknown totals, partial failure, folders, save acceptance/cancellation, native controls/menus, file actions, Profile isolation/fallback, Home motion/navigation/new window, shortcut, idle and quit. |
+| Native idle observer | Ten zero counters over 2.006 s; publications 68→68; no queued publication or CA keys; load 30.90/15.45/11.78. Real timer canary 1→0. The leaked-timer mutation produces live count 1 and fails both canary/idle gates. |
+| Negative proofs | **34/34 covered**, no missing gate: `.re/downloads/negative-summary.json`. Six grouped real behavior mutations cover 33 gates; `cancel-sheet-before.json` proves the final lifecycle fix on the real unfixed App. Faults are absent from final source and binary. |
+| Pending sheet cancellation | Before: cancelled item, sheet still visible. After: cancelled item, no sheet/running download, cleanup PASS: `.re/downloads/cancel-sheet-before.json` / `cancel-sheet-after.json`. |
+| Early failure while sheet is open | Deliberate exception after `save_sheet` PASS; App cleanup has zero remaining owned processes/windows, no forced kill: `.re/downloads/cleanup-final.json`. |
+| `features` | **19 PASS**, cleanup PASS: `.re/downloads/regression-features.json`. |
+| `shell` | **7 PASS**, cleanup PASS: `.re/downloads/regression-shell.json`. |
+| `app-actions` | **63 PASS**, cleanup PASS: `.re/downloads/regression-app-actions.json`. |
+| `window` | **76 PASS**, including all four formerly display-sensitive rows; cleanup PASS: `.re/downloads/regression-window.json`. |
+| Focused verify-all | `settings-preview,sidebar-render` PASS: `.re/downloads/verify-focused/summary.txt`; final full run also passes these targets. |
+| Full verify-all | Standard `heavy.sh tools/verify-all.sh --with-arc-data`: **22 PASS, one timing-only FAIL**, zero SKIP/INTERRUPTED: `.re/downloads/verify-final-head/summary.txt`. `commandbar-render` quiet rerun passes all rows; accepted combined result **23 targets PASS**. |
+
+The command-bar timing rerun changes no threshold or assertion. The full run
+measured CPU p95 9.01 ms / inline overhead +0.571 ms at load 9.7/10.7/12.0.
+Under the quiet lock, the target passed at 5.82 ms / +0.007 ms, load
+6.0/6.8/9.0. The unchanged `origin/main` binary from the same fresh baseline
+build ran under the same lock/session: 6.29 ms / +0.443 ms, load 6.4/6.8/8.9
+(the inline row fails there). Both raw attempts and the main comparison remain
+in `.re/downloads/commandbar-quiet-1*.log` and `verify-commandbar-quiet-1/`.
+This PR changes none of the command-bar/suggestion/command/drawing modules.
+
+The final display is the main AW2726DM at 1×, 2560×1440 (native NSScreen
+receipt `.re/downloads/display.json`). The earlier built-in 2× exceptions do not
+apply. The final standard sidebar comparison builds its own baseline and passes
+all 13 states plus CU5, with no override or reused products. The earlier default
+run's display-sensitive values were ΔE00 1.17/1.73/1.95 and its main/branch tables
+were byte-identical; unchanged capture/snapshot hashes and fresh-build evidence
+are in `sidebar-stock-proof.json` / `sidebar-merged-proof.json`.
+
+An early run stopped at machine load >200 is retained as interrupted and is not
+accepted. A baseline-product reuse run is exploratory only. Foreground-loss and
+harness-schema-error attempts are retained separately; the final App results
+have no interrupted attempts.
 
 The Open action goes through real `NSWorkspace` document delivery to a disposable
 background application. That process reads the fixture and returns its URL,
