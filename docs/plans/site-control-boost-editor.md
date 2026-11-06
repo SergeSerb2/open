@@ -1446,8 +1446,8 @@ A real native delayed-draw canary measures 35.506 ms and is rejected. SCC idle h
 zero scheduler/view counters (timer canary 1 then 0); total App CPU is 1.75%, not zero.
 Scroll closed/open p95 is 4.5/4.3 ms with no dropped frames, load 12.41/13.39/17.28;
 a bounded slow-frame page canary is rejected at 12.6 ms. S11 retains the four measured
-values in `docs/followups.md`; S12 is 22/40 at unchanged limits. R7's child-window
-fallback remains a lead design decision. This is implemented App wiring, not visual
+values in `docs/followups.md`; S12 is 22/40 at unchanged limits. The lead accepts the material as interim while S11/S12 stay FAIL; the white/black
+page diagnostic checks R7. A separate lead PR owns the child-window fallback if needed. This is implemented App wiring, not visual
 acceptance. Full verification and regression results are recorded in the PR.
 
 
