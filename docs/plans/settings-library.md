@@ -362,8 +362,7 @@ package side first):
 - Menu: Open menu item "Settings…" (command `settings`, Cmd+,)
   calls `SettingsPresenter.show(pane:)`. The command-bar action
   `settings` (Cmd+,) and `search-settings` call the same presenter.
-  `search-settings` opens Settings on General and focuses the pane
-  search field if present; else it opens General.
+  `search-settings` opens Profiles for the focused Profile (Section 7 lead ruling).
 - `SettingsPresenter` owns one `NSWindow` from
   `SettingsWindow.makeWindow(viewModel:)`. First call creates it.
   Later calls call `makeKeyAndOrderFront` and set the pane. Closing
@@ -720,7 +719,7 @@ Tab Sleeping group:
 
 | Control | Behavior | Store / effect |
 |---|---|---|
-| Mode pop-up: Automatic / Conservative / Aggressive / Never | Automatic = freeze hidden tabs, discard after 5 min hidden. Conservative = discard after 15 min. Aggressive = discard after 2 min and drop the spare renderer. Never = no freeze, no discard. Battery Saver (OS low power) acts as Aggressive in Automatic only. | `open.advanced.tabSleepMode`. Live: `actions.setTabSleepMode`. Never sleep: the visible tab, tabs with audio, tabs in the visible Split, keep-alive hosts (mail, chat, docs, calendar; `docs/re/features-core.md` section 3.4). Pinned tabs freeze but never discard in v1 (Open choice; mark for runtime check). |
+| Mode pop-up: Automatic / Conservative / Aggressive / Never | Automatic = freeze hidden tabs, discard after 5 min hidden. Conservative = discard after 15 min. Aggressive = discard after 2 min and drop the spare renderer. Never = no freeze, no discard, no 24 h destroy, and no loaded-page hidden-cache eviction. Battery Saver (OS low power) acts as Aggressive in Automatic only. | `open.advanced.tabSleepMode`. Live: `actions.setTabSleepMode`. Never sleep: the visible tab, tabs with audio, tabs in the visible Split, keep-alive hosts (mail, chat, docs, calendar; `docs/re/features-core.md` section 3.4). Pinned tabs and Favorites sleep like other tabs in modes other than Never (ratified memory policy). The global key is authoritative; launch and Profile creation reconcile the snapshot mode without another Undo step. |
 | "Sleep inactive tabs to save memory" note | Static help text | — |
 
 ### 5.6 App Icon
@@ -740,9 +739,10 @@ icons.
 
 Each cell: icon preview, name, "Current Icon" badge on the
 selection. Click writes `open.appIcon.selectedID`, then calls
-`actions.setApplicationIcon(id:)`. The app maps the ID to a bundled
-alternate icon (`NSApp.setApplicationIconImage` or alternate-icon
-API). Failure shows the error text. No restart. Preview logs the
+`actions.setApplicationIcon(id:)`. The app renders the existing original picker artwork at 1024 px, caches
+per ID, and sets `NSApp.applicationIconImage`. `openDefault` resets it to nil.
+Saved selection restores after the first window and content paint, with measured
+cost and no signed-bundle writes. Failure shows the error text. No restart. Preview logs the
 call and still writes the key.
 
 ### 5.7 Out of scope panes (do not build; keep the reason in code)
