@@ -233,7 +233,7 @@ def run(h, factory, results, tmp):
         before=state(); p0=pane(tab); time.sleep(2); after=state(); p1=pane(tab)
         observed=app.call('find-idle', action='read')
         row('F31_idle', p1['visible'] and not before.get('pending') and not after.get('pending') and before.get('requests') == after.get('requests')
-            and before.get('results') == after.get('results') and p0['layouts'] == p1['layouts'] and all(v == 0 for v in observed.values()), before=before, after=after, observer=observed, load=load)
+            and before.get('results') == after.get('results') and p0['layouts'] == p1['layouts'] and all(v == 0 for v in observed.values()), before=before, after=after, observer=observed, load=subprocess.check_output(['uptime'], text=True).strip())
         canary=app.call('find-idle', action='invalidate')
         row('F31_observer_canary', any(canary[k] > 0 for k in ('invalidations','layout')), observer=canary)
         app.call('find-idle', action='end')
