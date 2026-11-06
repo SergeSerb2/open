@@ -44,7 +44,7 @@ def ping(path):
     return request(path, 'ping')
 
 
-def run(negative, output, download_base=None):
+def run(negative, output, download_base=None, before_unload=False):
     # Stop at the first successful real ping, before the suite can mutate any
     # shared defaults. The parent can then inspect the app and kill only runner.
     code = '''
@@ -73,7 +73,7 @@ subprocess.Popen = popen
     code += "sys.argv = ['engine_e2e.py', '--only', 'shell', '--style', 'chrome', '--keep']; e.main()\n"
     roots = []
     runner = None
-    with (output / ('download.log' if download_base else 'negative.log' if negative else 'positive.log')).open('w') as log:
+    with (output / ('beforeunload.log' if before_unload else 'download.log' if download_base else 'negative.log' if negative else 'positive.log')).open('w') as log:
         try:
             runner = subprocess.Popen([sys.executable, '-c', code], cwd=ROOT,
                                       stdout=log, stderr=subprocess.STDOUT, start_new_session=True)
@@ -93,6 +93,27 @@ subprocess.Popen = popen
                     raise RuntimeError('runner exited before ping')
                 time.sleep(.05)
             assert reply, 'app did not answer ping'
+            if before_unload:
+                sock = roots[0] / 'automation.sock'
+                def call(command, **args):
+                    response = request(sock, command, **args)
+                    assert response.get('ok'), response
+                    return response['result']
+                tab = call('open', url='data:text/html,<title>Owner unload fixture</title>')['id']
+                call('wait', tab=tab)
+                call('policy', dialogs='hold')
+                call('eval', tab=tab, js='document.body.innerHTML="<button id=arm>Arm</button>";document.querySelector("#arm").onclick=()=>{onbeforeunload=e=>{e.preventDefault();e.returnValue="unsaved"}};true')
+                call('click', tab=tab, selector='#arm')
+                call('quit')
+                deadline = time.monotonic() + 5
+                preflight = {}
+                while time.monotonic() < deadline:
+                    preflight = call('dialog-state')
+                    if preflight.get('pending'): break
+                    time.sleep(.02)
+                assert preflight.get('pending') == 1 and preflight.get('kind') == 3, preflight
+                call('dialog', accept=False)
+                assert call('dialog-state')['pending'] == 0
             if download_base:
                 sock = roots[0] / 'automation.sock'
                 def call(command, **args):
@@ -120,12 +141,26 @@ subprocess.Popen = popen
             os.kill(runner.pid, signal.SIGKILL)  # deliberately NOT killpg
             runner.wait()
             remaining = before
+            unload_prompts = []
             while time.monotonic() - started < 10:
                 remaining = matches(BUNDLE) + matches(prefix)
                 if not remaining:
                     break
+                if before_unload:
+                    try:
+                        state = request(roots[0] / 'automation.sock', 'dialog-state')
+                        if state.get('ok') and state.get('result', {}).get('pending'):
+                            unload_prompts.append(state['result'])
+                    except (OSError, ValueError):
+                        pass
                 time.sleep(.1)
             elapsed = time.monotonic() - started
+            if before_unload:
+                observation = dict(before_unload=True, preflight=preflight, owner_death_prompts=unload_prompts,
+                                   elapsed=elapsed, remaining=remaining, ok=not remaining and not unload_prompts)
+                (output / 'beforeunload-observations.json').write_text(json.dumps(observation, indent=2) + '\n')
+                assert not unload_prompts, 'owner death re-entered beforeunload'
+
             if negative:
                 assert remaining, 'negative control unexpectedly exited'
                 assert ping(roots[0] / 'automation.sock'), 'negative app stopped answering'
@@ -137,7 +172,7 @@ subprocess.Popen = popen
                 assert sum(value.count(message) for value in texts) == 1, 'expected one owner-exit log line'
                 if download_base:
                     assert not any('downloads-quit-alert-presented' in value for value in texts if message in value), 'owner death presented download quit alert'
-            return dict(ok=True, negative=negative, active_download=bool(download_base), ping=reply, elapsed=elapsed,
+            return dict(ok=True, negative=negative, active_download=bool(download_base), before_unload=before_unload, ping=reply, elapsed=elapsed,
                         before=before, remaining=remaining)
         finally:
             if runner is not None:
@@ -164,9 +199,13 @@ if __name__ == '__main__':
     output = Path(sys.argv[1]).resolve()
     output.mkdir(parents=True, exist_ok=True)
     from downloads import server
-    results = [run(False, output), run(True, output)]
-    with server() as base:
-        results.append(run(False, output, download_base=base))
+    if '--before-unload' in sys.argv[2:]:
+        results = [run(False, output, before_unload=True)]
+    else:
+        results = [run(False, output), run(True, output)]
+        with server() as base:
+            results.append(run(False, output, download_base=base))
+        results.append(run(False, output, before_unload=True))
     assert not matches(BUNDLE), 'cleanup left app helpers'
     (output / 'results.json').write_text(json.dumps(results, indent=2) + '\n')
     print(json.dumps(results, indent=2))
