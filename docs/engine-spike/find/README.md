@@ -25,7 +25,7 @@ step-4 Release run passes all 50 Find checks. Interrupted attempts do not count.
 | Own-window light/dark pixels | WindowServer snapshots: background ΔE00 0.4977 light / 0.3836 dark (limit 2); radius, 300×32 frame, right 10, top 10/50 and narrow-pane checks pass |
 | First and repeat Cmd+F | Both p95 values pass the fixed 120 Hz budget in the initial step-4 run; final-head run pending |
 | Coalescing and idle work | One typed request, at most one engine activation, and all ten Find-scoped observer counters zero over two seconds with Find open and the page focused |
-| Negative proof | Fifty original gates rejected across the fault-App and strengthened Jump receipts; final twenty-sample 25 ms timing fault and retained-control proof in progress |
+| Negative proof | Fifty original gates rejected across the fault-App and strengthened Jump receipts; twenty-sample 25 ms fault rejects first/repeat p95 at 33.828/28.147 ms; retained-control fault rejects the lifetime condition with all idle counters zero |
 | Required regressions and full verify-all | Final-head runs pending |
 
 ## Performance measurements
@@ -77,6 +77,13 @@ these show no launch regression. Every enabled sample starts prewarm after
 its measured first paint. The heavier step-3 run reports 383.5 / 697.5 ms
 enabled and 392.5 / 709.5 ms disabled as load rises to 15.17; it is not the
 quiet-machine launch comparison.
+
+The 25 ms fault reports first p50/p95 31.997/33.828 ms and repeat
+27.083/28.147 ms over twenty windows (load1 10.13–11.80). The retained-bar
+fault fails only the lifetime condition in the idle row: its ten work counters
+remain zero, while the weak temporary-view references remain live. Both fault
+conditions fail, the other 48 checks pass, and owned-process cleanup passes.
+The script restores exact source hashes and rebuilds Debug and Release.
 
 Receipts: `.re/find/step1-shadow-path-20.json`, `step3-paired-20.json`,
 `step4-paired-20.json`, and `phase-comparison.json`. Final receipts stay under
