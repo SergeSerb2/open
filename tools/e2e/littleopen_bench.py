@@ -124,6 +124,7 @@ def main():
                             # observation time is inside this delay, not added to it.
                             time.sleep(max(0, opened_response_at + .4 - time.monotonic()))
                         app.begin_timing('Little Open page load')
+                        submit_request_at = time.monotonic()
                         submitted = raw_call(app, 'key', window=session['window'], text=target + '\r')
                     def page_loaded():
                         current = app.call('little-open-state')['sessions'][0]
@@ -163,7 +164,7 @@ def main():
                            'processCount': len(after['processes']), 'foregroundInterruptions': focus_loss}
                     if opened:
                         row.update(firstFrameMs=first_ms, pageLoadMs=page_ms,
-                                   openResponseToSubmitMs=(submitted['observationStart'] - opened_response_at) * 1000,
+                                   openResponseToSubmitMs=(submit_request_at - opened_response_at) * 1000,
                                    openRequestToSubmitMs=(submitted['observationStart'] - opened['observationStart']) * 1000)
                     else:
                         row.update(openToFCPMs=open_fcp_ms, clockDriftMs=clock_drift_ms,
