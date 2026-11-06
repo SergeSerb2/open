@@ -175,6 +175,8 @@ Copy URL tracker update ([#163](https://github.com/SergeSerb2/open/pull/163)): `
 
 ## `commandbar-render` inline completion gate is close to its budget under load
 
+- `commandbar-render` CPU p95 shows a ~2.4 ms systematic gap between two builds of identical source (main vs branch control, 2026-11-06, [#192](https://github.com/SergeSerb2/open/pull/192)); the timing gate is sensitive to build directory, order or warm-up; make the gate compare like with like.
+
 The gate "inline completion adds ≤ 0.3 ms p95" read +0.301 ms in one full `verify-all` at load 12.0 (Section 2 item 13 PR) and +0.170 ms on the rerun at load 9.0 (earlier Section 2 runs: well under). The gate converts main-thread cycles at the off run's rate, so heavy machine load still moves it. If it trips again under load only, consider pairing more keystrokes or reporting the paired median beside the p95.
 
 ## Page tools: engine items left after Section 8 page-platform Steps 4–6
