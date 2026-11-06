@@ -606,11 +606,11 @@ public final class BrowserModel {
                                      spaces includeSpaces: Bool, tabs includeTabs: Bool,
                                      favorites includeFavorites: Bool, folders includeFolders: Bool,
                                      searchSettings includeSearch: Bool, saving: () throws -> Void) throws -> ImportCounts {
-        typealias Edit = (apply: @MainActor (BrowserModel) -> Void, undo: @MainActor (BrowserModel) -> Void)
+        typealias Edit = (apply: @MainActor (BrowserModel) -> Void, undo: Revert)
         var edits: [Edit] = []
         var counts = ImportCounts()
         func perform(_ apply: @escaping @MainActor (BrowserModel) -> Void,
-                     undo: @escaping @MainActor (BrowserModel) -> Void) {
+                     undo: @escaping Revert) {
             apply(self); edits.append((apply, undo))
         }
         func copyTab(_ tab: Tab) -> Tab {
@@ -629,7 +629,8 @@ public final class BrowserModel {
             case .splitPane(let id): slot = self.node(id: id)?.split?.panes.count ?? 0
             }
             perform({ _ = $0.attach(node, to: parent, at: slot) }, undo: { model in
-                if model.parent(of: node.id) == parent { _ = model.detach(node.id) }
+                guard model.parent(of: node.id) == parent else { return false }
+                return model.detach(node.id) != nil
             })
         }
         func merge(_ nodes: [SidebarNode], into parent: NodeParent) {
@@ -677,7 +678,10 @@ public final class BrowserModel {
                 let copy = Profile(id: id, name: name, icon: imported.icon, dataDirectoryName: imported.dataDirectoryName)
                 let slot = profiles.count
                 perform({ model in model.insertProfile(copy, at: slot); model.emit(.reload(parent: .favorites(id))) },
-                        undo: { model in model.removeProfile(id); model.emit(.reload(parent: .favorites(id))) })
+                        undo: { model in
+                            guard model.profile(id: id) === copy else { return false }
+                            model.removeProfile(id); model.emit(.reload(parent: .favorites(id))); return true
+                        })
             }
             guard let target = profile(id: id) else { continue }
             if includeSearch {
@@ -686,7 +690,7 @@ public final class BrowserModel {
                 settings.customSearchEngines = imported.settings.customSearchEngines
                 if settings != target.settings {
                     let old = target.settings, new = settings
-                    perform({ _ in target.settings = new }, undo: { _ in target.settings = old })
+                    perform({ _ in target.settings = new }, undo: { _ in target.settings = old; return true })
                     counts.searchSettings += 1
                 }
             }
@@ -705,7 +709,10 @@ public final class BrowserModel {
                                  profileID: profile.id, isPinnedCollapsed: imported.isPinnedCollapsed)
                 let slot = spaces.count
                 perform({ model in model.insertSpace(copy, at: slot); model.emit(.reload(parent: .spaceToday(copy.id))) },
-                        undo: { model in model.removeSpace(copy.id); model.emit(.reload(parent: .spaceToday(copy.id))) })
+                        undo: { model in
+                            guard model.space(id: copy.id) === copy else { return false }
+                            model.removeSpace(copy.id); model.emit(.reload(parent: .spaceToday(copy.id))); return true
+                        })
                 counts.spaces += 1
             }
             // If Spaces is off, only an existing Space with the same ID can gain items.
@@ -725,15 +732,24 @@ public final class BrowserModel {
             if !rules.isEmpty {
                 perform({ $0.routingRules += rules }, undo: { model in
                     let added = Set(rules.map(\.id)); model.routingRules.removeAll { added.contains($0.id) }
+                    return true
                 })
             }
         }
         do { try saving() }
-        catch { for edit in edits.reversed() { edit.undo(self) }; throw error }
+        catch { for edit in edits.reversed() { _ = edit.undo(self) }; throw error }
         guard !edits.isEmpty else { return counts }
-        let committed = edits
-        registerChange(undo: { [weak self] in guard let self else { return }; for edit in committed.reversed() { edit.undo(self) } },
-                       redo: { [weak self] in guard let self else { return }; for edit in committed { edit.apply(self) } })
+        // Auto-archive has no undo step and can remove imported Today tabs
+        // beneath this command. Redo only the edits that this undo reversed.
+        var reversible = edits
+        let revert: Revert = { model in
+            reversible = reversible.reversed().filter { $0.undo(model) }.reversed()
+            return !reversible.isEmpty
+        }
+        registerUndo(revert, reapply: { model in
+            for edit in reversible { edit.apply(model) }
+            return revert
+        })
         return counts
     }
 
