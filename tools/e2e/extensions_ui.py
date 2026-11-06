@@ -624,6 +624,8 @@ def run(factory, results, tmp, root, wait_until, new_tab, frame, read_image, ext
 def little_open_checks(app, results, local_origin, probe, control, extensions, wait_until, frame, capture):
     def actions(): return app.call("extensions")["actions"]
     def action(identifier): return next(a for a in actions() if a["id"]==identifier)
+    original_main=app.call("window-state")
+    original_profile=next(s["profile"] for s in app.call("spaces") if s["id"]==original_main["space"])
     # Enable this probe only for X-19. activeTab changes Chrome's disabled
     # action semantics, so the existing X-10/P2 fixture must keep its defaults.
     prompt_handler=app.call("ext-prompt")["handler"]
@@ -756,6 +758,62 @@ def little_open_checks(app, results, local_origin, probe, control, extensions, w
             and new_query==[{"id":switched["chromeTabID"],"url":target_url}],
             "old":old,"rebound":rebound,"changed":changed,"session":switched,"queried":new_query}
         if new_popup: app.call("key",key="w",modifiers=["command"],window=new_popup["window"],route="app")
+        # Little Open stays in B while the most recent main window returns to A.
+        # There is no B main window, so routing must create one with B's Space.
+        app.call("space",space=original_main["space"])
+        app.call("window-focus",id=original_main["id"],activate=True)
+        front_a=app.call("window-state")
+        a_tabs={t["id"] for t in app.call("tabs")}
+        main_windows={w["id"] for w in app.call("shell-windows")}
+        profile_url=local_origin+"/extension-extra-profile-b"
+        routed=None
+        try:
+            little_call("ext-click",extension="more",select="Action Probe")
+            profile_popup=wait_until(lambda:(lambda p:p if p.get("visible") else None)(little_call("ext-popup-state")),timeout=15)
+            if profile_popup:
+                app.eval(profile_popup["page"],"chrome.runtime.sendMessage({type:'create-tab',windowId:"+str(switched["browser"]["chromeWindowID"])+",url:"+repr(profile_url)+"});true")
+            routed=wait_until(lambda:next((t for t in app.call("tabs") if t["url"]==profile_url and t["selected"]),None),timeout=15)
+            if routed: app.call("wait",tab=routed["id"],timeout=15)
+            destination=app.call("window-state")
+            destination_space=next((s for s in app.call("spaces") if s["id"]==destination["space"]),None)
+            loaded=app.eval(routed["id"],"location.href") if routed else None
+            app.call("window-focus",id=original_main["id"],activate=True)
+            untouched_a=app.call("window-state")
+            after_a=app.call("tabs")
+            results["X19_extra_tab_profile"]={"ok":bool(profile_popup and routed and destination_space)
+                and front_a["space"]==original_main["space"] and original_profile!=other_profile
+                and destination["id"]!=original_main["id"] and destination_space["profile"]==other_profile
+                and routed["profile"]==other_profile and routed["space"]==destination_space["id"]
+                and routed["section"]=="today" and routed["visible"] and loaded==profile_url
+                and untouched_a["space"]==original_main["space"] and {t["id"] for t in after_a}==a_tabs,
+                "frontA":front_a,"destination":destination,"destinationSpace":destination_space,
+                "routed":routed,"loaded":loaded,"afterA":after_a}
+            kept=wait_until(lambda:next((s for s in app.call("little-open-state")["sessions"]
+                if s["id"]==little_id and len(s["browser"]["tabs"])==1),None),timeout=10)
+            blank={"skipped":"no Profile-B destination"}
+            blank_ok=True
+            if routed and routed["profile"]==other_profile:
+                app.call("window-focus",id=destination["id"],activate=True)
+                b_control=app.call("open",url="chrome-extension://"+probe+"/popup.html")["id"]
+                app.call("wait",tab=b_control,timeout=15)
+                before_blank={t["id"] for t in app.call("tabs")}
+                app.eval(b_control,"chrome.storage.session.remove('createdTab').then(()=>chrome.runtime.sendMessage({type:'create-tab',windowId:"+str(switched["browser"]["chromeWindowID"])+",url:'about:blank'}))")
+                blank=wait_until(lambda:app.eval(b_control,"chrome.storage.session.get('createdTab').then(v=>v.createdTab||null)"),timeout=10)
+                kept_blank=wait_until(lambda:next((s for s in app.call("little-open-state")["sessions"]
+                    if s["id"]==little_id and len(s["browser"]["tabs"])==1),None),timeout=10)
+                blank_ok=bool(blank and kept_blank) and not blank.get("error") and {t["id"] for t in app.call("tabs")}==before_blank
+            results["X19_extra_tab_strip_cleanup"]={"ok":bool(kept) and blank_ok
+                and kept["content"]==switched["content"] and kept["chromeTabID"]==switched["chromeTabID"]
+                and kept["url"]==target_url,
+                "afterRoute":kept,"blankCreated":blank,"blankClosedWithoutMainTab":blank_ok}
+        finally:
+            for window in app.call("shell-windows"):
+                if window["id"] not in main_windows:
+                    app.call("window-focus",id=window["id"],activate=True)
+                    app.call("window-close")
+            app.call("window-focus",id=original_main["id"],activate=True)
+            for tab in app.call("tabs"):
+                if tab["url"]==profile_url: app.call("close",tab=tab["id"])
         little_call("ext-strip",retainBrowser=False)
     finally:
         if app.call("ext-prompt").get("pending"): app.call("ext-prompt",answer="cancel")

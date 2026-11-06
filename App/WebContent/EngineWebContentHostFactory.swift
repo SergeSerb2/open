@@ -1261,7 +1261,7 @@ extension EngineWebContentHostFactory: OEWebContentDelegate {
 
   func webContent(_ webContent: OEWebContent, didFinishLoadWithStatus status: Int) {
     if pendingLittleOpenExtensionTabs[webContent.identifier] === webContent {
-      routeLittleOpenExtensionTab(webContent, url: webContent.url ?? URL(string: "about:blank")!)
+      routeLittleOpenExtensionTab(webContent, url: webContent.url)
       return
     }
     finishCommandBarNavigation(webContent)
@@ -1380,18 +1380,40 @@ extension EngineWebContentHostFactory {
     }
   }
 
-  private func routeLittleOpenExtensionTab(_ content: OEWebContent, url: URL) {
+  private func routeLittleOpenExtensionTab(_ content: OEWebContent, url: URL?) {
     guard pendingLittleOpenExtensionTabs.removeValue(forKey: content.identifier) === content else { return }
     content.delegate = nil
-    let app = app
+    let sourceProfileID = profile(for: content.context)?.id
     // Recreate the URL in the destination before closing the original, after
-    // the source engine callback returns. Never host it in Little Open.
+    // the source engine callback returns. Close on every failure too, so the
+    // unshown source cannot remain in Little Open's Chrome tab strip.
     DispatchQueue.main.async {
-      guard let controller = app.frontWindowController ?? app.makeWindow(),
-        let target = app.hostFactories[controller.windowID],
-        target.openNewTab(url: url, background: false) != nil else { return }
-      app.focusWindow(controller.windowID, activate: true)
-      content.close()
+      defer { content.close() }
+      guard let url, url.absoluteString != "about:blank" else {
+        self.record("standaloneExtraTabDropped", content, ["reason": "blank-url"]); return
+      }
+      guard let profileID = sourceProfileID,
+        let space = self.model.mostRecentlyFocusedSpace(profileID: profileID) else {
+        self.record("standaloneExtraTabDropped", content, ["reason": "no-profile-space"]); return
+      }
+      var controller = self.app.linkExecutor.orderedControllers.first {
+        $0.context.focusedSpace?.profileID == profileID
+      }
+      if controller == nil {
+        // makeWindow can reuse the retained final main window. Set its Space
+        // before composition, so no page is created in a different Profile.
+        if self.app.windowControllers.isEmpty,
+          let retained = self.model.windows.first(where: { $0.style == .standard }) {
+          self.model.focusSpace(windowID: retained.id, spaceID: space.id)
+        }
+        controller = self.app.makeWindow(focusedSpaceID: space.id)
+      }
+      guard let controller, controller.context.focusedSpace?.profileID == profileID,
+        let target = self.app.hostFactories[controller.windowID],
+        target.openNewTab(url: url, background: false) != nil else {
+        self.record("standaloneExtraTabDropped", content, ["reason": "target-unavailable"]); return
+      }
+      self.app.focusWindow(controller.windowID, activate: true)
     }
   }
 
