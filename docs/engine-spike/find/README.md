@@ -6,65 +6,73 @@ Open-owned AppKit code and SF Symbols. It includes no reference assets.
 
 Implementation: `App/PageChrome/FindBarView.swift` and `FindController.swift`.
 The factory forwards lifecycle, menu, result, layout, and focus events.
+Placement follows the lead ruling at 22:59: always inset 10 pt inside the actual page viewport, converted into the pane/Peek overlay parent. Toolbar height is excluded through that viewport; no fixed toolbar offset is used. Frame/bounds notifications follow live resizes.
 Section 9 hook: `PeekController.onPageEscape` lets Find consume Esc before
 Peek's existing key monitor dismisses Peek. No engine source or distribution
 changes are part of this change.
 
-Final Debug and automation Release builds include main `e4d40ce0` (Extensions
-P3) and use engine framework SHA-256
-`7b49090502568f8189aa0e94f7cf23344beec5bed537136eff5f7fce573ad35a`.
-The measured implementation head is `fca01e46`; the final evidence update changes
-only documentation. No new Find warnings were emitted. Foreground-loss
-**INTERRUPTED** attempts do not count. No debugger or authorization workaround
-was attempted. Earlier receipts using engine `f34400e7` are historical and are
-not used for the final engine gate.
+Final Debug and automation Release builds include main `ffcf4649` (extension windows, omnibox and pin safety; includes Little Open App wiring) and `27be851f` (dialogs/permissions). Engine framework SHA-256:
+`3f45b07b885e03b6aecc461c6b6bff7612814a2ad23b6cf37b2b142d828f0738`.
+The measured implementation head is `5ba947d15d7f9475b5759093d3420bf20cae4f54`; the final evidence commit changes documentation only. No new Find warnings were emitted. Foreground-loss INTERRUPTED attempts do not count.
 
-The final new-engine Release run passes all 50 Find checks. All required
-regression suites completed; the two window launch failures meet the lead's
-known-main exception. Full verification has 22 PASS and one timing-only FAIL;
-that entire check passes in its first quiet rerun, with unchanged main measured
-under the same lock. No timing threshold or statistic was changed.
+The final Release run passes all 58 Find checks. Full verification passes all 24 checks.
 
 | Required evidence | Final result |
 |---|---|
-| Real-App behavior and native hit testing | 50/50: native field keys, page shortcuts, close click/focus, selection boundaries, tab state, navigation/reload, Split View and Peek |
-| Own-window light/dark pixels | WindowServer snapshots: background ΔE00 0.4977 light / 0.3836 dark (limit 2); radius, 300×32 frame, right 10, top 10/50 and narrow-pane checks pass on AW2726DM, scale 1 |
-| First and repeat Cmd+F | First p50/p95 4.371/6.104 ms; repeat 0.812/1.269 ms, twenty windows each; both p95 values pass 8.333 ms at 120 Hz; load1 5.57–9.80 |
-| Coalescing and idle work | One typed request, at most one engine activation, and all ten Find-scoped observer counters zero over two seconds; one post-paint warm-up; temporary bar/editor released |
-| Negative proof | Fifty original gates reject deliberate faults; the final new-engine 25 ms fault rejects first/repeat p95 at 35.259/28.171 ms; retained controls reject the lifetime condition with all idle counters zero |
-| Required regressions and full verification | Results below; the sole full-gate timing failure passes the focused quiet rerun |
+| Native behavior and focus | Field/page keys, tab state, navigation, selection boundaries, Split View and Peek pass |
+| Viewport and native close clicks | 10 pt top/right inside actual `contentHostView`; 300×32 preferred, left ≥10, narrow panes and live resizes; no intersection with visible pane chrome/toolbar/extension strip; clicks close Find and focus the page |
+| Own-window light/dark pixels | Background ΔE00 0.498/0.384 (limit 2), radius and frames pass on AW2726DM, scale 1 |
+| First/repeat Cmd+F | First p50/p95 3.374 / 3.832 ms; repeat 0.662 / 0.949 ms; twenty samples each; both p95 values pass 8.333 ms at 120 Hz; load1 6.05–8.22 |
+| Idle/lifetime | All ten observer counters zero; one post-paint warm-up; temporary bar/editor released |
+| Negative proof | Original fifty-gate fault coverage plus the updated viewport proof: legacy parent-top placement fails all eight new gates and updated F26; 25 ms delay fails both p95 gates; retention fails the lifetime condition |
 
-Final receipts are under `.re/find/final-e4d40ce0/` in this checkout. Each suite
-records successful owned-process cleanup. Its source receipt is copied before
-restoring generated files in `docs/engine-spike/`.
+Final receipts are in `.re/find/final-ffcf4649/`. Every accepted suite cleans up its owned processes.
 
 | Suite | PASS | Other results | Receipt |
 |---|---:|---|---|
-| find | 50 | None | `find-positive.json` |
-| features | 19 | None | `features-1.json` |
+| find | 58 | None | `find-1.json` |
+| features | 19 | None | `features-2.json` |
 | shell | 7 | None | `shell-1.json` |
 | window | 76 | 2 known-main launch FAIL; 1 existing card-material DEFERRED | `window-1.json` |
 | commandbar | 63 | None | `commandbar-1.json` |
-| page | 85 | 4 BLOCKED; 1 DEFERRED | `page-1.json` |
+| page | 85 | 4 existing BLOCKED; 1 DEFERRED | `page-1.json` |
+| page-chrome | 41 | None | `page-chrome-1.json` |
 
-Window cold medians: sidebarDrawn 386 ms / first paint 676 ms; warm: 386 /
-646 ms. Both meet the lead's known-main limits of 400 / 700 ms. The launch
-receipt records load averages 7.566 / 11.070 / 14.446. Two earlier window
-attempts lost foreground focus and are excluded. Card material remains the
-existing Part B deferral. Page's existing blocked checks are macOS notification
-delivery, service-worker `clients.openWindow`, the uninstalled Apple French
-translation model, and incognito capture; smart zoom remains deferred.
+Window cold sidebar/FCP medians: 343/575 ms; warm: 348/585 ms. They meet the lead's known-main exception ≤400/700 ms. The window run records load averages 7.124 / 8.981 / 10.259. Card material remains the existing Part B deferral. Page's blocked checks remain macOS notification delivery, service-worker `clients.openWindow`, the uninstalled Apple French translation model, and incognito capture; smart zoom is deferred.
 
-`heavy.sh tools/verify-all.sh --with-arc-data` ran on the merged head without the
-quiet lock. All display, functional, import, sound, idle and rendering checks
-pass. `commandbar-render` alone fails its timing rows 150/151: CPU p95 9.33 ms
-(limit 8) and completion overhead 0.332 ms (limit 0.3), at load1 16.4. Its
-focused quiet rerun (`heavy.sh tools/verify-all.sh --only commandbar-render`)
-passes all 151 checks: CPU p95 3.63 ms, overhead 0.118 ms, load averages
-10.6 / 9.3 / 10.9. Unchanged main `e4d40ce0` runs in the same quiet session and
-passes all 151: CPU p95 6.41 ms, overhead 0.190 ms, loads 11.3 / 9.2 / 10.9.
-The original table is `verify-full/summary.txt`; the focused table is
-`commandbar-quiet-1/summary.txt`, with both measurements in `commandbar-quiet.json`.
+Full `heavy.sh tools/verify-all.sh --with-arc-data` runs without the quiet lock. Its original table follows; any focused timing rerun is recorded separately.
+
+```text
+NAME                   RESULT SECONDS
+build                  PASS   37
+commands-demo          PASS   1
+roundtrip              PASS   1
+space-legacy           PASS   0
+space-editor           PASS   3
+space-pad-compare      PASS   1
+suggest-check          PASS   20
+commands-dump          PASS   0
+route                  PASS   2
+favicons               PASS   1
+media-demo             PASS   0
+sleep-demo             PASS   1
+adblock-perf           PASS   0
+adblock-catalog        PASS   0
+profiles               PASS   0
+settings-preview       PASS   84
+sidebar-render         PASS   112
+sidebar-compare        PASS   88
+commandbar-render      PASS   33
+features-render        PASS   87
+extensions-render      PASS   6
+sitecontrol-render     PASS   212
+boosts                 PASS   2
+import-arc             PASS   1
+```
+
+The 480a5237 run was stopped and its owned processes cleaned up when main advanced to Little Open wiring. Earlier, superseded-head receipts remain under `.re/find/final-viewport-27be851f/` and `final-e4d40ce0/`. On the first ffcf4649 features run, audio was not reported audible after the fixed one-second wait; a full unchanged rerun is recorded separately. On the prior head, one commandbar run hit an archive-restore lookup error after an internal foreground retry; its complete unchanged rerun passed 63 checks. These initial failures are retained, not relabelled PASS. The stale full verification was stopped for the main merge and is not counted.
+
+Earlier 7b490905 engine timings are historical and do not qualify this final engine gate.
 
 ## Performance measurements
 
@@ -90,33 +98,23 @@ own backing layer. No layer mask clips the rounded bar. The shadow color,
 opacity, radius and offset are unchanged. The small-caps font descriptor is
 built once, and native image caches are primed after paint.
 
-Final engine measurements below alternate twenty cache-only and twenty
-prewarmed launches in the same session (load1 5.57–9.80). Values are p50 / p95
-milliseconds. Both first and repeat gates use p95 only.
+Final mode measurements alternate twenty cache-only and twenty prewarmed launches in one session (load1 6.05–8.22). Values are p50 / p95 ms. The disabled mode is diagnostic; production uses the enabled mode.
 
-| Final mode | First open | Repeat open | Launch sidebar / first paint medians |
+| Mode | First open | Repeat open | Launch sidebar / FCP medians |
 |---|---|---|---|
-| Shared cache + native layers; prewarm disabled | 7.041 / 7.962 | 0.815 / 1.122 | 349 / 598.5 ms |
-| Shared cache + native layers + prewarm | 4.371 / 6.104 | 0.812 / 1.269 | 342.5 / 591 ms |
+| Cache + native layers; prewarm disabled | 5.465 / 5.996 | 0.65 / 0.8 | 324 / 530 ms |
+| Cache + native layers + prewarm | 3.374 / 3.832 | 0.662 / 0.949 | 324.5 / 531 ms |
 
-Every enabled sample starts warm-up after its recorded first paint. Launch
-marks show no regression against the disabled mode on the same engine. The
-240 Hz display interval is 4.167 ms, reported for information only.
+Every enabled warm-up starts after its measured first paint. The matched launch medians show no prewarm regression. The 240 Hz display interval is 4.167 ms for information only.
 
-Final first-open phase breakdown (p50 / p95 ms):
+First-open phases, p50 / p95 ms:
 
-| Mode | Create | Attach | Draw | Flush | Focus (after commit) |
+| Mode | Create | Attach | Draw | Flush | Focus after commit |
 |---|---|---|---|---|---|
-| Prewarm disabled | 2.751 / 3.070 | 1.439 / 2.128 | 0.602 / 0.769 | 1.985 / 2.529 | 8.503 / 11.831 |
-| Prewarm enabled | 1.206 / 1.937 | 0.736 / 0.984 | 0.586 / 0.792 | 1.689 / 2.284 | 9.236 / 15.060 |
+| Disabled | 2.162 / 2.291 | 1.197 / 1.297 | 0.471 / 0.557 | 1.587 / 1.739 | 8.327 / 10.158 |
+| Enabled | 0.92 / 1.043 | 0.629 / 0.696 | 0.425 / 0.534 | 1.273 / 1.441 | 8.699 / 9.851 |
 
-The final 25 ms fault reports first p50/p95 33.806/35.259 ms and repeat
-27.283/28.171 ms over twenty windows, load1 11.91–14.47. The retained-bar fault
-fails the lifetime condition while all ten work counters remain zero. These
-two conditions fail, the other 48 checks pass, and owned cleanup passes. Exact
-source hashes are restored and both normal builds pass afterward. See
-`final-negative-summary.json`, `final-negative-restoration.json`, and
-`find-performance-summary.json` in the final receipt directory.
+The final-engine fault proof on `5ba947d1` reports first p50/p95 30.409/30.61 ms and repeat 27.733/27.857 ms, twenty samples each, load1 4.93–5.26. Legacy parent-top/8 pt placement fails all eight viewport/close/resize gates and updated F26. Retained temporary controls fail the lifetime condition while all ten idle-work counters stay zero. The compound fault produces 43 PASS/15 expected FAIL and clean owned-process shutdown. Exact source hashes are restored and both normal builds pass. The restoration receipt records exact source hashes on this final head. Full receipts: `.re/find/final-ffcf4649/final-negative-*` and `negative.log`.
 
 The following optimization history uses the **old engine `f34400e7`**. It
 shows the effect after each requested step; it is not a final-engine baseline.
@@ -161,8 +159,16 @@ Receipts: `.re/find/step1-shadow-path-20.json`, `step3-paired-20.json`,
 Section 6 temporary hook: until its root `extensionBar` is replaced, Find hides
 that existing view only while its rectangle intersects a visible Find bar.
 It restores the saved visibility on close, tab/layout changes and teardown.
-The extensions view is neither moved nor restyled. The close gate uses the
-real AppKit hit test and native mouse events, with no forced control action.
+The extensions view is neither moved nor restyled. This bridge remains while
+main has the legacy root extension bar, per the lead's 23:02 ruling. Whichever
+PR merges second (Find or Section 6 app wiring) removes these legacy hooks,
+keeps only Find's viewport placement, and reruns the native close-click gates.
+The gates use the real AppKit hit test and native mouse events, with no forced
+control action. They require the bar and close button to avoid every visible
+pane bar, toolbar and extension strip; hidden legacy chrome is reported
+explicitly. The 58-check suite covers toolbar off/on, both split panes, a narrow
+pane, Peek, and live Split/Peek resizes. The automation reports viewport and
+chrome frames independently of the Find frame.
 
 ## Capture requests for the user
 
@@ -194,8 +200,10 @@ no isolated-world engine API.
 The query is capped at 1,000 UTF-8 bytes by Unicode scalar before each engine
 request. The page-selection bridge normalizes and counts grapheme clusters in the
 renderer for opening Find, then slices to 4,001 UTF-16 code units before
-returning to Swift (at most 16,004 UTF-8 bytes). Cmd+E preserves raw selected
-text, uses the same query cap, and searches without opening the bar. Async reads check page identity, tab identity, query
+returning to Swift (at most 16,004 UTF-8 bytes). The Use Selection to Find menu action preserves raw selected
+text, uses the same query cap, and searches without opening the bar. It has no
+default shortcut; Cmd+E stays assigned to Open Extensions (`CommandRegistry.swift`,
+Find and Extensions entries). Async reads check page identity, tab identity, query
 revision, dismissal/navigation state, and shutdown before applying results.
 Find uses no timers, polling, display links, disk I/O, or pre-paint work. The
 one queued edit is flushed by Return/Next and discarded on close.
