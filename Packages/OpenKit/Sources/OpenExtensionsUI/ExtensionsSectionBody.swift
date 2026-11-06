@@ -51,6 +51,7 @@ import OpenWeb
         guard let first = items.first else { return false }
         prefix = ""; lastTypeTime = -.infinity
         focusedID = first.item.id; pickerMode = true; updateFocus()
+        first.scrollToVisible(first.bounds.insetBy(dx: -2, dy: -2))
         return window?.makeFirstResponder(self) == true
     }
     private func forwardKey(_ event: NSEvent) { if onUnhandledKey?(event) != true { super.keyDown(with: event) } }
@@ -79,6 +80,7 @@ import OpenWeb
             if let found = items.firstIndex(where: { $0.item.name.folding(options: [.caseInsensitive, .diacriticInsensitive], locale: .current).hasPrefix(prefix.folding(options: [.caseInsensitive, .diacriticInsensitive], locale: .current)) }) { next = found }
         }
         focusedID = items[next].item.id; updateFocus()
+        items[next].scrollToVisible(items[next].bounds.insetBy(dx: -2, dy: -2))
     }
     public override func cancelOperation(_ sender: Any?) { onClose?() }
 }

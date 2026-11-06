@@ -63,8 +63,11 @@ import OpenWeb
         updateVisibility(); return true
     }
     public func updateAction(_ value: ExtensionActionInfo) {
-        guard let old = context.actions.first(where: { $0.id == value.id }), ExtensionsUIContext.accepts([value]) else { return }
-        if old.isPinned != value.isPinned || old.pinnedIndex != value.pinnedIndex {
+        guard ExtensionsUIContext.accepts([value]), context.actions.contains(where: { $0.id == value.id }) else { return }
+        // Another strip may already have updated the shared context. Compare with
+        // this strip's rendered structure so every host applies pin/order changes.
+        let old = pinned.first(where: { $0.id == value.id })
+        if (old != nil) != value.isPinned || (value.isPinned && old?.pinnedIndex != value.pinnedIndex) {
             var actions = context.actions
             guard let i = actions.firstIndex(where: { $0.id == value.id }) else { return }
             actions[i] = value; _ = setActions(actions)

@@ -67,6 +67,22 @@ enum SectionFlows {
         stage.controller.refreshExtensions(); present()
         check("shared five-column grid fits the SCC panel width", body.isGrid && body.items.count == 7 && body.frame.width == 236 && body.frame.maxX <= stage.controller.view.panel.bounds.width)
         stage.controller.dismiss(reason: .escape, animated: false)
+        _ = context.setActions((0..<70).map { (index: Int) in
+            ExtensionItem(extensionID: "grid.\(index)", name: index == 69 ? "Zebra End" : "Grid \(index)", isPinned: true, pinnedIndex: index)
+        })
+        stage.controller.refreshExtensions(); present()
+        func focusedVisible() -> Bool {
+            guard let item = body.items.first(where: { $0.item.id == body.focusedID }),
+                  let document = stage.controller.view.panel.scroll.documentView else { return false }
+            return stage.controller.view.panel.scroll.documentVisibleRect.contains(item.convert(item.bounds, to: document))
+        }
+        for _ in 0..<12 { stage.key(code: 125, characters: String(UnicodeScalar(NSDownArrowFunctionKey)!)) }
+        check("capped SCC scrolls arrow focus into view", body.focusedID == "grid.60" && focusedVisible())
+        stage.key(code: 6, characters: "z")
+        let selectedVisible = body.focusedID == "grid.69" && focusedVisible()
+        check("capped SCC scrolls type-selected item into view", selectedVisible)
+        stage.key(code: 36, characters: "\r")
+        check("capped SCC Return runs the visible selected extension", selectedVisible && ran == "grid.69" && closedBeforeRun)
         _ = context.setActions([]); stage.controller.refreshExtensions(); present()
         check("empty hosted extensions use standard SCC mode with Add only", stage.controller.mode == .standard && !stage.controller.view.panel.hasExtensionItems && body.items.count == 1)
         stage.controller.dismiss(reason: .escape, animated: false)

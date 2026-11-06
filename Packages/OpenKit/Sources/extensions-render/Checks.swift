@@ -95,6 +95,65 @@ import OpenExtensionsUI
         }
         return (good, "canary=\(canary); draw/layout/display/invalidation/schedule/overflow/timer/source/CV/CA = " + receipts.joined(separator: "; "))
     }
+    private static func sharedStripUpdates() -> Bool {
+        let context = ExtensionsUIContext(), root = NSView(frame: CGRect(x: 0, y: 0, width: 600, height: 180))
+        let strips = [ExtensionStripView(style: .urlField, context: context), ExtensionStripView(style: .toolbar, context: context)]
+        let actions = Synthetic.actions(3, pinned: 2)
+        for (index, strip) in strips.enumerated() {
+            strip.frame = CGRect(x: 0, y: index * 90, width: 600, height: 90)
+            strip.hovered = true; _ = strip.setActions(actions); root.addSubview(strip)
+        }
+        let window = ExtensionsRenderer.host(root, scale: 2)
+        defer { window.contentView = nil; window.close() }
+        var good = true
+        func deliver(_ action: ExtensionActionInfo, expected: [String]) {
+            // The App may update the shared snapshot before notifying either host.
+            _ = context.updateAction(action)
+            for strip in strips {
+                strip.updateAction(action); strip.layoutSubtreeIfNeeded()
+                good = good && strip.buttons.map { $0.action.id } == expected
+            }
+        }
+        var third = actions[2]; third.isPinned = true; third.pinnedIndex = 2
+        deliver(third, expected: ["synthetic.0", "synthetic.1", "synthetic.2"])
+        third.pinnedIndex = -1
+        deliver(third, expected: ["synthetic.2", "synthetic.0", "synthetic.1"])
+        var first = actions[0]; first.isPinned = false; first.pinnedIndex = nil
+        deliver(first, expected: ["synthetic.2", "synthetic.1"])
+        let counts = strips.map(\.layoutCount)
+        third.badgeText = "updated"; third.toolbarImage = Synthetic.image(index: 2, badge: "NEW")
+        deliver(third, expected: ["synthetic.2", "synthetic.1"])
+        return good && strips.map(\.layoutCount) == counts && strips.allSatisfy {
+            $0.buttons.first?.action.toolbarImage === third.toolbarImage
+        }
+    }
+    private static func scrollingPicker() -> Bool {
+        let scroll = NSScrollView(frame: CGRect(x: 0, y: 0, width: 236, height: 92))
+        let body = ExtensionsSectionBody(frame: .zero)
+        var actions = Synthetic.actions(31); actions[30].name = "Needle"
+        _ = body.setActions(actions); body.pickerMode = true
+        body.frame = CGRect(origin: .zero, size: body.intrinsicContentSize)
+        scroll.documentView = body
+        let window = ExtensionsRenderer.host(scroll, scale: 2)
+        defer { window.contentView = nil; window.close() }
+        window.makeFirstResponder(body)
+        func send(_ code: UInt16, _ text: String = "", _ time: TimeInterval = 0) {
+            window.sendEvent(Scenes.key(code, text: text, time: time, window: window.windowNumber))
+        }
+        func visible(_ id: String) -> Bool {
+            guard let item = body.items.first(where: { $0.item.id == id }) else { return false }
+            return body.focusedID == id && scroll.contentView.documentVisibleRect.contains(item.frame)
+        }
+        for _ in 0..<4 { send(125) }
+        let arrow = visible("synthetic.20")
+        send(0, "n", 3); let typed = visible("synthetic.30")
+        send(125); let wrapped = visible("synthetic.0")
+        send(126); let reverse = visible("synthetic.30")
+        var ranVisible = false
+        body.onIntent = { if case let .run(id, _) = $0 { ranVisible = visible(id) } }
+        send(36)
+        return arrow && typed && wrapped && reverse && ranVisible
+    }
     static func run() throws -> Bool {
         var passed = 0, failed = 0
         func check(_ name: String, _ condition: Bool, _ detail: String) {
@@ -148,8 +207,9 @@ import OpenExtensionsUI
         window.sendEvent(Scenes.key(53, window: window.windowNumber)); mouse(.leftMouseUp, CGPoint(x: start.x + 28, y: start.y))
         mouse(.leftMouseDown, start); mouse(.leftMouseDragged, CGPoint(x: 300, y: start.y)); mouse(.leftMouseUp, CGPoint(x: 300, y: start.y))
         let drag = nativeHit && threshold && reordered && moves.count == 1
-        check("strip.order", ordered && hidden && forced && noPage && run == "synthetic.0" && context == "synthetic.1" && close == 1 && drag,
-              "pinnedIndex; click/disabled/second-click; hidden AX/forced/no-page; native drag threshold/drop/Esc/outside=\(drag),events=\(nativeDragEvents),moves=\(moves),threshold=\(threshold),reorder=\(reordered); hit=\(nativeHit)")
+        let sharedUpdates = sharedStripUpdates()
+        check("strip.order", ordered && hidden && forced && noPage && run == "synthetic.0" && context == "synthetic.1" && close == 1 && drag && sharedUpdates,
+              "shared pin/unpin/order/badge=\(sharedUpdates); pinnedIndex; click/disabled/second-click; hidden AX/forced/no-page; native drag threshold/drop/Esc/outside=\(drag),events=\(nativeDragEvents),moves=\(moves),threshold=\(threshold),reorder=\(reordered); hit=\(nativeHit)")
         var updated = strip.buttons[0].action
         let before = strip.layoutCount; updated.badgeText = "changed"; updated.toolbarImage = Synthetic.image(index: 0, badge: "NEW")
         strip.updateAction(updated); strip.layoutSubtreeIfNeeded()
@@ -224,8 +284,9 @@ import OpenExtensionsUI
         body.onIntent = { if case let .run(id, _) = $0 { ran = id } }; body.onClose = { closed += 1 }
         send(36); send(53)
         _ = body.setActions(Synthetic.actions(3)); send(126); let rowWrap = body.focusedID == "extensions.add"
-        check("picker.keys", leftWrap && downWrap && up && type && reset && ran == "synthetic.0" && closed == 1 && rowWrap,
-              "NSWindow.sendEvent → firstResponder: grid/row wrap, prefix within1s/reset, Return run, Esc close")
+        let scrolled = scrollingPicker()
+        check("picker.keys", leftWrap && downWrap && up && type && reset && ran == "synthetic.0" && closed == 1 && rowWrap && scrolled,
+              "NSWindow.sendEvent → firstResponder: grid/row wrap, prefix within1s/reset, Return run, Esc close; scroll arrows/type/wrap/visible-run=\(scrolled)")
         var texts = true, promptReceipts: [String] = []
         for type in ExtensionPromptType.allCases {
             let prompt = SyntheticPrompt(type, permissions: type == .uninstall || type == .repair ? 0 : 3)

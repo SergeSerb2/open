@@ -1673,3 +1673,8 @@ The existing SCC guard required real item focus as soon as this target existed.
 Its sentinel is now a real hosted picker flow (`sitecontrol-render extensions-check`,
 offscreen). **guess (child), S-5/S-11:** its required 236 pt grid uses the SCC's
 full 236 pt width; row items retain the existing 10 pt SCC inset.
+
+Review fixes keep pin/order updates local to each strip's rendered state when
+hosts share one context. Picker arrows and type-select reveal the focused item
+inside the scroll viewport before Return can run it. The render CLIs exercise
+both flows, including the SCC's capped height.
