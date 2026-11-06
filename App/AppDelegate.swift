@@ -21,6 +21,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, OEEngineDelegate, OEBr
   var lastFirstRunStep = "none"
   var importInProgress = false
   private var modelSaveObserver: UUID?
+  private weak var firstRunDefaultModel: BrowserModel?
   lazy var importRunner = AppImportRunner(app: self)
   var firstContentView: NSView? { firstRunWindowController?.window?.contentView ?? windowControllers.first?.window?.contentView }
   private(set) var snapshotStore: SnapshotStore!
@@ -220,6 +221,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, OEEngineDelegate, OEBr
     }
     let directories = ProfileDirectories(root: root.standardizedFileURL.resolvingSymlinksInPath())
     self.directories = directories
+    if isFirstRun { firstRunDefaultModel = model }
     installModel(model)
     // Launch URLs enter the snapshot-backed model before window composition.
     // Only the final selection gets a page after engine readiness.
@@ -433,6 +435,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, OEEngineDelegate, OEBr
 
   func finishFirstRun(imported: Bool) {
     guard firstRunWindowController != nil else { return }
+    assert(imported || model === firstRunDefaultModel, "A fresh finish must keep the original default model")
     do {
       try snapshotStore.saveNow(model: model)
       firstRunSaved = true
