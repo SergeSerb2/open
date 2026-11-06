@@ -26,11 +26,11 @@ def matches(pattern):
     return result.stdout.splitlines()
 
 
-def ping(path):
+def request(path, command, **args):
     with socket.socket(socket.AF_UNIX) as sock:
         sock.settimeout(1)
         sock.connect(str(path))
-        sock.sendall(b'{"id":1,"cmd":"ping","args":{}}\n')
+        sock.sendall((json.dumps(dict(id=1, cmd=command, args=args)) + '\n').encode())
         data = b''
         while not data.endswith(b'\n'):
             part = sock.recv(65536)
@@ -40,7 +40,11 @@ def ping(path):
         return json.loads(data)
 
 
-def run(negative, output):
+def ping(path):
+    return request(path, 'ping')
+
+
+def run(negative, output, download_base=None):
     # Stop at the first successful real ping, before the suite can mutate any
     # shared defaults. The parent can then inspect the app and kill only runner.
     code = '''
@@ -69,7 +73,7 @@ subprocess.Popen = popen
     code += "sys.argv = ['engine_e2e.py', '--only', 'shell', '--style', 'chrome', '--keep']; e.main()\n"
     roots = []
     runner = None
-    with (output / ('negative.log' if negative else 'positive.log')).open('w') as log:
+    with (output / ('download.log' if download_base else 'negative.log' if negative else 'positive.log')).open('w') as log:
         try:
             runner = subprocess.Popen([sys.executable, '-c', code], cwd=ROOT,
                                       stdout=log, stderr=subprocess.STDOUT, start_new_session=True)
@@ -89,6 +93,25 @@ subprocess.Popen = popen
                     raise RuntimeError('runner exited before ping')
                 time.sleep(.05)
             assert reply, 'app did not answer ping'
+            if download_base:
+                sock = roots[0] / 'automation.sock'
+                def call(command, **args):
+                    response = request(sock, command, **args)
+                    assert response.get('ok'), response
+                    return response['result']
+                tab = call('tabs')[0]
+                call('download-settings', profile=tab['profile'], directory=str(roots[0] / 'Downloads'), ask=False)
+                # If the no-prompts guard regresses, dismiss its real alert with
+                # the existing native-button policy and fail on its log line.
+                call('download-policy', quit='keep')
+                call('navigate', tab=tab['id'], url=download_base + '/slow')
+                download_deadline = time.monotonic() + 15
+                while time.monotonic() < download_deadline:
+                    downloads = call('downloads-state')
+                    if downloads['running'] and any(item['received'] > 0 for item in downloads['items']):
+                        break
+                    time.sleep(.05)
+                assert downloads['running'] and any(item['received'] > 0 for item in downloads['items']), downloads
             before = matches(BUNDLE) + matches(prefix)
             assert before, 'no matching app processes'
             started = time.monotonic()
@@ -108,8 +131,11 @@ subprocess.Popen = popen
                 assert not remaining, 'orphan processes: ' + repr(remaining)
                 launch_logs = list((ROOT / 'docs/engine-spike').rglob('*.launch-*.log')) + [p for scratch in Path(tempfile.gettempdir()).glob(prefix + '*-scratch-*') for p in scratch.rglob('*.launch-*.log')]
                 message = 'Open: e2e owner %d exited; quitting' % runner.pid
-                assert sum(p.read_text(errors='replace').count(message) for p in launch_logs) == 1, 'expected one owner-exit log line'
-            return dict(ok=True, negative=negative, ping=reply, elapsed=elapsed,
+                texts = [p.read_text(errors='replace') for p in launch_logs]
+                assert sum(value.count(message) for value in texts) == 1, 'expected one owner-exit log line'
+                if download_base:
+                    assert not any('downloads-quit-alert-presented' in value for value in texts), 'owner death presented download quit alert'
+            return dict(ok=True, negative=negative, active_download=bool(download_base), ping=reply, elapsed=elapsed,
                         before=before, remaining=remaining)
         finally:
             if runner is not None:
@@ -135,7 +161,10 @@ subprocess.Popen = popen
 if __name__ == '__main__':
     output = Path(sys.argv[1]).resolve()
     output.mkdir(parents=True, exist_ok=True)
+    from downloads import server
     results = [run(False, output), run(True, output)]
+    with server() as base:
+        results.append(run(False, output, download_base=base))
     assert not matches(BUNDLE), 'cleanup left app helpers'
     (output / 'results.json').write_text(json.dumps(results, indent=2) + '\n')
     print(json.dumps(results, indent=2))
