@@ -1,6 +1,6 @@
 # First run — Welcome, Import from Arc, and default browser
 
-Status: Steps A–D implemented. Steps E/F add background History through the shared App runner, real-App verification and Release timing. Passwords and cookies remain capability OFF; only the count probe runs. This file is the complete brief for the coding agent that implements it. That agent has no other context. Read this file top to bottom, then read each source it names before you edit that area. Do not invent a second design.
+Status: Steps A–F implemented. Final Steps E/F runtime verification and Release timing remain pending under the Section 7 lead's screen hold on both machines (2026-11-06 14:29). Passwords and cookies remain capability OFF; only the count probe runs. This file is the complete brief for the coding agent that implements it. That agent has no other context. Read this file top to bottom, then read each source it names before you edit that area. Do not invent a second design.
 
 User-visible name rule: never use the Arc brand in UI text. "Little Arc" is "Little Open" in Open. The only exception is "Import from Arc" (`AGENTS.md`). Search aliases may keep old names.
 

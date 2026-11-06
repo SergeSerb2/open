@@ -1,4 +1,4 @@
-"""Steps C/D through the real App, using only owned roots and synthetic data."""
+"""First run through the real App, using only owned roots and synthetic data."""
 import json
 import os
 import runpy

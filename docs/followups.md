@@ -242,3 +242,8 @@ Merged evidence: [#170](https://github.com/SergeSerb2/open/pull/170) (static pag
   SwiftUI artwork. The first-run Release 250 ms budget and imported-tab 700 ms
   paint budget require the measured quiet-machine receipt; functional suite
   passes alone do not qualify those budgets.
+  Per the lead's 2026-11-06 icon ruling, decode/TIFF representation preparation
+  runs off main; one utility-priority main-queue turn applies the icon at least
+  about one second after paint. Main preparation must be below 5 ms; AppKit/Dock
+  setter cost is reported separately and is accepted without further work.
+  Final icon, first-run and timing runs wait for the screen hold to clear.
