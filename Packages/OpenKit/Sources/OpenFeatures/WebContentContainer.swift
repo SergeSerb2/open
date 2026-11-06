@@ -4,6 +4,9 @@ import OpenDesign
 
 @MainActor
 public final class PaneSlotView: NSView {
+    var fullBleed = false {
+        didSet { clip.layer?.cornerRadius = fullBleed ? 0 : PanelMetrics.cornerRadius; layer?.shadowOpacity = fullBleed ? 0 : PanelMetrics.shadowOpacity }
+    }
     public let tabID: ItemID
     public private(set) var paneChrome: PaneChromeView?
     public private(set) var placeholderView: PlaceholderContentView?
@@ -88,6 +91,7 @@ public final class PaneSlotView: NSView {
 @MainActor
 public final class WebContentContainer: NSView {
     public static let maxCachedHiddenHosts = 8
+    public var fullBleed = false { didSet { for slot in slots { slot.fullBleed = fullBleed } } }
     /// The render server resizes this background with the panel while page
     /// layout stays at its final width. Clip the wider hide frame temporarily.
     public func setSidebarSliding(_ sliding: Bool) {
@@ -163,6 +167,7 @@ public final class WebContentContainer: NSView {
         for slot in slots where !tabIDs.contains(slot.tabID) { slot.removeFromSuperview() }
         let byID = Dictionary(uniqueKeysWithValues: slots.map { ($0.tabID, $0) })
         slots = tabIDs.map { id in byID[id] ?? PaneSlotView(tabID: id) }
+        for slot in slots { slot.fullBleed = fullBleed }
         for slot in slots where slot.superview == nil { addSubview(slot, positioned: .below, relativeTo: dropOverlay) }
         ids = tabIDs; focused = focusedTabID; self.orientation = orientation
         self.fractions = fractions.count == ids.count ? fractions : Array(repeating: 1 / Double(ids.count), count: ids.count)
