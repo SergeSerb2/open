@@ -186,6 +186,29 @@ row #132 (+0.405 ms against +0.3 ms, load 13.7 / 12.0 / 19.2). Its queued
 quiet rerun was stopped before measurement when main changed the command-bar
 code. That run remains a historical FAIL; the table above covers newer code.
 
+## Restored-display window checks
+
+On source head `f553938b`, the full Release `window` suite passed 76/78
+boolean rows, all four required pixel rows, and owned cleanup with no
+interruptions. Only `cold_fresh_profile` and `warm_existing_profile` missed
+the 250 ms sidebar budget. Per TANDEM-RULES §4 item 4a, both count as
+**known main FAIL (4a)**: sidebar medians are ≤ 400 ms and first paint
+medians are ≤ 700 ms. No threshold or baseline changed.
+
+Each timing cell below is sidebarDrawn / firstContentfulPaint, in ms.
+Load is the suite's recorded 1 / 5 / 15 minute average.
+
+| Run | Cold medians | Warm medians | Load averages | Launch result |
+|---|---|---|---|---|
+| Plain on-screen | 346 / 598 | 361 / 618 | 10.60 / 13.65 / 13.73 | known main FAIL (4a) |
+| Quiet retry | 375 / 653 | 373 / 650 | 6.22 / 7.07 / 9.36 | known main FAIL (4a) |
+
+`chrome_dark_rings`, `traffic_light_look`, `traffic_light_stale_hover` and
+`comparison` passed in both runs. The quiet retry had already finished
+before the lead clarified that it was unnecessary. A subsequent main
+comparison was stopped while it waited for low load, before any App launch.
+Raw results and captures remain in `.re/extensions-p3/`.
+
 ## Limits and next engine work
 
 - E11 popup windows and E12 omnibox events are separate work. Metadata already
