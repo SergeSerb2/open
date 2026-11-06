@@ -17,20 +17,30 @@ import OpenTranslate
 final class AppSettingsActions: SettingsActions, LibraryActions, DownloadsProvider {
   unowned let app: AppDelegate
   init(app: AppDelegate) { self.app = app }
-  @ObservationIgnored lazy var settings: SettingsViewModel = {
+  @ObservationIgnored private var settingsStorage: SettingsViewModel?
+  var settings: SettingsViewModel {
+    if let settingsStorage { return settingsStorage }
     let vm = SettingsViewModel(model: app.model, actions: self, defaults: .standard,
       root: app.directories.root, snapshot: app.snapshotStore,
       focusedProfileID: app.frontWindowController.flatMap { app.hostFactories[$0.windowID]?.focusedProfile?.id })
-    if let store = app.stores.adBlock { vm.attach(adBlockStore: store) }
-    else { vm.advanced.statusText = "Ad blocking settings could not be opened." }
-    app.defaultBrowserService.onChange = { [weak vm] state in
+    if !app.isFirstRun || app.firstRunSaved {
+      if let store = app.stores.adBlock { vm.attach(adBlockStore: store) }
+      else { vm.advanced.statusText = "Ad blocking settings could not be opened." }
+    }
+    app.defaultBrowserService.onChange = { [weak vm, weak app] state in
       vm?.general.refresh()
       vm?.links.isDefaultBrowser = state.values.allSatisfy { $0 }
+      app?.firstRunWindowController?.model.refreshDefaultBrowserStatus()
     }
+    settingsStorage = vm
     return vm
-  }()
+  }
+  func modelWasInstalled() { settingsStorage = nil }
+  func attachBrowserStores() {
+    if settings.adBlock == nil, let store = app.stores.adBlock { settings.attach(adBlockStore: store) }
+  }
   @ObservationIgnored lazy var settingsPresenter = SettingsPresenter(viewModel: settings)
-  @ObservationIgnored lazy var captures = try? FileCapturesProvider(root: app.directories.root)
+  @ObservationIgnored lazy var captures = FileCapturesProvider(root: app.directories.root)
   @ObservationIgnored private(set) var library: LibraryViewModel?
   @ObservationIgnored private(set) var libraryPresenter: LibraryPresenter?
   func show(pane: PaneID? = nil) { settingsPresenter.show(pane: pane); NSApp.activate(); app.scheduleMenuRebuild() }
@@ -44,7 +54,6 @@ final class AppSettingsActions: SettingsActions, LibraryActions, DownloadsProvid
   }
   func showLibrary(section: LibrarySection? = nil) {
     app.downloadsCenter.refreshFiles()
-    guard let captures else { settings.statusText = "Captures could not be opened."; show(); return }
     let archives = Dictionary(uniqueKeysWithValues: app.model.profiles.map { ($0.id, app.archiveSink.store(for: $0.id)) })
     let histories = Dictionary(uniqueKeysWithValues: app.model.profiles.compactMap { profile in app.stores.history(for: profile.id).map { (profile.id, $0) } })
     if library == nil {
@@ -71,7 +80,7 @@ final class AppSettingsActions: SettingsActions, LibraryActions, DownloadsProvid
     // Prefer a live browser, then that existing state; never create a window here.
     let id = app.frontWindowController?.windowID ?? app.model.windows.first(where: { $0.style == .standard })?.id
     guard let id, app.model.windows.contains(where: { $0.id == id }) else { spaceManager = nil; return nil }
-    if let spaceManager, spaceManager.context.windowID == id { return spaceManager }
+    if let spaceManager, spaceManager.context.windowID == id { spaceManager.prepareForPresentation(); return spaceManager }
     let context = SidebarContext(model: app.model, windowID: id, previewPreferences: managerPreferences)
     context.storedFavicons = app.stores.sidebarFavicons
     context.systemAppearance = NSApp.effectiveAppearance.bestMatch(from: [.darkAqua, .aqua]) == .darkAqua ? .dark : .light
@@ -263,7 +272,7 @@ final class AppSettingsActions: SettingsActions, LibraryActions, DownloadsProvid
   }
   func keyBindingsDidChange(store: KeyBindingStore) { app.reloadKeyBindings() }
   func openEssentialShortcuts() { app.performCommand("keyboard-shortcuts-edu", payload: nil) }
-  func runImport(plan: ImportPlan) async -> ImportOutcome { ImportOutcome(errorText: "Import is not available in this build. No data was imported.") }
+  func runImport(plan: ImportPlan) async -> ImportOutcome { await app.importRunner.run(plan: plan, firstRun: false) }
   func setAdBlockEnabled(_ on: Bool, profileID: ProfileID) { status("Ad blocking is not active in this build. Your preferences were saved.", pane: .advanced) }
   func setEnabledBlockLists(_ ids: [String], profileID: ProfileID) { setAdBlockEnabled(true, profileID: profileID) }
   func setAdBlockExcludedDomains(_ domains: [String], profileID: ProfileID) { setAdBlockEnabled(true, profileID: profileID) }
@@ -305,9 +314,23 @@ final class AppSettingsActions: SettingsActions, LibraryActions, DownloadsProvid
   func trashDownload(id: String) { app.downloadsCenter.fileAction("trash", key: id) }
   func removeDownload(id: String) { app.downloadsCenter.remove(id) }
   func deleteCapture(id: UUID) {} // Library already removed the file and index.
-  private func captureURL(_ id: UUID) -> URL? { captures?.captures.first { $0.id == id }.flatMap { captures?.directory.appendingPathComponent($0.fileName) } }
+  private func captureURL(_ id: UUID) -> URL? { captures.captures.first { $0.id == id }.flatMap { library?.captureURL($0) } }
   func revealCapture(id: UUID) { if let url = captureURL(id) { NSWorkspace.shared.activateFileViewerSelecting([url]) } }
-  func openCapture(id: UUID) { if let url = captureURL(id) { NSWorkspace.shared.open(url) } }
+  #if OPEN_AUTOMATION
+  var recordCaptureFileActions = false
+  var captureFileActions: [String] = []
+  #endif
+  func openCapture(id: UUID) {
+    guard let url = captureURL(id) else { return }
+    #if OPEN_AUTOMATION
+    // Same OS-handoff receipt as Downloads: never launch the user's Preview in a suite.
+    if recordCaptureFileActions {
+      if captureFileActions.count >= 32 { captureFileActions.removeFirst() }
+      captureFileActions.append(url.lastPathComponent); return
+    }
+    #endif
+    NSWorkspace.shared.open(url)
+  }
   func copyCapture(id: UUID) { if let url = captureURL(id), let image = NSImage(contentsOf: url) { NSPasteboard.general.clearContents(); NSPasteboard.general.writeObjects([image]) } }
   func saveCapture(id: UUID, to: URL) -> String? { guard let url = captureURL(id) else { return "This capture is no longer available." }; do { try FileManager.default.copyItem(at: url, to: to); return nil } catch { return "The capture could not be saved. \(error.localizedDescription)" } }
   func openHistoryItem(url: URL) { if let profileID = library?.historyProfileID { openURL(url, profileID: profileID) } }

@@ -33,7 +33,7 @@ appDelegate.drawWindowsBeforeEngine()
 // Wait for a display callback whose last refresh is later than the flushed
 // window transaction. Chromium's observers must first run in its own loop,
 // so return from this temporary AppKit loop before calling start.
-let firstFrame = FirstWindowFrameObserver(view: appDelegate.windowControllers.first?.window?.contentView)
+let firstFrame = FirstWindowFrameObserver(view: appDelegate.firstContentView)
 firstFrame.start()
 #if OPEN_AUTOMATION
 if ProcessInfo.processInfo.environment["OPEN_AUTOMATION_EARLY_LITTLE_OPEN"] == "1" {
@@ -63,6 +63,8 @@ if firstFrame.presented {
   LaunchTiming.shared.mark("firstFrameWaitTimedOut")
   FileHandle.standardError.write(Data("Open: first window frame unconfirmed; continuing engine startup\n".utf8))
 }
+
+appDelegate.firstRunWindowController?.startProbeAfterDisplay()
 
 // Initialize outside the temporary AppKit runloop. Chromium installs native
 // runloop observers during start; those must first run in CefRunMessageLoop.

@@ -6,6 +6,7 @@ import OpenSidebar
 import OpenSpaceEditor
 import OpenCommands
 import OpenStore
+import OpenSpaceEditor
 
 @MainActor
 public final class BrowserWindowController: NSWindowController, NSWindowDelegate, SidebarDelegate, CommandDispatcher {
@@ -16,6 +17,7 @@ public final class BrowserWindowController: NSWindowController, NSWindowDelegate
     public let background = ThemeBackgroundView(frame: .zero)
     public private(set) var spaceCreationController: SpaceCreationController?
     public var onSpaceCreationIcon: (@MainActor (SpaceIcon?, CGRect, @escaping @MainActor (SpaceIcon?) -> Void) -> Void)?
+    public private(set) var themeEditor: ThemeEditorController?
     public let sidebar: SidebarView
     public let context: SidebarContext
     public let container: WebContentContainer
@@ -331,6 +333,9 @@ public final class BrowserWindowController: NSWindowController, NSWindowDelegate
         DispatchQueue.main.async { [weak self] in guard let self, self.observing else { return }; self.refreshPending = false; self.refresh() }
     }
     public func refresh() {
+        spaceCreationController?.closeThemeEditorIfSpaceChanged()
+        if let editor = themeEditor, let id = editor.session?.spaceID,
+           model.space(id: id) == nil || context.window?.focusedSpaceID != id { closeThemeEditor() }
         guard let space = context.focusedSpace else { return }
         if !observationArmed {
         observationArmed = true
@@ -342,7 +347,7 @@ public final class BrowserWindowController: NSWindowController, NSWindowDelegate
         } onChange: { [weak self] in Task { @MainActor [weak self] in self?.observationArmed = false; self?.scheduleRefresh() } }
         }
         // Sidebar's pager owns theme transitions. Never reset its cross-fade here.
-        if spaceCreationController == nil, background.targetStyle != context.style(for: space) { background.crossfade(to: context.style(for: space), animated: window?.isVisible == true && !Motion.reducesMotion) }
+        if spaceCreationController == nil, background.targetStyle != context.style(for: space) { background.crossfade(to: context.style(for: space), animated: window?.isVisible == true && !Motion.reducesMotion && !context.isLiveThemePreview(space.id)) }
         container.style = context.style(for: space)
         container.showsToolbar = context.window?.showsToolbar == true
         let style = context.style(for: space)
@@ -370,6 +375,7 @@ public final class BrowserWindowController: NSWindowController, NSWindowDelegate
         background.prepareForSnapshot()
     }
     public func layoutContent(animated: Bool = false) {
+        defer { updateThemeEditorAnchor() }
         let size = root.bounds.size, hidden = isPageFullscreen || (spaceCreationController == nil && context.window?.sidebarMode == .hidden)
         let width = context.sidebarWidth
         let panelFrame = isPageFullscreen ? root.bounds : PanelMetrics.frame(windowSize: size, sidebarWidth: width, sidebarHidden: hidden)
@@ -856,9 +862,18 @@ public final class BrowserWindowController: NSWindowController, NSWindowDelegate
     }
     /// Shared window-local key path. Focus comes from AppKit's current responder.
     @discardableResult public func handleKeyDown(_ event: NSEvent, unconsumed: Bool = false) -> Bool {
-        guard let eventWindow = event.window,
-              eventWindow === window || ownsAdditionalKeyWindow?(eventWindow) == true
+        // Window-less events belong here only while this controller's theme
+        // panel is key. Engine events from other windows must keep their owner.
+        let keyEditor = spaceCreationController?.themeEditor ?? themeEditor
+        let eventWindow = event.window ?? keyEditor.flatMap { NSApp.keyWindow === $0.panel ? $0.panel : nil }
+        guard let eventWindow,
+              eventWindow === window || eventWindow === keyEditor?.panel || ownsAdditionalKeyWindow?(eventWindow) == true
                 || existingTabSwitcher?.acceptsEventWindow(eventWindow) == true else { return false }
+        if eventWindow === keyEditor?.panel {
+            if event.modifierFlags.contains(.command), [13, 17, 37].contains(event.keyCode) {
+                keyEditor?.close()
+            } else { return false }
+        }
         if existingTabSwitcher?.handle(event) == true { return true }
         // A window-anchored popover the App shows (the translate popover, page-platform §4.7.3)
         // takes Esc and Return before any other route.
@@ -929,8 +944,9 @@ public final class BrowserWindowController: NSWindowController, NSWindowDelegate
         lastKeyRoute = (eventWindow.windowNumber, event.keyCode, flags, event.timestamp, true)
         return true
     }
-    private func handles(_ id: String) -> Bool { ["add-split-view", "close-split-pane", "expand-current-split", "separate-from-split-view", "next-split-pane", "previous-split-pane", "open-in-current-space", "go-back", "go-forward"].contains(id) || id.hasPrefix("focus-split-pane-") }
+    private func handles(_ id: String) -> Bool { ["edit-theme", "add-split-view", "close-split-pane", "expand-current-split", "separate-from-split-view", "next-split-pane", "previous-split-pane", "open-in-current-space", "go-back", "go-forward"].contains(id) || id.hasPrefix("focus-split-pane-") }
     public func performCommand(_ id: String) {
+        if id == "edit-theme" { if let space = context.focusedSpace { _ = editSpaceTheme(space.id) }; return }
         if id != "tab-switcher-forward", id != "tab-switcher-backward" { existingTabSwitcher?.cancel() }
         if onCommand?(id) == true { return }
         if id == "toggle-toolbar" { toggleToolbar(); return }
@@ -959,6 +975,7 @@ public final class BrowserWindowController: NSWindowController, NSWindowDelegate
     }
     public func menuState(for id: String) -> CommandMenuState? { onMenuState?(id) }
     public func isCommandEnabled(_ id: String, enabledKey: String) -> Bool {
+        if id == "edit-theme" { return context.focusedSpace != nil }
         if let enabled = onCommandValidation?(id, enabledKey) { return enabled }
         if id == "toggle-toolbar" { return context.window?.style == .standard }
         if id == "open-in-current-space" { return peekStorage?.isShown == true }
@@ -974,6 +991,7 @@ public final class BrowserWindowController: NSWindowController, NSWindowDelegate
         }
         if let handled = onSidebarIntent?(intent) { return handled }
         switch intent {
+        case .editSpaceTheme(let id): return editSpaceTheme(id)
         case .toggleSidebar: toggleSidebar(); return true
         case .setToolbarShown(let shown): return setToolbarShown(shown)
         case .setShowFullURL(let full): showsFullURLWithToolbar = full; return true
@@ -1020,9 +1038,53 @@ public final class BrowserWindowController: NSWindowController, NSWindowDelegate
         }
         refresh(); changed(); return true
     }
+    /// One controller per window. A repeated entry focuses the existing panel.
+    @discardableResult public func editSpaceTheme(_ id: SpaceID) -> Bool {
+        guard model.space(id: id) != nil, let window else { return false }
+        if let editor = themeEditor, editor.session?.spaceID == id, !editor.isClosed {
+            editor.panel.makeKeyAndOrderFront(nil); return true
+        }
+        if let editor = themeEditor { _ = editor.retarget(to: id) }
+        if context.window?.focusedSpaceID != id {
+            let undo = model.undoManager; undo?.disableUndoRegistration()
+            model.focusSpace(windowID: windowID, spaceID: id)
+            undo?.enableUndoRegistration(); refresh(); snapshotStore?.scheduleSave(model: model)
+        }
+        if let editor = themeEditor {
+            updateThemeEditorAnchor(); editor.panel.makeKeyAndOrderFront(nil); return true
+        }
+        // Hidden and hover-revealed sidebars use the window's leading edge +8.
+        let frame = context.window?.sidebarMode == .hidden
+            ? CGRect(x: 8, y: 0, width: 0, height: root.bounds.height)
+            : root.convert(sidebar.bounds, from: sidebar)
+        let editor = ThemeEditorController(model: model, spaceID: id, window: window,
+                                          anchor: .sidebarTrailingEdge(sidebarFrameInWindow: frame))
+        themeEditor = editor
+        editor.onCommit = { [weak model, store = snapshotStore] in
+            guard let model else { return }; store?.scheduleSave(model: model)
+        }
+        editor.onClose = { [weak self, weak editor] in
+            guard let self, self.themeEditor === editor else { return }
+            self.themeEditor = nil
+            // Return keyboard focus to browser chrome. A page responder would
+            // otherwise consume Cmd+Z without reaching the shared model undo.
+            self.window?.makeFirstResponder(self.sidebar.focusedOutline)
+            if editor?.panel.isKeyWindow == true, NSApp.isActive { self.window?.makeKey() }
+        }
+        editor.show(); context.isWindowActive = true; background.isWindowActive = true; return true
+    }
+    private func updateThemeEditorAnchor() {
+        guard let editor = themeEditor else { return }
+        let frame = context.window?.sidebarMode == .hidden
+            ? CGRect(x: 8, y: 0, width: 0, height: root.bounds.height)
+            : root.convert(sidebar.bounds, from: sidebar)
+        editor.updateAnchor(.sidebarTrailingEdge(sidebarFrameInWindow: frame))
+    }
+    public func closeThemeEditor() { themeEditor?.close(); themeEditor = nil }
     public func windowWillClose(_ notification: Notification) {
         spaceCreationController?.onFinish = nil
         spaceCreationController?.cancel(); spaceCreationController = nil
+        closeThemeEditor()
         existingTabSwitcher?.cancel()
         saveWindowState(); visibilityOverride = .closed; removeRevealCard(); hintWork?.cancel(); hintWork = nil
         hoverPreview.hide(animated: false); captureStorage?.tearDown()
@@ -1052,7 +1114,7 @@ public final class BrowserWindowController: NSWindowController, NSWindowDelegate
         // Back from another app or a hide (Cmd+H): the pointer may have left the buttons meanwhile.
         dimmedLights.syncWithPointer()
     }
-    public func windowDidResignKey(_ notification: Notification) { existingTabSwitcher?.cancel(); context.isWindowActive = false; background.isWindowActive = false; positionTrafficLights() }
+    public func windowDidResignKey(_ notification: Notification) { existingTabSwitcher?.cancel(); let active = (themeEditor != nil || spaceCreationController?.themeEditor != nil) && NSApp.isActive; context.isWindowActive = active; background.isWindowActive = active; positionTrafficLights() }
     public func windowDidChangeBackingProperties(_ notification: Notification) { positionTrafficLights() }
     public func windowDidBecomeMain(_ notification: Notification) { context.isWindowActive = true }
     public func windowDidResignMain(_ notification: Notification) { context.isWindowActive = window?.isKeyWindow == true }
@@ -1294,6 +1356,7 @@ extension BrowserWindowController {
         if let creation = spaceCreationController { creation.focus(); return true }
         guard let window, model.canCreateSpace(at: options.insertionIndex, moving: options.moving,
                                                removingEmptyFolder: options.removingEmptyFolder) else { return false }
+        closeThemeEditor()
         dismissSidebarReveal()
         let previousSpaceID = context.focusedSpace?.id
         let creation = SpaceCreationController(model: model, windowID: windowID, options: options)

@@ -44,6 +44,33 @@ on-screen lock around one suite only; take the heavy slot around build steps.
 - Release builds include it only with `OPEN_AUTOMATION=1 tools/build.sh Release` (used for measurements). A normal Release build has no socket code at all.
 - Socket: `<data root>/automation.sock`, mode 0600. The data root is `$OPEN_USER_DATA` or `--user-data-dir=DIR`, else `~/Library/Application Support/Open-Dev` (Debug) or `.../Open` (Release); it holds `State/browser.json` and `Profiles/<dir>/{Engine,State}` (docs/plans/profiles.md §5). `--automation-socket=PATH` or `$OPEN_AUTOMATION_SOCKET` override the socket path. Code: `App/Automation/AutomationServer.swift`.
 
+First run is detected once, before data-root preparation, when
+`State/browser.json` does not exist. `--skip-first-run` or
+`OPEN_SKIP_FIRST_RUN=1` selects the normal browser path. `--arc-dir=PATH`
+overrides the read-only import source for tests and support. Always use a
+disposable Open root and a synthetic source for first-run automation.
+
+The shared e2e `Open` launcher adds `--skip-first-run` by default. Its direct
+early-quit, missing-engine, and migration launches do the same. All suite
+modules, peer launches, and benchmarks use that launcher. `tools/run.sh` and
+the release smoke launch also pass the switch. `tools/openctl` connects to
+an existing socket and never launches the App. `verify-all.sh` runs package
+CLIs, not the App. Only the `firstrun` suite opts into first run.
+
+The dev launcher `tools/run.sh` always passes `--skip-first-run`. To see first
+run by hand, launch the built App binary directly with a disposable data root,
+inside the screen lock (omit `--skip-first-run`):
+
+```sh
+first_run_root=$(mktemp -d /tmp/open-first-run.XXXXXX)
+OPEN_USER_DATA="$first_run_root" \
+  /usr/bin/lockf -k /tmp/open-onscreen-e2e.lock \
+  build/Debug/Open.app/Contents/MacOS/Open --user-data-dir="$first_run_root" --arc-dir=/path/to/synthetic-arc
+```
+
+Use a synthetic source folder for this check. Quit the App before removing
+the temporary root.
+
 ## Protocol
 
 One JSON object per line in each direction.
@@ -80,6 +107,42 @@ Arguments are `key=value`; values that parse as JSON are sent as JSON.
 - No `tab`: the selected tab.
 
 ## Commands
+
+`first-run` returns `{active, step, completed}` even when there is no browser
+window. Optional `action` drives the same view-model methods as the buttons:
+`import`, `fresh`, `continue`, `notnow`, `back`, `finish`, `retry`, or
+`choose-dir` with `directory=PATH`. `select` sets optional `spaces`, `archive`,
+and `history` checkbox booleans on Import. `retry` on a save-error Report retries
+the pending model's save. Directory strings are limited to 4096 UTF-8 bytes;
+action names to 32. There is no action that changes the system default browser.
+
+For native evidence, `focus` grants input focus to this instance's first-run
+window. `inspect` reads its rendered text and top-left text frames using
+Vision on a snapshot of that window only. State includes its native frame
+size, key flag, and traffic-light frames. `snapshot` prefers the first-run
+panel while it exists. `OPEN_AUTOMATION_IMPORT_DELAY_MS` (automation builds
+only, at most 5000 ms) holds the real progress view for animation captures.
+`OPEN_AUTOMATION_PROBE_DELAY_MS` (the same limit) delays probe work so the suite
+can close and reopen Welcome before counting finishes. Reopen restarts a
+cancelled probe when counts have not landed.
+
+State also includes `importInProgress`; while a Settings import runs,
+`settingsStep` reports `Importing`. The same command also drives the visible Settings sheet after first run:
+`settings-import` with `directory=PATH`, `settings-next`, `settings-run`,
+and `settings-done`. State then includes `settingsStep`, `settingsOutcome`,
+and `settingsError`. These actions use the real cached wizard and shared App
+runner. History has an explicit phase-3 seam; passwords/cookies stay disabled.
+
+Run the synthetic first-run flow with:
+
+```sh
+/usr/bin/lockf -k /tmp/open-onscreen-e2e.lock python3 tools/e2e/engine_e2e.py --config Debug --style chrome --only firstrun
+```
+
+The suite restores shared defaults in `finally`, checks owned-process/window
+cleanup, and writes uncommitted receipts and native PNGs under
+`docs/engine-spike/`. Its five first-content timing samples include loads;
+loaded Debug numbers are upper bounds, not idle Release budget acceptance.
 
 | Command | Args | Result |
 |---|---|---|
@@ -924,6 +987,41 @@ relaunches that profile, and repeats the drag after repair.
 `OPEN_E2E_E2_FORCE_FAILURE=popup` stops the suite with its native popup open;
 `popup-quit` first quits the App to exercise restoration without the socket.
 Frame preferences are restored after quit through the shared defaults fallback.
+
+
+## Space editors (Section 4)
+
+Theme commands use the real App model and the same window controller as the
+menu and command bar. Coordinates for `editor-act` are panel content points
+from its top-left (including the transparent 13 pt band). Named controls use
+`control` with the names returned by `editor-state.controls`.
+
+| Command | Arguments | Result |
+|---|---|---|
+| `theme-get` | optional `space` (focused by default) | stored `style` or null, derived light/dark palette hex, `contentAppearance` |
+| `theme-set` | optional `space`, `style` object or null | session preview/commit, one Update Theme undo step and save |
+| `editor-open` | `kind=theme/icon`, optional `space`; icon also accepts `node` | true; unknown kinds return false |
+| `editor-act` | `action=click/hover`, `x/y` or named `control` | own-panel NSEvents |
+| `editor-act` | `action=drag`, `from/to` point arrays, optional `steps` (1–240) | own-panel mouse down, drag frames, up |
+| `editor-act` | `action=down/drag/up`, `x/y` | one event, for interrupted gestures |
+| `editor-act` | `action=key`, `key`, optional `modifiers` | `NSApplication.sendEvent`, app routing |
+| `editor-state` | — | kind, Space, frame, scale, controls, knob, commit/preview/frame counters, pending frame and process-wide editor display-link count |
+| `editor-close` | — | flush and close; safe when already closed |
+| `snapshot` | `window=editor`, `path` | real panel PNG |
+
+`command id=edit-theme` reuses the generic menu command runner. The native
+`space-editor` e2e suite runs both theme and icon row sets; creation can extend
+the kind switch and suite. Model reads can precede a pending display frame: wait
+for `editor-state.pendingFrame=false` after a completed gesture before
+asserting its committed value. Snapshot checks use empty background regions,
+so the auto-archive education banner is not mistaken for a theme pixel.
+
+`editor-state` also exposes the theme session commit ledger: `commitSequence`,
+`committedStyle`, `commitPreviews`, `sessionPreviews`, and `undoActionName`.
+The committed value is captured in the same MainActor call as the model
+undo registration. `A3_committed_style_stable` compares it with the model
+after the final frame and after idle, rejects later previews, and checks
+the Update Theme action name. A3 undo/redo compares against that ledger.
 
 ## Section 7 Settings flows
 

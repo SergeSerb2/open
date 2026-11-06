@@ -1,6 +1,6 @@
-# First run: Steps A and B
+# First run
 
-Implements [first-run.md §11 A/B](plans/first-run.md#11-implementation-order-small-prs-each-step-files-then-acceptance), including review round 1. Steps C–F remain pending. This PR adds no App wiring, startup trigger, completion save, model swap, engine import adapter, real default-browser call or launch-timing claim.
+Implements [first-run.md §11 A/B](plans/first-run.md#11-implementation-order-small-prs-each-step-files-then-acceptance), including review round 1. Steps C/D now add the App window, startup detection, guarded completion save, shared import runner, model landing and Settings merge. History streaming and secrets remain later steps. The default-browser offer uses the existing App service only on its button click.
 
 `FirstRunViewModel` and `FirstRunView` live in OpenSettings. `FirstRunWindow.size` is 560 × 520 pt. OpenDesign Settings tokens supply the insets, grouped rows, typography and colors. `SettingsButtonStyle` supplies the prominent default button: accent/white while key, normal gray while inactive. Welcome uses a 28 pt semibold wordmark and 28 pt buttons. Import and Report pin the heading/footer around a scrolling middle with automatic indicators. Sparse screens center a visual and text above the footer. Step transitions use `Motion.selectionFade` and cut with Reduce Motion.
 
@@ -14,9 +14,9 @@ let content = FirstRunView(model: firstRun)
 
 The model strongly retains its action object and the Settings owner. `FirstRunActions` and `SettingsActions` inherit one `ImportActions` requirement. Forward import and default-browser operations to the same implementation. Pass the existing Settings owner with its injected shared SnapshotStore. First run creates no writer.
 
-The app fills `arcIsRunning`. Progress assignments (`phaseText`, `progress`, `browserHasLanded`) are seams for the later adapter. `finishFirstRun(imported:)` uses the shared `ImportOutcome.didImportAnything` key set; canonical adapter keys and display aliases are handled once. The App must save successfully before recording completion or closing. Call `reportSaveFailure(imported:)` on failure: the fresh path has its own centered message. This step never writes `open.firstRun.completed` or saves a first-run snapshot.
+The app fills `arcIsRunning`. Progress assignments (`phaseText`, `progress`, `browserHasLanded`) are seams for the later adapter. `finishFirstRun(imported:)` uses the shared `ImportOutcome.didImportAnything` key set; canonical adapter keys and display aliases are handled once. The App must save successfully before recording completion or closing. Call `reportSaveFailure(imported:)` on failure: the fresh path has its own centered message. The App writes `open.firstRun.completed` only after `saveNow` succeeds.
 
-Step C entry criteria (recorded now; no Step C code in this PR):
+Step C entry criteria:
 
 - **N4:** Give report-saveerror a Try Again action that retries saving the pending imported model. The message must say the imported items are in the browser window behind this panel. Do not mark completion or close the panel until the save succeeds. Update §4 E-5 with that shipped text when Step C implements it.
 - **N9:** Check the determinate progress fill uses the accent and the indeterminate bar animates in the real window. A still offscreen PNG does not prove native animation or activation.
@@ -25,7 +25,7 @@ Step C entry criteria (recorded now; no Step C code in this PR):
 
 One `ImportWizardViewModel` owns the plan and consent gate. `PasswordsImportCopy` supplies the shared body, later note, help variants and buttons. The capability stays OFF: both flows disable the checkbox and exclude it from selection. Capability-ON renders stop before Allow. Cancel/Back keep choices. The Failed footer returns to Import without changing them. Default-browser entry makes no system call; error and decline messages are exclusive, and an already-default browser offers only Start Browsing.
 
-Counting and importing have separate state. Pending counts never gate first-run Start Fresh, Not Now or Continue. A late result updates counts without changing the step. Closing cancels the utility count task. Settings loads Space labels on that worker before enabling Review. `FirstRunView(startsProbe:false)` is used only by the CLI to hold deliberate counting/error render states; normal callers keep the default automatic probe.
+Counting and importing have separate state. Pending counts never gate first-run Start Fresh, Not Now or Continue. A late result updates counts without changing the step. Closing cancels the utility count task. Settings loads Space labels on that worker before enabling Review. `FirstRunView(startsProbe:false)` is used by the App to start the utility probe after the first display, and by the CLI to hold deliberate counting/error render states.
 
 ## Shared count probe
 
@@ -102,3 +102,25 @@ The Report uses red “Could not be read” count cells, “Not selected” for 
 ## Round-2 polish
 
 The seven remaining Settings default buttons use prominent SettingsButtonStyle. Standalone sheets in settings-preview explicitly inherit the same normal SettingsButtonStyle as the app; defaults override it. This avoids native default-button styling hiding a missing prominent style in renders. The existing action/adapter CLI flow also checks single-item and large-count copy, partial-success summaries, and the fresh-primary decision. No Step C implementation was added.
+
+## Steps C/D App verification
+
+`App/FirstRun` hosts the shared design-reviewed view. `AppImportRunner` runs
+sidebar/archive import for both first run and Settings. Import save failure
+keeps the landed browser behind the panel; Try Again saves that pending model.
+Start Fresh, Not Now and all-failed Continue save the default model. Unfinished first run cannot
+autosave it. Existing harness launches pass `--skip-first-run`.
+
+The `firstrun` real-App suite builds its source in a private temporary folder.
+It covers filtered counts, session focus, archive dedupe, Settings re-import
+and merge Undo, corrupt input, save failure/retry, quitting before finish,
+and relaunch. Regression rows cover a browser Space rename saved when quitting
+during a Settings import, a zero-item sidebar finishing on the original default
+model, Welcome counting after close and Dock reopen, and a Settings import
+preserving Never for a newly imported Profile after the first-run model swap.
+It captures Welcome, Import, Progress, Report and the default
+browser offer, compares progress-bar pixels, and measures heading clearance
+against native traffic-light frames. It never clicks the system-default setter.
+Receipts and images stay in the ignored suite output folder. See
+[automation.md](automation.md) for the command and launch overrides. Loaded
+Debug first-content samples do not qualify the idle 250 ms Release budget.

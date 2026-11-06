@@ -111,6 +111,7 @@ enum RenderCLI {
         case "fit-light-glyphs": try LightGlyphFit.run(rest)
         case "math": try Checks.math(rest)
         case "check": try Checks.run()
+        case "bench": try LiveThemeChecks.bench(); if Checks.failed > 0 { throw CLIError(description: "bench failed") }
         case "lifetime-check": try EditorChecks.releasedControllerUndo()
         case "bench-blend": try BlendBench.run(rest)
         case "compat-range-check": EditorChecks.compatibilityRange()

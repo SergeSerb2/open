@@ -32,6 +32,7 @@ public final class SpaceCreationController {
     public var onPickIcon: (@MainActor (SpaceIcon?, CGRect, @escaping @MainActor (SpaceIcon?) -> Void) -> Void)?
     private let model: BrowserModel
     private let windowID: WindowID
+    private var themeEditorSpaceID: SpaceID?
 
     public init(model: BrowserModel, windowID: WindowID, options: SpaceCreationOptions) {
         self.model = model; self.windowID = windowID; self.options = options
@@ -88,8 +89,14 @@ public final class SpaceCreationController {
         let editor = ThemeEditorController(draft: draftStyle, window: window,
             anchor: .card(creationView.themeButton.convert(creationView.themeButton.bounds, to: nil))) { [weak self] in self?.setDraftStyle($0) }
         themeEditor = editor
-        editor.onClose = { [weak self] in self?.themeEditor = nil }
+        themeEditorSpaceID = model.windows.first { $0.id == windowID }?.focusedSpaceID
+        editor.onClose = { [weak self] in self?.themeEditor = nil; self?.themeEditorSpaceID = nil }
         editor.show()
+    }
+    public func closeThemeEditorIfSpaceChanged() {
+        guard themeEditor != nil,
+              model.windows.first(where: { $0.id == windowID })?.focusedSpaceID != themeEditorSpaceID else { return }
+        themeEditor?.close()
     }
     public func cancel() {
         guard !isFinished else { return }

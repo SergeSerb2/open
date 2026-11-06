@@ -82,6 +82,13 @@ public final class SpaceManagerView: NSView {
         for column in columns.values { column.page?.resyncAfterVisibility() }
         if let id = pendingRename { pendingRename = nil; renameInsertedNode(id) }
     }
+    /// Reconcile membership before the retained Library view is shown again.
+    /// Pages stay lazy; their hidden updates are applied once the host is visible.
+    public func prepareForPresentation() {
+        syncColumns(force: true)
+        visibilityDirty = true
+        needsLayout = true
+    }
     private func syncColumns(force: Bool = false) {
         if !force, !visibleForUpdates { visibilityDirty = true; return }
         let live = Set(context.model.spaces.map(\.id))

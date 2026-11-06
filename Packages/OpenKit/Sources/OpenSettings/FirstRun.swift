@@ -68,6 +68,8 @@ public enum FirstRunWindow {public static let size=SettingsTokens.firstRunSize}
     public func startFresh() {guard !busy else {return};actions.finishFirstRun(imported:false)}
     public func skipImport() {guard !busy else {return};imported=false;enterDefaultBrowser()}
     public func enterDefaultBrowser() {step = .defaultBrowser;errorText=nil;defaultWasAttempted=false;isDefaultBrowser=actions.isDefaultBrowser()}
+    /// The App's default-browser service completes asynchronously after its click.
+    public func refreshDefaultBrowserStatus() {isDefaultBrowser=actions.isDefaultBrowser()}
     public func makeDefault() {
         guard step == .defaultBrowser,!isDefaultBrowser else {return}
         defaultWasAttempted=true
@@ -101,7 +103,10 @@ public enum FirstRunWindow {public static let size=SettingsTokens.firstRunSize}
         guard let outcome else {return}
         imported=wizard.hasImportedData
         errorText=outcome.errorText
-        step=outcome.errorText != nil && !imported ? .failed:.report
+        // Sidebar failure is E-1. Per-kind failures after parsing belong on
+        // Report, including an all-failed selection that can Continue fresh.
+        let sidebarFailed=outcome.failures["Spaces"] != nil || outcome.failures.isEmpty
+        step=outcome.errorText != nil && !imported && sidebarFailed ? .failed:.report
     }
     public func choose(directory:URL) async {wizard.plan.directory=directory;probe=nil;await refreshProbe()}
     public func refreshProbe() async {
@@ -109,7 +114,7 @@ public enum FirstRunWindow {public static let size=SettingsTokens.firstRunSize}
         guard !Task.isCancelled else {return}
         probe=wizard.probe
     }
-    public static let importedSaveError="Open could not save your data. Your imported items are still open in this window. Try again."
+    public static let importedSaveError="Open could not save your data. Your imported items are still open in the browser window behind this panel. Try again."
     public static let freshSaveError="Open could not save your data. Try Start Fresh again."
     public func reportSaveFailure(imported:Bool) {errorText=imported ? Self.importedSaveError:Self.freshSaveError}
     public func reportValue(_ category:String)->String {
@@ -261,7 +266,7 @@ public struct FirstRunView:View {
             if let duplicates=model.duplicateSummary {Text(duplicates).font(section).foregroundStyle(secondary).fixedSize(horizontal:false,vertical:true)}
             if let note=model.reportNote {Text(note).font(section).foregroundStyle(model.reportNoteIsError ? Color.red:secondary).fixedSize(horizontal:false,vertical:true)}
         }.frame(maxWidth:.infinity,alignment:.leading)}.scrollIndicators(.automatic)
-        HStack {Spacer();primary("Continue"){model.enterDefaultBrowser()}}.fixedSize(horizontal:false,vertical:true)
+        HStack {Spacer();if model.errorText == FirstRunViewModel.importedSaveError {primary("Try Again"){model.actions.finishFirstRun(imported:true)}} else if model.errorText != nil && !model.wizard.hasImportedData {Button("Continue"){model.enterDefaultBrowser()};primary("Try Again"){model.showImport()}} else {primary("Continue"){model.enterDefaultBrowser()}}}.fixedSize(horizontal:false,vertical:true)
     }}
     private var defaultBrowser:some View {VStack(spacing:16) {
         sparse {VStack(spacing:8) {

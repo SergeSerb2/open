@@ -64,7 +64,7 @@ let package = Package(
         .target(name: "OpenSpaceEditor", dependencies: ["OpenModel", "OpenDesign"], resources: [.copy("Resources/emoji-index.json")]),
         .target(name: "OpenSidebar", dependencies: ["OpenExtensionsUI", "OpenMedia", "OpenModel", "OpenDesign", "OpenStore"]),
         .executableTarget(name: "sidebar-render", dependencies: ["OpenWeb", "OpenMedia", "OpenModel", "OpenStore", "OpenDesign", "OpenSidebar"], resources: [.copy("Resources/sm6-cost-baselines.json")]),
-        .executableTarget(name: "space-editor-render", dependencies: ["OpenModel", "OpenStore", "OpenDesign", "OpenSidebar", "OpenSpaceEditor"], resources: [.copy("Resources")]),
+        .executableTarget(name: "space-editor-render", dependencies: ["OpenFeatures", "OpenModel", "OpenStore", "OpenDesign", "OpenSidebar", "OpenSpaceEditor"], resources: [.copy("Resources")]),
         .target(name: "OpenCommandBar", dependencies: ["OpenModel", "OpenStore", "OpenDesign", "OpenSuggest"]),
         .executableTarget(name: "commandbar-render", dependencies: ["OpenModel", "OpenStore", "OpenDesign", "OpenSuggest", "OpenCommandBar"]),
     ]
