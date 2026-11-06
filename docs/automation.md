@@ -6,7 +6,7 @@ Every agent command that opens Open on screen must hold the machine-wide lock
 for one suite or diagnostic invocation, including launch and cleanup:
 
 ```sh
-/usr/bin/lockf /tmp/open-onscreen-e2e.lock python3 tools/e2e/engine_e2e.py --config Debug --style chrome --only window
+/usr/bin/lockf -k /tmp/open-onscreen-e2e.lock python3 tools/e2e/engine_e2e.py --config Debug --style chrome --only window
 ```
 
 Release the lock between suite invocations. Do not hold it during builds,
@@ -159,22 +159,22 @@ Arguments are `key=value`; values that parse as JSON are sent as JSON.
 
 ```sh
 ~/Library/Caches/OpenRE/scripts/heavy.sh nice -n 10 tools/build.sh Debug
-/usr/bin/lockf /tmp/open-onscreen-e2e.lock python3 tools/e2e/engine_e2e.py --only shell                       # model, keyboard, split, persistence
-/usr/bin/lockf /tmp/open-onscreen-e2e.lock python3 tools/e2e/engine_e2e.py --only window --config Release     # startup, lifecycle failures, real window, persistence, static comparison
-/usr/bin/lockf /tmp/open-onscreen-e2e.lock python3 tools/e2e/engine_e2e.py --only window --window-chrome-only # focused §3.3 widths, motion, session-2 live pixels
-/usr/bin/lockf /tmp/open-onscreen-e2e.lock python3 tools/e2e/engine_e2e.py --only sidebar                     # intents, correct live page, cache eviction, static comparison
-/usr/bin/lockf /tmp/open-onscreen-e2e.lock python3 tools/e2e/engine_e2e.py --only peek                        # promotion identity, cleanup, model strip, live pane color
-/usr/bin/lockf /tmp/open-onscreen-e2e.lock python3 tools/e2e/engine_e2e.py --only features --style alloy      # engine features
-/usr/bin/lockf /tmp/open-onscreen-e2e.lock python3 tools/e2e/engine_e2e.py --only extensions --style alloy    # needs .re/ext/unpacked/*
-/usr/bin/lockf /tmp/open-onscreen-e2e.lock python3 tools/e2e/engine_e2e.py --only extensions --style chrome
-/usr/bin/lockf /tmp/open-onscreen-e2e.lock python3 tools/e2e/engine_e2e.py --only tabstrip --style chrome     # fork patch P1: chrome.tabs sees Open's tabs
-/usr/bin/lockf /tmp/open-onscreen-e2e.lock python3 tools/e2e/engine_e2e.py --only page                       # page-platform §8.3: capture C1–C7, then translation X1–X6
-/usr/bin/lockf /tmp/open-onscreen-e2e.lock python3 tools/e2e/engine_e2e.py --only actions --style chrome      # fork patch P2: toolbar actions and popups
-/usr/bin/lockf /tmp/open-onscreen-e2e.lock python3 tools/e2e/engine_e2e.py --only media --style chrome        # media-pip §8.4: mini players, auto-PiP, Now Playing, sleep feed
-/usr/bin/lockf /tmp/open-onscreen-e2e.lock python3 tools/e2e/engine_e2e.py --only sleep --style chrome        # app-shell Step G: tab sleep, memory-fork §11 F0–F5
+/usr/bin/lockf -k /tmp/open-onscreen-e2e.lock python3 tools/e2e/engine_e2e.py --only shell                       # model, keyboard, split, persistence
+/usr/bin/lockf -k /tmp/open-onscreen-e2e.lock python3 tools/e2e/engine_e2e.py --only window --config Release     # startup, lifecycle failures, real window, persistence, static comparison
+/usr/bin/lockf -k /tmp/open-onscreen-e2e.lock python3 tools/e2e/engine_e2e.py --only window --window-chrome-only # focused §3.3 widths, motion, session-2 live pixels
+/usr/bin/lockf -k /tmp/open-onscreen-e2e.lock python3 tools/e2e/engine_e2e.py --only sidebar                     # intents, correct live page, cache eviction, static comparison
+/usr/bin/lockf -k /tmp/open-onscreen-e2e.lock python3 tools/e2e/engine_e2e.py --only peek                        # promotion identity, cleanup, model strip, live pane color
+/usr/bin/lockf -k /tmp/open-onscreen-e2e.lock python3 tools/e2e/engine_e2e.py --only features --style alloy      # engine features
+/usr/bin/lockf -k /tmp/open-onscreen-e2e.lock python3 tools/e2e/engine_e2e.py --only extensions --style alloy    # needs .re/ext/unpacked/*
+/usr/bin/lockf -k /tmp/open-onscreen-e2e.lock python3 tools/e2e/engine_e2e.py --only extensions --style chrome
+/usr/bin/lockf -k /tmp/open-onscreen-e2e.lock python3 tools/e2e/engine_e2e.py --only tabstrip --style chrome     # fork patch P1: chrome.tabs sees Open's tabs
+/usr/bin/lockf -k /tmp/open-onscreen-e2e.lock python3 tools/e2e/engine_e2e.py --only page                       # page-platform §8.3: capture C1–C7, then translation X1–X6
+/usr/bin/lockf -k /tmp/open-onscreen-e2e.lock python3 tools/e2e/engine_e2e.py --only actions --style chrome      # fork patch P2: toolbar actions and popups
+/usr/bin/lockf -k /tmp/open-onscreen-e2e.lock python3 tools/e2e/engine_e2e.py --only media --style chrome        # media-pip §8.4: mini players, auto-PiP, Now Playing, sleep feed
+/usr/bin/lockf -k /tmp/open-onscreen-e2e.lock python3 tools/e2e/engine_e2e.py --only sleep --style chrome        # app-shell Step G: tab sleep, memory-fork §11 F0–F5
 OPEN_AUTOMATION=1 ~/Library/Caches/OpenRE/scripts/heavy.sh nice -n 10 tools/build.sh Release
-/usr/bin/lockf /tmp/open-onscreen-e2e.lock python3 tools/e2e/engine_e2e.py --only measure --config Release    # launch, memory, idle CPU
-/usr/bin/lockf /tmp/open-onscreen-e2e.lock python3 tools/e2e/engine_e2e.py --only relaunch --config Release   # N same-profile relaunches (OPEN_E2E_RELAUNCH_COUNT, default 20)
+/usr/bin/lockf -k /tmp/open-onscreen-e2e.lock python3 tools/e2e/engine_e2e.py --only measure --config Release    # launch, memory, idle CPU
+/usr/bin/lockf -k /tmp/open-onscreen-e2e.lock python3 tools/e2e/engine_e2e.py --only relaunch --config Release   # N same-profile relaunches (OPEN_E2E_RELAUNCH_COUNT, default 20)
 ```
 
 The `relaunch` suite (section 8 item 14) builds one profile with three local file tabs, then relaunches it `OPEN_E2E_RELAUNCH_COUNT` times (default 20). Each launch must reach automation, restore the same tabs, load only the selected tab, quit with no owned process left, and write no `No zone found` allocator FATAL to its launch log. The suite also fails on any new `Open*`/`cefsimple*` report in `~/Library/Logs/DiagnosticReports`. It is the regression check for the PartitionAlloc launch-zone race (`docs/engine-fork.md`, "PartitionAlloc and the launch race").
@@ -414,7 +414,7 @@ Commands in `App/Automation/AutomationNotifications.swift`.
 `OPEN_AUTOMATION_NOTIFICATION_AUTHORIZATION=record` (automation builds only): when the user allows a site's notifications and macOS has not been asked yet, the App logs `suppressed` instead of showing the macOS prompt. The `page` suite sets it, so a normal run needs no person. For U-N1 (page-platform §8.4), run the suite once with `OPEN_E2E_NOTIFICATION_PROMPT=1` and click Allow in the macOS prompt:
 
 ```sh
-OPEN_E2E_NOTIFICATION_PROMPT=1 /usr/bin/lockf /tmp/open-onscreen-e2e.lock python3 tools/e2e/engine_e2e.py --only page --style chrome
+OPEN_E2E_NOTIFICATION_PROMPT=1 /usr/bin/lockf -k /tmp/open-onscreen-e2e.lock python3 tools/e2e/engine_e2e.py --only page --style chrome
 ```
 
 ## Tab sleep (app-shell Step G)
@@ -477,7 +477,7 @@ On M1, hold the outer validation lock once per job, plus the on-screen lock
 for one suite invocation:
 
 ```sh
-/usr/bin/lockf /tmp/open-m1-validation.lock /usr/bin/lockf /tmp/open-onscreen-e2e.lock python3 tools/e2e/engine_e2e.py --only sidebar-completion
+/usr/bin/lockf -k /tmp/open-m1-validation.lock /usr/bin/lockf -k /tmp/open-onscreen-e2e.lock python3 tools/e2e/engine_e2e.py --only sidebar-completion
 ```
 
 The suite saves rest/hover PNGs, its App log, and `cleanup.json` in

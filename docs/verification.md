@@ -759,7 +759,7 @@ fail and must clean all owned hosts/processes. Proof output directories must be
 new. The proof tool bounds runs to 1…5, reaps only its recorded children and
 records cleanup in `receipt.json`. Its `--load high` mode starts owned burners;
 use it only for an explicitly authorized load proof. A full `--case check` run
-also needs `/usr/bin/lockf /tmp/open-onscreen-e2e.lock`, with no concurrent build.
+also needs `/usr/bin/lockf -k /tmp/open-onscreen-e2e.lock`, with no concurrent build.
 
 M5 review r2 (section 1, 2026-10-27, M5 Pro / 26B5112a, built-in 2x panel as the
 main display, load1 4.5–5.2). The sampler is stable: three `sm6-cost` runs gave
@@ -885,7 +885,7 @@ alone after a Release harness build:
 
 ```sh
 ~/Library/Caches/OpenRE/scripts/heavy.sh swift build --package-path Packages/OpenKit -c release -j 6 --product features-render
-/usr/bin/lockf /tmp/open-m5-quiet.lock python3 tools/verification/features-idle.py
+/usr/bin/lockf -k /tmp/open-m5-quiet.lock python3 tools/verification/features-idle.py
 ```
 
 Use a separate session for long jobs. The helper compiles a temporary native
