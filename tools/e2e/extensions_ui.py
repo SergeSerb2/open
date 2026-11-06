@@ -471,7 +471,8 @@ def run(factory, results, tmp, root, wait_until, new_tab, frame, read_image, ext
                     and bool(frames) and not any(overlaps(find["findFrame"], f) for f in frames),
                     "find":find, "stripFrames":frames, "closedByNativeClick":bool(closed)})
             finally:
-                app.call("key", key="escape", route="app")
+                if app.call("focus-state")["findVisible"]:
+                    app.call("key", key="escape", route="app")
                 if surface == "pane": app.call("split")
                 elif surface == "toolbar": app.call("command", id="toggle-toolbar")
         results["find_strip_no_overlap_native_close"] = {"ok":all(r["ok"] for r in find_rows), "rows":find_rows}
