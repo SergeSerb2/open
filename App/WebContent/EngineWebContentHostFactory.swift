@@ -722,7 +722,7 @@ final class EngineWebContentHostFactory: NSResponder, WebContentHostFactory {
   }
   func closeAll() {
     guard !isClosing else { return }
-    controller?.boostEditor?.close()
+    controller?.boostEditor?.close(returnFocus: false)
     isClosing = true
     pageChrome.close()
     pageContextMenu?.cancel(); pageContextMenu = nil

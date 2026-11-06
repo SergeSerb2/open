@@ -20,13 +20,14 @@ final class BoostEngineAdapter {
   private var livePlans: [ObjectIdentifier: String] = [:]
   private var deliveries: [ObjectIdentifier: Task<Void, Never>] = [:]
   private(set) var refreshCount = 0
+  private(set) var completedRefreshCount = 0
   private(set) var lastRefreshMilliseconds = 0.0
   private(set) var lastRefreshPageCount = 0
   init(boosts: AppBoosts) { self.boosts = boosts }
 
   func prepare(_ context: OEBrowserContext, profile: ProfileID) {
     let key = ObjectIdentifier(context)
-    guard registrations[key] == nil else { return }
+    guard registrations[key]?.context !== context else { return }
     registrations[key] = Registration(context: context, profile: profile)
     replaceScripts(context, profile: profile)
   }
@@ -66,6 +67,7 @@ final class BoostEngineAdapter {
     let pages = boosts.app.hostFactories.values.flatMap { Array($0.hosts.values) } + Array(boosts.app.littleOpenHosts.values)
     let hosts = Dictionary(pages.map { (ObjectIdentifier($0), $0) }, uniquingKeysWith: { first, _ in first }).values.filter { !$0.closed && (profile == nil || $0.profileID == profile) }
     lastRefreshPageCount = hosts.count; refreshCount += 1
+    let generation = refreshCount
     // Dispatch all page requests in this actor turn; no serial per-tab round trips.
     let tasks = hosts.compactMap { host -> Task<Void, Never>? in
       guard let url = host.content.url else { return nil }
@@ -73,7 +75,9 @@ final class BoostEngineAdapter {
     }
     Task { [weak self] in
       for task in tasks { await task.value }
-      self?.lastRefreshMilliseconds = (ProcessInfo.processInfo.systemUptime - start) * 1_000
+      guard let self, generation == self.refreshCount else { return }
+      self.lastRefreshMilliseconds = (ProcessInfo.processInfo.systemUptime - start) * 1_000
+      self.completedRefreshCount = generation
     }
   }
   private func replaceScripts(_ context: OEBrowserContext, profile: ProfileID) {

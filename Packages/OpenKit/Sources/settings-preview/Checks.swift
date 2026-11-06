@@ -676,8 +676,28 @@ func require(_ condition: @autoclosure () throws -> Bool, _ message: String) thr
             case "library-boosts":
                 try await env.prepareLibrary(); let library = env.library
                 library.section = .boosts
-                let labels = try await render(LibraryContent(viewModel: library), size: CGSize(width: 960, height: 640), scale: 1, dark: false, to: env.root.appendingPathComponent("boosts.png"))
-                try require(labels.contains("Calm docs") && labels.contains("Made for example.org/docs"), "Boost rows did not render")
+                // Static text is an AX value; list rows are lazy until AX is enabled.
+                @MainActor func renderedTexts() async throws -> Set<String> {
+                    var texts = Set<String>()
+                    try await withAccessibleHost(LibraryContent(viewModel: library), size: CGSize(width: 960, height: 640)) { host in
+                        var seen = Set<ObjectIdentifier>()
+                        @MainActor func visit(_ node: NSObject) {
+                            guard seen.insert(ObjectIdentifier(node)).inserted, seen.count < 4096 else { return }
+                            for name in ["accessibilityLabel", "accessibilityValue"] {
+                                let selector = NSSelectorFromString(name)
+                                if node.responds(to: selector), let value = node.perform(selector)?.takeUnretainedValue() as? String { texts.insert(value) }
+                            }
+                            let children = NSSelectorFromString("accessibilityChildren")
+                            if node.responds(to: children), let values = node.perform(children)?.takeUnretainedValue() as? [NSObject] { values.forEach(visit) }
+                            if let view = node as? NSView { view.subviews.forEach(visit) }
+                        }
+                        visit(host)
+                    }
+                    return texts
+                }
+                try await render(LibraryContent(viewModel: library), size: CGSize(width: 960, height: 640), scale: 1, dark: false, to: env.root.appendingPathComponent("boosts.png"))
+                let texts = try await renderedTexts()
+                try require(texts.contains("Calm docs") && texts.contains("Made for example.org/docs"), "Boost rows did not render: \(texts)")
                 env.defaults.set(false, forKey: "open.advanced.enableBoosts")
                 try await withAccessibleHost(BoostsSection(model: library), size: CGSize(width: 684, height: 600)) { host in
                     try require(env.defaults.bool(forKey: "open.advanced.enableBoosts") == false, "negative control: Boosts were already on")
@@ -685,7 +705,8 @@ func require(_ condition: @autoclosure () throws -> Bool, _ message: String) thr
                 }
                 try require(env.defaults.bool(forKey: "open.advanced.enableBoosts"), "Turn On did not write the supplied defaults store")
                 env.libraryActions.boostRows = [:]
-                let empty = try await render(LibraryContent(viewModel: library), size: CGSize(width: 960, height: 640), scale: 1, dark: false, to: env.root.appendingPathComponent("boosts-empty.png"))
+                try await render(LibraryContent(viewModel: library), size: CGSize(width: 960, height: 640), scale: 1, dark: false, to: env.root.appendingPathComponent("boosts-empty.png"))
+                let empty = try await renderedTexts()
                 try require(empty.contains("Nothing Boosted Yet!") && !empty.contains("Calm docs"), "Boost empty state did not replace rows")
             case "empty-states":
                 try await env.prepareLibrary(); env.downloadFeed.downloads = []

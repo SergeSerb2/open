@@ -17,7 +17,7 @@ extension AppSettingsActions {
   func deleteBoost(id: String, profileID: ProfileID) {
     guard let uuid = UUID(uuidString: id), app.model.profile(id: profileID) != nil else { return }
     let boostID = BoostID(rawValue: uuid)
-    for factory in app.hostFactories.values where factory.controller?.boostEditor?.session?.boost.id == boostID {
+    for factory in app.hostFactories.values where factory.controller?.boostEditor?.session?.context.profileID == profileID && factory.controller?.boostEditor?.session?.boost.id == boostID {
       factory.controller?.boostEditor?.close()
     }
     if app.stores.boosts.store(for: profileID).delete(id: boostID) { app.stores.boosts.refresh(profile: profileID) }

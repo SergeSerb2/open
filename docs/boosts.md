@@ -116,7 +116,9 @@ returns false. Code mode is not implemented. Color uses the documented interim
 filter math until the paint-time remap lands. The existing isolated-world harness
 receipts below do not prove the App's current world isolation.
 
-Real-App receipts are in `docs/engine-spike/results-boosteditor-debug.json`.
+The PR records redacted real-App counts, timings and load averages. The e2e
+runner writes local receipts under `docs/engine-spike/`; do not commit their
+process identifiers or temporary paths.
 Run `python3 tools/e2e/engine_e2e.py --style chrome --only boosteditor` under the
 on-screen lock. B4 and B5 report BLOCKED; they do not count as accepted behavior.
 
@@ -205,8 +207,9 @@ The bundled and served resource bytes match the final source: applier SHA-256
 The fallback bridge can be replaced after runtime load while retaining handlers;
 apply, ready, and a real banner-click commit reach the adopted transport.
 
-Production document-start timing and the actual OpenEngine adapter remain
-unverified. This pass proves package/Chrome runtime behavior and the real native
+In this historical pass, production document-start timing and the actual
+OpenEngine adapter were unverified. The Section 12 App receipts above cover the
+current adapter separately. This pass proves package/Chrome runtime behavior and the real native
 coordinator/store bridge. Existing model/store/matcher baseline results from the
 initial milestone were not repeated for this bounded fix.
 

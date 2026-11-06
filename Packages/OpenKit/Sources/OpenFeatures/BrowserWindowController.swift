@@ -1026,7 +1026,7 @@ public final class BrowserWindowController: NSWindowController, NSWindowDelegate
         refresh(); changed(); return true
     }
     public func windowWillClose(_ notification: Notification) {
-        boostEditor?.close()
+        boostEditor?.close(returnFocus: false)
         existingTabSwitcher?.cancel()
         saveWindowState(); visibilityOverride = .closed; removeRevealCard(); hintWork?.cancel(); hintWork = nil
         hoverPreview.hide(animated: false); captureStorage?.tearDown()

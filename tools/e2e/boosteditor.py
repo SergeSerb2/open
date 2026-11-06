@@ -162,14 +162,14 @@ def run(factory, results, tmp, env):
             row("B11_navigation_tab_close",b11)
             def b12():
                 tabs=[tab]+[new_tab(app,origin+"/boost.html?tab="+str(i),background=True) for i in range(9)]
-                app.call("select",tab=tab);call("open",boost=items()[0]["id"])
+                app.call("select",tab=tab);app.call("wait",tab=tab);call("open",boost=items()[0]["id"])
                 app.call("defaults",key="open.advanced.enableBoosts",value=False)
                 negative=all(probe(t)["filter"] == "none" for t in tabs)
                 app.call("defaults",key="open.advanced.enableBoosts",value=True)
                 wait_until(lambda: all("hue-rotate" in probe(t)["filter"] for t in tabs),timeout=5,step=.02)
                 before=call()["refreshCount"]
                 tap("font.Avenir")
-                wait_until(lambda: call()["refreshCount"] > before and all(probe(t)["font"].startswith("Avenir") for t in tabs),timeout=5,step=.02)
+                wait_until(lambda: call()["completedRefreshCount"] > before and all(probe(t)["font"].startswith("Avenir") for t in tabs),timeout=5,step=.02)
                 state=call()
                 return dict(positive=state["refreshPages"] == 10 and state["refreshMs"] < 100,negative=negative,refreshMs=state["refreshMs"],pages=state["refreshPages"])
             row("B12_ten_live_pages",b12)
@@ -224,7 +224,7 @@ def run(factory, results, tmp, env):
                 return dict(positive=all(v>0 for group in samples.values() for v in group),negative=app.eval(target,"!!document.getElementById('open-boosts-style')") == False,samplesMs=samples,mediansMs={k:statistics.median(v) for k,v in samples.items()},loads=loads)
             row("B15_unmatched_load_measurement",b15)
             def b16():
-                app.call("select",tab=tab);call("open",boost=items()[0]["id"])
+                app.call("select",tab=tab);app.call("wait",tab=tab);call("open",boost=items()[0]["id"])
                 old=app.call("window-state")["id"]
                 panel=call()["window"]
                 negative=active()
@@ -249,7 +249,19 @@ def run(factory, results, tmp, env):
                     except RuntimeError:refused.append(True)
                 try:app.call("boosts",action="list",profile="bad-id")
                 except RuntimeError:refused.append(True)
-                return dict(positive=accepted and len(refused) == 4,negative=before == items(),acceptedCounts=[2,512],refusedCounts=[1,513])
+                unchanged=before == items()
+                boostID=call()["boost"]["id"]
+                def renamed():
+                    return next(b for b in items() if b["id"] == boostID)
+                original=renamed()["name"]
+                tap("menu.Rename this Boost…");call("type",text="x"*16_384);tap("alert.Done")
+                atLimit=bool(wait_until(lambda: len(renamed()["name"].encode()) == 16_384,timeout=5,step=.02))
+                tap("menu.Rename this Boost…")
+                try:call("type",text="x"*16_385)
+                except RuntimeError:refused.append(True)
+                call("type",text=original);tap("alert.Done")
+                wait_until(lambda: renamed()["name"] == original,timeout=5,step=.02)
+                return dict(positive=accepted and atLimit and len(refused) == 5,negative=unchanged,acceptedCounts=[2,512],refusedCounts=[1,513],acceptedTextBytes=16_384,refusedTextBytes=16_385)
             row("B17_automation_limits",b17)
             def b18():
                 panel=call()["window"]
@@ -268,6 +280,19 @@ def run(factory, results, tmp, env):
                 app.call("little-open-action",id=sid,action="close")
                 return dict(positive=bool(ok) and initial.startswith("Avenir") and editorClosed,negative=negative)
             row("B18_little_open_live",b18)
+            def b19():
+                call("open",boost=items()[0]["id"])
+                tap("menu.Rename this Boost…")
+                caught=False
+                try:
+                    assert call()["alert"]["title"] == "Rename this Boost"
+                    raise RuntimeError("deliberate early failure with rename sheet open")
+                except RuntimeError:
+                    caught=True
+                finally:
+                    app.quit()
+                return dict(positive=app.quit_report.get("ok") is True,negative=caught,cleanup=app.quit_report)
+            row("B19_failure_sheet_cleanup",b19)
         finally:
             if app and not app.closed:
                 try:

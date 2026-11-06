@@ -118,9 +118,7 @@ final class AppBoosts: BoostsProvider {
           let controller = app.frontWindowController ?? app.makeWindow(focusedSpaceID: space.id),
           let factory = app.hostFactories[controller.windowID] else { return }
     factory.focus(space: space)
-    let before = Set(factory.hosts.keys)
-    _ = factory.openNewTab(url: url, background: false)
-    if let host = factory.hosts.values.first(where: { !before.contains($0.tabID) && $0.profileID == profileID }) { pendingEditors[host.tabID] = id }
+    if let tab = factory.openNewTab(url: url, background: false) { pendingEditors[tab.id] = id }
   }
   func saveNow() { for state in profiles.values { state.store.saveNow() } }
   func stop() { adapter.stop(); saveNow() }

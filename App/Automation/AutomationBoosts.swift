@@ -32,8 +32,11 @@ extension AutomationController {
       if let raw = args["boost"] as? String {
         guard let uuid = UUID(uuidString: raw) else { throw Failure(message: "invalid Boost ID") }; id = BoostID(rawValue: uuid)
       }
+      guard let owner = boosts.factory(for: tab), let host = owner.hosts[tab], let target = owner.controller else { throw Failure(message: "no Boost editor window") }
+      if let id, boosts.store(for: host.profileID).boost(id: id) == nil { throw Failure(message: "unknown Boost") }
       boosts.openEditor(boostID: id, tabID: tab, mode: .simple)
-      guard controller.boostEditor?.session != nil else { throw Failure(message: "could not open Boost editor") }
+      guard target.boostEditor?.session != nil else { throw Failure(message: "could not open Boost editor") }
+      return try boostEditorState(target.boostEditor)
     case "close": controller.boostEditor?.close()
     case "state": break
     case "drag":
@@ -102,7 +105,7 @@ extension AutomationController {
       "alert": editor.activeAlert.map { ["title": $0.messageText, "message": $0.informativeText, "buttons": $0.buttons.map(\.title)] as [String: Any] } ?? [:],
       "controls": view.controls.map { ["id": $0.controlID, "enabled": $0.isEnabled, "visible": !$0.isHiddenOrHasHiddenAncestor] },
       "refreshMs": runtime.lastRefreshMilliseconds, "refreshPages": runtime.lastRefreshPageCount,
-      "refreshCount": runtime.refreshCount]
+      "refreshCount": runtime.refreshCount, "completedRefreshCount": runtime.completedRefreshCount]
   }
 }
 #endif
