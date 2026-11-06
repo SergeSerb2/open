@@ -102,7 +102,7 @@ window factories' existing hosts; never a second page per tab), and
   change phase. Frozen tabs wait for their discard deadline, extended by any
   audio, load, form or retry grace deadline. It parks when every hidden tab
   with content waits for an event (keep-alive, notifications, audio, loading, capture, DevTools,
-  downloads, a known unload handler on a frozen page, a frozen page in off
+  downloads, a known unload handler on a frozen page, or any page in Never
   mode). Sleeping shells outside Never schedule one pass at their 24 h destroy time. Every
   event hook and `setNeedsPass()` (mode, permission, Low Power Mode changes)
   brings a pass forward within five seconds. The real-App
