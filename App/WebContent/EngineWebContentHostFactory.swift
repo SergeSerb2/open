@@ -526,7 +526,8 @@ final class EngineWebContentHostFactory: NSResponder, WebContentHostFactory {
       focus(space: space); app.scheduleSave(); app.scheduleMenuRebuild(); return true
     case .share(let id): return shareSidebarTab(id)
     case .duplicate(let id): return model.duplicateNode(id: id) != nil
-    case .showLibrary: app.settingsPresenter.showLibrary(); return true
+    case .showLibrary:
+      app.settingsPresenter.showLibrary(section: controller.map { app.downloadsCenter.opensDownloads(in: $0.context) } == true ? .downloads : nil); return true
     // The content toolbar (commandbar-completion §4.6): the setting is Settings ▸ Advanced's
     // "Show full URL when Toolbar is enabled"; every window follows it (AppDelegate's defaults observer).
     case .setShowFullURL(let full): app.settingsPresenter.settings.set(full, for: AppCommand.showFullURLKey); app.applyToolbarSettings(); return true
@@ -1606,12 +1607,10 @@ extension EngineWebContentHostFactory: OEBrowserContextDelegate {
     _ context: OEBrowserContext, decideDestinationFor download: OEDownload, suggestedFilename: String,
     completion: @escaping @MainActor (URL?) -> Void
   ) {
-    let dir = downloadDirectory ?? FileManager.default.urls(for: .downloadsDirectory, in: .userDomainMask)[0]
-    completion(dir.appendingPathComponent(suggestedFilename.isEmpty ? "download" : suggestedFilename))
+    app.downloadsCenter.decide(download, context: context, filename: suggestedFilename, window: window, directoryOverride: downloadDirectory, completion: completion)
   }
 
   func browserContext(_ context: OEBrowserContext, downloadDidUpdate download: OEDownload) {
-    app.settingsPresenter.noteDownload(download, context: context)
     app.tabSleep.downloadUpdated(download, factory: self)
     record(
       "download", download.webContent,
