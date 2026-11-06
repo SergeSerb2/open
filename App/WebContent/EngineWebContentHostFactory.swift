@@ -337,10 +337,14 @@ final class EngineWebContentHostFactory: NSResponder, WebContentHostFactory {
     guard let host = host as? EngineWebContentHost, host.owner === self, !host.closed,
           profile(for: tabID)?.id == host.profileID else { return false }
     // Sidebar tabs are tabs of the window's hidden Chrome window (fork patch
-    // P1); a Peek page is Alloy. Refusing closes it, and the container makes a
-    // Chrome host for the tab at its URL: one reload, accepted for v1
-    // (docs/m4.md, Peek expand).
-    if model.tab(id: tabID) != nil, host.content.runtimeStyle != app.options.defaultStyle { return false }
+    // P1); a Peek page is Alloy. The M4 Q5 fallback restores the browser's
+    // own history (including saved scroll/form state) in a Chrome host.
+    // The container closes the old host after this callback returns.
+    if model.tab(id: tabID) != nil, host.content.runtimeStyle != app.options.defaultStyle {
+      _ = makeHost(tabID: tabID, profileID: host.profileID, url: host.currentURL,
+                   history: host.content.captureNavigationHistory())
+      return false
+    }
     if host.tabID != tabID {
       let oldID = host.tabID
       if let previous = hosts[tabID], previous !== host { controller?.container.closeHost(for: tabID); previous.close() }
@@ -931,6 +935,15 @@ extension EngineWebContentHostFactory {
     focus(space: model.spaces[(i + delta + model.spaces.count) % model.spaces.count])
   }
 
+  /// The App's Exit route offers Esc to a shown Find bar before Peek/split.
+  /// Section 11 replaces the field with its per-page coordinator at this seam.
+  func dismissFindForExit() -> Bool {
+    guard findFieldCreated, !findField.isHidden else { return false }
+    findField.isHidden = true
+    selectedContent?.stopFinding(clearSelection: true); selectedContent?.focusPage()
+    return true
+  }
+
   @objc func showFind(_ sender: Any?) {
     _ = findField; layoutViews(); findField.isHidden = false
     window?.makeFirstResponder(findField)
@@ -1029,7 +1042,10 @@ extension EngineWebContentHostFactory: OEWebContentDelegate {
     let event = SwipeIndicatorView.Event(phase: phases[max(0, min(3, phase.rawValue))],
       direction: direction == .forward ? .forward : .back, progress: progress)
     var shown = false
-    if let id = tabID(for: webContent) { shown = controller?.container.showHistorySwipe(tabID: id, event) ?? false }
+    if let controller, controller.hasPeekController, controller.peekController.isShown,
+       (controller.peekController.stack.last?.host as? EngineWebContentHost)?.content === webContent {
+      controller.peekController.overlay.showHistorySwipe(event); shown = true
+    } else if let id = tabID(for: webContent) { shown = controller?.container.showHistorySwipe(tabID: id, event) ?? false }
     record("historySwipe", webContent, ["phase": event.phase.rawValue, "direction": event.direction.rawValue,
       "progress": progress, "indicator": shown])
   }
