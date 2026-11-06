@@ -112,13 +112,13 @@ Arguments are `key=value`; values that parse as JSON are sent as JSON.
 window. Optional `action` drives the same view-model methods as the buttons:
 `import`, `fresh`, `continue`, `notnow`, `back`, `finish`, `retry`, or
 `choose-dir` with `directory=PATH`. `select` sets optional `spaces`, `archive`,
-and `history` checkbox booleans on Import. `retry` on a save-error Report retries
+`history`, and `secrets` checkbox booleans on Import. Capability OFF still excludes passwords from the plan. `retry` on a save-error Report retries
 the pending model's save. Directory strings are limited to 4096 UTF-8 bytes;
 action names to 32. There is no action that changes the system default browser.
 
 For native evidence, `focus` grants input focus to this instance's first-run
 window. `inspect` reads its rendered text and top-left text frames using
-Vision on a snapshot of that window only. State includes its native frame
+Vision on a snapshot of that window only. OCR runs on a utility worker and retries only `TextRecognition.CRImageReaderError` code 1, once after 250 ms. `ocrRetries` records 0 or 1; the suite keeps its bounded 180-second timeout and all copy/geometry assertions. State includes its native frame
 size, key flag, and traffic-light frames. `snapshot` prefers the first-run
 panel while it exists. `OPEN_AUTOMATION_IMPORT_DELAY_MS` (automation builds
 only, at most 5000 ms) holds the real progress view for animation captures.
@@ -126,12 +126,12 @@ only, at most 5000 ms) holds the real progress view for animation captures.
 can close and reopen Welcome before counting finishes. Reopen restarts a
 cancelled probe when counts have not landed.
 
-State also includes `importInProgress`; while a Settings import runs,
+State also includes `importInProgress`, `historyInProgress`, `historyProcessed`, and the main-thread `importAllMilliseconds`. The landing gate clears `importInProgress` before History starts. Progress includes `phase`, `progress`, and `browserHasLanded`. While a Settings import runs,
 `settingsStep` reports `Importing`. The same command also drives the visible Settings sheet after first run:
-`settings-import` with `directory=PATH`, `settings-next`, `settings-run`,
+`settings-import` with `directory=PATH`, `settings-select` with `history=true` and optional `historyOnly=true`, `settings-next`, `settings-run`,
 and `settings-done`. State then includes `settingsStep`, `settingsOutcome`,
 and `settingsError`. These actions use the real cached wizard and shared App
-runner. History has an explicit phase-3 seam; passwords/cookies stay disabled.
+runner. `lastOutcome` and `lastFailures` remain readable after the first-run window closes. History streams through the existing Profile stores; passwords/cookies stay disabled. `OPEN_AUTOMATION_HISTORY_DELAY_MS` (automation builds only, at most 10000 ms per batch) pauses after the reader yields a real batch, before its transaction, so the suite can verify browsing while imported visits are still absent.
 
 Run the synthetic first-run flow with:
 
@@ -368,7 +368,7 @@ Additional socket commands:
 | `sidebar-duplicate id=…`, `sidebar-tree` | Send the production SidebarDelegate intent; read fresh subtree IDs and load flags. |
 | `settings-state`, `settings-toggle name=hotkey\|external` | Read the shared real presenters, including pane-local `generalError`/`advancedStatus`; commit the live Links settings model. |
 | `settings-profile` | Read the actual Profiles create-sheet state: `creating`, attached native `sheet` window number, `pane`, selected `spaces`, and `error`. `cancel=true` dismisses through the existing sheet state. |
-| `settings-icon` | Read `selected`, `applied`, pane `error`, `matchesApplication` (exact pixel equality in the actual NSApp icon's output color space and component format, including float16; AppKit copies NSImage), `imageObject` (cache identity), bitmap `pixels`, and `restoreStartedMs`/`restoreElapsedMs`. `select=<AppIconOption ID>` uses the real picker action. Default resets `NSApp.applicationIconImage` to nil. |
+| `settings-icon` | Read `selected`, `applied`, pane `error`, `matchesApplication` (exact pixel equality in the actual NSApp icon's output color space and component format, including float16; AppKit copies NSImage), `imageObject` (cache identity), bitmap `pixels`, and `restoreStartedMs`/`restoreElapsedMs` (total main work), `restorePreparationMs` (main preparation), `restoreSetterMs` (AppKit setter), `restoreDecodeMs` (worker decode/TIFF preparation). Restore uses one low-priority turn at least about 1 s after paint. `select=<AppIconOption ID>` uses the real picker action. Default resets `NSApp.applicationIconImage` to nil and does no restore work. |
 | `settings-custom-engine template=…` | Save a custom engine through the live Profiles settings model. |
 | `library-restore id=…`, `library-history-open url=…` | Exercise the live Library restore transaction or its profile-scoped history action. |
 | `history-state` | Optional `profile` UUID and `query`. Drains accepted history writes, then returns the Profile store path, search rows, commit-to-enqueue samples (ms, automation only, bounded at 4,096) and writer operation count. Store opens/searches stay on the HistoryStore actor. |
