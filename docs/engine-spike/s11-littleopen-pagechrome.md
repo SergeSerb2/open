@@ -42,12 +42,18 @@ explicit Little Open window resolve that window's factory.
 
 ## Verification
 
-Final receipts and negative proofs are pending. The initial current-engine
-real-App run passed every existing page-chrome row and the Little Open dialog,
-beforeunload and permission-persistence flows. Its Cmd+T assertion used the
-wrong expected destination and was corrected to the main command bar.
-Subsequent attempts were INTERRUPTED by foreground loss to macOS
-UserNotificationCenter and are not acceptance evidence.
+The restored implementation passes the 21 new Little Open flows (20 in the
+MIDI run plus the corrected quit-OK row). The final combined suite and required
+regressions are recorded in the PR. The first complete full verifier passed
+23/23 with no skips on AW2726DM, scale 1.0; the final-head rerun is also recorded
+in the PR. Display gates count as real checks.
+
+[Negative proof](s11-littleopen-negative-proof.json): disabling standalone
+visibility fails all 21 new rows. The dialog states remain queued, with no sheet.
+Forcing the existing NSPopover path produces a visible popover and fails both
+card rows with `Expected an in-window permission card`. Both negative runs have
+zero interruptions, clean owned-process shutdown and no forced cleanup.
+Production code was restored before final builds.
 
 ## Authorization prompt and fixture correction
 
