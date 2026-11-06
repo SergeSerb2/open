@@ -18,12 +18,14 @@ def background_response(app, tab, private, env, scale):
         path = str(Path(private) / ('R7-' + name + '.png'))
         app.call('snapshot', path=path)
         _, _, pixel = env['read_image'](path, srgb=True)
-        captures[name] = dict(snapshot=path, rgb=[list(pixel(x*scale, y*scale)) for x,y in points])
+        captures[name] = dict(snapshot=path, rgb=[list(pixel(x*scale, y*scale)) for x,y in points],
+                              pageRGB=list(pixel(700*scale, 500*scale)))
     probes = [dict(point=list(point), whiteRGB=white, blackRGB=black,
                    deltaE00=env['chrome_delta_e'](white, black),
                    maxChannelChange=max(abs(a-b) for a,b in zip(white, black)))
               for point,white,black in zip(points,captures['white']['rgb'],captures['black']['rgb'])]
     return dict(probes=probes, captures=captures, load=list(os.getloadavg()),
+                pageChanged=max(abs(a-b) for a,b in zip(captures['white']['pageRGB'],captures['black']['pageRGB']))>200,
                 diagnosticOnly=True, interpretation='A small change is evidence for R7; this does not alter S11/S12 acceptance.')
 
 
