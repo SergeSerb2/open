@@ -762,7 +762,7 @@ items, "Capture" and "Capture Full Page") and `shown` (the whole menu as it woul
 
 ## Runner lifetime
 
-E2e launchers pass `OPEN_E2E_OWNER_PID`: the shared `Open` launcher supplies it through LaunchServices, and the direct migration fixture sets it in its subprocess environment. Automation builds watch that runner with a process exit dispatch source before preparing data or windows. A missing owner exits immediately; owner death logs `Open: e2e owner <pid> exited; quitting` and requests normal shutdown (engine close skips beforeunload, and new download destination prompts are refused). A background deadline forces exit after five seconds if shutdown stalls. There is no polling or idle timer. Normal builds compile out the watcher and environment handling.
+E2e launchers pass `OPEN_E2E_OWNER_PID`: the shared `Open` launcher supplies it through LaunchServices, and the direct migration fixture sets it in its subprocess environment. Automation builds watch that runner with a process exit dispatch source before preparing data or windows. A missing owner exits immediately; owner death logs `Open: e2e owner <pid> exited; quitting` and requests normal shutdown (engine close skips beforeunload, download quit confirmation is skipped, active transfers and save choices are cancelled, and new download destination prompts are refused). A background deadline forces exit after five seconds if shutdown stalls. There is no polling or idle timer. Normal builds compile out the watcher and environment handling.
 
 ## Session downloads (S11)
 
