@@ -18,7 +18,7 @@ provenance are in `.re/s6/review-135-r2/baseline-provenance.txt`.
 ```sh
 ~/Library/Caches/OpenRE/scripts/heavy.sh tools/verify-all.sh --only sidebar-render --keep-logs
 ~/Library/Caches/OpenRE/scripts/heavy.sh tools/build.sh
-/usr/bin/lockf /tmp/open-onscreen-e2e.lock tools/e2e/engine_e2e.py --style chrome --only sidebar-completion
+/usr/bin/lockf -k /tmp/open-onscreen-e2e.lock tools/e2e/engine_e2e.py --style chrome --only sidebar-completion
 ```
 
 Valid sidebar proof: build PASS, **603 passed / 5 failed**, exit 1. Exact lines:
@@ -128,8 +128,8 @@ optimization goal remains open, as recorded in followups.
 
 ```sh
 ~/Library/Caches/OpenRE/scripts/heavy.sh tools/build.sh
-/usr/bin/lockf /tmp/open-onscreen-e2e.lock tools/e2e/engine_e2e.py --style chrome --only sidebar-completion
-/usr/bin/lockf /tmp/open-onscreen-e2e.lock tools/e2e/engine_e2e.py --style chrome --only sidebar
+/usr/bin/lockf -k /tmp/open-onscreen-e2e.lock tools/e2e/engine_e2e.py --style chrome --only sidebar-completion
+/usr/bin/lockf -k /tmp/open-onscreen-e2e.lock tools/e2e/engine_e2e.py --style chrome --only sidebar
 ```
 
 App: **BUILD SUCCEEDED**. Sidebar-completion **193/193 PASS**; sidebar **19/19
@@ -303,9 +303,9 @@ App rebuild: **BUILD SUCCEEDED** (`.re/s6/review-135/app-build.log`).
 Native commands, each in its own lock invocation after the rebuilt App:
 
 ```sh
-/usr/bin/lockf /tmp/open-onscreen-e2e.lock tools/e2e/engine_e2e.py --style chrome --only sidebar-completion
-/usr/bin/lockf /tmp/open-onscreen-e2e.lock tools/e2e/engine_e2e.py --style chrome --only sidebar
-/usr/bin/lockf /tmp/open-onscreen-e2e.lock tools/e2e/engine_e2e.py --style chrome --only window
+/usr/bin/lockf -k /tmp/open-onscreen-e2e.lock tools/e2e/engine_e2e.py --style chrome --only sidebar-completion
+/usr/bin/lockf -k /tmp/open-onscreen-e2e.lock tools/e2e/engine_e2e.py --style chrome --only sidebar
+/usr/bin/lockf -k /tmp/open-onscreen-e2e.lock tools/e2e/engine_e2e.py --style chrome --only window
 ```
 
 | Native suite | Final result | Focus / cleanup |
@@ -423,7 +423,7 @@ Final combined-source App build and native check, run sequentially after FP10:
 
 ```sh
 ~/Library/Caches/OpenRE/scripts/heavy.sh tools/build.sh
-/usr/bin/lockf /tmp/open-onscreen-e2e.lock tools/e2e/engine_e2e.py --style chrome --only sidebar-completion
+/usr/bin/lockf -k /tmp/open-onscreen-e2e.lock tools/e2e/engine_e2e.py --style chrome --only sidebar-completion
 ```
 
 App: **BUILD SUCCEEDED**. Native completion: **164/164 PASS**, including E20 and
@@ -537,9 +537,9 @@ Exact commands, all awaited in the foreground:
 ~/Library/Caches/OpenRE/scripts/heavy.sh tools/verify-all.sh --only sitecontrol-render --keep-logs
 ~/Library/Caches/OpenRE/scripts/heavy.sh tools/verify-all.sh --only sitecontrol-render --keep-logs
 ~/Library/Caches/OpenRE/scripts/heavy.sh tools/build.sh
-/usr/bin/lockf /tmp/open-onscreen-e2e.lock tools/e2e/engine_e2e.py --style chrome --only sidebar-completion
-/usr/bin/lockf /tmp/open-onscreen-e2e.lock tools/e2e/engine_e2e.py --style chrome --only sidebar-completion
-/usr/bin/lockf /tmp/open-onscreen-e2e.lock tools/e2e/engine_e2e.py --style chrome --only sidebar-completion
+/usr/bin/lockf -k /tmp/open-onscreen-e2e.lock tools/e2e/engine_e2e.py --style chrome --only sidebar-completion
+/usr/bin/lockf -k /tmp/open-onscreen-e2e.lock tools/e2e/engine_e2e.py --style chrome --only sidebar-completion
+/usr/bin/lockf -k /tmp/open-onscreen-e2e.lock tools/e2e/engine_e2e.py --style chrome --only sidebar-completion
 ~/Library/Caches/OpenRE/scripts/heavy.sh tools/verification/folder-peek-bench.py
 ```
 
@@ -647,8 +647,8 @@ outline behavior, Motion/Metrics and the original merge resolutions remain intac
 | `~/Library/Caches/OpenRE/scripts/heavy.sh tools/verify-all.sh --only sidebar-render,features-render,commands-demo,roundtrip --keep-logs` | PASS: sidebar-render **595/595** (inherited SW1–SW4 skips), features-render **332/332**, commands-demo **307/307** (six FP-AA checks included), roundtrip PASS. Build 53 s; checks 109/43/1/1 s. |
 | `~/Library/Caches/OpenRE/scripts/heavy.sh tools/verification/folder-peek-bench.py` | **3/3 PASS**, unchanged parent-approved conditional gate; loads and all p95 values below. |
 | `~/Library/Caches/OpenRE/scripts/heavy.sh tools/build.sh` | **PASS**, rebuilt App with #132 and S6 automation. |
-| `/usr/bin/lockf /tmp/open-onscreen-e2e.lock tools/e2e/engine_e2e.py --style chrome --only sidebar-completion` | **164/164 PASS**, including I9/I10 **29/29**, E20 **16/16** and all main auto-archive rows. First final-source invocation; zero focus interruptions; cleanup PASS. |
-| `/usr/bin/lockf /tmp/open-onscreen-e2e.lock tools/e2e/engine_e2e.py --style chrome --only sidebar` | **19/19 PASS**, including comparison; existing durable-profile-storage SKIP belongs to the profiles suite. First invocation; zero focus interruptions; cleanup PASS. |
+| `/usr/bin/lockf -k /tmp/open-onscreen-e2e.lock tools/e2e/engine_e2e.py --style chrome --only sidebar-completion` | **164/164 PASS**, including I9/I10 **29/29**, E20 **16/16** and all main auto-archive rows. First final-source invocation; zero focus interruptions; cleanup PASS. |
+| `/usr/bin/lockf -k /tmp/open-onscreen-e2e.lock tools/e2e/engine_e2e.py --style chrome --only sidebar` | **19/19 PASS**, including comparison; existing durable-profile-storage SKIP belongs to the profiles suite. First invocation; zero focus interruptions; cleanup PASS. |
 
 FP10 times in ms. All three native scroll work comparisons remain **18/18**;
 absolute 8.33 ms and same-run relative scroll limits pass.
@@ -714,7 +714,7 @@ Resolutions and combined behavior:
 | `~/Library/Caches/OpenRE/scripts/heavy.sh tools/verify-all.sh --only sidebar-render,features-render,commands-demo,roundtrip --keep-logs` | PASS: sidebar-render 595/595 (inherited SW1–SW4 skips), features-render 332/332 including HP11–HP14 and AA flows, commands-demo 307/307 including all six FP-AA checks, roundtrip PASS. Build 82 s; checks 108/42/2/1 s. |
 | `~/Library/Caches/OpenRE/scripts/heavy.sh tools/verification/folder-peek-bench.py` | PASS 3/3 under the parent's unchanged conditional gate; table below. |
 | `~/Library/Caches/OpenRE/scripts/heavy.sh tools/build.sh` | PASS, rebuilt actual Debug App. |
-| `/usr/bin/lockf /tmp/open-onscreen-e2e.lock tools/e2e/engine_e2e.py --style chrome --only sidebar-completion` | Final 135/135 PASS, including E20 16/16 and every main auto-archive row; 0 interruptions, cleanup PASS. Initial invocation failed E1's fixture assumption; corrected fixture invocation passes. |
+| `/usr/bin/lockf -k /tmp/open-onscreen-e2e.lock tools/e2e/engine_e2e.py --style chrome --only sidebar-completion` | Final 135/135 PASS, including E20 16/16 and every main auto-archive row; 0 interruptions, cleanup PASS. Initial invocation failed E1's fixture assumption; corrected fixture invocation passes. |
 
 FP10 times are ms; p95 values use full printed precision. Loads show attempt start
 and transition sample. Every attempt also has equal native scroll layouts/frame
@@ -732,7 +732,7 @@ Private evidence: `.re/s6/merge-verify.log`, `merge-fp10.log`, `merge-app-build.
 `merge-e2e-completion-1.log` (fixture failure), `merge-e2e-completion-2.log` (135 pass),
 `merge-completion-failure-1.json`, `merge-results-completion-final.json`. Harness logs:
 `/var/folders/s6/_07cr4w13vsg_myjkv9ldpqc0000gn/T/open-verify-20261028-170844.TGtqBW/`.
-`/usr/bin/lockf /tmp/open-onscreen-e2e.lock tools/e2e/engine_e2e.py --style chrome --only sidebar`
+`/usr/bin/lockf -k /tmp/open-onscreen-e2e.lock tools/e2e/engine_e2e.py --style chrome --only sidebar`
 **PASS 19/19**, including `comparison`, with the existing profile-storage SKIP
 owned by the profiles suite. Zero interruptions; cleanup PASS. Evidence:
 `merge-e2e-sidebar-1.log`, `merge-results-sidebar-final.json`,
@@ -881,7 +881,7 @@ Arc/private content is in those synthetic fixtures.
 |---|---|
 | `~/Library/Caches/OpenRE/scripts/heavy.sh tools/verify-all.sh --only sidebar-render,features-render --keep-logs` | PASS: build 32 s; sidebar-render **595/595** (106 s, inherited SW1–SW4 skips); features-render **293/293** (31 s). |
 | `~/Library/Caches/OpenRE/scripts/heavy.sh tools/build.sh` | PASS: rebuilt Debug Open. |
-| `/usr/bin/lockf /tmp/open-onscreen-e2e.lock tools/e2e/engine_e2e.py --style chrome --only sidebar-completion` | **80/80 PASS**, including **16/16 E20**; first suite invocation, 0 interruptions, owned-process/window cleanup PASS. No retries required. |
+| `/usr/bin/lockf -k /tmp/open-onscreen-e2e.lock tools/e2e/engine_e2e.py --style chrome --only sidebar-completion` | **80/80 PASS**, including **16/16 E20**; first suite invocation, 0 interruptions, owned-process/window cleanup PASS. No retries required. |
 | `sidebar-render plain-toggle-probe --rows 0` | Expected rejection before fixture allocation, exit 1; bounded 1,000-row control enforced. |
 
 The initial functional run before the last geometry guard also passed 595/595 and
@@ -984,7 +984,7 @@ All three paired scroll comparisons meet the parent's absolute, relative and nat
 | `~/Library/Caches/OpenRE/scripts/heavy.sh tools/verify-all.sh --only sidebar-render,features-render --keep-logs` | PASS: sidebar-render 595/595, inherited SW1–SW4 skips; features-render 293/293. |
 | `SIDEBAR_BASELINE_REF=c095ca1d2472b9763e187f5490ef6560975bf619 ~/Library/Caches/OpenRE/scripts/heavy.sh tools/verify-all.sh --only sidebar-compare --keep-logs` | PASS 13/13; same position/ink, max paired color drift ΔE00 0.13; CU5 2/2. Tables byte-identical 1/13, not 13/13. No thresholds or baseline files changed. |
 | `~/Library/Caches/OpenRE/scripts/heavy.sh tools/build.sh` | PASS, rebuilt Debug Open. |
-| `/usr/bin/lockf /tmp/open-onscreen-e2e.lock tools/e2e/engine_e2e.py --style chrome --only sidebar-completion` | INTERRUPTED after 3 bounded focus attempts: 18 accepted checks PASS, 0 FAIL, E20 not reached. Owned-process/window cleanup PASS. The c095ca1d 80/80 receipt below is historical, not a new-head pass. |
+| `/usr/bin/lockf -k /tmp/open-onscreen-e2e.lock tools/e2e/engine_e2e.py --style chrome --only sidebar-completion` | INTERRUPTED after 3 bounded focus attempts: 18 accepted checks PASS, 0 FAIL, E20 not reached. Owned-process/window cleanup PASS. The c095ca1d 80/80 receipt below is historical, not a new-head pass. |
 | Strict bench (command below) | FAIL 3/3 as shown; FP10 acceptance PENDING. |
 | Strict bench plus `--negative-proof` | Expected FAIL, exit 1: actual full native pass gives 1,000 layouts/frame vs 3; baseline/peek p95 1.76/239.21 ms, load1 4.27. |
 | Strict bench plus `--negative-transition-proof` | Expected FAIL, exit 1: 24 actual UI transitions, busy-wait phase median/p95 3.00/3.01 ms; transition median/p95/max 4.75/5.83/6.28 ms, load1 5.48. Native scroll layouts 3/3; it fails the transition gate. |
@@ -1089,10 +1089,10 @@ All commands below ran from `/Users/serge/.t3/worktrees/open/t3-85f17ccf`, seque
 | `SIDEBAR_BASELINE_REF=2d51f14a1207c00157edb90f51459d97b7b1096b ~/Library/Caches/OpenRE/scripts/heavy.sh tools/verify-all.sh --only sidebar-compare --keep-logs` | PASS: all 13 states, byte-identical parent/branch tables; maximum paired color drift 0 ΔE00, same position/ink. CU5 2/2. |
 | `~/Library/Caches/OpenRE/scripts/heavy.sh tools/verify-all.sh --only settings-preview,commands-dump --keep-logs` | PASS: settings-preview 37/37 and 216 rendered PNGs; command registry 192 commands, missing=0/extra=0/different=0. |
 | `~/Library/Caches/OpenRE/scripts/heavy.sh tools/build.sh` | PASS, final Debug app. |
-| `/usr/bin/lockf /tmp/open-onscreen-e2e.lock tools/e2e/engine_e2e.py --style chrome --only sidebar-completion` | PASS: final rebuilt app 80/80, no focus interruptions, owned-process/window cleanup PASS. |
-| `/usr/bin/lockf /tmp/open-onscreen-e2e.lock tools/e2e/engine_e2e.py --style chrome --only sidebar` | PASS: final rebuilt app 18/18, comparison PASS; 1 existing profiles-suite SKIP. One interrupted earlier attempt; bounded retry accepted all 18 checks. Cleanup PASS. |
-| `/usr/bin/lockf /tmp/open-onscreen-e2e.lock tools/e2e/engine_e2e.py --style chrome --only app-actions` | INTERRUPTED: 1 PASS, no accepted full-suite pass; 3 bounded focus attempts, cleanup PASS. |
-| `/usr/bin/lockf /tmp/open-onscreen-e2e.lock tools/e2e/engine_e2e.py --style chrome --only window` | INTERRUPTED: 5 PASS, no accepted full-suite pass; 3 bounded focus attempts, cleanup PASS. |
+| `/usr/bin/lockf -k /tmp/open-onscreen-e2e.lock tools/e2e/engine_e2e.py --style chrome --only sidebar-completion` | PASS: final rebuilt app 80/80, no focus interruptions, owned-process/window cleanup PASS. |
+| `/usr/bin/lockf -k /tmp/open-onscreen-e2e.lock tools/e2e/engine_e2e.py --style chrome --only sidebar` | PASS: final rebuilt app 18/18, comparison PASS; 1 existing profiles-suite SKIP. One interrupted earlier attempt; bounded retry accepted all 18 checks. Cleanup PASS. |
+| `/usr/bin/lockf -k /tmp/open-onscreen-e2e.lock tools/e2e/engine_e2e.py --style chrome --only app-actions` | INTERRUPTED: 1 PASS, no accepted full-suite pass; 3 bounded focus attempts, cleanup PASS. |
+| `/usr/bin/lockf -k /tmp/open-onscreen-e2e.lock tools/e2e/engine_e2e.py --style chrome --only window` | INTERRUPTED: 5 PASS, no accepted full-suite pass; 3 bounded focus attempts, cleanup PASS. |
 
 FP1–FP4 use the real public model command/UndoManager/SnapshotStore/SQLite archive flows in `openkit commands-demo`; FP11 uses the real `openkit import-arc` and `roundtrip` commands with six synthetic Arc-shaped variants. FP5–FP9 use real AppKit row views, AX actions, keyboard activation, context menus, multi-selection and the production drop path in `sidebar-render`; `features-render` covers hover eligibility/lifetime, the full folder card and unload behavior. E20 proves the App/engine path, actual native row membership and saved/reloaded DTOs. FP6 and FP10 remain separately reported below.
 

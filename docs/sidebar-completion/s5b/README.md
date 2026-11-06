@@ -39,10 +39,10 @@ From the repository root, use the shared machine locks. Run each command
 separately; do not build during an on-screen invocation.
 
 ```sh
-/usr/bin/lockf /tmp/open-m1-validation.lock ~/Library/Caches/OpenRE/scripts/heavy.sh tools/verify-all.sh --only settings-preview,profiles,sidebar-render,sidebar-compare,media-demo --keep-logs
-/usr/bin/lockf /tmp/open-m1-validation.lock ~/Library/Caches/OpenRE/scripts/heavy.sh tools/build.sh Debug
-/usr/bin/lockf /tmp/open-m1-validation.lock /usr/bin/lockf /tmp/open-onscreen-e2e.lock python3 tools/e2e/settings_previews.py --expected-engine-sha256 "$OPEN_EXPECTED_ENGINE_SHA256" --out /tmp/open-previews-flow-unique
-/usr/bin/lockf /tmp/open-m1-validation.lock /usr/bin/lockf /tmp/open-onscreen-e2e.lock python3 tools/e2e/settings_previews.py --expected-engine-sha256 "$OPEN_EXPECTED_ENGINE_SHA256" --out /tmp/open-previews-failure-unique --force-failure
+/usr/bin/lockf -k /tmp/open-m1-validation.lock ~/Library/Caches/OpenRE/scripts/heavy.sh tools/verify-all.sh --only settings-preview,profiles,sidebar-render,sidebar-compare,media-demo --keep-logs
+/usr/bin/lockf -k /tmp/open-m1-validation.lock ~/Library/Caches/OpenRE/scripts/heavy.sh tools/build.sh Debug
+/usr/bin/lockf -k /tmp/open-m1-validation.lock /usr/bin/lockf -k /tmp/open-onscreen-e2e.lock python3 tools/e2e/settings_previews.py --expected-engine-sha256 "$OPEN_EXPECTED_ENGINE_SHA256" --out /tmp/open-previews-flow-unique
+/usr/bin/lockf -k /tmp/open-m1-validation.lock /usr/bin/lockf -k /tmp/open-onscreen-e2e.lock python3 tools/e2e/settings_previews.py --expected-engine-sha256 "$OPEN_EXPECTED_ENGINE_SHA256" --out /tmp/open-previews-failure-unique --force-failure
 ```
 
 The failure invocation must exit 1 with the `FORCED: early failure` message,

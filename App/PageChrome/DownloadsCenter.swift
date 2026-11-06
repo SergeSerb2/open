@@ -261,6 +261,12 @@ final class DownloadsCenter: DownloadsProvider {
   }
   /// This runs before sleep capture or any page-beforeunload handling.
   func shouldKeepBrowsing() -> Bool {
+    #if OPEN_AUTOMATION
+    if AutomationOwnerWatch.quittingWithoutPrompts {
+      approveQuit()
+      return false
+    }
+    #endif
     guard !quitApproved, hasRunning else { return false }
     let alert = NSAlert()
     alert.messageText = "Downloads in progress"
@@ -288,10 +294,13 @@ final class DownloadsCenter: DownloadsProvider {
     #else
     if alert.runModal() != .alertFirstButtonReturn { return true }
     #endif
+    approveQuit()
+    return false
+  }
+  private func approveQuit() {
     quitApproved = true
     for entry in entries.values where entry.snapshot.state == .inProgress || entry.snapshot.state == .paused { entry.download.cancel() }
     for choice in choices.values { choice.cancel() }
-    return false
   }
   var queued: Bool { publishQueued }
 }

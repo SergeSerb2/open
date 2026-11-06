@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 """Fixtures and assertions for verify-all.sh; invokes real release interfaces only."""
 import contextlib
+import fcntl
 import json
 import os
 from pathlib import Path
@@ -81,7 +82,8 @@ def onscreen_suite(command):
     """Own lockf's shared FD; keep the 180 s execution budget after acquisition."""
     termination_signals = (signal.SIGTERM, signal.SIGINT, signal.SIGHUP)
     cancelled = None
-    directory = job = lock_file = lock_job = None
+    waiting_for_lock = False
+    directory = job = lock_file = None
     cleanup_complete = False
     output = ""
 
@@ -93,14 +95,6 @@ def onscreen_suite(command):
         # the short-lived ps children used to identify our registered app.
         previous_mask = signal.pthread_sigmask(signal.SIG_BLOCK, termination_signals)
         try:
-            if lock_job is not None:
-                if lock_job.poll() is None:
-                    lock_job.terminate()
-                    try:
-                        lock_job.wait(timeout=2)
-                    except subprocess.TimeoutExpired:
-                        lock_job.kill()
-                lock_job.wait()
             if job is not None:
                 if job.returncode is None:
                     with contextlib.suppress(ProcessLookupError):
@@ -121,7 +115,7 @@ def onscreen_suite(command):
             renderer = f"renderer {job.pid} reaped" if job is not None else "no renderer started"
             with contextlib.suppress(BrokenPipeError):
                 print(f"On-screen cleanup: {renderer}; native apps stopped={native_apps}; private root removed", flush=True)
-            # FD-mode lockf locks this shared open-file description. Reap all
+            # flock locks this shared open-file description. Reap all
             # helpers and remove the root before releasing our last descriptor.
             if lock_file is not None:
                 lock_file.close()
@@ -148,6 +142,10 @@ def onscreen_suite(command):
             cancelled = signum
         if cleanup_complete:
             exit_cancelled()
+        if waiting_for_lock:
+            # Raising prevents Python from restarting the blocking flock after
+            # the signal. Setup and child assignment still use deferred cancel.
+            raise InterruptedError("on-screen lock wait cancelled")
         # Do not raise asynchronously across TemporaryDirectory/Popen assignment:
         # a spawned child must be recorded before cancellation can unwind setup.
 
@@ -172,19 +170,17 @@ def onscreen_suite(command):
             if cancelled is not None:
                 break
             lock_file = open(lock_path, "a+")
-            lock_job = subprocess.Popen(["/usr/bin/lockf", "-k", "-s", str(lock_file.fileno())],
-                                        pass_fds=(lock_file.fileno(),),
-                                        stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
-            while cancelled is None:
-                try:
-                    lock_job.wait(timeout=0.25)
-                    break
-                except subprocess.TimeoutExpired:
-                    pass
+            waiting_for_lock = True
+            try:
+                if cancelled is None:
+                    # Join the kernel's queue alongside lockf waiters. Polling
+                    # with LOCK_NB can starve behind already-blocked waiters.
+                    fcntl.flock(lock_file.fileno(), fcntl.LOCK_EX)
+            finally:
+                waiting_for_lock = False
             if cancelled is not None:
                 break
-            require(lock_job.returncode == 0, "cannot acquire the on-screen lock")
-            # Another default-mode lockf user may unlink the path at release.
+            # An older lockf user or external replacement may unlink the path.
             # Never start a suite on a locked inode that is no longer current.
             held = os.fstat(lock_file.fileno())
             try:
@@ -892,7 +888,7 @@ def main():
             # release build and wholly offscreen checks need no on-screen lock.
             # Lock queue time is not suite execution time. The inner worker owns
             # the unchanged deadline and releases its lock after reaping children.
-            # The worker acquires lockf's FD-mode lock itself. A group signal
+            # The worker acquires the shared flock itself. A group signal
             # cannot kill a separate lock wrapper and unlock before cleanup.
             command = [sys.executable, str(Path(__file__).resolve()), "onscreen-suite", *command]
             all_passed(run(*command, timeout=None, interrupted_exit=2))

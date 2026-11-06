@@ -247,8 +247,8 @@ parity is claimed by these receipts.
 |---|---|
 | `~/Library/Caches/OpenRE/scripts/heavy.sh tools/verify-all.sh --only features-render,sidebar-render,commands-demo` | PASS: warning-free release build; commands-demo 232/232, sidebar-render 564/564, features-render 296/296 (TS1–TS10). |
 | `~/Library/Caches/OpenRE/scripts/heavy.sh tools/build.sh` | PASS: Debug Open.app, recorded fork distribution; no Chromium tree build. |
-| `/usr/bin/lockf /tmp/open-onscreen-e2e.lock python3 tools/e2e/engine_e2e.py --style chrome --only sidebar-completion` | PASS: 121/121 suite rows, including 16 TS rows. Engine fingerprint and owned-process cleanup also PASS. |
-| `/usr/bin/lockf /tmp/open-onscreen-e2e.lock python3 tools/e2e/engine_e2e.py --style chrome --only app-actions` | PASS: 47/47 action rows, plus engine fingerprint and cleanup (49 checks total). |
+| `/usr/bin/lockf -k /tmp/open-onscreen-e2e.lock python3 tools/e2e/engine_e2e.py --style chrome --only sidebar-completion` | PASS: 121/121 suite rows, including 16 TS rows. Engine fingerprint and owned-process cleanup also PASS. |
+| `/usr/bin/lockf -k /tmp/open-onscreen-e2e.lock python3 tools/e2e/engine_e2e.py --style chrome --only app-actions` | PASS: 47/47 action rows, plus engine fingerprint and cleanup (49 checks total). |
 | `Packages/OpenKit/.build/release/features-render switcher --out .re/tab-switcher/switcher-1x.png --size 1280x800 --scale 1` | PASS: inspected 1280 × 800 render. |
 | Same renderer with `--out .re/tab-switcher/switcher-2x.png --scale 2` | PASS: 2560 × 1600 render. No matching Arc frame exists for comparison. |
 
@@ -304,8 +304,8 @@ Merge-validation commands and results (same worktree, foreground):
 | `git diff --check` | PASS |
 | `~/Library/Caches/OpenRE/scripts/heavy.sh tools/verify-all.sh --only features-render,sidebar-render,commands-demo` | PASS: zero build warnings/errors; commands-demo 232/232, sidebar-render 564/564, features-render 335/335. |
 | `~/Library/Caches/OpenRE/scripts/heavy.sh tools/build.sh` | PASS: Debug Open.app. |
-| `/usr/bin/lockf /tmp/open-onscreen-e2e.lock python3 tools/e2e/engine_e2e.py --style chrome --only sidebar-completion --focus-retry-delay-seconds 180` | PASS: 135/135 suite rows, plus fingerprint and cleanup (137 total). Both E12 rows, all 16 TS rows, and E16/AA_APP passed. |
-| `/usr/bin/lockf /tmp/open-onscreen-e2e.lock python3 tools/e2e/engine_e2e.py --style chrome --only app-actions --focus-retry-delay-seconds 180` | FAIL: 46/47 action rows on each of three runs. Fingerprint and cleanup passed on all runs. The only failed row is the unchanged 50 ms `first_open_results_budget`. |
+| `/usr/bin/lockf -k /tmp/open-onscreen-e2e.lock python3 tools/e2e/engine_e2e.py --style chrome --only sidebar-completion --focus-retry-delay-seconds 180` | PASS: 135/135 suite rows, plus fingerprint and cleanup (137 total). Both E12 rows, all 16 TS rows, and E16/AA_APP passed. |
+| `/usr/bin/lockf -k /tmp/open-onscreen-e2e.lock python3 tools/e2e/engine_e2e.py --style chrome --only app-actions --focus-retry-delay-seconds 180` | FAIL: 46/47 action rows on each of three runs. Fingerprint and cleanup passed on all runs. The only failed row is the unchanged 50 ms `first_open_results_budget`. |
 
 App-actions cold-open results: **113.94 ms**, **57.45 ms**, **52.55 ms** against
 50 ms. Runs two and three began after gaps of at least three minutes. The second start's load
