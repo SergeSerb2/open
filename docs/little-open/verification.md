@@ -36,22 +36,32 @@ Chrome-style sidebar with Alloy Little Open pages. Every on-screen run takes
 `/usr/bin/lockf -k /tmp/open-onscreen-e2e.lock`. Builds use `heavy.sh` and export
 `OPEN_ENGINE_ROOT=$HOME/Developer/open-engine-s8-main`.
 
-The first complete run passed all 30 Little Open rows, with no interrupted
-attempts and successful owned-process cleanup. The final three-run streak and
-regression matrix run after merging main `8db4ac86` (including #171, #172,
-#173 and #174). The Peek navigation policy is from merged branch
-`s9/peek-app` at `09f2e1a0`; its PR was not on main when integrated.
+`littleopen` passes **34/34 three consecutive runs**, with zero interrupted
+attempts and successful owned-process cleanup in every run. Code includes main
+`ebcf08d2` (#171, #172, #173, #174 and #176). The initial integration merged
+`s9/peek-app` at `09f2e1a0` before #176 reached main; the final merge keeps its
+later commits too. Native key entry preserves the initiating timestamp through
+`OEApplication.sendEvent` and the App dispatcher, including delayed delivery.
+A File-menu request before engine readiness queues its timestamp until engine
+initialization, without adding a timer.
+
+The suite covers B4–B7/B9/B10, the no-main-window table, two real Profiles,
+Window/Dock commands, native timer counts, visibility/ticker behavior, history,
+NUX and real Chromium modifier-click navigation. The default-on modifier-click
+case starts with its defaults key absent. Native Cmd+L, Esc, Cmd+T and Cmd+W
+also pass in a separate real-App flow; Cmd+W retires the engine page and adds
+no archive entry.
 
 B10 uses the real S2 19/0011 window capture kept in the shared `.re/` tree.
 The page, Profile name, host text and controls are excluded from color samples.
 Measured element frames match §9.3. The pill sample is sRGB `#050627` in both
 captures, ΔE00 0. The bar and capsule samples stay in the specified ranges.
-The reference is private and is never committed. The native Open PNG contains
+The reference is private and is never committed. The [native Open PNG](page-state.png) contains
 synthetic fixture data only.
 
 ## Negative proofs
 
-One real-App run deliberately removed the same-press comparison, added a
+A real-App run under persistent `lockf -k`, with zero interruptions, deliberately removed the same-press comparison, added a
 retained 60-second coordinator Timer, omitted the Little Open visibility feed,
 changed the screen inset to 25 pt and changed the pill to red. The checks failed:
 
@@ -69,9 +79,44 @@ no remaining owned processes. Source files were restored byte for byte from
 saved SHA-256 manifests before the accepted build. The temporary throw was
 removed as well. No threshold, baseline or allowlist changed.
 
+The delayed-key check also fails on the older App binary with the library
+guard still enabled: direct duplicate 2 sessions, delayed menu twin 3, next
+press 4 (starting from 1). The corrected App reports 2 / 2 / 3 in all three
+accepted runs. The native key carries a five-second-old timestamp; this is
+not a second coordinator-only call.
+
 ## Acceptance receipts
 
-The final suite matrix and verify-all receipt are recorded below after completion.
+| Suite | Result | Notes |
+|---|---|---|
+| littleopen | 34/34 ×3 | No interruptions; cleanup PASS. |
+| routing | 9/9 | Real Little Open commit and window. |
+| peek | 42/42 | Includes main #176 changes. |
+| window | 76 PASS | Four required pixel rows PASS; two Release-budget rows SKIP in Debug. |
+| sidebar | 19 PASS | Pixel comparison PASS; durable-profile row delegated to profiles. |
+| sidebar-completion | 193 PASS | Metadata is not counted as a check. |
+| commandbar | 63/63 | PASS. |
+| toolbar | 10/10 | PASS. |
+| numbering | 3/3 | PASS. |
+| sleep | 20 PASS | Capture fixture BLOCKED; interrupted first attempt excluded and retried. |
+
+All accepted runs report successful cleanup. Window first stopped because its
+Release render helper was missing. After building that helper with zero
+warnings/errors, one attempt lost foreground and was excluded; the complete
+rerun passed. Sidebar was also rerun with the helper. These are Debug App
+receipts, not Release cold-launch performance claims. The final full
+`verify-all.sh --with-arc-data` table is recorded in the PR.
+
+Native feature timer counts are 0 with no sessions, 0 with a Never session,
+1 with an expiring Little Open session, and 1 with both Today and Little Open
+expiries. The shared scheduler has one armed timer in both expiring cases.
+The source coordinator contains no polling Timer.
+
+B10 checks the capsule, Profile icon, copy button, Space button, divider,
+chevron, pill, native traffic-light frames and the page's `[0, 47, W, H−47]`
+frame. It compares real PNG samples in sRGB with the §9.3 ranges widened by
+four channel levels as B10 specifies; the pill limit is ΔE00 ≤ 2. All three
+runs report pill ΔE00 0 against both `#050627` and the private S2 capture.
 
 ## User hand checks
 

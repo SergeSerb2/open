@@ -1,0 +1,378 @@
+{
+  "B10": {
+    "expected": {
+      "capsule": [
+        84,
+        8,
+        896,
+        31
+      ],
+      "chevron": [
+        1156,
+        15,
+        16,
+        16
+      ],
+      "copy": [
+        957,
+        16,
+        16,
+        16
+      ],
+      "divider": [
+        1148,
+        14,
+        1,
+        18
+      ],
+      "open": [
+        994,
+        15,
+        148,
+        17
+      ],
+      "pill": [
+        989,
+        8,
+        188,
+        30
+      ],
+      "profileIcon": [
+        97,
+        17,
+        14,
+        14
+      ]
+    },
+    "frames": {
+      "capsule": [
+        84,
+        8,
+        896,
+        31
+      ],
+      "chevron": [
+        1156,
+        15,
+        16,
+        16
+      ],
+      "copy": [
+        957,
+        16,
+        16,
+        16
+      ],
+      "divider": [
+        1148,
+        14,
+        1,
+        18
+      ],
+      "host": [
+        532.5,
+        15.5,
+        51,
+        16
+      ],
+      "open": [
+        994,
+        15,
+        148,
+        17
+      ],
+      "pill": [
+        989,
+        8,
+        188,
+        30
+      ],
+      "profile": [
+        114,
+        15.5,
+        45,
+        16
+      ],
+      "profileIcon": [
+        97,
+        17,
+        14,
+        14
+      ]
+    },
+    "ok": true,
+    "pillDeltaE00": 0.0,
+    "reference": {
+      "capture": "S2 19/0011",
+      "masks": "page, Profile name, host text, controls and traffic lights; measured element frames from section 9.3",
+      "pillDeltaE00": 0.0,
+      "samples": {
+        "bar": [
+          43,
+          38,
+          52
+        ],
+        "capsule": [
+          58,
+          59,
+          77
+        ],
+        "pill": [
+          5,
+          6,
+          39
+        ]
+      },
+      "size": [
+        1185,
+        832
+      ],
+      "status": "PRESENT"
+    },
+    "samples": {
+      "bar": [
+        39,
+        42,
+        55
+      ],
+      "capsule": [
+        62,
+        61,
+        74
+      ],
+      "pill": [
+        5,
+        6,
+        39
+      ]
+    }
+  },
+  "configuration": "Debug",
+  "delayedKeyOldBinary": {
+    "before": 1,
+    "delayedMenuTwin": 3,
+    "nextPress": 4,
+    "ok": false,
+    "route": "OEApplication.sendEvent with a five-second-old key-down stamp",
+    "samePress": 2
+  },
+  "delayedKeyOldBinaryCleanup": true,
+  "display": "M5 Pro, AW2726DM main display, 1x",
+  "engineDistributionSHA256": "f34400e71412d87a0b268fcd5658a8563cca34f600c8dd17b534a63e76aa7939",
+  "mainCommit": "ebcf08d2",
+  "manualChecks": [
+    "Real option-command-N from another app",
+    "Real external HTTP(S) click from Mail",
+    "B2: accept and decline Set as Default Browser"
+  ],
+  "nativeFeatureTimers": {
+    "empty": 0,
+    "expiring": 1,
+    "never": 0,
+    "todayAndLittleOpen": 1,
+    "todayOnly": 1
+  },
+  "negativeCleanup": true,
+  "negativeProof": {
+    "dialogFailure": {
+      "error": "deliberate Profile alert cleanup proof: visible=True",
+      "ok": false
+    },
+    "failedRows": [
+      "B10_title_bar",
+      "B9_bar_frame",
+      "B9_page_frame",
+      "B9_second_first_frame",
+      "same_press_guard",
+      "suite",
+      "sweeper_no_poll_never",
+      "sweeper_one_timer",
+      "visibility_feed_and_ticker"
+    ],
+    "interrupted": [],
+    "lock": "lockf -k",
+    "pillDeltaE00": 54.49725524513355,
+    "samePress": {
+      "before": 1,
+      "nextPress": 4,
+      "ok": false,
+      "samePress": 3
+    },
+    "sourceRestored": true,
+    "timers": {
+      "empty": 1,
+      "expiring": 2,
+      "never": 1,
+      "scheduler": 1
+    },
+    "visibilityProtected": false
+  },
+  "regressions": [
+    {
+      "notes": "Real Little Open commit and window.",
+      "result": "9/9",
+      "suite": "routing"
+    },
+    {
+      "notes": "Includes main #176 changes.",
+      "result": "42/42",
+      "suite": "peek"
+    },
+    {
+      "notes": "Four required pixel rows PASS; two Release-budget rows SKIP in Debug.",
+      "result": "76 PASS",
+      "suite": "window"
+    },
+    {
+      "notes": "Pixel comparison PASS; durable-profile row delegated to profiles.",
+      "result": "19 PASS",
+      "suite": "sidebar"
+    },
+    {
+      "notes": "Metadata is not counted as a check.",
+      "result": "193 PASS",
+      "suite": "sidebar-completion"
+    },
+    {
+      "notes": "PASS.",
+      "result": "63/63",
+      "suite": "commandbar"
+    },
+    {
+      "notes": "PASS.",
+      "result": "10/10",
+      "suite": "toolbar"
+    },
+    {
+      "notes": "PASS.",
+      "result": "3/3",
+      "suite": "numbering"
+    },
+    {
+      "notes": "Capture fixture BLOCKED; interrupted first attempt excluded and retried.",
+      "result": "20 PASS",
+      "suite": "sleep"
+    }
+  ],
+  "rows": {
+    "B10_title_bar": true,
+    "B4_delivery_resurfaces": true,
+    "B4_field_and_hotkey": true,
+    "B4_real_engine": true,
+    "B5_cmd_o_creates_main": true,
+    "B5_picker": true,
+    "B6_auto_main_input_preserved": true,
+    "B6_auto_main_navigation_preserved": true,
+    "B6_blank_no_main_bar_cmd_o": true,
+    "B6_cold_no_saved_windows_only_little": true,
+    "B6_cold_saved_windows_stay": true,
+    "B6_external_no_main": true,
+    "B6_last_main_closed": true,
+    "B6_quit_no_restore": true,
+    "B7_never": true,
+    "B7_one_hour_archive": true,
+    "B7_restore_focused_today": true,
+    "B9_bar_frame": true,
+    "B9_page_frame": true,
+    "B9_second_first_frame": true,
+    "NUX_once": true,
+    "close_all_no_archive": true,
+    "history": true,
+    "option_command_click": true,
+    "option_command_toggle_off": true,
+    "profile_confirm_cancel": true,
+    "same_press_guard": true,
+    "show_all": true,
+    "startup_deferred_little_open": true,
+    "sweeper_no_poll_never": true,
+    "sweeper_one_timer": true,
+    "sweeper_shared_today_timer": true,
+    "visibility_feed_and_ticker": true,
+    "window_and_dock_menus": true
+  },
+  "runs": [
+    {
+      "cleanup": true,
+      "interruptedAttempts": 0,
+      "passed": 34,
+      "reportedAt": "2026-11-05 18:45:11",
+      "run": 1,
+      "samePress": {
+        "before": 1,
+        "delayedMenuTwin": 2,
+        "nextPress": 3,
+        "ok": true,
+        "route": "OEApplication.sendEvent with a five-second-old key-down stamp",
+        "samePress": 2
+      },
+      "total": 34
+    },
+    {
+      "cleanup": true,
+      "interruptedAttempts": 0,
+      "passed": 34,
+      "reportedAt": "2026-11-05 18:49:57",
+      "run": 2,
+      "samePress": {
+        "before": 1,
+        "delayedMenuTwin": 2,
+        "nextPress": 3,
+        "ok": true,
+        "route": "OEApplication.sendEvent with a five-second-old key-down stamp",
+        "samePress": 2
+      },
+      "total": 34
+    },
+    {
+      "cleanup": true,
+      "interruptedAttempts": 0,
+      "passed": 34,
+      "reportedAt": "2026-11-05 18:53:50",
+      "run": 3,
+      "samePress": {
+        "before": 1,
+        "delayedMenuTwin": 2,
+        "nextPress": 3,
+        "ok": true,
+        "route": "OEApplication.sendEvent with a five-second-old key-down stamp",
+        "samePress": 2
+      },
+      "total": 34
+    }
+  ],
+  "sourceCommit": "16cd3ed1",
+  "windowDebugTiming": {
+    "cold_fresh_profile": {
+      "median_ms": {
+        "engineStart": 468,
+        "engineStarted": 572,
+        "firstContentfulPaint": 742,
+        "main": 305,
+        "modelLoaded": 311,
+        "sidebarDrawn": 466
+      },
+      "reason": "Release timing budgets are not evaluated in Debug",
+      "samples": 5,
+      "status": "SKIP"
+    },
+    "warm_existing_profile": {
+      "median_ms": {
+        "engineStart": 476,
+        "engineStarted": 570,
+        "firstContentfulPaint": 754,
+        "main": 315,
+        "modelLoaded": 321,
+        "sidebarDrawn": 474
+      },
+      "reason": "Release timing budgets are not evaluated in Debug",
+      "samples": 5,
+      "status": "SKIP"
+    }
+  },
+  "windowPixelRows": {
+    "chrome_dark_rings": true,
+    "comparison": true,
+    "traffic_light_look": true,
+    "traffic_light_stale_hover": true
+  }
+}
