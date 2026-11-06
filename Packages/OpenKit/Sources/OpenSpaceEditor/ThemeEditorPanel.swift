@@ -22,6 +22,7 @@ public final class ThemeEditorPanel: EditorPopoverPanel {
     public init() {
         super.init(contentRect: CGRect(origin: CGPoint(x: -20000, y: -20000), size: ThemeEditorMetrics.panelSize),
                    styleMask: [.borderless], backing: .buffered, defer: false)
+        acceptsMouseMovedEvents = true
         isFloatingPanel = false; hasShadow = true; isOpaque = false; backgroundColor = .clear
         isReleasedWhenClosed = false; hidesOnDeactivate = false
         contentView = editorView
@@ -35,6 +36,11 @@ public final class ThemeEditorPanel: EditorPopoverPanel {
     }
     public override var canBecomeKey: Bool { true }
     public override var canBecomeMain: Bool { false }
+    public override func constrainFrameRect(_ frameRect: NSRect, to screen: NSScreen?) -> NSRect {
+        // The controller clamps the material body. AppKit's default top-edge
+        // constraint would also pull the transparent outer band onto screen.
+        frameRect
+    }
     public func applyAppearance(_ mode: SpaceStyleAppearance) {
         guard appliedMode != mode else { return }; appliedMode = mode
         switch mode {
