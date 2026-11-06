@@ -1,0 +1,182 @@
+{
+  "engineSHA256": "7b49090502568f8189aa0e94f7cf23344beec5bed537136eff5f7fce573ad35a",
+  "hosted_webstore_prompt": {
+    "ok": true,
+    "prompt": {
+      "browser": 1,
+      "buttons": [
+        "Cancel",
+        "Add Extension"
+      ],
+      "chromiumButtons": [
+        "Cancel",
+        "Add extension"
+      ],
+      "chromiumTitle": "Add \"Google Translate\"?",
+      "events": [
+        {
+          "context": "Default",
+          "event": "changed"
+        },
+        {
+          "context": "Default",
+          "event": "commands"
+        },
+        {
+          "context": "Default",
+          "event": "ready"
+        }
+      ],
+      "extension": "aapbdbdomjkkjkaonfhkkikfgjllcleb",
+      "handler": true,
+      "name": "Google Translate",
+      "pending": true,
+      "permissionLines": [
+        "Read and change all your data on all websites"
+      ],
+      "permissions": [
+        {
+          "details": [],
+          "message": "Read and change all your data on all websites"
+        }
+      ],
+      "queued": 1,
+      "retainedDevices": [],
+      "retainedFiles": [],
+      "title": "Add Google Translate extension to Open?",
+      "triggeringExtensionName": "",
+      "type": "install",
+      "webContent": 2
+    },
+    "native": []
+  },
+  "manager_webstore_install": {
+    "ok": true,
+    "prompt": {
+      "browser": 1,
+      "buttons": [
+        "Cancel",
+        "Add Extension"
+      ],
+      "chromiumButtons": [
+        "Cancel",
+        "Add extension"
+      ],
+      "chromiumTitle": "Add \"Google Translate\"?",
+      "events": [
+        {
+          "context": "Default",
+          "event": "changed"
+        },
+        {
+          "context": "Default",
+          "event": "commands"
+        },
+        {
+          "context": "Default",
+          "event": "ready"
+        }
+      ],
+      "extension": "aapbdbdomjkkjkaonfhkkikfgjllcleb",
+      "handler": true,
+      "name": "Google Translate",
+      "pending": true,
+      "permissionLines": [
+        "Read and change all your data on all websites"
+      ],
+      "permissions": [
+        {
+          "details": [],
+          "message": "Read and change all your data on all websites"
+        }
+      ],
+      "queued": 1,
+      "retainedDevices": [],
+      "retainedFiles": [],
+      "title": "Add Google Translate extension to Open?",
+      "triggeringExtensionName": "",
+      "type": "install",
+      "webContent": 0
+    },
+    "answer": {
+      "answered": "accept",
+      "browser": 1,
+      "buttons": [
+        "Cancel",
+        "Add Extension"
+      ],
+      "chromiumButtons": [
+        "Cancel",
+        "Add extension"
+      ],
+      "chromiumTitle": "Add \"Google Translate\"?",
+      "events": [
+        {
+          "context": "Default",
+          "event": "changed"
+        },
+        {
+          "context": "Default",
+          "event": "commands"
+        },
+        {
+          "context": "Default",
+          "event": "ready"
+        }
+      ],
+      "extension": "aapbdbdomjkkjkaonfhkkikfgjllcleb",
+      "handler": true,
+      "injectedCancel": false,
+      "name": "Google Translate",
+      "pending": true,
+      "permissionLines": [
+        "Read and change all your data on all websites"
+      ],
+      "permissions": [
+        {
+          "details": [],
+          "message": "Read and change all your data on all websites"
+        }
+      ],
+      "queued": 0,
+      "retainedDevices": [],
+      "retainedFiles": [],
+      "title": "Add Google Translate extension to Open?",
+      "triggeringExtensionName": "",
+      "type": "install",
+      "webContent": 0
+    },
+    "completion": [
+      {
+        "error": "",
+        "event": "installComplete",
+        "id": "aapbdbdomjkkjkaonfhkkikfgjllcleb",
+        "installed": true
+      }
+    ],
+    "installed": true
+  },
+  "cleanup": {
+    "windows_before_quit": 0,
+    "error": "[Errno 61] Connection refused",
+    "forced": false,
+    "windows_after_quit": {
+      "count": 0,
+      "windows": []
+    },
+    "remaining_processes": [],
+    "ok": true,
+    "owned_pids": [
+      44181,
+      44195,
+      44196,
+      44197,
+      44198,
+      44203,
+      44204,
+      44207,
+      44212,
+      44215
+    ]
+  }
+}
