@@ -221,14 +221,18 @@ def run(factory, results, tmp, h):
         app.call('first-run', action='settings-done')
         browser_id = app.call('shell-windows')[0]['id']
         app.call('window-focus', id=browser_id, activate=True)
-        app.call('key', key='z', modifiers=['command'])
-        row('settings_merge_one_undo', {t['id'] for t in app.call('tabs')} == before_tabs)
+        undo_before = app.call('space-manager-state')
+        undo_key = app.call('key', key='z', modifiers=['command'])
+        undone_tabs = {t['id'] for t in app.call('tabs')}
+        row('settings_merge_one_undo', undone_tabs == before_tabs,
+            before=undo_before, key=undo_key, after=app.call('space-manager-state'),
+            expected=sorted(before_tabs), actual=sorted(undone_tabs))
         app.call('save')
         previous = snapshot_path().read_bytes()
         snapshot_path().unlink(); snapshot_path().mkdir()
         settings_import(expanded)
         row('settings_merge_save_rollback', 'previous browser state was kept' in state()['settingsError']
-            and {t['id'] for t in app.call('tabs')} == before_tabs, error=state()['settingsError'])
+            and {t['id'] for t in app.call('tabs')} == undone_tabs, error=state()['settingsError'])
         snapshot_path().rmdir(); snapshot_path().write_bytes(previous)
         app.call('first-run', action='settings-done')
         app.quit()
