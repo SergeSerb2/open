@@ -101,15 +101,15 @@ Arguments are `key=value`; values that parse as JSON are sent as JSON.
 | `find` / `zoom` / `mute` | `tab`, … | Find in page, zoom level, mute |
 | `print-pdf` | `tab`, `path` | Print to a PDF file |
 | `devtools-open`, `fullscreen-exit` | `tab` | — |
-| `extensions` | — | Installed extensions and the window's toolbar actions (through the OpenWeb `ExtensionHost` protocol) |
+| `extensions` | — | Installed extensions and the window's toolbar actions, with `duplicatesDropped` from the App's first-occurrence normalization. Action fields match `actions` below. |
 | `popup` | `extension` | Run the action like a click on its button; returns the popup page |
 | `popup-close` | — | Close the open popup |
 | `actions` | — | The focused window's toolbar actions from Chrome's model (fork patch P2): `ready`, and per action id, name, title, tooltip, accessible name, badge and colors, enabled, has popup, pinned and pinned index, wants to run, site access, showing popup, `live` (from the live model, else the profile's list), and the toolbar image and plain icon (PNG byte count, hash, point width, `pixels`: each representation's pixel size, and `object`: the image object's identity) |
-| `ext-pin` | `extension`, `pinned` (default `true`) | Pin or unpin an action |
-| `ext-move` | `extension`, `index` | Move a pinned action to a pinned index |
+| `ext-pin` | `extension`, `pinned` (default `true`), optional `index` | Pin or unpin an action; optionally move it through the guarded App host. |
+| `ext-move` | `extension`, `index` | Move only a currently pinned action. Clamp to the normalized pinned list and skip a no-op, as a native drag does. |
 | `ext-prompt` | `answer` (`accept`/`cancel`), `hold`, `handler`, `clear`, `twice` | Pending consent: type, extension/name, Open title/buttons (§3.11), `chromiumTitle`/`chromiumButtons`, permissions/details/lines, retained files/devices and weak page/browser ids. Holds by default; `hold=false` releases without answering. `handler=false` preserves Chromium's dialogs. `clear` cancels the queue; `twice` checks duplicate-answer safety. Also returns registry events. |
 | `ext-manage` | `extension`, `action` (`enable`, `disable`, `uninstall`, `reload`, `install-webstore`, `install-crx`), `path` | Live per-profile management. Remove always prompts. Web Store completion is recorded in `ext-prompt.events`, leaving the socket free to answer consent. Local CRX is guarded by `--open-automation` and uses the real installer/prompt. |
-| `ext-commands` | — | `{ready, context, commands}`. Each command has extension, name, summary, Cocoa key equivalent/modifier flags, global and action-command flags. Uppercase letters encode Shift in Cocoa's pair. |
+| `ext-commands` | — | `{ready, context, commands}`. Each command has extension, name, summary, Cocoa key equivalent/modifier flags, global and action-command flags, normalized shortcut, `dropped` and conflicting `openCommandID`. Uppercase letters encode Shift in Cocoa's pair. |
 | `ext-run-command` | `extension`, `name` | `executeExtensionCommand`: named event with active tab, or action with source command; unknown/inactive commands return false. |
 | `ext-strip` | `surface` (`url`, `pane`, `toolbar`, `little`) | Visible action ids in order, button and more frames in Cocoa window coordinates, visibility, layout/redraw counts and image conversions. `strips` includes unfocused panes. A missing App presenter reports `blocked`. |
 | `ext-hover` | `inside` (default true) | Tagged mouse-moved and tracking events inside Open, over or away from the sidebar. Does not move the hardware pointer. |
