@@ -132,7 +132,7 @@ public final class SpaceCreationController {
         host.addSublayer(circle)
         let reduced = Motion.reducesMotion, duration = reduced ? 0.2 : 0.5
         let fade = CABasicAnimation(keyPath: "opacity"); fade.fromValue = 1; fade.toValue = 0
-        fade.beginTime = reduced ? 0 : 0.3; fade.duration = 0.2
+        fade.beginTime = reduced ? 0 : 0.3; fade.duration = 0.2; fade.fillMode = .backwards
         let group = CAAnimationGroup(); group.duration = duration; group.animations = [fade]
         if !reduced {
             let grow = CABasicAnimation(keyPath: "transform.scale"); grow.fromValue = 0; grow.toValue = 1; grow.duration = duration
