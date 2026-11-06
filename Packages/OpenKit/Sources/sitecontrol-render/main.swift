@@ -15,8 +15,8 @@ struct CLIError: Error, CustomStringConvertible { let description: String }
 enum CLI {
     static let foundationNames = ["scc-no-boosts","scc-hover-action","scc-pane-anchor","scc-clamped"]
     static let sccNames = ["scc-no-boosts","scc-boost","scc-adblock-on","scc-adblock-excluded","scc-adblock-unavailable","scc-insecure","scc-boosts-off","scc-incognito","scc-internal-page","scc-many","scc-pane-anchor","scc-clamped","scc-light","scc-hover-label","scc-hover-boost","scc-hover-action","scc-keyboard-focus","scc-reload","scc-menu","scc-picker","scc-tooltip","scc-tooltip-on","scc-tooltip-off","scc-tooltip-unavailable","scc-tooltip-private","scc-focus-boost"]
-    // Zap mode and code mode are deferred to P7/Steps 6–7; stored Zap counts render here.
-    static let editorNames = ["editor-first-run","editor-no-color","editor-color","editor-dragging","editor-advanced","editor-font-selected","editor-zap-count","editor-name-menu","editor-scope-menu","editor-delete-alert","editor-not-active","editor-global-off","editor-legacy","editor-neutral-page"]
+    // Zap mode is deferred to P7/Step 6; stored Zap counts render here.
+    static let editorNames = ["editor-first-run","editor-no-color","editor-color","editor-dragging","editor-advanced","editor-font-selected","editor-zap-count","editor-name-menu","editor-scope-menu","editor-delete-alert","editor-not-active","editor-global-off","editor-legacy","editor-neutral-page","editor-code-css","editor-code-js-dirty"]
     static let names = sccNames + editorNames
     static func value(_ args: [String], _ name: String) -> String? {
         guard let i = args.firstIndex(of: name), i + 1 < args.count else { return nil }; return args[i + 1]
@@ -43,6 +43,8 @@ enum CLI {
             if state.hasPrefix("editor-") { let stage = EditorStage(state: state,scale: scale,appearance: .light); print(Flows.accessibilityDump(stage.view),terminator: "") }
             else { let stage = Stage(state: state,scale: scale,appearance: appearance); _ = stage.render(scale: scale); print(Flows.accessibilityDump(stage.controller.view.panel),terminator: "") }
         case "extensions-check": report(SectionFlows.extensions())
+        case "code-bench": report(CodeFlows.bench())
+        case "code-flows": report(CodeFlows.run())
         case "flows": report(value(args,"--group") == "editor" ? EditorFlows.run() : Flows.run()+EditorFlows.run())
         case "cold-measure":
             guard args == ["cold-measure","--thread-instructions"] else { throw CLIError(description: "usage: sitecontrol-render cold-measure --thread-instructions") }
@@ -73,6 +75,7 @@ enum CLI {
             var checks = autoreleasepool { Bench.run(only: .cold) }
             checks += autoreleasepool { Flows.run() }
             checks += autoreleasepool { EditorFlows.run() }
+            checks += autoreleasepool { CodeFlows.run() }
             for name in sccNames { for appearance in [ContentAppearance.light,.dark] { for scale: CGFloat in [1,2] {
                 autoreleasepool {
                     let stage = Stage(state: name,scale: scale,appearance: appearance)
@@ -82,7 +85,7 @@ enum CLI {
             checks += autoreleasepool { EditorFlows.renders() }
             checks += try receipts()
             checks += autoreleasepool { Bench.run(only: .skeleton) }
-            checks += EditorBench.run(acceptInstructionCost: true); report(checks)
+            checks += EditorBench.run(acceptInstructionCost: true);checks += CodeFlows.bench();report(checks)
         case "screens":
             guard let out = value(args,"--out") else { throw CLIError(description: "screens requires --out") }
             let states = value(args,"--group") == "editor" ? editorNames : names

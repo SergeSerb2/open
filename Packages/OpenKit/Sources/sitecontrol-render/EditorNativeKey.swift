@@ -54,7 +54,7 @@ import OpenDesign
             var checks: [Flows.Check] = rows.compactMap { row in guard let name = row["name"] as? String,let pass = row["pass"] as? Bool else { return nil };return .init(name:name,pass:pass,interrupted: row["interrupted"] as? Bool ?? false) }
             guard checks.count == rows.count else { return [.init(name:"F25 native result schema is complete",pass:false)] }
             let interrupted = checks.contains(where: \.interrupted)
-            checks.append(.init(name:interrupted ? "F25 native attempt \(attempt) exits after foreground interruption" : "F25 native suite completes all nine checks and exits",pass:(interrupted || rows.count == 9) && process.terminationStatus == 0));return checks
+            checks.append(.init(name:interrupted ? "F25 native attempt \(attempt) exits after foreground interruption" : "F25 native suite completes all ten checks and exits",pass:(interrupted || rows.count == 10) && process.terminationStatus == 0));return checks
         } catch { return [.init(name:"F25 registered native harness launch: \(error)",pass:false)] }
     }
     private static var focusAttempt = 1
@@ -98,6 +98,16 @@ import OpenDesign
             p.alert("Cancel");p.panel.makeKey();p.settle()
             check("F25 native floating-window key entry focuses Done",p.panel.isKeyWindow && p.panel.firstResponder === p.view.control(id:"editor.done"))
             p.key(48,"\t");check("F25 Tab follows Done with the name menu",p.panel.firstResponder === p.view.control(id:"editor.name"))
+            p.tap("editor.tool.code");p.settle(0.3)
+            if let code = p.view.codeView {
+                p.parent.makeKeyAndOrderFront(nil)
+                let point = code.editor.convert(CGPoint(x:80,y:20),to:nil)
+                let up = NSEvent.mouseEvent(with:.leftMouseUp,location:point,modifierFlags:[],timestamp:CACurrentMediaTime(),windowNumber:p.panel.windowNumber,context:nil,eventNumber:1,clickCount:1,pressure:0)!
+                NSApp.postEvent(up,atStart:false)
+                p.mouse(.leftMouseDown,point:CGPoint(x:80,y:20),in:code.editor);p.settle()
+                check("F25 click into code makes the native editor key",p.panel.isKeyWindow && !p.parent.isKeyWindow && p.panel.firstResponder === code.editor)
+            } else { check("F25 code view exists",false) }
+            p.controller.setCodeMode(false,animated:false);p.panel.makeKey();p.settle()
             checks.append(checkDoneKeyReturn(first: p))
         }
         let rows = checks.map { ["name":$0.name,"pass":$0.pass,"interrupted":$0.interrupted] as [String:Any] }

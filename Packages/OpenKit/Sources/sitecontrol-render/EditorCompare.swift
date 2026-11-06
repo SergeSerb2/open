@@ -22,13 +22,25 @@ enum EditorCompare {
             var child = Bitmap(width: 250,height: 232,fill: 255)
             for y in 0..<232 { for x in 0..<250 { child.set(x,y,arc.pixel(x,y+258)) } };arc = child
         }
-        guard advanced ? (arc.width == 250 && arc.height == 232) : (arc.width == 183 && arc.height == 588) else { throw CLIError(description: "editor capture dimensions do not match the complete native window") }
+        guard advanced ? (arc.width == 250 && arc.height == 232) : (arc.width == (state == "editor-code-css" ? 480 : 183) && arc.height == 588) else { throw CLIError(description: "editor capture dimensions do not match the complete native window") }
         var elements: [Element] = []
         func text(_ name: String,_ r: CGRect) { elements.append(.init(name: name,rect: r,kind: .text)) }
         func ink(_ name: String,_ r: CGRect) { elements.append(.init(name: name,rect: r,kind: .ink)) }
         func fill(_ name: String,_ r: CGRect) { elements.append(.init(name: name,rect: r,kind: .fill(r))) }
         func box(_ name: String,_ r: CGRect,_ sample: CGRect) { elements.append(.init(name: name,rect: r,kind: .box(sample))) }
-        if advanced {
+        if state == "editor-code-css" {
+            fill("code header",CGRect(x:4,y:30,width:5,height:5))
+            ink("Back arrow",CGRect(x:11,y:12,width:18,height:17));text("Back label",CGRect(x:33,y:9,width:39,height:23))
+            text("CSS segment label",CGRect(x:199,y:9,width:34,height:23));text("JS segment label",CGRect(x:252,y:9,width:27,height:23))
+            fill("CSS selected segment",CGRect(x:198,y:12,width:4,height:3));fill("JS idle segment",CGRect(x:277,y:12,width:4,height:3))
+            fill("code bottom bar",CGRect(x:110,y:540,width:5,height:5))
+            for (i,title) in ["Pick Selector","Developer Tools"].enumerated() {
+                let x = 15+i*48
+                fill(title+" button",CGRect(x:x+4,y:540,width:3,height:3))
+            }
+            // Pick Selector remains disabled until Step 8, so its glyph differs by design.
+            ink("Developer Tools glyph",CGRect(x:70,y:542,width:24,height:24))
+        } else if advanced {
             for y in 2..<13 { elements.append(.init(name: "advanced arrow row \(y)",rect: CGRect(x: 104,y: y,width: 43,height: 1),kind: .arrow)) }
             for (i,title) in ["Contrast","Brightness","Original Saturation"].enumerated() {
                 text(title,CGRect(x: 30,y: 39+i*62,width: 190,height: 23))

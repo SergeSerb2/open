@@ -186,7 +186,7 @@ enum EditorFlows {
         for _ in 0..<40 { fonts.key(48,"\t"); if fonts.panel.firstResponder === fourth { break } }
         let visible = fourth.visibleRect
         check("F12 font grid keeps 26 pt cells and keyboard focus",fonts.panel.firstResponder === fourth && fourth.bounds.width == 26 && visible.width >= 25.9 && fourth.showsKeyboardFocus)
-        check("design 12 disabled tile copy is user-facing",fonts.view.control(id: "editor.tool.zap")?.tooltipTitle == "Zap isn’t available yet." && fonts.view.control(id: "editor.tool.code")?.tooltipTitle == "Code editing isn’t available yet.")
+        check("design 12 Zap stays disabled and Code is available",fonts.view.control(id: "editor.tool.zap")?.tooltipTitle == "Zap isn’t available yet." && fonts.view.control(id: "editor.tool.code")?.isEnabled == true)
         return checks
     }
     private static func scopeFlows() -> [Flows.Check] {
@@ -244,9 +244,9 @@ enum EditorFlows {
         var checks: [Flows.Check] = []
         for state in CLI.editorNames { for scale: CGFloat in [1,2] { autoreleasepool {
             let stage = EditorStage(state: state,scale: scale),image = stage.render(),body = stage.editorImage()
-            checks.append(.init(name: "render \(state) \(Int(scale))x light editor and opaque canvas",pass: image.width == Int(1200*scale) && image.height == Int(900*scale) && body.width == Int(183*scale) && CLI.fullyOpaque(image) && stage.panel.appearance?.name == .aqua))
+            checks.append(.init(name: "render \(state) \(Int(scale))x light editor and opaque canvas",pass: image.width == Int(1200*scale) && image.height == Int(900*scale) && body.width == Int((state.hasPrefix("editor-code-") ? 480 : 183)*scale) && CLI.fullyOpaque(image) && stage.panel.appearance?.name == .aqua))
             let m = BoostEditorMetrics.self
-            if !["editor-not-active","editor-global-off"].contains(state) {
+            if !state.hasPrefix("editor-code-") && !["editor-not-active","editor-global-off"].contains(state) {
                 checks.append(.init(name: "render \(state) control frames match captured AX",pass: stage.view.pad.frame == m.ringFrame && stage.view.control(id: "editor.done")?.frame == m.done && stage.view.control(id: "editor.tool.size")?.frame == m.size && stage.view.control(id: "editor.tool.code")?.frame == m.code))
             }
             if state == "editor-no-color" {

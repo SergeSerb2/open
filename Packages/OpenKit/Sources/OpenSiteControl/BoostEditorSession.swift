@@ -3,6 +3,7 @@ import ImageIO
 import OpenModel
 import OpenBoosts
 import OpenAdBlock
+import OpenDesign
 
 public struct BoostScopeChoice: Sendable, Equatable {
     public let title: String
@@ -39,6 +40,44 @@ public final class BoostEditorSession {
     private var sampleTask: Task<Double?, Never>?
     private var sampleGeneration = 0
     private var deleted = false
+    /// The exact configured delays of pending native edits; cleared when flushed.
+    public private(set) var pendingCodeSaveDelays: [BoostCodeLanguage: TimeInterval] = [:]
+    private var codeWork: [BoostCodeLanguage: DispatchWorkItem] = [:]
+    private var codeDrafts: [BoostCodeLanguage: String] = [:]
+    private var didEditCode = false
+    public private(set) var devToolsVisible = false
+    public var showsJSNotice: Bool { !(codeDrafts[.js] ?? boost.js).isEmpty && !defaults.bool(forKey: "open.boosts.hasDismissedJSNotice") }
+    public var needsJSReload: Bool { boost.js != (host.loadedJS(boostID: boost.id,tabID: context.tabID) ?? "") }
+    public func code(_ language: BoostCodeLanguage) -> String { codeDrafts[language] ?? (language == .css ? boost.css : boost.js) }
+    public func editCode(_ text: String,language: BoostCodeLanguage) {
+        guard isEditable else { return }
+        let noticeBefore = showsJSNotice
+        didEditCode = true;codeDrafts[language] = text;codeWork[language]?.cancel()
+        let work = DispatchWorkItem { [weak self] in MainActor.assumeIsolated { self?.flushCode(language) } }
+        codeWork[language] = work
+        let delay = language == .css ? BoostEditorMetrics.cssSaveDelay : BoostEditorMetrics.jsSaveDelay
+        pendingCodeSaveDelays[language] = delay
+        DispatchQueue.main.asyncAfter(deadline: .now()+delay,execute: work)
+        if noticeBefore != showsJSNotice { onChange?() }
+    }
+    public func flushCode(_ language: BoostCodeLanguage? = nil) {
+        for kind in language.map({ [$0] }) ?? [.css,.js] {
+            codeWork.removeValue(forKey: kind)?.cancel();pendingCodeSaveDelays.removeValue(forKey: kind)
+            guard let text = codeDrafts.removeValue(forKey: kind),isEditable else { continue }
+            if kind == .css { boost.css = text } else { boost.js = text }
+            boost = store.upsert(boost)
+            if kind == .css { host.refresh(profile: context.profileID) }
+        }
+        onChange?()
+    }
+    public func boundPageDidCommit() { guard !isClosed else { return };onChange?() }
+    public func refreshToRun() {
+        guard isEditable else { return }
+        flushCode();host.reload(tabID: context.tabID)
+    }
+    public func toggleDevTools() { guard isEditable else { return };devToolsVisible.toggle();host.setDevToolsVisible(devToolsVisible,tabID: context.tabID);onChange?() }
+    public func dismissJSNotice() { defaults.set(true,forKey: "open.boosts.hasDismissedJSNotice");onChange?() }
+
     private var currentPageURL: URL?
 
     public init(context: SiteControlContext, boost: Boost, isNew: Bool = false,
@@ -50,7 +89,7 @@ public final class BoostEditorSession {
         sampledHue = boost.colorWheel?.baseHue
         undoManager.groupsByEvent = false
     }
-    isolated deinit { previewWork?.cancel(); sampleTask?.cancel() }
+    isolated deinit { previewWork?.cancel(); sampleTask?.cancel();codeWork.values.forEach { $0.cancel() } }
     public var isEditable: Bool { !context.isIncognito && !isClosed }
     public var globallyEnabled: Bool { defaults.object(forKey: "open.advanced.enableBoosts") as? Bool ?? true }
     public var showsInterstitial: Bool { !defaults.bool(forKey: "open.boosts.hasDismissedInterstitial") }
@@ -146,6 +185,7 @@ public final class BoostEditorSession {
         }
     }
     public func resetAll() {
+        flushCode()
         change("Reset all edits") { b in
             b.colorWheel = nil; b.colorAdjustment = nil; b.fontFamily = nil
             b.textZoom = nil; b.textTransform = nil; b.zaps = []; b.css = ""; b.js = ""
@@ -155,6 +195,7 @@ public final class BoostEditorSession {
     public func showAllBoosts() { host.showBoostsLibrary(profileID: context.profileID) }
     public func delete() {
         guard isEditable else { return }
+        codeWork.values.forEach { $0.cancel() };codeWork.removeAll();pendingCodeSaveDelays.removeAll();codeDrafts.removeAll()
         previewWork?.cancel(); sampleTask?.cancel(); deleted = true
         previewWork = nil; interactiveBefore = nil; interactiveOwner = nil
         _ = store.delete(id: boost.id); store.saveNow(); host.refresh(profile: context.profileID)
@@ -163,9 +204,10 @@ public final class BoostEditorSession {
     public func finish() {
         guard !isClosed else { return }
         if interactiveBefore != nil { endInteractive() }
+        flushCode()
         previewWork?.cancel(); previewWork = nil; sampleTask?.cancel()
         host.exitZap(tabID: context.tabID)
-        if isNew && boost.isEmpty && !deleted {
+        if isNew && boost.isEmpty && !didEditCode && !deleted {
             _ = store.delete(id: boost.id); host.refresh(profile: context.profileID)
         }
         store.saveNow()
@@ -202,6 +244,7 @@ public final class BoostEditorSession {
     private func change(_ name: String, edit: (inout Boost) -> Void) {
         guard isEditable else { return }
         if interactiveBefore != nil { endInteractive() }
+        flushCode()
         let before = boost; var candidate = boost; edit(&candidate); boost = BoostStore.normalizedForPreview(candidate)
         commit(before: before, name: name)
     }
