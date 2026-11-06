@@ -328,7 +328,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate, OEEngineDelegate, OEBr
 
   func didFocusWindow(_ id: WindowID) {
     activeWindowID = id
-    for (otherID, factory) in hostFactories where otherID != id { factory.commandBarSession?.dismiss() }
+    for (otherID, factory) in hostFactories where otherID != id {
+      factory.commandBarSession?.dismiss()
+      factory.controller?.boostEditor?.close(returnFocus: false)
+    }
     MainMenu.targetWindowCommands(hostFactories[id])
     settingsPresenter.refreshSpaceManagerContext()
   }
@@ -443,6 +446,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, OEEngineDelegate, OEBr
     ExtensionWindowController.closeAll()
     stopAutoArchive()
     tabSleep.stop()
+    stores.boosts.stop()
     shutdownPrepared = true
     recordShutdownPhase("prepare")
     afterPaintTask?.cancel(); afterPaintTask = nil
@@ -663,7 +667,7 @@ extension AppDelegate: CommandDispatcher {
     case "view-media": settingsPresenter.showLibrary(section: .media)
     case "view-archive": settingsPresenter.showLibrary(section: .archive)
     case "view-history": settingsPresenter.showLibrary(section: .history)
-    case "view-boosts": settingsPresenter.show(); settingsPresenter.settings.statusText = "Boost editing is not available in this build."
+    case "view-boosts": settingsPresenter.showLibrary(section: .boosts)
     case "keyboard-shortcuts-edu":
       // Help ▸ Essential Keyboard Shortcuts: Arc's floating EDU window (commandbar-completion §4.5, CC-27).
       EssentialShortcutsWindowController.shared.show(near: frontWindowController?.window ?? NSApp.keyWindow, store: keyBindings)

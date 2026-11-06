@@ -355,7 +355,7 @@ final class EngineWebContentHostFactory: NSResponder, WebContentHostFactory {
     // Website appearance is app-wide (page-platform §4.8): every context gets it at creation.
     if profile.id == model.defaultProfile?.id {
       let context = WebsiteAppearance.prepare(OEEngine.shared.defaultContext)
-      app.extensionPrompts.register(context.extensions); return context
+      app.extensionPrompts.register(context.extensions); app.stores.boosts.adapter.prepare(context, profile: profileID); return context
     }
     guard app.engine.result.layout == .engine else {
       // The old layout has no disk folder for other profiles (CEF refused
@@ -369,7 +369,7 @@ final class EngineWebContentHostFactory: NSResponder, WebContentHostFactory {
     }
     let context = OEEngine.shared.context(identifier: profile.dataDirectoryName, directory: app.directories.engineDirectory(dataDirectoryName: profile.dataDirectoryName))
       .map(WebsiteAppearance.prepare)
-    if let context { app.extensionPrompts.register(context.extensions) }; return context
+    if let context { app.extensionPrompts.register(context.extensions); app.stores.boosts.adapter.prepare(context, profile: profileID) }; return context
   }
   private static var legacyRefusals: Set<String> = []
   var focusedBrowser: OEBrowser? {
@@ -425,6 +425,7 @@ final class EngineWebContentHostFactory: NSResponder, WebContentHostFactory {
     return host
   }
   func hostDidClose(_ host: EngineWebContentHost) {
+    app.stores.boosts.hostClosed(host)
     pageChrome.cancel(host.content)
     if pageContextMenu?.belongs(to: host.content) == true { pageContextMenu?.cancel(); pageContextMenu = nil }
     translate.contentDidClose(host.content)
@@ -564,6 +565,9 @@ final class EngineWebContentHostFactory: NSResponder, WebContentHostFactory {
   /// editors return false, so no successful no-op reaches the sidebar.
   func performSidebar(_ intent: SidebarIntent) -> Bool? {
     switch intent {
+    case .customizePage(let id):
+      guard app.stores.boosts.canEdit(tabID: id) else { return false }
+      app.stores.boosts.editCurrent(tabID: id); return true
     case .dismissAutoArchiveBanner: app.dismissAutoArchiveEducation(); return true
     case .openProfileSettings(let id):
       guard model.profile(id: id) != nil else { return false }
@@ -649,7 +653,7 @@ final class EngineWebContentHostFactory: NSResponder, WebContentHostFactory {
       guard let tab = model.tab(id: id), tab.pinnedURL != nil else { return false }
       showCommandBar(.editCurrentURL, editingPinnedTab: tab.id); return true
     case .showSiteControls, .changeSpaceIcon, .editSpaceTheme, .newProfile, .shareSpace,
-         .changeIcon, .customizePage:
+         .changeIcon:
       return false // Explicitly deferred UI entries; see docs/app-shell.md Step B.
     default: return nil
     }
@@ -718,6 +722,7 @@ final class EngineWebContentHostFactory: NSResponder, WebContentHostFactory {
   }
   func closeAll() {
     guard !isClosing else { return }
+    controller?.boostEditor?.close()
     isClosing = true
     pageChrome.close()
     pageContextMenu?.cancel(); pageContextMenu = nil
@@ -815,7 +820,9 @@ extension EngineWebContentHostFactory {
   @objc func focusAddressBar(_ sender: Any?) { showCommandBar(.editCurrentURL) }
 
   func ownsKeyWindow(_ candidate: NSWindow) -> Bool {
-    candidate === window || candidate === popupPanel || auxiliaryPages.contains { $0.panel === candidate } || pageChrome.owns(candidate)
+    if let panel = controller?.boostEditor?.panel, candidate === panel || candidate.sheetParent === panel { return true }
+    if let panel = controller?.boostEditor?.view?.advancedPopover?.panel, candidate === panel { return true }
+    return candidate === window || candidate === popupPanel || auxiliaryPages.contains { $0.panel === candidate } || pageChrome.owns(candidate)
   }
   func navigateFromCommandBar(_ url: URL, current: Bool, background: Bool = false) {
     app.noteLaunchWindowNavigation(windowState.id)

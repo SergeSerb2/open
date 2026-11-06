@@ -59,6 +59,7 @@ final class EngineWebContentHost: NSObject, WebContentHost, WebContentProviding,
     historyRecorder = AppHistoryRecorder(stores: owner.app.stores, profileID: profileID)
     spaceID = owner.space(for: tabID)?.id ?? owner.focusedSpace?.id
     super.init(); content.delegate = self
+    owner.app.stores.boosts.adapter.prepare(content.context, profile: profileID)
     // Tab pages draw Open's own swipe indicator (page-platform §4.4.3), not Chromium's arrow.
     content.drawsEngineHistorySwipeOverlay = false
     content.historySwipeEnabled = owner.historySwipeAllowed
@@ -117,6 +118,7 @@ final class EngineWebContentHost: NSObject, WebContentHost, WebContentProviding,
     // CEF's OnLoadStart excludes same-document commits. Address changes outside
     // a document load cover pushState/fragments without duplicating that hook.
     if changes.contains(.URL), let url = page.url {
+      if !page.isLoading { owner.app.stores.boosts.pageCommitted(self, url: url) }
       historyRecorder.addressChanged(url, isLoading: page.isLoading, ephemeral: page.context.isEphemeral, title: page.title)
     }
     if changes.contains(.loading), !page.isLoading { historyRecorder.loadingChanged(false); historyRecorder.titleChanged(page.title) }
@@ -304,6 +306,7 @@ final class EngineWebContentHost: NSObject, WebContentHost, WebContentProviding,
   }
   func webContent(_ page: OEWebContent, didCommitNavigationTo url: URL, isReload: Bool) {
     guard !closed else { return }
+    owner?.app.stores.boosts.pageCommitted(self, url: url)
     owner?.findController?.didNavigate(page)
     historyRecorder.committed(url: url, isReload: isReload, ephemeral: page.context.isEphemeral)
     owner?.record("historyCommit", page, ["url": url.absoluteString, "reload": isReload])

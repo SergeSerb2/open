@@ -918,3 +918,27 @@ relaunches that profile, and repeats the drag after repair.
 `OPEN_E2E_E2_FORCE_FAILURE=popup` stops the suite with its native popup open;
 `popup-quit` first quits the App to exercise restoration without the socket.
 Frame preferences are restored after quit through the shared defaults fallback.
+
+## Boost runtime and simple editor (Section 12)
+
+| Command | Arguments | Result |
+|---|---|---|
+| `boosts` | `action: list|get`, optional `profile` UUID, `boost` UUID for get | Values from the App's loaded Profile store. No mutation API. |
+| `boost-editor` | `action: open|close|state|drag|key|tap|type`, optional `boost`, `tab` for open | Real simple editor and session. Private or non-http(s) tabs refuse open. |
+
+`drag` takes 2–512 finite `[x,y]` points within the color pad, in editor-view
+coordinates. It sends mouse down, drag through the final point, then mouse up.
+`key` uses the normal `key` arguments and always routes through OEApplication.
+`tap` takes a native control ID (`editor.color.invert`, `editor.undo`), a plan alias
+(`font.Avenir`, `size`, `case`, `firstRun.makeABoost`), `menu.<native title>`, or
+`alert.Done|Cancel|Delete`. Menus and alerts use their real native actions.
+`type text=...` edits the active rename sheet through App key events (16 KiB
+limit). CSS/JS typing reports blocked until Code mode exists.
+
+State includes the Boost value, bound tab/Profile, interstitial, global and scope
+state, undo state, controls, panel frame/key state, specific active alert, and
+last completed live refresh timing/page count. The `boosteditor` suite exercises
+B1–B3 and B6–B10, plus navigation/close, ten-page refresh, Library and saved-script
+flows. B4 is blocked by P7; B5 is blocked by Code mode. Every row includes a real
+negative control. The suite restores all preference keys in `finally` and uses
+an ephemeral local fixture server plus the runner's isolated roots/cleanup.

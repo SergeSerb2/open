@@ -41,6 +41,7 @@ func require(_ condition: @autoclosure () throws -> Bool, _ message: String) thr
         histories = Dictionary(uniqueKeysWithValues: settings.model.profiles.map { ($0.id, HistoryStore(fileURL: directories.historyFileURL(for: $0))) })
         faviconStore = try FaviconStore(databaseURL: root.appendingPathComponent("State/favicons.sqlite3"))
         library = LibraryViewModel(model: settings.model, defaults: defaults, actions: libraryActions, downloads: downloadFeed, captures: captures, archives: archives, histories: histories, snapshot: settings.snapshot, faviconStore: faviconStore, settingsActions: actions)
+        library.boostsProvider = libraryActions
         let library = self.library
         libraryActions.selectedHistoryProfile = { [weak library] in library?.historyProfileID }
         let settings = self.settings
@@ -51,6 +52,10 @@ func require(_ condition: @autoclosure () throws -> Bool, _ message: String) thr
         try Data("synthetic-settings-v1".utf8).write(to: root.appendingPathComponent("State/settings-preview.marker"))
     }
     func prepareLibrary() async throws {
+        libraryActions.boostRows = Dictionary(uniqueKeysWithValues: settings.model.profiles.map { profile in
+            (profile.id, [BoostItemSnapshot(id: UUID().uuidString, name: "Calm docs", domain: "example.com", isEnabled: true),
+                          BoostItemSnapshot(id: UUID().uuidString, name: "Reading", domain: "example.org", pathPrefix: "/docs", isEnabled: false)])
+        })
         try await SyntheticData.seedLibrary(root: root, model: settings.model, archives: archives, histories: histories)
         try captures.reload()
         if let item=captures.captures.first {for domain in ["example.com","example.org","example.net"] {try await faviconStore.ingest(imageData:Data(contentsOf:captures.directory.appendingPathComponent(item.fileName)),iconURL:URL(string:"https://\(domain)/favicon.ico"),for:URL(string:"https://\(domain)/")!,pageSpecific:false)}}
@@ -86,7 +91,7 @@ func require(_ condition: @autoclosure () throws -> Bool, _ message: String) thr
 }
 
 @MainActor func runChecks(only: String?) async throws {
-    let names = ["extension-shortcuts", "essential-shortcuts", "shortcuts-callout", "general-toggles", "default-browser", "profile-search", "profile-archive-scope", "profile-downloads", "clear-data", "profile-guards", "links-rules", "links-toggles", "shortcuts-save", "shortcuts-conflict", "advanced-toggles", "adblock", "app-icon", "import-counts", "library-archive", "library-downloads", "library-captures-history", "empty-states", "archive-save-failure", "archive-owner-partial", "adblock-profile-lifecycle", "suggestion-notice", "shortcuts-recording-admission", "archive-paging", "links-save-failure", "adblock-readiness", "settings-caches", "library-folder-archive", "library-tidy-search", "first-run-actions-and-adapter-gate", "first-run-probe", "first-run-count-parity", "probe-cancel-mid-copy", "sidebar-defaults", "library-spaces", "previews-legacy-migration"]
+    let names = ["extension-shortcuts", "essential-shortcuts", "shortcuts-callout", "general-toggles", "default-browser", "profile-search", "profile-archive-scope", "profile-downloads", "clear-data", "profile-guards", "links-rules", "links-toggles", "shortcuts-save", "shortcuts-conflict", "advanced-toggles", "adblock", "app-icon", "import-counts", "library-archive", "library-downloads", "library-captures-history", "library-boosts", "empty-states", "archive-save-failure", "archive-owner-partial", "adblock-profile-lifecycle", "suggestion-notice", "shortcuts-recording-admission", "archive-paging", "links-save-failure", "adblock-readiness", "settings-caches", "library-folder-archive", "library-tidy-search", "first-run-actions-and-adapter-gate", "first-run-probe", "first-run-count-parity", "probe-cancel-mid-copy", "sidebar-defaults", "library-spaces", "previews-legacy-migration"]
     if let only { try require(names.contains(only), "Unknown check \(only)") }
     var passed = 0
     for name in names where only == nil || only == name {
@@ -668,6 +673,20 @@ func require(_ condition: @autoclosure () throws -> Bool, _ message: String) thr
                 try require(library.historyRows.count == 2, "Work history profile scope")
                 let workURL = library.historyRows[0].url; library.actions.openHistoryItem(url: workURL)
                 disk = try env.diskModel(); try require(disk.spaces[2].today.contains { $0.tab?.url == workURL }, "history opened in the wrong profile")
+            case "library-boosts":
+                try await env.prepareLibrary(); let library = env.library
+                library.section = .boosts
+                let labels = try await render(LibraryContent(viewModel: library), size: CGSize(width: 960, height: 640), scale: 1, dark: false, to: env.root.appendingPathComponent("boosts.png"))
+                try require(labels.contains("Calm docs") && labels.contains("Made for example.org/docs"), "Boost rows did not render")
+                env.defaults.set(false, forKey: "open.advanced.enableBoosts")
+                try await withAccessibleHost(BoostsSection(model: library), size: CGSize(width: 684, height: 600)) { host in
+                    try require(env.defaults.bool(forKey: "open.advanced.enableBoosts") == false, "negative control: Boosts were already on")
+                    try require(pressAccessibilityElement(host, label: "Turn On"), "Turn On was not available")
+                }
+                try require(env.defaults.bool(forKey: "open.advanced.enableBoosts"), "Turn On did not write the supplied defaults store")
+                env.libraryActions.boostRows = [:]
+                let empty = try await render(LibraryContent(viewModel: library), size: CGSize(width: 960, height: 640), scale: 1, dark: false, to: env.root.appendingPathComponent("boosts-empty.png"))
+                try require(empty.contains("Nothing Boosted Yet!") && !empty.contains("Calm docs"), "Boost empty state did not replace rows")
             case "empty-states":
                 try await env.prepareLibrary(); env.downloadFeed.downloads = []
                 for store in env.archives.values { try await store.deleteAll() }

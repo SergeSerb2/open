@@ -12,6 +12,7 @@ final class AppStores {
   private var histories: [ProfileID: HistoryStore] = [:]
   private var currentProfile: ProfileID?
   private var currentSuggest: SuggestEngine?
+  lazy var boosts = AppBoosts(app: app)
   lazy var adBlock = try? AdBlockStore(root: app.directories.root)
   lazy var favicons = try? FaviconStore(databaseURL: app.directories.root.appendingPathComponent("State/favicons.sqlite3"))
   lazy var sidebarFavicons = favicons.map { StoredFaviconCache(store: $0) }

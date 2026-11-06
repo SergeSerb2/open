@@ -61,6 +61,7 @@ import OpenStore
         let view = settingsActions?.makeSpaceManagerView()
         if cachedSpaceManagerView !== view { cachedSpaceManagerView = view }
     }
+    public var boostsProvider: (any BoostsProvider)?
     public let downloads: any DownloadsProvider
     public let captures: any CapturesProvider
     public private(set) var archives: [ProfileID: ArchiveStore]

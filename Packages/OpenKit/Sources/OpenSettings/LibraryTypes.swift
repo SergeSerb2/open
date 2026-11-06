@@ -3,10 +3,11 @@ import OpenModel
 import Observation
 
 public enum LibrarySection: String, CaseIterable, Sendable {
-    case spaces, archive, downloads, captures, media, history
+    case spaces, archive, downloads, captures, boosts, media, history
     public var title: String { rawValue.capitalized }
     public var symbol: String { switch self {
     case .spaces: "rectangle.split.3x1"; case .archive: "archivebox"; case .downloads: "arrow.down.circle"; case .captures: "camera"
+    case .boosts: "paintbrush.pointed"
     case .media: "photo.on.rectangle"; case .history: "clock"
     } }
 }
@@ -14,6 +15,10 @@ public enum OriginFilter: String, CaseIterable, Sendable { case all, spaces, lit
 @MainActor public protocol DownloadsProvider: AnyObject { var downloads: [DownloadItemSnapshot] { get } }
 @MainActor public protocol CapturesProvider: AnyObject { var captures: [CaptureItemSnapshot] { get }; var directory: URL { get }; func remove(id: UUID) throws }
 @MainActor public protocol LibraryActions: AnyObject {
+    func setBoostEnabled(id: String, enabled: Bool, profileID: ProfileID)
+    func renameBoost(id: String, to name: String, profileID: ProfileID)
+    func deleteBoost(id: String, profileID: ProfileID)
+    func editBoost(id: String, profileID: ProfileID)
     func restoreArchived(id: ItemID)
     func deleteArchived(id: ItemID)
     func clearArchive()

@@ -1,11 +1,10 @@
 # Boosts + Zap
 
-Profiles integration: pass `fileURL: ProfileDirectories(root: root).boostsFileURL(for: profile)` to `BoostStore(root:profileID:fileURL:)`. The current destination is `Profiles/<dataDirectoryName>/Boosts/boosts.json`. The original `root:profileID:` constructor remains available for standalone callers; the App must pass the explicit Profile path. No App caller exists yet.
+Profiles integration: pass `fileURL: ProfileDirectories(root: root).boostsFileURL(for: profile)` to `BoostStore(root:profileID:fileURL:)`. The current destination is `Profiles/<dataDirectoryName>/Boosts/boosts.json`. The original `root:profileID:` constructor remains available for standalone callers; the App must pass the explicit Profile path. `AppBoosts` supplies this path and loads each store once before mutation.
 
 `OpenBoosts` is a Swift 6, macOS 26+ library in OpenKit. It depends only on
 `OpenModel` for `ProfileID`. It provides the data, persistence, matching, injection
-plans, picker bridge, and page runtimes. It has no engine or App wiring. Editor UI,
-Settings storage, sharing, imports, and per-frame engine injection remain future work.
+plans, picker bridge, and page runtimes. The App runtime and simple editor host live in `App/Boosts/`; native editor controls live in `OpenSiteControl`. Sharing, imports, Zap transport and Code mode remain future work.
 
 ## API
 
@@ -77,6 +76,49 @@ store. There is no DOM manifest. The stylesheet contains CSS only, with no Boost
 ID comments or attributes. Hide selectors are inherently observable CSS; they are
 not secrets. A page-created `__openZap.enter({boostID})` does not enter picking.
 A page-invented nonce cannot pass the native session check.
+
+## App runtime and editor (Section 12, Step 5)
+
+`AppBoosts` owns one store and matcher per loaded Profile. Editor commits, undo,
+Library switches, rename and delete rebuild the matcher at the same boundary.
+The global preference uses a UserDefaults notification; the runtime has no timer
+or idle polling. The Site Control provider methods are present without protocol
+conformance so the parallel Site Control App adapter can adopt them.
+
+Engine user scripts are Profile-wide. `BoostEngineAdapter` registers all reachable
+matcher plans before the first navigation. Mutually exclusive host/path gates
+keep overlapping plans separate across tabs. Replacing scripts is synchronous on
+the main actor and touches only `open.boosts.*`. Main-frame document-start appliers
+carry CSS, color filters, font, zoom, transform and saved Zaps. User JS is a
+separate document-start script; live preview/refresh never executes it. Commits
+and SPA address changes update the bound page. No matching Boost and no old live
+plan causes no JavaScript evaluation or runtime injection.
+
+Global off removes scripts and clears live pages. Global on rebuilds scripts and
+refreshes pages. Ephemeral contexts use the incognito planner policy; existing
+Boosts apply, while editor commands refuse ephemeral and non-http(s) pages.
+The browser's incognito window UI remains a separate App-shell gap.
+
+The simple editor is bound to one tab and one window. Tab, Space, Profile and
+window changes close it; navigation outside scope keeps it open with the native
+inactive banner. Preview uses the session's 60 Hz coalescing and the bound page
+only. Snapshots, reload and DevTools use OpenEngine. Cmd+Z/Shift+Cmd+Z enter via
+OEApplication before page edit routing and use the editor's own undo stack.
+
+`new-boost`, `edit-boost`, `new-legacy-boost`, Customize Page and `view-boosts`
+are wired. Legacy opens simple mode until Code mode lands. Gallery is disabled.
+Library Boosts uses the same stores and a Profile picker, with Edit, Rename,
+Delete, enable switches, the empty state and global Turn On action.
+
+**Limits:** managed scripts currently run in the main world. Overlay secrecy is
+not proven. P7 isolated-world/native message support blocks Zap; `enterZap`
+returns false. Code mode is not implemented. Color uses the documented interim
+filter math until the paint-time remap lands. The existing isolated-world harness
+receipts below do not prove the App's current world isolation.
+
+Real-App receipts are in `docs/engine-spike/results-boosteditor-debug.json`.
+Run `python3 tools/e2e/engine_e2e.py --style chrome --only boosteditor` under the
+on-screen lock. B4 and B5 report BLOCKED; they do not count as accepted behavior.
 
 ## Verification (2026-10-25, America/Vancouver)
 

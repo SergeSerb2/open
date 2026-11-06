@@ -231,3 +231,16 @@ Merged evidence: [#170](https://github.com/SergeSerb2/open/pull/170) (static pag
 - **Closed — Little Open: JS dialogs and permission prompts.** Standalone visibility feeds the shared NSAlert queue; Little Open uses an in-window permission card and the engine beforeunload close/quit preflight. Real-App `page-chrome` `little_*` rows cover replies, early loading, hidden windows, close Cancel/OK, MIDI persistence, focus and motion. Every new row has a missing-visibility negative proof; forced popovers fail the card rows. See [the S11 receipt](engine-spike/s11-littleopen-pagechrome.md) and [negative proof](engine-spike/s11-littleopen-negative-proof.json).
 - Little Open (Chrome-style tab load path): a Chrome-style tab of a hidden Browser loads 8–13 ms slower than an Alloy page (median +12 % for a typed URL, +5 % for an external link; p95 +6 % / +3.5 %). This affects Little Open since #185 and may affect every sidebar tab, which uses the same path. Owner: Section 16 or the next engine section, to profile where the time goes after the Browser is ready. Evidence: #185 receipts `docs/little-open/receipts/2026-11-06-realistic/` (20 interleaved pairs per path, engine 3f45b07b). — Section 9, 2026-11-06.
 - **Reference captures and system grants.** [Page-chrome §7](re/page-chrome.md#7-captures-that-would-settle-the-remaining-questions) still needs user-operated Arc captures. Permission width/edge and Downloads ring geometry/recent interval remain guesses. Combined camera/microphone and real macOS authorization/delivery remain BLOCKED under the no-credential-prompt rule; notifications/MIDI fixtures do not prove them (#180). Owner: user captures / lead, with the owning engine sections for system grants.
+
+## Section 12 Boost App runtime limits
+
+- Managed Boost scripts run in the main world until P7 adds isolated-world
+  injection and a native page-message channel. Overlay secrecy is not proven.
+  Zap entry is refused; existing saved Zap CSS can apply. Do not enable the
+  picker through a main-world capability relay.
+- Color uses the plan's interim root filters. Paint-time color remap remains the
+  engine lane's Step 4R; filters can affect images/video/canvas.
+- Code mode and its CSS/JS text surface remain Step 7. New Legacy Boost opens
+  the simple editor until then; Gallery stays disabled.
+- Incognito planner application is wired for ephemeral contexts. A real
+  incognito browser-window flow needs the App-shell window entry point.
