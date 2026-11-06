@@ -1249,7 +1249,7 @@ on both pages; the same editor in macOS Light.
 | 5 | 2026-11-06 | `s4/theme-live`: real App menu/command/header/switcher entries, one panel per window, live sessions, shared undo/save and all E8 close triggers. Focused native E7/E8/B1 PASS; B1 main-thread p95 1.849 ms, wall p95 1.874 ms, load 30.90/26.89/19.20, 240 ticks with two matching windows, no new tiles/layout. Real-App close/idle and undo after close PASS; negative controls fail. Final full-gate table is in the PR. |
 | 6 | | |
 | 7 | | |
-| 8 (theme) | 2026-11-06 | Generic theme automation and `engine_e2e.py --only space-editor`: three confirmed 31/31 PASS runs (`.re/s4-theme-live/confirmed-space-editor-{1,2,3}.{log,json}`). A1 checks panel geometry/rendering; A2 checks three windows; A3 checks exact style/knob undo and redo while open and after close; A4 preserves style and background pixels (ΔE00 0). E8 close triggers, one-save gesture and idle rows PASS. A5–A7, icon picker and New Space remain separate work. Live 1x→2x transition is UNVERIFIED: only a 1x screen is exposed in this session. |
+| 8 (theme) | 2026-11-06 | Generic theme automation and `engine_e2e.py --only space-editor`: three final-build 33/33 PASS runs (`.re/s4-theme-live/ready-space-editor-{1,3,4}.{log,json}`). A1 checks panel geometry/rendering; A2 checks three windows; A3 compares the exact undo-registered style with the idle model and redo, plus style/knob undo and redo while open and after close; A4 preserves style and background pixels (ΔE00 0). E8 close triggers, one-save gesture and idle rows PASS. A5–A7, icon picker and New Space remain separate work. Live 1x→2x transition is UNVERIFIED: only a 1x screen is exposed in this session. |
 | 9 | 2026-10-26 | §17: 29/29 session2-pad rows; color max ΔE00 1.034, preset raster max 1 pt, texture L* sd errors ≤0.042. Editor 172/172, including exact range/saturation/knob undo and redo. Break proofs: old laws fail 31 native and 26 capture rows; missing paired undo fails the existing redo-knob and new state-restoration rows; restored source passes. Merged focused build, space-legacy, space-editor, sidebar-render, and all 13 byte-identical sidebar tables PASS. F0069 legacy/diagnostic 2.38/2.29, legacy retained; F0139 editor-style diagnostic 0.84→1.89 reported below. Full verification and review-checklist receipts are in the PR body. Steps 5–8 remain deferred. |
 
 ## 17. Step 9 calibration — decoded Arc pad, intensity, and texture law (2026-10-26)
@@ -1897,3 +1897,22 @@ model theme captured for the Update Theme redo registration. The real-App
 display-link idle and after another 120 ms, with no later preview write or
 commit. Undo/redo must restore that committed value exactly. The ledger is
 bounded transient state; it adds no timer or observation loop.
+
+Lead review followups: preview coordination lives in `OpenDesign`, already
+imported by the sidebar and editor, rather than in the model package. A
+window-less key event falls back only to this controller’s own key theme
+panel; other key windows cannot enter that route. The material-body screen
+clamp excludes the transparent 13 pt band. AppKit’s default panel constraint
+initially imposed a second top-edge clamp, leaving a 13 pt visible margin;
+the panel now honors the controller’s frame. The real-App frame row checks
+all four edges at exactly 8 pt, with no threshold change. The saved old frame
+clamp fails at 21 pt.
+
+The post-commit-write App negative control fails
+`A3_committed_style_stable`: committed intensity 0.8 differs from the idle
+model’s 0.83125. The final normal build passes exact committed/model/redo
+style equality in all three runs, with fixed preview and commit counters
+after the display link stops. The normal path already writes the final
+preview before registering undo in the same synchronous frame flush. No
+additional wait replaces a missing product flush. Receipts and final-head
+regression/full-verifier tables are in the PR.
