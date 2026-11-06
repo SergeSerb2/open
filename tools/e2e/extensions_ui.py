@@ -165,6 +165,11 @@ def run(factory, results, tmp, root, wait_until, new_tab, frame, read_image, ext
         results["X6_popup"] = {"ok": p["key"] and p["ready"] and frame(p["contentSize"])[0] > 25
             and active == expected and abs(panel[1] + panel[3] - (anchor[1] - 6)) <= 1, "state": p, "activeTab": active}
         close()
+        # The popup and tab switches above can leave a pending strip layout.
+        # Capture only after the actual badge target has its visible slot.
+        hover()
+        badge_target = wait_until(lambda: (lambda s: s if s['visible'] and probe in s['ids'] else None)(strip()), timeout=5)
+        assert badge_target, strip()
         app.eval(content, "chrome.action.setBadgeText({tabId:" + str(active) + ",text:'7'}).then(()=>true)")
         badge = wait_until(lambda: action(probe).get("badge") == "7", timeout=5)
         hover(); badged = capture("badge-seven")

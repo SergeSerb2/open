@@ -68,7 +68,9 @@ final class AppSiteControlSource: SiteControlDataSource, SiteControlActions {
     var tiles: [SiteSettingTile] = []
     if context.isWebsite {
       let store = adBlockStore
-      let available = store?.isProfileOpen(profile.id) == true && store?.isEnabled == true
+      // Settings can open the store before the App has an engine adapter.
+      // Configuration alone must never claim that requests are being blocked.
+      let available = store?.onEngineEvent != nil && store?.isProfileOpen(profile.id) == true && store?.isEnabled == true
       let on = available && (try? store?.siteSnapshot(for: profile.id).shouldBlock(host: url.host() ?? "")) == true
       tiles.append(SiteSettingTile(id: "contentBlocking", kind: .contentBlocking, title: "Block Ads & Trackers",
         subtitle: on ? "On" : "Off", state: available ? (on ? .on : .off) : .unavailable,
@@ -94,7 +96,7 @@ final class AppSiteControlSource: SiteControlDataSource, SiteControlActions {
     guard let factory, let snapshot = snapshot(for: tabID), snapshot.context.isWebsite else { return }
     switch tile.kind {
     case .contentBlocking:
-      guard let store = adBlockStore, store.isEnabled, store.isProfileOpen(snapshot.context.profileID),
+      guard let store = adBlockStore, store.onEngineEvent != nil, store.isEnabled, store.isProfileOpen(snapshot.context.profileID),
             let host = snapshot.context.url.host() else { openAdBlockSettings(tabID: tabID); return }
       do { try store.setExcluded(host, excluded: tile.state == .on, profile: snapshot.context.profileID) }
       catch { factory.controller?.toasts.show(.init(title: "Ad blocking settings could not be saved.")) }

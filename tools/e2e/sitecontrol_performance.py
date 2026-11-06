@@ -22,12 +22,47 @@ def run(factory, results, origin, tmp, env):
         samples = app.call('site-controls', action='state')['firstDrawMilliseconds'][-30:]
         p95 = sorted(samples)[int(.95 * (len(samples) - 1))]
         data = dict(milliseconds=samples, p95=p95, limit=8, warmups=5,
-                    load=list(os.getloadavg()), negativeRejected=not (8.01 < 8))
+                    load=list(os.getloadavg()))
         if app.config == 'Release': data['ok'] = len(samples) == 30 and p95 < 8
         else: data.update(status='BLOCKED', reason='Release required for first-draw budget')
         results['P1_first_draw'] = data
     finally:
         env['_restore_defaults'](app, saved)
+        app.quit()
+
+    # Inject a delay into the real native SCC display call. This proves that
+    # the first-draw receipt includes display work, not just data construction.
+    delay_source = Path(tmp, 'sitecontrol-delay.m')
+    delay_source.write_text('''#import <AppKit/AppKit.h>
+#import <objc/runtime.h>
+#import <unistd.h>
+@interface NSView (SCCDelay)
+- (void)openSCCDelayedDisplay;
+@end
+@implementation NSView (SCCDelay)
++ (void)load {
+    method_exchangeImplementations(class_getInstanceMethod(self,@selector(displayIfNeeded)),
+                                   class_getInstanceMethod(self,@selector(openSCCDelayedDisplay)));
+}
+- (void)openSCCDelayedDisplay {
+    if ([NSStringFromClass(self.class) hasSuffix:@".SiteControlView"]) usleep(12000);
+    [self openSCCDelayedDisplay];
+}
+@end
+''')
+    delay_probe = str(Path(tmp, 'sitecontrol-delay.dylib'))
+    subprocess.run(['xcrun','clang','-dynamiclib','-fobjc-arc',str(delay_source),
+                    '-framework','AppKit','-o',delay_probe],check=True,timeout=30)
+    app = factory(urls=(origin + '/ads.html',), extra_env={'DYLD_INSERT_LIBRARIES': delay_probe})
+    try:
+        tab=app.call('tabs')[0]['id']; app.call('wait',tab=tab)
+        app.call('site-controls',action='open')
+        delayed=app.call('site-controls',action='state')['firstDrawMilliseconds'][-1]
+        results['P1_first_draw']['negativeRejected']=delayed>=12
+        results['P1_first_draw']['negativeMilliseconds']=delayed
+        if 'ok' in results['P1_first_draw']:
+            results['P1_first_draw']['ok']=results['P1_first_draw']['ok'] and delayed>=12
+    finally:
         app.quit()
 
     # Observe real view invalidation and native schedulers. The observer is

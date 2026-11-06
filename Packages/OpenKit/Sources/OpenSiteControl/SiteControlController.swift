@@ -140,6 +140,11 @@ public final class SiteControlController: NSObject, NSMenuDelegate {
         view.window?.makeFirstResponder(view)
         if self.mode == .extensionPicker { view.panel.focusExtensionPickerItem() }
         animateOpen(animated)
+        // Include native layout, display and the first layer submission in
+        // the click receipt, rather than timing only snapshot construction.
+        view.layoutSubtreeIfNeeded()
+        view.displayIfNeeded()
+        CATransaction.flush()
         onFirstDraw?((CACurrentMediaTime() - requestedAt) * 1000)
     }
     public func layout() { layout(preservingStructureMotion: false) }

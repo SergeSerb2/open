@@ -53,7 +53,7 @@ def run(factory, results, tmp, env):
             # Closed state is the negative control for all visible SCC elements.
             record('S1_open', not before['presented'] and s['presented'] and {r['id'] for r in actions} == expected
                    and s['extensionsVisible'] and any(i['id'] == 'extension.add' and i['visible'] for i in s['extensionItems'])
-                   and row(s,'row.contentBlocking').get('subtitle') == 'On' and s['security'].get('title') == 'Connection: Insecure' and geometry,
+                   and row(s,'row.contentBlocking').get('state') in ('on','unavailable') and s['security'].get('title') == 'Connection: Insecure' and geometry,
                    state=s, negative=before)
             app.call('snapshot', path=str(private/'S1-open.png'))
             toggled_closed=app.call('site-controls', action='open')
@@ -63,7 +63,22 @@ def run(factory, results, tmp, env):
             # Main's App ad-block adapter has not opened this profile. Never
             # count the unavailable row or a synthetic filter as a passing S2.
             if row(s,'row.contentBlocking').get('state') == 'unavailable':
-                blocked('S2_adblock', 'main App ad-block adapter has not opened the profile', row=row(s,'row.contentBlocking'))
+                # Lead ruling: the missing Section 13 adapter is an interim
+                # unavailable state. Opening Settings must not change it.
+                settings_file=Path(app.user_data,'adblock-settings.json')
+                settings_before=settings_file.read_bytes() if settings_file.exists() else None
+                browser=app.call('window-state')['id']
+                app.call('site-controls',action='tap',id='row.contentBlocking')
+                settings=app.call('settings-state')
+                app.call('menu-perform',id='close-window')
+                app.call('window-focus',id=browser,activate=True)
+                unavailable=opened()
+                settings_after=settings_file.read_bytes() if settings_file.exists() else None
+                record('S1_unavailable_settings',settings['settings']>0 and settings['pane']=='advanced'
+                       and row(unavailable,'row.contentBlocking').get('state')=='unavailable'
+                       and settings_before==settings_after,settings=settings,unchanged=settings_before==settings_after,
+                       negative='opening the store in Settings does not make the missing engine adapter available')
+                blocked('S2_adblock', 'section 13 ad-block adapter', row=row(unavailable,'row.contentBlocking'))
             else:
                 off = app.call('site-controls', action='tap', id='row.contentBlocking')
                 files = list(Path(app.user_data).glob('Profiles/*/adblock/exclusions.json'))
@@ -132,6 +147,22 @@ def run(factory, results, tmp, env):
             bad_anchor=refused(action='open',via='invalid')
             record('S8_split',s['presented'] and s['tab']==selected and s['host']=='127.0.0.1' and s['anchor'][0]>228 and bad_anchor,state=s,negativeRefused=bad_anchor)
             close(); app.call('split')
+            app.call('menu-perform',id='toggle-toolbar')
+            toolbar=opened('pane')
+            record('S8_toolbar',toolbar['presented'] and toolbar['tab']==app.call('window-state')['selected']
+                   and refused(action='open',via='urlField'),state=toolbar)
+            close(); app.call('menu-perform',id='toggle-toolbar')
+            app.call('menu-perform',id='toggle-sidebar')
+            hidden=refused(action='open')
+            app.call('mouse',action='move',x=600,y=300)
+            app.call('mouse',action='move',x=3,y=300)
+            revealed=wait(lambda:app.call('window-state')['revealed'],timeout=5)
+            floating=opened()
+            record('S8_floating',hidden and revealed and floating['presented']
+                   and abs(floating['tip'][0]-floating['anchor'][0]-floating['anchor'][2]/2)<=1,state=floating,negativeHidden=hidden)
+            close();app.call('menu-perform',id='toggle-sidebar')
+            opened();app.call('select',tab=tab)
+            record('S7_tab_change',not state()['presented'],negative='the panel was open on the other tab before selection')
             blank=new_tab(app,'about:blank'); no_site=refused(action='open')
             internal=new_tab(app,'chrome://version'); s=opened()
             acts=[c for c in s['controls'] if c['id'].startswith('action.')]
@@ -155,9 +186,9 @@ def run(factory, results, tmp, env):
             validation=all(p['deltaE00']<=3 for p in probes[2:])
             _,_,closed_pixels=env['read_image'](closed_path,srgb=True)
             closed_fit=all(max(abs(a-b) for a,b in zip(closed_pixels(x*scale,y*scale),rgb))<=3 for x,y,rgb in targets[:2])
-            record('S11_material',fits and validation and not closed_fit,probes=probes,snapshot=path,negative=closed_path,negativeRejected=not closed_fit,scale=scale)
+            record('S11_material',fits and validation and not closed_fit,probes=probes,snapshot=path,negative=closed_path,negativeRejected=not closed_fit,scale=scale,state=s)
             from sitecontrol_pixels import compare_live
-            results['S12_elements']=compare_live(path, s, scale, private, env)
+            results['S12_elements']=compare_live(path, s, scale, private, env,negative_path=closed_path)
             app.call('navigate',tab=tab,url=origin+'/heavy.html');app.call('wait',tab=tab);close()
             js='''new Promise(done=>{scrollTo(0,0);let last=0,frames=[];function tick(t){if(last)frames.push(t-last);last=t;scrollBy(0,12);if(frames.length<240)requestAnimationFrame(tick);else done(frames)}requestAnimationFrame(tick)})'''
             baseline=app.eval(tab,js);opened();shown=app.eval(tab,js)
@@ -165,7 +196,13 @@ def run(factory, results, tmp, env):
             # Discover the actual refresh interval, without assuming this display is 120 Hz.
             interval=statistics.median(baseline); drops=lambda xs: sum(max(0,round(x/interval)-1) for x in xs)/len(xs)
             p0,p1=p95(baseline),p95(shown);d0,d1=drops(baseline),drops(shown)
-            record('S13_scroll',p1<=p0+1 and d1<=d0+.01,closedP95=p0,openP95=p1,closedDropped=d0,openDropped=d1,refreshMilliseconds=interval,negative='positive 2 ms p95 regression is rejected',negativeRejected=not(p0+2<=p0+1))
+            # Break the real page frame path, then let the bounded promise end.
+            # The same acceptance predicate must reject the slow frames.
+            slow=app.eval(tab,js.replace('scrollBy(0,12);','scrollBy(0,12);let until=performance.now()+12;while(performance.now()<until){}')
+                          .replace('frames.length<240','frames.length<60'))
+            negative_rejected=not (p95(slow)<=p0+1 and drops(slow)<=d0+.01)
+            record('S13_scroll',p1<=p0+1 and d1<=d0+.01 and negative_rejected,closedP95=p0,openP95=p1,closedDropped=d0,openDropped=d1,refreshMilliseconds=interval,
+                   negativeRejected=negative_rejected,negativeP95=p95(slow),negativeDropped=drops(slow))
         finally:
             env['_restore_defaults'](app,saved)
             app.quit()

@@ -4,7 +4,7 @@ import os
 import statistics
 
 
-def compare_live(path, state, scale, private, env):
+def compare_live(path, state, scale, private, env, negative_path=None):
     captures = Path(env['ROOT'], '.re/runtime/sessions')
     frames = list(captures.glob('*09-site-controls-first/0010-*/win-73938.png'))
     if not frames:
@@ -27,9 +27,24 @@ def compare_live(path, state, scale, private, env):
         ac,oc=mean(arc,a,1),mean(ours,o,scale)
         de=delta(ac,oc)
         probes.append(dict(element=name,arcRGB=ac,openRGB=oc,deltaE00=de,ok=de<=2))
-    def add(name, a, o, text=False):
+    def add(name, a, o, text=False, arrow=False):
         def plane(px, rect, factor):
             x,y,w,h=rect
+            if arrow:
+                # Match sitecontrol-render's existing Bitmap.arrowInk. The
+                # top/bottom ring contains adjacent arrow ink, not background.
+                x0,y0,x1,y1=int(x),int(y),int(x+w),int(y+h)
+                pixel=lambda u,v:px((u+.5)*factor,(v+.5)*factor)
+                left,right=pixel(x0-1,y0),pixel(x1,y0)
+                samples=[]
+                for u in range(x0,x1):
+                    t=(u-x0+1)/(x1-x0+1); p=pixel(u,y0)
+                    samples.append((u,max(abs(p[i]-(left[i]*(1-t)+right[i]*t)) for i in range(3))))
+                peak=max((c for u,c in samples),default=0)
+                if peak<=6:return None,None
+                ink=[u for u,c in samples if c>=peak*.5]
+                core=[pixel(u,y0) for u,c in samples if c>=peak*.85]
+                return [min(ink),y0,max(ink)+1,y1],[statistics.mean(p[i] for p in core) for i in range(3)]
             points=[]
             for u in range(int(x)-1,int(x+w)+1):
                 for v in (int(y)-1,int(y+h)): points.append((u,v))
@@ -58,7 +73,7 @@ def compare_live(path, state, scale, private, env):
                     contrast=abs(lum(u,v)-coeff[0]-coeff[1]*u-coeff[2]*v)
                     ink.append((contrast,u,v))
             maximum=max((v[0] for v in ink),default=0)
-            selected=[(u,v) for c,u,v in ink if maximum>0 and c>=maximum*.5]
+            selected=[(u,v) for c,u,v in ink if maximum>6 and c>=maximum*.5]
             if not selected:return None,None
             box=[min(p[0] for p in selected),min(p[1] for p in selected),max(p[0] for p in selected)+1,max(p[1] for p in selected)+1]
             core=[px((u+.5)*factor,(v+.5)*factor) for c,u,v in ink if c>=maximum*.85]
@@ -75,7 +90,7 @@ def compare_live(path, state, scale, private, env):
         probes.append(dict(element=name,arcBox=ab,openBox=ob,positionError=error,deltaE00=de,
                            ok=error is not None and error<=1 and (text or de is not None and de<=2)))
     for row in range(10):
-        add('Arrow row '+str(row),[183,81+row,36,1],[state['tip'][0]-18,state['tip'][1]+row,36,1])
+        add('Arrow row '+str(row),[183,81+row,36,1],[state['tip'][0]-18,state['tip'][1]+row,36,1],arrow=True)
     for i,name in enumerate(['Share','New Boost','Capture','Capture Full Page']):
         # New Boost is intentionally disabled until the runtime is wired.
         if name=='New Boost' and not next(c for c in state['controls'] if c['id']=='action.newBoost')['enabled']:continue
@@ -99,6 +114,11 @@ def compare_live(path, state, scale, private, env):
     report=dict(ok=all(p['ok'] for p in probes),elements=probes,capture=reference,snapshot=path,
                 limits={'positionPoints':1,'deltaE00':2},
                 excluded='Different site-setting title/glyph and HTTP Insecure pill; disabled New Boost until provider; Developer Mode per Q14',
-                negativeRejected=not (2.01<=2) and not (1.01<=1),load=list(os.getloadavg()))
-    (Path(private)/'S12-elements.json').write_text(__import__('json').dumps(report,indent=2))
+                load=list(os.getloadavg()))
+    if negative_path:
+        negative=compare_live(negative_path,state,scale,private,env)
+        report['negativeRejected']=not negative['ok']
+        report['negativeFailedElements']=[p['element'] for p in negative['elements'] if not p['ok']]
+        report['ok']=report['ok'] and report['negativeRejected']
+        (Path(private)/'S12-elements.json').write_text(__import__('json').dumps(report,indent=2))
     return report
