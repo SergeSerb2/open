@@ -17,18 +17,28 @@ import OpenTranslate
 final class AppSettingsActions: SettingsActions, LibraryActions, DownloadsProvider {
   unowned let app: AppDelegate
   init(app: AppDelegate) { self.app = app }
-  @ObservationIgnored lazy var settings: SettingsViewModel = {
+  @ObservationIgnored private var settingsStorage: SettingsViewModel?
+  var settings: SettingsViewModel {
+    if let settingsStorage { return settingsStorage }
     let vm = SettingsViewModel(model: app.model, actions: self, defaults: .standard,
       root: app.directories.root, snapshot: app.snapshotStore,
       focusedProfileID: app.frontWindowController.flatMap { app.hostFactories[$0.windowID]?.focusedProfile?.id })
-    if let store = app.stores.adBlock { vm.attach(adBlockStore: store) }
-    else { vm.advanced.statusText = "Ad blocking settings could not be opened." }
-    app.defaultBrowserService.onChange = { [weak vm] state in
+    if !app.isFirstRun || app.firstRunSaved {
+      if let store = app.stores.adBlock { vm.attach(adBlockStore: store) }
+      else { vm.advanced.statusText = "Ad blocking settings could not be opened." }
+    }
+    app.defaultBrowserService.onChange = { [weak vm, weak app] state in
       vm?.general.refresh()
       vm?.links.isDefaultBrowser = state.values.allSatisfy { $0 }
+      app?.firstRunWindowController?.model.refreshDefaultBrowserStatus()
     }
+    settingsStorage = vm
     return vm
-  }()
+  }
+  func modelWasInstalled() { settingsStorage = nil }
+  func attachBrowserStores() {
+    if settings.adBlock == nil, let store = app.stores.adBlock { settings.attach(adBlockStore: store) }
+  }
   @ObservationIgnored lazy var settingsPresenter = SettingsPresenter(viewModel: settings)
   @ObservationIgnored lazy var captures = try? FileCapturesProvider(root: app.directories.root)
   @ObservationIgnored private(set) var library: LibraryViewModel?
@@ -263,7 +273,7 @@ final class AppSettingsActions: SettingsActions, LibraryActions, DownloadsProvid
   }
   func keyBindingsDidChange(store: KeyBindingStore) { app.reloadKeyBindings() }
   func openEssentialShortcuts() { app.performCommand("keyboard-shortcuts-edu", payload: nil) }
-  func runImport(plan: ImportPlan) async -> ImportOutcome { ImportOutcome(errorText: "Import is not available in this build. No data was imported.") }
+  func runImport(plan: ImportPlan) async -> ImportOutcome { await app.importRunner.run(plan: plan, firstRun: false) }
   func setAdBlockEnabled(_ on: Bool, profileID: ProfileID) { status("Ad blocking is not active in this build. Your preferences were saved.", pane: .advanced) }
   func setEnabledBlockLists(_ ids: [String], profileID: ProfileID) { setAdBlockEnabled(true, profileID: profileID) }
   func setAdBlockExcludedDomains(_ domains: [String], profileID: ProfileID) { setAdBlockEnabled(true, profileID: profileID) }

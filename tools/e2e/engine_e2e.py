@@ -116,7 +116,7 @@ class CheckedResults(dict):
 
 
 class Open:
-    def __init__(self, config, style, user_data, extra_args, log_path, urls=("about:blank",), extra_env=None, delivery_urls=()):
+    def __init__(self, config, style, user_data, extra_args, log_path, urls=("about:blank",), extra_env=None, delivery_urls=(), first_run=False):
         if os.path.exists(os.path.join(ROOT, ".re", "hold-on-screen")):
             raise RuntimeError("On-screen Open runs are held by the lead (.re/hold-on-screen)")
         self.user_data = user_data
@@ -149,7 +149,7 @@ class Open:
         env = dict(os.environ, OPEN_USER_DATA=user_data, OPEN_E2E_OWNER_PID=str(os.getpid()),
                    OPEN_AUTOMATION_SKIP_MAC_NOTIFICATIONS="1")
         env.update(extra_env or {})
-        args = [app, "--user-data-dir=" + user_data, "--style=%s" % style] + list(urls) + extra_args
+        args = [app, "--user-data-dir=" + user_data, "--style=%s" % style] + ([] if first_run else ["--skip-first-run"]) + list(urls) + extra_args
         self.log = open(log_path, "a")
         self.started = time.time()
         # A raw executable launch can have a visible window but no foreground
@@ -185,8 +185,9 @@ class Open:
     def call(self, cmd, timeout=120, **args):
         if cmd in ("window-close", "popup-close", "quit") or (cmd == "devtools" and args.get("method") == "Page.crash"):
             self.discover_owned_processes()
-        foreground_input = cmd in ("key", "focus", "little-open-link-click") or (cmd == "window-focus" and args.get("activate"))
+        foreground_input = cmd in ("key", "focus", "little-open-link-click", "editor-act") or (cmd == "window-focus" and args.get("activate"))
         if cmd in ("space-manager-drag", "sidebar-click", "sidebar-key", "hover"): foreground_input = True
+        if cmd == "first-run" and args.get("action") == "focus": foreground_input = True
         if foreground_input and self.pid and not self.call("native-focus-state").get("active", False):
             # `NSApp.activate()` is a request, not a grant. Renew the explicit
             # foreground request if another app took focus. Address the exact
@@ -4189,7 +4190,7 @@ def startup_failure_checks(factory, results, tmp):
     early_data = os.path.join(tmp, "early-quit")
     log = os.path.join(tmp, "early-quit.log")
     with open(log, "w") as stream:
-        proc = subprocess.run([app_path, "--use-mock-keychain", "--user-data-dir=" + early_data],
+        proc = subprocess.run([app_path, "--skip-first-run", "--use-mock-keychain", "--user-data-dir=" + early_data],
             env=dict(os.environ, OPEN_AUTOMATION_QUIT_BEFORE_ENGINE="1"), stdout=stream, stderr=subprocess.STDOUT, timeout=15)
     text = open(log).read()
     results["quit_before_engine"] = {"ok": proc.returncode == 0 and "termination before engine" in text
@@ -4219,7 +4220,7 @@ def startup_failure_checks(factory, results, tmp):
     failure_data = os.path.join(tmp, "engine-failure")
     failure_log = os.path.join(tmp, "engine-failure.log")
     with open(failure_log, "w") as stream:
-        failed = subprocess.run([os.path.join(failed_bundle, "Contents", "MacOS", "Open"), "--use-mock-keychain", "--user-data-dir=" + failure_data],
+        failed = subprocess.run([os.path.join(failed_bundle, "Contents", "MacOS", "Open"), "--skip-first-run", "--use-mock-keychain", "--user-data-dir=" + failure_data],
             env=dict(os.environ, OPEN_AUTOMATION_DISMISS_ENGINE_FAILURE="1"), stdout=stream, stderr=subprocess.STDOUT, timeout=15)
     text = open(failure_log).read()
     results["engine_failure_alert"] = {"ok": failed.returncode == 1 and "engine failed to start" in text
@@ -5096,7 +5097,7 @@ def profiles_checks(factory, results, tmp, config):
         env.update(env_extra)
         path = os.path.join(tmp, "migration-%s.log" % label)
         with open(path, "w") as log:
-            code = subprocess.run([binary, "--use-mock-keychain"], env=env, stdout=log, stderr=subprocess.STDOUT,
+            code = subprocess.run([binary, "--skip-first-run", "--use-mock-keychain"], env=env, stdout=log, stderr=subprocess.STDOUT,
                                   timeout=60).returncode
         return code, open(path).read()
 
@@ -10895,9 +10896,9 @@ def main():
     ap.add_argument("--engine-sha256", help="require this Vendor framework SHA-256 and matching embedded code before app launch")
     ap.add_argument("--engine-fingerprint-only", action="store_true", help="verify built engine artifacts and exit without launching Open")
     ap.add_argument("--extensions", default=os.path.join(ROOT, ".re", "ext", "unpacked"))
-    ap.add_argument("--only", choices=["find", "shell", "extensions", "features", "measure", "tabstrip", "window", "sidebar", "peek", "split",
+    ap.add_argument("--only", choices=["firstrun", "find", "shell", "extensions", "features", "measure", "tabstrip", "window", "sidebar", "peek", "split",
                                        "commandbar", "app-actions", "actions", "extensions-p3", "extensions-ui", "extensions-e2", "profiles", "sidebar-completion", "toolbar", "numbering", "media", "relaunch", "page", "page-chrome",
-                                       "sleep", "context-menus", "routing", "littleopen", "history", "applescript", "downloads"])
+                                       "sleep", "context-menus", "routing", "littleopen", "history", "applescript", "downloads", "space-editor"])
     ap.add_argument("--window-chrome-only", action="store_true", help="run only the window-chrome follow-up flows in the window suite")
     ap.add_argument("--keep", action="store_true",
                     help="keep this run's data root, cache root and scratch folder (paths printed at the end)")
@@ -11007,7 +11008,7 @@ def main():
         if snapshot:
             os.makedirs(os.path.join(user_data, "State"), exist_ok=True)
             shutil.copyfile(snapshot, os.path.join(user_data, "State", "browser.json"))
-        app = Open(opts.config, opts.style, user_data, extra + list(extra_args or []), log, urls=urls, extra_env=extra_env, delivery_urls=delivery_urls)
+        app = Open(opts.config, opts.style, user_data, extra + list(extra_args or []), log, urls=urls, extra_env=extra_env, delivery_urls=delivery_urls, first_run=opts.only == "firstrun")
         app.focus_tracker = tracker
         tracker.apps.append(app)
         return app
@@ -11089,7 +11090,13 @@ def main():
         print(json.dumps(results['engine'], sort_keys=True), flush=True)
         return
     def execute():
-        if opts.only == "extensions-ui":
+        if opts.only == "firstrun":
+            results["firstrun"] = CheckedResults(tracker)
+            # The executable's -I shebang omits the script directory from
+            # sys.path. Load this owned sibling by its exact repository path.
+            runpy.run_path(os.path.join(ROOT, "tools", "e2e", "firstrun.py"))["run"](
+                factory, results["firstrun"], tmp, sys.modules[__name__])
+        elif opts.only == "extensions-ui":
             results["extensions-ui"] = CheckedResults(tracker)
             import extensions_ui
             extensions_ui.run(factory, results["extensions-ui"], tmp, ROOT, wait_until, new_tab, frame, read_image, EXT)
@@ -11142,6 +11149,10 @@ def main():
         elif opts.only == "media":
             results["media"] = CheckedResults(tracker)
             media_checks(factory, results["media"], tmp)
+        elif opts.only == "space-editor":
+            import space_editor
+            results["space-editor"] = CheckedResults(tracker)
+            space_editor.checks(factory, results["space-editor"], tmp, sys.modules[__name__])
         elif opts.only == "downloads":
             import downloads
             results["downloads"] = CheckedResults(tracker)
@@ -11248,14 +11259,14 @@ def main():
                                     else opts.config.lower()))
     with open(os.path.join(OUT, name), "w") as f:
         json.dump(results, f, indent=2, sort_keys=True)
-    for group in ("find", "shell", "extensions", "features", "measure", "tabstrip", "window", "sidebar", "peek", "split", "commandbar", "app-actions", "actions", "extensions-p3", "extensions-ui", "extensions-e2", "profiles", "sidebar-completion", "toolbar", "numbering", "media", "relaunch", "page", "page-chrome", "sleep", "context-menus", "routing", "littleopen", "history", "applescript", "downloads"):
+    for group in ("firstrun", "find", "shell", "extensions", "features", "measure", "tabstrip", "window", "sidebar", "peek", "split", "commandbar", "app-actions", "actions", "extensions-p3", "extensions-ui", "extensions-e2", "profiles", "sidebar-completion", "toolbar", "numbering", "media", "relaunch", "page", "page-chrome", "sleep", "context-menus", "routing", "littleopen", "history", "applescript", "downloads", "space-editor"):
         for k, v in results.get(group, {}).items():
             if isinstance(v, dict) and "ok" in v:
                 print("%-24s %s" % (k, "PASS" if v.get("ok") else "FAIL"))
             elif isinstance(v, dict) and v.get("status") in ("SKIP", "BLOCKED", "INTERRUPTED", "DEFERRED"):
                 print("%-24s %s: %s" % (k, v["status"], v.get("reason", "")))
     print("wrote", os.path.join(OUT, name))
-    failures = [k for group in ("find", "shell", "extensions", "features", "measure", "tabstrip", "window", "sidebar", "peek", "split", "commandbar", "app-actions", "actions", "extensions-p3", "extensions-ui", "extensions-e2", "sidebar-completion", "toolbar", "numbering", "media", "relaunch", "page", "page-chrome", "sleep", "context-menus", "routing", "littleopen", "history", "applescript", "downloads")
+    failures = [k for group in ("firstrun", "find", "shell", "extensions", "features", "measure", "tabstrip", "window", "sidebar", "peek", "split", "commandbar", "app-actions", "actions", "extensions-p3", "extensions-ui", "extensions-e2", "sidebar-completion", "toolbar", "numbering", "media", "relaunch", "page", "page-chrome", "sleep", "context-menus", "routing", "littleopen", "history", "applescript", "downloads", "space-editor")
                 for k, v in results.get(group, {}).items() if isinstance(v, dict) and v.get("ok") is False]
     if failures or not results["cleanup"]["ok"]:
         sys.exit(1)
