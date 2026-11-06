@@ -45,7 +45,7 @@ let package = Package(
         .target(name: "OpenSettings", dependencies: ["OpenModel", "OpenRouting", "OpenCommands", "OpenSuggest", "OpenStore", "OpenDesign", "OpenAdBlock", "OpenImport"]),
         .executableTarget(name: "settings-preview", dependencies: ["OpenSettings", "OpenModel", "OpenRouting", "OpenCommands", "OpenSuggest", "OpenStore", "OpenImport", "OpenAdBlock"]),
         .target(name: "OpenModel"),
-        .target(name: "OpenFeatures", dependencies: ["OpenExtensionsUI", "OpenWeb", "OpenMedia", "OpenModel", "OpenStore", "OpenDesign", "OpenSidebar", "OpenSuggest", "OpenSleep", "OpenRouting", "OpenCommands", "OpenCommandBar"], resources: [.copy("Resources/Sounds")]),
+        .target(name: "OpenFeatures", dependencies: ["OpenSpaceEditor", "OpenExtensionsUI", "OpenWeb", "OpenMedia", "OpenModel", "OpenStore", "OpenDesign", "OpenSidebar", "OpenSuggest", "OpenSleep", "OpenRouting", "OpenCommands", "OpenCommandBar"], resources: [.copy("Resources/Sounds")]),
         .executableTarget(name: "features-render", dependencies: ["OpenCommandBar", "OpenWeb", "OpenMedia", "OpenModel", "OpenStore", "OpenFeatures", "OpenDesign", "OpenSleep", "OpenSidebar", "OpenSettings", "OpenCommands"], sources: ["Scene", "main.swift", "Checks.swift", "LittleOpenChecks.swift", "LittleOpenScenes.swift", "ToolbarChecks.swift", "PiPScene.swift", "PiPChecks.swift", "FeatureCompare.swift", "OffscreenRenderer.swift", "Compare.swift", "RenderCLI.swift", "SoundChecks.swift", "CompletionChecks.swift", "TabSwitcherChecks.swift", "FaviconChecks.swift", "AutoArchiveChecks.swift", "CaptureChecks.swift", "ToastChecks.swift", "SwipeChecks.swift", "TranslateChecks.swift", "IdleChecks.swift"]),
         .target(name: "OpenSleep", dependencies: ["OpenModel"], resources: [.copy("Resources/keep-alive-sites.json")]),
         .target(name: "OpenBoosts", dependencies: ["OpenModel"], exclude: ["Harness"], resources: [.copy("Resources/boost-applier.js"), .copy("Resources/zap-picker.js")]),
@@ -64,7 +64,7 @@ let package = Package(
         .target(name: "OpenSpaceEditor", dependencies: ["OpenModel", "OpenDesign"], resources: [.copy("Resources/emoji-index.json")]),
         .target(name: "OpenSidebar", dependencies: ["OpenExtensionsUI", "OpenMedia", "OpenModel", "OpenDesign", "OpenStore"]),
         .executableTarget(name: "sidebar-render", dependencies: ["OpenWeb", "OpenMedia", "OpenModel", "OpenStore", "OpenDesign", "OpenSidebar"], resources: [.copy("Resources/sm6-cost-baselines.json")]),
-        .executableTarget(name: "space-editor-render", dependencies: ["OpenModel", "OpenStore", "OpenDesign", "OpenSidebar", "OpenSpaceEditor"], resources: [.copy("Resources")]),
+        .executableTarget(name: "space-editor-render", dependencies: ["OpenFeatures", "OpenModel", "OpenStore", "OpenDesign", "OpenSidebar", "OpenSpaceEditor"], resources: [.copy("Resources")]),
         .target(name: "OpenCommandBar", dependencies: ["OpenModel", "OpenStore", "OpenDesign", "OpenSuggest"]),
         .executableTarget(name: "commandbar-render", dependencies: ["OpenModel", "OpenStore", "OpenDesign", "OpenSuggest", "OpenCommandBar"]),
     ]
