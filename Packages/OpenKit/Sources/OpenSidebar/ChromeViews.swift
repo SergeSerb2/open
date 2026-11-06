@@ -136,6 +136,8 @@ final class URLFieldView: NSView {
         didSet {
             guard siteControlState != oldValue else { return }
             siteControlGlyph.isOpen = siteControlState.isOpen; siteControlGlyph.isBoosted = siteControlState.isBoosted
+            siteControls.glyphView.isHidden = siteControlState != .rest
+            siteControlGlyph.isHidden = siteControlState == .rest
             needsLayout = true
         }
     }
@@ -169,7 +171,7 @@ final class URLFieldView: NSView {
             guard NSApp.currentEvent?.modifierFlags.contains(.option) != true else { return }
             context.send(.showSiteControls)
         }
-        siteControls.glyphView.isHidden = true
+        siteControlGlyph.isHidden = true
         siteControlGlyph.tint = { SidebarRole.toolbarGlyph.nsColor }
         siteControls.addSubview(siteControlGlyph)
         let style: @MainActor () -> SpaceThemeStyle = { [unowned context] in

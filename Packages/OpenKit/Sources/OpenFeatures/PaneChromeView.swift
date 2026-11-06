@@ -24,7 +24,7 @@ final class ActionButton: NSButton {
         if let circleFill {
             circleFill.setFill(); NSBezierPath(ovalIn: bounds.insetBy(dx: (bounds.width - bounds.height) / 2, dy: 0)).fill()
         }
-        if let state = siteControlState {
+        if let state = siteControlState, state != .rest {
             SiteControlGlyphView.draw(in: bounds, pointSize: glyphPointSize, isOpen: state.isOpen, isBoosted: state.isBoosted,
                 tint: contentTintColor ?? .black); return
         }
