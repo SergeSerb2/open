@@ -139,6 +139,9 @@ final class EngineWebContentHostFactory: NSResponder, WebContentHostFactory {
     let browser = content.browser ?? OEBrowser(context: content.context)
     littleOpenBrowser = browser; browser.window = controller.window; browser.delegate = self
     if content.browser == nil { browser.insert(content, at: 0); browser.activeWebContent = content }
+    controller.onCloseRequested = { [weak self] in
+      guard let self, let window = self.window else { return }; self.app.extensionPrompts.cancel(window: window)
+    }
     controller.extensionsUI = extensions.context
     extensions.attach()
     controller.titleBar.onExtensions = { [weak self, weak controller] in
@@ -148,7 +151,7 @@ final class EngineWebContentHostFactory: NSResponder, WebContentHostFactory {
     extensions.context.manageExtensions = { [weak self] in self?.performLittleOpenExtensionManagement("manage-extensions") }
     extensions.context.addExtension = { [weak self] in self?.performLittleOpenExtensionManagement("add-extension") }
   }
-  private func performLittleOpenExtensionManagement(_ command: String) {
+  func performLittleOpenExtensionManagement(_ command: String) {
     guard let profile = littleOpenController?.session.profileID,
           let space = model.mostRecentlyFocusedSpace(profileID: profile),
           let controller = app.windowControllers.first(where: { app.hostFactories[$0.windowID]?.focusedProfile?.id == profile })

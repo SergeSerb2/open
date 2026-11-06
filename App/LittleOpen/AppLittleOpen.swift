@@ -166,6 +166,8 @@ extension AppDelegate {
     guard let controller = keyLittleOpen else { return false }
     let host = controller.container.host(for: controller.session.tab.id)
     switch id {
+    case "manage-extensions", "add-extension", "extension-shortcuts":
+      littleOpenExtensionFactory()?.performLittleOpenExtensionManagement(id)
     case "open-in-current-space": controller.openInCurrentSpace()
     case "open-command-bar": controller.focusURL()
     case "archive-tab", "close-window": littleOpenCoordinator.close(sessionID: controller.session.id, archiveReason: nil)

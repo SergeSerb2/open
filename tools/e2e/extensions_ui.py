@@ -260,7 +260,9 @@ def run(factory, results, tmp, root, wait_until, new_tab, frame, read_image, ext
             inspected = wait_until(lambda: app.call("ext-popup-state").get("staysOpenOnBlur"), timeout=10)
             app.call("window-focus", id=app.call("window-state")["id"], activate=True)
             kept = app.call("ext-popup-state")
-            app.call("devtools-close", tab=page())
+            current_popup=app.call("ext-popup")
+            inspected_page=current_popup.get("page",{}).get("identifier")
+            if inspected_page: app.call("devtools-close", tab=inspected_page)
             results["X8_inspect_keeps_open"] = {"ok": bool(inspected) and kept["open"] and kept["visible"], "state":kept}
             close()
         app.call("select", tab=control); hover(); content = control
@@ -386,6 +388,8 @@ def run(factory, results, tmp, root, wait_until, new_tab, frame, read_image, ext
             app.call("ext-manage", extension="local", action="install-crx", path=crx)
             prompt = wait_until(lambda: (lambda p:p if p.get("pending") else None)(app.call("ext-prompt")), timeout=20)
             if not prompt: installs.append({"ok": False}); continue
+            if os.environ.get("OPEN_E2E_UI_FAIL_WITH_PROMPT") == "1":
+                raise RuntimeError("deliberate failure with ExtensionPromptSheet visible")
             app.call("key",key="escape" if answer=="cancel" else "return",window=prompt["sheet"],route="app")
             installed = wait_until(lambda: any(e["id"] == prompt["extension"] for e in app.call("extensions")["installed"]) == (answer=="accept"), timeout=15)
             installs.append({"ok": bool(installed) and prompt["sheetVisible"] and prompt["sheetClass"] == "ExtensionPromptSheet"

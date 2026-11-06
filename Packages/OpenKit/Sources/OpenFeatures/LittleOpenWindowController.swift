@@ -18,6 +18,8 @@ final class FeatureRootView: NSView {
 private final class LittleOpenNativeWindow: NSWindow {
     var redirectPageFocus: ((NSResponder?) -> NSResponder?)?
     var onLayoutPass: (() -> Void)?
+    var onCloseRequest: (() -> Void)?
+    override func performClose(_ sender: Any?) { onCloseRequest?(); super.performClose(sender) }
     override func makeFirstResponder(_ responder: NSResponder?) -> Bool {
         super.makeFirstResponder(redirectPageFocus?(responder) ?? responder)
     }
@@ -28,6 +30,7 @@ private final class LittleOpenNativeWindow: NSWindow {
 @MainActor
 public final class LittleOpenWindowController: NSWindowController, NSWindowDelegate, CommandBarDelegate {
     public var contentView: NSView { root }
+    public var onCloseRequested: (() -> Void)?
     public let session: LittleOpenSession
     public private(set) var state: LittleOpenWindowState = .bar
     public private(set) var container: WebContentContainer
@@ -86,6 +89,7 @@ public final class LittleOpenWindowController: NSWindowController, NSWindowDeleg
             return self.urlField
         }
         window.onLayoutPass = { [weak self] in self?.placeTrafficLights() }
+        window.onCloseRequest = { [weak self] in self?.onCloseRequested?() }
         // S2 19/0003: top-right on the pointer's screen. No autosave or cascade.
         let size = LittleOpenMetrics.barSize, visible = screen.visibleFrame, inset = LittleOpenMetrics.screenInset
         window.setFrame(CGRect(x: visible.maxX - inset - size.width, y: visible.maxY - inset - size.height, width: size.width, height: size.height), display: false)
