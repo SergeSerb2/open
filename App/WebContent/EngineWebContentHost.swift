@@ -97,6 +97,7 @@ final class EngineWebContentHost: NSObject, WebContentHost, WebContentProviding,
     onPageBackgroundChange = nil; onLiveStateChange = nil
     additionalKeyHandler = nil; onCloseRequest = nil
     cachedFaviconImage = nil; cachedFaviconPNG = nil; cachedFaviconURL = nil; faviconImagePageURL = nil; lastReportedFavicon = nil
+    owner?.pageChrome.cancel(content)
     content.delegate = nil; content.close(); content.view.removeFromSuperview()
     owner?.hostDidClose(self)
   }
@@ -263,10 +264,18 @@ final class EngineWebContentHost: NSObject, WebContentHost, WebContentProviding,
   }
   func webContentDidRequestClose(_ page: OEWebContent) {
     guard !closed else { return }
-    if let onCloseRequest { onCloseRequest() } else { owner?.close(page: page) }
+    if let onCloseRequest {
+      // Match the main-window close path: retire the standalone host only
+      // after Chromium's delegate callback returns.
+      DispatchQueue.main.async { [weak self] in
+        guard self?.closed == false else { return }
+        onCloseRequest()
+      }
+    } else { owner?.webContentDidRequestClose(page) }
   }
   func webContent(_ page: OEWebContent, handleKeyEventBeforePage event: NSEvent) -> Bool {
     guard !closed else { return false }
+    if owner?.pageChrome.handleKey(event) == true { return true }
     if additionalKeyHandler?(event) == true { return true }
     if owner?.controller?.handleKeyDown(event) == true { return true }
     // A key the page receives: tab sleep's form proxy (discard waits 5 min after typing).

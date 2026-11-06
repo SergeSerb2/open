@@ -56,6 +56,8 @@ public final class PaneChromeView: NSView {
     var fallbackColor: NSColor = .white
     let label = NSTextField(labelWithString: "")
     private var buttons: [ActionButton] = []
+    /// App permission popovers anchor to the toolbar URL area (S11).
+    public var urlAreaFrame: CGRect { label.frame }
     public var isFocused = false { didSet { update() } }
     /// F0081: the focused pane shows every control; an unfocused pane shows back,
     /// forward, the copy button, the host, and Close (AX and pixels).

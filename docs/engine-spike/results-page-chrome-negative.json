@@ -1,0 +1,464 @@
+{
+  "cleanup": {
+    "ok": true,
+    "processes": [
+      {
+        "forced": false,
+        "ok": true,
+        "owned_pids": [
+          65102,
+          65311,
+          65312,
+          65313,
+          65318,
+          65319,
+          69349,
+          69466,
+          69467,
+          69468,
+          69469,
+          69470,
+          69471,
+          69472,
+          69473,
+          69474,
+          71944,
+          72073,
+          72079,
+          72080,
+          72081,
+          72082,
+          72083,
+          72084,
+          72085,
+          72086
+        ],
+        "remaining_processes": [],
+        "reply": true,
+        "windows_after_quit": {
+          "count": 0,
+          "windows": []
+        },
+        "windows_before_quit": 1
+      },
+      {
+        "error": "[Errno 2] No such file or directory",
+        "forced": false,
+        "ok": true,
+        "owned_pids": [
+          72136,
+          72141,
+          72142,
+          72144,
+          72145,
+          72146,
+          72147,
+          72190,
+          72191,
+          72192,
+          72193,
+          72194,
+          72195,
+          72196,
+          72197,
+          72198
+        ],
+        "remaining_processes": [],
+        "windows_after_quit": {
+          "count": 0,
+          "windows": []
+        },
+        "windows_before_quit": 0
+      }
+    ]
+  },
+  "config": "Debug",
+  "engine": {
+    "distributionCodeSHA256": "1bc8b6044b77d53d46d76745a39b029e9709dbeb00fd31d08870ed0a38dd576a",
+    "distributionSHA256": "f34400e71412d87a0b268fcd5658a8563cca34f600c8dd17b534a63e76aa7939",
+    "distributionUUID": "4C4C4465-5555-3144-A1AB-FCF4EA280540",
+    "embeddedCodeSHA256": "1bc8b6044b77d53d46d76745a39b029e9709dbeb00fd31d08870ed0a38dd576a",
+    "embeddedSHA256": "7965fb82d3670f2824f8657069fcb816cb10fa70c82dd4260a575eb46c395359",
+    "embeddedUUID": "4C4C4465-5555-3144-A1AB-FCF4EA280540",
+    "requiredSHA256": "",
+    "source": "fork",
+    "stamp": "fork $HOME/Developer/open-engine-s8-main/chromium_git/chromium/src/cef/binary_distrib/cef_binary_156.0.14+g4fa4ab5+chromium-156.0.8078.48_macosarm64_minimal 1793841834"
+  },
+  "interrupted_attempts": [],
+  "page-chrome": {
+    "dialog_alert": {
+      "error": "{'pending': 0, 'visible': False}",
+      "ok": false,
+      "trace": "Traceback (most recent call last):\n  File \"$WORKTREE/tools/e2e/page_chrome.py\", line 65, in gate\n    results[name] = fn()\n  File \"$WORKTREE/tools/e2e/page_chrome.py\", line 88, in replies\n    page(); schedule(script); state = visible(ds)\n  File \"$WORKTREE/tools/e2e/page_chrome.py\", line 28, in visible\n    assert value, state()\nAssertionError: {'pending': 0, 'visible': False}\n"
+    },
+    "dialog_alert_native_escape": {
+      "error": "{'pending': 0, 'visible': False}",
+      "ok": false,
+      "trace": "Traceback (most recent call last):\n  File \"$WORKTREE/tools/e2e/page_chrome.py\", line 65, in gate\n    results[name] = fn()\n  File \"$WORKTREE/tools/e2e/page_chrome.py\", line 208, in alert_key\n    page(); schedule('(alert(\"native alert\"),\"done\")'); state=visible(ds)\n  File \"$WORKTREE/tools/e2e/page_chrome.py\", line 28, in visible\n    assert value, state()\nAssertionError: {'pending': 0, 'visible': False}\n"
+    },
+    "dialog_alert_native_return": {
+      "error": "{'pending': 0, 'visible': False}",
+      "ok": false,
+      "trace": "Traceback (most recent call last):\n  File \"$WORKTREE/tools/e2e/page_chrome.py\", line 65, in gate\n    results[name] = fn()\n  File \"$WORKTREE/tools/e2e/page_chrome.py\", line 208, in alert_key\n    page(); schedule('(alert(\"native alert\"),\"done\")'); state=visible(ds)\n  File \"$WORKTREE/tools/e2e/page_chrome.py\", line 28, in visible\n    assert value, state()\nAssertionError: {'pending': 0, 'visible': False}\n"
+    },
+    "dialog_background_select": {
+      "error": "{'pending': 0, 'visible': False}",
+      "ok": false,
+      "trace": "Traceback (most recent call last):\n  File \"$WORKTREE/tools/e2e/page_chrome.py\", line 65, in gate\n    results[name] = fn()\n  File \"$WORKTREE/tools/e2e/page_chrome.py\", line 158, in background\n    app.call('select', tab=target); shown = visible(ds); answer(False)\n  File \"$WORKTREE/tools/e2e/page_chrome.py\", line 28, in visible\n    assert value, state()\nAssertionError: {'pending': 0, 'visible': False}\n"
+    },
+    "dialog_beforeunload_close": {
+      "keptHost": true,
+      "ok": false,
+      "state": {
+        "buttons": [
+          "OK",
+          "Cancel"
+        ],
+        "held": false,
+        "informativeText": "Changes you made may not be saved.",
+        "kind": 3,
+        "message": "Is it OK to leave/reload this page?",
+        "pending": 1,
+        "promptWidth": 0,
+        "queued": false,
+        "sourceMessageBytes": 35,
+        "sourcePromptBytes": 0,
+        "suppressible": false,
+        "suppressionTitle": "",
+        "text": "",
+        "title": "Broken title",
+        "visible": true,
+        "window": 35553
+      }
+    },
+    "dialog_beforeunload_reload": {
+      "keptHost": true,
+      "ok": false,
+      "state": {
+        "buttons": [
+          "OK",
+          "Cancel"
+        ],
+        "held": false,
+        "informativeText": "Changes you made may not be saved.",
+        "kind": 3,
+        "message": "Is it OK to leave/reload this page?",
+        "pending": 1,
+        "promptWidth": 0,
+        "queued": false,
+        "sourceMessageBytes": 35,
+        "sourcePromptBytes": 0,
+        "suppressible": false,
+        "suppressionTitle": "",
+        "text": "",
+        "title": "Broken title",
+        "visible": true,
+        "window": 35557
+      }
+    },
+    "dialog_close_once": {
+      "answers": [
+        {
+          "accepted": true,
+          "content": 54,
+          "kind": 1,
+          "tab": "E928F68D-7F77-4390-8E0F-E869D0D13234",
+          "time": 1793916488.461144,
+          "type": "dialogAnswer"
+        }
+      ],
+      "ok": false
+    },
+    "dialog_confirm_cancel": {
+      "error": "{'pending': 0, 'visible': False}",
+      "ok": false,
+      "trace": "Traceback (most recent call last):\n  File \"$WORKTREE/tools/e2e/page_chrome.py\", line 65, in gate\n    results[name] = fn()\n  File \"$WORKTREE/tools/e2e/page_chrome.py\", line 88, in replies\n    page(); schedule(script); state = visible(ds)\n  File \"$WORKTREE/tools/e2e/page_chrome.py\", line 28, in visible\n    assert value, state()\nAssertionError: {'pending': 0, 'visible': False}\n"
+    },
+    "dialog_confirm_ok": {
+      "error": "{'pending': 0, 'visible': False}",
+      "ok": false,
+      "trace": "Traceback (most recent call last):\n  File \"$WORKTREE/tools/e2e/page_chrome.py\", line 65, in gate\n    results[name] = fn()\n  File \"$WORKTREE/tools/e2e/page_chrome.py\", line 88, in replies\n    page(); schedule(script); state = visible(ds)\n  File \"$WORKTREE/tools/e2e/page_chrome.py\", line 28, in visible\n    assert value, state()\nAssertionError: {'pending': 0, 'visible': False}\n"
+    },
+    "dialog_message_limit": {
+      "at": 8192,
+      "ok": false,
+      "over": 8193
+    },
+    "dialog_policy_accept": {
+      "ok": false,
+      "result": [
+        false,
+        null
+      ]
+    },
+    "dialog_policy_dismiss": {
+      "ok": false,
+      "result": [
+        true,
+        "policy text"
+      ]
+    },
+    "dialog_policy_hold": {
+      "ok": false
+    },
+    "dialog_prompt_cancel": {
+      "error": "{'pending': 0, 'visible': False}",
+      "ok": false,
+      "trace": "Traceback (most recent call last):\n  File \"$WORKTREE/tools/e2e/page_chrome.py\", line 65, in gate\n    results[name] = fn()\n  File \"$WORKTREE/tools/e2e/page_chrome.py\", line 88, in replies\n    page(); schedule(script); state = visible(ds)\n  File \"$WORKTREE/tools/e2e/page_chrome.py\", line 28, in visible\n    assert value, state()\nAssertionError: {'pending': 0, 'visible': False}\n"
+    },
+    "dialog_prompt_limit": {
+      "at": 4096,
+      "ok": false,
+      "over": 4097
+    },
+    "dialog_prompt_native_return": {
+      "error": "{'pending': 0, 'visible': False}",
+      "ok": false,
+      "trace": "Traceback (most recent call last):\n  File \"$WORKTREE/tools/e2e/page_chrome.py\", line 65, in gate\n    results[name] = fn()\n  File \"$WORKTREE/tools/e2e/page_chrome.py\", line 200, in prompt_keys\n    page(); schedule('prompt(\"native prompt\",\"seed\")'); state = visible(ds)\n  File \"$WORKTREE/tools/e2e/page_chrome.py\", line 28, in visible\n    assert value, state()\nAssertionError: {'pending': 0, 'visible': False}\n"
+    },
+    "dialog_prompt_ok": {
+      "error": "{'pending': 0, 'visible': False}",
+      "ok": false,
+      "trace": "Traceback (most recent call last):\n  File \"$WORKTREE/tools/e2e/page_chrome.py\", line 65, in gate\n    results[name] = fn()\n  File \"$WORKTREE/tools/e2e/page_chrome.py\", line 88, in replies\n    page(); schedule(script); state = visible(ds)\n  File \"$WORKTREE/tools/e2e/page_chrome.py\", line 28, in visible\n    assert value, state()\nAssertionError: {'pending': 0, 'visible': False}\n"
+    },
+    "dialog_quit_cancel": {
+      "ok": false,
+      "state": {
+        "buttons": [
+          "OK",
+          "Cancel"
+        ],
+        "held": false,
+        "informativeText": "Changes you made may not be saved.",
+        "kind": 3,
+        "message": "Is it OK to leave/reload this page?",
+        "pending": 1,
+        "promptWidth": 0,
+        "queued": false,
+        "sourceMessageBytes": 35,
+        "sourcePromptBytes": 0,
+        "suppressible": false,
+        "suppressionTitle": "",
+        "text": "",
+        "title": "Broken title",
+        "visible": true,
+        "window": 35561
+      }
+    },
+    "dialog_quit_ok": {
+      "ok": false,
+      "state": {
+        "buttons": [
+          "OK",
+          "Cancel"
+        ],
+        "held": false,
+        "informativeText": "Changes you made may not be saved.",
+        "kind": 3,
+        "message": "Is it OK to leave/reload this page?",
+        "pending": 1,
+        "promptWidth": 0,
+        "queued": false,
+        "sourceMessageBytes": 35,
+        "sourcePromptBytes": 0,
+        "suppressible": false,
+        "suppressionTitle": "",
+        "text": "",
+        "title": "Broken title",
+        "visible": true,
+        "window": 35719
+      }
+    },
+    "dialog_sheet_native_keys": {
+      "error": "{'pending': 0, 'visible': False}",
+      "ok": false,
+      "trace": "Traceback (most recent call last):\n  File \"$WORKTREE/tools/e2e/page_chrome.py\", line 65, in gate\n    results[name] = fn()\n  File \"$WORKTREE/tools/e2e/page_chrome.py\", line 215, in sheet_keys\n    page(); schedule('confirm(\"native sheet\")'); state = visible(ds)\n  File \"$WORKTREE/tools/e2e/page_chrome.py\", line 28, in visible\n    assert value, state()\nAssertionError: {'pending': 0, 'visible': False}\n"
+    },
+    "dialog_suppression": {
+      "error": "{'pending': 0, 'visible': False}",
+      "ok": false,
+      "trace": "Traceback (most recent call last):\n  File \"$WORKTREE/tools/e2e/page_chrome.py\", line 65, in gate\n    results[name] = fn()\n  File \"$WORKTREE/tools/e2e/page_chrome.py\", line 117, in suppression\n    page(); schedule('(alert(\"first\"),true)'); first = visible(ds); answer()\n  File \"$WORKTREE/tools/e2e/page_chrome.py\", line 28, in visible\n    assert value, state()\nAssertionError: {'pending': 0, 'visible': False}\n"
+    },
+    "dialog_suppression_navigation_scope": {
+      "error": "{'pending': 0, 'visible': False}",
+      "ok": false,
+      "trace": "Traceback (most recent call last):\n  File \"$WORKTREE/tools/e2e/page_chrome.py\", line 65, in gate\n    results[name] = fn()\n  File \"$WORKTREE/tools/e2e/page_chrome.py\", line 140, in navigation_reset\n    page(); schedule('(alert(\"first\"),true)'); visible(ds); answer()\n  File \"$WORKTREE/tools/e2e/page_chrome.py\", line 28, in visible\n    assert value, state()\nAssertionError: {'pending': 0, 'visible': False}\n"
+    },
+    "dialog_suppression_reload_reset": {
+      "error": "{'pending': 0, 'visible': False}",
+      "ok": false,
+      "trace": "Traceback (most recent call last):\n  File \"$WORKTREE/tools/e2e/page_chrome.py\", line 65, in gate\n    results[name] = fn()\n  File \"$WORKTREE/tools/e2e/page_chrome.py\", line 132, in suppression_reset\n    page(); schedule('(alert(\"first\"),true)'); visible(ds); answer()\n  File \"$WORKTREE/tools/e2e/page_chrome.py\", line 28, in visible\n    assert value, state()\nAssertionError: {'pending': 0, 'visible': False}\n"
+    },
+    "dialog_title_data": {
+      "error": "{'pending': 0, 'visible': False}",
+      "ok": false,
+      "trace": "Traceback (most recent call last):\n  File \"$WORKTREE/tools/e2e/page_chrome.py\", line 65, in gate\n    results[name] = fn()\n  File \"$WORKTREE/tools/e2e/page_chrome.py\", line 106, in opaque\n    schedule('(alert(\"opaque\"),true)'); state = visible(ds); answer()\n  File \"$WORKTREE/tools/e2e/page_chrome.py\", line 28, in visible\n    assert value, state()\nAssertionError: {'pending': 0, 'visible': False}\n"
+    },
+    "dialog_title_file": {
+      "error": "{'pending': 0, 'visible': False}",
+      "ok": false,
+      "trace": "Traceback (most recent call last):\n  File \"$WORKTREE/tools/e2e/page_chrome.py\", line 65, in gate\n    results[name] = fn()\n  File \"$WORKTREE/tools/e2e/page_chrome.py\", line 106, in opaque\n    schedule('(alert(\"opaque\"),true)'); state = visible(ds); answer()\n  File \"$WORKTREE/tools/e2e/page_chrome.py\", line 28, in visible\n    assert value, state()\nAssertionError: {'pending': 0, 'visible': False}\n"
+    },
+    "dialog_title_unicode_www": {
+      "error": "{'pending': 0, 'visible': False}",
+      "ok": false,
+      "trace": "Traceback (most recent call last):\n  File \"$WORKTREE/tools/e2e/page_chrome.py\", line 65, in gate\n    results[name] = fn()\n  File \"$WORKTREE/tools/e2e/page_chrome.py\", line 112, in unicode_title\n    schedule('(alert(\"unicode\"),true)'); state = visible(ds); answer()\n  File \"$WORKTREE/tools/e2e/page_chrome.py\", line 28, in visible\n    assert value, state()\nAssertionError: {'pending': 0, 'visible': False}\n"
+    },
+    "permission_allow_remember_data": {
+      "error": "{'anchor': {}, 'buttons': ['Not Now', 'Allow'], 'decisions': 0, 'help': 'Click the lock to change this any time', 'keyWindow': 35482, 'kinds': 0, 'origin': '', 'parent': 0, 'pending': 0, 'pendingPage': 0, 'promptKey': False, 'question': '', 'selectedPage': 594, 'visible': False, 'window': 0}",
+      "ok": false,
+      "trace": "Traceback (most recent call last):\n  File \"$WORKTREE/tools/e2e/page_chrome.py\", line 65, in gate\n    results[name] = fn()\n  File \"$WORKTREE/tools/e2e/page_chrome.py\", line 280, in allow\n    permission_page('remember'); perm(); state = visible(ps)\n  File \"$WORKTREE/tools/e2e/page_chrome.py\", line 28, in visible\n    assert value, state()\nAssertionError: {'anchor': {}, 'buttons': ['Not Now', 'Allow'], 'decisions': 0, 'help': 'Click the lock to change this any time', 'keyWindow': 35482, 'kinds': 0, 'origin': '', 'parent': 0, 'pending': 0, 'pendingPage': 0, 'promptKey': False, 'question': '', 'selectedPage': 594, 'visible': False, 'window': 0}\n"
+    },
+    "permission_anchor_content-top-left": {
+      "error": "{'anchor': {}, 'buttons': ['Not Now', 'Allow'], 'decisions': 0, 'help': 'Click the lock to change this any time', 'keyWindow': 35482, 'kinds': 0, 'origin': '', 'parent': 0, 'pending': 0, 'pendingPage': 0, 'promptKey': False, 'question': '', 'selectedPage': 884, 'visible': False, 'window': 0}",
+      "ok": false,
+      "trace": "Traceback (most recent call last):\n  File \"$WORKTREE/tools/e2e/page_chrome.py\", line 65, in gate\n    results[name] = fn()\n  File \"$WORKTREE/tools/e2e/page_chrome.py\", line 324, in fallback\n    perm(); state=visible(ps)\n  File \"$WORKTREE/tools/e2e/page_chrome.py\", line 28, in visible\n    assert value, state()\nAssertionError: {'anchor': {}, 'buttons': ['Not Now', 'Allow'], 'decisions': 0, 'help': 'Click the lock to change this any time', 'keyWindow': 35482, 'kinds': 0, 'origin': '', 'parent': 0, 'pending': 0, 'pendingPage': 0, 'promptKey': False, 'question': '', 'selectedPage': 884, 'visible': False, 'window': 0}\n"
+    },
+    "permission_anchor_toolbar-url": {
+      "error": "{'anchor': {}, 'buttons': ['Not Now', 'Allow'], 'decisions': 0, 'help': 'Click the lock to change this any time', 'keyWindow': 35482, 'kinds': 0, 'origin': '', 'parent': 0, 'pending': 0, 'pendingPage': 0, 'promptKey': False, 'question': '', 'selectedPage': 950, 'visible': False, 'window': 0}",
+      "ok": false,
+      "trace": "Traceback (most recent call last):\n  File \"$WORKTREE/tools/e2e/page_chrome.py\", line 65, in gate\n    results[name] = fn()\n  File \"$WORKTREE/tools/e2e/page_chrome.py\", line 324, in fallback\n    perm(); state=visible(ps)\n  File \"$WORKTREE/tools/e2e/page_chrome.py\", line 28, in visible\n    assert value, state()\nAssertionError: {'anchor': {}, 'buttons': ['Not Now', 'Allow'], 'decisions': 0, 'help': 'Click the lock to change this any time', 'keyWindow': 35482, 'kinds': 0, 'origin': '', 'parent': 0, 'pending': 0, 'pendingPage': 0, 'promptKey': False, 'question': '', 'selectedPage': 950, 'visible': False, 'window': 0}\n"
+    },
+    "permission_background_select": {
+      "error": "{'anchor': {}, 'buttons': ['Not Now', 'Allow'], 'decisions': 0, 'help': 'Click the lock to change this any time', 'keyWindow': 35482, 'kinds': 0, 'origin': '', 'parent': 0, 'pending': 0, 'pendingPage': 0, 'promptKey': False, 'question': '', 'selectedPage': 820, 'visible': False, 'window': 0}",
+      "ok": false,
+      "trace": "Traceback (most recent call last):\n  File \"$WORKTREE/tools/e2e/page_chrome.py\", line 65, in gate\n    results[name] = fn()\n  File \"$WORKTREE/tools/e2e/page_chrome.py\", line 316, in permission_background\n    app.call('select',tab=target); state=visible(ps); app.call('permission-prompt',answer='notnow')\n  File \"$WORKTREE/tools/e2e/page_chrome.py\", line 28, in visible\n    assert value, state()\nAssertionError: {'anchor': {}, 'buttons': ['Not Now', 'Allow'], 'decisions': 0, 'help': 'Click the lock to change this any time', 'keyWindow': 35482, 'kinds': 0, 'origin': '', 'parent': 0, 'pending': 0, 'pendingPage': 0, 'promptKey': False, 'question': '', 'selectedPage': 820, 'visible': False, 'window': 0}\n"
+    },
+    "permission_close_once": {
+      "error": "{'anchor': {}, 'buttons': ['Not Now', 'Allow'], 'decisions': 0, 'help': 'Click the lock to change this any time', 'keyWindow': 35482, 'kinds': 0, 'origin': '', 'parent': 0, 'pending': 0, 'pendingPage': 0, 'promptKey': False, 'question': '', 'selectedPage': 760, 'visible': False, 'window': 0}",
+      "ok": false,
+      "trace": "Traceback (most recent call last):\n  File \"$WORKTREE/tools/e2e/page_chrome.py\", line 65, in gate\n    results[name] = fn()\n  File \"$WORKTREE/tools/e2e/page_chrome.py\", line 302, in cancel_permission\n    permission_page('cancel-'+action); target=tab; perm(); visible(ps)\n  File \"$WORKTREE/tools/e2e/page_chrome.py\", line 28, in visible\n    assert value, state()\nAssertionError: {'anchor': {}, 'buttons': ['Not Now', 'Allow'], 'decisions': 0, 'help': 'Click the lock to change this any time', 'keyWindow': 35482, 'kinds': 0, 'origin': '', 'parent': 0, 'pending': 0, 'pendingPage': 0, 'promptKey': False, 'question': '', 'selectedPage': 760, 'visible': False, 'window': 0}\n"
+    },
+    "permission_midi_real_request": {
+      "error": "{'anchor': {}, 'buttons': ['Not Now', 'Allow'], 'decisions': 0, 'help': 'Click the lock to change this any time', 'keyWindow': 35482, 'kinds': 0, 'origin': '', 'parent': 0, 'pending': 0, 'pendingPage': 0, 'promptKey': False, 'question': '', 'selectedPage': 1018, 'visible': False, 'window': 0}",
+      "ok": false,
+      "trace": "Traceback (most recent call last):\n  File \"$WORKTREE/tools/e2e/page_chrome.py\", line 65, in gate\n    results[name] = fn()\n  File \"$WORKTREE/tools/e2e/page_chrome.py\", line 331, in midi\n    page('http://midi.localhost:%d/midi' % port); perm('midi'); state=visible(ps)\n  File \"$WORKTREE/tools/e2e/page_chrome.py\", line 28, in visible\n    assert value, state()\nAssertionError: {'anchor': {}, 'buttons': ['Not Now', 'Allow'], 'decisions': 0, 'help': 'Click the lock to change this any time', 'keyWindow': 35482, 'kinds': 0, 'origin': '', 'parent': 0, 'pending': 0, 'pendingPage': 0, 'promptKey': False, 'question': '', 'selectedPage': 1018, 'visible': False, 'window': 0}\n"
+    },
+    "permission_native_escape": {
+      "error": "{'anchor': {}, 'buttons': ['Not Now', 'Allow'], 'decisions': 0, 'help': 'Click the lock to change this any time', 'keyWindow': 35482, 'kinds': 0, 'origin': '', 'parent': 0, 'pending': 0, 'pendingPage': 0, 'promptKey': False, 'question': '', 'selectedPage': 1088, 'visible': False, 'window': 0}",
+      "ok": false,
+      "trace": "Traceback (most recent call last):\n  File \"$WORKTREE/tools/e2e/page_chrome.py\", line 65, in gate\n    results[name] = fn()\n  File \"$WORKTREE/tools/e2e/page_chrome.py\", line 340, in permission_keys\n    perm(); state=visible(ps)\n  File \"$WORKTREE/tools/e2e/page_chrome.py\", line 28, in visible\n    assert value, state()\nAssertionError: {'anchor': {}, 'buttons': ['Not Now', 'Allow'], 'decisions': 0, 'help': 'Click the lock to change this any time', 'keyWindow': 35482, 'kinds': 0, 'origin': '', 'parent': 0, 'pending': 0, 'pendingPage': 0, 'promptKey': False, 'question': '', 'selectedPage': 1088, 'visible': False, 'window': 0}\n"
+    },
+    "permission_native_l": {
+      "error": "{'anchor': {}, 'buttons': ['Not Now', 'Allow'], 'decisions': 0, 'help': 'Click the lock to change this any time', 'keyWindow': 35482, 'kinds': 0, 'origin': '', 'parent': 0, 'pending': 0, 'pendingPage': 0, 'promptKey': False, 'question': '', 'selectedPage': 1388, 'visible': False, 'window': 0}",
+      "ok": false,
+      "trace": "Traceback (most recent call last):\n  File \"$WORKTREE/tools/e2e/page_chrome.py\", line 65, in gate\n    results[name] = fn()\n  File \"$WORKTREE/tools/e2e/page_chrome.py\", line 340, in permission_keys\n    perm(); state=visible(ps)\n  File \"$WORKTREE/tools/e2e/page_chrome.py\", line 28, in visible\n    assert value, state()\nAssertionError: {'anchor': {}, 'buttons': ['Not Now', 'Allow'], 'decisions': 0, 'help': 'Click the lock to change this any time', 'keyWindow': 35482, 'kinds': 0, 'origin': '', 'parent': 0, 'pending': 0, 'pendingPage': 0, 'promptKey': False, 'question': '', 'selectedPage': 1388, 'visible': False, 'window': 0}\n"
+    },
+    "permission_native_return": {
+      "error": "{'anchor': {}, 'buttons': ['Not Now', 'Allow'], 'decisions': 0, 'help': 'Click the lock to change this any time', 'keyWindow': 35482, 'kinds': 0, 'origin': '', 'parent': 0, 'pending': 0, 'pendingPage': 0, 'promptKey': False, 'question': '', 'selectedPage': 1160, 'visible': False, 'window': 0}",
+      "ok": false,
+      "trace": "Traceback (most recent call last):\n  File \"$WORKTREE/tools/e2e/page_chrome.py\", line 65, in gate\n    results[name] = fn()\n  File \"$WORKTREE/tools/e2e/page_chrome.py\", line 340, in permission_keys\n    perm(); state=visible(ps)\n  File \"$WORKTREE/tools/e2e/page_chrome.py\", line 28, in visible\n    assert value, state()\nAssertionError: {'anchor': {}, 'buttons': ['Not Now', 'Allow'], 'decisions': 0, 'help': 'Click the lock to change this any time', 'keyWindow': 35482, 'kinds': 0, 'origin': '', 'parent': 0, 'pending': 0, 'pendingPage': 0, 'promptKey': False, 'question': '', 'selectedPage': 1160, 'visible': False, 'window': 0}\n"
+    },
+    "permission_native_t": {
+      "error": "{'anchor': {}, 'buttons': ['Not Now', 'Allow'], 'decisions': 0, 'help': 'Click the lock to change this any time', 'keyWindow': 35482, 'kinds': 0, 'origin': '', 'parent': 0, 'pending': 0, 'pendingPage': 0, 'promptKey': False, 'question': '', 'selectedPage': 1310, 'visible': False, 'window': 0}",
+      "ok": false,
+      "trace": "Traceback (most recent call last):\n  File \"$WORKTREE/tools/e2e/page_chrome.py\", line 65, in gate\n    results[name] = fn()\n  File \"$WORKTREE/tools/e2e/page_chrome.py\", line 340, in permission_keys\n    perm(); state=visible(ps)\n  File \"$WORKTREE/tools/e2e/page_chrome.py\", line 28, in visible\n    assert value, state()\nAssertionError: {'anchor': {}, 'buttons': ['Not Now', 'Allow'], 'decisions': 0, 'help': 'Click the lock to change this any time', 'keyWindow': 35482, 'kinds': 0, 'origin': '', 'parent': 0, 'pending': 0, 'pendingPage': 0, 'promptKey': False, 'question': '', 'selectedPage': 1310, 'visible': False, 'window': 0}\n"
+    },
+    "permission_native_w": {
+      "error": "{'anchor': {}, 'buttons': ['Not Now', 'Allow'], 'decisions': 0, 'help': 'Click the lock to change this any time', 'keyWindow': 35482, 'kinds': 0, 'origin': '', 'parent': 0, 'pending': 0, 'pendingPage': 0, 'promptKey': False, 'question': '', 'selectedPage': 1234, 'visible': False, 'window': 0}",
+      "ok": false,
+      "trace": "Traceback (most recent call last):\n  File \"$WORKTREE/tools/e2e/page_chrome.py\", line 65, in gate\n    results[name] = fn()\n  File \"$WORKTREE/tools/e2e/page_chrome.py\", line 340, in permission_keys\n    perm(); state=visible(ps)\n  File \"$WORKTREE/tools/e2e/page_chrome.py\", line 28, in visible\n    assert value, state()\nAssertionError: {'anchor': {}, 'buttons': ['Not Now', 'Allow'], 'decisions': 0, 'help': 'Click the lock to change this any time', 'keyWindow': 35482, 'kinds': 0, 'origin': '', 'parent': 0, 'pending': 0, 'pendingPage': 0, 'promptKey': False, 'question': '', 'selectedPage': 1234, 'visible': False, 'window': 0}\n"
+    },
+    "permission_navigate_once": {
+      "error": "{'anchor': {}, 'buttons': ['Not Now', 'Allow'], 'decisions': 0, 'help': 'Click the lock to change this any time', 'keyWindow': 35482, 'kinds': 0, 'origin': '', 'parent': 0, 'pending': 0, 'pendingPage': 0, 'promptKey': False, 'question': '', 'selectedPage': 702, 'visible': False, 'window': 0}",
+      "ok": false,
+      "trace": "Traceback (most recent call last):\n  File \"$WORKTREE/tools/e2e/page_chrome.py\", line 65, in gate\n    results[name] = fn()\n  File \"$WORKTREE/tools/e2e/page_chrome.py\", line 302, in cancel_permission\n    permission_page('cancel-'+action); target=tab; perm(); visible(ps)\n  File \"$WORKTREE/tools/e2e/page_chrome.py\", line 28, in visible\n    assert value, state()\nAssertionError: {'anchor': {}, 'buttons': ['Not Now', 'Allow'], 'decisions': 0, 'help': 'Click the lock to change this any time', 'keyWindow': 35482, 'kinds': 0, 'origin': '', 'parent': 0, 'pending': 0, 'pendingPage': 0, 'promptKey': False, 'question': '', 'selectedPage': 702, 'visible': False, 'window': 0}\n"
+    },
+    "permission_notnow_once_copy_anchor": {
+      "error": "{'anchor': {}, 'buttons': ['Not Now', 'Allow'], 'decisions': 0, 'help': 'Click the lock to change this any time', 'keyWindow': 35482, 'kinds': 0, 'origin': '', 'parent': 0, 'pending': 0, 'pendingPage': 0, 'promptKey': False, 'question': '', 'selectedPage': 544, 'visible': False, 'window': 0}",
+      "ok": false,
+      "trace": "Traceback (most recent call last):\n  File \"$WORKTREE/tools/e2e/page_chrome.py\", line 65, in gate\n    results[name] = fn()\n  File \"$WORKTREE/tools/e2e/page_chrome.py\", line 265, in notnow\n    url = permission_page('notnow'); perm(); state = visible(ps)\n  File \"$WORKTREE/tools/e2e/page_chrome.py\", line 28, in visible\n    assert value, state()\nAssertionError: {'anchor': {}, 'buttons': ['Not Now', 'Allow'], 'decisions': 0, 'help': 'Click the lock to change this any time', 'keyWindow': 35482, 'kinds': 0, 'origin': '', 'parent': 0, 'pending': 0, 'pendingPage': 0, 'promptKey': False, 'question': '', 'selectedPage': 544, 'visible': False, 'window': 0}\n"
+    },
+    "permission_remember_relaunch": {
+      "decisions": {
+        "decisions": [
+          {
+            "kind": 8,
+            "origin": "http://background.localhost:54297",
+            "state": 2
+          },
+          {
+            "kind": 8,
+            "origin": "http://cancel-close.localhost:54297",
+            "state": 2
+          },
+          {
+            "kind": 8,
+            "origin": "http://cancel-navigate.localhost:54297",
+            "state": 2
+          },
+          {
+            "kind": 8,
+            "origin": "http://hidden-content-top-left.localhost:54297",
+            "state": 2
+          },
+          {
+            "kind": 8,
+            "origin": "http://hidden-toolbar-url.localhost:54297",
+            "state": 2
+          },
+          {
+            "kind": 8,
+            "origin": "http://keys-escape.localhost:54297",
+            "state": 2
+          },
+          {
+            "kind": 8,
+            "origin": "http://keys-l.localhost:54297",
+            "state": 2
+          },
+          {
+            "kind": 8,
+            "origin": "http://keys-return.localhost:54297",
+            "state": 2
+          },
+          {
+            "kind": 8,
+            "origin": "http://keys-t.localhost:54297",
+            "state": 2
+          },
+          {
+            "kind": 8,
+            "origin": "http://keys-w.localhost:54297",
+            "state": 2
+          },
+          {
+            "kind": 8,
+            "origin": "http://notnow.localhost:54297",
+            "state": 2
+          },
+          {
+            "kind": 8,
+            "origin": "http://remember.localhost:54297",
+            "state": 2
+          },
+          {
+            "kind": 8,
+            "origin": "http://switch.localhost:54297",
+            "state": 2
+          }
+        ],
+        "ready": true
+      },
+      "ok": false,
+      "result": "denied"
+    },
+    "permission_tab_switch_once": {
+      "error": "{'anchor': {}, 'buttons': ['Not Now', 'Allow'], 'decisions': 0, 'help': 'Click the lock to change this any time', 'keyWindow': 35482, 'kinds': 0, 'origin': '', 'parent': 0, 'pending': 0, 'pendingPage': 0, 'promptKey': False, 'question': '', 'selectedPage': 646, 'visible': False, 'window': 0}",
+      "ok": false,
+      "trace": "Traceback (most recent call last):\n  File \"$WORKTREE/tools/e2e/page_chrome.py\", line 65, in gate\n    results[name] = fn()\n  File \"$WORKTREE/tools/e2e/page_chrome.py\", line 293, in switched\n    permission_page('switch'); target=tab; other=page(); app.call('select',tab=target); perm(target=target); visible(ps)\n  File \"$WORKTREE/tools/e2e/page_chrome.py\", line 28, in visible\n    assert value, state()\nAssertionError: {'anchor': {}, 'buttons': ['Not Now', 'Allow'], 'decisions': 0, 'help': 'Click the lock to change this any time', 'keyWindow': 35482, 'kinds': 0, 'origin': '', 'parent': 0, 'pending': 0, 'pendingPage': 0, 'promptKey': False, 'question': '', 'selectedPage': 646, 'visible': False, 'window': 0}\n"
+    }
+  },
+  "pathRedactions": [
+    "$WORKTREE",
+    "$HOME",
+    "$TMPDIR"
+  ],
+  "source": {
+    "clean": false,
+    "diffSHA256": "6a8bf95e1f5eb8e07ba21d8e80d303f24526f54f90ee34741340fcca45bbcd7e",
+    "head": "6078e7892be2ab8fc6ff89ec6822b0a211f97f89"
+  },
+  "started": "2026-11-05 15:06:51",
+  "style": "chrome"
+}
