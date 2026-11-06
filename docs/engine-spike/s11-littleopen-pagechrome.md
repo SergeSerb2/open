@@ -42,9 +42,9 @@ explicit Little Open window resolve that window's factory.
 
 ## Verification
 
-The restored implementation passes the 21 new Little Open flows (20 in the
-MIDI run plus the corrected quit-OK row). The final combined suite and required
-regressions are recorded in the PR. The first complete full verifier passed
+The restored implementation passes all 21 new Little Open flows in one
+combined MIDI run (`page-chrome`: 62/62). The required regression results
+and the known-main Downloads interruption are recorded in the PR. The first complete full verifier passed
 23/23 with no skips on AW2726DM, scale 1.0; the final-head rerun is also recorded
 in the PR. Display gates count as real checks.
 
@@ -60,7 +60,9 @@ Production code was restored before final builds.
 The first Little Open permission run used notifications, including Allow,
 with `OPEN_AUTOMATION_NOTIFICATION_AUTHORIZATION=record`. Its timing overlaps
 the 05:18 macOS notification-authorization dialog. Saved app output does not
-prove which process requested that dialog; treat this run as its likely source.
+prove which process requested that dialog; this run is a possible source.
+The engine startup path described below can request the disclosure independently
+of the Swift notification Allow path, so attribution to this fixture is unproved.
 The lead confirmed the last UserNotificationCenter window closed at 05:25:39.
 Runs before 05:26 that lost focus remain INTERRUPTED, not failed acceptance.
 
@@ -70,3 +72,37 @@ MIDI needs no attached device or macOS notification grant. No real OS
 authorization prompt or notification delivery is part of this acceptance.
 The existing normal-window page-chrome fixture retains its record-only
 notification authorization setting.
+
+## Known-main Alerts helper disclosure
+
+The two branch Downloads attempts lost focus to `UserNotificationCenter`,
+including at the first live-progress row. They remain INTERRUPTED; passing
+assertions inside an interrupted attempt do not count as acceptance. No run
+was still active when the lead reported the prompt. The lead's system-log
+evidence identifies a notification disclosure for
+`io.github.sergeserb2.open.helper.alerts` at 05:54:34 on 2026-11-06.
+
+One comparison used unchanged main `75f08364`'s Debug build and the same
+fresh-bundle Downloads controls flow. All ten controls rows passed, with zero
+interruptions and clean process cleanup. At 05:58:13.977, `usernoted` connected
+the Alerts helper (PID 40998) from that run's unique `downloads-attempt` copy.
+This proves main launches the helper too; it does not claim a second disclosure
+was shown. The main source checkout was clean. Raw receipts stay private:
+`.re/s11-littleopen/downloads-main-once.log`,
+`results-downloads-main-controls.json`, and `alerts-main-system.log`.
+The diagnostic wrapper limited the harness to one attempt, with no product or
+fixture behavior changed. No further Downloads retries were made.
+
+The source path is `OEBrowserContext.oe_contextInitialized` →
+`CefSetOpenNotificationHandler` → automation `NotificationState` →
+`NotificationDisplayServiceFactory::GetForProfile` →
+`NotificationPlatformBridge::Create` → `NotificationDispatcherMojo` constructor
+→ `CheckIfServiceCanBeTerminated` → `GetOrCreateService` →
+`MacNotificationProviderFactory::LaunchOutOfProcessProvider`
+(`kChildProcessHelperAlerts`). The Chromium constructor explicitly force-starts
+the service for first-start permission. There is no notification delivery or
+authorization call in the App's download-completion or quit path.
+The Swift `OPEN_AUTOMATION_NOTIFICATION_AUTHORIZATION=record` guard does not
+cover this engine startup. Engine changes are outside this PR's scope.
+Downloads counts as INTERRUPTED by a known-main system prompt for this PR,
+per the lead's ruling. The follow-up belongs to Section 8 / lead.
