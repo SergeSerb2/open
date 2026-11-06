@@ -10681,7 +10681,11 @@ def main():
     ap.add_argument("--extensions", default=os.path.join(ROOT, ".re", "ext", "unpacked"))
     ap.add_argument("--only", choices=["shell", "extensions", "features", "measure", "tabstrip", "window", "sidebar", "peek",
                                        "commandbar", "app-actions", "actions", "profiles", "sidebar-completion", "toolbar", "numbering", "media", "relaunch", "page",
+<<<<<<< HEAD
                                        "sleep", "routing", "littleopen", "history", "applescript", "downloads"])
+=======
+                                       "sleep", "context-menus", "routing", "history", "applescript", "downloads"])
+>>>>>>> origin/main
     ap.add_argument("--window-chrome-only", action="store_true", help="run only the window-chrome follow-up flows in the window suite")
     ap.add_argument("--keep", action="store_true",
                     help="keep this run's data root, cache root and scratch folder (paths printed at the end)")
@@ -10860,6 +10864,13 @@ def main():
             results[opts.only] = CheckedResults(tracker)
             space_manager_checks(results[opts.only], tmp, opts.config, opts.style)
             folder_peek_checks(factory, results[opts.only], tmp)
+        elif opts.only == "context-menus":
+            import importlib.util
+            spec = importlib.util.spec_from_file_location("open_context_menus", os.path.join(ROOT, "tools/e2e/context_menus.py"))
+            module = importlib.util.module_from_spec(spec)
+            spec.loader.exec_module(module)
+            results[opts.only] = CheckedResults(tracker)
+            module.context_menu_checks(factory, results[opts.only], tmp, sys.modules[__name__])
         elif opts.only == "applescript":
             results["applescript"] = CheckedResults(tracker)
             runpy.run_path(os.path.join(ROOT, "tools/e2e/applescript.py"))["run"](
@@ -10968,18 +10979,26 @@ def main():
                           "processes": [instance.quit_report for instance in _OWNED_APPS]}
     print("owned_process_cleanup    " + ("PASS" if results["cleanup"]["ok"] else "FAIL"), flush=True)
     name = ("results-actions-p2.json" if opts.only == "actions" else
-            "results-%s-%s.json" % (opts.only, opts.style if opts.only in ("extensions", "features", "tabstrip", "page")
+            "results-%s-%s.json" % (opts.only, opts.style if opts.only in ("extensions", "features", "tabstrip", "page", "context-menus")
                                     else opts.config.lower()))
     with open(os.path.join(OUT, name), "w") as f:
         json.dump(results, f, indent=2, sort_keys=True)
+<<<<<<< HEAD
     for group in ("shell", "extensions", "features", "measure", "tabstrip", "window", "sidebar", "peek", "commandbar", "app-actions", "actions", "profiles", "sidebar-completion", "toolbar", "numbering", "media", "relaunch", "page", "sleep", "routing", "littleopen", "history", "applescript", "downloads"):
+=======
+    for group in ("shell", "extensions", "features", "measure", "tabstrip", "window", "sidebar", "peek", "commandbar", "app-actions", "actions", "profiles", "sidebar-completion", "toolbar", "numbering", "media", "relaunch", "page", "sleep", "context-menus", "routing", "history", "applescript", "downloads"):
+>>>>>>> origin/main
         for k, v in results.get(group, {}).items():
             if isinstance(v, dict) and "ok" in v:
                 print("%-24s %s" % (k, "PASS" if v.get("ok") else "FAIL"))
             elif isinstance(v, dict) and v.get("status") in ("SKIP", "BLOCKED", "INTERRUPTED", "DEFERRED"):
                 print("%-24s %s: %s" % (k, v["status"], v.get("reason", "")))
     print("wrote", os.path.join(OUT, name))
+<<<<<<< HEAD
     failures = [k for group in ("shell", "extensions", "features", "measure", "tabstrip", "window", "sidebar", "peek", "commandbar", "app-actions", "actions", "sidebar-completion", "toolbar", "numbering", "media", "relaunch", "page", "sleep", "routing", "littleopen", "history", "applescript", "downloads")
+=======
+    failures = [k for group in ("shell", "extensions", "features", "measure", "tabstrip", "window", "sidebar", "peek", "commandbar", "app-actions", "actions", "sidebar-completion", "toolbar", "numbering", "media", "relaunch", "page", "sleep", "context-menus", "routing", "history", "applescript", "downloads")
+>>>>>>> origin/main
                 for k, v in results.get(group, {}).items() if isinstance(v, dict) and v.get("ok") is False]
     if failures or not results["cleanup"]["ok"]:
         sys.exit(1)
