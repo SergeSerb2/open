@@ -1704,6 +1704,8 @@ public final class BrowserModel {
     /// Filled by OpenDataRoot from disk and tombstones; model commands do no I/O.
     @ObservationIgnored public var unavailableProfileDirectoryNames: Set<String> = []
     @ObservationIgnored public var onArchiveError: ((Error) -> Void)?
+    /// App policy initialization, including Undo/Redo reinsertion. Must not register Undo.
+    @ObservationIgnored public var onProfileCreated: ((Profile) -> Void)?
 
     public var defaultProfile: Profile? { profiles.first { $0.dataDirectoryName == "Default" } ?? profiles.first }
 
@@ -1736,6 +1738,7 @@ public final class BrowserModel {
     }
 
     private func insertProfile(_ profile: Profile, at slot: Int) {
+        onProfileCreated?(profile)
         profiles.insert(profile, at: min(slot, profiles.count))
         profileByIDCache[profile.id] = profile
         for tab in profile.favorites { register(.tab(tab), under: .favorites(profile.id)) }
