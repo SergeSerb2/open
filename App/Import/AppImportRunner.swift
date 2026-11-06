@@ -36,6 +36,7 @@ final class AppImportRunner {
       let outcome = ImportOutcome(counts: counts, errorText: message, failures: failures)
       lastOutcome = outcome; return outcome
     }
+    guard !app.terminationRequested, !Task.isCancelled else { return result("Import stopped because Open is quitting.") }
     let imported: ArcImportResult
     do {
       // File decoding is already a Sendable seam in OpenImport. Build the live
@@ -52,6 +53,7 @@ final class AppImportRunner {
       return result("Open could not read your Arc data.")
     }
     let report = imported.report
+    guard !app.terminationRequested, !Task.isCancelled else { return result("Import stopped because Open is quitting.") }
     counts["Sidebar accounted"] = report.accountedTotal; counts["Sidebar total"] = report.totalItems
     counts["Archive accounted"] = report.archiveAccounted; counts["Archive total"] = report.archiveTotal
     counts["Skipped easels"] = report.skippedEasels + (plan.archive ? report.archiveSkippedEasels : 0)
@@ -97,6 +99,7 @@ final class AppImportRunner {
     // Never claim requested History as imported while that continuation is absent.
     if plan.history { failures["History"] = "History import is not available yet. You can import it later from Settings." }
     // Phase 4 remains capability OFF. No consent token or secret API is called.
+    guard !app.terminationRequested, !Task.isCancelled else { return result("Import stopped because Open is quitting.") }
     if firstRun {
       if plan.spaces {
         if !plan.searchSettings { for profile in imported.model.profiles { profile.settings = ProfileSettings() } }

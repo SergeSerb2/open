@@ -133,6 +133,16 @@ def run(factory, results, tmp, h):
         app.call('key', key='l', modifiers=['command'])
         row('welcome_keyboard_guards', state()['step'] == 'welcome' and not app.call('shell-windows'))
         app.call('key', key='return'); until('importChoices')
+        limits = []
+        for action in ('x'*32, 'x'*33):
+            try: app.call('first-run', action=action); limits.append('accepted')
+            except RuntimeError as error: limits.append(str(error))
+        app.call('first-run', action='choose-dir', directory='/'+'a'*4095)
+        try: app.call('first-run', action='choose-dir', directory='/'+'a'*4096); limits.append('accepted')
+        except RuntimeError as error: limits.append(str(error))
+        app.call('first-run', action='choose-dir', directory=str(source))
+        row('automation_limits', 'unknown first-run action' in limits[0]
+            and all('exceeds limit' in error for error in limits[1:]), results=limits)
         imported_png = shot('import'); import_copy = copy()
         row('F2_import_choices', not state()['secretsEnabled'] and 'Import from Arc' in import_copy,
             png=imported_png, text=import_copy)

@@ -24,6 +24,7 @@ extension AutomationController {
           guard let path = args["directory"] as? String else { throw Failure(message: "missing directory") }
           await wizard.choose(directory: URL(fileURLWithPath: path, isDirectory: true))
         case "settings-next":
+          guard wizard.step == .choose else { throw Failure(message: "wizard is not on Choose") }
           let deadline = ContinuousClock.now.advanced(by: .seconds(10))
           while wizard.busy && ContinuousClock.now < deadline { try await Task.sleep(for: .milliseconds(10)) }
           wizard.review()
@@ -32,20 +33,29 @@ extension AutomationController {
           firstRunActionTask = Task { @MainActor [weak self] in
             await wizard.beginImport(); self?.firstRunActionTask = nil
           }
-        case "settings-done": wizard.finish()
+        case "settings-done":
+          guard wizard.step == .report, !wizard.busy else { throw Failure(message: "wizard is not on Report") }
+          wizard.finish()
         default: throw Failure(message: "unknown first-run action")
         }
       } else {
         guard let flow else { throw Failure(message: "first run is not active") }
+        guard !flow.busy || ["focus", "inspect"].contains(action) else { throw Failure(message: "import is busy") }
         switch action {
         case "focus":
           guard let window = app.firstRunWindowController?.window else { throw Failure(message: "no first-run window") }
           try await activateForInput(window)
         case "inspect": break
-        case "import": flow.showImport()
-        case "fresh": flow.startFresh()
-        case "back": if !flow.busy { flow.step = flow.step == .importChoices ? .welcome : .importChoices }
-        case "notnow": if flow.step == .importChoices { flow.skipImport() } else if flow.step == .defaultBrowser { flow.finish() }
+        case "import":
+          guard flow.step == .welcome else { throw Failure(message: "not on Welcome") }; flow.showImport()
+        case "fresh":
+          guard [.welcome, .importChoices, .failed].contains(flow.step) else { throw Failure(message: "Start Fresh is unavailable") }; flow.startFresh()
+        case "back":
+          guard [.importChoices, .failed].contains(flow.step) else { throw Failure(message: "Back is unavailable") }
+          flow.step = flow.step == .importChoices ? .welcome : .importChoices
+        case "notnow":
+          guard [.importChoices, .defaultBrowser].contains(flow.step) else { throw Failure(message: "Not Now is unavailable") }
+          if flow.step == .importChoices { flow.skipImport() } else { flow.finish() }
         case "finish": guard flow.step == .defaultBrowser else { throw Failure(message: "not on default-browser step") }; flow.finish()
         case "continue", "retry":
           if flow.step == .report {
@@ -58,7 +68,7 @@ extension AutomationController {
             }
           }
         case "choose-dir":
-          guard !flow.busy, let path = args["directory"] as? String else { throw Failure(message: "missing directory or import busy") }
+          guard flow.step == .importChoices, let path = args["directory"] as? String else { throw Failure(message: "missing directory or not on Import") }
           await flow.choose(directory: URL(fileURLWithPath: path, isDirectory: true))
         default: throw Failure(message: "unknown first-run action")
         }
