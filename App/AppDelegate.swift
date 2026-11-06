@@ -37,6 +37,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, OEEngineDelegate, OEBr
   private var asyncEngineCalls: [String: Int] = [:]
   private var shutdownTrace: [[String: Any]] = []
   lazy var stores = AppStores(app: self)
+  lazy var extensionPrompts = ExtensionPromptPresenter(app: self)
+  lazy var extensionsMainMenu = ExtensionsMainMenuProvider(app: self)
   /// Mini players, auto-PiP and the media sleep feed (media-pip §7.2).
   lazy var media = MediaCoordinator(app: self, rulesURL: options.pipSiteRules)
   /// Tab sleep (app-shell §4.7, Step G): one SleepController, started after first paint.
@@ -134,6 +136,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, OEEngineDelegate, OEBr
     let wasEngineReady = engineReady
     let icons = wasEngineReady ? stores.sidebarFavicons : nil
     terminationRequested = true
+    extensionPrompts.cancelAll()
     if let commandWindowObserver { NotificationCenter.default.removeObserver(commandWindowObserver) }; commandWindowObserver = nil
     if let commandDefaultsObserver { NotificationCenter.default.removeObserver(commandDefaultsObserver) }; commandDefaultsObserver = nil
     if let initialWindowInputMonitor { NSEvent.removeMonitor(initialWindowInputMonitor) }; initialWindowInputMonitor = nil
@@ -594,6 +597,7 @@ extension AppDelegate: CommandDispatcher {
       keyBindings = .empty; Self.commandLog("Key bindings could not be loaded: \(error)")
     }
     for controller in windowControllers { controller.keyBindingOverrides = keyBindings }
+    extensionPrompts.rebuildShortcuts()
     updateLittleOpenHotkey(); scheduleMenuRebuild()
   }
   func updateLittleOpenHotkey() {

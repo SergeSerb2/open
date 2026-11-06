@@ -1,4 +1,5 @@
 import AppKit
+import OpenExtensionsUI
 import OpenDesign
 import OpenModel
 
@@ -648,6 +649,9 @@ extension SidebarView {
     /// The URL field's right-click menu, built as a click would build it.
     public func urlFieldMenu() -> NSMenu { SidebarMenus(context: context).urlField() }
     /// The URL field shows (it hides while the window shows the content toolbar).
+    public var extensionsStrip: ExtensionStripView? { urlField.extensionStrip }
+    public var siteControlsAnchor: NSView { urlField.siteControls }
+    public func refreshExtensionsLayout() { urlField.needsLayout = true; urlField.layoutSubtreeIfNeeded() }
     public var urlFieldVisible: Bool { !urlField.isHidden }
     /// The URL field's text right now (the host, or the full URL for a Developer Mode site).
     public var urlFieldText: String { context.pageHost ?? "" }

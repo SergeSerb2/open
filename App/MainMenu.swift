@@ -15,6 +15,7 @@ enum MainMenu {
       spaces: app.model.spaces.map { SpaceMenuEntry(id: $0.id.description, title: app.model.displayTitle(for: $0)) },
       tabs: (factory.map { f in f.numberedItems.map { TabMenuEntry(id: $0.description, title: f.numberedTitle($0)) } } ?? []),
       overrides: app.keyBindings, switchToNinth: UserDefaults.standard.bool(forKey: "open.shortcuts.switchToNinthEnabled"))
+    menu.items.first { $0.submenu?.title == "Extensions" }?.submenu?.delegate = app.extensionsMainMenu
     if let windowMenu = menu.items.first(where: { $0.title == "Window" })?.submenu { app.appendLittleOpenMenuItems(to: windowMenu, sessions: true) }
     #if DEBUG || OPEN_AUTOMATION
     if let help = menu.items.first(where: { $0.title == "Help" })?.submenu,
@@ -45,6 +46,9 @@ enum MainMenu {
       return true
     }
     if app.handleLittleOpenKey(event) { return true }
+    if let factory = app.littleOpenExtensionFactory(window: event.window ?? NSApp.keyWindow),
+      let browser = factory.focusedBrowser,
+      app.extensionPrompts.table(browser.context.extensions).handle(event, factory: factory) { return true }
     if let window = event.window, let factory = app.factory(forKeyWindow: window) {
       factory.findKeyRequestedAt = event.timestamp
       defer { factory.findKeyRequestedAt = nil }

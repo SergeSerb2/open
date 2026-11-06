@@ -1,6 +1,7 @@
 import AppKit
 import OpenModel
 import OpenDesign
+import OpenExtensionsUI
 
 @MainActor
 public final class PaneSlotView: NSView {
@@ -107,6 +108,7 @@ public final class PaneSlotView: NSView {
 public final class WebContentContainer: NSView {
     public static let maxCachedHiddenHosts = 8
     public var fullBleed = false { didSet { if fullBleed != oldValue { for slot in slots { slot.fullBleed = fullBleed } } } }
+    public var extensionsUI: ExtensionsUIContext? { didSet { for slot in slots { slot.paneChrome?.extensionsUI = extensionsUI } } }
     /// The render server resizes this background with the panel while page
     /// layout stays at its final width. Clip the wider hide frame temporarily.
     public func setSidebarSliding(_ sliding: Bool) {
@@ -282,6 +284,7 @@ public final class WebContentContainer: NSView {
                            close: { [weak self] in self?.onPaneClose?(id) }, menu: { [weak self] v in self?.onPaneMenu?(id, v) },
                            url: { [weak self] in self?.onURLField?() }, copy: { [weak self] changed in self?.toasts?.show(ToastContent(title: changed ? URLCleaner.cleanedTitle : URLCleaner.plainTitle)) },
                            toolbarMenu: { [weak self] in self?.onToolbarMenu?() })
+            slot.paneChrome?.extensionsUI = extensionsUI
         }
     }
     public func refreshPlaceholders() { for id in ids { ensureHost(id) }; updateSlots() }

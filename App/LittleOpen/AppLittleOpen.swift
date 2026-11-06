@@ -39,6 +39,11 @@ extension AppDelegate {
     // Fan out to the shared visibility feed, deadline and menus.
     coordinator.onChange = { [weak self] in
       guard let self else { return }
+      for controller in self.littleOpenCoordinator.controllers.values {
+        if let host = self.littleOpenHosts.values.first(where: { $0.view.window === controller.window }) {
+          host.owner?.attachLittleOpen(controller, content: host.content)
+        }
+      }
       self.media.visibility.visibilityChanged()
       self.expirySweeper?.rearm()
       self.scheduleMenuRebuild()
@@ -161,6 +166,8 @@ extension AppDelegate {
     guard let controller = keyLittleOpen else { return false }
     let host = controller.container.host(for: controller.session.tab.id)
     switch id {
+    case "manage-extensions", "add-extension", "extension-shortcuts":
+      littleOpenExtensionFactory()?.performLittleOpenExtensionManagement(id)
     case "open-in-current-space": controller.openInCurrentSpace()
     case "open-command-bar": controller.focusURL()
     case "archive-tab", "close-window": littleOpenCoordinator.close(sessionID: controller.session.id, archiveReason: nil)

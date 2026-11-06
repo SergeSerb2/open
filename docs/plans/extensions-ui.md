@@ -263,6 +263,15 @@ more button only.
 
 ### 3.4 Little Open toolbar
 
+**Lead update 2026-11-05 22:32:** Section 9 now owns a 47 pt title bar.
+The Extensions button is inside its URL capsule, left of Copy URL. Its
+glyph/hit frame is `[w − 252, 16, 16, 16]`, matching Copy URL's button
+style, with `LittleOpenMetrics.text` and symbol `puzzlepiece.extension`.
+While shown, host text ends at `extensions.minX − hostGap`; when hidden,
+the existing layout is unchanged. It shows for at least one action and
+uses the same menu and popup anchor below. This replaces the old frame
+and URL-field-width values below. **guess (lead), capture S-7.**
+
 Owner: `LittleOpenWindowController`. Add one `PlateButton`-style button
 "Extensions" (EX-3):
 
@@ -1648,9 +1657,9 @@ The engine side of E1–E7 is in (docs/engine-patches.md, P2 status; docs/engine
   - View Web Permissions: opens `chrome://settings/content/siteDetails?site=…` as a new tab.
   - Remove: shows Chrome's own uninstall dialog until P3 (E10).
 
-## Verification notes
+## Verification notes — UI kit (#175)
 
-PR: TBD (`s6/ui-kit`). Steps 1 and 4, plus the engine-free menu, popup-panel,
+PR: [#175](https://github.com/SergeSerb2/open/pull/175) (`s6/ui-kit`). Steps 1 and 4, plus the engine-free menu, popup-panel,
 and prompt-sheet parts of Steps 3 and 6, land in `OpenExtensionsUI` and
 `extensions-render`. `OpenWeb` retains the old App bridge API with compatibility
 defaults. An optional `SiteControlController.extensionsUIContext` hosts the
@@ -1678,3 +1687,43 @@ Review fixes keep pin/order updates local to each strip's rendered state when
 hosts share one context. Picker arrows and type-select reveal the focused item
 inside the scroll viewport before Return can run it. The render CLIs exercise
 both flows, including the SCC's capped height.
+
+## Verification notes — App wiring
+
+Steps 2, 3, 5 and 6 now use `App/Extensions` adapters and the shared
+`OpenExtensionsUI` views. The temporary root extension bar and its popup panel
+path are removed. Per-action events update one action; list changes normalize
+duplicate IDs by first occurrence in engine order, log the dropped count and
+expose `extensions.duplicatesDropped`. C5's engine fix (#184, distribution
+`3f45b07b`) makes every pin/order/native drag row require that count to be zero.
+The App still guards moves against its normalized pinned list, clamps the
+destination and skips a no-op. The suite replays pin uBO Lite, Dark Reader and
+probe; move 2 to 0; native drag 0 to 2.
+
+`tools/e2e/engine_e2e.py --config Release --only extensions-ui` exercises the
+real App. Its packed local CRX uses the same install, permission and removal
+sheets as non-automation runs. Native key and pointer events stay inside
+`NSApplication.sendEvent`; no desktop input is used. Receipts, deliberate
+source-break proofs and light/dark Open-only captures stay in
+`.re/extensions-ui/`, as for the UI kit.
+
+Two App presentation dependencies remain explicit:
+
+- X-13 is BLOCKED: App has no `SiteControlController` presenter or data source;
+  `showSiteControls` is a stub. Section 12 owns the presenter. The per-window
+  `extensionsUIContext` and action-refresh seam are ready.
+- X-19 run/popup/activeTab/tabs.query is BLOCKED: waits for Section 9's
+  Chrome-style Little Open page. Its real App button, menu, profile action list
+  and zero-action hiding are wired. The target is always the Little Open
+  window's own `OEBrowser`; it never falls back to a main window's tab.
+
+Section 11's Find PR #187 owns the only placement path, `FindController`.
+The old field, temporary placement bridge and root-extension-bar hiding hook
+are removed. `find_strip_no_overlap_native_close` opens Find for URL, pane,
+toolbar and Peek surfaces, checks its actual window frames against every
+visible strip button and clicks its native close button through
+`NSApplication.sendEvent`. It requires Find to close, page focus to return and
+the strip to stay visible. Section 11's `find` suite also runs its native
+viewport close gates with a pinned action in Split View, both toolbar states,
+narrow panes and Peek. Extension setup follows its unchanged twenty-window
+Find timing measurement.

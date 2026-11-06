@@ -4,6 +4,7 @@ import OpenDesign
 import OpenModel
 import OpenMedia
 import OpenStore
+import OpenExtensionsUI
 
 /// Shared state for every sidebar view: the model, the window it shows, and
 /// view-only state that is not part of the model (window active, command bar
@@ -13,6 +14,7 @@ import OpenStore
 public final class SidebarContext {
     public let model: BrowserModel
     public let windowID: WindowID
+    public var extensionsUI: ExtensionsUIContext?
     /// App-wide store injected by the host; each sidebar observes its own stable window list.
     public var media: MediaSourceStore?
     /// Session download progress supplied by the App; no sidebar polling.

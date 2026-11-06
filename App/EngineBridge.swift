@@ -114,23 +114,3 @@ final class EngineWebProfile: WebProfile {
   /// Runs after every permission write through this adapter (tab sleep's notification gate).
   static var onPermissionChange: ((OEBrowserContext) -> Void)?
 }
-
-/// OpenWeb.ExtensionHost over one OEBrowser.
-@MainActor
-final class EngineExtensionHost: ExtensionHost {
-  let browser: OEBrowser
-
-  init(_ browser: OEBrowser) { self.browser = browser }
-
-  var extensionActions: [ExtensionActionInfo] {
-    browser.extensionActions.map {
-      ExtensionActionInfo(
-        extensionID: $0.extensionIdentifier, title: $0.title,
-        iconPNG: $0.icon.flatMap(EngineWebContentHostFactory.pngData), badgeText: $0.badgeText,
-        isEnabled: $0.isEnabled, hasPopup: $0.hasPopup)
-    }
-  }
-
-  @discardableResult
-  func executeAction(extensionID: String) -> Bool { browser.executeExtensionAction(extensionID) }
-}
