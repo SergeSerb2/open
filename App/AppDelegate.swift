@@ -45,6 +45,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, OEEngineDelegate, OEBr
   private var sleepQuitTask: Task<Void, Never>?
   private var sleepQuitCaptured = false
   lazy var settingsPresenter = AppSettingsActions(app: self)
+  lazy var downloadsCenter = DownloadsCenter(app: self)
   let defaultBrowserService = DefaultBrowserService()
   lazy var linkExecutor = AppLinkExecutor(app: self)
   lazy var linkIntake = ExternalLinkIntake(executor: linkExecutor, snapshot: { [unowned self] in self.linkExecutor.snapshot() })
@@ -105,7 +106,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, OEEngineDelegate, OEBr
   }
 
   func applicationShouldTerminate(_ sender: NSApplication) -> NSApplication.TerminateReply {
-    if historyQuitTask != nil { return .terminateCancel }
+    if historyQuitTask != nil || faviconShutdownTask != nil || sleepQuitTask != nil { return .terminateCancel }
+    if downloadsCenter.shouldKeepBrowsing() { return .terminateCancel }
     let now = ProcessInfo.processInfo.systemUptime
     if !shutdownPrepared, historyQuitFlushedAt.map({ now - $0 > 5 }) ?? true {
       historyQuitTask = Task { @MainActor in
@@ -115,7 +117,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate, OEEngineDelegate, OEBr
       }
       return .terminateCancel
     }
-    if faviconShutdownTask != nil || sleepQuitTask != nil { return .terminateCancel }
     if !sleepQuitCaptured, engineReady, !shutdownPrepared, tabSleep.controller != nil {
       // OEApplication has no terminateLater: capture sleep history first (bounded at 3 s),
       // then ask again. The snapshot save and engine shutdown follow below.
@@ -494,6 +495,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, OEEngineDelegate, OEBr
   }
 
   func browserContext(_ context: OEBrowserContext, downloadDidUpdate download: OEDownload) {
+    downloadsCenter.updated(download, context: context)
     downloadOwner(download)?.browserContext(context, downloadDidUpdate: download)
   }
 

@@ -43,6 +43,12 @@ static BOOL executableTimerCaller(void) {
         if (strstr(path, "idle-probe.dylib") || strstr(path, "/Foundation.framework/") ||
             strstr(path, "/CoreFoundation.framework/") || strstr(path, "/libswift") ||
             strstr(path, "/libdispatch.dylib")) continue;
+        if (getenv("OPEN_IDLE_DOWNLOADS")) {
+            if (!strstr(path, "/Open.app/Contents/MacOS/Open")) return NO;
+            if (!info.dli_sname) return YES;
+            return strstr(info.dli_sname, "DownloadsCenter") || strstr(info.dli_sname, "HomeDownloadButton") ||
+                   strstr(info.dli_sname, "DownloadRowView") || strstr(info.dli_sname, "downloadIdleProof");
+        }
 #ifdef OPEN_APP_TIMER_PROBE
         if (!strstr(path, "/Open.app/Contents/MacOS/Open")) return NO;
 #else

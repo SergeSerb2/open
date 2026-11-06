@@ -7,7 +7,7 @@ import OpenModel
 @MainActor
 final class BottomBarView: NSView {
     unowned let context: SidebarContext
-    let home = PlateButton(glyph: .library)
+    let home = HomeDownloadButton()
     let plus = PlateButton(glyph: .bottomPlus)
     private let strip = NSView()
     private(set) var items: [SpaceID: SwitcherItemView] = [:]
