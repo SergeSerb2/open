@@ -115,6 +115,95 @@ pathlib.Path(sys.argv[2]).touch(); time.sleep(180)
             and len(app.call('shell-windows')) == 1 and app.call('ping').get('pid') == app.pid,
             outcome=failed['outcome'], error=failed['error'])
         app.quit()
+
+        # Import age starts in Open, including an unselected Today tab. The
+        # source timestamps and pinned/Favorite timestamps remain unchanged.
+        old = Path(tmp) / 'arc-old-today'
+        shutil.copytree(source, old)
+        sidebar = old / 'StorableSidebar.json'
+        graph = json.loads(sidebar.read_text())
+        items = graph['sidebar']['containers'][1]['items']
+        named = {item.get('title'): item for item in items if isinstance(item, dict)}
+        past = time.time() - 978307200 - 48 * 60 * 60
+        for name in ('t0', 't1', 'p2', 'favorite'):
+            named['Example ' + name]['data']['tab']['timeLastActiveAt'] = past
+        sidebar.write_text(json.dumps(graph))
+        original = sidebar.read_bytes()
+        today_id = named['Example t1']['id']
+        pinned_id = named['Example p2']['id']
+        favorite_id = named['Example favorite']['id']
+
+        def saved_tabs():
+            data = json.loads(Path(app.call('save')).read_text())
+            rows = {}
+            def visit(value):
+                if isinstance(value, dict):
+                    if 'id' in value and 'url' in value: rows[value['id']] = value
+                    for child in value.values(): visit(child)
+                elif isinstance(value, list):
+                    for child in value: visit(child)
+            visit(data)
+            return rows
+
+        def settings_import():
+            app.call('first-run', action='settings-import', directory=str(old))
+            app.call('first-run', action='settings-select', history=False)
+            app.call('first-run', action='settings-next'); app.call('first-run', action='settings-run')
+            assert h.wait_until(lambda: state().get('settingsStep') == 'Report', timeout=30, step=.05), state()
+            outcome = state()['settingsOutcome']
+            app.call('first-run', action='settings-done')
+            return outcome
+
+        app = launch(fresh=True, directory=old)
+        app.call('first-run', action='import')
+        app.call('first-run', action='select', history=False)
+        started = time.time()
+        app.call('first-run', action='continue'); until('report')
+        landed = saved_tabs()
+        app.call('first-run', action='continue'); app.call('first-run', action='finish')
+        finished = saved_tabs()
+        app.quit(); app = launch(directory=old)
+        reloaded = saved_tabs()
+        row('import_today_age_after_relaunch', today_id in finished and today_id in reloaded
+            and landed[today_id]['lastActiveAt'] >= started
+            and landed[pinned_id]['lastActiveAt'] == past + 978307200
+            and landed[favorite_id]['lastActiveAt'] == past + 978307200
+            and sidebar.read_bytes() == original,
+            sourceAgeHours=48, todayPresent=today_id in reloaded, sourceUnchanged=sidebar.read_bytes() == original)
+        repeat = settings_import()
+        row('import_old_today_repeat', repeat.get('Imported tabs') == 0
+            and saved_tabs()[today_id]['lastActiveAt'] == reloaded[today_id]['lastActiveAt'], outcome=repeat)
+
+        # The same stable IDs can have moved into Archive through real commands.
+        # A Favorite moved to Today and closed is also already in Open.
+        beta = next(space['id'] for space in app.call('spaces') if space['title'] == 'Beta')
+        app.call('space', space=beta)
+        app.call('close', tab=today_id)
+        app.call('sidebar-move', tab=favorite_id, section='today')
+        app.call('close', tab=favorite_id)
+        archived = {r['id'] for r in app.call('archive-list')['rows']}
+        repeat = settings_import()
+        remaining = saved_tabs()
+        row('import_manual_archive_stays_archived', {today_id, favorite_id} <= archived
+            and today_id not in remaining and favorite_id not in remaining
+            and repeat.get('Imported tabs') == 0 and repeat.get('Favorites') == 0,
+            outcome=repeat, manuallyArchived=2, sourceUnchanged=sidebar.read_bytes() == original)
+
+        # A genuinely new old Today tab added through Settings gets a fresh
+        # activity timestamp too, and survives the next startup sweep.
+        import uuid
+        new_id = str(uuid.uuid5(uuid.NAMESPACE_URL, 'https://example.com/first-run/new-old-today')).upper()
+        tab = dict(id=new_id, title='Example new old Today', createdAt=past,
+            data={'tab': dict(savedURL='https://example.com/new-old-today', savedTitle='Example new old Today', timeLastActiveAt=past)}, childrenIds=[])
+        items.extend([new_id, tab])
+        beta_today = next(item for item in items if isinstance(item, dict) and today_id in item.get('childrenIds', []))
+        beta_today['childrenIds'].append(new_id)
+        sidebar.write_text(json.dumps(graph))
+        started = time.time(); added = settings_import(); fresh = saved_tabs()
+        app.quit(); app = launch(directory=old)
+        row('import_settings_today_age', added.get('Imported tabs') == 1 and new_id in saved_tabs()
+            and fresh[new_id]['lastActiveAt'] >= started, outcome=added, sourceAgeHours=48)
+        app.quit()
     finally:
         if writer is not None:
             writer.terminate(); writer.wait(timeout=5)

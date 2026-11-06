@@ -305,6 +305,14 @@ Implemented from [import-phase2.md](plans/import-phase2.md), with its Lead decis
 
 `ArcImportResult.sourceProfileDirectories` maps each imported Profile ID to its original Chromium directory, before Open destination collision suffixes. The App uses that mapping for background History imports through its shared Profile stores.
 
+An App import starts each added Today tab's `lastActiveAt` at the import time,
+so startup auto-archive does not immediately remove old source tabs. Pinned tabs
+and Favorites keep their source activity times. Settings re-import also treats
+a stable tab/Favorite ID already in the target Profile's ArchiveStore as a
+duplicate. The App awaits one batched ID lookup per Profile on the archive
+queue, then passes the ID sets into the synchronous model merge. Live-ID
+deduplication stays unchanged. Neither rule changes Arc's source files.
+
 The reader retains the plan's array-returning API and adds an awaited batch-consumer overload. The CLI uses that overload to keep at most one 5,000-visit batch in flight, plus the source URL map. `HistoryStore(fileURL:)` accepts a full destination path. The writer uses one checked transaction per batch, reuses prepared statements, and rolls back all changes on failure. `history_import_keys` deduplicates by source profile directory and Chromium visit ID. The new `(url_id, time)` index supports count recomputation. A result success flag also detects a bad destination for an empty import.
 
 The upsert skips unchanged or empty replacement titles. This preserves the specified title result and avoids redundant FTS trigger work. The first F2 run, before this guard, failed the timing gate at 3.307 s. The final streaming implementation passed at 1.443 s. Re-import updates no visit count by hand and inserts no duplicate visit.

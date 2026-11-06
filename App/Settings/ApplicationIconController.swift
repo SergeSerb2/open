@@ -101,10 +101,11 @@ import OpenSettings
       DecodedIcon(image: image, milliseconds: (ProcessInfo.processInfo.systemUptime - started) * 1_000)
     }
     // Bound both encoded bytes and decoded dimensions before allocating pixels.
-    // Largest bitmap: 1024 * 1024 * 4 = 4,194,304 bytes.
+    // PNG's largest pixel format is 16-bit RGBA: 1024 * 1024 * 8 = 8,388,608 bytes.
     guard let size = (try? FileManager.default.attributesOfItem(atPath: file.path)[.size]) as? NSNumber,
           size.intValue > 0, size.intValue <= 16 * 1024 * 1024,
-          let source = CGImageSourceCreateWithURL(file as CFURL, nil), CGImageSourceGetCount(source) == 1,
+          let source = CGImageSourceCreateWithURL(file as CFURL, nil),
+          CGImageSourceGetType(source) as String? == "public.png", CGImageSourceGetCount(source) == 1,
           let properties = CGImageSourceCopyPropertiesAtIndex(source, 0, nil) as? [CFString: Any],
           properties[kCGImagePropertyPixelWidth] as? Int == 1024,
           properties[kCGImagePropertyPixelHeight] as? Int == 1024,

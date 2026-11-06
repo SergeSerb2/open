@@ -132,6 +132,10 @@ final class AppImportRunner {
       }
       if plan.spaces && hasSidebarData {
         if !plan.searchSettings { for profile in imported.model.profiles { profile.settings = ProfileSettings() } }
+        let importedAt = Date()
+        for space in imported.model.spaces {
+          for tab in importTabs(space.today) { tab.lastActiveAt = importedAt }
+        }
         ensureSelection(in: imported.model)
         app.installModel(imported.model)
         app.settingsPresenter.modelWasInstalled()
@@ -146,9 +150,29 @@ final class AppImportRunner {
       }
     } else {
       do {
+        var archivedIDs: [ProfileID: Set<ItemID>] = [:]
+        if plan.tabs || plan.favorites {
+          let candidates = Set(imported.model.profiles.flatMap { $0.favorites.map(\.id) }
+            + imported.model.spaces.flatMap { importTabs($0.pinned + $0.today).map(\.id) })
+          var targets = Dictionary(uniqueKeysWithValues: app.model.profiles.map { ($0.id, $0) })
+          if plan.spaces || plan.favorites {
+            for profile in imported.model.profiles where targets[profileMapping[profile.id] ?? profile.id] == nil {
+              targets[profile.id] = profile
+            }
+          }
+          // The sink's queue also owns pending manual archives. Await one batch
+          // per Profile before the synchronous, ID-preserving model merge.
+          for profile in targets.values {
+            let store = app.model.profile(id: profile.id) == nil
+              ? ArchiveStore(fileURL: app.directories.archiveFileURL(for: profile))
+              : app.archiveSink.store(for: profile.id)
+            archivedIDs[profile.id] = try await store.existingIDs(in: candidates)
+          }
+        }
         let merged = try app.model.mergeImportedSidebar(imported.model, profileMapping: profileMapping,
           spaces: plan.spaces, tabs: plan.tabs, favorites: plan.favorites, folders: plan.folders,
-          searchSettings: plan.searchSettings, saving: { try app.snapshotStore.saveNow(model: app.model) })
+          searchSettings: plan.searchSettings, archivedIDsByProfile: archivedIDs,
+          importedAt: Date(), saving: { try app.snapshotStore.saveNow(model: app.model) })
         counts[ImportOutcomeKeys.spaces] = merged.spaces
         counts["Pinned and Today tabs"] = merged.tabs
         counts["Favorites"] = merged.favorites; counts["Folders"] = merged.folders
@@ -236,6 +260,16 @@ final class AppImportRunner {
       }
     }
     return result(failures.isEmpty ? nil : "Some selected data could not be imported. You can try again later from Settings.")
+  }
+
+  private func importTabs(_ nodes: [SidebarNode]) -> [Tab] {
+    nodes.flatMap { node in
+      switch node {
+      case .tab(let tab): return [tab]
+      case .folder(let folder): return importTabs(folder.children)
+      case .split(let split): return split.panes
+      }
+    }
   }
 
   private func ensureSelection(in model: BrowserModel) {
