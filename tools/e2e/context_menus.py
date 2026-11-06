@@ -568,6 +568,42 @@ def context_menu_checks(factory, results, tmp, h):
                     'otherSpaceEnabled': from_other, 'focusedSpaceURL': urls, 'otherProfileIgnored': unrelated}
         run('cm_peek_email_scope', email_scope)
 
+        def email_split():
+            focus()
+            mail_space = app.call('space-create', title='Pinned split mail', profile='Default')
+            companion = app.call('open', url=origin + '/target.html', background=False)['id']
+            mail_url = webmail('mail.google.com', '/mail/u/0/')
+            mail = app.call('open', url=mail_url, background=True)['id']
+            split_id = None
+            try:
+                app.call('select', tab=companion)
+                app.call('sidebar-menu', node=mail, item='Open in Split View')
+                split_id = next(n['id'] for n in app.call('sidebar-tree')['today'] if n['kind'] == 'split')
+                app.call('sidebar-drop', nodes=[split_id], parent=dict(kind='pinned', id=mail_space), index=0)
+                empty_space = app.call('space-create', title='Empty mail source', profile='Default')
+                before = app.call('tabs')
+                enabled = row_enabled('peek-email')
+                app.call('key', key='e', modifiers=['command', 'shift'], route='app')
+                state = wait(lambda: (lambda s: s if s['shown'] else None)(app.call('peek-state')), timeout=5) or {}
+                content = state.get('stack', [{}])[-1].get('content')
+                urls = wait(lambda: [p['url'] for p in app.call('pages') if p['identifier'] == content and p['url'] == mail_url], timeout=5) or []
+                after = app.call('tabs')
+                focused = next(s['id'] for s in app.call('spaces') if s['focused'])
+                return {'ok': enabled and not any(t['selected'] for t in before) and focused == mail_space
+                        and any(t['id'] == mail and t['selected'] for t in after) and urls == [mail_url]
+                        and app.call('peek-state')['shown'],
+                        'emptySpace': empty_space, 'enabled': enabled, 'before': before,
+                        'mailSpace': mail_space, 'split': split_id, 'after': after, 'peek': state, 'urls': urls}
+            finally:
+                h._try(lambda: app.call('peek-close'))
+                h._try(lambda: app.call('space', space=mail_space))
+                if split_id:
+                    h._try(lambda: app.call('sidebar-menu', node=split_id, item='Separate All Tabs'))
+                for identifier in (mail, companion):
+                    h._try(lambda i=identifier: app.call('close', tab=i))
+                focus()
+        run('cm_peek_email_split', email_split)
+
         def email_hosts():
             focus()
             accepted = ['mail.google.com', 'outlook.live.com', 'outlook.office.com', 'outlook.office365.com',

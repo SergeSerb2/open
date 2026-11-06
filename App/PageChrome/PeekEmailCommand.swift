@@ -20,10 +20,10 @@ extension EngineWebContentHostFactory {
 
   func peekEmail() -> Bool {
     guard let mail = peekEmailTab, let controller else { return false }
-    // Peek needs a visible source tab. An empty Space first selects the saved mail tab.
+    // Peek needs a visible source tab. Resolve the saved tab's containing split and
+    // focused pane when the command starts from an empty Space.
     if selectedTab == nil {
-      if let space = model.spaces.first(where: { flattened($0.pinned).contains { $0.id == mail.id } }) { focus(space: space) }
-      select(nodeID: mail.id)
+      selectTabForCommand(mail.id)
     }
     guard let source = selectedTab else { return false }
     controller.peekController.open(url: mail.url, sourceTabID: source.id)
