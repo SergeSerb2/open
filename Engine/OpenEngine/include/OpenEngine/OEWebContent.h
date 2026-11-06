@@ -82,6 +82,15 @@ NS_SWIFT_UI_ACTOR
 - (void)webContent:(OEWebContent*)webContent
          didChange:(OEWebContentChange)changes
     NS_SWIFT_NAME(webContent(_:didChange:));
+/// A user-gesture, non-redirect, main-frame navigation. Return NO to cancel.
+/// A Shift-click new-window disposition uses this same policy with Shift set.
+/// The delegate may create new content here. Defer closing this page until
+/// the callback returns.
+- (BOOL)webContent:(OEWebContent*)webContent
+    shouldNavigateToURL:(NSURL*)URL
+            userGesture:(BOOL)userGesture
+              modifiers:(NSEventModifierFlags)modifiers
+    NS_SWIFT_NAME(webContent(_:shouldNavigateTo:userGesture:modifiers:));
 /// Chromium's history swiper changed state (trackpad two-finger swipe or
 /// Magic Mouse). `progress` is 0...1; 1 means the swipe navigates when the
 /// gesture ends. Completed arrives after the navigation started.

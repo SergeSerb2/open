@@ -82,6 +82,7 @@
     private func run(_ cmd: String, _ a: [String: Any]) async throws -> Any {
       // App lifecycle commands remain available after the final window closes.
       switch cmd {
+      case "applescript": return try await runAppleScript(a)
       case "routing-log": return routingLog()
       case "default-browser-state": return defaultBrowserState()
       case "history-state", "history-clear", "library-history-state", "library-history-delete":
@@ -196,6 +197,9 @@
         guard let key = a["key"] as? String, key.hasPrefix("open.") else { throw Failure(message: "defaults key must start with open.") }
         if a["persistent"] as? Bool == true { return UserDefaults.standard.persistentDomain(forName: "io.github.sergeserb2.open")?[key] ?? NSNull() }
         if let value = a["value"] { UserDefaults.standard.set(value is NSNull ? nil : value, forKey: key); app.scheduleMenuRebuild() }
+        if a["persistent"] as? Bool == true {
+          return UserDefaults.standard.persistentDomain(forName: "io.github.sergeserb2.open")?[key] ?? NSNull()
+        }
         return UserDefaults.standard.object(forKey: key) ?? NSNull()
       case "tab-switcher-state":
         guard let switcher = try window.controller!.existingTabSwitcher else {
@@ -481,6 +485,8 @@
         guard let profile = app.model.profiles.first(where: { $0.name == name }) ?? app.model.createProfile(name: name) else { throw Failure(message: "unknown Profile") }
         try app.directories.ensureProfileDirectories(for: profile)
         return w.controller?.sidebar(w.controller!.sidebar, didRequest: .setSpaceProfile(space: space.id, profile: profile.id)) == true
+      case "peek-ui", "peek-button", "peek-move-arm", "peek-move-state":
+        return try runPeekAppCommand(cmd, a)
       case "peek-open":
         let source = try modelTab(a, w)
         guard let raw = a["url"] as? String, let url = URL(string: raw), let controller = w.controller else { throw Failure(message: "missing Peek URL") }
