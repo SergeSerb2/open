@@ -866,6 +866,7 @@ public final class BrowserWindowController: NSWindowController, NSWindowDelegate
         // Esc and Return for the capture overlay; Esc and Cmd+C for its result card (§4.6.3, §4.6.5).
         if eventWindow === window, let capture = captureStorage, capture.phase == .selecting || capture.phase == .showing,
            capture.handleKey(event) { return true }
+        if !isCommandBarPresented, spaceCreationController?.handleKeyDown(event) == true { return true }
         let flags = event.modifierFlags.rawValue
         if shouldDeferKeyToFirstResponder?(event) == true {
             // The editor may close itself and change focus. A re-offered copy
