@@ -21,6 +21,21 @@ final class EditorHost: BoostEditorHost {
     var refreshDurations: [Double] = []
     var observers: [SiteControlObservationToken: @MainActor (ItemID,BoostPickerEvent)->Void] = [:]
     var globallyEnabled = true
+    var zapEnabled = false
+    var pickerCalls: [String] = []
+    lazy var coordinator = BoostPickerCoordinator(store: boostStore)
+    var pickerCommand: PickerOutbound?
+    func deliver(_ type: String, selector: String = "#promo-banner", matches: Int = 1, tab: ItemID? = nil) {
+        guard let command = pickerCommand else { return }
+        let wire = BridgeDecode.encode(command)
+        var payload = (try? JSONSerialization.jsonObject(with: Data(wire.payloadJSON.utf8))) as? [String: Any] ?? [:]
+        payload["selector"] = selector; payload["label"] = "div#promo-banner"; payload["matches"] = matches
+        payload["reason"] = "done"; payload["via"] = "undo"
+        let data = try! JSONSerialization.data(withJSONObject: payload)
+        guard let inbound = BridgeDecode.decode(type: type, payloadJSON: String(decoding: data, as: UTF8.self)) else { return }
+        if coordinator.handle(inbound, from: "fixture-document") { refresh(profile: profileID) }
+        if let event = coordinator.lastEvent { for observer in Array(observers.values) { observer(tab ?? tabID, event) } }
+    }
     init(neutral: Bool = false) {
         root = FileManager.default.temporaryDirectory.appendingPathComponent("open-editor-"+UUID().uuidString)
         boostStore = BoostStore(root: root,profileID: profileID); _ = boostStore.load()
@@ -50,10 +65,19 @@ final class EditorHost: BoostEditorHost {
         refreshDurations.append((CACurrentMediaTime()-start)*1000)
     }
     func pageSnapshot(tabID: ItemID) async -> Data? { if snapshotDelay > 0 { try? await Task.sleep(for: .seconds(snapshotDelay)) }; return snapshots }
-    func enterZap(boostID: BoostID,tabID: ItemID) -> Bool { false }
-    func exitZap(tabID: ItemID) { exits += 1 }
+    func enterZap(boostID: BoostID,tabID: ItemID) -> Bool {
+        pickerCalls.append("enter")
+        guard zapEnabled else { return false }
+        pickerCommand = coordinator.enterZap(boostID: boostID, for: "fixture-document"); return pickerCommand != nil
+    }
+    func enterSelectorPicker(boostID: BoostID,tabID: ItemID) -> Bool {
+        pickerCalls.append("select")
+        guard zapEnabled else { return false }
+        pickerCommand = coordinator.enterZap(boostID: boostID, for: "fixture-document", mode: .select); return pickerCommand != nil
+    }
+    func exitZap(tabID: ItemID) { exits += 1; pickerCalls.append("exit"); _ = coordinator.exitZap(for: "fixture-document") }
     func removeZapFromSession(_ selector: String,tabID: ItemID) {}
-    func requestZapCounts(tabID: ItemID) {}
+    func requestZapCounts(tabID: ItemID) { pickerCalls.append("list") }
     func observePickerEvents(_ observer: @escaping @MainActor (ItemID,BoostPickerEvent)->Void) -> SiteControlObservationToken { let token = SiteControlObservationToken(); observers[token] = observer; return token }
     func removePickerObserver(_ token: SiteControlObservationToken) { observers[token] = nil }
     func setDevToolsVisible(_ visible: Bool,tabID: ItemID) {}
@@ -122,6 +146,7 @@ final class EditorStage {
         let deadline = Date().addingTimeInterval(3)
         while waitForColors && !session.colorsReady && Date()<deadline { RunLoop.main.run(until: Date().addingTimeInterval(0.001)) }
         settle(waitForColors ? 0.2 : 0)
+        if ["editor-zap-on", "editor-zap-count"].contains(state) { host.zapEnabled = true; session.toggleZap() }
         if state == "editor-color",let button = view.control(id: "editor.color.advanced") { mouse(.leftMouseDown,point: CGPoint(x: button.bounds.midX,y: button.bounds.midY),in: button);settle() }
         if state == "editor-advanced" { tap("editor.color.advanced");configureAdvancedFallback();settle(0.35) }
         if state == "editor-dragging" { mouse(.leftMouseDown,point: view.pad.primaryKnobCenter ?? CGPoint(x: 90,y: 74),in: view.pad);mouse(.leftMouseDragged,point: CGPoint(x: 60,y: 29.5),in: view.pad);settle(0.3) }

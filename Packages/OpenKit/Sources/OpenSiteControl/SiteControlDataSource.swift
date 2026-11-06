@@ -32,6 +32,7 @@ import OpenBoosts
     func refresh(profile: ProfileID)
     func pageSnapshot(tabID: ItemID) async -> Data?
     func enterZap(boostID: BoostID, tabID: ItemID) -> Bool
+    func enterSelectorPicker(boostID: BoostID, tabID: ItemID) -> Bool
     func exitZap(tabID: ItemID)
     func removeZapFromSession(_ selector: String, tabID: ItemID)
     func requestZapCounts(tabID: ItemID)
@@ -42,4 +43,9 @@ import OpenBoosts
     func reload(tabID: ItemID)
     func currentURL(tabID: ItemID) -> URL?
     func showBoostsLibrary(profileID: ProfileID)
+}
+
+public extension BoostEditorHost {
+    /// App adapters opt in after the isolated-world select transport is wired.
+    func enterSelectorPicker(boostID: BoostID, tabID: ItemID) -> Bool { false }
 }

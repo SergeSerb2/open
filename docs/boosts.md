@@ -214,3 +214,38 @@ editor wheel math. Managed runtime injection requires the isolated-world engine
 contract above; document-start remains unverified Arc timing. See the [harness README](../Packages/OpenKit/Sources/OpenBoosts/Harness/README.md)
 for operation and limits: CSP, arbitrary JS effects, icon fonts, partial-invert media,
 pre-injection closed roots, and per-frame engine work.
+
+## Section 12 package: Zap restyle and selector selection
+
+The picker uses the 3 px #3139FF frame, 56 px bottom bar, yellow hover tint, and
+428 × 90 action card specified in `plans/site-control-boost-editor.md` §4.8.
+A page click opens the card. "Zap this" commits a precise pick. "Zap all related
+elements" previews live matching rectangles; the count and selector appear in the
+card's band. A wider action replaces an existing precise commit when present.
+The closed shadow root and selector algorithm stay unchanged. Done/Escape exit;
+Cmd/Ctrl+Z and Undo remove the last session commit.
+
+"Click to reveal" chips use persisted labels. Hover temporarily overrides the
+preview hide styles; leaving restores them. Clicking sends authenticated
+`zap:revealRequested`. The coordinator persists removal and emits `.removed`.
+The App adapter must send `coordinator.removeZap(selector:for:)`, refresh matching
+pages, and fan out `coordinator.lastEvent` after each accepted message.
+
+`BoostEditorSession` observes those events, reloads the stored count, and registers
+one full-Boost undo step per commit/reveal. `endPickerSession()` is the App hook for
+tab switch, same-URL reload, frame destruction, and transport loss. Close removes
+the observation. A failed host entry disables Zap with "Zap isn't available yet."
+
+Select mode uses a separate native capability (`enterZap(..., mode: .select)`).
+Its "Use Selector" action sends `picker:selected` with selector and match count.
+Neither JS nor the coordinator permits commits, hides, undo removals, or store
+writes in this mode. `BoostEditorHost.enterSelectorPicker` defaults to false until
+the App transport is ready. Code mode binds `session.insertSelectorAtCaret` to its
+CSS NSTextView and calls `session.pickSelector()`; selection inserts and exits.
+No App or engine wiring is supplied by this package change (B4 remains external).
+
+Verification: `boosts` runs real headless Chrome flows H0, A7, R1, A11, S1, R2.
+`sitecontrol-render` includes F13 and "Pick Selector inserts selector at CSS caret
+and exits", with the real store, coordinator, decoder, planner, and NSTextView.
+The host boundary is fake. `sitecontrol-render zap-flows` runs those package flows
+alone. New gate negative proofs and final counts are in the PR receipt.

@@ -1,0 +1,47 @@
+Negative proofs run on isolated copies of real runtime/resources and real Chrome flows.
+yellow tint: EXPECTED FAIL AssertionError [ERR_ASSERTION]: A7 yellow hover tint
+bar height: EXPECTED FAIL AssertionError [ERR_ASSERTION]: Expected values to be strictly equal:
+bar width: EXPECTED FAIL AssertionError [ERR_ASSERTION]: Expected values to be strictly equal:
+bar background: EXPECTED FAIL AssertionError [ERR_ASSERTION]: Expected values to be strictly equal:
+Done label: EXPECTED FAIL AssertionError [ERR_ASSERTION]: Expected values to be strictly equal:
+Done width: EXPECTED FAIL AssertionError [ERR_ASSERTION]: Expected values to be strictly equal:
+Done height: EXPECTED FAIL AssertionError [ERR_ASSERTION]: Expected values to be strictly equal:
+content frame: EXPECTED FAIL AssertionError [ERR_ASSERTION]: Expected values to be strictly equal:
+instruction: EXPECTED FAIL AssertionError [ERR_ASSERTION]: Expected values to be strictly equal:
+accent word: EXPECTED FAIL AssertionError [ERR_ASSERTION]: Expected values to be strictly equal:
+popup width: EXPECTED FAIL AssertionError [ERR_ASSERTION]: Expected values to be strictly equal:
+Zap this: EXPECTED FAIL AssertionError [ERR_ASSERTION]: Expected values to be strictly equal:
+related label: EXPECTED FAIL AssertionError [ERR_ASSERTION]: Expected values to be strictly equal:
+Cancel label: EXPECTED FAIL AssertionError [ERR_ASSERTION]: Expected values to be strictly equal:
+selector band: EXPECTED FAIL AssertionError [ERR_ASSERTION]: The input did not match the regular expression /^1 #promo-banner$/. Input:
+popup commits nothing: EXPECTED FAIL AssertionError [ERR_ASSERTION]: opening popup commits nothing
+chip label: EXPECTED FAIL AssertionError [ERR_ASSERTION]: Expected values to be strictly equal:
+reveal title: EXPECTED FAIL AssertionError [ERR_ASSERTION]: The input did not match the regular expression /Click to reveal/. Input:
+hover reveal: EXPECTED FAIL flow timeout (expected behavior missing)
+leave re-hides: EXPECTED FAIL flow timeout (expected behavior missing)
+reveal request: EXPECTED FAIL AssertionError [ERR_ASSERTION]: Expected values to be strictly equal:
+Done exit: EXPECTED FAIL AssertionError [ERR_ASSERTION]: Expected values to be strictly equal:
+related band count: EXPECTED FAIL AssertionError [ERR_ASSERTION]: related count lives in popup band
+Use Selector label: EXPECTED FAIL AssertionError [ERR_ASSERTION]: Expected values to be strictly equal:
+select hides Zap action: EXPECTED FAIL AssertionError [ERR_ASSERTION]: Expected values to be strictly equal:
+select hides related action: EXPECTED FAIL AssertionError [ERR_ASSERTION]: Expected values to be strictly equal:
+selected payload: EXPECTED FAIL AssertionError [ERR_ASSERTION]: Expected values to be strictly equal:
+select store unchanged: EXPECTED FAIL AssertionError [ERR_ASSERTION]: Expected values to be strictly deep-equal:
+Escape exit: EXPECTED FAIL AssertionError [ERR_ASSERTION]: Expected values to be strictly equal:
+29/29 mutations rejected. Source checkout was never modified.
+Negative proofs run on isolated copies of real runtime/resources and real Chrome flows.
+content border width: EXPECTED FAIL AssertionError [ERR_ASSERTION]: Expected values to be strictly equal:
+Done corner: EXPECTED FAIL AssertionError [ERR_ASSERTION]: Expected values to be strictly equal:
+control font: EXPECTED FAIL AssertionError [ERR_ASSERTION]: Expected values to be strictly equal:
+popup height: EXPECTED FAIL AssertionError [ERR_ASSERTION]: Expected values to be strictly equal:
+popup corner: EXPECTED FAIL AssertionError [ERR_ASSERTION]: Expected values to be strictly equal:
+selector font: EXPECTED FAIL AssertionError [ERR_ASSERTION]: Expected values to be strictly equal:
+select Cancel emits nothing: EXPECTED FAIL AssertionError [ERR_ASSERTION]: Expected values to be strictly equal:
+7/7 mutations rejected. Source checkout was never modified.
+Negative proofs run on isolated copies of real runtime/resources and real Chrome flows.
+persisted reveal label: EXPECTED FAIL AssertionError [ERR_ASSERTION]: persisted reveal chip uses native store label
+1/1 mutations rejected. Source checkout was never modified.
+Negative proofs run on isolated copies of real runtime/resources and real Chrome flows.
+popup above preview tint: EXPECTED FAIL AssertionError [ERR_ASSERTION]: Expected values to be strictly equal:
+preview tint below popup: EXPECTED FAIL AssertionError [ERR_ASSERTION]: related tint stays below popup
+2/2 mutations rejected. Source checkout was never modified.

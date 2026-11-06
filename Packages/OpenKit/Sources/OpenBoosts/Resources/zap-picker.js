@@ -60,8 +60,14 @@
   const escape = s => cssEscape ? cssEscape(s) : s.replace(/[^a-zA-Z0-9_-]/g, c => "\\" + c);
   const own = e => !!e && /^(open-zap-|open-boosts-)/.test(e.id || "");
   const rect = e => { const r = bounds(e); return { x: r.x, y: r.y, width: r.width, height: r.height }; };
-  let active = false, boostID = null, sessionNonce = null, host = null, overlay = null, highlight, chip, bar, relatedButton;
+  let active = false, boostID = null, sessionNonce = null, host = null, overlay = null, highlight, chip, bar, relatedButton, popup, band;
   let hovered = null, lastMove = null, frame = 0, flashTimer = 0, graceTimer = 0;
+  // Spec values explicitly marked as guesses live in one named constant each.
+  const IDLE_INSTRUCTION_COLOR = "#777777";
+  const HOVER_TINT = "rgba(255,214,10,0.35)";
+  const REVEAL_CHIP_LAYOUT = "display:flex;gap:8px;align-items:center;overflow:auto";
+  const REVEAL_CHIP_LABEL = entry => entry.label || entry.selector;
+  let mode = "zap", revealing = null;
   let session = [], lastPick = null, multi = [], previewStyles = new Map();
   const knownZaps = new Map();
   const queriedRoots = new Set();
@@ -249,17 +255,36 @@
     host.style.cssText = "all:initial;position:fixed;inset:0;pointer-events:none;z-index:2147483647";
     overlay = attachShadow(host, { mode: "closed" });
     overlay.innerHTML = `<style>
-      .hl,.hl-multi { position:fixed;pointer-events:none;box-sizing:border-box;border:2px solid #4C8DFF;background:rgba(76,141,255,0.12);border-radius:2px; }
-      .tag,.bar { position:fixed;font:11px system-ui;background:rgba(20,20,25,0.92);color:white;border-radius:4px;padding:2px 6px; }
-      .tag { pointer-events:none;max-width:460px; } .bar { bottom:16px;left:50%;transform:translateX(-50%);pointer-events:auto;padding:10px;display:flex;gap:12px;align-items:center; }
-      button { border:0;background:none;color:inherit;font:inherit;cursor:pointer;padding:4px; } button:focus { outline:1px solid #4C8DFF; }
-    </style><div class="hl" hidden></div><div class="tag" hidden></div><div class="bar"><span class="count">Zap mode</span><button class="related" hidden></button><button class="undo">Undo</button><button class="done">Done</button></div>`;
+      :host { all:initial; } [hidden] { display:none !important; }
+      .content-frame { z-index:4;position:fixed;inset:0;box-sizing:border-box;border:3px solid #3139FF;pointer-events:none; }
+      .hl,.hl-multi { z-index:0;position:fixed;pointer-events:none;box-sizing:border-box;background:${HOVER_TINT}; }
+      .tag { z-index:1;position:fixed;pointer-events:none;font:11px monospace;background:white;color:#333;padding:2px 6px;max-width:460px; }
+      .bar { z-index:2;position:fixed;bottom:0;left:0;right:0;height:56px;background:#FBFBFD;color:${IDLE_INSTRUCTION_COLOR};font:13px system-ui;pointer-events:auto;display:flex;align-items:center;justify-content:center; }
+      .instruction .accent { color:#3139FF; } .bar.popup-open .instruction,.bar.popup-open .accent { color:#DBDFFF; }
+      button { border:0;cursor:pointer;font:13px system-ui;box-sizing:border-box; } button:focus-visible { outline:2px solid #3139FF;outline-offset:2px; }
+      .done { position:absolute;right:10px;top:10px;width:59px;height:38px;border-radius:8px;background:#EDEEFF;color:#3139FF;font-weight:500; }
+      .undo { position:absolute;left:10px;background:transparent;color:#555; }
+      .reveals { ${REVEAL_CHIP_LAYOUT};max-width:55%;margin-right:70px; } .reveal { border-radius:8px;background:#EDEEFF;padding:8px;color:#333;white-space:nowrap; }
+      .popup { z-index:3;position:fixed;width:428px;max-width:calc(100vw - 12px);height:90px;border-radius:12px;background:white;box-shadow:0 4px 20px #0003;pointer-events:auto;overflow:hidden;color:#333; }
+      .actions { display:flex;gap:6px;padding:8px; } .actions button { height:38px;border-radius:7px;color:white;padding:0 10px;white-space:nowrap; }
+      .this { background:#FF453A; } .related { background:#FF9500;flex:1; } .cancel { background:#999; } .select { background:#3139FF;flex:1; }
+      .band { background:#F0F0F2;padding:8px;font:11px monospace;white-space:nowrap;overflow:hidden;text-overflow:ellipsis; }
+    </style><div class="content-frame"></div><div class="hl" hidden></div><div class="tag" hidden></div>
+    <div class="bar"><button class="undo">Undo</button><span class="instruction">Click elements on the page to <span class="accent">Zap</span> them</span><div class="reveals" hidden></div><button class="done">Done</button></div>
+    <div class="popup" hidden><div class="actions"><button class="this">Zap this</button><button class="related">Zap all related elements</button><button class="select" hidden>Use Selector</button><button class="cancel">Cancel</button></div><div class="band"></div></div>`;
     highlight = query(overlay, ".hl"); chip = query(overlay, ".tag"); bar = query(overlay, ".bar");
-    relatedButton = query(overlay, ".related");
+    popup = query(overlay, ".popup"); band = query(overlay, ".band"); relatedButton = query(overlay, ".related");
     query(overlay, ".undo").addEventListener("click", undo);
     query(overlay, ".done").addEventListener("click", () => exitWithReason("done"));
+    query(overlay, ".this").addEventListener("click", commitPick);
+    query(overlay, ".cancel").addEventListener("click", closePopup);
+    query(overlay, ".select").addEventListener("click", () => {
+      if (mode !== "select" || !lastPick) return;
+      post("picker:selected", { selector: lastPick.entry.selector, matches: lastPick.chosen.matches });
+      closePopup();
+    });
     relatedButton.addEventListener("mouseenter", showRelated);
-    relatedButton.addEventListener("mouseleave", clearMulti);
+    relatedButton.addEventListener("mouseleave", () => { clearMulti(); updateBand(); });
     relatedButton.addEventListener("click", replaceRelated);
     document.documentElement.appendChild(host);
   }
@@ -270,7 +295,7 @@
       const event = lastMove; lastMove = null;
       hovered = own(event.target) || event.target?.closest?.("[data-open-zap-ignore]") ? null : elementAt(event.clientX, event.clientY);
     }
-    if (!active || !hovered?.isConnected) { if (highlight) { highlight.hidden = true; chip.hidden = true; } return; }
+    if (!active || !popup?.hidden || !hovered?.isConnected) { if (highlight) { highlight.hidden = true; chip.hidden = true; } return; }
     const r = rect(hovered); position(highlight, r); highlight.hidden = false; chip.hidden = false;
     // Full selector generation is click-only; hover uses one cheap best-term preview.
     const cls = arrayFind([...hovered.classList], c => !gibberish(c));
@@ -288,13 +313,14 @@
   function showRelated() {
     clearMulti();
     if (!lastPick?.wide) return;
-    // The first pick has already changed layout. Measure live visible siblings.
+    band.textContent = `${lastPick.wide.matches} ${lastPick.wide.selector}`;
+    // Measure live visible siblings after any precise commit.
     const nodes = queryAll(lastPick.entry.root, lastPick.wide.selector);
     for (const r of arrayFilter(arrayMap(arraySlice([...nodes], 0, 100), rect), r => r.width > 0 && r.height > 0)) {
       const box = document.createElement("div"); box.className = "hl-multi"; position(box, r); overlay.appendChild(box); arrayPush(multi, box);
     }
   }
-  function refreshPreview() {
+  function refreshPreview(render = true) {
     for (const style of previewStyles.values()) style.remove(); previewStyles.clear();
     for (const entry of session) {
       if (entry.root !== document && !entry.root.host?.isConnected) continue;
@@ -307,9 +333,16 @@
         (entry.root === document ? document.documentElement : entry.root).appendChild(style);
         previewStyles.set(entry.root, style);
       }
-      style.textContent += `${entry.selector} { display: none !important; }\n`;
+      style.textContent += `${entry.selector} { display: ${revealing === entry.selector ? "revert" : "none"} !important; }\n`;
     }
-    if (overlay) query(overlay, ".count").textContent = `${session.length} zapped`;
+    if (revealing && !arraySome(session, z => z.selector === revealing)) {
+      for (const root of roots()) {
+        let style = previewStyles.get(root);
+        if (!style) { style = document.createElement("style"); (root === document ? document.documentElement : root).appendChild(style); previewStyles.set(root, style); }
+        style.textContent += `${revealing} { display: revert !important; }`;
+      }
+    }
+    if (render) renderReveals();
   }
   function removePreview() {
     clearTimeout(graceTimer); graceTimer = 0;
@@ -332,31 +365,67 @@
     const chosen = list[0];
     const wide = arrayFind(list, c => c.matches > 1 && arrayEvery(c.nodes, n => n.tagName === e.tagName && n.parentElement === e.parentElement));
     const entry = { boostID, selector: chosen.selector, label: label(e, chosen.selector), root };
-    if (arraySome(session, z => z.boostID === boostID && z.selector === entry.selector)) return;
-    arrayPush(session, entry); knownZaps.set(entry.boostID + "\0" + entry.selector, entry);
-    lastPick = { entry, wide };
-    relatedButton.hidden = !wide || wide.selector === chosen.selector;
-    relatedButton.textContent = wide ? `Zap all related (${wide.matches})` : "";
-    refreshPreview();
-    post("zap:committed", { boostID, selector: entry.selector, label: entry.label, matches: chosen.matches, inShadowRoot: root instanceof ShadowRoot });
+    lastPick = { entry, chosen, wide, committed: false };
+    relatedButton.hidden = mode === "select";
+    relatedButton.disabled = !wide || wide.selector === chosen.selector;
+    query(overlay, ".this").hidden = mode === "select";
+    query(overlay, ".select").hidden = mode !== "select";
+    updateBand(); popup.hidden = false; bar.classList.add("popup-open");
+    popup.style.left = Math.max(6, Math.min(event.clientX, window.innerWidth - 434)) + "px";
+    popup.style.top = Math.max(6, Math.min(event.clientY + 12, window.innerHeight - 152)) + "px";
     hovered = null; lastMove = null; drawHover();
+  }
+  function updateBand() { if (lastPick) band.textContent = `${lastPick.chosen.matches} ${lastPick.entry.selector}`; }
+  function closePopup() { popup.hidden = true; bar.classList.remove("popup-open"); clearMulti(); }
+  function commitPick() {
+    if (mode !== "zap" || !lastPick || lastPick.committed) return;
+    const { entry, chosen } = lastPick;
+    if (arraySome(session, z => z.selector === entry.selector)) return;
+    arrayPush(session, entry); knownZaps.set(entry.boostID + "\0" + entry.selector, entry); lastPick.committed = true;
+    refreshPreview();
+    post("zap:committed", { selector: entry.selector, label: entry.label, matches: chosen.matches, inShadowRoot: entry.root instanceof ShadowRoot });
+  }
+  function renderReveals() {
+    if (!overlay) return;
+    const list = query(overlay, ".reveals"); list.replaceChildren();
+    const entries = [...knownZaps.values()];
+    list.hidden = !entries.length || mode === "select";
+    query(overlay, ".instruction").hidden = entries.length > 0 && mode === "zap";
+    if (list.hidden) return;
+    const title = document.createElement("span"); title.textContent = "Click to reveal"; list.appendChild(title);
+    for (const entry of entries) {
+      const button = document.createElement("button"); button.className = "reveal"; button.textContent = REVEAL_CHIP_LABEL(entry);
+      button.addEventListener("mouseenter", () => { revealing = entry.selector; refreshPreviewStylesOnly(); });
+      button.addEventListener("mouseleave", () => { revealing = null; refreshPreviewStylesOnly(); });
+      button.addEventListener("click", () => { revealing = null; post("zap:revealRequested", { selector: entry.selector }); });
+      list.appendChild(button);
+    }
+  }
+  // Hover changes only styles; rebuilding the hovered chip would drop mouseleave.
+  function refreshPreviewStylesOnly() {
+    refreshPreview(false);
   }
   function noCandidate() {
     highlight.style.borderColor = "red";
-    clearTimeout(flashTimer); flashTimer = setTimeout(() => { highlight.style.borderColor = "#4C8DFF"; }, 200);
+    clearTimeout(flashTimer); flashTimer = setTimeout(() => { highlight.style.borderColor = "#3139FF"; }, 200);
     post("picker:error", { kind: "no-candidate" });
   }
   function replaceRelated() {
-    if (!lastPick?.wide) return;
+    if (mode !== "zap" || !lastPick?.wide) return;
     const { entry, wide } = lastPick, oldSelector = entry.selector;
-    knownZaps.delete(entry.boostID + "\0" + oldSelector); entry.selector = wide.selector; knownZaps.set(entry.boostID + "\0" + entry.selector, entry);
-    refreshPreview(); clearMulti(); relatedButton.hidden = true;
-    post("zap:replaced", { boostID: entry.boostID, oldSelector, newSelector: entry.selector, label: entry.label, matches: wide.matches });
+    if (!lastPick.committed) {
+      lastPick.chosen = wide; entry.selector = wide.selector; commitPick();
+    } else {
+      knownZaps.delete(entry.boostID + "\0" + oldSelector); entry.selector = wide.selector; knownZaps.set(entry.boostID + "\0" + entry.selector, entry);
+      refreshPreview();
+      post("zap:replaced", { oldSelector, newSelector: entry.selector, label: entry.label, matches: wide.matches });
+    }
+    closePopup();
   }
   function undo() {
-    if (!active) return false;
+    if (!active || mode === "select") return false;
     const entry = arrayPop(session); if (!entry) return false;
-    knownZaps.delete(entry.boostID + "\0" + entry.selector); lastPick = null; if (relatedButton) relatedButton.hidden = true;
+    knownZaps.delete(entry.boostID + "\0" + entry.selector); lastPick = null; closePopup();
     refreshPreview(); clearMulti();
     post("zap:removed", { boostID: entry.boostID, selector: entry.selector, via: "undo" }); return true;
   }
@@ -369,11 +438,13 @@
     // Only a native-issued capability can yield messages accepted by native.
     // Main-world callers can invent a nonce, but the coordinator rejects it.
     if (typeof options?.boostID !== "string" || typeof options.sessionNonce !== "string" || options.sessionNonce.length < 16) return;
+    if (options.mode !== undefined && options.mode !== "zap" && options.mode !== "select") return;
     removePreview(); session = []; knownZaps.clear(); lastPick = null;
-    boostID = options.boostID; sessionNonce = options.sessionNonce; active = true;
+    boostID = options.boostID; sessionNonce = options.sessionNonce; mode = options.mode === "select" ? "select" : "zap"; revealing = null; active = true;
     invalidateRoots(); rootObserver = new MutationObserver(invalidateRoots);
     rootObserver.observe(document, { childList: true, subtree: true });
-    ensureOverlay(); host.hidden = false; relatedButton.hidden = true;
+    ensureOverlay(); host.hidden = false; closePopup(); renderReveals();
+    query(overlay, ".undo").hidden = mode === "select";
     document.addEventListener("mousemove", move, true); document.addEventListener("click", click, true); document.addEventListener("keydown", keydown, true);
     window.addEventListener("scroll", reposition, true); window.addEventListener("resize", reposition);
     post("picker:ready", { boostID });
@@ -397,13 +468,16 @@
       if (!active || p?.boostID !== boostID || p.sessionNonce !== sessionNonce) return;
       if (msg.type === "zap:exit") exitWithReason("bridge");
       else if (msg.type === "zap:undo") undo();
-      else if (msg.type === "zap:remove") {
+      else if (msg.type === "zap:remove" && mode === "zap") {
+        revealing = null;
         session = arrayFilter(session, z => z.boostID !== p.boostID || z.selector !== p.selector); knownZaps.delete(p.boostID + "\0" + p.selector); refreshPreview();
         post("zap:removed", { boostID: p.boostID, selector: p.selector, via: "native" });
       } else if (msg.type === "zap:list") {
         invalidateRoots();
         const selectors = new Map(arrayMap(arrayFilter([...knownZaps.values()], z => z.boostID === p.boostID), z => [z.selector, z.label]));
-        for (const s of p.selectors || []) if (typeof s === "string" && !selectors.has(s)) selectors.set(s, "");
+        for (const s of p.selectors || []) if (typeof s === "string" && !selectors.has(s)) selectors.set(s, typeof p.labels?.[s] === "string" ? p.labels[s] : "");
+        if (mode === "zap") for (const [selector, label] of selectors) if (!knownZaps.has(boostID + "\0" + selector)) knownZaps.set(boostID + "\0" + selector, { boostID, selector, label });
+        renderReveals();
         post("zap:list-result", { boostID: p.boostID, entries: arrayMap([...selectors], ([selector, label]) => { const count = nodesForSelector(selector).length; return { selector, label, matchCount: count, truncated: count > 100 }; }) });
       }
     } catch (e) { console.warn("[open-zap]", e); }

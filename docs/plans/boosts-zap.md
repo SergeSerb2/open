@@ -1513,6 +1513,14 @@ Transport (abstract, per task prompt):
 
 ### 9.2 Page → native messages (complete list)
 
+Every `picker:*` and `zap:*` payload also carries `boostID` and the native-issued
+`sessionNonce`. Native binds the pair to its engine document identity. Missing,
+foreign, or expired pairs are ignored. Native records the mode with the capability;
+a select capability cannot change the store, even if it sends a commit or reveal.
+The restyled overlay in `site-control-boost-editor.md` §4.8 supersedes §7.2/§7.3's
+original pill and immediate-click UI. A page click opens the action card. "Zap this"
+commits; the related action can commit a wider pick or replace the precise commit.
+
 | Type | Payload (exact keys) | Sent when | Native effect (§8.3) |
 |---|---|---|---|
 | `picker:ready` | `{ boostID }` | Picker finishes `enter` (overlay live, listeners attached) | none |
@@ -1521,6 +1529,8 @@ Transport (abstract, per task prompt):
 | `zap:committed` | `{ boostID, selector, label, matches, inShadowRoot }` | Click commits a zap (§7.4). `matches` = candidate match count at generation time. `label` = suggested label: `tagName` lowercased plus `#id` when the chosen selector is an id selector, else `tagName`. | persist zap |
 | `zap:replaced` | `{ boostID, oldSelector, newSelector, label, matches }` | "Zap all related" replaces the just-committed zap | swap zap |
 | `zap:removed` | `{ boostID, selector, via }` via ∈ `"undo" \| "native"` | Undo pops a zap (`"undo"`), or picker echoes a native-initiated removal (`"native"`) | undo → persist removal; native → no-op |
+| `zap:revealRequested` | `{ boostID, sessionNonce, selector }` | Click a "Click to reveal" chip | coordinator removes the stored Zap and emits `.removed`; adapter sends `zap:remove` and refreshes the plan |
+| `picker:selected` | `{ boostID, sessionNonce, selector, matches }` | "Use Selector" in select mode | coordinator emits `.selected` only for a select capability; editor inserts at CSS caret and exits; no store change |
 | `zap:list-result` | `{ boostID, entries: [{ selector, label, matchCount, truncated }] }` | Reply to `zap:list` (§7.6) | cache for editor |
 | `boost:applied` | `{ planID }` | Applier finishes `apply` (including no-op same-plan applies? No — only when CSS actually changed or first apply). Fire once per distinct planID per page. | log only |
 | `boost:error` | `{ kind, selector? }` kind ∈ `"invalid-zap-selector"` | Applier skips a bad zap selector (§6.3) | log only |
@@ -1538,11 +1548,17 @@ Else label = `"<tag>"` (for example `div`). Native stores it as `ZappedElement.l
 |---|---|---|---|
 | `boost:apply` | `{ planID, boosts: [{ boostID, css, zaps: [string] }], colorAdjustment: { hueRotateDegrees, saturation, brightness, contrast, invert } \| null, fontFamily: string \| null, js: string }` | applier `apply()` | §6. Field names match `InjectionPlan` exactly. `js` is the planner's `combinedJS`. Empty plan is sent as `boosts: [], js: "", colorAdjustment: null, fontFamily: null` with `planID: "empty"` and must behave as clear. |
 | `boost:clear` | `{}` | applier `clear()` | §6.2. |
-| `zap:enter` | `{ boostID }` | picker `enter({ boostID })` | §7.3. If picker file not yet injected, the engine injects it first (§8.4). |
-| `zap:exit` | `{}` | picker `exit()` with reason `"bridge"` | §7.3. |
-| `zap:list` | `{ boostID }` | picker replies `zap:list-result` | §7.6. |
-| `zap:remove` | `{ boostID, selector }` | picker removes preview + echoes `zap:removed` via `"native"` | §7.6. The real un-hide comes from the follow-up `boost:apply` without that zap. |
-| `zap:undo` | `{}` | picker `undo()` | Same as Cmd/Ctrl+Z. For editor Undo buttons that live natively. |
+| `zap:enter` | `{ boostID, sessionNonce, mode?: "zap" \| "select" }` | picker `enter(options)` | §7.3. If picker file not yet injected, the engine injects it first (§8.4). |
+| `zap:exit` | `{ boostID, sessionNonce }` | picker `exit()` with reason `"bridge"` | §7.3. |
+| `zap:list` | `{ boostID, sessionNonce, selectors: [string], labels?: {selector: label} }` | picker replies `zap:list-result` | §7.6. |
+| `zap:remove` | `{ boostID, sessionNonce, selector }` | picker removes preview + echoes `zap:removed` via `"native"` | §7.6. The real un-hide comes from the follow-up `boost:apply` without that zap. |
+| `zap:undo` | `{ boostID, sessionNonce }` | picker `undo()` | Same as Cmd/Ctrl+Z. For editor Undo buttons that live natively. |
+
+`mode` defaults to `"zap"`. Select mode keeps the frame and tint, replaces Zap
+actions with "Use Selector" and Cancel, and never commits, hides, or writes data.
+`zap:list` supplies labels for persisted reveal chips; older senders may omit labels
+and the picker falls back to the selector. The coordinator's `lastEvent` is cleared
+on each `handle` call and contains only an authenticated, mode-appropriate event.
 
 Ordering guarantee the JS side may assume: for one page, native sends `boost:apply`
 messages in plan order; a `zap:enter` for a page always follows any pending
