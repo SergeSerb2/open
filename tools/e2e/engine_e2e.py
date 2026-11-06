@@ -7051,7 +7051,7 @@ def littleopen_checks(factory, results, tmp):
         immediate_url = origin + '/plain.html?littleopen=immediate'
         immediate = app.call('little-open-action', action='blank', then='submit', text=immediate_url)
         early = immediate['opened']['sessions'][0]
-        submitted = wait_until(lambda: (lambda s: s if s and s['state'] == 'page' and not s['loading'] else None)(session(early['id'])), timeout=12)
+        submitted = wait_until(lambda: (lambda s: s if s and s['state'] == 'page' and s['content'] and not s['loading'] else None)(session(early['id'])), timeout=12)
         ready = app.call('little-open-eval', id=early['id'], js='location.href') if submitted else None
         submitted_early = immediate['after']['sessions'][0]
         record('littleopen_submit_before_browser', early.get('browserID') is None
@@ -7383,9 +7383,13 @@ def littleopen_checks(factory, results, tmp):
         close_all()
         delivery_url = origin + '/no-main-external'
         deliver(delivery_url)
-        reached = wait_until(lambda: any(r['url'] == delivery_url and r['state'] == 'page' for r in sessions()), timeout=10)
-        record('B6_external_no_main', reached and state()['mainWindows'] == 0, state=state())
-        external = next((s for s in sessions() if s['url'] == delivery_url), {})
+        def external_loaded():
+            row = next((s for s in sessions() if s['url'] == delivery_url), None)
+            if not row or row['state'] != 'page' or not row['content'] or row['loading']:
+                return None
+            return row if app.call('little-open-eval', id=row['id'], js='location.href') == delivery_url else None
+        external = wait_until(external_loaded, timeout=10) or {}
+        record('B6_external_no_main', bool(external) and state()['mainWindows'] == 0, state=state())
         external_first = external.get('firstFrameRead') or {}
         results['littleopen_browser_deferred']['externalFirstFrame'] = external_first
         results['littleopen_browser_deferred']['ok'] &= (external_first.get('visible') is True
