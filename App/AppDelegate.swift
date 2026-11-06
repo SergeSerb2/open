@@ -66,8 +66,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, OEEngineDelegate, OEBr
   var littleOpenCoordinator: LittleOpenCoordinator!
   var littleOpenProfileAlert: NSAlert?
   var littleOpenHosts: [ItemID: EngineWebContentHost] = [:]
-  var commandWindowObserver: NSObjectProtocol?
-  var commandDefaultsObserver: NSObjectProtocol?
+  var commandWindowObserver: (any NSObjectProtocol)?
+  var commandDefaultsObserver: (any NSObjectProtocol)?
   private var numberedShortcutOptions = ""
   private var currentNumberedShortcutOptions: String {
     "\(UserDefaults.standard.bool(forKey: "open.shortcuts.includeFavoritesInTabNumbering")):\(UserDefaults.standard.bool(forKey: "open.shortcuts.switchToNinthEnabled"))"
@@ -95,6 +95,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, OEEngineDelegate, OEBr
     // engine (docs/architecture.md, launch tactics). Pages created before
     // the engine is ready wait inside OpenEngine.
     showWindowsIfNeeded()
+    installScripting()
   }
 
   func applicationShouldHandleReopen(_ sender: NSApplication, hasVisibleWindows flag: Bool) -> Bool {
@@ -211,7 +212,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, OEEngineDelegate, OEBr
         model.selectNode(windowID: state.id, spaceID: space.id, nodeID: tab.id)
       }
     }
-    model.addObserver { [weak self] _ in self?.scheduleSave(); self?.scheduleMenuRebuild() }
+    model.addObserver { [weak self] _ in self?.scheduleSave(); self?.scheduleMenuRebuild(); self?.purgeScriptingWrappers() }
     self.model = model
     self.directories = directories
     prepareLittleOpen()
@@ -325,6 +326,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, OEEngineDelegate, OEBr
       model.setWindowContentVisible(windowID: id, visible: false)
     }
     windowControllers.removeAll { $0.windowID == id }; hostFactories[id] = nil
+    purgeScriptingWrappers()
     media.windowClosed(id)
     tabSleep.visibilityChanged()
     if activeWindowID == id { activeWindowID = windowControllers.last?.windowID }
@@ -372,6 +374,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, OEEngineDelegate, OEBr
     LaunchTiming.shared.mark("engineInitialized")
     engineReady = true
     showWindowsIfNeeded()
+    refreshScriptingEngine()
     for factory in hostFactories.values { factory.engineDidBecomeReady() }
     // A fresh empty Space has no web paint to start T5. Register its shortcut
     // after the native first frame without creating Settings or SuggestEngine.
@@ -417,6 +420,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, OEEngineDelegate, OEBr
     menuRebuildTask?.cancel(); menuRebuildTask = nil
     littleOpenCoordinator?.closeAll()
     engineReady = false
+    refreshScriptingEngine()
     for factory in Array(hostFactories.values) { factory.closeAll() }
     recordShutdownPhase("hostsClosed")
   }

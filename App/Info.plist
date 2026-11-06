@@ -35,6 +35,12 @@
 	<string>OEApplication</string>
 	<key>NSHighResolutionCapable</key>
 	<true/>
+	<key>NSAppleScriptEnabled</key>
+	<true/>
+	<key>OSAScriptingDefinition</key>
+	<string>Open.sdef</string>
+	<key>NSAppleEventsUsageDescription</key>
+	<string>Scripts control Open windows, spaces, and tabs.</string>
 	<key>NSSupportsAutomaticGraphicsSwitching</key>
 	<true/>
 	<key>NSUserNotificationAlertStyle</key>

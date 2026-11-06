@@ -1,7 +1,8 @@
 import AppKit
 import Foundation
 
-/// Script-facing failures from docs/plans/applescript.md §8.
+/// Script-facing failure numbers from plan §8. The helpers apply them to the current
+/// Cocoa command or KVC setter and guard the main-thread specifier boundary.
 public enum ScriptError {
     public static let objectNotFound = 1000
     public static let invalidURL = 1001
