@@ -106,8 +106,12 @@
           return row
         }
       case _ where Self.littleOpenCommands.contains(cmd): return try await runLittleOpenCommand(cmd, a)
+      case "theme-get", "theme-set", "editor-open", "editor-act", "editor-close", "editor-state":
+        if cmd == "editor-act" { nativeInputStart = ProcessInfo.processInfo.systemUptime }
+        return try await runEditorCommand(cmd, a)
       case "key": return try await sendKey(a, app.frontWindowController.flatMap { app.hostFactories[$0.windowID] })
       case "snapshot": return try await snapshot(a, app.frontWindowController.flatMap { app.hostFactories[$0.windowID] })
+      case "library-captures-state": return try libraryCapturesState(a)
       case "ext-prompt", "ext-manage", "ext-commands", "ext-run-command", "ext-windows", "ext-omnibox", "ext-strip", "ext-click", "ext-popup-state", "ext-picker", "ext-hover", "ext-ui-menu", "ext-redraw-measure", "ext-shortcuts":
         return try await runExtensionCommand(cmd, a)
       case "applescript": return try await runAppleScript(a)
@@ -122,9 +126,6 @@
       case _ where Self.mediaCommands.contains(cmd): return try await runMediaCommand(cmd, a)
       case _ where Self.notificationCommands.contains(cmd): return try await runNotificationCommand(cmd, a)
       case _ where Self.sleepCommands.contains(cmd): return try await runSleepCommand(cmd, a)
-      case "editor-open", "editor-act", "editor-close", "editor-state":
-        if cmd == "editor-act" { nativeInputStart = ProcessInfo.processInfo.systemUptime }
-        return try await runEditorCommand(cmd, a)
       case "ping":
         return [
           "pid": Int(getpid()), "chromium": OEEngine.shared.chromiumVersion, "cef": OEEngine.shared.cefVersion,
@@ -1515,7 +1516,7 @@
 
     /// Bounded accessibility text from this process's own windows. Used to
     /// identify Chromium's uninstall confirmation, not merely any new window.
-    private func windowText(_ window: NSWindow) -> [String] {
+    func windowText(_ window: NSWindow) -> [String] {
       var seen: Set<ObjectIdentifier> = [], text: Set<String> = []
       func walk(_ object: NSObject, depth: Int) {
         guard depth <= 16, seen.count < 512, seen.insert(ObjectIdentifier(object)).inserted else { return }
@@ -1964,6 +1965,8 @@
         "control": ("", 59), "command": ("", 55),
         "down": (String(Character(UnicodeScalar(NSDownArrowFunctionKey)!)), 125),
         "up": (String(Character(UnicodeScalar(NSUpArrowFunctionKey)!)), 126),
+        "left": (String(Character(UnicodeScalar(NSLeftArrowFunctionKey)!)), 123),
+        "right": (String(Character(UnicodeScalar(NSRightArrowFunctionKey)!)), 124),
       ]
       guard let (chars, code) = keys[a["key"] as? String ?? "return"] else { throw Failure(message: "unknown key") }
       var mods: NSEvent.ModifierFlags = []
@@ -2012,9 +2015,9 @@
       }
       if a["window"] as? String == "library", app.settingsPresenter.libraryPresenter?.window == nil { throw Failure(message: "no Library window") }
       if a["window"] as? String == "editor" {
-        guard let panel = w?.iconPicker?.panel, panel.isVisible else { throw Failure(message: "no icon picker") }
-        let method = try await WindowSnapshot.capture(panel, to: url)
-        return ["path": path, "method": method]
+        guard let panel: NSWindow = w?.iconPicker?.panel ?? w?.controller?.themeEditor?.panel,
+              panel.isVisible else { throw Failure(message: "no editor") }
+        return ["path": path, "method": try await WindowSnapshot.capture(panel, to: url)]
       }
       let number = a["window"] as? String == "library" ? app.settingsPresenter.libraryPresenter?.window?.windowNumber : a["window"] as? Int
       guard let target = number.flatMap({ n in NSApp.windows.first { $0.windowNumber == n } }) ?? app.firstRunWindowController?.window ?? w?.window
