@@ -185,7 +185,7 @@ class Open:
     def call(self, cmd, timeout=120, **args):
         if cmd in ("window-close", "popup-close", "quit") or (cmd == "devtools" and args.get("method") == "Page.crash"):
             self.discover_owned_processes()
-        foreground_input = cmd in ("key", "focus", "little-open-link-click") or (cmd == "window-focus" and args.get("activate"))
+        foreground_input = cmd in ("key", "focus", "little-open-link-click", "editor-act") or (cmd == "window-focus" and args.get("activate"))
         if cmd in ("space-manager-drag", "sidebar-click", "sidebar-key", "hover"): foreground_input = True
         if foreground_input and self.pid and not self.call("native-focus-state").get("active", False):
             # `NSApp.activate()` is a request, not a grant. Renew the explicit
@@ -11139,6 +11139,10 @@ def main():
         elif opts.only == "media":
             results["media"] = CheckedResults(tracker)
             media_checks(factory, results["media"], tmp)
+        elif opts.only == "space-editor":
+            import space_editor
+            results["space-editor"] = CheckedResults(tracker)
+            space_editor.checks(factory, results["space-editor"], tmp, sys.modules[__name__])
         elif opts.only == "downloads":
             import downloads
             results["downloads"] = CheckedResults(tracker)
@@ -11162,10 +11166,6 @@ def main():
         elif opts.only == "sidebar":
             results["sidebar"] = CheckedResults(tracker)
             sidebar_checks(factory, results["sidebar"], tmp)
-        elif opts.only == "space-editor":
-            results["space-editor"] = CheckedResults(tracker)
-            runpy.run_path(os.path.join(ROOT, "tools/e2e/space_editor.py"))["run"](
-                factory, results["space-editor"], tmp, ROOT, wait_until, read_image, chrome_delta_e)
         elif opts.only == "peek":
             results["peek"] = CheckedResults(tracker)
             peek_checks(factory, results["peek"], tmp)

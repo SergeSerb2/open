@@ -933,7 +933,7 @@ from its top-left (including the transparent 13 pt band). Named controls use
 |---|---|---|
 | `theme-get` | optional `space` (focused by default) | stored `style` or null, derived light/dark palette hex, `contentAppearance` |
 | `theme-set` | optional `space`, `style` object or null | session preview/commit, one Update Theme undo step and save |
-| `editor-open` | `kind=theme`, optional `space` | true; unknown kinds return false |
+| `editor-open` | `kind=theme/icon`, optional `space`; icon also accepts `node` | true; unknown kinds return false |
 | `editor-act` | `action=click/hover`, `x/y` or named `control` | own-panel NSEvents |
 | `editor-act` | `action=drag`, `from/to` point arrays, optional `steps` (1–240) | own-panel mouse down, drag frames, up |
 | `editor-act` | `action=down/drag/up`, `x/y` | one event, for interrupted gestures |
@@ -943,8 +943,8 @@ from its top-left (including the transparent 13 pt band). Named controls use
 | `snapshot` | `window=editor`, `path` | real panel PNG |
 
 `command id=edit-theme` reuses the generic menu command runner. The native
-`space-editor` e2e suite covers the theme subset; sibling flows can extend the
-kind switch and suite. Model reads can precede a pending display frame: wait
+`space-editor` e2e suite runs both theme and icon row sets; creation can extend
+the kind switch and suite. Model reads can precede a pending display frame: wait
 for `editor-state.pendingFrame=false` after a completed gesture before
 asserting its committed value. Snapshot checks use empty background regions,
 so the auto-archive education banner is not mistaken for a theme pixel.
