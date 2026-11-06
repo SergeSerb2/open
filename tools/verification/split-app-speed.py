@@ -28,6 +28,7 @@ def main():
     parser.add_argument('--main-root', type=Path, required=True)
     parser.add_argument('--branch-root', type=Path, required=True)
     parser.add_argument('--output', type=Path, required=True)
+    parser.add_argument('--engine-sha256', help='require this engine distribution in both Apps before measuring')
     args = parser.parse_args()
     for sig in (signal.SIGTERM, signal.SIGHUP):
         signal.signal(sig, lambda *_: sys.exit(143))
@@ -35,6 +36,19 @@ def main():
     spec = importlib.util.spec_from_file_location('split_engine_e2e', branch/'tools/e2e/engine_e2e.py')
     h = importlib.util.module_from_spec(spec); sys.modules[spec.name] = h; spec.loader.exec_module(h)
     atexit.register(lambda: [app.quit() for app in h._OWNED_APPS])
+    engines = {}
+    for label in ('main', 'branch'):
+        root = getattr(args, label+'_root').resolve()
+        command = [sys.executable, str(root/'tools/e2e/engine_e2e.py'),
+                   '--config', 'Release', '--engine-fingerprint-only']
+        if args.engine_sha256:
+            command += ['--engine-sha256', args.engine_sha256]
+        checked = subprocess.run(command, cwd=root, capture_output=True, text=True)
+        if checked.returncode:
+            raise RuntimeError(checked.stdout + checked.stderr)
+        engines[label] = json.loads(checked.stdout.strip().splitlines()[-1])
+    if engines['main']['distributionSHA256'] != engines['branch']['distributionSHA256']:
+        raise RuntimeError('main and branch engines differ; no samples taken')
     server, origin = h._fixture_server('Split speed')
     receipts = []
     try:
@@ -46,7 +60,7 @@ def main():
                     run = Path(scratch)/('%s-%d' % (label, pair+1)); run.mkdir()
                     app = h.Open('Release', 'chrome', str(run/'data'), ['--use-mock-keychain'], str(run/'app.log'), urls=())
                     saved = {}
-                    receipt = dict(revision=label, pair=pair+1, load_before=list(os.getloadavg()),
+                    receipt = dict(revision=label, pair=pair+1, engine=engines[label], load_before=list(os.getloadavg()),
                                    uptime_before=subprocess.check_output(['uptime'], text=True).strip())
                     try:
                         key = 'open.advanced.showFullURLWithToolbar'
