@@ -10091,9 +10091,12 @@ def space_editor_creation_checks(factory, results, tmp):
         app.call('key', key='return', window=rename_window, route='app')
         require('rename_hidden_return_keeps_sidebar_hidden', bool(wait_until(lambda: focused()['title'] == 'Renamed Source', timeout=5))
                 and app.call('window-state')['sidebarMode'] == 'hidden', spaces=spaces(), window=app.call('window-state'))
+        # Showing the sidebar is itself undoable. Undo Rename while the
+        # sidebar is still hidden, before adding that window-mode action.
+        undo()
+        require('rename_hidden_one_undo', spaces() == before
+                and app.call('window-state')['sidebarMode'] == 'hidden', spaces=spaces())
         app.call('menu-perform', id='toggle-sidebar')
-        app.call('sidebar-key', key='z', modifiers=['cmd'])
-        require('rename_hidden_one_undo', spaces() == before)
         # Create an inline Profile in the same one-step transaction.
         app.call('editor-open', kind='create')
         app.call('editor-act', action='profile', name='New Profile…')
