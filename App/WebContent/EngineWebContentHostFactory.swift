@@ -139,6 +139,10 @@ final class EngineWebContentHostFactory: NSResponder, WebContentHostFactory {
     controller.isApplicationActive = { [weak self] in NSApp.isActive || self?.window?.isKeyWindow == true }
     controller.ownsAdditionalKeyWindow = { [weak self] in self?.ownsKeyWindow($0) == true }
     extensions.attach()
+    controller.onCloseRequested = { [weak self] in
+      guard let self, let window = self.window else { return }
+      self.app.extensionPrompts.cancel(window: window)
+    }
     controller.onExtensionShortcut = { [weak self] event in
       guard let self, let browser = self.focusedBrowser else { return false }
       return self.app.extensionPrompts.table(browser.context.extensions).handle(event, factory: self)

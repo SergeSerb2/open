@@ -217,10 +217,11 @@ def run(factory, results, tmp, root, wait_until, new_tab, frame, read_image, ext
         options_menu=app.call("ext-menu",extension=extensions["ublock"])
         if any(item["title"]=="Options" and item["enabled"] for item in options_menu):
             app.call("ext-menu",extension=extensions["ublock"],select="Options")
-        option_tab=wait_until(lambda:next((t for t in app.call("tabs") if t["id"] not in before_options and t["selected"]
+        option_tab=wait_until(lambda:next((t for t in app.call("tabs") if t["selected"]
             and t["url"].startswith("chrome-extension://"+extensions["ublock"])),None),timeout=10)
         results["X11_options_site_access"]={"ok":bool(site and option_tab) and not any(i["title"]=="Options" for i in bitwarden_menu),
             "menu":bitwarden_menu,"optionsMenu":options_menu,"onSite":on_site,"optionsTab":option_tab,
+            "optionsCreatedNewTab":bool(option_tab and option_tab["id"] not in before_options),
             "siteAccess":action(extensions["bitwarden"]).get("siteAccess")}
         app.call("select",tab=control)
         app.call("ext-pin", extension=probe, pinned=True, index=0)
@@ -446,9 +447,12 @@ def run(factory, results, tmp, root, wait_until, new_tab, frame, read_image, ext
         new_tab(app,"about:blank")
         app.call("ext-manage",extension="local",action="install-crx",path=crx)
         closing=wait_until(lambda:(lambda p:p if p.get("pending") else None)(app.call("ext-prompt")),timeout=15)
+        closing_id=app.call("window-state")["id"]
         app.call("window-close")
         cancelled=wait_until(lambda:not app.call("ext-prompt").get("pending"),timeout=5)
-        results["prompt_window_close_cancels"]={"ok":bool(closing and cancelled),"prompt":closing,"cancelled":bool(cancelled)}
+        window_closed=wait_until(lambda:all(w["id"]!=closing_id for w in app.call("shell-windows")),timeout=5)
+        results["prompt_window_close_cancels"]={"ok":bool(closing and cancelled and window_closed),"prompt":closing,
+            "cancelled":bool(cancelled),"windowClosed":bool(window_closed)}
         app.call("ext-prompt",clear=True)
         app.call("ext-manage",extension="local",action="install-crx",path=crx)
         quitting=wait_until(lambda:(lambda p:p if p.get("pending") else None)(app.call("ext-prompt")),timeout=15)

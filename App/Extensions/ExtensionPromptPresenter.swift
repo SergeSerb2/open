@@ -136,6 +136,9 @@ final class ExtensionPromptPresenter: NSObject, OEExtensionManagerDelegate {
     Array(queues.values).forEach { $0.cancelAll() }; queues.removeAll(); pending.removeAll(); requests.removeAll()
     windowObservers.values.forEach { NotificationCenter.default.removeObserver($0) }; windowObservers.removeAll()
   }
+  func cancel(window: NSWindow) {
+    queues.removeValue(forKey: ObjectIdentifier(window))?.cancelAll()
+  }
   isolated deinit { windowObservers.values.forEach { NotificationCenter.default.removeObserver($0) } }
   #if OPEN_AUTOMATION
   func answer(_ prompt: OEExtensionPrompt, accepted: Bool) {

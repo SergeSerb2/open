@@ -57,6 +57,8 @@ public final class BrowserWindowController: NSWindowController, NSWindowDelegate
     private var lastKeyRoute: (window: Int, code: UInt16, flags: UInt, timestamp: TimeInterval, handled: Bool)?
     public var onStateChange: (() -> Void)?
     public var onClose: (() -> Void)?
+    /// Cancel window-owned extension consent before AppKit checks attached sheets.
+    public var onCloseRequested: (() -> Void)?
     /// Ordinary keys, selection and window layout never create switcher state.
     public private(set) var existingTabSwitcher: TabSwitcherController?
     public var tabSwitcher: TabSwitcherController {
@@ -225,6 +227,7 @@ public final class BrowserWindowController: NSWindowController, NSWindowDelegate
         window.collectionBehavior.insert(.fullScreenPrimary); window.acceptsMouseMovedEvents = true
         super.init(window: window); window.contentView = root; window.delegate = self
         window.onLayoutPass = { [weak self] in self?.placeTrafficLights() }
+        window.onCloseRequest = { [weak self] in self?.onCloseRequested?() }
         if let state { window.setFrame(CGRect(x: state.frameX, y: state.frameY, width: dimensions.width, height: dimensions.height), display: false) }
         root.onAppearance = { [weak self] in
             guard let self else { return }
@@ -1054,6 +1057,11 @@ public final class BrowserWindowController: NSWindowController, NSWindowDelegate
 @MainActor
 final class BrowserWindow: NSWindow {
     var onLayoutPass: (() -> Void)?
+    var onCloseRequest: (() -> Void)?
+    override func performClose(_ sender: Any?) {
+        onCloseRequest?()
+        super.performClose(sender)
+    }
     private(set) var layoutPasses = 0
     override func layoutIfNeeded() {
         super.layoutIfNeeded()
