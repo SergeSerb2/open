@@ -113,8 +113,9 @@ def run(factory, results, tmp, root, wait_until, new_tab, frame, read_image, ext
         pin_result("X2_App_move_guards", {"ok":all(s["ok"] for s in guard_states), "rows":guard_states})
         expected_order = strip()["ids"]
         app.call("command", id="new-window")
+        new_tab(app, "about:blank")
         second = wait_until(lambda: (lambda s:s if s["ids"]==expected_order else None)(hover()), timeout=10)
-        pin_result("X2_second_window", {"ok":bool(second), "strip":second})
+        pin_result("X2_second_window", {"ok":bool(second), "strip":second or strip()})
         app.call("window-close")
         app.quit()
         # This run owns the profile. Disable Chromium's automatic pin policy
