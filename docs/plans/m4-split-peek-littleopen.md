@@ -686,10 +686,13 @@ scale, scrim fade only.
 | Split button (`openInSplit`) | Promote the Peek into a split with its source tab: if the source is a plain tab, `model.makeSplit([sourceTab, peekTab])` where `peekTab` is a new Today tab created with the Peek's current URL (then reparent the Peek host onto it per A2, or load fresh if A2 false); focus the new pane. If the source is already in a split with < 4 panes, `addPane` instead. If the split is at 4 panes, beep and keep the Peek open. Then dismiss the Peek chrome (the page now lives in the pane). This button's exact Arc semantics are unverified (§10 Q4) — the above is the only reading consistent with its name and glyph; mark it `// Guess: PK split semantics` in code. |
 | `open-in-current-space` (Cmd+O) while a Peek is topmost | "Move Little Open or Peek to Space…" opens the Space menu; choosing a Space expands the Peek into that Space's Today (top) instead of the current Space (§4.5 with an explicit target). R-§9.5 wires the same command for Little Open; the App delegate dispatches by key window / topmost surface. |
 
-Esc handling: `PeekController` installs a local key monitor while the
-stack is non-empty; Esc dismisses the top Peek and is consumed. When
-a Peek is maximized-split or mid-expand animation, Esc is ignored
-until the animation completes (0.18 s window).
+Esc handling (Section 9 lead decision, 2026-11-05): the App owns one
+`exit-modal` handler for the key standard window. View ▸ Exit and App Esc
+use the same priority: shown top Peek (with close Undo), then restore a
+maximized split pane, then no action. Exit is disabled when neither exists,
+so plain Esc reaches the page. The command bar keeps first refusal while
+it is open. The Peek-local monitor only handles history keys; it does not
+consume Esc. Mid-expand cancellation still follows §4.5.
 
 ### 4.5 Expand into a real tab (PK-6)
 
@@ -699,9 +702,12 @@ until the animation completes (0.18 s window).
 2. Hand over the page (guess PK-6, verify §10 Q5): if A2 holds,
    reparent the Peek host's view into the new tab's pane slot and
    rebind the container's host map to the new tab id — no reload,
-   scroll/form state survive. If A2 fails, `host.close()` the Peek
-   host and create a fresh host for the tab with its current URL
-   (a reload; note it in the PR).
+   scroll/form state survive. If A2 fails (Chrome-style sidebar tabs
+   cannot adopt an Alloy Peek), capture its engine navigation history
+   before closing it and restore that history in the tab's fresh host.
+   Use its current URL as the failure fallback. This reloads once and
+   preserves saved history/scroll/form state, but not JavaScript heap
+   state (lead Q5). Record the fallback in the PR.
 3. Select the new tab (`selectNode`), focus its host.
 4. Animate: the Peek panel's frame interpolates to the target pane
    slot's frame in the container (0.22 s ease-in-out, panel corner
@@ -1290,6 +1296,7 @@ numbers only here — the same discipline as routing.md and sleep.md.
 | 8 | 2026-10-25 | OUT OF SCOPE: App-target intake/default browser/global hotkey. |
 | 9 | 2026-10-25 | OUT OF SCOPE: real engine adapter. A1–A7 remain UNVERIFIED for the real engine. |
 | 10 | 2026-11-05 | Split real-App proof: `split` covers C1–C5, two/four live pages, app-route focus and Esc, native divider movement, four-pane orientations, below 800 pt equal scaling, close/separate collapse selection, relaunch orientation/fractions/focus, E5 sleep/wake, real PNG and speed gates. OpenFeatures retains split dispatch. Plus enablement and repeated chrome work fixed; pane chrome cache bounded to eight parked views. Destination-callback drag fallback and unchanged motion/narrow-bar visual limits: `docs/split-app.md`. Peek/Little Open acceptance is separate; old static results remain in `docs/m4.md`. |
+| 4 / 7 / 9 — Peek in the App | 2026-11-05 | Section 9: real main audit and negative proofs, wrapper-only navigation policy, App Exit, native shown state and immediate shared visibility feed, native swipe indicator, Cmd+O Today-top placement, and Chrome history/scroll/form fallback. Full receipt and final checks: [s9-peek-receipt.md](s9-peek-receipt.md). No Chromium fork build or measured visual changes. |
 
 
 
