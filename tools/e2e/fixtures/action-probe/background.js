@@ -32,13 +32,17 @@ chrome.omnibox.setDefaultSuggestion({ description: "Probe: %s" });
 chrome.omnibox.onInputStarted.addListener(() => {
   chrome.storage.session.set({ omniboxStarted: true });
 });
+const omniboxInputs = [];
 chrome.omnibox.onInputChanged.addListener((text, suggest) => {
+  omniboxInputs.push(text);
+  if (omniboxInputs.length > 32) omniboxInputs.shift();
+  chrome.storage.session.set({ omniboxInputs });
   const suggestions = [
     { content: "alpha", description: "<match>alpha</match>" },
     { content: "beta", description: "<match>beta</match>", deletable: true }
   ].filter(row => row.content.startsWith(text));
   // A deliberately late response proves that E12 drops stale suggestions.
-  if (text === "a") setTimeout(() => suggest(suggestions), 300);
+  if (text === "a") setTimeout(() => suggest([{content: "a-stale", description: "Late a response"}]), 300);
   else suggest(suggestions);
 });
 chrome.omnibox.onInputEntered.addListener(async (text, disposition) => {

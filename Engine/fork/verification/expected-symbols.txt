@@ -30,3 +30,5 @@ _cef_media_controller_get_for_browser
 
 # P3 live per-profile extension manager (seen with nm in the built distribution).
 _cef_extension_manager_create
+# E12 omnibox session bridge (generated C API).
+_cef_open_omnibox_create

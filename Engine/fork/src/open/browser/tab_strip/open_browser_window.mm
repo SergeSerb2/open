@@ -221,7 +221,9 @@ bool OpenBrowserWindow::IsVisible() const {
 
 void OpenBrowserWindow::SetBounds(const gfx::Rect& bounds) {
   // chrome.windows.update with left/top/width/height.
+  pending_bounds_ = bounds;
   [host_->window() setFrame:gfx::ScreenRectToNSRect(bounds) display:YES];
+  if (auto* strip = OpenTabStrip::FromBrowser(browser_)) strip->RequestFrame(bounds, IsActive());
 }
 
 void OpenBrowserWindow::Close() {
@@ -248,6 +250,7 @@ void OpenBrowserWindow::Close() {
 }
 
 void OpenBrowserWindow::Activate() {
+  if (auto* strip = OpenTabStrip::FromBrowser(browser_)) strip->RequestFrame(GetBounds(), true);
   NSWindow* window = host_->window();
   if (!window) {
     return;
@@ -292,7 +295,7 @@ ui::mojom::WindowShowState OpenBrowserWindow::GetRestoredState() const {
 
 gfx::Rect OpenBrowserWindow::GetBounds() const {
   NSWindow* window = host_->window();
-  return window ? gfx::ScreenRectFromNSRect(window.frame) : gfx::Rect();
+  return window ? gfx::ScreenRectFromNSRect(window.frame) : pending_bounds_;
 }
 
 bool OpenBrowserWindow::IsMaximized() const {

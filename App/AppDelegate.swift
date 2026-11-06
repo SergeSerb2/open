@@ -437,6 +437,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, OEEngineDelegate, OEBr
   /// defensively before CefShutdown if the message loop ends by another path.
   func prepareForEngineShutdown() {
     guard !shutdownPrepared else { return }
+    ExtensionWindowController.closeAll()
     stopAutoArchive()
     tabSleep.stop()
     shutdownPrepared = true
