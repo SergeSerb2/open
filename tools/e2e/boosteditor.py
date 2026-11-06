@@ -43,6 +43,8 @@ def run(factory, results, tmp, env):
             assert evidence.get("negative") is True, "missing real-flow negative proof"
             results[name] = dict(evidence, ok=True, load=os.getloadavg())
             print(name, "PASS", flush=True)
+        except env["FocusInterruption"]:
+            raise
         except Exception as error:
             results[name] = dict(ok=False, error=str(error), trace=traceback.format_exc()[-1400:], load=os.getloadavg())
             print(name, "FAIL", str(error)[:160], flush=True)
@@ -167,22 +169,34 @@ def run(factory, results, tmp, env):
                 return dict(positive=closed and not active(),negative=negative)
             row("B11_navigation_tab_close",b11)
             def b12():
-                tabs=[tab]+[new_tab(app,origin+"/boost.html?tab="+str(i)) for i in range(9)]
-                for live in tabs:
-                    app.call("select",tab=live)
-                    app.call("navigate",tab=live,url=origin+"/boost.html?live="+live)
-                    app.call("wait",tab=live)
-                    assert probe(live)["font"]
-                app.call("select",tab=tab);app.call("wait",tab=tab);call("open",boost=items()[0]["id"])
-                app.call("defaults",key="open.advanced.enableBoosts",value=False)
-                negative=bool(wait_until(lambda: all(probe(t)["filter"] == "none" for t in tabs),timeout=5,step=.02))
-                app.call("defaults",key="open.advanced.enableBoosts",value=True)
-                wait_until(lambda: all("hue-rotate" in probe(t)["filter"] for t in tabs),timeout=5,step=.02)
-                before=call()["refreshCount"]
-                tap("font.Avenir")
-                wait_until(lambda: call()["completedRefreshCount"] > before and all(probe(t)["font"].startswith("Avenir") for t in tabs),timeout=5,step=.02)
-                state=call()
-                return dict(positive=state["refreshPages"] == 10 and state["refreshMs"] < 100,negative=negative,refreshMs=state["refreshMs"],pages=state["refreshPages"])
+                # One window keeps eight hidden hosts. Use nine tabs plus a
+                # second window's tab to measure ten actual live pages.
+                original=app.call("window-state")["id"]
+                tabs=[tab]+[new_tab(app,origin+"/boost.html?tab="+str(i)) for i in range(8)]
+                handles=[t["page"]["identifier"] for t in app.call("tabs") if t["id"] in tabs]
+                peer=None;other=None
+                try:
+                    app.call("command",id="new-window")
+                    peer=app.call("window-state")["id"]
+                    other=new_tab(app,origin+"/boost.html?peer=1")
+                    handles.append(next(t["page"]["identifier"] for t in app.call("tabs") if t["id"] == other))
+                    assert len(handles) == 10 and len(set(handles)) == 10
+                    app.call("window-focus",id=original,activate=True)
+                    app.call("select",tab=tab);app.call("wait",tab=tab);call("open",boost=items()[0]["id"])
+                    app.call("defaults",key="open.advanced.enableBoosts",value=False)
+                    negative=bool(wait_until(lambda: all(probe(t)["filter"] == "none" for t in handles),timeout=5,step=.02))
+                    app.call("defaults",key="open.advanced.enableBoosts",value=True)
+                    wait_until(lambda: all("hue-rotate" in probe(t)["filter"] for t in handles),timeout=5,step=.02)
+                    before=call()["refreshCount"]
+                    tap("font.Avenir")
+                    wait_until(lambda: call()["completedRefreshCount"] > before and all(probe(t)["font"].startswith("Avenir") for t in handles),timeout=5,step=.02)
+                    state=call()
+                    return dict(positive=state["refreshPages"] == 10 and state["refreshMs"] < 100,negative=negative,refreshMs=state["refreshMs"],pages=state["refreshPages"])
+                finally:
+                    if peer:
+                        app.call("window-focus",id=peer,activate=True);app.call("window-close")
+                    app.call("window-focus",id=original,activate=True)
+                    for extra in tabs[1:]+([other] if other else []): app.call("close",tab=extra)
             row("B12_ten_live_pages",b12)
             def b13():
                 close();app.call("command",id="view-boosts")
