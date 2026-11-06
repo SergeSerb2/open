@@ -21,6 +21,7 @@ enum MainMenu {
   static func targetWindowCommands(_ target: EngineWebContentHostFactory?) { NSApp.mainMenu = build(factoryOverride: target) }
   static func performReservedShortcut(_ event: NSEvent) -> Bool {
     guard event.type == .keyDown, let app = NSApp.delegate as? AppDelegate else { return false }
+    if app.hostFactories.values.contains(where: { $0.pageChrome.dialogs.blocksBrowserShortcut(event) }) { return true }
     app.prepareCommandServices()
     if let window = event.window, let factory = app.factory(forKeyWindow: window) {
       return factory.controller?.handleKeyDown(event) == true
