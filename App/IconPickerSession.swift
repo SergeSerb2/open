@@ -6,7 +6,7 @@ extension EngineWebContentHostFactory {
   @discardableResult
   func openSpaceIconPicker(_ id: SpaceID) -> Bool {
     guard let space = model.space(id: id), let controller, let window, !isClosing else { return false }
-    iconPicker?.close()
+    controller.closeThemeEditor(); iconPicker?.close()
     if focusedSpace?.id != id { focus(space: space) } // focus has no undo step
     controller.sidebar.layoutSubtreeIfNeeded()
     let anchor = controller.sidebar.headerIconFrame(for: id) ?? fallbackIconAnchor()
@@ -23,7 +23,7 @@ extension EngineWebContentHostFactory {
   func openNodeIconPicker(_ id: ItemID) -> Bool {
     guard let node = model.node(id: id), let controller, let window, !isClosing,
           node.tab != nil || node.folder != nil else { return false }
-    iconPicker?.close()
+    controller.closeThemeEditor(); iconPicker?.close()
     if let space = space(containing: id), focusedSpace?.id != space.id { focus(space: space) }
     controller.sidebar.layoutSubtreeIfNeeded()
     // Choice for the lead: hidden/collapsed rows use the header anchor. Opening
