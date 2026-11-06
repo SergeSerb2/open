@@ -1657,9 +1657,9 @@ The engine side of E1–E7 is in (docs/engine-patches.md, P2 status; docs/engine
   - View Web Permissions: opens `chrome://settings/content/siteDetails?site=…` as a new tab.
   - Remove: shows Chrome's own uninstall dialog until P3 (E10).
 
-## Verification notes
+## Verification notes — UI kit (#175)
 
-PR: TBD (`s6/ui-kit`). Steps 1 and 4, plus the engine-free menu, popup-panel,
+PR: [#175](https://github.com/SergeSerb2/open/pull/175) (`s6/ui-kit`). Steps 1 and 4, plus the engine-free menu, popup-panel,
 and prompt-sheet parts of Steps 3 and 6, land in `OpenExtensionsUI` and
 `extensions-render`. `OpenWeb` retains the old App bridge API with compatibility
 defaults. An optional `SiteControlController.extensionsUIContext` hosts the

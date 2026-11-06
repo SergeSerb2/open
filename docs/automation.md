@@ -368,7 +368,8 @@ renderers and compilation do not require removing the file.
 ### Step C review: focus and shutdown observations
 
 Automation responses include `observationStart` (process monotonic uptime).
-`focus-state` reports the current responder owner, Find text/visibility, sheet
+`focus-state` reports the current responder owner, Find text/visibility, its
+window-coordinate `findFrame` and native `findCancelFrame`, sheet
 state, and the count/result of post-navigation focus decisions. It accepts an
 optional standard-window `id` without activating that window. `activation-events`
 starts before the first window/engine turn and reports native resignation and
