@@ -1270,3 +1270,96 @@ is still memoized by identity and store codecs by identical bytes. No engine
 source changes, dependencies, unit tests or Arc data are added. The failed FV16
 run also passed cleanup. Generated engine-spike outputs and temporary retry
 spacing are restored before committing.
+
+## §4.9 — S11 dialogs and permission prompts (2026-11-05)
+
+`App/PageChrome/` owns JavaScript sheets, permission popovers, and their
+lifetimes. The factory forwards engine requests and lifecycle events. The
+native `NSAlert` path and exact strings come from `docs/re/page-chrome.md`
+§2–§3 (research PR #170); the S11 lead's design decides Open behavior.
+Alert uses OK; confirm/prompt use OK and Cancel. Hosts retain `www.` and
+show IDNs as Unicode. Opaque and file origins use `This page says`.
+Beforeunload uses `Leave site?` / `Reload site?`, the engine's unsaved-changes
+line, and OK/Cancel. Prompt fields select their default text and own Return.
+The second dialog in a document exposes `Don't show this again`.
+Suppression resets on a main-frame document commit, including reload, and
+leaves same-document history changes alone. Background requests wait for
+visibility. Host teardown cancels every retained request once.
+
+The checkpoint's 8 KiB message and 4 KiB prompt-default refusal bounds remain;
+oversized requests produce `pageChromeRefused`. They are cancelled before
+AppKit presentation. Queues accept at most eight requests per page. The
+spec calls the bounds both “truncated” and “refusal”; this implementation
+keeps the checkpoint's refusal behavior pending the lead's resolution.
+
+Permission requests use an application-defined AppKit popover. Allow stores
+the engine Profile setting. Not Now resolves only this request and restores
+its previous setting after Chromium's synchronous decision callback. A tab
+switch, navigation, or close dismisses the request. Notification Allow keeps
+the system authorization and tab-sleep notification hooks. No macOS location
+prompt is suppressed. Layout width 320 pt and the final anchor edge are the
+lead's stated guesses, not measured Arc visuals.
+
+Section 12 integration hooks:
+
+- `PermissionPromptPresenter.anchorProvider`: supply a view, its local bounds,
+  and the requested popover edge for the Site Control button. Default anchors
+  are the sidebar URL pill, the visible content-toolbar URL area, then a 1×1
+  rectangle 24 pt from the focused page's top-left.
+- `SitePermissionStore.forContext(_:)`: `state(origin:kind:)`,
+  `set(origin:kind:state:)`, `allDecisions()`, and `SitePermissionStore.didChange`.
+  Values come from OpenEngine. An asynchronous, bounded per-Profile origin
+  index lets `allDecisions()` enumerate settings read/written through this
+  hook across relaunch. Settings written outside this hook before this change
+  become enumerable when their origin is first read; OpenEngine has no API
+  to enumerate all older settings. On initial use, await the store's
+  `persistenceTask?.value` before enumerating the asynchronous origin index;
+  `state(origin:kind:)` reads the engine immediately. Ephemeral Profiles
+  keep the index in memory.
+- `PaneChromeView.urlAreaFrame` exposes only the toolbar anchor geometry.
+
+The public engine API has no graceful close method; the App uses its existing
+`sendDevToolsMethod("Page.close", ...)` entry point for beforeunload close/quit.
+Runtime acceptance of this path is recorded with the S11 PR's e2e receipts.
+After an automation runner dies, quit skips the App's beforeunload preflight
+as well as the engine close prompt. Normal quit keeps the preflight. The
+runner-lifetime suite first observes/cancels a normal request, then kills its
+runner and requires shutdown without another request.
+Protocol-handler permission copy cannot be selected from `OEPermissionKind`:
+that API has no protocol-handler case or protocol metadata. Combined camera
+and microphone still uses the shared list-joining code when the engine asks.
+
+`page-chrome` e2e uses real loopback requests and the automation socket.
+`dialogPolicy` accept/dismiss/hold and `permissionPolicy` grant/deny remain.
+`dialog-button` and `permission-prompt` answers click the real AppKit buttons.
+The [S11 runtime report](engine-spike/s11-dialogs-permissions.md) records
+completed App source `a7e73498`, including main `e4d40ce0`
+(#177/#178/#182/#181/#179/#176), with required engine `7b490905`:
+316 PASS across eight complete suites
+(page-chrome 41, features 19, shell 7, window 76, page 85, sleep 20,
+downloads 34, context-menus 34). All restored-display verifier gates and all
+four native Window pixel/color rows pass on the 1x `AW2726DM`.
+Downloads passes after one excluded foreground-interrupted attempt;
+every other suite completes without interruption. All teardown
+checks pass. The runner-lifetime proof passes all four cases, including
+normal beforeunload cancellation followed by prompt-free owner shutdown
+in 0.202 s.
+
+The full verifier records 22 PASS and one command-bar timing FAIL under load
+(CPU p95 9.98 ms at load1 26.4). One targeted quiet rerun passes strictly
+(CPU p95 4.29 ms, inline delta +0.179 ms, load1 5.5), clearing all 23 gates
+without a timing exception. The report keeps both results and their load
+readings. The PR stays a draft for lead review.
+Window's two launch-budget rows are SKIP in Debug; its card-material
+row is DEFERRED. Page's four BLOCKED / one DEFERRED and Sleep's one BLOCKED
+row retain their explicit status. Sleep N5 passes through the permission
+hook. The report retains source-qualified earlier checkpoints, all timing
+attempts, negative proofs, Section 12 hooks, and the capture/API limits.
+
+User captures still needed (`docs/re/page-chrome.md` §7): light/dark 2x
+JavaScript sheets, prompt default/selection, repeat suppression, close/reload
+beforeunload, background tab behavior, and normal permission popovers with
+sidebar/toolbar on/off. On fresh synthetic origins capture Allow and Not Now,
+revisit/relaunch, combined camera/microphone, clipboard/MIDI, and Site Control
+values. Keep macOS permission alerts separate. Only the user operates Arc;
+no Arc runtime or pixel-comparison acceptance is claimed here.

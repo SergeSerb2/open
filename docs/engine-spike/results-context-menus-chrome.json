@@ -1,0 +1,3209 @@
+{
+  "cleanup": {
+    "ok": true,
+    "processes": [
+      {
+        "forced": false,
+        "ok": true,
+        "owned_pids": [
+          49274,
+          49281,
+          49282,
+          49285,
+          49286,
+          49291,
+          49292,
+          49294,
+          49336,
+          49340,
+          49427,
+          49655,
+          49667
+        ],
+        "remaining_processes": [],
+        "reply": true,
+        "windows_after_quit": {
+          "count": 0,
+          "windows": []
+        },
+        "windows_before_quit": 1
+      }
+    ]
+  },
+  "config": "Debug",
+  "context-menus": {
+    "cm_cancel_once": {
+      "decisions": [
+        {
+          "content": 1,
+          "key": "cancel",
+          "tab": "13BCE166-FB95-4AAC-9E6E-F962567A459D",
+          "time": 1793943115.024651,
+          "type": "contextMenuDecision"
+        },
+        {
+          "content": 1,
+          "key": "cancel",
+          "tab": "13BCE166-FB95-4AAC-9E6E-F962567A459D",
+          "time": 1793943115.032403,
+          "type": "contextMenuDecision"
+        }
+      ],
+      "ok": true
+    },
+    "cm_capture": {
+      "ok": true,
+      "shown": [
+        "Back",
+        "Forward",
+        "Reload",
+        "-",
+        "Save As…",
+        "Print…",
+        "-",
+        "Show Original",
+        "Capture",
+        "Capture Full Page",
+        "-",
+        "View Page Source",
+        "Inspect"
+      ],
+      "state": {
+        "cancelled": 0,
+        "completed": 0,
+        "entry": "command",
+        "error": "",
+        "held": false,
+        "hintShows": 0,
+        "overlay": {
+          "anchor": [],
+          "firstResponder": true,
+          "frame": [
+            228,
+            10,
+            1122,
+            980
+          ],
+          "hint": "Drag to capture. Press Esc to cancel.",
+          "hintHidden": false,
+          "pageFrame": [
+            228,
+            10,
+            1122,
+            980
+          ],
+          "selection": [],
+          "sizeLabel": [],
+          "sizeText": ""
+        },
+        "overlayActive": true,
+        "phase": "selecting",
+        "replays": 0
+      }
+    },
+    "cm_capture_full": {
+      "ok": true,
+      "shown": [
+        "Back",
+        "Forward",
+        "Reload",
+        "-",
+        "Save As…",
+        "Print…",
+        "-",
+        "Show Original",
+        "Capture",
+        "Capture Full Page",
+        "-",
+        "View Page Source",
+        "Inspect"
+      ],
+      "state": {
+        "cancelled": 1,
+        "card": {
+          "actions": [
+            "copy",
+            "save",
+            "share",
+            "library",
+            "delete"
+          ],
+          "frame": [
+            1092,
+            18,
+            248,
+            242
+          ],
+          "hovered": false,
+          "lifetime": 8,
+          "note": "",
+          "panel": [
+            228,
+            10,
+            1122,
+            980
+          ],
+          "paused": false,
+          "remaining": 7.553471958337468,
+          "savedLine": true
+        },
+        "completed": 1,
+        "entry": "command",
+        "error": "",
+        "held": false,
+        "hintShows": 0,
+        "overlayActive": false,
+        "phase": "showing",
+        "replays": 0,
+        "result": {
+          "bytes": 40478,
+          "fileName": "Context menu fixture 11-05 at 10.31PM.png",
+          "height": 980,
+          "host": "127.0.0.1",
+          "kind": "fullPage",
+          "saved": "C5191903-473D-4696-BAAE-799EB176C644",
+          "truncated": false,
+          "width": 1122
+        }
+      }
+    },
+    "cm_extension_limits": {
+      "limits": {
+        "depth": {
+          "acceptedNodes": 18,
+          "ok": true,
+          "refused": {
+            "content": 1,
+            "reason": "Menu exceeds 128 nodes, 8 levels or a 1024-byte title.",
+            "tab": "13BCE166-FB95-4AAC-9E6E-F962567A459D",
+            "time": 1793943119.49444,
+            "type": "contextMenuRefused"
+          }
+        },
+        "extension_title_collisions": {
+          "goKept": true,
+          "goShown": [
+            "Look Up “Extension collision selection”",
+            "-",
+            "Copy",
+            "Search Local Search for “Extension collision selection”",
+            "Copy Link to Highlight",
+            "Print…",
+            "-",
+            "Go to fixture",
+            "-",
+            "Inspect",
+            "-",
+            "Speech"
+          ],
+          "linkKept": true,
+          "linkShown": [
+            "Open Link in New Tab",
+            "Open Link in Split View",
+            "Open Link in Peek",
+            "Open Link in Little Open",
+            "Open Link in New Window",
+            "-",
+            "Save Link As…",
+            "Copy Link Address",
+            "-",
+            "Copy",
+            "Search Local Search for “Fixture link”",
+            "Copy Link to Highlight",
+            "Print…",
+            "-",
+            "Open Link in New Tab",
+            "-",
+            "Inspect",
+            "-",
+            "Speech"
+          ],
+          "ok": true
+        },
+        "nodes": {
+          "acceptedNodes": 128,
+          "ok": true,
+          "refused": {
+            "content": 1,
+            "reason": "Menu exceeds 128 nodes, 8 levels or a 1024-byte title.",
+            "tab": "13BCE166-FB95-4AAC-9E6E-F962567A459D",
+            "time": 1793943119.124968,
+            "type": "contextMenuRefused"
+          }
+        },
+        "title": {
+          "deliveredBytes": [
+            77,
+            77
+          ],
+          "upstreamElision": true
+        }
+      },
+      "ok": true
+    },
+    "cm_go_url": {
+      "ok": true,
+      "opened": {
+        "audible": false,
+        "canGoBack": false,
+        "canGoForward": false,
+        "crashed": false,
+        "createdAt": 1793943114.473887,
+        "favicon": false,
+        "faviconReportsCompleted": 0,
+        "faviconReportsRejected": 0,
+        "hasWebContent": true,
+        "id": "383302CA-D033-4918-94A3-3B8566931D70",
+        "lastActiveAt": 1793943114.489932,
+        "loaded": true,
+        "loading": false,
+        "page": {
+          "audible": false,
+          "browser": 1,
+          "browserIndex": 0,
+          "browserPinned": false,
+          "canGoBack": false,
+          "chromeTabId": 1586912266,
+          "chromeWindowId": 1586912248,
+          "context": "Default",
+          "crash": 0,
+          "extension": "",
+          "favicon": false,
+          "fullscreen": false,
+          "hidden": false,
+          "hostTab": "383302CA-D033-4918-94A3-3B8566931D70",
+          "identifier": 10,
+          "kind": "tab",
+          "live": true,
+          "loading": false,
+          "muted": false,
+          "pageBackground": [],
+          "popup": false,
+          "style": "chrome",
+          "title": "Context target",
+          "url": "http://127.0.0.1:55001/target.html",
+          "zoom": 0
+        },
+        "pinnedURL": "",
+        "profile": "2326C6CC-662D-41B4-B668-62816EC05E2A",
+        "progress": 1,
+        "rowFaviconHash": "",
+        "rowFaviconSource": "placeholder",
+        "section": "today",
+        "selected": true,
+        "sleepPhase": "live",
+        "space": "E92535B8-54A5-445D-918A-080D550AAD88",
+        "title": "Context target",
+        "unread": false,
+        "url": "http://127.0.0.1:55001/target.html",
+        "visible": true
+      },
+      "shown": [
+        "Look Up “http://127.0.0.1:55001/target.html”",
+        "-",
+        "Copy",
+        "Go to http://127.0.0.1:55001/target.html",
+        "Copy Link to Highlight",
+        "Print…",
+        "-",
+        "Inspect",
+        "-",
+        "Speech"
+      ]
+    },
+    "cm_help_contact-team": {
+      "ok": true,
+      "opened": {
+        "audible": false,
+        "canGoBack": false,
+        "canGoForward": false,
+        "crashed": false,
+        "createdAt": 1793943125.018506,
+        "favicon": false,
+        "faviconReportsCompleted": 0,
+        "faviconReportsRejected": 0,
+        "hasWebContent": true,
+        "id": "010DAB61-4D2F-46A8-AEF2-AD45D5CBD6A2",
+        "lastActiveAt": 1793943125.039978,
+        "loaded": true,
+        "loading": true,
+        "page": {
+          "audible": false,
+          "browser": 1,
+          "browserIndex": 1,
+          "browserPinned": false,
+          "canGoBack": false,
+          "chromeTabId": 1586912287,
+          "chromeWindowId": 1586912248,
+          "context": "Default",
+          "crash": 0,
+          "extension": "",
+          "favicon": false,
+          "fullscreen": false,
+          "hidden": false,
+          "hostTab": "010DAB61-4D2F-46A8-AEF2-AD45D5CBD6A2",
+          "identifier": 23,
+          "kind": "tab",
+          "live": true,
+          "loading": true,
+          "muted": false,
+          "pageBackground": [],
+          "popup": false,
+          "style": "chrome",
+          "title": "",
+          "url": "",
+          "zoom": 0
+        },
+        "pinnedURL": "",
+        "profile": "2326C6CC-662D-41B4-B668-62816EC05E2A",
+        "progress": 0.1,
+        "rowFaviconHash": "",
+        "rowFaviconSource": "placeholder",
+        "section": "today",
+        "selected": true,
+        "sleepPhase": "live",
+        "space": "E92535B8-54A5-445D-918A-080D550AAD88",
+        "title": "",
+        "unread": false,
+        "url": "https://github.com/SergeSerb2/open/issues/new",
+        "visible": true
+      }
+    },
+    "cm_help_getting-started": {
+      "ok": true,
+      "opened": {
+        "audible": false,
+        "canGoBack": false,
+        "canGoForward": false,
+        "crashed": false,
+        "createdAt": 1793943124.519781,
+        "favicon": false,
+        "faviconReportsCompleted": 0,
+        "faviconReportsRejected": 0,
+        "hasWebContent": true,
+        "id": "582EA02E-AF6E-46D1-83C4-F4F782E2364B",
+        "lastActiveAt": 1793943124.536819,
+        "loaded": true,
+        "loading": true,
+        "page": {
+          "audible": false,
+          "browser": 1,
+          "browserIndex": 1,
+          "browserPinned": false,
+          "canGoBack": false,
+          "chromeTabId": 1586912283,
+          "chromeWindowId": 1586912248,
+          "context": "Default",
+          "crash": 0,
+          "extension": "",
+          "favicon": false,
+          "fullscreen": false,
+          "hidden": false,
+          "hostTab": "582EA02E-AF6E-46D1-83C4-F4F782E2364B",
+          "identifier": 21,
+          "kind": "tab",
+          "live": true,
+          "loading": true,
+          "muted": false,
+          "pageBackground": [],
+          "popup": false,
+          "style": "chrome",
+          "title": "",
+          "url": "",
+          "zoom": 0
+        },
+        "pinnedURL": "",
+        "profile": "2326C6CC-662D-41B4-B668-62816EC05E2A",
+        "progress": 0.1,
+        "rowFaviconHash": "",
+        "rowFaviconSource": "placeholder",
+        "section": "today",
+        "selected": true,
+        "sleepPhase": "live",
+        "space": "E92535B8-54A5-445D-918A-080D550AAD88",
+        "title": "",
+        "unread": false,
+        "url": "https://github.com/SergeSerb2/open#readme",
+        "visible": true
+      }
+    },
+    "cm_help_help-center": {
+      "ok": true,
+      "opened": {
+        "audible": false,
+        "canGoBack": false,
+        "canGoForward": false,
+        "crashed": false,
+        "createdAt": 1793943124.274178,
+        "favicon": false,
+        "faviconReportsCompleted": 0,
+        "faviconReportsRejected": 0,
+        "hasWebContent": true,
+        "id": "DB2F077B-0293-4B53-A632-AE95BE9130E6",
+        "lastActiveAt": 1793943124.2924352,
+        "loaded": true,
+        "loading": true,
+        "page": {
+          "audible": false,
+          "browser": 1,
+          "browserIndex": 1,
+          "browserPinned": false,
+          "canGoBack": false,
+          "chromeTabId": 1586912281,
+          "chromeWindowId": 1586912248,
+          "context": "Default",
+          "crash": 0,
+          "extension": "",
+          "favicon": false,
+          "fullscreen": false,
+          "hidden": false,
+          "hostTab": "DB2F077B-0293-4B53-A632-AE95BE9130E6",
+          "identifier": 20,
+          "kind": "tab",
+          "live": true,
+          "loading": true,
+          "muted": false,
+          "pageBackground": [],
+          "popup": false,
+          "style": "chrome",
+          "title": "",
+          "url": "",
+          "zoom": 0
+        },
+        "pinnedURL": "",
+        "profile": "2326C6CC-662D-41B4-B668-62816EC05E2A",
+        "progress": 0.1,
+        "rowFaviconHash": "",
+        "rowFaviconSource": "placeholder",
+        "section": "today",
+        "selected": true,
+        "sleepPhase": "live",
+        "space": "E92535B8-54A5-445D-918A-080D550AAD88",
+        "title": "",
+        "unread": false,
+        "url": "https://github.com/SergeSerb2/open/blob/main/docs/commands.md",
+        "visible": true
+      }
+    },
+    "cm_help_release-notes": {
+      "ok": true,
+      "opened": {
+        "audible": false,
+        "canGoBack": false,
+        "canGoForward": false,
+        "crashed": false,
+        "createdAt": 1793943124.769588,
+        "favicon": false,
+        "faviconReportsCompleted": 0,
+        "faviconReportsRejected": 0,
+        "hasWebContent": true,
+        "id": "D80A5183-0FDA-4BAA-B0CF-0186D46247B0",
+        "lastActiveAt": 1793943124.787853,
+        "loaded": true,
+        "loading": true,
+        "page": {
+          "audible": false,
+          "browser": 1,
+          "browserIndex": 1,
+          "browserPinned": false,
+          "canGoBack": false,
+          "chromeTabId": 1586912285,
+          "chromeWindowId": 1586912248,
+          "context": "Default",
+          "crash": 0,
+          "extension": "",
+          "favicon": false,
+          "fullscreen": false,
+          "hidden": false,
+          "hostTab": "D80A5183-0FDA-4BAA-B0CF-0186D46247B0",
+          "identifier": 22,
+          "kind": "tab",
+          "live": true,
+          "loading": true,
+          "muted": false,
+          "pageBackground": [],
+          "popup": false,
+          "style": "chrome",
+          "title": "",
+          "url": "",
+          "zoom": 0
+        },
+        "pinnedURL": "",
+        "profile": "2326C6CC-662D-41B4-B668-62816EC05E2A",
+        "progress": 0.1,
+        "rowFaviconHash": "",
+        "rowFaviconSource": "placeholder",
+        "section": "today",
+        "selected": true,
+        "sleepPhase": "live",
+        "space": "E92535B8-54A5-445D-918A-080D550AAD88",
+        "title": "",
+        "unread": false,
+        "url": "https://github.com/SergeSerb2/open/releases",
+        "visible": true
+      }
+    },
+    "cm_image_background": {
+      "decisions": [
+        {
+          "commands": [
+            {
+              "checked": false,
+              "enabled": true,
+              "id": 50123,
+              "submenu": "",
+              "title": "Open Image in New Tab"
+            },
+            {
+              "checked": false,
+              "enabled": true,
+              "id": 50120,
+              "submenu": "",
+              "title": "Save Image As…"
+            },
+            {
+              "checked": false,
+              "enabled": true,
+              "id": 50122,
+              "submenu": "",
+              "title": "Copy Image"
+            },
+            {
+              "checked": false,
+              "enabled": true,
+              "id": 50121,
+              "submenu": "",
+              "title": "Copy Image Address"
+            },
+            {
+              "checked": false,
+              "enabled": true,
+              "id": 50162,
+              "submenu": "",
+              "title": "Inspect"
+            }
+          ],
+          "content": 1,
+          "incomingNodes": 6,
+          "items": [
+            "Open Image in New Tab",
+            "Save Image As…",
+            "Copy Image",
+            "Copy Image Address",
+            "",
+            "Inspect"
+          ],
+          "link": "",
+          "open": [],
+          "openItems": [
+            "Open Image in New Tab",
+            "Save Image As…",
+            "Copy Image",
+            "Copy Image Address",
+            "Inspect"
+          ],
+          "rows": [
+            {
+              "checked": false,
+              "enabled": true,
+              "key": "engine:50123",
+              "submenu": "",
+              "title": "Open Image in New Tab"
+            },
+            {
+              "checked": false,
+              "enabled": true,
+              "key": "engine:50120",
+              "submenu": "",
+              "title": "Save Image As…"
+            },
+            {
+              "checked": false,
+              "enabled": true,
+              "key": "engine:50122",
+              "submenu": "",
+              "title": "Copy Image"
+            },
+            {
+              "checked": false,
+              "enabled": true,
+              "key": "engine:50121",
+              "submenu": "",
+              "title": "Copy Image Address"
+            },
+            {
+              "checked": false,
+              "enabled": true,
+              "key": "engine:50162",
+              "submenu": "",
+              "title": "Inspect"
+            }
+          ],
+          "selectionBytes": 0,
+          "shown": [
+            "Open Image in New Tab",
+            "Save Image As…",
+            "Copy Image",
+            "Copy Image Address",
+            "-",
+            "Inspect"
+          ],
+          "tab": "13BCE166-FB95-4AAC-9E6E-F962567A459D",
+          "targets": 11,
+          "time": 1793943103.863546,
+          "type": "contextMenu"
+        },
+        {
+          "content": 0,
+          "disposition": 2,
+          "tab": "D36A70B0-616B-40F0-A620-E886DF1405FE",
+          "time": 1793943103.8661098,
+          "type": "open",
+          "url": "http://127.0.0.1:55001/image.svg"
+        },
+        {
+          "content": 1,
+          "key": "engine:50123",
+          "tab": "13BCE166-FB95-4AAC-9E6E-F962567A459D",
+          "time": 1793943103.86614,
+          "type": "contextMenuDecision"
+        },
+        {
+          "changes": 4105,
+          "content": 2,
+          "tab": "D36A70B0-616B-40F0-A620-E886DF1405FE",
+          "time": 1793943103.877166,
+          "type": "change"
+        },
+        {
+          "changes": 8,
+          "content": 2,
+          "tab": "D36A70B0-616B-40F0-A620-E886DF1405FE",
+          "time": 1793943103.8785372,
+          "type": "change"
+        },
+        {
+          "changes": 16,
+          "content": 2,
+          "tab": "D36A70B0-616B-40F0-A620-E886DF1405FE",
+          "time": 1793943103.878727,
+          "type": "change"
+        },
+        {
+          "content": 2,
+          "reload": false,
+          "tab": "D36A70B0-616B-40F0-A620-E886DF1405FE",
+          "time": 1793943103.885967,
+          "type": "historyCommit",
+          "url": "http://127.0.0.1:55001/image.svg"
+        },
+        {
+          "changes": 1,
+          "content": 2,
+          "tab": "D36A70B0-616B-40F0-A620-E886DF1405FE",
+          "time": 1793943103.886075,
+          "type": "change"
+        },
+        {
+          "changes": 2048,
+          "content": 2,
+          "tab": "D36A70B0-616B-40F0-A620-E886DF1405FE",
+          "time": 1793943103.8863091,
+          "type": "change"
+        },
+        {
+          "browser": 1,
+          "content": 0,
+          "ready": true,
+          "tab": "",
+          "time": 1793943103.886876,
+          "type": "extensionActions"
+        },
+        {
+          "content": 2,
+          "status": 200,
+          "tab": "D36A70B0-616B-40F0-A620-E886DF1405FE",
+          "time": 1793943103.890655,
+          "type": "load",
+          "url": "http://127.0.0.1:55001/image.svg"
+        },
+        {
+          "changes": 16,
+          "content": 2,
+          "tab": "D36A70B0-616B-40F0-A620-E886DF1405FE",
+          "time": 1793943103.890773,
+          "type": "change"
+        },
+        {
+          "changes": 16,
+          "content": 2,
+          "tab": "D36A70B0-616B-40F0-A620-E886DF1405FE",
+          "time": 1793943103.890809,
+          "type": "change"
+        },
+        {
+          "changes": 8,
+          "content": 2,
+          "tab": "D36A70B0-616B-40F0-A620-E886DF1405FE",
+          "time": 1793943103.8909369,
+          "type": "change"
+        },
+        {
+          "changes": 2,
+          "content": 2,
+          "tab": "D36A70B0-616B-40F0-A620-E886DF1405FE",
+          "time": 1793943103.891243,
+          "type": "change"
+        },
+        {
+          "changes": 4,
+          "content": 2,
+          "tab": "D36A70B0-616B-40F0-A620-E886DF1405FE",
+          "time": 1793943103.891333,
+          "type": "change"
+        }
+      ],
+      "new": [
+        {
+          "audible": false,
+          "canGoBack": false,
+          "canGoForward": false,
+          "crashed": false,
+          "createdAt": 1793943103.8638659,
+          "favicon": false,
+          "faviconReportsCompleted": 0,
+          "faviconReportsRejected": 0,
+          "hasWebContent": true,
+          "id": "D36A70B0-616B-40F0-A620-E886DF1405FE",
+          "lastActiveAt": 1793943103.8638659,
+          "loaded": true,
+          "loading": false,
+          "page": {
+            "audible": false,
+            "browser": 1,
+            "browserIndex": 0,
+            "browserPinned": false,
+            "canGoBack": false,
+            "chromeTabId": 1586912250,
+            "chromeWindowId": 1586912248,
+            "context": "Default",
+            "crash": 0,
+            "extension": "",
+            "favicon": false,
+            "fullscreen": false,
+            "hidden": true,
+            "hostTab": "D36A70B0-616B-40F0-A620-E886DF1405FE",
+            "identifier": 2,
+            "kind": "tab",
+            "live": true,
+            "loading": false,
+            "muted": false,
+            "pageBackground": [],
+            "popup": false,
+            "style": "chrome",
+            "title": "127.0.0.1:55001/image.svg",
+            "url": "http://127.0.0.1:55001/image.svg",
+            "zoom": 0
+          },
+          "pinnedURL": "",
+          "profile": "2326C6CC-662D-41B4-B668-62816EC05E2A",
+          "progress": 1,
+          "rowFaviconHash": "",
+          "rowFaviconSource": "placeholder",
+          "section": "today",
+          "selected": false,
+          "sleepPhase": "live",
+          "space": "E92535B8-54A5-445D-918A-080D550AAD88",
+          "title": "127.0.0.1:55001/image.svg",
+          "unread": true,
+          "url": "http://127.0.0.1:55001/image.svg",
+          "visible": false
+        }
+      ],
+      "ok": true,
+      "shown": [
+        "Open Image in New Tab",
+        "Save Image As…",
+        "Copy Image",
+        "Copy Image Address",
+        "-",
+        "Inspect"
+      ]
+    },
+    "cm_join_meeting_disabled": {
+      "ok": true
+    },
+    "cm_link_background": {
+      "decisions": [
+        {
+          "commands": [
+            {
+              "checked": false,
+              "enabled": true,
+              "id": 50100,
+              "submenu": "",
+              "title": "Open Link in New Tab"
+            },
+            {
+              "checked": false,
+              "enabled": true,
+              "id": 50101,
+              "submenu": "",
+              "title": "Open Link in New Window"
+            },
+            {
+              "checked": false,
+              "enabled": true,
+              "id": 50103,
+              "submenu": "",
+              "title": "Save Link As…"
+            },
+            {
+              "checked": false,
+              "enabled": true,
+              "id": 50104,
+              "submenu": "",
+              "title": "Copy Link Address"
+            },
+            {
+              "checked": false,
+              "enabled": true,
+              "id": 50150,
+              "submenu": "",
+              "title": "Copy"
+            },
+            {
+              "checked": false,
+              "enabled": false,
+              "id": 50158,
+              "submenu": "",
+              "title": "Copy Link to Highlight"
+            },
+            {
+              "checked": false,
+              "enabled": true,
+              "id": 35003,
+              "submenu": "",
+              "title": "Print…"
+            },
+            {
+              "checked": false,
+              "enabled": true,
+              "id": 50162,
+              "submenu": "",
+              "title": "Inspect"
+            },
+            {
+              "checked": false,
+              "enabled": true,
+              "id": 101,
+              "submenu": "Speech",
+              "title": "Start Speaking"
+            },
+            {
+              "checked": false,
+              "enabled": false,
+              "id": 102,
+              "submenu": "Speech",
+              "title": "Stop Speaking"
+            }
+          ],
+          "content": 1,
+          "incomingNodes": 15,
+          "items": [
+            "Open Link in New Tab",
+            "Open Link in New Window",
+            "",
+            "Save Link As…",
+            "Copy Link Address",
+            "",
+            "Copy",
+            "Copy Link to Highlight",
+            "Print…",
+            "",
+            "Inspect",
+            "",
+            "Speech"
+          ],
+          "link": "http://127.0.0.1:55001/target.html",
+          "open": [],
+          "openItems": [
+            "Open Link in New Tab",
+            "Open Link in Split View",
+            "Open Link in Peek",
+            "Open Link in Little Open",
+            "Open Link in New Window",
+            "Save Link As…",
+            "Copy Link Address",
+            "Copy",
+            "Search Local Search for “Fixture link”",
+            "Copy Link to Highlight",
+            "Print…",
+            "Inspect",
+            "Speech"
+          ],
+          "rows": [
+            {
+              "checked": false,
+              "enabled": true,
+              "key": "link-new-tab",
+              "submenu": "",
+              "title": "Open Link in New Tab"
+            },
+            {
+              "checked": false,
+              "enabled": true,
+              "key": "link-split",
+              "submenu": "",
+              "title": "Open Link in Split View"
+            },
+            {
+              "checked": false,
+              "enabled": true,
+              "key": "link-peek",
+              "submenu": "",
+              "title": "Open Link in Peek"
+            },
+            {
+              "checked": false,
+              "enabled": true,
+              "key": "link-little-open",
+              "submenu": "",
+              "title": "Open Link in Little Open"
+            },
+            {
+              "checked": false,
+              "enabled": true,
+              "key": "link-window",
+              "submenu": "",
+              "title": "Open Link in New Window"
+            },
+            {
+              "checked": false,
+              "enabled": true,
+              "key": "engine:50103",
+              "submenu": "",
+              "title": "Save Link As…"
+            },
+            {
+              "checked": false,
+              "enabled": true,
+              "key": "engine:50104",
+              "submenu": "",
+              "title": "Copy Link Address"
+            },
+            {
+              "checked": false,
+              "enabled": true,
+              "key": "engine:50150",
+              "submenu": "",
+              "title": "Copy"
+            },
+            {
+              "checked": false,
+              "enabled": true,
+              "key": "selection-search",
+              "submenu": "",
+              "title": "Search Local Search for “Fixture link”"
+            },
+            {
+              "checked": false,
+              "enabled": false,
+              "key": "engine:50158",
+              "submenu": "",
+              "title": "Copy Link to Highlight"
+            },
+            {
+              "checked": false,
+              "enabled": true,
+              "key": "engine:35003",
+              "submenu": "",
+              "title": "Print…"
+            },
+            {
+              "checked": false,
+              "enabled": true,
+              "key": "engine:50162",
+              "submenu": "",
+              "title": "Inspect"
+            },
+            {
+              "checked": false,
+              "enabled": true,
+              "key": "engine:101",
+              "submenu": "Speech",
+              "title": "Start Speaking"
+            },
+            {
+              "checked": false,
+              "enabled": false,
+              "key": "engine:102",
+              "submenu": "Speech",
+              "title": "Stop Speaking"
+            }
+          ],
+          "selectionBytes": 12,
+          "shown": [
+            "Open Link in New Tab",
+            "Open Link in Split View",
+            "Open Link in Peek",
+            "Open Link in Little Open",
+            "Open Link in New Window",
+            "-",
+            "Save Link As…",
+            "Copy Link Address",
+            "-",
+            "Copy",
+            "Search Local Search for “Fixture link”",
+            "Copy Link to Highlight",
+            "Print…",
+            "-",
+            "Inspect",
+            "-",
+            "Speech"
+          ],
+          "tab": "13BCE166-FB95-4AAC-9E6E-F962567A459D",
+          "targets": 23,
+          "time": 1793943103.661905,
+          "type": "contextMenu"
+        },
+        {
+          "content": 1,
+          "key": "link-new-tab",
+          "tab": "13BCE166-FB95-4AAC-9E6E-F962567A459D",
+          "time": 1793943103.6621609,
+          "type": "contextMenuDecision"
+        }
+      ],
+      "new": [
+        {
+          "audible": false,
+          "canGoBack": false,
+          "canGoForward": false,
+          "crashed": false,
+          "createdAt": 1793943103.662167,
+          "favicon": false,
+          "faviconReportsCompleted": 0,
+          "faviconReportsRejected": 0,
+          "hasWebContent": false,
+          "id": "D74D6D8E-FA06-404A-B979-57A4AA0161E4",
+          "lastActiveAt": 1793943103.662167,
+          "loaded": false,
+          "loading": false,
+          "pinnedURL": "",
+          "profile": "2326C6CC-662D-41B4-B668-62816EC05E2A",
+          "progress": 0,
+          "rowFaviconHash": "",
+          "rowFaviconSource": "placeholder",
+          "section": "today",
+          "selected": false,
+          "sleepPhase": "placeholder",
+          "space": "E92535B8-54A5-445D-918A-080D550AAD88",
+          "title": "",
+          "unread": true,
+          "url": "http://127.0.0.1:55001/target.html",
+          "visible": false
+        }
+      ],
+      "ok": true,
+      "shown": [
+        "Open Link in New Tab",
+        "Open Link in Split View",
+        "Open Link in Peek",
+        "Open Link in Little Open",
+        "Open Link in New Window",
+        "-",
+        "Save Link As…",
+        "Copy Link Address",
+        "-",
+        "Copy",
+        "Search Local Search for “Fixture link”",
+        "Copy Link to Highlight",
+        "Print…",
+        "-",
+        "Inspect",
+        "-",
+        "Speech"
+      ]
+    },
+    "cm_little_open_entry": {
+      "ok": true,
+      "request": {
+        "profileHint": "2326C6CC-662D-41B4-B668-62816EC05E2A",
+        "url": "http://127.0.0.1:55001/target.html"
+      },
+      "shown": [
+        "Open Link in New Tab",
+        "Open Link in Split View",
+        "Open Link in Peek",
+        "Open Link in Little Open",
+        "Open Link in New Window",
+        "-",
+        "Save Link As…",
+        "Copy Link Address",
+        "-",
+        "Copy",
+        "Search Local Search for “Fixture link”",
+        "Copy Link to Highlight",
+        "Print…",
+        "-",
+        "Inspect",
+        "-",
+        "Speech"
+      ],
+      "stubWindow": 131554
+    },
+    "cm_new_window": {
+      "new": {
+        "id": "9C917E2E-D0A9-489F-9ED7-95D014FE4F92",
+        "number": 131551
+      },
+      "ok": true,
+      "shown": null,
+      "tab": {
+        "audible": false,
+        "canGoBack": false,
+        "canGoForward": false,
+        "crashed": false,
+        "createdAt": 1793943105.248487,
+        "favicon": false,
+        "faviconReportsCompleted": 0,
+        "faviconReportsRejected": 0,
+        "hasWebContent": true,
+        "id": "FFB72817-5ACB-40BB-9C4E-3CA157A53D8D",
+        "lastActiveAt": 1793943105.297179,
+        "loaded": true,
+        "loading": false,
+        "page": {
+          "audible": false,
+          "browser": 2,
+          "browserIndex": 0,
+          "browserPinned": false,
+          "canGoBack": false,
+          "chromeTabId": 1586912259,
+          "chromeWindowId": 1586912258,
+          "context": "Default",
+          "crash": 0,
+          "extension": "",
+          "favicon": false,
+          "fullscreen": false,
+          "hidden": false,
+          "hostTab": "FFB72817-5ACB-40BB-9C4E-3CA157A53D8D",
+          "identifier": 6,
+          "kind": "tab",
+          "live": true,
+          "loading": false,
+          "muted": false,
+          "pageBackground": [
+            255,
+            255,
+            255,
+            255
+          ],
+          "popup": false,
+          "style": "chrome",
+          "title": "Context target",
+          "url": "http://127.0.0.1:55001/target.html",
+          "zoom": 0
+        },
+        "pinnedURL": "",
+        "profile": "2326C6CC-662D-41B4-B668-62816EC05E2A",
+        "progress": 1,
+        "rowFaviconHash": "",
+        "rowFaviconSource": "placeholder",
+        "section": "today",
+        "selected": true,
+        "sleepPhase": "live",
+        "space": "E92535B8-54A5-445D-918A-080D550AAD88",
+        "title": "Context target",
+        "unread": false,
+        "url": "http://127.0.0.1:55001/target.html",
+        "visible": true
+      }
+    },
+    "cm_order_editable": {
+      "decisions": [
+        {
+          "content": 1,
+          "key": "cancel",
+          "tab": "13BCE166-FB95-4AAC-9E6E-F962567A459D",
+          "time": 1793943103.482383,
+          "type": "contextMenuDecision"
+        }
+      ],
+      "engine": [
+        "Look Up “teh”",
+        "",
+        "Emoji & Symbols",
+        "",
+        "Undo",
+        "Redo",
+        "",
+        "Cut",
+        "Copy",
+        "Paste",
+        "Paste and Match Style",
+        "Select All",
+        "",
+        "Print…",
+        "",
+        "Writing Direction",
+        "",
+        "Inspect",
+        "",
+        "Speech"
+      ],
+      "expected": [
+        "Look Up “teh”",
+        "-",
+        "Emoji & Symbols",
+        "-",
+        "Undo",
+        "Redo",
+        "-",
+        "Cut",
+        "Copy",
+        "Paste",
+        "Paste and Match Style",
+        "Select All",
+        "-",
+        "Print…",
+        "-",
+        "Writing Direction",
+        "-",
+        "Inspect",
+        "-",
+        "Speech"
+      ],
+      "ok": true,
+      "rows": [
+        {
+          "checked": false,
+          "enabled": true,
+          "key": "engine:50165",
+          "submenu": "",
+          "title": "Look Up “teh”"
+        },
+        {
+          "checked": false,
+          "enabled": true,
+          "key": "engine:50220",
+          "submenu": "",
+          "title": "Emoji & Symbols"
+        },
+        {
+          "checked": false,
+          "enabled": false,
+          "key": "engine:50154",
+          "submenu": "",
+          "title": "Undo"
+        },
+        {
+          "checked": false,
+          "enabled": false,
+          "key": "engine:50155",
+          "submenu": "",
+          "title": "Redo"
+        },
+        {
+          "checked": false,
+          "enabled": true,
+          "key": "engine:50151",
+          "submenu": "",
+          "title": "Cut"
+        },
+        {
+          "checked": false,
+          "enabled": true,
+          "key": "engine:50150",
+          "submenu": "",
+          "title": "Copy"
+        },
+        {
+          "checked": false,
+          "enabled": true,
+          "key": "engine:50152",
+          "submenu": "",
+          "title": "Paste"
+        },
+        {
+          "checked": false,
+          "enabled": false,
+          "key": "engine:50157",
+          "submenu": "",
+          "title": "Paste and Match Style"
+        },
+        {
+          "checked": false,
+          "enabled": true,
+          "key": "engine:50156",
+          "submenu": "",
+          "title": "Select All"
+        },
+        {
+          "checked": false,
+          "enabled": true,
+          "key": "engine:35003",
+          "submenu": "",
+          "title": "Print…"
+        },
+        {
+          "checked": false,
+          "enabled": false,
+          "key": "engine:104",
+          "submenu": "Writing Direction",
+          "title": "Default"
+        },
+        {
+          "checked": true,
+          "enabled": true,
+          "key": "engine:105",
+          "submenu": "Writing Direction",
+          "title": "Left to Right"
+        },
+        {
+          "checked": false,
+          "enabled": true,
+          "key": "engine:106",
+          "submenu": "Writing Direction",
+          "title": "Right to Left"
+        },
+        {
+          "checked": false,
+          "enabled": true,
+          "key": "engine:50162",
+          "submenu": "",
+          "title": "Inspect"
+        },
+        {
+          "checked": false,
+          "enabled": true,
+          "key": "engine:101",
+          "submenu": "Speech",
+          "title": "Start Speaking"
+        },
+        {
+          "checked": false,
+          "enabled": false,
+          "key": "engine:102",
+          "submenu": "Speech",
+          "title": "Stop Speaking"
+        }
+      ],
+      "selection": "teh",
+      "shown": [
+        "Look Up “teh”",
+        "-",
+        "Emoji & Symbols",
+        "-",
+        "Undo",
+        "Redo",
+        "-",
+        "Cut",
+        "Copy",
+        "Paste",
+        "Paste and Match Style",
+        "Select All",
+        "-",
+        "Print…",
+        "-",
+        "Writing Direction",
+        "-",
+        "Inspect",
+        "-",
+        "Speech"
+      ]
+    },
+    "cm_order_image": {
+      "decisions": [
+        {
+          "content": 1,
+          "key": "cancel",
+          "tab": "13BCE166-FB95-4AAC-9E6E-F962567A459D",
+          "time": 1793943102.7421188,
+          "type": "contextMenuDecision"
+        }
+      ],
+      "engine": [
+        "Open Image in New Tab",
+        "Save Image As…",
+        "Copy Image",
+        "Copy Image Address",
+        "",
+        "Inspect"
+      ],
+      "expected": [
+        "Open Image in New Tab",
+        "Save Image As…",
+        "Copy Image",
+        "Copy Image Address",
+        "-",
+        "Inspect"
+      ],
+      "ok": true,
+      "rows": [
+        {
+          "checked": false,
+          "enabled": true,
+          "key": "engine:50123",
+          "submenu": "",
+          "title": "Open Image in New Tab"
+        },
+        {
+          "checked": false,
+          "enabled": true,
+          "key": "engine:50120",
+          "submenu": "",
+          "title": "Save Image As…"
+        },
+        {
+          "checked": false,
+          "enabled": true,
+          "key": "engine:50122",
+          "submenu": "",
+          "title": "Copy Image"
+        },
+        {
+          "checked": false,
+          "enabled": true,
+          "key": "engine:50121",
+          "submenu": "",
+          "title": "Copy Image Address"
+        },
+        {
+          "checked": false,
+          "enabled": true,
+          "key": "engine:50162",
+          "submenu": "",
+          "title": "Inspect"
+        }
+      ],
+      "selection": "",
+      "shown": [
+        "Open Image in New Tab",
+        "Save Image As…",
+        "Copy Image",
+        "Copy Image Address",
+        "-",
+        "Inspect"
+      ]
+    },
+    "cm_order_link": {
+      "decisions": [
+        {
+          "content": 1,
+          "key": "cancel",
+          "tab": "13BCE166-FB95-4AAC-9E6E-F962567A459D",
+          "time": 1793943102.356542,
+          "type": "contextMenuDecision"
+        }
+      ],
+      "engine": [
+        "Open Link in New Tab",
+        "Open Link in New Window",
+        "",
+        "Save Link As…",
+        "Copy Link Address",
+        "",
+        "Copy",
+        "Copy Link to Highlight",
+        "Print…",
+        "",
+        "Inspect",
+        "",
+        "Speech"
+      ],
+      "expected": [
+        "Open Link in New Tab",
+        "Open Link in Split View",
+        "Open Link in Peek",
+        "Open Link in Little Open",
+        "Open Link in New Window",
+        "-",
+        "Save Link As…",
+        "Copy Link Address",
+        "-",
+        "Copy",
+        "Search Local Search for “Fixture link”",
+        "Copy Link to Highlight",
+        "Print…",
+        "-",
+        "Inspect",
+        "-",
+        "Speech"
+      ],
+      "ok": true,
+      "rows": [
+        {
+          "checked": false,
+          "enabled": true,
+          "key": "link-new-tab",
+          "submenu": "",
+          "title": "Open Link in New Tab"
+        },
+        {
+          "checked": false,
+          "enabled": true,
+          "key": "link-split",
+          "submenu": "",
+          "title": "Open Link in Split View"
+        },
+        {
+          "checked": false,
+          "enabled": true,
+          "key": "link-peek",
+          "submenu": "",
+          "title": "Open Link in Peek"
+        },
+        {
+          "checked": false,
+          "enabled": true,
+          "key": "link-little-open",
+          "submenu": "",
+          "title": "Open Link in Little Open"
+        },
+        {
+          "checked": false,
+          "enabled": true,
+          "key": "link-window",
+          "submenu": "",
+          "title": "Open Link in New Window"
+        },
+        {
+          "checked": false,
+          "enabled": true,
+          "key": "engine:50103",
+          "submenu": "",
+          "title": "Save Link As…"
+        },
+        {
+          "checked": false,
+          "enabled": true,
+          "key": "engine:50104",
+          "submenu": "",
+          "title": "Copy Link Address"
+        },
+        {
+          "checked": false,
+          "enabled": true,
+          "key": "engine:50150",
+          "submenu": "",
+          "title": "Copy"
+        },
+        {
+          "checked": false,
+          "enabled": true,
+          "key": "selection-search",
+          "submenu": "",
+          "title": "Search Local Search for “Fixture link”"
+        },
+        {
+          "checked": false,
+          "enabled": false,
+          "key": "engine:50158",
+          "submenu": "",
+          "title": "Copy Link to Highlight"
+        },
+        {
+          "checked": false,
+          "enabled": true,
+          "key": "engine:35003",
+          "submenu": "",
+          "title": "Print…"
+        },
+        {
+          "checked": false,
+          "enabled": true,
+          "key": "engine:50162",
+          "submenu": "",
+          "title": "Inspect"
+        },
+        {
+          "checked": false,
+          "enabled": true,
+          "key": "engine:101",
+          "submenu": "Speech",
+          "title": "Start Speaking"
+        },
+        {
+          "checked": false,
+          "enabled": false,
+          "key": "engine:102",
+          "submenu": "Speech",
+          "title": "Stop Speaking"
+        }
+      ],
+      "selection": "Fixture link",
+      "shown": [
+        "Open Link in New Tab",
+        "Open Link in Split View",
+        "Open Link in Peek",
+        "Open Link in Little Open",
+        "Open Link in New Window",
+        "-",
+        "Save Link As…",
+        "Copy Link Address",
+        "-",
+        "Copy",
+        "Search Local Search for “Fixture link”",
+        "Copy Link to Highlight",
+        "Print…",
+        "-",
+        "Inspect",
+        "-",
+        "Speech"
+      ]
+    },
+    "cm_order_linked_image": {
+      "decisions": [
+        {
+          "content": 1,
+          "key": "cancel",
+          "tab": "13BCE166-FB95-4AAC-9E6E-F962567A459D",
+          "time": 1793943102.926969,
+          "type": "contextMenuDecision"
+        }
+      ],
+      "engine": [
+        "Open Link in New Tab",
+        "Open Link in New Window",
+        "",
+        "Save Link As…",
+        "Copy Link Address",
+        "",
+        "Open Image in New Tab",
+        "Save Image As…",
+        "Copy Image",
+        "Copy Image Address",
+        "",
+        "Inspect"
+      ],
+      "expected": [
+        "Open Link in New Tab",
+        "Open Link in Split View",
+        "Open Link in Peek",
+        "Open Link in Little Open",
+        "Open Link in New Window",
+        "-",
+        "Save Link As…",
+        "Copy Link Address",
+        "-",
+        "Open Image in New Tab",
+        "Save Image As…",
+        "Copy Image",
+        "Copy Image Address",
+        "-",
+        "Inspect"
+      ],
+      "ok": true,
+      "rows": [
+        {
+          "checked": false,
+          "enabled": true,
+          "key": "link-new-tab",
+          "submenu": "",
+          "title": "Open Link in New Tab"
+        },
+        {
+          "checked": false,
+          "enabled": true,
+          "key": "link-split",
+          "submenu": "",
+          "title": "Open Link in Split View"
+        },
+        {
+          "checked": false,
+          "enabled": true,
+          "key": "link-peek",
+          "submenu": "",
+          "title": "Open Link in Peek"
+        },
+        {
+          "checked": false,
+          "enabled": true,
+          "key": "link-little-open",
+          "submenu": "",
+          "title": "Open Link in Little Open"
+        },
+        {
+          "checked": false,
+          "enabled": true,
+          "key": "link-window",
+          "submenu": "",
+          "title": "Open Link in New Window"
+        },
+        {
+          "checked": false,
+          "enabled": true,
+          "key": "engine:50103",
+          "submenu": "",
+          "title": "Save Link As…"
+        },
+        {
+          "checked": false,
+          "enabled": true,
+          "key": "engine:50104",
+          "submenu": "",
+          "title": "Copy Link Address"
+        },
+        {
+          "checked": false,
+          "enabled": true,
+          "key": "engine:50123",
+          "submenu": "",
+          "title": "Open Image in New Tab"
+        },
+        {
+          "checked": false,
+          "enabled": true,
+          "key": "engine:50120",
+          "submenu": "",
+          "title": "Save Image As…"
+        },
+        {
+          "checked": false,
+          "enabled": true,
+          "key": "engine:50122",
+          "submenu": "",
+          "title": "Copy Image"
+        },
+        {
+          "checked": false,
+          "enabled": true,
+          "key": "engine:50121",
+          "submenu": "",
+          "title": "Copy Image Address"
+        },
+        {
+          "checked": false,
+          "enabled": true,
+          "key": "engine:50162",
+          "submenu": "",
+          "title": "Inspect"
+        }
+      ],
+      "selection": "",
+      "shown": [
+        "Open Link in New Tab",
+        "Open Link in Split View",
+        "Open Link in Peek",
+        "Open Link in Little Open",
+        "Open Link in New Window",
+        "-",
+        "Save Link As…",
+        "Copy Link Address",
+        "-",
+        "Open Image in New Tab",
+        "Save Image As…",
+        "Copy Image",
+        "Copy Image Address",
+        "-",
+        "Inspect"
+      ]
+    },
+    "cm_order_mailto": {
+      "decisions": [
+        {
+          "content": 1,
+          "key": "cancel",
+          "tab": "13BCE166-FB95-4AAC-9E6E-F962567A459D",
+          "time": 1793943102.55404,
+          "type": "contextMenuDecision"
+        }
+      ],
+      "engine": [
+        "Open Link in New Tab",
+        "Open Link in New Window",
+        "",
+        "Save Link As…",
+        "Copy Email Address",
+        "",
+        "Copy",
+        "Copy Link to Highlight",
+        "Print…",
+        "",
+        "Inspect",
+        "",
+        "Speech"
+      ],
+      "expected": [
+        "Open Link in New Tab",
+        "Open Link in Split View",
+        "Open Link in Peek",
+        "Open Link in Little Open",
+        "Open Link in New Window",
+        "-",
+        "Save Link As…",
+        "Copy Email Address",
+        "-",
+        "Copy",
+        "Search Local Search for “Fixture email”",
+        "Copy Link to Highlight",
+        "Print…",
+        "-",
+        "Inspect",
+        "-",
+        "Speech"
+      ],
+      "ok": true,
+      "rows": [
+        {
+          "checked": false,
+          "enabled": true,
+          "key": "link-new-tab",
+          "submenu": "",
+          "title": "Open Link in New Tab"
+        },
+        {
+          "checked": false,
+          "enabled": true,
+          "key": "link-split",
+          "submenu": "",
+          "title": "Open Link in Split View"
+        },
+        {
+          "checked": false,
+          "enabled": true,
+          "key": "link-peek",
+          "submenu": "",
+          "title": "Open Link in Peek"
+        },
+        {
+          "checked": false,
+          "enabled": true,
+          "key": "link-little-open",
+          "submenu": "",
+          "title": "Open Link in Little Open"
+        },
+        {
+          "checked": false,
+          "enabled": true,
+          "key": "link-window",
+          "submenu": "",
+          "title": "Open Link in New Window"
+        },
+        {
+          "checked": false,
+          "enabled": false,
+          "key": "engine:50103",
+          "submenu": "",
+          "title": "Save Link As…"
+        },
+        {
+          "checked": false,
+          "enabled": true,
+          "key": "engine:50104",
+          "submenu": "",
+          "title": "Copy Email Address"
+        },
+        {
+          "checked": false,
+          "enabled": true,
+          "key": "engine:50150",
+          "submenu": "",
+          "title": "Copy"
+        },
+        {
+          "checked": false,
+          "enabled": true,
+          "key": "selection-search",
+          "submenu": "",
+          "title": "Search Local Search for “Fixture email”"
+        },
+        {
+          "checked": false,
+          "enabled": false,
+          "key": "engine:50158",
+          "submenu": "",
+          "title": "Copy Link to Highlight"
+        },
+        {
+          "checked": false,
+          "enabled": true,
+          "key": "engine:35003",
+          "submenu": "",
+          "title": "Print…"
+        },
+        {
+          "checked": false,
+          "enabled": true,
+          "key": "engine:50162",
+          "submenu": "",
+          "title": "Inspect"
+        },
+        {
+          "checked": false,
+          "enabled": true,
+          "key": "engine:101",
+          "submenu": "Speech",
+          "title": "Start Speaking"
+        },
+        {
+          "checked": false,
+          "enabled": false,
+          "key": "engine:102",
+          "submenu": "Speech",
+          "title": "Stop Speaking"
+        }
+      ],
+      "selection": "Fixture email",
+      "shown": [
+        "Open Link in New Tab",
+        "Open Link in Split View",
+        "Open Link in Peek",
+        "Open Link in Little Open",
+        "Open Link in New Window",
+        "-",
+        "Save Link As…",
+        "Copy Email Address",
+        "-",
+        "Copy",
+        "Search Local Search for “Fixture email”",
+        "Copy Link to Highlight",
+        "Print…",
+        "-",
+        "Inspect",
+        "-",
+        "Speech"
+      ]
+    },
+    "cm_order_page": {
+      "decisions": [
+        {
+          "content": 1,
+          "key": "cancel",
+          "tab": "13BCE166-FB95-4AAC-9E6E-F962567A459D",
+          "time": 1793943102.175092,
+          "type": "contextMenuDecision"
+        }
+      ],
+      "engine": [
+        "Back",
+        "Forward",
+        "Reload",
+        "",
+        "Save As…",
+        "Print…",
+        "",
+        "View Page Source",
+        "Inspect"
+      ],
+      "expected": [
+        "Back",
+        "Forward",
+        "Reload",
+        "-",
+        "Save As…",
+        "Print…",
+        "-",
+        "Translate to English",
+        "Capture",
+        "Capture Full Page",
+        "-",
+        "View Page Source",
+        "Inspect"
+      ],
+      "ok": true,
+      "rows": [
+        {
+          "checked": false,
+          "enabled": false,
+          "key": "engine:33000",
+          "submenu": "",
+          "title": "Back"
+        },
+        {
+          "checked": false,
+          "enabled": false,
+          "key": "engine:33001",
+          "submenu": "",
+          "title": "Forward"
+        },
+        {
+          "checked": false,
+          "enabled": true,
+          "key": "engine:33002",
+          "submenu": "",
+          "title": "Reload"
+        },
+        {
+          "checked": false,
+          "enabled": true,
+          "key": "engine:35004",
+          "submenu": "",
+          "title": "Save As…"
+        },
+        {
+          "checked": false,
+          "enabled": true,
+          "key": "engine:35003",
+          "submenu": "",
+          "title": "Print…"
+        },
+        {
+          "checked": false,
+          "enabled": true,
+          "key": "translate",
+          "submenu": "",
+          "title": "Translate to English"
+        },
+        {
+          "checked": false,
+          "enabled": true,
+          "key": "capture-page",
+          "submenu": "",
+          "title": "Capture"
+        },
+        {
+          "checked": false,
+          "enabled": true,
+          "key": "capture-full-page",
+          "submenu": "",
+          "title": "Capture Full Page"
+        },
+        {
+          "checked": false,
+          "enabled": true,
+          "key": "engine:35002",
+          "submenu": "",
+          "title": "View Page Source"
+        },
+        {
+          "checked": false,
+          "enabled": true,
+          "key": "engine:50162",
+          "submenu": "",
+          "title": "Inspect"
+        }
+      ],
+      "selection": "",
+      "shown": [
+        "Back",
+        "Forward",
+        "Reload",
+        "-",
+        "Save As…",
+        "Print…",
+        "-",
+        "Translate to English",
+        "Capture",
+        "Capture Full Page",
+        "-",
+        "View Page Source",
+        "Inspect"
+      ]
+    },
+    "cm_order_selection": {
+      "decisions": [
+        {
+          "content": 1,
+          "key": "cancel",
+          "tab": "13BCE166-FB95-4AAC-9E6E-F962567A459D",
+          "time": 1793943103.112339,
+          "type": "contextMenuDecision"
+        }
+      ],
+      "engine": [
+        "Look Up “bonjour menu contextuel”",
+        "",
+        "Copy",
+        "Copy Link to Highlight",
+        "Print…",
+        "",
+        "Inspect",
+        "",
+        "Speech"
+      ],
+      "expected": [
+        "Look Up “bonjour menu contextuel”",
+        "-",
+        "Copy",
+        "Search Local Search for “bonjour menu contextuel”",
+        "Copy Link to Highlight",
+        "Print…",
+        "-",
+        "Inspect",
+        "-",
+        "Speech"
+      ],
+      "ok": true,
+      "rows": [
+        {
+          "checked": false,
+          "enabled": true,
+          "key": "engine:50165",
+          "submenu": "",
+          "title": "Look Up “bonjour menu contextuel”"
+        },
+        {
+          "checked": false,
+          "enabled": true,
+          "key": "engine:50150",
+          "submenu": "",
+          "title": "Copy"
+        },
+        {
+          "checked": false,
+          "enabled": true,
+          "key": "selection-search",
+          "submenu": "",
+          "title": "Search Local Search for “bonjour menu contextuel”"
+        },
+        {
+          "checked": false,
+          "enabled": false,
+          "key": "engine:50158",
+          "submenu": "",
+          "title": "Copy Link to Highlight"
+        },
+        {
+          "checked": false,
+          "enabled": true,
+          "key": "engine:35003",
+          "submenu": "",
+          "title": "Print…"
+        },
+        {
+          "checked": false,
+          "enabled": true,
+          "key": "engine:50162",
+          "submenu": "",
+          "title": "Inspect"
+        },
+        {
+          "checked": false,
+          "enabled": true,
+          "key": "engine:101",
+          "submenu": "Speech",
+          "title": "Start Speaking"
+        },
+        {
+          "checked": false,
+          "enabled": false,
+          "key": "engine:102",
+          "submenu": "Speech",
+          "title": "Stop Speaking"
+        }
+      ],
+      "selection": "bonjour menu contextuel",
+      "shown": [
+        "Look Up “bonjour menu contextuel”",
+        "-",
+        "Copy",
+        "Search Local Search for “bonjour menu contextuel”",
+        "Copy Link to Highlight",
+        "Print…",
+        "-",
+        "Inspect",
+        "-",
+        "Speech"
+      ]
+    },
+    "cm_order_url": {
+      "decisions": [
+        {
+          "content": 1,
+          "key": "cancel",
+          "tab": "13BCE166-FB95-4AAC-9E6E-F962567A459D",
+          "time": 1793943103.295722,
+          "type": "contextMenuDecision"
+        }
+      ],
+      "engine": [
+        "Look Up “https://example.invalid/context-target”",
+        "",
+        "Copy",
+        "Copy Link to Highlight",
+        "Print…",
+        "",
+        "Inspect",
+        "",
+        "Speech"
+      ],
+      "expected": [
+        "Look Up “https://example.invalid/context-target”",
+        "-",
+        "Copy",
+        "Go to https://example.invalid/context-target",
+        "Copy Link to Highlight",
+        "Print…",
+        "-",
+        "Inspect",
+        "-",
+        "Speech"
+      ],
+      "ok": true,
+      "rows": [
+        {
+          "checked": false,
+          "enabled": true,
+          "key": "engine:50165",
+          "submenu": "",
+          "title": "Look Up “https://example.invalid/context-target”"
+        },
+        {
+          "checked": false,
+          "enabled": true,
+          "key": "engine:50150",
+          "submenu": "",
+          "title": "Copy"
+        },
+        {
+          "checked": false,
+          "enabled": true,
+          "key": "selection-search",
+          "submenu": "",
+          "title": "Go to https://example.invalid/context-target"
+        },
+        {
+          "checked": false,
+          "enabled": false,
+          "key": "engine:50158",
+          "submenu": "",
+          "title": "Copy Link to Highlight"
+        },
+        {
+          "checked": false,
+          "enabled": true,
+          "key": "engine:35003",
+          "submenu": "",
+          "title": "Print…"
+        },
+        {
+          "checked": false,
+          "enabled": true,
+          "key": "engine:50162",
+          "submenu": "",
+          "title": "Inspect"
+        },
+        {
+          "checked": false,
+          "enabled": true,
+          "key": "engine:101",
+          "submenu": "Speech",
+          "title": "Start Speaking"
+        },
+        {
+          "checked": false,
+          "enabled": false,
+          "key": "engine:102",
+          "submenu": "Speech",
+          "title": "Stop Speaking"
+        }
+      ],
+      "selection": "https://example.invalid/context-target",
+      "shown": [
+        "Look Up “https://example.invalid/context-target”",
+        "-",
+        "Copy",
+        "Go to https://example.invalid/context-target",
+        "Copy Link to Highlight",
+        "Print…",
+        "-",
+        "Inspect",
+        "-",
+        "Speech"
+      ]
+    },
+    "cm_peek_and_split_disabled": {
+      "nested": [
+        "Open Link in New Tab",
+        "Open Link in Split View",
+        "Open Link in Peek",
+        "Open Link in Little Open",
+        "Open Link in New Window",
+        "-",
+        "Copy",
+        "Search Local Search for “Nested link”"
+      ],
+      "ok": true,
+      "state": {
+        "expanding": false,
+        "shown": true,
+        "stack": [
+          {
+            "boundTab": "EB699D5F-4924-458F-93C6-D45051D2F437",
+            "content": 7,
+            "originalHostTab": "EB699D5F-4924-458F-93C6-D45051D2F437",
+            "source": "13BCE166-FB95-4AAC-9E6E-F962567A459D"
+          }
+        ]
+      },
+      "url": "http://127.0.0.1:55001/target.html"
+    },
+    "cm_peek_email": {
+      "disabledAgain": true,
+      "empty": true,
+      "enabled": true,
+      "ignoredToday": true,
+      "ok": true,
+      "peek": {
+        "expanding": false,
+        "shown": true,
+        "stack": [
+          {
+            "boundTab": "DBD6A78F-DF91-46CC-BB5C-1F5C7CE784AB",
+            "content": 13,
+            "originalHostTab": "DBD6A78F-DF91-46CC-BB5C-1F5C7CE784AB",
+            "source": "13BCE166-FB95-4AAC-9E6E-F962567A459D"
+          }
+        ]
+      },
+      "urls": [
+        "https://mail.google.com:55002/mail/u/0/"
+      ]
+    },
+    "cm_peek_email_hosts": {
+      "favorite": true,
+      "hosts": {
+        "app.fastmail.com": true,
+        "app.hey.com": true,
+        "evil.mail.google.com": false,
+        "mail.google.com": true,
+        "mail.google.com.evil.invalid": false,
+        "mail.proton.me": true,
+        "mail.yahoo.com": true,
+        "outlook.live.com": true,
+        "outlook.office.com": true,
+        "outlook.office365.com": true,
+        "www.icloud.com": false,
+        "www.icloud.com/mail": true,
+        "www.icloud.com/mailish": false
+      },
+      "ok": true
+    },
+    "cm_peek_email_scope": {
+      "focusedSpaceURL": [
+        "https://mail.proton.me:55002/u/0/inbox"
+      ],
+      "ok": true,
+      "otherProfileIgnored": true,
+      "otherSpaceEnabled": true
+    },
+    "cm_peek_email_split": {
+      "after": [
+        {
+          "audible": false,
+          "canGoBack": false,
+          "canGoForward": false,
+          "crashed": false,
+          "createdAt": 1793943122.06827,
+          "favicon": false,
+          "faviconReportsCompleted": 0,
+          "faviconReportsRejected": 0,
+          "hasWebContent": true,
+          "id": "2EBD6FF1-5322-4B1F-A6AC-BE4D11841D31",
+          "lastActiveAt": 1793943122.2181978,
+          "loaded": true,
+          "loading": false,
+          "page": {
+            "audible": false,
+            "browser": 1,
+            "browserIndex": 0,
+            "browserPinned": true,
+            "canGoBack": false,
+            "chromeTabId": 1586912275,
+            "chromeWindowId": 1586912248,
+            "context": "Default",
+            "crash": 0,
+            "extension": "",
+            "favicon": false,
+            "fullscreen": false,
+            "hidden": false,
+            "hostTab": "2EBD6FF1-5322-4B1F-A6AC-BE4D11841D31",
+            "identifier": 16,
+            "kind": "tab",
+            "live": true,
+            "loading": false,
+            "muted": false,
+            "pageBackground": [
+              255,
+              255,
+              255,
+              255
+            ],
+            "popup": false,
+            "style": "chrome",
+            "title": "Local webmail fixture",
+            "url": "https://mail.google.com:55002/mail/u/0/",
+            "zoom": 0
+          },
+          "pinnedURL": "https://mail.google.com:55002/mail/u/0/",
+          "profile": "2326C6CC-662D-41B4-B668-62816EC05E2A",
+          "progress": 1,
+          "rowFaviconHash": "",
+          "rowFaviconSource": "placeholder",
+          "section": "pinned",
+          "selected": true,
+          "sleepPhase": "live",
+          "space": "1DAD3CAA-B360-4068-909B-7947BEE6FE33",
+          "title": "Local webmail fixture",
+          "unread": false,
+          "url": "https://mail.google.com:55002/mail/u/0/",
+          "visible": true
+        },
+        {
+          "audible": false,
+          "canGoBack": false,
+          "canGoForward": false,
+          "crashed": false,
+          "createdAt": 1793943122.044619,
+          "favicon": false,
+          "faviconReportsCompleted": 0,
+          "faviconReportsRejected": 0,
+          "hasWebContent": true,
+          "id": "2FFC217B-090B-4127-BCD5-4B1BD240470C",
+          "lastActiveAt": 1793943122.2182078,
+          "loaded": true,
+          "loading": false,
+          "page": {
+            "audible": false,
+            "browser": 1,
+            "browserIndex": 1,
+            "browserPinned": true,
+            "canGoBack": false,
+            "chromeTabId": 1586912274,
+            "chromeWindowId": 1586912248,
+            "context": "Default",
+            "crash": 0,
+            "extension": "",
+            "favicon": false,
+            "fullscreen": false,
+            "hidden": false,
+            "hostTab": "2FFC217B-090B-4127-BCD5-4B1BD240470C",
+            "identifier": 15,
+            "kind": "tab",
+            "live": true,
+            "loading": false,
+            "muted": false,
+            "pageBackground": [
+              255,
+              255,
+              255,
+              255
+            ],
+            "popup": false,
+            "style": "chrome",
+            "title": "Context target",
+            "url": "http://127.0.0.1:55001/target.html",
+            "zoom": 0
+          },
+          "pinnedURL": "http://127.0.0.1:55001/target.html",
+          "profile": "2326C6CC-662D-41B4-B668-62816EC05E2A",
+          "progress": 1,
+          "rowFaviconHash": "",
+          "rowFaviconSource": "placeholder",
+          "section": "pinned",
+          "selected": false,
+          "sleepPhase": "live",
+          "space": "1DAD3CAA-B360-4068-909B-7947BEE6FE33",
+          "title": "Context target",
+          "unread": false,
+          "url": "http://127.0.0.1:55001/target.html",
+          "visible": true
+        }
+      ],
+      "before": [],
+      "emptySpace": "99E495C3-3BC4-486E-8755-3E609378B91D",
+      "enabled": true,
+      "mailSpace": "1DAD3CAA-B360-4068-909B-7947BEE6FE33",
+      "ok": true,
+      "peek": {
+        "expanding": false,
+        "shown": true,
+        "stack": [
+          {
+            "boundTab": "C08D8DEB-FB93-43F7-A0B0-C9D66B0486FA",
+            "content": 17,
+            "originalHostTab": "C08D8DEB-FB93-43F7-A0B0-C9D66B0486FA",
+            "source": "2EBD6FF1-5322-4B1F-A6AC-BE4D11841D31"
+          }
+        ]
+      },
+      "split": "135A5B54-0885-44E6-8DA9-42F259FE9DCC",
+      "urls": [
+        "https://mail.google.com:55002/mail/u/0/"
+      ]
+    },
+    "cm_search": {
+      "ok": true,
+      "opened": {
+        "audible": false,
+        "canGoBack": false,
+        "canGoForward": false,
+        "crashed": false,
+        "createdAt": 1793943114.17324,
+        "favicon": false,
+        "faviconReportsCompleted": 0,
+        "faviconReportsRejected": 0,
+        "hasWebContent": true,
+        "id": "174CACDF-4C92-468F-9EEA-208A5D406304",
+        "lastActiveAt": 1793943114.188343,
+        "loaded": true,
+        "loading": false,
+        "page": {
+          "audible": false,
+          "browser": 1,
+          "browserIndex": 0,
+          "browserPinned": false,
+          "canGoBack": false,
+          "chromeTabId": 1586912263,
+          "chromeWindowId": 1586912248,
+          "context": "Default",
+          "crash": 0,
+          "extension": "",
+          "favicon": false,
+          "fullscreen": false,
+          "hidden": false,
+          "hostTab": "174CACDF-4C92-468F-9EEA-208A5D406304",
+          "identifier": 8,
+          "kind": "tab",
+          "live": true,
+          "loading": false,
+          "muted": false,
+          "pageBackground": [],
+          "popup": false,
+          "style": "chrome",
+          "title": "Context target",
+          "url": "http://127.0.0.1:55001/target.html?q=bonjour%20menu%20contextuel",
+          "zoom": 0
+        },
+        "pinnedURL": "",
+        "profile": "2326C6CC-662D-41B4-B668-62816EC05E2A",
+        "progress": 1,
+        "rowFaviconHash": "",
+        "rowFaviconSource": "placeholder",
+        "section": "today",
+        "selected": true,
+        "sleepPhase": "live",
+        "space": "E92535B8-54A5-445D-918A-080D550AAD88",
+        "title": "Context target",
+        "unread": false,
+        "url": "http://127.0.0.1:55001/target.html?q=bonjour%20menu%20contextuel",
+        "visible": true
+      },
+      "shown": [
+        "Look Up “bonjour menu contextuel”",
+        "-",
+        "Copy",
+        "Search Local Search for “bonjour menu contextuel”",
+        "Copy Link to Highlight",
+        "Print…",
+        "-",
+        "Inspect",
+        "-",
+        "Speech"
+      ]
+    },
+    "cm_search_truncation": {
+      "ok": true,
+      "opened": {
+        "audible": false,
+        "canGoBack": false,
+        "canGoForward": false,
+        "crashed": false,
+        "createdAt": 1793943114.734658,
+        "favicon": false,
+        "faviconReportsCompleted": 0,
+        "faviconReportsRejected": 0,
+        "hasWebContent": true,
+        "id": "1BBCCF2B-DC0A-4642-8F59-981DDD1C6914",
+        "lastActiveAt": 1793943114.758465,
+        "loaded": true,
+        "loading": false,
+        "page": {
+          "audible": false,
+          "browser": 1,
+          "browserIndex": 0,
+          "browserPinned": false,
+          "canGoBack": false,
+          "chromeTabId": 1586912268,
+          "chromeWindowId": 1586912248,
+          "context": "Default",
+          "crash": 0,
+          "extension": "",
+          "favicon": false,
+          "fullscreen": false,
+          "hidden": false,
+          "hostTab": "1BBCCF2B-DC0A-4642-8F59-981DDD1C6914",
+          "identifier": 11,
+          "kind": "tab",
+          "live": true,
+          "loading": false,
+          "muted": false,
+          "pageBackground": [],
+          "popup": false,
+          "style": "chrome",
+          "title": "Context target",
+          "url": "http://127.0.0.1:55001/target.html?q=xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx",
+          "zoom": 0
+        },
+        "pinnedURL": "",
+        "profile": "2326C6CC-662D-41B4-B668-62816EC05E2A",
+        "progress": 1,
+        "rowFaviconHash": "",
+        "rowFaviconSource": "placeholder",
+        "section": "today",
+        "selected": true,
+        "sleepPhase": "live",
+        "space": "E92535B8-54A5-445D-918A-080D550AAD88",
+        "title": "Context target",
+        "unread": false,
+        "url": "http://127.0.0.1:55001/target.html?q=xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx",
+        "visible": true
+      },
+      "shown": [
+        "Look Up “xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx”",
+        "-",
+        "Copy",
+        "Search Local Search for “xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx…”",
+        "Copy Link to Highlight",
+        "Print…",
+        "-",
+        "Inspect",
+        "-",
+        "Speech"
+      ]
+    },
+    "cm_selection_limit": {
+      "events": [
+        {
+          "commands": [
+            {
+              "checked": false,
+              "enabled": true,
+              "id": 50165,
+              "submenu": "",
+              "title": "Look Up “xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx…”"
+            },
+            {
+              "checked": false,
+              "enabled": true,
+              "id": 50150,
+              "submenu": "",
+              "title": "Copy"
+            },
+            {
+              "checked": false,
+              "enabled": false,
+              "id": 50158,
+              "submenu": "",
+              "title": "Copy Link to Highlight"
+            },
+            {
+              "checked": false,
+              "enabled": true,
+              "id": 35003,
+              "submenu": "",
+              "title": "Print…"
+            },
+            {
+              "checked": false,
+              "enabled": true,
+              "id": 50162,
+              "submenu": "",
+              "title": "Inspect"
+            },
+            {
+              "checked": false,
+              "enabled": true,
+              "id": 101,
+              "submenu": "Speech",
+              "title": "Start Speaking"
+            },
+            {
+              "checked": false,
+              "enabled": false,
+              "id": 102,
+              "submenu": "Speech",
+              "title": "Stop Speaking"
+            }
+          ],
+          "content": 1,
+          "incomingNodes": 11,
+          "items": [
+            "Look Up “xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx…”",
+            "",
+            "Copy",
+            "Copy Link to Highlight",
+            "Print…",
+            "",
+            "Inspect",
+            "",
+            "Speech"
+          ],
+          "link": "",
+          "open": [],
+          "openItems": [
+            "Look Up “xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx…”",
+            "Copy",
+            "Search Local Search for “xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx…”",
+            "Copy Link to Highlight",
+            "Print…",
+            "Inspect",
+            "Speech"
+          ],
+          "rows": [
+            {
+              "checked": false,
+              "enabled": true,
+              "key": "engine:50165",
+              "submenu": "",
+              "title": "Look Up “xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx…”"
+            },
+            {
+              "checked": false,
+              "enabled": true,
+              "key": "engine:50150",
+              "submenu": "",
+              "title": "Copy"
+            },
+            {
+              "checked": false,
+              "enabled": true,
+              "key": "selection-search",
+              "submenu": "",
+              "title": "Search Local Search for “xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx…”"
+            },
+            {
+              "checked": false,
+              "enabled": false,
+              "key": "engine:50158",
+              "submenu": "",
+              "title": "Copy Link to Highlight"
+            },
+            {
+              "checked": false,
+              "enabled": true,
+              "key": "engine:35003",
+              "submenu": "",
+              "title": "Print…"
+            },
+            {
+              "checked": false,
+              "enabled": true,
+              "key": "engine:50162",
+              "submenu": "",
+              "title": "Inspect"
+            },
+            {
+              "checked": false,
+              "enabled": true,
+              "key": "engine:101",
+              "submenu": "Speech",
+              "title": "Start Speaking"
+            },
+            {
+              "checked": false,
+              "enabled": false,
+              "key": "engine:102",
+              "submenu": "Speech",
+              "title": "Stop Speaking"
+            }
+          ],
+          "selectionBytes": 16384,
+          "shown": [
+            "Look Up “xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx…”",
+            "-",
+            "Copy",
+            "Search Local Search for “xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx…”",
+            "Copy Link to Highlight",
+            "Print…",
+            "-",
+            "Inspect",
+            "-",
+            "Speech"
+          ],
+          "tab": "13BCE166-FB95-4AAC-9E6E-F962567A459D",
+          "targets": 19,
+          "time": 1793943117.57092,
+          "type": "contextMenu"
+        },
+        {
+          "content": 1,
+          "reason": "Menu selection exceeds 16384 UTF-8 bytes.",
+          "tab": "13BCE166-FB95-4AAC-9E6E-F962567A459D",
+          "time": 1793943117.583712,
+          "type": "contextMenuRefused"
+        }
+      ],
+      "ok": true
+    },
+    "cm_split": {
+      "ok": true,
+      "panes": [
+        {
+          "audible": false,
+          "canGoBack": false,
+          "canGoForward": false,
+          "crashed": false,
+          "createdAt": 1793943101.277238,
+          "favicon": false,
+          "faviconReportsCompleted": 0,
+          "faviconReportsRejected": 0,
+          "hasWebContent": true,
+          "id": "13BCE166-FB95-4AAC-9E6E-F962567A459D",
+          "lastActiveAt": 1793943104.1108398,
+          "loaded": true,
+          "loading": false,
+          "page": {
+            "audible": false,
+            "browser": 1,
+            "browserIndex": 0,
+            "browserPinned": false,
+            "canGoBack": false,
+            "chromeTabId": 1586912249,
+            "chromeWindowId": 1586912248,
+            "context": "Default",
+            "crash": 0,
+            "extension": "",
+            "favicon": false,
+            "fullscreen": false,
+            "hidden": false,
+            "hostTab": "13BCE166-FB95-4AAC-9E6E-F962567A459D",
+            "identifier": 1,
+            "kind": "tab",
+            "live": true,
+            "loading": false,
+            "muted": false,
+            "pageBackground": [
+              255,
+              255,
+              255,
+              255
+            ],
+            "popup": false,
+            "style": "chrome",
+            "title": "Context menu fixture",
+            "url": "http://127.0.0.1:55001/index.html",
+            "zoom": 0
+          },
+          "pinnedURL": "",
+          "profile": "2326C6CC-662D-41B4-B668-62816EC05E2A",
+          "progress": 1,
+          "rowFaviconHash": "",
+          "rowFaviconSource": "placeholder",
+          "section": "today",
+          "selected": false,
+          "sleepPhase": "live",
+          "space": "E92535B8-54A5-445D-918A-080D550AAD88",
+          "title": "Context menu fixture",
+          "unread": false,
+          "url": "http://127.0.0.1:55001/index.html",
+          "visible": true
+        },
+        {
+          "audible": false,
+          "canGoBack": false,
+          "canGoForward": false,
+          "crashed": false,
+          "createdAt": 1793943104.108813,
+          "favicon": false,
+          "faviconReportsCompleted": 0,
+          "faviconReportsRejected": 0,
+          "hasWebContent": true,
+          "id": "FDB6FC64-BB90-49BE-8168-567B8ECDC9E8",
+          "lastActiveAt": 1793943104.138455,
+          "loaded": true,
+          "loading": true,
+          "page": {
+            "audible": false,
+            "browser": 1,
+            "browserIndex": 1,
+            "browserPinned": false,
+            "canGoBack": false,
+            "chromeTabId": 1586912252,
+            "chromeWindowId": 1586912248,
+            "context": "Default",
+            "crash": 0,
+            "extension": "",
+            "favicon": false,
+            "fullscreen": false,
+            "hidden": false,
+            "hostTab": "FDB6FC64-BB90-49BE-8168-567B8ECDC9E8",
+            "identifier": 3,
+            "kind": "tab",
+            "live": true,
+            "loading": true,
+            "muted": false,
+            "pageBackground": [],
+            "popup": false,
+            "style": "chrome",
+            "title": "",
+            "url": "",
+            "zoom": 0
+          },
+          "pinnedURL": "",
+          "profile": "2326C6CC-662D-41B4-B668-62816EC05E2A",
+          "progress": 0.1,
+          "rowFaviconHash": "",
+          "rowFaviconSource": "placeholder",
+          "section": "today",
+          "selected": true,
+          "sleepPhase": "live",
+          "space": "E92535B8-54A5-445D-918A-080D550AAD88",
+          "title": "",
+          "unread": false,
+          "url": "http://127.0.0.1:55001/target.html",
+          "visible": true
+        }
+      ],
+      "shown": [
+        "Open Link in New Tab",
+        "Open Link in Split View",
+        "Open Link in Peek",
+        "Open Link in Little Open",
+        "Open Link in New Window",
+        "-",
+        "Save Link As…",
+        "Copy Link Address",
+        "-",
+        "Copy",
+        "Search Local Search for “Fixture link”",
+        "Copy Link to Highlight",
+        "Print…",
+        "-",
+        "Inspect",
+        "-",
+        "Speech"
+      ],
+      "split": {
+        "focusedPaneID": "FDB6FC64-BB90-49BE-8168-567B8ECDC9E8",
+        "fractions": [],
+        "id": "EE85D473-0564-42E3-9B78-68E8326AD3AB",
+        "orientation": "horizontal",
+        "panes": [
+          {
+            "createdAt": 1793943101.277238,
+            "id": "13BCE166-FB95-4AAC-9E6E-F962567A459D",
+            "isMuted": false,
+            "isUnread": false,
+            "lastActiveAt": 1793943104.1108398,
+            "title": "Context menu fixture",
+            "url": "http://127.0.0.1:55001/index.html"
+          },
+          {
+            "createdAt": 1793943104.108813,
+            "id": "FDB6FC64-BB90-49BE-8168-567B8ECDC9E8",
+            "isMuted": false,
+            "isUnread": false,
+            "lastActiveAt": 1793943104.138455,
+            "openerID": "13BCE166-FB95-4AAC-9E6E-F962567A459D",
+            "title": "",
+            "url": "http://127.0.0.1:55001/target.html"
+          }
+        ]
+      },
+      "stages": {
+        "fullCapacityDisabled": true,
+        "initial": {
+          "focusedPaneID": "FDB6FC64-BB90-49BE-8168-567B8ECDC9E8",
+          "fractions": [],
+          "id": "EE85D473-0564-42E3-9B78-68E8326AD3AB",
+          "orientation": "horizontal",
+          "panes": [
+            {
+              "createdAt": 1793943101.277238,
+              "id": "13BCE166-FB95-4AAC-9E6E-F962567A459D",
+              "isMuted": false,
+              "isUnread": false,
+              "lastActiveAt": 1793943104.1108398,
+              "title": "Context menu fixture",
+              "url": "http://127.0.0.1:55001/index.html"
+            },
+            {
+              "createdAt": 1793943104.108813,
+              "id": "FDB6FC64-BB90-49BE-8168-567B8ECDC9E8",
+              "isMuted": false,
+              "isUnread": false,
+              "lastActiveAt": 1793943104.138455,
+              "openerID": "13BCE166-FB95-4AAC-9E6E-F962567A459D",
+              "title": "",
+              "url": "http://127.0.0.1:55001/target.html"
+            }
+          ]
+        },
+        "third": {
+          "focusedPaneID": "3827314D-42F3-4E1D-B272-850662911342",
+          "fractions": [
+            0.3333333333333333,
+            0.3333333333333333,
+            0.3333333333333333
+          ],
+          "id": "EE85D473-0564-42E3-9B78-68E8326AD3AB",
+          "orientation": "horizontal",
+          "panes": [
+            {
+              "createdAt": 1793943101.277238,
+              "id": "13BCE166-FB95-4AAC-9E6E-F962567A459D",
+              "isMuted": false,
+              "isUnread": false,
+              "lastActiveAt": 1793943104.4010038,
+              "title": "Context menu fixture",
+              "url": "http://127.0.0.1:55001/index.html"
+            },
+            {
+              "createdAt": 1793943104.401548,
+              "id": "3827314D-42F3-4E1D-B272-850662911342",
+              "isMuted": false,
+              "isUnread": true,
+              "lastActiveAt": 1793943104.4193292,
+              "openerID": "13BCE166-FB95-4AAC-9E6E-F962567A459D",
+              "title": "",
+              "url": "http://127.0.0.1:55001/target.html"
+            },
+            {
+              "createdAt": 1793943104.108813,
+              "id": "FDB6FC64-BB90-49BE-8168-567B8ECDC9E8",
+              "isMuted": false,
+              "isUnread": false,
+              "lastActiveAt": 1793943104.4010038,
+              "openerID": "13BCE166-FB95-4AAC-9E6E-F962567A459D",
+              "title": "Context target",
+              "url": "http://127.0.0.1:55001/target.html"
+            }
+          ]
+        },
+        "vertical": {
+          "focusedPaneID": "FDB6FC64-BB90-49BE-8168-567B8ECDC9E8",
+          "fractions": [],
+          "id": "EE85D473-0564-42E3-9B78-68E8326AD3AB",
+          "orientation": "vertical",
+          "panes": [
+            {
+              "createdAt": 1793943101.277238,
+              "id": "13BCE166-FB95-4AAC-9E6E-F962567A459D",
+              "isMuted": false,
+              "isUnread": false,
+              "lastActiveAt": 1793943104.1108398,
+              "title": "Context menu fixture",
+              "url": "http://127.0.0.1:55001/index.html"
+            },
+            {
+              "createdAt": 1793943104.108813,
+              "id": "FDB6FC64-BB90-49BE-8168-567B8ECDC9E8",
+              "isMuted": false,
+              "isUnread": false,
+              "lastActiveAt": 1793943104.138455,
+              "openerID": "13BCE166-FB95-4AAC-9E6E-F962567A459D",
+              "title": "",
+              "url": "http://127.0.0.1:55001/target.html"
+            }
+          ]
+        }
+      }
+    },
+    "cm_title_boundary": {
+      "engineExtensionTitleBytes": [
+        77,
+        77
+      ],
+      "events": [
+        {
+          "reason": null,
+          "requestedBytes": 1024,
+          "shownBytes": 1024,
+          "type": "contextMenu"
+        },
+        {
+          "reason": "Final menu exceeds 168 nodes, 8 levels or a 1024-byte title.",
+          "requestedBytes": 1025,
+          "shownBytes": null,
+          "type": "contextMenuRefused"
+        }
+      ],
+      "ok": true
+    },
+    "cm_translate": {
+      "ok": true,
+      "shown": [
+        "Back",
+        "Forward",
+        "Reload",
+        "-",
+        "Save As…",
+        "Print…",
+        "-",
+        "Translate to English",
+        "Capture",
+        "Capture Full Page",
+        "-",
+        "View Page Source",
+        "Inspect"
+      ],
+      "state": {
+        "backend": "fixture",
+        "batches": 1,
+        "button": {
+          "frame": [
+            8,
+            88,
+            212,
+            28
+          ],
+          "shown": true,
+          "title": "Translated"
+        },
+        "document": 2,
+        "fallbackUnits": 0,
+        "host": "127.0.0.1",
+        "loopRunning": true,
+        "neverTranslateHosts": [],
+        "popover": {
+          "presented": false
+        },
+        "probedDocument": 2,
+        "pulls": 1,
+        "sessions": 2,
+        "source": "fr",
+        "state": "translated",
+        "sticky": "127.0.0.1",
+        "target": "en",
+        "targetIdentifier": "en-CA",
+        "toasts": [
+          "Translated to English"
+        ],
+        "undoTitle": "Translate"
+      }
+    },
+    "cm_url_limit": {
+      "events": [
+        {
+          "linkBytes": 65536,
+          "reason": null,
+          "type": "contextMenu"
+        },
+        {
+          "linkBytes": 0,
+          "reason": "Menu URL exceeds 65536 UTF-8 bytes.",
+          "type": "contextMenuRefused"
+        }
+      ],
+      "ok": true
+    }
+  },
+  "engine": {
+    "distributionCodeSHA256": "7979934c0d84f4d9fedb3859826d0c7c65919834fc904ec2aee00a0b4e4dd8f2",
+    "distributionSHA256": "7b49090502568f8189aa0e94f7cf23344beec5bed537136eff5f7fce573ad35a",
+    "distributionUUID": "4C4C446F-5555-3144-A1AB-0A55260E4EBE",
+    "embeddedCodeSHA256": "7979934c0d84f4d9fedb3859826d0c7c65919834fc904ec2aee00a0b4e4dd8f2",
+    "embeddedSHA256": "ec8cdb8039674748940441956a1ae529423ae15c05ac972a806a9afb12a657c0",
+    "embeddedUUID": "4C4C446F-5555-3144-A1AB-0A55260E4EBE",
+    "requiredSHA256": "7b49090502568f8189aa0e94f7cf23344beec5bed537136eff5f7fce573ad35a",
+    "source": "fork",
+    "stamp": "fork $HOME/Developer/open-engine-s8-main/chromium_git/chromium/src/cef/binary_distrib/cef_binary_156.0.14+g4fa4ab5+chromium-156.0.8078.48_macosarm64_minimal 1793940850"
+  },
+  "interrupted_attempts": [],
+  "pathRedactions": [
+    "$WORKTREE",
+    "$HOME",
+    "$TMPDIR"
+  ],
+  "source": {
+    "clean": true,
+    "diffSHA256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "head": "a7e73498c3e68336217d8db40fbebe6ce6b89773"
+  },
+  "started": "2026-11-05 22:31:39",
+  "style": "chrome"
+}
