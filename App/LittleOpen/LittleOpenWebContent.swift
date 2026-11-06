@@ -16,6 +16,8 @@ final class LittleOpenWebContent: NSObject, LittleOpenWebContentProviding, WebCo
   let tabID = ItemID()
   private let root = LittleOpenSurfaceView(frame: .zero)
   private var creationScheduled = false
+  private var firstFrameLink: CADisplayLink?
+  private var frameSubmittedAt: CFTimeInterval = 0
   private var pendingURL: URL?
   private var closed = false
   #if OPEN_AUTOMATION
@@ -77,33 +79,35 @@ final class LittleOpenWebContent: NSObject, LittleOpenWebContentProviding, WebCo
     #endif
   }
 
-  /// The existing onChange feed runs after orderFront and Profile replacement.
-  /// Commit the first window frame, then create on the next main run-loop turn.
-  /// The weak completion and closed guard cancel creation if the window closes.
+  /// Confirm the ordered window's flushed transaction with the same native
+  /// refresh boundary as the App's first-window observer. Creation then runs
+  /// on the next main run-loop turn, without a timer or a fixed delay.
   func windowOrderedFront() {
     guard !closed, host == nil, !creationScheduled,
-      let window = surfaceWindow, window.isVisible else { return }
+      let window = surfaceWindow, window.isVisible, let view = window.contentView else { return }
     creationScheduled = true
-    CATransaction.begin()
-    CATransaction.setCompletionBlock { [weak self] in
-      // A main-queue async block can drain within the current turn.
-      RunLoop.main.perform(inModes: [.default, .eventTracking, .modalPanel]) { [weak self] in
-        MainActor.assumeIsolated {
-          guard let self, !self.closed else { return }
-          self.firstFrameRead = ["browserID": self.browser.map { $0.identifier } as Any? ?? NSNull(),
-            "content": self.host?.content.identifier ?? 0, "visible": self.surfaceWindow?.isVisible ?? false,
-            "uptime": ProcessInfo.processInfo.systemUptime]
-          #if OPEN_AUTOMATION
-          let before = self.beforeCreationForAutomation; self.beforeCreationForAutomation = nil
-          if before?(self) == true { return }
-          #endif
-          self.createBrowser()
-        }
+    window.displayIfNeeded()
+    CATransaction.flush()
+    frameSubmittedAt = CACurrentMediaTime()
+    firstFrameLink = view.displayLink(target: self, selector: #selector(firstFrameCommitted(_:)))
+    firstFrameLink?.add(to: .main, forMode: .common)
+  }
+  @objc private func firstFrameCommitted(_ link: CADisplayLink) {
+    guard !closed, link.timestamp >= frameSubmittedAt else { return }
+    firstFrameLink?.invalidate(); firstFrameLink = nil
+    firstFrameRead = ["browserID": browser.map { $0.identifier } as Any? ?? NSNull(),
+      "content": host?.content.identifier ?? 0, "visible": surfaceWindow?.isVisible ?? false,
+      "uptime": ProcessInfo.processInfo.systemUptime]
+    RunLoop.main.perform(inModes: [.default, .eventTracking, .modalPanel]) { [weak self] in
+      MainActor.assumeIsolated {
+        guard let self, !self.closed else { return }
+        #if OPEN_AUTOMATION
+        let before = self.beforeCreationForAutomation; self.beforeCreationForAutomation = nil
+        if before?(self) == true { return }
+        #endif
+        self.createBrowser()
       }
     }
-    window.displayIfNeeded()
-    CATransaction.commit()
-    CATransaction.flush()
   }
   private func createBrowser() {
     guard !closed, host == nil, let context = factory.context(for: profileID) else { return }
@@ -172,6 +176,7 @@ final class LittleOpenWebContent: NSObject, LittleOpenWebContentProviding, WebCo
   func close() {
     guard !closed else { return }; closed = true
     creationScheduled = false
+    firstFrameLink?.invalidate(); firstFrameLink = nil
     #if OPEN_AUTOMATION
     beforeCreationForAutomation = nil; onSubmissionForAutomation = nil
     #endif
