@@ -357,6 +357,9 @@ the oldest half, not the whole cache, when full.
 
 ### 4.4 Textures (`ThemeTexture.swift`, replaces direct `Grain` use)
 
+The recipes below are the original design. §17.3 supersedes their darkness
+and opacity law; §17.5 replaces the sand/denim art and gates its spatial fit.
+
 ```swift
 public enum ThemeTexture {
     public static func period(_ t: SpaceStyleTexture) -> CGFloat   // grain 100, sand 96, denim 300, tweed 128 pt
@@ -1239,6 +1242,7 @@ on both pages; the same editor in macOS Light.
 | 2 R3 | 2026-10-26 | Main `c768c38` included; release build and editor checks 48/48. Legacy field and exact-grain paths restored: all 13 sidebar capture tables byte-identical to main, zero metric drift. F0139 six-region max ΔE00 0.84. |
 | 3 R3 | 2026-10-26 | Editor checks 96/96, including one-color complementary Add/undo, grey knob overlap, and forced appearance. Historical peak-method fit 0.50850 was refused; review R3 below invalidates that measurement and sets 0.50 with dot-masked, hover-matched sampling. |
 | 4 R3 | 2026-10-26 | Full code head `cbac12b`: plain verify-all through heavy.sh, 20 PASS, import-arc not selected without per-run opt-in. Editor 151/151; sidebar 429/429; 13 capture tables byte-identical and CU5 2/2. F0137/F0138 and session-2 slider/page-two/preview compares PASS. Final fit check confirms zero changed pixels outside glyph host frames, but Light 0159 crosses ΔE00 1.75→4.36; candidate refused as required. Only Open render refreshes and this log follow the code gate; Steps 5–8 remain deferred. |
+| 9 blend | 2026-11-06 | Section 4 child B: display-space underlay/fill composition and own-art denim/sand ported onto main `3ab71a04`. Editor 186/186; session2-pad 41/41 offscreen and real-window; input boundaries 26/26. All new blend and spatial gates have source-break proofs. Focused verifier 6/6 PASS: 3 frozen legacy PNGs unchanged, 13/13 sidebar tables byte-identical, CU5 2/2, sidebar-render PASS. Fresh M5 color/cost and proposed tolerance/art choices are in §17.5; final-head full verifier and App regression results are in the PR body. |
 | 5 | | |
 | 6 | | |
 | 7 | 2026-11-06 | New Space sidebar page and C1 implemented. All five widths render in both appearances; Name-card 44→45 pt negative proof fails all ten geometry rows, restored C1 passes. Tab moves preserve Pinned/Today (lead decision, changes main’s Pinned-only helper); folder children use Today and the empty folder is removed atomically. Hidden rename uses Rename/Cancel; Profile picks use ChangeProfileRequest. Final App and regression receipts are recorded in the PR body. |
@@ -1327,7 +1331,8 @@ pixel       = a · key + (1 − a) · underlay                   gamma-encoded D
   capture is macOS Dark with `translucencyStyle: light`. In Light, Arc's
   other branch is a white wash at `min(a, 0.5)`. It is not captured over a
   theme, so in Light keep today's underlays without a wash (**guess**).
-- Composite editor styles in gamma-encoded Display P3: convert the key to P3
+- Historical Step 9 fixed-space implementation (superseded by §17.5):
+  composite editor styles in gamma-encoded Display P3: convert the key to P3
   (it already is, from `ThemeColorMath`), mix with the gray underlay, then
   convert the result to extended sRGB for the field image. The pad-center
   frame fits at ΔE00 1.23 in P3 and 2.55 in sRGB (**fit**). For gradients,
@@ -1367,7 +1372,8 @@ black tile (Open's own pattern) at layer opacity
   a cloudy 4–8 px pattern. Review r1 corrects the earlier “soft mottle”
   wording. Spatial gates compare box-2/4/8 sd ratios within ±0.1 and
   column/row/diagonal mean L* deviations within ±0.15 for grain and tweed;
-  denim and sand print INFO pending their separate own-art redraw.
+  denim and sand become gates with the own-art redraw in §17.5. Lag-1
+  H/V/D1/D2 correlation is also gated within ±0.15 for all four textures.
 - Monochrome: no per-channel tint. Arc's darkening differs by ≤ 0.001
   between channels. The F0139 per-channel grain note stays open, because
   this session shows none.
@@ -1439,11 +1445,155 @@ Implementation notes (Step 9):
   of six regions). The new encoded-P3 fill and calibrated grain replace the
   prior sRGB-clamped fit. This is the §17.3 report-change branch; it is not
   described as preserving the old 0.84 fit or as changing the legacy tables.
+  The display-space follow-up in §17.5 replaces this fixed-space blend.
 - The private compare input is bounded to 512 root entries, 64 MiB per PNG,
   4096×4096 pixels, 4096 chunks, and a 128 MiB decoded source. The synthetic
   CLI boundary driver is `Fixtures/space-editor-step9/check-inputs.py` in
   OpenKit. It includes the accepted limits, one-over refusals, and trailing
   data/unknown-option refusals. Capture pixels remain local and uncommitted.
+
+### 17.5 Display-space blend and own-art textures (2026-11-06)
+
+Editor themes use an opaque gray underlay plus an unblended fill. A single
+color uses a P3 `backgroundColor` at `a(i)`. A gradient uses a 64×64 P3 image
+premultiplied by each pixel's coverage. CoreAnimation blends the layers in
+the destination's encoded color space. `ThemeLayer.allowsGroupOpacity` keeps
+Space cross-fades as whole opaque themes. Legacy imports, mapped stops, and
+the default theme retain `ThemeField.makeImage` and their exact grain path.
+
+The underlay is the documented Section 5 hook: a later window-material
+change belongs below the fill and inside the same opacity group. This change
+does no window-chrome work. No timer, recurring display link, or idle task
+is added. Existing one-shot field invalidation remains in place.
+
+API: `ThemeField.composition(...)`, `Evaluator.fill(u:v:)`, and
+`ThemeBackgroundView.composesInDisplaySpace` (default true; false is the
+fixed-P3 diagnostic). `OffscreenRenderer.render(_:scale:colorSpace:)` takes
+a destination profile. Its default stays sRGB. The real-window renderer
+creates and closes its own borderless window. It never sends desktop input.
+
+Why (**strong guess**, supported by the new render measurements): Arc uses
+opacity layers, so its blend follows the display's encoded space. Fixed P3
+only gives the same result on a P3 destination. The capture's embedded
+profile provides the offscreen destination; the main display provides the
+real-window destination. The measurements below are from the current M5,
+not the old checkpoint's M5/M1 receipts. M1 was not used for this task.
+
+Fresh M5 measurements on main `3ab71a04` and this branch follow. The final
+verification table is in the PR body. Capture pixels and raw comparison
+artifacts stay in `.re/s4b/`. The float comparison reads each image in its
+own embedded profile, averages encoded components over the sidebar ROI
+(x 30–200, y 820–1020), then converts that mean to extended sRGB for ΔE00.
+F0139 uses the six background-only `theme-window` regions. Its normal gate
+still uses the existing 8-bit sRGB comparator and the unchanged ≤2 limit.
+
+| M5 renderer and blend | F0092 | F0093 | F0095 | F0098 i=0 | F0100 | F0102 | F0065 | F0139 |
+|---|---|---|---|---|---|---|---|---|
+| Real window, fixed P3 | 0.793 | 0.169 | 0.220 | 0.768 | 0.455 | 0.282 | 0.528 | 1.868 |
+| Real window, display space | 0.458 | 0.298 | 0.419 | 0.864 | 0.448 | 0.292 | 0.411 | 1.325 |
+| Offscreen in capture profile, fixed P3 | 0.813 | 0.233 | 0.220 | 0.763 | 0.455 | 0.282 | 0.469 | 1.856 |
+| Offscreen in capture profile, display space | 0.458 | 0.298 | 0.419 | 0.864 | 0.448 | 0.292 | 0.411 | 1.321 |
+
+The seven flat display-space windows have 99.72–99.77% identical pixels
+between offscreen and on-screen. Their sidebar ROIs match exactly. The
+fixed-P3 sRGB F0139 PNG is byte-identical to the saved current-main binary's
+PNG. The existing F0139 gate tool measures main/default sRGB at **1.89**;
+fixed P3 rendered in the capture profile is **1.82**; display-space is
+**1.24** (the real window gives fixed/display **1.83/1.24**). Both
+diagnostic blends keep the unchanged ≤2 threshold.
+
+`bench-blend --ticks 240` ran under `/tmp/open-m5-quiet.lock`.
+Load averages were **24.26 / 27.02 / 21.64** before and after the run.
+These are shared-machine measurements under the required lock, not a claim
+that the host was idle. Instructions are process-retired counts for the
+main-thread harness; CPU time comes from `CLOCK_THREAD_CPUTIME_ID`.
+
+| Fill | Blend | Instructions p50 / p95 | Thread CPU p50 / p95 ms |
+|---|---|---|---|
+| 1 color | fixed P3 | 1,443,974 / 1,470,579 | 0.075 / 0.094 |
+| 1 color | display space | 822,018 / 848,406 | 0.046 / 0.063 |
+| 3 colors | fixed P3 | 9,095,419 / 9,135,339 | 0.450 / 0.498 |
+| 3 colors | display space | 5,437,222 / 5,467,685 | 0.254 / 0.281 |
+
+Instruction p95 falls 42.3% / 40.1%; thread CPU p95 falls 33.0% / 43.6%.
+All four idle receipts show zero field rebuilds and zero tile generations
+over 0.25 s. The blend adds no callbacks or recurring work at rest. A theme
+change adds one full-window compositor layer (the underlay); this bench
+measures shell CPU work, not GPU power. Receipts: `.re/s4b/bench.log`,
+`blend-table.md`, `window-pixels.json`, and `F0139-*.json`.
+
+Own art (choices for the lead): sand is dense wrapped white noise, softened
+by a Gaussian with sigma 0.47 pt. Denim combines a fine diagonal carrier
+(0.40, −0.44 cycles/pt), vertical warp every 2.5 pt, a 57-cycle column beat
+per tile, smooth random thread shade every 30 pt, and fine noise. This
+retains the draft's art parameters because the new renders meet the measured
+spatial targets. It uses no copied, traced, or sampled capture pixels.
+Grain and tweed retain their tile bytes. Periods stay 100/96/300/128 pt
+for grain/sand/denim/tweed. The bounded cache builds once per texture and
+scale; noise affects layer opacity only, so there is no per-frame tile work.
+
+Proposed tolerances (lead approval pending): maximum absolute error across
+box-2/4/8 sd ratios ≤0.10, column/row/diagonal mean L* sd ≤0.15, and lag-1
+H/V/D1/D2 correlation ≤0.15. The first two extend the existing grain/tweed
+limits. The correlation limit admits independent procedural art and raster
+quantization while rejecting the old sand's directional lag and old denim's
+strong diagonal. No existing tolerance is widened. The table reports the
+actual capture values rather than replacing the follow-up's older numbers:
+this ROI gives denim diagonal sd 0.097 (the older note says 0.117).
+
+| Metric | Arc capture | Open before | Open after | Limit |
+|---|---|---|---|---|
+| Denim column/row/diagonal mean L* sd | 0.465/0.095/0.097 | 0.035/0.042/1.213 | 0.477/0.056/0.084 | max error 0.15 |
+| Denim box-2/4/8 sd ratios | 0.349/0.222/0.123 | 0.290/0.120/0.069 | 0.329/0.212/0.134 | max error 0.10 |
+| Denim lag-1 H/V/D1/D2 | −0.550/−0.395/0.580/0.306 | −0.455/−0.457/0.964/−0.457 | −0.571/−0.417/0.553/0.281 | max error 0.15 |
+| Sand column/row/diagonal mean L* sd | 0.187/0.193/0.151 | 0.154/0.209/0.146 | 0.187/0.192/0.157 | max error 0.15 |
+| Sand box-2/4/8 sd ratios | 0.595/0.298/0.164 | 0.554/0.290/0.164 | 0.606/0.327/0.180 | max error 0.10 |
+| Sand lag-1 H/V/D1/D2 | 0.194/0.198/−0.019/−0.005 | 0.329/−0.104/−0.058/−0.045 | 0.209/0.204/0.047/0.021 | max error 0.15 |
+
+New render gates have unique IDs `DB1a`–`DB1c` (BT.2020 destination),
+`DB2a`–`DB2c` (P3 law), `DB3` (legacy exclusion), and `DB4` (whole-theme
+cross-fade). The texture comparison now gates scale, direction, and
+correlation for all four textures. The boundary driver also exercises the
+new diagnostic options; `--color-space-of` shares the bounded PNG parser.
+
+Negative proofs (each source mutation was built and exercised through the
+real CLI, then restored):
+
+| Source break | New gate failures |
+|---|---|
+| Restore fixed-P3 default | DB1a olive blue 66 vs 68.0; DB1b green red 130 vs 134.2 |
+| Set fill layer opacity to 0.5 | DB1a/b/c and DB2a/b/c all FAIL |
+| Allow composition for legacy stops | DB3: 127/142/196 vs retained 122.4/140.9/194.7 |
+| Disable group opacity | DB4: 130/123/154 vs whole-theme mean 125.5/115.0/136.0 |
+| Restore unchanged main art | sand correlation error 0.300; denim scale/direction/correlation 0.103/1.114/0.768 |
+| Replace all four patterns with broad vertical bands | all 12 scale/direction/correlation rows FAIL; sand errors 0.666/1.327/0.976, denim 0.734/0.791/1.502; grain/tweed correlation 0.959/0.788 |
+
+Restoration is guarded by `finally`. The unmodified source is rebuilt after
+the proof run. Receipts: `.re/s4b/breaks/{results.json,*.log}`.
+
+Open-only before/after renders of all four textures are in
+[`Fixtures/space-editor-blend-textures`](../../Packages/OpenKit/Fixtures/space-editor-blend-textures/README.md).
+They are new review evidence. No existing PNG baseline is regenerated.
+
+Reproduction (all captures are local and read-only):
+
+```sh
+BIN=Packages/OpenKit/.build/release/space-editor-render
+$BIN compare --spec session2-pad --capture-root "$SESSION17" --out .re/blend/offscreen
+/usr/bin/lockf -k /tmp/open-onscreen-e2e.lock "$BIN" compare --spec session2-pad --capture-root "$SESSION17" --out .re/blend/onscreen --renderer onscreen
+$BIN window --synthetic --style "$STYLE" --width 500 --color-space-of "$F0139" --out .re/blend/F0139.png
+$BIN compare --spec theme-window --arc "$F0139" --ours .re/blend/F0139.png --out .re/blend/F0139
+/usr/bin/lockf -k /tmp/open-m5-quiet.lock "$BIN" bench-blend --ticks 240
+```
+
+Add `--blend fixed-p3` to the pad comparison or `--fixed-p3-blend` to
+`window` for the retained main-path comparison. `window --onscreen` uses
+the display instead of `--color-space-of`. Honor screen priority before
+each on-screen command. Every timing receipt includes `uptime`.
+
+Open items: the light-scheme white wash and inactive underlay remain guesses
+(§17.2). Section 5 owns the later material. The lead owns approval of the
+new art and spatial tolerances.
 
 ## Appendix — Lead decisions (2026-10-25)
 
