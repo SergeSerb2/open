@@ -28,7 +28,7 @@ public final class SpaceCreationController {
     public private(set) var isFinished = false
     public var onFinish: (@MainActor (Space?) -> Void)?
     public var onDraftStyle: (@MainActor (SpaceThemeStyle) -> Void)?
-    /// The window owns the picker. Until the picker lands this seam is inert.
+    /// The window owns the shared picker; picks edit only this local draft.
     public var onPickIcon: (@MainActor (SpaceIcon?, CGRect, @escaping @MainActor (SpaceIcon?) -> Void) -> Void)?
     private let model: BrowserModel
     private let windowID: WindowID

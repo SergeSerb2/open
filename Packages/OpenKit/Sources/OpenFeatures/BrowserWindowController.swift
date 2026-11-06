@@ -1299,7 +1299,6 @@ extension BrowserWindowController {
         let creation = SpaceCreationController(model: model, windowID: windowID, options: options)
         creation.creationView.systemAppearance = context.systemAppearance
         creation.onPickIcon = { [weak self] icon, rect, pick in
-            // TODO(Section 4 child C): wire IconPickerController after it merges.
             self?.onSpaceCreationIcon?(icon, rect, pick)
         }
         creation.onDraftStyle = { [weak self] style in self?.sidebar.previewSpaceCreation(style) }

@@ -3974,7 +3974,10 @@ def page_commands_checks(factory, results, tmp):
 
 def sidebar_checks(factory, results, tmp):
     app = factory(urls=(), fresh=True)
+    confirm_key = 'open.profiles.confirmInterProfileMove'
+    saved = {confirm_key: app.call('defaults', key=confirm_key)}
     try:
+        app.call('defaults', key=confirm_key, value=True)
         results["empty"] = {"ok": app.call("tabs") == [] and app.call("window-state")["shownPages"] == []}
         a = new_tab(app, fixture("Sidebar A"))
         b = app.call("open", url=fixture("Sidebar B"), background=True)["id"]
@@ -4049,6 +4052,9 @@ def sidebar_checks(factory, results, tmp):
         app.call("select", tab=e)
         previous = app.page(e)["identifier"]
         changed = app.call("space-profile", space=s2, profile="Work New")
+        warning = app.call('alert')
+        results['profile_change_warning'] = {'ok': 'Change Profile?' in warning['texts'], 'alert': warning}
+        app.call('alert', button='Change Profile')
         selected_auto_created = app.tab(e)["loaded"]
         live_page = check_page(app, e, "Sidebar E")
         reset = app.call("tab-state", tab=background)
@@ -4090,6 +4096,7 @@ def sidebar_checks(factory, results, tmp):
             and app.call("host-counts")["retained"] <= 9, "retained_before_wake": retained}
         results["window_png"] = {"ok": True, "file": shot(app, "sidebar-window.png")}
     finally:
+        _restore_defaults(app, saved)
         app.quit()
     static_window_comparison(factory, results, tmp, "sidebar")
 
@@ -9973,6 +9980,16 @@ def space_editor_creation_checks(factory, results, tmp):
         require('creation_submit_finishes_' + str(len(results)),
                 wait_until(lambda: not state()['open'], timeout=5), state=state())
     def undo(): return key('z', ['cmd'])
+    def pick_emoji():
+        app.call('editor-act', action='click', control='icon')
+        require('A5_draft_icon_picker_opens', bool(wait_until(lambda: app.call('editor-state').get('count', 0) > 0, timeout=5)))
+        app.call('editor-act', action='key', key='grinning face')
+        require('A5_draft_icon_search', bool(wait_until(lambda: app.call('editor-state').get('search') == 'grinning face'
+                and app.call('editor-state')['count'] < 20, timeout=3)))
+        app.call('editor-act', action='key', key='down')
+        app.call('editor-act', action='key', key='return')
+        require('A5_draft_icon_pick', bool(wait_until(lambda: not app.call('editor-state')['open'], timeout=3))
+                and state()['icon'] == {'type': 'emoji', 'value': '😀'})
     def tree(): return app.call('sidebar-tree')
     def shape(value):
         if isinstance(value, dict): return {k: shape(v) for k, v in value.items() if k != 'loaded'}
@@ -9996,6 +10013,13 @@ def space_editor_creation_checks(factory, results, tmp):
         app.call('menu-perform', id='new-space')
         require('A5_form_focused_default_profile_no_theme', state()['open'] and state()['nameFocused']
                 and state()['profile'] == previous['profile'] and state()['style'] is None, state=state())
+        icon_generation = state()['modelUndoGeneration']
+        pick_emoji()
+        require('A5_draft_icon_has_no_model_write', spaces() == before and state()['modelUndoGeneration'] == icon_generation)
+        app.call('editor-open', kind='create'); undo()
+        require('A5_draft_icon_native_undo', state()['icon'] is None and spaces() == before)
+        key('z', ['cmd', 'shift'])
+        require('A5_draft_icon_native_redo', state()['icon'] == {'type': 'emoji', 'value': '😀'} and spaces() == before)
         app.call('type', text='Created Space')
         app.call('command', id='new-space')
         require('A5_second_entry_keeps_draft', state()['name'] == 'Created Space' and spaces() == before)
@@ -10030,12 +10054,17 @@ def space_editor_creation_checks(factory, results, tmp):
         finish(); created = focused()
         require('A5_return_creates_at_end_with_profile', created['title'] == 'Created Space' and created['profile'] == previous['profile']
                 and len(spaces()) == len(before) + 1 and spaces()[-1]['id'] == created['id']
-                and app.call('theme-get')['style'] == draft, spaces=spaces())
+                and app.call('theme-get')['style'] == draft and created['icon'] == {'type': 'emoji', 'value': '😀'}, spaces=spaces())
         undo()
         require('A5_create_one_undo_restores_previous_focus', spaces() == before and focused()['id'] == source, spaces=spaces())
         app.call('split', op='plus', item='New Space…')
         require('A5_plus_menu_opens_form', state()['open'] and state()['nameFocused'])
         key('escape'); require('A5_plus_cancel_no_change', spaces() == before)
+        cancel_icon_generation = state()['modelUndoGeneration']
+        app.call('editor-open', kind='create'); pick_emoji()
+        app.call('editor-open', kind='create'); key('escape')
+        require('A5_draft_icon_escape_no_space_or_model_step', spaces() == before and not state()['open']
+                and state()['modelUndoGeneration'] == cancel_icon_generation)
         # Escape discards the theme stack and text, and never registers model undo.
         cancel_generation = state()['modelUndoGeneration']
         app.call('editor-open', kind='create')

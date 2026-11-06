@@ -1579,7 +1579,7 @@
       return String(arr.dropFirst().dropLast())
     }
 
-    private func describeIcon(_ icon: SpaceIcon?) -> Any {
+    func describeIcon(_ icon: SpaceIcon?) -> Any {
       guard let icon else { return NSNull() }
       switch icon {
       case .emoji(let value): return ["type": "emoji", "value": value]

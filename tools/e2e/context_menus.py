@@ -152,9 +152,10 @@ def context_menu_checks(factory, results, tmp, h):
 
     try:
         for key in ('open.translate.neverTranslateHosts', 'open.translate.enabled', 'open.previews.pinned',
-                    'open.links.littleOpenHotkeyEnabled'):
+                    'open.links.littleOpenHotkeyEnabled', 'open.profiles.confirmInterProfileMove'):
             saved[key] = app.call('defaults', key=key)
             app.call('defaults', key=key, value=None)
+        app.call('defaults', key='open.profiles.confirmInterProfileMove', value=True)
         app.call('window-frame', frame=[80, 60, 1360, 1000])
         focus()
         app.call('settings-custom-engine', template=origin + '/target.html?q=%s')
@@ -562,6 +563,7 @@ def context_menu_checks(factory, results, tmp, h):
             urls = wait(lambda: [p['url'] for p in app.call('pages') if p['identifier'] == content and p['url'].startswith('https://')], timeout=5) or []
             app.call('peek-close')
             app.call('space-profile', space=second, profile='Unrelated')
+            app.call('alert', button='Change Profile')
             app.call('pin', tab=near); app.call('close', tab=near)
             unrelated = not row_enabled('peek-email')
             return {'ok': from_other and urls == [webmail('mail.proton.me', '/u/0/inbox')] and unrelated,

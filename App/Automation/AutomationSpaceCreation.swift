@@ -22,6 +22,7 @@ extension AutomationController {
       let form = creation.creationView
       let style = try creation.draftStyle.map { try JSONSerialization.jsonObject(with: JSONEncoder().encode($0)) } ?? NSNull()
       return ["open": true, "modelUndoGeneration": app.model.undoGeneration, "name": form.nameField.stringValue, "style": style,
+        "icon": describeIcon(creation.draftIcon),
         "profile": creation.profilePicker.selectedProfileID?.description ?? "", "creatingProfile": creation.profilePicker.isCreatingProfile,
         "widthClass": form.widthClass.rawValue, "pinnedSubmit": form.submitIsPinned,
         "localUndo": creation.localUndoManager.canUndo, "modelUndo": app.undoManager.canUndo,
