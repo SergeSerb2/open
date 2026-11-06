@@ -11,7 +11,7 @@ import time
 
 from sitecontrol_fixtures import fixture_server
 
-def run(factory, results, tmp, env):
+def run(factory, results, tmp, env, functional_only=False):
     wait, new_tab = env['wait_until'], env['new_tab']
     load = lambda: list(os.getloadavg())
     with fixture_server(tmp) as origin:
@@ -215,6 +215,10 @@ def run(factory, results, tmp, env):
             try: private_window=app.call('command',id='new-incognito-window')
             except RuntimeError: private_window=False
             blocked('S10_incognito','incognito: main refuses private window creation', commandResult=private_window)
+            if functional_only:
+                for key in ['S11_material', 'S12_elements', 'S13_scroll', 'P1_first_draw', 'P2_idle']:
+                    results[key]=dict(status='DEFERRED', reason='M5 display/performance receipt required (TANDEM §4M)')
+                return
             # Use the same dark, white-page fixture and actual window pixels.
             app.call('permission',origin=origin,kind=1,state=1)
             app.call('select',tab=tab); app.call('navigate',tab=tab,url=origin+'/ads.html');app.call('wait',tab=tab)

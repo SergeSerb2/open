@@ -7,12 +7,14 @@ import time
 from pathlib import Path
 
 
-def split_checks(factory, results, tmp, h):
-    probe = Path(tmp) / 'split-idle-probe.dylib'
-    subprocess.run(['xcrun', 'clang', '-dynamiclib', '-fblocks', '-fobjc-arc', '-Wno-deprecated-declarations',
-                    str(Path(h.ROOT) / 'tools/verification/feature-idle-probe.m'), '-framework', 'AppKit',
-                    '-framework', 'QuartzCore', '-framework', 'CoreVideo', '-o', str(probe)], check=True)
-    environment = {'DYLD_INSERT_LIBRARIES': str(probe), 'OPEN_IDLE_OWNER': 'split'}
+def split_checks(factory, results, tmp, h, functional_only=False):
+    environment = None
+    if not functional_only:
+        probe = Path(tmp) / 'split-idle-probe.dylib'
+        subprocess.run(['xcrun', 'clang', '-dynamiclib', '-fblocks', '-fobjc-arc', '-Wno-deprecated-declarations',
+                        str(Path(h.ROOT) / 'tools/verification/feature-idle-probe.m'), '-framework', 'AppKit',
+                        '-framework', 'QuartzCore', '-framework', 'CoreVideo', '-o', str(probe)], check=True)
+        environment = {'DYLD_INSERT_LIBRARIES': str(probe), 'OPEN_IDLE_OWNER': 'split'}
     server, origin = h._fixture_server('Split')
     app = factory(urls=(), fresh=True, extra_env=environment)
     saved = {}
@@ -89,19 +91,22 @@ def split_checks(factory, results, tmp, h):
         back = app.page(b)['url']; app.call('menu-perform', id='go-forward'); app.call('wait', tab=b)
         row('E1_input_history', typed == 'split input' and back.endswith('/b') and app.page(b)['url'].endswith('/b-next')
             and app.page(a)['url'].endswith('/a'), typed=typed, back=back)
-        png = Path(h.ROOT) / '.re/s9-split/split-two-pane.png'; png.parent.mkdir(parents=True, exist_ok=True)
-        snapshot = app.call('snapshot', path=str(png))
-        captured = state(); width, height, pixel = h.read_image(str(png), srgb=True)
-        scale = width / 1360
-        ring_pixels = []
-        for pane in captured['panes']:
-            x, y, w, height_pt = pane['frame']
-            color = pixel((x+.75)*scale, (y+60)*scale)
-            error = h.chrome_delta_e(color, [49, 57, 255])  # F0081 measured 2 pt accent ring.
-            ring_pixels.append(dict(focused=pane['id'] == captured['focused'], rgb=color, delta_e00=error))
-        pixel_ok = all((p['delta_e00'] <= 2 if p['focused'] else p['delta_e00'] > 10) for p in ring_pixels)
-        row('snapshot_two_panes', geometry(captured, 'horizontal', 2) and pixel_ok and abs(height/scale-860) <= 1,
-            path=str(png), snapshot=snapshot, ringPixels=ring_pixels, scale=scale)
+        if functional_only:
+            results['snapshot_two_panes']=dict(status='DEFERRED', reason='M5 pixel receipt required (TANDEM §4M)')
+        else:
+            png = Path(h.ROOT) / '.re/s9-split/split-two-pane.png'; png.parent.mkdir(parents=True, exist_ok=True)
+            snapshot = app.call('snapshot', path=str(png))
+            captured = state(); width, height, pixel = h.read_image(str(png), srgb=True)
+            scale = width / 1360
+            ring_pixels = []
+            for pane in captured['panes']:
+                x, y, w, height_pt = pane['frame']
+                color = pixel((x+.75)*scale, (y+60)*scale)
+                error = h.chrome_delta_e(color, [49, 57, 255])  # F0081 measured 2 pt accent ring.
+                ring_pixels.append(dict(focused=pane['id'] == captured['focused'], rgb=color, delta_e00=error))
+            pixel_ok = all((p['delta_e00'] <= 2 if p['focused'] else p['delta_e00'] > 10) for p in ring_pixels)
+            row('snapshot_two_panes', geometry(captured, 'horizontal', 2) and pixel_ok and abs(height/scale-860) <= 1,
+                path=str(png), snapshot=snapshot, ringPixels=ring_pixels, scale=scale)
 
         # C2: all four edge zones use actual destination callbacks and pasteboard decoding.
         zones = []
@@ -196,10 +201,13 @@ def split_checks(factory, results, tmp, h):
             and abs(after['panes'][0]['frame'][3]-before['panes'][0]['frame'][3]-35) <= 1
             and geometry(after, 'vertical', 4) and [p['frame'] for p in before['panes'][2:]] == [p['frame'] for p in after['panes'][2:]],
             before=before, during=during, after=after)
-        idle = app.call('split', op='idle')
-        row('speed_idle_after_drag', all(v == 0 for v in idle['before'][5:]) and all(v == 0 for v in idle['after'])
-            and idle['animationsBefore'] == idle['animationsAfter'] == 0,
-            loadAverage=list(os.getloadavg()), uptime=subprocess.check_output(['uptime'], text=True).strip(), **idle)
+        if functional_only:
+            results['speed_idle_after_drag']=dict(status='DEFERRED', reason='M5 performance receipt required (TANDEM §4M)')
+        else:
+            idle = app.call('split', op='idle')
+            row('speed_idle_after_drag', all(v == 0 for v in idle['before'][5:]) and all(v == 0 for v in idle['after'])
+                and idle['animationsBefore'] == idle['animationsAfter'] == 0,
+                loadAverage=list(os.getloadavg()), uptime=subprocess.check_output(['uptime'], text=True).strip(), **idle)
         # Maximizing keeps hosts alive. Esc and a focus key both restore the stored layout.
         original = state(); app.call('menu-perform', id='expand-current-split'); expanded = settled(4)
         key('escape', ()); restored = settled(4)
@@ -257,13 +265,16 @@ def split_checks(factory, results, tmp, h):
         first = opened('bench-first'); second = opened('bench-second')
         third = opened('bench-third'); app.call('sidebar-menu', node=b, item='Open in Split View'); s = settled(2)
         live([p['id'] for p in s['panes']])
-        app.begin_timing('split switch benchmark')
-        measured = app.call('split', op='bench', nodes=[first, second, s['id']])
-        summaries = {}
-        for name, values in measured.items():
-            summaries[name] = dict(median=statistics.median(values), p95=sorted(values)[math.ceil(len(values)*.95)-1])
-        row('speed_tab_switch', all(summaries[name]['p95'] <= 25 for name in ('single', 'split')), loadAverage=list(os.getloadavg()), uptime=subprocess.check_output(['uptime'], text=True).strip(),
-            milliseconds=summaries, samples=measured, target_ms=16, target_met=all(summaries[name]['p95'] <= 16 for name in ('single', 'split')), absolute_ceiling_ms=25, relative_gate='separate interleaved main/branch receipt: branch <= main + 1 ms on both paths', scope='production sidebar selection through native layout/CA submission and first rAF after fresh visibilitychange in every shown pane (last pane wins), native layout/CA flush return; query return retained separately; excludes physical presentation')
+        if functional_only:
+            results['speed_tab_switch']=dict(status='DEFERRED', reason='M5 timing receipt required (TANDEM §4M)')
+        else:
+            app.begin_timing('split switch benchmark')
+            measured = app.call('split', op='bench', nodes=[first, second, s['id']])
+            summaries = {}
+            for name, values in measured.items():
+                summaries[name] = dict(median=statistics.median(values), p95=sorted(values)[math.ceil(len(values)*.95)-1])
+            row('speed_tab_switch', all(summaries[name]['p95'] <= 25 for name in ('single', 'split')), loadAverage=list(os.getloadavg()), uptime=subprocess.check_output(['uptime'], text=True).strip(),
+                milliseconds=summaries, samples=measured, target_ms=16, target_met=all(summaries[name]['p95'] <= 16 for name in ('single', 'split')), absolute_ceiling_ms=25, relative_gate='separate interleaved main/branch receipt: branch <= main + 1 ms on both paths', scope='production sidebar selection through native layout/CA submission and first rAF after fresh visibilitychange in every shown pane (last pane wins), native layout/CA flush return; query return retained separately; excludes physical presentation')
         app.begin_timing('split motion probe')
         motion = app.call('split', op='bench', nodes=[first, second, s['id']], motionOnly=True)
         unexpected = [animation for case in motion['motion'] for animation in case['animations']

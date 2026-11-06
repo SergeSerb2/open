@@ -11086,6 +11086,7 @@ def main():
                                        "commandbar", "app-actions", "actions", "extensions-p3", "extensions-ui", "sitecontrol", "extensions-e2", "profiles", "sidebar-completion", "toolbar", "numbering", "media", "relaunch", "page", "page-chrome",
                                        "sleep", "context-menus", "routing", "littleopen", "history", "applescript", "downloads", "space-editor"])
     ap.add_argument("--window-chrome-only", action="store_true", help="run only the window-chrome follow-up flows in the window suite")
+    ap.add_argument("--functional-only", action="store_true", help="defer M5 timing/pixel rows in sitecontrol, extensions-ui and split")
     ap.add_argument("--keep", action="store_true",
                     help="keep this run's data root, cache root and scratch folder (paths printed at the end)")
     ap.add_argument("--focus-retry-delay-seconds", type=int, default=0,
@@ -11103,6 +11104,8 @@ def main():
         ap.error("--focus-retry-delay-seconds must be between 0 and 600")
     if opts.only is None and not opts.engine_fingerprint_only:
         ap.error("--only is required unless --engine-fingerprint-only is set")
+    if opts.functional_only and opts.only not in ("sitecontrol", "extensions-ui", "split"):
+        ap.error("--functional-only applies to sitecontrol, extensions-ui or split")
     if opts.engine_sha256 and not re.fullmatch(r"[0-9a-f]{64}", opts.engine_sha256):
         ap.error("--engine-sha256 must be 64 lowercase hexadecimal characters")
 
@@ -11279,7 +11282,7 @@ def main():
         if opts.only == "sitecontrol":
             results["sitecontrol"] = CheckedResults(tracker)
             import sitecontrol
-            sitecontrol.run(factory, results["sitecontrol"], tmp, globals())
+            sitecontrol.run(factory, results["sitecontrol"], tmp, globals(), functional_only=opts.functional_only)
         elif opts.only == "firstrun":
             results["firstrun"] = CheckedResults(tracker)
             # The executable's -I shebang omits the script directory from
@@ -11289,13 +11292,14 @@ def main():
         elif opts.only == "extensions-ui":
             results["extensions-ui"] = CheckedResults(tracker)
             import extensions_ui
-            extensions_ui.run(factory, results["extensions-ui"], tmp, ROOT, wait_until, new_tab, frame, read_image, EXT)
+            extensions_ui.run(factory, results["extensions-ui"], tmp, ROOT, wait_until, new_tab, frame, read_image, EXT,
+                              functional_only=opts.functional_only)
         elif opts.only == "split":
             import importlib.util
             spec = importlib.util.spec_from_file_location('split_checks', os.path.join(ROOT, 'tools/e2e/split_checks.py'))
             module = importlib.util.module_from_spec(spec); spec.loader.exec_module(module)
             results["split"] = CheckedResults(tracker)
-            module.split_checks(factory, results["split"], tmp, sys.modules[__name__])
+            module.split_checks(factory, results["split"], tmp, sys.modules[__name__], functional_only=opts.functional_only)
         elif opts.only == "shell":
             results["shell"] = CheckedResults(tracker)
             shell_checks(factory, results["shell"], tmp)

@@ -200,6 +200,11 @@ probe's live call/delay counters; `firstDrawNativeProbe` records those counters
 at each first-draw callback, before later AppKit work. Both are empty without
 the injected probe. The source-refresh diagnostic loads SCC's 2000-card
 `heavy.html` with the panel closed and open, then changes the title 250 times.
+
+For M1 functional receipts, `--functional-only` is available with `--only
+sitecontrol`, `extensions-ui`, or `split`. It records M5 display/performance rows
+as DEFERRED without running them. The default full suites keep every gate and
+threshold. M1 receipts never replace M5 timing, pixel, color or full-gate proof.
 | `pasteboard` | optional `text` | Reads the general pasteboard string. `text` sets a sentinel for Copy URL negative controls. |
 | `actions` | — | The focused window's toolbar actions from Chrome's model (fork patch P2): `ready`, and per action id, name, title, tooltip, accessible name, badge and colors, enabled, has popup, pinned and pinned index, wants to run, site access, showing popup, `live` (from the live model, else the profile's list), and the toolbar image and plain icon (PNG byte count, hash, point width, `pixels`: each representation's pixel size, and `object`: the image object's identity) |
 | `ext-pin` | `extension`, `pinned` (default `true`), optional `index` | Pin or unpin an action; optionally move it through the guarded App host. |
