@@ -145,7 +145,7 @@ def run(h, factory, results, tmp):
 
         # Native text actions: two redo groups prove only one is redone, and a
         # single paste must insert the clipboard once. A5 separately proves
-        # typing and theme changes share their draft undo order.
+        # typing Undo falls back to the persistent draft history.
         app.call('editor-open', kind='create')
         app.call('editor-act', action='click', control='theme')
         app.call('editor-act', action='preset', index=2)
