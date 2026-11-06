@@ -32,6 +32,7 @@ public final class CommandBarController: NSObject {
     /// Open's privacy page, the target of "here" in the (i) footer. Nil hides that line (no dead link).
     public var privacyURL: URL? { didSet { panel.footer.showsLearnMore = privacyURL != nil } }
     /// True while the (i) privacy footer shows (CC-42).
+    public var allowsSearchHelp = true
     public var showsPrivacyFooter: Bool { view.showsFooter }
 
     public private(set) var isPresented = false
@@ -142,6 +143,7 @@ public final class CommandBarController: NSObject {
             if self.sessionExtensionID != nil, self.view.window == nil { self.dismiss(reason: .programmatic) }
             self.observeSessionWindow(); self.focusInput()
         }
+        panel.input.closeButton.action = { [weak self] in self?.dismiss(reason: .escape) }
         panel.input.infoButton.action = { [weak self] in self?.togglePrivacyFooter() }
         panel.input.onChipClose = { [weak self] in self?.exitSiteSearch() }
         panel.footer.settingsButton.action = { [weak self] in self?.openSearchSettings() }
@@ -163,8 +165,9 @@ public final class CommandBarController: NSObject {
 
     /// Opens the bar (or switches it to another mode while open). The panel shows in the next
     /// frame at full size and opacity: Arc's bar has no open animation (CC-44, D12).
-    public func present(_ request: CommandBarRequest) {
+    public func present(_ request: CommandBarRequest, presentation: CommandBarPresentation = .overlay) {
         endExtensionSession()
+        view.presentation = presentation
         pendingReturn = nil
         panel.input.editor.resetSession()
         self.request = request
@@ -195,8 +198,9 @@ public final class CommandBarController: NSObject {
     }
 
     /// Shows fixed content without a query: renders, design review, and docs.
-    public func presentPreview(_ preview: CommandBarPreview) {
+    public func presentPreview(_ preview: CommandBarPreview, presentation: CommandBarPresentation = .overlay) {
         endExtensionSession()
+        view.presentation = presentation
         pendingReturn = nil
         panel.input.editor.resetSession()
         streamTask?.cancel()
@@ -258,7 +262,7 @@ public final class CommandBarController: NSObject {
         delegate?.commandBar(self, didChangePresentation: false, mode: mode)
     }
 
-    private func focusInput() {
+    public func focusInput() {
         guard isPresented, let window = view.window else { return }
         let field = panel.input.field
         window.makeFirstResponder(field)
@@ -269,6 +273,10 @@ public final class CommandBarController: NSObject {
     }
 
     private func applyBackdrop() {
+        if view.presentation.isEmbedded {
+            panel.material.applySolid(LittleOpenMetrics.titleBarFill)
+            return
+        }
         panel.backdropIsDark = backdrop.isDark
         if let image = backdrop.image, view.bounds.width > 0 {
             let tallest = CommandBarMetrics.panelFrame(windowSize: view.bounds.size, rows: CommandBarMetrics.maxVisibleRows)
@@ -282,7 +290,7 @@ public final class CommandBarController: NSObject {
 
     /// (i) or Cmd+I: shows or hides the footer. The panel changes in one frame (D12).
     public func togglePrivacyFooter() {
-        guard isPresented else { return }
+        guard isPresented, allowsSearchHelp, request?.mode != .littleOpen, !view.presentation.isEmbedded else { return }
         view.showsFooter.toggle()
         view.layoutSubtreeIfNeeded()
         if let i = selectedIndex { panel.results.select(i) } // keep the highlighted row out from behind the band
@@ -476,6 +484,8 @@ public final class CommandBarController: NSObject {
             input.trailing = .siteSearchHint(name: keyword.name, space: completion.shown == nil)
         } else if scope != nil {
             input.trailing = .none // no (i) inside a scope (S2 18/0016, 0018)
+        } else if r?.mode == .littleOpen || !allowsSearchHelp {
+            input.trailing = .none
         } else {
             input.trailing = .info
         }
@@ -559,7 +569,7 @@ public final class CommandBarController: NSObject {
         if s.kind == .action, let id = s.actionID, isActionEnabled?(id, s.spaceID) == false {
             runQuery(text); return
         }
-        let destination: CommandBarDestination = r.mode == .editCurrentURL ? .currentTab : .newTab
+        let destination: CommandBarDestination = r.mode == .editCurrentURL || r.mode == .littleOpen ? .currentTab : .newTab
         let intent: CommandBarIntent?
         switch s.kind {
         case .navigate, .history:

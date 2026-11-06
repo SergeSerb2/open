@@ -13,6 +13,7 @@ enum Flows {
 
     static func run() -> [Check] {
         let env = Scenes.env()
+
         var checks: [Check] = []
         func check(_ name: String, _ pass: Bool, _ detail: @autoclosure () -> String) {
             let d = detail()
@@ -262,6 +263,22 @@ enum Flows {
         checks += SplitFlows.run(env)
         checks += ScopeFlows.run(env)
         checks += ExtensionFlows.run(env)
+        do {
+            let stage = Stage(size: LittleOpenMetrics.barSize, scale: 1, engine: env.engine, backdrop: .darkPage)
+            stage.controller.present(Scenes.request(env, mode: .littleOpen), presentation: .embedded(width: 490))
+            stage.settle()
+            check("Little Open embedded field and close accessory", stage.controller.request?.mode == .littleOpen
+                  && stage.controller.view.panelFrame == stage.root.bounds && stage.controller.view.debugHasCloseButton
+                  && stage.controller.view.debugCloseFrame == CGRect(x: 443, y: 19, width: 26, height: 26)
+                  && !stage.controller.view.debugPress("info"), "490 × 329, close at 443/19/26/26, no (i)")
+            stage.type("https://fresh.example/new"); stage.settle(); stage.key(.returnKey)
+            check("Little Open Return navigates current page", stage.recorder.intents.contains {
+                if case .open(_, .currentTab, _) = $0 { true } else { false }
+            }, "currentTab intent")
+            stage.controller.present(Scenes.request(env, mode: .littleOpen), presentation: .embedded(width: 490))
+            _ = stage.controller.view.debugPress("close")
+            check("Little Open close emits Escape", stage.recorder.intents.contains(.dismissed(.escape)), "close control uses the accessibility press path")
+        }
         return checks
     }
 

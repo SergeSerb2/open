@@ -7,6 +7,8 @@ import OpenSuggest
 public enum CommandBarMode: String, Sendable, Hashable, CaseIterable {
     /// Cmd+T: empty input; Return opens a new Today tab.
     case newTab
+    /// Little Open: the same suggestions, navigating its one page.
+    case littleOpen
     /// Cmd+L: the current URL fills the input, fully selected; Return navigates the current tab.
     case editCurrentURL
     /// Opens in the Tabs scope: open, pinned, and favorite tabs only. Leaving the scope gives `.newTab`.
@@ -16,7 +18,7 @@ public enum CommandBarMode: String, Sendable, Hashable, CaseIterable {
 
     var suggestMode: SuggestMode {
         switch self {
-        case .newTab: .newTab
+        case .newTab, .littleOpen: .newTab
         case .editCurrentURL: .editCurrentURL
         case .searchTabs: .searchTabs
         case .searchActions: .searchActions

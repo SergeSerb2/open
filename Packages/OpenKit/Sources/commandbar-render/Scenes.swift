@@ -11,7 +11,7 @@ import OpenSuggest
 enum Scenes {
     static let names = ["empty", "typing-git", "cmd-l", "space-hint", "site-chip", "site-search", "calculator", "actions", "scrolled", "privacy-footer",
                         "completion", "completion-case", "completion-accepted", "split-row", "split-row-selected",
-                        "actions-scope", "actions-scope-empty", "tabs-scope", "scope-chip-hover", "site-chip-query", "extension-action-row", "extension-scope"]
+                        "actions-scope", "actions-scope-empty", "tabs-scope", "scope-chip-hover", "site-chip-query", "little-open", "extension-action-row", "extension-scope"]
     /// Stands in for Open's privacy page in renders (the App has none yet, so its footer hides line 2).
     static let samplePrivacyURL = URL(string: "https://open.example/privacy")!
 
@@ -44,7 +44,7 @@ enum Scenes {
 
     /// Builds the stage and drives it into state `name`.
     static func run(_ name: String, env: Env, size: CGSize, scale: CGFloat, backdrop: CommandBarBackdrop) throws -> Stage {
-        let stage = Stage(size: size, scale: scale, engine: env.engine, backdrop: backdrop)
+        let stage = Stage(size: name == "little-open" ? LittleOpenMetrics.barSize : size, scale: scale, engine: env.engine, backdrop: backdrop)
         let c = stage.controller
         c.favicons = env.favicons
         c.theme = theme(env)
@@ -57,6 +57,8 @@ enum Scenes {
             stage.type(name == "extension-action-row" ? "action pro" : "probe")
             stage.settle()
             if name == "extension-scope" { stage.key(.tab); stage.settle(); stage.type("al") }
+        case "little-open":
+            c.present(request(env, mode: .littleOpen), presentation: .embedded(width: CommandBarMetrics.littleOpenWidth))
         case "empty":
             c.present(request(env, mode: .newTab))
         case "typing-git":

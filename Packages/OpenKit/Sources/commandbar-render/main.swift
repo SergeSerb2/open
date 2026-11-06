@@ -100,7 +100,10 @@ enum CLI {
                 let panel = stage.controller.view.panelFrame
                 let probe = CGPoint(x: (panel.minX + 300) * 2, y: (panel.minY + 8) * 2)
                 let fill = pixel(image, probe), page = pixel(image, CGPoint(x: 10, y: 10))
-                pass = image.width == 2200 && fill != page && stage.controller.isPresented
+                if state == "little-open" {
+                    pass = image.width == 980 && zip(fill, [39, 42, 55]).allSatisfy { abs($0 - $1) <= 3 }
+                        && stage.controller.view.debugHasCloseButton && stage.controller.isPresented
+                } else { pass = image.width == 2200 && fill != page && stage.controller.isPresented }
                 detail = "\(image.width)×\(image.height), panel fill \(fill), page \(page), rows \(stage.controller.rows.count)"
                 if state == "extension-scope" {
                     let field = stage.controller.view.debugFieldFrame

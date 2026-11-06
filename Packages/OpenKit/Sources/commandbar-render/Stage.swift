@@ -200,7 +200,9 @@ final class Stage {
         }
         // Page corners: the flat backdrop color (image backdrops: any non-garbage pixel). The bottom
         // corners too: an incomplete read-back leaves the lower part of the image unwritten (item 13).
-        if root.backdrop.image == nil, root.bottomColor == nil {
+        let embedded: Bool
+        if case .embedded = controller.view.presentation { embedded = true } else { embedded = false }
+        if root.backdrop.image == nil, root.bottomColor == nil, !embedded {
             let c = root.backdrop.color
             let expected = [c.red * 255, c.green * 255, c.blue * 255]
             let h = CGFloat(image.height) / scale - 4, w = CGFloat(image.width) / scale - 4

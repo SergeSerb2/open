@@ -82,6 +82,7 @@
     private func run(_ cmd: String, _ a: [String: Any]) async throws -> Any {
       // App lifecycle commands remain available after the final window closes.
       switch cmd {
+      case "applescript": return try await runAppleScript(a)
       case "routing-log": return routingLog()
       case "default-browser-state": return defaultBrowserState()
       case "history-state", "history-clear", "library-history-state", "library-history-delete":
