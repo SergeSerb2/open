@@ -66,7 +66,7 @@ final class AppSettingsActions: SettingsActions, LibraryActions, DownloadsProvid
     // Prefer a live browser, then that existing state; never create a window here.
     let id = app.frontWindowController?.windowID ?? app.model.windows.first(where: { $0.style == .standard })?.id
     guard let id, app.model.windows.contains(where: { $0.id == id }) else { spaceManager = nil; return nil }
-    if let spaceManager, spaceManager.context.windowID == id { return spaceManager }
+    if let spaceManager, spaceManager.context.windowID == id { spaceManager.prepareForPresentation(); return spaceManager }
     let context = SidebarContext(model: app.model, windowID: id, previewPreferences: managerPreferences)
     context.storedFavicons = app.stores.sidebarFavicons
     context.systemAppearance = NSApp.effectiveAppearance.bestMatch(from: [.darkAqua, .aqua]) == .darkAqua ? .dark : .light
