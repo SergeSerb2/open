@@ -849,3 +849,7 @@ tries unknown/unpinned actions, an empty pinned list, and negative, count,
 order, compact indices, and zero dropped duplicates when the App guard exists.
 It then closes its isolated App, writes the old duplicate-pin preference state,
 relaunches that profile, and repeats the drag after repair.
+
+`OPEN_E2E_E2_FORCE_FAILURE=popup` stops the suite with its native popup open;
+`popup-quit` first quits the App to exercise restoration without the socket.
+Frame preferences are restored after quit through the shared defaults fallback.

@@ -10988,7 +10988,7 @@ def main():
                     extensions_p3.run(app, results["extensions-p3"], tmp, ROOT, wait_until, new_tab)
                 elif opts.only == "extensions-e2":
                     import extensions_e2
-                    extensions_e2.run(app, results["extensions-e2"], tmp, ROOT, wait_until, new_tab, factory)
+                    extensions_e2.run(app, results["extensions-e2"], tmp, ROOT, wait_until, new_tab, factory, _restore_defaults)
                 else:
                     feature_checks(app, opts.style, results["features"], tmp)
             finally:

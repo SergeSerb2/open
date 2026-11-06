@@ -31,7 +31,7 @@ def fixtures(root, tmp, extensions):
     return [str(action), str(conflict), str(Path(root) / "tools/e2e/fixtures/tabs-probe")] + pin_probes + native_drag
 
 
-def run(app, results, tmp, root, wait, new_tab, factory):
+def run(app, results, tmp, root, wait, new_tab, factory, restore_defaults):
     # Use the manifest key's actual id, also guarding accidental fixture replacement.
     installed = wait(lambda: (lambda rows: rows if any(x["name"] == "Action Probe" for x in rows) else None)(
         app.call("extensions")["installed"]), timeout=30)
@@ -86,6 +86,9 @@ def run(app, results, tmp, root, wait, new_tab, factory):
                   "left:120,top:140,width:430,height:510,focused:false})")
         cid = made["id"]
         native = wait(lambda: native_window(cid), timeout=10)
+        if os.environ.get("OPEN_E2E_E2_FORCE_FAILURE") in ("popup", "popup-quit"):
+            if os.environ["OPEN_E2E_E2_FORCE_FAILURE"] == "popup-quit": app.quit()
+            raise RuntimeError("forced E2 failure with extension popup open")
         chrome = next((w for w in chrome_windows() if w["id"] == cid), {})
         results["X20_popup_window"] = {"ok": bool(native) and native["controller"] == "ExtensionWindowController"
             and native["pageIsContentView"] and not native["hasToolbar"] and native["autosave"] == "ExtensionPopupWindow"
@@ -227,9 +230,11 @@ def run(app, results, tmp, root, wait, new_tab, factory):
         app = native_drag_safety(app, results, wait, action, factory)
     finally:
         try:
-            app.call("ext-windows", preference=True, value=preference)
-        finally:
             app.quit()
+        finally:
+            # Quit can save the popup frame. Restore afterwards, with the
+            # harness's defaults fallback when the App/socket is already gone.
+            restore_defaults(app, {"NSWindow Frame ExtensionPopupWindow": preference})
 
 
 def pin_order(app, results, wait):
