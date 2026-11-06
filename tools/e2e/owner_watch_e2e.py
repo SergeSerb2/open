@@ -28,7 +28,7 @@ def matches(pattern):
 
 def request(path, command, **args):
     with socket.socket(socket.AF_UNIX) as sock:
-        sock.settimeout(1)
+        sock.settimeout(30)
         sock.connect(str(path))
         sock.sendall((json.dumps(dict(id=1, cmd=command, args=args)) + '\n').encode())
         data = b''
@@ -99,7 +99,9 @@ subprocess.Popen = popen
                     response = request(sock, command, **args)
                     assert response.get('ok'), response
                     return response['result']
-                tab = call('tabs')[0]
+                opened = call('open', url=download_base + '/')
+                call('wait', tab=opened['id'])
+                tab = next(item for item in call('tabs') if item['id'] == opened['id'])
                 call('download-settings', profile=tab['profile'], directory=str(roots[0] / 'Downloads'), ask=False)
                 # If the no-prompts guard regresses, dismiss its real alert with
                 # the existing native-button policy and fail on its log line.
