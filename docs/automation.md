@@ -166,7 +166,7 @@ Arguments are `key=value`; values that parse as JSON are sent as JSON.
 | `permission-prompt` | optional `answer`: `allow`/`notnow` | State: visible, question, kinds, buttons, anchor frame in screen points, window, pending and completion counts. `presentation` is `popover` or `card`; `frame` gives the card rectangle in window coordinates. Pass a Little Open window number in `window` to inspect or answer its prompt. With an answer, call `performClick` on the real button |
 | `permission-decisions` | — | Profile data hook: index `ready` and persisted non-ask origin/kind/state rows |
 | `events` | — | Drain the event log: `change`, `load`, `loadError`, `open`, `dialog`, `permission`, `contextMenu`, `fullscreen`, `download`, `console`, `devtools`, `extensionPopup`, `tab-request` and `window-request` (P1 requests from Chromium, with `refused` when the shell said no) |
-| `script-add` / `script-remove` | `id`, `source`, `css`, `end`, `matches`, `allFrames` | Boost-style user scripts (through the OpenWeb `WebProfile` protocol) |
+| `script-add` / `script-remove` | `id`, `source`, `css`, `end`, `matches`, `allFrames`, `world` (`page` default or `open`) | Boost-style user scripts (through the OpenWeb `WebProfile` protocol) |
 | `filter` / `filter-stats` | `block` (substrings) | Request filter (ad-block hook) and its counters |
 | `permission` | `origin`, `kind`, `state` | Read or set a site permission |
 | `download-dir` / `downloads` | `path` | Where downloads go; list downloads |
@@ -918,3 +918,23 @@ relaunches that profile, and repeats the drag after repair.
 `OPEN_E2E_E2_FORCE_FAILURE=popup` stops the suite with its native popup open;
 `popup-quit` first quits the App to exercise restoration without the socket.
 Frame preferences are restored after quit through the shared defaults fallback.
+
+## Open-world scripts and messages
+
+`eval` accepts `world: "page"` (default) or `"open"`, through OpenWeb's
+`evaluateJavaScript(_:in:)`. Invalid world names fail. Open evaluation targets
+only the current main-frame document and grants no user gesture.
+`script-add` accepts the same world names. Open-world scripts always run at
+document start and in the main frame, even with `end` or `allFrames` set.
+
+`open-world-messages` accepts `tab`, optional `clear: true`, and optional `subscribe: true/false`
+(to exercise the OpenWeb callback). It returns
+`messages` and `callbacks` (type, payloadJSON, documentID, content), and `statistics` (accepted,
+oversized, rateLimited, invalid). The App retains only the last 64 messages
+across its factory; clearing removes that page's receipt, not engine counters.
+The recorder is automation-only and never persists payloads.
+
+Example: add an Open script containing
+`__openNative.postMessage("picker:ready", JSON.stringify({boostID:"fixture"}))`,
+navigate to a matching page, then read `open-world-messages`. Page and extension
+worlds see `typeof __openNative === "undefined"`.

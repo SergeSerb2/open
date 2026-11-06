@@ -28,7 +28,11 @@
 }
 
 - (id)copyWithZone:(NSZone*)zone {
-  return self;
+  OEUserScript* copy = [[OEUserScript alloc] initWithIdentifier:_identifier
+      source:_source kind:_kind injectionTime:_injectionTime
+      matchPatterns:_matchPatterns mainFrameOnly:_mainFrameOnly];
+  copy.world = _world;
+  return copy;
 }
 
 @end
@@ -507,12 +511,12 @@ class OENotificationListCallback : public CefNotificationListCallback {
 #pragma mark User scripts
 
 - (NSArray<OEUserScript*>*)userScripts {
-  return [_scripts copy];
+  return [[NSArray alloc] initWithArray:_scripts copyItems:YES];
 }
 
 - (void)addUserScript:(OEUserScript*)script {
   [self removeUserScriptWithIdentifier:script.identifier broadcast:NO];
-  [_scripts addObject:script];
+  [_scripts addObject:[script copy]];
   [self oe_broadcastScripts];
 }
 
@@ -544,6 +548,7 @@ class OENotificationListCallback : public CefNotificationListCallback {
   for (OEUserScript* s in _scripts) {
     CefRefPtr<CefDictionaryValue> d = CefDictionaryValue::Create();
     d->SetString("source", OECef(s.source));
+    d->SetBool("openWorld", s.world == OEScriptWorldOpen);
     d->SetBool("css", s.kind == OEUserScriptKindStyleSheet);
     d->SetBool("end", s.injectionTime == OEUserScriptInjectionTimeDocumentEnd);
     d->SetBool("mainFrameOnly", s.mainFrameOnly);

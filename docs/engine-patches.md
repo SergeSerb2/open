@@ -113,7 +113,7 @@ unsafe `MovePinnedAction` call. No Chromium debugger was used.
 | P4 | Proprietary codecs (Widevine is out of v1) | H.264/AAC sites | 0: already in the fork's GN args; verify on the first fork build | — |
 | P5 | Trim the Chrome layer (Google services, components, locales) | Less network chatter, smaller bundle, faster first launch | 1–2 weeks | — |
 | P6 | Audible state callback (done 2026-11-02, part of "Media" below) | Correct speaker icon (Web Audio too); OpenSleep needs every audio change | 1–2 days | — |
-| P7 | Isolated-world scripts for Open's page runtimes | Zap picker and Boost applier out of the page's reach | 3–5 days | — |
+| P7 | Isolated-world scripts for Open's page runtimes (implemented, Section 12) | Zap picker and Boost applier out of the page's reach | done | — |
 | P8 | Native ad-block engine | Already planned in [plans/adblock-fork.md](plans/adblock-fork.md); listed here only for order | see that plan | — |
 
 The extension series as built (P1–P3; excerpt). Two series with their own numbers:
@@ -403,7 +403,40 @@ Verification: see "Media verification" below.
 
 ## P7. Isolated-world scripts for Open's page runtimes
 
-User Boost JavaScript runs in the main world on purpose (docs/boosts.md). Open's own page runtimes (the Zap picker, the Boost applier internals) must run in an isolated world so pages cannot reach them (docs/followups.md, PR #23 review). OpenEngine injects at V8 context creation (`OnContextCreated` in `OEApp.mm`), which is document-start but main world only. Patch: run the same document-start hook in an isolated world through `blink::WebLocalFrame::ExecuteScriptInIsolatedWorld`, using the queued-context path in `cef/libcef/renderer/frame_impl.cc` that adblock-fork F-10 describes for cosmetic filtering. Coordinate with that plan's `cef.mojom` change so both use one mechanism.
+User Boost JavaScript keeps the page world. Open's applier and picker use
+`OEScriptWorldOpen`. Chromium patch `0601-open-script-world.patch` reserves
+`ISOLATED_WORLD_ID_OPEN` (6 on macOS) immediately below the extension range.
+CEF patch `0601-open-script-world.patch` confines queued-context actions and
+release notifications to the main world; isolated-world creation must not
+flush or invalidate the main frame's queue.
+
+The overlay API `cef_open_world.h` creates or gets that world's context using
+Blink's `ExecuteScriptInIsolatedWorld` and `GetScriptContextFromWorldId`.
+`OEApp::OnContextCreated` filters to the main world, then runs matching Open
+scripts there at document start, main frame only. Creation is lazy: pages with
+no Open scripts and no Open evaluation create no Open context.
+
+`OEOpenWorld.mm` installs `__openNative.postMessage(type, payloadJSON)` only in
+that context. The native handler checks the current world and document token.
+It drops messages above 64 KiB (type plus payload, UTF-8), and messages beyond
+200 in any sliding second per page, before IPC. Counters are read on demand.
+Main-thread delivery includes Chromium's `DocumentToken` as `documentID`.
+Native evaluation uses the same context without a user gesture, awaits
+promises, bounds results to 1 MiB and pending calls to 64, and times out after
+10 seconds. The old page-world evaluation is unchanged.
+
+Ad-block cosmetics can reuse the per-frame `CefGetOpenScriptContext` from
+their renderer hook. OpenEngine limits its user scripts and native channel
+to the main frame; the CEF primitive also supports child-frame cosmetics. The current adblock-fork plan supersedes the old F-10 frame-pipe push:
+`cef.mojom` connects after commit (F-27); process-level renderer pull supplies
+cosmetic data (D-13). P7 adds no second browser-to-renderer document-start
+pipe. Both runtimes can use this fixed world; cosmetic data delivery remains
+Section 13's work.
+
+Evidence: real-App `features` rows `open_world_document_start`,
+`open_world_extension_isolation`, `open_world_messages`, `open_world_limits`,
+plus the existing `user_scripts` row. Build and suite receipts are recorded in
+the PR. This transport adds no App UI.
 
 ## P8. Native ad-block engine
 

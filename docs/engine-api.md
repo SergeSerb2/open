@@ -346,7 +346,7 @@ Each has a fork patch in [engine-patches.md](engine-patches.md):
 | H.264, AAC, Widevine | Not in stock CEF | P4 |
 | Audible state for Web Audio | Fixed: Chromium's tab audio signal through `CefMediaController` (no page probe) | P6, done |
 | Media session, tab volume, PiP without a gesture | Fixed: `OEMediaSession`, `mediaVolume`, `requestPictureInPicture` from the fork's `CefMediaController` | media 0401, done |
-| User scripts in an isolated world | Main world | P7 |
+| User scripts in an isolated world | Page and Open worlds, native channel and document token | P7 implemented |
 
 ## Debugging crashes
 
@@ -377,3 +377,35 @@ are in `Engine/OpenEngine/src/`. The tables above give behavior and limits.
 [#149](https://github.com/SergeSerb2/open/pull/149) adds relaunch evidence, not a public API. G2 App sleep integration
 merged in [#165](https://github.com/SergeSerb2/open/pull/165); e2e `sleep` F0/F2/F4/F5 prove the App paths.
 `sleep_f3_capture` remains BLOCKED without a camera/mic grant.
+
+## Open isolated world (P7 / E5)
+
+`OEScriptWorld` has `.page` (0, default) and `.open` (1). Set `OEUserScript.world`
+before adding it to a context; the context copies the script. Open scripts
+always run at document start in the main frame, using the existing match
+patterns. Page scripts keep their injection time and frame options.
+
+`evaluateJavaScript(_:inWorld:)` evaluates in the current document. The Open
+world shares the DOM, with separate globals and DOM wrappers. It grants no
+user gesture, awaits promises, returns JSON-compatible values (undefined is
+null), and reports exceptions. Open evaluation limits: 1 MiB source (UTF-16
+units), 1 MiB UTF-8 result, 64 pending calls, 10-second completion deadline.
+Page evaluation keeps its existing behavior.
+
+Only Open's reserved world exposes `__openNative.postMessage(type, payloadJSON)`.
+The App prelude maps `window.__open.postMessage(type, payload)` to this function
+with `JSON.stringify(payload)`. Native replies evaluate
+`window.__open.receive(envelope)` in `.open`. The engine does not interpret the
+runtime's envelope. `webContent(_:didReceiveOpenWorldMessage:payloadJSON:documentID:)`
+and `onOpenWorldMessage` deliver on the main thread. Consumers must validate
+message types and payloads. Either callback may close the page.
+
+`documentID` is Chromium's document token. A new main-frame document changes it;
+fragment and history-state navigation keep it. The handler drops stale-context
+calls. Accepted-message size is at most 65,536 UTF-8 bytes for type plus payload.
+Only 200 messages in a sliding second pass per renderer page. Oversize, rate,
+and invalid-argument drops are counted without IPC.
+`openWorldMessageStatistics` reads accepted/oversized/rateLimited/invalid totals.
+
+OpenWeb mirrors this as `ScriptWorld`, `UserScript.world`,
+`WebContent.evaluateJavaScript(_:in:)`, and `onOpenWorldMessage`.

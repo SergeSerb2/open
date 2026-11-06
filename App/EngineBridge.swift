@@ -8,6 +8,9 @@ import OpenWeb
 extension OEWebContent: @retroactive WebContent {
   public var faviconPNG: Data? { favicon.flatMap(EngineWebContentHostFactory.pngData) }
   public var isCrashed: Bool { crashState != .none }
+  public func evaluateJavaScript(_ script: String, in world: ScriptWorld) async throws -> Any {
+    try await evaluateJavaScript(script, inWorld: world == .open ? .open : .page)
+  }
   public func snapshotPNG() async throws -> Data { try await takeSnapshot() }
   /// EP-8 (page-platform §6): OpenEngine's tiled DevTools capture.
   public func fullPagePNG(maxDevicePixels: Int) async throws -> FullPagePNG {
@@ -32,19 +35,21 @@ final class EngineWebProfile: WebProfile {
   var userScripts: [UserScript] {
     context.userScripts.map {
       UserScript(
-        id: $0.identifier, source: $0.source, kind: $0.kind == .styleSheet ? .styleSheet : .javaScript,
+        id: $0.identifier, source: OpenWorldPrelude.unwrapped($0.source, world: $0.world), kind: $0.kind == .styleSheet ? .styleSheet : .javaScript,
         injectionTime: $0.injectionTime == .documentEnd ? .documentEnd : .documentStart,
-        matchPatterns: $0.matchPatterns, mainFrameOnly: $0.mainFrameOnly)
+        matchPatterns: $0.matchPatterns, mainFrameOnly: $0.mainFrameOnly,
+        world: $0.world == .open ? .open : .page)
     }
   }
 
   func addUserScript(_ script: UserScript) {
-    context.addUserScript(
-      OEUserScript(
-        identifier: script.id, source: script.source,
+    let value = OEUserScript(
+        identifier: script.id, source: script.world == .open ? OpenWorldPrelude.source + "\n" + script.source : script.source,
         kind: script.kind == .styleSheet ? .styleSheet : .javaScript,
         injectionTime: script.injectionTime == .documentEnd ? .documentEnd : .documentStart,
-        matchPatterns: script.matchPatterns, mainFrameOnly: script.mainFrameOnly))
+        matchPatterns: script.matchPatterns, mainFrameOnly: script.mainFrameOnly)
+    value.world = script.world == .open ? .open : .page
+    context.addUserScript(value)
   }
 
   func removeUserScript(id: String) { context.removeUserScript(identifier: id) }

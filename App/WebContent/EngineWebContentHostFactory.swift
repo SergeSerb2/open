@@ -133,6 +133,7 @@ final class EngineWebContentHostFactory: NSResponder, WebContentHostFactory {
   var savePageRequestCount = 0
   var downloadDirectory: URL?
   private(set) var events: [[String: Any]] = []
+  var recordedOpenWorldMessages: [[String: Any]] = []
   private(set) var lastFindResult: OEFindResult?
   func standaloneSurfaceVisibilityChanged() {
     // Setting even the same window re-enters Chromium's SetHostView path.

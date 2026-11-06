@@ -32,6 +32,7 @@
     private var managerUndoCount = 0
     // troubleshooting-setup recorder (page-platform Troubleshooting checks).
     private var revealedURLs: [URL] = []
+    var recordedOpenWorldCallbacks: [[String: Any]] = []
 
     init(app: AppDelegate) { self.app = app; extensionAutomation.registerContexts() }
 
@@ -640,7 +641,7 @@
         guard let js = a["js"] as? String else { throw Failure(message: "missing js") }
         // Through the OpenWeb protocol, as OpenKit features will call it.
         let page: any WebContent = try content(a, w)
-        return try await page.evaluateJavaScript(js)
+        return try await page.evaluateJavaScript(js, in: try scriptWorld(a))
       case "devtools":
         guard let method = a["method"] as? String else { throw Failure(message: "missing method") }
         return try await content(a, w).sendDevToolsMethod(method, parameters: a["params"] as? [String: Any])
@@ -1109,6 +1110,7 @@
       case "permission-decisions":
         let store = SitePermissionStore.forContext(try focusedBrowser(w).context)
         return ["ready": store.indexReady, "decisions": store.allDecisions().map { ["origin": $0.origin.absoluteString, "kind": $0.kind.rawValue, "state": $0.state.rawValue] }]
+      case "open-world-messages": return try await openWorldMessages(try content(a, w), factory: w, clear: a["clear"] as? Bool == true, subscribe: a["subscribe"] as? Bool)
       case "script-add":
         let profile = EngineWebProfile(try focusedBrowser(w).context)
         profile.addUserScript(
@@ -1117,7 +1119,7 @@
             kind: a["css"] as? Bool == true ? .styleSheet : .javaScript,
             injectionTime: a["end"] as? Bool == true ? .documentEnd : .documentStart,
             matchPatterns: a["matches"] as? [String] ?? ["<all_urls>"],
-            mainFrameOnly: !(a["allFrames"] as? Bool ?? false)))
+            mainFrameOnly: !(a["allFrames"] as? Bool ?? false), world: try scriptWorld(a)))
         return profile.userScripts.map(\.id)
       case "script-remove":
         let profile = EngineWebProfile(try focusedBrowser(w).context)

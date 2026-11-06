@@ -48,6 +48,16 @@ CefRefPtr<OEClient> OECreateClient(OEWebContent* webContent) {
   return new OEClient(webContent);
 }
 
+bool OEClient::OnProcessMessageReceived(CefRefPtr<CefBrowser> browser,
+    CefRefPtr<CefFrame> frame, CefProcessId source,
+    CefRefPtr<CefProcessMessage> message) {
+  auto name = message->GetName();
+  if (source != PID_RENDERER || !frame->IsMain() ||
+      (name != "oe.open.message" && name != "oe.open.reply")) return false;
+  [view_ oe_openWorldMessage:message];
+  return true;
+}
+
 #pragma mark Life span
 
 bool OEClient::OnBeforePopup(CefRefPtr<CefBrowser> browser,

@@ -1,0 +1,14 @@
+diff --git a/chrome/common/chrome_isolated_world_ids.h b/chrome/common/chrome_isolated_world_ids.h
+index 846e4777c4d2e983078ad629621a3eb3acf780e4..caf1206d8d7ca3884fee1884403f1cc5dc3ceeb8 100644
+--- a/chrome/common/chrome_isolated_world_ids.h
++++ b/chrome/common/chrome_isolated_world_ids.h
+@@ -22,6 +22,9 @@ enum ChromeIsolatedWorldIDs {
+ #if BUILDFLAG(IS_MAC)
+   // Isolated world ID for AppleScript.
+   ISOLATED_WORLD_ID_APPLESCRIPT,
++
++  // One fixed world for Open runtimes; extensions allocate above this range.
++  ISOLATED_WORLD_ID_OPEN,
+ #endif  // BUILDFLAG(IS_MAC)
+ 
+   // Numbers for isolated worlds for extensions are set in
