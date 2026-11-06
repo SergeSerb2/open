@@ -3996,6 +3996,8 @@ def sidebar_checks(factory, results, tmp):
         app.call("select", tab=a)
         first_page = check_page(app, a, "Sidebar A")
         # Click the real switcher through OEApplication.sendEvent; no direct intent dispatch.
+        # A socket-ready launch can still be waiting for its activation grant.
+        app.call("window-focus", id=app.call("window-state")["id"], activate=True)
         app.call("window-motion", reduced=False)
         frame = app.call("window-state")["spaceSwitcherFrames"][s2]
         app.call("mouse", action="click", x=frame[0]+frame[2]/2, y=frame[1]+frame[3]/2)
