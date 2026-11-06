@@ -38,8 +38,8 @@ extension AutomationController {
       if a["action"] as? String == "click", a["control"] as? String == "tone",
          let button = picker.toneButton(at: a["index"] as? Int ?? 0), let toneWindow = picker.toneWindow {
         let point = button.convert(CGPoint(x: button.bounds.midX, y: button.bounds.midY), to: nil)
-        _ = try await mouse(["action": "click", "window": toneWindow.windowNumber, "x": point.x,
-                             "y": toneWindow.frame.height - point.y, "queued": true], w)
+        _ = try await mouse(["action": "click", "window": toneWindow.windowNumber, "x": Double(point.x),
+                             "y": Double(toneWindow.frame.height - point.y), "queued": true], w)
         return true
       }
       guard a["action"] as? String == "click", let control = a["control"] as? String,
@@ -47,8 +47,8 @@ extension AutomationController {
       let point = picker.view.convert(CGPoint(x: frame.midX, y: frame.midY), to: nil)
       // Reuse the native queue path and wait for mouse-up delivery. Native
       // controls can track synchronously; custom cells finish on mouse-up.
-      _ = try await mouse(["action": "click", "window": panel.windowNumber, "x": point.x,
-                           "y": panel.frame.height - point.y, "queued": true,
+      _ = try await mouse(["action": "click", "window": panel.windowNumber, "x": Double(point.x),
+                           "y": Double(panel.frame.height - point.y), "queued": true,
                            "modifiers": a["modifiers"] as? [String] ?? []], w)
       return true
     default: throw Failure(message: "unknown editor command")
