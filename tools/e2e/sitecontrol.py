@@ -105,6 +105,18 @@ def run(factory, results, tmp, env):
                 record('S2_adblock', row(off,'row.contentBlocking').get('subtitle') == 'Off' and off['reloadVisible'] and persisted
                        and row(on,'row.contentBlocking').get('subtitle') == 'On' and allowed is True and denied is False,
                        off=off,on=on,allowed=allowed,blocked=denied)
+            standard = state()
+            standard_picker = standard['mode'] == 'extensionPicker' and standard['focusedControl'] == 'extension.add'
+            close(); app.call('key', key='e', modifiers=['cmd'], route='app')
+            empty_picker = state()
+            app.call('key', key='return', route='app')
+            added = wait(lambda: next((t for t in app.call('tabs') if t['selected']
+                         and t['url'] == 'https://chromewebstore.google.com/category/extensions'), None), timeout=5)
+            record('S1_empty_picker', not standard_picker and empty_picker['presented']
+                   and empty_picker['mode'] == 'extensionPicker' and empty_picker['focusedControl'] == 'extension.add'
+                   and bool(added) and not state()['presented'], state=empty_picker,
+                   negativeStandardRejected=not standard_picker, openedStore=bool(added))
+            app.call('key', key='w', modifiers=['cmd'], route='app'); app.call('select', tab=tab)
             close()
             app.call('permission', origin=origin, kind=1, state=0)
             app.call('permission', origin=origin, kind=1, state=1)
