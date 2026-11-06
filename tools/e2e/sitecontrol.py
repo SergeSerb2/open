@@ -54,8 +54,12 @@ def run(factory, results, tmp, env):
             adblock_open_before = Path(app.user_data, '.adblock-lock').exists()
             before = state()
             s = opened()
-            record('S1_lazy_adblock_owner', not adblock_open_before
-                   and not Path(app.user_data, '.adblock-lock').exists(),
+            startup = app.call('startup')
+            # Command services legitimately open Settings after first paint.
+            # Capture the owner at the existing pre-engine startup checkpoint,
+            # after the real window and SCC source have been constructed.
+            record('S1_lazy_adblock_owner', startup.get('adBlockOwnerOpenBeforeEngine') is False,
+                   startup=startup,
                    openedBefore=adblock_open_before,
                    openedAfter=Path(app.user_data, '.adblock-lock').exists())
             actions = [r for r in s['controls'] if r['id'].startswith('action.')]

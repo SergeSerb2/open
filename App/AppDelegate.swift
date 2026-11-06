@@ -300,6 +300,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate, OEEngineDelegate, OEBr
       "contextsBeforeEngine": OEEngine.shared.contexts.count,
       "visibleWindows": windowControllers.filter { $0.window?.isVisible == true }.count,
     ]
+    #if OPEN_AUTOMATION
+    startupEvidence["adBlockOwnerOpenBeforeEngine"] = stores.existingAdBlock != nil
+    #endif
   }
 
   @discardableResult
