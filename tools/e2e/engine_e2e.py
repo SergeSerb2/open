@@ -7084,6 +7084,7 @@ def littleopen_checks(factory, results, tmp):
                and deferred.get('browserCreationStartedAt', 0) >= first.get('uptime', float('inf')),
                opened=early, firstFrame=first, after=deferred)
         close_all()
+        creation_baseline = state()['littleOpenBrowserCreations']
         closed = app.call('little-open-action', action='blank', then='close')
         closed_early = closed['opened']['sessions'][0]
         # Pump later native turns too: canceled work must never create a Browser.
@@ -7099,8 +7100,10 @@ def littleopen_checks(factory, results, tmp):
         record('littleopen_close_before_browser', closed_early.get('browserID') is None
                and closed_early['content'] == 0 and not closed_state['sessions']
                and closed['after']['browserCount'] == closed_state['browserCount'] == baseline
+               and closed_state['littleOpenBrowserCreations'] == creation_baseline
                and accepted_limit['after']['browserCount'] == baseline and refused_limit,
                opened=closed_early, after=closed_state, baseline=baseline,
+               creationBaseline=creation_baseline,
                inputLimit={'acceptedBytes': 8192, 'refusedBytes': 8193, 'refused': refused_limit})
         app.call('open', url=origin + '/main-browser-control')
         base = state()

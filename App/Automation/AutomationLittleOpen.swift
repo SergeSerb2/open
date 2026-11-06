@@ -75,6 +75,7 @@ extension AutomationController {
     return ["sessions": sessions, "hotkeyRegistered": app.hotkeyService?.isRegistered ?? false,
       "expiry": archiveState(), "mainWindows": app.windowControllers.count,
       "browserCount": OEEngine.shared.browsers.count,
+      "littleOpenBrowserCreations": LittleOpenWebContent.browserCreationCountForAutomation,
       "browserIDs": OEEngine.shared.browsers.map(\.identifier),
       "mainBrowserIDs": OEEngine.shared.browsers.filter { browser in
         app.windowControllers.contains { $0.window === browser.window }

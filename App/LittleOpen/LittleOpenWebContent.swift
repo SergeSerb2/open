@@ -20,6 +20,7 @@ final class LittleOpenWebContent: NSObject, LittleOpenWebContentProviding, WebCo
   private var closed = false
   #if OPEN_AUTOMATION
   static var beforeNextCreationForAutomation: ((LittleOpenWebContent) -> Bool)?
+  private(set) static var browserCreationCountForAutomation = 0
   private var beforeCreationForAutomation: ((LittleOpenWebContent) -> Bool)?
   var onSubmissionForAutomation: (() -> Void)?
   private(set) var submittedBeforeBrowser = false
@@ -109,6 +110,9 @@ final class LittleOpenWebContent: NSObject, LittleOpenWebContentProviding, WebCo
     browserCreationStartedAt = ProcessInfo.processInfo.systemUptime
     // Same P1 path as the main window: context, Browser, Chrome host, strip insertion.
     let browser = OEBrowser(context: context)
+    #if OPEN_AUTOMATION
+    Self.browserCreationCountForAutomation += 1
+    #endif
     self.browser = browser
     browser.context.delegate = app
     factory.standaloneBrowser = browser
