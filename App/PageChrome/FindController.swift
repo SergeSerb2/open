@@ -27,6 +27,8 @@ final class FindController {
   private var selectionGeneration = 0
   private var pendingEdits: Set<ItemID> = []
   private var editScheduled = false
+  private var measuringPresentation = false
+  private var syncPhases: [String: Double] = [:]
   private weak var occludedChrome: NSView?
   private var chromeWasHidden = false
   private(set) var requestCount = 0
@@ -55,7 +57,9 @@ final class FindController {
     let start = ProcessInfo.processInfo.systemUptime
     let requestedAt = factory.findKeyRequestedAt ?? start
     let state = state(id), wasEditing = owns(factory.window?.firstResponder)
+    syncPhases.removeAll(keepingCapacity: true); measuringPresentation = true
     state.open = true; sync(refreshResults: false)
+    measuringPresentation = false
     let layoutAt = ProcessInfo.processInfo.systemUptime
     // Commit the visible bar before the native text-input context's first-use
     // setup. The editor stays lazy and focus still completes in this action.
@@ -68,6 +72,7 @@ final class FindController {
       "layout": (layoutAt - start) * 1000, "draw": (drawAt - layoutAt) * 1000, "flush": (visibleAt - drawAt) * 1000,
       "focus": (ProcessInfo.processInfo.systemUptime - visibleAt) * 1000]
     lastPresentationMilliseconds = (ProcessInfo.processInfo.systemUptime - start) * 1000
+    presentationPhases.merge(syncPhases) { _, new in new }
     if seedSelection, !wasEditing { readSelection(id, page: page, opening: true) }
     else if !state.query.isEmpty { run(id, forward: true) }
   }
@@ -104,7 +109,13 @@ final class FindController {
           if (\#(opening ? "true" : "false")) {
             text = text.replace(/[\u000A-\u000D\u0085\u2028\u2029]/g, ' ');
             if (typeof text !== 'string') return '';
-            text = text.replace(/^[\u0009-\u000D\u0020\u0085\u00A0\u1680\u2000-\u200B\u2028\u2029\u202F\u205F\u3000]+|[\u0009-\u000D\u0020\u0085\u00A0\u1680\u2000-\u200B\u2028\u2029\u202F\u205F\u3000]+$/g, '');
+            // Foundation's trim set, without regex backtracking on long selections.
+            const trim = c => (c >= 9 && c <= 13) || c === 32 || c === 133 || c === 160 || c === 5760 ||
+              (c >= 8192 && c <= 8203) || c === 8232 || c === 8233 || c === 8239 || c === 8287 || c === 12288;
+            let first = 0, last = text.length;
+            while (first < last && trim(text.charCodeAt(first))) first++;
+            while (last > first && trim(text.charCodeAt(last - 1))) last--;
+            text = text.slice(first, last);
             if (typeof text !== 'string') return '';
             let count = 0;
             for (const segment of new Intl.Segmenter('und', {granularity:'grapheme'}).segment(text)) {
@@ -214,8 +225,10 @@ final class FindController {
       guard state.open, let (parent, top) = targets[id], let page = factory.hosts[id]?.content else {
         state.overlay?.removeFromSuperview(); continue
       }
-      if state.overlay == nil {
-        let overlay = FindPaneOverlay(frame: .zero); state.overlay = overlay
+      let creationAt = measuringPresentation ? ProcessInfo.processInfo.systemUptime : 0
+      let creatingOverlay = state.overlay == nil
+      if creatingOverlay {
+        let overlay = FindPaneOverlay(frame: FindPaneOverlay.placement(in: parent, topInset: top)); state.overlay = overlay
         overlay.bar.onEdit = { [weak self] in self?.edit($0, id: id) }
         overlay.bar.onAction = { [weak self] tag in
           guard let self else { return }
@@ -224,17 +237,24 @@ final class FindController {
         overlay.bar.onClose = { [weak self] in self?.close(id) }
         overlay.bar.setQuery(state.query)
       }
+      if measuringPresentation { syncPhases["create", default: 0] += (ProcessInfo.processInfo.systemUptime - creationAt) * 1000 }
       guard let overlay = state.overlay else { continue }
+      let attachAt = measuringPresentation ? ProcessInfo.processInfo.systemUptime : 0
       let changed = overlay.superview !== parent || state.page !== page
       overlay.topInset = top
       if overlay.superview !== parent { overlay.removeFromSuperview(); parent.addSubview(overlay) }
       state.page = page; overlay.isHidden = false; overlay.updatePlacement()
-      overlay.layoutSubtreeIfNeeded()
+      if measuringPresentation { syncPhases["attach", default: 0] += (ProcessInfo.processInfo.systemUptime - attachAt) * 1000 }
+      let layoutAt = measuringPresentation ? ProcessInfo.processInfo.systemUptime : 0
+      if !creatingOverlay { overlay.layoutSubtreeIfNeeded() }
+      if measuringPresentation { syncPhases["layoutViews", default: 0] += (ProcessInfo.processInfo.systemUptime - layoutAt) * 1000 }
       if changed, refreshResults, !state.query.isEmpty {
         resetResult(state); page.stopFinding(clearSelection: true); run(id, forward: true)
       }
     }
+    let occlusionAt = measuringPresentation ? ProcessInfo.processInfo.systemUptime : 0
     updateChromeOcclusion()
+    if measuringPresentation { syncPhases["occlusion"] = (ProcessInfo.processInfo.systemUptime - occlusionAt) * 1000 }
   }
   /// The legacy root extensions stack otherwise paints over Find and captures
   /// its button clicks. Preserve its visibility whenever Find leaves its area.

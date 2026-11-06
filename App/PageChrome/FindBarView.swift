@@ -4,7 +4,7 @@ import CoreText
 /// Recreated from page-chrome §1; no reference assets. The dedicated field
 /// editor consumes navigation keys before the embedded page can see them.
 @MainActor
-final class FindBarView: NSView, NSTextFieldDelegate {
+class FindBarView: NSView, NSTextFieldDelegate {
   let field: NSTextField = FindQueryField()
   private var editorStorage: FindFieldEditor?
   private let search = NSImageView()
@@ -28,6 +28,9 @@ final class FindBarView: NSView, NSTextFieldDelegate {
 
   override init(frame: NSRect) {
     super.init(frame: frame)
+    // The controls keep their native input/accessibility behavior while AppKit
+    // draws this small surface into one backing layer.
+    canDrawSubviewsIntoLayer = true
     wantsLayer = true
     layer?.cornerRadius = 5
     layer?.shadowRadius = 5
@@ -132,8 +135,13 @@ final class FindBarView: NSView, NSTextFieldDelegate {
       return [rect.minX, rect.minY, rect.width, rect.height]
     }
     let rect = close.convert(close.bounds, to: nil)
-    let hit = window?.contentView.map { $0.hitTest($0.convert(NSPoint(x: rect.midX, y: rect.midY), from: nil)) } ?? nil
+    let point = NSPoint(x: rect.midX, y: rect.midY)
+    let hit = window?.contentView.map { root in
+      root.hitTest(root.superview?.convert(point, from: nil) ?? point)
+    } ?? nil
     return ["close": frame(close), "query": frame(field), "editor": frame(field.currentEditor()),
+      "cellClass": field.cell.map { String(describing: type(of: $0)) } ?? "none",
+      "editorClass": field.currentEditor().map { String(describing: type(of: $0)) } ?? "none",
       "closeHit": hit.map { String(describing: type(of: $0)) } ?? "none", "closeHitMatches": hit === close]
   }
   #endif
@@ -247,8 +255,8 @@ private final class FindFieldEditor: NSTextView {
 /// A bar-sized pane overlay. Parent frame notifications keep it anchored
 /// without a page-sized backing surface, timers, or a display link.
 @MainActor
-final class FindPaneOverlay: NSView {
-  let bar = FindBarView(frame: .zero)
+final class FindPaneOverlay: FindBarView {
+  var bar: FindBarView { self }
   private var parentObserver: (any NSObjectProtocol)?
   var topInset: CGFloat = 10 { didSet { if topInset != oldValue { updatePlacement() } } }
   override var wantsDefaultClipping: Bool { false }
@@ -256,7 +264,9 @@ final class FindPaneOverlay: NSView {
     didSet { if isHidden { stopObserving() } else { observeParent(); updatePlacement() } }
   }
   override init(frame: NSRect) {
-    super.init(frame: frame); addSubview(bar); needsLayout = true
+    super.init(frame: frame)
+    // Resolve the manual control frames before joining the window's layout tree.
+    layoutSubtreeIfNeeded()
   }
   @available(*, unavailable) required init?(coder: NSCoder) { fatalError() }
   isolated deinit { if let parentObserver { NotificationCenter.default.removeObserver(parentObserver) } }
@@ -275,15 +285,12 @@ final class FindPaneOverlay: NSView {
   }
   func updatePlacement() {
     guard let parent = superview else { return }
-    let width = min(300, max(0, parent.bounds.width - 20))
-    let y = parent.isFlipped ? parent.bounds.minY + topInset : parent.bounds.maxY - topInset - 32
-    let target = CGRect(x: parent.bounds.maxX - 10 - width, y: y, width: width, height: 32)
+    let target = Self.placement(in: parent, topInset: topInset)
     if frame != target { frame = target; needsLayout = true }
   }
-  override func layout() {
-    super.layout(); if bar.frame != bounds { bar.frame = bounds }
-  }
-  override func hitTest(_ point: NSPoint) -> NSView? {
-    let hit = super.hitTest(point); return hit === self ? nil : hit
+  static func placement(in parent: NSView, topInset: CGFloat) -> CGRect {
+    let width = min(300, max(0, parent.bounds.width - 20))
+    let y = parent.isFlipped ? parent.bounds.minY + topInset : parent.bounds.maxY - topInset - 32
+    return CGRect(x: parent.bounds.maxX - 10 - width, y: y, width: width, height: 32)
   }
 }

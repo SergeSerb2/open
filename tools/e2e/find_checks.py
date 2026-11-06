@@ -35,7 +35,15 @@ def run(h, factory, results, tmp):
                          navigationVisible=False, separatorVisible=False, frame=[], paneFrame=[], topInset=0,
                          placeholder='', radius=0, querySelection=[], layouts=0))
     def settled(tab=None, count=None):
-        return h.wait_until(lambda: (lambda p: p if count is None or p['countText'] == count else None)(pane(tab)), timeout=3, step=.05) or pane(tab)
+        expected_total=int(count.rsplit('/',1)[1]) if count and '/' in count else (0 if count=='Not Found' else None)
+        def ready():
+            p=pane(tab)
+            if count is None or p['countText']==count: return p
+            # This fixture's text is static. A displayed final total that is
+            # wrong cannot be repaired by advancing the active ordinal.
+            if expected_total is not None and p['countText'] and p['total']!=expected_total and not state().get('pending'): return p
+            return None
+        return h.wait_until(ready, timeout=3, step=.05) or pane(tab)
     def query(value):
         key('f', ['cmd']); key('a', ['cmd']); key(text=value)
         return settled()
@@ -127,15 +135,21 @@ def run(h, factory, results, tmp):
         app.call('select', tab=tab); a = settled(tab, '1/5')
         app.call('select', tab=other); b2 = settled(other, '1/2')
         row('F17_per_tab', a['visible'] and a['query'] == 'quasar' and a['total'] == 5 and b['query'] == b2['query'] == 'orbit' and b2['total'] == 2, a=a, b=b2)
-        app.call('navigate', tab=other, url=origin + '/index.html?new=document'); app.call('wait', tab=other)
+        new_document=origin + '/index.html?new=document'
+        app.call('navigate', tab=other, url=new_document); app.call('wait', tab=other)
+        navigated=h.wait_until(lambda: app.eval(other, 'location.href===%r && document.readyState==="complete"' % new_document), timeout=5, step=.05)
         p = pane(other)
-        row('F18_navigation_clears', p['visible'] and p['query'] == 'orbit' and p['countText'] == '' and not p['navigationVisible'], pane=p)
+        row('F18_navigation_clears', bool(navigated) and p['visible'] and p['query'] == 'orbit' and p['countText'] == '' and not p['navigationVisible'], pane=p)
         f = p['frame']; app.call('mouse', action='click', x=f[0]+45, y=app.call('window-state')['frame'][3]-f[1]-16)
+        before_return=state(); return_focus=app.call('focus-state')
         key('return'); p = settled(other, '1/2')
-        row('F19_return_after_navigation', p['visible'] and p['countText'] == '1/2', pane=p)
+        row('F19_return_after_navigation', p['visible'] and p['countText'] == '1/2', pane=p, focus=return_focus,
+            requests=state().get('requests',0)-before_return.get('requests',0), results=state().get('results',0)-before_return.get('results',0))
+        old_origin=app.eval(other, 'performance.timeOrigin')
         app.call('menu-perform', id='reload'); app.call('wait', tab=other)
+        reloaded=h.wait_until(lambda: app.eval(other, 'performance.timeOrigin!==%r && document.readyState==="complete"' % old_origin), timeout=5, step=.05)
         p = pane(other)
-        row('F19_reload_clears', p['visible'] and p['query'] == 'orbit' and p['countText'] == '', pane=p)
+        row('F19_reload_clears', bool(reloaded) and p['visible'] and p['query'] == 'orbit' and p['countText'] == '', pane=p)
         # Use the real native menu action as well as its key binding.
         key('escape'); app.call('menu-perform', id='find-and-replace'); p = pane(other)
         row('F20_find_replace_opens', p['visible'] and p['focused'], pane=p)

@@ -10,27 +10,34 @@ Section 9 hook: `PeekController.onPageEscape` lets Find consume Esc before
 Peek's existing key monitor dismisses Peek. No engine source or distribution
 changes are part of this change.
 
-Debug build passed on the main engine distribution, SHA-256
+Debug and automation Release builds use the main engine distribution, SHA-256
 `f34400e71412d87a0b268fcd5658a8563cca34f600c8dd17b534a63e76aa7939`.
-No new Find warnings were emitted. The first on-screen run was
-**INTERRUPTED** by SecurityAgent and does not count. The lead lifted that
-hold at 14:30. No debugger or authorization workaround was attempted.
+No new Find warnings were emitted. SecurityAgent and foreground-loss
+**INTERRUPTED** attempts do not count. No debugger or authorization workaround
+was attempted.
 
 The draft is **not accepted**. Current evidence before the final-head run:
 
 | Required evidence | State |
 |---|---|
-| Find flow, per-pane/tab/Peek state, selection, menu actions | Closed-bar next/previous checks passed (4/5 then 3/5); the native close click is blocked by the legacy root extensions overlay; fix pending validation |
-| Own-window light/dark ΔE00 ≤ 2, corner pixels, frame checks | 2x WindowServer edge samples ΔE00 0; stronger blank-middle samples FAIL at 3.95 light / 5.43 dark because of that overlay |
-| Cmd+F within one 120 Hz frame | FAIL: Debug 8.735 ms at load 8.22; earlier Release 29.141 ms at load 73.81; deadline 8.333 ms; no current speed acceptance |
-| Coalescing and idle work | Earlier full flow passed: one typed request and at most one engine activation; all ten idle observer counters zero over two seconds |
-| Negative proof for every new gate; forced early-Peek-failure cleanup | Pending |
-| e2e features, shell, window, commandbar, page | Pending |
+| Real-App behavior and native hit testing | 49/50 Release checks pass; native field keys, page Cmd+G, close click, selection boundaries, tab memory, document navigation/reload, Split View and Peek pass |
+| Own-window light/dark pixels | WindowServer snapshots pass: blank-middle background ΔE00 0.4977 light / 0.3836 dark, limit 2; radius, 300×32 frame, right 10, top 10/50 and narrow-pane checks pass |
+| First Cmd+F within one frame | FAIL: 11.5107 ms at load 9.81/10.55/11.74, against 4.1667 ms on AW2726DM, 1x, maximum 240 Hz; it also misses the 120 Hz reference interval of 8.3333 ms |
+| Coalescing and idle work | PASS: one typed request and at most one engine activation; all ten Find-scoped idle observer counters zero over two seconds with the bar open and page focused |
+| Negative proof for every new gate; forced early-Peek-failure cleanup | Pending; interrupted negative attempts are excluded |
+| e2e features, shell, window, commandbar, page; full verify-all | Final-head runs pending |
 
-Receipts stay under `.re/find/` in the implementation checkout. The raw
-interrupted JSON is `find-interrupted-securityagent.json`; the full initial
-log is `find-first.log`. The harness also writes its ordinary
-`docs/engine-spike/results-find-debug.json` receipt (not committed).
+The complete normal receipt is `.re/find/find-functional-quiet.json`, with
+load and phase timings in `.re/find/find-fixed-quiet.log`. Earlier receipts
+precede the root extensions collision fix and are not current acceptance.
+Receipts stay under `.re/find/` in the implementation checkout. The harness
+also writes `docs/engine-spike/results-find-release.json` (not committed).
+
+Section 6 temporary hook: until its root `extensionBar` is replaced, Find hides
+that existing view only while its rectangle intersects a visible Find bar.
+It restores the saved visibility on close, tab/layout changes and teardown.
+The extensions view is neither moved nor restyled. The close gate uses the
+real AppKit hit test and native mouse events, with no forced control action.
 
 ## Capture requests for the user
 
@@ -43,8 +50,8 @@ page and include the page top, sidebar/toolbar, and AX snapshot if possible.
 
 The lead's unconfirmed choices are per-tab in-memory state; keeping the match
 on close; closed-bar Cmd+G reopening; and Find and Replace opening Find.
-The monitor-away display rerun must include this PR's own-window color/radius
-rows and the known built-in-display baseline rows from TANDEM-RULES §4.
+The final display checks run on the main AW2726DM at 1x. The earlier
+built-in-display exceptions do not apply.
 
 
 ## Scope and source review

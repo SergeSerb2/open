@@ -100,7 +100,6 @@ final class EngineWebContentHost: NSObject, WebContentHost, WebContentProviding,
 
   func webContent(_ page: OEWebContent, didChange changes: OEWebContentChange) {
     guard !closed, let owner else { return }
-    if changes.contains(.loading), page.isLoading { owner.findController?.didNavigate(page) }
     let token = generation
     if changes.contains(.loading), page.isLoading { historyRecorder.loadingChanged(true) }
     if changes.contains(.URL), let url = page.url, url.absoluteString != "about:blank" {
@@ -283,6 +282,7 @@ final class EngineWebContentHost: NSObject, WebContentHost, WebContentProviding,
   }
   func webContent(_ page: OEWebContent, didCommitNavigationTo url: URL, isReload: Bool) {
     guard !closed else { return }
+    owner?.findController?.didNavigate(page)
     historyRecorder.committed(url: url, isReload: isReload, ephemeral: page.context.isEphemeral)
     owner?.record("historyCommit", page, ["url": url.absoluteString, "reload": isReload])
   }
