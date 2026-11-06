@@ -145,6 +145,47 @@ The probe retains asynchronous event batches, keeps the same deadline and
 Cmd-W app-route check, and saves/resets/restores the shared developer-mode
 default. No production key route or threshold changed.
 
+## Full verification before PR
+
+Full gate on `f95f57a0ad3d0f78e096902850fb1f4c3c90a110` after merging current main:
+`~/Library/Caches/OpenRE/scripts/heavy.sh tools/verify-all.sh --with-arc-data`.
+It used no quiet lock. Start load averages: 8.12 9.24 10.24; end: 11.54 12.03 11.52.
+The restored-display checks are real gates; no display exemption is used.
+`commands-dump` retains missing/extra/different 0/0/0 and 11 allowed-missing.
+Arc input was read only; raw output stays private. The PR records the required
+repeat on its final head after these follow-up links are added.
+
+| Check | Result | Seconds |
+|---|---|---|
+| build | PASS | 93 |
+| commands-demo | PASS | 2 |
+| roundtrip | PASS | 0 |
+| space-legacy | PASS | 1 |
+| space-editor | PASS | 4 |
+| space-pad-compare | PASS | 3 |
+| suggest-check | PASS | 16 |
+| commands-dump | PASS | 1 |
+| route | PASS | 2 |
+| favicons | PASS | 1 |
+| media-demo | PASS | 0 |
+| sleep-demo | PASS | 1 |
+| adblock-perf | PASS | 0 |
+| adblock-catalog | PASS | 1 |
+| profiles | PASS | 0 |
+| settings-preview | PASS | 83 |
+| sidebar-render | PASS | 111 |
+| sidebar-compare | PASS | 134 |
+| commandbar-render | PASS | 39 |
+| features-render | PASS | 89 |
+| sitecontrol-render | PASS | 100 |
+| boosts | PASS | 3 |
+| import-arc | PASS | 1 |
+
+An earlier full run on `ca6634c1` passed 22/23 groups and failed command-bar
+row #132 (+0.405 ms against +0.3 ms, load 13.7 / 12.0 / 19.2). Its queued
+quiet rerun was stopped before measurement when main changed the command-bar
+code. That run remains a historical FAIL; the table above covers newer code.
+
 ## Limits and next engine work
 
 - E11 popup windows and E12 omnibox events are separate work. Metadata already
