@@ -5,6 +5,12 @@ import OpenBoosts
 
 @MainActor enum CodeFlows {
     static func run() -> [Flows.Check] {
+        let checks = autoreleasepool { editingFlows() }
+        // Complete deferred native teardown before another process takes focus.
+        RunLoop.main.run(until:Date().addingTimeInterval(0.01))
+        return checks+EditorNativeKey.run(review:true)+renders()
+    }
+    private static func editingFlows() -> [Flows.Check] {
         var checks: [Flows.Check] = []
         func check(_ name: String,_ pass: Bool) { checks.append(.init(name: name,pass: pass)) }
         let stage = EditorStage(),store = stage.host.boostStore,id = stage.session.boost.id
@@ -106,7 +112,7 @@ import OpenBoosts
         stage.key(53,"\u{1b}");stage.settle(0.3)
         check("F17 first Esc ends text editing; second Esc returns to simple mode",ended && !stage.view.isCodeMode && stage.controller.panel != nil)
         stage.controller.close();stage.parent.close()
-        return checks+EditorNativeKey.run(review:true)+renders()
+        return checks
     }
     /// Real native field editing and window key dispatch, including hidden siblings.
     static func reviewFlows() -> [Flows.Check] {

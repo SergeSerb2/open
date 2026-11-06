@@ -210,11 +210,7 @@ public final class BoostEditorView: NSView {
         }
         button("editor.tool.size","Change text size","",.half) { [weak self] in guard let self else { return }; self.session.cycleTextSize(backwards: (self.control(id: "editor.tool.size") as? EditorButton)?.activationModifiers.contains(.shift) == true) }
         button("editor.tool.case","Change text case","",.half) { [weak self] in guard let self else { return }; self.session.cycleTextCase(backwards: (self.control(id: "editor.tool.case") as? EditorButton)?.activationModifiers.contains(.shift) == true) }
-        button("editor.tool.zap","Zap","bolt.fill",.row) {}; button("editor.tool.code","Code","curlybraces",.row) { [weak self] in self?.onCodeMode?(true) }
-        for id in ["zap"] {
-            // Blocked on P7: isolated world; App and the engine own the hook.
-            let b = control(id: "editor.tool."+id)!; b.isEnabled = false; b.tooltipTitle = id == "zap" ? "Zap isn’t available yet." : "Code editing isn’t available yet."
-        }
+        button("editor.tool.zap","Zap","bolt.fill",.row) { [weak session] in session?.toggleZap() }; button("editor.tool.code","Code","curlybraces",.row) { [weak self] in self?.onCodeMode?(true) }
         for size in [true,false] { (control(id: "editor.tool."+(size ? "size" : "case")) as? EditorButton)?.secondaryClick = { [weak self] in self?.showTextMenu(size: size) } }
         addSubview(firstRun); firstRun.make.invoke = { [weak session] in session?.dismissInterstitial() }; firstRun.later.invoke = { [weak self] in self?.onClose?() }
         session.onChange = { [weak self] in self?.refresh() }; pad.onKey = { [weak self] in self?.onKey?($0) ?? false }; refresh()
@@ -242,6 +238,10 @@ public final class BoostEditorView: NSView {
             b.selected = id == "invert" ? wheel.invertLightness : id == "advanced" && advanced
             if id == "invert" { let glyph = wheel.invertLightness ? "lightbulb.fill" : "lightbulb";if b.symbol != glyph { b.symbol = glyph } }
         }
+        let zap = control(id: "editor.tool.zap") as! EditorButton
+        let zapAvailable = session.zapAvailable
+        zap.isEnabled = session.isEditable && session.globallyEnabled && session.isActiveOnPage && zapAvailable
+        zap.tooltipTitle = zapAvailable ? "Zap" : "Zap isn't available yet."
         if session.isInteracting { return }
         let name = control(id: "editor.name") as! EditorButton; name.caption = session.boost.name; name.setAccessibilityLabel(session.boost.name.isEmpty ? "Boost name" : session.boost.name)
         control(id: "editor.undo")?.isEnabled = session.undoManager.canUndo
@@ -249,7 +249,9 @@ public final class BoostEditorView: NSView {
         (control(id: "editor.tool.size") as? EditorButton)?.caption = "Size"; (control(id: "editor.tool.case") as? EditorButton)?.caption = "Case"
         control(id: "editor.tool.size")?.setAccessibilityValue(BoostEditorSession.textSizeNames[session.textSizeIndex]); control(id: "editor.tool.case")?.setAccessibilityValue(BoostEditorSession.textCaseNames[session.textCaseIndex])
         (control(id: "editor.tool.zap") as? EditorButton)?.caption = "Zap"; (control(id: "editor.tool.code") as? EditorButton)?.caption = "Code"
-        control(id: "editor.tool.zap")?.setAccessibilityValue(session.boost.zaps.count)
+        zap.selected = session.isZapActive
+        zap.setAccessibilityValue(session.boost.zaps.count)
+        zap.setAccessibilityLabel(session.boost.zaps.isEmpty ? "Zap" : "Zap, \(session.boost.zaps.count)")
         let next = [session.isActiveOnPage ? "" : "This Boost doesn't apply to \(session.pageURL.host ?? "this page").",session.globallyEnabled ? "" : "Boosts are off. Turn them on in Settings to see changes."].filter { !$0.isEmpty }
         let bannersChanged = next != banners
         if bannersChanged {

@@ -33,6 +33,12 @@ def run(h, factory, results, tmp):
     probe = os.path.join(tmp, 'idle-probe.dylib')
     subprocess.run(['xcrun', 'clang', '-dynamiclib', '-fblocks', '-fobjc-arc', '-Wno-deprecated-declarations', source,
                     '-framework', 'AppKit', '-framework', 'QuartzCore', '-framework', 'CoreVideo', '-o', probe], check=True, timeout=30)
+    input_probe = None
+    if os.environ.get('OPEN_FIND_INPUT_ORDER_NEGATIVE') == '1':
+        input_probe = os.path.join(tmp, 'find-input-order-probe.dylib')
+        subprocess.run(['xcrun', 'clang', '-dynamiclib', '-fobjc-arc',
+                        os.path.join(h.ROOT, 'tools/e2e/find-input-order-probe.m'),
+                        '-framework', 'AppKit', '-o', input_probe], check=True, timeout=30)
     app = None
     saved = {}
     private = os.path.join(h.ROOT, '.re', 'find')
@@ -146,7 +152,8 @@ def run(h, factory, results, tmp):
         # Keep extension setup outside the unchanged twenty-window timing gate.
         # The native close/viewport rows below must run with a real pinned action.
         app.quit()
-        app = factory(urls=(origin + '/index.html',), fresh=True, extra_args=[
+        app = factory(urls=(origin + '/index.html',), fresh=True,
+            extra_env={'DYLD_INSERT_LIBRARIES': input_probe} if input_probe else {}, extra_args=[
             '--load-extension=' + os.path.join(h.ROOT, 'tools/e2e/fixtures/action-probe'),
             '--disable-features=DisableLoadExtensionCommandLineSwitch'])
         tab = app.call('tabs')[0]['id']; app.call('wait', tab=tab); app.call('focus', tab=tab)
@@ -224,10 +231,13 @@ def run(h, factory, results, tmp):
         navigated=h.wait_until(lambda: app.eval(other, 'location.href===%r && document.readyState==="complete"' % new_document), timeout=5, step=.05)
         p = pane(other)
         row('F18_navigation_clears', bool(navigated) and p['visible'] and p['query'] == 'orbit' and p['countText'] == '' and not p['navigationVisible'], pane=p)
-        f = p['frame']; app.call('mouse', action='click', x=f[0]+45, y=app.call('window-state')['frame'][3]-f[1]-16)
+        # Queue both halves of the click. A direct down with an already queued
+        # up can leave AppKit's control gesture tracking active and filter Return.
+        f = p['frame']; app.call('mouse', action='click', queued=True, x=f[0]+45, y=app.call('window-state')['frame'][3]-f[1]-16)
         before_return=state(); return_focus=app.call('focus-state')
-        key('return'); p = settled(other, '1/2')
+        return_delivery=key('return'); p = settled(other, '1/2')
         row('F19_return_after_navigation', p['visible'] and p['countText'] == '1/2', pane=p, focus=return_focus,
+            delivery=return_delivery, focusAfter=app.call('focus-state'), before=before_return,
             requests=state().get('requests',0)-before_return.get('requests',0), results=state().get('results',0)-before_return.get('results',0))
         old_origin=app.eval(other, 'performance.timeOrigin')
         app.call('menu-perform', id='reload'); app.call('wait', tab=other)
