@@ -265,7 +265,15 @@ final class AppSettingsActions: SettingsActions, LibraryActions, DownloadsProvid
     guard let space = app.model.spaces.first(where: { $0.profileID == profileID }),
       let controller = app.frontWindowController ?? app.makeWindow(focusedSpaceID: space.id),
       let factory = app.hostFactories[controller.windowID] else { return }
-    app.focusWindow(controller.windowID, activate: true); factory.focus(space: space); _ = factory.openNewTab(url: url, background: false)
+    app.focusWindow(controller.windowID, activate: true); factory.focus(space: space)
+    if url.scheme == "chrome", url.host() == "extensions", url.query == nil, url.fragment == nil {
+      let path = url.path.trimmingCharacters(in: CharacterSet(charactersIn: "/"))
+      // Settings uses the same focused-Space singleton rule as the Extensions menu.
+      if path.isEmpty || path == "shortcuts" {
+        _ = factory.performAppCommand(path.isEmpty ? "manage-extensions" : "extension-shortcuts"); return
+      }
+    }
+    _ = factory.openNewTab(url: url, background: false)
   }
   func openHelp(topic: String) { if let profile = app.model.defaultProfile { openURL(AppCommand.helpURL, profileID: profile.id) } }
   func copyText(_ text: String) { NSPasteboard.general.clearContents(); NSPasteboard.general.setString(text, forType: .string) }

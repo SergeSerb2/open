@@ -25,7 +25,10 @@ def run(factory, results, tmp, root, wait_until, new_tab, frame, read_image, ext
     results = Progress(results)
     app = factory(urls=("about:blank",))
     saved = {}
+    bindings = Path(app.user_data) / "State/keybindings.json"
+    previous_bindings = bindings.read_bytes() if bindings.exists() else None
     server = None
+    x27_disabled = False
     captures = Path(root) / ".re/extensions-ui/captures"
     captures.mkdir(parents=True, exist_ok=True)
     probe = "kpapbconhioppmhbehbhjldpbgpbibhl"  # Resolved from the real action list below.
@@ -72,13 +75,18 @@ def run(factory, results, tmp, root, wait_until, new_tab, frame, read_image, ext
                             duplicatesDropped=duplicates)
     try:
         for key, value in {"open.advanced.showToolbar": False,
-                           "open.advanced.playSoundEffects": False}.items():
+                           "open.advanced.playSoundEffects": False,
+                           "open.settings.lastPane": "general",
+                           "open.shortcuts.defaultPriority": "browser"}.items():
             saved[key] = app.call("defaults", key=key, persistent=True)
             app.call("defaults", key=key, value=value)
+        app.call("settings-pane", pane="shortcuts")
+        app.call("ext-shortcuts", action="reset-all")
+        app.call("ext-shortcuts", action="close")
         app.call("window-frame", frame=[80, 60, 1200, 800])
         app.call("window-focus", id=app.call("window-state")["id"], activate=True)
         wait_until(lambda: len(actions()) >= 4, timeout=30)
-        probe = next(a["id"] for a in actions() if a["name"] == "Open action probe")
+        probe = next(a["id"] for a in actions() if a["name"] == "Action Probe")
         ids = [extensions["ublock"], extensions["darkreader"], probe]
         for a in actions(): app.call("ext-pin", extension=a["id"], pinned=False)
         for identifier in ids: app.call("ext-pin", extension=identifier, pinned=True)
@@ -331,17 +339,86 @@ def run(factory, results, tmp, root, wait_until, new_tab, frame, read_image, ext
         p = popup(probe, command=True)
         results["X12_shortcuts"] = {"ok": bool(named and p) and len(own) == 2 and all(not c["dropped"] for c in own), "commands": own, "popup": p}
         close()
-        bindings = Path(app.user_data) / "State/keybindings.json"
-        previous_bindings = bindings.read_bytes() if bindings.exists() else None
+        # X-27: perform the real Shortcuts pane's native menu item twice,
+        # selecting another tab in between to prove the singleton is reselected.
+        # Bitwarden ships a separate default conflict (⇧⌘L / View Library).
+        # Isolate the requested one-line notice, then restore its enabled state.
+        app.call("ext-manage", extension=extensions["bitwarden"], action="disable")
+        x27_disabled = True
+        wait_until(lambda: not action(extensions["bitwarden"]), timeout=5)
+        app.call("settings-pane", pane="general")
+        app.call("settings-pane", pane="shortcuts")
+        app.call("ext-shortcuts", action="reset-all")
+        clean_shortcuts = app.call("ext-shortcuts")
+        shortcuts_tabs = []
         try:
-            bindings.write_text(json.dumps({"version":1,"bindings":{"new-tab":{"shortcuts":[{"key":"u","modifiers":["command","shift"]}],"priority":"browser"}}}))
-            app.call("reload-keybindings")
+            for _ in range(2):
+                app.call("ext-shortcuts", action="menu", select="Extension Shortcuts")
+                selected = wait_until(lambda: next((t for t in app.call("tabs")
+                    if t["url"] == "chrome://extensions/shortcuts" and t["selected"]), None), timeout=10)
+                shortcuts_tabs.append(selected)
+                app.call("select", tab=control)
+                app.call("settings-pane", pane="shortcuts")
+            all_shortcuts = [t for t in app.call("tabs") if t["url"] == "chrome://extensions/shortcuts"]
+            results["X27_shortcuts_menu_singleton"] = {"ok":len(all_shortcuts) == 1
+                and all(t and t["id"] == all_shortcuts[0]["id"] for t in shortcuts_tabs)
+                and all_shortcuts[0]["section"] == "today",
+                "menu":clean_shortcuts["menu"], "invocations":shortcuts_tabs, "tabs":all_shortcuts}
+            at_limit = app.call("ext-shortcuts", action="record", id="new-tab", key="u",
+                modifiers=["control", "option", "shift", "command"])
+            app.call("ext-shortcuts", action="reset", id="new-tab")
+            unchanged = bindings.read_bytes()
+            refused = []
+            for key, modifiers in (("", ["command"]), ("uu", ["command"]), ("u", ["command"] * 5)):
+                try:
+                    app.call("ext-shortcuts", action="record", id="new-tab", key=key, modifiers=modifiers)
+                    refused.append(False)
+                except RuntimeError as error:
+                    refused.append("invalid shortcut" in str(error))
+            results["X27_binding_input_bounds"] = {"ok":at_limit["status"] == "Saved." and all(refused)
+                and bindings.read_bytes() == unchanged, "fourModifiers":at_limit["status"], "refused":refused}
+            # record() saves KeyBindingStore and calls the real App reload hook.
+            bound = app.call("ext-shortcuts", action="record", id="new-tab", key="u", modifiers=["command", "shift"])
+            expected_notice = action(probe)["name"] + ": ⇧⌘U is used by " + bound["openCommandTitle"] + ", so it is off."
+            notice = wait_until(lambda: (lambda s:s if s["notices"] == [expected_notice] else None)(app.call("ext-shortcuts")), timeout=5)
             conflicts = [c for c in app.call("ext-commands")["commands"] if c["extension"] == probe and c["name"] == "probe-named"]
-            results["X12_shortcut_conflict"] = {"ok": len(conflicts)==1 and conflicts[0]["dropped"] and conflicts[0]["openCommandID"]=="new-tab", "rows":conflicts}
+            saved_binding = json.loads(bindings.read_text())["bindings"].get("new-tab")
+            app.call("ext-shortcuts", action="close")
+            app.call("select", tab=control); app.call("focus", target="page")
+            def command_count():
+                return app.eval(control, "chrome.storage.session.get('commands').then(v=>(v.commands||[]).filter(c=>c==='probe-named').length)")
+            before_command = command_count()
+            app.call("key", key="u", modifiers=["command", "shift"], route="app")
+            open_command = wait_until(lambda: (lambda s:s if s.get("presented") else None)(app.call("commandbar-state")), timeout=5)
+            # A restored command below proves the worker/event path is live;
+            # this unchanged count alone would not prove it was suppressed.
+            time.sleep(.2)
+            suppressed_count = command_count()
+            app.call("key", key="escape", route="app")
+            results["X27_user_binding_conflict"] = {"ok":clean_shortcuts["notices"] == [] and bool(notice)
+                and bound["status"] == "Saved." and saved_binding == {"shortcuts":[{"key":"u","modifiers":["shift","command"]}], "priority":"browser"}
+                and len(conflicts)==1 and conflicts[0]["dropped"] and conflicts[0]["openCommandID"] == "new-tab"
+                and bool(open_command) and open_command["mode"] == "newTab" and suppressed_count == before_command,
+                "expectedNotice":expected_notice, "pane":notice or bound,
+                "savedBinding":saved_binding, "commands":conflicts, "openCommand":open_command,
+                "counterBefore":before_command, "counterAfter":suppressed_count}
         finally:
-            if previous_bindings is None: bindings.unlink(missing_ok=True)
-            else: bindings.write_bytes(previous_bindings)
-            app.call("reload-keybindings")
+            app.call("settings-pane", pane="shortcuts")
+            app.call("ext-shortcuts", action="reset", id="new-tab")
+        restored = app.call("ext-shortcuts")
+        restored_commands = [c for c in app.call("ext-commands")["commands"] if c["extension"] == probe and c["name"] == "probe-named"]
+        app.call("ext-shortcuts", action="close")
+        app.call("select", tab=control); app.call("focus", target="page")
+        before_restored = command_count()
+        app.call("key", key="u", modifiers=["command", "shift"], route="app")
+        fired = wait_until(lambda: command_count() == before_restored + 1, timeout=5)
+        results["X27_restored_extension_command"] = {"ok": restored["notices"] == [] and restored["bindingCount"] == 0
+            and len(restored_commands) == 1 and not restored_commands[0]["dropped"] and bool(fired)
+            and not app.call("commandbar-state").get("presented"), "pane":restored, "commands":restored_commands,
+            "counterBefore":before_restored, "counterAfter":command_count()}
+        app.call("ext-manage", extension=extensions["bitwarden"], action="enable")
+        wait_until(lambda: action(extensions["bitwarden"]), timeout=5)
+        x27_disabled = False
         command_settings=new_tab(app,"chrome://extensions/shortcuts")
         wait_until(lambda: app.eval(command_settings,"typeof chrome.developerPrivate.updateExtensionCommand")=="function",timeout=10)
         def bind_named(keys):
@@ -562,6 +639,8 @@ def run(factory, results, tmp, root, wait_until, new_tab, frame, read_image, ext
         try:
             if not app.closed:
                 try:
+                    if x27_disabled:
+                        app.call("ext-manage", extension=extensions["bitwarden"], action="enable")
                     app.call("ext-prompt", clear=True)
                     close()
                 except (OSError,RuntimeError,json.JSONDecodeError): pass
@@ -569,5 +648,7 @@ def run(factory, results, tmp, root, wait_until, new_tab, frame, read_image, ext
             # Restore the real shared domain even after a crashed App.
             from engine_e2e import _restore_defaults
             _restore_defaults(app,saved)
+            if previous_bindings is None: bindings.unlink(missing_ok=True)
+            else: bindings.write_bytes(previous_bindings)
             app.quit()
             if server: server.shutdown();server.server_close()
