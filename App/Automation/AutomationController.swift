@@ -764,12 +764,14 @@
         browser.setExtensionAction(id, pinned: a["pinned"] as? Bool ?? true)
         if let index = a["index"] as? Int {
           guard index >= 0, index < 512 else { throw Failure(message: "invalid pinned index") }
-          browser.moveExtensionAction(id, toPinnedIndex: UInt(index))
+          // Read the post-pin list before using the same guarded move as a drag.
+          w.extensions.host?.reload()
+          w.extensions.host?.movePinned(extensionID: id, to: index)
         }
         return true
       case "ext-move":
         guard let id = a["extension"] as? String, let index = a["index"] as? Int else { throw Failure(message: "missing extension or index") }
-        try focusedBrowser(w).moveExtensionAction(id, toPinnedIndex: UInt(index))
+        w.extensions.host?.movePinned(extensionID: id, to: index)
         return true
       case "ext-run":
         guard let id = a["extension"] as? String else { throw Failure(message: "missing extension") }
