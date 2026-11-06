@@ -6,15 +6,15 @@
         "forced": false,
         "ok": true,
         "owned_pids": [
-          31141,
-          31145,
-          31146,
-          31147,
-          31148,
-          31156,
-          31404,
-          31406,
-          31445
+          44272,
+          44280,
+          44281,
+          44282,
+          44283,
+          44286,
+          44414,
+          44415,
+          44419
         ],
         "remaining_processes": [],
         "reply": true,
@@ -28,14 +28,14 @@
         "forced": false,
         "ok": true,
         "owned_pids": [
-          31470,
-          31475,
-          31476,
-          31477,
-          31478,
-          31484,
-          31485,
-          31511
+          44433,
+          44445,
+          44446,
+          44447,
+          44448,
+          44452,
+          44453,
+          44479
         ],
         "remaining_processes": [],
         "reply": true,
@@ -49,13 +49,12 @@
         "forced": false,
         "ok": true,
         "owned_pids": [
-          31691,
-          31744,
-          31745,
-          31746,
-          31747,
-          31823,
-          31858
+          44523,
+          44532,
+          44533,
+          44534,
+          44535,
+          44572
         ],
         "remaining_processes": [],
         "reply": true,
@@ -69,37 +68,14 @@
         "forced": false,
         "ok": true,
         "owned_pids": [
-          32386,
-          32404,
-          32405,
-          32406,
-          32407,
-          32408,
-          32409,
-          32518,
-          32519,
-          32562
-        ],
-        "remaining_processes": [],
-        "reply": true,
-        "windows_after_quit": {
-          "count": 0,
-          "windows": []
-        },
-        "windows_before_quit": 2
-      },
-      {
-        "forced": false,
-        "ok": true,
-        "owned_pids": [
-          32580,
-          32587,
-          32588,
-          32590,
-          32591,
-          32592,
-          32593,
-          32683
+          44596,
+          44660,
+          44661,
+          44662,
+          44663,
+          44664,
+          44665,
+          44691
         ],
         "remaining_processes": [],
         "reply": true,
@@ -113,12 +89,17 @@
         "forced": false,
         "ok": true,
         "owned_pids": [
-          32821,
-          32848,
-          32849,
-          32851,
-          32852,
-          33026
+          44699,
+          44703,
+          44704,
+          44705,
+          44706,
+          44707,
+          44708,
+          44809,
+          44830,
+          44862,
+          44863
         ],
         "remaining_processes": [],
         "reply": true,
@@ -132,59 +113,14 @@
         "forced": false,
         "ok": true,
         "owned_pids": [
-          33075,
-          33087,
-          33088,
-          33089,
-          33090,
-          33092,
-          33093,
-          33266
-        ],
-        "remaining_processes": [],
-        "reply": true,
-        "windows_after_quit": {
-          "count": 0,
-          "windows": []
-        },
-        "windows_before_quit": 1
-      },
-      {
-        "forced": false,
-        "ok": true,
-        "owned_pids": [
-          33316,
-          33325,
-          33326,
-          33327,
-          33328,
-          33329,
-          33330,
-          33545,
-          33552,
-          33616,
-          33623
-        ],
-        "remaining_processes": [],
-        "reply": true,
-        "windows_after_quit": {
-          "count": 0,
-          "windows": []
-        },
-        "windows_before_quit": 1
-      },
-      {
-        "forced": false,
-        "ok": true,
-        "owned_pids": [
-          34029,
-          34051,
-          34052,
-          34053,
-          34054,
-          34057,
-          34058,
-          34086
+          45089,
+          45101,
+          45102,
+          45103,
+          45104,
+          45106,
+          45107,
+          45120
         ],
         "remaining_processes": [],
         "reply": true,
@@ -208,1444 +144,7 @@
     "source": "fork",
     "stamp": "fork $HOME/Developer/open-engine-s8-main/chromium_git/chromium/src/cef/binary_distrib/cef_binary_156.0.14+g4fa4ab5+chromium-156.0.8078.48_macosarm64_minimal 1793841834"
   },
-  "interrupted_attempts": [
-    {
-      "attempt": 1,
-      "checks": {
-        "A1_appearance_checkmarks_chrome": {
-          "expected": [
-            {
-              "appearance-automatic": false,
-              "appearance-dark": true,
-              "appearance-light": false
-            },
-            {
-              "appearance-automatic": false,
-              "appearance-dark": false,
-              "appearance-light": true
-            },
-            {
-              "appearance-automatic": true,
-              "appearance-dark": false,
-              "appearance-light": false
-            }
-          ],
-          "menu": [
-            {
-              "appearance-automatic": false,
-              "appearance-dark": true,
-              "appearance-light": false
-            },
-            {
-              "appearance-automatic": false,
-              "appearance-dark": false,
-              "appearance-light": true
-            },
-            {
-              "appearance-automatic": true,
-              "appearance-dark": false,
-              "appearance-light": false
-            }
-          ],
-          "ok": true
-        },
-        "A1_appearance_light_dark_chrome": {
-          "afterNavigation": {
-            "background": "rgb(17, 17, 17)",
-            "changes": [],
-            "dark": true,
-            "loadId": "16vndpd0srq"
-          },
-          "ok": true,
-          "start": {
-            "background": "rgb(255, 255, 255)",
-            "changes": [
-              "light"
-            ],
-            "dark": false,
-            "loadId": "eypp1u0m91"
-          },
-          "websitesDark": {
-            "background": "rgb(17, 17, 17)",
-            "changes": [],
-            "dark": true,
-            "loadId": "gkd7zjdrn9g"
-          },
-          "websitesLight": {
-            "background": "rgb(255, 255, 255)",
-            "changes": [],
-            "dark": false,
-            "loadId": "gkd7zjdrn9g"
-          }
-        },
-        "A1_appearance_stored_chrome": {
-          "ok": true,
-          "stored": [
-            "dark",
-            "light"
-          ]
-        },
-        "A2_appearance_automatic_follows_app_chrome": {
-          "ok": true,
-          "states": [
-            {
-              "background": "rgb(17, 17, 17)",
-              "changes": [
-                "light",
-                "dark"
-              ],
-              "dark": true,
-              "loadId": "gkd7zjdrn9g"
-            },
-            {
-              "background": "rgb(255, 255, 255)",
-              "changes": [
-                "light",
-                "dark",
-                "light"
-              ],
-              "dark": false,
-              "loadId": "gkd7zjdrn9g"
-            },
-            {
-              "background": "rgb(17, 17, 17)",
-              "changes": [
-                "light",
-                "dark",
-                "light",
-                "dark"
-              ],
-              "dark": true,
-              "loadId": "gkd7zjdrn9g"
-            }
-          ]
-        },
-        "D1_javascript_console_panel_chrome": {
-          "ok": true,
-          "selectedTabs": [
-            "tab-console"
-          ],
-          "windows": [
-            "cookies",
-            "DevTools - 127.0.0.1:50518/cookies.html"
-          ]
-        },
-        "D1_key_cmd_opt_j_chrome": {
-          "devtoolsClosedFirst": true,
-          "ok": true,
-          "selectedTabs": [
-            "tab-console"
-          ]
-        },
-        "D1_quit_with_devtools_open": {
-          "crashReports": [],
-          "devtools": true,
-          "ok": true,
-          "quit": {
-            "forced": false,
-            "ok": true,
-            "owned_pids": [
-              31141,
-              31145,
-              31146,
-              31147,
-              31148,
-              31156,
-              31404,
-              31406,
-              31445
-            ],
-            "remaining_processes": [],
-            "reply": true,
-            "windows_after_quit": {
-              "count": 0,
-              "windows": []
-            },
-            "windows_before_quit": 2
-          }
-        },
-        "D2_network_inspector_panel_chrome": {
-          "consoleAfter": [
-            "tab-console"
-          ],
-          "first": [
-            "tab-network"
-          ],
-          "method": "DevToolsAPI.showPanel in the DevTools front end (no fork patch; Chrome's own Console command path)",
-          "networkWhileOpen": [
-            "tab-network"
-          ],
-          "ok": true
-        },
-        "D3_developer_mode": {
-          "fields": [
-            "127.0.0.1",
-            "127.0.0.1:50518/cookies.html?dev=1",
-            "localhost",
-            "127.0.0.1"
-          ],
-          "hiddenOnBlank": true,
-          "ok": true,
-          "stored": [],
-          "titles": [
-            "Turn on Developer Mode for this site",
-            "Turn off Developer Mode for this site"
-          ]
-        },
-        "D4_allow_js_apple_events_checkmark": {
-          "expected": [
-            false,
-            true,
-            false
-          ],
-          "menu": [
-            false,
-            true,
-            false
-          ],
-          "ok": true
-        },
-        "D4_allow_js_apple_events_osascript": {
-          "external": {
-            "permissionStatus": -1744,
-            "reason": "read-only AEDeterminePermissionToAutomateTarget, askUserIfNeeded=false",
-            "status": "BLOCKED",
-            "targetBundle": "$WORKTREE/build/Debug/Open.app",
-            "targetPID": 31141
-          },
-          "off": {
-            "number": 1013,
-            "ok": true,
-            "reply": "1013|JavaScript from Apple Events is off. Turn it on in View ▸ Developer.",
-            "sender": "self NSAppleScript"
-          },
-          "offAgain": {
-            "number": 1013,
-            "ok": true,
-            "reply": "1013|JavaScript from Apple Events is off. Turn it on in View ▸ Developer.",
-            "sender": "self NSAppleScript"
-          },
-          "ok": true,
-          "on": "3",
-          "sender": "self NSAppleScript"
-        },
-        "D4_allow_js_apple_events_setting": {
-          "ok": true,
-          "stored": [
-            false,
-            true,
-            false
-          ]
-        },
-        "H1_task_manager_window": {
-          "ok": true,
-          "shown": "yes",
-          "titles": [
-            "cookies",
-            "Task Manager"
-          ],
-          "window": {
-            "attachedSheet": 0,
-            "class": "NativeWidgetMacNSWindow",
-            "firstResponder": "BridgedContentView",
-            "frame": "{{960, 765}, {640, 390}}",
-            "key": true,
-            "level": 0,
-            "number": 98153,
-            "parent": 0,
-            "sheet": false,
-            "title": "Task Manager",
-            "visible": true
-          }
-        },
-        "H2_cancel_trace": {
-          "files": [
-            "Open Trace 2026-11-05 20.10.50.json"
-          ],
-          "ok": true
-        },
-        "H2_record_trace_stop": {
-          "error": "",
-          "file": "$TMPDIR/Open-E2E-page-chrome-30973-be987441-scratch-74bo55q2/traces/Open Trace 2026-11-05 20.10.50.json",
-          "menu": [
-            {
-              "cancel-trace": false,
-              "record-trace": true
-            },
-            {
-              "cancel-trace": true,
-              "record-trace": false
-            },
-            {
-              "cancel-trace": false,
-              "record-trace": true
-            }
-          ],
-          "ok": true,
-          "recordingToast": {
-            "accessory": "stop",
-            "accessoryFrame": [
-              1298,
-              35,
-              32,
-              27
-            ],
-            "age": 2.0136826666712295,
-            "coalescingKey": "trace",
-            "exiting": false,
-            "frame": [
-              1158,
-              18,
-              182,
-              60
-            ],
-            "hovered": false,
-            "lifetime": null,
-            "sticky": true,
-            "subtitle": "0:01",
-            "symbol": null,
-            "title": "Recording Trace…"
-          },
-          "savedToast": {
-            "accessory": "show in finder",
-            "accessoryFrame": [
-              1298,
-              28,
-              32,
-              27
-            ],
-            "age": 0.08120570833125385,
-            "coalescingKey": "trace",
-            "exiting": false,
-            "frame": [
-              1196,
-              18,
-              144,
-              46
-            ],
-            "hovered": false,
-            "lifetime": 5,
-            "sticky": false,
-            "subtitle": null,
-            "symbol": null,
-            "title": "Trace Saved"
-          },
-          "showInFinder": true,
-          "traceEvents": 5908
-        },
-        "H3_copy_open_info": {
-          "ok": true,
-          "text": "Open 0.1.0 (1)\nEngine: Chromium 156.0.8078.48, CEF 156.0.14+g4fa4ab5+chromium-156.0.8078.48\nmacOS Version 27.2 (Build 26B123)\nMac: Mac17,8 (arm64)",
-          "toast": "Copied Open Info"
-        },
-        "H4_cast_menu_hidden": {
-          "cast": {
-            "action": "openCommandAction:",
-            "checked": false,
-            "enabled": false,
-            "hidden": true,
-            "id": "cast",
-            "key": "",
-            "payload": "",
-            "tag": 0,
-            "targetNil": false,
-            "title": "Cast…"
-          },
-          "expected": [
-            true,
-            false
-          ],
-          "menu": [
-            true,
-            false
-          ],
-          "ok": true
-        },
-        "H4_media_router_off": {
-          "helpers": 7,
-          "helpersWithMediaRouterOff": 7,
-          "ok": true
-        },
-        "H_reveal_open_data": {
-          "ok": true,
-          "reveals": [
-            "$TMPDIR/Open-E2E-page-chrome-30973-be987441-scratch-74bo55q2/traces/Open Trace 2026-11-05 20.10.50.json",
-            "$HOME/Library/Application Support/Open-E2E-page-chrome-30973-be987441"
-          ],
-          "root": "$HOME/Library/Application Support/Open-E2E-page-chrome-30973-be987441"
-        },
-        "K1_clear_cookies_and_refresh_chrome": {
-          "after": [
-            "",
-            "k2=localhost"
-          ],
-          "before": [
-            "k1=127.0.0.1",
-            "k2=localhost"
-          ],
-          "enabled": true,
-          "interim": "host cookies of the page's host via clearBrowsingData(origin:); Site Control E2 pending",
-          "ok": true,
-          "reloaded": true
-        },
-        "K2_clear_cache_disabled_before_E2_chrome": {
-          "ok": true,
-          "row": {
-            "action": "openCommandAction:",
-            "checked": false,
-            "enabled": false,
-            "hidden": false,
-            "id": "clear-cache-and-refresh",
-            "key": "",
-            "payload": "",
-            "tag": 0,
-            "targetNil": false,
-            "title": "Clear Cache and Refresh"
-          }
-        },
-        "Q1_quote_link_scrolls": {
-          "landed": {
-            "hash": "",
-            "scrollY": 5843,
-            "visible": true
-          },
-          "link": "http://127.0.0.1:50836/quote.html#:~:text=A%20unique%20sentence%20far%20down%20the%20page%20for%20the%20quote%20link.",
-          "ok": true,
-          "toast": {
-            "accessory": "none",
-            "accessoryFrame": null,
-            "age": 0.05230058333836496,
-            "coalescingKey": null,
-            "exiting": false,
-            "frame": [
-              1093,
-              18,
-              167,
-              42
-            ],
-            "hovered": false,
-            "lifetime": 3,
-            "panel": [
-              228,
-              10,
-              1042,
-              780
-            ],
-            "sticky": false,
-            "subtitle": null,
-            "symbol": "quote.bubble.fill",
-            "title": "Copied Quote Link"
-          }
-        },
-        "Q2_quote_context": {
-          "landed": {
-            "first": false,
-            "scrollY": 2883,
-            "second": true
-          },
-          "link": "http://127.0.0.1:50836/quote.html#:~:text=on%20this%20page.-,The%20same%20sentence%20appears%20twice%20on%20this%20page.,-A%20unique%20sentence",
-          "ok": true
-        },
-        "Q3_quote_without_selection": {
-          "ok": true,
-          "pasteboard": "http://127.0.0.1:50836/quote.html",
-          "toast": {
-            "accessory": "share",
-            "accessoryFrame": [
-              1218,
-              28,
-              32,
-              27
-            ],
-            "age": 0.005410791673057247,
-            "coalescingKey": null,
-            "exiting": false,
-            "frame": [
-              1065,
-              18,
-              195,
-              46
-            ],
-            "hovered": false,
-            "lifetime": 5,
-            "panel": [
-              228,
-              10,
-              1042,
-              780
-            ],
-            "sticky": false,
-            "subtitle": null,
-            "symbol": null,
-            "title": "Copied Current URL"
-          }
-        },
-        "Q4_copy_url_offers_quote": {
-          "offer": {
-            "elapsed": 0,
-            "selected": true,
-            "shown": true
-          },
-          "ok": true,
-          "pasteboard": "http://127.0.0.1:50836/quote.html#:~:text=A%20unique%20sentence%20far%20down%20the%20page%20for%20the%20quote%20link.",
-          "toast": {
-            "accessory": "copy quote link",
-            "accessoryFrame": [
-              1218,
-              35,
-              32,
-              27
-            ],
-            "age": 0.000998041665297933,
-            "coalescingKey": null,
-            "exiting": false,
-            "frame": [
-              972,
-              18,
-              288,
-              60
-            ],
-            "hovered": false,
-            "lifetime": 5,
-            "panel": [
-              228,
-              10,
-              1042,
-              780
-            ],
-            "sticky": false,
-            "subtitle": "Share a link directly to this text instead?",
-            "symbol": null,
-            "title": "Copied Current URL"
-          }
-        },
-        "Q5_share_quote_button": {
-          "button": {
-            "frame": [
-              8,
-              88,
-              212,
-              28
-            ],
-            "shown": true,
-            "title": "Share Quote"
-          },
-          "hiddenAfterClear": true,
-          "ok": true,
-          "pasteboard": "http://127.0.0.1:50836/quote.html#:~:text=A%20unique%20sentence%20far%20down%20the%20page%20for%20the%20quote%20link."
-        },
-        "T-E1_copy_url_clean": {
-          "ok": true,
-          "pasteboard": "http://127.0.0.1:50836/en.html?id=1#top",
-          "toast": {
-            "accessory": "share",
-            "accessoryFrame": [
-              1218,
-              28,
-              32,
-              27
-            ],
-            "age": 0.0037062083356431685,
-            "coalescingKey": null,
-            "exiting": false,
-            "frame": [
-              962,
-              18,
-              298,
-              46
-            ],
-            "hovered": false,
-            "lifetime": 5,
-            "panel": [
-              228,
-              10,
-              1042,
-              780
-            ],
-            "sticky": false,
-            "subtitle": null,
-            "symbol": null,
-            "title": "Copied a clean link without trackers"
-          }
-        },
-        "T-E2_copy_url_share": {
-          "ok": true,
-          "share": {
-            "anchor": [
-              1218,
-              28,
-              32,
-              27
-            ],
-            "choseService": false,
-            "closed": true,
-            "node": "toast",
-            "pending": false,
-            "requested": true,
-            "servicesRequested": true,
-            "url": "http://127.0.0.1:50836/en.html?id=1"
-          },
-          "toast": {
-            "accessory": "share",
-            "accessoryFrame": [
-              1218,
-              28,
-              32,
-              27
-            ],
-            "age": 0.00647200000094017,
-            "coalescingKey": null,
-            "exiting": false,
-            "frame": [
-              1065,
-              18,
-              195,
-              46
-            ],
-            "hovered": false,
-            "lifetime": 5,
-            "panel": [
-              228,
-              10,
-              1042,
-              780
-            ],
-            "sticky": false,
-            "subtitle": null,
-            "symbol": null,
-            "title": "Copied Current URL"
-          }
-        },
-        "Z1_zoom_toasts": {
-          "ok": true,
-          "titles": [
-            "110%",
-            "125%",
-            "100%"
-          ]
-        },
-        "Z2_peek_pinch_then_actual_size": {
-          "assertion": {
-            "heldAfter1s": 2.0000011920928955,
-            "ok": true,
-            "pinched": 2.0000011920928955,
-            "reset": true
-          },
-          "focus": [
-            {
-              "event": "frontmostChanged",
-              "frontmostApp": "T3 Pretty Internal (Nightly)",
-              "frontmostPID": 1305,
-              "openPID": 31691,
-              "uptime": 39280.86561591667
-            },
-            {
-              "active": false,
-              "event": "NSApplicationDidResignActiveNotification",
-              "frontmostApp": "T3 Pretty Internal (Nightly)",
-              "frontmostPID": 1305,
-              "keyWindow": 0,
-              "openPID": 31691,
-              "uptime": 39280.86836958334
-            }
-          ],
-          "status": "INTERRUPTED"
-        },
-        "Z2_pinch_then_actual_size": {
-          "after": 1,
-          "heldAfter1s": 2.000000476837158,
-          "ok": true,
-          "pinched": 2.000000476837158
-        },
-        "Z3_smart_zoom": {
-          "reason": "no synthetic smart-zoom path; user check U-S1",
-          "status": "DEFERRED"
-        },
-        "Z4_no_chromium_zoom_bubble": {
-          "newWindows": [],
-          "ok": true
-        },
-        "capture_2x_c1_area": {
-          "devicePixelRatio": 2,
-          "ok": true,
-          "row": {
-            "bytes": 4311,
-            "createdAt": 1793934658.1009831,
-            "fileName": "982843AE-36E1-4DFB-9A82-3504762C3928.png",
-            "height": 400,
-            "id": "982843AE-36E1-4DFB-9A82-3504762C3928",
-            "kind": "area",
-            "sourceHost": "127.0.0.1",
-            "width": 600
-          }
-        },
-        "capture_2x_c2_full_page": {
-          "bands": [
-            0,
-            1,
-            2,
-            3,
-            4,
-            5,
-            6,
-            7,
-            8,
-            9,
-            10,
-            11
-          ],
-          "cssWidth": 1042,
-          "ok": true,
-          "probe": [
-            [
-              224,
-              65,
-              64,
-              255
-            ],
-            [
-              64,
-              176,
-              80,
-              255
-            ],
-            [
-              48,
-              96,
-              224,
-              255
-            ],
-            [
-              224,
-              192,
-              47,
-              255
-            ],
-            [
-              161,
-              64,
-              192,
-              255
-            ],
-            [
-              50,
-              192,
-              192,
-              255
-            ],
-            [
-              240,
-              128,
-              33,
-              255
-            ],
-            [
-              32,
-              32,
-              32,
-              255
-            ],
-            [
-              129,
-              224,
-              128,
-              255
-            ],
-            [
-              225,
-              127,
-              192,
-              255
-            ],
-            [
-              66,
-              128,
-              159,
-              255
-            ],
-            [
-              192,
-              160,
-              128,
-              255
-            ]
-          ],
-          "row": {
-            "bytes": 978563,
-            "createdAt": 1793934659.334933,
-            "fileName": "1E6DCA2C-55F3-4CDA-A30F-3561FEF81081.png",
-            "height": 24000,
-            "id": "1E6DCA2C-55F3-4CDA-A30F-3561FEF81081",
-            "kind": "fullPage",
-            "sourceHost": "127.0.0.1",
-            "width": 2084
-          }
-        },
-        "capture_2x_c3_portrait": {
-          "ok": true,
-          "row": {
-            "bytes": 162958,
-            "createdAt": 1793934663.9058619,
-            "fileName": "E5546E4B-01E8-42CF-B1C7-619A6F933518.png",
-            "height": 3029,
-            "id": "E5546E4B-01E8-42CF-B1C7-619A6F933518",
-            "kind": "portrait",
-            "sourceHost": "127.0.0.1",
-            "width": 2423
-          },
-          "view": [
-            1042,
-            780
-          ]
-        },
-        "capture_2x_full_page_cap": {
-          "bands": [
-            0,
-            1,
-            2,
-            3,
-            4,
-            5,
-            6,
-            7,
-            8,
-            9,
-            10,
-            11,
-            0,
-            1,
-            2,
-            3
-          ],
-          "error": "",
-          "ok": true,
-          "row": {
-            "bytes": 1270742,
-            "createdAt": 1793934662.015078,
-            "fileName": "31484A95-89A3-48E0-A7F4-68F09887A83C.png",
-            "height": 32768,
-            "id": "31484A95-89A3-48E0-A7F4-68F09887A83C",
-            "kind": "fullPage",
-            "sourceHost": "127.0.0.1",
-            "width": 2084
-          },
-          "state": {
-            "cancelled": 1,
-            "card": {
-              "actions": [
-                "copy",
-                "save",
-                "share",
-                "library",
-                "delete"
-              ],
-              "frame": [
-                1012,
-                18,
-                248,
-                264
-              ],
-              "hovered": false,
-              "lifetime": 8,
-              "note": "Page cut at 32,768 px.",
-              "panel": [
-                228,
-                10,
-                1042,
-                780
-              ],
-              "paused": false,
-              "remaining": 7.988303416670533,
-              "savedLine": true
-            },
-            "completed": 7,
-            "entry": "command",
-            "error": "",
-            "held": false,
-            "hintShows": 1,
-            "overlayActive": false,
-            "phase": "showing",
-            "replays": 1,
-            "result": {
-              "bytes": 1270742,
-              "fileName": "Tall page 11-05 at 8.11PM.png",
-              "height": 32768,
-              "host": "127.0.0.1",
-              "kind": "fullPage",
-              "saved": "31484A95-89A3-48E0-A7F4-68F09887A83C",
-              "truncated": true,
-              "width": 2084
-            }
-          }
-        },
-        "capture_c1_area": {
-          "ok": true,
-          "row": [
-            {
-              "bytes": 1662,
-              "createdAt": 1793934654.9340959,
-              "fileName": "15E5B6FF-9F4C-492C-9AD5-0EEB0E7941CD.png",
-              "height": 200,
-              "id": "15E5B6FF-9F4C-492C-9AD5-0EEB0E7941CD",
-              "kind": "area",
-              "sourceHost": "127.0.0.1",
-              "width": 300
-            }
-          ],
-          "scale": 1,
-          "state": {
-            "cancelled": 0,
-            "card": {
-              "actions": [
-                "copy",
-                "save",
-                "share",
-                "library",
-                "retake",
-                "delete"
-              ],
-              "frame": [
-                1012,
-                18,
-                248,
-                231
-              ],
-              "hovered": false,
-              "lifetime": 8,
-              "note": "",
-              "panel": [
-                228,
-                10,
-                1042,
-                780
-              ],
-              "paused": false,
-              "remaining": 7.983498541667359,
-              "savedLine": true
-            },
-            "completed": 1,
-            "entry": "command",
-            "error": "",
-            "held": false,
-            "hintShows": 0,
-            "overlayActive": false,
-            "phase": "showing",
-            "replays": 0,
-            "result": {
-              "bytes": 1662,
-              "fileName": "Long page 11-05 at 8.10PM.png",
-              "height": 200,
-              "host": "127.0.0.1",
-              "kind": "area",
-              "saved": "15E5B6FF-9F4C-492C-9AD5-0EEB0E7941CD",
-              "truncated": false,
-              "width": 300
-            }
-          },
-          "steps": [
-            {
-              "after": "command",
-              "state": {
-                "cancelled": 0,
-                "completed": 0,
-                "entry": "command",
-                "error": "",
-                "held": false,
-                "hintShows": 0,
-                "overlay": {
-                  "anchor": [],
-                  "firstResponder": true,
-                  "frame": [
-                    228,
-                    10,
-                    1042,
-                    780
-                  ],
-                  "hint": "Drag to capture. Press Esc to cancel.",
-                  "hintHidden": false,
-                  "pageFrame": [
-                    228,
-                    10,
-                    1042,
-                    780
-                  ],
-                  "selection": [],
-                  "sizeLabel": [],
-                  "sizeText": ""
-                },
-                "overlayActive": true,
-                "phase": "selecting",
-                "replays": 0
-              }
-            },
-            {
-              "after": "drag",
-              "hintHidden": true,
-              "selection": [
-                100,
-                100,
-                150,
-                100
-              ],
-              "sizeLabel": [
-                142,
-                206,
-                67,
-                20
-              ]
-            }
-          ]
-        },
-        "capture_c2_full_page": {
-          "bands": [
-            0,
-            1,
-            2,
-            3,
-            4,
-            5,
-            6,
-            7,
-            8,
-            9,
-            10,
-            11
-          ],
-          "ok": true,
-          "probe": [
-            [
-              224,
-              65,
-              64,
-              255
-            ],
-            [
-              64,
-              176,
-              80,
-              255
-            ],
-            [
-              48,
-              96,
-              224,
-              255
-            ],
-            [
-              224,
-              192,
-              47,
-              255
-            ],
-            [
-              161,
-              64,
-              192,
-              255
-            ],
-            [
-              50,
-              192,
-              192,
-              255
-            ],
-            [
-              240,
-              128,
-              33,
-              255
-            ],
-            [
-              32,
-              32,
-              32,
-              255
-            ],
-            [
-              129,
-              224,
-              128,
-              255
-            ],
-            [
-              225,
-              127,
-              192,
-              255
-            ],
-            [
-              66,
-              128,
-              159,
-              255
-            ],
-            [
-              192,
-              160,
-              128,
-              255
-            ]
-          ],
-          "row": {
-            "bytes": 270568,
-            "createdAt": 1793934657.0369492,
-            "fileName": "E94AF968-C0BD-40EB-AF8D-8D6639001BE4.png",
-            "height": 12000,
-            "id": "E94AF968-C0BD-40EB-AF8D-8D6639001BE4",
-            "kind": "fullPage",
-            "sourceHost": "127.0.0.1",
-            "width": 1042
-          },
-          "scrollAfter": 3000,
-          "state": {
-            "cancelled": 1,
-            "card": {
-              "actions": [
-                "copy",
-                "save",
-                "share",
-                "library",
-                "delete"
-              ],
-              "frame": [
-                1012,
-                18,
-                248,
-                242
-              ],
-              "hovered": false,
-              "lifetime": 8,
-              "note": "",
-              "panel": [
-                228,
-                10,
-                1042,
-                780
-              ],
-              "paused": false,
-              "remaining": 7.991843541662092,
-              "savedLine": true
-            },
-            "completed": 3,
-            "entry": "command",
-            "error": "",
-            "held": false,
-            "hintShows": 1,
-            "overlayActive": false,
-            "phase": "showing",
-            "replays": 0,
-            "result": {
-              "bytes": 270568,
-              "fileName": "Long page 11-05 at 8.10PM.png",
-              "height": 12000,
-              "host": "127.0.0.1",
-              "kind": "fullPage",
-              "saved": "E94AF968-C0BD-40EB-AF8D-8D6639001BE4",
-              "truncated": false,
-              "width": 1042
-            }
-          }
-        },
-        "capture_c3_portrait": {
-          "ok": true,
-          "row": {
-            "bytes": 51314,
-            "createdAt": 1793934656.671607,
-            "fileName": "C0D9DE56-C622-4522-BF44-D88F9D3FEFDD.png",
-            "height": 1515,
-            "id": "C0D9DE56-C622-4522-BF44-D88F9D3FEFDD",
-            "kind": "portrait",
-            "sourceHost": "127.0.0.1",
-            "width": 1212
-          }
-        },
-        "capture_c4_escape": {
-          "ok": true,
-          "overlay": {
-            "anchor": [],
-            "firstResponder": true,
-            "frame": [
-              228,
-              10,
-              1042,
-              780
-            ],
-            "hint": "Drag to capture. Press Esc to cancel.",
-            "hintHidden": false,
-            "pageFrame": [
-              228,
-              10,
-              1042,
-              780
-            ],
-            "selection": [],
-            "sizeLabel": [],
-            "sizeText": ""
-          },
-          "state": {
-            "cancelled": 1,
-            "completed": 1,
-            "entry": "command",
-            "error": "",
-            "held": false,
-            "hintShows": 1,
-            "overlayActive": false,
-            "phase": "idle",
-            "replays": 0,
-            "result": {
-              "bytes": 1662,
-              "fileName": "Long page 11-05 at 8.10PM.png",
-              "height": 200,
-              "host": "127.0.0.1",
-              "kind": "area",
-              "saved": "15E5B6FF-9F4C-492C-9AD5-0EEB0E7941CD",
-              "truncated": false,
-              "width": 300
-            }
-          }
-        },
-        "capture_c5_drag": {
-          "ok": true,
-          "row": {
-            "bytes": 1224,
-            "createdAt": 1793934657.535181,
-            "fileName": "2AA09C27-F80D-4610-A14C-048D8190FF7D.png",
-            "height": 160,
-            "id": "2AA09C27-F80D-4610-A14C-048D8190FF7D",
-            "kind": "area",
-            "sourceHost": "127.0.0.1",
-            "width": 240
-          },
-          "steps": [
-            {
-              "after": "down",
-              "held": true,
-              "overlay": false
-            },
-            {
-              "after": "move 2.2 pt",
-              "held": true,
-              "overlay": false
-            },
-            {
-              "after": "drag",
-              "anchor": [
-                500,
-                300
-              ],
-              "overlay": true,
-              "selection": [
-                500,
-                300,
-                120,
-                80
-              ]
-            }
-          ]
-        },
-        "capture_c6_click_replay": {
-          "ok": true,
-          "opened": {
-            "audible": false,
-            "canGoBack": false,
-            "canGoForward": false,
-            "crashed": false,
-            "createdAt": 1793934657.5915031,
-            "favicon": false,
-            "faviconReportsCompleted": 0,
-            "faviconReportsRejected": 0,
-            "hasWebContent": true,
-            "id": "FD380E2A-29F8-48BD-8B8C-5D49B6C86B69",
-            "lastActiveAt": 1793934657.617204,
-            "loaded": true,
-            "loading": false,
-            "page": {
-              "audible": false,
-              "browser": 1,
-              "browserIndex": 0,
-              "browserPinned": false,
-              "canGoBack": false,
-              "chromeTabId": 1743814588,
-              "chromeWindowId": 1743814586,
-              "context": "Default",
-              "crash": 0,
-              "extension": "",
-              "favicon": false,
-              "fullscreen": false,
-              "hidden": false,
-              "hostTab": "FD380E2A-29F8-48BD-8B8C-5D49B6C86B69",
-              "identifier": 2,
-              "kind": "tab",
-              "live": true,
-              "loading": false,
-              "muted": false,
-              "pageBackground": [
-                255,
-                255,
-                255,
-                255
-              ],
-              "popup": false,
-              "style": "chrome",
-              "title": "Link target",
-              "url": "http://127.0.0.1:50639/links-target.html",
-              "zoom": 0
-            },
-            "pinnedURL": "",
-            "profile": "4D9DCEAB-E635-4DD5-9A39-62FC35C15D81",
-            "progress": 1,
-            "rowFaviconHash": "",
-            "rowFaviconSource": "placeholder",
-            "section": "today",
-            "selected": true,
-            "sleepPhase": "live",
-            "space": "444522D4-BC89-471F-9BD8-2DCD38ABC172",
-            "title": "Link target",
-            "unread": false,
-            "url": "http://127.0.0.1:50639/links-target.html",
-            "visible": true
-          },
-          "replays": 1
-        },
-        "capture_c7_incognito": {
-          "reason": "no incognito window in Open yet (app-shell 4.8); the ephemeral-context path is covered offscreen (features-render C3/C7)",
-          "status": "BLOCKED"
-        },
-        "capture_card_anchor": {
-          "card": [
-            1012,
-            18,
-            248,
-            231
-          ],
-          "ok": true,
-          "panel": [
-            228,
-            10,
-            1042,
-            780
-          ]
-        },
-        "capture_card_copy_save_escape": {
-          "ok": true,
-          "sheet": {
-            "attachedSheet": 0,
-            "class": "NSSavePanel",
-            "firstResponder": "NSRemoteView",
-            "frame": "{{555, 409}, {370, 182}}",
-            "key": true,
-            "level": 0,
-            "number": 98161,
-            "parent": 0,
-            "sheet": true,
-            "title": "Save",
-            "visible": true
-          }
-        },
-        "capture_card_lifetime": {
-          "ok": true,
-          "paused": 7.767718958333717,
-          "resumed": 7.767220249996171,
-          "scheduled": [
-            8,
-            7.983498541667359
-          ]
-        },
-        "capture_context_menu": {
-          "ok": true,
-          "shown": [
-            "Back",
-            "Forward",
-            "Reload",
-            "-",
-            "Save As…",
-            "Print…",
-            "-",
-            "View Page Source",
-            "-",
-            "Capture",
-            "Capture Full Page",
-            "-",
-            "Inspect"
-          ]
-        },
-        "capture_delete": {
-          "ok": true,
-          "rows": 2
-        },
-        "capture_menu_enabled": {
-          "menu": {
-            "capture-full-page": {
-              "action": "openCommandAction:",
-              "checked": false,
-              "enabled": true,
-              "hidden": false,
-              "id": "capture-full-page",
-              "key": "",
-              "payload": "",
-              "tag": 0,
-              "targetNil": false,
-              "title": "Capture Full Page"
-            },
-            "capture-page": {
-              "action": "openCommandAction:",
-              "checked": false,
-              "enabled": true,
-              "hidden": false,
-              "id": "capture-page",
-              "key": "2",
-              "payload": "",
-              "tag": 0,
-              "targetNil": false,
-              "title": "Capture…"
-            },
-            "capture-portrait": {
-              "action": "openCommandAction:",
-              "checked": false,
-              "enabled": true,
-              "hidden": false,
-              "id": "capture-portrait",
-              "key": "",
-              "payload": "",
-              "tag": 0,
-              "targetNil": false,
-              "title": "Capture in Portrait Mode"
-            }
-          },
-          "ok": true
-        },
-        "capture_shortcut_hint": {
-          "hintShows": 1,
-          "ok": true,
-          "stored": 1793934656.325249
-        },
-        "capture_shortcut_hint_once": {
-          "hintShows": 1,
-          "ok": true
-        }
-      },
-      "focus": [
-        {
-          "event": "frontmostChanged",
-          "frontmostApp": "T3 Pretty Internal (Nightly)",
-          "frontmostPID": 1305,
-          "openPID": 31691,
-          "uptime": 39280.86561591667
-        },
-        {
-          "active": false,
-          "event": "NSApplicationDidResignActiveNotification",
-          "frontmostApp": "T3 Pretty Internal (Nightly)",
-          "frontmostPID": 1305,
-          "keyWindow": 0,
-          "openPID": 31691,
-          "uptime": 39280.86836958334
-        }
-      ],
-      "reason": "foreground lost during Z2_peek_pinch_then_actual_size",
-      "status": "INTERRUPTED"
-    }
-  ],
+  "interrupted_attempts": [],
   "page": {
     "A1_appearance_checkmarks_chrome": {
       "expected": [
@@ -1689,26 +188,28 @@
         "background": "rgb(17, 17, 17)",
         "changes": [],
         "dark": true,
-        "loadId": "1t15smjcaaj"
+        "loadId": "v38hy3xxpn"
       },
       "ok": true,
       "start": {
         "background": "rgb(255, 255, 255)",
-        "changes": [],
+        "changes": [
+          "light"
+        ],
         "dark": false,
-        "loadId": "deme6yq3azi"
+        "loadId": "kbl6n3vc02f"
       },
       "websitesDark": {
         "background": "rgb(17, 17, 17)",
         "changes": [],
         "dark": true,
-        "loadId": "uqr1m1kzl6f"
+        "loadId": "4kegtyuxcmv"
       },
       "websitesLight": {
         "background": "rgb(255, 255, 255)",
         "changes": [],
         "dark": false,
-        "loadId": "uqr1m1kzl6f"
+        "loadId": "4kegtyuxcmv"
       }
     },
     "A1_appearance_stored_chrome": {
@@ -1728,7 +229,7 @@
             "dark"
           ],
           "dark": true,
-          "loadId": "uqr1m1kzl6f"
+          "loadId": "4kegtyuxcmv"
         },
         {
           "background": "rgb(255, 255, 255)",
@@ -1738,7 +239,7 @@
             "light"
           ],
           "dark": false,
-          "loadId": "uqr1m1kzl6f"
+          "loadId": "4kegtyuxcmv"
         },
         {
           "background": "rgb(17, 17, 17)",
@@ -1749,7 +250,7 @@
             "dark"
           ],
           "dark": true,
-          "loadId": "uqr1m1kzl6f"
+          "loadId": "4kegtyuxcmv"
         }
       ]
     },
@@ -1760,7 +261,7 @@
       ],
       "windows": [
         "cookies",
-        "DevTools - 127.0.0.1:51166/cookies.html"
+        "DevTools"
       ]
     },
     "D1_key_cmd_opt_j_chrome": {
@@ -1778,16 +279,15 @@
         "forced": false,
         "ok": true,
         "owned_pids": [
-          32386,
-          32404,
-          32405,
-          32406,
-          32407,
-          32408,
-          32409,
-          32518,
-          32519,
-          32562
+          44272,
+          44280,
+          44281,
+          44282,
+          44283,
+          44286,
+          44414,
+          44415,
+          44419
         ],
         "remaining_processes": [],
         "reply": true,
@@ -1814,7 +314,7 @@
     "D3_developer_mode": {
       "fields": [
         "127.0.0.1",
-        "127.0.0.1:51166/cookies.html?dev=1",
+        "127.0.0.1:54171/cookies.html?dev=1",
         "localhost",
         "127.0.0.1"
       ],
@@ -1845,7 +345,7 @@
         "reason": "read-only AEDeterminePermissionToAutomateTarget, askUserIfNeeded=false",
         "status": "BLOCKED",
         "targetBundle": "$WORKTREE/build/Debug/Open.app",
-        "targetPID": 32386
+        "targetPID": 44272
       },
       "off": {
         "number": 1013,
@@ -1890,7 +390,7 @@
         "frame": "{{960, 765}, {640, 390}}",
         "key": true,
         "level": 0,
-        "number": 98191,
+        "number": 121585,
         "parent": 0,
         "sheet": false,
         "title": "Task Manager",
@@ -1899,14 +399,13 @@
     },
     "H2_cancel_trace": {
       "files": [
-        "Open Trace 2026-11-05 20.10.50.json",
-        "Open Trace 2026-11-05 20.11.51.json"
+        "Open Trace 2026-11-05 21.42.25.json"
       ],
       "ok": true
     },
     "H2_record_trace_stop": {
       "error": "",
-      "file": "$TMPDIR/Open-E2E-page-chrome-30973-be987441-scratch-74bo55q2/traces/Open Trace 2026-11-05 20.11.51.json",
+      "file": "$TMPDIR/Open-E2E-page-chrome-44237-b351628d-scratch-au000fwz/traces/Open Trace 2026-11-05 21.42.25.json",
       "menu": [
         {
           "cancel-trace": false,
@@ -1930,7 +429,7 @@
           32,
           27
         ],
-        "age": 2.0167442500023753,
+        "age": 2.015555083336949,
         "coalescingKey": "trace",
         "exiting": false,
         "frame": [
@@ -1954,7 +453,7 @@
           32,
           27
         ],
-        "age": 0.07640795833140146,
+        "age": 0.07725795832811855,
         "coalescingKey": "trace",
         "exiting": false,
         "frame": [
@@ -1971,7 +470,7 @@
         "title": "Trace Saved"
       },
       "showInFinder": true,
-      "traceEvents": 6818
+      "traceEvents": 7844
     },
     "H3_copy_open_info": {
       "ok": true,
@@ -2009,10 +508,10 @@
     "H_reveal_open_data": {
       "ok": true,
       "reveals": [
-        "$TMPDIR/Open-E2E-page-chrome-30973-be987441-scratch-74bo55q2/traces/Open Trace 2026-11-05 20.11.51.json",
-        "$HOME/Library/Application Support/Open-E2E-page-chrome-30973-be987441"
+        "$TMPDIR/Open-E2E-page-chrome-44237-b351628d-scratch-au000fwz/traces/Open Trace 2026-11-05 21.42.25.json",
+        "$HOME/Library/Application Support/Open-E2E-page-chrome-44237-b351628d"
       ],
-      "root": "$HOME/Library/Application Support/Open-E2E-page-chrome-30973-be987441"
+      "root": "$HOME/Library/Application Support/Open-E2E-page-chrome-44237-b351628d"
     },
     "K1_clear_cookies_and_refresh_chrome": {
       "after": [
@@ -2064,17 +563,17 @@
         ],
         "decisions": 0,
         "help": "Click the lock to change this any time",
-        "keyWindow": 98288,
+        "keyWindow": 121654,
         "kinds": 8,
-        "origin": "http://127.0.0.1:51679/",
-        "parent": 98288,
+        "origin": "http://127.0.0.1:54543/",
+        "parent": 121654,
         "pending": 1,
         "pendingPage": 1,
         "promptKey": true,
         "question": "Allow 127.0.0.1 to send you notifications?",
         "selectedPage": 1,
         "visible": true,
-        "window": 98305
+        "window": 121658
       },
       "request": "skipped:authorized",
       "requests": [
@@ -2093,8 +592,8 @@
       "engine": [
         {
           "body": "Banner from notify.html",
-          "id": "n#http://127.0.0.1:51679#open-n1",
-          "origin": "http://127.0.0.1:51679/",
+          "id": "n#http://127.0.0.1:54543#open-n1",
+          "origin": "http://127.0.0.1:54543/",
           "title": "Open N1 banner"
         }
       ],
@@ -2108,7 +607,7 @@
     },
     "N2_alerts_helper": {
       "helpers": [
-        33545
+        44809
       ],
       "helpersBefore": [],
       "ok": true,
@@ -2132,7 +631,7 @@
       "ok": true
     },
     "N3_activation": {
-      "focusedSpace": "5266ECC5-10F3-48C1-866A-1644732424C2",
+      "focusedSpace": "27922C71-5E62-4FA2-B122-00D5F556C509",
       "ok": true,
       "prepared": {
         "miniaturized": true,
@@ -2144,14 +643,14 @@
         {
           "content": 2,
           "request": "activate",
-          "space": "5266ECC5-10F3-48C1-866A-1644732424C2",
-          "tab": "289416B5-6D10-46CB-B64A-4E8EF518149B",
-          "time": 1793934754.2702432,
+          "space": "27922C71-5E62-4FA2-B122-00D5F556C509",
+          "tab": "214B3DC0-E5C4-4E3C-BA79-403D4300D48D",
+          "time": 1793940186.800194,
           "type": "tab-request"
         }
       ],
       "selected": true,
-      "space2": "5266ECC5-10F3-48C1-866A-1644732424C2",
+      "space2": "27922C71-5E62-4FA2-B122-00D5F556C509",
       "windowRestoredAndKey": true
     },
     "N3_notification_click": {
@@ -2162,10 +661,10 @@
       "router": [
         {
           "action": "page",
-          "id": "n#http://127.0.0.1:51679#open-n1",
-          "origin": "http://127.0.0.1:51679/",
+          "id": "n#http://127.0.0.1:54543#open-n1",
+          "origin": "http://127.0.0.1:54543/",
           "persistent": false,
-          "tab": "34DD44FA-F686-47EC-AD7D-502B56CBB1FA"
+          "tab": "948F028F-5560-4BC0-A528-77D87ADAE636"
         }
       ],
       "selected": true
@@ -2175,10 +674,10 @@
       "router": [
         {
           "action": "fallback",
-          "id": "n#http://127.0.0.1:51679#open-n1",
-          "origin": "http://127.0.0.1:51679/",
+          "id": "n#http://127.0.0.1:54543#open-n1",
+          "origin": "http://127.0.0.1:54543/",
           "persistent": false,
-          "tab": "B7CD08CF-5A31-4733-B2FD-6D4E47ECB137"
+          "tab": "25BBC69E-8C2C-4A7C-9D5E-9ED4D04D5429"
         }
       ],
       "selectedAfter": true,
@@ -2193,29 +692,29 @@
         {
           "content": 1,
           "request": "activate",
-          "space": "2DD56ED2-7C40-4FB6-AD42-F1D1166FED05",
-          "tab": "34DD44FA-F686-47EC-AD7D-502B56CBB1FA",
-          "time": 1793934754.351997,
+          "space": "2782E0C3-C01C-4C89-83E9-D69455218232",
+          "tab": "948F028F-5560-4BC0-A528-77D87ADAE636",
+          "time": 1793940186.906763,
           "type": "tab-request"
         }
       ],
       "notification": {
-        "body": "Click opens http://127.0.0.1:51679/notify.html?from=worker",
-        "id": "p#http://127.0.0.1:51679/#1open-n6",
-        "origin": "http://127.0.0.1:51679/",
+        "body": "Click opens http://127.0.0.1:54543/notify.html?from=worker",
+        "id": "p#http://127.0.0.1:54543/#1open-n6",
+        "origin": "http://127.0.0.1:54543/",
         "title": "Open N6 worker"
       },
       "opened": [],
       "pages": [
-        "http://127.0.0.1:51679/notify.html",
-        "http://127.0.0.1:51679/notify.html?space2",
-        "http://127.0.0.1:51679/notify.html?nofocus"
+        "http://127.0.0.1:54543/notify.html",
+        "http://127.0.0.1:54543/notify.html?space2",
+        "http://127.0.0.1:54543/notify.html?nofocus"
       ],
       "reason": "P1: clients.openWindow from a service worker opens no page in Open (followups)",
       "status": "BLOCKED",
       "tabs": [
-        "http://127.0.0.1:51679/notify.html?nofocus",
-        "http://127.0.0.1:51679/notify.html"
+        "http://127.0.0.1:54543/notify.html?nofocus",
+        "http://127.0.0.1:54543/notify.html"
       ]
     },
     "N6_engine_display": {
@@ -2237,12 +736,12 @@
         "scrollY": 5843,
         "visible": true
       },
-      "link": "http://127.0.0.1:51478/quote.html#:~:text=A%20unique%20sentence%20far%20down%20the%20page%20for%20the%20quote%20link.",
+      "link": "http://127.0.0.1:54420/quote.html#:~:text=A%20unique%20sentence%20far%20down%20the%20page%20for%20the%20quote%20link.",
       "ok": true,
       "toast": {
         "accessory": "none",
         "accessoryFrame": null,
-        "age": 0.05097808333084686,
+        "age": 0.0493620416673366,
         "coalescingKey": null,
         "exiting": false,
         "frame": [
@@ -2271,7 +770,7 @@
         "scrollY": 2793,
         "second": true
       },
-      "link": "http://127.0.0.1:51478/quote.html#:~:text=on%20this%20page.-,The%20same%20sentence%20appears%20twice%20on%20this%20page.,-A%20unique%20sentence",
+      "link": "http://127.0.0.1:54420/quote.html#:~:text=on%20this%20page.-,The%20same%20sentence%20appears%20twice%20on%20this%20page.,-A%20unique%20sentence",
       "ok": true
     },
     "Q2_selection_and_link": {
@@ -2288,13 +787,13 @@
       },
       "picked": {
         "hasSelection": true,
-        "link": "http://127.0.0.1:51584/quote.html#:~:text=The%20quick%20brown%20fox%20studies%20the%20lazy%20dog%20before%20every%20jump.",
+        "link": "http://127.0.0.1:54494/quote.html#:~:text=The%20quick%20brown%20fox%20studies%20the%20lazy%20dog%20before%20every%20jump.",
         "text": "The quick brown fox studies the lazy dog before every jump.\n\n"
       }
     },
     "Q3_quote_without_selection": {
       "ok": true,
-      "pasteboard": "http://127.0.0.1:51478/quote.html",
+      "pasteboard": "http://127.0.0.1:54420/quote.html",
       "toast": {
         "accessory": "share",
         "accessoryFrame": [
@@ -2303,7 +802,7 @@
           32,
           27
         ],
-        "age": 0.0035032083396799862,
+        "age": 0.004509166668867692,
         "coalescingKey": null,
         "exiting": false,
         "frame": [
@@ -2333,7 +832,7 @@
         "shown": true
       },
       "ok": true,
-      "pasteboard": "http://127.0.0.1:51478/quote.html#:~:text=A%20unique%20sentence%20far%20down%20the%20page%20for%20the%20quote%20link.",
+      "pasteboard": "http://127.0.0.1:54420/quote.html#:~:text=A%20unique%20sentence%20far%20down%20the%20page%20for%20the%20quote%20link.",
       "toast": {
         "accessory": "copy quote link",
         "accessoryFrame": [
@@ -2342,7 +841,7 @@
           32,
           27
         ],
-        "age": 0.005449041665997356,
+        "age": 0.004502124997088686,
         "coalescingKey": null,
         "exiting": false,
         "frame": [
@@ -2378,7 +877,7 @@
       },
       "hiddenAfterClear": true,
       "ok": true,
-      "pasteboard": "http://127.0.0.1:51478/quote.html#:~:text=A%20unique%20sentence%20far%20down%20the%20page%20for%20the%20quote%20link."
+      "pasteboard": "http://127.0.0.1:54420/quote.html#:~:text=A%20unique%20sentence%20far%20down%20the%20page%20for%20the%20quote%20link."
     },
     "SW1_indicator_hides_after_completion": {
       "ok": true,
@@ -2491,7 +990,7 @@
         "changed",
         "cancelled"
       ],
-      "url": "http://127.0.0.1:51584/links-target.html"
+      "url": "http://127.0.0.1:54494/links-target.html"
     },
     "SW3_split_pane_swipe": {
       "ok": true,
@@ -2524,10 +1023,10 @@
         "made": false,
         "pane": true
       },
-      "tabURL": "http://127.0.0.1:51584/links-target.html",
+      "tabURL": "http://127.0.0.1:54494/links-target.html",
       "visible": [
-        "10D9759F-8F3C-4D3D-98DA-76CF65ED1240",
-        "6C104872-66FD-4D71-8DFC-4F321E57212C"
+        "272F097D-01A2-48B7-A337-72CDBF6D3C4F",
+        "3EA9341D-857A-4EE3-A168-4B81B247DD0F"
       ]
     },
     "SW4_capture_overlay_pauses_swipes": {
@@ -2574,7 +1073,7 @@
     },
     "T-E1_copy_url_clean": {
       "ok": true,
-      "pasteboard": "http://127.0.0.1:51478/en.html?id=1#top",
+      "pasteboard": "http://127.0.0.1:54420/en.html?id=1#top",
       "toast": {
         "accessory": "share",
         "accessoryFrame": [
@@ -2583,7 +1082,7 @@
           32,
           27
         ],
-        "age": 0.00740866666455986,
+        "age": 0.003952541665057652,
         "coalescingKey": null,
         "exiting": false,
         "frame": [
@@ -2621,7 +1120,7 @@
         "pending": false,
         "requested": true,
         "servicesRequested": true,
-        "url": "http://127.0.0.1:51478/en.html?id=1"
+        "url": "http://127.0.0.1:54420/en.html?id=1"
       },
       "toast": {
         "accessory": "share",
@@ -2631,7 +1130,7 @@
           32,
           27
         ],
-        "age": 0.005133249993377831,
+        "age": 0.006919166669831611,
         "coalescingKey": null,
         "exiting": false,
         "frame": [
@@ -2667,9 +1166,9 @@
         "Save As…",
         "Print…",
         "Translate to English",
-        "View Page Source",
         "Capture",
         "Capture Full Page",
+        "View Page Source",
         "Inspect"
       ]
     },
@@ -2735,7 +1234,7 @@
           4
         ],
         "title": "Translate this page to English?",
-        "window": 98328
+        "window": 121842
       },
       "tipY": 802,
       "window": [
@@ -2948,16 +1447,16 @@
       ]
     },
     "Z2_peek_pinch_then_actual_size": {
-      "heldAfter1s": 1.999999761581421,
+      "heldAfter1s": 1.9999990463256836,
       "ok": true,
-      "pinched": 1.999999761581421,
+      "pinched": 1.9999990463256836,
       "reset": true
     },
     "Z2_pinch_then_actual_size": {
       "after": 1,
-      "heldAfter1s": 2,
+      "heldAfter1s": 1.999999761581421,
       "ok": true,
-      "pinched": 2
+      "pinched": 1.999999761581421
     },
     "Z3_smart_zoom": {
       "reason": "no synthetic smart-zoom path; user check U-S1",
@@ -2971,11 +1470,11 @@
       "devicePixelRatio": 2,
       "ok": true,
       "row": {
-        "bytes": 4309,
-        "createdAt": 1793934720.168215,
-        "fileName": "A7C3227B-7C59-4C96-ACC3-4D419FDC6DEB.png",
+        "bytes": 4311,
+        "createdAt": 1793940153.7366729,
+        "fileName": "67FFD9B2-004C-47B4-926E-21C8BED00051.png",
         "height": 400,
-        "id": "A7C3227B-7C59-4C96-ACC3-4D419FDC6DEB",
+        "id": "67FFD9B2-004C-47B4-926E-21C8BED00051",
         "kind": "area",
         "sourceHost": "127.0.0.1",
         "width": 600
@@ -3074,10 +1573,10 @@
       ],
       "row": {
         "bytes": 978563,
-        "createdAt": 1793934721.773752,
-        "fileName": "A9FD7806-0745-43D2-978F-14381F23F10F.png",
+        "createdAt": 1793940154.94298,
+        "fileName": "8350899D-6E2B-4EAD-99CA-591316519240.png",
         "height": 24000,
-        "id": "A9FD7806-0745-43D2-978F-14381F23F10F",
+        "id": "8350899D-6E2B-4EAD-99CA-591316519240",
         "kind": "fullPage",
         "sourceHost": "127.0.0.1",
         "width": 2084
@@ -3087,10 +1586,10 @@
       "ok": true,
       "row": {
         "bytes": 162958,
-        "createdAt": 1793934726.7798738,
-        "fileName": "CAE521BB-D6B8-4267-975C-2936A36E5883.png",
+        "createdAt": 1793940159.001744,
+        "fileName": "CB3BB95D-9BA3-47BD-BCB0-8E6CFCB4C455.png",
         "height": 3029,
-        "id": "CAE521BB-D6B8-4267-975C-2936A36E5883",
+        "id": "CB3BB95D-9BA3-47BD-BCB0-8E6CFCB4C455",
         "kind": "portrait",
         "sourceHost": "127.0.0.1",
         "width": 2423
@@ -3123,10 +1622,10 @@
       "ok": true,
       "row": {
         "bytes": 1270742,
-        "createdAt": 1793934724.890547,
-        "fileName": "ACD2CCF2-B5B7-4F6E-B72B-6C51848EDA0D.png",
+        "createdAt": 1793940157.3530989,
+        "fileName": "935356F8-EB61-4B79-AE3E-8EE4FA4F87FF.png",
         "height": 32768,
-        "id": "ACD2CCF2-B5B7-4F6E-B72B-6C51848EDA0D",
+        "id": "935356F8-EB61-4B79-AE3E-8EE4FA4F87FF",
         "kind": "fullPage",
         "sourceHost": "127.0.0.1",
         "width": 2084
@@ -3157,7 +1656,7 @@
             780
           ],
           "paused": false,
-          "remaining": 7.999082375004946,
+          "remaining": 7.998726708334289,
           "savedLine": true
         },
         "completed": 7,
@@ -3170,11 +1669,11 @@
         "replays": 1,
         "result": {
           "bytes": 1270742,
-          "fileName": "Tall page 11-05 at 8.12PM.png",
+          "fileName": "Tall page 11-05 at 9.42PM.png",
           "height": 32768,
           "host": "127.0.0.1",
           "kind": "fullPage",
-          "saved": "ACD2CCF2-B5B7-4F6E-B72B-6C51848EDA0D",
+          "saved": "935356F8-EB61-4B79-AE3E-8EE4FA4F87FF",
           "truncated": true,
           "width": 2084
         }
@@ -3184,11 +1683,11 @@
       "ok": true,
       "row": [
         {
-          "bytes": 1662,
-          "createdAt": 1793934716.624687,
-          "fileName": "620AFE14-7A7C-49E2-89D0-A36B36C8F66C.png",
+          "bytes": 1663,
+          "createdAt": 1793940150.51141,
+          "fileName": "86396A31-754A-4A92-B65F-974BE5066652.png",
           "height": 200,
-          "id": "620AFE14-7A7C-49E2-89D0-A36B36C8F66C",
+          "id": "86396A31-754A-4A92-B65F-974BE5066652",
           "kind": "area",
           "sourceHost": "127.0.0.1",
           "width": 300
@@ -3222,7 +1721,7 @@
             780
           ],
           "paused": false,
-          "remaining": 7.986202958330978,
+          "remaining": 7.995228250001674,
           "savedLine": true
         },
         "completed": 1,
@@ -3234,12 +1733,12 @@
         "phase": "showing",
         "replays": 0,
         "result": {
-          "bytes": 1662,
-          "fileName": "Long page 11-05 at 8.11PM.png",
+          "bytes": 1663,
+          "fileName": "Long page 11-05 at 9.42PM.png",
           "height": 200,
           "host": "127.0.0.1",
           "kind": "area",
-          "saved": "620AFE14-7A7C-49E2-89D0-A36B36C8F66C",
+          "saved": "86396A31-754A-4A92-B65F-974BE5066652",
           "truncated": false,
           "width": 300
         }
@@ -3390,10 +1889,10 @@
       ],
       "row": {
         "bytes": 270568,
-        "createdAt": 1793934719.0402641,
-        "fileName": "FDF59803-B12D-4B0F-B171-17F73B681CFC.png",
+        "createdAt": 1793940152.663766,
+        "fileName": "4ED8247B-74EC-4209-BFF1-E7DC23D9D33C.png",
         "height": 12000,
-        "id": "FDF59803-B12D-4B0F-B171-17F73B681CFC",
+        "id": "4ED8247B-74EC-4209-BFF1-E7DC23D9D33C",
         "kind": "fullPage",
         "sourceHost": "127.0.0.1",
         "width": 1042
@@ -3425,7 +1924,7 @@
             780
           ],
           "paused": false,
-          "remaining": 7.991458333330229,
+          "remaining": 7.988955624998198,
           "savedLine": true
         },
         "completed": 3,
@@ -3438,11 +1937,11 @@
         "replays": 0,
         "result": {
           "bytes": 270568,
-          "fileName": "Long page 11-05 at 8.11PM.png",
+          "fileName": "Long page 11-05 at 9.42PM.png",
           "height": 12000,
           "host": "127.0.0.1",
           "kind": "fullPage",
-          "saved": "FDF59803-B12D-4B0F-B171-17F73B681CFC",
+          "saved": "4ED8247B-74EC-4209-BFF1-E7DC23D9D33C",
           "truncated": false,
           "width": 1042
         }
@@ -3452,10 +1951,10 @@
       "ok": true,
       "row": {
         "bytes": 51314,
-        "createdAt": 1793934718.563321,
-        "fileName": "74D273D3-D41B-4854-BB89-E3B6CCA4CEA6.png",
+        "createdAt": 1793940152.299171,
+        "fileName": "F58344D8-BCE2-4F97-9035-995F5A47B790.png",
         "height": 1515,
-        "id": "74D273D3-D41B-4854-BB89-E3B6CCA4CEA6",
+        "id": "F58344D8-BCE2-4F97-9035-995F5A47B790",
         "kind": "portrait",
         "sourceHost": "127.0.0.1",
         "width": 1212
@@ -3495,12 +1994,12 @@
         "phase": "idle",
         "replays": 0,
         "result": {
-          "bytes": 1662,
-          "fileName": "Long page 11-05 at 8.11PM.png",
+          "bytes": 1663,
+          "fileName": "Long page 11-05 at 9.42PM.png",
           "height": 200,
           "host": "127.0.0.1",
           "kind": "area",
-          "saved": "620AFE14-7A7C-49E2-89D0-A36B36C8F66C",
+          "saved": "86396A31-754A-4A92-B65F-974BE5066652",
           "truncated": false,
           "width": 300
         }
@@ -3510,10 +2009,10 @@
       "ok": true,
       "row": {
         "bytes": 1224,
-        "createdAt": 1793934719.579215,
-        "fileName": "A335EF59-6929-456A-B051-D58E6A794BEA.png",
+        "createdAt": 1793940153.174541,
+        "fileName": "BA4210B5-E5F2-4453-9CF4-683102DF08E5.png",
         "height": 160,
-        "id": "A335EF59-6929-456A-B051-D58E6A794BEA",
+        "id": "BA4210B5-E5F2-4453-9CF4-683102DF08E5",
         "kind": "area",
         "sourceHost": "127.0.0.1",
         "width": 240
@@ -3552,13 +2051,13 @@
         "canGoBack": false,
         "canGoForward": false,
         "crashed": false,
-        "createdAt": 1793934719.632732,
+        "createdAt": 1793940153.233073,
         "favicon": false,
         "faviconReportsCompleted": 0,
         "faviconReportsRejected": 0,
         "hasWebContent": true,
-        "id": "9D1F71D3-2250-44B1-B53F-4288C8147043",
-        "lastActiveAt": 1793934719.654583,
+        "id": "E50E7054-8DC1-479A-8248-DC3E88E8717D",
+        "lastActiveAt": 1793940153.26061,
         "loaded": true,
         "loading": false,
         "page": {
@@ -3567,15 +2066,15 @@
           "browserIndex": 0,
           "browserPinned": false,
           "canGoBack": false,
-          "chromeTabId": 1683036567,
-          "chromeWindowId": 1683036565,
+          "chromeTabId": 964248785,
+          "chromeWindowId": 964248783,
           "context": "Default",
           "crash": 0,
           "extension": "",
           "favicon": false,
           "fullscreen": false,
           "hidden": false,
-          "hostTab": "9D1F71D3-2250-44B1-B53F-4288C8147043",
+          "hostTab": "E50E7054-8DC1-479A-8248-DC3E88E8717D",
           "identifier": 2,
           "kind": "tab",
           "live": true,
@@ -3590,21 +2089,21 @@
           "popup": false,
           "style": "chrome",
           "title": "Link target",
-          "url": "http://127.0.0.1:51352/links-target.html",
+          "url": "http://127.0.0.1:54306/links-target.html",
           "zoom": 0
         },
         "pinnedURL": "",
-        "profile": "84C7A4F9-B9A6-4D74-AFDB-27FFD87529DE",
+        "profile": "7914AAF5-8234-4BF6-96DB-710DF16B1142",
         "progress": 1,
         "rowFaviconHash": "",
         "rowFaviconSource": "placeholder",
         "section": "today",
         "selected": true,
         "sleepPhase": "live",
-        "space": "444C4CA0-7E35-4BD6-A723-F939EF4E320E",
+        "space": "9BD7CA74-99D8-4706-B209-2AC2B5ED012F",
         "title": "Link target",
         "unread": false,
-        "url": "http://127.0.0.1:51352/links-target.html",
+        "url": "http://127.0.0.1:54306/links-target.html",
         "visible": true
       },
       "replays": 1
@@ -3637,7 +2136,7 @@
         "frame": "{{555, 409}, {370, 182}}",
         "key": true,
         "level": 0,
-        "number": 98199,
+        "number": 121593,
         "parent": 0,
         "sheet": true,
         "title": "Save",
@@ -3646,11 +2145,11 @@
     },
     "capture_card_lifetime": {
       "ok": true,
-      "paused": 7.727619999997842,
-      "resumed": 7.726829833329248,
+      "paused": 7.744861250001122,
+      "resumed": 7.7439235000056215,
       "scheduled": [
         8,
-        7.986202958330978
+        7.995228250001674
       ]
     },
     "capture_context_menu": {
@@ -3663,11 +2162,10 @@
         "Save As…",
         "Print…",
         "-",
-        "View Page Source",
-        "-",
         "Capture",
         "Capture Full Page",
         "-",
+        "View Page Source",
         "Inspect"
       ]
     },
@@ -3719,7 +2217,7 @@
     "capture_shortcut_hint": {
       "hintShows": 1,
       "ok": true,
-      "stored": 1793934718.1585112
+      "stored": 1793940151.961182
     },
     "capture_shortcut_hint_once": {
       "hintShows": 1,
@@ -3734,8 +2232,8 @@
   "source": {
     "clean": true,
     "diffSHA256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
-    "head": "7cddbb141e4324370acd17e57509b443739024cf"
+    "head": "6eb7dcdf874c3a4dfa8092937d2aeb3b01b07b94"
   },
-  "started": "2026-11-05 20:10:40",
+  "started": "2026-11-05 21:42:15",
   "style": "chrome"
 }

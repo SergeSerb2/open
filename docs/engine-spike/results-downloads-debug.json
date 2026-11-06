@@ -7,15 +7,15 @@
         "forced": false,
         "ok": true,
         "owned_pids": [
-          38277,
-          38407,
-          38408,
-          38410,
-          38411,
-          38643,
-          38749,
-          38750,
-          38751
+          55262,
+          55373,
+          55374,
+          55375,
+          55376,
+          55468,
+          55524,
+          55525,
+          55526
         ],
         "remaining_processes": [],
         "windows_after_quit": {
@@ -29,11 +29,11 @@
         "forced": false,
         "ok": true,
         "owned_pids": [
-          39015,
-          39087,
-          39088,
-          39092,
-          39093
+          55697,
+          55713,
+          55714,
+          55716,
+          55717
         ],
         "remaining_processes": [],
         "windows_after_quit": {
@@ -60,7 +60,7 @@
         "id": "Default:8",
         "name": "sample.txt",
         "path": "",
-        "profile": "00F82ADE-19E3-4810-BB65-F460C776BF46",
+        "profile": "3BCA450C-494C-4E48-A7D1-1D9420CBBFD3",
         "received": 0,
         "speed": 0,
         "state": "cancelled",
@@ -76,7 +76,7 @@
           "Show in Finder"
         ],
         "id": "Default:5",
-        "subtitle": "Completed · $TMPDIR/Open-E2E-downloads-chrome-38058-7e6be0f4-scratch-vghp4_xg/downloads-attempt-itb49qnf/first/sample (7).txt"
+        "subtitle": "Completed · $TMPDIR/Open-E2E-downloads-chrome-55086-c6bbb8f8-scratch-8wq7vlnq/downloads-attempt-0l1a6p7_/first/sample (7).txt"
       }
     },
     "completion_motion": {
@@ -183,7 +183,7 @@
       "ok": true
     },
     "copy_file_url": {
-      "copied": "file://$TMPDIR/Open-E2E-downloads-chrome-38058-7e6be0f4-scratch-vghp4_xg/downloads-attempt-itb49qnf/first/sample%20(7).txt",
+      "copied": "file://$TMPDIR/Open-E2E-downloads-chrome-55086-c6bbb8f8-scratch-8wq7vlnq/downloads-attempt-0l1a6p7_/first/sample%20(7).txt",
       "ok": true
     },
     "failed_subtitle": {
@@ -192,7 +192,7 @@
         "id": "Default:3",
         "name": "sample.txt",
         "path": "",
-        "profile": "00F82ADE-19E3-4810-BB65-F460C776BF46",
+        "profile": "3BCA450C-494C-4E48-A7D1-1D9420CBBFD3",
         "received": 0,
         "speed": 0,
         "state": "failed",
@@ -221,8 +221,8 @@
     "folder_unique": {
       "ok": true,
       "paths": [
-        "$TMPDIR/Open-E2E-downloads-chrome-38058-7e6be0f4-scratch-vghp4_xg/downloads-attempt-itb49qnf/first/sample (6).txt",
-        "$TMPDIR/Open-E2E-downloads-chrome-38058-7e6be0f4-scratch-vghp4_xg/downloads-attempt-itb49qnf/first/sample (7).txt"
+        "$TMPDIR/Open-E2E-downloads-chrome-55086-c6bbb8f8-scratch-8wq7vlnq/downloads-attempt-0l1a6p7_/first/sample (6).txt",
+        "$TMPDIR/Open-E2E-downloads-chrome-55086-c6bbb8f8-scratch-8wq7vlnq/downloads-attempt-0l1a6p7_/first/sample (7).txt"
       ]
     },
     "hide": {
@@ -238,7 +238,7 @@
         "homeOpacity": 1,
         "indeterminate": false,
         "lineWidth": 2,
-        "progress": 0.005859375,
+        "progress": 0.00634765625,
         "reduceMotion": false,
         "ringBounds": [
           3,
@@ -283,16 +283,16 @@
         0,
         0
       ],
-      "elapsed": 2.0130092080000033,
+      "elapsed": 2.0052544169999997,
       "load": [
-        16.99267578125,
-        12.0458984375,
-        12.0361328125
+        14.20458984375,
+        13.25732421875,
+        12.0322265625
       ],
       "ok": true,
       "publishes": [
-        73,
-        73
+        76,
+        76
       ]
     },
     "live_subtitle": {
@@ -300,10 +300,10 @@
         "fileExists": false,
         "id": "Default:1",
         "name": "sample (1).txt",
-        "path": "$TMPDIR/Open-E2E-downloads-chrome-38058-7e6be0f4-scratch-vghp4_xg/downloads-attempt-itb49qnf/first/sample (1).txt",
-        "profile": "00F82ADE-19E3-4810-BB65-F460C776BF46",
-        "received": 196608,
-        "speed": 196608,
+        "path": "$TMPDIR/Open-E2E-downloads-chrome-55086-c6bbb8f8-scratch-8wq7vlnq/downloads-attempt-0l1a6p7_/first/sample (1).txt",
+        "profile": "3BCA450C-494C-4E48-A7D1-1D9420CBBFD3",
+        "received": 212992,
+        "speed": 212992,
         "state": "inProgress",
         "total": 33554432
       },
@@ -314,7 +314,7 @@
           "Cancel"
         ],
         "id": "Default:1",
-        "subtitle": "197 KB/33.6 MB · 197 KB/s · from 127.0.0.1"
+        "subtitle": "213 KB/33.6 MB · 213 KB/s · from 127.0.0.1"
       }
     },
     "menu_cancel": {
@@ -325,9 +325,9 @@
       "item": {
         "fileExists": true,
         "id": "Default:9",
-        "name": "open-e2e-fallback-38058.txt",
-        "path": "$TMPDIR/Open-E2E-downloads-chrome-38058-7e6be0f4-scratch-vghp4_xg/downloads-attempt-itb49qnf/DefaultDownloads/open-e2e-fallback-38058.txt",
-        "profile": "00F82ADE-19E3-4810-BB65-F460C776BF46",
+        "name": "open-e2e-fallback-55086.txt",
+        "path": "$TMPDIR/Open-E2E-downloads-chrome-55086-c6bbb8f8-scratch-8wq7vlnq/downloads-attempt-0l1a6p7_/DefaultDownloads/open-e2e-fallback-55086.txt",
+        "profile": "3BCA450C-494C-4E48-A7D1-1D9420CBBFD3",
         "received": 131072,
         "speed": 0,
         "state": "completed",
@@ -339,15 +339,15 @@
       "actions": [
         {
           "action": "open",
-          "url": "file://$TMPDIR/Open-E2E-downloads-chrome-38058-7e6be0f4-scratch-vghp4_xg/downloads-attempt-itb49qnf/first/sample%20(7).txt"
+          "url": "file://$TMPDIR/Open-E2E-downloads-chrome-55086-c6bbb8f8-scratch-8wq7vlnq/downloads-attempt-0l1a6p7_/first/sample%20(7).txt"
         },
         {
           "action": "copy",
-          "url": "file://$TMPDIR/Open-E2E-downloads-chrome-38058-7e6be0f4-scratch-vghp4_xg/downloads-attempt-itb49qnf/first/sample%20(7).txt"
+          "url": "file://$TMPDIR/Open-E2E-downloads-chrome-55086-c6bbb8f8-scratch-8wq7vlnq/downloads-attempt-0l1a6p7_/first/sample%20(7).txt"
         },
         {
           "action": "reveal",
-          "url": "file://$TMPDIR/Open-E2E-downloads-chrome-38058-7e6be0f4-scratch-vghp4_xg/downloads-attempt-itb49qnf/first/sample%20(7).txt"
+          "url": "file://$TMPDIR/Open-E2E-downloads-chrome-55086-c6bbb8f8-scratch-8wq7vlnq/downloads-attempt-0l1a6p7_/first/sample%20(7).txt"
         }
       ],
       "ok": true
@@ -357,16 +357,16 @@
       "ok": true,
       "receipt": {
         "bytes": 131072,
-        "pid": 38643,
+        "pid": 55468,
         "sha256": "9b5b8e701fa00856d9a55089c7a07190f84a113ca41fbc15b7497ad36d5d3a43",
-        "url": "file://$TMPDIR/Open-E2E-downloads-chrome-38058-7e6be0f4-scratch-vghp4_xg/downloads-attempt-itb49qnf/first/sample%20(7).txt"
+        "url": "file://$TMPDIR/Open-E2E-downloads-chrome-55086-c6bbb8f8-scratch-8wq7vlnq/downloads-attempt-0l1a6p7_/first/sample%20(7).txt"
       }
     },
     "pause": {
       "ok": true,
       "received": [
-        196608,
-        196608
+        212992,
+        212992
       ],
       "row": {
         "buttons": [
@@ -380,10 +380,10 @@
     "profile_folder": {
       "item": {
         "fileExists": true,
-        "id": "Profile-8737DE91:1",
+        "id": "Profile-EF35AF46:1",
         "name": "sample.txt",
-        "path": "$TMPDIR/Open-E2E-downloads-chrome-38058-7e6be0f4-scratch-vghp4_xg/downloads-attempt-itb49qnf/second/sample.txt",
-        "profile": "02D434C4-AA8B-40F6-838E-105E4F8A239A",
+        "path": "$TMPDIR/Open-E2E-downloads-chrome-55086-c6bbb8f8-scratch-8wq7vlnq/downloads-attempt-0l1a6p7_/second/sample.txt",
+        "profile": "BD2C22EA-BE96-4C9A-BAAA-4E6CFC72F085",
         "received": 131072,
         "speed": 0,
         "state": "completed",
@@ -415,8 +415,8 @@
         "fileExists": false,
         "id": "Default:1",
         "name": "sample (1).txt",
-        "path": "$TMPDIR/Open-E2E-downloads-chrome-38058-7e6be0f4-scratch-vghp4_xg/downloads-attempt-itb49qnf/first/sample (1).txt",
-        "profile": "00F82ADE-19E3-4810-BB65-F460C776BF46",
+        "path": "$TMPDIR/Open-E2E-downloads-chrome-55086-c6bbb8f8-scratch-8wq7vlnq/downloads-attempt-0l1a6p7_/first/sample (1).txt",
+        "profile": "3BCA450C-494C-4E48-A7D1-1D9420CBBFD3",
         "received": 950272,
         "speed": 316757,
         "state": "inProgress",
@@ -441,8 +441,8 @@
         "fileExists": true,
         "id": "Default:6",
         "name": "chosen.txt",
-        "path": "$TMPDIR/Open-E2E-downloads-chrome-38058-7e6be0f4-scratch-vghp4_xg/downloads-attempt-itb49qnf/chosen.txt",
-        "profile": "00F82ADE-19E3-4810-BB65-F460C776BF46",
+        "path": "$TMPDIR/Open-E2E-downloads-chrome-55086-c6bbb8f8-scratch-8wq7vlnq/downloads-attempt-0l1a6p7_/chosen.txt",
+        "profile": "3BCA450C-494C-4E48-A7D1-1D9420CBBFD3",
         "received": 131072,
         "speed": 0,
         "state": "completed",
@@ -456,7 +456,7 @@
         "id": "Default:7",
         "name": "sample.txt",
         "path": "",
-        "profile": "00F82ADE-19E3-4810-BB65-F460C776BF46",
+        "profile": "3BCA450C-494C-4E48-A7D1-1D9420CBBFD3",
         "received": 0,
         "speed": 0,
         "state": "cancelled",
@@ -467,7 +467,7 @@
     "save_sheet": {
       "ok": true,
       "sheet": {
-        "directory": "$TMPDIR/Open-E2E-downloads-chrome-38058-7e6be0f4-scratch-vghp4_xg/downloads-attempt-itb49qnf/first",
+        "directory": "$TMPDIR/Open-E2E-downloads-chrome-55086-c6bbb8f8-scratch-8wq7vlnq/downloads-attempt-0l1a6p7_/first",
         "id": "Default:6",
         "name": "sample.txt",
         "sheet": true,
@@ -511,7 +511,7 @@
           "Cancel"
         ],
         "id": "Default:2",
-        "subtitle": "197 KB · 197 KB/s · from 127.0.0.1"
+        "subtitle": "213 KB · 213 KB/s · from 127.0.0.1"
       }
     }
   },
@@ -535,8 +535,8 @@
   "source": {
     "clean": true,
     "diffSHA256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
-    "head": "7cddbb141e4324370acd17e57509b443739024cf"
+    "head": "6eb7dcdf874c3a4dfa8092937d2aeb3b01b07b94"
   },
-  "started": "2026-11-05 20:16:44",
+  "started": "2026-11-05 21:50:32",
   "style": "chrome"
 }

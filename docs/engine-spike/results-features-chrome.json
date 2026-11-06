@@ -6,16 +6,40 @@
         "forced": false,
         "ok": true,
         "owned_pids": [
-          18673,
-          18693,
-          18694,
-          18696,
-          18698,
-          18699,
-          18754,
-          18826,
-          19245,
-          19437
+          36544,
+          36550,
+          36551,
+          36552,
+          36553,
+          36588,
+          36705,
+          37447,
+          37449,
+          37498,
+          37514
+        ],
+        "remaining_processes": [],
+        "reply": true,
+        "windows_after_quit": {
+          "count": 0,
+          "windows": []
+        },
+        "windows_before_quit": 1
+      },
+      {
+        "forced": false,
+        "ok": true,
+        "owned_pids": [
+          38000,
+          38015,
+          38016,
+          38017,
+          38023,
+          38024,
+          38278,
+          38501,
+          39464,
+          39627
         ],
         "remaining_processes": [],
         "reply": true,
@@ -70,15 +94,11 @@
     },
     "context_menu": {
       "items": [
-        "Look Up “on”",
-        "",
         "Copy",
         "Copy Link to Highlight",
         "Print…",
         "",
-        "Inspect",
-        "",
-        "Speech"
+        "Inspect"
       ],
       "ok": true
     },
@@ -92,36 +112,7 @@
       "ok": true
     },
     "downloads": {
-      "events": [
-        [
-          1,
-          0
-        ],
-        [
-          1,
-          10
-        ],
-        [
-          1,
-          10
-        ],
-        [
-          1,
-          10
-        ],
-        [
-          1,
-          10
-        ],
-        [
-          1,
-          10
-        ],
-        [
-          2,
-          10
-        ]
-      ],
+      "events": [],
       "ok": true
     },
     "find_in_page": {
@@ -200,7 +191,7 @@
       ]
     },
     "print_to_pdf": {
-      "bytes": 441131,
+      "bytes": 398144,
       "ok": true
     },
     "profiles": {
@@ -210,8 +201,8 @@
         "cookie": "",
         "storage": null
       },
-      "work_space": "846D9753-57DD-4305-80EC-03C323EF7D4A",
-      "work_tab_context": "Profile-3024A88C"
+      "work_space": "8D6996CF-03D1-4F6D-90AD-EA8E11877817",
+      "work_tab_context": "Profile-04C9C55C"
     },
     "request_filter": {
       "ok": true,
@@ -240,7 +231,7 @@
       "eme": "available: com.widevine.alpha",
       "ok": true,
       "playback": {
-        "currentTime": 4.958401,
+        "currentTime": 4.95847,
         "frames": 123,
         "keySystem": "com.widevine.alpha",
         "track": "vp09.00.41.08"
@@ -253,7 +244,245 @@
       "ok": true
     }
   },
-  "interrupted_attempts": [],
+  "interrupted_attempts": [
+    {
+      "attempt": 1,
+      "checks": {
+        "adblock_control": {
+          "ok": true,
+          "without_extensions": {
+            "https://pagead2.googlesyndication.com/pagead/js/adsbygoogle.js": "loaded",
+            "https://securepubads.g.doubleclick.net/tag/js/gpt.js": "loaded"
+          }
+        },
+        "audio_state": {
+          "audible_after_pause": false,
+          "audible_while_playing": true,
+          "muted": {
+            "audible": true,
+            "muted": true
+          },
+          "ok": true
+        },
+        "codecs": {
+          "ok": true,
+          "support": {
+            "aac": true,
+            "av1": true,
+            "h264": true,
+            "hevc": true,
+            "mp3": "probably",
+            "opus": true,
+            "vp9": true
+          }
+        },
+        "context_menu": {
+          "items": [
+            "Copy",
+            "Copy Link to Highlight",
+            "Print…",
+            "",
+            "Inspect"
+          ],
+          "ok": true
+        },
+        "downloads": {
+          "events": [
+            [
+              1,
+              0
+            ],
+            [
+              1,
+              10
+            ],
+            [
+              1,
+              10
+            ],
+            [
+              1,
+              10
+            ],
+            [
+              1,
+              10
+            ],
+            [
+              1,
+              10
+            ],
+            [
+              2,
+              10
+            ]
+          ],
+          "ok": true
+        },
+        "find_in_page": {
+          "active": 0,
+          "final": true,
+          "matches": 134,
+          "ok": true
+        },
+        "fullscreen": {
+          "document_fullscreen": true,
+          "events": [
+            true
+          ],
+          "ok": true
+        },
+        "js_dialogs": {
+          "events": [
+            0,
+            1,
+            2
+          ],
+          "ok": true,
+          "result": [
+            true,
+            "hello"
+          ]
+        },
+        "pdf_viewer": {
+          "document": {
+            "body": "\n    \n  \n\n",
+            "embed": false,
+            "iframe": false,
+            "type": "application/pdf"
+          },
+          "ok": true,
+          "screenshot": "chrome-pdf-viewer.png",
+          "viewer_targets": [
+            "chrome-extension://mhjfbmdgcfjbbpaeojofohoefgiehjai/index.html"
+          ]
+        },
+        "permissions": {
+          "events": [
+            {
+              "kinds": 8,
+              "origin": "https://en.wikipedia.org/"
+            }
+          ],
+          "geolocation": "not tested",
+          "notification": "granted",
+          "ok": true
+        },
+        "picture_in_picture": {
+          "ok": true,
+          "result": true,
+          "visible_windows": [
+            [
+              "BrowserWindow",
+              "{{80, 60}, {1360, 860}}"
+            ],
+            [
+              "PiPPanel",
+              "{{2230, 10}, {320, 180}}"
+            ]
+          ]
+        },
+        "popups_new_tabs": {
+          "new_sidebar_tabs": [
+            "https://example.com/"
+          ],
+          "ok": true,
+          "page_kinds": [
+            "popup",
+            "tab",
+            "tab",
+            "tab"
+          ]
+        },
+        "print_to_pdf": {
+          "bytes": 441131,
+          "ok": true
+        },
+        "profiles": {
+          "ok": true,
+          "work_engine_dir_exists": true,
+          "work_profile_sees": {
+            "cookie": "",
+            "storage": null
+          },
+          "work_space": "CCD1A143-9032-4699-BE28-371F3563B770",
+          "work_tab_context": "Profile-B026530A"
+        },
+        "request_filter": {
+          "ok": true,
+          "stats": {
+            "blocked": 1,
+            "recent": [
+              "https://example.org/?x=1"
+            ]
+          },
+          "with_filter": "blocked",
+          "without_filter": "loaded"
+        },
+        "user_scripts": {
+          "matched": {
+            "boost": "number",
+            "early": true,
+            "outline": "rgb(255, 0, 0)"
+          },
+          "ok": true,
+          "unmatched_site": "undefined"
+        },
+        "widevine": {
+          "assertion": {
+            "error": "foreground lost during widevine",
+            "ok": false,
+            "trace": "Traceback (most recent call last):\n  File \"$WORKTREE/tools/e2e/engine_e2e.py\", line 654, in run\n    results[name] = fn()\n  File \"$WORKTREE/tools/e2e/engine_e2e.py\", line 113, in __setitem__\n    raise FocusInterruption(\"foreground lost during \" + key, interruptions)\nFocusInterruption: foreground lost during widevine\n"
+          },
+          "focus": [
+            {
+              "event": "frontmostChanged",
+              "frontmostApp": "T3 Pretty Internal (Nightly)",
+              "frontmostPID": 1305,
+              "openPID": 36544,
+              "uptime": 44335.907849
+            },
+            {
+              "active": false,
+              "event": "NSApplicationDidResignActiveNotification",
+              "frontmostApp": "T3 Pretty Internal (Nightly)",
+              "frontmostPID": 1305,
+              "keyWindow": 0,
+              "openPID": 36544,
+              "uptime": 44335.91222666667
+            }
+          ],
+          "status": "INTERRUPTED"
+        },
+        "zoom": {
+          "innerWidth_100": 1122,
+          "innerWidth_zoomed": 935,
+          "level": 1,
+          "ok": true
+        }
+      },
+      "focus": [
+        {
+          "event": "frontmostChanged",
+          "frontmostApp": "T3 Pretty Internal (Nightly)",
+          "frontmostPID": 1305,
+          "openPID": 36544,
+          "uptime": 44335.907849
+        },
+        {
+          "active": false,
+          "event": "NSApplicationDidResignActiveNotification",
+          "frontmostApp": "T3 Pretty Internal (Nightly)",
+          "frontmostPID": 1305,
+          "keyWindow": 0,
+          "openPID": 36544,
+          "uptime": 44335.91222666667
+        }
+      ],
+      "reason": "foreground lost during widevine",
+      "status": "INTERRUPTED"
+    }
+  ],
   "pathRedactions": [
     "$WORKTREE",
     "$HOME",
@@ -272,15 +501,15 @@
       "AttributeGraph",
       "AttributeGraph graph data"
     ],
-    "pid": 18673,
-    "root": "$HOME/Library/Application Support/Open-E2E-features-chrome-18612-73e64a4c",
-    "userData": "$HOME/Library/Application Support/Open-E2E-features-chrome-18612-73e64a4c/Engine"
+    "pid": 38000,
+    "root": "$HOME/Library/Application Support/Open-E2E-features-chrome-36507-0b3c711b",
+    "userData": "$HOME/Library/Application Support/Open-E2E-features-chrome-36507-0b3c711b/Engine"
   },
   "source": {
     "clean": true,
     "diffSHA256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
-    "head": "7cddbb141e4324370acd17e57509b443739024cf"
+    "head": "6eb7dcdf874c3a4dfa8092937d2aeb3b01b07b94"
   },
-  "started": "2026-11-05 19:58:18",
+  "started": "2026-11-05 21:34:58",
   "style": "chrome"
 }

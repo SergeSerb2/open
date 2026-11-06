@@ -1333,28 +1333,23 @@ and microphone still uses the shared list-joining code when the engine asks.
 `dialogPolicy` accept/dismiss/hold and `permissionPolicy` grant/deny remain.
 `dialog-button` and `permission-prompt` answers click the real AppKit buttons.
 The [S11 runtime report](engine-spike/s11-dialogs-permissions.md) records
-latest Chrome-style Debug App source `43ba07a2`, including main #182:
-page-chrome 41/41 PASS without interruption, runner lifetime 4/4 PASS, and
-clean owned-process/window teardown. Before the owner-death fix, the new
-beforeunload assertion FAILS; after it, owner death creates no pending request
-and shutdown takes 0.200 s. The report qualifies its full-verifier and broad
-native reruns by source commit.
+completed App source `6eb7dcdf`, including main #178/#182/#181/#179/#176,
+with recorded engine `f34400e7`: 316 PASS across eight complete suites
+(page-chrome 41, features 19, shell 7, window 76, page 85, sleep 20,
+downloads 34, context-menus 34). Full verification passes 23/23, including
+all restored-display gates. All four native Window pixel/color rows pass on
+the 1x `AW2726DM`. Features passes after one excluded foreground-interrupted
+attempt; every other suite completes without interruption. All teardown
+checks pass. The runner-lifetime proof passes all four cases, including
+normal beforeunload cancellation followed by prompt-free owner shutdown.
 
-The previous broad checkpoint `7cddbb14`, including Downloads #181 and
-extension commands #179, ran on the 1x `AW2726DM`: page-chrome 41 PASS, features
-19, page 85, sleep 20, and Downloads 34. These five complete suites have zero
-FAIL and clean teardown. Shell and Window are INTERRUPTED on that
-head after two invocations of three foreground-loss attempts each; the latest
-attempts report `active=false`, `frontmost=OpenTodos`. A quiet foreground
-interval remains a merge gate. Earlier Shell 7/7 and Window 76/76 receipts
-on `deeec4c3`, including its four display rows, are historical and are not
-counted as merged-head acceptance. Full `verify-all` passes 23/23, including
-all restored-display gates. Page's four BLOCKED / one DEFERRED rows and
-Sleep's one BLOCKED row retain their explicit status. Sleep N5 passes through
-the permission hook. Interrupted partial rows are excluded from the counts.
-The broken variant fails the same 41 new gates; an intentional failure with
-a visible sheet also completes cleanup. The report and PR body retain the
-full verifier summary, load readings, and open capture/API limits.
+These are pre-#177 engine-update results. Main `e4d40ce0` now records engine
+`7b490905`; its merge, build and final reruns remain pending. The PR stays a
+draft. Window's two launch-budget rows are SKIP in Debug; its card-material
+row is DEFERRED. Page's four BLOCKED / one DEFERRED and Sleep's one BLOCKED
+row retain their explicit status. Sleep N5 passes through the permission
+hook. The report retains source-qualified earlier checkpoints, all timing
+attempts, negative proofs, Section 12 hooks, and the capture/API limits.
 
 User captures still needed (`docs/re/page-chrome.md` §7): light/dark 2x
 JavaScript sheets, prompt default/selection, repeat suppression, close/reload

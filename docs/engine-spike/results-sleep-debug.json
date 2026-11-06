@@ -6,30 +6,30 @@
         "forced": false,
         "ok": true,
         "owned_pids": [
-          35559,
-          35636,
-          35637,
-          35638,
-          35640,
-          35641,
-          35643,
-          35780,
-          35962,
-          35963,
-          35964,
-          35965,
-          35966,
-          35967,
-          35970,
-          35973,
-          36051,
-          36052,
-          36144,
-          36317,
-          36404,
-          36426,
-          36434,
-          36437
+          48261,
+          48265,
+          48266,
+          48267,
+          48268,
+          48271,
+          48272,
+          48606,
+          48644,
+          48649,
+          48651,
+          48652,
+          48654,
+          48657,
+          48659,
+          48660,
+          48718,
+          48719,
+          48888,
+          49068,
+          49104,
+          49110,
+          49111,
+          49116
         ],
         "remaining_processes": [],
         "reply": true,
@@ -43,14 +43,15 @@
         "forced": false,
         "ok": true,
         "owned_pids": [
-          36449,
-          36466,
-          36467,
-          36468,
-          36472,
-          36473,
-          36474,
-          36544
+          49132,
+          49138,
+          49139,
+          49140,
+          49141,
+          49143,
+          49144,
+          49145,
+          49179
         ],
         "remaining_processes": [],
         "reply": true,
@@ -64,15 +65,15 @@
         "forced": false,
         "ok": true,
         "owned_pids": [
-          36561,
-          36570,
-          36571,
-          36572,
-          36573,
-          36574,
-          36575,
-          36576,
-          36583
+          49198,
+          49203,
+          49204,
+          49205,
+          49206,
+          49209,
+          49210,
+          49211,
+          49215
         ],
         "remaining_processes": [],
         "reply": true,
@@ -120,18 +121,18 @@
     "sleep_f1_renderers": {
       "nineSleeping": {
         "count": 3,
-        "rssKB": 424384
+        "rssKB": 425744
       },
       "note": "discard in place: the page objects stay, their renderers go",
       "ok": true,
       "oneTab": {
         "count": 3,
-        "rssKB": 421024
+        "rssKB": 422208
       },
       "refused": [],
       "tenTabsLoaded": {
         "count": 11,
-        "rssKB": 1763792
+        "rssKB": 1766528
       }
     },
     "sleep_f2_history_scroll_form": {
@@ -167,8 +168,8 @@
       "historyLength": 1,
       "landed": true,
       "log": [
-        "sleep-restore-fallback 72A10C39",
-        "sleep-wake placeholder 72A10C39 ms=60.201048851013184"
+        "sleep-restore-fallback CF5C54E0",
+        "sleep-wake placeholder CF5C54E0 ms=84.95199680328369"
       ],
       "ok": true,
       "victimStored": true
@@ -176,7 +177,7 @@
     "sleep_f4_history_restore": {
       "back": true,
       "log": [
-        "sleep-wake placeholder 0FC5F474 ms=95.69001197814941"
+        "sleep-wake placeholder A9D844E2 ms=145.46000957489014"
       ],
       "ok": true,
       "restored": {
@@ -187,24 +188,24 @@
     "sleep_f4_quit_capture": {
       "hostedAfterRelaunch": 1,
       "load": [
-        8.7080078125,
-        9.509765625,
-        11.26318359375
+        16.3544921875,
+        12.4482421875,
+        11.47021484375
       ],
       "ok": true,
       "phasesBeforeQuit": {
-        "0FC5F474-2206-4B8E-A184-AB2D6C7BB345": "sleeping",
-        "2BBC98F7-9F7C-4F24-893A-A906723E4C45": "live",
-        "72A10C39-E692-4223-A96F-409CF9BA9FFF": "frozen",
-        "7B2E4B31-DF2D-403C-9320-8BDB441F0314": "placeholder"
+        "0898A5D2-0770-4E26-BA5C-E0279C40FFAB": "live",
+        "A96EA327-4ACE-42E4-9A3E-488BF30EA384": "placeholder",
+        "A9D844E2-047C-4398-8299-AAADD6557F9A": "sleeping",
+        "CF5C54E0-4EF8-478B-9DDA-2066ECBFBAC2": "frozen"
       },
       "quitCaptureMs": [
-        2.647995948791504
+        2.1429061889648438
       ],
-      "quitSeconds": 0.45,
+      "quitSeconds": 0.56,
       "renderersAfterRelaunch": {
         "count": 3,
-        "rssKB": 420816
+        "rssKB": 421200
       },
       "storedRows": 24
     },
@@ -212,49 +213,49 @@
       "cache": "warm (same fixture page each wake)",
       "destroyed": {
         "n": 10,
-        "p50ms": 97.16188907623291,
-        "p95ms": 118.4990406036377
+        "p50ms": 129.7450065612793,
+        "p95ms": 159.10100936889648
       },
       "load": [
-        8.85693359375,
-        9.55224609375,
-        11.28857421875
+        14.2958984375,
+        11.93505859375,
+        11.28125
       ],
       "n": 20,
       "note": "in-place discard reload; budget 700 ms first paint on a cached page",
       "ok": true,
-      "p50ms": 36.918044090270996,
-      "p95ms": 46.02503776550293
+      "p50ms": 43.18702220916748,
+      "p95ms": 52.51598358154297
     },
     "sleep_f5_unfreeze": {
       "frozenBeforeWake": 20,
       "load": [
-        8.85693359375,
-        9.55224609375,
-        11.28857421875
+        14.2958984375,
+        11.93505859375,
+        11.28125
       ],
       "measure": "select call → the page's visibilitychange to visible (includes the automation round trip)",
       "n": 20,
       "ok": true,
-      "p50ms": 2.192138671875,
-      "p95ms": 3.947998046875
+      "p50ms": 3.566162109375,
+      "p95ms": 4.39501953125
     },
     "sleep_frozen_deadline": {
       "discardDelay": 300,
       "hiddenElapsed": 30,
       "load": [
-        8.04736328125,
-        9.54638671875,
-        11.3525390625
+        11.3896484375,
+        11.22265625,
+        11.017578125
       ],
-      "nextPassDelay": 269.9724689722061,
+      "nextPassDelay": 269.93696308135986,
       "ok": true
     },
     "sleep_idle_parked": {
       "load": [
-        8.04736328125,
-        9.54638671875,
-        11.3525390625
+        11.3896484375,
+        11.22265625,
+        11.017578125
       ],
       "ok": true,
       "passesAfter": 1,
@@ -307,21 +308,21 @@
       "ok": true
     },
     "sleep_started_after_paint": {
-      "firstContentfulPaint": 3910,
+      "firstContentfulPaint": 966,
       "ok": true,
-      "sidebarDrawn": 527,
-      "sleepStarted": 4014
+      "sidebarDrawn": 535,
+      "sleepStarted": 1084
     },
     "sleep_tabs_discard": {
       "background": {
         "ok": {
-          "id": 1862050274
+          "id": 1069444356
         }
       },
       "backgroundSlept": true,
       "ok": true,
       "visible": {
-        "error": "Cannot discard tab with id: 1862050211."
+        "error": "Cannot discard tab with id: 1069444293."
       }
     },
     "sleep_timed_ladder": {
@@ -334,16 +335,16 @@
         "discarded": true,
         "downloading": false,
         "freezeGate": null,
-        "hiddenAt": 1793934901.410892,
+        "hiddenAt": 1793940385.9311972,
         "hosts": 1,
-        "id": "1AB05AA6-A98F-4CE8-95EC-14038A9A6C21",
+        "id": "15F40482-1B3C-49CD-988D-0A1DFC547BD9",
         "lastFormInteractionAt": null,
         "notificationsAllowed": false,
         "phase": "sleeping",
         "retryAfter": null,
-        "sleptAt": 1793935201.4446812,
+        "sleptAt": 1793940686.014641,
         "title": "Open freeze ticker",
-        "url": "http://t1.localhost:53305/ticker.html"
+        "url": "http://t1.localhost:56379/ticker.html"
       },
       "ok": true,
       "phases": [
@@ -360,18 +361,18 @@
         "loaded": true,
         "sleepPhase": "live",
         "title": "Open freeze ticker",
-        "url": "http://t1.localhost:53305/ticker.html"
+        "url": "http://t1.localhost:56379/ticker.html"
       },
       "wakeLog": [
-        "sleep-wake discard 1AB05AA6 ms=31.09896183013916"
+        "sleep-wake discard 15F40482 ms=53.91800403594971"
       ]
     }
   },
   "source": {
     "clean": true,
     "diffSHA256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
-    "head": "7cddbb141e4324370acd17e57509b443739024cf"
+    "head": "6eb7dcdf874c3a4dfa8092937d2aeb3b01b07b94"
   },
-  "started": "2026-11-05 20:14:36",
+  "started": "2026-11-05 21:46:04",
   "style": "chrome"
 }

@@ -6,15 +6,16 @@
         "forced": false,
         "ok": true,
         "owned_pids": [
-          66360,
-          66368,
-          66369,
-          66370,
-          66371,
-          66373,
-          66374,
-          66377,
-          66378
+          40406,
+          40416,
+          40417,
+          40418,
+          40419,
+          40422,
+          40423,
+          40432,
+          40453,
+          40470
         ],
         "remaining_processes": [],
         "reply": true,
@@ -28,14 +29,13 @@
         "forced": false,
         "ok": true,
         "owned_pids": [
-          66906,
-          66913,
-          66914,
-          66916,
-          66922,
-          66923,
-          66996,
-          66997
+          40503,
+          40506,
+          40507,
+          40508,
+          40509,
+          40510,
+          40511
         ],
         "remaining_processes": [],
         "reply": true,
@@ -49,15 +49,13 @@
         "forced": false,
         "ok": true,
         "owned_pids": [
-          67577,
-          67587,
-          67588,
-          67589,
-          67590,
-          67597,
-          67598,
-          67600,
-          67601
+          40544,
+          40584,
+          40585,
+          40586,
+          40587,
+          40605,
+          40607
         ],
         "remaining_processes": [],
         "reply": true,
@@ -81,191 +79,7 @@
     "source": "fork",
     "stamp": "fork $HOME/Developer/open-engine-s8-main/chromium_git/chromium/src/cef/binary_distrib/cef_binary_156.0.14+g4fa4ab5+chromium-156.0.8078.48_macosarm64_minimal 1793841834"
   },
-  "interrupted_attempts": [
-    {
-      "attempt": 1,
-      "checks": {
-        "fresh_model": {
-          "ok": true,
-          "spaces": [
-            {
-              "focused": true,
-              "id": "7E53DF3B-EA5C-4FA5-9E20-A5C2A9A7B1DB",
-              "pinned": 0,
-              "profile": "B68AA1B9-9952-47CD-93EC-C34CD107CCF6",
-              "title": "Space",
-              "today": 0
-            }
-          ],
-          "tabs": []
-        },
-        "tab_strip_mirror": {
-          "ok": true,
-          "sidebar": [
-            [
-              "pinned",
-              "https://example.com/"
-            ],
-            [
-              "today",
-              "https://www.iana.org/help/example-domains"
-            ],
-            [
-              "today",
-              "https://example.org/"
-            ]
-          ],
-          "strip": [
-            [
-              0,
-              "9C89BB97-3893-483A-A791-BFAA66AC49F8"
-            ],
-            [
-              1,
-              "4AE8DDDF-F700-43FF-A20F-6B23D4FA570D"
-            ],
-            [
-              2,
-              "F9198427-96EE-45F1-86F3-D7E862979A05"
-            ]
-          ]
-        }
-      },
-      "focus": [
-        {
-          "active": false,
-          "frontmostApp": "OpenTodos",
-          "frontmostPID": 15630,
-          "keyWindow": 0,
-          "uptime": 40795.79948454167
-        }
-      ],
-      "reason": "focus: key focus not ready: active=false target=104315 targetIsKey=false key=0 keySameObject=false fullscreenTransition=false onActiveSpace=true canBecomeKey=true class=OpenFeatures.BrowserWindow attachedSheet=0 childWindows=[] frontmost=OpenTodos frontmostPID=15630",
-      "status": "INTERRUPTED"
-    },
-    {
-      "attempt": 2,
-      "checks": {
-        "fresh_model": {
-          "ok": true,
-          "spaces": [
-            {
-              "focused": true,
-              "id": "B15C1310-F15B-476F-971D-B0D6C84CA132",
-              "pinned": 0,
-              "profile": "B58C5BD0-EC21-4C9D-A321-D5228D55DA2C",
-              "title": "Space",
-              "today": 0
-            }
-          ],
-          "tabs": []
-        },
-        "tab_strip_mirror": {
-          "ok": true,
-          "sidebar": [
-            [
-              "pinned",
-              "https://example.com/"
-            ],
-            [
-              "today",
-              "https://www.iana.org/help/example-domains"
-            ],
-            [
-              "today",
-              "https://example.org/"
-            ]
-          ],
-          "strip": [
-            [
-              0,
-              "AD66B772-CB8C-4A81-BB7F-7E54F158B0A4"
-            ],
-            [
-              1,
-              "4819CAD9-58AB-40CF-AF57-54175C543AF2"
-            ],
-            [
-              2,
-              "5168E311-E766-4FF6-BFF8-B5FDC2A55459"
-            ]
-          ]
-        }
-      },
-      "focus": [
-        {
-          "active": false,
-          "frontmostApp": "OpenTodos",
-          "frontmostPID": 15630,
-          "keyWindow": 0,
-          "uptime": 40834.40305858334
-        }
-      ],
-      "reason": "focus: key focus not ready: active=false target=104456 targetIsKey=false key=0 keySameObject=false fullscreenTransition=false onActiveSpace=true canBecomeKey=true class=OpenFeatures.BrowserWindow attachedSheet=0 childWindows=[] frontmost=OpenTodos frontmostPID=15630",
-      "status": "INTERRUPTED"
-    },
-    {
-      "attempt": 3,
-      "checks": {
-        "fresh_model": {
-          "ok": true,
-          "spaces": [
-            {
-              "focused": true,
-              "id": "EC45B2A2-C508-4160-A225-7319D2C852DD",
-              "pinned": 0,
-              "profile": "42308EC8-EE81-4854-92CE-9D352B0C61AB",
-              "title": "Space",
-              "today": 0
-            }
-          ],
-          "tabs": []
-        },
-        "tab_strip_mirror": {
-          "ok": true,
-          "sidebar": [
-            [
-              "pinned",
-              "https://example.com/"
-            ],
-            [
-              "today",
-              "https://www.iana.org/help/example-domains"
-            ],
-            [
-              "today",
-              "https://example.org/"
-            ]
-          ],
-          "strip": [
-            [
-              0,
-              "42F550A3-9CA1-4ED6-9831-D216B9BDD7D7"
-            ],
-            [
-              1,
-              "4102A49C-11CE-4BF9-BBAD-DD871C6C6835"
-            ],
-            [
-              2,
-              "B62C726B-8683-492E-B337-E09EF3BC5CD7"
-            ]
-          ]
-        }
-      },
-      "focus": [
-        {
-          "active": false,
-          "frontmostApp": "OpenTodos",
-          "frontmostPID": 15630,
-          "keyWindow": 0,
-          "uptime": 40873.44638941667
-        }
-      ],
-      "reason": "focus: key focus not ready: active=false target=104553 targetIsKey=false key=0 keySameObject=false fullscreenTransition=false onActiveSpace=true canBecomeKey=true class=OpenFeatures.BrowserWindow attachedSheet=0 childWindows=[] frontmost=OpenTodos frontmostPID=15630",
-      "status": "INTERRUPTED"
-    }
-  ],
+  "interrupted_attempts": [],
   "pathRedactions": [
     "$WORKTREE",
     "$HOME",
@@ -277,28 +91,120 @@
       "spaces": [
         {
           "focused": true,
-          "id": "EC45B2A2-C508-4160-A225-7319D2C852DD",
+          "id": "204D7307-52A8-44A1-9970-9642BE2384CD",
           "pinned": 0,
-          "profile": "42308EC8-EE81-4854-92CE-9D352B0C61AB",
+          "profile": "D87D8A32-B9D7-4099-A68C-EB457813946D",
           "title": "Space",
           "today": 0
         }
       ],
       "tabs": []
     },
-    "suite": {
-      "attempts": 3,
-      "focus": [
-        {
-          "active": false,
-          "frontmostApp": "OpenTodos",
-          "frontmostPID": 15630,
-          "keyWindow": 0,
-          "uptime": 40873.44638941667
-        }
+    "keyboard": {
+      "ok": true,
+      "restored_same_id": true,
+      "routes": {
+        "cmd_l_window": "CommandBarFieldEditor",
+        "cmd_t_app": "CommandBarFieldEditor"
+      },
+      "tabs": [
+        3,
+        4,
+        3
+      ]
+    },
+    "persistence": {
+      "loaded_after_launch": [
+        "https://example.com/"
       ],
-      "reason": "focus: key focus not ready: active=false target=104553 targetIsKey=false key=0 keySameObject=false fullscreenTransition=false onActiveSpace=true canBecomeKey=true class=OpenFeatures.BrowserWindow attachedSheet=0 childWindows=[] frontmost=OpenTodos frontmostPID=15630",
-      "status": "INTERRUPTED"
+      "ok": true,
+      "snapshot": "State/browser.json",
+      "tabs": 4
+    },
+    "quit_order_owned_work": {
+      "ok": true,
+      "pendingBeforeQuit": {
+        "background": 1,
+        "captures": 1
+      },
+      "quit": {
+        "forced": false,
+        "ok": true,
+        "owned_pids": [
+          40544,
+          40584,
+          40585,
+          40586,
+          40587,
+          40605,
+          40607
+        ],
+        "remaining_processes": [],
+        "reply": true,
+        "windows_after_quit": {
+          "count": 0,
+          "windows": []
+        },
+        "windows_before_quit": 1
+      },
+      "trace": [
+        {
+          "asyncEngineCalls": {},
+          "backgroundTasks": 1,
+          "captureTasks": 1,
+          "closedFactories": 0,
+          "factories": 1,
+          "hosts": 1,
+          "lateAsyncEngineCalls": 0,
+          "phase": "prepare",
+          "selectionTasks": 0,
+          "uptime": 44547.70030404167
+        },
+        {
+          "asyncEngineCalls": {},
+          "backgroundTasks": 0,
+          "captureTasks": 0,
+          "closedFactories": 1,
+          "factories": 1,
+          "hosts": 0,
+          "lateAsyncEngineCalls": 0,
+          "phase": "hostsClosed",
+          "selectionTasks": 0,
+          "uptime": 44547.70520979167
+        },
+        {
+          "asyncEngineCalls": {},
+          "backgroundTasks": 0,
+          "captureTasks": 0,
+          "closedFactories": 1,
+          "factories": 1,
+          "hosts": 0,
+          "lateAsyncEngineCalls": 0,
+          "phase": "engineShutdownBegin",
+          "selectionTasks": 0,
+          "uptime": 44547.715486333334
+        },
+        {
+          "asyncEngineCalls": {},
+          "backgroundTasks": 0,
+          "captureTasks": 0,
+          "closedFactories": 1,
+          "factories": 1,
+          "hosts": 0,
+          "lateAsyncEngineCalls": 0,
+          "phase": "engineShutdownEnd",
+          "selectionTasks": 0,
+          "uptime": 44547.74566666667
+        }
+      ]
+    },
+    "split_view": {
+      "ok": true,
+      "panes": [
+        "https://example.org/",
+        "https://example.net/"
+      ],
+      "screenshot": "shell-split-view.png"
     },
     "tab_strip_mirror": {
       "ok": true,
@@ -319,24 +225,29 @@
       "strip": [
         [
           0,
-          "42F550A3-9CA1-4ED6-9831-D216B9BDD7D7"
+          "697180FD-470D-4B13-99D7-B728779C8591"
         ],
         [
           1,
-          "4102A49C-11CE-4BF9-BBAD-DD871C6C6835"
+          "272F0E8E-D235-4782-A942-C3DBF988DCD4"
         ],
         [
           2,
-          "B62C726B-8683-492E-B337-E09EF3BC5CD7"
+          "F4EEFC64-E3C3-4CE5-829D-4F7404821777"
         ]
       ]
+    },
+    "window_png": {
+      "file": "shell-window.png",
+      "method": "windowserver+devtools",
+      "ok": true
     }
   },
   "source": {
     "clean": true,
     "diffSHA256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
-    "head": "7cddbb141e4324370acd17e57509b443739024cf"
+    "head": "6eb7dcdf874c3a4dfa8092937d2aeb3b01b07b94"
   },
-  "started": "2026-11-05 20:36:13",
+  "started": "2026-11-05 21:38:39",
   "style": "chrome"
 }
