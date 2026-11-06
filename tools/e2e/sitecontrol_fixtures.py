@@ -1,27 +1,31 @@
-"""Local ads and Boost pages from the Site Control plan, plus the scroll page."""
-from contextlib import contextmanager
-from http.server import SimpleHTTPRequestHandler, ThreadingHTTPServer
-from functools import partial
-from pathlib import Path
+"""Shared Section 12 fixtures. The caller owns the temp directory and server lifetime."""
+import http.server
+import pathlib
 import threading
+from contextlib import contextmanager
 
 
 @contextmanager
 def fixture_server(tmp):
-    root = Path(tmp) / 'sitecontrol-web'
-    root.mkdir(exist_ok=True)
-    (root / 'ad.js').write_text('window.adLoaded=(window.adLoaded||0)+1')
-    common = '<div id="promo-banner">Promotion</div><script>window.clicks=0;document.addEventListener("click",()=>window.clicks++);if(!location.search)document.cookie="f=1;path=/";</script>'
-    (root / 'ads.html').write_text('<!doctype html><style>body{background:white;margin:0;min-height:3000px}</style><h1>Site control fixture</h1>' + common + '<script src="/ad.js"></script>')
-    (root / 'boost.html').write_text('<!doctype html><style>body{background:#fff;margin:0}header{width:600px;height:300px;background:#2E7DF6}</style><header></header><h1>Boost fixture</h1>' + '<article>Article</article>' * 3 + common)
-    (root / 'heavy.html').write_text('<!doctype html><style>body{margin:0;background:white}.card{height:70px;background:linear-gradient(90deg,#fff,#def);border-bottom:1px solid #aaa}</style>' + ''.join('<div class="card">%d</div>' % i for i in range(2000)))
-    class Handler(SimpleHTTPRequestHandler):
-        def log_message(self, *_): pass
-    server = ThreadingHTTPServer(('127.0.0.1', 0), partial(Handler, directory=str(root)))
+    folder = pathlib.Path(tmp) / "sitecontrol-fixtures"
+    folder.mkdir(parents=True, exist_ok=True)
+    (folder / "boost.html").write_text("""<!doctype html><title>Boost fixture</title>
+<style>body{background:#fff;color:#222;margin:16px}header{width:600px;height:300px;background:#2E7DF6}article{height:32px}</style>
+<header></header><h1>Boost fixture heading</h1><article>First</article><article>Second</article><article>Third</article><div id="promo-banner">Promo</div>
+<script>document.addEventListener('DOMContentLoaded',()=>{window.boostAtDOMContentLoaded=getComputedStyle(document.documentElement).filter;window.styleAtDOMContentLoaded=!!document.getElementById('open-boosts-style')})</script>""", encoding="utf-8")
+    (folder / "ads.html").write_text("""<!doctype html><title>Site fixture</title><h1>Site controls</h1><div id="promo-banner">Promo</div><script>document.cookie='f=1';window.clicks=0;document.addEventListener('click',()=>window.clicks++)</script><script src="/ad.js"></script>""", encoding="utf-8")
+    (folder / "ad.js").write_text("window.fixtureAdLoaded=true", encoding="utf-8")
+    class Handler(http.server.SimpleHTTPRequestHandler):
+        def __init__(self, *a, **kw):
+            super().__init__(*a, directory=str(folder), **kw)
+        def log_message(self, *a):
+            pass
+    server = http.server.ThreadingHTTPServer(("127.0.0.1", 0), Handler)
     thread = threading.Thread(target=server.serve_forever, daemon=True)
     thread.start()
     try:
-        yield 'http://127.0.0.1:%d' % server.server_port
+        yield "http://127.0.0.1:%d" % server.server_address[1]
     finally:
-        server.shutdown(); server.server_close(); thread.join(timeout=5)
-
+        server.shutdown()
+        server.server_close()
+        thread.join(timeout=5)

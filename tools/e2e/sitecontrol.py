@@ -15,6 +15,12 @@ def run(factory, results, tmp, env):
     wait, new_tab = env['wait_until'], env['new_tab']
     load = lambda: list(os.getloadavg())
     with fixture_server(tmp) as origin:
+        # SCC's scroll load stays local to this suite. Both Section 12 suites
+        # use the same ads/Boost pages from sitecontrol_fixtures.
+        (Path(tmp) / 'sitecontrol-fixtures' / 'heavy.html').write_text(
+            '<!doctype html><style>body{margin:0;background:white}.card{height:70px;background:linear-gradient(90deg,#fff,#def);border-bottom:1px solid #aaa}</style>'
+            + ''.join('<div class="card">%d</div>' % i for i in range(2000)),
+            encoding='utf-8')
         app = factory(urls=('about:blank',))
         saved = {}
         private = Path(env['ROOT']) / '.re/handoff/sections/s12/A-sitecontrol'
@@ -90,13 +96,13 @@ def run(factory, results, tmp, env):
                 files = list(Path(app.user_data).glob('Profiles/*/adblock/exclusions.json'))
                 persisted = any('127.0.0.1' in json.loads(p.read_text()) for p in files)
                 app.call('site-controls', action='tap', id='reload'); app.call('wait', tab=tab)
-                allowed = app.eval(tab,'window.adLoaded||0')
+                allowed = app.eval(tab,'window.fixtureAdLoaded === true')
                 on = app.call('site-controls', action='tap', id='row.contentBlocking') if state()['presented'] else None
                 if on is None: opened(); on = app.call('site-controls',action='tap',id='row.contentBlocking')
                 app.call('site-controls', action='tap', id='reload'); app.call('wait', tab=tab)
-                denied = app.eval(tab,'window.adLoaded||0')
+                denied = app.eval(tab,'window.fixtureAdLoaded === true')
                 record('S2_adblock', row(off,'row.contentBlocking').get('subtitle') == 'Off' and off['reloadVisible'] and persisted
-                       and row(on,'row.contentBlocking').get('subtitle') == 'On' and allowed == 1 and denied == 0,
+                       and row(on,'row.contentBlocking').get('subtitle') == 'On' and allowed is True and denied is False,
                        off=off,on=on,allowed=allowed,blocked=denied)
             close()
             app.call('permission', origin=origin, kind=1, state=0)
@@ -122,7 +128,9 @@ def run(factory, results, tmp, env):
             app.call('permission', origin=origin, kind=1, state=0)
             blocked('S4_boost', 'boost runtime', negativeNewBoostRefused=refused(action='tap', id='action.newBoost'),
                     negativeMenuRefused=refused(action='menu', item='New Boost…'), noBoostRows=not state()['boostsVisible'])
-            close(); app.call('navigate', tab=tab, url=origin+'/ads.html?no-cookie'); app.call('wait', tab=tab)
+            # boost.html shares the cookie's origin and does not set it again
+            # on reload, so S5 can prove that Clear Cookies removed it.
+            close(); app.call('navigate', tab=tab, url=origin+'/boost.html'); app.call('wait', tab=tab)
             cookie_before = app.eval(tab, 'document.cookie')
             s=opened(); absent_cache = not any(i['title']=='Clear Cache' for i in s['items'])
             cache_refused = refused(action='menu', item='Clear Cache')
@@ -133,7 +141,8 @@ def run(factory, results, tmp, env):
             s=opened(); app.call('pasteboard',text='scc-negative-sentinel')
             app.call('key',key='c',modifiers=['cmd','shift'],route='app')
             copied=app.call('pasteboard'); toasts=app.call('toasts')
-            record('S6_copy', len([c for c in s['controls'] if c['id'].startswith('action.')]) == 4 and not any('copy' in c['id'].lower() for c in s['controls']) and copied == origin+'/ads.html?no-cookie' and bool(toasts), pasteboard=copied,toasts=toasts,negative='sentinel replaced; no SCC Copy control')
+            record('S6_copy', len([c for c in s['controls'] if c['id'].startswith('action.')]) == 4 and not any('copy' in c['id'].lower() for c in s['controls']) and copied == origin+'/boost.html' and bool(toasts), pasteboard=copied,toasts=toasts,negative='sentinel replaced; no SCC Copy control')
+            close(); app.call('navigate',tab=tab,url=origin+'/ads.html'); app.call('wait',tab=tab)
             opened(); app.call('key',key='escape',route='app'); escaped = not state()['presented']
             opened(); count=app.eval(tab,'window.clicks'); app.call('mouse',action='click',x=700,y=500,queued=True)
             got=wait(lambda: app.eval(tab,'window.clicks') == count+1, timeout=5)
@@ -179,7 +188,7 @@ def run(factory, results, tmp, env):
             blocked('S10_incognito','incognito: main refuses private window creation', commandResult=private_window)
             # Use the same dark, white-page fixture and actual window pixels.
             app.call('permission',origin=origin,kind=1,state=1)
-            app.call('select',tab=tab); app.call('navigate',tab=tab,url=origin+'/ads.html?no-cookie');app.call('wait',tab=tab)
+            app.call('select',tab=tab); app.call('navigate',tab=tab,url=origin+'/ads.html');app.call('wait',tab=tab)
             close(); closed_path=str(private/'S11-closed.png');app.call('snapshot',path=closed_path)
             s=opened();time.sleep(.4);path=str(private/'S11-open.png');app.call('snapshot',path=path)
             width,height,pixel=env['read_image'](path,srgb=True)
