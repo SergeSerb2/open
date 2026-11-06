@@ -88,7 +88,8 @@ profile after Chromium has sanitized its initially valid icon. They check the
 metadata decoder's actual input boundaries. The native fallback respects
 Chromium's existing 500 ms Add-button guard; it does not change native UI.
 
-Negative proof on the same engine and App: `OPEN_E2E_P3_CANCEL_INSTALL=1`
+Negative proof on the same engine and App (the kept-lock pair after
+main `8db4ac86`): `OPEN_E2E_P3_CANCEL_INSTALL=1`
 deliberately changes an automation install Accept to Cancel. X-1 reports
 `FAIL`, `injectedCancel: true`, `installed: false`; cleanup reports `PASS`.
 With the flag removed, X-1 and the complete P3 suite report `PASS`.
@@ -125,6 +126,8 @@ All required suites passed on distribution `7b490905…`:
 All six accepted suites were repeated after the 17:35 kept-lock rule, using
 the Release App rebuilt after main `8db4ac86` (Little Open and AppleScript).
 The negative/restore pair and both real Web Store rows were repeated too.
+After main `ebcf08d2` (Peek navigation), the App was rebuilt and P3 passed
+14/14 again; the engine distribution is unchanged.
 Earlier runs using the old lock form remain historical evidence. The PR
 records later main merges and full verification on the final source head.
 
