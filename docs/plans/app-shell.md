@@ -454,12 +454,14 @@ Budgets (release, M5 Pro, idle machine): sidebar drawn ≤ 250 ms from process s
 | T4 first page | After engine readiness, create the host for each visible selected tab only (one per window, plus split panes of selected splits). Everything else stays a placeholder. | first paint ≤ 700 ms (`timing` first contentful paint) |
 | T5 lazy systems | After first paint, in this order, each on first use or idle time: automation server (Debug; starts at `engineDidInitialize` today — keep), `FaviconStore` open (background), per-profile `HistoryStore` on first commit, `BoostStore` + ad-block `openProfile` for shown profiles only, `SleepController` start, key-binding overrides load, `GlobalHotkey` register, Little Open sweeper start, external-link queue flush. None of these may block T2 or T4. | — |
 
+Find uses the existing confirmed-paint hook: after sleep starts, the next main-queue turn warms shared fonts, symbols and colors plus one offscreen throwaway bar/field editor. It runs once per process, drops its temporary references, and adds no timer or repeating task. Pane controllers and bars remain lazy until Find is used. This work never precedes T4.
+
 ### 5.2 What must never happen at launch
 
 - No `CefInitialize` before the first window draws (T3 after T2). If `OEApplication` or CEF forces earlier init, stop and report with the `timing` output; do not silently accept a 450 ms sidebar.
 - No web content for unselected tabs. No engine context for profiles with no shown Space (D7). No `HistoryStore`, `FaviconStore`, or SQLite open on the main actor before T2.
 - No network at launch: no favicon fetch, no list update, no suggestion fetch until a page commits or the command bar opens.
-- No Settings, command bar, Peek, or editor construction. All lazy (§3.5, §4.11).
+- No Settings, command bar, Peek, or editor construction before first paint. All stay lazy (§3.5, §4.11), except Find's single throwaway T5 warm-up described above.
 - No full sidebar rebuild after engine readiness. The T2 sidebar is final; engine events only fill `tab.live`.
 
 ### 5.3 Quit order

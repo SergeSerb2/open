@@ -16,22 +16,72 @@ No new Find warnings were emitted. SecurityAgent and foreground-loss
 **INTERRUPTED** attempts do not count. No debugger or authorization workaround
 was attempted.
 
-The draft is **not accepted**. Current evidence before the final-head run:
+Final verification after the latest main merge is in progress. The initial
+step-4 Release run passes all 50 Find checks. Interrupted attempts do not count.
 
 | Required evidence | State |
 |---|---|
-| Real-App behavior and native hit testing | 49/50 Release checks pass after merging main through #176; native field keys, page Cmd+G, close click, selection boundaries, tab memory, document navigation/reload, Split View and Peek pass |
-| Own-window light/dark pixels | WindowServer snapshots pass: blank-middle background ΔE00 0.4977 light / 0.3836 dark, limit 2; radius, 300×32 frame, right 10, top 10/50 and narrow-pane checks pass |
-| First Cmd+F within one frame | FAIL: 7.3319 ms at load 8.85/10.28/12.05, against 4.1667 ms on AW2726DM, 1x, maximum 240 Hz; it is within the 120 Hz reference interval of 8.3333 ms |
-| Coalescing and idle work | PASS: one typed request and at most one engine activation; all ten Find-scoped idle observer counters zero over two seconds with the bar open and page focused |
-| Negative proof for every new gate; forced early-Peek-failure cleanup | Pending; interrupted negative attempts are excluded |
-| e2e features, shell, window, commandbar, page; full verify-all | features 19/19 PASS; remaining final-head runs pending |
+| Real-App behavior and native hit testing | 50/50 in the initial step-4 run: native field keys, page shortcuts, close click/focus, selection boundaries, tab state, navigation/reload, Split View and Peek |
+| Own-window light/dark pixels | WindowServer snapshots: background ΔE00 0.4977 light / 0.3836 dark (limit 2); radius, 300×32 frame, right 10, top 10/50 and narrow-pane checks pass |
+| First and repeat Cmd+F | Both p95 values pass the fixed 120 Hz budget in the initial step-4 run; final-head run pending |
+| Coalescing and idle work | One typed request, at most one engine activation, and all ten Find-scoped observer counters zero over two seconds with Find open and the page focused |
+| Negative proof | Fifty original gates rejected across the fault-App and strengthened Jump receipts; final twenty-sample 25 ms timing fault and retained-control proof in progress |
+| Required regressions and full verify-all | Final-head runs pending |
 
-The complete normal receipt is `.re/find/find-batched-quiet.json`, with
-load and phase timings in `.re/find/find-batched-quiet.log`. Earlier receipts
-precede the root extensions collision fix and are not current acceptance.
-Receipts stay under `.re/find/` in the implementation checkout. The harness
-also writes `docs/engine-spike/results-find-release.json` (not committed).
+## Performance measurements
+
+The gate is **p95 ≤ 8.333 ms for both first and repeat opens**, nearest rank,
+with twenty fresh App windows per mode. Medians are information only. The
+240 Hz display interval (4.167 ms) is also information only. Measurement runs
+take the quiet lock first, wait for low load holding only that lock, then take
+the screen lock. The measured interval is the native Cmd+F event timestamp to
+the flushed visible layer; field focus also finishes in the same action.
+
+The rounded shadow path already existed in the baseline and is updated during
+layout before attachment. Fonts (13 pt query, 12 pt small caps), four sized SF
+Symbols and colors are now static process resources. The existing confirmed
+first-paint hook queues one process-wide offscreen bar/editor warm-up on the
+next main turn. It adds no timer, polling or recurring task. Open drops the
+temporary references inside an autorelease pool. AppKit can defer native
+editor teardown to its next event-loop drain; a separate real-App probe found
+both controls released within 0.5 seconds without opening Find. The idle gate
+requires one warm-up run and no retained temporary controls after settling.
+
+Step 4 gives the background a direct layer update and each native control its
+own backing layer. No layer mask clips the rounded bar. The shadow color,
+opacity, radius and offset are unchanged. The small-caps font descriptor is
+built once, and native image caches are primed after paint.
+
+Values below are p50 / p95 milliseconds. Step 2 and step 3 alternate in the
+same forty-window session with an automation-only prewarm-disable flag.
+
+| Step | First open | Repeat open | Load1 range |
+|---|---|---|---|
+| Shadow-path baseline | 9.901 / 11.395 | 1.056 / 1.360 | 9.87–10.99 |
+| Shared cache; prewarm disabled | 10.561 / 14.050 | 1.158 / 1.654 | 10.30–15.17 |
+| Shared cache + post-paint prewarm | 7.101 / 9.148 | 1.168 / 1.774 | 10.30–15.17 |
+| Native backing layers + prewarm | 4.130 / 5.589 | 0.840 / 1.593 | 8.15–9.27 |
+
+First-open phase breakdown (p50 / p95 ms):
+
+| Step | Create | Attach | Draw | Flush | Focus (after commit) |
+|---|---|---|---|---|---|
+| Shadow-path baseline | 3.038 / 3.443 | 1.806 / 2.034 | 2.201 / 3.022 | 2.583 / 3.219 | 10.973 / 15.365 |
+| Shared cache; prewarm disabled | 3.099 / 4.315 | 1.833 / 2.712 | 2.464 / 3.430 | 2.760 / 3.703 | 11.892 / 15.073 |
+| Shared cache + post-paint prewarm | 1.427 / 2.345 | 0.846 / 1.360 | 1.696 / 2.285 | 2.519 / 4.164 | 8.782 / 11.255 |
+| Native backing layers + prewarm | 1.036 / 1.878 | 0.638 / 1.049 | 0.462 / 0.801 | 1.629 / 2.514 | 7.225 / 9.652 |
+
+Launch baseline medians were sidebar 379.5 ms / FCP 643 ms. The step-4 paired
+run reports prewarm enabled at 346.5 / 614.5 ms and disabled at 347 / 622.5 ms;
+these show no launch regression. Every enabled sample starts prewarm after
+its measured first paint. The heavier step-3 run reports 383.5 / 697.5 ms
+enabled and 392.5 / 709.5 ms disabled as load rises to 15.17; it is not the
+quiet-machine launch comparison.
+
+Receipts: `.re/find/step1-shadow-path-20.json`, `step3-paired-20.json`,
+`step4-paired-20.json`, and `phase-comparison.json`. Final receipts stay under
+`.re/find/` in the implementation checkout. The suite also writes
+`docs/engine-spike/results-find-release.json` (not committed).
 
 Section 6 temporary hook: until its root `extensionBar` is replaced, Find hides
 that existing view only while its rectangle intersects a visible Find bar.
@@ -72,7 +122,7 @@ renderer for opening Find, then slices to 4,001 UTF-16 code units before
 returning to Swift (at most 16,004 UTF-8 bytes). Cmd+E preserves raw selected
 text, uses the same query cap, and searches without opening the bar. Async reads check page identity, tab identity, query
 revision, dismissal/navigation state, and shutdown before applying results.
-Find uses no timers, polling, display links, disk I/O, or launch work. The
+Find uses no timers, polling, display links, disk I/O, or pre-paint work. The
 one queued edit is flushed by Return/Next and discarded on close.
 
 Additional routing hook: `BrowserWindowController.shouldDeferKeyToFirstResponder`
