@@ -3713,6 +3713,9 @@ def peek_checks(factory, results, tmp):
     finally:
         app.quit()
 
+    import runpy
+    runpy.run_path(os.path.join(ROOT, "tools", "e2e", "peek_app.py"))["run"](factory, results, tmp, globals())
+
 
 def page_fixture_server():
     """Serves tools/e2e/fixtures/page-platform on an ephemeral 127.0.0.1 port (no external network)."""
