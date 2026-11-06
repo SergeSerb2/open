@@ -29,9 +29,9 @@ public enum ThemeField {
     public static func layerAlpha(intensity: Double) -> Double {
         ThemeTuning.intensityAlphaFloor + ThemeTuning.intensityAlphaSlope * min(1, max(0, intensity.isFinite ? intensity : 0))
     }
-    /// Underlay gray for `translucencyStyle: light`, active window. The inactive fit
-    /// (0.83) now only derives `WindowMaterial`'s light backdrop: every inactive
-    /// window is its active field moved by `WindowMaterial.inactiveShift`.
+    /// Underlay gray for `translucencyStyle: light`, active and inactive window. Light
+    /// imports and editor themes keep this fit while inactive; the default light theme
+    /// and every dark window use `WindowMaterial.inactiveShift` (derived from it).
     public static let lightUnderlayActive: Double = 0.694
     public static let lightUnderlayInactive: Double = 0.83
     /// guess: no `translucencyStyle: dark` theme was observed.
@@ -88,6 +88,10 @@ public enum ThemeField {
         let translucency: SpaceThemeStyle.Translucency
         let isActive: Bool
         let cardTint: Bool
+        /// Light imports and editor themes keep their fitted inactive underlay (0.694 → 0.83
+        /// behind the theme's alpha): it fits Arc's inactive light frame better than a constant
+        /// backdrop shift (sidebar-compare `static-inactive`, worst ΔE00 1.17 against 1.85).
+        let usesInactiveUnderlayFit: Bool
         /// True when the fill's coverage is the same everywhere (no overlay stops).
         var hasConstantCoverage: Bool { overlay.count != 2 }
 
@@ -116,9 +120,12 @@ public enum ThemeField {
             baseParam = Param(ThemeField.endpoints(ThemeField.baseLine, size: windowSize))
             overlayParam = Param(ThemeField.endpoints(ThemeField.overlayLine, size: windowSize))
             alpha = style.usesLegacyIntensity ? 0.64 : ThemeField.layerAlpha(intensity: style.intensityFactor)
+            var isCorners = false
+            if case .corners = style.fill { isCorners = true }
+            usesInactiveUnderlayFit = !isActive && !cardTint && translucency == .light && !isCorners
             let fitted: Double
             switch style.translucency {
-            case .light: fitted = ThemeField.lightUnderlayActive
+            case .light: fitted = usesInactiveUnderlayFit ? ThemeField.lightUnderlayInactive : ThemeField.lightUnderlayActive
             case .dark: fitted = ThemeField.darkUnderlayActive
             }
             // §17.2: preserve U0 at and above the wash cap. Light's uncaptured
@@ -139,7 +146,7 @@ public enum ThemeField {
         public func color(u: Double, v: Double) -> (Double, Double, Double) {
             let (r, g, b) = activeColor(u: u, v: v)
             if cardTint { return (WindowMaterial.tint(r, translucency), WindowMaterial.tint(g, translucency), WindowMaterial.tint(b, translucency)) }
-            if !isActive { return (WindowMaterial.inactive(r, translucency), WindowMaterial.inactive(g, translucency), WindowMaterial.inactive(b, translucency)) }
+            if !isActive, !usesInactiveUnderlayFit { return (WindowMaterial.inactive(r, translucency), WindowMaterial.inactive(g, translucency), WindowMaterial.inactive(b, translucency)) }
             return (r, g, b)
         }
 
@@ -218,9 +225,9 @@ public enum ThemeField {
     public static func composition(style: SpaceThemeStyle, windowSize: CGSize, isActive: Bool, resolution: Int = 64) -> Composition? {
         guard !style.usesLegacyIntensity, case .blended = style.fill,
               let p3 = CGColorSpace(name: CGColorSpace.displayP3), let srgb = CGColorSpace(name: CGColorSpace.sRGB) else { return nil }
-        let e = Evaluator(style: style, windowSize: windowSize, isActive: true)
+        let e = Evaluator(style: style, windowSize: windowSize, isActive: isActive)
         var underlayGray = e.underlay
-        if !isActive {
+        if !isActive, !e.usesInactiveUnderlayFit {
             // The inactive shift moves only the underlay: exact while the fill's coverage is
             // constant and the moved gray stays in range; otherwise draw the baked field.
             guard e.hasConstantCoverage, e.alpha < 1 else { return nil }

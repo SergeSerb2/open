@@ -605,7 +605,7 @@ The F0001 static comparison (§8, 31 elements) is unchanged: it has six favorite
 
 | Difference | Size | Why |
 |---|---|---|
-| Card fill near its bottom | ΔE00 10.8 (`#180E3A` vs `#2C2336`); the top, right, and bottom strokes differ with it (2.2, 2.7, 8.4) | Capture session 2 (item 5) shows the cause: Arc's card is translucent, not a gradient. Its fill is ≈ 0.885 × a theme tint + 0.115 × the page under the card, blurred (Gaussian σ ≈ 25 px; RMS 1.06 levels over two pages). Over a white page it is 1.5–2 levels lighter than the anchored sidebar; over a dark page (`#101418`) it is 26 levels darker. F0129's dark bottom sat over dark page content. Open's card is opaque. The same blend over black matches Arc's inactive window (interaction-states §13.1). Followup in `docs/followups.md`. |
+| Card fill near its bottom | ΔE00 10.8 (`#180E3A` vs `#2C2336`); the top, right, and bottom strokes differ with it (2.2, 2.7, 8.4) | Resolved in §16.6 (Section 5): the card is now its tint over the blurred page; ΔE00 0.91 / 0.71 to S2 05/0009 and 0029. Before: Open's card was opaque. |
 | Space header without favorites | ours 8 pt below the URL field; A0361 1–3 pt | Fitted to Arc's 8 pt rhythm. Arc's real zero-favorites state is its favorites empty-state card (not captured); A0361 is the window-only sidebar, a different header. |
 | Reveal zone unit and exit delay | — | Guesses: the unit (10) comes from a view-store value; the exit delay reuses the 0.15 s debounce. |
 
@@ -625,6 +625,40 @@ The real app (`OPEN_AUTOMATION=1 tools/build.sh Release`), driven only through t
 | `hide_reveal`, `fullscreen_hover_reveal` | rewritten: condition waits on the card (settled, or gone) instead of fixed sleeps, each sub-condition and its time recorded |
 
 The two rewritten checks failed in about one run of two before (docs/followups.md, PR #53), always on the first reveal after a hide. The reveal itself was not slow. guess (not traced): a pointer event at the real pointer cancelled the pending reveal. Both possible causes are gone: synthetic pointer events carry a tag and the reveal follows only tagged events once a check moves the pointer, and the waits are conditions.
+
+### 16.6 Window material: translucent card and inactive window (Section 5, 2026-11-06)
+
+One model now draws the window background in every state (`OpenDesign/WindowMaterial.swift`, interaction-states §13.1):
+
+```text
+pixel = (1 − w) × tint + w × backdrop        w = 0.115
+tint  = (activeField − w × activeBackdrop) / (1 − w)
+```
+
+Each theme's active field stays the reference: every earlier theme fit measured it, so active windows render as before. The backdrop is chosen per window scheme (`SpaceThemeStyle.backdropScheme`: an imported Arc theme's `translucencyStyle`; editor and default themes follow the macOS appearance, as their underlay wash does).
+
+| State | Backdrop | Evidence |
+|---|---|---|
+| Active, dark | gray 0.91 | S2 03/0003 vs 0016: the inactive drop is 26.3–27.0 levels (backdrop ≈ 0.89); S2 05/0009 and 0029: the card is +1.3 over white and −25 over `#101418` against the anchored sidebar (backdrop 0.93–0.96). 0.91 splits the two fits. |
+| Inactive, dark | black | S2 03/0016: equal to the card tint over black within 1 level (§13.1) |
+| Active / inactive, light | 0.574 / white | **guess**: derived so that legacy light themes (alpha 0.64) keep the fitted inactive lift (underlay 0.694 → 0.83, +12.5 levels). No light inactive capture exists. |
+| Hover-reveal card | the page under the card, Gaussian σ 25 pt | S2 05/0009 vs 0006, 0029 vs 0037: a = 0.115, σ ≈ 25 px, RMS 1.06 |
+
+Dark inactive windows add `w × (inactive − active backdrop)` = −26.7 levels to every channel; the default light theme adds +12.5 (guess). Baked fields (default `.corners`, imports) add it per pixel; editor fills keep Section 4's display-space layers and move only the underlay when the fill's coverage is constant and the moved gray stays in 0…1, else they use the baked field. This replaces the guessed `darkUnderlayInactive` (0.10). Light imports and light editor themes keep their fitted inactive underlay (0.694 → 0.83 behind the theme alpha): a first try with the constant +12.5 made sidebar-compare `static-inactive` (a light import with an overlay stop) worse against Arc's inactive frame (worst ΔE00 1.85 against 1.17), so the fit stays. At alpha 0.64 the two agree.
+
+The card draws the tint at opacity 0.885 over a `CABackdropLayer` with a `gaussianBlur` filter (radius 25, `scale` 0.25, normalized edges; `PageBlurLayer`). The window server renders it from what the window draws below the card, including the Chromium GPU process's page layers (checked: the card darkens over a dark page and lightens over a light band). CoreAnimation has no public backdrop layer; `NSVisualEffectView` adds its own tint and saturation, which would break the fitted 0.115 page share. Without the private classes the card stays opaque. The card shows the window's own field at its place (`ThemeBackgroundView.fieldFrame`), as Arc's card matches the anchored sidebar; before, the card stretched the field over its own width and was up to 4 levels redder. The card shadow is masked to the outside of the card, so the blur does not sample the shadow's fill. The backdrop layer exists only in the card's background view; it is hidden with the card and does no work while nothing under it changes.
+
+Real window, 1728 × 1084 at 1x, in-app snapshots (e2e `window`, rows `chrome_card_material`, `chrome_inactive_material`), region x 120–220, y 420–560 (card) and x 30–200, y 440–1000 (sidebar):
+
+| State | Arc | Open | ΔE00 |
+|---|---|---|---|
+| Card over white (05/0009) | (41.2, 37.4, 57.8) | (44.2, 38.9, 58.7) | 0.91 |
+| Card over `#101418` (05/0029) | (14.5, 11.3, 31.6) | (16.5, 11.8, 31.7) | 0.71 |
+| Inactive, default dark (03/0016) | — | — | 0.68 |
+| Card − anchored over white / dark, levels | +1.2…+1.6 / −25 | +2.5…+3.0 / −24.1…−25.3 | model +2.6 / −24.9 |
+| Lift over a 112-gray band: center / at its edge / 75 pt above | — | 11.25 / 5.85 / 0.15 | model 11.04 / ½ / ≈ 0 |
+
+Inactive shift per theme kind (sidebar, levels; model −26.7 dark, +12.5 light): default dark −27.0/−26.2/−26.7; default light +12.5; one-color dark editor theme −25.0/−27.8/−26.6; three-color dark editor theme −27.5/−26.9/−26.7; one-color light editor theme +13.2/+12.9/+13.3 (underlay fit at alpha 0.64). Negative proofs (same builds with the blur off, or the shift at 0): `chrome_card_material` FAIL (card − anchored 0.0, band lift 0.5), `chrome_inactive_material` FAIL (every shift 0, default dark ΔE00 7.95 to Arc).
 
 ## 17. Sidebar completion S1 (2026-10-26)
 
