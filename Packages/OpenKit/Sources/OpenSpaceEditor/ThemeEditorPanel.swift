@@ -36,6 +36,11 @@ public final class ThemeEditorPanel: NSPanel {
     }
     public override var canBecomeKey: Bool { true }
     public override var canBecomeMain: Bool { false }
+    public override func constrainFrameRect(_ frameRect: NSRect, to screen: NSScreen?) -> NSRect {
+        // The controller clamps the material body. AppKit's default top-edge
+        // constraint would also pull the transparent outer band onto screen.
+        frameRect
+    }
     public func applyAppearance(_ mode: SpaceStyleAppearance) {
         guard appliedMode != mode else { return }; appliedMode = mode
         switch mode {
