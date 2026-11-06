@@ -1,5 +1,29 @@
 # Profiles — implementation plan for Open
 
+Section 10 shell errata (2026-11-06): the App deletion flow supersedes the
+separate wipe and undo wording in §3.4, §5.5, §6.5 and §7.1. Settings asks
+for the exact Profile name, or `DELETE` for unused Profiles. It captures the
+directory, deletes the model with undo registration disabled, tears down the
+context, wipes Open-owned files, then calls `saveNow`. It clears older Undo
+actions so create/redo cannot restore the deleted identity. The model/CLI
+command remains undoable when used outside that irreversible App flow.
+
+`releaseContext` proves page closure only. An engine directory loaded during
+this launch stays on disk until the next launch. A bounded, atomic, synced
+`Profiles/.pending-wipe.json` journal records cleanup. Before engine startup,
+the App removes those engine/cache directories and their `Local State`
+`profile.info_cache`, `last_used`, and `last_active_profiles` references.
+Never-loaded engine/cache directories are removed in-session; their Local
+State cleanup still waits for launch. No restart prompt is shown.
+
+App bootstrap and every `installModel` path repair missing Profile refs and
+save repairs. The first standard window shows one informational sheet with
+the affected Space titles. Settings rows use Section 4's shared icon picker.
+Header geometry and the more-than-one-Profile visibility rule are **guess
+S10-I1**; editable Profile icons and a new Little Open page for a Profile
+without a Space are also guesses. See [profiles-shell.md](../profiles-shell.md)
+for the acceptance receipt and evidence limits.
+
 Status: plan for implementation. Implementer: follow this file top to bottom.
 Do not spawn subagents (AGENTS.md rule 8). Do not write unit tests (rule 6).
 Verify end to end only: real `swift build`, real `openkit` CLI on real

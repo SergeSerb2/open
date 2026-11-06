@@ -27,7 +27,7 @@ import CryptoKit
     func openMoreSettings() { record("openMoreSettings") }
     func revealOpenDataFolder() { record("revealOpenDataFolder") }
     func copyOpenInfoToPasteboard() { record("copyOpenInfoToPasteboard") }
-    func deleteProfileData(profileID: ProfileID) -> String? { record("deleteProfileData \(profileID)"); return nil }
+    func deleteProfileData(profileID: ProfileID, dataDirectoryName: String) async -> String? { record("deleteProfileData \(profileID)"); return nil }
     func clearBrowsingData(profileID: ProfileID, kinds: ClearDataKinds) async -> String? { await clearBrowsingData(profileID: profileID, kinds: kinds, range: .all) }
     func clearBrowsingData(profileID: ProfileID, kinds: ClearDataKinds, range: ClearDataRange) async -> String? { record("clearBrowsingData \(profileID) kinds=\(kinds.rawValue) range=\(range.rawValue)"); return nil }
     func openProfileSubpage(profileID: ProfileID, page: ProfilePage) { record("openProfileSubpage \(profileID) \(page.rawValue)") }
@@ -144,6 +144,20 @@ import CryptoKit
             settings.selectedPane = pane
             for scale in scales { try await render(SettingsContent(viewModel: settings), size: CGSize(width: 684, height: 650), scale: scale, dark: true, to: output.appendingPathComponent("\(pane == .appIcon ? "app-icon" : pane.rawValue)@\(scale)x.png")) }
         }
+        _ = settings.profiles.create(name:"Example Unused Profile")
+        settings.profiles.beginDelete()
+        for scale in scales {
+            try await render(ProfileDeleteSheet(model:settings.profiles),size:CGSize(width:508,height:310),scale:scale,dark:true,to:output.appendingPathComponent("profile-delete-disabled@\(scale)x.png"))
+        }
+        settings.profiles.deleteConfirmation=settings.profiles.deleteToken
+        for scale in scales {
+            try await render(ProfileDeleteSheet(model:settings.profiles),size:CGSize(width:508,height:310),scale:scale,dark:true,to:output.appendingPathComponent("profile-delete-enabled@\(scale)x.png"))
+        }
+        settings.profiles.confirmsDelete=false;settings.profiles.beginDelete(unused:true)
+        for scale in scales {
+            try await render(ProfileDeleteSheet(model:settings.profiles),size:CGSize(width:508,height:360),scale:scale,dark:true,to:output.appendingPathComponent("profile-delete-unused@\(scale)x.png"))
+        }
+        settings.profiles.confirmsUnused=false
         for section in LibrarySection.allCases {
             library.section = section
             for scale in scales { try await render(LibraryContent(viewModel: library), size: CGSize(width: 960, height: 640), scale: scale, dark: true, to: output.appendingPathComponent("library-\(section.rawValue)@\(scale)x.png")) }

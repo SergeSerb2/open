@@ -77,7 +77,9 @@ public struct ExtensionShortcutConflict: Sendable, Hashable {
     func openMoreSettings()
     func revealOpenDataFolder()
     func copyOpenInfoToPasteboard()
-    func deleteProfileData(profileID: ProfileID) -> String?
+    /// Called after irreversible model removal, with the directory captured before deletion.
+    func deleteProfileData(profileID: ProfileID, dataDirectoryName: String) async -> String?
+    func chooseProfileIcon(profileID: ProfileID, anchor: NSView)
     func clearBrowsingData(profileID: ProfileID, kinds: ClearDataKinds) async -> String?
     func clearBrowsingData(profileID: ProfileID, kinds: ClearDataKinds, range: ClearDataRange) async -> String?
     func openProfileSubpage(profileID: ProfileID, page: ProfilePage)
@@ -108,6 +110,7 @@ public struct ExtensionShortcutConflict: Sendable, Hashable {
 }
 
 public extension SettingsActions {
+    func chooseProfileIcon(profileID: ProfileID, anchor: NSView) {}
     func extensionShortcutConflicts(profileID: ProfileID) -> [ExtensionShortcutConflict] { [] }
     func makeSpaceManagerView() -> NSView? { nil }
 }

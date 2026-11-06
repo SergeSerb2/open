@@ -1151,11 +1151,13 @@ final class SpaceHeaderView: NSView {
     var iconFrameInWindow: CGRect { icon.convert(icon.bounds, to: nil) }
     let chevron = PlateButton(glyph: .disclosureDown)
     let more = PlateButton(glyph: .spaceMore)
+    let profileIndicator: ProfileIndicatorButton
     var pointerInside = false { didSet { if pointerInside != oldValue { needsDisplay = true; needsLayout = true } } }
 
     init(context: SidebarContext, space: Space) {
         self.context = context
         self.space = space
+        profileIndicator = ProfileIndicatorButton(context:context,space:space)
         super.init(frame: .zero)
         wantsLayer = true
         layerContentsRedrawPolicy = .onSetNeedsDisplay
@@ -1176,9 +1178,10 @@ final class SpaceHeaderView: NSView {
         chevron.action = { [unowned context, space] in context.send(.setPinnedCollapsed(space: space.id, collapsed: !space.isPinnedCollapsed)) }
         more.glyphTint = { _ in SidebarRole.spaceTitle.nsColor }
         more.menuProvider = { [weak self] in self?.page.map { $0.menus.space($0.space) } }
+        profileIndicator.menuProvider = { [weak self] in self?.page.map { $0.menus.profile($0.space) } }
         chevron.context = context
         more.context = context
-        addSubview(icon); addSubview(title); addSubview(chevron); addSubview(more)
+        addSubview(icon); addSubview(title); addSubview(chevron); addSubview(more); addSubview(profileIndicator)
     }
 
     @available(*, unavailable) required init?(coder: NSCoder) { fatalError() }
@@ -1218,7 +1221,14 @@ final class SpaceHeaderView: NSView {
         let s = m.headerMoreSize
         more.frame = CGRect(x: w - m.headerMoreTrailing - s, y: (m.headerHeight - s) / 2, width: s, height: s)
         more.isHidden = !hovered
-        let right = hovered ? more.frame.minX - 2 : w - 17
+        var right = hovered ? more.frame.minX - 2 : w - 17
+        let hasProfiles = tracked({ context.model.profiles.count > 1 }) { [weak self] in self?.needsLayout=true }
+        profileIndicator.isHidden = !hasProfiles
+        if hasProfiles {
+            let size = ProfileIndicatorMetrics.hitSize
+            profileIndicator.frame = CGRect(x:right-size,y:(m.headerHeight-size)/2,width:size,height:size)
+            right -= size + ProfileIndicatorMetrics.gap
+        }
         title.frame = CGRect(x: m.headerTitleX, y: m.headerTitleY, width: max(0, right - m.headerTitleX), height: 18)
     }
 

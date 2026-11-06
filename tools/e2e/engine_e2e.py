@@ -188,6 +188,8 @@ class Open:
         foreground_input = cmd in ("key", "focus", "little-open-link-click", "editor-act") or (cmd == "window-focus" and args.get("activate"))
         if cmd in ("space-manager-drag", "sidebar-click", "sidebar-key", "hover"): foreground_input = True
         if cmd == "first-run" and args.get("action") == "focus": foreground_input = True
+        if cmd == "profiles-shell" and args.get("action") in ("press", "type-delete", "icon-symbol", "indicator-menu"):
+            foreground_input = True
         if foreground_input and self.pid and not self.call("native-focus-state").get("active", False):
             # `NSApp.activate()` is a request, not a grant. Renew the explicit
             # foreground request if another app took focus. Address the exact
@@ -11077,6 +11079,7 @@ def main():
                                        "commandbar", "app-actions", "actions", "extensions-p3", "extensions-ui", "extensions-e2", "profiles", "sidebar-completion", "toolbar", "numbering", "media", "relaunch", "page", "page-chrome",
                                        "sleep", "context-menus", "routing", "littleopen", "history", "applescript", "downloads", "space-editor"])
     ap.add_argument("--window-chrome-only", action="store_true", help="run only the window-chrome follow-up flows in the window suite")
+    ap.add_argument("--profiles-shell-only", action="store_true", help="run only the Section 10 real-App Profiles shell flows")
     ap.add_argument("--keep", action="store_true",
                     help="keep this run's data root, cache root and scratch folder (paths printed at the end)")
     ap.add_argument("--focus-retry-delay-seconds", type=int, default=0,
@@ -11357,8 +11360,11 @@ def main():
             results["peek"] = CheckedResults(tracker)
             peek_checks(factory, results["peek"], tmp)
         elif opts.only == "profiles":
-            results["profiles"] = {}
-            profiles_checks(factory, results["profiles"], tmp, opts.config)
+            results["profiles"] = CheckedResults(tracker)
+            if not opts.profiles_shell_only:
+                profiles_checks(factory, results["profiles"], tmp, opts.config)
+            runpy.run_path(os.path.join(ROOT, "tools/e2e/profiles_shell.py"))["run"](
+                factory, results["profiles"], tmp, globals(), domain_before)
         elif opts.only == "measure":
             results["measure"] = CheckedResults(tracker)
             measure(factory, results["measure"], tmp)
