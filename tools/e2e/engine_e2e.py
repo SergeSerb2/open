@@ -4438,11 +4438,12 @@ def _actions_checks(app, results):
     api = {}
     if state:
         popup_eval(state, "chrome.storage.session.set({openPopup: ''}).then(() => true)")
-        popup_eval(state, "chrome.runtime.sendMessage('open-popup')"
-                          ".then(() => { setTimeout(() => window.close(), 50); return true; })")
+        popup_eval(state, "chrome.runtime.sendMessage('open-popup').then(() => true)")
         # D1 now closes the shell popup when its parent becomes key. Send the
         # delayed request first, while its requesting page still exists.
         api["key"] = make_key()
+        api["blurClosedRequestingPopup"] = bool(wait_until(lambda:
+            app.call("ext-popup").get("page", {}).get("identifier") != state["page"]["identifier"], timeout=2))
 
         def api_popup():
             s = app.call("ext-popup")
@@ -4458,7 +4459,8 @@ def _actions_checks(app, results):
             state = open_popup(ACTION_PROBE)
             api["result"] = popup_eval(state, "chrome.storage.session.get('openPopup').then(r => r.openPopup)") if state else None
             close_popup()
-    results["open_popup_api"] = {"ok": api.get("key") is True and api.get("source") == "api" and api.get("result") == "ok",
+    results["open_popup_api"] = {"ok": api.get("key") is True and api.get("blurClosedRequestingPopup")
+                                 and api.get("source") == "api" and api.get("result") == "ok",
                                  **api}
 
     # While a popup is open, openPopup() is refused (as Chrome's desktop
