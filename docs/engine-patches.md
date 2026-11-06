@@ -69,7 +69,7 @@ Engine receipt (M5, 2026-11-05): baseline `engine-status` 8 PASS, 20 patches,
 47 overlays, 24 symbols; distribution
 `7b49090502568f8189aa0e94f7cf23344beec5bed537136eff5f7fce573ad35a`.
 After this change: 8 PASS, 21 patches, 50 overlays, 25 symbols; distribution
-`cdb3ffe57d1dbaa27331ed1cf8ef220d270122f277a7c1ff3734908eda02b37f`.
+`3f45b07b885e03b6aecc461c6b6bff7612814a2ad23b6cf37b2b142d828f0738`.
 The engine build uses the `open-engine-s8` root, `nice`, the engine lock,
 and 10 jobs. The main distribution root is not changed.
 
