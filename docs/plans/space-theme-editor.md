@@ -1881,3 +1881,10 @@ monitoring and idle gates. A separate controller-replacement mutant failed
 the retarget gate. All mutated sources were restored before normal builds.
 A live move between 1x and 2x remains unverified: this App session exposes
 only a 1x screen. Both scales retain the existing native layout checks.
+
+The real-App drag/redo assertion captures its expected committed style only
+after the last display frame completes. A post-merge run exposed the same
+read-before-frame race as the thumb check: redo restored the final knobs,
+but the assertion had saved an earlier preview as its expected style. The
+suite retains exact style/knob comparisons and records the immediate and
+committed styles as diagnostics. No timing budget or comparison is relaxed.

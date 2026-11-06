@@ -117,9 +117,12 @@ def run(factory, results, scratch, root, wait_until, read_image, delta_e):
         knob_rect = state()['controls']['knob']
         start = [knob_rect[0] + knob_rect[2] / 2 + 13, knob_rect[1] + knob_rect[3] / 2 + 13]
         app.call('editor-act', action='drag', **{'from': start, 'to': [105, 235], 'steps': 16})
-        edited = wait_until(lambda: (lambda s: s if s != first else None)(theme()), timeout=3, step=.02)
-        assert edited, 'drag did not reach model'
-        wait_until(lambda: state()['displayLinks'] == 0, timeout=3, step=.02)
+        # The final mouse-up returns before its pending display frame. Capture
+        # the undo baseline only after that frame, as with the overhang click.
+        immediate_edited = theme()
+        assert wait_until(lambda: state()['displayLinks'] == 0, timeout=3, step=.02), 'drag frame did not finish'
+        edited = theme()
+        assert edited and edited != first, 'drag did not reach model'
         after = [capture('A2-after-' + str(i), w['number']) for i, w in enumerate(windows)]
         old_pixels, new_pixels = list(map(sample, before)), list(map(sample, after))
         results['A2_three_windows'] = dict(ok=all(old_pixels[i] != new_pixels[i] for i in range(2)) and old_pixels[2] == new_pixels[2],
@@ -133,7 +136,7 @@ def run(factory, results, scratch, root, wait_until, read_image, delta_e):
         app.call('editor-act', action='key', key='z', modifiers=['cmd', 'shift'])
         wait_until(lambda: theme() == edited and state()['knob'] == knob_edited, timeout=3, step=.02)
         redo, knob_redo = theme(), state()['knob']
-        results['A3_open_undo_redo'] = dict(ok=undo == first and redo == edited and knob_undo == knob_before and knob_redo == knob_edited, styleUndo=undo == first, styleRedo=redo == edited, before=knob_before, edited=knob_edited, undo=knob_undo, redo=knob_redo)
+        results['A3_open_undo_redo'] = dict(ok=undo == first and redo == edited and knob_undo == knob_before and knob_redo == knob_edited, styleUndo=undo == first, styleRedo=redo == edited, pendingFrameChangedStyle=immediate_edited != edited, expectedStyle=edited, redoStyle=redo, before=knob_before, edited=knob_edited, undo=knob_undo, redo=knob_redo)
         app.call('editor-act', action='click', x=243.032, y=465)
         immediate_end = theme()
         wait_until(lambda: state()['displayLinks'] == 0, timeout=3, step=.02)
