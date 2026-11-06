@@ -23,10 +23,12 @@ extension AutomationController {
     }
     let icon = app.applicationIcon
     // AppKit copies the assigned NSImage through its bitmap representation.
-    // Compare both through that same representation, in a fixed color space.
+    // Compare in AppKit's output color space: converting its display-profile
+    // copy back to sRGB would add a second, lossy color transform to that side.
     let matchesApplication: Bool
-    if let expected = icon.appliedImage, let actual = NSApp.applicationIconImage,
-       let expectedPixels = iconPixels(expected), let actualPixels = iconPixels(actual) {
+    if let expected = icon.appliedImage.flatMap(iconCGImage),
+       let actual = NSApp.applicationIconImage.flatMap(iconCGImage), let space = actual.colorSpace,
+       let expectedPixels = iconPixels(expected, space: space), let actualPixels = iconPixels(actual, space: space) {
       matchesApplication = expectedPixels == actualPixels
     } else { matchesApplication = icon.appliedID == "openDefault" && icon.appliedImage == nil }
     return ["selected": settings.appIcon.selected, "applied": icon.appliedID,
@@ -39,13 +41,16 @@ extension AutomationController {
       "restoreElapsedMs": icon.restoreElapsedMs ?? NSNull()]
   }
 
-  private func iconPixels(_ image: NSImage) -> Data? {
-    guard let tiff = image.tiffRepresentation, let cg = NSBitmapImageRep(data: tiff)?.cgImage,
-      let colorSpace = CGColorSpace(name: CGColorSpace.sRGB),
-      let context = CGContext(data: nil, width: 1024, height: 1024, bitsPerComponent: 8,
-        bytesPerRow: 4096, space: colorSpace,
+  private func iconCGImage(_ image: NSImage) -> CGImage? {
+    guard let tiff = image.tiffRepresentation else { return nil }
+    return NSBitmapImageRep(data: tiff)?.cgImage
+  }
+
+  private func iconPixels(_ image: CGImage, space: CGColorSpace) -> Data? {
+    guard let context = CGContext(data: nil, width: 1024, height: 1024, bitsPerComponent: 8,
+        bytesPerRow: 4096, space: space,
         bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue), let pixels = context.data else { return nil }
-    context.draw(cg, in: CGRect(x: 0, y: 0, width: 1024, height: 1024))
+    context.draw(image, in: CGRect(x: 0, y: 0, width: 1024, height: 1024))
     return Data(bytes: pixels, count: 4_194_304)
   }
 }
