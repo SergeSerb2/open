@@ -179,6 +179,24 @@ Arguments are `key=value`; values that parse as JSON are sent as JSON.
 | `save` | — | Write the snapshot now; returns its path |
 | `quit` | — | Quit Open normally |
 
+## Deferred Little Open Browser
+
+`little-open-state` reports `browserID: null`, `content: 0`, and a non-visible
+surface until the window's deferred Browser and page exist. `firstFrameRead`
+records those absent objects at the first native frame. The later state exposes
+the owned Browser, `browserCreationStartedAt` (system uptime), and its Chrome tab.
+`browserCount` and `littleOpenBrowserCreations` distinguish live Browsers from
+cumulative Little Open creation, including a Browser that immediately closes.
+
+`little-open-action {action:"blank"}` follows the normal deferred path. For
+the real-event race checks, add `then:"submit", text:"URL"` or `then:"close"`.
+The automation hook runs native `OEApplication.sendEvent` typing/Return or close
+before the queued creation. It returns `opened` and `after` state. Text is limited
+to 8,192 UTF-8 bytes; 8,193 bytes fail. Submit requires nonempty text. The submit
+hook waits for the real navigation intent before resuming creation. The close
+hook continues through the production cancellation guard. Normal creation uses
+neither hook. See [the deferred Browser report](little-open/deferred-browser.md).
+
 ## Window pixels
 
 `snapshot` captures only Open's windows, from inside Open, so it needs no Screen Recording permission:

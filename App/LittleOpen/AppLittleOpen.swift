@@ -27,7 +27,8 @@ extension AppDelegate {
     littleOpenCoordinator = coordinator
     coordinator.onSwitchToTab = { [weak self] id, space in self?.selectLittleOpenDestination(tabID: id, spaceID: space) }
     coordinator.onOpenInMain = { [weak self] windowID, tabID, host in
-      // Standalone Alloy pages are recreated through the sidebar's factory.
+      // Recreate through the sidebar's factory: host ownership stays local.
+      // A live cross-factory transfer needs a separate ownership handoff.
       host?.close()
       self?.selectLittleOpenDestination(tabID: tabID, windowID: windowID)
     }
@@ -37,14 +38,19 @@ extension AppDelegate {
     }
     coordinator.confirmProfileSwitch = { [weak self] profile, completion in self?.confirmLittleOpenProfileSwitch(profile, completion: completion) }
     // Fan out to the shared visibility feed, deadline and menus.
-    coordinator.onChange = { [weak self] in
-      guard let self else { return }
-      for controller in self.littleOpenCoordinator.controllers.values {
+    coordinator.onChange = { [weak self, weak coordinator] in
+      guard let self, let coordinator else { return }
+      for controller in coordinator.controllers.values {
+        let view = controller.container.host(for: controller.session.tab.id)?.view as? LittleOpenSurfaceView
+        view?.owner?.windowOrderedFront()
         if let host = self.littleOpenHosts.values.first(where: { $0.view.window === controller.window }) {
           host.owner?.attachLittleOpen(controller, content: host.content)
         }
       }
       self.media.visibility.visibilityChanged()
+      for host in self.littleOpenHosts.values {
+        host.owner?.standaloneSurfaceVisibilityChanged()
+      }
       self.expirySweeper?.rearm()
       self.scheduleMenuRebuild()
     }

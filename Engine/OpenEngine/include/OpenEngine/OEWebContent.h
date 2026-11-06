@@ -265,6 +265,11 @@ OE_EXPORT @interface OEWebContent : NSObject
 @property(nonatomic, readonly, copy) NSString* statusText;
 
 #pragma mark Navigation
+/// Starts creation now when the view is attached, instead of waiting for its
+/// automatic next-turn creation. Chrome tab creation may call delegates
+/// synchronously. Do not use for content returned from an open-request callback
+/// until Chromium has finished adopting it.
+- (void)prepareForDisplay;
 - (void)loadURL:(NSURL*)URL NS_SWIFT_NAME(load(_:));
 - (void)goBack;
 - (void)goForward;

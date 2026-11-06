@@ -1,0 +1,1321 @@
+{
+  "scenario": "typed",
+  "reportOnly": true,
+  "samples": [
+    {
+      "build": "main",
+      "pair": 0,
+      "scenario": "typed",
+      "load": [
+        5.51220703125,
+        5.80908203125,
+        6.58203125
+      ],
+      "endLoad": [
+        5.51220703125,
+        5.80908203125,
+        6.58203125
+      ],
+      "uptime": "4:47  up 19:31, 7 users, load averages: 5.51 5.81 6.58",
+      "firstContentfulPaintMs": 32,
+      "baselineRSS": 567574528,
+      "loadedRSS": 948387840,
+      "windowRSS": 380813312,
+      "processCount": 6,
+      "foregroundInterruptions": [],
+      "firstFrameMs": 96.16520833515096,
+      "pageLoadMs": 60.4274583311053,
+      "openResponseToSubmitMs": 407.12016599999987,
+      "openRequestToSubmitMs": 449.1612083365908,
+      "cleanupOK": true
+    },
+    {
+      "build": "branch",
+      "pair": 0,
+      "scenario": "typed",
+      "load": [
+        5.51220703125,
+        5.80908203125,
+        6.58203125
+      ],
+      "endLoad": [
+        5.51220703125,
+        5.80908203125,
+        6.58203125
+      ],
+      "uptime": "4:47  up 19:31, 7 users, load averages: 5.51 5.81 6.58",
+      "firstContentfulPaintMs": 44,
+      "baselineRSS": 567820288,
+      "loadedRSS": 954155008,
+      "windowRSS": 386334720,
+      "processCount": 6,
+      "foregroundInterruptions": [],
+      "firstFrameMs": 62.39970833121333,
+      "pageLoadMs": 82.53433332720306,
+      "openResponseToSubmitMs": 404.501834,
+      "openRequestToSubmitMs": 456.2724999996135,
+      "browserCreationToReadyMs": 476.1963333294261,
+      "firstFrameToBrowserCreationMs": 0.21079166617710143,
+      "cleanupOK": true
+    },
+    {
+      "build": "branch",
+      "pair": 1,
+      "scenario": "typed",
+      "load": [
+        5.630859375,
+        5.82861328125,
+        6.58447265625
+      ],
+      "endLoad": [
+        5.630859375,
+        5.82861328125,
+        6.58447265625
+      ],
+      "uptime": "4:47  up 19:31, 7 users, load averages: 5.63 5.83 6.58",
+      "firstContentfulPaintMs": 36,
+      "baselineRSS": 568606720,
+      "loadedRSS": 955367424,
+      "windowRSS": 386760704,
+      "processCount": 6,
+      "foregroundInterruptions": [],
+      "firstFrameMs": 71.29329166491516,
+      "pageLoadMs": 68.54416665737517,
+      "openResponseToSubmitMs": 407.9555419999998,
+      "openRequestToSubmitMs": 466.6513333359035,
+      "browserCreationToReadyMs": 463.61579166841693,
+      "firstFrameToBrowserCreationMs": 0.2864166599465534,
+      "cleanupOK": true
+    },
+    {
+      "build": "main",
+      "pair": 1,
+      "scenario": "typed",
+      "load": [
+        5.630859375,
+        5.82861328125,
+        6.58447265625
+      ],
+      "endLoad": [
+        5.630859375,
+        5.82861328125,
+        6.58447265625
+      ],
+      "uptime": "4:47  up 19:31, 7 users, load averages: 5.63 5.83 6.58",
+      "firstContentfulPaintMs": 44,
+      "baselineRSS": 568262656,
+      "loadedRSS": 950697984,
+      "windowRSS": 382435328,
+      "processCount": 6,
+      "foregroundInterruptions": [],
+      "firstFrameMs": 93.49699999438599,
+      "pageLoadMs": 96.61066667467821,
+      "openResponseToSubmitMs": 404.512875,
+      "openRequestToSubmitMs": 448.6546249972889,
+      "cleanupOK": true
+    },
+    {
+      "build": "main",
+      "pair": 2,
+      "scenario": "typed",
+      "load": [
+        6.541015625,
+        6.013671875,
+        6.64501953125
+      ],
+      "endLoad": [
+        6.541015625,
+        6.013671875,
+        6.64501953125
+      ],
+      "uptime": "4:47  up 19:31, 7 users, load averages: 6.54 6.01 6.65",
+      "firstContentfulPaintMs": 24,
+      "baselineRSS": 567820288,
+      "loadedRSS": 949338112,
+      "windowRSS": 381517824,
+      "processCount": 6,
+      "foregroundInterruptions": [],
+      "firstFrameMs": 95.03270832647104,
+      "pageLoadMs": 52.394583326531574,
+      "openResponseToSubmitMs": 404.723709,
+      "openRequestToSubmitMs": 448.79666666383855,
+      "cleanupOK": true
+    },
+    {
+      "build": "branch",
+      "pair": 2,
+      "scenario": "typed",
+      "load": [
+        6.541015625,
+        6.013671875,
+        6.64501953125
+      ],
+      "endLoad": [
+        6.541015625,
+        6.013671875,
+        6.64501953125
+      ],
+      "uptime": "4:47  up 19:31, 7 users, load averages: 6.54 6.01 6.65",
+      "firstContentfulPaintMs": 24,
+      "baselineRSS": 569950208,
+      "loadedRSS": 955777024,
+      "windowRSS": 385826816,
+      "processCount": 6,
+      "foregroundInterruptions": [],
+      "firstFrameMs": 63.204916659742594,
+      "pageLoadMs": 74.20537500001956,
+      "openResponseToSubmitMs": 408.56620799999985,
+      "openRequestToSubmitMs": 460.3474583273055,
+      "browserCreationToReadyMs": 471.1178333382122,
+      "firstFrameToBrowserCreationMs": 0.23008332937024534,
+      "cleanupOK": true
+    },
+    {
+      "build": "branch",
+      "pair": 3,
+      "scenario": "typed",
+      "load": [
+        6.57763671875,
+        6.02978515625,
+        6.64697265625
+      ],
+      "endLoad": [
+        6.57763671875,
+        6.02978515625,
+        6.64697265625
+      ],
+      "uptime": "4:47  up 19:31, 7 users, load averages: 6.58 6.03 6.65",
+      "firstContentfulPaintMs": 36,
+      "baselineRSS": 568950784,
+      "loadedRSS": 956104704,
+      "windowRSS": 387153920,
+      "processCount": 6,
+      "foregroundInterruptions": [],
+      "firstFrameMs": 70.65666666312609,
+      "pageLoadMs": 72.36158332671039,
+      "openResponseToSubmitMs": 406.414375,
+      "openRequestToSubmitMs": 466.22341667534783,
+      "browserCreationToReadyMs": 465.09962499840185,
+      "firstFrameToBrowserCreationMs": 2.8287083405302837,
+      "cleanupOK": true
+    },
+    {
+      "build": "main",
+      "pair": 3,
+      "scenario": "typed",
+      "load": [
+        6.57763671875,
+        6.02978515625,
+        6.64697265625
+      ],
+      "endLoad": [
+        6.2109375,
+        5.96240234375,
+        6.61962890625
+      ],
+      "uptime": "4:47  up 19:31, 7 users, load averages: 6.21 5.96 6.62",
+      "firstContentfulPaintMs": 28,
+      "baselineRSS": 570277888,
+      "loadedRSS": 952172544,
+      "windowRSS": 381894656,
+      "processCount": 6,
+      "foregroundInterruptions": [],
+      "firstFrameMs": 96.11095832951833,
+      "pageLoadMs": 66.10075000207871,
+      "openResponseToSubmitMs": 409.54808300000025,
+      "openRequestToSubmitMs": 455.3039166639792,
+      "cleanupOK": true
+    },
+    {
+      "build": "main",
+      "pair": 4,
+      "scenario": "typed",
+      "load": [
+        6.2109375,
+        5.96240234375,
+        6.61962890625
+      ],
+      "endLoad": [
+        6.2109375,
+        5.96240234375,
+        6.61962890625
+      ],
+      "uptime": "4:47  up 19:31, 7 users, load averages: 6.21 5.96 6.62",
+      "firstContentfulPaintMs": 44,
+      "baselineRSS": 569638912,
+      "loadedRSS": 954744832,
+      "windowRSS": 385105920,
+      "processCount": 6,
+      "foregroundInterruptions": [],
+      "firstFrameMs": 67.04449999961071,
+      "pageLoadMs": 74.34254167310428,
+      "openResponseToSubmitMs": 401.599375,
+      "openRequestToSubmitMs": 441.426291668904,
+      "cleanupOK": true
+    },
+    {
+      "build": "branch",
+      "pair": 4,
+      "scenario": "typed",
+      "load": [
+        6.2109375,
+        5.96240234375,
+        6.61962890625
+      ],
+      "endLoad": [
+        6.19384765625,
+        5.962890625,
+        6.61572265625
+      ],
+      "uptime": "4:47  up 19:31, 7 users, load averages: 6.19 5.96 6.62",
+      "firstContentfulPaintMs": 32,
+      "baselineRSS": 568803328,
+      "loadedRSS": 955891712,
+      "windowRSS": 387088384,
+      "processCount": 6,
+      "foregroundInterruptions": [],
+      "firstFrameMs": 54.221666665398516,
+      "pageLoadMs": 79.3615833244985,
+      "openResponseToSubmitMs": 404.12075000000016,
+      "openRequestToSubmitMs": 448.8110833335668,
+      "browserCreationToReadyMs": 471.74341666686814,
+      "firstFrameToBrowserCreationMs": 2.2075833257986233,
+      "cleanupOK": true
+    },
+    {
+      "build": "branch",
+      "pair": 5,
+      "scenario": "typed",
+      "load": [
+        6.19384765625,
+        5.962890625,
+        6.61572265625
+      ],
+      "endLoad": [
+        6.19384765625,
+        5.962890625,
+        6.61572265625
+      ],
+      "uptime": "4:47  up 19:31, 7 users, load averages: 6.19 5.96 6.62",
+      "firstContentfulPaintMs": 32,
+      "baselineRSS": 570900480,
+      "loadedRSS": 960348160,
+      "windowRSS": 389447680,
+      "processCount": 6,
+      "foregroundInterruptions": [],
+      "firstFrameMs": 70.37262500671204,
+      "pageLoadMs": 62.92287500400562,
+      "openResponseToSubmitMs": 410.0294170000001,
+      "openRequestToSubmitMs": 469.74349999800324,
+      "browserCreationToReadyMs": 459.4351666601142,
+      "firstFrameToBrowserCreationMs": 2.8585833351826295,
+      "cleanupOK": true
+    },
+    {
+      "build": "main",
+      "pair": 5,
+      "scenario": "typed",
+      "load": [
+        6.19384765625,
+        5.962890625,
+        6.61572265625
+      ],
+      "endLoad": [
+        5.69775390625,
+        5.86376953125,
+        6.57666015625
+      ],
+      "uptime": "4:47  up 19:31, 7 users, load averages: 5.70 5.86 6.58",
+      "firstContentfulPaintMs": 44,
+      "baselineRSS": 570834944,
+      "loadedRSS": 953434112,
+      "windowRSS": 382599168,
+      "processCount": 6,
+      "foregroundInterruptions": [],
+      "firstFrameMs": 75.61987500230316,
+      "pageLoadMs": 70.78183333214838,
+      "openResponseToSubmitMs": 406.8137919999999,
+      "openRequestToSubmitMs": 451.149541666382,
+      "cleanupOK": true
+    },
+    {
+      "build": "main",
+      "pair": 6,
+      "scenario": "typed",
+      "load": [
+        5.69775390625,
+        5.86376953125,
+        6.57666015625
+      ],
+      "endLoad": [
+        5.69775390625,
+        5.86376953125,
+        6.57666015625
+      ],
+      "uptime": "4:47  up 19:31, 7 users, load averages: 5.70 5.86 6.58",
+      "firstContentfulPaintMs": 32,
+      "baselineRSS": 568557568,
+      "loadedRSS": 947224576,
+      "windowRSS": 378667008,
+      "processCount": 6,
+      "foregroundInterruptions": [],
+      "firstFrameMs": 92.03883333248086,
+      "pageLoadMs": 53.72437500045635,
+      "openResponseToSubmitMs": 406.30366699999996,
+      "openRequestToSubmitMs": 451.05308333586436,
+      "cleanupOK": true
+    },
+    {
+      "build": "branch",
+      "pair": 6,
+      "scenario": "typed",
+      "load": [
+        5.69775390625,
+        5.86376953125,
+        6.57666015625
+      ],
+      "endLoad": [
+        5.3212890625,
+        5.78271484375,
+        6.5439453125
+      ],
+      "uptime": "4:47  up 19:31, 7 users, load averages: 5.32 5.78 6.54",
+      "firstContentfulPaintMs": 40,
+      "baselineRSS": 568426496,
+      "loadedRSS": 955219968,
+      "windowRSS": 386793472,
+      "processCount": 6,
+      "foregroundInterruptions": [],
+      "firstFrameMs": 67.38358332950156,
+      "pageLoadMs": 79.71600000746548,
+      "openResponseToSubmitMs": 400.365834,
+      "openRequestToSubmitMs": 456.4209999953164,
+      "browserCreationToReadyMs": 465.9925416635815,
+      "firstFrameToBrowserCreationMs": 2.7608750096987933,
+      "cleanupOK": true
+    },
+    {
+      "build": "branch",
+      "pair": 7,
+      "scenario": "typed",
+      "load": [
+        5.3212890625,
+        5.78271484375,
+        6.5439453125
+      ],
+      "endLoad": [
+        5.3212890625,
+        5.78271484375,
+        6.5439453125
+      ],
+      "uptime": "4:47  up 19:31, 7 users, load averages: 5.32 5.78 6.54",
+      "firstContentfulPaintMs": 28,
+      "baselineRSS": 569049088,
+      "loadedRSS": 956153856,
+      "windowRSS": 387104768,
+      "processCount": 6,
+      "foregroundInterruptions": [],
+      "firstFrameMs": 66.27733333152719,
+      "pageLoadMs": 71.74329165718518,
+      "openResponseToSubmitMs": 404.02245800000003,
+      "openRequestToSubmitMs": 458.3347083389526,
+      "browserCreationToReadyMs": 462.96158332552295,
+      "firstFrameToBrowserCreationMs": 0.8390833390876651,
+      "cleanupOK": true
+    },
+    {
+      "build": "main",
+      "pair": 7,
+      "scenario": "typed",
+      "load": [
+        5.21533203125,
+        5.7529296875,
+        6.52880859375
+      ],
+      "endLoad": [
+        5.21533203125,
+        5.7529296875,
+        6.52880859375
+      ],
+      "uptime": "4:47  up 19:31, 7 users, load averages: 5.22 5.75 6.53",
+      "firstContentfulPaintMs": 36,
+      "baselineRSS": 570572800,
+      "loadedRSS": 952074240,
+      "windowRSS": 381501440,
+      "processCount": 6,
+      "foregroundInterruptions": [],
+      "firstFrameMs": 93.45450000546407,
+      "pageLoadMs": 61.28879166499246,
+      "openResponseToSubmitMs": 402.8294160000003,
+      "openRequestToSubmitMs": 448.69091667351313,
+      "cleanupOK": true
+    },
+    {
+      "build": "main",
+      "pair": 8,
+      "scenario": "typed",
+      "load": [
+        5.21533203125,
+        5.7529296875,
+        6.52880859375
+      ],
+      "endLoad": [
+        5.21533203125,
+        5.7529296875,
+        6.52880859375
+      ],
+      "uptime": "4:48  up 19:31, 7 users, load averages: 5.22 5.75 6.53",
+      "firstContentfulPaintMs": 36,
+      "baselineRSS": 570114048,
+      "loadedRSS": 952909824,
+      "windowRSS": 382795776,
+      "processCount": 6,
+      "foregroundInterruptions": [],
+      "firstFrameMs": 90.70062499085907,
+      "pageLoadMs": 63.20895833778195,
+      "openResponseToSubmitMs": 401.177417,
+      "openRequestToSubmitMs": 442.60370833217166,
+      "cleanupOK": true
+    },
+    {
+      "build": "branch",
+      "pair": 8,
+      "scenario": "typed",
+      "load": [
+        5.03759765625,
+        5.70703125,
+        6.5078125
+      ],
+      "endLoad": [
+        5.03759765625,
+        5.70703125,
+        6.5078125
+      ],
+      "uptime": "4:48  up 19:31, 7 users, load averages: 5.04 5.71 6.51",
+      "firstContentfulPaintMs": 48,
+      "baselineRSS": 566738944,
+      "loadedRSS": 955645952,
+      "windowRSS": 388907008,
+      "processCount": 6,
+      "foregroundInterruptions": [],
+      "firstFrameMs": 85.5499166646041,
+      "pageLoadMs": 107.29758333764039,
+      "openResponseToSubmitMs": 409.5029170000002,
+      "openRequestToSubmitMs": 480.4030416562455,
+      "browserCreationToReadyMs": 501.79316666617524,
+      "firstFrameToBrowserCreationMs": 0.3575416631065309,
+      "cleanupOK": true
+    },
+    {
+      "build": "branch",
+      "pair": 9,
+      "scenario": "typed",
+      "load": [
+        5.03759765625,
+        5.70703125,
+        6.5078125
+      ],
+      "endLoad": [
+        5.1142578125,
+        5.71142578125,
+        6.50439453125
+      ],
+      "uptime": "4:48  up 19:31, 7 users, load averages: 5.11 5.71 6.50",
+      "firstContentfulPaintMs": 36,
+      "baselineRSS": 568295424,
+      "loadedRSS": 955400192,
+      "windowRSS": 387104768,
+      "processCount": 6,
+      "foregroundInterruptions": [],
+      "firstFrameMs": 75.66062500700355,
+      "pageLoadMs": 90.07541666505858,
+      "openResponseToSubmitMs": 401.65704200000005,
+      "openRequestToSubmitMs": 462.5721250049537,
+      "browserCreationToReadyMs": 476.6187083296245,
+      "firstFrameToBrowserCreationMs": 0.36820833338424563,
+      "cleanupOK": true
+    },
+    {
+      "build": "main",
+      "pair": 9,
+      "scenario": "typed",
+      "load": [
+        5.1142578125,
+        5.71142578125,
+        6.50439453125
+      ],
+      "endLoad": [
+        5.1142578125,
+        5.71142578125,
+        6.50439453125
+      ],
+      "uptime": "4:48  up 19:32, 7 users, load averages: 5.11 5.71 6.50",
+      "firstContentfulPaintMs": 28,
+      "baselineRSS": 569950208,
+      "loadedRSS": 952123392,
+      "windowRSS": 382173184,
+      "processCount": 6,
+      "foregroundInterruptions": [],
+      "firstFrameMs": 78.12895832466893,
+      "pageLoadMs": 72.0230833394453,
+      "openResponseToSubmitMs": 410.0542089999997,
+      "openRequestToSubmitMs": 455.9259166562697,
+      "cleanupOK": true
+    },
+    {
+      "build": "main",
+      "pair": 10,
+      "scenario": "typed",
+      "load": [
+        5.1142578125,
+        5.71142578125,
+        6.50439453125
+      ],
+      "endLoad": [
+        5.02490234375,
+        5.6826171875,
+        6.4892578125
+      ],
+      "uptime": "4:48  up 19:32, 7 users, load averages: 5.02 5.68 6.49",
+      "firstContentfulPaintMs": 24,
+      "baselineRSS": 568098816,
+      "loadedRSS": 947617792,
+      "windowRSS": 379518976,
+      "processCount": 6,
+      "foregroundInterruptions": [],
+      "firstFrameMs": 95.9677916689543,
+      "pageLoadMs": 51.555791666032746,
+      "openResponseToSubmitMs": 406.9823330000002,
+      "openRequestToSubmitMs": 451.6813333320897,
+      "cleanupOK": true
+    },
+    {
+      "build": "branch",
+      "pair": 10,
+      "scenario": "typed",
+      "load": [
+        5.02490234375,
+        5.6826171875,
+        6.4892578125
+      ],
+      "endLoad": [
+        5.02490234375,
+        5.6826171875,
+        6.4892578125
+      ],
+      "uptime": "4:48  up 19:32, 7 users, load averages: 5.02 5.68 6.49",
+      "firstContentfulPaintMs": 28,
+      "baselineRSS": 567771136,
+      "loadedRSS": 955498496,
+      "windowRSS": 387727360,
+      "processCount": 6,
+      "foregroundInterruptions": [],
+      "firstFrameMs": 56.351416671532206,
+      "pageLoadMs": 67.6462083356455,
+      "openResponseToSubmitMs": 407.2543749999999,
+      "openRequestToSubmitMs": 454.414291671128,
+      "browserCreationToReadyMs": 463.5324166738428,
+      "firstFrameToBrowserCreationMs": 2.1766666613984853,
+      "cleanupOK": true
+    },
+    {
+      "build": "branch",
+      "pair": 11,
+      "scenario": "typed",
+      "load": [
+        5.02490234375,
+        5.6826171875,
+        6.4892578125
+      ],
+      "endLoad": [
+        4.8623046875,
+        5.6376953125,
+        6.46875
+      ],
+      "uptime": "4:48  up 19:32, 7 users, load averages: 4.86 5.64 6.47",
+      "firstContentfulPaintMs": 32,
+      "baselineRSS": 566771712,
+      "loadedRSS": 954875904,
+      "windowRSS": 388104192,
+      "processCount": 6,
+      "foregroundInterruptions": [],
+      "firstFrameMs": 68.55470832670107,
+      "pageLoadMs": 60.43216667603701,
+      "openResponseToSubmitMs": 406.3695000000001,
+      "openRequestToSubmitMs": 461.61270832817536,
+      "browserCreationToReadyMs": 453.15587500226684,
+      "firstFrameToBrowserCreationMs": 0.334291675244458,
+      "cleanupOK": true
+    },
+    {
+      "build": "main",
+      "pair": 11,
+      "scenario": "typed",
+      "load": [
+        4.8623046875,
+        5.6376953125,
+        6.46875
+      ],
+      "endLoad": [
+        4.8623046875,
+        5.6376953125,
+        6.46875
+      ],
+      "uptime": "4:48  up 19:32, 7 users, load averages: 4.86 5.64 6.47",
+      "firstContentfulPaintMs": 28,
+      "baselineRSS": 568131584,
+      "loadedRSS": 949288960,
+      "windowRSS": 381157376,
+      "processCount": 6,
+      "foregroundInterruptions": [],
+      "firstFrameMs": 102.63591667171568,
+      "pageLoadMs": 61.284416675334796,
+      "openResponseToSubmitMs": 407.37541700000037,
+      "openRequestToSubmitMs": 447.8462083352497,
+      "cleanupOK": true
+    },
+    {
+      "build": "main",
+      "pair": 12,
+      "scenario": "typed",
+      "load": [
+        5.11328125,
+        5.6767578125,
+        6.4775390625
+      ],
+      "endLoad": [
+        5.11328125,
+        5.6767578125,
+        6.4775390625
+      ],
+      "uptime": "4:48  up 19:32, 7 users, load averages: 5.11 5.68 6.48",
+      "firstContentfulPaintMs": 32,
+      "baselineRSS": 568606720,
+      "loadedRSS": 949321728,
+      "windowRSS": 380715008,
+      "processCount": 6,
+      "foregroundInterruptions": [],
+      "firstFrameMs": 95.11504166584928,
+      "pageLoadMs": 67.44483334477991,
+      "openResponseToSubmitMs": 402.52675000000005,
+      "openRequestToSubmitMs": 446.4693333284231,
+      "cleanupOK": true
+    },
+    {
+      "build": "branch",
+      "pair": 12,
+      "scenario": "typed",
+      "load": [
+        5.11328125,
+        5.6767578125,
+        6.4775390625
+      ],
+      "endLoad": [
+        5.11328125,
+        5.6767578125,
+        6.4775390625
+      ],
+      "uptime": "4:48  up 19:32, 7 users, load averages: 5.11 5.68 6.48",
+      "firstContentfulPaintMs": 28,
+      "baselineRSS": 568164352,
+      "loadedRSS": 955088896,
+      "windowRSS": 386924544,
+      "processCount": 6,
+      "foregroundInterruptions": [],
+      "firstFrameMs": 63.0176666600164,
+      "pageLoadMs": 53.839791667996906,
+      "openResponseToSubmitMs": 410.06616700000006,
+      "openRequestToSubmitMs": 460.0419583293842,
+      "browserCreationToReadyMs": 449.94512500124983,
+      "firstFrameToBrowserCreationMs": 0.9189583361148834,
+      "cleanupOK": true
+    },
+    {
+      "build": "branch",
+      "pair": 13,
+      "scenario": "typed",
+      "load": [
+        4.70361328125,
+        5.58203125,
+        6.439453125
+      ],
+      "endLoad": [
+        4.70361328125,
+        5.58203125,
+        6.439453125
+      ],
+      "uptime": "4:48  up 19:32, 7 users, load averages: 4.70 5.58 6.44",
+      "firstContentfulPaintMs": 36,
+      "baselineRSS": 568426496,
+      "loadedRSS": 956432384,
+      "windowRSS": 388005888,
+      "processCount": 6,
+      "foregroundInterruptions": [],
+      "firstFrameMs": 69.7680833254708,
+      "pageLoadMs": 77.7667083311826,
+      "openResponseToSubmitMs": 400.24920799999995,
+      "openRequestToSubmitMs": 457.76716666296124,
+      "browserCreationToReadyMs": 465.41945832723286,
+      "firstFrameToBrowserCreationMs": 0.3463333414401859,
+      "cleanupOK": true
+    },
+    {
+      "build": "main",
+      "pair": 13,
+      "scenario": "typed",
+      "load": [
+        4.70361328125,
+        5.58203125,
+        6.439453125
+      ],
+      "endLoad": [
+        4.70361328125,
+        5.58203125,
+        6.439453125
+      ],
+      "uptime": "4:48  up 19:32, 7 users, load averages: 4.70 5.58 6.44",
+      "firstContentfulPaintMs": 28,
+      "baselineRSS": 568426496,
+      "loadedRSS": 947519488,
+      "windowRSS": 379092992,
+      "processCount": 6,
+      "foregroundInterruptions": [],
+      "firstFrameMs": 88.4479583328357,
+      "pageLoadMs": 57.77933333592955,
+      "openResponseToSubmitMs": 410.0569999999997,
+      "openRequestToSubmitMs": 451.7503749957541,
+      "cleanupOK": true
+    },
+    {
+      "build": "main",
+      "pair": 14,
+      "scenario": "typed",
+      "load": [
+        4.80712890625,
+        5.5888671875,
+        6.4365234375
+      ],
+      "endLoad": [
+        4.80712890625,
+        5.5888671875,
+        6.4365234375
+      ],
+      "uptime": "4:48  up 19:32, 7 users, load averages: 4.81 5.59 6.44",
+      "firstContentfulPaintMs": 32,
+      "baselineRSS": 570556416,
+      "loadedRSS": 950435840,
+      "windowRSS": 379879424,
+      "processCount": 6,
+      "foregroundInterruptions": [],
+      "firstFrameMs": 88.67554165772162,
+      "pageLoadMs": 65.47941666212864,
+      "openResponseToSubmitMs": 405.53866699999986,
+      "openRequestToSubmitMs": 446.20662499801256,
+      "cleanupOK": true
+    },
+    {
+      "build": "branch",
+      "pair": 14,
+      "scenario": "typed",
+      "load": [
+        4.80712890625,
+        5.5888671875,
+        6.4365234375
+      ],
+      "endLoad": [
+        4.80712890625,
+        5.5888671875,
+        6.4365234375
+      ],
+      "uptime": "4:48  up 19:32, 7 users, load averages: 4.81 5.59 6.44",
+      "firstContentfulPaintMs": 32,
+      "baselineRSS": 570015744,
+      "loadedRSS": 954957824,
+      "windowRSS": 384942080,
+      "processCount": 6,
+      "foregroundInterruptions": [],
+      "firstFrameMs": 74.90587499341927,
+      "pageLoadMs": 68.46262500039302,
+      "openResponseToSubmitMs": 404.4380410000001,
+      "openRequestToSubmitMs": 465.17195833439473,
+      "browserCreationToReadyMs": 458.20483333955053,
+      "firstFrameToBrowserCreationMs": 0.5238750018179417,
+      "cleanupOK": true
+    },
+    {
+      "build": "branch",
+      "pair": 15,
+      "scenario": "typed",
+      "load": [
+        4.501953125,
+        5.51220703125,
+        6.404296875
+      ],
+      "endLoad": [
+        4.501953125,
+        5.51220703125,
+        6.404296875
+      ],
+      "uptime": "4:48  up 19:32, 7 users, load averages: 4.50 5.51 6.40",
+      "firstContentfulPaintMs": 28,
+      "baselineRSS": 568819712,
+      "loadedRSS": 956710912,
+      "windowRSS": 387891200,
+      "processCount": 6,
+      "foregroundInterruptions": [],
+      "firstFrameMs": 58.42433332873043,
+      "pageLoadMs": 64.01416666631121,
+      "openResponseToSubmitMs": 402.39975000000004,
+      "openRequestToSubmitMs": 451.6346666641766,
+      "browserCreationToReadyMs": 454.81620833743364,
+      "firstFrameToBrowserCreationMs": 2.4082916643237695,
+      "cleanupOK": true
+    },
+    {
+      "build": "main",
+      "pair": 15,
+      "scenario": "typed",
+      "load": [
+        4.501953125,
+        5.51220703125,
+        6.404296875
+      ],
+      "endLoad": [
+        4.501953125,
+        5.51220703125,
+        6.404296875
+      ],
+      "uptime": "4:48  up 19:32, 7 users, load averages: 4.50 5.51 6.40",
+      "firstContentfulPaintMs": 36,
+      "baselineRSS": 568492032,
+      "loadedRSS": 949960704,
+      "windowRSS": 381468672,
+      "processCount": 6,
+      "foregroundInterruptions": [],
+      "firstFrameMs": 71.28129166085273,
+      "pageLoadMs": 79.7362916637212,
+      "openResponseToSubmitMs": 400.4488340000001,
+      "openRequestToSubmitMs": 443.5234583361307,
+      "cleanupOK": true
+    },
+    {
+      "build": "main",
+      "pair": 16,
+      "scenario": "typed",
+      "load": [
+        4.46142578125,
+        5.48681640625,
+        6.39013671875
+      ],
+      "endLoad": [
+        4.46142578125,
+        5.48681640625,
+        6.39013671875
+      ],
+      "uptime": "4:48  up 19:32, 7 users, load averages: 4.46 5.49 6.39",
+      "firstContentfulPaintMs": 28,
+      "baselineRSS": 569917440,
+      "loadedRSS": 952041472,
+      "windowRSS": 382124032,
+      "processCount": 6,
+      "foregroundInterruptions": [],
+      "firstFrameMs": 86.66020834061783,
+      "pageLoadMs": 57.33716666873079,
+      "openResponseToSubmitMs": 401.5130419999999,
+      "openRequestToSubmitMs": 442.4907916691154,
+      "cleanupOK": true
+    },
+    {
+      "build": "branch",
+      "pair": 16,
+      "scenario": "typed",
+      "load": [
+        4.46142578125,
+        5.48681640625,
+        6.39013671875
+      ],
+      "endLoad": [
+        4.18408203125,
+        5.412109375,
+        6.3583984375
+      ],
+      "uptime": "4:48  up 19:32, 7 users, load averages: 4.18 5.41 6.36",
+      "firstContentfulPaintMs": 44,
+      "baselineRSS": 573292544,
+      "loadedRSS": 961839104,
+      "windowRSS": 388546560,
+      "processCount": 6,
+      "foregroundInterruptions": [],
+      "firstFrameMs": 62.733041660976596,
+      "pageLoadMs": 94.85441666038241,
+      "openResponseToSubmitMs": 403.2705410000004,
+      "openRequestToSubmitMs": 456.503083332791,
+      "browserCreationToReadyMs": 486.0415000002831,
+      "firstFrameToBrowserCreationMs": 2.5829583319136873,
+      "cleanupOK": true
+    },
+    {
+      "build": "branch",
+      "pair": 17,
+      "scenario": "typed",
+      "load": [
+        4.18408203125,
+        5.412109375,
+        6.3583984375
+      ],
+      "endLoad": [
+        4.18408203125,
+        5.412109375,
+        6.3583984375
+      ],
+      "uptime": "4:48  up 19:32, 7 users, load averages: 4.18 5.41 6.36",
+      "firstContentfulPaintMs": 36,
+      "baselineRSS": 568967168,
+      "loadedRSS": 955482112,
+      "windowRSS": 386514944,
+      "processCount": 6,
+      "foregroundInterruptions": [],
+      "firstFrameMs": 74.7504166647559,
+      "pageLoadMs": 80.07987499877345,
+      "openResponseToSubmitMs": 410.05716700000016,
+      "openRequestToSubmitMs": 472.2347083297791,
+      "browserCreationToReadyMs": 476.7314166674623,
+      "firstFrameToBrowserCreationMs": 0.8327499963343143,
+      "cleanupOK": true
+    },
+    {
+      "build": "main",
+      "pair": 17,
+      "scenario": "typed",
+      "load": [
+        4.18408203125,
+        5.412109375,
+        6.3583984375
+      ],
+      "endLoad": [
+        4.0888671875,
+        5.37158203125,
+        6.33837890625
+      ],
+      "uptime": "4:48  up 19:32, 7 users, load averages: 4.09 5.37 6.34",
+      "firstContentfulPaintMs": 32,
+      "baselineRSS": 567951360,
+      "loadedRSS": 950370304,
+      "windowRSS": 382418944,
+      "processCount": 6,
+      "foregroundInterruptions": [],
+      "firstFrameMs": 78.70408333837986,
+      "pageLoadMs": 78.9329999970505,
+      "openResponseToSubmitMs": 407.19525,
+      "openRequestToSubmitMs": 441.9308333453955,
+      "cleanupOK": true
+    },
+    {
+      "build": "main",
+      "pair": 18,
+      "scenario": "typed",
+      "load": [
+        4.0888671875,
+        5.37158203125,
+        6.33837890625
+      ],
+      "endLoad": [
+        4.0888671875,
+        5.37158203125,
+        6.33837890625
+      ],
+      "uptime": "4:48  up 19:32, 7 users, load averages: 4.09 5.37 6.34",
+      "firstContentfulPaintMs": 28,
+      "baselineRSS": 567787520,
+      "loadedRSS": 948797440,
+      "windowRSS": 381009920,
+      "processCount": 6,
+      "foregroundInterruptions": [],
+      "firstFrameMs": 90.92616666748654,
+      "pageLoadMs": 52.52437500166707,
+      "openResponseToSubmitMs": 402.5118750000001,
+      "openRequestToSubmitMs": 449.2855833377689,
+      "cleanupOK": true
+    },
+    {
+      "build": "branch",
+      "pair": 18,
+      "scenario": "typed",
+      "load": [
+        4.08154296875,
+        5.3486328125,
+        6.32421875
+      ],
+      "endLoad": [
+        4.08154296875,
+        5.3486328125,
+        6.32421875
+      ],
+      "uptime": "4:48  up 19:32, 7 users, load averages: 4.08 5.35 6.32",
+      "firstContentfulPaintMs": 32,
+      "baselineRSS": 568426496,
+      "loadedRSS": 954941440,
+      "windowRSS": 386514944,
+      "processCount": 6,
+      "foregroundInterruptions": [],
+      "firstFrameMs": 68.95262499165256,
+      "pageLoadMs": 62.40129166690167,
+      "openResponseToSubmitMs": 401.0758750000001,
+      "openRequestToSubmitMs": 459.93229166197125,
+      "browserCreationToReadyMs": 450.6182500044815,
+      "firstFrameToBrowserCreationMs": 2.762708332738839,
+      "cleanupOK": true
+    },
+    {
+      "build": "branch",
+      "pair": 19,
+      "scenario": "typed",
+      "load": [
+        4.08154296875,
+        5.3486328125,
+        6.32421875
+      ],
+      "endLoad": [
+        4.08154296875,
+        5.3486328125,
+        6.32421875
+      ],
+      "uptime": "4:49  up 19:32, 7 users, load averages: 4.08 5.35 6.32",
+      "firstContentfulPaintMs": 36,
+      "baselineRSS": 568442880,
+      "loadedRSS": 955367424,
+      "windowRSS": 386924544,
+      "processCount": 6,
+      "foregroundInterruptions": [],
+      "firstFrameMs": 70.69937499181833,
+      "pageLoadMs": 68.28754166781437,
+      "openResponseToSubmitMs": 401.17125,
+      "openRequestToSubmitMs": 458.82362499833107,
+      "browserCreationToReadyMs": 456.0521249950398,
+      "firstFrameToBrowserCreationMs": 0.3596666792873293,
+      "cleanupOK": true
+    },
+    {
+      "build": "main",
+      "pair": 19,
+      "scenario": "typed",
+      "load": [
+        4.31494140625,
+        5.3759765625,
+        6.328125
+      ],
+      "endLoad": [
+        4.31494140625,
+        5.3759765625,
+        6.328125
+      ],
+      "uptime": "4:49  up 19:32, 7 users, load averages: 4.31 5.38 6.33",
+      "firstContentfulPaintMs": 48,
+      "baselineRSS": 567721984,
+      "loadedRSS": 950124544,
+      "windowRSS": 382402560,
+      "processCount": 6,
+      "foregroundInterruptions": [],
+      "firstFrameMs": 103.55420832638629,
+      "pageLoadMs": 89.17087499867193,
+      "openResponseToSubmitMs": 405.9665829999997,
+      "openRequestToSubmitMs": 453.4000416606432,
+      "cleanupOK": true
+    }
+  ],
+  "attempts": [
+    {
+      "pair": 0,
+      "attempt": 1,
+      "exit": 0,
+      "receipt": "pair-00-attempt-00.json",
+      "log": "pair-00-attempt-00.log"
+    },
+    {
+      "pair": 1,
+      "attempt": 1,
+      "exit": 0,
+      "receipt": "pair-01-attempt-00.json",
+      "log": "pair-01-attempt-00.log"
+    },
+    {
+      "pair": 2,
+      "attempt": 1,
+      "exit": 0,
+      "receipt": "pair-02-attempt-00.json",
+      "log": "pair-02-attempt-00.log"
+    },
+    {
+      "pair": 3,
+      "attempt": 1,
+      "exit": 0,
+      "receipt": "pair-03-attempt-00.json",
+      "log": "pair-03-attempt-00.log"
+    },
+    {
+      "pair": 4,
+      "attempt": 1,
+      "exit": 0,
+      "receipt": "pair-04-attempt-00.json",
+      "log": "pair-04-attempt-00.log"
+    },
+    {
+      "pair": 5,
+      "attempt": 1,
+      "exit": 0,
+      "receipt": "pair-05-attempt-00.json",
+      "log": "pair-05-attempt-00.log"
+    },
+    {
+      "pair": 6,
+      "attempt": 1,
+      "exit": 0,
+      "receipt": "pair-06-attempt-00.json",
+      "log": "pair-06-attempt-00.log"
+    },
+    {
+      "pair": 7,
+      "attempt": 1,
+      "exit": 0,
+      "receipt": "pair-07-attempt-00.json",
+      "log": "pair-07-attempt-00.log"
+    },
+    {
+      "pair": 8,
+      "attempt": 1,
+      "exit": 0,
+      "receipt": "pair-08-attempt-00.json",
+      "log": "pair-08-attempt-00.log"
+    },
+    {
+      "pair": 9,
+      "attempt": 1,
+      "exit": 0,
+      "receipt": "pair-09-attempt-00.json",
+      "log": "pair-09-attempt-00.log"
+    },
+    {
+      "pair": 10,
+      "attempt": 1,
+      "exit": 0,
+      "receipt": "pair-10-attempt-00.json",
+      "log": "pair-10-attempt-00.log"
+    },
+    {
+      "pair": 11,
+      "attempt": 1,
+      "exit": 0,
+      "receipt": "pair-11-attempt-00.json",
+      "log": "pair-11-attempt-00.log"
+    },
+    {
+      "pair": 12,
+      "attempt": 1,
+      "exit": 0,
+      "receipt": "pair-12-attempt-00.json",
+      "log": "pair-12-attempt-00.log"
+    },
+    {
+      "pair": 13,
+      "attempt": 1,
+      "exit": 0,
+      "receipt": "pair-13-attempt-00.json",
+      "log": "pair-13-attempt-00.log"
+    },
+    {
+      "pair": 14,
+      "attempt": 1,
+      "exit": 0,
+      "receipt": "pair-14-attempt-00.json",
+      "log": "pair-14-attempt-00.log"
+    },
+    {
+      "pair": 15,
+      "attempt": 1,
+      "exit": 0,
+      "receipt": "pair-15-attempt-00.json",
+      "log": "pair-15-attempt-00.log"
+    },
+    {
+      "pair": 16,
+      "attempt": 1,
+      "exit": 0,
+      "receipt": "pair-16-attempt-00.json",
+      "log": "pair-16-attempt-00.log"
+    },
+    {
+      "pair": 17,
+      "attempt": 1,
+      "exit": 0,
+      "receipt": "pair-17-attempt-00.json",
+      "log": "pair-17-attempt-00.log"
+    },
+    {
+      "pair": 18,
+      "attempt": 1,
+      "exit": 0,
+      "receipt": "pair-18-attempt-00.json",
+      "log": "pair-18-attempt-00.log"
+    },
+    {
+      "pair": 19,
+      "attempt": 1,
+      "exit": 0,
+      "receipt": "pair-19-attempt-00.json",
+      "log": "pair-19-attempt-00.log"
+    }
+  ],
+  "complete": true,
+  "screenLock": "one interleaved pair per lock; low-load waits hold only the outer quiet lock",
+  "configuration": "Release",
+  "method": "automation request start to first native display-link tick; page submit to loading=false plus document complete and first contentful paint",
+  "externalMethod": "time before LaunchServices open(1) delivery to performance.timeOrigin + FCP; wall/monotonic clock stability checked",
+  "typedDelayMs": 400,
+  "memory": "App metrics totalRSS: App and owned helpers; one loaded window minus baseline",
+  "mainBundle": "<main-worktree>/build/Release/Open.app",
+  "branchBundle": "<branch-worktree>/build/Release/Open.app",
+  "summary": {
+    "main": {
+      "firstFrameMs": {
+        "median": 91.4824999999837,
+        "p95": 102.63591667171568
+      },
+      "pageLoadMs": {
+        "median": 64.3441874999553,
+        "p95": 89.17087499867193
+      },
+      "windowRSS": {
+        "median": 381509632.0,
+        "p95": 382795776
+      },
+      "loadedRSS": {
+        "median": 950247424.0,
+        "p95": 953434112
+      }
+    },
+    "branch": {
+      "firstFrameMs": {
+        "median": 68.75366665917682,
+        "p95": 75.66062500700355
+      },
+      "pageLoadMs": {
+        "median": 72.05243749194779,
+        "p95": 94.85441666038241
+      },
+      "windowRSS": {
+        "median": 387096576.0,
+        "p95": 388907008
+      },
+      "loadedRSS": {
+        "median": 955490304.0,
+        "p95": 960348160
+      },
+      "browserCreationToReadyMs": {
+        "median": 464.3577083334094,
+        "p95": 486.0415000002831
+      }
+    }
+  },
+  "extraHiddenBrowserRSS": 5586944.0,
+  "provenance": "provenance.json"
+}

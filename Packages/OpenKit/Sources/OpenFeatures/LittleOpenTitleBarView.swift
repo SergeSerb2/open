@@ -6,6 +6,7 @@ import OpenModel
 @MainActor
 public final class LittleOpenTitleBarView: NSView {
     private let capsule = NSView()
+    public var urlCapsuleView: NSView? { capsule }
     private let pill = NSView()
     private let divider = NSView()
     private let profileIconButton: NSButton

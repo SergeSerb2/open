@@ -12,6 +12,15 @@ import OpenSettings
 // App has no window controller of its own.
 typealias BrowserWindowController = OpenFeatures.BrowserWindowController
 
+/// A page hosted outside the sidebar's BrowserWindowController.
+@MainActor
+protocol StandalonePageSurface: AnyObject {
+  var surfaceWindow: NSWindow? { get }
+  var surfacePage: OEWebContent? { get }
+  var isSurfaceVisible: Bool { get }
+  func surfaceAnchor() -> (view: NSView, rect: CGRect)?
+}
+
 @MainActor
 final class AuxiliaryPage {
   let content: OEWebContent
@@ -29,10 +38,12 @@ final class EngineWebContentHostFactory: NSResponder, WebContentHostFactory {
   unowned let app: AppDelegate
   let windowState: BrowserWindowState
   weak var controller: BrowserWindowController?
+  weak var standaloneSurface: (any StandalonePageSurface)?
+  weak var standaloneBrowser: OEBrowser?
   weak var littleOpenController: LittleOpenWindowController?
   private weak var littleOpenContent: OEWebContent?
   private var littleOpenBrowser: OEBrowser?
-  var window: NSWindow? { controller?.window ?? littleOpenController?.window }
+  var window: NSWindow? { controller?.window ?? standaloneSurface?.surfaceWindow ?? littleOpenController?.window }
   var model: BrowserModel { app.model }
   var contentContainer: NSView { controller!.container }
   private(set) var hosts: [ItemID: EngineWebContentHost] = [:]
@@ -121,6 +132,15 @@ final class EngineWebContentHostFactory: NSResponder, WebContentHostFactory {
   var downloadDirectory: URL?
   private(set) var events: [[String: Any]] = []
   private(set) var lastFindResult: OEFindResult?
+  func standaloneSurfaceVisibilityChanged() {
+    // Setting even the same window re-enters Chromium's SetHostView path.
+    // Window geometry follows the page view's existing native observers.
+    if let browser = standaloneBrowser, browser.window !== standaloneSurface?.surfaceWindow {
+      browser.window = standaloneSurface?.surfaceWindow
+    }
+    pageChrome.visibilityChanged()
+  }
+
   lazy var pageChrome = PageChromeCoordinator(owner: self)
   var pendingDialogs: [OEJavaScriptDialog] { pageChrome.dialogs.pendingDialogs }
 
@@ -346,6 +366,7 @@ final class EngineWebContentHostFactory: NSResponder, WebContentHostFactory {
   }
   private static var legacyRefusals: Set<String> = []
   var focusedBrowser: OEBrowser? {
+    if let standaloneBrowser { return standaloneBrowser }
     if littleOpenController != nil { return littleOpenContent?.browser ?? littleOpenBrowser }
     guard app.engineReady, let profile = focusedProfile else { return nil }; return mirror.browser(for: profile.id)
   }
@@ -360,19 +381,18 @@ final class EngineWebContentHostFactory: NSResponder, WebContentHostFactory {
   /// `history`: a sleeping tab's stored back/forward list (memory-fork §5.2–§5.3). The page is
   /// created without a renderer and gets the history before it is shown; it loads the current
   /// entry when it shows, or `url` (the fallback) if the engine refuses the history.
-  func makeHost(tabID: ItemID, profileID: ProfileID, url: URL?, history: OENavigationHistory?) -> (any WebContentHost)? {
+  func makeHost(tabID: ItemID, profileID: ProfileID, url: URL?, history: OENavigationHistory?, browser: OEBrowser? = nil) -> (any WebContentHost)? {
     guard let context = context(for: profileID) else {
       if let url, model.tab(id: tabID) != nil { queuedNavigations[tabID] = url }
       return nil
     }
     if let host = hosts[tabID], !host.closed { return host }
     let config = OEWebContentConfiguration(context: context)
-    // Sidebar tabs are tabs of the window's hidden Chrome window (fork patch
-    // P1). Hosts that are not model tabs (Peek) stay Alloy: a Chrome style
-    // page outside a strip would get its own Chrome window.
+    // Sidebar and Little Open pages attach to a hidden Chrome window (P1).
+    // Other non-model hosts (Peek) remain Alloy.
     let isModelTab = model.tab(id: tabID) != nil
     if isModelTab { app.noteLaunchWindowNavigation(windowState.id) }
-    config.runtimeStyle = isModelTab ? app.options.defaultStyle : .alloy
+    config.runtimeStyle = browser != nil ? .chrome : (isModelTab ? app.options.defaultStyle : .alloy)
     config.showsChromeToolbar = app.options.chromeToolbar
     if isModelTab, model.tab(id: tabID)?.url.scheme == "chrome" { config.runtimeStyle = .chrome }
     contentCreationCount += 1
@@ -382,10 +402,18 @@ final class EngineWebContentHostFactory: NSResponder, WebContentHostFactory {
     content.view.isHidden = true
     let host = EngineWebContentHost(tabID: tabID, profileID: profileID, content: content, owner: self)
     hosts[tabID] = host
+    if let browser {
+      // Hosted Chrome creation is synchronous. Seed an already submitted URL
+      // before insertion, so it creates the target instead of navigating a
+      // throwaway about:blank page first (deferred Little Open).
+      if let url, history == nil { host.load(url) }
+      browser.insert(content, at: 0)
+      browser.activeWebContent = content
+    }
     if typedNavigationTabs.remove(tabID) != nil { host.historyRecorder.markTyped() }
     if model.tab(id: tabID) != nil { modelHostIDs.insert(tabID) }
     mirror.sync()
-    if let url, history == nil { host.load(url) }
+    if let url, history == nil, browser == nil { host.load(url) }
     app.tabSleep.contentCreated(tabID: tabID, host: host)
     return host
   }

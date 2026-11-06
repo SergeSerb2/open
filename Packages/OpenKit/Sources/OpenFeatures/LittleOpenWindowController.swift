@@ -211,6 +211,9 @@ public final class LittleOpenWindowController: NSWindowController, NSWindowDeleg
         let url = currentURL ?? session.tab.url
         container.closeAll(); container.removeFromSuperview(); container = WebContentContainer(factory: factory)
         session.tab.url = url
+        // closeAll marks the old host as a placeholder; this standalone page
+        // must acquire a new host (and Browser) in the replacement Profile.
+        session.tab.live.sleepPhase = .live
         root.addSubview(container, positioned: .below, relativeTo: titleBar)
         configureContainer(); updateChrome(); layoutContent()
         if state == .bar || commandBar.isPresented { presentCommandBar() }

@@ -24,9 +24,17 @@ extension AutomationController {
       let window = state.window
       let controller = app.littleOpenCoordinator.controllers[state.id]!
       let page = OEEngine.shared.allWebContents.first { $0.view.window === window }
+      let standalone = (controller.container.host(for: controller.session.tab.id)?.view as? LittleOpenSurfaceView)?.owner
+      let surface = standalone?.registeredSurface
       window.layoutIfNeeded()
       let contentRect = window.convertToScreen(controller.container.convert(controller.container.bounds, to: nil))
       controller.contentView.layoutSubtreeIfNeeded()
+      let anchor = surface?.surfaceAnchor()
+      let surfaceState: [String: Any] = [
+        "registered": surface != nil,
+        "visible": surface?.isSurfaceVisible ?? false,
+        "anchorName": anchor.map { $0.view === controller.titleBar.urlCapsuleView ? "url-capsule" : "content-top-left" } as Any? ?? NSNull(),
+        "anchorRectInWindow": anchor.map { frame($0.view.convert($0.rect, to: nil)) } as Any? ?? NSNull()]
       let lights = [NSWindow.ButtonType.closeButton, .miniaturizeButton, .zoomButton].compactMap { kind -> [Double]? in
         guard let button = window.standardWindowButton(kind), let parent = button.superview else { return nil }
         let rect = controller.contentView.convert(button.frame, from: parent)
@@ -40,10 +48,19 @@ extension AutomationController {
         "visible": window.isVisible, "miniaturized": window.isMiniaturized, "key": window.isKeyWindow,
         "visibilityProtected": visibility.littleOpen.contains(controller.session.tab.id),
         "tabID": controller.session.tab.id.description, "sidebarTab": app.model.tab(id: controller.session.tab.id) != nil,
-        "content": page?.identifier ?? 0, "runtimeStyle": page?.runtimeStyle == .alloy ? "alloy" : "chrome",
+        "content": page?.identifier ?? 0, "runtimeStyle": page.map { $0.runtimeStyle == .alloy ? "alloy" : "chrome" } as Any? ?? NSNull(),
         "loading": page?.isLoading ?? false, "firstResponder": window.firstResponder.map { String(describing: type(of: $0)) } ?? "",
         "barPresented": controller.commandBar.isPresented, "barInput": controller.urlField.stringValue,
-        "trafficLights": lights,
+        "trafficLights": lights, "surface": surfaceState,
+        "browserID": page?.browser.map { $0.identifier } as Any? ?? NSNull(),
+        "firstFrameRead": standalone?.firstFrameRead as Any? ?? NSNull(),
+        "browserCreationStartedAt": standalone?.browserCreationStartedAt as Any? ?? NSNull(),
+        "submittedBeforeBrowser": standalone?.submittedBeforeBrowser ?? false,
+        "browser": page?.browser.map { browser in
+          ["id": browser.identifier, "chromeWindowID": browser.chromeWindowIdentifier,
+           "tabs": browser.webContents.map(\.identifier), "active": browser.activeWebContent?.identifier ?? 0,
+           "windowMatches": browser.window === window, "context": browser.context.identifier] as [String: Any]
+        } as Any? ?? NSNull(),
         "fieldFocused": (window.firstResponder as? NSTextView)?.delegate as AnyObject? === controller.urlField,
         "contentFrame": frame(CGRect(x: contentRect.minX - window.frame.minX,
           y: window.frame.maxY - contentRect.maxY, width: contentRect.width, height: contentRect.height)),
@@ -57,6 +74,12 @@ extension AutomationController {
     }
     return ["sessions": sessions, "hotkeyRegistered": app.hotkeyService?.isRegistered ?? false,
       "expiry": archiveState(), "mainWindows": app.windowControllers.count,
+      "browserCount": OEEngine.shared.browsers.count,
+      "littleOpenBrowserCreations": LittleOpenWebContent.browserCreationCountForAutomation,
+      "browserIDs": OEEngine.shared.browsers.map(\.identifier),
+      "mainBrowserIDs": OEEngine.shared.browsers.filter { browser in
+        app.windowControllers.contains { $0.window === browser.window }
+      }.map(\.identifier),
       "autoCreatedLaunchWindow": app.autoCreatedLaunchWindowID?.description ?? "",
       "featureTimers": count.map { $0(6) } ?? NSNull()]
   }
@@ -91,6 +114,51 @@ extension AutomationController {
         "suppression": alert.suppressionButton?.title ?? ""] as [String: Any]
     }
     if cmd == "little-open-action", args["action"] as? String == "blank" {
+      if let next = args["then"] as? String {
+        guard ["submit", "close"].contains(next), args["timestamp"] == nil else { throw Failure(message: "invalid immediate action") }
+        let text = args["text"] as? String ?? ""
+        guard next != "submit" || !text.isEmpty else { throw Failure(message: "missing immediate text") }
+        guard text.utf8.count <= 8192 else { throw Failure(message: "immediate text exceeds 8 KiB") }
+        var observed: [String: Any]?
+        // Use the actual queued creation turn. Native typing can pump nested
+        // AppKit work; this boundary guarantees Return precedes Browser creation.
+        await withCheckedContinuation { (continuation: CheckedContinuation<Void, Never>) in
+          LittleOpenWebContent.beforeNextCreationForAutomation = { [weak self] surface in
+            guard let self, let window = surface.surfaceWindow,
+              let controller = self.app.littleOpenCoordinator.controllers.values.first(where: { $0.window === window }) else { continuation.resume(); return true }
+            let opened = self.littleOpenState()
+            if next == "close" {
+              self.app.littleOpenCoordinator.close(sessionID: controller.session.id, archiveReason: nil)
+              observed = ["opened": opened, "after": self.littleOpenState()]
+              continuation.resume()
+              // Continue through the real queued creation path after close.
+              // Its closed guard must prevent creation; the probe must not.
+              return false
+            }
+            // Return may wait for the real suggestion stream. Keep this test's
+            // creation turn pending until its native navigation intent arrives.
+            surface.onSubmissionForAutomation = { [weak self, weak surface] in
+              guard let self, let surface else { continuation.resume(); return }
+              observed = ["opened": opened, "after": self.littleOpenState()]
+              continuation.resume()
+              surface.resumeCreationForAutomation()
+            }
+            controller.focusURL()
+            for ch in text + "\r" {
+              for type in [NSEvent.EventType.keyDown, .keyUp] {
+                if let event = NSEvent.keyEvent(with: type, location: .zero, modifierFlags: [],
+                  timestamp: ProcessInfo.processInfo.systemUptime, windowNumber: window.windowNumber,
+                  context: nil, characters: String(ch), charactersIgnoringModifiers: String(ch),
+                  isARepeat: false, keyCode: ch == "\r" ? 36 : 0) { NSApp.sendEvent(event) }
+              }
+            }
+            return true
+          }
+          app.openBlankLittleOpen()
+        }
+        guard let observed else { throw Failure(message: "missing Little Open creation observation") }
+        return observed
+      }
       app.openBlankLittleOpen(timestamp: args["timestamp"] as? Double)
       return littleOpenState()
     }

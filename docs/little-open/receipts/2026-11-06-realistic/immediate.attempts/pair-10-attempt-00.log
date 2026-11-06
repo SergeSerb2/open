@@ -1,0 +1,55 @@
+{"build": "main", "pair": 10, "scenario": "immediate", "load": [10.13671875, 6.88525390625, 6.75830078125], "endLoad": [10.13671875, 6.88525390625, 6.75830078125], "uptime": "4:51  up 19:35, 7 users, load averages: 10.14 6.89 6.76", "firstContentfulPaintMs": 44, "baselineRSS": 568918016, "loadedRSS": 948797440, "windowRSS": 379879424, "processCount": 6, "foregroundInterruptions": [], "firstFrameMs": 64.31920832255855, "pageLoadMs": 90.53754166234285, "openResponseToSubmitMs": 26.713500000000057, "openRequestToSubmitMs": 78.27579166041687}
+{"build": "branch", "pair": 10, "scenario": "immediate", "load": [9.80517578125, 6.8701171875, 6.75341796875], "endLoad": [9.80517578125, 6.8701171875, 6.75341796875], "uptime": "4:51  up 19:35, 7 users, load averages: 9.81 6.87 6.75", "firstContentfulPaintMs": 28, "baselineRSS": 572882944, "loadedRSS": 961429504, "windowRSS": 388546560, "processCount": 6, "foregroundInterruptions": [], "firstFrameMs": 70.47725000302307, "pageLoadMs": 100.41829166584648, "openResponseToSubmitMs": 16.066625000000112, "openRequestToSubmitMs": 85.21874999860302, "browserCreationToReadyMs": 114.9229166621808, "firstFrameToBrowserCreationMs": 0.23687499924562871}
+{
+  "configuration": "Release",
+  "scenario": "immediate",
+  "reportOnly": true,
+  "method": "automation request start to first native display-link tick; page submit to loading=false plus document complete and first contentful paint",
+  "externalMethod": "time before LaunchServices open(1) delivery to performance.timeOrigin + FCP; wall/monotonic clock stability checked",
+  "typedDelayMs": 0,
+  "memory": "App metrics totalRSS: App and owned helpers; one loaded window minus baseline",
+  "partialPair": 10,
+  "summary": {
+    "main": {
+      "firstFrameMs": {
+        "median": 64.31920832255855,
+        "p95": 64.31920832255855
+      },
+      "pageLoadMs": {
+        "median": 90.53754166234285,
+        "p95": 90.53754166234285
+      },
+      "windowRSS": {
+        "median": 379879424,
+        "p95": 379879424
+      },
+      "loadedRSS": {
+        "median": 948797440,
+        "p95": 948797440
+      }
+    },
+    "branch": {
+      "firstFrameMs": {
+        "median": 70.47725000302307,
+        "p95": 70.47725000302307
+      },
+      "pageLoadMs": {
+        "median": 100.41829166584648,
+        "p95": 100.41829166584648
+      },
+      "windowRSS": {
+        "median": 388546560,
+        "p95": 388546560
+      },
+      "loadedRSS": {
+        "median": 961429504,
+        "p95": 961429504
+      },
+      "browserCreationToReadyMs": {
+        "median": 114.9229166621808,
+        "p95": 114.9229166621808
+      }
+    }
+  },
+  "extraHiddenBrowserRSS": 8667136
+}
