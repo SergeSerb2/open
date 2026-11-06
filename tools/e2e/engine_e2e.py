@@ -10016,7 +10016,10 @@ def space_editor_creation_checks(factory, results, tmp):
                 and app.call('window-state')['sidebarMode'] == 'hidden' and state()['modelUndoGeneration'] == cancel_generation)
         app.call('menu-perform', id='rename-space')
         require('rename_hidden_specific_dialog', 'Rename Space' in app.call('alert')['texts'] and 'Rename' in app.call('alert')['buttons'])
-        key('a', ['cmd']); app.call('key', text='Renamed Source', route='app'); key('return')
+        rename_window = app.call('window-state')['attachedSheet']
+        app.call('key', key='a', modifiers=['cmd'], window=rename_window, route='app')
+        app.call('key', text='Renamed Source', window=rename_window, route='app')
+        app.call('key', key='return', window=rename_window, route='app')
         require('rename_hidden_return_keeps_sidebar_hidden', bool(wait_until(lambda: focused()['title'] == 'Renamed Source', timeout=5))
                 and app.call('window-state')['sidebarMode'] == 'hidden')
         app.call('menu-perform', id='toggle-sidebar')
