@@ -118,7 +118,8 @@ import OpenBoosts
         let stage = EditorStage(state:"editor-code-css")
         defer { stage.controller.close();stage.parent.close() }
         let code = stage.view.codeView!,css = code.editor
-        let before = css.string
+        let before = String(decoding:Array(css.string.utf8),as:UTF8.self)
+        let expected = (before as NSString).replacingCharacters(in:NSRange(location:5,length:0),with:".picked")
         stage.panel.makeKey();stage.panel.makeFirstResponder(css)
         css.setSelectedRange(NSRange(location:5,length:0))
         let unavailable = code.control("editor.code.pick")?.isEnabled == false
@@ -128,8 +129,7 @@ import OpenBoosts
         let entered = stage.session.isSelecting && stage.host.pickerCalls.last == "select"
         let caret = css.selectedRange()
         stage.host.deliver("picker:selected",selector:".picked")
-        print("Selector text before=\(before.debugDescription), after=\(css.string.debugDescription)")
-        let expected = (before as NSString).replacingCharacters(in:NSRange(location:5,length:0),with:".picked")
+        print("Selector text expected=\(expected.debugDescription), actual=\(css.string.debugDescription)")
         let inserted = caret == NSRange(location:5,length:0) && css.string == expected && !stage.session.isSelecting && stage.host.pickerCalls.last == "exit"
         print("Selector flow: caret=\(caret); expected=\(css.string == expected); changed=\(css.string != before); selecting=\(stage.session.isSelecting); last=\(stage.host.pickerCalls.last ?? "none"); hidden=\(code.isHidden)")
         stage.panel.makeKey();stage.panel.makeFirstResponder(css)
