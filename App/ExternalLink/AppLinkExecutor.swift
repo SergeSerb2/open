@@ -24,7 +24,8 @@ final class AppLinkExecutor: LinkDestinationExecutor {
         guard let state = model.windows.first(where: { $0.id == controller.windowID }), state.style == .standard else { return nil }
         return RoutingWindowSnapshot(id: state.id, kind: .standard, focusedSpaceID: state.focusedSpaceID)
       }, rules: model.routingRules, defaultDestination: model.defaultDestination,
-      externalLinksInLittleOpen: UserDefaults.standard.object(forKey: "open.links.externalInLittleOpen") as? Bool ?? true)
+      externalLinksInLittleOpen: UserDefaults.standard.object(forKey: "open.links.externalInLittleOpen") as? Bool ?? true,
+      profiles: model.profiles.map(\.id))
   }
 
   func openInSpace(_ url: URL, spaceID: SpaceID) {

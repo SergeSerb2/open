@@ -1,5 +1,6 @@
 import Foundation
 import OpenModel
+import OpenRouting
 
 public struct ImportReport: Sendable {
     public var totalItems: Int = 0
@@ -26,6 +27,7 @@ public struct ImportReport: Sendable {
     public var skippedUnknown: Int = 0
     public var orphans: Int = 0
     public var skippedRoutingRules: Int = 0
+    public var routingDestinationFallbacks: Int = 0
     public var containers: Int = 0
     public var archiveStatus: String = "not imported (no real file exists)"
     public var boostsStatus: String = "not imported (no real file exists)"
@@ -759,13 +761,28 @@ public struct ArcImporter {
 
         // Routing.
         var rules: [RoutingRule] = []
-        var defaultDestination: DefaultDestination = .littleOpen
+        var profileReferences = sourceProfiles.refOwners
+        for (arcID, object) in spacesRaw {
+            if let reference = object["profile"], let owner = sourceProfiles.spaceOwners[arcID] {
+                profileReferences[Self.profileReferenceKey(reference)] = owner
+            }
+        }
+        func destination(_ raw: Any?) -> DefaultDestination? {
+            let result = parseDestination(raw, arcSpaceIDToOpen: arcSpaceIDToOpen,
+                profileReferences: profileReferences, spaces: spaces)
+            if result.usedFallback { report.routingDestinationFallbacks += 1 }
+            return result.destination
+        }
+        var defaultDestination: DefaultDestination = .littleOpen(profile: nil)
         if let routeData = try? Data(contentsOf: arcDirectory.appendingPathComponent("StorableLinkRouting.json")),
            let routeRoot = try? JSONSerialization.jsonObject(with: routeData) as? [String: Any] {
-            defaultDestination = parseDestination(routeRoot["defaultDestination"], arcSpaceIDToOpen: arcSpaceIDToOpen) ?? .littleOpen
+            defaultDestination = destination(routeRoot["defaultDestination"]) ?? .littleOpen(profile: nil)
             for rawRule in (routeRoot["rules"] as? [[String: Any]]) ?? [] {
                 guard let components = rawRule["sourceComponents"] as? [[String: Any]] else { report.skippedRoutingRules += 1; continue }
+                let target = destination(rawRule["destination"])
                 var importedRule = false
+                // Guess: components are OR alternatives. Keep one Open rule per
+                // component in source order; Arc's comparison logic is unverified.
                 for component in components {
                     guard let ct = component["componentType"] as? [String: Any],
                           let urlMatch = ct["urlMatch"] as? [String: Any],
@@ -773,14 +790,20 @@ public struct ArcImporter {
                           let kindDict = urlMatch["_0"] as? [String: Any] else { continue }
                     let match: RoutingMatch
                     if kindDict.keys.contains("contains") { match = .hostContains(pattern) }
+                    else if kindDict.keys.contains("matches") {
+                        // Guess: Arc analytics calls this "equals". Treat a bare
+                        // host as hostEquals, other text as urlPrefix. Arc's actual
+                        // matching semantics remain unverified (s10 audit §2).
+                        match = Self.routingMatchForArcMatches(pattern)
+                    }
                     else if kindDict.keys.contains("equals") || kindDict.keys.contains("exact") { match = .hostEquals(pattern) }
                     else if kindDict.keys.contains("prefix") || kindDict.keys.contains("hasPrefix") { match = .urlPrefix(pattern) }
                     else { continue }
-                    guard let dest = parseDestination(rawRule["destination"], arcSpaceIDToOpen: arcSpaceIDToOpen) else { continue }
+                    guard let dest = target else { continue }
                     let destination: RoutingDestination
                     switch dest {
-                    case .littleOpen: destination = .littleOpen
-                    case .mostRecentSpace: destination = .mostRecentSpace
+                    case .littleOpen(let profile): destination = .littleOpen(profile: profile)
+                    case .mostRecentSpace(let profile): destination = .mostRecentSpace(profile: profile)
                     case .space(let sid): destination = .space(sid)
                     }
                     rules.append(RoutingRule(match: match, destination: destination))
@@ -948,20 +971,46 @@ public struct ArcImporter {
         return ArcImportResult(model: model, report: report, archiveRecords: archiveRecords)
     }
 
-    private func parseDestination(_ raw: Any?, arcSpaceIDToOpen: [String: SpaceID]) -> DefaultDestination? {
-        guard let dict = raw as? [String: Any] else { return nil }
-        if let spaceDict = dict["space"] as? [String: Any] {
-            if let zero = spaceDict["_0"] as? [String: Any] {
-                if zero.keys.contains("mostRecent") { return .mostRecentSpace }
-                // {_0: "<spaceArcID>"} form
-                for value in zero.values {
-                    if let s = value as? String, let openID = arcSpaceIDToOpen[s] { return .space(openID) }
-                }
-            }
-            if let s = spaceDict["_0"] as? String, let openID = arcSpaceIDToOpen[s] { return .space(openID) }
-            return .mostRecentSpace
+    private static func routingMatchForArcMatches(_ pattern: String) -> RoutingMatch {
+        HostNormalizer.isBareHostPattern(pattern) ? .hostEquals(pattern) : .urlPrefix(pattern)
+    }
+
+    @MainActor
+    private func parseDestination(_ raw: Any?, arcSpaceIDToOpen: [String: SpaceID],
+                                  profileReferences: [String: ProfileID], spaces: [Space])
+        -> (destination: DefaultDestination?, usedFallback: Bool) {
+        guard let dict = raw as? [String: Any] else { return (nil, true) }
+        let little = dict["littleArc"] ?? dict["little"]
+        guard let payload = (dict["space"] ?? little) as? [String: Any] else { return (nil, true) }
+        let isLittle = dict["space"] == nil
+        func recent(_ profile: ProfileID? = nil) -> DefaultDestination {
+            isLittle ? .littleOpen(profile: profile) : .mostRecentSpace(profile: profile)
         }
-        if dict["littleArc"] != nil || dict["little"] != nil { return .littleOpen }
-        return nil
+        func specificSpace(_ arcID: String) -> DefaultDestination? {
+            guard let id = arcSpaceIDToOpen[arcID] else { return nil }
+            if isLittle {
+                guard let space = spaces.first(where: { $0.id == id }) else { return nil }
+                return .littleOpen(profile: space.profileID)
+            }
+            return .space(id)
+        }
+        // Keep the older direct-string Space representation readable too.
+        if let id = payload["_0"] as? String {
+            return specificSpace(id).map { ($0, false) } ?? (recent(), true)
+        }
+        guard let context = payload["_0"] as? [String: Any], context.count == 1 else {
+            return (recent(), true)
+        }
+        if context["mostRecent"] != nil { return (recent(), false) }
+        if let space = context["space"] as? [String: Any],
+           let id = space["_0"] as? String, let destination = specificSpace(id) {
+            return (destination, false)
+        }
+        if let profile = context["profile"] as? [String: Any], let reference = profile["_0"],
+           let id = profileReferences[Self.profileReferenceKey(reference)] {
+            return (recent(id), false)
+        }
+        // Preserve the previous unknown-context fallback, and count the loss.
+        return (recent(), true)
     }
 }

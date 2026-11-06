@@ -128,7 +128,7 @@ public struct ActionRegistry: Sendable {
         // Settings and features
         BrowserAction(id: "settings", title: "Settings", aliases: ["Preferences"], shortcut: "⌘,", symbol: "gearshape"),
         BrowserAction(id: "search-settings", title: "Search Settings", aliases: ["Manage Search Settings", "Search Engine", "Default Search Engine"], symbol: "magnifyingglass.circle"),
-        BrowserAction(id: "air-traffic-control", title: "Air Traffic Control", aliases: ["Link Routing"], symbol: "airplane"),
+        BrowserAction(id: "air-traffic-control", title: "Air Traffic Control", aliases: ["Link Routing", "Link Preferences", "Air Traffic Controller"], symbol: "airplane"),
         BrowserAction(id: "manage-passwords", title: "Manage Passwords", aliases: ["Passwords"], symbol: "key"),
         BrowserAction(id: "manage-extensions", title: "Manage Extensions", aliases: ["Extensions"], symbol: "puzzlepiece.extension"),
         BrowserAction(id: "add-extension", title: "Add Extension", aliases: ["Chrome Web Store"], symbol: "puzzlepiece"),
