@@ -29,12 +29,13 @@ public enum ThemeField {
     public static func layerAlpha(intensity: Double) -> Double {
         ThemeTuning.intensityAlphaFloor + ThemeTuning.intensityAlphaSlope * min(1, max(0, intensity.isFinite ? intensity : 0))
     }
-    /// Underlay gray for `translucencyStyle: light`, active and inactive window.
+    /// Underlay gray for `translucencyStyle: light`, active window. The inactive fit
+    /// (0.83) now only derives `WindowMaterial`'s light backdrop: every inactive
+    /// window is its active field moved by `WindowMaterial.inactiveShift`.
     public static let lightUnderlayActive: Double = 0.694
     public static let lightUnderlayInactive: Double = 0.83
     /// guess: no `translucencyStyle: dark` theme was observed.
     public static let darkUnderlayActive: Double = 0.16
-    public static let darkUnderlayInactive: Double = 0.10
 
     /// CSS-style lines through the window center. Angle 0° points up, 90° right.
     public struct Line: Sendable, Hashable {
@@ -84,8 +85,19 @@ public enum ThemeField {
         let legacy: Bool
         let solidKey: P3?
         let solidColor: (Double, Double, Double)?
+        let translucency: SpaceThemeStyle.Translucency
+        let isActive: Bool
+        let cardTint: Bool
+        /// True when the fill's coverage is the same everywhere (no overlay stops).
+        var hasConstantCoverage: Bool { overlay.count != 2 }
 
-        public init(style: SpaceThemeStyle, windowSize: CGSize, isActive: Bool) {
+        /// `isActive: false` moves the active field to the inactive backdrop;
+        /// `cardTint` gives the tint drawn at `1 − w` over the blurred page
+        /// (`WindowMaterial`). The active field is the reference for both.
+        public init(style: SpaceThemeStyle, windowSize: CGSize, isActive: Bool, cardTint: Bool = false) {
+            translucency = style.backdropScheme
+            self.isActive = isActive
+            self.cardTint = cardTint
             legacy = style.usesLegacyIntensity
             let solidKey: P3?
             switch style.fill {
@@ -106,8 +118,8 @@ public enum ThemeField {
             alpha = style.usesLegacyIntensity ? 0.64 : ThemeField.layerAlpha(intensity: style.intensityFactor)
             let fitted: Double
             switch style.translucency {
-            case .light: fitted = isActive ? ThemeField.lightUnderlayActive : ThemeField.lightUnderlayInactive
-            case .dark: fitted = isActive ? ThemeField.darkUnderlayActive : ThemeField.darkUnderlayInactive
+            case .light: fitted = ThemeField.lightUnderlayActive
+            case .dark: fitted = ThemeField.darkUnderlayActive
             }
             // §17.2: preserve U0 at and above the wash cap. Light's uncaptured
             // white-wash branch remains today's fitted underlay (documented guess).
@@ -125,6 +137,14 @@ public enum ThemeField {
         /// Final color (extended, gamma-encoded sRGB) at window uv. Editor
         /// fills use the encoded Display P3 mix: what a P3 display shows.
         public func color(u: Double, v: Double) -> (Double, Double, Double) {
+            let (r, g, b) = activeColor(u: u, v: v)
+            if cardTint { return (WindowMaterial.tint(r, translucency), WindowMaterial.tint(g, translucency), WindowMaterial.tint(b, translucency)) }
+            if !isActive { return (WindowMaterial.inactive(r, translucency), WindowMaterial.inactive(g, translucency), WindowMaterial.inactive(b, translucency)) }
+            return (r, g, b)
+        }
+
+        /// The active window's color: every theme fit's reference.
+        private func activeColor(u: Double, v: Double) -> (Double, Double, Double) {
             if let solidColor { return solidColor }
             if !legacy, corners.isEmpty {
                 let (color, a) = fill(u: u, v: v)
@@ -198,8 +218,16 @@ public enum ThemeField {
     public static func composition(style: SpaceThemeStyle, windowSize: CGSize, isActive: Bool, resolution: Int = 64) -> Composition? {
         guard !style.usesLegacyIntensity, case .blended = style.fill,
               let p3 = CGColorSpace(name: CGColorSpace.displayP3), let srgb = CGColorSpace(name: CGColorSpace.sRGB) else { return nil }
-        let e = Evaluator(style: style, windowSize: windowSize, isActive: isActive)
-        let gray = CGFloat(e.underlay)
+        let e = Evaluator(style: style, windowSize: windowSize, isActive: true)
+        var underlayGray = e.underlay
+        if !isActive {
+            // The inactive shift moves only the underlay: exact while the fill's coverage is
+            // constant and the moved gray stays in range; otherwise draw the baked field.
+            guard e.hasConstantCoverage, e.alpha < 1 else { return nil }
+            underlayGray += WindowMaterial.inactiveShift(style.backdropScheme) / (1 - e.alpha)
+            guard (0...1).contains(underlayGray) else { return nil }
+        }
+        let gray = CGFloat(underlayGray)
         let underlay = CGColor(colorSpace: srgb, components: [gray, gray, gray, 1])!
         if let key = e.solidKey {
             let solid = CGColor(colorSpace: p3, components: [CGFloat(key.r), CGFloat(key.g), CGFloat(key.b), CGFloat(e.alpha)])
@@ -228,9 +256,9 @@ public enum ThemeField {
     /// The whole-window field as a small float image in uv space. Stretch it over
     /// the window with linear filtering; the field is smooth, so 64×64 samples
     /// stay within a fraction of a level of the exact math.
-    public static func makeImage(style: SpaceThemeStyle, windowSize: CGSize, isActive: Bool, resolution: Int = 64) -> CGImage? {
+    public static func makeImage(style: SpaceThemeStyle, windowSize: CGSize, isActive: Bool, cardTint: Bool = false, resolution: Int = 64) -> CGImage? {
         let n = max(resolution, 2)
-        let e = Evaluator(style: style, windowSize: windowSize, isActive: isActive)
+        let e = Evaluator(style: style, windowSize: windowSize, isActive: isActive, cardTint: cardTint)
         var pixels = [Float](repeating: 1, count: n * n * 4)
         for y in 0..<n {
             let v = (Double(y) + 0.5) / Double(n)

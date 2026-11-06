@@ -1033,7 +1033,7 @@
           "trafficLightsHidden": controller.trafficLightFrames.map(\.hidden), "titlebar": titlebar,
           "reveal": ["phase": reveal.phase, "shows": reveal.shows, "hides": reveal.hides, "pointerEvents": reveal.pointerEvents,
             "dwell": reveal.dwell, "zone": reveal.zone, "offset": reveal.offset.isFinite ? Double(reveal.offset) : NSNull(),
-            "card": rect(reveal.card)] as [String: Any],
+            "card": rect(reveal.card), "pageBlur": controller.cardDrawsPageBlur] as [String: Any],
           "chrome": ["urlField": inRoot(chrome.urlField), "urlFieldHovered": chrome.urlFieldHovered, "favorites": inRoot(chrome.favorites),
             "header": inRoot(chrome.header), "headerTitle": inRoot(chrome.headerTitle),
             "headerTitleBaseline": chrome.headerTitleBaseline.map { Double(root.convert(CGPoint(x: 0, y: $0), from: sidebar).y) } ?? NSNull(),
