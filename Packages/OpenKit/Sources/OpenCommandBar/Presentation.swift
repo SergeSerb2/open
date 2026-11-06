@@ -9,6 +9,7 @@ public enum CommandBarIcon: Sendable, Hashable {
     /// An SF Symbol. `plate` draws the 24 pt rounded plate behind it (action rows, F0063 row 4).
     case symbol(String, plate: Bool)
     case emoji(String)
+    case `extension`(String)
     /// A Split View: one cell per pane on a 30 pt plate, side by side or stacked (A0120, CC-13, CC-15).
     case split([CommandBarIcon], vertical: Bool)
 }
@@ -33,12 +34,13 @@ public struct CommandBarRow: Sendable, Hashable, Identifiable {
     public var icon: CommandBarIcon
     public var accessory: CommandBarAccessory
     /// A Split View row's pane titles, drawn with a thin rule between them (CC-14). Empty for other rows.
+    public var boldRanges: [Range<Int>]
     public var titleParts: [String]
 
     public init(id: String, kind: SuggestionKind, title: String, subtitle: String = "", icon: CommandBarIcon,
-                accessory: CommandBarAccessory = .none, titleParts: [String] = []) {
+                accessory: CommandBarAccessory = .none, titleParts: [String] = [], boldRanges: [Range<Int>] = []) {
         self.id = id; self.kind = kind; self.title = title; self.subtitle = subtitle; self.icon = icon; self.accessory = accessory
-        self.titleParts = titleParts
+        self.titleParts = titleParts; self.boldRanges = boldRanges
     }
 }
 
@@ -59,10 +61,11 @@ public struct CommandBarInput: Sendable, Hashable {
     public var chip: SiteChip?
     public var trailing: CommandBarTrailing
 
-    /// The scope chip: its title only, no icon (CC-41).
+    /// Site Search has no icon (CC-41); an extension scope includes its 16 pt icon (§3.14).
     public struct SiteChip: Sendable, Hashable {
         public var name: String
-        public init(name: String) { self.name = name }
+        public var extensionID: String?
+        public init(name: String, extensionID: String? = nil) { self.name = name; self.extensionID = extensionID }
     }
 
     public init(placeholder: String, leadingIcon: CommandBarIcon, chip: SiteChip? = nil, trailing: CommandBarTrailing = .info) {
@@ -75,6 +78,8 @@ public enum CommandBarText {
     public static let placeholder = "Search or Enter URL…"
     /// The placeholder inside every scope (CC-18, CC-41: S2 18/0016 shows "Search…" with a Site Search chip).
     public static let scopePlaceholder = "Search…"
+    // guess (child): the named extension placeholder follows §3.14’s helper signature.
+    public static func siteSearchPlaceholder(_ name: String) -> String { "Search \(name)…" }
     /// Scope chip titles: "Actions" is Arc's (CC-17); "Tabs" is a guess.
     public static let actionsScope = "Actions"
     public static let tabsScope = "Tabs"
@@ -141,13 +146,19 @@ enum RowPresentation {
         case .action:
             let keys = KeycapText.split(s.subtitle)
             return CommandBarRow(id: s.id, kind: s.kind, title: s.title, icon: icon, accessory: keys.isEmpty ? .none : .keys(keys))
-        case .siteSearchHint:
+        case .extensionAction:
+            return CommandBarRow(id: s.id, kind: s.kind, title: s.title, subtitle: s.subtitle, icon: icon,
+                                 accessory: s.shortcutKeys.isEmpty ? .none : .keys(s.shortcutKeys))
+        case .extensionSuggestion:
+            return CommandBarRow(id: s.id, kind: s.kind, title: s.title, subtitle: s.subtitle, icon: icon, boldRanges: s.boldRanges)
+        case .siteSearchHint, .extensionKeywordHint:
             return CommandBarRow(id: s.id, kind: s.kind, title: s.title, subtitle: s.subtitle, icon: icon)
         }
     }
 
     static func paneIcon(_ hint: IconHint?, url: URL) -> CommandBarIcon {
         switch hint {
+        case .extension(let id): return .extension(id)
         case .emoji(let e): return .emoji(e)
         case .symbol(let name): return .symbol(name, plate: false)
         case .favicon(let u): return .favicon(u, fallback: "globe")
@@ -157,6 +168,8 @@ enum RowPresentation {
 
     static func icon(for s: Suggestion) -> CommandBarIcon {
         switch s.kind {
+        case .extensionAction, .extensionKeywordHint, .extensionSuggestion:
+            return s.extensionID.map { .extension($0) } ?? .symbol("puzzlepiece.extension", plate: false)
         case .search, .searchSuggestion, .siteSearchHint: return .symbol("magnifyingglass", plate: false)
         case .calculator: return .symbol("equal", plate: true)
         case .action:
@@ -167,6 +180,7 @@ enum RowPresentation {
             return .symbol("magnifyingglass", plate: false)
         case .navigate, .history, .switchToTab:
             switch s.icon {
+            case .extension(let id): return .extension(id)
             case .emoji(let e): return .emoji(e)
             case .symbol(let name): return .symbol(name, plate: false)
             case .favicon(let u): return .favicon(u, fallback: "globe")
