@@ -10,6 +10,7 @@
   import OpenSettings
   import OpenDesign
   import OpenExtensionsUI
+  import OpenSpaceEditor
   import Synchronization
 
   /// Executes automation commands (docs/automation.md) on the main actor.
@@ -53,7 +54,7 @@
         else { throw Failure(message: "expected {\"cmd\": …}") }
         id = request["id"] ?? NSNull()
         let args = request["args"] as? [String: Any] ?? [:]
-        inputCommand = cmd == "key" || cmd == "focus" || cmd == "little-open-link-click" || (cmd == "window-focus" && args["activate"] as? Bool == true)
+        inputCommand = cmd == "editor-act" || cmd == "key" || cmd == "focus" || cmd == "little-open-link-click" || (cmd == "window-focus" && args["activate"] as? Bool == true)
         if ["space-manager-drag", "sidebar-click", "sidebar-key", "hover"].contains(cmd) { inputCommand = true }
         if inputCommand { nativeInputStart = 0 }
         let result = try await run(cmd, args)
@@ -103,6 +104,9 @@
       case _ where Self.mediaCommands.contains(cmd): return try await runMediaCommand(cmd, a)
       case _ where Self.notificationCommands.contains(cmd): return try await runNotificationCommand(cmd, a)
       case _ where Self.sleepCommands.contains(cmd): return try await runSleepCommand(cmd, a)
+      case "editor-open", "editor-act", "editor-close", "editor-state":
+        if cmd == "editor-act" { nativeInputStart = ProcessInfo.processInfo.systemUptime }
+        return try runEditorCommand(cmd, a)
       case "ping":
         return [
           "pid": Int(getpid()), "chromium": OEEngine.shared.chromiumVersion, "cef": OEEngine.shared.cefVersion,
@@ -526,7 +530,7 @@
         return app.model.spaces.map { space in
           [
             "id": space.id.description, "title": space.title ?? "", "profile": space.profileID.description, "focused": space.id == w.focusedSpace?.id,
-            "pinned": space.pinned.count, "today": space.today.count,
+            "pinned": space.pinned.count, "today": space.today.count, "icon": describeIcon(space.icon),
           ] as [String: Any]
         }
       case "space-create":
@@ -1250,6 +1254,7 @@
         "profile": w.profile(for: tab.id)?.id.description ?? "", "space": w.space(for: tab.id)?.id.description ?? "",
         "hasWebContent": tab.live.hasWebContent, "loaded": w.contents[tab.id] != nil,
       ]
+      d["iconOverride"] = describeIcon(tab.iconOverride)
       d["rowFaviconSource"] = w.controller?.sidebar.drawnFaviconSource(tabID: tab.id) ?? ""
       d["rowFaviconHash"] = faviconHash(w.controller?.sidebar.drawnFavicon(tabID: tab.id))
       d["faviconReportsCompleted"] = app.stores.sidebarFavicons?.completedReports ?? 0
@@ -1561,10 +1566,18 @@
       return String(arr.dropFirst().dropLast())
     }
 
+    private func describeIcon(_ icon: SpaceIcon?) -> Any {
+      guard let icon else { return NSNull() }
+      switch icon {
+      case .emoji(let value): return ["type": "emoji", "value": value]
+      case .named(let value): return ["type": "named", "value": value]
+      case .symbol(let value): return ["type": "symbol", "value": value]
+      }
+    }
     private func describeNode(_ node: SidebarNode) -> [String: Any] {
       switch node {
       case .tab(let tab): return ["id": tab.id.description, "kind": "tab", "url": tab.url.absoluteString, "title": tab.displayTitle, "loaded": tab.live.hasWebContent]
-      case .folder(let folder): return ["id": folder.id.description, "kind": "folder", "title": folder.title, "expanded": folder.isExpanded, "peekedChildID": folder.peekedChildID?.description ?? "", "children": folder.children.map(describeNode)]
+      case .folder(let folder): return ["id": folder.id.description, "kind": "folder", "title": folder.title, "expanded": folder.isExpanded, "iconOverride": describeIcon(folder.iconOverride), "peekedChildID": folder.peekedChildID?.description ?? "", "children": folder.children.map(describeNode)]
       case .split(let split): return ["id": split.id.description, "kind": "split", "children": split.panes.map { describeNode(.tab($0)) }]
       }
     }
@@ -1970,6 +1983,11 @@
         return ["path": path, "method": "devtools"]
       }
       if a["window"] as? String == "library", app.settingsPresenter.libraryPresenter?.window == nil { throw Failure(message: "no Library window") }
+      if a["window"] as? String == "editor" {
+        guard let panel = w?.iconPicker?.panel, panel.isVisible else { throw Failure(message: "no icon picker") }
+        let method = try await WindowSnapshot.capture(panel, to: url)
+        return ["path": path, "method": method]
+      }
       let number = a["window"] as? String == "library" ? app.settingsPresenter.libraryPresenter?.window?.windowNumber : a["window"] as? Int
       guard let target = number.flatMap({ n in NSApp.windows.first { $0.windowNumber == n } }) ?? w?.window
       else { throw Failure(message: "no window") }

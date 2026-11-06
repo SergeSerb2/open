@@ -101,6 +101,10 @@ enum RenderCLI {
         case "compat-range-check": EditorChecks.compatibilityRange()
         case "window": try window(rest)
         case "editor": try EditorScene.render(rest)
+        case "picker": try PickerScene.render(rest)
+        case "picker-check":
+            try PickerScene.check()
+            if Checks.failed > 0 { throw CLIError(description: "picker checks failed") }
         case "compare":
             if value(rest, "--spec") == "session2-pad" { try SessionTwoPadCompare.run(rest) }
             else if value(rest, "--spec") == "session2-editor" { try SessionTwoCompare.run(rest) }

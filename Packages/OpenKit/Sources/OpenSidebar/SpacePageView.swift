@@ -1148,6 +1148,7 @@ final class SpaceHeaderView: NSView {
     private let title = TextLabel()
     var displayedTitle: String { title.text() }
     private let icon = SpaceIconView()
+    var iconFrameInWindow: CGRect { icon.convert(icon.bounds, to: nil) }
     let chevron = PlateButton(glyph: .disclosureDown)
     let more = PlateButton(glyph: .spaceMore)
     var pointerInside = false { didSet { if pointerInside != oldValue { needsDisplay = true; needsLayout = true } } }
