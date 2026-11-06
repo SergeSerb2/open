@@ -267,44 +267,54 @@ private final class FindFieldEditor: NSTextView {
   }
 }
 
-/// A bar-sized pane overlay. Parent frame notifications keep it anchored
-/// without a page-sized backing surface, timers, or a display link.
+/// A bar-sized overlay anchored inside the actual page viewport. Frame/bounds
+/// notifications follow pane chrome, toolbar and live resize without idle work.
 @MainActor
 final class FindPaneOverlay: FindBarView {
   var bar: FindBarView { self }
-  private var parentObserver: (any NSObjectProtocol)?
-  var topInset: CGFloat = 10 { didSet { if topInset != oldValue { updatePlacement() } } }
+  private var geometryObservers: [any NSObjectProtocol] = []
+  private(set) weak var viewport: NSView?
   override var isHidden: Bool {
-    didSet { if isHidden { stopObserving() } else { observeParent(); updatePlacement() } }
+    didSet { if isHidden { stopObserving() } else { observeGeometry(); updatePlacement() } }
   }
   override init(frame: NSRect) {
     super.init(frame: frame)
-    // Resolve the manual control frames before joining the window's layout tree.
+    // Resolve manual control frames before joining the window's layout tree.
     layoutSubtreeIfNeeded()
   }
   @available(*, unavailable) required init?(coder: NSCoder) { fatalError() }
-  isolated deinit { if let parentObserver { NotificationCenter.default.removeObserver(parentObserver) } }
+  isolated deinit { for observer in geometryObservers { NotificationCenter.default.removeObserver(observer) } }
+  func setViewport(_ view: NSView) {
+    guard viewport !== view else { return }
+    stopObserving(); viewport = view; observeGeometry(); updatePlacement()
+  }
   override func viewDidMoveToSuperview() {
-    super.viewDidMoveToSuperview(); stopObserving(); observeParent(); updatePlacement()
+    super.viewDidMoveToSuperview(); stopObserving(); observeGeometry(); updatePlacement()
   }
   private func stopObserving() {
-    if let parentObserver { NotificationCenter.default.removeObserver(parentObserver); self.parentObserver = nil }
+    for observer in geometryObservers { NotificationCenter.default.removeObserver(observer) }
+    geometryObservers.removeAll()
   }
-  private func observeParent() {
-    guard parentObserver == nil, !isHidden, let parent = superview else { return }
+  private func observeGeometry() {
+    guard geometryObservers.isEmpty, !isHidden, let parent = superview, let viewport else { return }
     parent.postsFrameChangedNotifications = true
-    parentObserver = NotificationCenter.default.addObserver(forName: NSView.frameDidChangeNotification, object: parent, queue: .main) { [weak self] _ in
-      MainActor.assumeIsolated { self?.updatePlacement() }
+    viewport.postsFrameChangedNotifications = true; viewport.postsBoundsChangedNotifications = true
+    for (name, view) in [(NSView.frameDidChangeNotification, parent), (NSView.frameDidChangeNotification, viewport),
+                         (NSView.boundsDidChangeNotification, viewport)] {
+      geometryObservers.append(NotificationCenter.default.addObserver(forName: name, object: view, queue: .main) { [weak self] _ in
+        MainActor.assumeIsolated { self?.updatePlacement() }
+      })
     }
   }
   func updatePlacement() {
-    guard let parent = superview else { return }
-    let target = Self.placement(in: parent, topInset: topInset)
+    guard let parent = superview, let viewport else { return }
+    let target = Self.placement(in: parent, viewport: viewport)
     if frame != target { frame = target; needsLayout = true }
   }
-  static func placement(in parent: NSView, topInset: CGFloat) -> CGRect {
-    let width = min(300, max(0, parent.bounds.width - 20))
-    let y = parent.isFlipped ? parent.bounds.minY + topInset : parent.bounds.maxY - topInset - 32
-    return CGRect(x: parent.bounds.maxX - 10 - width, y: y, width: width, height: 32)
+  static func placement(in parent: NSView, viewport: NSView) -> CGRect {
+    let area = parent.convert(viewport.bounds, from: viewport)
+    let width = min(300, max(0, area.width - 20))
+    let y = parent.isFlipped ? area.minY + 10 : area.maxY - 10 - 32
+    return CGRect(x: area.maxX - 10 - width, y: y, width: width, height: 32)
   }
 }

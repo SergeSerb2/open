@@ -60,9 +60,28 @@ def run(h, factory, results, tmp):
     def select(tab, element):
         app.call('focus', tab=tab)
         app.eval(tab, 'window.selectFindText(%r)' % element)
-    def rect_ok(p, top=10, width=300):
-        f, area = p['frame'], p['paneFrame']
-        return len(f) == 4 and len(area) == 4 and p['visible'] and abs(f[2]-width)<.1 and f[3] == 32 and abs(area[0]+area[2]-f[0]-f[2]-10)<.1 and abs(area[1]+area[3]-f[1]-f[3]-top)<.1
+    def rect_ok(p, width=None):
+        f, area = p['frame'], p.get('viewportFrame', [])
+        if len(f) != 4 or len(area) != 4: return False
+        expected = max(0, min(300, area[2]-20)) if width is None else width
+        return p['visible'] and abs(f[2]-expected)<.1 and f[3] == 32 and f[0]>=area[0]+10-.1 and f[1]>=area[1]-.1 and abs(area[0]+area[2]-f[0]-f[2]-10)<.1 and abs(area[1]+area[3]-f[1]-f[3]-10)<.1
+    def intersects(a, b):
+        return len(a)==4 and len(b)==4 and min(a[0]+a[2],b[0]+b[2])>max(a[0],b[0]) and min(a[1]+a[3],b[1]+b[3])>max(a[1],b[1])
+    def clear_of_chrome(p):
+        close = p.get('controls', {}).get('close', [])
+        return len(close)==4 and all(not intersects(rect, item.get('frame', []))
+            for item in p.get('chrome', []) if not item.get('hidden', False) for rect in [p['frame'],close])
+    def viewport_close(name, target=None):
+        if target is not None: app.call('focus', tab=target)
+        key('f', ['cmd']); p=pane(target)
+        control=p.get('controls', {}).get('close', [])
+        before=rect_ok(p) and clear_of_chrome(p) and p.get('controls',{}).get('closeHitMatches') is True
+        if len(control)==4:
+            app.call('mouse', action='click', x=control[0]+control[2]/2,
+                     y=app.call('window-state')['frame'][3]-control[1]-control[3]/2)
+        closed=h.wait_until(lambda: not pane(p['tab'])['visible'] and app.call('focus-state')['owner']=='page', timeout=3, step=.05)
+        row(name, before and bool(closed), pane=p, closed=bool(closed), focus=app.call('focus-state'))
+        key('f', ['cmd'])
     try:
         samples = []
         compare = os.environ.get('OPEN_FIND_COMPARE_PREWARM') == '1'
@@ -98,7 +117,7 @@ def run(h, factory, results, tmp):
         row('F01_lazy', all(s['lazy'] for s in samples + cache_samples), state=cold)
         p = pane(tab)
         row('F02_open_focus_placeholder', p['visible'] and p['focused'] and p['placeholder'] == 'Find in page...', pane=p)
-        row('F03_frame', rect_ok(p) and p['radius'] == 5 and p.get('controls',{}).get('closeHitMatches') is True, pane=p)
+        row('F03_frame', rect_ok(p, width=300) and clear_of_chrome(p) and p['radius'] == 5 and p.get('controls',{}).get('closeHitMatches') is True, pane=p)
         load = subprocess.check_output(['uptime'], text=True).strip()
         deadline=1000/120
         def distribution(name, source=samples):
@@ -160,7 +179,7 @@ def run(h, factory, results, tmp):
         app.call('mouse', action='click', x=f[0]+f[2]-16, y=app.call('window-state')['frame'][3]-f[1]-16)
         click_closed=h.wait_until(lambda: not pane(tab)['visible'] and app.call('focus-state')['owner'] == 'page' and app.eval(tab, 'document.hasFocus()'), timeout=3, step=.05)
         key(text='-close'); closed_text=app.eval(tab, "document.getElementById('input').value")
-        row('F13_escape_focus', editing_before_escape and escaped and bool(click_closed) and not pane(tab)['visible'] and not state().get('chromeHidden') and app.call('focus-state')['owner'] == 'page' and closed_text == 'page-typing-close', text=text, closeText=closed_text, closePane=pane(tab), closeFocus=app.call('focus-state'), chromeHidden=state().get('chromeHidden'))
+        row('F13_escape_focus', editing_before_escape and escaped and bool(click_closed) and not pane(tab)['visible'] and not state().get('chromeHidden') and app.call('focus-state')['owner'] == 'page' and closed_text == 'page-typing-close' and rect_ok(p) and clear_of_chrome(p) and p.get('controls',{}).get('closeHitMatches') is True, text=text, closeText=closed_text, closePane=pane(tab), beforeClick=p, closeFocus=app.call('focus-state'), chromeHidden=state().get('chromeHidden'))
         if os.environ.get('OPEN_FIND_FOCUS_ONLY') == '1': return
         for name, element, expected in [('trim_newline', 'lines', 'alpha beta'), ('short', 'seed', 'A short selection'), ('40', 'forty', '1234567890123456789012345678901234567890'), ('41_keeps', 'fortyone', '1234567890123456789012345678901234567890')]:
             select(tab, element); key('f', ['cmd'])
@@ -221,23 +240,38 @@ def run(h, factory, results, tmp):
         app.call('focus', tab=left_id); key('2', ['ctrl','shift']); key('f', ['cmd']); key('a', ['cmd']); key(text='orbit')
         right_id = state().get('focusedTab'); right = settled(right_id, '1/2'); left2 = pane(left_id)
         row('F25_split_focused_only', left_id != right_id and left['query'] == left2['query'] == 'quasar' and left2['total'] == 5 and right['query'] == 'orbit' and right['total'] == 2 and left2['visible'] and right['visible'], left=left2, right=right)
-        # The toolbar is tested on a single pane, at a 50 pt top inset.
+        viewport_close('F33_split_left_viewport_close', left_id)
+        viewport_close('F33_split_right_viewport_close', right_id)
+        # Both toolbar states use a 10 pt inset inside the real page viewport.
         app.call('split'); app.call('select', tab=tab)
         key('f', ['cmd']); key('a', ['cmd']); key(text='quasar'); settled(tab, '1/5')
+        viewport_close('F33_toolbar_off_viewport_close', tab)
         app.call('menu-perform', id='toggle-toolbar'); p = pane(tab)
-        row('F26_toolbar_top_50', rect_ok(p, top=50) and not state().get('chromeHidden'), pane=p, chromeHidden=state().get('chromeHidden'))
+        row('F26_toolbar_viewport', rect_ok(p) and clear_of_chrome(p) and not state().get('chromeHidden'), pane=p, chromeHidden=state().get('chromeHidden'))
+        viewport_close('F33_toolbar_on_viewport_close', tab)
         app.call('menu-perform', id='toggle-toolbar')
         # A narrow split pane shrinks the preferred 300 pt width.
         app.call('window-frame', frame=[100,70,600,760]); app.call('split')
         key('f', ['cmd']); p = pane()
-        expected_width = max(0, min(300, p['paneFrame'][2]-20)) if p['paneFrame'] else 0
-        row('F27_narrow', p['visible'] and expected_width < 300 and rect_ok(p, top=50, width=expected_width), pane=p)
+        expected_width = max(0, min(300, p['viewportFrame'][2]-20)) if p.get('viewportFrame') else 0
+        row('F27_narrow', p['visible'] and expected_width < 300 and rect_ok(p, width=expected_width) and clear_of_chrome(p), pane=p)
+        resizes=[]
+        for width in [640,720,600]:
+            app.call('window-frame', frame=[100,70,width,760])
+            visible=[p for p in state().get('panes',[]) if p['visible']]
+            resizes.append(dict(width=width,panes=visible))
+        row('F34_split_live_resize', all(item['panes'] and all(rect_ok(p) and clear_of_chrome(p) for p in item['panes']) for item in resizes)
+            and len({tuple(item['panes'][0]['frame']) for item in resizes if item['panes']})>1, resizes=resizes)
+        viewport_close('F33_narrow_viewport_close')
         app.call('split'); app.call('window-frame', frame=[100,70,1100,760]); app.call('select', tab=tab)
         # Peek keeps its own bar; Esc closes Find before closing Peek.
         app.call('peek-open', tab=tab, url=origin + '/index.html?peek=1')
         app.call('wait'); peek = app.call('peek-state')['stack'][-1]['content']
         key('f', ['cmd']); key(text='quasar'); p = settled(count='1/5')
-        row('F28_peek', p['visible'] and p['total'] == 5 and p['tab'] not in (tab, other) and rect_ok(p), pane=p)
+        row('F28_peek', p['visible'] and p['total'] == 5 and p['tab'] not in (tab, other) and rect_ok(p) and clear_of_chrome(p), pane=p)
+        viewport_close('F33_peek_viewport_close')
+        old_peek=pane()['frame']; app.call('window-frame', frame=[100,70,1200,800]); resized_peek=pane()
+        row('F34_peek_live_resize', rect_ok(resized_peek) and clear_of_chrome(resized_peek) and old_peek!=resized_peek['frame'], before=old_peek, pane=resized_peek)
         if os.environ.get('OPEN_FIND_FAIL_AT_PEEK') == '1': raise RuntimeError('intentional Find cleanup proof with Peek open')
         key('escape')
         field_escape = not pane()['visible'] and app.call('peek-state')['shown']

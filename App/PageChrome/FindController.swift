@@ -206,13 +206,13 @@ final class FindController {
   }
   func sync(refreshResults: Bool = true) {
     guard let controller = factory.controller else { return }
-    var targets: [ItemID: (NSView, CGFloat)] = [:]
+    var targets: [ItemID: (parent: NSView, viewport: NSView)] = [:]
     for slot in controller.container.slots where !slot.isHidden {
-      targets[slot.tabID] = (slot, slot.paneChrome == nil ? 10 : 50)
+      if let viewport = slot.contentHostView { targets[slot.tabID] = (slot, viewport) }
     }
     if controller.hasPeekController, controller.peekController.isShown,
        let host = controller.peekController.stack.last?.host as? EngineWebContentHost {
-      targets[host.tabID] = (controller.peekController.overlay.panel, 10)
+      targets[host.tabID] = (controller.peekController.overlay.panel, host.view)
       controller.peekController.onPageEscape = { [weak self] in
         guard let self, let id = self.focusedID, self.states[id]?.open == true else { return false }
         self.close(id); return true
@@ -222,13 +222,13 @@ final class FindController {
       guard factory.model.tab(id: id) != nil || factory.hosts[id] != nil else {
         state.overlay?.removeFromSuperview(); states[id] = nil; continue
       }
-      guard state.open, let (parent, top) = targets[id], let page = factory.hosts[id]?.content else {
+      guard state.open, let (parent, viewport) = targets[id], let page = factory.hosts[id]?.content else {
         state.overlay?.removeFromSuperview(); continue
       }
       let creationAt = measuringPresentation ? ProcessInfo.processInfo.systemUptime : 0
       let creatingOverlay = state.overlay == nil
       if creatingOverlay {
-        let overlay = FindPaneOverlay(frame: FindPaneOverlay.placement(in: parent, topInset: top)); state.overlay = overlay
+        let overlay = FindPaneOverlay(frame: FindPaneOverlay.placement(in: parent, viewport: viewport)); state.overlay = overlay
         overlay.bar.onEdit = { [weak self] in self?.edit($0, id: id) }
         overlay.bar.onAction = { [weak self] tag in
           guard let self else { return }
@@ -241,7 +241,7 @@ final class FindController {
       guard let overlay = state.overlay else { continue }
       let attachAt = measuringPresentation ? ProcessInfo.processInfo.systemUptime : 0
       let changed = overlay.superview !== parent || state.page !== page
-      overlay.topInset = top
+      overlay.setViewport(viewport)
       if overlay.superview !== parent { overlay.removeFromSuperview(); parent.addSubview(overlay) }
       state.page = page; overlay.isHidden = false; overlay.updatePlacement()
       if measuringPresentation { syncPhases["attach", default: 0] += (ProcessInfo.processInfo.systemUptime - attachAt) * 1000 }
@@ -359,13 +359,28 @@ final class FindController {
         let rect = view.convert(view.bounds, to: nil)
         return [rect.minX, rect.minY, rect.width, rect.height]
       }
+      let chrome: [[String: Any]] = factory.controller?.container.slots.compactMap { slot in
+        guard let view = slot.paneChrome, !view.isHiddenOrHasHiddenAncestor else { return nil }
+        return ["kind": "paneChrome", "frame": frame(view)]
+      } ?? []
+      // Section 6's strip is inside pane/sidebar chrome. Report its actual
+      // native frame too when present, without importing its future module.
+      func extensionStrips(in view: NSView) -> [[String: Any]] {
+        let own: [[String: Any]] = String(describing: type(of: view)) == "ExtensionStripView"
+          ? [["kind": "extensionStrip", "frame": frame(view), "hidden": view.isHiddenOrHasHiddenAncestor]] : []
+        return own + view.subviews.flatMap { extensionStrips(in: $0) }
+      }
+      let strips = factory.controller.map { extensionStrips(in: $0.contentView) } ?? []
+      let legacy = factory.findOverlappingChrome
+      let exclusions = chrome + strips + (legacy.map { [["kind": "legacyExtensionBar", "frame": frame($0),
+        "hidden": $0.isHiddenOrHasHiddenAncestor]] } ?? [])
       return ["tab": id.description, "visible": state.open && state.overlay?.superview != nil && state.overlay?.isHiddenOrHasHiddenAncestor == false,
         "query": state.query, "countText": bar?.countText ?? "", "active": bar?.active ?? 0, "total": bar?.total ?? 0,
         "notFound": bar?.notFound ?? false, "navigationVisible": bar?.navigationVisible ?? false,
         "separatorVisible": bar?.separatorVisible ?? false, "frame": frame(bar), "paneFrame": frame(state.overlay?.superview),
-        "topInset": state.overlay?.topInset ?? 10, "focused": bar?.owns(factory.window?.firstResponder) ?? false,
+        "viewportFrame": frame(state.overlay?.viewport), "topInset": 10, "focused": bar?.owns(factory.window?.firstResponder) ?? false,
         "placeholder": bar?.field.placeholderString ?? "", "radius": bar?.layer?.cornerRadius ?? 0,
-        "controls": bar?.controlGeometry ?? [:],
+        "controls": bar?.controlGeometry ?? [:], "chrome": exclusions,
         "querySelection": (bar?.field.currentEditor() as? NSTextView).map { [$0.selectedRange().location, $0.selectedRange().length] } ?? [],
         "layouts": bar?.layoutCount ?? 0]
     }
