@@ -21,7 +21,7 @@ enum PageTools {
   static func handles(_ id: String) -> Bool { pageIDs.contains(id) || appIDs.contains(id) }
 
   /// Same defaults key as OpenScripting's `ScriptHost.allowJavaScriptFromAppleEventsKey`
-  /// (the App does not link OpenScripting). Default false, Chromium's default (T-13, Q3).
+  /// (the shared value crosses the App scripting adapter). Default false (T-13, Q3).
   static let allowJavaScriptFromAppleEventsKey = "open.developer.allowJavaScriptFromAppleEvents"
 
   /// Per-site HTTP cache clearing is Site Control E2, which needs a fork patch

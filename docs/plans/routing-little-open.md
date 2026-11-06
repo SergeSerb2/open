@@ -1181,12 +1181,13 @@ public final class LittleOpenCoordinator: LinkDestinationExecutor {
     public private(set) var sessions: [LittleOpenSession]
 
     public func open(url: URL, profileHint: ProfileID?)
-    public func openBlank(focusURLField: Bool)
+    public func openBlank(focusURLField: Bool, keyDownTimestamp: TimeInterval? = nil)
     public func moveToSpace(sessionID: WindowID, spaceID: SpaceID)
     public func close(sessionID: WindowID, archiveReason: ArchiveReason?)
     public func showAll()
     public func closeAll()
     @discardableResult public func archiveExpired(now: Date) -> Int
+    public func nextExpiry(now: Date) -> Date?
 }
 ```
 
@@ -1259,11 +1260,11 @@ window id, S2 19/0003 → 0011).
 | Frame model | Anchor by the top-right corner, like Arc's `preferredFrame.anchor.topRight` (LA-S2-6). A user move or resize applies to that window only. No autosave name in v1: new windows always use the fixed frames above. | anchor measured; per-window only guess (Arc's `LittleBrowserWindow_size` value is still unknown, §14 Q2) |
 | Minimum size | Page state 360 × 240. The bar state is not resizable. | Plan choice |
 | Style | `.titled, .closable, .miniaturizable, .resizable, .fullSizeContentView`; transparent title bar; `titleVisibility = .hidden`. Bar state: the three standard buttons hidden, not resizable, movable by background. Page state: the buttons show at `[9 / 32 / 55, 16, 16, 16]` (3 pt left of the main window's 12 / 35 / 58). No sidebar, no tab strip, no Space switcher. | measured button frames (S2 19/0011); mechanism guess; LA-1 |
-| Title bar (page state) | 47 pt. Measured fill (sRGB, S2 19/0011, default dark theme): ≈ `#202335` … `#2F2B38`, varying by about ±8 levels across the bar, so it is probably a translucent material over the window background (**guess**). Which Space theme colors it is not known (both test Spaces had the default theme): use the theme of the Space named in the pill (guess). | height measured (page starts at y 47); fill range measured away from text and corners |
-| URL capsule | `[84, 8, W − 289, 31]` (right edge W − 205), radius 8 continuous (visual). Measured fill ≈ `#383948` … `#42414D` (sRGB, S2 19/0011, away from text), lighter than the bar; probably translucent like the bar (**guess**). It holds the Profile chip at its left, the host in the middle, and the copy-link button at its right. A click on the host opens the command bar over this window in `.editCurrentURL` mode, panel width min(766, W − 40) (guess: Cmd+L does the same). | frame measured (pixel bounds on S2 19/0011); click guess |
+| Title bar (page state) | 47 pt. Measured fill (sRGB, S2 19/0011, default dark theme): ≈ `#202335` … `#2F2B38`, varying by about ±8 levels across the bar, so it is probably a translucent material over the window background (**guess**). Which Space theme colors it is not known (both test Spaces had the default theme): v1 lead decision (2026-11-05): fixed solid `#272A37`, no Space tint and no visual-effect view (guess). | height measured (page starts at y 47); fill range measured away from text and corners |
+| URL capsule | `[84, 8, W − 289, 31]` (right edge W − 205), radius 8 continuous (visual). Measured fill ≈ `#383948` … `#42414D` (sRGB, S2 19/0011, away from text), lighter than the bar; probably translucent like the bar (**guess**). v1 lead decision (2026-11-05): solid `#3D3D4A`. It holds the Profile chip at its left, the host in the middle, and the copy-link button at its right. A click on the host opens the command bar over this window in `.editCurrentURL` mode, panel width min(766, W − 40) (guess: Cmd+L does the same). | frame measured (pixel bounds on S2 19/0011); click guess |
 | Profile chip | Profile icon 14 pt at `[97, 17]` and the Profile name (13 Medium, white ≈ 0.8) at x 114, inside the capsule; shown only when two or more Profiles exist (guess, like the Space Manager chip). Click: the profile menu (LA-7, §9.2). | frames measured (AX `littleBrowserProfileIndicator`); visibility rule and click guess |
 | Host | The page host without `www.`, 13 Regular, centered between the chip's right end and the copy-link button (`[497.5, 15.5, 129, 16]` at W 1185, center x 562). | frame measured; centering rule fitted |
-| Copy-link button | `[W − 228, 16, 16, 16]`, SF `link` glyph; click copies the URL and shows the "Copied Current URL" toast in this window. | frame measured; action and toast guess (same as the main window) |
+| Copy-link button | `[W − 228, 16, 16, 16]`, SF `link` glyph; click copies the URL; the library shows no toast (lead decision 2026-11-05). | frame measured; action and toast guess (same as the main window) |
 | "Open in" pill | Dark capsule `[W − 196, 8, 188, 30]`, opaque fill `#050627` (sRGB, uniform across the pill, S2 19/0011). Left part: a button "Open in **\<Space\>**" + keycap "⌘O" (`[W − 191, 15, 148, 17]`); a 1 pt divider; right part: a chevron button `[W − 29, 15, 16, 16]`, tooltip "More Spaces". `<Space>` = the most recently focused Space of the window's Profile (guess: it showed the main window's focused Space). The button and ⌘O run §9.4 with that Space. | frames and text measured (S2 19/0011, 0025); Space choice guess |
 | Space picker | The chevron opens a dark popover (≈ 244 wide) anchored at the window's top-right: a "Search Spaces…" field (focused; typing filters by Space title), then every Space of the window's Profile with its icon on a colored rounded square, the current Space first and highlighted, rows 46 pt apart. Return or a click runs §9.4 with that Space. Esc closes the popover. | layout measured (S2 19/0023); filter, Profile scope, and keys guess |
 | Back, forward, reload | No buttons. ⌘[ / ⌘] / ⌘R work through the key router (guess: not captured). | absence measured |
@@ -1354,11 +1355,13 @@ fire; the guard is still required because the order is not guaranteed.
 
 ### 9.6 Auto-archive sweeper (LA-8)
 
-- Where: the coordinator owns a `Timer` (60 s, main run loop, tolerant 10 s)
-  started on init, invalidated on deinit. Each fire calls
-  `archiveExpired(now: Date())`. Also call it once at launch after sessions
-  restore (v1 restores none — the call is a no-op that keeps the seam).
-- Rule: for each session where `now - lastActiveAt` exceeds its **profile's**
+- Lead decision 2026-11-05: the coordinator has no polling timer. The App's
+  single `ExpirySweeper` drives `archiveExpired(now:)`, including at launch.
+  `nextExpiry(now:)` returns the earliest `lastActiveAt + Profile interval`,
+  or nil for no expiring sessions (Never is excluded). The App uses `onChange`
+  to reschedule after session creation, close, activity and Profile changes.
+  Changing the Profile policy also requires the App to reschedule.
+- Rule: for each session where `now - lastActiveAt` reaches its **profile's**
   `settings.littleOpenAutoArchiveAfter.seconds` (nil seconds = Never =
   skip), close with `archiveReason: .autoArchived`. Process expirations in
   `lastActiveAt` ascending order. Return the count.
@@ -1805,7 +1808,24 @@ Acceptance:
 | L4 | A committed navigation turns the window into the page state at 1185 × 832 with the top-right corner unchanged; the web content frame is `[0, 47, W, H − 47]`; LA-S2-4 element frames within 0.5 pt at W 1185 and at W 800. |
 | L5 | The pill shows the most recent Space's title; pressing it (or `open-in-current-space`) calls `moveToSpace` with that Space; the chevron opens the picker; typing filters rows; Return calls `moveToSpace` with the highlighted Space. |
 | L6 | Two `openBlank` calls with the same key-down timestamp make one window; two with timestamps 0.2 s apart make two. |
-| L7 | Bar intents (table in §9.3) with a fake host: `.open` and `.search` load in this window and ignore modifiers; `.switchToTab` calls `onSwitchToTab` once and closes the window; `.runAction` calls `performCommand` once; `.copy` writes the pasteboard; `.dismissed(.escape)` and the "x" close a bar-state window and only close the overlay bar in the page state. |
+| L7 | Bar intents (table in §9.3) with a fake host: `.open` and `.search` load in this window and ignore modifiers; `.switchToTab` calls `onSwitchToTab` once and closes the window; `.runAction` calls `performCommand` once; `.copy` writes the pasteboard. Non-navigation selections restore the focused embedded bar if the session survives in bar state; an action callback can close the session without restoring it. `.dismissed(.escape)` and the "x" close a bar-state window and only close the overlay bar in the page state. |
+| L8 | `nextExpiry(now:)` chooses the earliest per-Profile deadline, nil for Never/no sessions; activity sends `onChange`; exact-deadline expiry writes `.autoArchived`, `littleOpen:<id>`, nil Space and the supplied timestamp to the real SQLite ArchiveStore. |
+
+Step 6a verification log (2026-11-05): library implementation on
+`s9/little-open-library`. `features-render check --only little-open` exercises
+real unordered AppKit windows, the embedded/overlay command bar, picker input,
+model moves, and a temporary SQLite ArchiveStore. New PNGs use synthetic data
+under `Packages/OpenKit/FeatureRenders/little-open/`. Final counts, negative
+proofs and the complete gate receipt are recorded there in `verification.md`.
+The App still shows `showLittleOpenStub`; Step 6b owns App wiring, global/menu
+key delivery, the App sweeper, and B9/B10 native-window comparison. No engine
+build, Arc launch, desktop input or unit tests are part of Step 6a.
+PR review added four L7 flows for blank calculator/action selections, later
+navigation and an action callback that closes the session. The old source
+fails the two control-restoration rows; the corrected library passes all
+51 Little Open rows in the 564-row features flow, plus 19 idle rows. The
+post-review Debug App build also passes. The receipt distinguishes the full
+pre-review gate from the focused post-review verification.
 
 Then `tools/verify-all.sh` and the B10 compare once the App can show the window.
 
