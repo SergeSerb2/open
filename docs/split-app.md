@@ -46,11 +46,11 @@ The idle observer runs only inside the suite-owned first App. It starts before p
 
 Approved in this task on 2026-11-05, subject to the main comparison and negative proof below. The old endpoint waited for a JavaScript query to return after the renderer was already visible. Its retained branch single/split p95 values are **14.277/18.992 ms**, labelled **old endpoint, diagnostic only** (`switch-ack-overhead.json`).
 
-The new endpoint is the maximum of native selection/layout through the existing `CATransaction.flush()` return and the first `requestAnimationFrame` timestamp after a fresh `visibilitychange` in **every** shown pane. The last pane wins. The renderer timestamp uses `performance.timeOrigin`; the probe checks its epoch against native time. The 16 ms p95 **target remains NOT MET consistently**; an earlier valid new-engine quiet run reached 17.710 ms at load1 10.09. The historical budget-decision fixture is labelled separately below. The approved gate is branch p95 ≤ interleaved main p95 + 1 ms, with an absolute 25 ms ceiling, on both single→single and single→split paths. Physical presentation is out of scope. This is the approved renderer frame endpoint, not a screenshot/monitor measurement. See [High Resolution Time](https://www.w3.org/TR/hr-time-3/) and [page visibility](https://html.spec.whatwg.org/multipage/interaction.html#page-visibility).
+The new endpoint is the maximum of native selection/layout through the existing `CATransaction.flush()` return and the first `requestAnimationFrame` timestamp after a fresh `visibilitychange` in **every** shown pane. The last pane wins. The renderer timestamp uses `performance.timeOrigin`; the probe checks its epoch against native time. The 16 ms p95 **target remains NOT MET consistently**; an earlier valid 7b490905-engine quiet run reached 17.710 ms at load1 10.09. The historical budget-decision fixture is labelled separately below. The approved gate is branch p95 ≤ interleaved main p95 + 1 ms, with an absolute 25 ms ceiling, on both single→single and single→split paths. Physical presentation is out of scope. This is the approved renderer frame endpoint, not a screenshot/monitor measurement. See [High Resolution Time](https://www.w3.org/TR/hr-time-3/) and [page visibility](https://html.spec.whatwg.org/multipage/interaction.html#page-visibility).
 
 The native endpoint does not add an explicit CA transaction or a completion block. A diagnostic observer did so and waited for animations: main single/split p95 **233.392/242.181 ms**, branch **266.130/270.870 ms**, across three interleaved pairs. Those rejected samples stay in `app-paired-animation-end.json`. Apple's [completion-block documentation](https://developer.apple.com/documentation/quartzcore/catransaction/setcompletionblock%28_%3A%29) defines that callback as animation completion. The diagnostic motion probe compares ordinary selections with this added transaction and records layer keys/durations to explain the extra time; it does not count as root-tab selection acceptance.
 
-`tools/verification/split-app-speed.py` interleaves main, branch, main, branch, main, branch under one quiet/on-screen session. Each process has fresh data and 40 samples per path. Every sample and query-return diagnostic is retained. The branch must meet the relative main + 1 ms gate and absolute 25 ms ceiling on both paths. The standalone `split` row enforces the ceiling and reports the 16 ms target; the separate interleaved tool enforces the relative gate. Main is an archive of `be4f75ab` with only the identical benchmark observer and one automation dispatch hook; its production selection, container and chrome sources match the commit byte for byte (`timing-main-manifest.json`). Both locks use `lockf -k`. The quiet lock is acquired before the on-screen lock, using the priority flag while waiting. Before launching a timing receipt, the runner waits for load1 ≤12; no measured sample is discarded.
+`tools/verification/split-app-speed.py` interleaves main, branch, main, branch, main, branch under one quiet/on-screen session. Each process has fresh data and 40 samples per path. Every sample and query-return diagnostic is retained. The branch must meet the relative main + 1 ms gate and absolute 25 ms ceiling on both paths. The standalone `split` row enforces the ceiling and reports the 16 ms target; the separate interleaved tool enforces the relative gate. Main is an archive of `ffcf4649` with only the identical benchmark observer and one automation dispatch hook; its production selection, container and chrome sources match the commit byte for byte (`timing-main-manifest.json`). Both locks use `lockf -k`. The quiet lock is acquired before the on-screen lock, using the priority flag while waiting. Before launching a timing receipt, the runner waits for load1 ≤12; no measured sample is discarded.
 
 The first `ebcf08d2` comparison failed the nominal single relative gate: main/branch p95 19.151/20.448 ms (split 29.083/24.743 ms). Its three-tab setup selected a split pane ID as the single target. That showed one page but was not a selectable root single row. All earlier paired results are therefore diagnostic for that fixture, including the historical budget-decision numbers. The final comparison uses four tabs: two root singles disjoint from a separate two-pane split, asserted through the actual sidebar tree. All earlier samples remain labelled superseded; no threshold changes.
 
@@ -74,11 +74,11 @@ The unchanged 1,000-row native sidebar workload runs from base and branch binari
 | Receipt | Main p95 ms | Branch p95 ms | Median change | Load range (1/5/15) | Result |
 |---|---|---|---|---|---|
 | Initial | 4.12/5.20/3.01 | 4.32/3.34/5.89 | 4.12→4.32, +4.85% | 10.96–11.59 / 11.72–11.86 / 11.28–11.33 | PASS |
-| Final, persistent quiet lock and literal uptime | 1.39/1.50/1.89 | 1.48/1.64/2.05 | 1.50→1.64, +9.33% | 8.79–10.09 / 8.96–9.23 / 10.70–10.79 | raw gate PASS; machine-noise ruling retained |
+| Final, persistent quiet lock and literal uptime | 1.35/1.32/1.32 | 1.32/1.51/1.30 | 1.32→1.32, +0.00% | 7.22–7.76 / 7.46–7.57 / 8.50–8.53 | raw gate PASS; machine-noise ruling retained |
 
 Raw receipts are `sidebar-speed.json` and `sidebar-final.json`. No sidebar rendering work is added.
 
-Lead ruling (2026-11-05 23:48 Vancouver): **machine noise, not a branch regression**. The unchanged ±10% gate is retained. The two identical-main controls measured 2.75→3.77 ms (+37.09%, load ranges 7.32–7.91 / 8.63–8.79 / 12.44–12.54) and 2.30→1.64 ms (−28.70%, load ranges 7.48–8.08 / 11.22–11.28 / 13.12–13.13). The earlier actual branch comparison was 2.65→3.64 ms (+37.36%). All control samples and loads remain in the artifact. The current same-main-binary control is 4.49→4.11 ms (-8.46%), raw PASS; the current branch comparison is 1.50→1.64 ms (+9.33%), raw PASS. No threshold, sample-selection rule or benchmark code was tuned.
+Lead ruling (2026-11-05 23:48 Vancouver): **machine noise, not a branch regression**. The unchanged ±10% gate is retained. The two identical-main controls measured 2.75→3.77 ms (+37.09%, load ranges 7.32–7.91 / 8.63–8.79 / 12.44–12.54) and 2.30→1.64 ms (−28.70%, load ranges 7.48–8.08 / 11.22–11.28 / 13.12–13.13). The earlier actual branch comparison was 2.65→3.64 ms (+37.36%). All control samples and loads remain in the artifact. The current same-main-binary control is 1.61→1.34 ms (-16.77%), raw FAIL; the current branch comparison is 1.32→1.32 ms (+0.00%), raw PASS. No threshold, sample-selection rule or benchmark code was tuned.
 
 ## Negative proofs
 
@@ -104,21 +104,21 @@ Earlier instrumented latency runs accidentally re-injected a startup-armed idle 
 
 ## Final interleaved receipt (1× display)
 
-Main is `be4f75ab`, including Downloads, extensions UI, native dialogs and Little Open App. The branch includes this main commit. The fixture uses two root single rows disjoint from a two-pane split, checked through the actual sidebar tree. The approved relative/25 ms gate result is **FAIL: single-tab relative limit**. The 16 ms target remains open across tested loads; the earlier full acceptance run reached 16.581 ms. Physical presentation is out of scope. All synthetic samples, loads and motion records, including the earlier accepted `ebcf08d2` comparison, remain in [the committed artifact](split-app-timings.json).
+Main is `ffcf4649`, including Downloads, extensions UI, native dialogs and Little Open App. The branch includes this main commit. The fixture uses two root single rows disjoint from a two-pane split, checked through the actual sidebar tree. The approved relative/25 ms gate result is **PASS**. The 16 ms target remains open across tested loads; the earlier full acceptance run reached 16.581 ms. Physical presentation is out of scope. All synthetic samples, loads and motion records, including the earlier accepted `ebcf08d2` comparison, remain in [the committed artifact](split-app-timings.json).
 
 | Revision | Single median / p95 ms | Split median / p95 ms | Old query p95 single / split ms | Native p95 single / split ms | Renderer p95 single / split ms |
 |---|---:|---:|---:|---:|---:|
-| main | 6.184 / 9.715 | 12.609 / 17.924 | 9.246 / 16.825 | 6.766 / 13.408 | 9.715 / 17.924 |
-| branch | 6.330 / 10.848 | 7.843 / 11.985 | 9.026 / 11.118 | 6.874 / 8.364 | 10.848 / 11.985 |
+| main | 5.711 / 7.652 | 12.105 / 14.736 | 10.227 / 14.888 | 5.885 / 11.996 | 7.652 / 14.736 |
+| branch | 5.509 / 7.774 | 7.189 / 10.060 | 7.776 / 10.188 | 5.450 / 7.008 | 7.774 / 10.060 |
 
 | Pair | Revision | Single p95 ms | Split p95 ms | Load before → after (1/5/15) |
 |---|---|---:|---:|---|
-| 1 | main | 6.934 | 13.549 | 13.49/12.85/12.46 → 12.68/12.69/12.41 |
-| 1 | branch | 7.235 | 8.026 | 12.68/12.69/12.41 → 12.46/12.64/12.40 |
-| 2 | main | 8.989 | 14.850 | 12.46/12.64/12.40 → 13.71/12.90/12.49 |
-| 2 | branch | 9.650 | 10.239 | 14.37/13.05/12.54 → 13.46/12.88/12.49 |
-| 3 | main | 9.857 | 17.966 | 13.46/12.88/12.49 → 13.02/12.80/12.46 |
-| 3 | branch | 12.142 | 12.962 | 13.02/12.80/12.46 → 11.64/12.51/12.36 |
+| 1 | main | 7.875 | 14.890 | 7.03/7.38/8.52 → 7.67/7.51/8.56 |
+| 1 | branch | 7.774 | 10.101 | 7.67/7.51/8.56 → 8.25/7.63/8.60 |
+| 2 | main | 7.296 | 13.730 | 8.25/7.63/8.60 → 7.99/7.59/8.58 |
+| 2 | branch | 7.940 | 9.615 | 8.39/7.68/8.60 → 8.12/7.63/8.58 |
+| 3 | main | 7.652 | 25.640 | 8.12/7.63/8.58 → 7.71/7.56/8.55 |
+| 3 | branch | 7.307 | 8.354 | 7.71/7.56/8.55 → 7.89/7.60/8.56 |
 
 All three ordinary/wrapped motion cohorts have no independent ring animation. Existing changed-frame slot motion keeps its 0.22-second duration; unchanged cached frames need no new animation.
 
@@ -135,40 +135,40 @@ All three ordinary/wrapped motion cohorts have no independent ring animation. Ex
 | `numbering` Chrome Release | 3 PASS; cleanup PASS |
 | `commandbar` Chrome Release | 63 PASS; cleanup PASS |
 
-The complete quiet window rerun has cold/warm sidebar-drawn medians 410/410 ms and first-paint medians 679/695 ms at load 6.24/8.91/11.17. Both launch rows fail their original budgets. Classification: **known main FAIL under 4h**. The final interleaved startup comparison against main `be4f75ab` has strict no-slower result **PASS**, load qualification **PASS**. No startup fix is claimed. All four 1× window pixel rows pass.
+The complete quiet window rerun has cold/warm sidebar-drawn medians 320/323 ms and first-paint medians 538/538 ms at load 10.95/7.13/7.89. Both launch rows fail their original budgets. Classification: **known main FAIL under 4h**. The final interleaved startup comparison against main `ffcf4649` has strict no-slower result **PASS**, load qualification **PASS**. No startup fix is claimed. All four 1× window pixel rows pass.
 
-The earlier main/branch/main/branch launch comparison (main e4d40ce0, branch d5d2666a, same engine) FAILED: pooled cold sidebar 328→348 ms, warm 332.5→343 ms; first paint 550.5→578.5 and 547→580 ms. All earlier samples remain retained.
+The earlier main/branch/main/branch launch comparison (main e4d40ce0, branch d5d2666a, engine 7b490905) also FAILS: pooled cold sidebar 328→348 ms, warm 332.5→343 ms; first paint 550.5→578.5 and 547→580 ms. All earlier samples remain retained.
 
 Final startup control:
 
 | Pair | Revision | Cold sidebar / paint ms | Warm sidebar / paint ms | Load before → after (1/5/15) |
 |---|---|---|---|---|
-| 1 | main | 386 / 674 | 375 / 646 | 8.48/9.12/11.05 → 8.58/9.12/11.01 |
-| 1 | branch | 341 / 652 | 351 / 603 | 8.58/9.12/11.01 → 9.39/9.28/11.04 |
-| 2 | main | 356 / 590 | 362 / 601 | 9.39/9.28/11.04 → 9.10/9.22/11.00 |
-| 2 | branch | 353 / 593 | 359 / 595 | 9.10/9.22/11.00 → 7.83/8.93/10.87 |
+| 1 | main | 327 / 532 | 321 / 515 | 8.27/7.62/8.03 → 9.19/7.84/8.10 |
+| 1 | branch | 326 / 523 | 327 / 523 | 9.19/7.84/8.10 → 10.14/8.07/8.18 |
+| 2 | main | 328 / 523 | 331 / 520 | 10.14/8.07/8.18 → 10.02/8.12/8.19 |
+| 2 | branch | 328 / 527 | 308 / 502 | 10.02/8.12/8.19 → 9.51/8.07/8.17 |
 
 
 Final standalone split switch p95 (single / split ms), with loads:
 
 | Run | Single p95 | Split p95 | Load (1/5/15) |
 |---|---:|---:|---|
-| 1 | 12.231 | 11.926 | 10.85/11.65/12.02 |
-| 2 | 10.324 | 13.618 | 9.31/11.67/12.54 |
-| 3 | 10.401 | 12.248 | 6.02/9.90/11.76 |
+| 1 | 8.313 | 8.571 | 6.27/7.23/8.37 |
+| 2 | 7.017 | 8.231 | 4.32/6.56/8.06 |
+| 3 | 7.394 | 8.011 | 3.10/5.94/7.75 |
 
 All split-owned five-second idle counters are zero. The three consecutive split runs and regression suites use fresh roots and the final merged App; all owned processes/windows close. Full verification and command-bar quiet attempts are recorded in the PR.
 
 ## Current timing result
 
-Current paired gate: **FAIL (single-tab relative limit)**. Single-tab p95 main→branch 9.715→10.848 ms against main +1 ms; excess 0.133 ms. Split p95 17.924→11.985 ms. Both absolute 25 ms ceilings pass. All six cleanups pass. No timing rerun or threshold change is used to select a passing result.
+Current paired gate: **PASS**. Single-tab p95 main→branch 7.652→7.774 ms against main +1 ms; margin 0.878 ms. Split p95 14.736→10.060 ms. Both absolute 25 ms ceilings pass. All six cleanups pass. No timing rerun or threshold change is used to select a passing result.
 
 ## Retained failed attempts
 
-The first sidebar-completion attempt stopped at `TS_highlight_does_not_create_hosts`: created/retained hosts stayed 16/9 while engine contents fell 11→9. The unchanged assertion then passed in a complete 193/193 branch rerun and a 193/193 unchanged-main control. Both attempts are retained. Foreground-interrupted window attempts and timing admission refusals are excluded; no App starts on an admission refusal.
+The prior `be4f75ab` main / `6c6372ad` branch comparison, using engine `7b490905`, failed the single-tab relative gate: p95 9.715→10.848 ms, 0.133 ms above main +1 ms. Split p95 was 17.924→11.985 ms. This failure and all six cohorts remain in `earlierBe4Engine7bReceipt` in the committed artifact. The current comparison follows the required main and engine refresh.
 
+On that prior head, the first sidebar-completion attempt failed `TS_highlight_does_not_create_hosts`: created/retained hosts stayed 16/9 while engine contents fell 11→9. The unchanged assertion then passed in a complete 193/193 branch rerun and a 193/193 unchanged-main control. Both attempts remain retained. Current-head sidebar-completion passes 193/193.
 
+The earlier 7b490905-engine trio on source d5d2666a passed its functional, idle and cleanup rows, but its third timing row failed: split p95 29.945 ms at load1 14.85. A permitted quiet rerun then passed 40/40 three times, with split p95 17.710/14.895/14.052 ms. The current receipts follow the later main merge; all earlier arrays remain committed. The earlier full loaded window run measured cold/warm sidebar 548/549 ms and paint 887/901 ms at load1 32.77. Its slower paired startup comparison remains a failure. The final quiet window is classified under rule 4h only with medians within 400/700 ms or a qualifying current-main no-slower comparison.
 
-The first new-engine trio on source d5d2666a passed its functional, idle and cleanup rows, but its third timing row failed: split p95 29.945 ms at load1 14.85. A permitted quiet rerun then passed 40/40 three times, with split p95 17.710/14.895/14.052 ms. The current receipts follow the later main merge; all earlier arrays remain committed. The earlier full loaded window run measured cold/warm sidebar 548/549 ms and paint 887/901 ms at load1 32.77. Its slower paired startup comparison remains a failure. The final quiet window is classified under rule 4h only with medians within 400/700 ms or a qualifying current-main no-slower comparison.
-
-Source for the final App receipts: `6c6372ad22a2b181ba8994d22b76e0cb3310eb1f`; main control: `be4f75abb4e8f33bfd6c5b9266909f1106ad3044`; engine distribution `7b49090502568f8189aa0e94f7cf23344beec5bed537136eff5f7fce573ad35a`. Final evidence changes are documentation only.
+Source for the final App receipts: `f7fb6148239d223bb5cbf77023a2fe9f6f67f3be`; main control: `ffcf464927a98308ac364b4a2f4350da38a8cbcc`; engine distribution `3f45b07b885e03b6aecc461c6b6bff7612814a2ad23b6cf37b2b142d828f0738`. Final evidence changes are documentation only.
