@@ -303,6 +303,7 @@ final class EngineWebContentHost: NSObject, WebContentHost, WebContentProviding,
   }
   func webContent(_ page: OEWebContent, didCommitNavigationTo url: URL, isReload: Bool) {
     guard !closed else { return }
+    owner?.findController?.didNavigate(page)
     historyRecorder.committed(url: url, isReload: isReload, ephemeral: page.context.isEphemeral)
     owner?.record("historyCommit", page, ["url": url.absoluteString, "reload": isReload])
   }
