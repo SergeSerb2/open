@@ -26,6 +26,7 @@ import math
 import glob
 import hashlib
 import re
+import runpy
 import os
 import shutil
 import signal
@@ -6451,12 +6452,14 @@ CAPTURE_BANDS = [(224, 64, 64), (64, 176, 80), (48, 96, 224), (224, 192, 48), (1
 
 def page_checks(factory, results, tmp, style="alloy"):
     """page-platform §8.3 `--only page`: one suite, one row group per feature."""
+    # D4 runs before foreground-sensitive groups, so consent-limited self-scripting
+    # evidence remains available even when a later group is interrupted.
+    page_tools_checks(factory, results, tmp, style)
     capture_checks(factory, results, tmp)
     page_commands_checks(factory, results, tmp)
     page_engine_checks(factory, results, tmp)
     page_notification_checks(factory, results, tmp)
     page_translate_checks(factory, results, tmp)
-    page_tools_checks(factory, results, tmp, style)
 
 
 def page_engine_checks(factory, results, tmp):
@@ -9548,9 +9551,7 @@ def page_tools_apple_events_checks(app, results):
         "ok": not initial[1] and on[1] is True and off[1] is False, "stored": [initial[1], on[1], off[1]]}
     results["D4_allow_js_apple_events_checkmark"] = _menu_checks_row(
         [initial[0], on[0], off[0]], [False, True, False])
-    results["D4_allow_js_apple_events_osascript"] = _blocked(
-        "the App does not host OpenScripting yet (applescript plan Steps 5-7); the 1013 gate is in "
-        "ScriptCommands.executeJavascript and runs once the App wires ScriptHost")
+    runpy.run_path(os.path.join(ROOT, "tools/e2e/applescript.py"))["javascript_gate_checks"](app, results)
 
 
 def page_tools_troubleshooting_checks(app, results, tmp, port, style):
@@ -9670,10 +9671,10 @@ def page_tools_checks(factory, results, tmp, style):
         ws = app.call("window-state")
         app.call("window-focus", id=ws["id"], activate=True)
         app.call("wait", tab=app.call("tabs")[0]["id"])
+        page_tools_apple_events_checks(app, results)
         page_tools_appearance_checks(app, results, port, style)
         page_tools_clear_checks(app, results, port, style)
         page_tools_devtools_checks(app, results, port, style)
-        page_tools_apple_events_checks(app, results)
         page_tools_developer_mode_checks(app, results, port)
         page_tools_troubleshooting_checks(app, results, tmp, port, style)
         page_tools_quit_with_devtools_check(app, results, saved)
@@ -9702,6 +9703,8 @@ def _restore_defaults(app, saved):
                 subprocess.run(["defaults", "delete", domain, key], capture_output=True)
             elif isinstance(value, bool):
                 subprocess.run(["defaults", "write", domain, key, "-bool", "true" if value else "false"], capture_output=True)
+            elif isinstance(value, (list, dict)):
+                runpy.run_path(os.path.join(ROOT, "tools/e2e/restore_defaults.py"))["write_collection"](key, value, domain)
             else:
                 subprocess.run(["defaults", "write", domain, key, "-string", str(value)], capture_output=True)
 
@@ -10275,7 +10278,7 @@ def main():
     ap.add_argument("--extensions", default=os.path.join(ROOT, ".re", "ext", "unpacked"))
     ap.add_argument("--only", choices=["shell", "extensions", "features", "measure", "tabstrip", "window", "sidebar", "peek",
                                        "commandbar", "app-actions", "actions", "profiles", "sidebar-completion", "toolbar", "numbering", "media", "relaunch", "page",
-                                       "sleep", "routing", "history", "downloads"])
+                                       "sleep", "routing", "history", "applescript", "downloads"])
     ap.add_argument("--window-chrome-only", action="store_true", help="run only the window-chrome follow-up flows in the window suite")
     ap.add_argument("--keep", action="store_true",
                     help="keep this run's data root, cache root and scratch folder (paths printed at the end)")
@@ -10454,6 +10457,10 @@ def main():
             results[opts.only] = CheckedResults(tracker)
             space_manager_checks(results[opts.only], tmp, opts.config, opts.style)
             folder_peek_checks(factory, results[opts.only], tmp)
+        elif opts.only == "applescript":
+            results["applescript"] = CheckedResults(tracker)
+            runpy.run_path(os.path.join(ROOT, "tools/e2e/applescript.py"))["run"](
+                factory, results["applescript"], tmp, _fixture_server, _restore_defaults, wait_until)
         elif opts.only == "page":
             results["page"] = CheckedResults(tracker)
             page_checks(factory, results["page"], tmp, opts.style)
@@ -10468,7 +10475,6 @@ def main():
             results["downloads"] = CheckedResults(tracker)
             downloads.checks(factory, results["downloads"], tmp, opts.config, sys.modules[__name__])
         elif opts.only == "history":
-            import runpy
             results["history"] = CheckedResults(tracker)
             runpy.run_path(os.path.join(ROOT, "tools/e2e/history_e2e.py"))["history_checks"](
                 factory, results["history"], tmp, wait_until, _restore_defaults)
@@ -10560,14 +10566,14 @@ def main():
                                     else opts.config.lower()))
     with open(os.path.join(OUT, name), "w") as f:
         json.dump(results, f, indent=2, sort_keys=True)
-    for group in ("shell", "extensions", "features", "measure", "tabstrip", "window", "sidebar", "peek", "commandbar", "app-actions", "actions", "profiles", "sidebar-completion", "toolbar", "numbering", "media", "relaunch", "page", "sleep", "routing", "history", "downloads"):
+    for group in ("shell", "extensions", "features", "measure", "tabstrip", "window", "sidebar", "peek", "commandbar", "app-actions", "actions", "profiles", "sidebar-completion", "toolbar", "numbering", "media", "relaunch", "page", "sleep", "routing", "history", "applescript", "downloads"):
         for k, v in results.get(group, {}).items():
             if isinstance(v, dict) and "ok" in v:
                 print("%-24s %s" % (k, "PASS" if v.get("ok") else "FAIL"))
             elif isinstance(v, dict) and v.get("status") in ("SKIP", "BLOCKED", "INTERRUPTED", "DEFERRED"):
                 print("%-24s %s: %s" % (k, v["status"], v.get("reason", "")))
     print("wrote", os.path.join(OUT, name))
-    failures = [k for group in ("shell", "extensions", "features", "measure", "tabstrip", "window", "sidebar", "peek", "commandbar", "app-actions", "actions", "sidebar-completion", "toolbar", "numbering", "media", "relaunch", "page", "sleep", "routing", "history", "downloads")
+    failures = [k for group in ("shell", "extensions", "features", "measure", "tabstrip", "window", "sidebar", "peek", "commandbar", "app-actions", "actions", "sidebar-completion", "toolbar", "numbering", "media", "relaunch", "page", "sleep", "routing", "history", "applescript", "downloads")
                 for k, v in results.get(group, {}).items() if isinstance(v, dict) and v.get("ok") is False]
     if failures or not results["cleanup"]["ok"]:
         sys.exit(1)

@@ -2,8 +2,8 @@ import AppKit
 import Foundation
 import OpenModel
 
-/// Space KVC tabs flatten Pinned then Today. Specifiers use the key/first window as their container;
-/// without a window they retain the last valid specifier, or return nil.
+/// Space id/title and appleScriptTabs flatten Pinned then Today. Tab IDs follow location
+/// moves; enumeration stays scoped. Specifiers use a key/first window or retain the last valid container.
 @MainActor
 @objc(ScriptSpace)
 public final class ScriptSpace: NSObject {
@@ -40,7 +40,14 @@ public final class ScriptSpace: NSObject {
     @objc public func countOfAppleScriptTabs() -> Int { appleScriptTabs.count }
     @objc public func objectInAppleScriptTabsAtIndex(_ index: Int) -> ScriptTab? { ScriptRead.at(index, in: appleScriptTabs, noun: "tab") }
     @objc public func valueInAppleScriptTabsWithUniqueID(_ id: String) -> ScriptTab? {
-        ScriptRead.byID(id, in: appleScriptTabs, noun: "tab", uuid: { $0.tabID.rawValue })
+        // A held tab specifier keeps its original Space container across a location
+        // move (A12). Resolve its stable ID from the live model; enumeration stays
+        // scoped to this Space. Never return a cached wrapper for a closed tab.
+        if liveSpace() != nil, let uuid = UUID(uuidString: id),
+           let tab = ScriptHost.shared.model?.tab(id: ItemID(rawValue: uuid)) {
+            return ScriptHost.shared.tabWrapper(for: tab)
+        }
+        return ScriptRead.byID(id, in: appleScriptTabs, noun: "tab", uuid: { $0.tabID.rawValue })
     }
     @objc(insertInAppleScriptTabs:atIndex:) public func insertInAppleScriptTabs(_ tab: ScriptTab, at index: Int) {
         guard liveSpace() != nil else { return }
