@@ -110,6 +110,31 @@ def run(factory, results, tmp, wait_until, restore_defaults):
         results['settings_sleep_launch_reconcile'] = {'ok': all(mode == 'off' for mode in modes.values()),
             'modes': list(modes.values())}
 
+        # Missing and oversized owned cache files fail without a render or crash.
+        cache = Path(app.user_data)/'Cache/AppIcons/openDark-v1.png'
+        for kind in ('missing', 'oversized'):
+            app.call('settings-icon', select='openDark')
+            app.quit()
+            if kind == 'missing':
+                cache.unlink()
+            else:
+                with cache.open('wb') as stream: stream.truncate(16 * 1024 * 1024 + 1)
+            app = factory(urls=(url,))
+            broken = wait_until(lambda: (lambda s: s if s['restoreStartedMs'] is not None else None)(
+                app.call('settings-icon')), timeout=10, step=.05)
+            results['settings_app_icon_cache_' + kind] = {'ok': bool(broken)
+                and broken['applied'] == 'openDefault' and broken['imageObject'] == 'bundle'
+                and broken['error'] == 'The application icon could not be restored. Try selecting it again.',
+                'error': broken['error'], 'load': os.getloadavg()}
+        app.call('settings-icon', select='openDefault')
+        app.quit(); app = factory(urls=(url,))
+        app.call('wait', tab=app.call('tabs')[0]['id'])
+        bundle = app.call('settings-icon')
+        results['settings_app_icon_default_no_work'] = {'ok': bundle['applied'] == 'openDefault'
+            and bundle['imageObject'] == 'bundle' and bundle['restoreStartedMs'] is None
+            and bundle['restoreElapsedMs'] is None and bundle['restoreDecodeMs'] is None,
+            'load': os.getloadavg()}
+
         # A bad saved selection leaves the bundle icon and reports in the Icon pane.
         app.call('defaults', key='open.appIcon.selectedID', value='unavailable-icon')
         app.quit(); app = factory(urls=(url,))
