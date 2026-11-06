@@ -1,0 +1,42 @@
+diff --git a/chrome/browser/notifications/mac/notification_platform_bridge_mac.cc b/chrome/browser/notifications/mac/notification_platform_bridge_mac.cc
+index ec0919a5fb6ed0a89b3cf728a98363b5b12f24b3..fb73bd64847f8ac040c01cf58079026331cf8bd4 100644
+--- a/chrome/browser/notifications/mac/notification_platform_bridge_mac.cc
++++ b/chrome/browser/notifications/mac/notification_platform_bridge_mac.cc
+@@ -7,6 +7,7 @@
+ #include <utility>
+ 
+ #include "base/barrier_closure.h"
++#include "base/command_line.h"
+ #include "base/feature_list.h"
+ #include "base/functional/bind.h"
+ #include "base/functional/callback.h"
+@@ -28,6 +29,14 @@
+ #include "ui/message_center/public/cpp/notification.h"
+ #include "ui/message_center/public/cpp/notification_types.h"
+ 
++namespace {
++
++// App automation opt-out; normal launches keep the native notification path.
++constexpr char kOpenAutomationSkipMacOSNotifications[] =
++    "open-automation-skip-macos-notifications";
++
++}  // namespace
++
+ NotificationPlatformBridgeMac::NotificationPlatformBridgeMac(
+     std::unique_ptr<NotificationDispatcherMac> banner_dispatcher,
+     std::unique_ptr<NotificationDispatcherMac> alert_dispatcher,
+@@ -45,6 +54,14 @@ NotificationPlatformBridgeMac::~NotificationPlatformBridgeMac() {
+ // static
+ std::unique_ptr<NotificationPlatformBridge>
+ NotificationPlatformBridge::Create() {
++  // The dispatcher constructor force-starts the Alerts helper. Return before
++  // constructing either dispatcher so automation uses the existing message
++  // center fallback without registering with macOS or opening a Mojo pipe.
++  if (base::CommandLine::ForCurrentProcess()->HasSwitch(
++          kOpenAutomationSkipMacOSNotifications)) {
++    return nullptr;
++  }
++
+   auto banner_dispatcher = std::make_unique<NotificationDispatcherMojo>(
+       std::make_unique<MacNotificationProviderFactory>(
+           mac_notifications::NotificationStyle::kBanner));

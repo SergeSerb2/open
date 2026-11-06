@@ -86,9 +86,12 @@ configuration.verboseLogging = options.verboseLogging
 // Developer ID builds use the "Open Safe Storage" keychain item.
 configuration.useMockKeychain = !CodeSignature.hasTeamIdentifier
 #if OPEN_AUTOMATION
-// The engine's notification test hooks (page-platform EP-7) run only with this
-// switch; release builds never pass it.
+// The engine's test hooks run only with this switch; normal Release builds
+// never pass it. E2E launchers separately suppress macOS notification setup.
 configuration.additionalSwitches = configuration.additionalSwitches + ["--open-automation"]
+if AutomationNotificationSetup.suppressesSystemSetup {
+  configuration.additionalSwitches.append(AutomationNotificationSetup.skipSwitch)
+}
 #endif
 
 OEEngine.shared.delegate = appDelegate

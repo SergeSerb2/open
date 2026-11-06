@@ -521,6 +521,15 @@ The engine requests of [plans/page-platform.md](plans/page-platform.md) §6. One
 | chromium | `0501-page-history-swipe-hooks.patch` | `chrome/browser/ui/cocoa/history_overlay_controller.mm` | EP-1: the history overlay reports began / changed / completed / cancelled with direction and progress to the page's `CefOpenPageHandler`, and stays hidden when the page asked for no engine overlay. Both swipe paths (trackpad, Magic Mouse) go through this controller. |
 | chromium | `0504-page-notification-click.patch` | `chrome/browser/notifications/notification_display_service_impl.cc` | EP-6: a web notification click reaches the request context's `CefOpenNotificationHandler` before Chromium dispatches it to the page (one hook in `ProcessNotificationOperation`, the entry point of the macOS response). |
 | cef | `0505-page-website-color-scheme.patch` | `libcef/browser/chrome/chrome_content_browser_client_cef.{h,cc}` | EP-9b: a request context's website color scheme (`CefSetWebsiteColorScheme`) wins over Chrome's in `OverrideWebPreferences` and again in a new `OverrideWebPreferencesAfterNavigation` override (Chrome recomputes the scheme after every navigation). DevTools and chrome:// pages keep Chrome's. |
+| chromium | `0506-page-automation-notification-guard.patch` | `chrome/browser/notifications/mac/notification_platform_bridge_mac.cc` | With `--open-automation-skip-macos-notifications`, `NotificationPlatformBridge::Create()` returns null before constructing the banner or Alerts dispatchers. Chromium's existing delegator uses its message-center fallback. No provider, Mojo pipe or Alerts helper is created by this path. Without the switch, the original native path is unchanged. |
+
+0506 is the next page-platform number after Chromium 0501/0504 and CEF
+0505. Its switch constant is local to Chromium; it uses
+`base::CommandLine::ForCurrentProcess()` and adds no dependency on libcef.
+The App adds the switch only in automation builds when the e2e environment
+opts out. Notification fixtures explicitly opt in to the original native
+path. See [the guard receipt](engine-spike/automation-notification-guard-blocked.md)
+for the fresh Release and native control evidence; U-N1 delivery stays separate.
 
 Section 8 decisions (differences from page-platform §6, with the reason):
 
