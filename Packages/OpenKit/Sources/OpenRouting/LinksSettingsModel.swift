@@ -99,6 +99,12 @@ public enum RuleIssue: Hashable, Sendable {
         case .duplicateOf, .containsIsSubstring: return false
         }
     }
+    public var ruleID: RuleID {
+        switch self {
+        case .emptyPattern(let id), .patternHasSpaces(let id), .prefixNotParseable(let id),
+             .missingSpace(let id), .duplicateOf(let id, _), .containsIsSubstring(let id): return id
+        }
+    }
 }
 
 /// Links-pane data only. The App owns persistence and per-profile setting hydration.
@@ -140,6 +146,18 @@ public final class LinksSettingsModel {
     }
 
     public func issues() -> [RuleIssue] {
+        issues(in: drafts)
+    }
+
+    /// Validate a sheet draft with the same rules as Save, without publishing an edit.
+    public func issues(replacing draft: RuleDraft) -> [RuleIssue] {
+        var proposed = drafts
+        if let index = proposed.firstIndex(where: { $0.id == draft.id }) { proposed[index] = draft }
+        else { proposed.append(draft) }
+        return issues(in: proposed)
+    }
+
+    private func issues(in drafts: [RuleDraft]) -> [RuleIssue] {
         var result: [RuleIssue] = []
         for (index, draft) in drafts.enumerated() {
             result += draft.validationIssues(spaces: spaces)

@@ -18,6 +18,12 @@ import OpenDesign
     public var showsSuggestNotice = false
     public var nameDraft = ""
     public var assignedSpaces: Set<SpaceID> = []
+    public func beginCreate(sourceSpace: SpaceID? = nil) {
+        nameDraft = ""; errorText = ""
+        assignedSpaces = Set(sourceSpace.flatMap { root.model.space(id: $0)?.id }.map { [$0] } ?? [])
+        showsSuggestNotice = false
+        showsCreate = true
+    }
     public var pendingArchive: AutoArchiveInterval?
     private var archiveProfileID: ProfileID?
     private var clearProfileID: ProfileID?
@@ -48,7 +54,7 @@ import OpenDesign
               !root.bool("open.general.searchSuggestNoticeDismissed") else {return}
         if root.selectedProfileID != id {root.selectedProfileID=id}; showsSuggestNotice=true
     }
-    public func paneDidAppear() { refresh(); presentSuggestNotice() }
+    public func paneDidAppear() { refresh(); if !showsCreate { presentSuggestNotice() } }
     public func dismissSuggestNotice() { root.set(true, for: "open.general.searchSuggestNoticeDismissed"); showsSuggestNotice = false }
     public var downloadDirectory: String { get { profile?.settings.downloadDirectory ?? "~/Downloads" } set { update { $0.downloadDirectory = newValue } } }
     public var askWhereToSave: Bool { get { profile?.settings.askWhereToSaveEachFile ?? false } set { update { $0.askWhereToSaveEachFile = newValue } } }
@@ -151,7 +157,7 @@ public struct ProfilesPane: View {
                         Spacer(minLength:0)
                         Divider()
                         HStack(spacing:0) {
-                            profileTool("plus",help:"Create Profile") { model.nameDraft="";model.assignedSpaces=[];model.showsCreate=true }
+                            profileTool("plus",help:"Create Profile") { model.beginCreate() }
                             Divider().frame(height:15)
                             profileTool("minus",help:"Delete Profile") { model.confirmsDelete=true }.disabled(!model.canDelete)
                             Divider().frame(height:15)

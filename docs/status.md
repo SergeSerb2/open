@@ -320,7 +320,7 @@ Columns: feature · RE doc + section · plan · library code · App wiring · ve
 | Confirmation before moving a Space to another profile ("don't show again") | FC §5.4 r9 | profiles §7.3 | data only | none | none | planned | |
 | Profile indicator in the Space header and Little Open | FC §5.3 r7 | profiles §7 (data; designer visuals) | none | none | none | planned | |
 | Missing-profile fallback to Default | FC §5.3 r8 | profiles | model `repairMissingProfileReferences` | none (only `openkit` calls it) | verify-all `profiles` | planned | Still no App caller found in this refresh. Library only. |
-| New Profile (File menu; Set Profile ▸ New Profile…) | FC §5.1 r2 | settings (create sheet) | `OpenSettings` sheet | main (sheet); sidebar intent refused | none | planned (partial) | The create sheet shows in App Settings. The sidebar `newProfile` intent still returns `false` (factory line 366), and File ▸ New Profile has no dispatch. |
+| New Profile (File menu; Set Profile ▸ New Profile…) | FC §5.1 r2 | settings (create sheet) | `OpenSettings` shared create sheet | Section 7 | e2e `commandbar` Settings rows | implemented | File command and sidebar intent open Profiles with the existing sheet; sidebar source Space is preselected. |
 | Incognito windows: ephemeral context, distinct look, no history | FC §3.1 r2, §8.1 r3 | app-shell §4.8 (Q8); profiles D-P8 | engine off-the-record context of Default | none | none | planned | Note: engine incognito is an off-the-record profile of Default, not of the Space's profile (`docs/followups.md`, #88 review). The incognito sidebar look is not specified. |
 | Download location per profile | FC §5.2 r4 | S11 Downloads design; app-shell §4.9 | `App/PageChrome/DownloadsCenter.swift`, `DownloadDestinationChoice.swift`; `OpenSettings` setting | main (#181) | e2e `downloads` 34/34; full verify + quiet timing rerun (see `docs/downloads.md`) | done | Profile folders, unique names, fallback event and queued save sheets are implemented. Real-App save acceptance/cancellation, Library cancellation of a pending sheet, and second-Profile isolation pass; receipts are in `docs/downloads.md`. |
 
@@ -480,12 +480,12 @@ The context-menu receipt records final native order for page/link/mailto/image/l
 | Settings window: 684×650, pane tabs, one reused window | IS §18 | settings | presenter in `OpenSettings` (`SettingsPresenter`) | main | `settings-preview check` (verify-all); renders in `docs/settings/`; Step C (#85) | done | Spot-check: `App/Settings/AppSettingsActions.swift:25` owns the presenter for the App. The Library's Spaces section hosts the real Space Manager (§1.2, #124). |
 | General pane | FC §7.2 General; IS §18 | settings §5.1 | `OpenSettings/GeneralPane.swift` | main | `settings-preview` | done | Some actions are stubs (updates, import run). |
 | Profiles pane | FC §7.2 Profiles | settings §5.2 | `OpenSettings/ProfilesPane.swift` | main | `settings-preview` | done (partial) | See §1.10 limits. Passwords and cards open `chrome://settings` pages. |
-| Links pane | FC §7.2 Links | settings §5.3 | `OpenSettings/LinksPane.swift` | main | `settings-preview` | done | Rules have no effect until link intake lands (§1.11). |
+| Links pane | FC §7.2 Links | settings §5.3 | `OpenSettings/LinksPane.swift` | main | `settings-preview` | done | Live link intake (§1.11). Peek uses the canonical pane keys with legacy migration; row/default diagnostics and invalid Test input render inline. |
 | Shortcuts pane | FC §7.2 Shortcuts | settings §5.4 | `OpenSettings/ShortcutsPane.swift` | main | `settings-preview` (`shortcuts-callout`) | done | "Learn the Essential Shortcuts" is a callout button that opens the Essential window (Step 6, CC-29/CC-30); the list shows every active command. |
-| Icon pane (Open's own icons) | FC §7.1 App Icon | settings | `OpenSettings/AppIconPane.swift` | main | `settings-preview` | done (partial) | Icon switching is not connected (`AppSettingsActions.swift:119`). |
-| Advanced pane plus Ad Blocking and Tab Sleeping groups | FC §7.2 Advanced | settings §5.5 | `OpenSettings/AdvancedPane.swift` | main | `settings-preview` | done (partial) | Ad blocking and sleep save settings only (§1.3, §1.14). |
+| Icon pane (Open's own icons) | FC §7.1 App Icon | settings | `OpenSettings/AppIconPane.swift` | main | `settings-preview` | implemented | Applies original 1024 px artwork to the running App, caches by ID, restores after content, resets to the bundle icon, and shows pane errors. |
+| Advanced pane plus Ad Blocking and Tab Sleeping groups | FC §7.2 Advanced | settings §5.5 | `OpenSettings/AdvancedPane.swift` | main | `settings-preview` | done (partial) | Sleep is live: global mode reconciles launch/new Profiles; Never prevents freeze/discard/destroy and hidden-cache eviction. Ad blocking engine actions remain separate (§1.14). |
 | Clear Browsing Data per profile with time range | FC §7.2 Profiles | settings | `OpenSettings` sheet and action | main | `settings-preview` | done (partial) | Only cookies + cache together, all time (§1.10). |
-| Cmd+, opens Settings in the app | MH Arc menu | app-shell §4.11; settings adapter table (`docs/settings.md`) | — | main | none (code read) | done | Dispatched in Step C (`App/AppDelegate.swift` `settings`, #85). |
+| Cmd+, opens Settings in the app | MH Arc menu | app-shell §4.11; settings adapter table (`docs/settings.md`) | — | main | none (code read) | done | Shared presenter; Cmd+, is suppressed while the command bar field captures typing. Escape is unchanged. |
 | Library window: Archive, Downloads, Captures, Media, History | FA §9.6 LB-1 | settings §6 (D-9) | presenter in `OpenSettings` (`LibraryPresenter`) | main | `settings-preview`; Step C (#85) | done (partial) | All sections open in the App, including Spaces (the real Space Manager, #124). Media still has no live source (§1.1). |
 | Library folder sources (Documents, Desktop, Downloads folders, Screenshots) | FA LB-1 | deferred to v1.1 (settings D-9) | — | — | — | out of scope (lead decision) | |
 | Account, Max, Staff panes | FC §7.1 | — | — | — | — | out of scope | |
@@ -885,7 +885,7 @@ This appendix is the first audit's table. It is history. Section 8 current dispa
 | File | Capture… | Cmd+Shift+2 | `capture-page` | — | — | page-platform Step 13 |
 | File | Capture Full Page | — | `capture-full-page` | — | — | page-platform Step 13 |
 | File | Capture in Portrait Mode | — | `capture-portrait` | — | — | page-platform Step 13 |
-| File | New Profile | — | `new-profile` | — | — | none (`OpenSettings` has the create sheet) |
+| File | New Profile | — | `new-profile` | Y | Y | Section 7: Profiles with shared Create Profile sheet |
 | File | New Boost | — | `new-boost` | — | — | none (Boost editor plan in progress) |
 | File | Edit Boost | — | `edit-boost` | — | — | none (Boost editor plan in progress) |
 | File | New Legacy Boost (Advanced) | — | `new-legacy-boost` | — | — | none (Boost editor plan in progress) |

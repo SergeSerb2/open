@@ -3,6 +3,7 @@ import AppKit
 import OpenEngine
 import OpenModel
 import OpenSleep
+import OpenSettings
 
 /// Tab sleep automation commands (app-shell §6 `sleep` suite, docs/automation.md "Tab sleep").
 /// Automation builds only: the clock offset, the explicit pass and the low-power override
@@ -31,11 +32,8 @@ extension AutomationController {
       // Writes every Profile's mode, as Settings ▸ Advanced does (setTabSleepMode).
       if let raw = a["mode"] as? String {
         guard let mode = SleepMode(rawValue: raw) else { throw Failure(message: "mode must be off, conservative, balanced or aggressive") }
-        for profile in app.model.profiles {
-          var settings = profile.settings; settings.sleepMode = mode
-          app.model.updateProfileSettings(id: profile.id, settings: settings)
-        }
-        app.scheduleSave(); sleep.modeChanged()
+        let setting = TabSleepMode.allCases.first { $0.modelMode == mode } ?? .automatic
+        app.settingsPresenter.settings.advanced.sleepMode = setting
       }
       return Dictionary(uniqueKeysWithValues: app.model.profiles.map { ($0.id.description, $0.settings.sleepMode.rawValue) })
     case "sleep-clock":

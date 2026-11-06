@@ -6055,7 +6055,9 @@ def sleep_checks(factory, results, tmp, style):
             return fn()
         except Exception:
             return None
-    for key in SLEEP_MEDIA_KEYS:
+    sleep_keys = SLEEP_MEDIA_KEYS + ("open.advanced.tabSleepMode",)
+    saved_sleep_defaults = {key: app.call("defaults", key=key, persistent=True) for key in sleep_keys}
+    for key in sleep_keys:
         app.call("defaults", key=key, value=None)
     app.call("sleep-power", lowPower=False)
     try:
@@ -6173,10 +6175,37 @@ def sleep_checks(factory, results, tmp, style):
                 mode_rows[mode] = {"ok": early == "frozen" and late == "sleeping", "before": early, "at": late}
             else:
                 advance(48 * 3600); tick(); late = phase(t)
-                mode_rows[mode] = {"ok": late == "frozen", "after48h": late}
+                live = app.call("engine-sleep", tab=t, op="state")
+                pressure = tick(pressure="critical")
+                mode_rows[mode] = {"ok": late == "live" and phase(t) == "live" and not live['frozen'] and not live['discarded'],
+                                   "after48h": late, "engine": live}
             app.call("close", tab=t)
         app.call("sleep-mode", mode="balanced")
         results["sleep_modes"] = {"ok": all(r["ok"] for r in mode_rows.values()), "modes": mode_rows}
+
+        # Never protects loaded hidden pages beyond both the freeze deadline and
+        # the eight-host cache cap. A previously discarded shell is not destroyed.
+        shell = open_live(site(3, "a.html?never-shell"))
+        select(home); advance(15); sleep_now(shell)
+        shell_before = ts(shell)
+        app.call("sleep-mode", mode="off")
+        awake = [open_live(site(40 + i, "ticker.html")) for i in range(10)]
+        select(home); tick(); advance(31); tick()
+        past_freeze = [ts(tab) for tab in awake]
+        advance(48 * 3600); tick(); tick(pressure="critical")
+        retained = [ts(tab) for tab in awake]
+        engine = [app.call("engine-sleep", tab=tab, op="state") for tab in awake]
+        shell_after = ts(shell)
+        results["sleep_never_live_and_cache"] = {
+            "ok": all(s["phase"] == "live" and s["hosts"] == 1 for s in past_freeze + retained)
+                  and all(not s["frozen"] and not s["discarded"] for s in engine)
+                  and shell_before["phase"] == "sleeping" and shell_before["hosts"] == 1
+                  and shell_after["phase"] == "sleeping" and shell_after["hosts"] == 1,
+            "hiddenLoadedPages": len(awake), "freezeDelay": 30, "elapsedBeforeFirstPass": 31,
+            "phases": [s["phase"] for s in retained], "hosts": [s["hosts"] for s in retained],
+            "sleepingShellHostsAfter48h": shell_after["hosts"], "load": os.getloadavg()}
+        for tab in awake + [shell]: app.call("close", tab=tab)
+        app.call("sleep-mode", mode="balanced")
 
         # F1: sleeping drops renderer processes. Eight distinct sites, then sleep them all.
         select(home)
@@ -6454,6 +6483,7 @@ def sleep_checks(factory, results, tmp, style):
             app.call("window-frame", frame=[80, 60, 1280, 820])
             wait_until(lambda: app.call("tabs"), timeout=10)
             app.call("wait", tab=home)
+            assert wait_until(lambda: state().get("started"), timeout=10, step=.05), "sleep did not start after relaunch"
             n1 = len(state()["log"])
             select(victim)
             # No `wait` here: the first page (the refused restore) closes, and its replacement loads
@@ -6470,8 +6500,7 @@ def sleep_checks(factory, results, tmp, style):
         try:
             if not app.closed:
                 app.call("sleep-power", lowPower=None)
-                for key in SLEEP_MEDIA_KEYS:
-                    app.call("defaults", key=key, value=None)
+            _restore_defaults(app, saved_sleep_defaults)
         except Exception:
             pass
         app.quit()
@@ -7698,6 +7727,10 @@ def commandbar_checks(factory, results, tmp, config):
     threading.Thread(target=server.serve_forever, daemon=True).start()
     origin = 'http://127.0.0.1:%d' % server.server_address[1]
     app = factory(urls=(origin + '/start',), fresh=True)
+    settings_keys = ('open.settings.lastPane', 'open.links.littleOpenHotkeyEnabled',
+                     'open.links.externalInLittleOpen', 'open.general.searchSuggestNoticeDismissed')
+    saved_settings_defaults = {key: app.call('defaults', key=key, persistent=True) for key in settings_keys}
+    for key in settings_keys: app.call('defaults', key=key, value=None)
     state = lambda: app.call('commandbar-state')
     def bar(key, route='app'):
         routing = app.call('key', key=key, modifiers=['cmd'], route=route)
@@ -8050,7 +8083,11 @@ def commandbar_checks(factory, results, tmp, config):
         results['settings_persist_relaunch'] = {'ok': app.call('settings-state')['external'] != original_external}
         app.call('settings-toggle', name='external')
     finally:
+        _restore_defaults(app, saved_settings_defaults)
         app.quit(); server.shutdown(); server.server_close()
+
+    import settings_live
+    settings_live.run(factory, results, tmp, wait_until, _restore_defaults)
 
 
 def commandbar_footer_checks(app, results, tmp, bar, press, tab):
@@ -10270,7 +10307,7 @@ def _restore_defaults(app, saved):
     domain = getattr(app, "preferences_domain", "io.github.sergeserb2.open")
     for key, value in saved.items():
         restored = False
-        if not app.closed:
+        if app is not None and not app.closed:
             try:
                 app.call("defaults", key=key, value=value)
                 restored = True
@@ -10864,6 +10901,14 @@ def main():
     ap.add_argument("--focus-retry-delay-seconds", type=int, default=0,
                     help="wait between interrupted foreground attempts (0–600 seconds)")
     opts = ap.parse_args()
+    # Startup itself may migrate legacy Peek choices before the socket answers.
+    # Preserve the pre-launch stored values, including absence, across every app
+    # and every retry (the Peek suite also launches a second Find/Escape app).
+    import plistlib
+    exported = subprocess.run(['defaults', 'export', 'io.github.sergeserb2.open', '-'], capture_output=True)
+    domain_before = plistlib.loads(exported.stdout) if exported.returncode == 0 else {}
+    startup_peek = {key: domain_before.get(key) for key in
+                    ('open.links.openPeekShiftClick', 'open.links.openPeekOtherSites')}
     if not 0 <= opts.focus_retry_delay_seconds <= 600:
         ap.error("--focus-retry-delay-seconds must be between 0 and 600")
     if opts.only is None and not opts.engine_fingerprint_only:
@@ -10964,7 +11009,8 @@ def main():
         tracker.apps.append(app)
         return app
 
-    results = {"style": opts.style, "config": opts.config, "started": time.strftime("%Y-%m-%d %H:%M:%S")}
+    results = {"style": opts.style, "config": opts.config, "started": time.strftime("%Y-%m-%d %H:%M:%S"),
+               "load": os.getloadavg()}
     source_diff = subprocess.check_output(["git", "diff", "HEAD", "--", "App", "Packages/OpenKit/Sources", "tools/e2e"], cwd=ROOT)
     results["source"] = {"head": subprocess.check_output(["git", "rev-parse", "HEAD"], cwd=ROOT, text=True).strip(),
                          "clean": not source_diff, "diffSHA256": hashlib.sha256(source_diff).hexdigest()}
@@ -11175,6 +11221,7 @@ def main():
         finally:
             for instance in _OWNED_APPS:
                 instance.quit()
+            _restore_defaults(None, startup_peek)
         if interruption is None:
             break
         interrupted_attempts.append(dict(interruption, attempt=attempt, status="INTERRUPTED",
