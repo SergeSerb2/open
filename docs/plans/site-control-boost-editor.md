@@ -1160,7 +1160,7 @@ As on PR #103 (lead round 1 and 2 changes kept), plus `browserWindowFrame(tabID:
     func refresh(profile: ProfileID)                                // §5.3 all matching pages
     func pageSnapshot(tabID: ItemID) async -> Data?                 // PNG for baseHue
     func enterZap(boostID: BoostID, tabID: ItemID) -> Bool           // coordinator + send; false if blocked (P7)
-    func enterSelectorPicker(boostID: BoostID, tabID: ItemID) -> Bool // select-mode capability; default false
+    func enterSelectorPicker(boostID: BoostID, tabID: ItemID) -> Bool // required select-mode capability; false if blocked
     func exitZap(tabID: ItemID)
     func removeZapFromSession(_ selector: String, tabID: ItemID)
     func requestZapCounts(tabID: ItemID)                            // zap:list
