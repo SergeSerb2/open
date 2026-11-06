@@ -83,8 +83,5 @@ public struct SiteControlGeometry: Sendable {
     }
 }
 
-/// Adapter events contain no bridge capability. Only the App adapter decodes and
-/// validates picker messages with the coordinator before publishing these events.
-public enum BoostPickerEvent: Sendable {
-    case committed(Boost), removed(Boost), exited, listResult([ZapListEntry])
-}
+// Re-export the coordinator's validated events without a second mapping enum.
+public typealias BoostPickerEvent = OpenBoosts.BoostPickerEvent

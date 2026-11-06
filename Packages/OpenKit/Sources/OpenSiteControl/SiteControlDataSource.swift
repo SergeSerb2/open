@@ -41,7 +41,10 @@ extension SiteControlDataSource {
     func preview(_ boost: Boost, tabID: ItemID)
     func refresh(profile: ProfileID)
     func pageSnapshot(tabID: ItemID) async -> Data?
+    /// False before P7 or while the bound page has no usable Open world.
+    func zapAvailability(tabID: ItemID) -> Bool
     func enterZap(boostID: BoostID, tabID: ItemID) -> Bool
+    func enterSelectorPicker(boostID: BoostID, tabID: ItemID) -> Bool
     func exitZap(tabID: ItemID)
     func removeZapFromSession(_ selector: String, tabID: ItemID)
     func requestZapCounts(tabID: ItemID)
