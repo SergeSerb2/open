@@ -162,6 +162,9 @@ extension EngineWebContentHostFactory {
     alert.addButton(withTitle: "Rename"); alert.addButton(withTitle: "Cancel")
     let field = NSTextField(string: space.title ?? "")
     field.frame = NSRect(x: 0, y: 0, width: 260, height: 24); field.placeholderString = "Space name"
+    // A single-line field consumes Return to send its action. Forward that
+    // native action to the alert's Rename button so Return confirms the sheet.
+    field.target = alert.buttons[0]; field.action = #selector(NSButton.performClick(_:))
     alert.accessoryView = field; pendingRenameAlert = alert
     alert.beginSheetModal(for: window) { [weak self] response in
       guard let self else { return }; self.pendingRenameAlert = nil

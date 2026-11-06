@@ -10090,7 +10090,7 @@ def space_editor_creation_checks(factory, results, tmp):
         app.call('key', text='Renamed Source', window=rename_window, route='app')
         app.call('key', key='return', window=rename_window, route='app')
         require('rename_hidden_return_keeps_sidebar_hidden', bool(wait_until(lambda: focused()['title'] == 'Renamed Source', timeout=5))
-                and app.call('window-state')['sidebarMode'] == 'hidden')
+                and app.call('window-state')['sidebarMode'] == 'hidden', spaces=spaces(), window=app.call('window-state'))
         app.call('menu-perform', id='toggle-sidebar')
         app.call('sidebar-key', key='z', modifiers=['cmd'])
         require('rename_hidden_one_undo', spaces() == before)
