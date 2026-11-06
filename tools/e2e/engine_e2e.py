@@ -4438,9 +4438,11 @@ def _actions_checks(app, results):
     api = {}
     if state:
         popup_eval(state, "chrome.storage.session.set({openPopup: ''}).then(() => true)")
-        api["key"] = make_key()
         popup_eval(state, "chrome.runtime.sendMessage('open-popup')"
                           ".then(() => { setTimeout(() => window.close(), 50); return true; })")
+        # D1 now closes the shell popup when its parent becomes key. Send the
+        # delayed request first, while its requesting page still exists.
+        api["key"] = make_key()
 
         def api_popup():
             s = app.call("ext-popup")
@@ -4465,6 +4467,10 @@ def _actions_checks(app, results):
     state = open_popup(ACTION_PROBE)
     if state:
         popup_eval(state, "chrome.storage.session.set({openPopup: ''}).then(() => true)")
+        # Inspect keeps the popup open across D1, so this tests refusal with
+        # both an active browser window and an existing popup.
+        app.call("devtools-open", tab=state["page"]["identifier"])
+        refusal["inspected"] = bool(wait_until(lambda: app.call("ext-popup").get("staysOpenOnBlur"), timeout=5))
         refusal["key"] = make_key()
         popup_eval(state, "chrome.runtime.sendMessage('open-popup-now').then(() => true)")
         refusal["result"] = wait_until(lambda: popup_eval(state, "chrome.storage.session.get('openPopup')"
@@ -4472,9 +4478,10 @@ def _actions_checks(app, results):
         after = app.call("ext-popup")
         refusal["same_popup"] = (after.get("open") and after["source"] == "user"
                                  and after["page"]["identifier"] == state["page"]["identifier"])
+        app.call("devtools-close", tab=state["page"]["identifier"])
         close_popup()
     results["open_popup_refused_while_open"] = {
-        "ok": refusal.get("key") is True and refusal.get("result") == "Failed to open popup." and bool(refusal.get("same_popup")),
+        "ok": refusal.get("inspected") and refusal.get("key") is True and refusal.get("result") == "Failed to open popup." and bool(refusal.get("same_popup")),
         **refusal}
     # Running the action whose popup is open closes it (Chrome's toolbar).
     if not app.call("ext-popup").get("open"):
@@ -4548,12 +4555,18 @@ def _actions_checks(app, results):
     app.call("ext-pin", extension=EXT["bitwarden"], pinned=True)
     pinned = wait_until(lambda: (lambda ids: ids if ids[:2] == [ACTION_PROBE, EXT["bitwarden"]] else None)(
         [x["id"] for x in actions()["actions"]]), timeout=10)
-    app.call("ext-move", extension=EXT["bitwarden"], index=0)
-    moved = wait_until(lambda: (lambda xs: xs if [x["id"] for x in xs][:2] == [EXT["bitwarden"], ACTION_PROBE]
-                                and xs[0]["pinnedIndex"] == 0 and xs[1]["pinnedIndex"] == 1 else None)(
-        actions()["actions"]), timeout=10)
-    results["pin_and_move"] = {"ok": bool(pinned) and bool(moved), "after_pin": pinned,
-                               "after_move": moved and [(x["id"], x["pinnedIndex"]) for x in moved[:3]]}
+    duplicates = app.call("extensions")["duplicatesDropped"]
+    if duplicates:
+        results["pin_and_move"] = {"status": "BLOCKED", "reason": "engine defect, C5: duplicate E1 action IDs",
+            "duplicatesDropped": duplicates, "receipt": ".re/extensions-ui/engine-native-drag-crash.ips"}
+    else:
+        app.call("ext-move", extension=EXT["bitwarden"], index=0)
+        moved = wait_until(lambda: (lambda xs: xs if [x["id"] for x in xs][:2] == [EXT["bitwarden"], ACTION_PROBE]
+                                    and xs[0]["pinnedIndex"] == 0 and xs[1]["pinnedIndex"] == 1 else None)(
+            actions()["actions"]), timeout=10)
+        results["pin_and_move"] = {"ok": bool(pinned) and bool(moved), "after_pin": pinned,
+                                   "duplicatesDropped": duplicates,
+                                   "after_move": moved and [(x["id"], x["pinnedIndex"]) for x in moved[:3]]}
 
     # The context menu is Chrome's (extension name, pin, options, ...); its
     # pin item unpins.
