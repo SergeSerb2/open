@@ -29,6 +29,7 @@ public final class BrowserWindowController: NSWindowController, NSWindowDelegate
         peek.onPageChange = { [weak self] in self?.syncPeekSidebar() }
         if let space = context.focusedSpace {
             let style = context.style(for: space)
+            peek.overlay.style = style
             peek.overlay.controlsFill = style.lightPalette?.title.nsColor ?? PeekMetrics.defaultControls.nsColor
             peek.overlay.scrimColor = style.darkPalette?.background.withAlpha(PeekMetrics.scrimAlpha).nsColor ?? PeekMetrics.defaultScrim.nsColor
         }
@@ -291,7 +292,7 @@ public final class BrowserWindowController: NSWindowController, NSWindowDelegate
             guard let self else { return true }
             if let peek = self.peekStorage { return peek.intercept(tabID: id, url: url, flags: flags) }
             let favorite: Bool = if case .favorites? = self.model.parent(of: id) { true } else { false }
-            guard self.model.tab(id: id) != nil, self.model.isPinned(tabID: id) || favorite else { return true }
+            guard self.model.tab(id: id) != nil, self.model.isPinned(tabID: id) || favorite || flags.contains(.shift) else { return true }
             return self.peekController.intercept(tabID: id, url: url, flags: flags)
         }
         container.onReturnPreviewHost = { [weak self] in
@@ -337,6 +338,7 @@ public final class BrowserWindowController: NSWindowController, NSWindowDelegate
         container.style = context.style(for: space)
         container.showsToolbar = context.window?.showsToolbar == true
         let style = context.style(for: space)
+        peekStorage?.overlay.style = style
         peekStorage?.overlay.controlsFill = style.lightPalette?.title.nsColor ?? PeekMetrics.defaultControls.nsColor
         peekStorage?.overlay.scrimColor = style.darkPalette?.background.withAlpha(PeekMetrics.scrimAlpha).nsColor ?? PeekMetrics.defaultScrim.nsColor
         splitController.refresh()
@@ -835,6 +837,15 @@ public final class BrowserWindowController: NSWindowController, NSWindowDelegate
     }
 
     public var peekBadgeTabIDs: Set<ItemID> { peekStorage?.peekBadgeTabIDs ?? [] }
+    public var canExitModal: Bool { peekStorage?.isShown == true || container.maximizedTabID != nil }
+    /// View > Exit and Esc share this priority. The App validates the key standard window.
+    @discardableResult public func exitModal() -> Bool {
+        if let peek = peekStorage, peek.isShown { peek.escape(); return true }
+        if container.maximizedTabID != nil {
+            splitController.performCommand("escape"); container.cancelOperation(nil); return true
+        }
+        return false
+    }
     /// Shared window-local key path. Focus comes from AppKit's current responder.
     @discardableResult public func handleKeyDown(_ event: NSEvent, unconsumed: Bool = false) -> Bool {
         guard let eventWindow = event.window,
@@ -856,13 +867,8 @@ public final class BrowserWindowController: NSWindowController, NSWindowDelegate
         }
         if let last = lastKeyRoute, last.window == eventWindow.windowNumber, last.code == event.keyCode,
            last.flags == flags, unconsumed || (event.timestamp > 0 && last.timestamp == event.timestamp) { return last.handled }
-        if event.keyCode == 53, !isCommandBarPresented, let peek = peekStorage, peek.isShown {
-            peek.escape()
-            lastKeyRoute = (eventWindow.windowNumber, event.keyCode, flags, event.timestamp, true)
-            return true
-        }
-        if event.keyCode == 53, !isCommandBarPresented, container.maximizedTabID != nil {
-            splitController.performCommand("escape"); container.cancelOperation(nil)
+        if event.keyCode == 53, !isCommandBarPresented,
+           (onCommand?("exit-modal") ?? exitModal()) {
             lastKeyRoute = (eventWindow.windowNumber, event.keyCode, flags, event.timestamp, true)
             return true
         }
@@ -919,6 +925,7 @@ public final class BrowserWindowController: NSWindowController, NSWindowDelegate
             for space in model.spaces { menu.addItem(FeatureMenuItem(context.title(of: space)) { [weak self] in self?.peekStorage?.expandTop(into: space.id) }) }
             pendingMoveMenu = menu
             if window?.isVisible == true { menu.popUp(positioning: nil, at: CGPoint(x: root.bounds.midX, y: root.bounds.midY), in: root) }
+            pendingMoveMenu = nil
         }
         else if id == "go-back", peekStorage?.isShown == true { peekStorage?.stack.last?.host?.goBack() }
         else if id == "go-forward", peekStorage?.isShown == true { peekStorage?.stack.last?.host?.goForward() }

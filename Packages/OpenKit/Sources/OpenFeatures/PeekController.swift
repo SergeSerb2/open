@@ -135,7 +135,6 @@ public final class PeekController {
         keyMonitor = NSEvent.addLocalMonitorForEvents(matching: .keyDown) { [weak self] event in
             let consumed = MainActor.assumeIsolated {
                 guard let self, event.window === self.overlay.window, self.isShown else { return false }
-                if event.keyCode == 53 { if self.onPageEscape?() != true { self.escape() }; return true }
                 if event.modifierFlags.contains(.command) {
                     if event.charactersIgnoringModifiers == "[" { self.stack.last?.host?.goBack(); return true }
                     if event.charactersIgnoringModifiers == "]" { self.stack.last?.host?.goForward(); return true }
@@ -151,6 +150,12 @@ public final class PeekController {
         if case .favorites(let profileID)? = model.parent(of: item.sourceTabID) {
             sourceIsVisible = splitController.space?.profileID == profileID
         } else { sourceIsVisible = splitController.selected?.id == sourceNodeID(of: item) }
+        // Factories create transient pages hidden. Only the shown top page is
+        // visible; a refresh must not hide/show a page that stays on screen.
+        for candidate in stack {
+            let hidden = !sourceIsVisible || candidate.id != item.id
+            if candidate.host?.view.isHidden != hidden { candidate.host?.view.isHidden = hidden }
+        }
         guard sourceIsVisible else { overlay.isHidden = true; return }
         overlay.isHidden = false; if let host = item.host { overlay.showHost(host) }; overlay.needsLayout = true
     }
@@ -161,6 +166,7 @@ public final class PeekController {
         return item.sourceTabID
     }
     public func escape() {
+        if onPageEscape?() == true { return }
         if isExpanding { expandingGeneration += 1; isExpanding = false; overlay.panel.layer?.removeAllAnimations(); overlay.buttons.forEach { $0.alphaValue = 1 }; overlay.needsLayout = true; refresh() }
         else { dismissTop() }
     }
