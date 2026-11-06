@@ -364,6 +364,19 @@ def run(factory, results, tmp, root, wait_until, new_tab, frame, read_image, ext
                 and all(t and t["id"] == all_shortcuts[0]["id"] for t in shortcuts_tabs)
                 and all_shortcuts[0]["section"] == "today",
                 "menu":clean_shortcuts["menu"], "invocations":shortcuts_tabs, "tabs":all_shortcuts}
+            at_limit = app.call("ext-shortcuts", action="record", id="new-tab", key="u",
+                modifiers=["control", "option", "shift", "command"])
+            app.call("ext-shortcuts", action="reset", id="new-tab")
+            unchanged = bindings.read_bytes()
+            refused = []
+            for key, modifiers in (("", ["command"]), ("uu", ["command"]), ("u", ["command"] * 5)):
+                try:
+                    app.call("ext-shortcuts", action="record", id="new-tab", key=key, modifiers=modifiers)
+                    refused.append(False)
+                except RuntimeError as error:
+                    refused.append("invalid shortcut" in str(error))
+            results["X27_binding_input_bounds"] = {"ok":at_limit["status"] == "Saved." and all(refused)
+                and bindings.read_bytes() == unchanged, "fourModifiers":at_limit["status"], "refused":refused}
             # record() saves KeyBindingStore and calls the real App reload hook.
             bound = app.call("ext-shortcuts", action="record", id="new-tab", key="u", modifiers=["command", "shift"])
             expected_notice = action(probe)["name"] + ": ⇧⌘U is used by " + bound["openCommandTitle"] + ", so it is off."
