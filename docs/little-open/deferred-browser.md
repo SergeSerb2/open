@@ -4,13 +4,13 @@ Section 9 decision: deferred Little Open Browser.
 
 The bar is a command bar. Its first frame needs neither an engine Browser nor a page. A stable AppKit view occupies the container slot while those objects are absent. This also keeps the page path compatible with the pane-slot reuse merged in main `5916425d`.
 
-The existing coordinator `onChange` feed runs after the window is ordered front. It draws and commits that window's first `CATransaction`. The commit completion queues Browser creation on the next main run-loop turn. There is no production display link, timer, fixed delay, or pre-warmed Browser pool. Profile replacement uses the same path.
+The existing coordinator `onChange` feed runs after the window is ordered front. It draws and commits that window's first `CATransaction`. The commit completion uses `RunLoop.main.perform` to queue Browser creation on the next main run-loop turn. A main-queue async block can drain within the current turn. There is no production display link, timer, fixed delay, or pre-warmed Browser pool. Profile replacement uses the same path.
 
 The window owns one hidden Chrome `OEBrowser` and one tab after creation. A URL submitted before creation stays in one pending navigation slot. A later navigation replaces an earlier pending navigation, as it does in a live page. The factory seeds that URL before Chrome tab insertion, so creation can start the target directly. Native Return on the first event uses this path. External-link and Opt+Cmd-click entries also keep their URL until creation.
 
 Before creation, `surfacePage` is nil, visibility is false, history has no page to record, and automation `browserID` is null. The committed-frame read records the absent Browser and page before construction. The independent timing probe keeps the original native display-link endpoint. Creation registers the engine host and fires coordinator `onChange` again for Section 6 discovery. Closing clears the URL and prevents the weak commit/queued callback from creating a Browser. Live close still flushes history and closes the Browser once.
 
-Section 11 must still consume `StandalonePageSurface` for dialogs and permission anchors. Section 6 owns extension delegates, popup anchors, and its real extension acceptance. Move to Space keeps the existing reload and factory ownership boundary.
+Section 11 must still consume `StandalonePageSurface` for dialogs and permission anchors. Section 6 owns extension delegates and popup anchors. Its merged #189 attachment runs from the same `onChange` feed once the host exists. Visibility updates retain the same native Browser window instead of repeatedly entering `SetHostView` for an unchanged window. Move to Space keeps the existing reload and factory ownership boundary.
 
 ## Timing method
 
@@ -27,7 +27,9 @@ The old per-window median RSS cost was 5.48 MiB. Memory uses App `totalRSS` (App
 
 Intermediate deferred receipts remain in `.re/surface-hook/`: attempt 1 passed first frame (58.60 / 62.45 ms versus 75.79 / 91.56 ms) but failed page load (102.43 / 140.23 ms versus 97.55 / 125.07 ms). Attempt 2 seeded the early URL before insertion; 20 pairs passed first frame and page-load p95 but missed page-load median by 2.23 ms (109.93 versus 107.69 ms). The final version uses the lead-approved transaction-commit callback instead of waiting for a second display-link observation.
 
-Display-link attempt 3 stopped at the declared load limit after 17 valid samples; transaction attempt 4 stopped after four. Neither is an acceptance receipt. A planned attempt 5 was canceled before sampling when main advanced. Final current-main acceptance, the memory table, and the final-head verification table are maintained in [PR #185](https://github.com/SergeSerb2/open/pull/185). The final comparison includes main `4ac8566a` (Find and Section 11 docs) and engine `3f45b07b`.
+Display-link attempt 3 stopped at the declared load limit after 17 valid samples; transaction attempt 4 stopped after four. Neither is an acceptance receipt. A planned attempt 5 was canceled before sampling when main advanced. Final current-main acceptance, the memory table, and the final-head verification table are maintained in [PR #185](https://github.com/SergeSerb2/open/pull/185). The current control is main `8920190f` (including Find and Extensions UI #189), with engine `3f45b07b`. Both sides are rebuilt after that merge.
+
+The complete current-main receipt before the run-loop and host-window corrections used 10 pairs at load1 8.11–9.83: first frame main 89.84/109.12 ms versus branch 91.75/157.76 ms, page load 131.63/193.65 ms versus 158.82/232.72 ms (FAIL). With `RunLoop.main.perform`, a separate 20-pair receipt at load1 9.70–11.91 passed first frame (main 77.55/91.60 ms, branch 71.63/79.18 ms), but page-load median still failed (main 104.46/136.41 ms, branch 112.05/131.19 ms). Neither failing receipt is replaced or counted as final acceptance. The host-window correction follows an in-process trace of 29–37 identical `setWindow:` calls per load, totaling 2–3 ms; final acceptance remains the fresh uninstrumented gate in the PR.
 
 ## Real-app race checks and negative proofs
 
