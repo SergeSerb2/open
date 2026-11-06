@@ -136,6 +136,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, OEEngineDelegate, OEBr
     let wasEngineReady = engineReady
     let icons = wasEngineReady ? stores.sidebarFavicons : nil
     terminationRequested = true
+    for controller in windowControllers { controller.closeThemeEditor() }
     extensionPrompts.cancelAll()
     if let commandWindowObserver { NotificationCenter.default.removeObserver(commandWindowObserver) }; commandWindowObserver = nil
     if let commandDefaultsObserver { NotificationCenter.default.removeObserver(commandDefaultsObserver) }; commandDefaultsObserver = nil

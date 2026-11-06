@@ -436,7 +436,7 @@ after in the PR. If its ΔE00 worsens past 2, keep 0.64 for imported themes
 | Position | left = sidebar trailing edge in window coordinates (anchored sidebar: `sidebarWidth`; floating card: card frame `maxX`); top = window top + 35 pt. Clamp inside the screen's `visibleFrame` with 8 pt margins; if clamped horizontally, keep it fully on screen. | §14 (x 500 = sidebar width, y 35) |
 | Opened from the creation form | top aligned with the Theme card's top, same left edge (**guess**) | §6 |
 | Appearance | forced Space Light/Dark overrides the system live; Automatic follows the system; tokens in §5.9 | Session 2 0158–0163, lead round 3 supersedes Q9 |
-| One per window | Opening an editor for any Space closes the open one first (commit is already done per gesture). | Open choice |
+| One per window | A second entry focuses the existing panel. A different Space commits the current gesture and retargets that same controller and panel (Section 4 child-A brief, 2026-11-06). | Open choice |
 | Close triggers | Esc; mouse down in any app window outside the panel (local event monitor); the app deactivates (`NSApplication.didResignActiveNotification`); the browser window closes or switches Space; the edited Space is deleted | Arc `didKeyDownEscape`; transient popover behavior |
 
 ### 5.2 Layout (content coordinates, origin top-left, pt)
@@ -796,9 +796,11 @@ normal window).
   from `baseline` to the current value; the controller sets the action name
   "Update Theme"; the app's existing debounced `scheduleSave()` runs. Then
   `baseline` = current value.
-- Undo / redo while the panel is open: the session observes `space.theme`;
-  any change it did not make reseeds the editor state (§4.3) and moves the
-  knobs (no animation for knobs; the background uses `themeDiscrete`).
+- Undo / redo while the panel is open restores the exact paired in-session
+  state: style, knob, lightness range, and saturation (Step 9 lead decision,
+  2026-10-26 17:14). Other external theme changes reseed the state (§4.3).
+  Knobs do not animate; the background uses `themeDiscrete`. The range is
+  never written to disk. Reopening derives it from the key per §17.1.
 - Closing the panel mid-drag (Esc during a drag) commits first.
 - App quit with the panel open: `applicationWillTerminate` closes panels,
   which commits.
@@ -1239,10 +1241,10 @@ on both pages; the same editor in macOS Light.
 | 2 R3 | 2026-10-26 | Main `c768c38` included; release build and editor checks 48/48. Legacy field and exact-grain paths restored: all 13 sidebar capture tables byte-identical to main, zero metric drift. F0139 six-region max ΔE00 0.84. |
 | 3 R3 | 2026-10-26 | Editor checks 96/96, including one-color complementary Add/undo, grey knob overlap, and forced appearance. Historical peak-method fit 0.50850 was refused; review R3 below invalidates that measurement and sets 0.50 with dot-masked, hover-matched sampling. |
 | 4 R3 | 2026-10-26 | Full code head `cbac12b`: plain verify-all through heavy.sh, 20 PASS, import-arc not selected without per-run opt-in. Editor 151/151; sidebar 429/429; 13 capture tables byte-identical and CU5 2/2. F0137/F0138 and session-2 slider/page-two/preview compares PASS. Final fit check confirms zero changed pixels outside glyph host frames, but Light 0159 crosses ΔE00 1.75→4.36; candidate refused as required. Only Open render refreshes and this log follow the code gate; Steps 5–8 remain deferred. |
-| 5 | | |
+| 5 | 2026-11-06 | `s4/theme-live`: real App menu/command/header/switcher entries, one panel per window, live sessions, shared undo/save and all E8 close triggers. Focused native E7/E8/B1 PASS; B1 main-thread p95 1.849 ms, wall p95 1.874 ms, load 30.90/26.89/19.20, 240 ticks with two matching windows, no new tiles/layout. Real-App close/idle and undo after close PASS; negative controls fail. Final full-gate table is in the PR. |
 | 6 | | |
 | 7 | | |
-| 8 | | |
+| 8 (theme) | 2026-11-06 | Generic theme automation and `engine_e2e.py --only space-editor`: three confirmed 31/31 PASS runs (`.re/s4-theme-live/confirmed-space-editor-{1,2,3}.{log,json}`). A1 checks panel geometry/rendering; A2 checks three windows; A3 checks exact style/knob undo and redo while open and after close; A4 preserves style and background pixels (ΔE00 0). E8 close triggers, one-save gesture and idle rows PASS. A5–A7, icon picker and New Space remain separate work. Live 1x→2x transition is UNVERIFIED: only a 1x screen is exposed in this session. |
 | 9 | 2026-10-26 | §17: 29/29 session2-pad rows; color max ΔE00 1.034, preset raster max 1 pt, texture L* sd errors ≤0.042. Editor 172/172, including exact range/saturation/knob undo and redo. Break proofs: old laws fail 31 native and 26 capture rows; missing paired undo fails the existing redo-knob and new state-restoration rows; restored source passes. Merged focused build, space-legacy, space-editor, sidebar-render, and all 13 byte-identical sidebar tables PASS. F0069 legacy/diagnostic 2.38/2.29, legacy retained; F0139 editor-style diagnostic 0.84→1.89 reported below. Full verification and review-checklist receipts are in the PR body. Steps 5–8 remain deferred. |
 
 ## 17. Step 9 calibration — decoded Arc pad, intensity, and texture law (2026-10-26)
@@ -1610,6 +1612,41 @@ F0137/F0138 remain at maximum **1 pt / ΔE00 1.94**. Session-2 slider frames
 most **ΔE00 1.31** across 0112/0114/0116/0118/0159.
 
 
+### Step 5 implementation — live sessions (2026-10-26)
+
+`ThemeEditSession` owns the current model baseline and draft. The panel's
+single display link writes one preview per frame. The shared
+`ThemePreviewRegistry` publishes after that write, in the same transaction;
+each matching sidebar swaps and rebuilds its field before presentation.
+Other Spaces are not invalidated. Leases are scoped to editor gestures, so
+preset/mode/add/remove/texture and undo/redo keep the discrete 0.21 s fade.
+
+The browser window owns one controller. Both `edit-theme` and
+`editSpaceTheme` use it; the latter focuses its target first without adding
+an undo step. A gesture commit schedules one debounced save. Its undo relay
+keeps the store independently of the original window, so undo/redo still
+save after that window closes. Esc flushes a pending frame before closing.
+Outside mouse down, app deactivation, Space switch/delete, owner close, and
+app termination close the editor. The existing final save after the engine
+message loop follows the termination notification; no new app shutdown
+path is added. Backing-scale changes follow the owner window.
+
+`App/MainMenu.swift` adds only the theme command's feature ownership and a
+small key-window lookup for the panel. Existing generic automation drives
+the real windows in `engine_e2e.py --only theme-live`; Step 8's dedicated
+`editor-*` / `theme-*` APIs, creation form, and icon picker remain deferred.
+The already-landed thumb-overhang `hitTest` path is retained and checked
+through the native panel path.
+
+Step 5 checkpoint (22:26): implementation is committed for handoff, but is
+not ready to ship. The focused E7/E8/B1 harness passed at this
+checkpoint. The latest real-window run with the opaque white page passed
+live propagation, save scheduling, app key routing, and close triggers;
+its thumb-overhang assertion and dependent undo-after-close assertion
+failed and still need investigation. Real-window rest/hover calibration,
+the review checklist, and the full verification gate remain open. No Step 5
+PR is opened during the requested pause.
+
 ### Step 9 review r1 response (2026-10-26)
 
 The undo action closure retains its relay; Foundation's undo target itself
@@ -1651,3 +1688,46 @@ Review r1 focused receipt: `space-editor` **178/178**; `session2-pad`
 (limit 0.15); diagonals include only runs at least 85 px long. Restoring the
 old cloudy tile fails the new scale gate with error **0.384**. Restoring
 old page restoration fails both page-navigation undo and redo checks.
+
+
+### Step 5 / Step 8 theme port — real App (2026-11-06)
+
+The old `t3/space-editor-live` checkpoint is ported as content onto current
+main. `OpenFeatures.BrowserWindowController` owns one theme controller;
+`EngineWebContentHostFactory.performSidebar` and the menu/command bar route
+through it. The existing bottom switcher already uses the Space context menu.
+A repeated entry focuses the panel; a different Space retargets it after a
+commit and focuses that Space without undo. Paired editor undo snapshots
+carry the Space id, so undoing a prior target does not move the current
+Space's knobs. Resize and move keep the anchor, and backing changes update
+render scale. Hidden or hover-revealed sidebars anchor at window leading +8
+pt, top 35 pt (choice for the lead).
+
+The old thumb-overhang failure was a check race: immediately after the
+native click, the model still read intensity 0.8; after the pending display
+frame it read 0.98, and the overhang click reached 1.0. The suite now waits
+for the pending frame. No thumb art or hit area is changed. The dependent
+undo-after-close failure was real: `RenderWidgetHostViewCocoa` retained
+keyboard focus and consumed Cmd+Z. Closing now returns focus to the browser
+outline before the page is focused again. Cmd+T/L/W then use their normal
+browser command paths. Termination explicitly closes editors before the
+final snapshot save.
+
+Automation lives in `App/Automation/AutomationSpaceEditor.swift`. The kind
+switch accepts theme and refuses unknown kinds, ready for siblings to add
+icon/create. `editor-act` uses own-panel events through the application;
+`editor-state` exposes frame, scale, knob, preview/commit/frame counts and
+pending/active display links. `space-editor` is the shared real-App suite.
+A1 compares structural geometry and rendered pixels only: Arc captures are
+not in the repo. A4 samples blank background, clear of auto-archive banners.
+The icon-picker, creation-form and A5–A7 rows are not marked complete here.
+
+Verification receipts for this port are under `.re/s4-theme-live/` (local,
+synthetic captures only). The focused native gate, three real-App runs, and
+negative controls are separate receipts. The combined native mutant failed
+15 rows, including B1 at main-thread p95 6.791 ms (load
+15.85/23.45/20.82); the App mutant failed geometry, undo/persistence, close
+monitoring and idle gates. A separate controller-replacement mutant failed
+the retarget gate. All mutated sources were restored before normal builds.
+A live move between 1x and 2x remains unverified: this App session exposes
+only a 1x screen. Both scales retain the existing native layout checks.

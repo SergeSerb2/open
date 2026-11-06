@@ -87,6 +87,8 @@
       // App lifecycle commands remain available after the final window closes.
       switch cmd {
       case _ where Self.littleOpenCommands.contains(cmd): return try await runLittleOpenCommand(cmd, a)
+      case "theme-get", "theme-set", "editor-open", "editor-act", "editor-close", "editor-state":
+        return try await runEditorCommand(cmd, a)
       case "key": return try await sendKey(a, app.frontWindowController.flatMap { app.hostFactories[$0.windowID] })
       case "snapshot": return try await snapshot(a, app.frontWindowController.flatMap { app.hostFactories[$0.windowID] })
       case "ext-prompt", "ext-manage", "ext-commands", "ext-run-command", "ext-windows", "ext-omnibox", "ext-strip", "ext-click", "ext-popup-state", "ext-picker", "ext-hover", "ext-ui-menu", "ext-redraw-measure", "ext-shortcuts":
@@ -1970,6 +1972,10 @@
         return ["path": path, "method": "devtools"]
       }
       if a["window"] as? String == "library", app.settingsPresenter.libraryPresenter?.window == nil { throw Failure(message: "no Library window") }
+      if a["window"] as? String == "editor" {
+        guard let panel = w?.controller?.themeEditor?.panel else { throw Failure(message: "no editor") }
+        return ["path": path, "method": try await WindowSnapshot.capture(panel, to: url)]
+      }
       let number = a["window"] as? String == "library" ? app.settingsPresenter.libraryPresenter?.window?.windowNumber : a["window"] as? Int
       guard let target = number.flatMap({ n in NSApp.windows.first { $0.windowNumber == n } }) ?? w?.window
       else { throw Failure(message: "no window") }

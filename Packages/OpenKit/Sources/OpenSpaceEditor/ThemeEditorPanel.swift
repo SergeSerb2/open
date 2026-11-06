@@ -22,6 +22,7 @@ public final class ThemeEditorPanel: NSPanel {
     public init() {
         super.init(contentRect: CGRect(origin: CGPoint(x: -20000, y: -20000), size: ThemeEditorMetrics.panelSize),
                    styleMask: [.borderless], backing: .buffered, defer: false)
+        acceptsMouseMovedEvents = true
         isFloatingPanel = false; hasShadow = true; isOpaque = false; backgroundColor = .clear
         isReleasedWhenClosed = false; hidesOnDeactivate = false
         contentView = editorView

@@ -918,3 +918,31 @@ relaunches that profile, and repeats the drag after repair.
 `OPEN_E2E_E2_FORCE_FAILURE=popup` stops the suite with its native popup open;
 `popup-quit` first quits the App to exercise restoration without the socket.
 Frame preferences are restored after quit through the shared defaults fallback.
+
+
+## Space editors (Section 4)
+
+Theme commands use the real App model and the same window controller as the
+menu and command bar. Coordinates for `editor-act` are panel content points
+from its top-left (including the transparent 13 pt band). Named controls use
+`control` with the names returned by `editor-state.controls`.
+
+| Command | Arguments | Result |
+|---|---|---|
+| `theme-get` | optional `space` (focused by default) | stored `style` or null, derived light/dark palette hex, `contentAppearance` |
+| `theme-set` | optional `space`, `style` object or null | session preview/commit, one Update Theme undo step and save |
+| `editor-open` | `kind=theme`, optional `space` | true; unknown kinds return false |
+| `editor-act` | `action=click/hover`, `x/y` or named `control` | own-panel NSEvents |
+| `editor-act` | `action=drag`, `from/to` point arrays, optional `steps` (1–240) | own-panel mouse down, drag frames, up |
+| `editor-act` | `action=down/drag/up`, `x/y` | one event, for interrupted gestures |
+| `editor-act` | `action=key`, `key`, optional `modifiers` | `NSApplication.sendEvent`, app routing |
+| `editor-state` | — | kind, Space, frame, scale, controls, knob, commit/preview/frame counters, pending frame and process-wide editor display-link count |
+| `editor-close` | — | flush and close; safe when already closed |
+| `snapshot` | `window=editor`, `path` | real panel PNG |
+
+`command id=edit-theme` reuses the generic menu command runner. The native
+`space-editor` e2e suite covers the theme subset; sibling flows can extend the
+kind switch and suite. Model reads can precede a pending display frame: wait
+for `editor-state.pendingFrame=false` after a completed gesture before
+asserting its committed value. Snapshot checks use empty background regions,
+so the auto-archive education banner is not mistaken for a theme pixel.

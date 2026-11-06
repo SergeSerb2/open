@@ -648,7 +648,8 @@ final class EngineWebContentHostFactory: NSResponder, WebContentHostFactory {
       // "Edit Pinned URL dialog" (FC §3.2 r3); Section 2's brief chose the command bar.
       guard let tab = model.tab(id: id), tab.pinnedURL != nil else { return false }
       showCommandBar(.editCurrentURL, editingPinnedTab: tab.id); return true
-    case .showSiteControls, .changeSpaceIcon, .editSpaceTheme, .newProfile, .shareSpace,
+    case .editSpaceTheme(let id): return controller?.editSpaceTheme(id) == true
+    case .showSiteControls, .changeSpaceIcon, .newProfile, .shareSpace,
          .changeIcon, .customizePage:
       return false // Explicitly deferred UI entries; see docs/app-shell.md Step B.
     default: return nil
@@ -815,7 +816,8 @@ extension EngineWebContentHostFactory {
   @objc func focusAddressBar(_ sender: Any?) { showCommandBar(.editCurrentURL) }
 
   func ownsKeyWindow(_ candidate: NSWindow) -> Bool {
-    candidate === window || candidate === popupPanel || auxiliaryPages.contains { $0.panel === candidate } || pageChrome.owns(candidate)
+    if candidate === controller?.themeEditor?.panel { return true }
+    return candidate === window || candidate === popupPanel || auxiliaryPages.contains { $0.panel === candidate } || pageChrome.owns(candidate)
   }
   func navigateFromCommandBar(_ url: URL, current: Bool, background: Bool = false) {
     app.noteLaunchWindowNavigation(windowState.id)

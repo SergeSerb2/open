@@ -1277,3 +1277,33 @@ Historical negative-control receipts describe their original frozen harnesses;
 this refresh retains their defect gates and adapts the delay assertions to main.
 
 [Current merge/checklist receipts](../Packages/OpenKit/MediaRenders/step3b/evidence/main-refresh/README.md).
+
+
+## Space theme editor live propagation (Step 5)
+
+The editor is a child `ThemeEditorPanel`, built lazily by the browser window.
+The `edit-theme` command and `.editSpaceTheme` sidebar intent share that
+controller. Each display tick writes the current draft through
+`ThemeEditSession`; a shared `ThemePreviewRegistry` then updates matching
+sidebars in that transaction. Live gestures have no cross-fade. Discrete
+changes use `Motion.themeCrossfade`; other Spaces keep their field and rows.
+
+One completed gesture is one “Update Theme” undo step and one debounced
+save. Undo includes the editor's transient lightness range and saturation,
+as specified in the Step 9 lead decision; those values are not persisted.
+The session flushes before closing, and its save callback outlives the
+original window's undo entry. Outside mouse down, Escape, app deactivation,
+Space switch/delete, owner-window close, and termination close the panel.
+
+Verification: `space-editor-render check` includes E7/E8 and B1 (240 ticks,
+two same-Space scenes, main-thread CPU p95 ≤4 ms, every window rebuilt once
+per frame, no tile generations after warm-up). The generic real-app suite
+is `tools/e2e/engine_e2e.py --only space-editor`, under the on-screen lock.
+Its screenshots contain only the committed synthetic fixture's data.
+Theme automation provides `theme-get`, `theme-set`, `editor-open kind=theme`,
+`editor-act`, `editor-close`, `editor-state`, and `snapshot window=editor`.
+The generic editor kind switch refuses unknown kinds. Creation and icon-picker
+flows remain separate work. When the sidebar is hidden or hover-revealed,
+the panel anchors at the window leading edge +8 pt (choice for the lead).
+Closing returns keyboard focus to browser chrome, so the shared model undo
+manager receives Cmd+Z before a page is focused again.
