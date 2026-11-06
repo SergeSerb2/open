@@ -39,6 +39,12 @@ public final class BoostEditorSession {
     private var sampleTask: Task<Double?, Never>?
     private var sampleGeneration = 0
     private var deleted = false
+    public private(set) var isZapActive = false
+    public private(set) var isSelecting = false
+    public var zapAvailable: Bool { host.zapAvailability(tabID: context.tabID) }
+    /// Code-mode owner inserts through its NSTextView at the current CSS caret.
+    public var insertSelectorAtCaret: ((String) -> Void)?
+    private var pickerObservation: SiteControlObservationToken?
     private var currentPageURL: URL?
 
     public init(context: SiteControlContext, boost: Boost, isNew: Bool = false,
@@ -49,6 +55,10 @@ public final class BoostEditorSession {
         colorsReady = boost.colorWheel != nil
         sampledHue = boost.colorWheel?.baseHue
         undoManager.groupsByEvent = false
+        pickerObservation = host.observePickerEvents { [weak self] tab, event in
+            guard let self, tab == self.context.tabID, !self.isClosed else { return }
+            self.handlePickerEvent(event)
+        }
     }
     isolated deinit { previewWork?.cancel(); sampleTask?.cancel() }
     public var isEditable: Bool { !context.isIncognito && !isClosed }
@@ -76,6 +86,7 @@ public final class BoostEditorSession {
     public func updatePageURL(_ url: URL?) {
         let changed = currentPageURL != url
         currentPageURL = url
+        endPickerSession()
         if changed && boost.colorWheel == nil { restartColorSampling() }
         onChange?()
     }
@@ -152,6 +163,46 @@ public final class BoostEditorSession {
         }
         restartColorSampling()
     }
+    public func toggleZap() {
+        guard isEditable, globallyEnabled, isActiveOnPage, zapAvailable else { return }
+        if isZapActive { endPickerSession(); return }
+        if isSelecting { endPickerSession() }
+        endInteractive()
+        isZapActive = host.enterZap(boostID: boost.id, tabID: context.tabID)
+        if isZapActive { host.requestZapCounts(tabID: context.tabID) }
+        onChange?()
+    }
+    public func pickSelector() {
+        guard isEditable, globallyEnabled, isActiveOnPage else { return }
+        if isSelecting { endPickerSession(); return }
+        if isZapActive { endPickerSession() }
+        endInteractive()
+        isSelecting = host.enterSelectorPicker(boostID: boost.id, tabID: context.tabID)
+        onChange?()
+    }
+    /// App calls this on tab switch, navigation (including same-URL reload),
+    /// frame destruction, and transport loss. Close sends its own unconditional exit.
+    public func endPickerSession() {
+        guard isZapActive || isSelecting else { return }
+        host.exitZap(tabID: context.tabID)
+        isZapActive = false; isSelecting = false; onChange?()
+    }
+    private func handlePickerEvent(_ event: BoostPickerEvent) {
+        switch event {
+        case let .committed(value), let .removed(value):
+            guard value.id == boost.id, let saved = store.boost(id: boost.id) else { return }
+            let before = boost
+            boost = saved
+            if boost != before { registerRestore(before, name: "Change Zap") }
+        case .exited: isZapActive = false; isSelecting = false
+        case let .selected(selector, _):
+            guard isSelecting else { return }
+            insertSelectorAtCaret?(selector)
+            endPickerSession()
+        case .listResult: break
+        }
+        onChange?()
+    }
     public func showAllBoosts() { host.showBoostsLibrary(profileID: context.profileID) }
     public func delete() {
         guard isEditable else { return }
@@ -165,6 +216,8 @@ public final class BoostEditorSession {
         if interactiveBefore != nil { endInteractive() }
         previewWork?.cancel(); previewWork = nil; sampleTask?.cancel()
         host.exitZap(tabID: context.tabID)
+        isZapActive = false; isSelecting = false
+        if let pickerObservation { host.removePickerObserver(pickerObservation); self.pickerObservation = nil }
         if isNew && boost.isEmpty && !deleted {
             _ = store.delete(id: boost.id); host.refresh(profile: context.profileID)
         }
@@ -226,7 +279,11 @@ public final class BoostEditorSession {
             MainActor.assumeIsolated { target.restore(inverse, name: name) }
         }
         undoManager.setActionName(name)
+        for zap in boost.zaps where !value.zaps.contains(where: { $0.selector == zap.selector }) {
+            host.removeZapFromSession(zap.selector, tabID: context.tabID)
+        }
         boost = store.upsert(value)
+        if isZapActive { host.requestZapCounts(tabID: context.tabID) }
         host.refresh(profile: context.profileID); onChange?()
     }
     private func schedulePreview() {

@@ -10,6 +10,7 @@ enum EditorFlows {
         var checks: [Flows.Check] = []
         func check(_ name: String,_ pass: Bool) { checks.append(.init(name: name,pass: pass)) }
         checks += padAndWindowFlows()
+        checks += zapFlows()
         let stage = EditorStage(), store = stage.host.boostStore
         let id = stage.session.boost.id
         let initial = stage.session.boost
@@ -186,7 +187,8 @@ enum EditorFlows {
         for _ in 0..<40 { fonts.key(48,"\t"); if fonts.panel.firstResponder === fourth { break } }
         let visible = fourth.visibleRect
         check("F12 font grid keeps 26 pt cells and keyboard focus",fonts.panel.firstResponder === fourth && fourth.bounds.width == 26 && visible.width >= 25.9 && fourth.showsKeyboardFocus)
-        check("design 12 disabled tile copy is user-facing",fonts.view.control(id: "editor.tool.zap")?.tooltipTitle == "Zap isn’t available yet." && fonts.view.control(id: "editor.tool.code")?.tooltipTitle == "Code editing isn’t available yet.")
+        fonts.tap("editor.tool.zap")
+        check("design 12 disabled tile copy is user-facing",fonts.view.control(id: "editor.tool.zap")?.tooltipTitle == "Zap isn't available yet." && fonts.view.control(id: "editor.tool.code")?.tooltipTitle == "Code editing isn’t available yet.")
         return checks
     }
     private static func scopeFlows() -> [Flows.Check] {
