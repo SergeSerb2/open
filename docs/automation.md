@@ -298,7 +298,11 @@ Additional socket commands:
 | `commandbar-state` | Read actual bar mode, text, rows, selection, and monotonic first-result timings. Also `footer` (the (i) privacy footer shows), `hidden`, `panelOpacity` (the panel's presentation opacity), `animationKeys` (bar layers, the self-blinking caret excluded) and `allAnimationKeys`, `panelFrame` (window points, top-left origin), `fieldWidth`, `allowsRemote`. Does not create the bar. |
 | `settings-pane` | `pane`: a Settings pane id (`general`, `profiles`, `links`, `shortcuts`, `appIcon`, `advanced`). Shows Settings on that pane through the App's presenter (a fixture step before a check that must switch panes). |
 | `commandbar-press` | `control`: `info`, `dismiss`, `searchSettings`, or `privacyLink`. Performs that bar control's AX press action (the control's real action). Returns `pressed` and the new `commandbar-state`. |
-| `menu-state`, `menu-perform id=…` | Read native menu validation or invoke an enabled native menu item. |
+| `menu-state`, `menu-perform id=…` | Read native menu validation (including `key`, raw `modifierMask`, nil-target/action and hidden state), or invoke an enabled native menu item. |
+| `key observeCommands=true` | Scope a dispatch trace to this real in-process key event. Returns the actual `charactersIgnoringModifiers`, window command entries in `commands`, and native menu dispatches in `menuActions`. It changes no route or target and installs no observer at rest. |
+| `menu-key-render path=…` | Copy the real Shift+letter items into an AppKit menu, capture this App's native popup, then cancel it without an action. Run under the on-screen lock. |
+| `editor-open kind=create`, `creation-state` | Open or focus the New Space sidebar page; read its draft, Profile, native Name focus, theme preview and undo state. |
+| `editor-act`, `editor-close` | Use the creation form's controls (`click control=theme/icon/create/cancel`, `profile name=…`) or a draft theme preset (`preset index=0…8`). Close the theme editor first, else cancel creation. |
 | `reload-keybindings` | Load the actual `State/keybindings.json`, validate conflicts, and rebuild menus and the global registration. |
 | `sidebar-duplicate id=…`, `sidebar-tree` | Send the production SidebarDelegate intent; read fresh subtree IDs and load flags. |
 | `settings-state`, `settings-toggle name=hotkey\|external` | Read the shared real presenters, including pane-local `generalError`/`advancedStatus`; commit the live Links settings model. |
