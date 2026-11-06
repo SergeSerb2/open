@@ -160,7 +160,7 @@ def onscreen_suite(command):
         lock_path = "/tmp/open-onscreen-e2e.lock"
         while cancelled is None:
             lock_file = open(lock_path, "a+")
-            lock_job = subprocess.Popen(["/usr/bin/lockf", "-s", str(lock_file.fileno())],
+            lock_job = subprocess.Popen(["/usr/bin/lockf", "-k", "-s", str(lock_file.fileno())],
                                         pass_fds=(lock_file.fileno(),),
                                         stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
             while cancelled is None:
