@@ -1938,6 +1938,9 @@
         }
       }
       if code >= 123 { mods.insert([.function, .numericPad]) }
+      // AppKit preserves Shift in charactersIgnoringModifiers. Native menu
+      // equivalents such as Redo need "Z", even though the key router folds case.
+      let eventCharacters = mods.contains(.shift) ? chars.uppercased() : chars
       let route = a["route"] as? String ?? "app"
       let dispatchStarted = ProcessInfo.processInfo.systemUptime
       // Modifier keys alone post one flagsChanged event (down: pass the modifier; up: none).
@@ -1948,7 +1951,7 @@
         guard
           let event = NSEvent.keyEvent(
             with: type, location: .zero, modifierFlags: mods, timestamp: eventTimestamp,
-            windowNumber: target.windowNumber, context: nil, characters: chars, charactersIgnoringModifiers: chars,
+            windowNumber: target.windowNumber, context: nil, characters: eventCharacters, charactersIgnoringModifiers: eventCharacters,
             isARepeat: false, keyCode: code)
         else { continue }
         if route == "window" { target.sendEvent(event) } else { NSApp.sendEvent(event) }
