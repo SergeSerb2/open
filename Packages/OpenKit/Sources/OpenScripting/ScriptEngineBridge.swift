@@ -1,7 +1,8 @@
 import Foundation
 import OpenModel
 
-/// App-owned engine adapter. Conversion and the ten-second JavaScript timeout belong to H2.
+/// Named-tab navigation and execute contract for dictionary verbs. The App H2 adapter
+/// owns value conversion and the ten-second reply deadline; this module never imports an engine.
 @MainActor
 public protocol ScriptEngineBridge: AnyObject {
     func navigate(tabID: ItemID, to url: URL)

@@ -8,6 +8,12 @@ import QuartzCore
 
 /// Panel, input row, and result rows.
 public enum CommandBarMetrics {
+    /// S2 19/0003: fixed embedded panel, 79 + 5 × 50 = 329 pt.
+    public static let littleOpenWidth: CGFloat = 490
+    public static let littleOpenRows = 5
+    public static func littleOpenCloseFrame(width: CGFloat) -> CGRect {
+        CGRect(x: width - 47, y: 19, width: 26, height: 26)
+    }
     /// Outer width, border included (x 725…1490, F0049/F0063).
     public static let panelWidth: CGFloat = 766
     /// Side margin kept when the window is narrower than the panel plus margins. guess.

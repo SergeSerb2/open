@@ -2,6 +2,34 @@ import AppKit
 import Observation
 import OpenModel
 import OpenRouting
+import OpenDesign
+
+/// AppKit coordinates. Injection makes the window placement independent of the desktop.
+public struct LittleOpenScreen: Sendable {
+    public var frame: CGRect
+    public var visibleFrame: CGRect
+    public init(frame: CGRect, visibleFrame: CGRect) { self.frame = frame; self.visibleFrame = visibleFrame }
+    @MainActor public static func pointerScreen() -> LittleOpenScreen {
+        let point = NSEvent.mouseLocation
+        let screen = NSScreen.screens.first { $0.frame.contains(point) } ?? NSScreen.main
+        // Guess only when no display exists (offscreen callers inject their screen).
+        return LittleOpenScreen(frame: screen?.frame ?? LittleOpenMetrics.fallbackScreenFrame,
+                                visibleFrame: screen?.visibleFrame ?? LittleOpenMetrics.fallbackScreenFrame)
+    }
+}
+
+public enum LittleOpenWindowState: String, Sendable { case bar, page }
+
+@MainActor
+public struct LittleOpenAutomationState {
+    public let id: WindowID
+    public let window: NSWindow
+    public let state: LittleOpenWindowState
+    public let currentURL: URL
+    public let profileID: ProfileID
+    public let pillSpaceID: SpaceID?
+    public let lastActiveAt: Date
+}
 
 @MainActor
 @Observable
@@ -11,48 +39,70 @@ public final class LittleOpenCoordinator {
     @ObservationIgnored public let model: BrowserModel
     @ObservationIgnored private let archiveSink: (any ArchiveSink)?
     @ObservationIgnored let makeWebContent: (ProfileID) -> any LittleOpenWebContentProviding
-    @ObservationIgnored private var timer: Timer?
+    @ObservationIgnored let screenProvider: () -> LittleOpenScreen
+    @ObservationIgnored private var lastKeyDownTimestamp: TimeInterval?
+    @ObservationIgnored private var introClaimed = false
+    @ObservationIgnored public var onSwitchToTab: ((ItemID, SpaceID?) -> Void)?
+    @ObservationIgnored public var performCommand: ((String, SpaceID?) -> Void)?
+    @ObservationIgnored public var isActionEnabled: ((String, SpaceID?) -> Bool)?
     @ObservationIgnored public var presentWindows = true
     @ObservationIgnored public var onChange: (() -> Void)?
     @ObservationIgnored public var onOpenInMain: ((WindowID, ItemID, (any WebContentHost)?) -> Void)?
     @ObservationIgnored public var confirmProfileSwitch: ((ProfileID, @escaping (Bool) -> Void) -> Void)?
     @ObservationIgnored public var defaults = UserDefaults.standard
-    public init(model: BrowserModel, archiveSink: (any ArchiveSink)?, makeWebContent: @escaping (ProfileID) -> any LittleOpenWebContentProviding) {
+    public init(model: BrowserModel, archiveSink: (any ArchiveSink)?,
+                screenProvider: @escaping () -> LittleOpenScreen = { LittleOpenScreen.pointerScreen() },
+                makeWebContent: @escaping (ProfileID) -> any LittleOpenWebContentProviding) {
         self.model = model; self.archiveSink = archiveSink; self.makeWebContent = makeWebContent
-        timer = Timer.scheduledTimer(withTimeInterval: 60, repeats: true) { [weak self] _ in
-            MainActor.assumeIsolated { _ = self?.archiveExpired(now: Date()) }
-        }; timer?.tolerance = 10
+        self.screenProvider = screenProvider
     }
-    isolated deinit { timer?.invalidate(); for c in controllers.values { c.container.closeAll(); c.window?.orderOut(nil) } }
+    isolated deinit { for c in controllers.values { c.container.closeAll(); c.window?.orderOut(nil) } }
+    /// Read-only live state for the App's automation adapter.
+    public var stateForAutomation: [LittleOpenAutomationState] {
+        sessions.compactMap { session in
+            guard let controller = controllers[session.id], let window = controller.window else { return nil }
+            return LittleOpenAutomationState(id: session.id, window: window, state: controller.state,
+                currentURL: controller.currentURL ?? session.tab.url, profileID: session.profileID,
+                pillSpaceID: controller.pillSpaceID, lastActiveAt: session.lastActiveAt)
+        }
+    }
+    func claimIntro() -> Bool {
+        guard !introClaimed, !defaults.bool(forKey: "open.links.littleOpenNUXSeen") else { return false }
+        introClaimed = true
+        defaults.set(true, forKey: "open.links.littleOpenNUXSeen")
+        return true
+    }
+    private var defaultProfile: ProfileID? {
+        model.windows.compactMap { model.space(id: $0.focusedSpaceID)?.profileID }.first ?? model.profiles.first?.id
+    }
     public func open(url: URL, profileHint: ProfileID?) {
         let canonical = HostNormalizer.canonicalURLString(url)
         if let session = sessions.first(where: { HostNormalizer.canonicalURLString(controllers[$0.id]?.currentURL ?? $0.tab.url) == canonical }) {
             resurface(session.id); return
         }
-        guard let profile = profileHint.flatMap({ model.profile(id: $0)?.id }) ?? model.spaces.first?.profileID ?? model.profiles.first?.id else { return }
+        guard let profile = profileHint.flatMap({ model.profile(id: $0)?.id }) ?? defaultProfile else { return }
         create(url: url, profile: profile, focus: false)
     }
-    /// A fresh blank unless an existing blank window is key (also prevents shortcut double fire).
-    public func openBlank(focusURLField: Bool) {
-        if let session = sessions.first(where: { controllers[$0.id]?.isKeyForReuse == true && $0.tab.url.absoluteString == "about:blank" }) {
-            resurface(session.id); if focusURLField { controllers[session.id]?.focusURL() }; return
+    /// Every press creates a window; only duplicate delivery of the same key-down coalesces.
+    public func openBlank(focusURLField: Bool, keyDownTimestamp: TimeInterval? = nil) {
+        if let timestamp = keyDownTimestamp, timestamp.isFinite {
+            if let previous = lastKeyDownTimestamp, abs(timestamp - previous) < LittleOpenMetrics.samePressTolerance { return }
+            lastKeyDownTimestamp = timestamp
         }
-        guard let profile = model.spaces.first?.profileID ?? model.profiles.first?.id else { return }
+        guard let profile = defaultProfile else { return }
         create(url: URL(string: "about:blank")!, profile: profile, focus: focusURLField)
     }
     private func create(url: URL, profile: ProfileID, focus: Bool) {
         let tab = Tab(url: url); tab.live.sleepPhase = .live
         let session = LittleOpenSession(tab: tab, profileID: profile)
         let controller = LittleOpenWindowController(session: session, coordinator: self, factory: LittleHostFactory(makeWebContent), defaults: defaults)
-        if let previous = sessions.first.flatMap({ controllers[$0.id]?.window }) { controller.window?.setFrameOrigin(CGPoint(x: previous.frame.minX + 24, y: previous.frame.minY - 24)) }
         sessions.insert(session, at: 0); controllers[session.id] = controller
         resurface(session.id); if focus { controller.focusURL() }; onChange?()
     }
     public func resurface(_ id: WindowID) {
         guard let session = sessions.first(where: { $0.id == id }), let controller = controllers[id] else { return }
         session.lastActiveAt = Date()
-        if !presentWindows { for c in controllers.values { c.offscreenKey = false } }
-        if presentWindows { controller.window?.makeKeyAndOrderFront(nil) } else { controller.offscreenKey = true }
+        if presentWindows { controller.window?.makeKeyAndOrderFront(nil) }
         controller.updateVisibility()
         sessions.sort { $0.lastActiveAt > $1.lastActiveAt }; onChange?()
     }
@@ -84,26 +134,37 @@ public final class LittleOpenCoordinator {
         close(sessionID: sessionID, archiveReason: nil)
     }
     public func close(sessionID: WindowID, archiveReason: ArchiveReason?) {
+        close(sessionID: sessionID, archiveReason: archiveReason, now: Date())
+    }
+    private func close(sessionID: WindowID, archiveReason: ArchiveReason?, now: Date) {
         guard let session = sessions.first(where: { $0.id == sessionID }) else { return }
-        if let reason = archiveReason { archiveSink?.archive([ArchiveEntry(tab: session.tab, reason: reason, originalLocation: "littleOpen:\(session.id)", spaceID: nil, profileID: session.profileID, archivedAt: Date())]) }
+        if let reason = archiveReason { archiveSink?.archive([ArchiveEntry(tab: session.tab, reason: reason, originalLocation: "littleOpen:\(session.id)", spaceID: nil, profileID: session.profileID, archivedAt: now)]) }
         session.windowIsVisible = false
         sessions.removeAll { $0.id == sessionID }
-        if let controller = controllers.removeValue(forKey: sessionID) { controller.container.closeAll(); controller.window?.delegate = nil; controller.window?.close() }
+        if let controller = controllers.removeValue(forKey: sessionID) { controller.prepareToClose(); controller.container.closeAll(); controller.window?.delegate = nil; controller.window?.close() }
         onChange?()
     }
     public func showAll() { for session in Array(sessions.reversed()) { resurface(session.id) } }
     public func closeAll() { for session in Array(sessions) { close(sessionID: session.id, archiveReason: nil) } }
+    /// No polling timer: the App's ExpirySweeper schedules this deadline and observes onChange.
+    public func nextExpiry(now: Date) -> Date? {
+        sessions.compactMap { session in
+            model.profile(id: session.profileID)?.settings.littleOpenAutoArchiveAfter.seconds.map {
+                session.lastActiveAt.addingTimeInterval($0)
+            }
+        }.min()
+    }
     @discardableResult public func archiveExpired(now: Date) -> Int {
         let expired = sessions.filter { session in
             guard let interval = model.profile(id: session.profileID)?.settings.littleOpenAutoArchiveAfter.seconds else { return false }
-            return now.timeIntervalSince(session.lastActiveAt) > interval
+            return now >= session.lastActiveAt.addingTimeInterval(interval)
         }.sorted { $0.lastActiveAt < $1.lastActiveAt }
-        for session in expired { close(sessionID: session.id, archiveReason: .autoArchived) }; return expired.count
+        for session in expired { close(sessionID: session.id, archiveReason: .autoArchived, now: now) }; return expired.count
     }
     public func switchProfile(sessionID: WindowID, profileID: ProfileID) {
         guard let session = sessions.first(where: { $0.id == sessionID }), session.profileID != profileID, model.profile(id: profileID) != nil else { return }
         let apply: (Bool) -> Void = { [weak self, weak session] confirmed in
-            guard confirmed, let self, let session else { return }
+            guard confirmed, let self, let session, self.sessions.contains(where: { $0 === session }) else { return }
             session.profileID = profileID; self.controllers[sessionID]?.replaceProfile(); self.onChange?()
         }
         if defaults.bool(forKey: "open.links.littleOpenProfileSwitchConfirmed") { apply(true) }
