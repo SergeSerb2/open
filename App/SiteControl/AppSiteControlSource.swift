@@ -38,13 +38,13 @@ final class AppSiteControlSource: SiteControlDataSource, SiteControlActions {
   private(set) var buttonReadCount = 0
   private(set) var changeDeliveryCount = 0
   #endif
-  private let adBlockStore: AdBlockStore?
+  private var adBlockStore: AdBlockStore? { factory?.app.stores.existingAdBlock }
   init(factory: EngineWebContentHostFactory) {
     self.factory = factory
     model = factory.model
-    // Open the shared store before a click. Snapshot reads never acquire its
-    // directory lease or read global settings on the presentation path.
-    adBlockStore = factory.app.stores.adBlock
+    // Read only the existing owner. The unavailable row needs no store, so
+    // creating this source must not load the catalog and PSL during launch.
+    // Settings or the engine adapter opens it; its notifications refresh us.
     // Structural edits and page title/favicon/loading changes do not change
     // SCC rows. The window owns selection/dismissal; only a Profile rebind
     // needs a data-source notification here.
