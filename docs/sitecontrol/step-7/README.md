@@ -124,4 +124,3 @@ completion load was 13.50/20.77/23.40. `receipt-check` verifies all committed
 manifests offscreen.
 
 The final-head full summary, loads and review checklist are in the linked PR.
-
