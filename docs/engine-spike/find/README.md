@@ -10,23 +10,61 @@ Section 9 hook: `PeekController.onPageEscape` lets Find consume Esc before
 Peek's existing key monitor dismisses Peek. No engine source or distribution
 changes are part of this change.
 
-Debug and automation Release builds use the main engine distribution, SHA-256
-`f34400e71412d87a0b268fcd5658a8563cca34f600c8dd17b534a63e76aa7939`.
-No new Find warnings were emitted. SecurityAgent and foreground-loss
+Final Debug and automation Release builds include main `e4d40ce0` (Extensions
+P3) and use engine framework SHA-256
+`7b49090502568f8189aa0e94f7cf23344beec5bed537136eff5f7fce573ad35a`.
+The measured implementation head is `fca01e46`; the final evidence update changes
+only documentation. No new Find warnings were emitted. Foreground-loss
 **INTERRUPTED** attempts do not count. No debugger or authorization workaround
-was attempted.
+was attempted. Earlier receipts using engine `f34400e7` are historical and are
+not used for the final engine gate.
 
-Final verification after the latest main merge is in progress. The initial
-step-4 Release run passes all 50 Find checks. Interrupted attempts do not count.
+The final new-engine Release run passes all 50 Find checks. All required
+regression suites completed; the two window launch failures meet the lead's
+known-main exception. Full verification has 22 PASS and one timing-only FAIL;
+that entire check passes in its first quiet rerun, with unchanged main measured
+under the same lock. No timing threshold or statistic was changed.
 
-| Required evidence | State |
+| Required evidence | Final result |
 |---|---|
-| Real-App behavior and native hit testing | 50/50 in the initial step-4 run: native field keys, page shortcuts, close click/focus, selection boundaries, tab state, navigation/reload, Split View and Peek |
-| Own-window light/dark pixels | WindowServer snapshots: background ΔE00 0.4977 light / 0.3836 dark (limit 2); radius, 300×32 frame, right 10, top 10/50 and narrow-pane checks pass |
-| First and repeat Cmd+F | Both p95 values pass the fixed 120 Hz budget in the initial step-4 run; final-head run pending |
-| Coalescing and idle work | One typed request, at most one engine activation, and all ten Find-scoped observer counters zero over two seconds with Find open and the page focused |
-| Negative proof | Fifty original gates rejected across the fault-App and strengthened Jump receipts; twenty-sample 25 ms fault rejects first/repeat p95 at 33.828/28.147 ms; retained-control fault rejects the lifetime condition with all idle counters zero |
-| Required regressions and full verify-all | Final-head runs pending |
+| Real-App behavior and native hit testing | 50/50: native field keys, page shortcuts, close click/focus, selection boundaries, tab state, navigation/reload, Split View and Peek |
+| Own-window light/dark pixels | WindowServer snapshots: background ΔE00 0.4977 light / 0.3836 dark (limit 2); radius, 300×32 frame, right 10, top 10/50 and narrow-pane checks pass on AW2726DM, scale 1 |
+| First and repeat Cmd+F | First p50/p95 4.371/6.104 ms; repeat 0.812/1.269 ms, twenty windows each; both p95 values pass 8.333 ms at 120 Hz; load1 5.57–9.80 |
+| Coalescing and idle work | One typed request, at most one engine activation, and all ten Find-scoped observer counters zero over two seconds; one post-paint warm-up; temporary bar/editor released |
+| Negative proof | Fifty original gates reject deliberate faults; the final new-engine 25 ms fault rejects first/repeat p95 at 35.259/28.171 ms; retained controls reject the lifetime condition with all idle counters zero |
+| Required regressions and full verification | Results below; the sole full-gate timing failure passes the focused quiet rerun |
+
+Final receipts are under `.re/find/final-e4d40ce0/` in this checkout. Each suite
+records successful owned-process cleanup. Its source receipt is copied before
+restoring generated files in `docs/engine-spike/`.
+
+| Suite | PASS | Other results | Receipt |
+|---|---:|---|---|
+| find | 50 | None | `find-positive.json` |
+| features | 19 | None | `features-1.json` |
+| shell | 7 | None | `shell-1.json` |
+| window | 76 | 2 known-main launch FAIL; 1 existing card-material DEFERRED | `window-1.json` |
+| commandbar | 63 | None | `commandbar-1.json` |
+| page | 85 | 4 BLOCKED; 1 DEFERRED | `page-1.json` |
+
+Window cold medians: sidebarDrawn 386 ms / first paint 676 ms; warm: 386 /
+646 ms. Both meet the lead's known-main limits of 400 / 700 ms. The launch
+receipt records load averages 7.566 / 11.070 / 14.446. Two earlier window
+attempts lost foreground focus and are excluded. Card material remains the
+existing Part B deferral. Page's existing blocked checks are macOS notification
+delivery, service-worker `clients.openWindow`, the uninstalled Apple French
+translation model, and incognito capture; smart zoom remains deferred.
+
+`heavy.sh tools/verify-all.sh --with-arc-data` ran on the merged head without the
+quiet lock. All display, functional, import, sound, idle and rendering checks
+pass. `commandbar-render` alone fails its timing rows 150/151: CPU p95 9.33 ms
+(limit 8) and completion overhead 0.332 ms (limit 0.3), at load1 16.4. Its
+focused quiet rerun (`heavy.sh tools/verify-all.sh --only commandbar-render`)
+passes all 151 checks: CPU p95 3.63 ms, overhead 0.118 ms, load averages
+10.6 / 9.3 / 10.9. Unchanged main `e4d40ce0` runs in the same quiet session and
+passes all 151: CPU p95 6.41 ms, overhead 0.190 ms, loads 11.3 / 9.2 / 10.9.
+The original table is `verify-full/summary.txt`; the focused table is
+`commandbar-quiet-1/summary.txt`, with both measurements in `commandbar-quiet.json`.
 
 ## Performance measurements
 
@@ -52,8 +90,38 @@ own backing layer. No layer mask clips the rounded bar. The shadow color,
 opacity, radius and offset are unchanged. The small-caps font descriptor is
 built once, and native image caches are primed after paint.
 
-Values below are p50 / p95 milliseconds. Step 2 and step 3 alternate in the
-same forty-window session with an automation-only prewarm-disable flag.
+Final engine measurements below alternate twenty cache-only and twenty
+prewarmed launches in the same session (load1 5.57–9.80). Values are p50 / p95
+milliseconds. Both first and repeat gates use p95 only.
+
+| Final mode | First open | Repeat open | Launch sidebar / first paint medians |
+|---|---|---|---|
+| Shared cache + native layers; prewarm disabled | 7.041 / 7.962 | 0.815 / 1.122 | 349 / 598.5 ms |
+| Shared cache + native layers + prewarm | 4.371 / 6.104 | 0.812 / 1.269 | 342.5 / 591 ms |
+
+Every enabled sample starts warm-up after its recorded first paint. Launch
+marks show no regression against the disabled mode on the same engine. The
+240 Hz display interval is 4.167 ms, reported for information only.
+
+Final first-open phase breakdown (p50 / p95 ms):
+
+| Mode | Create | Attach | Draw | Flush | Focus (after commit) |
+|---|---|---|---|---|---|
+| Prewarm disabled | 2.751 / 3.070 | 1.439 / 2.128 | 0.602 / 0.769 | 1.985 / 2.529 | 8.503 / 11.831 |
+| Prewarm enabled | 1.206 / 1.937 | 0.736 / 0.984 | 0.586 / 0.792 | 1.689 / 2.284 | 9.236 / 15.060 |
+
+The final 25 ms fault reports first p50/p95 33.806/35.259 ms and repeat
+27.283/28.171 ms over twenty windows, load1 11.91–14.47. The retained-bar fault
+fails the lifetime condition while all ten work counters remain zero. These
+two conditions fail, the other 48 checks pass, and owned cleanup passes. Exact
+source hashes are restored and both normal builds pass afterward. See
+`final-negative-summary.json`, `final-negative-restoration.json`, and
+`find-performance-summary.json` in the final receipt directory.
+
+The following optimization history uses the **old engine `f34400e7`**. It
+shows the effect after each requested step; it is not a final-engine baseline.
+Values are p50 / p95 ms. Step 2 and step 3 alternate in one forty-window session
+with the automation-only prewarm-disable flag.
 
 | Step | First open | Repeat open | Load1 range |
 |---|---|---|---|
@@ -71,14 +139,14 @@ First-open phase breakdown (p50 / p95 ms):
 | Shared cache + post-paint prewarm | 1.427 / 2.345 | 0.846 / 1.360 | 1.696 / 2.285 | 2.519 / 4.164 | 8.782 / 11.255 |
 | Native backing layers + prewarm | 1.036 / 1.878 | 0.638 / 1.049 | 0.462 / 0.801 | 1.629 / 2.514 | 7.225 / 9.652 |
 
-Launch baseline medians were sidebar 379.5 ms / FCP 643 ms. The step-4 paired
+The historical launch baseline medians were sidebar 379.5 ms / FCP 643 ms. The step-4 paired
 run reports prewarm enabled at 346.5 / 614.5 ms and disabled at 347 / 622.5 ms;
 these show no launch regression. Every enabled sample starts prewarm after
 its measured first paint. The heavier step-3 run reports 383.5 / 697.5 ms
 enabled and 392.5 / 709.5 ms disabled as load rises to 15.17; it is not the
 quiet-machine launch comparison.
 
-The 25 ms fault reports first p50/p95 31.997/33.828 ms and repeat
+The historical 25 ms fault reports first p50/p95 31.997/33.828 ms and repeat
 27.083/28.147 ms over twenty windows (load1 10.13–11.80). The retained-bar
 fault fails only the lifetime condition in the idle row: its ten work counters
 remain zero, while the weak temporary-view references remain live. Both fault
