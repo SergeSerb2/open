@@ -108,6 +108,7 @@
       case _ where Self.littleOpenCommands.contains(cmd): return try await runLittleOpenCommand(cmd, a)
       case "key": return try await sendKey(a, app.frontWindowController.flatMap { app.hostFactories[$0.windowID] })
       case "snapshot": return try await snapshot(a, app.frontWindowController.flatMap { app.hostFactories[$0.windowID] })
+      case "library-captures-state": return try libraryCapturesState(a)
       case "ext-prompt", "ext-manage", "ext-commands", "ext-run-command", "ext-windows", "ext-omnibox", "ext-strip", "ext-click", "ext-popup-state", "ext-picker", "ext-hover", "ext-ui-menu", "ext-redraw-measure", "ext-shortcuts":
         return try await runExtensionCommand(cmd, a)
       case "applescript": return try await runAppleScript(a)
@@ -1517,7 +1518,7 @@
 
     /// Bounded accessibility text from this process's own windows. Used to
     /// identify Chromium's uninstall confirmation, not merely any new window.
-    private func windowText(_ window: NSWindow) -> [String] {
+    func windowText(_ window: NSWindow) -> [String] {
       var seen: Set<ObjectIdentifier> = [], text: Set<String> = []
       func walk(_ object: NSObject, depth: Int) {
         guard depth <= 16, seen.count < 512, seen.insert(ObjectIdentifier(object)).inserted else { return }
@@ -1966,6 +1967,8 @@
         "control": ("", 59), "command": ("", 55),
         "down": (String(Character(UnicodeScalar(NSDownArrowFunctionKey)!)), 125),
         "up": (String(Character(UnicodeScalar(NSUpArrowFunctionKey)!)), 126),
+        "left": (String(Character(UnicodeScalar(NSLeftArrowFunctionKey)!)), 123),
+        "right": (String(Character(UnicodeScalar(NSRightArrowFunctionKey)!)), 124),
       ]
       guard let (chars, code) = keys[a["key"] as? String ?? "return"] else { throw Failure(message: "unknown key") }
       var mods: NSEvent.ModifierFlags = []
