@@ -110,6 +110,8 @@ final class EngineWebContentHostFactory: NSResponder, WebContentHostFactory {
   var permissionPolicy: String?
   var promptText: String?
   var contextMenuPolicy: String?
+  var pageContextMenu: PageContextMenuBuilder?
+  var pageContextMenuHooks = PageContextMenuHooks()
   var fullscreenPolicy: String?
   var pendingSavePanel: NSSavePanel?
   var savePageRequestCount = 0
@@ -324,6 +326,7 @@ final class EngineWebContentHostFactory: NSResponder, WebContentHostFactory {
   }
   func hostDidClose(_ host: EngineWebContentHost) {
     pageChrome.cancel(host.content)
+    if pageContextMenu?.belongs(to: host.content) == true { pageContextMenu?.cancel(); pageContextMenu = nil }
     translate.contentDidClose(host.content)
     commandBarNavigationFocus.remove(host.tabID)
     typedNavigationTabs.remove(host.tabID)
@@ -615,6 +618,7 @@ final class EngineWebContentHostFactory: NSResponder, WebContentHostFactory {
     guard !isClosing else { return }
     isClosing = true
     pageChrome.close()
+    pageContextMenu?.cancel(); pageContextMenu = nil
     controller?.existingTabSwitcher?.cancel()
     translate.closeAll()
     for task in saveCaptureTasks.values { task.cancel() }
@@ -1180,70 +1184,10 @@ extension EngineWebContentHostFactory: OEWebContentDelegate {
   }
 
   func webContent(_ webContent: OEWebContent, showContextMenu menu: OEContextMenu) -> Bool {
-    let ns = NSMenu()
-    if let link = menu.linkURL {
-      let opener = tabID(for: webContent)
-      ns.addItem(
-        ClosureMenuItem(title: "Open Link in New Tab") { [weak self] in
-          self?.openNewTab(url: link, background: true, opener: opener)
-        })
-      ns.addItem(.separator())
-    }
-    // Translate: Open's own item (Chromium's needs a Google API key, page-platform §2.1 T-1).
-    let translateItem = translate.contextMenuItem(for: webContent)
-    for item in menu.items {
-      if item.isSeparator {
-        ns.addItem(.separator())
-        continue
-      }
-      let command = item.commandIdentifier
-      let mi = ClosureMenuItem(title: item.title) { menu.select(command: command) }
-      mi.isEnabled = item.isEnabled
-      ns.addItem(mi)
-    }
-    if let translateItem, menu.linkURL == nil {
-      let mi = ClosureMenuItem(title: translateItem.title) { [weak self] in self?.translate.perform(translateItem.action) }
-      // After Chromium's page items, before its last group (Inspect).
-      if let last = ns.items.lastIndex(where: \.isSeparatorItem) { ns.insertItem(mi, at: last) } else { ns.addItem(mi) }
-    }
-    let openItems = addCaptureItems(to: ns, for: webContent)
-    func commands(_ items: [OEContextMenuItem], in submenu: String = "") -> [[String: Any]] {
-      items.flatMap { item -> [[String: Any]] in
-        if item.isSeparator { return [] }
-        if !item.submenu.isEmpty { return commands(item.submenu, in: item.title) }
-        return [["id": item.commandIdentifier, "title": item.title, "enabled": item.isEnabled, "submenu": submenu]]
-      }
-    }
-    record(
-      "contextMenu", webContent,
-      [
-        "items": menu.items.map(\.title), "commands": commands(menu.items),
-        "link": menu.linkURL?.absoluteString ?? "", "targets": menu.targets.rawValue,
-        "openItems": ns.items.filter { !$0.isSeparatorItem }.map(\.title),
-        "open": openItems, "shown": ns.items.map { $0.isSeparatorItem ? "-" : $0.title },
-      ])
-    if contextMenuPolicy == "record" {
-      menu.cancel()
-      return true
-    }
-    if let policy = contextMenuPolicy, policy.hasPrefix("run-open:") {
-      // Runs one of Open's own items by title, after the right click returns.
-      let title = String(policy.dropFirst(9))
-      menu.cancel()
-      DispatchQueue.main.async { if let index = ns.items.firstIndex(where: { $0.title == title }) { ns.performActionForItem(at: index) } }
-      return true
-    }
-    if let policy = contextMenuPolicy, policy.hasPrefix("run:"), let command = Int(policy.dropFirst(4)) {
-      // After the right click returns, as a picked menu item would.
-      DispatchQueue.main.async { menu.select(command: command) }
-      return true
-    }
-    let point = menu.location
-    let view = webContent.view
-    DispatchQueue.main.async {
-      let picked = ns.popUp(positioning: nil, at: point, in: view)
-      if !picked { menu.cancel() }
-    }
+    pageContextMenu?.cancel()
+    let session = PageContextMenuBuilder(request: menu, page: webContent, owner: self)
+    pageContextMenu = session
+    session.buildAndShow()
     return true
   }
 
