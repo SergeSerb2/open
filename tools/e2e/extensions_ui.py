@@ -212,11 +212,13 @@ def run(factory, results, tmp, root, wait_until, new_tab, frame, read_image, ext
         if on_site: app.call("ext-menu",extension=extensions["bitwarden"],select=on_site)
         site=wait_until(lambda:action(extensions["bitwarden"]).get("siteAccess")==2,timeout=5) if on_site else None
         before_options={t["id"] for t in app.call("tabs")}
-        if any(item["title"]=="Options" and item["enabled"] for item in bitwarden_menu):
-            app.call("ext-menu",extension=extensions["bitwarden"],select="Options")
+        options_menu=app.call("ext-menu",extension=extensions["ublock"])
+        if any(item["title"]=="Options" and item["enabled"] for item in options_menu):
+            app.call("ext-menu",extension=extensions["ublock"],select="Options")
         option_tab=wait_until(lambda:next((t for t in app.call("tabs") if t["id"] not in before_options and t["selected"]
-            and t["url"].startswith("chrome-extension://"+extensions["bitwarden"])),None),timeout=10)
-        results["X11_options_site_access"]={"ok":bool(site and option_tab),"menu":bitwarden_menu,"onSite":on_site,"optionsTab":option_tab,
+            and t["url"].startswith("chrome-extension://"+extensions["ublock"])),None),timeout=10)
+        results["X11_options_site_access"]={"ok":bool(site and option_tab) and not any(i["title"]=="Options" for i in bitwarden_menu),
+            "menu":bitwarden_menu,"optionsMenu":options_menu,"onSite":on_site,"optionsTab":option_tab,
             "siteAccess":action(extensions["bitwarden"]).get("siteAccess")}
         app.call("select",tab=control)
         app.call("ext-pin", extension=probe, pinned=True, index=0)
@@ -386,7 +388,7 @@ def run(factory, results, tmp, root, wait_until, new_tab, frame, read_image, ext
             pin_result("install_toast_pin",{"ok":bool(pinned_toast),"toast":toast})
         else:
             results["install_toast_pin"]={"ok":False,"reason":"fresh user install should be unpinned with pinned_by_default=false","toast":toast}
-        if installs[-1].get("prompt"):
+        if installs[-1].get("prompt") and action(installs[-1]["prompt"]["extension"]):
             installed_id = installs[-1]["prompt"]["extension"]
             app.call("ext-menu", extension=installed_id, select="Remove from Open…")
             request = wait_until(lambda: (lambda p:p if p.get("pending") else None)(app.call("ext-prompt")), timeout=10)
@@ -436,6 +438,7 @@ def run(factory, results, tmp, root, wait_until, new_tab, frame, read_image, ext
             "redraws": idle["redraws"]-baseline["redraws"], "layouts": idle["layoutCount"]-baseline["layoutCount"], "seconds":10}
         results["X19_little_open"] = {"status":"BLOCKED", "reason":"App entry point is showLittleOpenStub; Section 9 owns the real App presenter"}
         app.call("command",id="new-window")
+        new_tab(app,"about:blank")
         app.call("ext-manage",extension="local",action="install-crx",path=crx)
         closing=wait_until(lambda:(lambda p:p if p.get("pending") else None)(app.call("ext-prompt")),timeout=15)
         app.call("window-close")
