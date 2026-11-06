@@ -323,6 +323,9 @@ def run(factory, results, tmp, h):
         row('all_failed_unsaved', not s['completed'] and not snapshot_path().exists()
             and not app.call('shell-windows') and s['failures'].get('Archive') == 'Could not be read'
             and 'Try Again' in text and 'Continue' in text, text=text)
+        app.call('first-run', action='retry')
+        row('all_failed_retry', state()['step'] == 'importChoices' and not snapshot_path().exists())
+        app.call('first-run', action='continue'); until('report')
         app.call('first-run', action='continue'); app.call('first-run', action='finish')
         row('all_failed_continue', state()['completed'] and not state()['active']
             and len(app.call('spaces')) == 1 and app.call('tabs') == [])
