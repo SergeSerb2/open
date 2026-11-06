@@ -1579,8 +1579,8 @@ public final class BrowserModel {
         return Profile(name: name.trimmingCharacters(in: .whitespacesAndNewlines), icon: icon, settings: settings, dataDirectoryName: directory)
     }
 
-    private func insertProfile(_ profile: Profile, at slot: Int) {
-        onProfileCreated?(profile)
+    private func insertProfile(_ profile: Profile, at slot: Int, notify: Bool = true) {
+        if notify { onProfileCreated?(profile) }
         profiles.insert(profile, at: min(slot, profiles.count))
         profileByIDCache[profile.id] = profile
         for tab in profile.favorites { register(.tab(tab), under: .favorites(profile.id)) }
@@ -1714,9 +1714,12 @@ public final class BrowserModel {
             guard model.canCreateSpace(at: i, moving: nodeIDs, removingEmptyFolder: removingEmptyFolder) else { return nil }
             if let newProfile {
                 guard model.profile(id: newProfile.id) == nil else { return nil }
-                model.insertProfile(newProfile, at: profileSlot)
+                model.insertProfile(newProfile, at: profileSlot, notify: false)
             }
-            guard let revert = model.insertSpaceMoving(space, at: i, moving: nodeIDs, placement: placement, removingEmptyFolder: removingEmptyFolder) else {
+            guard let revert = model.insertSpaceMoving(space, at: i, moving: nodeIDs, placement: placement,
+                removingEmptyFolder: removingEmptyFolder, beforePublishing: {
+                    if let newProfile { model.onProfileCreated?(newProfile) }
+                }) else {
                 if let newProfile { model.removeProfile(newProfile.id) }
                 return nil
             }
@@ -1754,7 +1757,8 @@ public final class BrowserModel {
     }
 
     private func insertSpaceMoving(_ space: Space, at i: Int, moving ids: [ItemID],
-                                   placement: SpaceCreationPlacement, removingEmptyFolder folderID: ItemID?) -> Revert? {
+                                   placement: SpaceCreationPlacement, removingEmptyFolder folderID: ItemID?,
+                                   beforePublishing: () -> Void) -> Revert? {
         guard self.space(id: space.id) == nil, profile(id: space.profileID) != nil,
               canCreateSpace(at: i, moving: ids, removingEmptyFolder: folderID) else { return nil }
         let previousFocus = windows.map { ($0.id, $0.focusedSpaceID) }
@@ -1783,6 +1787,9 @@ public final class BrowserModel {
             moves.append(revert)
         }
         if let folderID, detach(folderID) == nil { rollback(); return nil }
+        // Announce an inline Profile only after the last failable relocation,
+        // and before consumers receive this Space's buffered tree events.
+        beforePublishing()
         emit(.reload(parent: .spaceToday(space.id)))
         let committedEvents = spaceCreationEvents ?? []; spaceCreationEvents = nil
         for event in committedEvents { emit(event) }

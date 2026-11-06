@@ -10050,7 +10050,8 @@ def space_editor_creation_checks(factory, results, tmp):
         app.call('editor-open', kind='create'); app.call('type', text='   '); finish()
         require('A5_blank_is_untitled_no_theme', focused()['title'] == '' and app.call('theme-get')['style'] is None)
         undo(); require('A5_blank_one_undo', spaces() == before)
-        # Text and theme share one draft stack, in the user's edit order.
+        # Native field typing is session-local. Its Undo falls back to the
+        # form's persistent draft stack after the typing steps are exhausted.
         app.call('editor-open', kind='create')
         app.call('editor-act', action='click', control='theme')
         app.call('editor-act', action='preset', index=2)
@@ -10060,13 +10061,18 @@ def space_editor_creation_checks(factory, results, tmp):
         require('A5_text_typing_after_theme', state()['name'] == 'abc' and state()['style'] == typing_theme)
         key('z', ['cmd'])
         require('A5_text_undo_before_theme', state()['name'] == '' and state()['style'] == typing_theme, state=state())
-        key('z', ['cmd', 'shift'])
-        require('A5_text_redo_before_theme', state()['name'] == 'abc' and state()['style'] == typing_theme, state=state())
-        key('z', ['cmd']); key('z', ['cmd'])
+        key('z', ['cmd'])
         require('A5_theme_undo_after_typing', state()['name'] == '' and state()['style'] is None, state=state())
-        key('z', ['cmd', 'shift']); key('z', ['cmd', 'shift'])
+        key('z', ['cmd', 'shift'])
+        require('A5_theme_redo_before_typing', state()['name'] == '' and state()['style'] == typing_theme, state=state())
+        key('z', ['cmd', 'shift'])
         require('A5_text_theme_redo_keeps_both_steps', state()['name'] == 'abc' and state()['style'] == typing_theme
                 and spaces() == before, state=state())
+        app.call('editor-act', action='profile', name='New Profile…')
+        app.call('type', text='Draft typing')
+        app.call('editor-open', kind='create')
+        require('A5_draft_survives_name_and_profile_field_sessions', state()['style'] == typing_theme
+                and state()['localUndo'] and state()['nameFocused'] and spaces() == before, state=state())
         key('escape')
         # A hidden sidebar is temporarily shown without a persisted mode change.
         app.call('menu-perform', id='toggle-sidebar')

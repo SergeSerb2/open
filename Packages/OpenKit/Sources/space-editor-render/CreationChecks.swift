@@ -95,8 +95,8 @@ final class CreationScene: NSObject, NSWindowDelegate {
         guard let fieldEditor = editing.controller.creationView.nameField.currentEditor() as? NSTextView else {
             throw CLIError(description: "C1 Name field has no native editor")
         }
-        Checks.check(fieldEditor.allowsUndo && fieldEditor.undoManager === editing.controller.localUndoManager,
-                     "C1 native Name editor shares the draft undo manager")
+        Checks.check(fieldEditor.allowsUndo && fieldEditor.undoManager !== editing.controller.localUndoManager,
+                     "C1 native Name typing history is separate from the draft undo manager")
         fieldEditor.insertText("abc", replacementRange: fieldEditor.selectedRange())
         OffscreenRenderer.settle(editing.scene, runLoop: 0.01)
         editing.edit("undo:")
@@ -107,10 +107,10 @@ final class CreationScene: NSObject, NSWindowDelegate {
                      "C1 native redo restores typing before theme undo")
         editing.edit("undo:"); editing.edit("undo:")
         Checks.check(editing.controller.creationView.nameField.stringValue.isEmpty && editing.controller.draftStyle == nil,
-                     "C1 one stack undoes typing then theme")
+                     "C1 native Undo falls back from typing to theme")
         editing.edit("redo:"); editing.edit("redo:")
         Checks.check(editing.controller.creationView.nameField.stringValue == "abc" && editing.controller.draftStyle == typingTheme,
-                     "C1 one stack redoes theme then typing without a lost step")
+                     "C1 native Redo restores draft then field typing")
         let scene = try CreationScene(); defer { scene.close() }
         let oldCount = scene.model.spaces.count, previous = scene.model.windows[0].focusedSpaceID
         scene.controller.creationView.nameField.stringValue = "Created in the form"
@@ -171,6 +171,31 @@ final class CreationScene: NSObject, NSWindowDelegate {
         let refusedAfter = try encoder.encode(SnapshotMapper.dto(from: refused.model))
         Checks.check(refusedBefore == refusedAfter && !refused.undo.canUndo && !refused.controller.isFinished,
                      "C1 missing move refuses Space and inline Profile without mutation or undo")
+        #if DEBUG
+        let rollback = try CreationScene(prepare: { model in
+            let source = model.spaces[0]
+            let a = model.newTab(in: source.id, url: URL(string: "https://example.invalid/a")!)
+            let b = model.newTab(in: source.id, url: URL(string: "https://example.invalid/b")!)
+            return .init(moving: [a.id, b.id])
+        })
+        defer { rollback.close() }
+        let rollbackBefore = try encoder.encode(SnapshotMapper.dto(from: rollback.model))
+        let generation = rollback.model.undoGeneration, revision = rollback.model.treeRevision
+        var announcedProfiles = 0, changes = 0
+        rollback.model.onProfileCreated = { _ in announcedProfiles += 1 }
+        let observation = rollback.model.addObserver { _ in changes += 1 }
+        defer { rollback.model.removeObserver(observation) }
+        rollback.controller.profilePicker.isCreatingProfile = true
+        rollback.controller.creationView.profileNameField.stringValue = "Rolled back Profile"
+        rollback.model.diagnosticRollbackFailureAtMove = 1
+        rollback.controller.submit()
+        rollback.model.diagnosticRollbackFailureAtMove = nil
+        let rollbackAfter = try encoder.encode(SnapshotMapper.dto(from: rollback.model))
+        Checks.check(rollbackBefore == rollbackAfter && announcedProfiles == 0 && changes == 0
+            && rollback.model.undoGeneration == generation && rollback.model.treeRevision == revision
+            && !rollback.undo.canUndo && !rollback.controller.isFinished,
+            "C1 late move refusal never announces an inline Profile or changes snapshot events revision undo")
+        #endif
         let inline = try CreationScene(); defer { inline.close() }
         let profileCount = inline.model.profiles.count, spaceCount = inline.model.spaces.count
         inline.controller.profilePicker.isCreatingProfile = true

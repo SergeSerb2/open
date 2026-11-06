@@ -688,6 +688,13 @@ buttons), each fading in and rising 6 pt over 0.2 s ease-out (constants
   undo stack is the form's local undo (Cmd+Z inside the form), discarded on
   cancel.
 
+Lead decision (2026-11-06): Name and inline Profile use normal macOS
+field-session typing history, separate from the form's theme/icon history.
+Native menu Undo uses the focused field's typing steps first, then the draft
+steps. Redo restores undone draft steps before the field's typing. Starting
+or ending a field session must never clear the draft history; AppKit may
+discard that field's typing history when its editing session ends.
+
 ### 6.4 Create
 
 1. `model.createSpace(title:profileID:icon:theme:at:moving:)` (§10.1), one

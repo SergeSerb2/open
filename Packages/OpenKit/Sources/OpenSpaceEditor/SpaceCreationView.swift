@@ -185,7 +185,10 @@ public final class SpaceCreationView: NSView, NSTextFieldDelegate {
         cancelButton.frame = CGRect(x: 0, y: 38, width: cw, height: 26)
     }
 
-    public func focusName() { window?.makeFirstResponder(nameField) }
+    public func focusName() {
+        if let editor = nameField.currentEditor() { window?.makeFirstResponder(editor) }
+        else { window?.makeFirstResponder(nameField) }
+    }
     public func breakTextUndoCoalescing() {
         for field in [nameField, profileNameField] { (field as? CreationTextField)?.editor.breakUndoCoalescing() }
     }
@@ -217,11 +220,31 @@ public final class SpaceCreationView: NSView, NSTextFieldDelegate {
     @objc private func pickProfile() { onProfile?(profilePopup.indexOfSelectedItem) }
 }
 
-/// Keep typing on the same stack as theme/icon edits without changing the
-/// window's shared editor or the command bar's editor.
+/// AppKit may clear a field's typing history when a new editing session starts.
+/// Keep that normal behavior separate from the form-lifetime draft history.
 @MainActor private final class CreationFieldEditor: NSTextView {
     weak var draftUndoManager: UndoManager?
-    override var undoManager: UndoManager? { draftUndoManager }
+    private let typingUndoManager = UndoManager()
+    override var undoManager: UndoManager? { typingUndoManager }
+
+    // These are native responder actions, reached by the nil-target Edit menu.
+    // No key equivalent or local key monitor bypasses AppKit's menu dispatch.
+    @objc(undo:) func undoEditing(_ sender: Any?) {
+        breakUndoCoalescing()
+        if typingUndoManager.canUndo { typingUndoManager.undo() }
+        else if draftUndoManager?.canUndo == true { draftUndoManager?.undo() }
+    }
+    @objc(redo:) func redoEditing(_ sender: Any?) {
+        breakUndoCoalescing()
+        // After typing then draft Undo, restore the draft before the typing.
+        if draftUndoManager?.canRedo == true { draftUndoManager?.redo() }
+        else if typingUndoManager.canRedo { typingUndoManager.redo() }
+    }
+    override func validateUserInterfaceItem(_ item: any NSValidatedUserInterfaceItem) -> Bool {
+        if item.action == NSSelectorFromString("undo:") { return typingUndoManager.canUndo || draftUndoManager?.canUndo == true }
+        if item.action == NSSelectorFromString("redo:") { return draftUndoManager?.canRedo == true || typingUndoManager.canRedo }
+        return super.validateUserInterfaceItem(item)
+    }
 }
 
 @MainActor private final class CreationTextFieldCell: NSTextFieldCell {

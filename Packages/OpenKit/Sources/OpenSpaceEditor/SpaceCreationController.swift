@@ -36,8 +36,9 @@ public final class SpaceCreationController {
     public init(model: BrowserModel, windowID: WindowID, options: SpaceCreationOptions) {
         self.model = model; self.windowID = windowID; self.options = options
         profilePicker = SpaceCreationProfilePickerModel(model: model, windowID: windowID)
-        // TextKit uses event groups for typing. Theme/icon edits register their
-        // own groups on this same manager.
+        // Draft edits outlive AppKit's field-editing sessions. TextKit keeps its
+        // normal per-field typing history and falls back to this draft stack.
+        localUndoManager.groupsByEvent = false
         creationView.localUndoManager = localUndoManager
         creationView.nameField.stringValue = options.prefillTitle ?? ""
         creationView.onCreate = { [weak self] in self?.submit() }
