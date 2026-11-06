@@ -1,4 +1,5 @@
 import AppKit
+import CoreText
 import OpenDesign
 import OpenModel
 import OpenSpaceEditor
@@ -13,7 +14,11 @@ enum PickerScene {
         let picker = IconPickerController(target: target, current: current, window: owner,
                                           anchor: CGRect(x: 20, y: 500, width: 20, height: 20), onPick: onPick)
         picker.panel.appearance = NSAppearance(named: light ? .aqua : .darkAqua)
-        picker.show(); picker.view.load(try EmojiIndex.load()); OffscreenRenderer.settle(picker.view)
+        picker.show()
+        let deadline = Date(timeIntervalSinceNow: 5)
+        while picker.view.entries.isEmpty, Date() < deadline { settle(0.01) }
+        guard !picker.view.entries.isEmpty else { picker.close(); owner.close(); throw CLIError(description: "picker emoji index did not load") }
+        OffscreenRenderer.settle(picker.view)
         picker.panel.orderBack(nil) // Entirely outside every screen; enables native AppKit control hit testing.
         return (owner, picker)
     }
@@ -57,6 +62,17 @@ enum PickerScene {
         defer { picker.close(); owner.close() }
         Checks.check(picker.view.page == .emoji && picker.panel.frame.size == CGSize(width: 246, height: 300), "I1 Space defaults to Emoji; panel 246x300")
         Checks.check(NamedSpaceIcons.order.count == 55 && Set(NamedSpaceIcons.order) == Set(NamedSpaceIcons.symbols.keys), "I1 all 55 icons retain mapping source order")
+        let font = CTFontCreateWithName("AppleColorEmoji" as CFString, 20, nil)
+        let shown = picker.view.entries.flatMap { [$0.value] + $0.variants }
+        let unsupported = shown.filter { value in
+            let text = NSAttributedString(string: value, attributes: [kCTFontAttributeName as NSAttributedString.Key: font])
+            let runs = CTLineGetGlyphRuns(CTLineCreateWithAttributedString(text)) as! [CTRun]
+            guard runs.count == 1, let run = runs.first, CTRunGetGlyphCount(run) == 1,
+                  let runFont = (CTRunGetAttributes(run) as NSDictionary)[kCTFontAttributeName],
+                  CFGetTypeID(runFont as CFTypeRef) == CTFontGetTypeID() else { return true }
+            return CTFontCopyPostScriptName(runFont as! CTFont) as String != "AppleColorEmoji"
+        }
+        Checks.check(!shown.isEmpty && unsupported.isEmpty, "I1 picker exposes only single AppleColorEmoji glyphs (shown \(shown.count), unsupported \(unsupported.count))")
         click(picker, control: "icons")
         Checks.check(picker.view.page == .icons, "I1 real segmented-control click opens Icons")
         let selected = picker.view.collection.item(at: IndexPath(item: 31, section: 0))?.view.accessibilityValue() as? String

@@ -98,6 +98,7 @@ final class EngineWebContentHostFactory: NSResponder, WebContentHostFactory {
   private(set) var lastNavigationFocusRestored = false
   func showCommandBar(_ mode: CommandBarMode, editingPinnedTab: ItemID? = nil) {
     guard !isClosing, !app.terminationRequested else { return }
+    iconPicker?.close()
     let requestedAt = LaunchTiming.shared.elapsedMilliseconds
     app.prepareCommandServices()
     if commandBarSession == nil { commandBarSession = AppCommandBarSession(factory: self) }
@@ -906,6 +907,10 @@ extension EngineWebContentHostFactory {
   }
 
   @objc func closeTab(_ sender: Any?) {
+    // Cmd+W closes the key picker, including its tone panel, before any tab.
+    if let picker = iconPicker, NSApp.keyWindow === picker.panel || NSApp.keyWindow === picker.toneWindow {
+      picker.close(); return
+    }
     if let key = NSApp.keyWindow, let page = pageChrome.permissionPage(in: key) {
       pageChrome.permissions.cancel(page: page)
       if let id = tabID(for: page) { closeTab(id: id) } else { close(page: page) }

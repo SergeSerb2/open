@@ -144,7 +144,7 @@ public final class IconPickerView: NSView, NSSearchFieldDelegate, NSCollectionVi
         item.cell.setAccessibilityValue(value == current ? "Selected" : "")
         item.cell.onPick = { [weak self] in self?.onPick?(value) }
         item.cell.onTones = nil
-        if page == .emoji && visibleEntries[index].tones.count == 6 {
+        if page == .emoji && visibleEntries[index].tones.count > 1 {
             item.cell.onTones = { [weak self, weak cell = item.cell] in
             guard let self, let cell, self.page == .emoji, self.visibleEntries.indices.contains(index) else { return }
             self.onTones?(self.visibleEntries[index], cell)

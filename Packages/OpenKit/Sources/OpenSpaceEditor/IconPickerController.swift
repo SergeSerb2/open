@@ -108,8 +108,8 @@ public final class IconPickerController {
     }
     private func showTones(_ entry: EmojiEntry, cell: NSView) {
         closeTones(); tones = entry.tones
-        guard tones.count == 6 else { return }
-        let size = CGSize(width: 188, height: 38)
+        guard tones.count > 1 else { return }
+        let size = CGSize(width: 8 + CGFloat(tones.count) * 30, height: 38)
         let rect = panel.convertToScreen(cell.convert(cell.bounds, to: nil))
         let tonesPanel = TonePanel(contentRect: CGRect(x: rect.minX, y: rect.maxY + 4, width: size.width, height: size.height), styleMask: .borderless, backing: .buffered, defer: false)
         tonesPanel.onEscape = { [weak self] in self?.close() }

@@ -1,8 +1,9 @@
 #!/usr/bin/env python3
 """Generate Open's name-only index from pinned, fully-qualified Unicode data.
 
-Unicode Emoji 17.0 is supported by macOS 26.4 and later. No CLDR or Arc data.
-Toned sequences stay verbatim; names and category order come from Unicode.
+The picker filters for AppleColorEmoji support on the running macOS. The
+complete Unicode 17.0 source stays pinned for future OS support. No CLDR or
+Arc data. Toned sequences stay verbatim; names and categories come from Unicode.
 """
 import argparse
 import hashlib

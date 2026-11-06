@@ -1,3 +1,4 @@
+import CoreText
 import Foundation
 
 public struct EmojiEntry: Sendable {
@@ -5,8 +6,8 @@ public struct EmojiEntry: Sendable {
     public let name: String
     public let category: Int
     public let variants: [String]
-    /// Default plus one sequence for each uniform skin tone. Mixed tones remain
-    /// in the pinned index; this compact chooser has exactly six choices.
+    /// Default plus each supported uniform skin tone. Unsupported variants are
+    /// removed once at load time; mixed tones stay in the pinned source index.
     public var tones: [String] {
         [value] + (0x1F3FB...0x1F3FF).compactMap { tone in
             variants.first { sequence in
@@ -41,15 +42,35 @@ public struct EmojiIndex: Sendable {
         }
         return EmojiIndex(categories: categories, entries: entries)
     }
+
+    /// CoreText owns the created objects through Swift's CF memory management.
+    /// One pass uses at most one emoji line (128 UTF-8 bytes) at a time.
+    fileprivate func supportedBySystemFont() -> EmojiIndex {
+        let font = CTFontCreateWithName("AppleColorEmoji" as CFString, 20, nil)
+        func supported(_ value: String) -> Bool {
+            let text = NSAttributedString(string: value, attributes: [kCTFontAttributeName as NSAttributedString.Key: font])
+            let runs = CTLineGetGlyphRuns(CTLineCreateWithAttributedString(text)) as! [CTRun]
+            guard runs.count == 1, let run = runs.first, CTRunGetGlyphCount(run) == 1,
+                  let runFont = (CTRunGetAttributes(run) as NSDictionary)[kCTFontAttributeName],
+                  CFGetTypeID(runFont as CFTypeRef) == CTFontGetTypeID() else { return false }
+            return CTFontCopyPostScriptName(runFont as! CTFont) as String == "AppleColorEmoji"
+        }
+        return EmojiIndex(categories: categories, entries: entries.compactMap { entry in
+            guard supported(entry.value) else { return nil }
+            return EmojiEntry(value: entry.value, name: entry.name, category: entry.category,
+                              variants: entry.variants.filter(supported))
+        })
+    }
 }
 
-/// Starts once, only on first open. Decode never blocks the UI thread.
+/// Starts once, only on first open. Decode and CoreText filtering never block
+/// the UI thread. The process cache is refreshed by the next app launch.
 actor EmojiIndexCache {
     static let shared = EmojiIndexCache()
     private var cached: EmojiIndex?
     func load() async throws -> EmojiIndex {
         if let cached { return cached }
-        let index = try EmojiIndex.load()
+        let index = try EmojiIndex.load().supportedBySystemFont()
         cached = index
         return index
     }

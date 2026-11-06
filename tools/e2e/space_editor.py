@@ -5,10 +5,10 @@ from pathlib import Path
 def checks(factory, results, tmp, harness):
     app = factory(urls=(), fresh=True)
 
-    def require(name, ok, **detail):
+    def require(name, ok, *, fatal=True, **detail):
         print(name, 'PASS' if ok else 'FAIL', flush=True)
         results[name] = dict(detail, ok=bool(ok))
-        if not ok:
+        if not ok and fatal:
             raise AssertionError(name)
 
     def state():
@@ -102,6 +102,26 @@ def checks(factory, results, tmp, harness):
         app.call('mouse', action='click', x=400, y=300, queued=True)
         require('outside_click_closes', closed())
         require('close_idempotent', app.call('editor-close') and closed())
+        # Global keys start at NSApplication with the picker as the key window.
+        shortcut_rows = []
+        for letter, mode in [('t', 'newTab'), ('l', 'editCurrentURL')]:
+            opened(space=space)
+            panel = app.call('native-focus-state')['keyWindow']
+            app.call('key', key=letter, modifiers=['cmd'], route='app', window=panel)
+            bar = app.call('commandbar-state')
+            row = 'picker_cmd_' + letter
+            require(row, closed() and bar['presented'] and bar['mode'] == mode, fatal=False)
+            shortcut_rows.append(row)
+            app.call('editor-close')
+            app.call('key', key='escape', route='app')
+        app.call('open', url='about:blank')
+        opened(space=space)
+        before_tabs = [t['id'] for t in app.call('tabs')]
+        panel = app.call('native-focus-state')['keyWindow']
+        app.call('key', key='w', modifiers=['cmd'], route='app', window=panel)
+        require('picker_cmd_w', closed() and [t['id'] for t in app.call('tabs')] == before_tabs, fatal=False)
+        shortcut_rows.append('picker_cmd_w')
+        assert all(results[row]['ok'] for row in shortcut_rows), 'picker shortcut routing'
     finally:
         try:
             app.call('editor-close')
