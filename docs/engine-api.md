@@ -395,7 +395,8 @@ Page evaluation keeps its existing behavior.
 
 Only Open's reserved world exposes `__openNative.postMessage(type, payloadJSON)`.
 The App prelude maps `window.__open.postMessage(type, payload)` to this function
-with `JSON.stringify(payload)`. Native replies evaluate
+with `JSON.stringify(payload)`. It is added only to JavaScript; Open-world
+stylesheet sources stay unchanged. Native replies evaluate
 `window.__open.receive(envelope)` in `.open`. The engine does not interpret the
 runtime's envelope. `webContent(_:didReceiveOpenWorldMessage:payloadJSON:documentID:)`
 and `onOpenWorldMessage` deliver on the main thread. Consumers must validate

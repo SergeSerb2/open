@@ -991,6 +991,8 @@ Frame preferences are restored after quit through the shared defaults fallback.
 only the current main-frame document and grants no user gesture.
 `script-add` accepts the same world names. Open-world scripts always run at
 document start and in the main frame, even with `end` or `allFrames` set.
+With `css: true`, the stylesheet keeps its original source and receives no
+JavaScript transport prelude.
 
 `open-world-messages` accepts `tab`, optional `clear: true`, and optional `subscribe: true/false`
 (to exercise the OpenWeb callback). It returns

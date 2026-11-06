@@ -35,7 +35,7 @@ final class EngineWebProfile: WebProfile {
   var userScripts: [UserScript] {
     context.userScripts.map {
       UserScript(
-        id: $0.identifier, source: OpenWorldPrelude.unwrapped($0.source, world: $0.world), kind: $0.kind == .styleSheet ? .styleSheet : .javaScript,
+        id: $0.identifier, source: $0.kind == .javaScript ? OpenWorldPrelude.unwrapped($0.source, world: $0.world) : $0.source, kind: $0.kind == .styleSheet ? .styleSheet : .javaScript,
         injectionTime: $0.injectionTime == .documentEnd ? .documentEnd : .documentStart,
         matchPatterns: $0.matchPatterns, mainFrameOnly: $0.mainFrameOnly,
         world: $0.world == .open ? .open : .page)
@@ -44,7 +44,7 @@ final class EngineWebProfile: WebProfile {
 
   func addUserScript(_ script: UserScript) {
     let value = OEUserScript(
-        identifier: script.id, source: script.world == .open ? OpenWorldPrelude.source + "\n" + script.source : script.source,
+        identifier: script.id, source: script.world == .open && script.kind == .javaScript ? OpenWorldPrelude.source + "\n" + script.source : script.source,
         kind: script.kind == .styleSheet ? .styleSheet : .javaScript,
         injectionTime: script.injectionTime == .documentEnd ? .documentEnd : .documentStart,
         matchPatterns: script.matchPatterns, mainFrameOnly: script.mainFrameOnly)
