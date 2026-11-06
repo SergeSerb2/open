@@ -374,7 +374,7 @@ def context_menu_checks(factory, results, tmp, h):
             number = app.call('native-focus-state')['keyWindow']
             shown = number != 0 and number not in {w['number'] for w in windows}
             if shown:
-                # Native Close Window on the stub itself, never the source page/tab.
+                # Native Close Window on Little Open itself, never the source page/tab.
                 app.call('key', key='w', modifiers=['command', 'shift'], route='app', window=number)
             focus()
             return {'ok': shown and request.get('url') == origin + '/target.html' and request.get('profileHint') == profile

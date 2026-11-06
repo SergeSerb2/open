@@ -21,6 +21,8 @@ final class EngineWebContentHost: NSObject, WebContentHost, WebContentProviding,
   var onTitleChange: ((String) -> Void)?
   var onLoadingChange: ((Bool) -> Void)?
   var onFaviconChange: ((Data?) -> Void)?
+  var additionalKeyHandler: ((NSEvent) -> Bool)?
+  var onCloseRequest: (() -> Void)?
   var shouldNavigate: ((URL, NSEvent.ModifierFlags) -> Bool)?
   private(set) var pageBackgroundColor: NSColor?
   var onPageBackgroundChange: ((NSColor?) -> Void)?
@@ -93,6 +95,7 @@ final class EngineWebContentHost: NSObject, WebContentHost, WebContentProviding,
     cancelBackgroundRead(); faviconProbe?.cancel(); faviconProbe = nil
     onURLChange = nil; onTitleChange = nil; onLoadingChange = nil; onFaviconChange = nil; shouldNavigate = nil
     onPageBackgroundChange = nil; onLiveStateChange = nil
+    additionalKeyHandler = nil; onCloseRequest = nil
     cachedFaviconImage = nil; cachedFaviconPNG = nil; cachedFaviconURL = nil; faviconImagePageURL = nil; lastReportedFavicon = nil
     owner?.pageChrome.cancel(content)
     content.delegate = nil; content.close(); content.view.removeFromSuperview()
@@ -256,19 +259,31 @@ final class EngineWebContentHost: NSObject, WebContentHost, WebContentProviding,
   }
   func webContent(_ page: OEWebContent, shouldNavigateTo url: URL, userGesture: Bool, modifiers: NSEvent.ModifierFlags) -> Bool {
     guard !closed else { return false }
+    owner?.record("navigationPolicy", page, ["url": url.absoluteString, "modifiers": modifiers.rawValue, "userGesture": userGesture])
     return !userGesture || shouldNavigate?(url, modifiers) != false
   }
-  func webContentDidRequestClose(_ page: OEWebContent) { if !closed { owner?.webContentDidRequestClose(page) } }
+  func webContentDidRequestClose(_ page: OEWebContent) {
+    guard !closed else { return }
+    if let onCloseRequest {
+      // Match the main-window close path: retire the standalone host only
+      // after Chromium's delegate callback returns.
+      DispatchQueue.main.async { [weak self] in
+        guard self?.closed == false else { return }
+        onCloseRequest()
+      }
+    } else { owner?.webContentDidRequestClose(page) }
+  }
   func webContent(_ page: OEWebContent, handleKeyEventBeforePage event: NSEvent) -> Bool {
     guard !closed else { return false }
     if owner?.pageChrome.handleKey(event) == true { return true }
+    if additionalKeyHandler?(event) == true { return true }
     if owner?.controller?.handleKeyDown(event) == true { return true }
     // A key the page receives: tab sleep's form proxy (discard waits 5 min after typing).
     if event.type == .keyDown { owner?.app.tabSleep.pageKeyDown(tabID: tabID) }
     return false
   }
   func webContent(_ page: OEWebContent, handleUnconsumedKeyEvent event: NSEvent) -> Bool {
-    !closed && owner?.controller?.handleKeyDown(event, unconsumed: true) == true
+    !closed && (additionalKeyHandler?(event) == true || owner?.controller?.handleKeyDown(event, unconsumed: true) == true)
   }
   func webContent(_ page: OEWebContent, runJavaScriptDialog dialog: OEJavaScriptDialog) -> Bool {
     !closed && owner?.webContent(page, runJavaScriptDialog: dialog) == true
