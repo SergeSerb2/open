@@ -22,7 +22,7 @@ enum CLI {
         guard let i = args.firstIndex(of: name), i + 1 < args.count else { return nil }; return args[i + 1]
     }
     static func run(_ args: [String]) throws {
-        guard let command = args.first else { throw CLIError(description: "usage: sitecontrol-render render|ax|flows|check|bench|screens|motion|compare [--state scc-no-boosts] [--out FILE.png] [--scale 1|2] [--appearance light|dark]") }
+        guard let command = args.first else { throw CLIError(description: "usage: sitecontrol-render render|ax|flows|extensions-check|check|bench|screens|motion|compare [--state scc-no-boosts] [--out FILE.png] [--scale 1|2] [--appearance light|dark]") }
         if command == "compare",!(value(args,"--state") ?? "").hasPrefix("editor-") { try MaterialFallback.configure(args) }
         let state = value(args, "--state") ?? "scc-no-boosts"
         guard names.contains(state) else { throw CLIError(description: "unknown state \(state)") }
@@ -42,6 +42,7 @@ enum CLI {
         case "ax":
             if state.hasPrefix("editor-") { let stage = EditorStage(state: state,scale: scale,appearance: .light); print(Flows.accessibilityDump(stage.view),terminator: "") }
             else { let stage = Stage(state: state,scale: scale,appearance: appearance); _ = stage.render(scale: scale); print(Flows.accessibilityDump(stage.controller.view.panel),terminator: "") }
+        case "extensions-check": report(SectionFlows.extensions())
         case "flows": report(value(args,"--group") == "editor" ? EditorFlows.run() : Flows.run()+EditorFlows.run())
         case "cold-measure":
             guard args == ["cold-measure","--thread-instructions"] else { throw CLIError(description: "usage: sitecontrol-render cold-measure --thread-instructions") }
