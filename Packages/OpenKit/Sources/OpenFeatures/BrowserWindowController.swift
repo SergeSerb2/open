@@ -844,9 +844,10 @@ public final class BrowserWindowController: NSWindowController, NSWindowDelegate
     }
 
     public var peekBadgeTabIDs: Set<ItemID> { peekStorage?.peekBadgeTabIDs ?? [] }
-    public var canExitModal: Bool { peekStorage?.isShown == true || container.maximizedTabID != nil }
+    public var canExitModal: Bool { spaceCreationController != nil || peekStorage?.isShown == true || container.maximizedTabID != nil }
     /// View > Exit and Esc share this priority. The App validates the key standard window.
     @discardableResult public func exitModal() -> Bool {
+        if let creation = spaceCreationController { creation.cancel(); return true }
         if let peek = peekStorage, peek.isShown { peek.escape(); return true }
         if container.maximizedTabID != nil {
             splitController.performCommand("escape"); container.cancelOperation(nil); return true

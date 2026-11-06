@@ -9960,6 +9960,13 @@ def space_editor_creation_checks(factory, results, tmp):
         app.call('type', text='Created Space')
         app.call('command', id='new-space')
         require('A5_second_entry_keeps_draft', state()['name'] == 'Created Space' and spaces() == before)
+        for shortcut in ('t', 'l'):
+            key(shortcut, ['cmd'])
+            require('A5_form_cmd_' + shortcut, bool(wait_until(lambda: app.call('commandbar-state')['presented'], timeout=5)) and state()['open'])
+            key('escape')
+            require('A5_bar_escape_keeps_form_' + shortcut, not app.call('commandbar-state')['presented'] and state()['open'])
+            app.call('editor-open', kind='create')
+            require('A5_form_refocus_' + shortcut, state()['nameFocused'] and state()['name'] == 'Created Space' and spaces() == before)
         # Theme input goes through the actual card and panel swatch, local undo.
         app.call('editor-act', action='click', control='theme')
         app.call('editor-act', action='preset', index=2)
@@ -10004,7 +10011,14 @@ def space_editor_creation_checks(factory, results, tmp):
         key('escape')
         require('A5_hidden_cancel_keeps_mode_and_undo', not state()['open']
                 and app.call('window-state')['sidebarMode'] == 'hidden' and state()['modelUndoGeneration'] == cancel_generation)
+        app.call('menu-perform', id='rename-space')
+        require('rename_hidden_specific_dialog', 'Rename Space' in app.call('alert')['texts'] and 'Rename' in app.call('alert')['buttons'])
+        key('a', ['cmd']); app.call('key', text='Renamed Source', route='app'); key('return')
+        require('rename_hidden_return_keeps_sidebar_hidden', bool(wait_until(lambda: focused()['title'] == 'Renamed Source', timeout=5))
+                and app.call('window-state')['sidebarMode'] == 'hidden')
         app.call('menu-perform', id='toggle-sidebar')
+        app.call('sidebar-key', key='z', modifiers=['cmd'])
+        require('rename_hidden_one_undo', spaces() == before)
         # Create an inline Profile in the same one-step transaction.
         app.call('editor-open', kind='create')
         app.call('editor-act', action='profile', name='New Profile…')
@@ -10060,6 +10074,14 @@ def space_editor_creation_checks(factory, results, tmp):
         app.call('profile-menu', close=True)
         app.call('sidebar-key', key='z', modifiers=['cmd'])
         require('A7_profile_undo', wait_until(lambda: focused()['profile'] == previous['profile'], timeout=5), space=focused())
+        windows = app.call('shell-windows')
+        app.call('menu-perform', id='blank-window'); key('escape')
+        new_window = app.call('window-state')['id']; before_close_key = spaces()
+        app.call('editor-open', kind='create'); key('w', ['cmd'])
+        require('A5_form_cmd_w_does_not_submit', spaces() == before_close_key)
+        if any(w['id'] == new_window for w in app.call('shell-windows')):
+            app.call('window-focus', id=new_window, activate=True); app.call('window-close')
+        require('A5_window_close_discards_form', len(app.call('shell-windows')) == len(windows))
     finally:
         try:
             app.call('editor-close')
