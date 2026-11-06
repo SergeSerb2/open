@@ -204,6 +204,37 @@ def run(factory, results, tmp, h):
             app.call('quit'); state=visible(ds); answer(False)
             return dict(ok=state['parent']==row['window'] and ev('document.title')=='Little fixture',state=state)
         gate('little_quit_cancel',quit_cancel)
+        def quit_partial_cancel():
+            nonlocal row
+            armed = {}
+            for path in ['/quit-first', '/quit-second']:
+                page(path); call('click', tab=current()['content'], selector='#arm')
+                assert wait(lambda:call('engine-sleep',tab=current()['content'])['unloadHandlers'],timeout=3)
+                armed[row['id']] = dict(current())
+            def active_dialog():
+                for session in sessions():
+                    state = app.call('dialog-state', window=session['window'])
+                    if state.get('visible'): return session, state
+                return None
+            app.call('quit')
+            first = wait(active_dialog, timeout=5, step=.02)
+            assert first, sessions()
+            accepted, first_state = first
+            assert app.call('dialog-button', window=accepted['window'], accept=True)
+            second = wait(lambda: (lambda value: value if value and value[0]['id'] != accepted['id'] else None)(active_dialog()), timeout=5, step=.02)
+            assert second, sessions()
+            row, second_state = second
+            answer(False)
+            closed = wait(lambda: all(s['id'] != accepted['id'] for s in sessions()), timeout=3, step=.02)
+            survivor = current()
+            alive = survivor and survivor['content'] == armed[row['id']]['content'] and ev('document.title') == 'Little fixture'
+            ev('onbeforeunload=null;location.href="/after-quit-cancel";true')
+            navigated = wait(lambda: (lambda s: s and s['url'] == origin + '/after-quit-cancel' and not s['loading'])(current()), timeout=8, step=.02)
+            return dict(ok=bool(closed and alive and navigated) and len(sessions()) == 1
+                        and first_state['parent'] == accepted['window'] and second_state['parent'] == row['window'],
+                        acceptedClosed=bool(closed), survivorAlive=bool(alive), survivorNavigated=bool(navigated),
+                        first=first_state, second=second_state, sessions=sessions())
+        gate('little_quit_partial_cancel',quit_partial_cancel)
         if not only or 'little_quit_ok' in only:
             try:
                 cleanup(); page(); call('click',tab=current()['content'],selector='#arm')

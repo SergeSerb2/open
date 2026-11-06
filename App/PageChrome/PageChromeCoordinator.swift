@@ -95,8 +95,8 @@ final class PageChromeCoordinator {
 }
 
 /// Quit preflight uses the same engine-owned close flow, without deleting any
-/// sidebar tabs. Cancel returns to the running App; accepted pages are rebuilt
-/// on selection if a later page cancels the quit.
+/// sidebar tabs. Cancel returns to the running App; accepted sidebar pages are
+/// rebuilt on selection, while accepted standalone windows finish closing.
 @MainActor
 final class PageQuitCoordinator {
   unowned let app: AppDelegate
@@ -140,7 +140,14 @@ final class PageQuitCoordinator {
     let waits = owner.pageChrome.requestClose(page) { [weak self, weak owner, weak page] allowed in
       guard let self else { return }
       if allowed {
-        if let owner, let page, let id = owner.tabID(for: page) { owner.controller?.container.closeHost(for: id) }
+        if let owner, let page, let id = owner.tabID(for: page) {
+          if owner.standaloneSurface?.surfacePage === page {
+            // Page.close has destroyed the browser. On this deferred turn its
+            // unload handlers are gone, so the normal session close completes
+            // without another preflight or a stranded standalone host.
+            owner.hosts[id]?.onCloseRequest?()
+          } else { owner.controller?.container.closeHost(for: id) }
+        }
         self.next()
       } else { self.running = false; self.remaining.removeAll() }
     }
