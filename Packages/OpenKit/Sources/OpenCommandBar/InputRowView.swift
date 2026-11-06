@@ -203,6 +203,8 @@ final class InputRowView: NSView {
     let field = CommandBarTextField(frame: .zero)
     let editor = CommandBarFieldEditor(usingTextLayoutManager: false)
     let infoButton = InfoButton(frame: .zero)
+    let closeButton = EmbeddedCloseButton(frame: .zero)
+    var embedded = false { didSet { needsLayout = true } }
     var input = CommandBarInput(placeholder: CommandBarText.placeholder, leadingIcon: .symbol("magnifyingglass", plate: false)) {
         didSet {
             guard input != oldValue else { return }
@@ -228,7 +230,7 @@ final class InputRowView: NSView {
     weak var favicons: CommandBarFaviconSource?
     /// While the privacy footer shows, the (i) button hides and the field takes its place (CC-42).
     var showsFooter = false { didSet { if showsFooter != oldValue { needsLayout = true } } }
-    private var showsInfoButton: Bool { input.trailing == .info && !showsFooter }
+    private var showsInfoButton: Bool { !embedded && input.trailing == .info && !showsFooter }
 
     /// Each drawn part is its own small view, so a keystroke redraws only what changed.
     private let iconView = PaintView(frame: .zero)
@@ -302,6 +304,7 @@ final class InputRowView: NSView {
         addSubview(field)
         infoButton.fill = theme.infoFill
         addSubview(infoButton)
+        closeButton.isHidden = true; addSubview(closeButton)
     }
 
     @available(*, unavailable) required init?(coder: NSCoder) { fatalError() }
@@ -311,7 +314,7 @@ final class InputRowView: NSView {
     override func accessibilityRole() -> NSAccessibility.Role? { .group }
     override func accessibilityLabel() -> String? { "Command Bar Input" }
     override func accessibilityChildren() -> [Any]? {
-        showsInfoButton ? [field, infoButton] : [field]
+        embedded ? [field, closeButton] : showsInfoButton ? [field, infoButton] : [field]
     }
 
     private func updatePlaceholder() {
@@ -364,6 +367,7 @@ final class InputRowView: NSView {
 
     var trailingWidth: CGFloat {
         let m = CommandBarMetrics.self
+        if embedded { return m.infoButtonSize + m.infoButtonTrailing }
         switch input.trailing {
         case .info: return m.infoButtonSize + m.infoButtonTrailing - (showsFooter ? m.footerFieldGrowth : 0)
         case .siteSearchHint(let name, let space): return Self.hintWidth(name: name, space: space) + m.hintTrailing
@@ -378,6 +382,8 @@ final class InputRowView: NSView {
         if input.chip != nil { x = chipRect.maxX + m.chipToText }
         let right = bounds.width - trailingWidth - m.textFieldTrailingGap
         field.frame = CGRect(x: x + Self.fieldOffset.x, y: m.textFieldY + Self.fieldOffset.y, width: max(20, right - x), height: m.textFieldHeight + 2)
+        closeButton.isHidden = !embedded
+        closeButton.frame = m.littleOpenCloseFrame(width: bounds.width)
         infoButton.isHidden = !showsInfoButton
         infoButton.frame = CGRect(x: bounds.width - m.infoButtonTrailing - m.infoButtonSize, y: m.infoButtonY, width: m.infoButtonSize, height: m.infoButtonSize)
         iconView.frame = m.leadingIconFrame
@@ -391,7 +397,7 @@ final class InputRowView: NSView {
         chipHit.frame = chipRect
         chipHit.title = input.chip?.name ?? ""
         if input.chip == nil, chipHovered { chipHovered = false }
-        if case .siteSearchHint(let name, let space) = input.trailing {
+        if case .siteSearchHint(let name, let space) = input.trailing, !embedded {
             let w = ceil(Self.hintWidth(name: name, space: space))
             hintView.isHidden = false
             hintView.frame = CGRect(x: bounds.width - m.hintTrailing - w, y: m.hintY, width: w, height: m.keycapHeight)
@@ -594,3 +600,27 @@ final class PaintView: NSView {
     }
 }
 
+
+/// S2 19/0003: close in the embedded bar, with a small plate rather than the main bar's (i).
+@MainActor
+final class EmbeddedCloseButton: NSView {
+    var action: (() -> Void)?
+    override var isFlipped: Bool { true }
+    override func isAccessibilityElement() -> Bool { !isHidden }
+    override func accessibilityRole() -> NSAccessibility.Role? { .button }
+    override func accessibilityLabel() -> String? { "Close Little Open" }
+    override func accessibilityPerformPress() -> Bool {
+        guard !isHidden, let action else { return false }; action(); return true
+    }
+    override func mouseDown(with event: NSEvent) {}
+    override func mouseUp(with event: NSEvent) {
+        if bounds.contains(convert(event.locationInWindow, from: nil)) { _ = accessibilityPerformPress() }
+    }
+    override func draw(_ dirtyRect: NSRect) {
+        CommandBarRole.plate.nsColor.setFill()
+        NSBezierPath(roundedRect: bounds.insetBy(dx: LittleOpenMetrics.closePlateInset, dy: LittleOpenMetrics.closePlateInset), xRadius: LittleOpenMetrics.closePlateRadius, yRadius: LittleOpenMetrics.closePlateRadius).fill()
+        if let image = SymbolCache.image("xmark", size: LittleOpenMetrics.closeGlyphSize, weight: .medium, color: CommandBarRole.infoGlyph) {
+            image.drawFlipped(in: CGRect(x: (bounds.width - image.size.width) / 2, y: (bounds.height - image.size.height) / 2, width: image.size.width, height: image.size.height))
+        }
+    }
+}

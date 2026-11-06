@@ -31,6 +31,19 @@ enum FeatureCLI {
             if failed > 0 { throw CLIError(description: "stored favicon checks failed") }
             return
         }
+        if cmd == "render", let scene = RenderCLI.value(args, "--scene"), scene.hasPrefix("little-") {
+            try await LittleOpenScenes.render(scene, args: args); return
+        }
+        if args == ["check", "--only", "little-open"] {
+            var passed = 0, failed = 0
+            try await LittleOpenChecks.run { ok, label in
+                print("\(ok ? "PASS" : "FAIL") \(label)")
+                if ok { passed += 1 } else { failed += 1 }
+            }
+            print("Little Open check: \(passed) passed, \(failed) failed")
+            if failed > 0 { throw CLIError(description: "Little Open checks failed") }
+            return
+        }
         if cmd == "check" {
             if args == ["check", "--only", "idle"] {
                 var passed = 0, failed = 0
