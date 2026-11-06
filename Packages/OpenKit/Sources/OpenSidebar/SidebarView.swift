@@ -651,6 +651,15 @@ extension SidebarView {
     /// The URL field shows (it hides while the window shows the content toolbar).
     public var extensionsStrip: ExtensionStripView? { urlField.extensionStrip }
     public var siteControlsAnchor: NSView { urlField.siteControls }
+    public var siteControlsAvailable: Bool {
+        get { urlField.siteControlsAvailable }
+        set { urlField.siteControlsAvailable = newValue }
+    }
+    public var siteControlState: SiteControlButtonState {
+        get { urlField.siteControlState }
+        set { urlField.siteControlState = newValue }
+    }
+    @discardableResult public func pressSiteControls() -> Bool { urlField.siteControls.accessibilityPerformPress() }
     public func refreshExtensionsLayout() { urlField.needsLayout = true; urlField.layoutSubtreeIfNeeded() }
     public var urlFieldVisible: Bool { !urlField.isHidden }
     /// The URL field's text right now (the host, or the full URL for a Developer Mode site).

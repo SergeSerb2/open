@@ -271,7 +271,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, OEEngineDelegate, OEBr
     model.setWindowContentVisible(windowID: state.id, visible: true)
     let factory = EngineWebContentHostFactory(app: self, state: state)
     hostFactories[state.id] = factory
-    let controller = BrowserWindowController(model: model, windowID: state.id, factory: factory, snapshotStore: snapshotStore)
+    let controller = BrowserWindowController(model: model, windowID: state.id, factory: factory, snapshotStore: snapshotStore, siteControlSource: factory.siteControlSource, siteControlActions: factory.siteControlSource)
     controller.context.storedFavicons = stores.sidebarFavicons
     factory.attach(controller)
     windowControllers.append(controller)

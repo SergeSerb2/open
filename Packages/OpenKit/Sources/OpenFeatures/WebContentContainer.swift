@@ -154,6 +154,7 @@ public final class WebContentContainer: NSView {
     public var onPaneClose: ((ItemID) -> Void)?
     public var onPaneMenu: ((ItemID, NSView) -> Void)?
     public var onURLField: (() -> Void)?
+    public var onSiteControls: ((ItemID) -> Void)?
     /// The window's toasts (the pane bar's Copy button says what it copied).
     public weak var toasts: ToastCenter?
     public var onTabURLChanged: ((ItemID, URL) -> Void)?
@@ -285,6 +286,8 @@ public final class WebContentContainer: NSView {
                            url: { [weak self] in self?.onURLField?() }, copy: { [weak self] changed in self?.toasts?.show(ToastContent(title: changed ? URLCleaner.cleanedTitle : URLCleaner.plainTitle)) },
                            toolbarMenu: { [weak self] in self?.onToolbarMenu?() })
             slot.paneChrome?.extensionsUI = extensionsUI
+            slot.paneChrome?.onSiteControls = onSiteControls.map { handler in { handler(id) } }
+            slot.paneChrome?.update()
         }
     }
     public func refreshPlaceholders() { for id in ids { ensureHost(id) }; updateSlots() }

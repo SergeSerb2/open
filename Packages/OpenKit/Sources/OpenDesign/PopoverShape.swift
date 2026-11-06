@@ -3,7 +3,7 @@ import QuartzCore
 
 /// Shared system-popover choice. The on-engine material calibration is Step 3.
 public enum PopoverMaterial {
-    public static let material: NSVisualEffectView.Material = .popover
+    public static let material: NSVisualEffectView.Material = .hudWindow
     public static let blending: NSVisualEffectView.BlendingMode = .withinWindow
     public static let shadowOpacity = SiteControlMetrics.shadowOpacity
     public static let shadowRadius = SiteControlMetrics.shadowRadius

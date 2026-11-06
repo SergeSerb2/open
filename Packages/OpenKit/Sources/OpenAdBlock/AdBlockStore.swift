@@ -46,6 +46,8 @@ private final class TemporaryRoot {
 /// Mutations throw so the UI cannot claim a change that failed to persist.
 @MainActor
 public final class AdBlockStore {
+    public static let didChange = Notification.Name("OpenAdBlockStoreDidChange")
+    public func isProfileOpen(_ profile: ProfileID) -> Bool { states[profile] != nil }
     public let root: URL
     public let catalog: AdBlockCatalog
     public var onScheduledUpdate: (@MainActor (_ outcome: String, _ nextDelay: TimeInterval) -> Void)?
@@ -102,6 +104,7 @@ public final class AdBlockStore {
         states[profile] = state; exclusions[profile] = normalized
         onEngineEvent?(.configure(profile: profile, listDirectory: listDirectory(for: profile),
                                  enabled: isEnabled, excludedDomains: normalized.sorted()))
+        NotificationCenter.default.post(name: Self.didChange, object: self)
         if scheduleUpdates {
             let scale = Double(ProcessInfo.processInfo.environment["OPEN_ADBLOCK_DEBUG_SCHEDULE_SCALE"] ?? "1") ?? 1
             guard scale.isFinite, scale > 0, scale <= 1 else { throw AdBlockError("invalid debug schedule scale") }
@@ -148,6 +151,7 @@ public final class AdBlockStore {
         }
         isEnabled = enabled
         onEngineEvent?(.enabled(enabled))
+        NotificationCenter.default.post(name: Self.didChange, object: self)
     }
 
     public func enabledListIDs(for profile: ProfileID) -> [String] {
@@ -172,6 +176,7 @@ public final class AdBlockStore {
         }
         exclusions[profile] = domains
         onEngineEvent?(.exclusions(profile: profile, domains: domains.sorted()))
+        NotificationCenter.default.post(name: Self.didChange, object: self)
     }
 
     public func setListEnabled(_ id: String, _ on: Bool, profile: ProfileID) async throws {

@@ -115,7 +115,9 @@ final class EngineWebContentHostFactory: NSResponder, WebContentHostFactory {
   private(set) var auxiliaryPages: [AuxiliaryPage] = []
   var popupPanel: NSPanel? { extensions.popup.panel }
   private(set) lazy var extensions = WindowExtensions(factory: self)
+  private(set) lazy var siteControlSource = AppSiteControlSource(factory: self)
   #if OPEN_AUTOMATION
+  var siteControlDrawSamples: [Double] = []
   var popupCallbackClose: (phase: String, toggle: Bool)?
   func releaseBrowsersForAutomation() -> [String: Any] {
     extensions.releaseBrowserOwnershipForAutomation(); return mirror.releaseWithoutClosingForAutomation()
@@ -214,6 +216,18 @@ final class EngineWebContentHostFactory: NSResponder, WebContentHostFactory {
     controller.isApplicationActive = { [weak self] in NSApp.isActive || self?.window?.isKeyWindow == true }
     controller.ownsAdditionalKeyWindow = { [weak self] in self?.ownsKeyWindow($0) == true }
     extensions.attach()
+    extensions.siteControl = controller.siteControl
+    #if OPEN_AUTOMATION
+    controller.siteControl?.onFirstDraw = { [weak self] ms in
+      guard let self else { return }
+      self.siteControlDrawSamples.append(ms)
+      if self.siteControlDrawSamples.count > 128 { self.siteControlDrawSamples.removeFirst() }
+    }
+    #endif
+    pageChrome.permissions.anchorProvider = { [weak self] page in
+      guard let self, let id = self.tabID(for: page), let anchor = self.controller?.visibleSiteControlAnchor(tabID: id) else { return nil }
+      return PermissionPromptPresenter.Anchor(view: anchor, rect: anchor.bounds)
+    }
     controller.onCloseRequested = { [weak self] in
       guard let self, let window = self.window else { return }
       self.app.extensionPrompts.cancel(window: window)
@@ -648,7 +662,7 @@ final class EngineWebContentHostFactory: NSResponder, WebContentHostFactory {
       // "Edit Pinned URL dialog" (FC §3.2 r3); Section 2's brief chose the command bar.
       guard let tab = model.tab(id: id), tab.pinnedURL != nil else { return false }
       showCommandBar(.editCurrentURL, editingPinnedTab: tab.id); return true
-    case .showSiteControls, .changeSpaceIcon, .editSpaceTheme, .newProfile, .shareSpace,
+    case .changeSpaceIcon, .editSpaceTheme, .newProfile, .shareSpace,
          .changeIcon, .customizePage:
       return false // Explicitly deferred UI entries; see docs/app-shell.md Step B.
     default: return nil

@@ -5,6 +5,7 @@ import OpenDesign
 import OpenSidebar
 import OpenCommands
 import OpenStore
+import OpenSiteControl
 
 @MainActor
 public final class BrowserWindowController: NSWindowController, NSWindowDelegate, SidebarDelegate, CommandDispatcher {
@@ -36,6 +37,10 @@ public final class BrowserWindowController: NSWindowController, NSWindowDelegate
         layoutContent()
         return peek
     }
+    public private(set) var siteControl: SiteControlController?
+    let siteControlSource: (any SiteControlDataSource)?
+    private var siteControlToken: SiteControlObservationToken?
+    var siteControlSpace: SpaceID?
     private let factory: any WebContentHostFactory
     private let defaults: UserDefaults
     public var onSidebarIntent: ((SidebarIntent) -> Bool?)?
@@ -211,9 +216,10 @@ public final class BrowserWindowController: NSWindowController, NSWindowDelegate
     public private(set) var pendingConfirmation: NSAlert?
     /// Title of the newest toast shown, for checks.
     public var lastToastTitle: String { toasts.lastTitle }
-    public init(model: BrowserModel, windowID: WindowID, factory: any WebContentHostFactory, size: CGSize? = nil, defaults: UserDefaults = .standard, snapshotStore: SnapshotStore? = nil) {
+    public init(model: BrowserModel, windowID: WindowID, factory: any WebContentHostFactory, size: CGSize? = nil, defaults: UserDefaults = .standard, snapshotStore: SnapshotStore? = nil, siteControlSource: (any SiteControlDataSource)? = nil, siteControlActions: (any SiteControlActions)? = nil) {
         self.model = model; self.windowID = windowID; self.snapshotStore = snapshotStore
         self.factory = factory; self.defaults = defaults
+        self.siteControlSource = siteControlSource
         let state = model.windows.first { $0.id == windowID }
         let dimensions = size ?? CGSize(width: max(640, state?.frameWidth ?? 1280), height: max(480, state?.frameHeight ?? 800))
         root = BrowserRootView(frame: CGRect(origin: .zero, size: dimensions))
@@ -308,6 +314,15 @@ public final class BrowserWindowController: NSWindowController, NSWindowDelegate
         container.toasts = toasts
         container.onToolbarMenu = { [weak self] in self?.makeToolbarMenu() }
         splitController.onChange = { [weak self] in self?.changed() }
+        if let siteControlSource, let siteControlActions {
+            let controller = SiteControlController(source: siteControlSource, actions: siteControlActions)
+            siteControl = controller
+            root.addSubview(controller.view)
+            controller.geometry = { [weak self] in self?.siteControlGeometry($0) }
+            controller.onDismiss = { [weak self] _ in self?.refreshSiteControlButtons() }
+            siteControlToken = siteControlSource.observeChanges { [weak self] _ in self?.refreshSiteControlButtons() }
+            container.onSiteControls = { [weak self] id in self?.toggleSiteControls(anchor: .paneBar(id), tabID: id) }
+        }
         root.addSubview(toastOverlay)
         root.onLayout = { [weak self] in self?.layoutContent() }
         root.onDragBackground = { [weak self] event in self?.window?.performDrag(with: event) }
@@ -322,7 +337,7 @@ public final class BrowserWindowController: NSWindowController, NSWindowDelegate
         refresh()
     }
     @available(*, unavailable) required init?(coder: NSCoder) { fatalError() }
-    isolated deinit { hintWork?.cancel(); observing = false; if let treeObserver { model.removeObserver(treeObserver) }; if let keyMonitor { NSEvent.removeMonitor(keyMonitor) }; container.closeAll(); reveal.reset(); cardSampleTask?.cancel(); if let pointerMonitor { NSEvent.removeMonitor(pointerMonitor) }; if let captureMonitor { NSEvent.removeMonitor(captureMonitor) }; captureStorage?.tearDown(); trafficLightObservers.forEach(NotificationCenter.default.removeObserver) }
+    isolated deinit { if let siteControlToken { siteControlSource?.removeChangeObserver(siteControlToken) }; hintWork?.cancel(); observing = false; if let treeObserver { model.removeObserver(treeObserver) }; if let keyMonitor { NSEvent.removeMonitor(keyMonitor) }; container.closeAll(); reveal.reset(); cardSampleTask?.cancel(); if let pointerMonitor { NSEvent.removeMonitor(pointerMonitor) }; if let captureMonitor { NSEvent.removeMonitor(captureMonitor) }; captureStorage?.tearDown(); trafficLightObservers.forEach(NotificationCenter.default.removeObserver) }
     private func scheduleRefresh() {
         guard !refreshPending else { return }; refreshPending = true
         DispatchQueue.main.async { [weak self] in guard let self, self.observing else { return }; self.refreshPending = false; self.refresh() }
@@ -347,11 +362,17 @@ public final class BrowserWindowController: NSWindowController, NSWindowDelegate
         peekStorage?.overlay.controlsFill = style.lightPalette?.title.nsColor ?? PeekMetrics.defaultControls.nsColor
         peekStorage?.overlay.scrimColor = style.darkPalette?.background.withAlpha(PeekMetrics.scrimAlpha).nsColor ?? PeekMetrics.defaultScrim.nsColor
         splitController.refresh()
+        if siteControl?.isPresented == true,
+           siteControl?.tabID != splitController.focusedTab?.id || siteControlSpace != context.focusedSpace?.id {
+            siteControl?.dismiss(reason: .sourceUnavailable, animated: false)
+        }
+        refreshSiteControlButtons()
         // show() binds the focused host now and defers other panes one turn (§5.4).
         // Refreshing placeholders here repeats every pane's chrome/layout work.
         peekStorage?.refresh(); layoutContent(); syncPeekSidebar(); onVisibilityChange?()
     }
     private func syncPeekSidebar() {
+        if peekStorage?.isShown == true { siteControl?.dismiss(reason: .sourceUnavailable, animated: false) }
         var badges: [ItemID: SidebarPeekBadge] = [:]
         for item in peekStorage?.stack ?? [] { badges[item.sourceTabID] = SidebarPeekBadge(url: item.host?.currentURL ?? item.url, faviconPNG: item.faviconPNG) }
         if context.peekBadges != badges { context.peekBadges = badges }
@@ -469,6 +490,8 @@ public final class BrowserWindowController: NSWindowController, NSWindowDelegate
         }
         // Toasts anchor at the web panel's top-right (PG-1.1); the whole panel in Split View (lead Q10).
         if toastOverlay.frame != panelFrame { toastOverlay.frame = panelFrame }
+        siteControl?.view.frame = root.bounds
+        siteControl?.layout()
         positionTrafficLights()
         hoverPreview.layout()
         captureStorage?.layout()
@@ -856,6 +879,7 @@ public final class BrowserWindowController: NSWindowController, NSWindowDelegate
               eventWindow === window || ownsAdditionalKeyWindow?(eventWindow) == true
                 || existingTabSwitcher?.acceptsEventWindow(eventWindow) == true else { return false }
         if existingTabSwitcher?.handle(event) == true { return true }
+        if eventWindow === window, siteControl?.handleKey(event) == true { return true }
         // A window-anchored popover the App shows (the translate popover, page-platform §4.7.3)
         // takes Esc and Return before any other route.
         if let keyInterceptor, keyInterceptor(event) { return true }
@@ -970,6 +994,11 @@ public final class BrowserWindowController: NSWindowController, NSWindowDelegate
         }
         if let handled = onSidebarIntent?(intent) { return handled }
         switch intent {
+        case .showSiteControls:
+            guard NSApp.currentEvent?.modifierFlags.contains(.option) != true,
+                  let id = splitController.focusedTab?.id else { return false }
+            toggleSiteControls(anchor: .urlField, tabID: id)
+            return siteControl != nil
         case .toggleSidebar: toggleSidebar(); return true
         case .setToolbarShown(let shown): return setToolbarShown(shown)
         case .setShowFullURL(let full): showsFullURLWithToolbar = full; return true
@@ -1017,6 +1046,7 @@ public final class BrowserWindowController: NSWindowController, NSWindowDelegate
         refresh(); changed(); return true
     }
     public func windowWillClose(_ notification: Notification) {
+        siteControl?.dismiss(reason: .sourceUnavailable, animated: false)
         existingTabSwitcher?.cancel()
         saveWindowState(); visibilityOverride = .closed; removeRevealCard(); hintWork?.cancel(); hintWork = nil
         hoverPreview.hide(animated: false); captureStorage?.tearDown()
@@ -1048,7 +1078,7 @@ public final class BrowserWindowController: NSWindowController, NSWindowDelegate
     public func windowDidResignKey(_ notification: Notification) { existingTabSwitcher?.cancel(); context.isWindowActive = false; background.isWindowActive = false; positionTrafficLights() }
     public func windowDidChangeBackingProperties(_ notification: Notification) { positionTrafficLights() }
     public func windowDidBecomeMain(_ notification: Notification) { context.isWindowActive = true }
-    public func windowDidResignMain(_ notification: Notification) { context.isWindowActive = window?.isKeyWindow == true }
+    public func windowDidResignMain(_ notification: Notification) { siteControl?.dismiss(reason: .sourceUnavailable, animated: false); context.isWindowActive = window?.isKeyWindow == true }
     public func windowDidMiniaturize(_ notification: Notification) { onVisibilityChange?() }
     public func windowDidDeminiaturize(_ notification: Notification) {
         onVisibilityChange?()

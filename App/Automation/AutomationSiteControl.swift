@@ -1,0 +1,108 @@
+#if OPEN_AUTOMATION
+import AppKit
+import OpenFeatures
+import OpenModel
+import OpenSiteControl
+import Darwin
+
+extension AutomationController {
+  func siteControlIdle(_ args: [String: Any]) throws -> Any {
+    typealias Action = @convention(c) () -> Void
+    typealias Watch = @convention(c) (UnsafeMutableRawPointer) -> Void
+    typealias Count = @convention(c) (Int32) -> UInt64
+    func symbol<T>(_ name: String, _: T.Type) throws -> T {
+      guard let address = dlsym(UnsafeMutableRawPointer(bitPattern: -2), name) else { throw Failure(message: "SCC idle observer is not loaded") }
+      return unsafeBitCast(address, to: T.self)
+    }
+    let count = try symbol("open_idle_count", Count.self)
+    switch args["action"] as? String ?? "read" {
+    case "begin": try symbol("open_idle_begin", Action.self)()
+    case "reset": try symbol("open_idle_reset_events", Action.self)()
+    case "end": try symbol("open_idle_end", Action.self)()
+    case "watch":
+      let watch = try symbol("open_idle_watch_view", Watch.self)
+      func visit(_ view: NSView) { watch(Unmanaged.passUnretained(view).toOpaque()); view.subviews.forEach(visit) }
+      guard let view = try window.controller?.siteControl?.view else { throw Failure(message: "no site controls") }
+      visit(view)
+    case "canary":
+      let timer = Timer.scheduledTimer(withTimeInterval: 10, repeats: true) { _ in }
+      let live = count(6); timer.invalidate()
+      return ["live": live, "after": count(6)]
+    default: break
+    }
+    var usage = rusage(); getrusage(RUSAGE_SELF, &usage)
+    let cpu = Double(usage.ru_utime.tv_sec + usage.ru_stime.tv_sec)
+      + Double(usage.ru_utime.tv_usec + usage.ru_stime.tv_usec) / 1_000_000
+    return ["counts": (0..<10).map { count(Int32($0)) }, "cpuSeconds": cpu]
+  }
+
+  func runSiteControl(_ args: [String: Any]) async throws -> Any {
+    let factory = try window
+    guard let owner = factory.controller, let scc = owner.siteControl else { throw Failure(message: "no site") }
+    switch args["action"] as? String ?? "state" {
+    case "state": break
+    case "open":
+      guard let tab = owner.splitController.focusedTab,
+            factory.siteControlSource.snapshot(for: tab.id) != nil,
+            !(owner.hasPeekController && owner.peekController.isShown) else { throw Failure(message: "no site") }
+      let via = args["via"] as? String ?? "urlField"
+      if via == "pane" {
+        guard let pane = owner.container.slots.first(where: { $0.tabID == tab.id })?.paneChrome,
+              pane.pressSiteControls() else { throw Failure(message: "no visible pane anchor") }
+      } else if via == "urlField" {
+        _ = try await runExtensionCommand("ext-hover", ["inside": true])
+        owner.sidebar.refreshExtensionsLayout()
+        guard !owner.sidebar.siteControlsAnchor.isHiddenOrHasHiddenAncestor,
+              owner.sidebar.pressSiteControls() else { throw Failure(message: "no visible URL anchor") }
+      } else { throw Failure(message: "via must be urlField or pane") }
+    case "close": scc.dismiss(reason: .escape, animated: false)
+    case "tap":
+      guard scc.isPresented, let id = args["id"] as? String, id.utf8.count <= 256,
+            let button = scc.view.panel.controls.first(where: { $0.controlID == (id.hasPrefix("row.") ? String(id.dropFirst(4)) : id) }),
+            !button.isHiddenOrHasHiddenAncestor, button.isEnabled else { throw Failure(message: "no enabled visible control") }
+      button.performClick(nil)
+    case "menu":
+      guard scc.isPresented else { throw Failure(message: "site controls closed") }
+      let menu = scc.makeMenu()
+      if let title = args["item"] as? String {
+        guard title.utf8.count <= 128,
+              let index = menu.items.firstIndex(where: { $0.title == title && !$0.isSeparatorItem && $0.isEnabled }) else { throw Failure(message: "no enabled menu item") }
+        menu.performActionForItem(at: index)
+      }
+    default: throw Failure(message: "unknown site-controls action")
+    }
+    owner.refreshSiteControlButtons()
+    return siteControlState(owner)
+  }
+  private func siteControlState(_ owner: BrowserWindowController) -> [String: Any] {
+    guard let scc = owner.siteControl else { return ["presented": false] }
+    let panel = scc.view.panel, snapshot = panel.snapshot
+    let rect = { (r: CGRect) in [Double(r.minX), Double(r.minY), Double(r.width), Double(r.height)] }
+    let controls = panel.controls.map { button -> [String: Any] in
+      ["id": button.controlID, "title": button.accessibilityLabel() ?? button.title,
+       "enabled": button.isEnabled, "visible": scc.isPresented && !button.isHiddenOrHasHiddenAncestor,
+       "frame": rect(button.convert(button.bounds, to: scc.view))]
+    }
+    let rows = (snapshot?.tiles ?? []).map { tile -> [String: Any] in
+      ["id": "row." + tile.id, "title": tile.title, "subtitle": tile.subtitle,
+       "state": tile.state == .on ? "on" : tile.state == .off ? "off" : "unavailable",
+       "visible": scc.isPresented, "inUse": tile.inUse]
+    }
+    let menu = scc.isPresented ? scc.makeMenu().items.map { ["title": $0.title, "enabled": $0.isEnabled, "separator": $0.isSeparatorItem] as [String: Any] } : []
+    let tip = scc.view.visibleArrowTip
+    return ["presented": scc.isPresented, "tab": scc.tabID?.description ?? "", "host": snapshot?.context.displayHost ?? "",
+      "mode": scc.mode == .extensionPicker ? "extensionPicker" : "standard",
+      "rows": rows, "controls": controls, "items": menu,
+      "extensionsVisible": scc.isPresented && panel.extensionsSectionVisible,
+      "boostsVisible": scc.isPresented && panel.boostsSectionVisible,
+      "reloadVisible": scc.isPresented && panel.showsReload,
+      "anchor": rect(scc.view.anchorFrame), "body": rect(scc.view.panelFrame), "tip": [Double(tip.x), Double(tip.y)],
+      "urlButtonState": owner.sidebar.siteControlState.rawValue,
+      "security": controls.first(where: { $0["id"] as? String == "security" }) ?? [:],
+      "focusedControl": (owner.window?.firstResponder as? SiteControlButton)?.controlID ?? "",
+      "firstDrawMilliseconds": (try? window.siteControlDrawSamples) ?? [],
+      "extensionItems": panel.hasExtensionItems ? panel.extensionsBody.items.map { ["id": $0.item.id, "title": $0.item.name, "visible": scc.isPresented && !$0.isHiddenOrHasHiddenAncestor] as [String: Any] } : controls.filter { $0["id"] as? String == "extension.add" },
+      "extensionsFocusedID": panel.extensionsBody.focusedID ?? ""] as [String: Any]
+  }
+}
+#endif

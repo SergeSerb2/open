@@ -50,7 +50,7 @@ public struct SiteControlSnapshot: Sendable, Equatable {
         self.boostsGloballyEnabled = boostsGloballyEnabled
         self.capabilities = capabilities; self.commandsEnabled = commandsEnabled
     }
-    public var canCreateBoost: Bool { context.isWebsite && !context.isIncognito && boostsGloballyEnabled }
+    public var canCreateBoost: Bool { context.isWebsite && !context.isIncognito && boostsGloballyEnabled && (commandsEnabled["new-boost"] ?? true) }
 }
 public enum SiteCapability: Hashable, Sendable { case changedSettings, clearCache, securityState, certificateViewer, extensionPinning, isolatedWorld }
 public enum SiteSecurity: Sendable, Equatable { case secure, insecure, unknown }

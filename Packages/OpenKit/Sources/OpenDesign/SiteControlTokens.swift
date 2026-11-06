@@ -26,10 +26,14 @@ public enum SiteControlMetrics {           // §3. m = measured (S2), g = guess,
     public static let reloadRowHeight: CGFloat = 32, reloadGap: CGFloat = 11, globalOffHeight: CGFloat = 28 // o
     public static let maxHeight: CGFloat = 640, inUseDot: CGFloat = 6                      // o; height = min(content, maxHeight, window room) (§3.1)
     public static let sparkleOpacity = (topRight: 1.0, topLeft: 0.35, bottomRight: 0.35)   // g (resting frame, Q15)
+    public static let buttonSparkleSize: CGFloat = 4 // §3.10, approximate captured size
     public static let buttonSparkleOpacity: CGFloat = 0.45                                 // g (URL field button, Q15)
     public static let shadowOpacity: Float = 0.25, shadowRadius: CGFloat = 12, shadowOffsetY: CGFloat = 4 // g; shared with the theme popover
 }
 public enum SiteControlColors {            // macOS Dark measured (IS §20.15); Light = guess; mode = the window's (§3.2)
+    // Live fallback trial after .popover and .hudWindow missed S11. The fitted
+    // bitmap below remains exclusive to the offscreen harness.
+    public static let liveMaterialTint = DesignColor(light: .black(0), dark: RGBA(hex: 0x686881, alpha: 0.32))
     public static let fallbackTint = RGBA(hex: 0x49475A), fallbackBackdropWeight: [CGFloat] = [0.28, 0.28, 0.21]
     public static let fallbackBlurSigma: CGFloat = 5                                       // fit + validation (§3.2)
     public static let rim = DesignColor(light: .black(0.10), dark: .white(0.20))           // m (dark) / g (light)

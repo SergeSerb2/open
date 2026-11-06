@@ -124,7 +124,7 @@ public final class SiteControlPanelView: NSView {
     public var offscreenMaterial: CGImage? { didSet { material.isHidden = offscreenMaterial != nil; fallback.contents = offscreenMaterial } }
     public var offscreenMaterialFrame: CGRect? { didSet { needsLayout = true } }
     private let material = NSVisualEffectView()
-    private let fallback = CALayer(), surfaceMask = CAShapeLayer(), rim = CAShapeLayer(), separator = CAShapeLayer()
+    private let fallback = CALayer(), materialTint = CALayer(), surfaceMask = CAShapeLayer(), rim = CAShapeLayer(), separator = CAShapeLayer()
     private let security = SiteControlButton(id: "security",label: "Connection",symbol: "lock.fill",pointSize: SiteControlMetrics.pillLockGlyph)
     public let more = SiteControlButton(id: "more",label: "More",symbol: "ellipsis",pointSize: SiteControlMetrics.moreGlyph,weight: .bold)
     public override var isFlipped: Bool { true }
@@ -132,7 +132,8 @@ public final class SiteControlPanelView: NSView {
         super.init(frame: frame); wantsLayer = true; layer?.mask = surfaceMask
         setAccessibilityElement(true); setAccessibilityRole(.popover); setAccessibilityTitle("Site Control Center")
         material.material = PopoverMaterial.material; material.blendingMode = PopoverMaterial.blending; material.state = .active
-        material.setAccessibilityElement(false); addSubview(material)
+        material.setAccessibilityElement(false); material.wantsLayer = true; addSubview(material)
+        material.layer?.addSublayer(materialTint)
         layer?.addSublayer(fallback); layer?.addSublayer(rim); layer?.addSublayer(separator)
         let actionSpecs = [("share","Share","square.and.arrow.up"),("newBoost","New Boost",BoostGlyph.outline),("capture","Capture a portion of this page","camera"),("captureFull","Capture the full page","text.viewfinder")]
         for (id,label,symbol) in actionSpecs {
@@ -183,6 +184,8 @@ public final class SiteControlPanelView: NSView {
         super.layout(); let m = SiteControlMetrics.self, body = bodyRect, scale = window?.backingScaleFactor ?? 1, path = shape
         CATransaction.begin(); CATransaction.setDisableActions(true)
         material.frame = bounds; fallback.frame = bounds
+        materialTint.frame = material.bounds
+        materialTint.backgroundColor = SiteControlColors.liveMaterialTint.cgColor(contentAppearance)
         surfaceMask.frame = bounds; surfaceMask.path = path
         // The effect view supplies only the material. Probe/calibration is Step 3;
         // the explicit inner rim is the one rim, shared with the fitted fallback.
@@ -216,7 +219,7 @@ extension SiteControlPanelView {
             body.addSubview(button); controls.append(button)
         }
         header("extensions","Extensions","Manage")
-        if let context = extensionsContext {
+        if let context = extensionsContext, !context.actions.isEmpty {
             _ = extensionsBody.setActions(context.actions)
             // guess (child), S-5/S-11: the required 236 pt grid uses the SCC's
             // complete 236 pt width; rows retain the SCC's existing 10 pt inset.
@@ -224,7 +227,8 @@ extension SiteControlPanelView {
             extensionsBody.frame = CGRect(x: x, y: y, width: m.width - 2 * x, height: extensionsBody.intrinsicContentSize.height)
             body.addSubview(extensionsBody); y += extensionsBody.frame.height
         } else {
-            // Compatibility until the App supplies its window's extensions context.
+            _ = extensionsBody.setActions([])
+            // With no installed actions, use the plan's 48 x 32 Add tile.
             let add = addExtension
             add.style = .extensionTile; add.tooltipTitle = "Add Extension"
             add.frame = CGRect(x: m.padding,y: y,width: m.extensionTile.width,height: m.extensionTile.height)
@@ -307,7 +311,7 @@ extension SiteControlPanelView {
     }
     func focusExtensionPickerItem() {
         extensionPickerFocusResolved = false
-        if extensionsContext != nil {
+        if hasExtensionItems {
             controls.forEach { $0.showsKeyboardFocus = false }
             extensionPickerFocusResolved = extensionsBody.focusFirst()
             extensionsBody.scrollToVisible(extensionsBody.bounds.insetBy(dx: -2, dy: -2))
