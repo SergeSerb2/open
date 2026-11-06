@@ -100,8 +100,17 @@ def run(factory, results, tmp, root, wait_until, new_tab, frame, read_image, ext
             for event, slot in (("down",slots[0]),("drag",slots[2]),("up",slots[2])):
                 app.call("mouse", action=event, x=slot[0]+14, y=win_height-slot[1]-14)
             reordered = wait_until(lambda: strip()["ids"] == ids, timeout=5)
-            pin_result("X2_native_drag", {"ok":bool(reordered), "before":before_drag, "after":strip(),
+            pin_result("X2_native_drag", {"ok":before_drag["ids"] == [probe] + ids[:2] and bool(reordered),
+                "before":before_drag, "after":strip(),
                 "sequence":"pin uBO Lite, Dark Reader, probe; move 2→0; native drag 0→2"})
+        guard_states = []
+        for identifier, index, expected in (("a" * 32, 0, ids), (extensions["bitwarden"], 0, ids),
+                (probe, 9999, ids), (probe, 0, [probe] + ids[:2]),
+                (probe, 0, [probe] + ids[:2]), (probe, 9999, ids)):
+            app.call("ext-move", extension=identifier, index=index)
+            settled = wait_until(lambda: strip()["ids"] == expected, timeout=5)
+            guard_states.append({"ok":bool(settled), "extension":identifier, "index":index, "strip":strip()})
+        pin_result("X2_App_move_guards", {"ok":all(s["ok"] for s in guard_states), "rows":guard_states})
         expected_order = strip()["ids"]
         app.call("command", id="new-window")
         second = wait_until(lambda: (lambda s:s if s["ids"]==expected_order else None)(hover()), timeout=10)
