@@ -60,7 +60,7 @@ def main():
     table = (output / 'table.md').read_text()
     if '| FAIL |' in table or '| PASS |' not in table:
         raise ValueError('missing or failed session2-pad gate rows')
-    print('session2-pad: %d gate rows PASS; %d art-followup info rows' % (table.count('| PASS |'), table.count('| INFO |')))
+    print('session2-pad: %d gate rows PASS' % table.count('| PASS |'))
     print('Private comparison artifacts: ' + str(output))
     return 0
 
