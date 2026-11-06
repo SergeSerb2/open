@@ -159,6 +159,8 @@
         let adapter = app.settingsPresenter
         return ["pane": adapter.settings.selectedPane.rawValue, "selectedProfile": adapter.settings.selectedProfileID.description,
           "settings": adapter.settingsPresenter.window?.windowNumber ?? 0,
+          "settingsVisible": adapter.settingsPresenter.window?.isVisible ?? false,
+          "generalError": adapter.settings.general.errorText, "advancedStatus": adapter.settings.advanced.statusText,
           "library": adapter.libraryPresenter?.window?.windowNumber ?? 0,
           "librarySection": adapter.library?.section.rawValue ?? "", "archiveRows": adapter.library?.archiveRows.count ?? 0,
           "historyRows": adapter.library?.historyRows.count ?? 0,
@@ -167,6 +169,8 @@
           "sameSnapshot": adapter.settings.snapshot === app.snapshotStore,
           "hotkey": adapter.settings.bool("open.links.littleOpenHotkeyEnabled"),
           "external": adapter.settings.bool("open.links.externalInLittleOpen")] as [String: Any]
+      case "settings-profile": return try settingsProfile(a)
+      case "settings-icon": return try settingsIcon(a)
       case "settings-toggle":
         let settings = app.settingsPresenter.settings
         if a["name"] as? String == "hotkey" { settings.links.littleOpenHotkeyEnabled.toggle() }
@@ -216,7 +220,12 @@
         // Reads (and with `value`, writes) one Open preference in this app's own domain.
         guard let key = a["key"] as? String, key.hasPrefix("open.") else { throw Failure(message: "defaults key must start with open.") }
         if a["persistent"] as? Bool == true { return UserDefaults.standard.persistentDomain(forName: "io.github.sergeserb2.open")?[key] ?? NSNull() }
-        if let value = a["value"] { UserDefaults.standard.set(value is NSNull ? nil : value, forKey: key); app.scheduleMenuRebuild() }
+        if let value = a["value"] {
+          UserDefaults.standard.set(value is NSNull ? nil : value, forKey: key)
+          app.settingsPresenter.settings.preferenceRevision &+= 1
+          if key == "open.advanced.tabSleepMode" { app.tabSleep.reconcileSettingsPolicy() }
+          app.scheduleMenuRebuild()
+        }
         if a["persistent"] as? Bool == true {
           return UserDefaults.standard.persistentDomain(forName: "io.github.sergeserb2.open")?[key] ?? NSNull()
         }

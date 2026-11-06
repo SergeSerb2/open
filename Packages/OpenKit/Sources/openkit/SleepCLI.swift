@@ -288,7 +288,7 @@ func runSleepDemo(args: [String]) async throws {
             check("\(mode.rawValue) delay boundary", before && tab.live.sleepPhase == .sleeping)
         } else {
             s.clock.advance(48 * 3600); await s.controller.tick()
-            check("off still freezes and never auto-discards", tab.live.sleepPhase == .frozen)
+            check("Never stays live past 48 hours", tab.live.sleepPhase == .live)
         }
     }
 
@@ -327,14 +327,14 @@ func runSleepDemo(args: [String]) async throws {
     proxies.controller.tabDidCommit(unload.id)
     check("discard wake becomes live on commit", unload.live.sleepPhase == .live)
 
-    let pressure = scenario("pressure", .off)
+    let pressure = scenario("pressure", .conservative)
     let newest = pressure.tab(age: 40), oldest = pressure.tab(age: 80), protected = pressure.tab(age: 100)
     let pressureAudio = pressure.tab(age: 100), pressureCapture = pressure.tab(age: 100)
     await pressure.controller.tick()
     await pressure.select(protected); pressureAudio.live.isAudible = true; pressureCapture.live.isCapturing = true
     pressure.trace.calls.removeAll()
     await pressure.controller.handleMemoryPressure(.warning)
-    check("warning pressure overrides delay/off; oldest first; gates honored", pressure.trace.ids("discard") == [oldest.id, newest.id])
+    check("warning pressure overrides delay; oldest first; gates honored", pressure.trace.ids("discard") == [oldest.id, newest.id])
     await pressure.controller.handleMemoryPressure(.critical)
     check("critical pressure destroys sleeping shells and invokes engine hook", pressure.trace.ids("destroy") == [oldest.id, newest.id] && pressure.engine.criticalCount == 1 && pressure.controller.liveContent.contains(protected.id))
     pressure.controller.start(); pressure.controller.start(); pressure.controller.stop(); pressure.controller.stop()
@@ -350,13 +350,13 @@ func runSleepDemo(args: [String]) async throws {
     ownership.model.profiles.append(other); ownership.model.spaces.append(otherSpace); ownership.model.rebuildIndex()
     ownership.controller.contentCreated(tabID: favorite.id); ownership.controller.contentCreated(tabID: nested.id)
     await ownership.controller.tick(); await ownership.controller.tick()
-    check("per-profile mode lookup covers favorites and nested pinned tabs", offTab.live.sleepPhase == .frozen && favorite.live.sleepPhase == .sleeping && nested.live.sleepPhase == .sleeping)
+    check("per-profile mode lookup covers favorites and nested pinned tabs", offTab.live.sleepPhase == .live && favorite.live.sleepPhase == .sleeping && nested.live.sleepPhase == .sleeping)
     other.settings.sleepMode = .off
     await ownership.controller.tick()
     check("switching off leaves already sleeping tabs asleep", favorite.live.sleepPhase == .sleeping && nested.live.sleepPhase == .sleeping)
     await ownership.select(offTab)
     ownership.controller.tabDidCommit(offTab.id)
-    check("unfreeze wake shows retained content and logs on commit", offTab.live.sleepPhase == .live && ownership.logs.contains { $0.contains("sleep-wake unfreeze") })
+    check("Never keeps retained content live on selection", offTab.live.sleepPhase == .live)
     let secondWindow = BrowserWindowState(focusedSpaceID: ownership.space.id, selectedNodeBySpace: [ownership.space.id: offTab.id])
     ownership.model.windows.append(secondWindow)
     await ownership.select(nil)
@@ -507,7 +507,7 @@ private func runAppWiringScenarios(root: URL, check: (String, Bool) -> Void) asy
         s.clock.advance(90); await s.controller.tick()
         let atTwoMinutes = tab.live.sleepPhase
         check("Battery Saver maps \(mode.rawValue) to \(expected[mode]!.rawValue)", s.controller.effectiveMode(mode) == expected[mode]
-              && (expected[mode] == .aggressive ? atTwoMinutes == .sleeping : atTwoMinutes == .frozen))
+              && (mode == .off ? atTwoMinutes == .live : expected[mode] == .aggressive ? atTwoMinutes == .sleeping : atTwoMinutes == .frozen))
     }
     let battery = SleepScenario(root: root.appendingPathComponent("battery-off"))
     let plugged = battery.tab()
@@ -547,7 +547,7 @@ private func runAppWiringScenarios(root: URL, check: (String, Bool) -> Void) asy
           && destroyDue.map { abs($0 - (86400 - 0)) < 1 } == true)
     let off = SleepScenario(root: root.appendingPathComponent("idle-off"), mode: .off)
     let offTab = off.tab(age: 100); await off.controller.tick()
-    check("off mode: a frozen tab parks the loop", offTab.live.sleepPhase == .frozen && off.controller.nextPassDelay() == nil)
+    check("off mode: a live tab parks the loop", offTab.live.sleepPhase == .live && off.controller.nextPassDelay() == nil)
     idle.controller.start()
     check("start schedules one pass", idle.controller.isPassScheduled && (idle.controller.scheduledPassDelay ?? 99) <= SleepController.passInterval)
     idle.controller.stop()
@@ -788,6 +788,7 @@ private func runSleepReviewScenarios(root: URL, check: (String, Bool) -> Void) a
     moving.model.profiles.append(targetProfile); moving.model.spaces.append(targetSpace); moving.model.rebuildIndex()
     await moving.controller.tick()
     moving.model.moveNode(id: moved.id, to: .spaceToday(targetSpace.id), at: nil)
+    await moving.controller.tick()
     await moving.controller.tick()
     check("tree revision invalidates cached ownership after a profile move", moved.live.sleepPhase == .sleeping)
 

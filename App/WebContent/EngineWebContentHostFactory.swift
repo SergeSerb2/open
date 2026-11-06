@@ -660,7 +660,8 @@ final class EngineWebContentHostFactory: NSResponder, WebContentHostFactory {
       showCommandBar(.editCurrentURL, editingPinnedTab: tab.id); return true
     case .changeSpaceIcon(let id): return openSpaceIconPicker(id)
     case .changeIcon(let id): return openNodeIconPicker(id)
-    case .showSiteControls, .editSpaceTheme, .newProfile, .shareSpace, .customizePage:
+    case .newProfile(let space): app.settingsPresenter.showNewProfile(sourceSpace: space); return true
+    case .showSiteControls, .editSpaceTheme, .shareSpace, .customizePage:
       return false // Explicitly deferred UI entries; see docs/app-shell.md Step B.
     default: return nil
     }
