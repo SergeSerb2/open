@@ -137,7 +137,7 @@ public enum CommandRegistry {
                           defaultShortcuts: [KeyboardShortcut(key: "f", modifiers: [.command, .option])],
                           enabledKey: EnabledKey.currentTab),
         CommandDefinition(id: "use-selection-to-find", title: "Use Selection to Find", menuPath: ["Edit", "Find"],
-                          defaultShortcuts: [.cmd("e")], scope: .webContent),
+                          scope: .webContent),
         CommandDefinition(id: "jump-to-selection", title: "Jump to Selection", menuPath: ["Edit", "Find"],
                           defaultShortcuts: [.cmd("j")], scope: .webContent),
         CommandDefinition(id: "emoji-and-symbols", title: "Emoji & Symbols", menuPath: ["Edit"],
@@ -287,6 +287,9 @@ public enum CommandRegistry {
     // MARK: - Extensions, Window, Help
 
     static let extensionsMenu: [CommandDefinition] = [
+        CommandDefinition(id: "open-extensions-picker", title: "Open Extensions", menuPath: ["Extensions"],
+                          defaultShortcuts: [.cmd("e")], isCustomizable: true,
+                          aliases: ["Extensions picker", "Pinned extensions", "Run extension"]),
         CommandDefinition(id: "manage-extensions", title: "Manage Extensions…", menuPath: ["Extensions"], aliases: ["Extensions"]),
         CommandDefinition(id: "add-extension", title: "Add Extension…", menuPath: ["Extensions"], aliases: ["Chrome Web Store"]),
     ]
@@ -376,6 +379,7 @@ public enum CommandRegistry {
     // MARK: - Code-only commands (no menu item; keys live in code, not in the nib)
 
     static let codeOnly: [CommandDefinition] = [
+        CommandDefinition(id: "extension-shortcuts", title: "Extension Shortcuts"),
         CommandDefinition(id: "add-to-favorites", title: "Add to Favorites",
                           enabledKey: EnabledKey.currentTabNotFavorite, aliases: ["Favorite", "Move to Favorites"]),
         CommandDefinition(id: "remove-from-favorites", title: "Remove from Favorites",

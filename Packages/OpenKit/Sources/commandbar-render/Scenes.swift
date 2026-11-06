@@ -11,11 +11,12 @@ import OpenSuggest
 enum Scenes {
     static let names = ["empty", "typing-git", "cmd-l", "space-hint", "site-chip", "site-search", "calculator", "actions", "scrolled", "privacy-footer",
                         "completion", "completion-case", "completion-accepted", "split-row", "split-row-selected",
-                        "actions-scope", "actions-scope-empty", "tabs-scope", "scope-chip-hover", "site-chip-query", "little-open"]
+                        "actions-scope", "actions-scope-empty", "tabs-scope", "scope-chip-hover", "site-chip-query", "little-open", "extension-action-row", "extension-scope"]
     /// Stands in for Open's privacy page in renders (the App has none yet, so its footer hides line 2).
     static let samplePrivacyURL = URL(string: "https://open.example/privacy")!
 
-    struct Env {
+    @MainActor struct Env {
+        let extensions = SyntheticExtensionSource()
         let world: Synthetic.World
         let engine: SuggestEngine
         let history: HistoryStore
@@ -48,6 +49,14 @@ enum Scenes {
         c.favicons = env.favicons
         c.theme = theme(env)
         switch name {
+        case "extension-action-row", "extension-scope":
+            stage.capturesNativeField = name == "extension-scope"
+            env.engine.extensionSource = env.extensions
+            c.extensionIcon = SyntheticExtensionSource.icon
+            c.present(request(env, mode: .newTab))
+            stage.type(name == "extension-action-row" ? "action pro" : "probe")
+            stage.settle()
+            if name == "extension-scope" { stage.key(.tab); stage.settle(); stage.type("al") }
         case "little-open":
             c.present(request(env, mode: .littleOpen), presentation: .embedded(width: CommandBarMetrics.littleOpenWidth))
         case "empty":

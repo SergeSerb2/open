@@ -122,7 +122,8 @@ class Open:
         self.user_data = user_data
         self.config, self.style = config, style
         self.sock = os.path.join(user_data, "automation.sock")
-        app = os.path.join(ROOT, "build", config, "Open.app", "Contents", "MacOS", "Open")
+        bundle_override = (extra_env or {}).get("OPEN_E2E_APP_BUNDLE")
+        app = os.path.join(bundle_override or os.path.join(ROOT, "build", config, "Open.app"), "Contents", "MacOS", "Open")
         self.executable = app
         self.bundle = os.path.dirname(os.path.dirname(os.path.dirname(app)))
         activator_source = os.path.join(ROOT, "tools", "e2e", "activate-own-app.swift")
@@ -145,7 +146,7 @@ class Open:
         self.observation_steps = []
         self.activation_trace = []
         self.focus_tracker = None
-        env = dict(os.environ, OPEN_USER_DATA=user_data)
+        env = dict(os.environ, OPEN_USER_DATA=user_data, OPEN_E2E_OWNER_PID=str(os.getpid()))
         env.update(extra_env or {})
         args = [app, "--user-data-dir=" + user_data, "--style=%s" % style] + list(urls) + extra_args
         self.log = open(log_path, "a")
@@ -445,6 +446,7 @@ def wav_data_uri(seconds=2, freq=440, rate=22050):
 
 
 def extension_checks(app, style, results):
+    app.call("ext-prompt", handler=False)
     def ext_list():
         lst = app.call("extensions")
         return lst if len(lst["installed"]) >= 4 else None
@@ -1150,7 +1152,10 @@ def tabstrip_checks(app, results):
         return strip_ids(page) == [p["chromeTabId"] for _, p in live()]
 
     wait_until(lambda: any(e["id"] == PROBE for e in app.call("extensions")["installed"]), timeout=30)
-    first = app.call("tabs")[0]["id"]
+    # The live registry can be ready before Bitwarden opens its welcome tab.
+    # Finish that install side effect before establishing selected-tab state.
+    wait_until(lambda: [t for t in app.call("tabs") if "bitwarden.com" in t["url"]], timeout=15)
+    first = next(t["id"] for t in app.call("tabs") if t["url"].startswith("https://example.com"))
     a = new_tab(app, "https://example.org/")
     b = new_tab(app, "https://www.iana.org/help/example-domains")
     app.call("select", tab=first)
@@ -1310,20 +1315,41 @@ def tabstrip_checks(app, results):
         "today_tab_gone_from_sidebar": bool(gone), "pinned_and_favorite_unloaded_in_place": bool(stays),
         "results": [removed_pinned, removed_fav]}
 
-    # chrome.tabs.discard asks Open: a background tab unloads in place; the
-    # visible tab is refused. Chromium never discards on its own.
+    # chrome.tabs.discard asks Open's sleep controller: a background renderer
+    # is discarded in place; the visible tab is refused. The sleeping page
+    # object stays until the controller's later destroy deadline.
     bg = f2
     bg_cid = chrome_id(bg)
+    discard_initial = []
+    def ready_to_discard():
+        state = next(iter(app.call("sleep-state", tab=bg).get("tabs", [])), {})
+        if not discard_initial: discard_initial.append(state)
+        # A recent network commit has the controller's existing 10 s loading
+        # grace. Establish an eligible background tab before sending one
+        # discard request; a correct refusal during that grace is not failure.
+        return state if state.get("content") and state.get("phase") == "live" \
+            and state.get("discardGate") is None else None
+    discard_ready = wait_until(ready_to_discard, timeout=20)
     discard_bg = ext_call(pop, "chrome.tabs.discard(%d).then(t => ({id: t.id, discarded: t.discarded}))" % bg_cid)
-    unloaded = wait_until(lambda: (lambda r: r if r and not r["loaded"] else None)(row(bg)), timeout=10)
+    def discarded_in_place():
+        state = app.call("sleep-state", tab=bg)
+        tab = next(iter(state.get("tabs", [])), {})
+        return tab if tab.get("phase") == "sleeping" and tab.get("discarded") else None
+    asleep = wait_until(discarded_in_place, timeout=10)
+    chromium_after = ext_call(pop, "chrome.tabs.get(%d).then(t => ({id: t.id, discarded: t.discarded}))" % bg_cid)
     visible = [t for t in app.call("tabs") if t["visible"]][0]
     discard_visible = ext_call(pop, "chrome.tabs.discard(%d)" % visible["page"]["chromeTabId"])
     time.sleep(0.5)
     results["tabs_discard"] = {
-        "ok": "ok" in discard_bg and bool(unloaded) and "error" in discard_visible
+        "ok": bool(discard_ready) and "ok" in discard_bg and bool(asleep) and bool(row(bg))
+              and chromium_after.get("ok", {}).get("id") == bg_cid and "error" in discard_visible
               and bool(row(visible["id"])) and row(visible["id"])["loaded"],
-        "background": discard_bg, "background_unloaded_in_place": bool(unloaded),
-        "visible": discard_visible}
+        "background": discard_bg, "background_sleeping_in_place": bool(asleep),
+        "eligible_before_request": discard_ready,
+        "initial_eligibility": discard_initial[0] if discard_initial else None,
+        "sleep_state": asleep or app.call("sleep-state", tab=bg), "chromium_after": chromium_after,
+        "visible": discard_visible,
+        "note": "P1 returns discarded:false in desktop chrome.tabs metadata; the engine's renderer-discard flag and sleeping phase prove the discard."}
 
     # Tabs stay in their Open window: windows.create({tabId}) and moves to
     # or from another window are refused.
@@ -4157,7 +4183,7 @@ def startup_failure_checks(factory, results, tmp):
     early_data = os.path.join(tmp, "early-quit")
     log = os.path.join(tmp, "early-quit.log")
     with open(log, "w") as stream:
-        proc = subprocess.run([app_path, "--user-data-dir=" + early_data],
+        proc = subprocess.run([app_path, "--use-mock-keychain", "--user-data-dir=" + early_data],
             env=dict(os.environ, OPEN_AUTOMATION_QUIT_BEFORE_ENGINE="1"), stdout=stream, stderr=subprocess.STDOUT, timeout=15)
     text = open(log).read()
     results["quit_before_engine"] = {"ok": proc.returncode == 0 and "termination before engine" in text
@@ -4187,7 +4213,7 @@ def startup_failure_checks(factory, results, tmp):
     failure_data = os.path.join(tmp, "engine-failure")
     failure_log = os.path.join(tmp, "engine-failure.log")
     with open(failure_log, "w") as stream:
-        failed = subprocess.run([os.path.join(failed_bundle, "Contents", "MacOS", "Open"), "--user-data-dir=" + failure_data],
+        failed = subprocess.run([os.path.join(failed_bundle, "Contents", "MacOS", "Open"), "--use-mock-keychain", "--user-data-dir=" + failure_data],
             env=dict(os.environ, OPEN_AUTOMATION_DISMISS_ENGINE_FAILURE="1"), stdout=stream, stderr=subprocess.STDOUT, timeout=15)
     text = open(failure_log).read()
     results["engine_failure_alert"] = {"ok": failed.returncode == 1 and "engine failed to start" in text
@@ -4205,10 +4231,19 @@ ACTION_PROBE_COPY = None
 
 
 def actions_checks(app, results):
+    app.call("ext-prompt", handler=False)
+    # Popup key routing must not depend on the user's per-site mode state.
+    # This App key lives in the shared defaults domain, even with a test root.
+    key = "open.developer.modeHosts"
+    previous = app.call("defaults", key=key)
     try:
+        app.call("defaults", key=key, value=None)
         _actions_checks(app, results)
     finally:
-        app.cleanup_surfaces()
+        try:
+            app.call("defaults", key=key, value=previous)
+        finally:
+            app.cleanup_surfaces()
 
 
 def _actions_checks(app, results):
@@ -4574,10 +4609,19 @@ def popup_key_checks(app, results, open_popup, close_popup):
         if state:
             app.call("focus", tab=state["page"]["identifier"])
             app.call("events")
-            app.call("key", key="d", modifiers=["ctrl"], window="popup", route="window")
-            stages = wait_until(lambda: (lambda e: e if {"beforePage", "unconsumed"} <= {x.get("phase") for x in e} else None)(
-                [x for x in app.call("events") if x["type"] == "popupKey"]), timeout=5)
-            keys["ctrl_d_stages"] = sorted({x.get("phase") for x in stages or []})
+            # Ctrl-D is Toggle Developer Mode in the current App and is
+            # correctly consumed before the page. Use an unbound chord to
+            # exercise the unconsumed callback (the original P2 contract).
+            app.call("key", key="d", modifiers=["ctrl", "shift"], window="popup", route="window")
+            # The socket drains events. CEF can deliver the before-page and
+            # unconsumed callbacks in separate polls; retain both observations.
+            observed = []
+            def key_stages():
+                observed.extend(x for x in app.call("events") if x["type"] == "popupKey")
+                return observed if {"beforePage", "unconsumed"} <= {x.get("phase") for x in observed} else None
+            stages = wait_until(key_stages, timeout=5)
+            keys["unbound_key_stages"] = sorted({x.get("phase") for x in stages or []})
+            keys["events"] = observed
             keys["still_open"] = bool(app.call("ext-popup").get("open"))
             app.call("key", key="w", modifiers=["cmd"], window="popup", route="app")
             keys["closed"] = bool(wait_until(lambda: not app.call("ext-popup").get("open"), timeout=5))
@@ -4585,7 +4629,7 @@ def popup_key_checks(app, results, open_popup, close_popup):
             if not keys["closed"]:
                 close_popup()
         results["popup_keys"] = {
-            "ok": keys["opened"] and keys.get("ctrl_d_stages") == ["beforePage", "unconsumed"] and keys.get("still_open")
+            "ok": keys["opened"] and keys.get("unbound_key_stages") == ["beforePage", "unconsumed"] and keys.get("still_open")
                   and keys.get("closed") and keys.get("tabs_kept"), **keys}
     finally:
         app.cleanup_surfaces()
@@ -5025,7 +5069,7 @@ def profiles_checks(factory, results, tmp, config):
 
     def run_binary(label, **env_extra):
         """One launch of the real app; returns its exit code and output."""
-        env = dict(os.environ, OPEN_USER_DATA=root, **env_extra)
+        env = dict(os.environ, OPEN_USER_DATA=root, OPEN_E2E_OWNER_PID=str(os.getpid()), **env_extra)
         path = os.path.join(tmp, "migration-%s.log" % label)
         with open(path, "w") as log:
             code = subprocess.run([binary, "--use-mock-keychain"], env=env, stdout=log, stderr=subprocess.STDOUT,
@@ -9691,6 +9735,7 @@ def page_tools_checks(factory, results, tmp, style):
 def _restore_defaults(app, saved):
     """Restores keys of the shared io.github.sergeserb2.open domain through the App, or
     with `defaults` when the App can no longer answer (a crash must not leave keys behind)."""
+    domain = getattr(app, "preferences_domain", "io.github.sergeserb2.open")
     for key, value in saved.items():
         restored = False
         if not app.closed:
@@ -9701,13 +9746,13 @@ def _restore_defaults(app, saved):
                 pass
         if not restored:
             if value is None:
-                subprocess.run(["defaults", "delete", "io.github.sergeserb2.open", key], capture_output=True)
+                subprocess.run(["defaults", "delete", domain, key], capture_output=True)
             elif isinstance(value, bool):
-                subprocess.run(["defaults", "write", "io.github.sergeserb2.open", key, "-bool", "true" if value else "false"], capture_output=True)
+                subprocess.run(["defaults", "write", domain, key, "-bool", "true" if value else "false"], capture_output=True)
             elif isinstance(value, (list, dict)):
-                runpy.run_path(os.path.join(ROOT, "tools/e2e/restore_defaults.py"))["write_collection"](key, value)
+                runpy.run_path(os.path.join(ROOT, "tools/e2e/restore_defaults.py"))["write_collection"](key, value, domain)
             else:
-                subprocess.run(["defaults", "write", "io.github.sergeserb2.open", key, "-string", str(value)], capture_output=True)
+                subprocess.run(["defaults", "write", domain, key, "-string", str(value)], capture_output=True)
 
 
 def page_tools_quit_with_devtools_check(app, results, saved):
@@ -10278,8 +10323,8 @@ def main():
     ap.add_argument("--engine-fingerprint-only", action="store_true", help="verify built engine artifacts and exit without launching Open")
     ap.add_argument("--extensions", default=os.path.join(ROOT, ".re", "ext", "unpacked"))
     ap.add_argument("--only", choices=["shell", "extensions", "features", "measure", "tabstrip", "window", "sidebar", "peek",
-                                       "commandbar", "app-actions", "actions", "profiles", "sidebar-completion", "toolbar", "numbering", "media", "relaunch", "page",
-                                       "sleep", "routing", "history", "applescript"])
+                                       "commandbar", "app-actions", "actions", "extensions-p3", "profiles", "sidebar-completion", "toolbar", "numbering", "media", "relaunch", "page",
+                                       "sleep", "context-menus", "routing", "history", "applescript", "downloads"])
     ap.add_argument("--window-chrome-only", action="store_true", help="run only the window-chrome follow-up flows in the window suite")
     ap.add_argument("--keep", action="store_true",
                     help="keep this run's data root, cache root and scratch folder (paths printed at the end)")
@@ -10458,6 +10503,13 @@ def main():
             results[opts.only] = CheckedResults(tracker)
             space_manager_checks(results[opts.only], tmp, opts.config, opts.style)
             folder_peek_checks(factory, results[opts.only], tmp)
+        elif opts.only == "context-menus":
+            import importlib.util
+            spec = importlib.util.spec_from_file_location("open_context_menus", os.path.join(ROOT, "tools/e2e/context_menus.py"))
+            module = importlib.util.module_from_spec(spec)
+            spec.loader.exec_module(module)
+            results[opts.only] = CheckedResults(tracker)
+            module.context_menu_checks(factory, results[opts.only], tmp, sys.modules[__name__])
         elif opts.only == "applescript":
             results["applescript"] = CheckedResults(tracker)
             runpy.run_path(os.path.join(ROOT, "tools/e2e/applescript.py"))["run"](
@@ -10471,6 +10523,10 @@ def main():
         elif opts.only == "media":
             results["media"] = CheckedResults(tracker)
             media_checks(factory, results["media"], tmp)
+        elif opts.only == "downloads":
+            import downloads
+            results["downloads"] = CheckedResults(tracker)
+            downloads.checks(factory, results["downloads"], tmp, opts.config, sys.modules[__name__])
         elif opts.only == "history":
             results["history"] = CheckedResults(tracker)
             runpy.run_path(os.path.join(ROOT, "tools/e2e/history_e2e.py"))["history_checks"](
@@ -10497,7 +10553,7 @@ def main():
             results["measure"] = CheckedResults(tracker)
             measure(factory, results["measure"], tmp)
         else:
-            app = factory(urls=("https://example.com/",))
+            app = factory(urls=("about:blank" if opts.only == "extensions-p3" else "https://example.com/",))
             try:
                 results["ping"] = app.call("ping")
                 app.call("window-frame", frame=[80, 60, 1360, 860])
@@ -10512,6 +10568,9 @@ def main():
                     tabstrip_checks(app, results["tabstrip"])
                 elif opts.only == "actions":
                     actions_checks(app, results["actions"])
+                elif opts.only == "extensions-p3":
+                    import extensions_p3
+                    extensions_p3.run(app, results["extensions-p3"], tmp, ROOT, wait_until, new_tab)
                 else:
                     feature_checks(app, opts.style, results["features"], tmp)
             finally:
@@ -10559,18 +10618,18 @@ def main():
                           "processes": [instance.quit_report for instance in _OWNED_APPS]}
     print("owned_process_cleanup    " + ("PASS" if results["cleanup"]["ok"] else "FAIL"), flush=True)
     name = ("results-actions-p2.json" if opts.only == "actions" else
-            "results-%s-%s.json" % (opts.only, opts.style if opts.only in ("extensions", "features", "tabstrip", "page")
+            "results-%s-%s.json" % (opts.only, opts.style if opts.only in ("extensions", "features", "tabstrip", "page", "context-menus")
                                     else opts.config.lower()))
     with open(os.path.join(OUT, name), "w") as f:
         json.dump(results, f, indent=2, sort_keys=True)
-    for group in ("shell", "extensions", "features", "measure", "tabstrip", "window", "sidebar", "peek", "commandbar", "app-actions", "actions", "profiles", "sidebar-completion", "toolbar", "numbering", "media", "relaunch", "page", "sleep", "routing", "history", "applescript"):
+    for group in ("shell", "extensions", "features", "measure", "tabstrip", "window", "sidebar", "peek", "commandbar", "app-actions", "actions", "extensions-p3", "profiles", "sidebar-completion", "toolbar", "numbering", "media", "relaunch", "page", "sleep", "context-menus", "routing", "history", "applescript", "downloads"):
         for k, v in results.get(group, {}).items():
             if isinstance(v, dict) and "ok" in v:
                 print("%-24s %s" % (k, "PASS" if v.get("ok") else "FAIL"))
             elif isinstance(v, dict) and v.get("status") in ("SKIP", "BLOCKED", "INTERRUPTED", "DEFERRED"):
                 print("%-24s %s: %s" % (k, v["status"], v.get("reason", "")))
     print("wrote", os.path.join(OUT, name))
-    failures = [k for group in ("shell", "extensions", "features", "measure", "tabstrip", "window", "sidebar", "peek", "commandbar", "app-actions", "actions", "sidebar-completion", "toolbar", "numbering", "media", "relaunch", "page", "sleep", "routing", "history", "applescript")
+    failures = [k for group in ("shell", "extensions", "features", "measure", "tabstrip", "window", "sidebar", "peek", "commandbar", "app-actions", "actions", "extensions-p3", "sidebar-completion", "toolbar", "numbering", "media", "relaunch", "page", "sleep", "context-menus", "routing", "history", "applescript", "downloads")
                 for k, v in results.get(group, {}).items() if isinstance(v, dict) and v.get("ok") is False]
     if failures or not results["cleanup"]["ok"]:
         sys.exit(1)

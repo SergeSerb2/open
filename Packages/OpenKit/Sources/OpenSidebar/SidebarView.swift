@@ -531,6 +531,10 @@ extension SidebarView {
     }
 
     public var favoritesCollection: NSCollectionView { favorites.collection }
+    /// Native Home control and its real badge layers, for App automation.
+    public var homeButton: NSView { bottomBar.home }
+    public var downloadBadgeEvidence: [String: Any] { bottomBar.home.evidence }
+
     public func spaceSwitcher(spaceID: SpaceID) -> NSView? { bottomBar.items[spaceID] }
     /// Delay a switcher's pending spring-load Space switch was scheduled with.
     public func springLoadDelay(spaceID: SpaceID) -> TimeInterval? { bottomBar.items[spaceID]?.pendingSpringLoadDelay }

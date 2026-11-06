@@ -40,6 +40,8 @@ public struct DownloadItemSnapshot: Identifiable, Sendable {
     public var filePath: String?
     public var startedAt: Date
     public var profileID: ProfileID
+    /// App snapshots cache this off the main actor. Nil is for legacy providers.
+    public var fileExists: Bool?
     public var bytesPerSecond: Int64 = 0
     public var errorDescription: String?
     public var progress: Double? { totalBytes.flatMap { $0 > 0 ? min(1, Double(receivedBytes) / Double($0)) : nil } }

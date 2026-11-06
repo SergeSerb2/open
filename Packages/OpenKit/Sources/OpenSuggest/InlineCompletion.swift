@@ -71,7 +71,7 @@ public struct InlineCompletion: Sendable, Hashable {
     /// §4.1.1 rules 1, 2 (`allowsInlineCompletion`, from the bar) and 4: new tab or edit mode with no
     /// scope, and typed text that is not empty and has no whitespace.
     static func allowed(_ input: SuggestInput) -> Bool {
-        input.context.allowsInlineCompletion && input.siteSearch == nil
+        input.context.allowsInlineCompletion && input.siteSearch == nil && input.context.extensionScopeID == nil
             && (input.context.mode == .newTab || input.context.mode == .editCurrentURL)
             && !input.rawText.isEmpty && !input.rawText.contains(where: \.isWhitespace)
     }

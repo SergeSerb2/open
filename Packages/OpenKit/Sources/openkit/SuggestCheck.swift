@@ -448,6 +448,57 @@ func runSuggestCheck(args: [String]) async {
     // 22, 44. Latency, with and without inline completion.
     await latencyCheck(log: log, history: history)
 
+    // Extensions use the same public query stream as the command bar.
+    let extensions = SuggestExtensionSource()
+    engine.extensionSource = extensions
+    if let s = await lastSnapshot(engine, "action pro", ctx) {
+        log.check("ext-action-by-name", s.topHit?.kind == .extensionAction && s.topHit?.extensionID == "probe" && s.topHit?.subtitle == "Extension" && s.topHit?.shortcutKeys == ["⇧", "⌘", "Y"], "top=\(describe(s.topHit))")
+    }
+    if let s = await lastSnapshot(engine, "PrObE", ctx) {
+        log.check("ext-keyword-hint", s.suggestions.contains { $0.kind == .extensionKeywordHint && $0.extensionID == "probe" } && engine.extensionKeywordTrigger(for: "PrObE")?.id == "probe", "exact folded keyword, hint row")
+    }
+    var extContext = ctx; extContext.extensionScopeID = "probe"
+    let initial = await snapshots(engine, "al", extContext)
+    log.check("ext-scope-default", initial.first?.suggestions.map(\.title) == ["Probe: al"] && initial.first?.topHit?.extensionContent == "al" && initial.first?.topHit?.subtitle == "Action Probe", "default %s substitution before async answer")
+    let final = initial.last?.suggestions ?? []
+    log.check("ext-scope-async", final.count == 5 && final.map(\.title) == ["Probe: al", "alpha", "alpine", "also", "alt"] && final[1].boldRanges == [0..<2] && final[1].isDeletable, "default + 4 rows, source order, bold ranges, deletable")
+    extensions.holdOldAnswer = true
+    var oldRows: [Suggestion] = []
+    let oldTask = Task { @MainActor in
+        for await s in engine.query("a", context: extContext) where s.sequence > 0 { oldRows += s.suggestions }
+    }
+    while extensions.pendingOld == nil { await Task.yield() }
+    let latest = await snapshots(engine, "alp", extContext)
+    extensions.pendingOld?.resume(returning: [.init(content: "stale", title: "STALE")]); extensions.pendingOld = nil
+    await oldTask.value
+    log.check("ext-scope-async stale text dropped", oldRows.isEmpty && latest.last?.suggestions.first?.title == "Probe: alp" && latest.last?.suggestions.contains(where: { $0.title == "STALE" }) == false, "old non-cancellable answer released after alp completes")
+    if let s = await lastSnapshot(engine, "yt", ctx) {
+        log.check("ext-keyword-conflict", engine.extensionKeywordTrigger(for: "yt") == nil && engine.siteSearchTrigger(for: "yt")?.name == "YouTube" && !s.suggestions.contains { $0.kind == .extensionKeywordHint }, "Site Search YouTube wins")
+    }
+    extensions.noAnswer = true
+    let unanswered = await lastSnapshot(engine, "no answer", extContext)
+    log.check("ext-scope-no-answer", unanswered?.suggestions.map(\.title) == ["Probe: no answer"], "nil async response retains the default")
+    extensions.noAnswer = false
+    // Exercise boundary rejection through the public engine, not an isolated helper.
+    let boundary = String(repeating: "b", count: ExtensionProviderLimits.textUTF16)
+    extensions.literalDefault = true
+    let atLimit = await lastSnapshot(engine, boundary, extContext)
+    let overLimit = await lastSnapshot(engine, boundary + "b", extContext)
+    log.check("ext-scope-input-limits", atLimit?.suggestions.first?.extensionContent == boundary && overLimit?.suggestions.isEmpty == true, "16384 UTF-16 units accepted; 16385 refused")
+    extensions.literalDefault = false
+    extensions.actions = (0..<50).map { .init(id: "ext-\($0)", name: "Action Probe \($0)") }
+    var samples: [Double] = []
+    for _ in 0..<101 {
+        let s = await lastSnapshot(engine, "action pro", ctx)
+        if let ms = s?.timings.first(where: { $0.provider == "extensions" })?.milliseconds { samples.append(ms) }
+    }
+    samples.removeFirst() // warm-up; one provider timing receipt, with load printed below
+    samples.sort()
+    let p95 = samples[Int(Double(samples.count - 1) * 0.95)]
+    var loads = [Double](repeating: 0, count: 3); _ = getloadavg(&loads, 3)
+    log.check("ext-actions 50 extensions < 0.2 ms", p95 < 0.2, String(format: "local synchronous p95 %.4f ms; max %.4f ms; n=%d; load %.2f %.2f %.2f", p95, samples.last ?? 0, samples.count, loads[0], loads[1], loads[2]))
+    engine.extensionSource = nil
+
     log.printTable()
     print("\nsuggest-check: \(log.rows.count - log.failures)/\(log.rows.count) passed")
     if log.failures > 0 { exit(1) }
@@ -933,4 +984,20 @@ private func completionChecks(log: CheckLog, tmp: URL) async {
               first40?.sequence == 0 && first40?.suggestions.contains { $0.kind == .history && $0.url?.host() == "github.com" } == true
                 && first40?.inlineCompletion?.fieldText == "github.com",
               "snapshot \(first40?.sequence ?? -1): \(show(first40))")
+}
+
+@MainActor private final class SuggestExtensionSource: ExtensionCommandBarSource {
+    var actions: [ExtensionCommandBarAction] = [.init(id: "probe", name: "Action Probe", shortcutKeys: ["⇧", "⌘", "Y"])]
+    var keywords: [ExtensionKeyword] = [.init(id: "probe", name: "Action Probe", keyword: "probe"), .init(id: "conflict", name: "Conflict Probe", keyword: "yt")]
+    var holdOldAnswer = false, noAnswer = false, literalDefault = false
+    var pendingOld: CheckedContinuation<[ExtensionOmniboxRow]?, Never>?
+    func startSession(extensionID: String) {}
+    func cancelSession(extensionID: String) {}
+    func deleteSuggestion(_ content: String, extensionID: String) {}
+    func defaultRow(extensionID: String, text: String) -> ExtensionOmniboxRow { .init(content: text, title: literalDefault ? text : "Probe: %s") }
+    func inputChanged(_ text: String, extensionID: String) async -> [ExtensionOmniboxRow]? {
+        if holdOldAnswer && text == "a" { return await withCheckedContinuation { pendingOld = $0 } }
+        if noAnswer { return nil }
+        return ["alpha", "alpine", "also", "alt", "capped"].map { .init(content: $0, title: $0, boldRanges: [0..<2], deletable: true) }
+    }
 }

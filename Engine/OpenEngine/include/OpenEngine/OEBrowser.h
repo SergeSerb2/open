@@ -209,6 +209,11 @@ OE_EXPORT @interface OEBrowser : NSObject
 /// is open closes it. A disabled action asks for its context menu instead
 /// (browser:requestsContextMenuForExtensionAction:). Returns NO for an
 /// unknown id and without a live model (extensionActionsReady NO).
+/// Runs an active named command with the active tab, or an action command
+/// through executeExtensionAction with source command. Flushes pending tab sync.
+- (BOOL)executeExtensionCommand:(NSString*)name forExtension:(NSString*)identifier
+    NS_SWIFT_NAME(executeExtensionCommand(_:forExtension:));
+
 - (BOOL)executeExtensionAction:(NSString*)extensionIdentifier
                         source:(OEExtensionActionSource)source
     NS_SWIFT_NAME(executeExtensionAction(_:source:));
@@ -246,6 +251,8 @@ OE_EXPORT @interface OEBrowser : NSObject
 /// away, so several menus can be open at once. The model also goes away
 /// with the action or with the window's live model.
 NS_SWIFT_UI_ACTOR
+/// Keep, answer, and release this object on the main thread. Each menu owns a
+/// Chromium model; an id from a destroyed toolbar generation is refused.
 OE_EXPORT @interface OEExtensionActionMenu : NSObject
 @property(nonatomic, readonly, copy) NSString* extensionIdentifier;
 /// Radio items come as checked items.

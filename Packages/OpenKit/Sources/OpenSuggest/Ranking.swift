@@ -12,9 +12,10 @@ public enum Ranking {
         case .navigate: return 1.0
         case .calculator: return 1.0
         case .history: return 0.9
-        case .action: return 0.85
+        case .action, .extensionAction: return 0.85
         case .siteSearch: return 0.8
-        case .siteSearchHint: return 0.6
+        case .siteSearchHint, .extensionKeywordHint: return 0.6
+        case .extensionSuggestion: return 1
         case .search: return 0.5
         case .searchSuggestion: return 0.45
         }
@@ -40,9 +41,10 @@ public enum Ranking {
         case .history: return 6
         case .searchSuggestion: return 5
         case .navigate: return 3
-        case .action: return 3
+        case .action, .extensionAction: return 3
+        case .extensionSuggestion: return 5
         case .siteSearch: return 2
-        case .siteSearchHint, .calculator, .search: return 1
+        case .siteSearchHint, .extensionKeywordHint, .calculator, .search: return 1
         }
     }
 
@@ -53,9 +55,10 @@ public enum Ranking {
         case .navigate: return 7
         case .calculator: return 6
         case .history: return 5
-        case .action: return 4
+        case .action, .extensionAction: return 4
         case .siteSearch: return 3
-        case .siteSearchHint: return 2
+        case .siteSearchHint, .extensionKeywordHint: return 2
+        case .extensionSuggestion: return 9
         case .search: return 1
         case .searchSuggestion: return 0
         }
@@ -178,6 +181,10 @@ public enum Ranking {
     /// T6 exact action title/alias (3+ characters) → that action ·
     /// T7 best eligible row (strong tab, strong history, strong action) · T8 typed search.
     static func rank(_ candidates: [Suggestion], input: SuggestInput, maxResults: Int) -> Ranked {
+        if input.context.extensionScopeID != nil {
+            let rows = Array(candidates.filter { $0.kind == .extensionSuggestion }.prefix(min(5, maxResults)))
+            return Ranked(rows: rows, hasTopHit: !rows.isEmpty, rule: rows.isEmpty ? .none : .extensionScope, completion: nil)
+        }
         let mode = input.context.mode
         var rows = dedupe(candidates, mode: mode)
         rows.sort(by: order)
@@ -205,7 +212,7 @@ public enum Ranking {
         } else if let i = rows.firstIndex(where: { $0.kind == .switchToTab && $0.isExactTabMatch }) {
             topIndex = i; rule = .exactTab
         } else if input.query.bytes.count >= 3,
-                  let i = rows.firstIndex(where: { $0.kind == .action && $0.scoreDetail.quality == MatchQuality.exact }) {
+                  let i = rows.firstIndex(where: { ($0.kind == .action || $0.kind == .extensionAction) && $0.scoreDetail.quality == MatchQuality.exact }) {
             topIndex = i; rule = .exactAction
         } else if let i = rows.firstIndex(where: { $0.canBeTopHit && $0.kind != .searchSuggestion }) {
             topIndex = i; rule = .bestEligible

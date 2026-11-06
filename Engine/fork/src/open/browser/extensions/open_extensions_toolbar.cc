@@ -4,6 +4,7 @@
 
 #include "open/browser/extensions/open_extensions_toolbar.h"
 
+#include <climits>
 #include <algorithm>
 #include <utility>
 
@@ -41,6 +42,9 @@ namespace open_engine {
 namespace {
 
 using InvocationSource = ToolbarActionViewModel::InvocationSource;
+// UI-thread only; never recycle an id, including after Browser recreation.
+// Exhaustion refuses new menus instead of wrapping into a stale generation.
+uint64_t g_next_menu_id = 1;
 
 // One action's ExtensionActionDelegate: popups and their state go to the
 // window's toolbar. Template: extension_action_delegate_android.cc.
@@ -463,7 +467,10 @@ CefRefPtr<CefListValue> OpenExtensionsToolbar::Menu(const std::string& id,
           : extensions::ExtensionContextMenuModel::ContextMenuSource::
                 kToolbarAction);
   auto items = MenuItems(menu.model.get());
-  *menu_id = next_menu_id_++;
+  if (g_next_menu_id > INT_MAX) {
+    return nullptr;
+  }
+  *menu_id = static_cast<int>(g_next_menu_id++);
   menus_.emplace(*menu_id, std::move(menu));
   return items;
 }
@@ -637,6 +644,9 @@ void OpenExtensionsToolbar::OnPinnedActionsChanged() {
 void OpenExtensionsToolbar::OnActiveWebContentsChanged(
     bool is_same_document,
     content::WebContents* web_contents) {
+  if (is_same_document) {
+    return;
+  }
   // Every action's state is per tab.
   for (const auto& id : model_->GetAllActionIds()) {
     ScheduleUpdated(id);

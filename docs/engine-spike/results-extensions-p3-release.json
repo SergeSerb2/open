@@ -1,0 +1,654 @@
+{
+  "cleanup": {
+    "ok": true,
+    "processes": [
+      {
+        "forced": false,
+        "ok": true,
+        "owned_pids": [
+          54179,
+          54229,
+          54230,
+          54231,
+          54232,
+          54233,
+          54234,
+          54256,
+          54263,
+          54267,
+          54270,
+          54293,
+          54468,
+          54470,
+          54471,
+          54487
+        ],
+        "remaining_processes": [],
+        "reply": true,
+        "windows_after_quit": {
+          "count": 0,
+          "windows": []
+        },
+        "windows_before_quit": 1
+      }
+    ]
+  },
+  "config": "Release",
+  "engine": {
+    "distributionCodeSHA256": "7979934c0d84f4d9fedb3859826d0c7c65919834fc904ec2aee00a0b4e4dd8f2",
+    "distributionSHA256": "7b49090502568f8189aa0e94f7cf23344beec5bed537136eff5f7fce573ad35a",
+    "distributionUUID": "4C4C446F-5555-3144-A1AB-0A55260E4EBE",
+    "embeddedCodeSHA256": "7979934c0d84f4d9fedb3859826d0c7c65919834fc904ec2aee00a0b4e4dd8f2",
+    "embeddedSHA256": "ec8cdb8039674748940441956a1ae529423ae15c05ac972a806a9afb12a657c0",
+    "embeddedUUID": "4C4C446F-5555-3144-A1AB-0A55260E4EBE",
+    "requiredSHA256": "7b49090502568f8189aa0e94f7cf23344beec5bed537136eff5f7fce573ad35a",
+    "source": "fork",
+    "stamp": "fork /Users/serge/Developer/open-engine-s8/chromium_git/chromium/src/cef/binary_distrib/cef_binary_156.0.14+g4fa4ab5+chromium-156.0.8078.48_macosarm64_minimal 1793918995"
+  },
+  "extensions-p3": {
+    "X14_permissions_deny_allow": {
+      "ok": true,
+      "rows": [
+        {
+          "ok": true,
+          "prompt": {
+            "browser": 1,
+            "buttons": [
+              "Deny",
+              "Allow"
+            ],
+            "chromiumButtons": [
+              "Deny",
+              "Allow"
+            ],
+            "chromiumTitle": "\"Open action probe\" has requested additional permissions.",
+            "events": [
+              {
+                "context": "Default",
+                "event": "changed"
+              },
+              {
+                "context": "Default",
+                "event": "commands"
+              },
+              {
+                "context": "Default",
+                "event": "ready"
+              },
+              {
+                "context": "Default",
+                "event": "commands"
+              },
+              {
+                "context": "Default",
+                "event": "commands"
+              },
+              {
+                "context": "Default",
+                "event": "changed"
+              },
+              {
+                "context": "Default",
+                "event": "commands"
+              },
+              {
+                "context": "Default",
+                "event": "changed"
+              },
+              {
+                "byUser": true,
+                "event": "installed",
+                "id": "flgfndpgiiafpjgjcelphomjfeeklbha"
+              }
+            ],
+            "extension": "flgfndpgiiafpjgjcelphomjfeeklbha",
+            "handler": true,
+            "name": "Open action probe",
+            "pending": true,
+            "permissionLines": [
+              "Manage your downloads"
+            ],
+            "permissions": [
+              {
+                "details": [],
+                "message": "Manage your downloads"
+              }
+            ],
+            "queued": 1,
+            "retainedDevices": [],
+            "retainedFiles": [],
+            "title": "The extension Open action probe has requested additional permissions",
+            "triggeringExtensionName": "",
+            "type": "permissions",
+            "webContent": 0
+          },
+          "value": false
+        },
+        {
+          "ok": true,
+          "prompt": {
+            "browser": 1,
+            "buttons": [
+              "Deny",
+              "Allow"
+            ],
+            "chromiumButtons": [
+              "Deny",
+              "Allow"
+            ],
+            "chromiumTitle": "\"Open action probe\" has requested additional permissions.",
+            "events": [
+              {
+                "context": "Default",
+                "event": "changed"
+              },
+              {
+                "context": "Default",
+                "event": "commands"
+              },
+              {
+                "context": "Default",
+                "event": "ready"
+              },
+              {
+                "context": "Default",
+                "event": "commands"
+              },
+              {
+                "context": "Default",
+                "event": "commands"
+              },
+              {
+                "context": "Default",
+                "event": "changed"
+              },
+              {
+                "context": "Default",
+                "event": "commands"
+              },
+              {
+                "context": "Default",
+                "event": "changed"
+              },
+              {
+                "byUser": true,
+                "event": "installed",
+                "id": "flgfndpgiiafpjgjcelphomjfeeklbha"
+              }
+            ],
+            "extension": "flgfndpgiiafpjgjcelphomjfeeklbha",
+            "handler": true,
+            "name": "Open action probe",
+            "pending": true,
+            "permissionLines": [
+              "Manage your downloads"
+            ],
+            "permissions": [
+              {
+                "details": [],
+                "message": "Manage your downloads"
+              }
+            ],
+            "queued": 1,
+            "retainedDevices": [],
+            "retainedFiles": [],
+            "title": "The extension Open action probe has requested additional permissions",
+            "triggeringExtensionName": "",
+            "type": "permissions",
+            "webContent": 0
+          },
+          "value": true
+        }
+      ]
+    },
+    "X15_uninstall_cancel_accept_with_popup": {
+      "alive": true,
+      "cancelKept": true,
+      "ok": true,
+      "popupClosed": true,
+      "prompt": {
+        "browser": 1,
+        "buttons": [
+          "Cancel",
+          "Remove Extension"
+        ],
+        "chromiumButtons": [
+          "Cancel",
+          "Remove"
+        ],
+        "chromiumTitle": "Remove \"Open action probe\"?",
+        "events": [
+          {
+            "context": "Default",
+            "event": "changed"
+          },
+          {
+            "context": "Default",
+            "event": "commands"
+          },
+          {
+            "context": "Default",
+            "event": "ready"
+          },
+          {
+            "context": "Default",
+            "event": "commands"
+          },
+          {
+            "context": "Default",
+            "event": "commands"
+          },
+          {
+            "context": "Default",
+            "event": "changed"
+          },
+          {
+            "context": "Default",
+            "event": "commands"
+          },
+          {
+            "context": "Default",
+            "event": "changed"
+          },
+          {
+            "byUser": true,
+            "event": "installed",
+            "id": "flgfndpgiiafpjgjcelphomjfeeklbha"
+          },
+          {
+            "context": "Default",
+            "event": "changed"
+          },
+          {
+            "context": "Default",
+            "event": "commands"
+          },
+          {
+            "context": "Default",
+            "event": "changed"
+          },
+          {
+            "context": "Default",
+            "event": "commands"
+          },
+          {
+            "context": "Default",
+            "event": "changed"
+          },
+          {
+            "context": "Default",
+            "event": "commands"
+          },
+          {
+            "context": "Default",
+            "event": "changed"
+          },
+          {
+            "context": "Default",
+            "event": "commands"
+          }
+        ],
+        "extension": "flgfndpgiiafpjgjcelphomjfeeklbha",
+        "handler": true,
+        "name": "Open action probe",
+        "pending": true,
+        "permissionLines": [],
+        "permissions": [],
+        "queued": 1,
+        "retainedDevices": [],
+        "retainedFiles": [],
+        "title": "Remove Open action probe extension from Open?",
+        "triggeringExtensionName": "",
+        "type": "uninstall",
+        "webContent": 0
+      },
+      "removed": true
+    },
+    "X1_local_install_prompt": {
+      "answer": {
+        "answered": "accept",
+        "browser": 1,
+        "buttons": [
+          "Cancel",
+          "Add Extension"
+        ],
+        "chromiumButtons": [
+          "Cancel",
+          "Add extension"
+        ],
+        "chromiumTitle": "Add \"Open action probe\"?",
+        "events": [
+          {
+            "context": "Default",
+            "event": "changed"
+          },
+          {
+            "context": "Default",
+            "event": "commands"
+          },
+          {
+            "context": "Default",
+            "event": "ready"
+          }
+        ],
+        "extension": "flgfndpgiiafpjgjcelphomjfeeklbha",
+        "handler": true,
+        "injectedCancel": false,
+        "name": "Open action probe",
+        "pending": true,
+        "permissionLines": [
+          "Read your browsing history"
+        ],
+        "permissions": [
+          {
+            "details": [],
+            "message": "Read your browsing history"
+          }
+        ],
+        "queued": 0,
+        "retainedDevices": [],
+        "retainedFiles": [],
+        "title": "Add Open action probe extension to Open?",
+        "triggeringExtensionName": "",
+        "type": "install",
+        "webContent": 1
+      },
+      "cancelled": true,
+      "installed": true,
+      "native_dialogs": [],
+      "ok": true,
+      "prompt": {
+        "browser": 1,
+        "buttons": [
+          "Cancel",
+          "Add Extension"
+        ],
+        "chromiumButtons": [
+          "Cancel",
+          "Add extension"
+        ],
+        "chromiumTitle": "Add \"Open action probe\"?",
+        "events": [
+          {
+            "context": "Default",
+            "event": "changed"
+          },
+          {
+            "context": "Default",
+            "event": "commands"
+          },
+          {
+            "context": "Default",
+            "event": "ready"
+          }
+        ],
+        "extension": "flgfndpgiiafpjgjcelphomjfeeklbha",
+        "handler": true,
+        "name": "Open action probe",
+        "pending": true,
+        "permissionLines": [
+          "Read your browsing history"
+        ],
+        "permissions": [
+          {
+            "details": [],
+            "message": "Read your browsing history"
+          }
+        ],
+        "queued": 1,
+        "retainedDevices": [],
+        "retainedFiles": [],
+        "title": "Add Open action probe extension to Open?",
+        "triggeringExtensionName": "",
+        "type": "install",
+        "webContent": 1
+      },
+      "release_cancelled": true,
+      "source": "local signed CRX3 -> CrxInstaller"
+    },
+    "commands_execute": {
+      "actionSource": "command",
+      "named": {
+        "commands": [
+          "probe-named"
+        ],
+        "lastCommandTab": 2037882345
+      },
+      "ok": true,
+      "unknownRefused": true
+    },
+    "commands_list_and_action_keys": {
+      "actionKey": "Y",
+      "actionModifiers": 1048576,
+      "commands": [
+        {
+          "actionCommand": true,
+          "extension": "flgfndpgiiafpjgjcelphomjfeeklbha",
+          "global": false,
+          "keyEquivalent": "Y",
+          "modifierFlags": 1048576,
+          "name": "_execute_action",
+          "summary": ""
+        },
+        {
+          "actionCommand": false,
+          "extension": "flgfndpgiiafpjgjcelphomjfeeklbha",
+          "global": false,
+          "keyEquivalent": "U",
+          "modifierFlags": 1048576,
+          "name": "probe-named",
+          "summary": "Run the probe command"
+        }
+      ],
+      "ok": true
+    },
+    "disable_enable_with_popup": {
+      "actionGone": true,
+      "disabled": {
+        "directory": "/Users/serge/Library/Application Support/Open-E2E-extensions-p3-chrome-54162-041c155a/Engine/Default/Extensions/flgfndpgiiafpjgjcelphomjfeeklbha/1.0_0",
+        "disableReasons": 1,
+        "enabled": false,
+        "fromWebStore": false,
+        "hasAction": true,
+        "homepage": "",
+        "hostPermissions": [],
+        "icon": "128x128",
+        "id": "flgfndpgiiafpjgjcelphomjfeeklbha",
+        "manifestVersion": 3,
+        "name": "Open action probe",
+        "omniboxKeyword": "probe",
+        "options": "",
+        "permissions": [
+          "storage",
+          "tabs"
+        ],
+        "unpacked": false,
+        "version": "1.0"
+      },
+      "ok": true,
+      "popupClosed": true
+    },
+    "fallback_native_dialog_installs": {
+      "installed": true,
+      "native": [
+        {
+          "attachedSheet": 0,
+          "class": "NativeWidgetMacNSWindow",
+          "firstResponder": "BridgedContentView",
+          "frame": "{{1056, 910}, {448, 196}}",
+          "key": true,
+          "level": 0,
+          "number": 74835,
+          "parent": 0,
+          "sheet": false,
+          "text": [
+            "Add \"Open action probe\"?",
+            "Add extension",
+            "Cancel",
+            "It can:",
+            "Read your browsing history"
+          ],
+          "title": "",
+          "visible": true
+        }
+      ],
+      "ok": true
+    },
+    "live_metadata": {
+      "extension": {
+        "directory": "/Users/serge/Library/Application Support/Open-E2E-extensions-p3-chrome-54162-041c155a/Engine/Default/Extensions/flgfndpgiiafpjgjcelphomjfeeklbha/1.0_0",
+        "disableReasons": 0,
+        "enabled": true,
+        "fromWebStore": false,
+        "hasAction": true,
+        "homepage": "",
+        "hostPermissions": [],
+        "icon": "128x128",
+        "id": "flgfndpgiiafpjgjcelphomjfeeklbha",
+        "manifestVersion": 3,
+        "name": "Open action probe",
+        "omniboxKeyword": "probe",
+        "options": "",
+        "permissions": [
+          "storage",
+          "tabs"
+        ],
+        "unpacked": false,
+        "version": "1.0"
+      },
+      "ok": true
+    },
+    "management_reload": {
+      "ok": true
+    },
+    "metadata_icon_limits": {
+      "ok": true,
+      "rows": [
+        {
+          "case": "dimensions-at",
+          "encodedBytes": 21198,
+          "icon": "2048x2048",
+          "ok": true,
+          "pixels": [
+            2048,
+            2048
+          ]
+        },
+        {
+          "case": "dimensions-over",
+          "encodedBytes": 21197,
+          "icon": "",
+          "ok": true,
+          "pixels": [
+            2049,
+            2048
+          ]
+        },
+        {
+          "case": "bytes-at",
+          "encodedBytes": 4194304,
+          "icon": "128x128",
+          "ok": true,
+          "pixels": [
+            128,
+            128
+          ]
+        },
+        {
+          "case": "bytes-over",
+          "encodedBytes": 4194305,
+          "icon": "",
+          "ok": true,
+          "pixels": [
+            128,
+            128
+          ]
+        },
+        {
+          "case": "depth-over",
+          "encodedBytes": 466,
+          "icon": "",
+          "ok": true,
+          "pixels": [
+            128,
+            128
+          ]
+        }
+      ]
+    },
+    "non_default_profile": {
+      "absentInDefault": true,
+      "installedInSecond": true,
+      "ok": true
+    },
+    "registry_delegate_events": {
+      "events": [
+        {
+          "context": "Default",
+          "event": "changed"
+        },
+        {
+          "context": "Default",
+          "event": "commands"
+        },
+        {
+          "context": "Default",
+          "event": "ready"
+        },
+        {
+          "context": "Default",
+          "event": "commands"
+        },
+        {
+          "context": "Default",
+          "event": "commands"
+        },
+        {
+          "context": "Default",
+          "event": "changed"
+        },
+        {
+          "context": "Default",
+          "event": "commands"
+        },
+        {
+          "context": "Default",
+          "event": "changed"
+        },
+        {
+          "byUser": true,
+          "event": "installed",
+          "id": "flgfndpgiiafpjgjcelphomjfeeklbha"
+        }
+      ],
+      "ok": true
+    },
+    "registry_ready": {
+      "ok": true
+    },
+    "stale_menu_generation_refused": {
+      "ok": true,
+      "ran": false
+    }
+  },
+  "interrupted_attempts": [],
+  "ping": {
+    "cef": "156.0.14+g4fa4ab5+chromium-156.0.8078.48",
+    "chromium": "156.0.8078.48",
+    "mallocZones": [
+      "PartitionAlloc",
+      "objc-class_rw_t",
+      "DefaultMallocZone",
+      "DefaultPurgeableMallocZone",
+      "QuartzCore",
+      "LSBindingEvaluator",
+      "AttributeGraph",
+      "AttributeGraph graph data"
+    ],
+    "pid": 54179,
+    "root": "/Users/serge/Library/Application Support/Open-E2E-extensions-p3-chrome-54162-041c155a",
+    "userData": "/Users/serge/Library/Application Support/Open-E2E-extensions-p3-chrome-54162-041c155a/Engine"
+  },
+  "started": "2026-11-05 18:23:11",
+  "style": "chrome"
+}
