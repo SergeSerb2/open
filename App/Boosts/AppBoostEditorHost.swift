@@ -20,7 +20,9 @@ final class AppBoostEditorHost: BoostEditorHost {
     return try? await host.content.takeSnapshot()
   }
   // Blocked on P7: isolated world and a native page-message channel.
+  func zapAvailability(tabID: ItemID) -> Bool { false }
   func enterZap(boostID: BoostID, tabID: ItemID) -> Bool { false }
+  func enterSelectorPicker(boostID: BoostID, tabID: ItemID) -> Bool { false }
   func exitZap(tabID: ItemID) {}
   func removeZapFromSession(_ selector: String, tabID: ItemID) {}
   func requestZapCounts(tabID: ItemID) {}
