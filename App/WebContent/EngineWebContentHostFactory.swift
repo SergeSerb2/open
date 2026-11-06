@@ -104,6 +104,8 @@ final class EngineWebContentHostFactory: NSResponder, WebContentHostFactory {
   #endif
   private lazy var extensionBar = makeExtensionBar()
   private var extensionBarCreated = false
+  // Section 6's legacy root overlay can intersect the pane's Find surface.
+  var findOverlappingChrome: NSView? { extensionBarCreated ? extensionBar : nil }
 
   var dialogPolicy: String?
   var permissionPolicy: String?
@@ -657,8 +659,8 @@ final class EngineWebContentHostFactory: NSResponder, WebContentHostFactory {
   }
   private func layoutViews() {
     guard let controller else { return }; let panel = controller.container.frame
-    findController?.sync()
     if extensionBarCreated { extensionBar.frame = CGRect(x: panel.maxX - 210, y: panel.minY + 8, width: 200, height: 26) }
+    findController?.sync()
   }
   private func updateChrome() { window?.title = selectedTab?.displayTitle ?? "Open" }
 }

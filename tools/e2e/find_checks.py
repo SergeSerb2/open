@@ -61,7 +61,7 @@ def run(h, factory, results, tmp):
         opening_key = key('f', ['cmd'])
         p = pane(tab)
         row('F02_open_focus_placeholder', p['visible'] and p['focused'] and p['placeholder'] == 'Find in page...', pane=p)
-        row('F03_frame', rect_ok(p) and p['radius'] == 5, pane=p)
+        row('F03_frame', rect_ok(p) and p['radius'] == 5 and p.get('controls',{}).get('closeHitMatches') is True, pane=p)
         load = subprocess.check_output(['uptime'], text=True).strip()
         row('F04_one_frame', p['visible'] and state().get('presentationPhases', {}).get('commit', 999) <= 1000/120,
             commitMilliseconds=state().get('presentationPhases', {}).get('commit'), dispatchMilliseconds=opening_key.get('dispatchMilliseconds'), scope='native key event timestamp to flushed visible Find layer in the initial settled window, with no Find warm-up; native field-editor focus completes in the same action', viewMilliseconds=state().get('presentationMilliseconds'), phases=state().get('presentationPhases'), deadline=1000/120, load=load)
@@ -109,7 +109,7 @@ def run(h, factory, results, tmp):
         app.call('mouse', action='click', x=f[0]+f[2]-16, y=app.call('window-state')['frame'][3]-f[1]-16)
         click_closed=h.wait_until(lambda: not pane(tab)['visible'] and app.call('focus-state')['owner'] == 'page' and app.eval(tab, 'document.hasFocus()'), timeout=3, step=.05)
         key(text='-close'); closed_text=app.eval(tab, "document.getElementById('input').value")
-        row('F13_escape_focus', editing_before_escape and escaped and bool(click_closed) and not pane(tab)['visible'] and app.call('focus-state')['owner'] == 'page' and closed_text == 'page-typing-close', text=text, closeText=closed_text, closePane=pane(tab), closeFocus=app.call('focus-state'))
+        row('F13_escape_focus', editing_before_escape and escaped and bool(click_closed) and not pane(tab)['visible'] and not state().get('chromeHidden') and app.call('focus-state')['owner'] == 'page' and closed_text == 'page-typing-close', text=text, closeText=closed_text, closePane=pane(tab), closeFocus=app.call('focus-state'), chromeHidden=state().get('chromeHidden'))
         if os.environ.get('OPEN_FIND_FOCUS_ONLY') == '1': return
         for name, element, expected in [('trim_newline', 'lines', 'alpha beta'), ('short', 'seed', 'A short selection'), ('40', 'forty', '1234567890123456789012345678901234567890'), ('41_keeps', 'fortyone', '1234567890123456789012345678901234567890')]:
             select(tab, element); key('f', ['cmd'])
@@ -147,10 +147,11 @@ def run(h, factory, results, tmp):
         row('F21_jump_selection', bool(jumped), scroll=app.eval(other, 'window.scrollY'))
         app.eval(other, 'getSelection().removeAllRanges();window.scrollTo(0,0)')
         # Use Selection to Find has no 40-character ceiling; preserve Cmd+E registry.
-        select(other, 'long'); app.call('menu-perform', id='use-selection-to-find')
+        select(other, 'long'); selection_requests=state().get('requests',0)
+        app.call('menu-perform', id='use-selection-to-find')
         h.wait_until(lambda: not state().get('pending'), timeout=3, step=.05)
         p = pane(other)
-        row('F22_use_selection', not p['visible'] and p['query'] == app.eval(other, "document.getElementById('long').textContent") and len(p['query']) > 40, pane=p,
+        row('F22_use_selection', not p['visible'] and p['query'] == app.eval(other, "document.getElementById('long').textContent") and len(p['query']) > 40 and state().get('requests',0)>selection_requests, pane=p,
             menu=next(m for m in app.call('menu-state') if m['id'] == 'use-selection-to-find'))
         app.eval(other, 'getSelection().removeAllRanges()')
         query('x'*1000); p = pane(other)
@@ -169,7 +170,7 @@ def run(h, factory, results, tmp):
         app.call('split'); app.call('select', tab=tab)
         key('f', ['cmd']); key('a', ['cmd']); key(text='quasar'); settled(tab, '1/5')
         app.call('menu-perform', id='toggle-toolbar'); p = pane(tab)
-        row('F26_toolbar_top_50', rect_ok(p, top=50), pane=p)
+        row('F26_toolbar_top_50', rect_ok(p, top=50) and not state().get('chromeHidden'), pane=p, chromeHidden=state().get('chromeHidden'))
         app.call('menu-perform', id='toggle-toolbar')
         # A narrow split pane shrinks the preferred 300 pt width.
         app.call('window-frame', frame=[100,70,600,760]); app.call('split')

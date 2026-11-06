@@ -27,6 +27,8 @@ final class FindController {
   private var selectionGeneration = 0
   private var pendingEdits: Set<ItemID> = []
   private var editScheduled = false
+  private weak var occludedChrome: NSView?
+  private var chromeWasHidden = false
   private(set) var requestCount = 0
   private(set) var resultCount = 0
   private(set) var typedRequests = 0
@@ -188,6 +190,7 @@ final class FindController {
     // End field editing before hiding its ancestor, then focus the actual page.
     if state.overlay?.bar.owns(factory.window?.firstResponder) == true { factory.window?.makeFirstResponder(nil) }
     state.overlay?.isHidden = true
+    updateChromeOcclusion()
     if focusedID == id { factory.hosts[id]?.content.focusPage() }
   }
   func sync(refreshResults: Bool = true) {
@@ -231,6 +234,28 @@ final class FindController {
         resetResult(state); page.stopFinding(clearSelection: true); run(id, forward: true)
       }
     }
+    updateChromeOcclusion()
+  }
+  /// The legacy root extensions stack otherwise paints over Find and captures
+  /// its button clicks. Preserve its visibility whenever Find leaves its area.
+  private func updateChromeOcclusion() {
+    guard let chrome = factory.findOverlappingChrome, let parent = chrome.superview,
+      chrome.window != nil else { restoreChrome(); return }
+    let overlaps = states.values.contains { state in
+      guard state.open, let bar = state.overlay?.bar, bar.window === chrome.window,
+        !bar.isHiddenOrHasHiddenAncestor else { return false }
+      return bar.convert(bar.bounds, to: parent).intersects(chrome.frame)
+    }
+    if overlaps {
+      if occludedChrome !== chrome {
+        restoreChrome(); occludedChrome = chrome; chromeWasHidden = chrome.isHidden
+      }
+      if !chrome.isHidden { chrome.isHidden = true }
+    } else { restoreChrome() }
+  }
+  private func restoreChrome() {
+    if let chrome = occludedChrome, chrome.isHidden != chromeWasHidden { chrome.isHidden = chromeWasHidden }
+    occludedChrome = nil
   }
   func didUpdate(_ result: OEFindResult, page: OEWebContent) {
     guard let id = factory.hosts.values.first(where: { $0.content === page })?.tabID,
@@ -269,16 +294,19 @@ final class FindController {
     guard let state = states.removeValue(forKey: id) else { return }
     if state.overlay?.bar.owns(factory.window?.firstResponder) == true { factory.window?.makeFirstResponder(nil) }
     pendingEdits.remove(id); state.overlay?.removeFromSuperview()
+    updateChromeOcclusion()
   }
   func hostClosed(_ id: ItemID) {
     states[id]?.overlay?.removeFromSuperview(); states[id]?.page = nil
     states[id]?.acceptsResults = false
     if factory.model.tab(id: id) == nil { states[id] = nil }
+    updateChromeOcclusion()
   }
   func closeAll() {
     selectionTask?.cancel(); selectionTask = nil; pendingEdits.removeAll()
     if owns(factory.window?.firstResponder) { factory.window?.makeFirstResponder(nil) }
     states.values.forEach { $0.overlay?.removeFromSuperview() }; states.removeAll()
+    restoreChrome()
   }
   func jumpToSelection() {
     guard let page = factory.selectedContent else { return }
@@ -322,6 +350,7 @@ final class FindController {
         "layouts": bar?.layoutCount ?? 0]
     }
     return ["created": true, "panes": panes, "focusedTab": focusedID?.description ?? "", "requests": requestCount, "results": resultCount,
+      "chromeHidden": factory.findOverlappingChrome?.isHidden ?? false,
       "typedRequests": typedRequests, "activationRequests": activationRequests,
       "pending": editScheduled || selectionTask != nil, "presentationMilliseconds": lastPresentationMilliseconds, "presentationPhases": presentationPhases]
   }
