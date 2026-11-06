@@ -10040,19 +10040,20 @@ def space_editor_creation_checks(factory, results, tmp):
         a = app.call('open', url=path.as_uri())['id']; app.call('wait', tab=a)
         app.call('pin', tab=a)
         b = app.call('open', url=path.as_uri())['id']; app.call('wait', tab=b)
-        for ids in ([b], [a, b]):
+        for ids in ([a], [b], [a, b]):
             app.call('space', space=source)
             app.call('sidebar-click', node=ids[0])
             for node in ids[1:]: app.call('sidebar-click', node=node, modifiers=['cmd'])
             old = shape(tree()); count = len(spaces())
             app.call('sidebar-menu', node=ids[0], item='Move to/New Space…')
-            require('move_form_no_early_mutation_' + str(len(ids)), len(spaces()) == count and shape(tree()) == old)
+            require('move_form_no_early_mutation_' + ('pinned' if ids == [a] else 'today' if ids == [b] else 'mixed'), len(spaces()) == count and shape(tree()) == old)
             app.call('type', text='Moved Space'); finish()
             moved = tree()
-            require('move_preserves_sections_' + str(len(ids)), [n['id'] for n in moved['today']] == [b]
-                    and [n['id'] for n in moved['pinned']] == ([a] if len(ids) > 1 else []), tree=moved)
+            require('move_preserves_sections_' + ('pinned' if ids == [a] else 'today' if ids == [b] else 'mixed'),
+                    [n['id'] for n in moved['today']] == ([b] if b in ids else [])
+                    and [n['id'] for n in moved['pinned']] == ([a] if a in ids else []), tree=moved)
             undo(); app.call('space', space=source)
-            require('move_one_undo_' + str(len(ids)), len(spaces()) == count and shape(tree()) == old)
+            require('move_one_undo_' + ('pinned' if ids == [a] else 'today' if ids == [b] else 'mixed'), len(spaces()) == count and shape(tree()) == old)
             app.call('sidebar-key', key='escape')
         folder = app.call('folder', tabs=[a], title='Turned Space', section='pinned')
         app.call('sidebar-drop', nodes=[b], parent=dict(kind='folder', id=folder), index=1)
