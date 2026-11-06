@@ -4179,7 +4179,7 @@ def startup_failure_checks(factory, results, tmp):
     early_data = os.path.join(tmp, "early-quit")
     log = os.path.join(tmp, "early-quit.log")
     with open(log, "w") as stream:
-        proc = subprocess.run([app_path, "--user-data-dir=" + early_data],
+        proc = subprocess.run([app_path, "--use-mock-keychain", "--user-data-dir=" + early_data],
             env=dict(os.environ, OPEN_AUTOMATION_QUIT_BEFORE_ENGINE="1"), stdout=stream, stderr=subprocess.STDOUT, timeout=15)
     text = open(log).read()
     results["quit_before_engine"] = {"ok": proc.returncode == 0 and "termination before engine" in text
@@ -4209,7 +4209,7 @@ def startup_failure_checks(factory, results, tmp):
     failure_data = os.path.join(tmp, "engine-failure")
     failure_log = os.path.join(tmp, "engine-failure.log")
     with open(failure_log, "w") as stream:
-        failed = subprocess.run([os.path.join(failed_bundle, "Contents", "MacOS", "Open"), "--user-data-dir=" + failure_data],
+        failed = subprocess.run([os.path.join(failed_bundle, "Contents", "MacOS", "Open"), "--use-mock-keychain", "--user-data-dir=" + failure_data],
             env=dict(os.environ, OPEN_AUTOMATION_DISMISS_ENGINE_FAILURE="1"), stdout=stream, stderr=subprocess.STDOUT, timeout=15)
     text = open(failure_log).read()
     results["engine_failure_alert"] = {"ok": failed.returncode == 1 and "engine failed to start" in text
