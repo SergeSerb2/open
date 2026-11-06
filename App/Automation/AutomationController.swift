@@ -777,6 +777,9 @@
         // The action's context menu: its items, or select one by title.
         guard let id = a["extension"] as? String else { throw Failure(message: "missing extension") }
         try focusActionPane(a, w)
+        if a["keep"] as? Bool != true, a["stale"] as? Bool != true, a["snapshot"] as? Bool != true {
+          return try await runExtensionUICommand("ext-ui-menu", a, w)
+        }
         let browser = try focusedBrowser(w)
         guard let menu = browser.contextMenu(forExtensionAction: id, source: a["source"] as? String == "menu" ? .menuItem : .toolbarAction)
         else { throw Failure(message: "no menu") }

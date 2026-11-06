@@ -60,7 +60,7 @@ extension AutomationController {
     case "install-webstore":
       // Completion is recorded so the socket remains available to answer consent.
       manager.install(fromWebStore: id, window: factory.window) { [weak extensionAutomation] installed, error in
-        extensionAutomation?.events.append(["event": "installComplete", "id": id, "installed": installed, "error": error ?? ""])
+        extensionAutomation?.record(["event": "installComplete", "id": id, "installed": installed, "error": error ?? ""])
       }
     case "install-crx":
       guard let path = args["path"] as? String, let content = browser.activeWebContent else { throw Failure(message: "missing CRX path or active page") }
@@ -105,7 +105,10 @@ extension AutomationController {
       guard let source = ui.host?.contextMenu(extensionID: id, fromMenuItem: false),
             let native = ExtensionsMenuBuilder.contextMenu(source) else { throw Failure(message: "no menu") }
       let result = describeExtensionMenu(native)
-      if let title = args["select"] as? String { try selectExtensionMenu(native, title: title) }
+      if let title = args["select"] as? String {
+        try selectExtensionMenu(native, title: title)
+        return ["items": result, "ran": (source as? EngineExtensionMenu)?.didRun == true] as [String: Any]
+      }
       else { source.cancel() }
       return result
     }
@@ -136,9 +139,11 @@ extension AutomationController {
       if surface == "little" { result["blocked"] = "App Little Open entry point is still showLittleOpenStub" }
       return result
     }
-    guard let id = args["extension"] as? String,
-          let button = strips.flatMap(\.buttons).first(where: { $0.action.id == id && !$0.isHiddenOrHasHiddenAncestor }),
-          let window = button.window else { throw Failure(message: "action has no visible slot on this surface") }
+    guard let id = args["extension"] as? String else { throw Failure(message: "missing extension") }
+    let button: NSView? = id == "more"
+      ? strips.first(where: { !$0.moreButton.isHiddenOrHasHiddenAncestor })?.moreButton
+      : strips.flatMap(\.buttons).first(where: { $0.action.id == id && !$0.isHiddenOrHasHiddenAncestor })
+    guard let button, let window = button.window else { throw Failure(message: "action has no visible slot on this surface") }
     let point = button.convert(CGPoint(x: button.bounds.midX, y: button.bounds.midY), to: nil)
     ui.capturesMenus = true; ui.capturedMenu = nil
     defer { ui.capturesMenus = false; ui.capturedMenu = nil }
@@ -151,7 +156,11 @@ extension AutomationController {
       // The native mouse-up is queued by the shared real-event helper.
       try await Task.sleep(for: .milliseconds(20))
     }
-    if let native = ui.capturedMenu { return ["menu": describeExtensionMenu(native)] }
+    if let native = ui.capturedMenu {
+      let items = describeExtensionMenu(native)
+      if let title = args["select"] as? String { try selectExtensionMenu(native, title: title) }
+      return ["menu": items]
+    }
     return ["clicked": id, "popup": ui.popup.state] as [String: Any]
   }
   private func describeExtensionMenu(_ menu: NSMenu) -> [[String: Any]] {

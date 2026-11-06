@@ -103,7 +103,9 @@ public final class PaneChromeView: NSView {
         let stripStyle: ExtensionStripStyle = role == .toolbar ? .toolbar : .paneBar
         if extensionStrip?.style != stripStyle { extensionStrip?.removeFromSuperview(); extensionStrip = nil }
         if extensionStrip == nil, let extensionsUI {
-            let strip = ExtensionStripView(style: stripStyle, context: extensionsUI); addSubview(strip); extensionStrip = strip
+            let strip = ExtensionStripView(style: stripStyle, context: extensionsUI)
+            strip.onVisibilityChange = { [weak self] in self?.needsLayout = true }
+            addSubview(strip); extensionStrip = strip
         }
         if let strip = extensionStrip {
             strip.frame = bounds; strip.isFocused = isFocused || role == .toolbar; strip.hasPage = host != nil

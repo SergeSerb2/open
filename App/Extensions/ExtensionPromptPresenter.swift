@@ -40,6 +40,7 @@ private final class EngineExtensionPrompt: ExtensionPromptModel {
 final class ExtensionPromptPresenter: NSObject, OEExtensionManagerDelegate {
   unowned let app: AppDelegate
   private var queues: [ObjectIdentifier: ExtensionPromptQueue] = [:]
+  private var windowObservers: [ObjectIdentifier: any NSObjectProtocol] = [:]
   private var requests: [ObjectIdentifier: EngineExtensionPrompt] = [:]
   private(set) var pending: [OEExtensionPrompt] = []
   private var tables: [ObjectIdentifier: ExtensionShortcutTable] = [:]
@@ -77,6 +78,15 @@ final class ExtensionPromptPresenter: NSObject, OEExtensionManagerDelegate {
     }
     let windowKey = ObjectIdentifier(window)
     let queue = queues[windowKey] ?? ExtensionPromptQueue(window: window); queues[windowKey] = queue
+    if windowObservers[windowKey] == nil {
+      windowObservers[windowKey] = NotificationCenter.default.addObserver(forName: NSWindow.willCloseNotification, object: window, queue: .main) { [weak self] _ in
+        MainActor.assumeIsolated {
+          guard let self else { return }
+          self.queues.removeValue(forKey: windowKey)?.cancelAll()
+          if let observer = self.windowObservers.removeValue(forKey: windowKey) { NotificationCenter.default.removeObserver(observer) }
+        }
+      }
+    }
     queue.enqueue(model)
   }
   private func requestingWindow(_ prompt: OEExtensionPrompt, manager: OEExtensionManager) -> NSWindow? {
@@ -118,12 +128,15 @@ final class ExtensionPromptPresenter: NSObject, OEExtensionManagerDelegate {
     record(["event": "loadFailed", "error": error])
     app.frontWindowController?.toasts.show(ToastContent(title: "Couldn't load extension", subtitle: error, lifetime: 6))
   }
-  private func record(_ event: [String: Any]) {
+  func record(_ event: [String: Any]) {
     if events.count >= 256 { events.removeFirst() }; events.append(event)
   }
   func cancelAll() {
-    queues.values.forEach { $0.cancelAll() }; queues.removeAll(); pending.removeAll(); requests.removeAll()
+    // Answers can synchronously remove requests; iterate a stable queue snapshot.
+    Array(queues.values).forEach { $0.cancelAll() }; queues.removeAll(); pending.removeAll(); requests.removeAll()
+    windowObservers.values.forEach { NotificationCenter.default.removeObserver($0) }; windowObservers.removeAll()
   }
+  isolated deinit { windowObservers.values.forEach { NotificationCenter.default.removeObserver($0) } }
   #if OPEN_AUTOMATION
   func answer(_ prompt: OEExtensionPrompt, accepted: Bool) {
     let key = ObjectIdentifier(prompt)

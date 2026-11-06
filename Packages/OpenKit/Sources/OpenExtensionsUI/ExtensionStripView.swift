@@ -91,6 +91,7 @@ import OpenWeb
     }
     public override func layout() {
         super.layout(); layoutCount += 1
+        let previousWidth = geometry.stripWidth
         geometry = ExtensionStripLayout(style: style, width: bounds.width, pinnedCount: pinned.count, hostTextWidth: hostTextWidth, focused: isFocused)
         for (i, b) in buttons.enumerated() {
             b.isHidden = i >= geometry.actionFrames.count
@@ -99,6 +100,7 @@ import OpenWeb
         moreButton.isHidden = geometry.moreFrame == nil
         if let f = geometry.moreFrame { moreButton.frame = f }
         updateVisibility()
+        if geometry.stripWidth != previousWidth { onVisibilityChange?() }
     }
     public func updateVisibility() {
         let wasVisible = showsActions

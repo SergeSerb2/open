@@ -13,6 +13,8 @@ final class ExtensionPopupController {
   private(set) var page: OEWebContent?
   private weak var requestedAnchor: NSView?
   private var requestedID: String?
+  private var requestedAt: CFTimeInterval?
+  private var invocationAt: CFTimeInterval?
   private weak var anchorStrip: ExtensionStripView?
   private(set) var anchorFrame = CGRect.zero
   private(set) var anchorKind = ExtensionPopupAnchorKind.contentTopLeading
@@ -23,12 +25,15 @@ final class ExtensionPopupController {
   private(set) var openedAt: Double?
   private(set) var visibleAt: Double?
   init(factory: EngineWebContentHostFactory) { self.factory = factory }
-  func prepareAnchor(_ view: NSView?, extensionID: String) { requestedAnchor = view; requestedID = extensionID }
+  func prepareAnchor(_ view: NSView?, extensionID: String) {
+    requestedAnchor = view; requestedID = extensionID; requestedAt = CACurrentMediaTime()
+  }
   func opened(browser: OEBrowser, page: OEWebContent, action: OEExtensionAction) {
     guard let parent = factory.window else { browser.closeExtensionPopup(); return }
     if self.page != nil { detach() }
     self.browser = browser; self.page = page; page.delegate = factory
     openedAt = CACurrentMediaTime(); visibleAt = nil; readyToVisibleMilliseconds = nil
+    invocationAt = requestedID == action.extensionIdentifier && browser.extensionPopupSource != .API ? requestedAt : nil
     requestedSize = ExtensionsMetrics.popupMinimum
     let panel = self.panel ?? ExtensionPopupPanel(); self.panel = panel
     panel.onCloseRequest = { [weak self] in self?.close() }
@@ -47,7 +52,14 @@ final class ExtensionPopupController {
   private func resolveAnchor(_ id: String) {
     let ui = factory.extensions
     factory.controller?.contentView.layoutSubtreeIfNeeded()
-    if requestedID == id, let view = requestedAnchor, view.window === factory.window, !view.isHiddenOrHasHiddenAncestor {
+    // Start with A4's final fallback so a missing/removed anchor can never reuse
+    // the previous popup's frame.
+    if let content = factory.controller?.container, let window = factory.window {
+      let rect = content.convert(content.bounds, to: nil)
+      anchorFrame = window.convertToScreen(CGRect(x: rect.minX + 16, y: rect.maxY - 8, width: 1, height: 1))
+      anchorKind = .contentTopLeading
+    }
+    if browser?.extensionPopupSource != .API, requestedID == id, let view = requestedAnchor, view.window === factory.window, !view.isHiddenOrHasHiddenAncestor {
       setAnchor(view, kind: view is ExtensionActionButton ? .actionButton : .overflow)
     } else {
       // A4 order is intentional: pane, URL slot (forced visible), URL SCC, content point.
@@ -63,14 +75,9 @@ final class ExtensionPopupController {
           ui.context.forcedVisibility.insert(.popup); factory.controller?.sidebar.refreshExtensionsLayout()
           setAnchor(view, kind: .siteControls)
         }
-      } else if let content = factory.controller?.container, let window = factory.window {
-        let rect = content.convert(content.bounds, to: nil)
-        // The specification's point is in top-left content coordinates.
-        anchorFrame = window.convertToScreen(CGRect(x: rect.minX + 16, y: rect.maxY - 8, width: 1, height: 1))
-        anchorKind = .contentTopLeading
       }
     }
-    requestedAnchor = nil; requestedID = nil
+    requestedAnchor = nil; requestedID = nil; requestedAt = nil
   }
   private func setAnchor(_ view: NSView, kind: ExtensionPopupAnchorKind) {
     guard let window = view.window else { return }
@@ -100,8 +107,19 @@ final class ExtensionPopupController {
   func close() { browser?.closeExtensionPopup() }
   private func blur() {
     guard page != nil, browser?.extensionPopupStaysOpenOnBlur != true,
-          factory.pendingDialogs.isEmpty, panel?.attachedSheet == nil else { return }
-    close()
+          factory.pendingDialogs.isEmpty, panel?.attachedSheet == nil,
+          factory.window?.attachedSheet == nil else { return }
+    // AppKit changes key windows inside mouseDown and Inspect Popup. Let that
+    // event finish before closing: the button records its toggle, and Chromium
+    // marks the popup as inspected before the deferred keep-open check.
+    let current = page
+    DispatchQueue.main.async { [weak self, weak current] in
+      guard let self, let current, self.page === current, self.panel?.isKeyWindow != true,
+            self.browser?.extensionPopupStaysOpenOnBlur != true,
+            self.factory.pendingDialogs.isEmpty, self.panel?.attachedSheet == nil,
+            self.factory.window?.attachedSheet == nil else { return }
+      self.close()
+    }
   }
   func sidebarDidHide() {
     if anchorKind == .urlField || anchorKind == .siteControls { close() }
@@ -135,7 +153,8 @@ final class ExtensionPopupController {
       "frame": NSStringFromRect(panel?.frame ?? .zero), "contentSize": NSStringFromSize(panel?.contentView?.bounds.size ?? .zero),
       "anchor": NSStringFromRect(anchorFrame), "anchorKind": String(describing: anchorKind),
       "readyToVisibleMs": readyToVisibleMilliseconds ?? NSNull(),
-      "clickToVisibleMs": visibleAt.flatMap { v in openedAt.map { (v - $0) * 1000 } } ?? NSNull(),
+      "clickToVisibleMs": visibleAt.flatMap { v in invocationAt.map { (v - $0) * 1000 } } ?? NSNull(),
+      "openToVisibleMs": visibleAt.flatMap { v in openedAt.map { (v - $0) * 1000 } } ?? NSNull(),
       "staysOpenOnBlur": browser?.extensionPopupStaysOpenOnBlur == true]
   }
   isolated deinit { fallback?.cancel(); observers.forEach { NotificationCenter.default.removeObserver($0) } }

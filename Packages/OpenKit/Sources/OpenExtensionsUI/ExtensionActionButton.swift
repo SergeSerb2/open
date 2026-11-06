@@ -17,6 +17,7 @@ public enum ExtensionActionIntent {
     public private(set) var redrawCount = 0
     private var tracking: NSTrackingArea?
     private var down: CGPoint?
+    private var downClosesPopup = false
     private var dragging = false
     private var plate = CALayer()
     public override var isFlipped: Bool { true }
@@ -99,7 +100,8 @@ public enum ExtensionActionIntent {
     public override func mouseDown(with event: NSEvent) {
         guard !isHiddenOrHasHiddenAncestor else { return }
         if event.modifierFlags.contains(.control) { rightMouseDown(with: event); return }
-        down = event.locationInWindow; dragging = false; pressed = true; updatePlate(animated: true)
+        down = event.locationInWindow; downClosesPopup = action.isShowingPopup
+        dragging = false; pressed = true; updatePlate(animated: true)
         TooltipController.shared.cancel(for: self)
     }
     public override func mouseDragged(with event: NSEvent) {
@@ -112,7 +114,12 @@ public enum ExtensionActionIntent {
         guard down != nil else { return }
         down = nil; pressed = false; updatePlate(animated: true)
         if dragging { dragging = false; onDragEnd?(event); return }
-        if bounds.contains(convert(event.locationInWindow, from: nil)) { activate() }
+        if bounds.contains(convert(event.locationInWindow, from: nil)) {
+            // Making the browser key can close its popup between down and up.
+            // This click still toggles that popup; it must not reopen it.
+            if downClosesPopup { onIntent?(.closePopup) } else { activate() }
+        }
+        downClosesPopup = false
     }
     public func activate() {
         guard !isHiddenOrHasHiddenAncestor else { return }

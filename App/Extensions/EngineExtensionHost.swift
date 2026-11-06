@@ -64,7 +64,11 @@ final class EngineExtensionHost: ExtensionHost {
   }
   func setPinned(_ pinned: Bool, extensionID: String) { browser.setExtensionAction(extensionID, pinned: pinned) }
   func movePinned(extensionID: String, to index: Int) {
-    guard index >= 0, index < 512 else { return }; browser.moveExtensionAction(extensionID, toPinnedIndex: UInt(index))
+    let pinned = extensionActions.filter(\.isPinned)
+    guard let current = pinned.firstIndex(where: { $0.id == extensionID }) else { return }
+    let destination = min(max(0, index), pinned.count - 1)
+    guard current != destination else { return }
+    browser.moveExtensionAction(extensionID, toPinnedIndex: UInt(destination))
   }
   func contextMenu(extensionID: String, fromMenuItem: Bool) -> (any ExtensionMenu)? {
     browser.contextMenu(forExtensionAction: extensionID, source: fromMenuItem ? .menuItem : .toolbarAction).map(EngineExtensionMenu.init)
@@ -87,6 +91,7 @@ final class EngineExtensionImages {
     let reps = source.representations.compactMap { $0 as? NSBitmapImageRep }.sorted { $0.pixelsWide < $1.pixelsWide }
     guard reps.count <= 4, reps.allSatisfy({ $0.pixelsWide <= 2048 && $0.pixelsHigh <= 2048 }),
           let largest = reps.last?.cgImage ?? source.cgImage(forProposedRect: nil, context: nil, hints: nil),
+          largest.width <= 2048, largest.height <= 2048,
           let image = ExtensionImage(cgImage: largest, pointSize: source.size,
             image1x: reps.first(where: { $0.pixelsWide == Int(source.size.width) })?.cgImage) else { return nil }
     cache.setObject(ImageBox(image), forKey: source); conversionCount += 1; return image
@@ -97,13 +102,14 @@ final class EngineExtensionImages {
 final class EngineExtensionMenu: ExtensionMenu {
   private let source: OEExtensionActionMenu
   private var answered = false
+  private(set) var didRun = false
   init(_ source: OEExtensionActionMenu) { self.source = source }
   var items: [ExtensionMenuItem] { Self.items(source.items) }
   private static func items(_ values: [OEContextMenuItem]) -> [ExtensionMenuItem] {
     values.map { ExtensionMenuItem(command: $0.commandIdentifier, title: $0.title, isEnabled: $0.isEnabled,
       isSeparator: $0.isSeparator, isChecked: $0.isChecked, submenu: items($0.submenu)) }
   }
-  func select(command: Int) { guard !answered else { return }; answered = true; _ = source.select(command: command) }
+  func select(command: Int) { guard !answered else { return }; answered = true; didRun = source.select(command: command) }
   func cancel() { guard !answered else { return }; answered = true; source.cancel() }
   isolated deinit { if !answered { source.cancel() } }
 }
@@ -184,6 +190,9 @@ final class WindowExtensions {
   }
   private func track(_ native: NSMenu, anchor: NSView, flag: ExtensionsUIContext.ForcedVisibility) {
     guard anchor.window != nil else { return }
+    #if OPEN_AUTOMATION
+    if capturesMenus { capturedMenu = native; return }
+    #endif
     let strip = strips.first { anchor === $0.moreButton || anchor.isDescendant(of: $0) }
     strip?.forcedVisibility.insert(flag)
     menu = native
