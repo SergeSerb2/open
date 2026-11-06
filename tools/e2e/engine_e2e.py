@@ -5022,7 +5022,7 @@ def profiles_checks(factory, results, tmp, config):
 
     def run_binary(label, **env_extra):
         """One launch of the real app; returns its exit code and output."""
-        env = dict(os.environ, OPEN_USER_DATA=root, **env_extra)
+        env = dict(os.environ, OPEN_USER_DATA=root, OPEN_E2E_OWNER_PID=str(os.getpid()), **env_extra)
         path = os.path.join(tmp, "migration-%s.log" % label)
         with open(path, "w") as log:
             code = subprocess.run([binary, "--use-mock-keychain"], env=env, stdout=log, stderr=subprocess.STDOUT,
