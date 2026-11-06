@@ -223,7 +223,8 @@ A page click opens the card. "Zap this" commits a precise pick. "Zap all related
 elements" previews live matching rectangles; the count and selector appear in the
 card's band. The card closes after every choice. The related action sends one
 direct commit, which makes one store mutation and one undo step. Cancel commits
-nothing (Open choice, lead, 2026-11-06). `zap:replaced` decoding remains supported.
+nothing. **Open choice (lead, 2026-11-06):** every choice closes the card;
+related commits directly. `zap:replaced` decoding remains supported.
 The closed shadow root and selector algorithm stay unchanged. Done/Escape exit;
 Cmd/Ctrl+Z and Undo remove the last session commit.
 
@@ -258,3 +259,8 @@ Verification: `boosts` runs real headless Chrome flows H0, A7, R1, A11, S1, R2.
 and exits", with the real store, coordinator, decoder, planner, and NSTextView.
 The host boundary is fake. `sitecontrol-render zap-flows` runs those package flows
 alone. New gate negative proofs and final counts are in the PR receipt.
+The PR includes the negative-proof logs in collapsed sections: 40 initial browser
+mutations plus 15 direct-choice mutations, and 12 native behavior mutations that
+cover all 14 new Zap/selector rows. Raw receipts remain in the shared `.re/`
+handoff directory. The new Zap-on scene has 1x/2x render receipts; existing
+baseline images, comparators, thresholds, and allowlists remain unchanged.

@@ -1441,6 +1441,25 @@ paste the summary (`AGENTS.md` rule 10). Steps 1, 2, and 4 are open PRs that are
 | 8 | S12-D package (PR pending); code-mode binding by Step 7/App | "Pick Selector": picker select mode (`zap:enter` with `mode: "select"`; page → native `picker:selected {boostID, sessionNonce, selector, matches}`; no commit, no hide); the editor inserts the selector at the CSS caret | `boosts` harness incl. a check that select mode commits nothing; flow "Pick Selector inserts the selector" |
 | 9 | new | Engine items E1–E4 as they land | interim rows switch |
 
+**Step 6 package integration (S12-D):** the App adapter fans out validated
+`coordinator.lastEvent` to the editor sessions. Handle the added `labels` argument
+of `.listZaps` so reveal chips retain their stored labels. After an accepted
+reveal, send `removeZap(selector:for:)` before refreshing matching pages. Call
+`endPickerSession()` on tab switch, frame destruction, and transport loss, and
+`updatePageURL` on navigation, including same-URL reloads. `finish()` removes the
+session observer. The card behavior is the **Open choice (lead, 2026-11-06)** in
+§4.8: Cancel commits nothing; precise and direct-related choices each close the
+card, persist once, and undo once. `zap:replaced` decoding remains compatible.
+Negative-proof logs and counts belong in the PR; raw receipts remain in `.re/`.
+
+**Step 8 package integration (S12-D):** `BoostEditorHost.enterSelectorPicker`
+is a plain protocol requirement without a default; the render harness fake host
+implements it. The lead binds the App host and code-mode button after merge:
+call `session.pickSelector()` and bind `insertSelectorAtCaret` to the CSS
+NSTextView caret. Selection inserts the selector and exits without a store write
+or hidden content. The coordinator owns `BoostPickerEvent`; OpenSiteControl
+exports an alias. These package hooks do not wait for the B/C branches to merge.
+
 ---
 
 ## 11. Risks and open questions
