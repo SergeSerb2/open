@@ -153,13 +153,14 @@ def run(factory, results, tmp, env):
                    and refused(action='open',via='urlField'),state=toolbar)
             close(); app.call('menu-perform',id='toggle-toolbar')
             app.call('menu-perform',id='toggle-sidebar')
-            hidden=refused(action='open')
             app.call('mouse',action='move',x=600,y=300)
+            hidden=wait(lambda:not app.call('window-state')['revealed'],timeout=5)
+            closed_before_reveal=not state()['presented']
             app.call('mouse',action='move',x=3,y=300)
             revealed=wait(lambda:app.call('window-state')['revealed'],timeout=5)
             floating=opened()
-            record('S8_floating',hidden and revealed and floating['presented']
-                   and abs(floating['tip'][0]-floating['anchor'][0]-floating['anchor'][2]/2)<=1,state=floating,negativeHidden=hidden)
+            record('S8_floating',hidden and closed_before_reveal and revealed and floating['presented']
+                   and abs(floating['tip'][0]-floating['anchor'][0]-floating['anchor'][2]/2)<=1,state=floating,negativeClosed=closed_before_reveal,hiddenBeforeReveal=hidden)
             close();app.call('menu-perform',id='toggle-sidebar')
             opened();app.call('select',tab=tab)
             record('S7_tab_change',not state()['presented'],negative='the panel was open on the other tab before selection')
