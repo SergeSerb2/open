@@ -1001,6 +1001,10 @@
           "confirmation": controller.pendingConfirmation.map { ["title": $0.messageText, "text": $0.informativeText,
             "buttons": $0.buttons.map(\.title)] as [String: Any] } ?? NSNull(),
           "sidebarResizeActive": controller.sidebarResizeActive,
+          "sidebarResizeHandleDragging": controller.sidebarResizeHandleDragging,
+          "sidebarResizeHandleVisible": controller.sidebarResizeHandleVisible,
+          "sidebarResizeHasStart": controller.sidebarResizeHasStart,
+          "sidebarWidthOverride": controller.context.sidebarWidthOverride.map { $0 as Any } ?? NSNull(),
           "sidebarWidthCommits": controller.sidebarWidthCommits, "sidebarGestureHides": controller.sidebarGestureHides,
           "sidebarGeometryChanges": controller.sidebarGeometryChanges,
           "sidebarVisible": !controller.sidebar.isHidden, "revealed": controller.isSidebarRevealed,
@@ -1057,6 +1061,24 @@
         default: NSApp.appearance = nil
         }
         return NSApp.effectiveAppearance.name.rawValue
+      case "undo-state":
+        if a["clear"] as? Bool == true { app.undoManager.removeAllActions() }
+        return ["generation": app.model.undoGeneration, "canUndo": app.undoManager.canUndo,
+          "canRedo": app.undoManager.canRedo] as [String: Any]
+      case "window-interrupt":
+        guard let win = w.window else { throw Failure(message: "no window") }
+        switch a["kind"] as? String {
+        case "key": win.orderOut(nil)
+        case "sheet":
+          // Native sheet lifecycle, with no tracking loop or external input.
+          let sheet = NSWindow(contentRect: NSRect(x: 0, y: 0, width: 240, height: 100), styleMask: [.titled], backing: .buffered, defer: false)
+          sheet.isReleasedWhenClosed = false
+          win.beginSheet(sheet, completionHandler: { _ in })
+        case "end-sheet":
+          if let sheet = win.attachedSheet { win.endSheet(sheet); sheet.orderOut(nil) }
+        default: throw Failure(message: "expected key, sheet, or end-sheet")
+        }
+        return true
       case "window-focus":
         guard let id = a["id"] as? String, let controller = app.windowControllers.first(where: { $0.windowID.description == id }) else { throw Failure(message: "unknown window") }
         let readinessTimeout = a["readinessTimeout"] as? Double ?? 5

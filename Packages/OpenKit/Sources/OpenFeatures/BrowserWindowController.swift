@@ -162,6 +162,7 @@ public final class BrowserWindowController: NSWindowController, NSWindowDelegate
     private var anchoredSliding = false
     private var sidebarMotionRequestedAt: CFTimeInterval?
     private var dragStartWidth: CGFloat?
+    private var dragStartMode: SidebarMode?
     /// Actual animations read back from the layer when scheduled, retained after completion.
     public private(set) var sidebarAnimations: [String: CAAnimation] = [:]
     public private(set) var cardAnimations: [String: CAAnimation] = [:]
@@ -245,9 +246,7 @@ public final class BrowserWindowController: NSWindowController, NSWindowDelegate
         root.addSubview(container); root.addSubview(cardShadow); root.addSubview(sidebar); root.addSubview(resizeHandle)
         cardShadow.isHidden = true
         resizeHandle.onBegin = { [weak self] in self?.beginSidebarResize() }
-        resizeHandle.onCancel = { [weak self] in
-            self?.resizingSidebar = false; self?.dragStartWidth = nil
-        }
+        resizeHandle.onCancel = { [weak self] in self?.cancelSidebarResize() }
         resizeHandle.onReset = { [weak self] in self?.resetSidebarWidth() }
         resizeHandle.onResize = { [weak self] x, ended in self?.resizeSidebar(to: x, ended: ended) }
         reveal.geometry = { [weak self] in
@@ -268,6 +267,7 @@ public final class BrowserWindowController: NSWindowController, NSWindowDelegate
         // a deactivation comes from someone using the Mac, not from the check.
         trafficLightObservers.append(NotificationCenter.default.addObserver(forName: NSApplication.didResignActiveNotification, object: nil, queue: .main) { [weak self] _ in
             MainActor.assumeIsolated {
+                self?.cancelSidebarResize()
                 guard BrowserWindowController.pointerEventFilter == nil else { return }
                 self?.dismissSidebarReveal()
             }
@@ -778,18 +778,18 @@ public final class BrowserWindowController: NSWindowController, NSWindowDelegate
     private func beginSidebarResize() {
         guard dragStartWidth == nil else { return }
         dragStartWidth = context.sidebarWidth
+        dragStartMode = context.window?.sidebarMode
         resizingSidebar = true
         removeRevealCard()
     }
     public func resizeSidebar(to x: CGFloat, ended: Bool) {
-        guard x.isFinite, let state = context.window else { return }
-        if dragStartWidth == nil { beginSidebarResize() }
+        guard resizingSidebar, x.isFinite, let state = context.window else { return }
         let hidden = x < WindowMetrics.sidebarDragHidePoint
         context.sidebarWidthOverride = min(WindowMetrics.maxSidebarWidth, max(WindowMetrics.minSidebarWidth, x))
         let crossed = (state.sidebarMode == .hidden) != hidden
         if crossed {
             sidebarMotionRequestedAt = CACurrentMediaTime()
-            model.setSidebarMode(windowID: windowID, mode: hidden ? .hidden : .anchored)
+            model.setSidebarMode(windowID: windowID, mode: hidden ? .hidden : .anchored, registerUndo: false)
         }
         layoutContent(animated: crossed)
         guard ended else { return }
@@ -801,11 +801,23 @@ public final class BrowserWindowController: NSWindowController, NSWindowDelegate
             sidebarWidthCommits += 1
             model.setSidebarWidth(windowID: windowID, width: Double(context.sidebarWidth))
         }
-        resizingSidebar = false; dragStartWidth = nil
+        if let dragStartMode { model.registerSidebarModeUndo(windowID: windowID, from: dragStartMode) }
+        resizingSidebar = false; dragStartWidth = nil; dragStartMode = nil
         resizeHandle.isHidden = hidden
         if !hidden || !anchoredSliding { context.sidebarWidthOverride = nil }
         // A hidden flick keeps the live width until the running slide completes.
         changed()
+    }
+    /// All interruptions share this path. The stored width has never changed; dropping
+    /// the live override restores it. Reset the handle too, so late drag/up events do nothing.
+    private func cancelSidebarResize() {
+        resizeHandle.cancelDrag()
+        guard resizingSidebar else { return }
+        if let dragStartMode { model.setSidebarMode(windowID: windowID, mode: dragStartMode, registerUndo: false) }
+        resizingSidebar = false; dragStartWidth = nil; dragStartMode = nil
+        context.sidebarWidthOverride = nil
+        removeRevealCard()
+        layoutContent()
     }
     private func resetSidebarWidth() {
         guard context.window != nil else { return }
@@ -817,6 +829,9 @@ public final class BrowserWindowController: NSWindowController, NSWindowDelegate
         changed()
     }
     public var sidebarResizeActive: Bool { resizingSidebar }
+    public var sidebarResizeHandleDragging: Bool { resizeHandle.dragging }
+    public var sidebarResizeHandleVisible: Bool { !resizeHandle.isHidden }
+    public var sidebarResizeHasStart: Bool { dragStartWidth != nil || dragStartMode != nil }
     /// Pointer location in root coordinates (also left of the window while it is key).
     public func trackSidebarPointer(_ point: CGPoint) { reveal.pointerMoved(to: point) }
     /// Hides the hover-reveal card (a tab selection, the command bar) with its slide.
@@ -1076,6 +1091,7 @@ public final class BrowserWindowController: NSWindowController, NSWindowDelegate
     }
     public func closeThemeEditor() { themeEditor?.close(); themeEditor = nil }
     public func windowWillClose(_ notification: Notification) {
+        cancelSidebarResize()
         closeThemeEditor()
         existingTabSwitcher?.cancel()
         saveWindowState(); visibilityOverride = .closed; removeRevealCard(); hintWork?.cancel(); hintWork = nil
@@ -1105,7 +1121,8 @@ public final class BrowserWindowController: NSWindowController, NSWindowDelegate
         // Back from another app or a hide (Cmd+H): the pointer may have left the buttons meanwhile.
         dimmedLights.syncWithPointer()
     }
-    public func windowDidResignKey(_ notification: Notification) { existingTabSwitcher?.cancel(); let active = themeEditor != nil && NSApp.isActive; context.isWindowActive = active; background.isWindowActive = active; positionTrafficLights() }
+    public func windowWillBeginSheet(_ notification: Notification) { cancelSidebarResize() }
+    public func windowDidResignKey(_ notification: Notification) { cancelSidebarResize(); existingTabSwitcher?.cancel(); let active = themeEditor != nil && NSApp.isActive; context.isWindowActive = active; background.isWindowActive = active; positionTrafficLights() }
     public func windowDidChangeBackingProperties(_ notification: Notification) { positionTrafficLights() }
     public func windowDidBecomeMain(_ notification: Notification) { context.isWindowActive = true }
     public func windowDidResignMain(_ notification: Notification) { context.isWindowActive = window?.isKeyWindow == true }
@@ -1167,8 +1184,9 @@ final class SidebarResizeHandle: NSView {
     var onCancel: (() -> Void)?
     var onResize: ((CGFloat, Bool) -> Void)?
     var onReset: (() -> Void)?
-    private var dragging = false
+    private(set) var dragging = false
     private var moved = false
+    func cancelDrag() { dragging = false; moved = false }
     override func acceptsFirstMouse(for event: NSEvent?) -> Bool { true }
     override func resetCursorRects() { addCursorRect(bounds, cursor: .resizeLeftRight) }
     override func mouseDown(with event: NSEvent) {
