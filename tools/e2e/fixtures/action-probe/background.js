@@ -1,8 +1,14 @@
 // Counts chrome.action.onClicked (popup-less clicks) and opens the popup on
 // request (chrome.action.openPopup), for tools/e2e/engine_e2e.py --only actions.
 chrome.action.onClicked.addListener(async (tab) => {
-  const { clicks = 0 } = await chrome.storage.session.get("clicks");
-  await chrome.storage.session.set({ clicks: clicks + 1, lastClickTab: tab.id });
+  const { clicks = 0, probeScript = false } = await chrome.storage.session.get(["clicks", "probeScript"]);
+  let script;
+  if (probeScript) try {
+    const results = await chrome.scripting.executeScript({ target: { tabId: tab.id }, func: () => location.href });
+    script = { url: results[0]?.result };
+  } catch (error) { script = { error: String(error) }; }
+  await chrome.storage.session.set({ clicks: clicks + 1, lastClickTab: tab.id, lastClickURL: tab.url,
+    ...(probeScript ? { lastClickScript: script } : {}) });
 });
 
 function openPopup() {
@@ -19,6 +25,12 @@ chrome.runtime.onMessage.addListener((message, sender, reply) => {
   } else if (message === "open-popup-now") {
     // While the popup that asked is still open: Chrome refuses.
     openPopup();
+    reply(true);
+  } else if (message?.type === "create-tab") {
+    // Keep the API request alive if selecting its tab closes the popup.
+    chrome.tabs.create({ windowId: message.windowId, url: message.url, active: true }).then(
+      tab => chrome.storage.session.set({ createdTab: tab }),
+      error => chrome.storage.session.set({ createdTab: { error: String(error) } }));
     reply(true);
   }
 });

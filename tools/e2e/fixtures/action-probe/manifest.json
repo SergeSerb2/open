@@ -40,7 +40,9 @@
     }
   },
   "optional_permissions": [
-    "downloads"
+    "downloads",
+    "activeTab",
+    "scripting"
   ],
   "omnibox": {
     "keyword": "probe"

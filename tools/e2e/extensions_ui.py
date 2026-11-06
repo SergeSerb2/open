@@ -77,6 +77,8 @@ def run(factory, results, tmp, root, wait_until, new_tab, frame, read_image, ext
         for key, value in {"open.advanced.showToolbar": False,
                            "open.advanced.playSoundEffects": False,
                            "open.settings.lastPane": "general",
+                           "open.links.littleOpenProfileSwitchConfirmed": False,
+                           "open.links.littleOpenNUXSeen": True,
                            "open.shortcuts.defaultPriority": "browser"}.items():
             saved[key] = app.call("defaults", key=key, persistent=True)
             app.call("defaults", key=key, value=value)
@@ -293,7 +295,9 @@ def run(factory, results, tmp, root, wait_until, new_tab, frame, read_image, ext
         app.eval(content, "chrome.action.setPopup({popup:''}).then(()=>true)")
         before = app.eval(content, "chrome.storage.session.get('clicks').then(v=>v.clicks||0)")
         close(); hover(); app.call("ext-click", extension=probe, surface="url")
-        count = app.eval(control, "chrome.storage.session.get('clicks').then(v=>v.clicks||0)")
+        # The fixture stores the click after its asynchronous scripting probe.
+        count = wait_until(lambda:(lambda value:value if value!=before else None)(
+            app.eval(control, "chrome.storage.session.get('clicks').then(v=>v.clicks||0)")), timeout=10)
         app.eval(control, "chrome.action.setPopup({popup:'popup.html'}).then(()=>true)")
         results["X9_popup_less"] = {"ok": count == before + 1, "before": before, "after": count}
         app.eval(control, "chrome.action.disable().then(()=>true)")
@@ -580,44 +584,7 @@ def run(factory, results, tmp, root, wait_until, new_tab, frame, read_image, ext
         idle = strip()
         results["X21_idle"] = {"ok": idle["redraws"] == baseline["redraws"] and idle["layoutCount"] == baseline["layoutCount"],
             "redraws": idle["redraws"]-baseline["redraws"], "layouts": idle["layoutCount"]-baseline["layoutCount"], "seconds":10}
-        # S9 owns page creation; this exercises its actual App presenter.
-        before_little={row["id"] for row in app.call("little-open-state")["sessions"]}
-        app.call("menu-perform",id="new-little-open-window")
-        little=next(row for row in app.call("little-open-state")["sessions"] if row["id"] not in before_little)
-        little_id=little["id"]
-        try:
-            app.call("key",window=little["window"],text=local_origin+"/little\r",route="app")
-            little=wait_until(lambda:next((row for row in app.call("little-open-state")["sessions"]
-                if row["id"]==little_id and row["state"]=="page" and not row["loading"]),None),timeout=15)
-            little_strip=app.call("ext-strip",surface="little")
-            little_menu=app.call("ext-click",extension="more",surface="little") if little_strip["visible"] else {"menu":[]}
-            results["X19_button_menu"]={"ok":bool(little) and little_strip["visible"] and len(little_strip["ids"])>=4
-                and little["titleElements"].get("extensions")==[little["frame"][2]-252,16,16,16]
-                and [i["title"] for i in little_menu["menu"] if not i["separator"]][-2:]==["Manage Extensions…","Add Extension…"],
-                "strip":little_strip,"session":little,"menu":little_menu}
-            for appearance in ("light","dark"):
-                app.call("appearance",name=appearance);capture("little-"+appearance,little["window"])
-            if little_strip["ready"]:
-                app.call("ext-click",extension="more",surface="little",select=action(probe)["name"])
-                little_popup=wait_until(lambda:(lambda p:p if p.get("visible") else None)(app.call("ext-popup-state",surface="little")),timeout=15)
-                queried=app.eval(little_popup["page"],"chrome.tabs.query({active:true,currentWindow:true}).then(ts=>ts.map(t=>t.id))") if little_popup else []
-                button=little_strip["buttonFrame"];anchor=frame(little_popup["anchor"]) if little_popup else []
-                expected=[button[0]+little["frame"][0],button[1]+little["frame"][1],*button[2:]]
-                results["X19_run_popup_activeTab"]={"ok":bool(little_popup) and queried==[little_strip["activeTab"]]
-                    and all(abs(a-b)<=1 for a,b in zip(anchor,expected)),"popup":little_popup,"queried":queried,"strip":little_strip}
-                app.call("key",key="w",modifiers=["command"],window=little_popup["window"],route="app")
-            else:
-                results["X19_run_popup_activeTab"]={"status":"BLOCKED","reason":"waits for Section 9's Chrome-style Little Open page"}
-            # Registry changes reach the standalone window without a polling loop.
-            installed_actions=[a["id"] for a in actions()]
-            try:
-                for identifier in installed_actions: app.call("ext-manage",extension=identifier,action="disable")
-                empty=wait_until(lambda:(lambda state:state if not state["visible"] and not state["ids"] else None)(app.call("ext-strip",surface="little")),timeout=10)
-                results["X19_zero_actions"]={"ok":bool(empty),"strip":empty}
-            finally:
-                for identifier in installed_actions: app.call("ext-manage",extension=identifier,action="enable")
-        finally:
-            app.call("little-open-action",id=little_id,action="close")
+        little_open_checks(app, results, local_origin, probe, control, extensions, wait_until, frame, capture)
         app.call("command",id="new-window")
         new_tab(app,"about:blank")
         app.call("ext-manage",extension="local",action="install-crx",path=crx)
@@ -652,3 +619,205 @@ def run(factory, results, tmp, root, wait_until, new_tab, frame, read_image, ext
             else: bindings.write_bytes(previous_bindings)
             app.quit()
             if server: server.shutdown();server.server_close()
+
+
+def little_open_checks(app, results, local_origin, probe, control, extensions, wait_until, frame, capture):
+    def actions(): return app.call("extensions")["actions"]
+    def action(identifier): return next(a for a in actions() if a["id"]==identifier)
+    original_main=app.call("window-state")
+    original_profile=next(s["profile"] for s in app.call("spaces") if s["id"]==original_main["space"])
+    # Enable this probe only for X-19. activeTab changes Chrome's disabled
+    # action semantics, so the existing X-10/P2 fixture must keep its defaults.
+    prompt_handler=app.call("ext-prompt")["handler"]
+    app.call("ext-prompt",handler=False)
+    app.eval(control,"window.x19Permissions='pending'; chrome.permissions.request({permissions:['activeTab','scripting']}).then(v=>window.x19Permissions=v,e=>window.x19Permissions=String(e));true")
+    permission=wait_until(lambda:(lambda p:p if p.get("pending") else None)(app.call("ext-prompt")),timeout=10)
+    if permission: app.call("ext-prompt",answer="accept")
+    granted=wait_until(lambda:app.eval(control,"window.x19Permissions===true"),timeout=10)
+    # S9 owns page creation; this exercises its actual App presenter.
+    before_little={row["id"] for row in app.call("little-open-state")["sessions"]}
+    app.call("menu-perform",id="new-little-open-window")
+    little=next(row for row in app.call("little-open-state")["sessions"] if row["id"] not in before_little)
+    little_id=little["id"]
+    def little_call(command, **args):
+        return app.call(command, surface="little", window=little["window"], **args)
+    try:
+        app.call("key",window=little["window"],text=local_origin+"/little\r",route="app")
+        little=wait_until(lambda:next((row for row in app.call("little-open-state")["sessions"]
+            if row["id"]==little_id and row["state"]=="page" and not row["loading"]),None),timeout=15)
+        little_strip=little_call("ext-strip")
+        little_menu=little_call("ext-click",extension="more") if little_strip["visible"] else {"menu":[]}
+        results["X19_button_menu"]={"ok":bool(little) and little_strip["visible"] and len(little_strip["ids"])>=4
+            and little["titleElements"].get("extensions")==[little["frame"][2]-252,16,16,16]
+            and [i["title"] for i in little_menu["menu"] if not i["separator"]][-2:]==["Manage Extensions…","Add Extension…"],
+            "strip":little_strip,"session":little,"menu":little_menu}
+        for appearance in ("light","dark"):
+            app.call("appearance",name=appearance);capture("little-"+appearance,little["window"])
+        # Compare to Section 9's page, never to the UI host's own target.
+        # A wrong main-browser binding must fail even if internally consistent.
+        target_url=local_origin+"/little"
+        target_tab=app.call("little-open-eval",id=little_id,js="location.href")
+        main_tab=app.call("engine-sleep")["chromeTabId"]
+        app.eval(control,"chrome.storage.session.set({probeScript:true}).then(()=>true)")
+        before_grant=app.eval(control,"chrome.scripting.executeScript({target:{tabId:"+str(little["chromeTabID"])+"},func:()=>location.href}).then(r=>({url:r[0].result}),e=>({error:String(e)}))")
+        app.eval(control,"chrome.action.setPopup({popup:''}).then(()=>true)")
+        before=app.eval(control,"chrome.storage.session.get('clicks').then(v=>v.clicks||0)")
+        little_call("ext-click",extension="more",select=action(probe)["name"])
+        clicked=wait_until(lambda:(lambda v:v if v.get("clicks",0)>before else None)(app.eval(control,
+            "chrome.storage.session.get(['clicks','lastClickTab','lastClickURL','lastClickScript'])")),timeout=10)
+        results["X19_popup_less_target"]={"ok":bool(clicked) and clicked["clicks"]==before+1
+            and clicked["lastClickTab"]==little_strip["activeTab"] and clicked["lastClickTab"]!=main_tab
+            and clicked.get("lastClickURL")==target_url and target_tab==target_url,"clicked":clicked,"mainTab":main_tab}
+        results["X19_activeTab_grant"]={"ok":bool(granted) and "error" in before_grant and bool(clicked)
+            and clicked.get("lastClickScript")=={"url":target_url},"permissionsGranted":bool(granted),"beforeClick":before_grant,"clicked":clicked}
+        app.eval(control,"chrome.action.setPopup({popup:'popup.html'}).then(()=>true)")
+        little_call("ext-click",extension="more",select=action(probe)["name"])
+        little_popup=wait_until(lambda:(lambda p:p if p.get("visible") else None)(little_call("ext-popup-state")),timeout=15)
+        queried=app.eval(little_popup["page"],"chrome.tabs.query({active:true,currentWindow:true}).then(ts=>ts.map(t=>({id:t.id,url:t.url})))") if little_popup else []
+        actual_tab=app.call("little-open-state")["sessions"][0]["browser"]["active"]
+        # The actual page's Chrome tab id is independently read by Section 9.
+        button=little_strip["buttonFrame"];anchor=frame(little_popup["anchor"]) if little_popup else []
+        expected=[button[0]+little["frame"][0],button[1]+little["frame"][1],*button[2:]]
+        panel=frame(little_popup["frame"]) if little_popup else []
+        # A3 clamps the panel to the visible screen's 8 pt inset when Little
+        # Open's top-right frame puts the button near that edge.
+        screen=little["visibleFrame"]
+        expected_left=min(max(anchor[0],screen[0]+8),screen[0]+screen[2]-8-panel[2]) if little_popup else None
+        results["X19_popup_tabs_query"]={"ok":bool(little_popup) and queried==[{"id":little["chromeTabID"],"url":target_url}]
+            and queried[0]["id"]!=main_tab,"queried":queried,"session":little,"mainTab":main_tab,"page":actual_tab}
+        results["X19_popup_anchor"]={"ok":bool(little_popup) and little_popup["anchorKind"]=="littleOpen"
+            and len(anchor)==4 and all(abs(a-b)<=1 for a,b in zip(anchor,expected))
+            and abs(panel[0]-expected_left)<=1 and abs(panel[1]+panel[3]-(anchor[1]-6))<=1,
+            "popup":little_popup,"expectedAnchor":expected,"expectedLeft":expected_left}
+        if little_popup: app.call("key",key="w",modifiers=["command"],window=little_popup["window"],route="app")
+        # guess (child), Section 6 lead ruling: extra extension tabs leave
+        # Little Open for the most recent main window's selected Today list.
+        main_window=app.call("window-state")["id"]
+        extra_url=local_origin+"/extension-extra"
+        little_call("ext-click",extension="more",select=action(probe)["name"])
+        extra_popup=wait_until(lambda:(lambda p:p if p.get("visible") else None)(little_call("ext-popup-state")),timeout=15)
+        try:
+            if extra_popup:
+                app.eval(extra_popup["page"],"chrome.tabs.query({active:true,currentWindow:true}).then(ts=>chrome.runtime.sendMessage({type:'create-tab',windowId:ts[0].windowId,url:"+repr(extra_url)+"}));true")
+            extra=wait_until(lambda:next((t for t in app.call("tabs") if t["url"]==extra_url and t["selected"]),None),timeout=15)
+            if extra: app.call("wait",tab=extra["id"],timeout=15)
+            main_page=app.eval(extra["id"],"location.href") if extra else None
+            kept=next(s for s in app.call("little-open-state")["sessions"] if s["id"]==little_id)
+            created_result=app.eval(control,"chrome.storage.session.get('createdTab').then(v=>v.createdTab||null)")
+            results["X19_extra_tab_main_today"]={"ok":bool(extra_popup and extra) and extra["section"]=="today"
+                and extra["visible"] and app.call("window-state")["id"]==main_window
+                and main_page==extra_url
+                and bool(created_result) and created_result["windowId"]==little["browser"]["chromeWindowID"]
+                and (created_result.get("pendingUrl") or created_result.get("url"))==extra_url
+                and kept["chromeTabID"]==little["chromeTabID"] and kept["content"]==little["content"]
+                and kept["url"]==target_url and len(kept["browser"]["tabs"])==1,
+                "mainWindow":main_window,"mainPage":main_page,"createdTab":created_result,
+                "mainTabs":app.call("tabs"),"extra":extra,"little":kept}
+        finally:
+            for tab in app.call("tabs"):
+                if tab["url"]==extra_url: app.call("close",tab=tab["id"])
+            app.call("little-open-action",id=little_id,action="focus")
+        # Registry changes reach the standalone window without a polling loop.
+        app.eval(control,"chrome.storage.session.set({probeScript:false}).then(()=>true)")
+        installed_actions=[a["id"] for a in actions()]
+        try:
+            for identifier in installed_actions:
+                if identifier!=probe: app.call("ext-manage",extension=identifier,action="disable")
+            single=wait_until(lambda:(lambda state:state if state["visible"] and state["ids"]==[probe] else None)(little_call("ext-strip")),timeout=10)
+            results["X19_one_action"]={"ok":bool(single),"strip":single}
+            app.call("ext-manage",extension=probe,action="disable")
+            empty=wait_until(lambda:(lambda state:state if not state["visible"] and not state["ids"] else None)(little_call("ext-strip")),timeout=10)
+            results["X19_zero_actions"]={"ok":bool(empty),"strip":empty}
+        finally:
+            for identifier in installed_actions: app.call("ext-manage",extension=identifier,action="enable")
+        wait_until(lambda:len(little_call("ext-strip")["ids"])==len(installed_actions),timeout=10)
+        old=little_call("ext-strip",retainBrowser=True)
+        # Create a second real Profile and seed its distinct action list.
+        other_space=app.call("space-create",title="X19 Profile",profile="X19 Profile")
+        other_profile=next(s["profile"] for s in app.call("spaces") if s["id"]==other_space)
+        app.call("little-open-action",id=little_id,action="switch-profile",profile=other_profile)
+        alert=app.call("little-open-profile-alert")
+        if alert.get("visible"): app.call("little-open-profile-alert",action="confirm")
+        switched=wait_until(lambda:next((s for s in app.call("little-open-state")["sessions"]
+            if s["id"]==little_id and s["profile"]==other_profile and s.get("content") and not s["loading"]),None),timeout=20)
+        rebound=little_call("ext-strip")
+        if not switched or not rebound["visible"] or rebound["browser"]!=switched["browserID"]:
+            results["X19_profile_switch"]={"ok":False,"old":old,"rebound":rebound,"session":switched}
+            return
+        # Disable one action only in this Profile, then execute its probe.
+        little_call("ext-manage",extension=extensions["bitwarden"],action="disable")
+        changed=wait_until(lambda:(lambda s:s if extensions["bitwarden"] not in s["ids"] and probe in s["ids"] else None)(little_call("ext-strip")),timeout=10)
+        little_call("ext-click",extension="more",select="Action Probe")
+        new_popup=wait_until(lambda:(lambda p:p if p.get("visible") else None)(little_call("ext-popup-state")),timeout=15)
+        new_query=app.eval(new_popup["page"],"chrome.tabs.query({active:true,currentWindow:true}).then(ts=>ts.map(t=>({id:t.id,url:t.url})))") if new_popup else []
+        results["X19_profile_switch"]={"ok":bool(switched and changed and new_popup)
+            and rebound["browser"]==switched["browserID"] and rebound["browser"]!=old["browser"]
+            and rebound["context"]!=old["context"] and rebound["delegateMatches"] and rebound["retainedDelegateCleared"]
+            and rebound["retainedActionIDs"]==[]
+            and rebound["retainedBrowser"]==old["browser"] and set(changed["ids"])==set(old["ids"])-{extensions["bitwarden"]}
+            and new_query==[{"id":switched["chromeTabID"],"url":target_url}],
+            "old":old,"rebound":rebound,"changed":changed,"session":switched,"queried":new_query}
+        if new_popup: app.call("key",key="w",modifiers=["command"],window=new_popup["window"],route="app")
+        # Little Open stays in B while the most recent main window returns to A.
+        # There is no B main window, so routing must create one with B's Space.
+        app.call("space",space=original_main["space"])
+        app.call("window-focus",id=original_main["id"],activate=True)
+        front_a=app.call("window-state")
+        a_tabs={t["id"] for t in app.call("tabs")}
+        main_windows={w["id"] for w in app.call("shell-windows")}
+        profile_url=local_origin+"/extension-extra-profile-b"
+        routed=None
+        try:
+            little_call("ext-click",extension="more",select="Action Probe")
+            profile_popup=wait_until(lambda:(lambda p:p if p.get("visible") else None)(little_call("ext-popup-state")),timeout=15)
+            if profile_popup:
+                app.eval(profile_popup["page"],"chrome.runtime.sendMessage({type:'create-tab',windowId:"+str(switched["browser"]["chromeWindowID"])+",url:"+repr(profile_url)+"});true")
+            routed=wait_until(lambda:next((t for t in app.call("tabs") if t["url"]==profile_url and t["selected"]),None),timeout=15)
+            if routed: app.call("wait",tab=routed["id"],timeout=15)
+            destination=app.call("window-state")
+            destination_space=next((s for s in app.call("spaces") if s["id"]==destination["space"]),None)
+            loaded=app.eval(routed["id"],"location.href") if routed else None
+            app.call("window-focus",id=original_main["id"],activate=True)
+            untouched_a=app.call("window-state")
+            after_a=app.call("tabs")
+            results["X19_extra_tab_profile"]={"ok":bool(profile_popup and routed and destination_space)
+                and front_a["space"]==original_main["space"] and original_profile!=other_profile
+                and destination["id"]!=original_main["id"] and destination_space["profile"]==other_profile
+                and routed["profile"]==other_profile and routed["space"]==destination_space["id"]
+                and routed["section"]=="today" and routed["visible"] and loaded==profile_url
+                and untouched_a["space"]==original_main["space"] and {t["id"] for t in after_a}==a_tabs,
+                "frontA":front_a,"destination":destination,"destinationSpace":destination_space,
+                "routed":routed,"loaded":loaded,"afterA":after_a}
+            kept=wait_until(lambda:next((s for s in app.call("little-open-state")["sessions"]
+                if s["id"]==little_id and len(s["browser"]["tabs"])==1),None),timeout=10)
+            blank={"skipped":"no Profile-B destination"}
+            blank_ok=True
+            if routed and routed["profile"]==other_profile:
+                app.call("window-focus",id=destination["id"],activate=True)
+                b_control=app.call("open",url="chrome-extension://"+probe+"/popup.html")["id"]
+                app.call("wait",tab=b_control,timeout=15)
+                before_blank={t["id"] for t in app.call("tabs")}
+                app.eval(b_control,"chrome.storage.session.remove('createdTab').then(()=>chrome.runtime.sendMessage({type:'create-tab',windowId:"+str(switched["browser"]["chromeWindowID"])+",url:'about:blank'}))")
+                blank=wait_until(lambda:app.eval(b_control,"chrome.storage.session.get('createdTab').then(v=>v.createdTab||null)"),timeout=10)
+                kept_blank=wait_until(lambda:next((s for s in app.call("little-open-state")["sessions"]
+                    if s["id"]==little_id and len(s["browser"]["tabs"])==1),None),timeout=10)
+                blank_ok=bool(blank and kept_blank) and not blank.get("error") and {t["id"] for t in app.call("tabs")}==before_blank
+            results["X19_extra_tab_strip_cleanup"]={"ok":bool(kept) and blank_ok
+                and kept["content"]==switched["content"] and kept["chromeTabID"]==switched["chromeTabID"]
+                and kept["url"]==target_url,
+                "afterRoute":kept,"blankCreated":blank,"blankClosedWithoutMainTab":blank_ok}
+        finally:
+            for window in app.call("shell-windows"):
+                if window["id"] not in main_windows:
+                    app.call("window-focus",id=window["id"],activate=True)
+                    app.call("window-close")
+            app.call("window-focus",id=original_main["id"],activate=True)
+            for tab in app.call("tabs"):
+                if tab["url"]==profile_url: app.call("close",tab=tab["id"])
+        little_call("ext-strip",retainBrowser=False)
+    finally:
+        if app.call("ext-prompt").get("pending"): app.call("ext-prompt",answer="cancel")
+        app.call("ext-prompt",handler=prompt_handler)
+        alert=app.call("little-open-profile-alert")
+        if alert.get("visible"): app.call("little-open-profile-alert",action="cancel")
+        app.call("little-open-action",id=little_id,action="close")

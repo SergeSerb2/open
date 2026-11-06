@@ -127,6 +127,8 @@ final class WindowExtensions {
   private var tabID: OpenModel.ItemID?
   private var menu: NSMenu?
   #if OPEN_AUTOMATION
+  static var retainedLittleOpenBrowser: OEBrowser?
+  static var retainedLittleOpenContext: ExtensionsUIContext?
   var capturesMenus = false
   var capturedMenu: NSMenu?
   #endif
@@ -170,6 +172,8 @@ final class WindowExtensions {
     if factory.windowState.sidebarMode == .hidden { popup.sidebarDidHide() }
   }
   func run(_ id: String, source: ExtensionRunSource, anchor: NSView? = nil) {
+    guard !factory.isClosing, host?.browser === factory.focusedBrowser,
+      factory.littleOpenController == nil || host?.browser === factory.standaloneBrowser else { return }
     popup.prepareAnchor(anchor, extensionID: id)
     _ = host?.executeAction(extensionID: id, source: source)
   }
@@ -184,7 +188,7 @@ final class WindowExtensions {
   func showLittleOpenMenu(_ controller: LittleOpenWindowController) {
     let native = controller.makeExtensionsMenu()
     if host?.actionsReady != true {
-      // Until the page has its own live Chrome browser, the engine refuses runs.
+      // A pending standalone page has no action target. Never run a main tab.
       for item in native.items.dropLast(2) where !item.isSeparatorItem { item.isEnabled = false }
     }
     track(native, anchor: controller.extensionsButton, flag: .overflowMenu)
@@ -222,5 +226,6 @@ final class WindowExtensions {
     menu?.cancelTrackingWithoutAnimation(); menu = nil
     popup.close(); siteControl?.dismiss(reason: .command, animated: false)
     host?.onActionsChanged = nil; host?.onActionChanged = nil; host = nil
+    _ = context.setActions([])
   }
 }

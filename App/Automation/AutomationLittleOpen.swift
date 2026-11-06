@@ -52,6 +52,7 @@ extension AutomationController {
         "loading": page?.isLoading ?? false, "firstResponder": window.firstResponder.map { String(describing: type(of: $0)) } ?? "",
         "barPresented": controller.commandBar.isPresented, "barInput": controller.urlField.stringValue,
         "trafficLights": lights, "surface": surfaceState,
+        "chromeTabID": page?.chromeTabIdentifier ?? -1,
         "browserID": page?.browser.map { $0.identifier } as Any? ?? NSNull(),
         "firstFrameRead": standalone?.firstFrameRead as Any? ?? NSNull(),
         "browserCreationStartedAt": standalone?.browserCreationStartedAt as Any? ?? NSNull(),

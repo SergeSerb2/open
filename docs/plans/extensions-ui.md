@@ -1,6 +1,6 @@
 # Extensions UI — implementation plan for Open (shell side of fork patches P2/P3)
 
-Status: shell/engine implemented on main (2026-11-06), except the explicit Section 12 X-13 presenter and Section 9 X-19 execution dependencies. Verification notes below map Steps 1–8 to PRs and real evidence. Reference captures and unverified global/update gates remain open. Original plan: 2026-10-25. Implementer: a coding agent with no other
+Status: shell/engine implemented on main (2026-11-06), except the explicit Section 12 X-13 presenter dependency. Little Open X-19 follow-up passes nine real-App rows; the full UI suite passes 53 rows with only X-13 BLOCKED. Verification notes below map Steps 1–8 to PRs and real evidence. Reference captures and unverified global/update gates remain open. Original plan: 2026-10-25. Implementer: a coding agent with no other
 context. Follow this file literally. "Open choice" means the choice is
 final for v1. "guess" means no Arc capture proves the value: build the
 value as written, and §12 lists the capture that will confirm or change
@@ -1539,7 +1539,7 @@ in a P1 tab (X-1), not with `--load-extension`.
 | X-16 | Menu bar | `Extensions` menu (built via `menuNeedsUpdate`) lists pinned first, then the rest, then Manage…/Add…; choosing an item runs the action |
 | X-17 | Manage | `manage-extensions` twice → one `chrome://extensions` tab, selected |
 | X-18 | Split View | split two tabs, focus pane 2: pane-bar strip shows only in pane 2; slot click anchors the popup to the pane-bar slot |
-| X-19 | Little Open | Little Open window with an extension installed: Extensions button visible; menu runs an action; popup anchors to the button |
+| X-19 | Little Open | Button visible for ≥1 action and hidden for 0; popup-less onClicked reports the standalone page id/URL; activeTab script fails before click and succeeds after click; popup tabs.query returns that page and its panel anchors 6 pt below the Extensions button; extra extension tabs open selected in the most recent main window's Today while Little Open keeps its page; Profile replacement changes the action list/target and clears the old delegate/list |
 | X-20 | Popup window | Bitwarden "pop out" → an `ExtensionWindowController` window, not a Chrome Views window; `chrome.windows.getAll()` includes it as type popup |
 | X-21 | Idle | 10 s idle with all extensions loaded: 0 extension UI redraws (signpost counter) |
 | X-22 | Run by name | command bar "action pro" → `.extensionAction` row "Action Probe"; Return → popup opens anchored per A4 |
@@ -1695,7 +1695,7 @@ wires lazy menu updates, overflow and Little Open's button/menu.
 `extensions-ui X16_menu_bar`, `X16_menu_run`, `X17_manage_singleton` and
 `overflow_menu_anchor` prove real actions and singleton selection.
 `X19_button_menu` and `X19_zero_actions` prove the Little Open control/list.
-X-19 run/popup/activeTab/tabs.query remains BLOCKED on Section 9 (ruling A).
+Section 9 [#185](https://github.com/SergeSerb2/open/pull/185) supplies the standalone Chrome browser. The X-19 follow-up [#192](https://github.com/SergeSerb2/open/pull/192) binds only `factory.standaloneBrowser`, clears the old delegate/list on replacement, and keeps pending-page actions from borrowing a main-window target. Nine real-App rows PASS: button/menu, popup-less target, activeTab, popup tabs.query, popup anchor, extra-tab routing to main Today, one/zero actions and Profile replacement. Wrong-main-target and skipped re-attach faults each FAIL the intended row. Discarding extra tabs, or recreating them before their real URL arrives, FAILs the extra-tab row. All faults are removed and the restored flow PASSes; each final proof reports cleanup PASS. The final `extensions-ui` run has 53 PASS and only X-13 BLOCKED; 20 popup samples have ready-to-visible p95 7.55 ms (budget 16.7 ms, load1 7.49). The fixture requests optional activeTab/scripting permissions only for X-19, preserving the existing disabled-action checks. Section 9’s page creation and the engine are unchanged.
 The page-context-menu "Manage Extensions" hook remains open in Section 11;
 `PageContextMenuHooks.extensionItems` still defaults to empty.
 
@@ -1808,6 +1808,13 @@ Gap 37 is closed; global OS delivery remains separate.
 - **Little Open, lead ruling A:** pages become Chrome-style tabs of their
   own `OEBrowser`; Section 9 implements this. Extension action/activeTab/
   tabs.query must target that page, with no main-window fallback.
+- **Little Open extra extension tabs, guess (child), Section 6 lead ruling:**
+  keep the standalone page and open each extra tab selected in the most
+  recent main window's Today list. Hosted Chrome contents cannot change
+  browsers, so retain the unshown extra content until its real address
+  arrives, then recreate that URL there before closing the original on the
+  next main-loop turn. Arc parity is unconfirmed; capture
+  needed. `X19_extra_tab_main_today` exercises this route.
 - Prompt fallback and the App duplicate-ID guard are the policies stated in
   Steps 5–6; the guard exposes `duplicatesDropped`, which acceptance requires
   to be zero. Neither is a second extension state store.

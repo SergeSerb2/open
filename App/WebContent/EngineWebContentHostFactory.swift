@@ -42,7 +42,9 @@ final class EngineWebContentHostFactory: NSResponder, WebContentHostFactory {
   weak var standaloneBrowser: OEBrowser?
   weak var littleOpenController: LittleOpenWindowController?
   private weak var littleOpenContent: OEWebContent?
-  private var littleOpenBrowser: OEBrowser?
+  private weak var littleOpenBrowser: OEBrowser?
+  // Unshown extension-created pages awaiting their first real address.
+  private var pendingLittleOpenExtensionTabs: [Int: OEWebContent] = [:]
   var window: NSWindow? { controller?.window ?? standaloneSurface?.surfaceWindow ?? littleOpenController?.window }
   var model: BrowserModel { app.model }
   var contentContainer: NSView { controller!.container }
@@ -153,11 +155,16 @@ final class EngineWebContentHostFactory: NSResponder, WebContentHostFactory {
   isolated deinit { if let observerID { model.removeObserver(observerID) } }
 
   func attachLittleOpen(_ controller: LittleOpenWindowController, content: OEWebContent) {
-    guard littleOpenController !== controller || littleOpenContent !== content else { return }
+    // Section 9 owns creation and closing. Never synthesize a browser here or
+    // borrow a main window's active tab while the first frame is pending.
+    guard let browser = standaloneBrowser, content.browser === browser else { return }
+    guard littleOpenController !== controller || littleOpenContent !== content || littleOpenBrowser !== browser else { return }
+    if let previous = littleOpenBrowser, previous !== browser {
+      extensions.closeAll()
+      if previous.delegate === self { previous.delegate = nil }
+    }
     littleOpenController = controller; littleOpenContent = content
-    let browser = content.browser ?? OEBrowser(context: content.context)
     littleOpenBrowser = browser; browser.window = controller.window; browser.delegate = self
-    if content.browser == nil { browser.insert(content, at: 0); browser.activeWebContent = content }
     controller.onCloseRequested = { [weak self] in
       guard let self, let window = self.window else { return }; self.app.extensionPrompts.cancel(window: window)
     }
@@ -367,7 +374,7 @@ final class EngineWebContentHostFactory: NSResponder, WebContentHostFactory {
   private static var legacyRefusals: Set<String> = []
   var focusedBrowser: OEBrowser? {
     if let standaloneBrowser { return standaloneBrowser }
-    if littleOpenController != nil { return littleOpenContent?.browser ?? littleOpenBrowser }
+    if littleOpenController != nil || standaloneSurface != nil { return nil }
     guard app.engineReady, let profile = focusedProfile else { return nil }; return mirror.browser(for: profile.id)
   }
   func tabID(for content: OEWebContent) -> ItemID? { hosts.first { $0.value.content === content }?.key }
@@ -738,7 +745,17 @@ final class EngineWebContentHostFactory: NSResponder, WebContentHostFactory {
     commandBarSession?.dismiss()
     controller?.container.closeAll(); for host in Array(hosts.values) { host.close() }
     for page in auxiliaryPages { closeAuxiliary(page); page.panel.close() }
-    extensions.closeAll(); littleOpenBrowser?.close(); littleOpenBrowser = nil; mirror.close()
+    extensions.closeAll()
+    for content in pendingLittleOpenExtensionTabs.values {
+      content.delegate = nil
+      DispatchQueue.main.async { content.close() }
+    }
+    pendingLittleOpenExtensionTabs.removeAll()
+    // Clear the delegate before Section 9 closes/replaces the standalone page.
+    // A retained old browser must not deliver actions to the new Profile UI.
+    if littleOpenBrowser?.delegate === self { littleOpenBrowser?.delegate = nil }
+    littleOpenBrowser = nil; littleOpenContent = nil
+    mirror.close()
   }
   func content(forAutomationHandle handle: Any?) -> OEWebContent? {
     switch handle {
@@ -1041,6 +1058,14 @@ extension EngineWebContentHostFactory {
 
 extension EngineWebContentHostFactory: OEWebContentDelegate {
   func webContent(_ webContent: OEWebContent, didChange changes: OEWebContentChange) {
+    if pendingLittleOpenExtensionTabs[webContent.identifier] === webContent {
+      if changes.contains(.URL), let url = webContent.url, url.absoluteString != "about:blank" {
+        routeLittleOpenExtensionTab(webContent, url: url)
+      } else if changes.contains(.live), !webContent.isLive {
+        pendingLittleOpenExtensionTabs[webContent.identifier] = nil; webContent.delegate = nil
+      }
+      return
+    }
     if let popup = auxiliaryPages.first(where: { $0.content === webContent }) {
       if changes.contains(.loading), webContent.isLoading { popup.historyRecorder?.loadingChanged(true) }
       if changes.contains(.URL), let url = webContent.url {
@@ -1235,6 +1260,10 @@ extension EngineWebContentHostFactory: OEWebContentDelegate {
   }
 
   func webContent(_ webContent: OEWebContent, didFinishLoadWithStatus status: Int) {
+    if pendingLittleOpenExtensionTabs[webContent.identifier] === webContent {
+      routeLittleOpenExtensionTab(webContent, url: webContent.url)
+      return
+    }
     finishCommandBarNavigation(webContent)
     app.prepareCommandsAfterPaint(webContent)
     if tabID(for: webContent) != nil { LaunchTiming.shared.mark("firstLoadEnd"); translate.pageDidFinishLoad(webContent, status: status) }
@@ -1323,6 +1352,20 @@ extension EngineWebContentHostFactory {
   /// index and openerTabId are not applied (documented P1 gap).
   @objc(browser:didOpenWebContent:active:)
   func browser(_ browser: OEBrowser, didOpen webContent: OEWebContent, active: Bool) {
+    if controller == nil {
+      // guess (child), Section 6 lead ruling: Little Open keeps one page;
+      // extra extension tabs open selected in the most recent main window.
+      // Hosted Chrome contents cannot change browsers. OnTabCreated can
+      // precede navigation, so retain the unshown page until its URL arrives.
+      // Arc parity is unconfirmed and needs a capture.
+      record("standaloneExtraTabRouted", webContent, ["browser": browser.identifier])
+      pendingLittleOpenExtensionTabs[webContent.identifier] = webContent
+      webContent.delegate = self
+      if let url = webContent.url, url.absoluteString != "about:blank" {
+        routeLittleOpenExtensionTab(webContent, url: url)
+      }
+      return
+    }
     guard let space = space(forNewTabIn: browser), let profileID = profile(for: browser.context)?.id else {
       webContent.close()
       return
@@ -1334,6 +1377,43 @@ extension EngineWebContentHostFactory {
     if active {
       if space.id != focusedSpace?.id { focus(space: space) }
       select(nodeID: tab.id)
+    }
+  }
+
+  private func routeLittleOpenExtensionTab(_ content: OEWebContent, url: URL?) {
+    guard pendingLittleOpenExtensionTabs.removeValue(forKey: content.identifier) === content else { return }
+    content.delegate = nil
+    let sourceProfileID = profile(for: content.context)?.id
+    // Recreate the URL in the destination before closing the original, after
+    // the source engine callback returns. Close on every failure too, so the
+    // unshown source cannot remain in Little Open's Chrome tab strip.
+    DispatchQueue.main.async {
+      defer { content.close() }
+      guard let url, url.absoluteString != "about:blank" else {
+        self.record("standaloneExtraTabDropped", content, ["reason": "blank-url"]); return
+      }
+      guard let profileID = sourceProfileID,
+        let space = self.model.mostRecentlyFocusedSpace(profileID: profileID) else {
+        self.record("standaloneExtraTabDropped", content, ["reason": "no-profile-space"]); return
+      }
+      var controller = self.app.linkExecutor.orderedControllers.first {
+        $0.context.focusedSpace?.profileID == profileID
+      }
+      if controller == nil {
+        // makeWindow can reuse the retained final main window. Set its Space
+        // before composition, so no page is created in a different Profile.
+        if self.app.windowControllers.isEmpty,
+          let retained = self.model.windows.first(where: { $0.style == .standard }) {
+          self.model.focusSpace(windowID: retained.id, spaceID: space.id)
+        }
+        controller = self.app.makeWindow(focusedSpaceID: space.id)
+      }
+      guard let controller, controller.context.focusedSpace?.profileID == profileID,
+        let target = self.app.hostFactories[controller.windowID],
+        target.openNewTab(url: url, background: false) != nil else {
+        self.record("standaloneExtraTabDropped", content, ["reason": "target-unavailable"]); return
+      }
+      self.app.focusWindow(controller.windowID, activate: true)
     }
   }
 
