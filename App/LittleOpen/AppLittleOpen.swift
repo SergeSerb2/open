@@ -43,6 +43,9 @@ extension AppDelegate {
       for controller in coordinator.controllers.values {
         let view = controller.container.host(for: controller.session.tab.id)?.view as? LittleOpenSurfaceView
         view?.owner?.windowOrderedFront()
+        if let host = self.littleOpenHosts.values.first(where: { $0.view.window === controller.window }) {
+          host.owner?.attachLittleOpen(controller, content: host.content)
+        }
       }
       self.media.visibility.visibilityChanged()
       for host in self.littleOpenHosts.values {
@@ -169,6 +172,8 @@ extension AppDelegate {
     guard let controller = keyLittleOpen else { return false }
     let host = controller.container.host(for: controller.session.tab.id)
     switch id {
+    case "manage-extensions", "add-extension", "extension-shortcuts":
+      littleOpenExtensionFactory()?.performLittleOpenExtensionManagement(id)
     case "open-in-current-space": controller.openInCurrentSpace()
     case "open-command-bar": controller.focusURL()
     case "archive-tab", "close-window": littleOpenCoordinator.close(sessionID: controller.session.id, archiveReason: nil)

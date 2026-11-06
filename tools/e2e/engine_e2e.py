@@ -4440,9 +4440,12 @@ def _actions_checks(app, results):
     api = {}
     if state:
         popup_eval(state, "chrome.storage.session.set({openPopup: ''}).then(() => true)")
+        popup_eval(state, "chrome.runtime.sendMessage('open-popup').then(() => true)")
+        # D1 now closes the shell popup when its parent becomes key. Send the
+        # delayed request first, while its requesting page still exists.
         api["key"] = make_key()
-        popup_eval(state, "chrome.runtime.sendMessage('open-popup')"
-                          ".then(() => { setTimeout(() => window.close(), 50); return true; })")
+        api["blurClosedRequestingPopup"] = bool(wait_until(lambda:
+            app.call("ext-popup").get("page", {}).get("identifier") != state["page"]["identifier"], timeout=2))
 
         def api_popup():
             s = app.call("ext-popup")
@@ -4458,7 +4461,8 @@ def _actions_checks(app, results):
             state = open_popup(ACTION_PROBE)
             api["result"] = popup_eval(state, "chrome.storage.session.get('openPopup').then(r => r.openPopup)") if state else None
             close_popup()
-    results["open_popup_api"] = {"ok": api.get("key") is True and api.get("source") == "api" and api.get("result") == "ok",
+    results["open_popup_api"] = {"ok": api.get("key") is True and api.get("blurClosedRequestingPopup")
+                                 and api.get("source") == "api" and api.get("result") == "ok",
                                  **api}
 
     # While a popup is open, openPopup() is refused (as Chrome's desktop
@@ -4467,6 +4471,10 @@ def _actions_checks(app, results):
     state = open_popup(ACTION_PROBE)
     if state:
         popup_eval(state, "chrome.storage.session.set({openPopup: ''}).then(() => true)")
+        # Inspect keeps the popup open across D1, so this tests refusal with
+        # both an active browser window and an existing popup.
+        app.call("devtools-open", tab=state["page"]["identifier"])
+        refusal["inspected"] = bool(wait_until(lambda: app.call("ext-popup").get("staysOpenOnBlur"), timeout=5))
         refusal["key"] = make_key()
         popup_eval(state, "chrome.runtime.sendMessage('open-popup-now').then(() => true)")
         refusal["result"] = wait_until(lambda: popup_eval(state, "chrome.storage.session.get('openPopup')"
@@ -4474,9 +4482,10 @@ def _actions_checks(app, results):
         after = app.call("ext-popup")
         refusal["same_popup"] = (after.get("open") and after["source"] == "user"
                                  and after["page"]["identifier"] == state["page"]["identifier"])
+        app.call("devtools-close", tab=state["page"]["identifier"])
         close_popup()
     results["open_popup_refused_while_open"] = {
-        "ok": refusal.get("key") is True and refusal.get("result") == "Failed to open popup." and bool(refusal.get("same_popup")),
+        "ok": refusal.get("inspected") and refusal.get("key") is True and refusal.get("result") == "Failed to open popup." and bool(refusal.get("same_popup")),
         **refusal}
     # Running the action whose popup is open closes it (Chrome's toolbar).
     if not app.call("ext-popup").get("open"):
@@ -4550,12 +4559,19 @@ def _actions_checks(app, results):
     app.call("ext-pin", extension=EXT["bitwarden"], pinned=True)
     pinned = wait_until(lambda: (lambda ids: ids if ids[:2] == [ACTION_PROBE, EXT["bitwarden"]] else None)(
         [x["id"] for x in actions()["actions"]]), timeout=10)
-    app.call("ext-move", extension=EXT["bitwarden"], index=0)
-    moved = wait_until(lambda: (lambda xs: xs if [x["id"] for x in xs][:2] == [EXT["bitwarden"], ACTION_PROBE]
-                                and xs[0]["pinnedIndex"] == 0 and xs[1]["pinnedIndex"] == 1 else None)(
-        actions()["actions"]), timeout=10)
-    results["pin_and_move"] = {"ok": bool(pinned) and bool(moved), "after_pin": pinned,
-                               "after_move": moved and [(x["id"], x["pinnedIndex"]) for x in moved[:3]]}
+    duplicates = app.call("extensions")["duplicatesDropped"]
+    if duplicates:
+        results["pin_and_move"] = {"ok": False, "reason": "duplicate E1 action IDs regressed after C5's engine fix",
+            "duplicatesDropped": duplicates, "receipt": ".re/extensions-ui/engine-native-drag-crash.ips"}
+    else:
+        app.call("ext-move", extension=EXT["bitwarden"], index=0)
+        moved = wait_until(lambda: (lambda xs: xs if [x["id"] for x in xs][:2] == [EXT["bitwarden"], ACTION_PROBE]
+                                    and xs[0]["pinnedIndex"] == 0 and xs[1]["pinnedIndex"] == 1 else None)(
+            actions()["actions"]), timeout=10)
+        after_duplicates = app.call("extensions")["duplicatesDropped"]
+        results["pin_and_move"] = {"ok": bool(pinned) and bool(moved) and after_duplicates == 0, "after_pin": pinned,
+                                   "duplicatesDropped": after_duplicates,
+                                   "after_move": moved and [(x["id"], x["pinnedIndex"]) for x in moved[:3]]}
 
     # The context menu is Chrome's (extension name, pin, options, ...); its
     # pin item unpins.
@@ -10830,7 +10846,7 @@ def main():
     ap.add_argument("--engine-fingerprint-only", action="store_true", help="verify built engine artifacts and exit without launching Open")
     ap.add_argument("--extensions", default=os.path.join(ROOT, ".re", "ext", "unpacked"))
     ap.add_argument("--only", choices=["find", "shell", "extensions", "features", "measure", "tabstrip", "window", "sidebar", "peek", "split",
-                                       "commandbar", "app-actions", "actions", "extensions-p3", "extensions-e2", "profiles", "sidebar-completion", "toolbar", "numbering", "media", "relaunch", "page", "page-chrome",
+                                       "commandbar", "app-actions", "actions", "extensions-p3", "extensions-ui", "extensions-e2", "profiles", "sidebar-completion", "toolbar", "numbering", "media", "relaunch", "page", "page-chrome",
                                        "sleep", "context-menus", "routing", "littleopen", "history", "applescript", "downloads"])
     ap.add_argument("--window-chrome-only", action="store_true", help="run only the window-chrome follow-up flows in the window suite")
     ap.add_argument("--keep", action="store_true",
@@ -10902,6 +10918,11 @@ def main():
         dirs = [ACTION_PROBE_COPY, os.path.join(opts.extensions, "bitwarden")]
         if not all(os.path.isdir(d) for d in dirs):
             sys.exit("missing extensions: %s" % dirs)
+        extra += ["--load-extension=" + ",".join(dirs), "--disable-features=DisableLoadExtensionCommandLineSwitch"]
+    if opts.only == "extensions-ui":
+        dirs = [os.path.join(ROOT, "tools/e2e/fixtures/action-probe")] + [os.path.join(opts.extensions, d) for d in ("ublock-lite", "darkreader", "bitwarden")]
+        if not all(os.path.isdir(d) for d in dirs):
+            sys.exit("missing unpacked extensions in %s" % opts.extensions)
         extra += ["--load-extension=" + ",".join(dirs), "--disable-features=DisableLoadExtensionCommandLineSwitch"]
     if opts.only == "profiles":
         extra += ["--load-extension=" + os.path.join(ROOT, "tools", "e2e", "fixtures", "tabs-probe"),
@@ -11004,7 +11025,11 @@ def main():
         print(json.dumps(results['engine'], sort_keys=True), flush=True)
         return
     def execute():
-        if opts.only == "split":
+        if opts.only == "extensions-ui":
+            results["extensions-ui"] = CheckedResults(tracker)
+            import extensions_ui
+            extensions_ui.run(factory, results["extensions-ui"], tmp, ROOT, wait_until, new_tab, frame, read_image, EXT)
+        elif opts.only == "split":
             import importlib.util
             spec = importlib.util.spec_from_file_location('split_checks', os.path.join(ROOT, 'tools/e2e/split_checks.py'))
             module = importlib.util.module_from_spec(spec); spec.loader.exec_module(module)
@@ -11157,14 +11182,14 @@ def main():
                                     else opts.config.lower()))
     with open(os.path.join(OUT, name), "w") as f:
         json.dump(results, f, indent=2, sort_keys=True)
-    for group in ("find", "shell", "extensions", "features", "measure", "tabstrip", "window", "sidebar", "peek", "split", "commandbar", "app-actions", "actions", "extensions-p3", "extensions-e2", "profiles", "sidebar-completion", "toolbar", "numbering", "media", "relaunch", "page", "page-chrome", "sleep", "context-menus", "routing", "littleopen", "history", "applescript", "downloads"):
+    for group in ("find", "shell", "extensions", "features", "measure", "tabstrip", "window", "sidebar", "peek", "split", "commandbar", "app-actions", "actions", "extensions-p3", "extensions-ui", "extensions-e2", "profiles", "sidebar-completion", "toolbar", "numbering", "media", "relaunch", "page", "page-chrome", "sleep", "context-menus", "routing", "littleopen", "history", "applescript", "downloads"):
         for k, v in results.get(group, {}).items():
             if isinstance(v, dict) and "ok" in v:
                 print("%-24s %s" % (k, "PASS" if v.get("ok") else "FAIL"))
             elif isinstance(v, dict) and v.get("status") in ("SKIP", "BLOCKED", "INTERRUPTED", "DEFERRED"):
                 print("%-24s %s: %s" % (k, v["status"], v.get("reason", "")))
     print("wrote", os.path.join(OUT, name))
-    failures = [k for group in ("find", "shell", "extensions", "features", "measure", "tabstrip", "window", "sidebar", "peek", "split", "commandbar", "app-actions", "actions", "extensions-p3", "extensions-e2", "sidebar-completion", "toolbar", "numbering", "media", "relaunch", "page", "page-chrome", "sleep", "context-menus", "routing", "littleopen", "history", "applescript", "downloads")
+    failures = [k for group in ("find", "shell", "extensions", "features", "measure", "tabstrip", "window", "sidebar", "peek", "split", "commandbar", "app-actions", "actions", "extensions-p3", "extensions-ui", "extensions-e2", "sidebar-completion", "toolbar", "numbering", "media", "relaunch", "page", "page-chrome", "sleep", "context-menus", "routing", "littleopen", "history", "applescript", "downloads")
                 for k, v in results.get(group, {}).items() if isinstance(v, dict) and v.get("ok") is False]
     if failures or not results["cleanup"]["ok"]:
         sys.exit(1)

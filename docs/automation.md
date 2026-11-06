@@ -116,16 +116,22 @@ Arguments are `key=value`; values that parse as JSON are sent as JSON.
 | `find-idle` | `action=begin`, `watch`, `reset`, `read`, `invalidate`, `end` | Harness-only bridge to the already-injected S8 idle observer. Reports draw/layout/display, invalidation, scheduling, timer, and display-link counters. `invalidate` marks the real Find view for layout as an observer canary. No observer library is loaded or attached by this command. Unknown actions fail. |
 | `print-pdf` | `tab`, `path` | Print to a PDF file |
 | `devtools-open`, `fullscreen-exit` | `tab` | — |
-| `extensions` | — | Installed extensions and the window's toolbar actions (through the OpenWeb `ExtensionHost` protocol) |
+| `extensions` | — | Installed extensions and the window's toolbar actions, with `duplicatesDropped` from the App's first-occurrence normalization. Action fields match `actions` below. |
 | `popup` | `extension` | Run the action like a click on its button; returns the popup page |
 | `popup-close` | — | Close the open popup |
 | `actions` | — | The focused window's toolbar actions from Chrome's model (fork patch P2): `ready`, and per action id, name, title, tooltip, accessible name, badge and colors, enabled, has popup, pinned and pinned index, wants to run, site access, showing popup, `live` (from the live model, else the profile's list), and the toolbar image and plain icon (PNG byte count, hash, point width, `pixels`: each representation's pixel size, and `object`: the image object's identity) |
-| `ext-pin` | `extension`, `pinned` (default `true`) | Pin or unpin an action |
-| `ext-move` | `extension`, `index` | Move a pinned action to a pinned index. Negative indices return an automation error; unknown/unpinned actions and indices outside the engine model's range are no-ops with engine diagnostics. |
+| `ext-pin` | `extension`, `pinned` (default `true`), optional `index` | Pin or unpin an action; optionally move it through the guarded App host. |
+| `ext-move` | `extension`, `index`, optional `engine` | Move only a currently pinned action. Negative automation indices return an error. Clamp to the normalized pinned list and skip a no-op, as a native drag does. `engine=true` directly probes the engine's invalid-index refusal instead. |
 | `ext-prompt` | `answer` (`accept`/`cancel`), `hold`, `handler`, `clear`, `twice` | Pending consent: type, extension/name, Open title/buttons (§3.11), `chromiumTitle`/`chromiumButtons`, permissions/details/lines, retained files/devices and weak page/browser ids. Holds by default; `hold=false` releases without answering. `handler=false` preserves Chromium's dialogs. `clear` cancels the queue; `twice` checks duplicate-answer safety. Also returns registry events. |
 | `ext-manage` | `extension`, `action` (`enable`, `disable`, `uninstall`, `reload`, `install-webstore`, `install-crx`), `path` | Live per-profile management. Remove always prompts. Web Store completion is recorded in `ext-prompt.events`, leaving the socket free to answer consent. Local CRX is guarded by `--open-automation` and uses the real installer/prompt. |
-| `ext-commands` | — | `{ready, context, commands}`. Each command has extension, name, summary, Cocoa key equivalent/modifier flags, global and action-command flags. Uppercase letters encode Shift in Cocoa's pair. |
+| `ext-commands` | — | `{ready, context, commands}`. Each command has extension, name, summary, Cocoa key equivalent/modifier flags, global and action-command flags, normalized shortcut, `dropped` and conflicting `openCommandID`. Uppercase letters encode Shift in Cocoa's pair. |
 | `ext-run-command` | `extension`, `name` | `executeExtensionCommand`: named event with active tab, or action with source command; unknown/inactive commands return false. |
+| `ext-strip` | `surface` (`url`, `pane`, `toolbar`, `little`) | Visible action ids in order, button and more frames in Cocoa window coordinates, visibility, layout/redraw counts and image conversions. `strips` includes unfocused panes. A missing App presenter reports `blocked`. |
+| `ext-hover` | `inside` (default true) | Tagged mouse-moved and tracking events inside Open, over or away from the sidebar. Does not move the hardware pointer. |
+| `ext-click` | `extension`, `surface`, `button` (`left` or `right`) | Native in-process events to the visible slot; right-click or a disabled left-click returns the rendered context-menu items. Hidden slots refuse clicks. |
+| `ext-ui-menu` | `kind: bar`, or `extension`; optional `select` title | Updates the real Extensions menu through `menuNeedsUpdate`, or builds the rendered action context menu. Selection executes the enabled native menu item. |
+| `ext-popup-state` | — | Shell panel open/visible/ready/key flags, panel/content/anchor frames, anchor kind, ready-to-visible timing and blur keep-open state. |
+| `ext-picker` | `keys` | Sends native keys to the presented SCC picker and returns `focusedID`; reports the exact missing App hook while SCC presentation is unavailable. |
 | `ext-run` | `extension`, `source` (`toolbar` default, `menu`, `command`) | Run the action as the user would; returns whether it ran (a popup opens, or `chrome.action.onClicked` fires) |
 | `ext-menu` | `extension`, `source` (`toolbar` default, `menu`), `select`, `keep`, `stale` | The action's context menu items (title, command, enabled, checked, separator, submenu); with `select`, run the item with that title and return `items` and `ran`. `keep` keeps this menu open (not cancelled); `select` with `stale` then runs the item on that kept menu and cancels the new one |
 | `ext-popup` | — | The open popup: `open`, its page, its extension, its source (`user`, `command`, `api`), and `staysOpenOnBlur` |
@@ -377,7 +383,8 @@ renderers and compilation do not require removing the file.
 ### Step C review: focus and shutdown observations
 
 Automation responses include `observationStart` (process monotonic uptime).
-`focus-state` reports the current responder owner, Find text/visibility, sheet
+`focus-state` reports the current responder owner, Find text/visibility, its
+window-coordinate `findFrame` and native `findCancelFrame`, sheet
 state, and the count/result of post-navigation focus decisions. It accepts an
 optional standard-window `id` without activating that window. `activation-events`
 starts before the first window/engine turn and reports native resignation and

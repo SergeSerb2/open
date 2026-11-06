@@ -151,6 +151,10 @@ targets:
       - package: OpenKit
         product: OpenWeb
       - package: OpenKit
+        product: OpenExtensionsUI
+      - package: OpenKit
+        product: OpenSiteControl
+      - package: OpenKit
         product: OpenFeatures
       - package: OpenKit
         product: OpenSettings

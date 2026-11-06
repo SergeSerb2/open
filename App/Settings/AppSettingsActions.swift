@@ -242,6 +242,11 @@ final class AppSettingsActions: SettingsActions, LibraryActions, DownloadsProvid
     openURL(URL(string: "chrome://settings/\(path)")!, profileID: profileID)
   }
   func openPreviewsSettings() {} // General owns its one sheet.
+  func extensionShortcutConflicts(profileID: ProfileID) -> [ExtensionShortcutConflict] {
+    guard let factory = app.hostFactories.values.first,
+          let context = factory.context(for: profileID) else { return [] }
+    return app.extensionPrompts.table(context.extensions).conflicts
+  }
   func keyBindingsDidChange(store: KeyBindingStore) { app.reloadKeyBindings() }
   func openEssentialShortcuts() { app.performCommand("keyboard-shortcuts-edu", payload: nil) }
   func runImport(plan: ImportPlan) async -> ImportOutcome { ImportOutcome(errorText: "Import is not available in this build. No data was imported.") }

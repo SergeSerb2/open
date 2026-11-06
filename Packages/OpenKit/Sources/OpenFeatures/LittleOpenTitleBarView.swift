@@ -13,12 +13,15 @@ public final class LittleOpenTitleBarView: NSView {
     public let profileButton: NSButton
     public let hostButton: NSButton
     public let copyButton: NSButton
+    public let extensionsButton: NSButton
+    public var showsExtensions = false { didSet { if showsExtensions != oldValue { extensionsButton.isHidden = !showsExtensions; needsLayout = true } } }
     public let pillButton: NSButton
     public let chevronButton: NSButton
     private let keycap = NSTextField(labelWithString: "⌘O")
     public var onProfile: (() -> Void)?
     public var onEditURL: (() -> Void)?
     public var onCopy: (() -> Void)?
+    public var onExtensions: (() -> Void)?
     public var onOpenInSpace: (() -> Void)?
     public var onMoreSpaces: (() -> Void)?
     public private(set) var spaceTitle = ""
@@ -39,6 +42,7 @@ public final class LittleOpenTitleBarView: NSView {
         profileButton = button("Profile")
         hostButton = button("")
         copyButton = button("Copy Current URL", symbol: "link")
+        extensionsButton = button("Extensions", symbol: "puzzlepiece.extension")
         pillButton = button("Open in Space")
         chevronButton = button("More Spaces", symbol: "chevron.down")
         super.init(frame: frame); wantsLayer = true
@@ -49,10 +53,11 @@ public final class LittleOpenTitleBarView: NSView {
             view.layer?.cornerRadius = radius; view.layer?.cornerCurve = .continuous; addSubview(view)
         }
         divider.wantsLayer = true; divider.layer?.backgroundColor = LittleOpenMetrics.text.withAlpha(LittleOpenMetrics.dividerAlpha).cgColor; addSubview(divider)
-        for (b, tag) in [(profileIconButton, 0), (profileButton, 0), (hostButton, 1), (copyButton, 2), (pillButton, 3), (chevronButton, 4)] {
+        for (b, tag) in [(profileIconButton, 0), (profileButton, 0), (hostButton, 1), (copyButton, 2), (pillButton, 3), (chevronButton, 4), (extensionsButton, 5)] {
             b.tag = tag; b.target = self; b.action = #selector(press(_:)); addSubview(b)
         }
         chevronButton.toolTip = "More Spaces"
+        extensionsButton.toolTip = "Extensions"; extensionsButton.isHidden = true
         keycap.font = .systemFont(ofSize: LittleOpenMetrics.fontSize); keycap.textColor = LittleOpenMetrics.text.nsColor
         keycap.alignment = .center; keycap.wantsLayer = true
         keycap.layer?.backgroundColor = LittleOpenMetrics.capsuleFill.cgColor
@@ -68,6 +73,7 @@ public final class LittleOpenTitleBarView: NSView {
         case 2: onCopy?()
         case 3: onOpenInSpace?()
         case 4: onMoreSpaces?()
+        case 5: onExtensions?()
         default: break
         }
     }
@@ -94,26 +100,31 @@ public final class LittleOpenTitleBarView: NSView {
         super.layout(); let m = LittleOpenMetrics.self, w = bounds.width
         capsule.frame = m.capsule(width: w); pill.frame = m.pill(width: w); divider.frame = m.divider(width: w)
         copyButton.frame = m.copy(width: w); chevronButton.frame = m.chevron(width: w)
+        // guess (lead), capture S-7. Copy's 16 pt frame is also its native hit area.
+        extensionsButton.frame = m.extensions(width: w)
         let label = m.pillButton(width: w)
         pillButton.frame = CGRect(x: label.minX, y: label.minY, width: label.width - m.keycapWidth, height: label.height)
         keycap.frame = CGRect(x: label.maxX - m.keycapWidth, y: label.minY, width: m.keycapWidth, height: label.height)
         let chipX = m.profileIcon.minX
         // On a minimum-size page the chip hides before it can cover the host/copy control (guess).
-        let available = max(0, copyButton.frame.minX - m.hostGap - chipX)
+        let accessoryLeft = showsExtensions ? extensionsButton.frame.minX : copyButton.frame.minX
+        let available = max(0, accessoryLeft - m.hostGap - chipX)
         let chipWidth = min(profileWidth, max(0, available - m.minimumHostWidth))
         profileButton.isHidden = profileWidth == 0 || chipWidth == 0
         profileIconButton.isHidden = profileButton.isHidden
         profileIconButton.frame = m.profileIcon
         profileButton.frame = CGRect(x: m.profileTextX, y: m.hostY, width: max(0, chipWidth - (m.profileTextX - chipX)), height: m.hostHeight)
         let left = profileButton.isHidden ? capsule.frame.minX + m.hostGap : profileButton.frame.maxX + m.hostGap
-        let right = copyButton.frame.minX - m.hostGap
+        let right = accessoryLeft - m.hostGap
         let width = min(ceil(hostButton.attributedTitle.size().width), max(0, right - left))
         hostButton.frame = CGRect(x: left + max(0, right - left - width) / 2, y: m.hostY, width: width, height: m.hostHeight)
     }
     /// Frames in the measured top-left coordinate system, shared by automation and L4.
     public var elementFrames: [String: CGRect] {
-        ["capsule": capsule.frame, "profileIcon": profileIconButton.frame, "profile": profileButton.frame, "host": hostButton.frame,
+        var frames = ["capsule": capsule.frame, "profileIcon": profileIconButton.frame, "profile": profileButton.frame, "host": hostButton.frame,
          "copy": copyButton.frame, "pill": pill.frame, "open": LittleOpenMetrics.pillButton(width: bounds.width),
          "chevron": chevronButton.frame, "divider": divider.frame]
+        if showsExtensions { frames["extensions"] = extensionsButton.frame }
+        return frames
     }
 }

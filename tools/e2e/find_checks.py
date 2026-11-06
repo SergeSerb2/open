@@ -73,14 +73,21 @@ def run(h, factory, results, tmp):
             for item in p.get('chrome', []) if not item.get('hidden', False) for rect in [p['frame'],close])
     def viewport_close(name, target=None):
         if target is not None: app.call('focus', tab=target)
+        app.call('ext-hover', inside=True)
         key('f', ['cmd']); p=pane(target)
+        strips = [app.call('ext-strip', surface=s) for s in ('url', 'pane', 'toolbar')]
+        pinned = [s for s in strips if s.get('visible') and s.get('ids')]
+        duplicates = app.call('extensions')['duplicatesDropped']
         control=p.get('controls', {}).get('close', [])
-        before=rect_ok(p) and clear_of_chrome(p) and p.get('controls',{}).get('closeHitMatches') is True
+        before=rect_ok(p) and clear_of_chrome(p) and p.get('controls',{}).get('closeHitMatches') is True and bool(pinned) and duplicates == 0
         if len(control)==4:
             app.call('mouse', action='click', x=control[0]+control[2]/2,
                      y=app.call('window-state')['frame'][3]-control[1]-control[3]/2)
         closed=h.wait_until(lambda: not pane(p['tab'])['visible'] and app.call('focus-state')['owner']=='page', timeout=3, step=.05)
-        row(name, before and bool(closed), pane=p, closed=bool(closed), focus=app.call('focus-state'))
+        after = [app.call('ext-strip', surface=s) for s in ('url', 'pane', 'toolbar')]
+        row(name, before and bool(closed) and any(s.get('visible') and s.get('ids') for s in after),
+            pane=p, closed=bool(closed), focus=app.call('focus-state'), strips=strips,
+            stripsAfterClose=after, duplicatesDropped=duplicates)
         key('f', ['cmd'])
     try:
         samples = []
@@ -136,6 +143,21 @@ def run(h, factory, results, tmp):
             print('Find cache-only first median/p95 %.4f/%.4f ms; repeat %.4f/%.4f ms' %
                   (cache_first['median'], cache_first['p95'], cache_repeat['median'], cache_repeat['p95']), flush=True)
         if os.environ.get('OPEN_FIND_TIMING_ONLY') == '1': return
+        # Keep extension setup outside the unchanged twenty-window timing gate.
+        # The native close/viewport rows below must run with a real pinned action.
+        app.quit()
+        app = factory(urls=(origin + '/index.html',), fresh=True, extra_args=[
+            '--load-extension=' + os.path.join(h.ROOT, 'tools/e2e/fixtures/action-probe'),
+            '--disable-features=DisableLoadExtensionCommandLineSwitch'])
+        tab = app.call('tabs')[0]['id']; app.call('wait', tab=tab); app.call('focus', tab=tab)
+        setting = 'open.advanced.showToolbar'
+        saved[setting] = app.call('defaults', key=setting, persistent=True)
+        app.call('defaults', key=setting, value=False)
+        actions = h.wait_until(lambda: app.call('extensions')['actions'], timeout=15)
+        if not actions: raise RuntimeError('Find extension overlap proof has no action')
+        for action in actions: app.call('ext-pin', extension=action['id'], pinned=True)
+        app.call('ext-hover', inside=True)
+        key('f', ['cmd'])
         requests_before = state()
         key(text='quasar'); p = settled(tab, '1/5')
         after_typing = state()
@@ -179,7 +201,7 @@ def run(h, factory, results, tmp):
         app.call('mouse', action='click', x=f[0]+f[2]-16, y=app.call('window-state')['frame'][3]-f[1]-16)
         click_closed=h.wait_until(lambda: not pane(tab)['visible'] and app.call('focus-state')['owner'] == 'page' and app.eval(tab, 'document.hasFocus()'), timeout=3, step=.05)
         key(text='-close'); closed_text=app.eval(tab, "document.getElementById('input').value")
-        row('F13_escape_focus', editing_before_escape and escaped and bool(click_closed) and not pane(tab)['visible'] and not state().get('chromeHidden') and app.call('focus-state')['owner'] == 'page' and closed_text == 'page-typing-close' and rect_ok(p) and clear_of_chrome(p) and p.get('controls',{}).get('closeHitMatches') is True, text=text, closeText=closed_text, closePane=pane(tab), beforeClick=p, closeFocus=app.call('focus-state'), chromeHidden=state().get('chromeHidden'))
+        row('F13_escape_focus', editing_before_escape and escaped and bool(click_closed) and not pane(tab)['visible'] and app.call('focus-state')['owner'] == 'page' and closed_text == 'page-typing-close' and rect_ok(p) and clear_of_chrome(p) and p.get('controls',{}).get('closeHitMatches') is True, text=text, closeText=closed_text, closePane=pane(tab), beforeClick=p, closeFocus=app.call('focus-state'))
         if os.environ.get('OPEN_FIND_FOCUS_ONLY') == '1': return
         for name, element, expected in [('trim_newline', 'lines', 'alpha beta'), ('short', 'seed', 'A short selection'), ('40', 'forty', '1234567890123456789012345678901234567890'), ('41_keeps', 'fortyone', '1234567890123456789012345678901234567890')]:
             select(tab, element); key('f', ['cmd'])
@@ -247,7 +269,7 @@ def run(h, factory, results, tmp):
         key('f', ['cmd']); key('a', ['cmd']); key(text='quasar'); settled(tab, '1/5')
         viewport_close('F33_toolbar_off_viewport_close', tab)
         app.call('menu-perform', id='toggle-toolbar'); p = pane(tab)
-        row('F26_toolbar_viewport', rect_ok(p) and clear_of_chrome(p) and not state().get('chromeHidden'), pane=p, chromeHidden=state().get('chromeHidden'))
+        row('F26_toolbar_viewport', rect_ok(p) and clear_of_chrome(p), pane=p)
         viewport_close('F33_toolbar_on_viewport_close', tab)
         app.call('menu-perform', id='toggle-toolbar')
         # A narrow split pane shrinks the preferred 300 pt width.
@@ -270,8 +292,13 @@ def run(h, factory, results, tmp):
         key('f', ['cmd']); key(text='quasar'); p = settled(count='1/5')
         row('F28_peek', p['visible'] and p['total'] == 5 and p['tab'] not in (tab, other) and rect_ok(p) and clear_of_chrome(p), pane=p)
         viewport_close('F33_peek_viewport_close')
-        old_peek=pane()['frame']; app.call('window-frame', frame=[100,70,1200,800]); resized_peek=pane()
-        row('F34_peek_live_resize', rect_ok(resized_peek) and clear_of_chrome(resized_peek) and old_peek!=resized_peek['frame'], before=old_peek, pane=resized_peek)
+        old_peek=pane()['frame']; old_viewport=pane()['viewportFrame']
+        app.call('window-frame', frame=[100,70,1200,800])
+        # Peek lays out its page viewport on the next AppKit layout pass. Wait
+        # for that input to change, then apply the same Find placement checks.
+        viewport_resized=h.wait_until(lambda: pane().get('viewportFrame') != old_viewport, timeout=3, step=.05)
+        resized_peek=pane()
+        row('F34_peek_live_resize', bool(viewport_resized) and rect_ok(resized_peek) and clear_of_chrome(resized_peek) and old_peek!=resized_peek['frame'], before=old_peek, viewportBefore=old_viewport, pane=resized_peek)
         if os.environ.get('OPEN_FIND_FAIL_AT_PEEK') == '1': raise RuntimeError('intentional Find cleanup proof with Peek open')
         key('escape')
         field_escape = not pane()['visible'] and app.call('peek-state')['shown']

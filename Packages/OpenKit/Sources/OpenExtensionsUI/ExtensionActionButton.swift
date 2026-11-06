@@ -13,8 +13,13 @@ public enum ExtensionActionIntent {
     public var tooltipStyle: SpaceThemeStyle?
     public private(set) var hovered = false
     public private(set) var pressed = false
+    /// In-process acceptance counter: draw calls, not state assignments.
+    public private(set) var redrawCount = 0
+    /// Optional in-process measurement hook. No scheduled work when it is nil.
+    public var onRedraw: (() -> Void)?
     private var tracking: NSTrackingArea?
     private var down: CGPoint?
+    private var downClosesPopup = false
     private var dragging = false
     private var plate = CALayer()
     public override var isFlipped: Bool { true }
@@ -32,9 +37,10 @@ public enum ExtensionActionIntent {
     public override func layout() { super.layout(); plate.frame = bounds }
     public func update(_ value: ExtensionActionInfo) {
         guard ExtensionsUIContext.accepts([value]) else { return }
+        let changed = action != value
         action = value
         setAccessibilityLabel(value.accessibleName); setAccessibilityIdentifier("extensionAction.\(value.id)")
-        updatePlate(animated: false); needsDisplay = true
+        updatePlate(animated: false); if changed { needsDisplay = true }
         if hovered && !isHiddenOrHasHiddenAncestor {
             TooltipController.shared.schedule(Tooltip(title: action.tooltip, keys: action.shortcutKeys,
                 style: tooltipStyle ?? .defaultTheme(system: contentAppearance)), for: self)
@@ -56,6 +62,7 @@ public enum ExtensionActionIntent {
     }
     public override func viewDidChangeEffectiveAppearance() { super.viewDidChangeEffectiveAppearance(); updatePlate(animated: false); needsDisplay = true }
     public override func draw(_ dirtyRect: NSRect) {
+        redrawCount += 1; onRedraw?()
         guard let image = action.toolbarImage else { return }
         Self.draw(image, centeredIn: bounds, scale: window?.backingScaleFactor ?? 2)
     }
@@ -95,7 +102,8 @@ public enum ExtensionActionIntent {
     public override func mouseDown(with event: NSEvent) {
         guard !isHiddenOrHasHiddenAncestor else { return }
         if event.modifierFlags.contains(.control) { rightMouseDown(with: event); return }
-        down = event.locationInWindow; dragging = false; pressed = true; updatePlate(animated: true)
+        down = event.locationInWindow; downClosesPopup = action.isShowingPopup
+        dragging = false; pressed = true; updatePlate(animated: true)
         TooltipController.shared.cancel(for: self)
     }
     public override func mouseDragged(with event: NSEvent) {
@@ -108,7 +116,12 @@ public enum ExtensionActionIntent {
         guard down != nil else { return }
         down = nil; pressed = false; updatePlate(animated: true)
         if dragging { dragging = false; onDragEnd?(event); return }
-        if bounds.contains(convert(event.locationInWindow, from: nil)) { activate() }
+        if bounds.contains(convert(event.locationInWindow, from: nil)) {
+            // Making the browser key can close its popup between down and up.
+            // This click still toggles that popup; it must not reopen it.
+            if downClosesPopup { onIntent?(.closePopup) } else { activate() }
+        }
+        downClosesPopup = false
     }
     public func activate() {
         guard !isHiddenOrHasHiddenAncestor else { return }
