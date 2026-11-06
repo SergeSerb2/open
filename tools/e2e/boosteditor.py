@@ -409,6 +409,36 @@ def run(factory, results, tmp, env):
                             negative=synced["boost"]["name"] != "Disabled Boost" and synced["boost"]["isEnabled"],editorStayedOpen=synced["open"],libraryAddedUndo=False,libraryNameBytesAccepted=16_384,libraryNameBytesRefused=16_385,originalFont=original,expectedFont=expected,
                             undo={k:undone.get(k) for k in ("name","isEnabled","fontFamily")},redo={k:redone.get(k) for k in ("name","isEnabled","fontFamily")})
             row("B22_library_reconcile_undo",b22)
+            def b24():
+                boostID=call()["boost"]["id"]
+                app.call("boost-library",action="rename",boost=boostID,name="Library color rename")
+                synced=call();assert synced["open"] and synced["boost"]["name"] == "Library color rename"
+                before=synced["boost"].get("colorWheel")
+                tap("editor.color.invert");edited=call()["boost"]
+                call("key",key="z",modifiers=["cmd"]);undone=call()["boost"]
+                call("key",key="z",modifiers=["cmd","shift"]);redone=call()["boost"]
+                keptName=all(b["name"] == "Library color rename" for b in (edited,undone,redone))
+                app.call("boost-library",action="rename",boost=boostID,name="Library rename")
+                return dict(positive=keptName and undone.get("colorWheel") == before and redone.get("colorWheel") == edited.get("colorWheel"),
+                            negative=edited.get("colorWheel") != before,editorStayedOpen=synced["open"],
+                            undoName=undone["name"],redoName=redone["name"])
+            row("B24_library_rename_color_undo",b24)
+            def b25():
+                boostID=call()["boost"]["id"]
+                app.call("boost-library",action="enabled",boost=boostID,enabled=True)
+                assert call()["boost"]["isEnabled"]
+                app.call("boost-library",action="enabled",boost=boostID,enabled=False)
+                synced=call();assert synced["open"] and not synced["boost"]["isEnabled"]
+                before=synced["boost"].get("textTransform")
+                tap("case");edited=call()["boost"]
+                call("key",key="z",modifiers=["cmd"]);undone=call()["boost"]
+                call("key",key="z",modifiers=["cmd","shift"]);redone=call()["boost"]
+                keptDisabled=all(not b["isEnabled"] for b in (edited,undone,redone))
+                app.call("boost-library",action="enabled",boost=boostID,enabled=True)
+                return dict(positive=keptDisabled and undone.get("textTransform") == before and redone.get("textTransform") == edited.get("textTransform"),
+                            negative=edited.get("textTransform") != before,editorStayedOpen=synced["open"],
+                            undoEnabled=undone["isEnabled"],redoEnabled=redone["isEnabled"])
+            row("B25_library_disable_edit_undo",b25)
             def b23():
                 boostID=call()["boost"]["id"]
                 tap("menu.Rename this Boost…");call("type",text="Editor rename");tap("alert.Done")
