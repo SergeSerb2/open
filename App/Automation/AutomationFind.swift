@@ -6,6 +6,14 @@ import Darwin
 /// the e2e launcher injects it into its own disposable App instance.
 @MainActor
 enum FindIdleProbe {
+  static func displayInfo(window: NSWindow?) -> [String: Any] {
+    func describe(_ screen: NSScreen?) -> [String: Any] {
+      guard let screen else { return [:] }
+      return ["name": screen.localizedName, "scale": screen.backingScaleFactor,
+        "maximumFPS": screen.maximumFramesPerSecond]
+    }
+    return ["main": describe(NSScreen.main), "window": describe(window?.screen)]
+  }
   static func perform(_ action: String, factory: EngineWebContentHostFactory) throws -> [String: Any] {
     func symbol(_ name: String) throws -> UnsafeMutableRawPointer {
       guard let value = dlsym(UnsafeMutableRawPointer(bitPattern: -2), name) else {

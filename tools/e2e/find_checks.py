@@ -26,6 +26,7 @@ def run(h, factory, results, tmp):
     private = os.path.join(h.ROOT, '.re', 'find')
     os.makedirs(private, exist_ok=True)
     def row(name, ok, **data):
+        data['display'] = state().get('display', {})
         results[name] = dict(ok=bool(ok), **data)
     def key(key=None, modifiers=(), text=None):
         return app.call('key', route='app', **({'text': text} if text is not None else {'key': key, 'modifiers': list(modifiers)}))
@@ -63,8 +64,10 @@ def run(h, factory, results, tmp):
         row('F02_open_focus_placeholder', p['visible'] and p['focused'] and p['placeholder'] == 'Find in page...', pane=p)
         row('F03_frame', rect_ok(p) and p['radius'] == 5 and p.get('controls',{}).get('closeHitMatches') is True, pane=p)
         load = subprocess.check_output(['uptime'], text=True).strip()
-        row('F04_one_frame', p['visible'] and state().get('presentationPhases', {}).get('commit', 999) <= 1000/120,
-            commitMilliseconds=state().get('presentationPhases', {}).get('commit'), dispatchMilliseconds=opening_key.get('dispatchMilliseconds'), scope='native key event timestamp to flushed visible Find layer in the initial settled window, with no Find warm-up; native field-editor focus completes in the same action', viewMilliseconds=state().get('presentationMilliseconds'), phases=state().get('presentationPhases'), deadline=1000/120, load=load)
+        fps=state().get('display',{}).get('window',{}).get('maximumFPS',0)
+        deadline=min(1000/120,1000/fps) if fps>0 else 0
+        row('F04_one_frame', p['visible'] and fps>0 and state().get('presentationPhases', {}).get('commit', 999) <= deadline,
+            commitMilliseconds=state().get('presentationPhases', {}).get('commit'), dispatchMilliseconds=opening_key.get('dispatchMilliseconds'), scope='native key event timestamp to flushed visible Find layer in the initial settled window, with no Find warm-up; native field-editor focus completes in the same action', viewMilliseconds=state().get('presentationMilliseconds'), phases=state().get('presentationPhases'), deadline=deadline, baseline120HzDeadline=1000/120, load=load)
         if os.environ.get('OPEN_FIND_TIMING_ONLY') == '1': return
         requests_before = state()
         key(text='quasar'); p = settled(tab, '1/5')

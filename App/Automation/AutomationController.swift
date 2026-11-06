@@ -651,7 +651,9 @@
       case "events":
         return w.drainEvents()
       case "find-state":
-        return w.findController?.automationState() ?? ["panes": [], "created": false, "pending": false]
+        var state = w.findController?.automationState() ?? ["panes": [], "created": false, "pending": false]
+        state["display"] = FindIdleProbe.displayInfo(window: w.window)
+        return state
       case "find-idle":
         return try FindIdleProbe.perform(a["action"] as? String ?? "read", factory: w)
       case "find":
