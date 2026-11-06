@@ -116,7 +116,9 @@ It covers filtered counts, session focus, archive dedupe, Settings re-import
 and merge Undo, corrupt input, save failure/retry, quitting before finish,
 and relaunch. Regression rows cover a browser Space rename saved when quitting
 during a Settings import, a zero-item sidebar finishing on the original default
-model, and Welcome counting after close and Dock reopen. It captures Welcome, Import, Progress, Report and the default
+model, Welcome counting after close and Dock reopen, and a Settings import
+preserving Never for a newly imported Profile after the first-run model swap.
+It captures Welcome, Import, Progress, Report and the default
 browser offer, compares progress-bar pixels, and measures heading clearance
 against native traffic-light frames. It never clicks the system-default setter.
 Receipts and images stay in the ignored suite output folder. See
