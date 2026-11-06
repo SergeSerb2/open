@@ -44,6 +44,19 @@ on-screen lock around one suite only; take the heavy slot around build steps.
 - Release builds include it only with `OPEN_AUTOMATION=1 tools/build.sh Release` (used for measurements). A normal Release build has no socket code at all.
 - Socket: `<data root>/automation.sock`, mode 0600. The data root is `$OPEN_USER_DATA` or `--user-data-dir=DIR`, else `~/Library/Application Support/Open-Dev` (Debug) or `.../Open` (Release); it holds `State/browser.json` and `Profiles/<dir>/{Engine,State}` (docs/plans/profiles.md §5). `--automation-socket=PATH` or `$OPEN_AUTOMATION_SOCKET` override the socket path. Code: `App/Automation/AutomationServer.swift`.
 
+First run is detected once, before data-root preparation, when
+`State/browser.json` does not exist. `--skip-first-run` or
+`OPEN_SKIP_FIRST_RUN=1` selects the normal browser path. `--arc-dir=PATH`
+overrides the read-only import source for tests and support. Always use a
+disposable Open root and a synthetic source for first-run automation.
+
+The shared e2e `Open` launcher adds `--skip-first-run` by default. Its direct
+early-quit, missing-engine, and migration launches do the same. All suite
+modules, peer launches, and benchmarks use that launcher. `tools/run.sh` and
+the release smoke launch also pass the switch. `tools/openctl` connects to
+an existing socket and never launches the App. `verify-all.sh` runs package
+CLIs, not the App. Only the `firstrun` suite opts into first run.
+
 ## Protocol
 
 One JSON object per line in each direction.
@@ -80,6 +93,37 @@ Arguments are `key=value`; values that parse as JSON are sent as JSON.
 - No `tab`: the selected tab.
 
 ## Commands
+
+`first-run` returns `{active, step, completed}` even when there is no browser
+window. Optional `action` drives the same view-model methods as the buttons:
+`import`, `fresh`, `continue`, `notnow`, `back`, `finish`, `retry`, or
+`choose-dir` with `directory=PATH`. `retry` on a save-error Report retries
+the pending model's save. Directory strings are limited to 4096 UTF-8 bytes;
+action names to 32. There is no action that changes the system default browser.
+
+For native evidence, `focus` grants input focus to this instance's first-run
+window. `inspect` reads its rendered text and top-left text frames using
+Vision on a snapshot of that window only. State includes its native frame
+size, key flag, and traffic-light frames. `snapshot` prefers the first-run
+panel while it exists. `OPEN_AUTOMATION_IMPORT_DELAY_MS` (automation builds
+only, at most 5000 ms) holds the real progress view for animation captures.
+
+The same command also drives the visible Settings sheet after first run:
+`settings-import` with `directory=PATH`, `settings-next`, `settings-run`,
+and `settings-done`. State then includes `settingsStep`, `settingsOutcome`,
+and `settingsError`. These actions use the real cached wizard and shared App
+runner. History has an explicit phase-3 seam; passwords/cookies stay disabled.
+
+Run the synthetic first-run flow with:
+
+```sh
+/usr/bin/lockf -k /tmp/open-onscreen-e2e.lock python3 tools/e2e/engine_e2e.py --config Debug --style chrome --only firstrun
+```
+
+The suite restores shared defaults in `finally`, checks owned-process/window
+cleanup, and writes uncommitted receipts and native PNGs under
+`docs/engine-spike/`. Its five first-content timing samples include loads;
+loaded Debug numbers are upper bounds, not idle Release budget acceptance.
 
 | Command | Args | Result |
 |---|---|---|

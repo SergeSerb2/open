@@ -591,6 +591,152 @@ public final class BrowserModel {
         if group { um.endUndoGrouping() }
     }
 
+    /// Counts from an ID-preserving sidebar merge. Archive/history belong to stores.
+    public struct ImportCounts {
+        public var spaces = 0, tabs = 0, favorites = 0, folders = 0, searchSettings = 0, duplicates = 0
+        public init() {}
+    }
+
+    /// Imports into the live model without changing existing Space metadata, item
+    /// order or selection. Source objects are copied with their stable IDs. The
+    /// durable save is part of the command: failure reverses edits and registers
+    /// no undo. Success registers the whole merge as one undo step.
+    @discardableResult
+    public func mergeImportedSidebar(_ source: BrowserModel, profileMapping: [ProfileID: ProfileID],
+                                     spaces includeSpaces: Bool, tabs includeTabs: Bool,
+                                     favorites includeFavorites: Bool, folders includeFolders: Bool,
+                                     searchSettings includeSearch: Bool, saving: () throws -> Void) throws -> ImportCounts {
+        typealias Edit = (apply: @MainActor (BrowserModel) -> Void, undo: @MainActor (BrowserModel) -> Void)
+        var edits: [Edit] = []
+        var counts = ImportCounts()
+        func perform(_ apply: @escaping @MainActor (BrowserModel) -> Void,
+                     undo: @escaping @MainActor (BrowserModel) -> Void) {
+            apply(self); edits.append((apply, undo))
+        }
+        func copyTab(_ tab: Tab) -> Tab {
+            Tab(id: tab.id, url: tab.url, title: tab.title, customTitle: tab.customTitle,
+                pinnedURL: tab.pinnedURL, customIcon: tab.customIcon, iconOverride: tab.iconOverride,
+                createdAt: tab.createdAt, lastActiveAt: tab.lastActiveAt, isMuted: tab.isMuted,
+                openerID: tab.openerID, isUnread: tab.isUnread)
+        }
+        func add(_ node: SidebarNode, to parent: NodeParent) {
+            let slot: Int
+            switch parent {
+            case .spacePinned(let id): slot = space(id: id)?.pinned.count ?? 0
+            case .spaceToday(let id): slot = space(id: id)?.today.count ?? 0
+            case .favorites(let id): slot = profile(id: id)?.favorites.count ?? 0
+            case .folder(let id): slot = self.node(id: id)?.folder?.children.count ?? 0
+            case .splitPane(let id): slot = self.node(id: id)?.split?.panes.count ?? 0
+            }
+            perform({ _ = $0.attach(node, to: parent, at: slot) }, undo: { model in
+                if model.parent(of: node.id) == parent { _ = model.detach(node.id) }
+            })
+        }
+        func merge(_ nodes: [SidebarNode], into parent: NodeParent) {
+            for node in nodes {
+                switch node {
+                case .folder(let folder):
+                    if let existing = self.node(id: folder.id)?.folder {
+                        if includeFolders { counts.duplicates += 1 }
+                        merge(folder.children, into: .folder(existing.id))
+                    } else if includeFolders, self.node(id: folder.id) == nil {
+                        let copy = Folder(id: folder.id, title: folder.title, isExpanded: folder.isExpanded,
+                                          customIcon: folder.customIcon, iconOverride: folder.iconOverride)
+                        add(.folder(copy), to: parent); counts.folders += 1
+                        merge(folder.children, into: .folder(copy.id))
+                    } else { merge(folder.children, into: parent) }
+                case .tab(let tab):
+                    guard includeTabs else { continue }
+                    if self.node(id: tab.id) != nil { counts.duplicates += 1 }
+                    else { add(.tab(copyTab(tab)), to: parent); counts.tabs += 1 }
+                case .split(let split):
+                    guard includeTabs else { continue }
+                    let panes = split.panes.filter { tab in
+                        if self.node(id: tab.id) != nil { counts.duplicates += 1; return false }
+                        return true
+                    }.map(copyTab)
+                    if self.node(id: split.id) != nil {
+                        for tab in panes { add(.tab(tab), to: parent); counts.tabs += 1 }
+                    } else if panes.count >= 2 {
+                        let focused = panes.contains { $0.id == split.focusedPaneID } ? split.focusedPaneID : panes.first?.id
+                        add(.split(Split(id: split.id, orientation: split.orientation, fractions: panes.count == split.panes.count ? split.fractions : [], panes: panes, focusedPaneID: focused)), to: parent)
+                        counts.tabs += panes.count
+                    } else if let tab = panes.first { add(.tab(tab), to: parent); counts.tabs += 1 }
+                }
+            }
+        }
+        for imported in source.profiles {
+            let id = profileMapping[imported.id] ?? imported.id
+            if profile(id: id) == nil {
+                guard includeSpaces || includeFavorites else { continue }
+                var name = imported.name
+                var suffix = 2
+                while profiles.contains(where: { $0.name.caseInsensitiveCompare(name) == .orderedSame }) {
+                    name = imported.name + " (" + String(suffix) + ")"; suffix += 1
+                }
+                let copy = Profile(id: id, name: name, icon: imported.icon, dataDirectoryName: imported.dataDirectoryName)
+                let slot = profiles.count
+                perform({ model in model.insertProfile(copy, at: slot); model.emit(.reload(parent: .favorites(id))) },
+                        undo: { model in model.removeProfile(id); model.emit(.reload(parent: .favorites(id))) })
+            }
+            guard let target = profile(id: id) else { continue }
+            if includeSearch {
+                var settings = target.settings
+                settings.searchEngineID = imported.settings.searchEngineID
+                settings.customSearchEngines = imported.settings.customSearchEngines
+                if settings != target.settings {
+                    let old = target.settings, new = settings
+                    perform({ _ in target.settings = new }, undo: { _ in target.settings = old })
+                    counts.searchSettings += 1
+                }
+            }
+            if includeFavorites {
+                for tab in imported.favorites {
+                    if node(id: tab.id) != nil { counts.duplicates += 1 }
+                    else { add(.tab(copyTab(tab)), to: .favorites(id)); counts.favorites += 1 }
+                }
+            }
+        }
+        for imported in source.spaces {
+            if space(id: imported.id) != nil {
+                if includeSpaces { counts.duplicates += 1 }
+            } else if includeSpaces, let profile = profile(id: profileMapping[imported.profileID] ?? imported.profileID) {
+                let copy = Space(id: imported.id, title: imported.title, icon: imported.icon, theme: imported.theme,
+                                 profileID: profile.id, isPinnedCollapsed: imported.isPinnedCollapsed)
+                let slot = spaces.count
+                perform({ model in model.insertSpace(copy, at: slot); model.emit(.reload(parent: .spaceToday(copy.id))) },
+                        undo: { model in model.removeSpace(copy.id); model.emit(.reload(parent: .spaceToday(copy.id))) })
+                counts.spaces += 1
+            }
+            // If Spaces is off, only an existing Space with the same ID can gain items.
+            guard space(id: imported.id) != nil else { continue }
+            merge(imported.pinned, into: .spacePinned(imported.id))
+            merge(imported.today, into: .spaceToday(imported.id))
+        }
+        if includeSpaces {
+            let ids = Set(routingRules.map(\.id))
+            // Arc's importer assigns fresh rule IDs. Treat the same rule body
+            // as a duplicate too, so a Settings re-import remains idempotent.
+            let rules = source.routingRules.filter { candidate in
+                !ids.contains(candidate.id) && !routingRules.contains {
+                    $0.match == candidate.match && $0.destination == candidate.destination && $0.sourceBundleID == candidate.sourceBundleID
+                }
+            }
+            if !rules.isEmpty {
+                perform({ $0.routingRules += rules }, undo: { model in
+                    let added = Set(rules.map(\.id)); model.routingRules.removeAll { added.contains($0.id) }
+                })
+            }
+        }
+        do { try saving() }
+        catch { for edit in edits.reversed() { edit.undo(self) }; throw error }
+        guard !edits.isEmpty else { return counts }
+        let committed = edits
+        registerChange(undo: { [weak self] in guard let self else { return }; for edit in committed.reversed() { edit.undo(self) } },
+                       redo: { [weak self] in guard let self else { return }; for edit in committed { edit.apply(self) } })
+        return counts
+    }
+
     // MARK: - Commands: tabs
 
     /// Copies a whole sidebar subtree immediately after its source, with fresh
