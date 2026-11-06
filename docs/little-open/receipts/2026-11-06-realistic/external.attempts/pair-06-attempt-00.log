@@ -1,0 +1,47 @@
+{"build": "main", "pair": 6, "scenario": "external", "load": [5.04150390625, 5.4375, 6.31640625], "endLoad": [5.04150390625, 5.4375, 6.31640625], "uptime": "4:49  up 19:33, 7 users, load averages: 5.04 5.44 6.32", "firstContentfulPaintMs": 108, "baselineRSS": 569819136, "loadedRSS": 950403072, "windowRSS": 380583936, "processCount": 6, "foregroundInterruptions": [], "openToFCPMs": 266.49609375, "clockDriftMs": -0.008705078125046839, "openToReadyMs": 271.3332500000001, "requestWallMs": 1793965773034.7039, "fcpWallMs": 1793965773301.2, "routing": {"profileHint": "<fresh-generated-profile>", "url": "http://127.0.0.1:52957/plain.html?sample=6"}}
+{"build": "branch", "pair": 6, "scenario": "external", "load": [5.04150390625, 5.4375, 6.31640625], "endLoad": [5.04150390625, 5.4375, 6.31640625], "uptime": "4:49  up 19:33, 7 users, load averages: 5.04 5.44 6.32", "firstContentfulPaintMs": 108, "baselineRSS": 567836672, "loadedRSS": 954171392, "windowRSS": 386334720, "processCount": 6, "foregroundInterruptions": [], "openToFCPMs": 265.962890625, "clockDriftMs": -0.00027734375021282176, "openToReadyMs": 271.6957080000002, "requestWallMs": 1793965774868.237, "fcpWallMs": 1793965775134.2, "routing": {"profileHint": "<fresh-generated-profile>", "url": "http://127.0.0.1:52957/plain.html?sample=6"}, "browserCreationToReadyMs": 124.30833332473412, "firstFrameToBrowserCreationMs": 0.6894999969517812}
+{
+  "configuration": "Release",
+  "scenario": "external",
+  "reportOnly": true,
+  "method": "automation request start to first native display-link tick; page submit to loading=false plus document complete and first contentful paint",
+  "externalMethod": "time before LaunchServices open(1) delivery to performance.timeOrigin + FCP; wall/monotonic clock stability checked",
+  "typedDelayMs": 0,
+  "memory": "App metrics totalRSS: App and owned helpers; one loaded window minus baseline",
+  "partialPair": 6,
+  "summary": {
+    "main": {
+      "openToFCPMs": {
+        "median": 266.49609375,
+        "p95": 266.49609375
+      },
+      "windowRSS": {
+        "median": 380583936,
+        "p95": 380583936
+      },
+      "loadedRSS": {
+        "median": 950403072,
+        "p95": 950403072
+      }
+    },
+    "branch": {
+      "openToFCPMs": {
+        "median": 265.962890625,
+        "p95": 265.962890625
+      },
+      "windowRSS": {
+        "median": 386334720,
+        "p95": 386334720
+      },
+      "loadedRSS": {
+        "median": 954171392,
+        "p95": 954171392
+      },
+      "browserCreationToReadyMs": {
+        "median": 124.30833332473412,
+        "p95": 124.30833332473412
+      }
+    }
+  },
+  "extraHiddenBrowserRSS": 5750784
+}

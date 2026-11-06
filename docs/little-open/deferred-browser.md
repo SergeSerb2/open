@@ -14,7 +14,7 @@ Section 11 must still consume `StandalonePageSurface` for dialogs and permission
 
 ## Timing method
 
-Use `tools/e2e/littleopen_bench.py` under quiet then on-screen `lockf -k`, or `tools/e2e/littleopen_bench_series.py` under the outer quiet lock, with fresh App/profile/cache per sample, alternating pair order, automation Release, and the same engine and display. Every measured load1 must be at most 12. First frame uses the existing native display-link probe. Page load keeps PR #185's native-field submit to loading=false, document complete, and FCP endpoint. The series runner releases the screen lock after each complete interleaved pair. It waits for low load holding only the quiet lock; an entire incomplete pair is discarded solely if load1 exceeds 12. Every attempt is retained. `--pair-index` outputs are explicitly partial and cannot serve as aggregate acceptance. The series requires 10–100 samples per build and applies the same strict median/p95 gates. No warm-up delay is added before submit. Browser creation to page ready starts immediately before Browser construction and ends at that same page-ready observation; it can include the time before native submit.
+Use `tools/e2e/littleopen_bench.py` under quiet then on-screen `lockf -k`, or `tools/e2e/littleopen_bench_series.py` under the outer quiet lock, with fresh App/profile/cache per sample, alternating pair order, automation Release, and the same engine and display. Every measured load1 must be at most 12. First frame uses the existing native display-link probe. Page load keeps PR #185's native-field submit to loading=false, document complete, and FCP endpoint. The series runner releases the screen lock after each complete interleaved pair. It waits for low load holding only the quiet lock; an entire incomplete pair is discarded solely if load1 exceeds 12. Every attempt is retained. `--pair-index` outputs are explicitly partial and cannot serve as aggregate acceptance. The series requires 10–100 samples per build and applies the same strict median/p95 gates. The original `immediate` scenario adds no warm-up delay before submit. The `typed` scenario waits 400 ms from the blank-open response, counting frame observation inside that delay. The `external` scenario uses the `littleopen` suite’s LaunchServices delivery (`/usr/bin/open -a <owned bundle> <fixture URL>`), so routing receives the URL at open. Its metric starts before that request and ends at the page’s `performance.timeOrigin + first-contentful-paint` timestamp. The runner checks wall-clock stability against its monotonic clock. `--report-only` records these measurements without a performance verdict; the original default gate remains unchanged. Browser creation to page ready starts immediately before Browser construction and ends at that same page-ready observation; it can include the time before native submit.
 
 The old synchronous receipt on engine `3f45b07b` compared main `ffcf4649` with branch `621c537f` (10 pairs, load1 8.57–9.80):
 
@@ -72,3 +72,30 @@ The final 30-pair receipt uses the retained native-frame/direct-creation path af
 | Browser creation to page ready | — | 146.63 / 229.81 | Diagnostic |
 
 Added memory is **5.26 MiB/window**, compared with the original 5.48 MiB. Raw receipt: `.re/surface-hook/deferred-190-final-series-30.json`. The independent frame probe confirms creation follows the first native frame. The page-load acceptance is not met, so PR #185 remains draft even though the functional checks pass. No Chromium tree or patch was changed. Further performance work remains for the Section 9 lead; no new engine cause is claimed from these timings alone.
+
+## Realistic timing
+
+Measured on 2026-11-06 with unchanged current `origin/main` `e83dc38faf36d6fdf6beaa73ea4dfd79d8994e34` and branch `4e57a018588304f78957e034d9dc679aaa040282`. The branch already contains that main commit. Its product code is identical to PR head `43e8062e`; only benchmark tooling changed. Both automation Release builds pass and use engine `3f45b07b885e03b6aecc461c6b6bff7612814a2ad23b6cf37b2b142d828f0738`, with matching engine code fingerprints. App executable hashes are unchanged after all measurements. The display is the AW2726DM, 2560×1440, 1×.
+
+Each path has **20 complete interleaved pairs**, with main/branch order alternating. Every sample starts a fresh App, profile and cache. The same outer quiet-lock session contains all three series; every pair takes its own on-screen `lockf -k`. Low-load and screen-access waits hold only the quiet lock. All 120 owned-process cleanup checks pass, with zero recorded foreground interruptions. All complete pairs in the corrected series are included. All medians use 20 samples per build; p95 is the nearest-rank 19th sorted sample.
+
+| Path, median / p95, ms | Main | Deferred branch | Load1 range |
+|---|---:|---:|---:|
+| Typed URL: 400 ms wait, submit → page ready | 64.34 / 89.17 | 72.05 / 94.85 | 4.08–6.58 |
+| External link: open request → FCP | 265.00 / 281.63 | 277.98 / 291.64 | 4.21–6.98 |
+
+Typed URL opens a blank Little Open through the existing automation entry for the ⌥⌘N flow, waits 400 ms from its response, then submits the fixture URL through the native field. Frame observation is inside that wait. The measured response-to-submit-request delay is **400.25–410.07 ms**. The endpoint remains the PR’s submit-request → loading=false + document complete + FCP observation.
+
+External link uses `littleopen_checks.deliver`’s LaunchServices entry, `/usr/bin/open -a <owned bundle> <fixture URL>`. It reaches routing intake and the `open(url:)` path with the URL known at open. Its total starts before delivery and ends at the document’s `performance.timeOrigin + FCP`, including LaunchServices, window, first frame, Browser creation and load. Maximum wall/monotonic clock drift is **0.012 ms**. Routing receipts confirm the fixture URL. This endpoint is distinct from the later page-ready observation.
+
+The existing immediate-submit path is recorded again in the same session, at load1 **6.98–11.73**:
+
+| Immediate-submit diagnostic, median / p95, ms | Main | Deferred branch |
+|---|---:|---:|
+| First native frame | 77.65 / 94.27 | 65.03 / 70.48 |
+| Immediate submit → page ready | 119.28 / 157.42 | 120.46 / 182.30 |
+| Browser creation → page ready | — | 135.14 / 206.09 |
+
+These tables report measurements only. **The Section 9 lead decides acceptance; PR #185 stays draft.** The earlier 30-pair receipt and its original verdict remain above as history.
+
+Committed receipts, all 60 paired attempt receipts/logs, and source/binary provenance are in [receipts/2026-11-06-realistic](receipts/2026-11-06-realistic/README.md). An earlier exploratory typed run was interrupted after a new audit field mixed Python and App clock domains. Its page timing used one clock, but that entire run is excluded from these tables. The raw exploratory receipts remain at `.re/surface-hook/realistic-clock-audit-interrupted/`. The corrected audit uses one clock, and all three final series start again from pair zero.

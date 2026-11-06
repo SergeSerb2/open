@@ -1,0 +1,12 @@
+{
+  "mainSHA": "e83dc38faf36d6fdf6beaa73ea4dfd79d8994e34",
+  "benchmarkSHA": "4e57a018588304f78957e034d9dc679aaa040282",
+  "productSHA": "43e8062e568260c3cd20567b03f1504e28033f5e",
+  "engineSHA256": "3f45b07b885e03b6aecc461c6b6bff7612814a2ad23b6cf37b2b142d828f0738",
+  "display": "AW2726DM 2560x1440 1x",
+  "appSHA256": {
+    "main": "2cf3284d81bd7828ba0601a3a1603778db411fdf184ee6754634e3df8e1b708e",
+    "branch": "c89957f60677a0b843a18bc24b1526bab9c501bb734cc6aee42d475e9bffdfda"
+  },
+  "appHashesUnchangedAfterMeasurement": true
+}
