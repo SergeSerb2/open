@@ -1,0 +1,542 @@
+{
+  "cleanup": {
+    "ok": true,
+    "processes": [
+      {
+        "error": "[Errno 2] No such file or directory",
+        "forced": false,
+        "ok": true,
+        "owned_pids": [
+          38277,
+          38407,
+          38408,
+          38410,
+          38411,
+          38643,
+          38749,
+          38750,
+          38751
+        ],
+        "remaining_processes": [],
+        "windows_after_quit": {
+          "count": 0,
+          "windows": []
+        },
+        "windows_before_quit": 0
+      },
+      {
+        "error": "[Errno 2] No such file or directory",
+        "forced": false,
+        "ok": true,
+        "owned_pids": [
+          39015,
+          39087,
+          39088,
+          39092,
+          39093
+        ],
+        "remaining_processes": [],
+        "windows_after_quit": {
+          "count": 0,
+          "windows": []
+        },
+        "windows_before_quit": 0
+      }
+    ]
+  },
+  "config": "Debug",
+  "downloads": {
+    "cancel": {
+      "ok": true,
+      "row": {
+        "buttons": [],
+        "id": "Default:1",
+        "subtitle": "Cancelled"
+      }
+    },
+    "cancel_save_from_library": {
+      "item": {
+        "fileExists": false,
+        "id": "Default:8",
+        "name": "sample.txt",
+        "path": "",
+        "profile": "00F82ADE-19E3-4810-BB65-F460C776BF46",
+        "received": 0,
+        "speed": 0,
+        "state": "cancelled",
+        "total": 33554432
+      },
+      "ok": true,
+      "sheets": []
+    },
+    "completed_subtitle": {
+      "ok": true,
+      "row": {
+        "buttons": [
+          "Show in Finder"
+        ],
+        "id": "Default:5",
+        "subtitle": "Completed · $TMPDIR/Open-E2E-downloads-chrome-38058-7e6be0f4-scratch-vghp4_xg/downloads-attempt-itb49qnf/first/sample (7).txt"
+      }
+    },
+    "completion_motion": {
+      "after": {
+        "animations": 0,
+        "checkOpacity": 0,
+        "completing": false,
+        "completions": 6,
+        "homeDuration": 0,
+        "homeOpacity": 1,
+        "indeterminate": false,
+        "lineWidth": 2,
+        "progress": 0,
+        "reduceMotion": false,
+        "ringBounds": [
+          3,
+          3,
+          26,
+          26
+        ],
+        "ringFadeDuration": 0,
+        "ringOpacity": 0,
+        "running": 0,
+        "spring": {},
+        "trackOpacity": 0
+      },
+      "during": {
+        "animations": 5,
+        "checkOpacity": 0,
+        "completing": true,
+        "completions": 6,
+        "homeDuration": 1.45,
+        "homeOpacity": 1,
+        "indeterminate": false,
+        "lineWidth": 2,
+        "progress": 0,
+        "reduceMotion": false,
+        "ringBounds": [
+          3,
+          3,
+          26,
+          26
+        ],
+        "ringFadeDuration": 0.8,
+        "ringOpacity": 0,
+        "running": 0,
+        "spring": {
+          "damping": 25.132741228718345,
+          "duration": 0.5,
+          "mass": 1,
+          "stiffness": 157.91367041742973
+        },
+        "trackOpacity": 0
+      },
+      "ok": true
+    },
+    "completion_reduced": {
+      "after": {
+        "animations": 0,
+        "checkOpacity": 0,
+        "completing": false,
+        "completions": 7,
+        "homeDuration": 0,
+        "homeOpacity": 1,
+        "indeterminate": false,
+        "lineWidth": 2,
+        "progress": 0,
+        "reduceMotion": true,
+        "ringBounds": [
+          3,
+          3,
+          26,
+          26
+        ],
+        "ringFadeDuration": 0,
+        "ringOpacity": 0,
+        "running": 0,
+        "spring": {},
+        "trackOpacity": 0
+      },
+      "during": {
+        "animations": 4,
+        "checkOpacity": 0,
+        "completing": true,
+        "completions": 7,
+        "homeDuration": 1.45,
+        "homeOpacity": 1,
+        "indeterminate": false,
+        "lineWidth": 2,
+        "progress": 0,
+        "reduceMotion": true,
+        "ringBounds": [
+          3,
+          3,
+          26,
+          26
+        ],
+        "ringFadeDuration": 0.8,
+        "ringOpacity": 0,
+        "running": 0,
+        "spring": {},
+        "trackOpacity": 0
+      },
+      "ok": true
+    },
+    "copy_file_url": {
+      "copied": "file://$TMPDIR/Open-E2E-downloads-chrome-38058-7e6be0f4-scratch-vghp4_xg/downloads-attempt-itb49qnf/first/sample%20(7).txt",
+      "ok": true
+    },
+    "failed_subtitle": {
+      "item": {
+        "fileExists": false,
+        "id": "Default:3",
+        "name": "sample.txt",
+        "path": "",
+        "profile": "00F82ADE-19E3-4810-BB65-F460C776BF46",
+        "received": 0,
+        "speed": 0,
+        "state": "failed",
+        "total": 13107200
+      },
+      "ok": true,
+      "row": {
+        "buttons": [
+          "Retry"
+        ],
+        "id": "Default:3",
+        "subtitle": "Failed to Download"
+      }
+    },
+    "finished_menu_order": {
+      "ok": true,
+      "titles": [
+        "Open text",
+        "Copy text",
+        "Show in Finder",
+        "separator",
+        "Hide from Open",
+        "Move to Trash"
+      ]
+    },
+    "folder_unique": {
+      "ok": true,
+      "paths": [
+        "$TMPDIR/Open-E2E-downloads-chrome-38058-7e6be0f4-scratch-vghp4_xg/downloads-attempt-itb49qnf/first/sample (6).txt",
+        "$TMPDIR/Open-E2E-downloads-chrome-38058-7e6be0f4-scratch-vghp4_xg/downloads-attempt-itb49qnf/first/sample (7).txt"
+      ]
+    },
+    "hide": {
+      "ok": true
+    },
+    "home_progress": {
+      "badge": {
+        "animations": 0,
+        "checkOpacity": 0,
+        "completing": false,
+        "completions": 0,
+        "homeDuration": 0,
+        "homeOpacity": 1,
+        "indeterminate": false,
+        "lineWidth": 2,
+        "progress": 0.005859375,
+        "reduceMotion": false,
+        "ringBounds": [
+          3,
+          3,
+          26,
+          26
+        ],
+        "ringFadeDuration": 0,
+        "ringOpacity": 1,
+        "running": 1,
+        "spring": {},
+        "trackOpacity": 1
+      },
+      "ok": true
+    },
+    "home_recent_entry": {
+      "ok": true
+    },
+    "home_recent_new_window": {
+      "ok": true
+    },
+    "home_running_entry": {
+      "ok": true
+    },
+    "idle_observer_canary": {
+      "canary": {
+        "after": 0,
+        "live": 1
+      },
+      "ok": true
+    },
+    "idle_zero": {
+      "counts": [
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0
+      ],
+      "elapsed": 2.0130092080000033,
+      "load": [
+        16.99267578125,
+        12.0458984375,
+        12.0361328125
+      ],
+      "ok": true,
+      "publishes": [
+        73,
+        73
+      ]
+    },
+    "live_subtitle": {
+      "item": {
+        "fileExists": false,
+        "id": "Default:1",
+        "name": "sample (1).txt",
+        "path": "$TMPDIR/Open-E2E-downloads-chrome-38058-7e6be0f4-scratch-vghp4_xg/downloads-attempt-itb49qnf/first/sample (1).txt",
+        "profile": "00F82ADE-19E3-4810-BB65-F460C776BF46",
+        "received": 196608,
+        "speed": 196608,
+        "state": "inProgress",
+        "total": 33554432
+      },
+      "ok": true,
+      "row": {
+        "buttons": [
+          "Pause",
+          "Cancel"
+        ],
+        "id": "Default:1",
+        "subtitle": "197 KB/33.6 MB · 197 KB/s · from 127.0.0.1"
+      }
+    },
+    "menu_cancel": {
+      "ok": true
+    },
+    "missing_folder_fallback": {
+      "fallbacks": 1,
+      "item": {
+        "fileExists": true,
+        "id": "Default:9",
+        "name": "open-e2e-fallback-38058.txt",
+        "path": "$TMPDIR/Open-E2E-downloads-chrome-38058-7e6be0f4-scratch-vghp4_xg/downloads-attempt-itb49qnf/DefaultDownloads/open-e2e-fallback-38058.txt",
+        "profile": "00F82ADE-19E3-4810-BB65-F460C776BF46",
+        "received": 131072,
+        "speed": 0,
+        "state": "completed",
+        "total": 131072
+      },
+      "ok": true
+    },
+    "open_copy_reveal": {
+      "actions": [
+        {
+          "action": "open",
+          "url": "file://$TMPDIR/Open-E2E-downloads-chrome-38058-7e6be0f4-scratch-vghp4_xg/downloads-attempt-itb49qnf/first/sample%20(7).txt"
+        },
+        {
+          "action": "copy",
+          "url": "file://$TMPDIR/Open-E2E-downloads-chrome-38058-7e6be0f4-scratch-vghp4_xg/downloads-attempt-itb49qnf/first/sample%20(7).txt"
+        },
+        {
+          "action": "reveal",
+          "url": "file://$TMPDIR/Open-E2E-downloads-chrome-38058-7e6be0f4-scratch-vghp4_xg/downloads-attempt-itb49qnf/first/sample%20(7).txt"
+        }
+      ],
+      "ok": true
+    },
+    "open_file": {
+      "error": "",
+      "ok": true,
+      "receipt": {
+        "bytes": 131072,
+        "pid": 38643,
+        "sha256": "9b5b8e701fa00856d9a55089c7a07190f84a113ca41fbc15b7497ad36d5d3a43",
+        "url": "file://$TMPDIR/Open-E2E-downloads-chrome-38058-7e6be0f4-scratch-vghp4_xg/downloads-attempt-itb49qnf/first/sample%20(7).txt"
+      }
+    },
+    "pause": {
+      "ok": true,
+      "received": [
+        196608,
+        196608
+      ],
+      "row": {
+        "buttons": [
+          "Resume",
+          "Cancel"
+        ],
+        "id": "Default:1",
+        "subtitle": "Paused"
+      }
+    },
+    "profile_folder": {
+      "item": {
+        "fileExists": true,
+        "id": "Profile-8737DE91:1",
+        "name": "sample.txt",
+        "path": "$TMPDIR/Open-E2E-downloads-chrome-38058-7e6be0f4-scratch-vghp4_xg/downloads-attempt-itb49qnf/second/sample.txt",
+        "profile": "02D434C4-AA8B-40F6-838E-105E4F8A239A",
+        "received": 131072,
+        "speed": 0,
+        "state": "completed",
+        "total": 131072
+      },
+      "ok": true
+    },
+    "quit_close": {
+      "ok": true
+    },
+    "quit_empty": {
+      "ok": true
+    },
+    "quit_keep": {
+      "alerts": [
+        {
+          "body": "There are downloads in progress. Closing the application will cancel them.",
+          "buttons": [
+            "Close Open",
+            "Keep browsing"
+          ],
+          "title": "Downloads in progress"
+        }
+      ],
+      "ok": true
+    },
+    "resume": {
+      "item": {
+        "fileExists": false,
+        "id": "Default:1",
+        "name": "sample (1).txt",
+        "path": "$TMPDIR/Open-E2E-downloads-chrome-38058-7e6be0f4-scratch-vghp4_xg/downloads-attempt-itb49qnf/first/sample (1).txt",
+        "profile": "00F82ADE-19E3-4810-BB65-F460C776BF46",
+        "received": 950272,
+        "speed": 316757,
+        "state": "inProgress",
+        "total": 33554432
+      },
+      "ok": true
+    },
+    "running_menu_order": {
+      "ok": true,
+      "titles": [
+        "Open text",
+        "Copy text",
+        "Show in Finder",
+        "separator",
+        "Cancel Download",
+        "separator",
+        "Hide from Open"
+      ]
+    },
+    "save_accept": {
+      "item": {
+        "fileExists": true,
+        "id": "Default:6",
+        "name": "chosen.txt",
+        "path": "$TMPDIR/Open-E2E-downloads-chrome-38058-7e6be0f4-scratch-vghp4_xg/downloads-attempt-itb49qnf/chosen.txt",
+        "profile": "00F82ADE-19E3-4810-BB65-F460C776BF46",
+        "received": 131072,
+        "speed": 0,
+        "state": "completed",
+        "total": 131072
+      },
+      "ok": true
+    },
+    "save_cancel": {
+      "item": {
+        "fileExists": false,
+        "id": "Default:7",
+        "name": "sample.txt",
+        "path": "",
+        "profile": "00F82ADE-19E3-4810-BB65-F460C776BF46",
+        "received": 0,
+        "speed": 0,
+        "state": "cancelled",
+        "total": 131072
+      },
+      "ok": true
+    },
+    "save_sheet": {
+      "ok": true,
+      "sheet": {
+        "directory": "$TMPDIR/Open-E2E-downloads-chrome-38058-7e6be0f4-scratch-vghp4_xg/downloads-attempt-itb49qnf/first",
+        "id": "Default:6",
+        "name": "sample.txt",
+        "sheet": true,
+        "visible": true
+      }
+    },
+    "shortcut": {
+      "ok": true
+    },
+    "trash": {
+      "ok": true
+    },
+    "unknown_total": {
+      "badge": {
+        "animations": 1,
+        "checkOpacity": 0,
+        "completing": false,
+        "completions": 0,
+        "homeDuration": 0,
+        "homeOpacity": 1,
+        "indeterminate": true,
+        "lineWidth": 2,
+        "progress": 0,
+        "reduceMotion": false,
+        "ringBounds": [
+          3,
+          3,
+          26,
+          26
+        ],
+        "ringFadeDuration": 0,
+        "ringOpacity": 1,
+        "running": 1,
+        "spring": {},
+        "trackOpacity": 1
+      },
+      "ok": true,
+      "row": {
+        "buttons": [
+          "Pause",
+          "Cancel"
+        ],
+        "id": "Default:2",
+        "subtitle": "197 KB · 197 KB/s · from 127.0.0.1"
+      }
+    }
+  },
+  "engine": {
+    "distributionCodeSHA256": "1bc8b6044b77d53d46d76745a39b029e9709dbeb00fd31d08870ed0a38dd576a",
+    "distributionSHA256": "f34400e71412d87a0b268fcd5658a8563cca34f600c8dd17b534a63e76aa7939",
+    "distributionUUID": "4C4C4465-5555-3144-A1AB-FCF4EA280540",
+    "embeddedCodeSHA256": "1bc8b6044b77d53d46d76745a39b029e9709dbeb00fd31d08870ed0a38dd576a",
+    "embeddedSHA256": "7965fb82d3670f2824f8657069fcb816cb10fa70c82dd4260a575eb46c395359",
+    "embeddedUUID": "4C4C4465-5555-3144-A1AB-FCF4EA280540",
+    "requiredSHA256": "",
+    "source": "fork",
+    "stamp": "fork $HOME/Developer/open-engine-s8-main/chromium_git/chromium/src/cef/binary_distrib/cef_binary_156.0.14+g4fa4ab5+chromium-156.0.8078.48_macosarm64_minimal 1793841834"
+  },
+  "interrupted_attempts": [],
+  "pathRedactions": [
+    "$WORKTREE",
+    "$HOME",
+    "$TMPDIR"
+  ],
+  "source": {
+    "clean": true,
+    "diffSHA256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "head": "7cddbb141e4324370acd17e57509b443739024cf"
+  },
+  "started": "2026-11-05 20:16:44",
+  "style": "chrome"
+}

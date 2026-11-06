@@ -1328,14 +1328,19 @@ and microphone still uses the shared list-joining code when the engine asks.
 `page-chrome` e2e uses real loopback requests and the automation socket.
 `dialogPolicy` accept/dismiss/hold and `permissionPolicy` grant/deny remain.
 `dialog-button` and `permission-prompt` answers click the real AppKit buttons.
-The [S11 runtime report](engine-spike/s11-dialogs-permissions.md) records the
-final Chrome-style Debug runs on source `deeec4c3`, with NSScreen main
-`AW2726DM` at 1x: page-chrome 41 PASS, features 19, shell 7, window 76,
-page 85, and sleep 20, all with zero FAIL and clean owned-process teardown.
-The four window display rows pass. Page's four BLOCKED / one DEFERRED rows,
-window's existing deferred/measurement rows, and sleep's capture BLOCKED
-row retain their explicit status. Sleep N5 passes through the permission
-hook. Earlier foreground-interrupted runs are excluded from these counts.
+The [S11 runtime report](engine-spike/s11-dialogs-permissions.md) records clean
+Chrome-style Debug App source `7cddbb14`, including Downloads #181 and
+extension commands #179, on the 1x `AW2726DM`: page-chrome 41 PASS, features
+19, page 85, sleep 20, and Downloads 34. These five complete suites have zero
+FAIL and clean teardown. Shell and Window are INTERRUPTED on this merged
+head after two invocations of three foreground-loss attempts each; the latest
+attempts report `active=false`, `frontmost=OpenTodos`. A quiet foreground
+interval remains a merge gate. Earlier Shell 7/7 and Window 76/76 receipts
+on `deeec4c3`, including its four display rows, are historical and are not
+counted as merged-head acceptance. Full `verify-all` passes 23/23, including
+all restored-display gates. Page's four BLOCKED / one DEFERRED rows and
+Sleep's one BLOCKED row retain their explicit status. Sleep N5 passes through
+the permission hook. Interrupted partial rows are excluded from the counts.
 The broken variant fails the same 41 new gates; an intentional failure with
 a visible sheet also completes cleanup. The report and PR body retain the
 full verifier summary, load readings, and open capture/API limits.

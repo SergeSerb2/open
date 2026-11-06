@@ -6,30 +6,30 @@
         "forced": false,
         "ok": true,
         "owned_pids": [
-          22157,
-          22202,
-          22203,
-          22205,
-          22206,
-          22211,
-          22212,
-          22791,
-          22855,
-          22856,
-          22857,
-          22858,
-          22859,
-          22861,
-          22862,
-          22863,
-          22878,
-          22879,
-          22925,
-          23164,
-          23168,
-          23172,
-          23173,
-          23177
+          35559,
+          35636,
+          35637,
+          35638,
+          35640,
+          35641,
+          35643,
+          35780,
+          35962,
+          35963,
+          35964,
+          35965,
+          35966,
+          35967,
+          35970,
+          35973,
+          36051,
+          36052,
+          36144,
+          36317,
+          36404,
+          36426,
+          36434,
+          36437
         ],
         "remaining_processes": [],
         "reply": true,
@@ -43,15 +43,14 @@
         "forced": false,
         "ok": true,
         "owned_pids": [
-          23185,
-          23198,
-          23199,
-          23200,
-          23201,
-          23204,
-          23206,
-          23207,
-          23251
+          36449,
+          36466,
+          36467,
+          36468,
+          36472,
+          36473,
+          36474,
+          36544
         ],
         "remaining_processes": [],
         "reply": true,
@@ -65,15 +64,15 @@
         "forced": false,
         "ok": true,
         "owned_pids": [
-          23264,
-          23276,
-          23277,
-          23280,
-          23281,
-          23286,
-          23287,
-          23288,
-          23296
+          36561,
+          36570,
+          36571,
+          36572,
+          36573,
+          36574,
+          36575,
+          36576,
+          36583
         ],
         "remaining_processes": [],
         "reply": true,
@@ -121,18 +120,18 @@
     "sleep_f1_renderers": {
       "nineSleeping": {
         "count": 3,
-        "rssKB": 424624
+        "rssKB": 424384
       },
       "note": "discard in place: the page objects stay, their renderers go",
       "ok": true,
       "oneTab": {
         "count": 3,
-        "rssKB": 421296
+        "rssKB": 421024
       },
       "refused": [],
       "tenTabsLoaded": {
         "count": 11,
-        "rssKB": 1764912
+        "rssKB": 1763792
       }
     },
     "sleep_f2_history_scroll_form": {
@@ -168,8 +167,8 @@
       "historyLength": 1,
       "landed": true,
       "log": [
-        "sleep-restore-fallback 5DA2C0E9",
-        "sleep-wake placeholder 5DA2C0E9 ms=62.9199743270874"
+        "sleep-restore-fallback 72A10C39",
+        "sleep-wake placeholder 72A10C39 ms=60.201048851013184"
       ],
       "ok": true,
       "victimStored": true
@@ -177,7 +176,7 @@
     "sleep_f4_history_restore": {
       "back": true,
       "log": [
-        "sleep-wake placeholder E25EB4F1 ms=107.51605033874512"
+        "sleep-wake placeholder 0FC5F474 ms=95.69001197814941"
       ],
       "ok": true,
       "restored": {
@@ -188,24 +187,24 @@
     "sleep_f4_quit_capture": {
       "hostedAfterRelaunch": 1,
       "load": [
-        4.73779296875,
-        7.1357421875,
-        9.6787109375
+        8.7080078125,
+        9.509765625,
+        11.26318359375
       ],
       "ok": true,
       "phasesBeforeQuit": {
-        "1C2DA93E-046C-4370-A2CE-E83B4C207844": "placeholder",
-        "5DA2C0E9-197A-4796-9AE3-0ECC56343FEB": "frozen",
-        "94B4951F-0FD6-4556-B6D1-EE79EA6CD757": "live",
-        "E25EB4F1-8EC6-4B67-A54C-3E3801F0208C": "sleeping"
+        "0FC5F474-2206-4B8E-A184-AB2D6C7BB345": "sleeping",
+        "2BBC98F7-9F7C-4F24-893A-A906723E4C45": "live",
+        "72A10C39-E692-4223-A96F-409CF9BA9FFF": "frozen",
+        "7B2E4B31-DF2D-403C-9320-8BDB441F0314": "placeholder"
       },
       "quitCaptureMs": [
-        2.0400285720825195
+        2.647995948791504
       ],
-      "quitSeconds": 0.44,
+      "quitSeconds": 0.45,
       "renderersAfterRelaunch": {
         "count": 3,
-        "rssKB": 419888
+        "rssKB": 420816
       },
       "storedRows": 24
     },
@@ -213,49 +212,49 @@
       "cache": "warm (same fixture page each wake)",
       "destroyed": {
         "n": 10,
-        "p50ms": 84.18703079223633,
-        "p95ms": 110.29207706451416
+        "p50ms": 97.16188907623291,
+        "p95ms": 118.4990406036377
       },
       "load": [
-        4.50146484375,
-        7.17431640625,
-        9.72265625
+        8.85693359375,
+        9.55224609375,
+        11.28857421875
       ],
       "n": 20,
       "note": "in-place discard reload; budget 700 ms first paint on a cached page",
       "ok": true,
-      "p50ms": 33.468008041381836,
-      "p95ms": 43.89297962188721
+      "p50ms": 36.918044090270996,
+      "p95ms": 46.02503776550293
     },
     "sleep_f5_unfreeze": {
       "frozenBeforeWake": 20,
       "load": [
-        4.541015625,
-        7.13818359375,
-        9.69482421875
+        8.85693359375,
+        9.55224609375,
+        11.28857421875
       ],
       "measure": "select call → the page's visibilitychange to visible (includes the automation round trip)",
       "n": 20,
       "ok": true,
-      "p50ms": 2.10400390625,
-      "p95ms": 2.422119140625
+      "p50ms": 2.192138671875,
+      "p95ms": 3.947998046875
     },
     "sleep_frozen_deadline": {
       "discardDelay": 300,
       "hiddenElapsed": 30,
       "load": [
-        4.6279296875,
-        7.4345703125,
-        9.888671875
+        8.04736328125,
+        9.54638671875,
+        11.3525390625
       ],
-      "nextPassDelay": 269.9745479822159,
+      "nextPassDelay": 269.9724689722061,
       "ok": true
     },
     "sleep_idle_parked": {
       "load": [
-        4.6279296875,
-        7.4345703125,
-        9.888671875
+        8.04736328125,
+        9.54638671875,
+        11.3525390625
       ],
       "ok": true,
       "passesAfter": 1,
@@ -308,21 +307,21 @@
       "ok": true
     },
     "sleep_started_after_paint": {
-      "firstContentfulPaint": 830,
+      "firstContentfulPaint": 3910,
       "ok": true,
-      "sidebarDrawn": 460,
-      "sleepStarted": 941
+      "sidebarDrawn": 527,
+      "sleepStarted": 4014
     },
     "sleep_tabs_discard": {
       "background": {
         "ok": {
-          "id": 166091353
+          "id": 1862050274
         }
       },
       "backgroundSlept": true,
       "ok": true,
       "visible": {
-        "error": "Cannot discard tab with id: 166091290."
+        "error": "Cannot discard tab with id: 1862050211."
       }
     },
     "sleep_timed_ladder": {
@@ -335,16 +334,16 @@
         "discarded": true,
         "downloading": false,
         "freezeGate": null,
-        "hiddenAt": 1793930794.9463658,
+        "hiddenAt": 1793934901.410892,
         "hosts": 1,
-        "id": "C932A2F7-0395-4366-B7AA-A0786092044E",
+        "id": "1AB05AA6-A98F-4CE8-95EC-14038A9A6C21",
         "lastFormInteractionAt": null,
         "notificationsAllowed": false,
         "phase": "sleeping",
         "retryAfter": null,
-        "sleptAt": 1793931094.977606,
+        "sleptAt": 1793935201.4446812,
         "title": "Open freeze ticker",
-        "url": "http://t1.localhost:56023/ticker.html"
+        "url": "http://t1.localhost:53305/ticker.html"
       },
       "ok": true,
       "phases": [
@@ -361,18 +360,18 @@
         "loaded": true,
         "sleepPhase": "live",
         "title": "Open freeze ticker",
-        "url": "http://t1.localhost:56023/ticker.html"
+        "url": "http://t1.localhost:53305/ticker.html"
       },
       "wakeLog": [
-        "sleep-wake discard C932A2F7 ms=32.27198123931885"
+        "sleep-wake discard 1AB05AA6 ms=31.09896183013916"
       ]
     }
   },
   "source": {
     "clean": true,
     "diffSHA256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
-    "head": "deeec4c34f7f6ad2a8355c9ba0599cbe64358996"
+    "head": "7cddbb141e4324370acd17e57509b443739024cf"
   },
-  "started": "2026-11-05 19:06:13",
+  "started": "2026-11-05 20:14:36",
   "style": "chrome"
 }

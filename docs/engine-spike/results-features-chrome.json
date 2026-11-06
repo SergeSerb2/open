@@ -6,17 +6,16 @@
         "forced": false,
         "ok": true,
         "owned_pids": [
-          161,
-          459,
-          2053,
-          2198,
-          99905,
-          99916,
-          99917,
-          99919,
-          99920,
-          99923,
-          99924
+          18673,
+          18693,
+          18694,
+          18696,
+          18698,
+          18699,
+          18754,
+          18826,
+          19245,
+          19437
         ],
         "remaining_processes": [],
         "reply": true,
@@ -71,11 +70,15 @@
     },
     "context_menu": {
       "items": [
+        "Look Up “on”",
+        "",
         "Copy",
         "Copy Link to Highlight",
         "Print…",
         "",
-        "Inspect"
+        "Inspect",
+        "",
+        "Speech"
       ],
       "ok": true
     },
@@ -197,7 +200,7 @@
       ]
     },
     "print_to_pdf": {
-      "bytes": 395562,
+      "bytes": 441131,
       "ok": true
     },
     "profiles": {
@@ -207,8 +210,8 @@
         "cookie": "",
         "storage": null
       },
-      "work_space": "ED3BF295-E63E-4833-B6F7-F0C38EC02B0D",
-      "work_tab_context": "Profile-FEAC6BAF"
+      "work_space": "846D9753-57DD-4305-80EC-03C323EF7D4A",
+      "work_tab_context": "Profile-3024A88C"
     },
     "request_filter": {
       "ok": true,
@@ -237,7 +240,7 @@
       "eme": "available: com.widevine.alpha",
       "ok": true,
       "playback": {
-        "currentTime": 4.958246,
+        "currentTime": 4.958401,
         "frames": 123,
         "keySystem": "com.widevine.alpha",
         "track": "vp09.00.41.08"
@@ -269,15 +272,15 @@
       "AttributeGraph",
       "AttributeGraph graph data"
     ],
-    "pid": 99905,
-    "root": "$HOME/Library/Application Support/Open-E2E-features-chrome-99851-b83beecd",
-    "userData": "$HOME/Library/Application Support/Open-E2E-features-chrome-99851-b83beecd/Engine"
+    "pid": 18673,
+    "root": "$HOME/Library/Application Support/Open-E2E-features-chrome-18612-73e64a4c",
+    "userData": "$HOME/Library/Application Support/Open-E2E-features-chrome-18612-73e64a4c/Engine"
   },
   "source": {
     "clean": true,
     "diffSHA256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
-    "head": "deeec4c34f7f6ad2a8355c9ba0599cbe64358996"
+    "head": "7cddbb141e4324370acd17e57509b443739024cf"
   },
-  "started": "2026-11-05 18:55:02",
+  "started": "2026-11-05 19:58:18",
   "style": "chrome"
 }
