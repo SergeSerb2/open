@@ -184,6 +184,15 @@ loaded Debug numbers are upper bounds, not idle Release budget acceptance.
 | `popup-close` | — | Close the open popup |
 | `site-controls` | `action: open\|close\|state\|tap\|menu`, `via: urlField\|pane` (default `urlField`), `id`, `item` | Opens through the actual URL-field or focused pane button; taps an enabled visible control; dispatches the actual enabled native menu item. `state` returns the anchor tab/host, presentation mode, rows with titles/subtitles/states, control/item visibility, menu, reload state, anchor/body frames and arrow tip (flipped window points), URL button state, extension items/focus, and first-draw milliseconds (controller entry through native layout/display and first Core Animation submission). Only the automation callback forces display for that receipt; the shipping App uses normal AppKit draw scheduling. `sourceReads` reports full snapshots, lightweight button reads and coalesced change deliveries for page-load diagnostics. `sourceActions` counts calls to `toggle` and `openAdBlockSettings`; S1 checks that the unavailable ad-block row opens Settings once without calling `toggle`. `about:`/unavailable pages return `no site`. Row ids include `row.contentBlocking` and `row.permission.camera`; buttons include `action.share`, `action.newBoost`, `action.capture`, `action.captureFull`, `extension.add`, and `reload`. |
 | `site-controls-idle` | `action: begin\|watch\|reset\|read\|canary\|end` | Real-App SCC performance proof. Requires the harness-only injected scheduler/view observer. Watches the panel tree, returns ten native observer counters and process CPU seconds; `canary` schedules and invalidates a real timer. The shipping App does not load the observer. |
+
+The `sitecontrol` suite attaches an INFO-only R-7 `backgroundResponse` diagnostic
+to S11. It samples (300,140) and (260,250) under the open panel with the engine
+page white, then black, and reports both sRGB values and ΔE00. A change below 3
+at both points indicates the remote-layer sampling risk in plan §11.1. This
+diagnostic does not change the S11/S12 acceptance limits or turn a FAIL into PASS.
+The `split` suite also records the frontmost PID's command line on focus loss
+when the process still exists. An exited process is reported as unavailable;
+the suite retains its INTERRUPTED result.
 | `pasteboard` | optional `text` | Reads the general pasteboard string. `text` sets a sentinel for Copy URL negative controls. |
 | `actions` | — | The focused window's toolbar actions from Chrome's model (fork patch P2): `ready`, and per action id, name, title, tooltip, accessible name, badge and colors, enabled, has popup, pinned and pinned index, wants to run, site access, showing popup, `live` (from the live model, else the profile's list), and the toolbar image and plain icon (PNG byte count, hash, point width, `pixels`: each representation's pixel size, and `object`: the image object's identity) |
 | `ext-pin` | `extension`, `pinned` (default `true`), optional `index` | Pin or unpin an action; optionally move it through the guarded App host. |

@@ -24,9 +24,17 @@ def background_response(app, tab, private, env, scale):
                    deltaE00=env['chrome_delta_e'](white, black),
                    maxChannelChange=max(abs(a-b) for a,b in zip(white, black)))
               for point,white,black in zip(points,captures['white']['rgb'],captures['black']['rgb'])]
-    return dict(probes=probes, captures=captures, load=list(os.getloadavg()),
-                pageChanged=max(abs(a-b) for a,b in zip(captures['white']['pageRGB'],captures['black']['pageRGB']))>200,
-                diagnosticOnly=True, interpretation='A small change is evidence for R7; this does not alter S11/S12 acceptance.')
+    for probe in probes:
+        probe['barelyChanges'] = probe['deltaE00'] < 3
+    page_changed = max(abs(a-b) for a,b in zip(captures['white']['pageRGB'],captures['black']['pageRGB'])) > 200
+    return dict(status='INFO', risk='R-7', probes=probes, captures=captures, load=list(os.getloadavg()),
+                pageChanged=page_changed, barelyChangesDeltaE00=3,
+                remoteLayerSamplingRisk=all(p['barelyChanges'] for p in probes) if page_changed else None,
+                diagnosticOnly=True,
+                interpretation='With the page changed from white to black, ΔE00 < 3 at both probes indicates '
+                               'that the within-window material does not sample the engine remote layer. '
+                               'A larger response does not establish parity. S11/S12 acceptance is unchanged.',
+                fallback='Separate follow-up PR: borderless child window with .behindWindow blending (plan §11.1).')
 
 
 def compare_live(path, state, scale, private, env, negative_path=None):

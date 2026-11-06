@@ -31,8 +31,8 @@ public enum SiteControlMetrics {           // §3. m = measured (S2), g = guess,
     public static let shadowOpacity: Float = 0.25, shadowRadius: CGFloat = 12, shadowOffsetY: CGFloat = 4 // g; shared with the theme popover
 }
 public enum SiteControlColors {            // macOS Dark measured (IS §20.15); Light = guess; mode = the window's (§3.2)
-    // Live fallback trial after .popover and .hudWindow missed S11. The fitted
-    // bitmap below remains exclusive to the offscreen harness.
+    // Shipped with .hudWindow: interim (lead 2026-11-06). S11/S12 remain FAIL.
+    // The fitted bitmap below remains exclusive to the offscreen harness.
     public static let liveMaterialTint = DesignColor(light: .black(0), dark: RGBA(hex: 0x686881, alpha: 0.32))
     public static let fallbackTint = RGBA(hex: 0x49475A), fallbackBackdropWeight: [CGFloat] = [0.28, 0.28, 0.21]
     public static let fallbackBlurSigma: CGFloat = 5                                       // fit + validation (§3.2)

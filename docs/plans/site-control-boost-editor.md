@@ -1497,13 +1497,21 @@ turn. Title, favicon and loading changes do not invalidate SCC rows.
 P2 has ten zero scheduler/view counters and a timer canary of 1 then 0. Total App
 CPU is 2.283%, not zero (load 16.19/11.96/12.76). S13 scroll p95 is 4.9 ms closed and
 open, with zero dropped frames (load 13.62/11.26/12.54); the slow-frame canary is
-rejected at 12.6 ms. S11/S12 remain FAIL at unchanged limits. The lead accepts the
-`.hudWindow` material and Dark #686881 tint at 0.32 only as interim. R7's flat-page
-diagnostic changes the page from [255,255,255] to [0,0,0] and changes the material
+rejected at 12.6 ms. S11/S12 remain FAIL at unchanged limits: **open: material,
+R-7 follow-up (lead ruling)**. The shipped `.hudWindow` material and Dark #686881
+tint at 0.32 are **interim (lead 2026-11-06)**. S11's R-7 diagnostic is INFO, never
+gated. It probes (300,140) and (260,250) with the page white, then black, beneath
+the open panel. A ΔE00 < 3 at both points indicates that the within-window material
+does not sample the engine's remote layer. The historical pre-theme diagnostic
+changes the page from [255,255,255] to [0,0,0] and changes the material
 by up to 72 and 51 channel levels at (300,140) and (260,250), ΔE00 25.43 and 19.39
 (load 13.42/11.18/12.52). This demonstrates a backdrop response at those points;
-it does not establish visual parity or confirm the no-backdrop hypothesis. A
-separate lead-owned PR decides whether the child-window fallback is needed.
+it does not establish visual parity or confirm the no-backdrop hypothesis. The
+14:49 lead ruling keeps these new-suite failures as open work, not regressions,
+and permits the interim merge. Plan §11.1 sets the fallback: a borderless child
+window with `.behindWindow` blending. A separate lead-owned follow-up PR will
+handle it after this PR merges; this PR does not implement it. A fresh diagnostic
+and final runtime receipts remain pending the screen hold.
 Release `extensions-ui` passes 56/56 with cleanup PASS and no interruptions,
 including X13: first Cmd+E opens, second closes, third reopens; arrows, type-a,
 Return, reopen and Esc use the real App event path. The old App fails only the

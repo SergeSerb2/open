@@ -62,11 +62,13 @@ class FocusInterruption(RuntimeError):
 
 class FocusTracker:
     """Native input and every timed polling/capture interval keep separate trace bounds."""
-    def __init__(self):
+    def __init__(self, capture_frontmost_command=False):
         self.apps = []
         self.checkpoints = {}
         self.timing_checkpoints = {}
         self.observation_checkpoints = {}
+        self.capture_frontmost_command = capture_frontmost_command
+        self.frontmost_processes = {}
 
     def loss(self):
         interruptions = []
@@ -82,7 +84,14 @@ class FocusTracker:
                 resigned = event["event"] == "NSApplicationDidResignActiveNotification"
                 outside = event["event"] == "frontmostChanged" and event.get("frontmostPID") not in (None, 0, app.pid)
                 if event["uptime"] >= min(steps) and (resigned or outside):
-                    interruptions.append(dict(event, openPID=app.pid))
+                    evidence = dict(event, openPID=app.pid)
+                    if self.capture_frontmost_command and outside:
+                        from focus_diagnostics import frontmost_command
+                        pid = event['frontmostPID']
+                        if pid not in self.frontmost_processes:
+                            self.frontmost_processes[pid] = frontmost_command(pid)
+                        evidence['frontmostProcess'] = self.frontmost_processes[pid]
+                    interruptions.append(evidence)
         return interruptions
 
     def checkpoint(self, native_only=False):
@@ -11395,7 +11404,7 @@ def main():
 
     interrupted_attempts = []
     for attempt in range(1, 4):
-        tracker = FocusTracker()
+        tracker = FocusTracker(capture_frontmost_command=opts.only == 'split')
         _ACTIVE_FOCUS_TRACKER = tracker
         shutil.rmtree(user_data, ignore_errors=True)
         interruption = None
