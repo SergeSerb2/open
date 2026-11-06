@@ -2,6 +2,13 @@
 #include "include/cef_command_line.h"
 
 @implementation OEBrowser (ActivationAutomation)
++ (NSDictionary<NSString*, id>*)activationStateForAutomation:(BOOL)reset {
+  auto state = CefGetOpenBrowserActivationDiagnostics(reset);
+  if (!state) return @{};
+  return @{@"invalidActivationRequests": @(state->GetInt("invalidActivationRequests")),
+           @"activeChromeWindowID": @(state->GetInt("activeChromeWindowID"))};
+}
+
 - (NSDictionary<NSString*, id>*)probeCloseActivationForAutomation {
   if (!CefCommandLine::GetGlobalCommandLine()->HasSwitch("open-automation")) {
     return @{@"refused": @YES};
@@ -32,6 +39,7 @@
   [parking close];
   return @{@"prepared": @YES, @"before": @(before), @"after": @(after),
            @"closed": @(!strip->IsValid()), @"hostVisible": @(window.isVisible),
-           @"hostKey": @(window.isKeyWindow)};
+           @"hostKey": @(window.isKeyWindow),
+           @"diagnostic": [OEBrowser activationStateForAutomation:NO]};
 }
 @end

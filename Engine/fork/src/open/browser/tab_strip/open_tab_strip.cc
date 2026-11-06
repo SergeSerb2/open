@@ -700,6 +700,9 @@ void OpenTabStrip::OnBrowserDidClose(BrowserWindowInterface* browser) {
   if (browser != browser_.get()) {
     return;
   }
+  if (window_) {
+    window_->OnBrowserClosing();
+  }
   // Chrome deletes the Browser (and its window) on the next turn.
   const bool had_actions = toolbar_ && toolbar_->IsReady();
   toolbar_.reset();

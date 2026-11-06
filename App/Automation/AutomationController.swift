@@ -91,6 +91,7 @@
       switch cmd {
       case "first-run": return try await runFirstRun(a)
       case "engine-close-activation": return try probeEngineCloseActivation()
+      case "engine-activation-state": return try engineActivationState(a)
       case "timing" where app.frontWindowController == nil:
         var marks = LaunchTiming.shared.report
         marks["kernelProcessStart"] = LaunchTiming.shared.hasKernelProcessStart
