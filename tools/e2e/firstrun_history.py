@@ -50,7 +50,7 @@ pathlib.Path(sys.argv[2]).touch(); time.sleep(180)
         # Code-path proof: neither App adapter nor runner constructs a consent
         # token or calls a decrypt/Keychain API. countOnly remains in ArcProbe.
         root = Path(h.ROOT)
-        paths = ['App/Import/AppImportRunner.swift', 'App/FirstRun/AppFirstRunActions.swift']
+        paths = ['App/Import/AppImportRunner.swift', 'App/FirstRun/AppFirstRunActions.swift', 'App/Settings/AppSettingsActions.swift']
         text = '\n'.join((root/p).read_text() for p in paths)
         forbidden = ['SecItemCopyMatching', 'grantedByUser(', 'ChromiumCrypto.', 'ArcSecretsReader(']
         row('F10_passwords_off', not result['secretsEnabled'] and not result['outcome'].get('Passwords and cookies', 0)

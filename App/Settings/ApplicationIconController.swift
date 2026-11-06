@@ -2,6 +2,19 @@ import AppKit
 import ImageIO
 import OpenSettings
 
+/// AppKit asks for TIFF data when sending the icon to the Dock. Keep the
+/// worker's encoding so that the main-thread setter cannot encode it again.
+private final class RestoredApplicationIcon: NSImage {
+  private let encodedTIFF: Data
+  init(image: CGImage, encodedTIFF: Data) {
+    self.encodedTIFF = encodedTIFF
+    super.init(size: .init(width: 1024, height: 1024))
+    addRepresentation(NSBitmapImageRep(cgImage: image))
+  }
+  required init?(coder: NSCoder) { return nil }
+  override var tiffRepresentation: Data? { encodedTIFF }
+}
+
 /// Changes only this process's icon. The signed application bundle is never written.
 @MainActor final class ApplicationIconController {
   unowned let app: AppDelegate
@@ -14,6 +27,8 @@ import OpenSettings
   /// Main-actor work only. File reading and PNG decoding are measured separately.
   private(set) var restoreElapsedMs: Double?
   private(set) var restoreDecodeMs: Double?
+  private(set) var restorePreparationMs: Double?
+  private(set) var restoreSetterMs: Double?
   private(set) var appliedImage: NSImage?
   init(app: AppDelegate) { self.app = app }
 
@@ -62,7 +77,7 @@ import OpenSettings
     let generation = selectionGeneration
     guard let option = AppIconOption(rawValue: id) else {
       restoreStartedMs = LaunchTiming.shared.elapsedMilliseconds
-      restoreElapsedMs = 0
+      restoreElapsedMs = 0; restorePreparationMs = 0; restoreSetterMs = 0
       errorText = "This application icon is not available."
       app.settingsPresenter.settings.appIcon.errorText = errorText
       return
@@ -73,32 +88,42 @@ import OpenSettings
       guard let self, generation == self.selectionGeneration,
             !self.app.shutdownPrepared, !self.app.terminationRequested else { return }
       self.restoreDecodeMs = decoded.milliseconds
-      self.restoreStartedMs = LaunchTiming.shared.elapsedMilliseconds
-      LaunchTiming.shared.mark("appIconRestoreStarted")
-      let started = ProcessInfo.processInfo.systemUptime
-      if let cgImage = decoded.image {
-        let image = NSImage(size: .init(width: 1024, height: 1024))
-        image.addRepresentation(NSBitmapImageRep(cgImage: cgImage))
-        NSApp.applicationIconImage = image
-        self.appliedImage = image; self.appliedID = id; self.errorText = ""
-      } else {
-        self.errorText = "The application icon could not be restored. Try selecting it again."
+      // One low-priority turn, outside the launch burst and at least one second
+      // after the paint hook. No repeating timer or idle polling remains.
+      DispatchQueue.main.asyncAfter(deadline: .now() + 1, qos: .utility, flags: .enforceQoS) { [weak self] in
+        guard let self, generation == self.selectionGeneration,
+              !self.app.shutdownPrepared, !self.app.terminationRequested else { return }
+        self.restoreStartedMs = LaunchTiming.shared.elapsedMilliseconds
+        LaunchTiming.shared.mark("appIconRestoreStarted")
+        let started = ProcessInfo.processInfo.systemUptime
+        self.restorePreparationMs = 0; self.restoreSetterMs = 0
+        if let cgImage = decoded.image, let tiff = decoded.tiff {
+          let image = RestoredApplicationIcon(image: cgImage, encodedTIFF: tiff)
+          self.restorePreparationMs = (ProcessInfo.processInfo.systemUptime - started) * 1_000
+          let setterStarted = ProcessInfo.processInfo.systemUptime
+          NSApp.applicationIconImage = image
+          self.restoreSetterMs = (ProcessInfo.processInfo.systemUptime - setterStarted) * 1_000
+          self.appliedImage = image; self.appliedID = id; self.errorText = ""
+        } else {
+          self.errorText = "The application icon could not be restored. Try selecting it again."
+        }
+        self.restoreElapsedMs = (ProcessInfo.processInfo.systemUptime - started) * 1_000
+        LaunchTiming.shared.mark("appIconRestored")
+        if !self.errorText.isEmpty { self.app.settingsPresenter.settings.appIcon.errorText = self.errorText }
       }
-      self.restoreElapsedMs = (ProcessInfo.processInfo.systemUptime - started) * 1_000
-      LaunchTiming.shared.mark("appIconRestored")
-      if !self.errorText.isEmpty { self.app.settingsPresenter.settings.appIcon.errorText = self.errorText }
     }
   }
 
   private struct DecodedIcon: @unchecked Sendable {
     // Immutable CGImage; the worker completes before the main actor receives it.
     let image: CGImage?
+    let tiff: Data?
     let milliseconds: Double
   }
   nonisolated private static func decode(_ file: URL) -> DecodedIcon {
     let started = ProcessInfo.processInfo.systemUptime
-    func result(_ image: CGImage? = nil) -> DecodedIcon {
-      DecodedIcon(image: image, milliseconds: (ProcessInfo.processInfo.systemUptime - started) * 1_000)
+    func result(_ image: CGImage? = nil, _ tiff: Data? = nil) -> DecodedIcon {
+      DecodedIcon(image: image, tiff: tiff, milliseconds: (ProcessInfo.processInfo.systemUptime - started) * 1_000)
     }
     // Bound both encoded bytes and decoded dimensions before allocating pixels.
     // PNG's largest pixel format is 16-bit RGBA: 1024 * 1024 * 8 = 8,388,608 bytes.
@@ -110,7 +135,8 @@ import OpenSettings
           properties[kCGImagePropertyPixelWidth] as? Int == 1024,
           properties[kCGImagePropertyPixelHeight] as? Int == 1024,
           let image = CGImageSourceCreateImageAtIndex(source, 0,
-            [kCGImageSourceShouldCacheImmediately: true] as CFDictionary) else { return result() }
-    return result(image)
+            [kCGImageSourceShouldCacheImmediately: true] as CFDictionary),
+          let tiff = NSBitmapImageRep(cgImage: image).representation(using: .tiff, properties: [:]) else { return result() }
+    return result(image, tiff)
   }
 }

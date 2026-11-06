@@ -303,10 +303,16 @@ the bar. Search Settings opens Profiles. Cmd+9 retains its last-tab default.
 
 The Icon pane applies Open's existing original artwork to the running App
 through `NSApp.applicationIconImage`. Alternate images render at 1024 pixels
-and are cached per ID. The default resets to the bundle icon. Restore runs
-after the first window and content paint (or the existing no-paint deadline).
-`settings-icon` and launch timing expose restore cost and ordering. The signed
-bundle is never changed. Failures appear in the Icon pane.
+and are saved as versioned PNGs below the data root's `Cache/AppIcons` folder.
+Restore decodes and prepares the TIFF representation on a utility worker.
+The main-thread setter runs in one low-priority queue turn at least about one
+second after first paint (or after the existing no-paint deadline). No repeating
+timer remains. The default icon schedules no task, decode, or setter.
+`settings-icon` reports worker decode/preparation, main preparation, setter and
+total main cost separately. The acceptance target is main decode/preparation
+below 5 ms; AppKit/Dock setter cost is reported separately, per the Section 7
+lead's 2026-11-06 ruling. The signed bundle is never changed. A missing or bad
+cache leaves the bundle icon and asks the user to select the icon again.
 
 Actions use the triggering pane's existing status/error line. Links renders
 model issues per rule and default destination; errors block Save, warnings

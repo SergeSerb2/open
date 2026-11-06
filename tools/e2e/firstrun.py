@@ -80,6 +80,7 @@ def run(factory, results, tmp, h):
     saved = {}
     app = None
     all_copy = []
+    ocr_retries = []
     def launch(fresh=False, directory=source, **env):
         nonlocal app
         app = factory(urls=(), fresh=fresh, extra_args=['--arc-dir=' + str(directory)], extra_env=env)
@@ -95,7 +96,9 @@ def run(factory, results, tmp, h):
         app.call('snapshot', path=path)
         return path
     def copy():
-        rows = app.call('first-run', action='inspect', timeout=180)['renderedText']
+        inspection = app.call('first-run', action='inspect', timeout=180)
+        ocr_retries.append(inspection['ocrRetries'])
+        rows = inspection['renderedText']
         text = '\n'.join(row['text'] for row in rows)
         all_copy.append(text)
         return text
@@ -149,6 +152,7 @@ def run(factory, results, tmp, h):
         row('F2_import_choices', not state()['secretsEnabled'] and 'Import from Arc' in import_copy,
             png=imported_png, text=import_copy)
         geometry = app.call('first-run', action='inspect', timeout=180)
+        ocr_retries.append(geometry['ocrRetries'])
         heading = [r for r in geometry['renderedText'] if 'Import from Arc' in r['text']]
         light_bottom = max(r[1]+r[3] for r in geometry['trafficLights'])
         heading_top = min((r['frame'][1] for r in heading), default=0)
@@ -437,7 +441,7 @@ def run(factory, results, tmp, h):
         import re
         forbidden = [text for text in all_copy if re.search(r'\b(?:sign in|account|Little Arc)\b', text, re.I)]
         row('F13_copy', not forbidden and 'Arc' not in welcome_copy.replace('Import from Arc', '')
-            and 'Open is a fast, private browser' in binary_strings, checkedScreens=len(all_copy))
+            and 'Open is a fast, private browser' in binary_strings, checkedScreens=len(all_copy), ocrRetries=sum(ocr_retries))
     finally:
         if app is not None:
             h._restore_defaults(app, saved)

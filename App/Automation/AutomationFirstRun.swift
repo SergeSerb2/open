@@ -129,7 +129,10 @@ extension AutomationController {
           let r = button.convert(button.bounds, to: nil)
           return [r.minX, window.frame.height - r.maxY, r.width, r.height]
         }
-        if action == "inspect" { state["renderedText"] = try await firstRunRenderedText(window) }
+        if action == "inspect" {
+          let inspection = try await firstRunRenderedText(window)
+          state["renderedText"] = inspection.lines; state["ocrRetries"] = inspection.retries
+        }
       }
     }
     if action?.hasPrefix("settings-") == true || current == nil {
@@ -147,25 +150,36 @@ extension AutomationController {
   /// Inspect pixels from our own native window. SwiftUI's in-process AX tree
   /// can be empty unless an outside assistive client has activated it. OCR
   /// proves the displayed copy and its geometry without such a client or input.
-  private func firstRunRenderedText(_ window: NSWindow) async throws -> [[String: Any]] {
+  private func firstRunRenderedText(_ window: NSWindow) async throws -> (lines: [[String: Any]], retries: Int) {
     try await Task.sleep(for: .milliseconds(250)) // allow the normal step fade to finish
     let url = FileManager.default.temporaryDirectory.appendingPathComponent("open-firstrun-\(UUID()).png")
     defer { try? FileManager.default.removeItem(at: url) }
     _ = try await WindowSnapshot.capture(window, to: url)
     let width = Double(window.frame.width), height = Double(window.frame.height)
-    let lines = try await Task.detached(priority: .utility) {
-      let request = VNRecognizeTextRequest()
-      request.recognitionLevel = .accurate
-      request.usesLanguageCorrection = false
-      try VNImageRequestHandler(url: url).perform([request])
-      return (request.results ?? []).prefix(128).compactMap { observation -> FirstRunTextLine? in
-        guard let line = observation.topCandidates(1).first else { return nil }
-        let r = observation.boundingBox
-        return FirstRunTextLine(text: String(line.string.prefix(512)), frame:
-          [r.minX * width, (1 - r.maxY) * height, r.width * width, r.height * height])
+    let inspected = try await Task.detached(priority: .utility) {
+      func recognize() throws -> [FirstRunTextLine] {
+        let request = VNRecognizeTextRequest()
+        request.recognitionLevel = .accurate
+        request.usesLanguageCorrection = false
+        try VNImageRequestHandler(url: url).perform([request])
+        return (request.results ?? []).prefix(128).compactMap { observation -> FirstRunTextLine? in
+          guard let line = observation.topCandidates(1).first else { return nil }
+          let r = observation.boundingBox
+          return FirstRunTextLine(text: String(line.string.prefix(512)), frame:
+            [r.minX * width, (1 - r.maxY) * height, r.width * width, r.height * height])
+        }
+      }
+      do { return (try recognize(), 0) }
+      catch {
+        let failure = error as NSError
+        guard failure.domain == "TextRecognition.CRImageReaderError", failure.code == 1 else { throw error }
+        // One retry of Vision's transient decoder failure, on the same native
+        // capture. Keep all copy/geometry assertions and the client deadline.
+        try await Task.sleep(for: .milliseconds(250))
+        return (try recognize(), 1)
       }
     }.value
-    return lines.map { ["text": $0.text, "frame": $0.frame] }
+    return (inspected.0.map { ["text": $0.text, "frame": $0.frame] }, inspected.1)
   }
 }
 #endif

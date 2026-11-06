@@ -118,7 +118,7 @@ action names to 32. There is no action that changes the system default browser.
 
 For native evidence, `focus` grants input focus to this instance's first-run
 window. `inspect` reads its rendered text and top-left text frames using
-Vision on a snapshot of that window only. OCR runs on a utility worker; the suite uses a bounded 180-second timeout for this action only. State includes its native frame
+Vision on a snapshot of that window only. OCR runs on a utility worker and retries only `TextRecognition.CRImageReaderError` code 1, once after 250 ms. `ocrRetries` records 0 or 1; the suite keeps its bounded 180-second timeout and all copy/geometry assertions. State includes its native frame
 size, key flag, and traffic-light frames. `snapshot` prefers the first-run
 panel while it exists. `OPEN_AUTOMATION_IMPORT_DELAY_MS` (automation builds
 only, at most 5000 ms) holds the real progress view for animation captures.
@@ -366,7 +366,7 @@ Additional socket commands:
 | `sidebar-duplicate id=…`, `sidebar-tree` | Send the production SidebarDelegate intent; read fresh subtree IDs and load flags. |
 | `settings-state`, `settings-toggle name=hotkey\|external` | Read the shared real presenters, including pane-local `generalError`/`advancedStatus`; commit the live Links settings model. |
 | `settings-profile` | Read the actual Profiles create-sheet state: `creating`, attached native `sheet` window number, `pane`, selected `spaces`, and `error`. `cancel=true` dismisses through the existing sheet state. |
-| `settings-icon` | Read `selected`, `applied`, pane `error`, `matchesApplication` (exact pixel equality in the actual NSApp icon's output color space and component format, including float16; AppKit copies NSImage), `imageObject` (cache identity), bitmap `pixels`, and `restoreStartedMs`/`restoreElapsedMs` (main-actor work)/`restoreDecodeMs` (worker decode). `select=<AppIconOption ID>` uses the real picker action. Default resets `NSApp.applicationIconImage` to nil. |
+| `settings-icon` | Read `selected`, `applied`, pane `error`, `matchesApplication` (exact pixel equality in the actual NSApp icon's output color space and component format, including float16; AppKit copies NSImage), `imageObject` (cache identity), bitmap `pixels`, and `restoreStartedMs`/`restoreElapsedMs` (total main work), `restorePreparationMs` (main preparation), `restoreSetterMs` (AppKit setter), `restoreDecodeMs` (worker decode/TIFF preparation). Restore uses one low-priority turn at least about 1 s after paint. `select=<AppIconOption ID>` uses the real picker action. Default resets `NSApp.applicationIconImage` to nil and does no restore work. |
 | `settings-custom-engine template=…` | Save a custom engine through the live Profiles settings model. |
 | `library-restore id=…`, `library-history-open url=…` | Exercise the live Library restore transaction or its profile-scoped history action. |
 | `history-state` | Optional `profile` UUID and `query`. Drains accepted history writes, then returns the Profile store path, search rows, commit-to-enqueue samples (ms, automation only, bounded at 4,096) and writer operation count. Store opens/searches stay on the HistoryStore actor. |
