@@ -18,7 +18,7 @@ Application responds to `quit` without a separate command declaration.
 
 | Object | Read API | Write API / verbs |
 |---|---|---|
-| application | windows, name, frontmost, version | make window; make tab creates a Little Open window; quit |
+| application | windows, name, frontmost, version | make window; make tab is the Little Open creation term (App returns 1011 until its hook can return a script-addressable tab); quit |
 | window | id, name, index, closeable, minimizable, minimized, resizable, visible, zoomable, zoomed, active tab, active space, incognito, mode; tabs and spaces | index (1 only), minimized, visible, zoomed; make tab; close; mode/incognito only at creation |
 | space | id, title; tabs | make tab; focus |
 | tab | id, title, URL, loading, location | URL, location; select, go back, go forward, reload, stop, execute, close |
@@ -293,7 +293,9 @@ The interrupted attempt is retained separately. The package build reports 0 warn
 and 0 errors. `commands-dump` remains missing/extra/different 0/0/0, allowedMissing 11.
 Receipts: `.re/verify-all-final/summary.txt`, `.re/verify-sitecontrol-rerun/summary.txt`.
 
-Hand checks for the user (no agent desktop input):
+### Script Editor and external sender hand checks
+
+These checks remain BLOCKED by macOS Automation consent (-1744) in [#174](https://github.com/SergeSerb2/open/pull/174). Its final `applescript` suite records 137 PASS / 2 external-consent BLOCKED; self-scripting does not replace these user checks. No agent desktop input:
 
 1. In Script Editor, choose File ▸ Open Dictionary and select the built
    `build/Debug/Open.app`. Confirm Standard Suite, window/tab/space, and all ten
@@ -306,7 +308,10 @@ Hand checks for the user (no agent desktop input):
    javascript "1 + 2"` must error 1013 with the exact off message above. Turn the
    setting on in the test App; the same event must return text `3`. Restore the setting.
 4. Quit only the test instance. Confirm Script Editor/JXA results separately from
-   the automated self-scripting receipts. A15 and incognito remain 1011/1010 limits.
+   the automated self-scripting receipts. A15 (app-level Little Open creation) and
+   incognito remain 1011/1010 limits. #183 wires standalone Little Open pages, but
+   `ScriptHost.makeLittleTab` is still nil until Section 9’s coordinator returns a
+   script-addressable tab.
 
 ## Step 1–4 verification (2026-10-25, America/Vancouver)
 
