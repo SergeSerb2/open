@@ -28,6 +28,26 @@ def run(factory, results, origin, tmp, env):
         if app.config == 'Release': data['ok'] = len(all_samples) == 35 and len(samples) == 30 and p95 < 8 and p95_all < 8
         else: data.update(status='BLOCKED', reason='Release required for first-draw budget')
         results['P1_first_draw'] = data
+        # Review receipt through real page loads. State reads do not ask the
+        # source for panel data, so these deltas isolate native refresh work.
+        def reads(): return app.call('site-controls', action='state')['sourceReads']
+        def delta(before, after): return {key: after[key] - before[key] for key in before}
+        before = reads()
+        app.call('navigate', tab=tab, url=origin + '/boost.html'); app.call('wait', tab=tab)
+        time.sleep(.2)
+        closed = delta(before, reads())
+        app.call('site-controls', action='open')
+        before = reads()
+        app.call('navigate', tab=tab, url=origin + '/ads.html'); app.call('wait', tab=tab)
+        time.sleep(.2)
+        opened = delta(before, reads())
+        before = reads()
+        app.eval(tab, "for(let i=0;i<250;i++)document.title='SCC title '+i;true")
+        time.sleep(.2)
+        titles = delta(before, reads())
+        data['sourceRefresh'] = dict(closedPageLoad=closed, openPageLoad=opened,
+            titleChanges=titles, load=list(os.getloadavg()))
+        app.call('site-controls', action='close')
     finally:
         env['_restore_defaults'](app, saved)
         app.quit()

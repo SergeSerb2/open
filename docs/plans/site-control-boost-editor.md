@@ -1450,6 +1450,16 @@ values in `docs/followups.md`; S12 is 22/40 at unchanged limits. The lead accept
 page diagnostic checks R7. A separate lead PR owns the child-window fallback if needed. This is implemented App wiring, not visual
 acceptance. Full verification and regression results are recorded in the PR.
 
+The receipt above predates the shared fixture alignment and review fixes. Both
+Section 12 suites now use `tools/e2e/sitecontrol_fixtures.py`; the SCC scroll page
+is suite-local. S5 clears the shared origin's cookie on `boost.html`, which does
+not set it again on reload. The first-draw callback alone opts into forced native
+display; shipping presentation keeps AppKit scheduling. Button refreshes read
+availability and enabled Boost state without building panel rows. Source changes
+are coalesced per tab on the next main-queue turn; title, favicon and loading
+updates do not invalidate SCC rows. Fresh App flows and page-load counters remain
+pending the explicit screen-clear message.
+
 
 ## 11. Risks and open questions
 

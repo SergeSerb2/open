@@ -41,6 +41,7 @@ public final class BrowserWindowController: NSWindowController, NSWindowDelegate
     let siteControlSource: (any SiteControlDataSource)?
     private var siteControlToken: SiteControlObservationToken?
     var siteControlSpace: SpaceID?
+    var siteControlButtonsRefreshPending = false
     private let factory: any WebContentHostFactory
     private let defaults: UserDefaults
     public var onSidebarIntent: ((SidebarIntent) -> Bool?)?
@@ -320,7 +321,7 @@ public final class BrowserWindowController: NSWindowController, NSWindowDelegate
             root.addSubview(controller.view)
             controller.geometry = { [weak self] in self?.siteControlGeometry($0) }
             controller.onDismiss = { [weak self] _ in self?.refreshSiteControlButtons() }
-            siteControlToken = siteControlSource.observeChanges { [weak self] _ in self?.refreshSiteControlButtons() }
+            siteControlToken = siteControlSource.observeChanges { [weak self] _ in self?.scheduleSiteControlButtonsRefresh() }
             container.onSiteControls = { [weak self] id in self?.toggleSiteControls(anchor: .paneBar(id), tabID: id) }
         }
         root.addSubview(toastOverlay)

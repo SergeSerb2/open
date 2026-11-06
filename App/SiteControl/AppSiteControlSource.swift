@@ -28,13 +28,27 @@ final class AppSiteControlSource: SiteControlDataSource, SiteControlActions {
   private var observers: [SiteControlObservationToken: @MainActor (ItemID) -> Void] = [:]
   private var notifications: [any NSObjectProtocol] = []
   private var modelToken: UUID?
+  private var pendingTabs: Set<ItemID> = []
+  private var refreshPending = false
+  #if OPEN_AUTOMATION
+  private(set) var snapshotReadCount = 0
+  private(set) var buttonReadCount = 0
+  private(set) var changeDeliveryCount = 0
+  #endif
   private let adBlockStore: AdBlockStore?
   init(factory: EngineWebContentHostFactory) {
     self.factory = factory
     // Open the shared store before a click. Snapshot reads never acquire its
     // directory lease or read global settings on the presentation path.
     adBlockStore = factory.app.stores.adBlock
-    modelToken = factory.model.addObserver { [weak self] _ in self?.refresh() }
+    // Structural edits and page title/favicon/loading changes do not change
+    // SCC rows. The window owns selection/dismissal; only a Profile rebind
+    // needs a data-source notification here.
+    modelToken = factory.model.addObserver { [weak self] change in
+      guard case .spaceProfileChanged(let id, _, _) = change,
+            self?.factory?.focusedSpace?.id == id else { return }
+      self?.refresh()
+    }
     for name in [SitePermissionStore.didChange, AdBlockStore.didChange] {
       notifications.append(NotificationCenter.default.addObserver(forName: name, object: nil, queue: .main) { [weak self] _ in
         MainActor.assumeIsolated { self?.refresh() }
@@ -46,32 +60,67 @@ final class AppSiteControlSource: SiteControlDataSource, SiteControlActions {
     if let boostToken { boostProvider?.removeBoostObserver(boostToken) }
     notifications.forEach(NotificationCenter.default.removeObserver)
   }
-  func refresh() {
-    guard let factory else { return }
-    for id in Set(factory.visibleTabs.map(\.id)) {
-      for observer in Array(observers.values) { observer(id) }
+  func refresh(tabID: ItemID? = nil) {
+    guard let factory, !factory.isClosing else { return }
+    let visible = Set(factory.visibleTabs.map(\.id))
+    pendingTabs.formIntersection(visible)
+    if let tabID { if visible.contains(tabID) { pendingTabs.insert(tabID) } }
+    else { pendingTabs.formUnion(visible) }
+    guard !pendingTabs.isEmpty, !refreshPending else { return }
+    refreshPending = true
+    // Store/URL events can arrive in a burst. Never rebuild the same bound
+    // panel once per event or fan out a full snapshot through button updates.
+    DispatchQueue.main.async { [weak self] in
+      guard let self else { return }
+      self.refreshPending = false
+      let changed = self.pendingTabs; self.pendingTabs.removeAll(keepingCapacity: true)
+      guard let factory = self.factory, !factory.isClosing else { return }
+      let visible = Set(factory.visibleTabs.map(\.id))
+      let callbacks = Array(self.observers.values)
+      for id in changed.intersection(visible) {
+        #if OPEN_AUTOMATION
+        self.changeDeliveryCount += 1
+        #endif
+        for observer in callbacks { observer(id) }
+      }
     }
   }
   func observeChanges(_ observer: @escaping @MainActor (ItemID) -> Void) -> SiteControlObservationToken {
     let token = SiteControlObservationToken(); observers[token] = observer; return token
   }
   func removeChangeObserver(_ token: SiteControlObservationToken) { observers.removeValue(forKey: token) }
-  func snapshot(for tabID: ItemID) -> SiteControlSnapshot? {
+  private func context(for tabID: ItemID) -> SiteControlContext? {
     guard let factory, !factory.isClosing, factory.standaloneSurface == nil,
-          let tab = factory.model.tab(id: tabID), let profile = factory.profile(for: tabID),
-          factory.hosts[tabID] != nil else { return nil }
-    let url = factory.hosts[tabID]?.content.url ?? tab.url
+          let tab = factory.model.tab(id: tabID), let host = factory.hosts[tabID], !host.closed,
+          factory.model.profile(id: host.profileID) != nil else { return nil }
+    let url = host.content.url ?? tab.url
     guard url.scheme != "about", !url.absoluteString.isEmpty else { return nil }
-    let context = SiteControlContext(tabID: tabID, profileID: profile.id, url: url,
+    return SiteControlContext(tabID: tabID, profileID: host.profileID, url: url,
       displayHost: url.host() ?? url.absoluteString,
       security: url.scheme == "https" ? .secure : url.scheme == "http" ? .insecure : .unknown)
+  }
+  func buttonState(for tabID: ItemID) -> (available: Bool, boosted: Bool) {
+    #if OPEN_AUTOMATION
+    buttonReadCount += 1
+    #endif
+    guard let context = context(for: tabID) else { return (false, false) }
+    let boosted = context.isWebsite && boostProvider?.boostsGloballyEnabled == true
+      && boostProvider?.matchingBoosts(url: context.url, profileID: context.profileID).contains(where: \.isEnabled) == true
+    return (true, boosted)
+  }
+  func snapshot(for tabID: ItemID) -> SiteControlSnapshot? {
+    #if OPEN_AUTOMATION
+    snapshotReadCount += 1
+    #endif
+    guard let factory, let context = context(for: tabID) else { return nil }
+    let url = context.url, profileID = context.profileID
     var tiles: [SiteSettingTile] = []
     if context.isWebsite {
       let store = adBlockStore
       // Settings can open the store before the App has an engine adapter.
       // Configuration alone must never claim that requests are being blocked.
-      let available = store?.onEngineEvent != nil && store?.isProfileOpen(profile.id) == true && store?.isEnabled == true
-      let on = available && (try? store?.siteSnapshot(for: profile.id).shouldBlock(host: url.host() ?? "")) == true
+      let available = store?.onEngineEvent != nil && store?.isProfileOpen(profileID) == true && store?.isEnabled == true
+      let on = available && (try? store?.siteSnapshot(for: profileID).shouldBlock(host: url.host() ?? "")) == true
       tiles.append(SiteSettingTile(id: "contentBlocking", kind: .contentBlocking, title: "Block Ads & Trackers",
         subtitle: on ? "On" : "Off", state: available ? (on ? .on : .off) : .unavailable,
         symbol: "hand.raised.fill", help: available ? (on ? "The built-in ad blocker is on for this site." : "The built-in ad blocker is off for this site.") : "The built-in ad blocker is off. You can turn it on in Settings."))
@@ -85,7 +134,7 @@ final class AppSiteControlSource: SiteControlDataSource, SiteControlActions {
         }
       }
     }
-    let boosts = context.isWebsite ? boostProvider?.matchingBoosts(url: url, profileID: profile.id) ?? [] : []
+    let boosts = context.isWebsite ? boostProvider?.matchingBoosts(url: url, profileID: profileID) ?? [] : []
     return SiteControlSnapshot(context: context, tiles: tiles, boosts: boosts,
       boostsGloballyEnabled: boostProvider?.boostsGloballyEnabled ?? true,
       capabilities: factory.extensions.host == nil ? [] : [.extensionPinning],

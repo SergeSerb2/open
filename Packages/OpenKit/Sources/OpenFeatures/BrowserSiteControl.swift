@@ -55,20 +55,28 @@ extension BrowserWindowController {
     }
     public func refreshSiteControlButtons() {
         let ids = Set(container.slots.map(\.tabID) + [splitController.focusedTab?.id].compactMap { $0 })
-        let snapshots = Dictionary(uniqueKeysWithValues: ids.compactMap { id in
-            siteControlSource?.snapshot(for: id).map { (id, $0) }
+        let states = Dictionary(uniqueKeysWithValues: ids.compactMap { id in
+            siteControlSource.map { (id, $0.buttonState(for: id)) }
         })
         if siteControlSource != nil {
-            sidebar.siteControlsAvailable = splitController.focusedTab.flatMap { snapshots[$0.id] } != nil
+            sidebar.siteControlsAvailable = splitController.focusedTab.map { states[$0.id]?.available == true } == true
                 && !(hasPeekController && peekController.isShown)
         }
         func state(_ id: ItemID?) -> SiteControlButtonState {
-            let snapshot = id.flatMap { snapshots[$0] }
-            let boosted = snapshot?.boostsGloballyEnabled == true && snapshot?.boosts.contains(where: \.isEnabled) == true
+            let boosted = id.flatMap { states[$0] }?.boosted == true
             let open = siteControl?.isPresented == true && siteControl?.tabID == id
             return open ? (boosted ? .openBoosted : .open) : (boosted ? .boosted : .rest)
         }
         sidebar.siteControlState = state(splitController.focusedTab?.id)
         for slot in container.slots { slot.paneChrome?.siteControlState = state(slot.tabID) }
+    }
+    func scheduleSiteControlButtonsRefresh() {
+        guard !siteControlButtonsRefreshPending else { return }
+        siteControlButtonsRefreshPending = true
+        DispatchQueue.main.async { [weak self] in
+            guard let self else { return }
+            self.siteControlButtonsRefreshPending = false
+            self.refreshSiteControlButtons()
+        }
     }
 }

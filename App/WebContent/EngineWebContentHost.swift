@@ -114,6 +114,7 @@ final class EngineWebContentHost: NSObject, WebContentHost, WebContentProviding,
       onURLChange?(url); cancelBackgroundRead(); pageBackgroundColor = nil; onPageBackgroundChange?(nil)
     }
     guard !closed, generation == token else { return }
+    if changes.contains(.URL), owner.controller?.siteControl != nil { owner.siteControlSource.refresh(tabID: tabID) }
     // CEF's OnLoadStart excludes same-document commits. Address changes outside
     // a document load cover pushState/fragments without duplicating that hook.
     if changes.contains(.URL), let url = page.url {
