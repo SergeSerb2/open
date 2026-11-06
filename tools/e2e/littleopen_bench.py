@@ -49,6 +49,8 @@ def main():
     parser.add_argument('--report-only', action='store_true', help='record measurements without a performance verdict')
     parser.add_argument('--pair-index', type=int, help='emit one partial pair for the lock-releasing series runner; not an acceptance receipt')
     args = parser.parse_args()
+    # New user-realistic paths are measurements for the lead, never new gates.
+    args.report_only = args.report_only or args.scenario != 'immediate'
     if not 10 <= args.samples <= 100:
         parser.error('10 to 100 samples per build are required')
     if args.pair_index is not None and not 0 <= args.pair_index < 100:
@@ -201,9 +203,8 @@ def main():
             return result
         receipt['summary'] = {label: summary(label) for label in ('main', 'branch')}
         if not args.report_only:
-            metrics = ('openToFCPMs',) if args.scenario == 'external' else ('firstFrameMs', 'pageLoadMs')
             receipt['noSlower'] = all(receipt['summary']['branch'][metric][pct] <= receipt['summary']['main'][metric][pct]
-                                 for metric in metrics for pct in ('median', 'p95'))
+                                 for metric in ('firstFrameMs', 'pageLoadMs') for pct in ('median', 'p95'))
         receipt['extraHiddenBrowserRSS'] = receipt['summary']['branch']['windowRSS']['median'] - receipt['summary']['main']['windowRSS']['median']
         print(json.dumps({k: v for k, v in receipt.items() if k not in ('samples', 'mainBundle', 'branchBundle')}, indent=2))
     finally:

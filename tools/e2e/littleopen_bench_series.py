@@ -26,6 +26,8 @@ def main():
     parser.add_argument('--scenario', choices=('immediate', 'typed', 'external'), default='immediate')
     parser.add_argument('--report-only', action='store_true', help='record measurements without a performance verdict')
     args = parser.parse_args()
+    # New user-realistic paths are measurements for the lead, never new gates.
+    args.report_only = args.report_only or args.scenario != 'immediate'
     if not 10 <= args.samples <= 100:
         parser.error('10 to 100 samples per build are required')
     output = Path(args.output).resolve()
@@ -95,9 +97,8 @@ def main():
                 summary[metric] = {'median': statistics.median(values),
                                    'p95': values[math.ceil(len(values) * .95) - 1]}
     if not args.report_only:
-        metrics = ('openToFCPMs',) if args.scenario == 'external' else ('firstFrameMs', 'pageLoadMs')
         receipt['noSlower'] = all(receipt['summary']['branch'][metric][pct] <= receipt['summary']['main'][metric][pct]
-                             for metric in metrics for pct in ('median', 'p95'))
+                             for metric in ('firstFrameMs', 'pageLoadMs') for pct in ('median', 'p95'))
     receipt['extraHiddenBrowserRSS'] = receipt['summary']['branch']['windowRSS']['median'] - receipt['summary']['main']['windowRSS']['median']
     receipt['complete'] = True
     output.write_text(json.dumps(receipt, indent=2) + '\n')

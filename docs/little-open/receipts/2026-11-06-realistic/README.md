@@ -18,4 +18,4 @@ Run each scenario (`typed`, `external`, `immediate`) in one outer quiet-lock ses
   --config Release --samples 20 --scenario typed --report-only --output <new-receipt.json>
 ```
 
-The default `immediate` scenario and original performance gate remain available without `--report-only`. No product code, baseline, threshold, or comparator changes in this measurement task. No new acceptance gate is added, so a new negative proof is not applicable.
+The default `immediate` scenario and original performance gate remain available without `--report-only`. The `typed` and `external` scenarios always report measurements only. No product code, baseline, threshold, or comparator changes in this measurement task. No new acceptance gate is added, so a new negative proof is not applicable.
