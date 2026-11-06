@@ -16,7 +16,7 @@ let settingsPresenter = SettingsPresenter(viewModel: settings)
 
 Attach the shared `AdBlockStore`. Settings opens the selected profile on refresh/selection, including newly created profiles, and tracks which opens have finished, and closes its state before profile deletion. The shared store owns update schedules and bundled defaults. Call `settings.adBlock?.refresh()` from its store-event adapter after external Site Control Center or list updates. List and allowed-site controls stay disabled until the selected Profile is open. Store faults use plain text; technical details remain in Copy Debug Info. List status reads cached typed receipts, with no file parsing during view drawing. The preview opens fixture profiles without a schedule. Refresh reconciles externally deleted profiles too. `settings.adBlock?.hasOtherBlocker` accepts the app's extension state.
 
-`SettingsPresenter.show(pane:)` reuses one standard titled window, 684×650 pt. Closing the window retains it. Showing or reactivating it refreshes external browser/store state. The root registers defaults when it is constructed; construct it once at launch. The selected pane writes `open.settings.lastPane`. The native tab bar changes the window title. Account, AI, internal, referral, and sync panes are absent.
+`SettingsPresenter.show(pane:)` reuses one standard titled window, 684×650 pt. Closing the window retains it. Showing or reactivating it refreshes external browser/store state. The App registers defaults before showing its first window. The root also registers them for isolated preview suites. The selected pane writes `open.settings.lastPane`. The native tab bar changes the window title. Account, AI, internal, referral, and sync panes are absent.
 
 For Library, inject the app's existing archive/history stores and its single Downloads feed. Supply app-owned Captures through `FileCapturesProvider(root:)`, or a conforming provider that reads the same index. Pass the shared favicon cache when available.
 
@@ -44,9 +44,10 @@ The Library view model owns Archive restore/delete/clear and capture index/file 
 | Command | App adapter |
 |---|---|
 | `settings`, Cmd+, | `settingsPresenter.show()` |
-| `search-settings` | `.show(pane: .general)` |
+| `search-settings` | `.show(pane: .profiles)` for the focused Profile |
 | `keyboard-shortcuts` | `.show(pane: .shortcuts)` |
 | `air-traffic-control` | `.show(pane: .links)`; optional `settings.scrollTarget = "links-rules"` |
+| `new-profile` | Profiles with the existing Create Profile sheet; sidebar intent preselects its source Space |
 | `import-from-browser` | `.show(pane: .general)`, then `settings.showsImport = true` |
 | `set-default-browser` | `settings.general.setDefault()` |
 | `view-library`, Home, Cmd+Shift+L | `libraryPresenter.show()` |
@@ -61,7 +62,7 @@ The app's command router must preserve command-bar text capture rules. Settings 
 - `openPreviewsSettings` is a notification/focus callback: General already presents the shared Previews sheet. The adapter must not present a second copy.
 - `keyBindingsDidChange` rebuilds menus and re-registers/unregisters the global hotkey. Load overrides from `State/keybindings.json`. The Links hotkey switch notifies the same owner.
 - The app reads General, Peek, numbering, and Advanced defaults at use, and observes changes where an immediate effect is required (Previews and Boosts). Defaults are registered once at startup.
-- `setTabSleepMode` maps `automatic`→`SleepMode.balanced`, `never`→`.off`, and the other two labels to the matching model cases. The app reconciles this choice with the existing profile policies used by `SleepController`. No engine or second sleep implementation lives in Settings.
+- `setTabSleepMode` maps `automatic`→`SleepMode.balanced`, `never`→`.off`, and the other two labels to the matching model cases. The global `open.advanced.tabSleepMode` is authoritative. At launch, on mode changes, and on Profile creation, the App reconciles `ProfileSettings.sleepMode` directly, without another Undo step, and schedules a save only when a value changes. Never blocks freeze, discard, 24-hour shell destruction, and loaded-page hidden-cache eviction. Other modes still sleep pinned tabs and Favorites. No engine or second sleep implementation lives in Settings.
 - `AdBlockStore` remains the configuration and download owner. Its engine events and Settings action callbacks must have one app adapter; do not send the same engine reload twice. The master switch is global. Lists and exclusions remain per profile.
 - `clearBrowsingData(profileID:kinds:range:)` includes the time range. The app clears the selected profile only, including its History store. The overload without a range means All time.
 - `deleteProfileData` wipes the engine data only after the UI has checked deletion guards. A failed wipe keeps the model profile. The model command removes it only after the action succeeds.
@@ -287,3 +288,28 @@ All 86 Settings/Library PNGs were re-rendered and inspected at both scales, incl
 ## First-run review round 2
 
 All seven remaining Settings default buttons now explicitly use prominent SettingsButtonStyle: Ad Block Done, Previews Done, Profile Create/Save, This Profile Only, suggestion notice, Save Engine, and Save Rule. The standalone sheet renderer uses the same base SettingsButtonStyle as the app. Settings import shows “Search engine” in Choose and Report and formats count strings with the shared singular/plural helper. The adapter’s `Search settings` key is unchanged. All 86 Settings/Library PNGs and their SHA-256 receipts were refreshed.
+
+## Section 7 live Settings
+
+Peek uses the positive registry keys `open.links.openPeekShiftClick` and
+`open.links.openPeekOtherSites` (both default true). Startup copies a stored
+legacy `open.peek.shiftClick` / `open.peek.otherSites` value only when its
+canonical key has no stored value. A stored canonical choice always wins.
+
+File ▸ New Profile and sidebar Set Profile ▸ New Profile open Profiles with
+the same create sheet. A supplied source Space starts selected. Cmd+, is
+consumed while the command bar's text field owns typing; Escape still closes
+the bar. Search Settings opens Profiles. Cmd+9 retains its last-tab default.
+
+The Icon pane applies Open's existing original artwork to the running App
+through `NSApp.applicationIconImage`. Alternate images render at 1024 pixels
+and are cached per ID. The default resets to the bundle icon. Restore runs
+after the first window and content paint (or the existing no-paint deadline).
+`settings-icon` and launch timing expose restore cost and ordering. The signed
+bundle is never changed. Failures appear in the Icon pane.
+
+Actions use the triggering pane's existing status/error line. Links renders
+model issues per rule and default destination; errors block Save, warnings
+do not. Invalid Test input shows “Enter a valid URL.” Successful import's
+Open Library completion hides Settings and opens Archive. Export Data keeps
+its existing metadata export contract.

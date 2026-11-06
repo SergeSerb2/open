@@ -42,6 +42,29 @@ final class AppSleepCoordinator {
 
   init(app: AppDelegate) { self.app = app }
 
+  /// Global Settings is the authority. Policy initialization registers no extra Undo.
+  func installSettingsPolicy() {
+    app.model.onProfileCreated = { [weak self] profile in
+      guard let self, self.reconcile(profile) else { return }
+      self.app.scheduleSave()
+    }
+    reconcileSettingsPolicy()
+  }
+
+  private func reconcile(_ profile: Profile) -> Bool {
+    let mode = TabSleepMode(rawValue: UserDefaults.standard.string(forKey: "open.advanced.tabSleepMode") ?? "") ?? .automatic
+    guard profile.settings.sleepMode != mode.modelMode else { return false }
+    profile.settings.sleepMode = mode.modelMode
+    return true
+  }
+
+  func reconcileSettingsPolicy() {
+    var changed = false
+    for profile in app.model.profiles { if reconcile(profile) { changed = true } }
+    if changed { app.scheduleSave() }
+    modeChanged()
+  }
+
   // MARK: Lifecycle
 
   /// Builds the controller once (no timer yet). Needs the model, the data root and a ready engine.
@@ -255,6 +278,8 @@ final class AppSleepCoordinator {
 
   /// The hidden-host cache keeps pages the sleep gates protect.
   func protects(_ id: ItemID) -> Bool {
+    // The cache cap closes loaded pages, including before the controller starts at T5.
+    if UserDefaults.standard.string(forKey: "open.advanced.tabSleepMode") == "never" { return true }
     guard let controller else { return false }
     switch controller.blockingGate(tabID: id, forDiscard: false) {
     case nil, .visible?, .loading?: return false
