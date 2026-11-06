@@ -11180,6 +11180,8 @@ def main():
     domain_before = plistlib.loads(exported.stdout) if exported.returncode == 0 else {}
     startup_peek = {key: domain_before.get(key) for key in
                     ('open.links.openPeekShiftClick', 'open.links.openPeekOtherSites')}
+    if opts.only in ('window', 'sidebar'):
+        startup_peek['open.sidebar.hideHintShown'] = domain_before.get('open.sidebar.hideHintShown')
     if not 0 <= opts.focus_retry_delay_seconds <= 600:
         ap.error("--focus-retry-delay-seconds must be between 0 and 600")
     if opts.only is None and not opts.engine_fingerprint_only:
@@ -11486,6 +11488,9 @@ def main():
         shutil.rmtree(user_data, ignore_errors=True)
         interruption = None
         try:
+            if opts.only in ('window', 'sidebar'):
+                # Deterministic chrome captures; restore the user's value in finally.
+                _restore_defaults(None, {'open.sidebar.hideHintShown': True})
             execute()
         except FocusInterruption as error:
             interruption = {"reason": str(error), "focus": error.evidence}

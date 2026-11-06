@@ -1049,4 +1049,6 @@ drag/up rejection, edge-hover recovery, and a new drag. `window-state` exposes
 and nullable `sidebarWidthOverride` for complete cleanup evidence. `drag_undo_single`
 checks three live crossings and two Cmd+Z events through the outline and App key path; `drag_undo_same_mode`
 checks that returning to the start mode adds no action. Width commits and the
-hidden-gesture notification remain mouse-up effects.
+hidden-gesture notification remain mouse-up effects. The `window` and `sidebar`
+suites set the hide-hint flag to a fixed value at each attempt and restore its
+pre-launch value (including absence) in `finally`.
