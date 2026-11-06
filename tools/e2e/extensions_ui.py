@@ -450,6 +450,10 @@ def run(factory, results, tmp, root, wait_until, new_tab, frame, read_image, ext
         app.call("key", key="e", modifiers=["command"], route="app")
         picker = app.call("ext-picker")
         picker_items = app.call("site-controls", action="state")["extensionItems"]
+        app.call("key", key="right", route="app")
+        picker_right = app.call("ext-picker")
+        app.call("key", key="left", route="app")
+        picker_left = app.call("ext-picker")
         app.call("key", key="a", route="app")
         picker_selected = app.call("ext-picker")
         app.call("key", key="return", route="app")
@@ -462,10 +466,13 @@ def run(factory, results, tmp, root, wait_until, new_tab, frame, read_image, ext
         picker_escaped = app.call("ext-picker")
         results["X13_picker"] = {"ok": not picker_before.get("presented") and picker.get("presented")
             and bool(picker_items) and picker.get("focusedID") == picker_items[0]["id"]
+            and len(picker_items) > 1 and picker_right.get("focusedID") == picker_items[1]["id"]
+            and picker_left.get("focusedID") == picker_items[0]["id"]
             and picker_selected.get("focusedID") == probe
             and bool(picker_ran) and not picker_after.get("presented") and picker_reopened.get("presented")
             and not picker_escaped.get("presented"), "state":picker, "selected":picker_selected,
-            "negativeClosed":picker_before, "items":picker_items, "afterReturn":picker_after, "afterEscape":picker_escaped}
+            "negativeClosed":picker_before, "items":picker_items, "afterRight":picker_right,
+            "afterLeft":picker_left, "afterReturn":picker_after, "afterEscape":picker_escaped}
         bar = app.call("ext-ui-menu", kind="bar")
         names = [a["name"] for a in sorted(actions(), key=lambda a: (not a["pinned"], a["pinnedIndex"] if a["pinned"] else a["name"]))]
         shown_names = [x["title"] for x in bar if not x["separator"]]
