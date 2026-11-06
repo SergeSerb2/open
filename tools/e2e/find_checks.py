@@ -5,6 +5,19 @@ import subprocess
 from pathlib import Path
 
 
+def jump_selection(h, app, tab):
+    app.eval(tab, "window.selectFindText('far')"); time.sleep(.1)
+    app.eval(tab, 'window.scrollTo(0,0)'); time.sleep(.1)
+    selection_position = "(() => {let r=document.getElementById('far').getBoundingClientRect();return [scrollY,innerHeight,r.top,r.bottom]})()"
+    before_jump = app.eval(tab, selection_position)
+    app.call('key', route='app', key='j', modifiers=['cmd'])
+    def centered_selection():
+        position=app.eval(tab, selection_position)
+        return position if position[0]>1000 and abs((position[2]+position[3]-position[1])/2)<2 else None
+    jumped=h.wait_until(centered_selection, timeout=3, step=.05)
+    return dict(ok=before_jump[0]==0 and before_jump[2]>before_jump[1] and bool(jumped),
+        before=before_jump, after=app.eval(tab, selection_position))
+
 def run(h, factory, results, tmp):
     server, origin = h._static_server(os.path.join(h.ROOT, 'tools/e2e/fixtures/find'))
     # Reuse the real S8 scheduler/view observer, scoped to Find's executable
@@ -151,17 +164,7 @@ def run(h, factory, results, tmp):
         key('escape'); key('f', ['cmd','option']); p=pane(other)
         row('F20_find_replace_key', p['visible'] and p['focused'], pane=p)
         key('escape'); app.call('focus', tab=other)
-        app.eval(other, "window.selectFindText('far')"); time.sleep(.1)
-        app.eval(other, 'window.scrollTo(0,0)'); time.sleep(.1)
-        selection_position = "(() => {let r=document.getElementById('far').getBoundingClientRect();return [scrollY,innerHeight,r.top,r.bottom]})()"
-        before_jump = app.eval(other, selection_position)
-        key('j', ['cmd'])
-        def centered_selection():
-            position=app.eval(other, selection_position)
-            return position if position[0]>1000 and abs((position[2]+position[3]-position[1])/2)<2 else None
-        jumped=h.wait_until(centered_selection, timeout=3, step=.05)
-        row('F21_jump_selection', before_jump[0]==0 and before_jump[2]>before_jump[1] and bool(jumped),
-            before=before_jump, after=app.eval(other, selection_position))
+        row('F21_jump_selection', **jump_selection(h, app, other))
         app.eval(other, 'getSelection().removeAllRanges();window.scrollTo(0,0)')
         # Use Selection to Find has no 40-character ceiling; preserve Cmd+E registry.
         select(other, 'long'); selection_requests=state().get('requests',0)
