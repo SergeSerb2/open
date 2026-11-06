@@ -121,16 +121,6 @@ Small items found during review and verification. Each line: area — issue — 
 - Sidebar compact toolbar (merged #126) — the "More options" menu content (Reload This Page / Stop Loading, Hide Sidebar) is a guess: the capture never opened it (C11). — section 1, A1, 2026-10-27
 - Hover preview page card (merged #127) — size 420 × min(560, H − 20) pt and x = sidebar width + 8 are Open values; capture C4 (`previews`: hover a pinned tab and a favorite for 2 s) is still requested to confirm them. — section 1, A2, 2026-10-28
 
-- Section 9 — reuse the App's `ExpirySweeper` merged in #130 for Little Open. Supply the minimum of
-  `TodayAutoArchiveController.nextExpiry(now:)` and the Little Open session deadline,
-  and call both domain sweeps from its sweep closure. Keep one App timer. Little Open
-  deadlines use session activity plus each Profile's `littleOpenAutoArchiveAfter`
-  (default 6 h; Never returns nil). Remove `LittleOpenCoordinator`'s existing 60 s
-  poll when that integration lands; the old polling instruction in
-  `docs/plans/routing-little-open.md` §9.6 is superseded. Keep `littleOpen:` archive
-  locations and trigger Today education only from the Today report. Merged #130
-  does not change Little Open. — Sidebar item 6, 2026-10-28
-
 - Section 9 activity rule (merged #130/#135) — reuse the model's shown-tab protection in both expiry
   and next-deadline queries. A focused Space's selected tab, or every pane of its
   selected split, stays protected while any window shows it, including a selected

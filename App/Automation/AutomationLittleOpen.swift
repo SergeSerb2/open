@@ -67,9 +67,12 @@ extension AutomationController {
       guard let page = factory.content(forAutomationHandle: args["tab"]), let target = page.view.window,
         let x = args["x"] as? Double, let y = args["y"] as? Double else { throw Failure(message: "missing link page or point") }
       try await activateForInput(target)
-      let point = page.view.convert(NSPoint(x: x, y: page.view.isFlipped ? y : page.view.bounds.height - y), to: nil)
-      return try await mouse(["window": target.windowNumber, "action": "click", "x": point.x,
-        "y": target.frame.height - point.y, "modifiers": ["command", "option"]], factory)
+      page.focusPage()
+      for type in ["mousePressed", "mouseReleased"] {
+        _ = try await page.sendDevToolsMethod("Input.dispatchMouseEvent", parameters: [
+          "type": type, "x": x, "y": y, "button": "left", "clickCount": 1, "modifiers": 5])
+      }
+      return ["point": [x, y], "path": "OpenEngine Input.dispatchMouseEvent", "modifiers": 5] as [String: Any]
     }
     if cmd == "little-open-dock-menu" {
       return app.applicationDockMenu(NSApp)?.items.map { ["id": $0.identifier?.rawValue ?? "", "title": $0.title] } ?? []

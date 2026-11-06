@@ -6989,7 +6989,6 @@ def littleopen_checks(factory, results, tmp):
         fixture_path = os.path.join(tmp, 'littleopen-snapshot.json')
         with open(fixture_path, 'w') as stream: json.dump(seed, stream)
         app.quit(); app = factory(urls=(), snapshot=fixture_path, extra_env=env)
-        app.call('reload-keybindings')
         base = state()
         menu('new-little-open-window')
         bar = sessions()[0]
@@ -7175,18 +7174,22 @@ def littleopen_checks(factory, results, tmp):
         def modifier_click(target):
             point = app.eval(source, """(() => { const a=document.createElement('a'); a.textContent='Little Open link';
                 a.href=%s; document.body.replaceChildren(a); const r=a.getBoundingClientRect(); return [r.x+r.width/2,r.y+r.height/2] })()""" % json.dumps(target))
-            app.call('little-open-link-click', tab=source, x=point[0], y=point[1])
+            app.eval(source, "window.__littleClicks=[]; ['mousedown','mouseup','click'].forEach(k=>document.addEventListener(k,e=>window.__littleClicks.push([k,e.clientX,e.clientY,e.metaKey,e.altKey,e.target.tagName]))); true")
+            return app.call('little-open-link-click', tab=source, x=point[0], y=point[1])
+        source_profile = next(t['profile'] for t in app.call('tabs') if t['id'] == source)
+        source_count = len(app.call('tabs'))
         target_url = origin + '/option-command-little'
-        modifier_click(target_url)
+        click_diagnostics = modifier_click(target_url)
         clicked = wait_until(lambda: any(r['url'] == target_url and r['state'] == 'page' for r in sessions()), timeout=10)
-        record('option_command_click', clicked and app.eval(source, 'location.href') == original_url,
-               state=state(), source=app.eval(source, 'location.href'), events=app.call('events'))
+        record('option_command_click', clicked and app.eval(source, 'location.href') == original_url
+               and len(app.call('tabs')) == source_count and sessions()[0]['profile'] == source_profile,
+               state=state(), source=app.eval(source, 'location.href'), events=app.call('events'), click=click_diagnostics, input=app.eval(source, 'window.__littleClicks || []'))
         close_all()
         app.call('defaults', key=keys[2], value=False)
         off_target = origin + '/option-command-off'
-        modifier_click(off_target)
+        click_diagnostics = modifier_click(off_target)
         in_place = wait_until(lambda: app.eval(source, 'location.href') == off_target, timeout=10)
-        record('option_command_toggle_off', in_place and not sessions(), source=app.eval(source, 'location.href'), state=state(), events=app.call('events'))
+        record('option_command_toggle_off', in_place and not sessions() and len(app.call('tabs')) == source_count, source=app.eval(source, 'location.href'), state=state(), events=app.call('events'), click=click_diagnostics, input=app.eval(source, 'window.__littleClicks || []'))
         app.call('defaults', key=keys[2], value=True)
 
         # Both domains share the same native timer. Sweep reports keep the Today

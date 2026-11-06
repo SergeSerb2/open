@@ -86,9 +86,13 @@ final class ExternalLinkIntake {
 
 extension AppDelegate {
   func consumeColdExternalLaunch(opensLittleOpen: Bool) {
+    // Guess: the first external delivery before any App input is a cold
+    // delivery. open(1) can send its launch URL after AppKit reports a default
+    // launch, so the notification alone cannot classify that real OS path.
+    let cold = coldExternalLaunchPending || (!executedExternalLink && initialMainWindowUntouched && options.initialURLs.isEmpty)
     executedExternalLink = true
     defer { coldExternalLaunchPending = false }
-    if coldExternalLaunchPending, opensLittleOpen {
+    if cold, opensLittleOpen {
       for controller in Array(windowControllers) { controller.window?.close() }
     }
   }

@@ -65,3 +65,15 @@ synthetic fixture data only.
 - Click a real external HTTP(S) link in Mail.
 - B2: accept and decline the real Set as Default Browser system prompt on a
   user-selected build, then check both HTTP and HTTPS handlers.
+
+## App choices and limits
+
+- Guess: a first external delivery before any App input is a cold delivery.
+  `open(1)` can deliver its URL after AppKit reports a default launch. The App
+  handles that clock-free case as well as queued URLs and the native launch
+  notification. The first real input or earlier external destination ends it.
+- The final suite saves and restores `open.library.lastSection` as well as the
+  six Little Open/education keys. An early development run omitted that Library
+  key; its earlier value was not retained.
+- A focused release build was terminated at load1 201 to reduce machine pressure.
+  That attempt is incomplete. It does not count as a completed verify-all run.

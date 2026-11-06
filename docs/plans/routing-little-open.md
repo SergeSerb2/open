@@ -1831,7 +1831,8 @@ Then `tools/verify-all.sh` and the B10 compare once the App can show the window.
 
 ### Step 7 — Sweeper, menus, polish of behavior (§9.6–§9.7)
 
-Files: coordinator sweeper + Timer, Show/Close All menu items (§9.2),
+Files: shared App `ExpirySweeper` (one minimum Today/Little Open deadline),
+Show/Close All menu items (§9.2),
 NUX banner (§9.3), Links-pane App wiring (bind the future designer's pane —
 or a minimal functional pane if none exists yet — to `LinksSettingsModel`,
 write `currentRouting()` into `BrowserModel` on save, refresh

@@ -51,6 +51,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, OEEngineDelegate, OEBr
   var lastLittleOpenRequest: LittleOpenRequest?
   var coldExternalLaunchPending = false
   var executedExternalLink = false
+  var initialMainWindowUntouched = true
+  var initialWindowInputMonitor: Any?
   /// Library ▸ Captures writer (page-platform §4.6.6); one per app, shared by every window.
   lazy var captureLibrary = CaptureLibraryWriter(app: self, root: directories.root)
   var keyBindings = KeyBindingStore.empty
@@ -129,6 +131,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, OEEngineDelegate, OEBr
     terminationRequested = true
     if let commandWindowObserver { NotificationCenter.default.removeObserver(commandWindowObserver) }; commandWindowObserver = nil
     if let commandDefaultsObserver { NotificationCenter.default.removeObserver(commandDefaultsObserver) }; commandDefaultsObserver = nil
+    if let initialWindowInputMonitor { NSEvent.removeMonitor(initialWindowInputMonitor) }; initialWindowInputMonitor = nil
     hotkeyService?.unregister(); afterPaintTask?.cancel(); menuRebuildTask?.cancel()
     stopAutoArchive()
     saveState()
@@ -370,6 +373,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate, OEEngineDelegate, OEBr
     engineReady = true
     showWindowsIfNeeded()
     for factory in hostFactories.values { factory.engineDidBecomeReady() }
+    // A fresh empty Space has no web paint to start T5. Register its shortcut
+    // after the native first frame without creating Settings or SuggestEngine.
+    reloadKeyBindings()
     completeLinkRestoration()
     EngineWebProfile.onPermissionChange = { [weak self] context in self?.tabSleep.permissionsChanged(context: context) }
     scheduleMenuRebuild()
@@ -593,6 +599,7 @@ extension AppDelegate: CommandDispatcher {
     performCommand(id)
   }
   func performCommand(_ id: String) {
+    noteInitialWindowInput()
     if performLittleOpenCommand(id) { return }
     if SystemCommandActions.selectors[id] != nil { _ = SystemCommandActions.perform(id); return }
     if PageTools.isAppCommandEnabled(id) == true, PageTools.performAppCommand(id) { return }

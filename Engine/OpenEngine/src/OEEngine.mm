@@ -55,6 +55,10 @@ NSErrorDomain const OEErrorDomain = @"app.open.engine";
 
 static __weak NSWindow* navigationMouseWindow;
 static NSEventModifierFlags navigationMouseModifiers;
+void OENoteNavigationInput(NSWindow* window, NSEventModifierFlags modifiers) {
+  navigationMouseWindow = window;
+  navigationMouseModifiers = modifiers;
+}
 NSEventModifierFlags OENavigationModifiersForWindow(NSWindow* window) {
   return window && window == navigationMouseWindow ? navigationMouseModifiers : 0;
 }
@@ -79,11 +83,9 @@ NSEventModifierFlags OENavigationModifiersForWindow(NSWindow* window) {
 - (void)sendEvent:(NSEvent*)event {
   CefScopedSendingEvent sendingEventScoper;
   if (event.type == NSEventTypeLeftMouseDown || event.type == NSEventTypeLeftMouseUp) {
-    navigationMouseWindow = event.window;
-    navigationMouseModifiers = event.modifierFlags;
+    OENoteNavigationInput(event.window, event.modifierFlags);
   } else if (event.type == NSEventTypeKeyDown) {
-    navigationMouseWindow = nil;
-    navigationMouseModifiers = 0;
+    OENoteNavigationInput(nil, 0);
   }
   // App shortcuts that must beat the page. AppKit would otherwise send the
   // key-down to Chromium's RenderWidgetHostViewCocoa first, and the page can
