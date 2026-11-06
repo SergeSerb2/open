@@ -478,6 +478,13 @@ typedef void (^OEDevToolsCompletion)(NSDictionary* _Nullable, NSError* _Nullable
   }];
 }
 
+- (void)prepareForDisplay {
+  if (_view.window && !_browser && !_creating && !_awaitingPopup &&
+      !_closeRequested) {
+    [self oe_createBrowser];
+  }
+}
+
 - (void)oe_createBrowserNow {
   if (_closeRequested || _browser) {
     _creating = NO;

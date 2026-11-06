@@ -145,6 +145,9 @@ final class LittleOpenWebContent: NSObject, LittleOpenWebContentProviding, WebCo
     }
     // Section 6 discovers the new Browser as soon as its tab exists.
     factory.standaloneSurfaceVisibilityChanged()
+    // This turn already follows the first native frame. Start the attached
+    // tab now; a second queue turn would overlap the user's first URL input.
+    host.content.prepareForDisplay()
     app.littleOpenCoordinator?.onChange?()
     guard !closed else { return }
     if let url = pendingURL { pendingURL = nil; host.load(url) }
