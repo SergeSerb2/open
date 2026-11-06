@@ -131,7 +131,11 @@ final class EngineWebContentHostFactory: NSResponder, WebContentHostFactory {
   private(set) var events: [[String: Any]] = []
   private(set) var lastFindResult: OEFindResult?
   func standaloneSurfaceVisibilityChanged() {
-    standaloneBrowser?.window = standaloneSurface?.surfaceWindow
+    // Setting even the same window re-enters Chromium's SetHostView path.
+    // Window geometry follows the page view's existing native observers.
+    if let browser = standaloneBrowser, browser.window !== standaloneSurface?.surfaceWindow {
+      browser.window = standaloneSurface?.surfaceWindow
+    }
     pageChrome.visibilityChanged()
   }
 
