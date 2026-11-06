@@ -206,6 +206,18 @@ def run(factory, results, tmp, root, wait_until, new_tab, frame, read_image, ext
             "blocked":blocked,"action":counter,"redrawDelta":after_ubo["redraws"]-before_ubo["redraws"],
             "layoutDelta":after_ubo["layoutCount"]-before_ubo["layoutCount"],"source":"uBO Lite DNR session rule, local HTTP requests"}
         app.eval(ubo_page,"chrome.declarativeNetRequest.updateSessionRules({removeRuleIds:[2147483000]}).then(()=>true)")
+        bitwarden_menu=app.call("ext-menu",extension=extensions["bitwarden"])
+        site_items=[child for item in bitwarden_menu for child in item["submenu"]]
+        on_site=next((item["title"] for item in site_items if item["title"].startswith("On 127.0.0.1")),None)
+        if on_site: app.call("ext-menu",extension=extensions["bitwarden"],select=on_site)
+        site=wait_until(lambda:action(extensions["bitwarden"]).get("siteAccess")==2,timeout=5) if on_site else None
+        before_options={t["id"] for t in app.call("tabs")}
+        if any(item["title"]=="Options" and item["enabled"] for item in bitwarden_menu):
+            app.call("ext-menu",extension=extensions["bitwarden"],select="Options")
+        option_tab=wait_until(lambda:next((t for t in app.call("tabs") if t["id"] not in before_options and t["selected"]
+            and t["url"].startswith("chrome-extension://"+extensions["bitwarden"])),None),timeout=10)
+        results["X11_options_site_access"]={"ok":bool(site and option_tab),"menu":bitwarden_menu,"onSite":on_site,"optionsTab":option_tab,
+            "siteAccess":action(extensions["bitwarden"]).get("siteAccess")}
         app.call("select",tab=control)
         app.call("ext-pin", extension=probe, pinned=True, index=0)
         # D1-D5 and F2 use the native key/event path, not a popup-controller call.
@@ -325,6 +337,8 @@ def run(factory, results, tmp, root, wait_until, new_tab, frame, read_image, ext
         app.call("ext-ui-menu", kind="bar", select=action(probe)["name"])
         from_menu = wait_until(lambda: app.call("ext-popup-state").get("visible"), timeout=10)
         results["X16_menu_run"] = {"ok": bool(from_menu), "state":app.call("ext-popup-state")}
+        forced=hover(False)
+        results["X3_popup_forces_visible"]={"ok":forced["visible"] and app.call("ext-popup-state")["open"],"strip":forced}
         close()
         for _ in range(2): app.call("command", id="manage-extensions")
         manage = [t for t in app.call("tabs") if t["url"] == "chrome://extensions"]
@@ -366,7 +380,7 @@ def run(factory, results, tmp, root, wait_until, new_tab, frame, read_image, ext
         toasts = app.call("toasts")
         toast = next((t for t in toasts["toasts"] if t["title"]=="Added Open action probe"),{})
         results["install_toast"] = {"ok":toast.get("lifetime")==3,"state":toasts}
-        if toast.get("accessory")=="button":
+        if toast.get("accessory")=="pin":
             app.call("toast-action",index=0)
             pinned_toast = wait_until(lambda: action(installs[-1]["prompt"]["extension"]).get("pinned"),timeout=5)
             pin_result("install_toast_pin",{"ok":bool(pinned_toast),"toast":toast})
@@ -393,6 +407,7 @@ def run(factory, results, tmp, root, wait_until, new_tab, frame, read_image, ext
         if second: app.call("key",key="escape",window=second["sheet"],route="app")
         drained=wait_until(lambda:not app.call("ext-prompt").get("pending"),timeout=5)
         results["prompt_fifo"]={"ok":bool(first and second and drained) and first["sheetVisible"],"first":first,"second":second,"drained":bool(drained)}
+        wait_until(lambda:not any(not t["exiting"] for t in app.call("toasts")["toasts"]),timeout=5)
         for appearance in ("light", "dark"):
             close(); app.call("select",tab=blank)
             app.call("appearance", name=appearance)
@@ -420,6 +435,19 @@ def run(factory, results, tmp, root, wait_until, new_tab, frame, read_image, ext
         results["X21_idle"] = {"ok": idle["redraws"] == baseline["redraws"] and idle["layoutCount"] == baseline["layoutCount"],
             "redraws": idle["redraws"]-baseline["redraws"], "layouts": idle["layoutCount"]-baseline["layoutCount"], "seconds":10}
         results["X19_little_open"] = {"status":"BLOCKED", "reason":"App entry point is showLittleOpenStub; Section 9 owns the real App presenter"}
+        app.call("command",id="new-window")
+        app.call("ext-manage",extension="local",action="install-crx",path=crx)
+        closing=wait_until(lambda:(lambda p:p if p.get("pending") else None)(app.call("ext-prompt")),timeout=15)
+        app.call("window-close")
+        cancelled=wait_until(lambda:not app.call("ext-prompt").get("pending"),timeout=5)
+        results["prompt_window_close_cancels"]={"ok":bool(closing and cancelled),"prompt":closing,"cancelled":bool(cancelled)}
+        app.call("ext-prompt",clear=True)
+        app.call("ext-manage",extension="local",action="install-crx",path=crx)
+        quitting=wait_until(lambda:(lambda p:p if p.get("pending") else None)(app.call("ext-prompt")),timeout=15)
+        app.quit(); app=factory(urls=("about:blank",))
+        wait_until(lambda:app.call("extensions")["ready"],timeout=20)
+        installed_ids={e["id"] for e in app.call("extensions")["installed"]}
+        results["prompt_quit_cancels"]={"ok":bool(quitting) and quitting["extension"] not in installed_ids and not app.call("ext-prompt").get("pending"),"prompt":quitting}
     finally:
         try:
             if not app.closed:

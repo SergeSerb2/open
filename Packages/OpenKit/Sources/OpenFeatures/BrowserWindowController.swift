@@ -44,8 +44,9 @@ public final class BrowserWindowController: NSWindowController, NSWindowDelegate
     public var onCommandValidation: ((String, String) -> Bool?)?
     /// Runtime menu state from the App (page-platform §7.1); nil keeps the item as built.
     public var onMenuState: ((String) -> CommandMenuState?)?
-    /// Sees every key event of this window first (after the tab switcher); true consumes it.
+    /// Extension commands run after Open's bindings and before page delivery.
     public var onExtensionShortcut: ((NSEvent) -> Bool)?
+    /// Sees every key event of this window first (after the tab switcher); true consumes it.
     public var keyInterceptor: ((NSEvent) -> Bool)?
     public var ownsAdditionalKeyWindow: ((NSWindow) -> Bool)?
     public var isApplicationActive: (() -> Bool)?
