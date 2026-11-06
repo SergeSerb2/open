@@ -617,5 +617,10 @@ these files use P1's existing overlay source list. See `engine-api.md` for
 cookie scope, supported states, completion behavior and bounds. Four C API
 entry points are required by `verification/expected-symbols.txt`.
 
-The engine compiles with these overlays. Real-App positive/negative proof is
-pending the lead's screen HOLD release; this does not mark E1/E2/E3 accepted.
+The engine and Debug App compile with these overlays. The real-App `sitedata`
+suite passes all ten settings, data and security rows. Temporarily disabling
+the bridge backends and native security observer makes all ten rows fail;
+production source is restored and rebuilt afterwards. Cache proof uses server
+hit counters: clearing origin A changes hits from [1, 1] to [2, 1], while
+origin B remains cached. Mixed-content and malicious-page classifications
+have source support but no dedicated runtime fixtures in this receipt.
