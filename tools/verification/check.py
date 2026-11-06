@@ -169,6 +169,11 @@ def onscreen_suite(command):
                 time.sleep(0.25)
             if cancelled is not None:
                 break
+            # Wait outside the screen lock; recheck after the kernel queue.
+            while cancelled is None and os.getloadavg()[0] > 60:
+                time.sleep(0.25)
+            if cancelled is not None:
+                break
             lock_file = open(lock_path, "a+")
             waiting_for_lock = True
             try:
@@ -187,7 +192,7 @@ def onscreen_suite(command):
                 current = os.stat(lock_path)
             except FileNotFoundError:
                 current = None
-            if current is not None and (held.st_dev, held.st_ino) == (current.st_dev, current.st_ino):
+            if current is not None and (held.st_dev, held.st_ino) == (current.st_dev, current.st_ino) and os.getloadavg()[0] <= 60:
                 break
             lock_file.close()
             lock_file = None
@@ -839,12 +844,14 @@ def main():
         profiles(cli)
     elif name == "settings-preview":
         preview = str(root / "Packages/OpenKit/.build/release/settings-preview")
-        all_passed(run(preview, "check"))
+        # Every Settings preview launch takes the shared screen lock.
+        locked = [sys.executable, str(Path(__file__).resolve()), "onscreen-suite", preview]
+        all_passed(run(*locked, "check", timeout=None, interrupted_exit=2))
         output = Path("settings-panes").resolve()
-        rendered = run(preview, "render", "--out", str(output))
+        rendered = run(*locked, "render", "--out", str(output), timeout=None, interrupted_exit=2)
         require("PREVIEWS-CONTROLS delay=absent popups=0 expected-labels=present" in rendered,
                 "missing rendered Previews control evidence")
-        dump = run(preview, "dump-keys", "--root", str(output / "fixture"))
+        dump = run(*locked, "dump-keys", "--root", str(output / "fixture"), timeout=None, interrupted_exit=2)
         require("snapshot profile Personal searchEngineID = google" in dump, "missing settings store receipt")
         require(not any(line.startswith("default open.general.previewsDelaySeconds =") for line in dump.splitlines()),
                 "removed preview delay default was registered")
