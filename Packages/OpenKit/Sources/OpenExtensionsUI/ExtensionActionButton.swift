@@ -15,6 +15,8 @@ public enum ExtensionActionIntent {
     public private(set) var pressed = false
     /// In-process acceptance counter: draw calls, not state assignments.
     public private(set) var redrawCount = 0
+    /// Optional in-process measurement hook. No scheduled work when it is nil.
+    public var onRedraw: (() -> Void)?
     private var tracking: NSTrackingArea?
     private var down: CGPoint?
     private var downClosesPopup = false
@@ -60,7 +62,7 @@ public enum ExtensionActionIntent {
     }
     public override func viewDidChangeEffectiveAppearance() { super.viewDidChangeEffectiveAppearance(); updatePlate(animated: false); needsDisplay = true }
     public override func draw(_ dirtyRect: NSRect) {
-        redrawCount += 1
+        redrawCount += 1; onRedraw?()
         guard let image = action.toolbarImage else { return }
         Self.draw(image, centeredIn: bounds, scale: window?.backingScaleFactor ?? 2)
     }

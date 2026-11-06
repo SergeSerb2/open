@@ -60,7 +60,9 @@ final class ExtensionPopupController {
       anchorKind = .contentTopLeading
     }
     if browser?.extensionPopupSource != .API, requestedID == id, let view = requestedAnchor, view.window === factory.window, !view.isHiddenOrHasHiddenAncestor {
-      setAnchor(view, kind: view is ExtensionActionButton ? .actionButton : .overflow)
+      setAnchor(view, kind: factory.littleOpenController != nil ? .littleOpen : view is ExtensionActionButton ? .actionButton : .overflow)
+    } else if let little = factory.littleOpenController, !little.extensionsButton.isHiddenOrHasHiddenAncestor {
+      setAnchor(little.extensionsButton, kind: .littleOpen)
     } else {
       // A4 order is intentional: pane, URL slot (forced visible), URL SCC, content point.
       let pane = ui.strips.first { $0.style != .urlField && $0.isFocused && !$0.isHiddenOrHasHiddenAncestor }
@@ -148,7 +150,7 @@ final class ExtensionPopupController {
     })
   }
   var state: [String: Any] {
-    ["open": page != nil, "visible": panel?.isVisible == true && panel?.alphaValue == 1,
+    ["page": page?.identifier ?? 0, "open": page != nil, "visible": panel?.isVisible == true && panel?.alphaValue == 1,
       "ready": panel?.isReady == true, "key": panel?.isKeyWindow == true, "window": panel?.windowNumber ?? 0,
       "frame": NSStringFromRect(panel?.frame ?? .zero), "contentSize": NSStringFromSize(panel?.contentView?.bounds.size ?? .zero),
       "anchor": NSStringFromRect(anchorFrame), "anchorKind": String(describing: anchorKind),

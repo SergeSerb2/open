@@ -160,12 +160,15 @@ def run(factory, results, tmp, root, wait_until, new_tab, frame, read_image, ext
         seven_on_a = wait_until(lambda: action(probe).get("badge")=="7", timeout=5)
         results["X4_per_tab"] = {"ok":bool(empty_on_b and seven_on_a),"tabA":active,"tabB":other_chrome}
         layouts = strip()["layoutCount"]; draws = strip()["redraws"]
+        app.call("ext-redraw-measure",start=True)
         app.eval(content, "Promise.all(Array.from({length:100},(_,i)=>chrome.action.setBadgeText({tabId:" + str(active) + ",text:String(i)}))).then(()=>true)")
         burst = wait_until(lambda: action(probe).get("badge") == "99", timeout=5)
         time.sleep(.1)
         after = strip()
-        results["X5_badge_burst"] = {"ok": bool(burst) and after["layoutCount"] == layouts and after["redraws"] - draws <= 3,
-            "layoutDelta": after["layoutCount"]-layouts, "redrawDelta": after["redraws"]-draws,
+        measured = app.call("ext-redraw-measure")
+        results["X5_badge_burst"] = {"ok": bool(burst) and after["layoutCount"] == layouts
+            and measured["frames"] > 0 and measured["maxPerActionPerFrame"] <= 1,
+            "layoutDelta": after["layoutCount"]-layouts, "redrawDelta": after["redraws"]-draws, "displayFrames":measured,
             "source": "network-free action-probe, 100 action events in one renderer turn"}
         # Real store extensions use their bundled assets and APIs; no account or network is needed.
         for identifier, name in ((extensions["bitwarden"], "bitwarden"), (extensions["darkreader"], "darkreader")):
@@ -201,11 +204,14 @@ def run(factory, results, tmp, root, wait_until, new_tab, frame, read_image, ext
             "chrome.declarativeNetRequest.updateSessionRules({addRules:["+json.dumps(dnr_rule)+"]})]).then(()=>true)")
         local_tab=new_tab(app,local_origin)
         hover(); before_ubo=strip()
+        app.call("ext-redraw-measure",start=True)
         blocked=app.eval(local_tab,"Promise.all(Array.from({length:40},(_,i)=>fetch('/open-extension-blocked/'+i).then(()=>false,()=>true))).then(v=>v.filter(Boolean).length)")
         counter=wait_until(lambda:(lambda a:a if int(a.get("badge") or 0)>0 else None)(action(extensions["ublock"])),timeout=10)
         after_ubo=strip()
-        results["X5_ublock_dnr_badge"]={"ok":blocked==40 and bool(counter) and after_ubo["layoutCount"]==before_ubo["layoutCount"],
-            "blocked":blocked,"action":counter,"redrawDelta":after_ubo["redraws"]-before_ubo["redraws"],
+        ubo_measure=app.call("ext-redraw-measure")
+        results["X5_ublock_dnr_badge"]={"ok":blocked==40 and bool(counter) and after_ubo["layoutCount"]==before_ubo["layoutCount"]
+            and ubo_measure["frames"]>0 and ubo_measure["maxPerActionPerFrame"]<=1,
+            "blocked":blocked,"action":counter,"displayFrames":ubo_measure,"redrawDelta":after_ubo["redraws"]-before_ubo["redraws"],
             "layoutDelta":after_ubo["layoutCount"]-before_ubo["layoutCount"],"source":"uBO Lite DNR session rule, local HTTP requests"}
         app.eval(ubo_page,"chrome.declarativeNetRequest.updateSessionRules({removeRuleIds:[2147483000]}).then(()=>true)")
         bitwarden_menu=app.call("ext-menu",extension=extensions["bitwarden"])
@@ -442,7 +448,44 @@ def run(factory, results, tmp, root, wait_until, new_tab, frame, read_image, ext
         idle = strip()
         results["X21_idle"] = {"ok": idle["redraws"] == baseline["redraws"] and idle["layoutCount"] == baseline["layoutCount"],
             "redraws": idle["redraws"]-baseline["redraws"], "layouts": idle["layoutCount"]-baseline["layoutCount"], "seconds":10}
-        results["X19_little_open"] = {"status":"BLOCKED", "reason":"App entry point is showLittleOpenStub; Section 9 owns the real App presenter"}
+        # S9 owns page creation; this exercises its actual App presenter.
+        before_little={row["id"] for row in app.call("little-open-state")["sessions"]}
+        app.call("menu-perform",id="new-little-open-window")
+        little=next(row for row in app.call("little-open-state")["sessions"] if row["id"] not in before_little)
+        little_id=little["id"]
+        try:
+            app.call("key",window=little["window"],text=local_origin+"/little\r",route="app")
+            little=wait_until(lambda:next((row for row in app.call("little-open-state")["sessions"]
+                if row["id"]==little_id and row["state"]=="page" and not row["loading"]),None),timeout=15)
+            little_strip=app.call("ext-strip",surface="little")
+            little_menu=app.call("ext-click",extension="more",surface="little")
+            results["X19_button_menu"]={"ok":bool(little) and little_strip["visible"] and len(little_strip["ids"])>=4
+                and little["titleElements"].get("extensions")==[little["frame"][2]-252,16,16,16]
+                and [i["title"] for i in little_menu["menu"] if not i["separator"]][-2:]==["Manage Extensions…","Add Extension…"],
+                "strip":little_strip,"session":little,"menu":little_menu}
+            for appearance in ("light","dark"):
+                app.call("appearance",name=appearance);capture("little-"+appearance,little["window"])
+            if little_strip["ready"]:
+                app.call("ext-click",extension="more",surface="little",select=action(probe)["name"])
+                little_popup=wait_until(lambda:(lambda p:p if p.get("visible") else None)(app.call("ext-popup-state",surface="little")),timeout=15)
+                queried=app.eval(little_popup["page"],"chrome.tabs.query({active:true,currentWindow:true}).then(ts=>ts.map(t=>t.id))") if little_popup else []
+                button=little_strip["buttonFrame"];anchor=frame(little_popup["anchor"]) if little_popup else []
+                expected=[button[0]+little["frame"][0],button[1]+little["frame"][1],*button[2:]]
+                results["X19_run_popup_activeTab"]={"ok":bool(little_popup) and queried==[little_strip["activeTab"]]
+                    and all(abs(a-b)<=1 for a,b in zip(anchor,expected)),"popup":little_popup,"queried":queried,"strip":little_strip}
+                app.call("key",key="w",modifiers=["command"],window=little_popup["window"],route="app")
+            else:
+                results["X19_run_popup_activeTab"]={"status":"BLOCKED","reason":"waits for Section 9's Chrome-style Little Open page"}
+            # Registry changes reach the standalone window without a polling loop.
+            installed_actions=[a["id"] for a in actions()]
+            try:
+                for identifier in installed_actions: app.call("ext-manage",extension=identifier,action="disable")
+                empty=wait_until(lambda:(lambda state:state if not state["visible"] and not state["ids"] else None)(app.call("ext-strip",surface="little")),timeout=10)
+                results["X19_zero_actions"]={"ok":bool(empty),"strip":empty}
+            finally:
+                for identifier in installed_actions: app.call("ext-manage",extension=identifier,action="enable")
+        finally:
+            app.call("little-open-action",id=little_id,action="close")
         app.call("command",id="new-window")
         new_tab(app,"about:blank")
         app.call("ext-manage",extension="local",action="install-crx",path=crx)

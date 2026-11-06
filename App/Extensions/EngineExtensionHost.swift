@@ -181,6 +181,14 @@ final class WindowExtensions {
     #endif
     track(native, anchor: anchor, flag: .contextMenu)
   }
+  func showLittleOpenMenu(_ controller: LittleOpenWindowController) {
+    let native = controller.makeExtensionsMenu()
+    if host?.actionsReady != true {
+      // Until the page has its own live Chrome browser, the engine refuses runs.
+      for item in native.items.dropLast(2) where !item.isSeparatorItem { item.isEnabled = false }
+    }
+    track(native, anchor: controller.extensionsButton, flag: .overflowMenu)
+  }
   func showOverflow(hidden: Int, anchor: NSView) {
     let pinned = context.actions.filter(\.isPinned).count
     let native = ExtensionsMenuBuilder.menu(actions: context.actions, kind: .overflow(visiblePinned: pinned - hidden),

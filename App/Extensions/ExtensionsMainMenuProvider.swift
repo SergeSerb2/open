@@ -10,7 +10,7 @@ final class ExtensionsMainMenuProvider: NSObject, NSMenuDelegate {
   func menuNeedsUpdate(_ menu: NSMenu) {
     for item in injected where item.menu === menu { menu.removeItem(item) }
     injected.removeAll()
-    guard let factory = NSApp.keyWindow.flatMap({ app.factory(forKeyWindow: $0) })
+    guard let factory = app.littleOpenExtensionFactory() ?? NSApp.keyWindow.flatMap({ app.factory(forKeyWindow: $0) })
       ?? app.frontWindowController.flatMap({ app.hostFactories[$0.windowID] }) else { return }
     let built = ExtensionsMenuBuilder.menu(actions: factory.extensions.context.actions, kind: .bar,
       run: { [weak factory] id, source in factory?.extensions.run(id, source: source) }, command: { _ in })

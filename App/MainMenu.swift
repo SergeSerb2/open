@@ -46,6 +46,9 @@ enum MainMenu {
       return true
     }
     if app.handleLittleOpenKey(event) { return true }
+    if let factory = app.littleOpenExtensionFactory(window: event.window ?? NSApp.keyWindow),
+      let browser = factory.focusedBrowser,
+      app.extensionPrompts.table(browser.context.extensions).handle(event, factory: factory) { return true }
     if let window = event.window, let factory = app.factory(forKeyWindow: window) {
       return factory.controller?.handleKeyDown(event) == true
     }

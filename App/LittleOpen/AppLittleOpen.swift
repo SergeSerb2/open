@@ -39,6 +39,11 @@ extension AppDelegate {
     // Fan out to the shared visibility feed, deadline and menus.
     coordinator.onChange = { [weak self] in
       guard let self else { return }
+      for controller in self.littleOpenCoordinator.controllers.values {
+        if let host = self.littleOpenHosts.values.first(where: { $0.view.window === controller.window }) {
+          host.owner?.attachLittleOpen(controller, content: host.content)
+        }
+      }
       self.media.visibility.visibilityChanged()
       self.expirySweeper?.rearm()
       self.scheduleMenuRebuild()

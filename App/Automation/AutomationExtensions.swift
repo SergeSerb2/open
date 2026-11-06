@@ -36,7 +36,19 @@ extension AutomationController {
       result["events"] = extensionAutomation.events
       return result
     }
-    let factory = try window
+    let factory: EngineWebContentHostFactory
+    if args["surface"] as? String == "little" {
+      guard let little = app.littleOpenExtensionFactory() else { throw Failure(message: "no focused Little Open extension host") }
+      factory = little
+    } else { factory = try window }
+    if cmd == "ext-redraw-measure" {
+      if args["start"] as? Bool == true {
+        extensionRedrawMeasurement?.stop()
+        extensionRedrawMeasurement = ExtensionRedrawMeasurement(strips: factory.extensions.strips)
+        try await Task.sleep(for: .milliseconds(50))
+      } else { extensionRedrawMeasurement?.stop() }
+      return extensionRedrawMeasurement?.state ?? [:]
+    }
     if ["ext-strip", "ext-click", "ext-popup-state", "ext-picker", "ext-hover", "ext-ui-menu"].contains(cmd) {
       return try await runExtensionUICommand(cmd, args, factory)
     }
@@ -78,6 +90,31 @@ extension AutomationController {
     let ui = factory.extensions
     factory.controller?.contentView.layoutSubtreeIfNeeded()
     if cmd == "ext-popup-state" { return ui.popup.state }
+    if args["surface"] as? String == "little", let little = factory.littleOpenController {
+      little.contentView.layoutSubtreeIfNeeded()
+      let button = little.extensionsButton, rect = button.convert(button.bounds, to: nil)
+      if cmd == "ext-strip" {
+        return ["ids": ui.context.actions.map(\.id), "more": false,
+          "frames": [[rect.minX, rect.minY, rect.width, rect.height]],
+          "buttonFrame": [rect.minX, rect.minY, rect.width, rect.height],
+          "visible": !button.isHiddenOrHasHiddenAncestor, "ready": ui.host?.actionsReady == true,
+          "browser": ui.host?.browser.identifier ?? 0, "context": ui.host?.browser.context.identifier ?? "",
+          "activeTab": ui.host?.browser.activeWebContent?.chromeTabIdentifier ?? -1,
+          "contextIDs": ui.context.actions.map(\.id)] as [String: Any]
+      }
+      if cmd == "ext-click" {
+        guard !button.isHiddenOrHasHiddenAncestor, let target = little.window else { throw Failure(message: "Little Open Extensions button is hidden") }
+        ui.capturesMenus = true; ui.capturedMenu = nil
+        defer { ui.capturesMenus = false; ui.capturedMenu = nil }
+        _ = try await mouse(["action": "click", "window": target.windowNumber,
+          "x": Double(rect.midX), "y": Double(target.frame.height - rect.midY)], factory)
+        try await Task.sleep(for: .milliseconds(20))
+        guard let native = ui.capturedMenu else { throw Failure(message: "Little Open Extensions button did not open its menu") }
+        let items = describeExtensionMenu(native)
+        if let title = args["select"] as? String { try selectExtensionMenu(native, title: title) }
+        return ["menu": items]
+      }
+    }
     if cmd == "ext-hover" {
       guard let window = factory.window, let controller = factory.controller else { throw Failure(message: "no window") }
       let inside = args["inside"] as? Bool ?? true
@@ -136,7 +173,6 @@ extension AutomationController {
       result["pinnedIDs"] = ui.context.actions.filter(\.isPinned).map(\.id)
       result["listUpdates"] = ui.host?.listUpdateCount ?? 0
       result["actionUpdates"] = ui.host?.actionUpdateCount ?? 0
-      if surface == "little" { result["blocked"] = "App Little Open entry point is still showLittleOpenStub" }
       return result
     }
     guard let id = args["extension"] as? String else { throw Failure(message: "missing extension") }

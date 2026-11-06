@@ -29,7 +29,10 @@ final class EngineWebContentHostFactory: NSResponder, WebContentHostFactory {
   unowned let app: AppDelegate
   let windowState: BrowserWindowState
   weak var controller: BrowserWindowController?
-  var window: NSWindow? { controller?.window }
+  weak var littleOpenController: LittleOpenWindowController?
+  private weak var littleOpenContent: OEWebContent?
+  private var littleOpenBrowser: OEBrowser?
+  var window: NSWindow? { controller?.window ?? littleOpenController?.window }
   var model: BrowserModel { app.model }
   var contentContainer: NSView { controller!.container }
   private(set) var hosts: [ItemID: EngineWebContentHost] = [:]
@@ -130,6 +133,29 @@ final class EngineWebContentHostFactory: NSResponder, WebContentHostFactory {
   @available(*, unavailable) required init?(coder: NSCoder) { fatalError() }
   isolated deinit { if let observerID { model.removeObserver(observerID) } }
 
+  func attachLittleOpen(_ controller: LittleOpenWindowController, content: OEWebContent) {
+    guard littleOpenController !== controller || littleOpenContent !== content else { return }
+    littleOpenController = controller; littleOpenContent = content
+    let browser = content.browser ?? OEBrowser(context: content.context)
+    littleOpenBrowser = browser; browser.window = controller.window; browser.delegate = self
+    if content.browser == nil { browser.insert(content, at: 0); browser.activeWebContent = content }
+    controller.extensionsUI = extensions.context
+    extensions.attach()
+    controller.titleBar.onExtensions = { [weak self, weak controller] in
+      guard let controller else { return }; self?.extensions.showLittleOpenMenu(controller)
+    }
+    // Manage/Add still open in a Space of this profile, never in the standalone page.
+    extensions.context.manageExtensions = { [weak self] in self?.performLittleOpenExtensionManagement("manage-extensions") }
+    extensions.context.addExtension = { [weak self] in self?.performLittleOpenExtensionManagement("add-extension") }
+  }
+  private func performLittleOpenExtensionManagement(_ command: String) {
+    guard let profile = littleOpenController?.session.profileID,
+          let space = model.mostRecentlyFocusedSpace(profileID: profile),
+          let controller = app.windowControllers.first(where: { app.hostFactories[$0.windowID]?.focusedProfile?.id == profile })
+            ?? app.makeWindow(focusedSpaceID: space.id), let factory = app.hostFactories[controller.windowID] else { return }
+    app.focusWindow(controller.windowID, activate: true); _ = factory.performAppCommand(command)
+  }
+
   func attach(_ controller: BrowserWindowController) {
     self.controller = controller
     controller.onTextUndoManager = { [weak self] window in
@@ -226,15 +252,15 @@ final class EngineWebContentHostFactory: NSResponder, WebContentHostFactory {
   #endif
 
   var focusedSpace: Space? { model.space(id: windowState.focusedSpaceID) ?? model.spaces.first }
-  var focusedProfile: Profile? { focusedSpace.flatMap { model.profile(id: $0.profileID) } }
+  var focusedProfile: Profile? { littleOpenController.flatMap { model.profile(id: $0.session.profileID) } ?? focusedSpace.flatMap { model.profile(id: $0.profileID) } }
   var selectedNodeID: ItemID? { focusedSpace.flatMap { windowState.selectedNodeBySpace[$0.id] } }
-  var selectedTab: Tab? { controller?.splitController.focusedTab }
+  var selectedTab: Tab? { controller?.splitController.focusedTab ?? littleOpenController?.session.tab }
   var visibleTabs: [Tab] { controller?.splitController.split?.panes ?? selectedTab.map { [$0] } ?? [] }
   var selectedContent: OEWebContent? {
     if let controller, controller.hasPeekController, controller.peekController.isShown {
       return (controller.peekController.stack.last?.host as? EngineWebContentHost)?.content
     }
-    return selectedTab.flatMap { hosts[$0.id]?.content }
+    return littleOpenContent ?? selectedTab.flatMap { hosts[$0.id]?.content }
   }
   var orderedTabs: [Tab] {
     (focusedProfile?.favorites ?? []) + (focusedSpace.map { flattened($0.pinned) + flattened($0.today) } ?? [])
@@ -312,6 +338,7 @@ final class EngineWebContentHostFactory: NSResponder, WebContentHostFactory {
   }
   private static var legacyRefusals: Set<String> = []
   var focusedBrowser: OEBrowser? {
+    if littleOpenController != nil { return littleOpenContent?.browser ?? littleOpenBrowser }
     guard app.engineReady, let profile = focusedProfile else { return nil }; return mirror.browser(for: profile.id)
   }
   func tabID(for content: OEWebContent) -> ItemID? { hosts.first { $0.value.content === content }?.key }
@@ -673,7 +700,7 @@ final class EngineWebContentHostFactory: NSResponder, WebContentHostFactory {
     commandBarSession?.dismiss()
     controller?.container.closeAll(); for host in Array(hosts.values) { host.close() }
     for page in auxiliaryPages { closeAuxiliary(page); page.panel.close() }
-    extensions.closeAll(); mirror.close()
+    extensions.closeAll(); littleOpenBrowser?.close(); littleOpenBrowser = nil; mirror.close()
   }
   func content(forAutomationHandle handle: Any?) -> OEWebContent? {
     switch handle {
