@@ -101,6 +101,18 @@ def checks(factory, results, tmp, config, harness):
         app.call('command', id='view-downloads')
         wait(lambda: bool(state()['rows']))
     def dismiss_library(): E._try(lambda: app.call('download-library-close'))
+    def cancel_sheet_flow():
+        app.call('download-settings', profile=profile, directory=str(first), ask=True)
+        pending = start('/slow')
+        sheet = wait(lambda: next((v for v in state()['sheets'] if v['visible']), None))
+        library()
+        wait(lambda: bool(row(pending)))
+        app.call('download-row', id=pending, action='Cancel')
+        stopped = wait(lambda: item(pending).get('state') == 'cancelled' and not state()['sheets'] and not state()['running'])
+        check('cancel_save_from_library', sheet and stopped, item=item(pending), sheets=state()['sheets'])
+        dismiss_library()
+        app.call('download-settings', profile=profile, ask=False)
+
     def save_flow():
         app.call('download-settings', profile=profile, directory=str(first), ask=True)
         ask = start('/fast')
@@ -116,6 +128,7 @@ def checks(factory, results, tmp, config, harness):
         app.call('download-save', id=sheet['id'], action='cancel')
         check('save_cancel', wait(lambda: item(cancelled).get('state') == 'cancelled') and item(cancelled).get('name') == 'sample.txt' and not state()['sheets'], item=item(cancelled))
         app.call('download-settings', profile=profile, ask=False)
+        cancel_sheet_flow()
 
 
     def controls_flow():
@@ -300,6 +313,7 @@ def checks(factory, results, tmp, config, harness):
                      "profiles": profiles_flow, "fallback": fallback_flow, "badge": badge_flow, "quit": quit_flow}
             selection = os.environ.get('OPEN_DOWNLOADS_CASE', '')
             selected = set(selection.split(',')) if selection else set(flows)
+            flows['cancel-sheet'] = cancel_sheet_flow
             if selected - set(flows):
                 raise RuntimeError('unknown Downloads diagnostic case: ' + selection)
             for name, flow in flows.items():

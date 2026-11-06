@@ -198,7 +198,10 @@ final class DownloadsCenter: DownloadsProvider {
       entries[key]?.snapshot.fileExists = exists; schedulePublish()
     }
   }
-  func cancel(_ key: String) { entries[key]?.download.cancel() }
+  func cancel(_ key: String) {
+    choices[key]?.cancel()
+    entries[key]?.download.cancel()
+  }
   func pause(_ key: String) {
     guard entries[key]?.snapshot.state == .inProgress else { return }
     entries[key]?.download.pause(); entries[key]?.snapshot.state = .paused; schedulePublish()
