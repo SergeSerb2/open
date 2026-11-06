@@ -60,3 +60,15 @@ After merging main `e83dc38f`, Debug and automation Release builds pass on engin
 The merged Extensions UI suite has 47 PASS and one existing BLOCKED row, X13 (the App has no Site Control presenter). All three Little Open rows pass, including a real extension popup and `activeTab` execution. Invoke the runner with `python3` as documented; its isolated-Python shebang alone cannot import `extensions_ui` and stops before any App launch.
 
 The `window` suite has 76 PASS and two known-main launch failures under CHILD-RULES 4h: cold/warm sidebar medians 360/362 ms, first paint 586/577 ms. All pixel rows pass. Cleanup passes with zero interruptions. The final full-verifier table and final timing receipt remain in PR #185; passing functional checks do not replace the strict timing gate.
+
+## Final timing acceptance: FAIL
+
+The final 30-pair receipt uses the retained native-frame/direct-creation path after merging main `e83dc38f`, compared with unchanged main `8920190f`. Engine is `3f45b07b`; every measured load1 is 8.32–11.98. Both timing endpoints and the memory method remain unchanged. All 30 complete pairs are included; load-invalid incomplete pairs remain in the attempt log.
+
+| Metric, median / p95, ms | Main | Deferred branch | Gate |
+|---|---:|---:|---|
+| First native frame | 80.10 / 123.01 | 66.86 / 93.76 | PASS |
+| Page load | 113.23 / 186.48 | 130.11 / 209.34 | FAIL |
+| Browser creation to page ready | — | 146.63 / 229.81 | Diagnostic |
+
+Added memory is **5.26 MiB/window**, compared with the original 5.48 MiB. Raw receipt: `.re/surface-hook/deferred-190-final-series-30.json`. The independent frame probe confirms creation follows the first native frame. The page-load acceptance is not met, so PR #185 remains draft even though the functional checks pass. No Chromium tree or patch was changed. Further performance work remains for the Section 9 lead; no new engine cause is claimed from these timings alone.
