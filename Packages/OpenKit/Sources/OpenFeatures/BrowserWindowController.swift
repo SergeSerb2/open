@@ -48,6 +48,8 @@ public final class BrowserWindowController: NSWindowController, NSWindowDelegate
     public var onExtensionShortcut: ((NSEvent) -> Bool)?
     /// Sees every key event of this window first (after the tab switcher); true consumes it.
     public var keyInterceptor: ((NSEvent) -> Bool)?
+    /// A native field editor retains plain editing keys before Peek/window routes.
+    public var shouldDeferKeyToFirstResponder: ((NSEvent) -> Bool)?
     public var ownsAdditionalKeyWindow: ((NSWindow) -> Bool)?
     public var isApplicationActive: (() -> Bool)?
     public var isCommandBarPresented = false
@@ -861,6 +863,12 @@ public final class BrowserWindowController: NSWindowController, NSWindowDelegate
         if eventWindow === window, let capture = captureStorage, capture.phase == .selecting || capture.phase == .showing,
            capture.handleKey(event) { return true }
         let flags = event.modifierFlags.rawValue
+        if shouldDeferKeyToFirstResponder?(event) == true {
+            // The editor may close itself and change focus. A re-offered copy
+            // of that same key must still stay away from the page and Peek.
+            lastKeyRoute = (eventWindow.windowNumber, event.keyCode, flags, event.timestamp, true)
+            return false
+        }
         if let last = lastKeyRoute, last.window == eventWindow.windowNumber, last.code == event.keyCode,
            last.flags == flags, unconsumed || (event.timestamp > 0 && last.timestamp == event.timestamp) { return last.handled }
         if event.keyCode == 53, !isCommandBarPresented,

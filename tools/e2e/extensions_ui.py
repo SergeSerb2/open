@@ -463,34 +463,38 @@ def run(factory, results, tmp, root, wait_until, new_tab, frame, read_image, ext
         results["toolbar_frames_anchor"]={"ok":toolbar["visible"] and anchored(toolbar_popup,probe_slot),"strip":toolbar,"popup":toolbar_popup}
         close();app.call("command",id="toggle-toolbar")
         find_rows = []
-        for surface in ("url", "pane", "toolbar"):
+        for surface in ("url", "pane", "toolbar", "peek"):
             if surface == "pane": app.call("split")
             elif surface == "toolbar": app.call("command", id="toggle-toolbar")
+            elif surface == "peek":
+                app.call("peek-open", tab=blank, url=local_origin+"/find-peek")
+                app.call("wait")
             try:
                 hover()
                 app.call("key", key="f", modifiers=["command"], route="app")
                 app.call("key", text="extension", route="app")
-                find = app.call("focus-state")
-                strips = strip(surface).get("strips", [])
+                find_state = app.call("find-state")
+                find = next(p for p in find_state["panes"] if p["tab"] == find_state["focusedTab"])
+                strips = strip("url" if surface == "peek" else surface).get("strips", [])
                 frames = [r for s in strips if s["visible"] for r in s["frames"] + ([s["moreFrame"]] if s["more"] else [])]
                 url = strip()
                 frames += url["frames"] if url["visible"] else []
                 def overlaps(a, b):
                     return a[0] < b[0]+b[2] and b[0] < a[0]+a[2] and a[1] < b[1]+b[3] and b[1] < a[1]+a[3]
-                cancel = find["findCancelFrame"]
-                # The real NSSearchFieldCell cancel glyph receives native down/up.
-                # Section 11 replaces this field with its viewport Find bar.
+                cancel = find["controls"]["close"]
+                # Section 11's native Find close button receives down/up through Open.
                 app.call("mouse", action="click", x=cancel[0]+cancel[2]/2,
                     y=app.call("window-state")["frame"][3]-cancel[1]-cancel[3]/2)
-                closed = wait_until(lambda: not app.call("focus-state")["findVisible"], timeout=3)
-                find_rows.append({"surface":surface, "ok":find["findVisible"] and cancel[2]>0 and bool(closed)
-                    and bool(frames) and not any(overlaps(find["findFrame"], f) for f in frames),
+                closed = wait_until(lambda: not app.call("focus-state")["findVisible"] and app.call("focus-state")["owner"] == "page", timeout=3)
+                find_rows.append({"surface":surface, "ok":find["visible"] and find["controls"]["closeHitMatches"] and cancel[2]>0 and bool(closed)
+                    and bool(frames) and not any(overlaps(find["frame"], f) for f in frames) and strip()["visible"],
                     "find":find, "stripFrames":frames, "closedByNativeClick":bool(closed)})
             finally:
                 if app.call("focus-state")["findVisible"]:
                     app.call("key", key="escape", route="app")
                 if surface == "pane": app.call("split")
                 elif surface == "toolbar": app.call("command", id="toggle-toolbar")
+                elif surface == "peek": app.call("peek-close")
         results["find_strip_no_overlap_native_close"] = {"ok":all(r["ok"] for r in find_rows), "rows":find_rows}
         hover(True); time.sleep(1)
         baseline = strip()

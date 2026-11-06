@@ -1717,10 +1717,13 @@ Two App presentation dependencies remain explicit:
   and zero-action hiding are wired. The target is always the Little Open
   window's own `OEBrowser`; it never falls back to a main window's tab.
 
-Until Section 11's Find PR merges, the marked placement bridge in
-`EngineWebContentHostFactory.layoutViews` positions Find in the focused page
-viewport. The second PR to merge removes the bridge in favor of Section 11's
-placement. `find_strip_no_overlap_native_close` opens Find for URL, pane and
-toolbar surfaces, checks its actual window frames against every visible strip
-button and clicks its native cancel glyph through `NSApplication.sendEvent`.
-It requires Find to close and the strip to stay visible.
+Section 11's Find PR #187 owns the only placement path, `FindController`.
+The old field, temporary placement bridge and root-extension-bar hiding hook
+are removed. `find_strip_no_overlap_native_close` opens Find for URL, pane,
+toolbar and Peek surfaces, checks its actual window frames against every
+visible strip button and clicks its native close button through
+`NSApplication.sendEvent`. It requires Find to close, page focus to return and
+the strip to stay visible. Section 11's `find` suite also runs its native
+viewport close gates with a pinned action in Split View, both toolbar states,
+narrow panes and Peek. Extension setup follows its unchanged twenty-window
+Find timing measurement.

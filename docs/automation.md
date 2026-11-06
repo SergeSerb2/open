@@ -28,7 +28,7 @@ that suite's existing lock; they do not acquire it again. The lock serializes
 agents, while native-focus interruption tracking still covers user activity.
 
 Builds, `swift build`, and every `tools/verify-all.sh` invocation use the separate
-machine-wide heavy-job slot script (two jobs at a time):
+machine-wide heavy-job slot script (capacity is set by the lead):
 
 ```sh
 ~/Library/Caches/OpenRE/scripts/heavy.sh nice -n 10 tools/build.sh Debug
@@ -112,6 +112,8 @@ Arguments are `key=value`; values that parse as JSON are sent as JSON.
 | `mouse` | `window`, `x`, `y`; `action=move`, `action=hover`, `action=down`, `action=drag`, `action=up`, or `action=click` with `clickCount` and `modifiers` (`option`, `command`, `shift`, `control`); or `from` / `to` point pairs | Own-window click, queued pointer motion, or native resize drag; system cursor stays unchanged. Down/drag/up and the from/to drag send real NSEvents through `OEApplication.sendEvent`; separate actions let a check inspect or snapshot a held drag. The resize handle uses AppKit mouse callbacks, so the socket stays responsive. A double-click uses `clickCount=2` (the suite also sends the first click). `click` runs the window's layout pass first (as real input follows a display cycle) and queues the mouse-up before sending the mouse-down, so controls that track the mouse (the window buttons) finish. Motion events carry a tag; from the first one on, pointer-driven window logic (the sidebar hover reveal) ignores the hardware pointer, so someone using the Mac cannot disturb a check. `move` and `click` also set the automation pointer at once (`BrowserWindowController.automationPointer`), and `hover` sets it after it has delivered enter, move, and exit (it rebuilds every tracking area first, and those rebuilds must still see the old point). A `move` delivers no enter or exit, so it clears `hover`'s record of entered owners and the next `hover` enters the owners under its point again; state that reads where the pointer is, not an event (the window buttons' hover after a full-screen exit, a restore, or a show), reads it instead of the hardware pointer. `hover` also delivers enter, move, and exit to the owners of the tracking areas under the point, title bar included (tracking areas follow the hardware pointer), and returns the owners it found. macOS's own window-button glyphs and tiling menu follow only the hardware pointer |
 | `focus` | `tab` | Give the page keyboard focus |
 | `find` / `zoom` / `mute` | `tab`, … | Find in page, zoom level, mute |
+| `find-state` | — | Read-only lazy Find state: `created`, focused tab, and one row per used pane (`visible`, `query`, `countText`, `active`, `total`, `notFound`, native field focus/selection, placeholder, navigation/separator visibility, bar/pane/page-viewport frames and visible chrome/extension-strip frames in window coordinates with a bottom-left origin; native close-button frame and hit-test owner). Also request/result/layout counters, pending work, and presentation phases (layout, draw, layer flush, field focus). The commit time starts at the native key event timestamp; it measures the flushed layer, not physical display scanout. Reading state creates no Find controller. |
+| `find-idle` | `action=begin`, `watch`, `reset`, `read`, `invalidate`, `end` | Harness-only bridge to the already-injected S8 idle observer. Reports draw/layout/display, invalidation, scheduling, timer, and display-link counters. `invalidate` marks the real Find view for layout as an observer canary. No observer library is loaded or attached by this command. Unknown actions fail. |
 | `print-pdf` | `tab`, `path` | Print to a PDF file |
 | `devtools-open`, `fullscreen-exit` | `tab` | — |
 | `extensions` | — | Installed extensions and the window's toolbar actions, with `duplicatesDropped` from the App's first-occurrence normalization. Action fields match `actions` below. |
@@ -808,6 +810,40 @@ automatically answered suppressed dialogs also carry `suppressed:true`.
 `dialogAnswer` and `permissionAnswer` record one completion per owned request.
 `OPEN_E2E_PAGE_CHROME_EARLY_FAILURE=1` forces failure while the first real
 sheet is visible; cleanup must still leave zero owned processes/windows.
+
+## Find in page (Section 11)
+
+Run `--only find --style chrome` through the on-screen lock. The suite serves
+`tools/e2e/fixtures/find/` on a unique loopback port and drives the native
+application event route. It covers the field editor, page shortcuts, tab
+state, navigation, Split View, Peek, selection seeding, query limits, pane
+viewport frames, chrome intersections, native close clicks and live resizes
+with the toolbar on/off, in Split View and in Peek. It also checks light/dark
+window pixels (ΔE00 ≤ 2) and idle request/result/layout counters. PNGs stay in `.re/find/`; JSON uses the ordinary suite receipt.
+The Find timing gate uses the project's 120 Hz reference: 8.33 ms from the
+native Cmd+F timestamp to the visible layer commit. It reports separate
+first-open (including lazy creation) and repeat-open medians and nearest-rank
+p95 from twenty fresh windows. Both p95 values must pass. The 240 Hz interval is
+printed for information. Take timing receipts with the quiet lock first,
+wait for low load while holding only that lock, then take the screen lock.
+Fonts, symbols and appearance colors are shared per process. After the first
+web paint, one main-queue turn primes those resources and an offscreen native
+bar/editor, then releases the temporary controls. `find-state.warmup` reports
+the run count, launch-relative times and temporary-control release. This adds
+no timer or repeating task. Automation builds accept
+`OPEN_FIND_DISABLE_PREWARM=1` for a cache-only comparison;
+`OPEN_FIND_COMPARE_PREWARM=1` alternates twenty cache-only and twenty enabled
+launches in the Find suite and records both phase and launch measurements.
+No shared defaults are changed by this suite. The toolbar toggle changes
+only its disposable browser model, and app appearance is restored in `finally`.
+`OPEN_FIND_FAIL_AT_PEEK=1` forces an early failure with Peek and Find open;
+the normal owned-process cleanup must still pass.
+
+Find and Replace opens Find in web pages. Jump to Selection scrolls the
+selection's containing element to the center via the existing main-world
+JavaScript API; this API does not provide an isolated world. Use Selection
+to Find uses the native menu action and has the 1,000-byte query cap without
+the 40-character seed limit. This work changes no command bindings.
 
 ## Runner lifetime
 

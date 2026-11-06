@@ -50,6 +50,8 @@ enum MainMenu {
       let browser = factory.focusedBrowser,
       app.extensionPrompts.table(browser.context.extensions).handle(event, factory: factory) { return true }
     if let window = event.window, let factory = app.factory(forKeyWindow: window) {
+      factory.findKeyRequestedAt = event.timestamp
+      defer { factory.findKeyRequestedAt = nil }
       return factory.controller?.handleKeyDown(event) == true
     }
     let context = RoutingContext(isAppActive: NSApp.isActive,
@@ -107,6 +109,7 @@ extension EngineWebContentHostFactory {
 
   func isAppCommandEnabled(_ original: String, enabledKey: String? = nil, payload: String? = nil) -> Bool {
     let id = AppCommand.canonicalID(original)
+    if ["find", "find-next", "find-previous", "find-and-replace", "use-selection-to-find", "jump-to-selection"].contains(id) { return selectedContent != nil }
     if id == "peek-email" { return controller != nil && peekEmailTab != nil }
     // Post-v1: Join Meeting needs calendar live data (lead decision S2 on live-data sources).
     if id == "join-meeting" { return false }
@@ -170,6 +173,12 @@ extension EngineWebContentHostFactory {
   @discardableResult
   func performAppCommand(_ original: String, payload: String? = nil) -> Bool {
     let id = AppCommand.canonicalID(original)
+    // Find owns its pane even when AppKit's field editor implements the native selector.
+    if let tag = ["find": 1, "find-next": 2, "find-previous": 3, "find-and-replace": 12, "use-selection-to-find": 7][id] {
+      guard selectedContent != nil else { return false }
+      ensureFindController().perform(tag: tag); return true
+    }
+    if id == "jump-to-selection", selectedContent != nil { ensureFindController().jumpToSelection(); return true }
     // A Find bar keeps Esc even when the Exit menu is disabled (no Peek/split).
     if id == "exit-modal", window === NSApp.keyWindow, windowState.style == .standard,
        dismissFindForExit() { return true }

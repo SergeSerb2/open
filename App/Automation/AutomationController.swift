@@ -672,6 +672,13 @@
         return try await sendKey(a, w)
       case "events":
         return w.drainEvents()
+      case "find-state":
+        var state = w.findController?.automationState() ?? ["panes": [], "created": false, "pending": false]
+        state["display"] = FindIdleProbe.displayInfo(window: w.window)
+        state["warmup"] = FindBarPrewarm.snapshot
+        return state
+      case "find-idle":
+        return try FindIdleProbe.perform(a["action"] as? String ?? "read", factory: w)
       case "find":
         let page = try content(a, w)
         page.find(a["text"] as? String ?? "", forward: true, caseSensitive: false)
@@ -1897,7 +1904,7 @@
               windowNumber: target.windowNumber, context: nil, characters: String(ch),
               charactersIgnoringModifiers: String(ch), isARepeat: false, keyCode: ch == "\r" ? 36 : 0)
             {
-              target.sendEvent(event)
+              if a["route"] as? String == "window" { target.sendEvent(event) } else { NSApp.sendEvent(event) }
             }
           }
         }
@@ -1907,7 +1914,7 @@
       let keys: [String: (String, UInt16)] = [
         "return": ("\r", 36), "escape": ("\u{1b}", 53), "tab": ("\t", 48), "space": (" ", 49),
         "delete": ("\u{7f}", 51), "forward-delete": (String(Character(UnicodeScalar(NSDeleteFunctionKey)!)), 117),
-        "o": ("o", 31), ",": (",", 43), "z": ("z", 6), "n": ("n", 45), "t": ("t", 17), "w": ("w", 13), "l": ("l", 37), "f": ("f", 3), "s": ("s", 1), "a": ("a", 0),
+        "o": ("o", 31), ",": (",", 43), "z": ("z", 6), "n": ("n", 45), "t": ("t", 17), "w": ("w", 13), "l": ("l", 37), "f": ("f", 3), "g": ("g", 5), "s": ("s", 1), "a": ("a", 0),
         "e": ("e", 14), "v": ("v", 9), "x": ("x", 7), "c": ("c", 8), "d": ("d", 2), "i": ("i", 34), "j": ("j", 38), "y": ("y", 16), "u": ("u", 32), "1": ("1", 18), "2": ("2", 19), "3": ("3", 20), "4": ("4", 21), "9": ("9", 25), "=": ("=", 24), "-": ("-", 27), "}": ("}", 30), "{": ("{", 33),
         "control": ("", 59), "command": ("", 55),
         "down": (String(Character(UnicodeScalar(NSDownArrowFunctionKey)!)), 125),
@@ -1926,6 +1933,7 @@
       }
       if code >= 123 { mods.insert([.function, .numericPad]) }
       let route = a["route"] as? String ?? "app"
+      let dispatchStarted = ProcessInfo.processInfo.systemUptime
       // Modifier keys alone post one flagsChanged event (down: pass the modifier; up: none).
       let types: [NSEvent.EventType] = code == 59 || code == 55 ? [.flagsChanged] : [.keyDown, .keyUp]
       let eventTimestamp = a["eventTimestamp"] as? Double ?? ProcessInfo.processInfo.systemUptime
@@ -1939,10 +1947,11 @@
         else { continue }
         if route == "window" { target.sendEvent(event) } else { NSApp.sendEvent(event) }
       }
+      let dispatchMilliseconds = (ProcessInfo.processInfo.systemUptime - dispatchStarted) * 1000
       // CEF's window key callback is asynchronous. Report after its next pump
       // turn, as a user-facing automation caller expects.
       try? await Task.sleep(for: .milliseconds(20))
-      return ["firstResponder": target.firstResponder.map { String(describing: type(of: $0)) } ?? "none",
+      return ["dispatchMilliseconds": dispatchMilliseconds, "firstResponder": target.firstResponder.map { String(describing: type(of: $0)) } ?? "none",
         "sidebarMode": w?.windowState.sidebarMode.rawValue ?? "", "barPresented": w?.commandBarSession?.isPresented == true,
         "keyWindow": NSApp.keyWindow?.windowNumber ?? 0] as [String: Any]
     }
