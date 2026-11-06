@@ -157,6 +157,18 @@ def onscreen_suite(command):
     try:
         lock_path = "/tmp/open-onscreen-e2e.lock"
         while cancelled is None:
+            # TANDEM-RULES §3.4a: this native suite never creates a priority flag.
+            # Queue time stays outside the execution deadline, as for lock acquisition.
+            priority = Path("/tmp/open-onscreen-priority")
+            while cancelled is None:
+                try:
+                    if time.time() - priority.stat().st_mtime >= 1800:
+                        break
+                except FileNotFoundError:
+                    break
+                time.sleep(0.25)
+            if cancelled is not None:
+                break
             lock_file = open(lock_path, "a+")
             waiting_for_lock = True
             try:
@@ -837,8 +849,10 @@ def main():
         require(not any(line.startswith("default open.general.previewsDelaySeconds =") for line in dump.splitlines()),
                 "removed preview delay default was registered")
         pngs = sorted(output.glob("*.png"))
-        require(len(pngs) == 222, "missing settings/library/appearance/detail/sheet/state renders")
+        require(len(pngs) == 226, "missing settings/library/appearance/detail/sheet/state renders")
         require({"library-spaces@1x.png", "library-spaces@2x.png"} <= {p.name for p in pngs}, "missing Library Spaces renders")
+        require({f"shortcuts-extension-conflicts-{appearance}@{scale}x.png" for appearance in ("light", "dark") for scale in (1, 2)} <= {p.name for p in pngs},
+                "missing extension shortcut conflict renders")
         # Essential Keyboard Shortcuts window (commandbar-completion Step 6): light, dark, and a custom key.
         require({f"essential-shortcuts-{n}@{s}x.png" for n in ("light", "dark", "custom-key") for s in (1, 2)} <= {p.name for p in pngs},
                 "missing Essential Keyboard Shortcuts renders")

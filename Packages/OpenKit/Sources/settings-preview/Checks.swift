@@ -86,7 +86,7 @@ func require(_ condition: @autoclosure () throws -> Bool, _ message: String) thr
 }
 
 @MainActor func runChecks(only: String?) async throws {
-    let names = ["essential-shortcuts", "shortcuts-callout", "general-toggles", "default-browser", "profile-search", "profile-archive-scope", "profile-downloads", "clear-data", "profile-guards", "links-rules", "links-toggles", "shortcuts-save", "shortcuts-conflict", "advanced-toggles", "adblock", "app-icon", "import-counts", "library-archive", "library-downloads", "library-captures-history", "empty-states", "archive-save-failure", "archive-owner-partial", "adblock-profile-lifecycle", "suggestion-notice", "shortcuts-recording-admission", "archive-paging", "links-save-failure", "adblock-readiness", "settings-caches", "library-folder-archive", "library-tidy-search", "first-run-actions-and-adapter-gate", "first-run-probe", "first-run-count-parity", "probe-cancel-mid-copy", "sidebar-defaults", "library-spaces", "previews-legacy-migration"]
+    let names = ["extension-shortcuts", "essential-shortcuts", "shortcuts-callout", "general-toggles", "default-browser", "profile-search", "profile-archive-scope", "profile-downloads", "clear-data", "profile-guards", "links-rules", "links-toggles", "shortcuts-save", "shortcuts-conflict", "advanced-toggles", "adblock", "app-icon", "import-counts", "library-archive", "library-downloads", "library-captures-history", "empty-states", "archive-save-failure", "archive-owner-partial", "adblock-profile-lifecycle", "suggestion-notice", "shortcuts-recording-admission", "archive-paging", "links-save-failure", "adblock-readiness", "settings-caches", "library-folder-archive", "library-tidy-search", "first-run-actions-and-adapter-gate", "first-run-probe", "first-run-count-parity", "probe-cancel-mid-copy", "sidebar-defaults", "library-spaces", "previews-legacy-migration"]
     if let only { try require(names.contains(only), "Unknown check \(only)") }
     var passed = 0
     for name in names where only == nil || only == name {
@@ -95,6 +95,30 @@ func require(_ condition: @autoclosure () throws -> Bool, _ message: String) thr
         let personal=vm.model.profiles[0].id,work=vm.model.profiles[1].id
         do {
             switch name {
+            case "extension-shortcuts":
+                vm.selectedPane = .shortcuts
+                env.actions.extensionConflicts = PreviewActions.sampleExtensionConflicts
+                let expected = ["Action Probe: ⇧⌘Y is used by Copy URL, so it is off.", "Search Probe: ⌘T is used by New Tab…, so it is off."]
+                try require(vm.shortcuts.extensionConflicts.map(\.notice) == expected, "extension notice copy")
+                try require(!vm.shortcuts.commands.contains { ["probe", "conflict"].contains($0.id) }, "dynamic extension commands leaked into registry")
+                try await withAccessibleHost(ShortcutsPane(model: vm.shortcuts), size: CGSize(width: 684, height: 600)) { host in
+                    let labels = accessibilityLabels(host)
+                    try require(expected.allSatisfy { labels.contains($0) }, "extension conflict lines missing from pane: \(labels)")
+                    try require(pressAccessibilityElement(host, label: "Extension Shortcuts…"), "extension link missing")
+                    @MainActor func menuButton(_ view: NSView) -> NSPopUpButton? {
+                        if let button = view as? NSPopUpButton, button.menu?.items.contains(where: { $0.title == "Extension Shortcuts" }) == true { return button }
+                        return view.subviews.lazy.compactMap { menuButton($0) }.first
+                    }
+                    guard let menu = menuButton(host)?.menu else { throw CheckFailure(description: "Shortcuts … menu missing") }
+                    try require(menu.items.dropFirst().map(\.title) == ["Revert Unsaved Changes", "Shortcut Help", "Extension Shortcuts"], "Shortcuts … menu order")
+                    menu.performActionForItem(at: 3)
+                }
+                try require(env.actions.openedURLs.count == 2 && env.actions.openedURLs.allSatisfy { $0.0.absoluteString == "chrome://extensions/shortcuts" && $0.1 == vm.selectedProfileID }, "extension link/menu URL or Profile")
+                vm.selectedProfileID = work
+                vm.shortcuts.openExtensionShortcuts()
+                try require(env.actions.openedURLs.last?.1 == work, "extension shortcuts ignored selected Profile")
+                env.actions.extensionConflicts = []
+                try require(vm.shortcuts.extensionConflicts.isEmpty, "empty extension conflicts retained")
             case "essential-shortcuts":
                 // Rows in Arc's order with live keycaps; a custom key shows; a cleared one shows "—" (plan §4.5.2).
                 let store = KeyBindingStore.empty

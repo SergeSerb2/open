@@ -122,6 +122,12 @@
       case "menu-state":
         NSApp.mainMenu?.update()
         return menuRows(NSApp.mainMenu)
+      case "command" where (a["id"] as? String).flatMap({ CommandRegistry.byID[$0] }).map({ $0.menuPath == nil }) == true:
+        guard let id = a["id"] as? String, CommandRegistry.byID[id] != nil,
+          let controller = try window.controller,
+          controller.isCommandEnabled(id, enabledKey: CommandRegistry.byID[id]?.enabledKey ?? EnabledKey.always)
+        else { throw Failure(message: "unknown or disabled command") }
+        controller.performCommand(id); return true
       case "menu-perform", "command":
         guard let id = a["id"] as? String, let (menu, index) = findMenuItem(id, in: NSApp.mainMenu) else { throw Failure(message: "unknown menu item") }
         let item = menu.item(at: index)!

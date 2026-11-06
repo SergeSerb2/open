@@ -56,6 +56,20 @@ public extension ImportOutcome {
 }
 public extension ImportActions { var canImportPasswordsAndCookies: Bool { false } }
 
+public struct ExtensionShortcutConflict: Sendable, Hashable {
+    public var extensionName: String
+    public var commandDescription: String
+    public var shortcut: OpenCommands.KeyboardShortcut
+    public var openCommandID: String
+    public init(extensionName: String, commandDescription: String, shortcut: OpenCommands.KeyboardShortcut, openCommandID: String) {
+        self.extensionName = extensionName; self.commandDescription = commandDescription
+        self.shortcut = shortcut; self.openCommandID = openCommandID
+    }
+    public var notice: String {
+        "\(extensionName): \(shortcut.symbolDisplay) is used by \(CommandRegistry.byID[openCommandID]?.title ?? openCommandID), so it is off."
+    }
+}
+
 @MainActor public protocol SettingsActions: ImportActions {
     func setAsDefaultBrowser() -> String?
     func isDefaultBrowser() -> Bool
@@ -89,9 +103,11 @@ public extension ImportActions { var canImportPasswordsAndCookies: Bool { false 
     func makeSpaceManagerView() -> NSView?
     /// Settings ▸ Shortcuts "Learn the Essential Shortcuts": open the Essential Keyboard Shortcuts window
     /// (commandbar-completion §4.5.3, CC-29).
+    func extensionShortcutConflicts(profileID: ProfileID) -> [ExtensionShortcutConflict]
     func openEssentialShortcuts()
 }
 
 public extension SettingsActions {
+    func extensionShortcutConflicts(profileID: ProfileID) -> [ExtensionShortcutConflict] { [] }
     func makeSpaceManagerView() -> NSView? { nil }
 }
