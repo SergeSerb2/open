@@ -48,8 +48,8 @@ Engine apply/build/distrib used `/tmp/open-engine-build.lock`, the scripts'
 nice setting, 10 jobs, and a separate session. Release App build used
 `OPEN_ENGINE_ROOT=$HOME/Developer/open-engine-s8 OPEN_AUTOMATION=1
 ~/Library/Caches/OpenRE/scripts/heavy.sh tools/build.sh Release`:
-`** BUILD SUCCEEDED **`. The new 0305 hook patch also passed a clean-file
-apply round trip for both Chromium hook files.
+`** BUILD SUCCEEDED **`. Both new 0305 hook patches passed clean-file apply round trips: the two
+Chromium dialog files and the CEF download file.
 
 ## P3 end to end
 
@@ -109,7 +109,35 @@ verification. Both new hook patches passed apply round trips.
 
 ## Regression gates
 
-Final regression and full verification results are recorded in the PR.
+All required suites passed on distribution `7b490905…`:
+
+| Suite (`--only`) | Feature rows | Cleanup | Interruptions |
+|---|---|---|---|
+| `extensions-p3` | 14/14 PASS | PASS | 0 |
+| `actions` | 26/26 PASS | PASS | 0 |
+| `extensions` | 8/8 PASS | PASS | 0 |
+| `tabstrip` | 35/35 PASS | PASS | 0 |
+| `features` | 19/19 PASS | PASS | 0 |
+| `shell` | 7/7 PASS | PASS | 0 |
+
+The final three suites used the Release App rebuilt after merging external-link
+intake from main `8bd3aadb`; earlier suites used the History merge `495a47d3`.
+Both Apps have the same verified engine code. The PR records the full
+verification summary on the final merged source head.
+
+The tabstrip setup waits for Bitwarden's welcome tab before asserting the
+selected tab. Its discard row waits for the sleep controller's actual
+eligibility before sending one request. The final receipt records initial
+gate `loading`, then a nil gate, successful `chrome.tabs.discard`, and a
+sleeping renderer with the same tab id. It keeps the existing 10 s loading
+grace and result assertions. The earlier request during that grace correctly
+returned `Cannot discard tab`; it is retained as a failed attempt.
+
+The actions key probe uses unbound Control-Shift-D. Main now binds Control-D
+to Toggle Developer Mode, so the old unconsumed-key expectation was stale.
+The probe retains asynchronous event batches, keeps the same deadline and
+Cmd-W app-route check, and saves/resets/restores the shared developer-mode
+default. No production key route or threshold changed.
 
 ## Limits and next engine work
 
