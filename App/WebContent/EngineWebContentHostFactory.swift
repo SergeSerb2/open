@@ -834,9 +834,15 @@ extension EngineWebContentHostFactory {
             view === sidebar || view.isDescendant(of: sidebar)
               || ((responder as? NSTextView)?.delegate as? NSView).map({ $0.isDescendant(of: sidebar) }) == true { owner = "sidebar" }
     else if let page = selectedContent, let view, view === page.view || view.isDescendant(of: page.view) { owner = "page" }
+    func frame(_ rect: CGRect) -> [CGFloat] { [rect.minX, rect.minY, rect.width, rect.height] }
+    let findFrame = findFieldCreated ? findField.convert(findField.bounds, to: nil) : .zero
+    let cancelFrame = findFieldCreated ? (findField.cell as? NSSearchFieldCell).map {
+      findField.convert($0.cancelButtonRect(forBounds: findField.bounds), to: nil)
+    } ?? .zero : .zero
     return ["owner": owner, "responder": responder.map { String(describing: type(of: $0)) } ?? "none",
       "navigationDecisions": navigationFocusDecisions, "lastNavigationRestored": lastNavigationFocusRestored,
       "findVisible": findFieldCreated && !findField.isHidden,
+      "findFrame": frame(findFrame), "findCancelFrame": frame(cancelFrame),
       "findText": findFieldCreated ? findField.stringValue : "", "sheet": window?.attachedSheet != nil]
   }
   func selectTabForCommand(_ id: ItemID, spaceID: SpaceID? = nil) {
