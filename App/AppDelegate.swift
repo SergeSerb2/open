@@ -527,7 +527,7 @@ extension AppDelegate: CommandDispatcher {
   /// No suggestion index, history, hotkey or settings work before first paint.
   func prepareCommandsAfterPaint(_ page: OEWebContent) {
     guard engineReady, !shutdownPrepared, !terminationRequested,
-          !commandServicesPrepared || !tabSleep.isStarted, afterPaintTask == nil else { return }
+          !commandServicesPrepared || !tabSleep.isStarted || !FindBarPrewarm.isScheduled, afterPaintTask == nil else { return }
     afterPaintTask = Task { @MainActor [weak self, weak page] in
       defer { self?.afterPaintTask = nil }
       for _ in 0..<40 {
@@ -541,6 +541,7 @@ extension AppDelegate: CommandDispatcher {
           }
           // Startup T5: the sleep controller starts after first paint, never before.
           self.tabSleep.start()
+          FindBarPrewarm.schedule(afterPaintIn: self)
           return
         }
         try? await Task.sleep(for: .milliseconds(50))

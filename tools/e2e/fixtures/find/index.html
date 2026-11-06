@@ -1,0 +1,14 @@
+<!doctype html><meta charset="utf-8"><title>Find fixture</title>
+<style>body{background:white;color:#222;font:18px system-ui} p{margin:24px} #far{margin-top:2200px}</style>
+<p id="matches">quasar quasar quasar quasar QUASAR</p>
+<p id="other">orbit orbit</p><p id="seed">A short selection</p><p id="long" style="white-space:pre">  This selection is longer than forty characters exactly.
+  </p>
+<p id="forty">1234567890123456789012345678901234567890</p>
+<p id="fortyone">12345678901234567890123456789012345678901</p>
+<p id="lines" style="white-space:pre">  alpha
+beta  </p>
+<input id="input" aria-label="Page input"><p id="far">A distant selected paragraph</p><div style="height:1600px"></div>
+<script>
+window.findKeys=[];addEventListener('keydown',e=>findKeys.push(e.key));
+window.selectFindText=(id)=>{let r=document.createRange();r.selectNodeContents(document.getElementById(id));let s=getSelection();s.removeAllRanges();s.addRange(r);return s.toString()};
+</script>
