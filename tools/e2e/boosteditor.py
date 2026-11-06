@@ -38,8 +38,10 @@ def run(factory, results, tmp, env):
             assert evidence.pop("positive", False), "positive proof failed: " + json.dumps(evidence)
             assert evidence.get("negative") is True, "missing real-flow negative proof"
             results[name] = dict(evidence, ok=True, load=os.getloadavg())
+            print(name, "PASS", flush=True)
         except Exception as error:
             results[name] = dict(ok=False, error=str(error), trace=traceback.format_exc()[-1400:], load=os.getloadavg())
+            print(name, "FAIL", str(error)[:160], flush=True)
     def active():
         return call().get("open", False)
     def ready():
@@ -162,9 +164,12 @@ def run(factory, results, tmp, env):
             row("B11_navigation_tab_close",b11)
             def b12():
                 tabs=[tab]+[new_tab(app,origin+"/boost.html?tab="+str(i),background=True) for i in range(9)]
+                # Background tabs are lazy. Select each once to create ten live pages.
+                for live in tabs:
+                    app.call("select",tab=live);app.call("wait",tab=live)
                 app.call("select",tab=tab);app.call("wait",tab=tab);call("open",boost=items()[0]["id"])
                 app.call("defaults",key="open.advanced.enableBoosts",value=False)
-                negative=all(probe(t)["filter"] == "none" for t in tabs)
+                negative=bool(wait_until(lambda: all(probe(t)["filter"] == "none" for t in tabs),timeout=5,step=.02))
                 app.call("defaults",key="open.advanced.enableBoosts",value=True)
                 wait_until(lambda: all("hue-rotate" in probe(t)["filter"] for t in tabs),timeout=5,step=.02)
                 before=call()["refreshCount"]
@@ -185,7 +190,7 @@ def run(factory, results, tmp, env):
             row("B13_library_live",b13)
             def b14():
                 nonlocal app,tab
-                app.call("library-close");app.quit()
+                app.call("library-close");app.call("defaults",key="open.advanced.enableBoosts",value=True);app.quit()
                 # A saved user Boost is the public input while Code mode is blocked.
                 files=list(pathlib.Path(app.user_data).glob("Profiles/*/Boosts/boosts.json"))
                 source=next(p for p in files if json.loads(p.read_text())["boosts"])

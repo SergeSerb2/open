@@ -62,7 +62,14 @@ extension AutomationController {
         throw Failure(message: "blocked: code mode; type supports the active rename field only (16 KiB)")
       }
       alert.window.makeKeyAndOrderFront(nil); alert.window.makeFirstResponder(field); field.selectText(nil)
-      _ = try await sendKey(["window": alert.window.windowNumber, "route": "app", "text": text], factory)
+      try await activateForInput(alert.window)
+      // One native text event also represents composed input. Sending 16K
+      // separate key pairs makes AppKit re-layout the growing field each time.
+      for type in [NSEvent.EventType.keyDown, .keyUp] {
+        if let event = NSEvent.keyEvent(with: type, location: .zero, modifierFlags: [], timestamp: ProcessInfo.processInfo.systemUptime,
+          windowNumber: alert.window.windowNumber, context: nil, characters: text, charactersIgnoringModifiers: text, isARepeat: false, keyCode: 0) { NSApp.sendEvent(event) }
+      }
+      try? await Task.sleep(for: .milliseconds(20))
     case "tap":
       guard let editor = controller.boostEditor, let view = editor.view, let id = args["id"] as? String else { throw Failure(message: "Boost editor is closed") }
       if id.hasPrefix("menu.") {

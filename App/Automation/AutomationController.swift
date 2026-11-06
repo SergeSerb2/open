@@ -862,6 +862,15 @@
 
       // Windows and pixels (Open's own windows only).
       case "windows":
+        let enhanced = a["accessibility"] as? Bool == true
+        let axRead = NSSelectorFromString("accessibilityAttributeValue:"), axWrite = NSSelectorFromString("accessibilitySetValue:forAttribute:")
+        let previousAX = enhanced && NSApp.responds(to: axRead) ? NSApp.perform(axRead, with: "AXEnhancedUserInterface")?.takeUnretainedValue() : nil
+        if enhanced, NSApp.responds(to: axWrite) { NSApp.perform(axWrite, with: NSNumber(value: true), with: "AXEnhancedUserInterface") }
+        defer { if enhanced, NSApp.responds(to: axWrite) { NSApp.perform(axWrite, with: previousAX ?? NSNumber(value: false), with: "AXEnhancedUserInterface") } }
+        if enhanced {
+          for window in NSApp.windows { window.contentView?.layoutSubtreeIfNeeded() }
+          try? await Task.sleep(for: .milliseconds(50))
+        }
         return NSApp.windows.map { nativeWindow in
           var row = describe(nativeWindow)
           if a["accessibility"] as? Bool == true { row["text"] = windowText(nativeWindow) }
