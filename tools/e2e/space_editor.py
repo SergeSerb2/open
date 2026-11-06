@@ -114,15 +114,30 @@ def run(factory, results, scratch, root, wait_until, read_image, delta_e):
         before = [capture('A2-before-' + str(i), w['number']) for i, w in enumerate(windows)]
         counters = app.call('frame-save-counters')
         knob_before = state()['knob']
+        commit_before = state()['commitSequence']
         knob_rect = state()['controls']['knob']
         start = [knob_rect[0] + knob_rect[2] / 2 + 13, knob_rect[1] + knob_rect[3] / 2 + 13]
         app.call('editor-act', action='drag', **{'from': start, 'to': [105, 235], 'steps': 16})
-        # The final mouse-up returns before its pending display frame. Capture
-        # the undo baseline only after that frame, as with the overhang click.
+        # Mouse-up can return before its queued frame. Read the commit ledger
+        # at idle, before a snapshot can flush the frame for this assertion.
         immediate_edited = theme()
         assert wait_until(lambda: state()['displayLinks'] == 0, timeout=3, step=.02), 'drag frame did not finish'
         edited = theme()
         assert edited and edited != first, 'drag did not reach model'
+        at_rest = state(); committed_style = at_rest['committedStyle']
+        time.sleep(.12)
+        after_idle, idle_style = state(), theme()
+        results['A3_committed_style_stable'] = dict(
+            ok=at_rest['commitSequence'] == commit_before + 1 == after_idle['commitSequence']
+                and committed_style == edited == idle_style
+                and at_rest['commitPreviews'] == at_rest['sessionPreviews'] == after_idle['sessionPreviews']
+                and at_rest['displayLinks'] == after_idle['displayLinks'] == 0
+                and not (at_rest['pendingFrame'] or after_idle['pendingFrame'])
+                and at_rest['undoActionName'] == 'Update Theme',
+            committedStyle=committed_style, modelAtRest=edited, modelAfterIdle=idle_style,
+            previewAtCommit=at_rest['commitPreviews'], previewAtRest=at_rest['sessionPreviews'],
+            previewAfterIdle=after_idle['sessionPreviews'], commitSequence=at_rest['commitSequence'],
+            stableCommitSequence=after_idle['commitSequence'], undoActionName=at_rest['undoActionName'])
         after = [capture('A2-after-' + str(i), w['number']) for i, w in enumerate(windows)]
         old_pixels, new_pixels = list(map(sample, before)), list(map(sample, after))
         results['A2_three_windows'] = dict(ok=all(old_pixels[i] != new_pixels[i] for i in range(2)) and old_pixels[2] == new_pixels[2],
@@ -134,9 +149,9 @@ def run(factory, results, scratch, root, wait_until, read_image, delta_e):
         wait_until(lambda: theme() == first and state()['knob'] == knob_before, timeout=3, step=.02)
         undo, knob_undo = theme(), state()['knob']
         app.call('editor-act', action='key', key='z', modifiers=['cmd', 'shift'])
-        wait_until(lambda: theme() == edited and state()['knob'] == knob_edited, timeout=3, step=.02)
+        wait_until(lambda: theme() == committed_style and state()['knob'] == knob_edited, timeout=3, step=.02)
         redo, knob_redo = theme(), state()['knob']
-        results['A3_open_undo_redo'] = dict(ok=undo == first and redo == edited and knob_undo == knob_before and knob_redo == knob_edited, styleUndo=undo == first, styleRedo=redo == edited, pendingFrameChangedStyle=immediate_edited != edited, expectedStyle=edited, redoStyle=redo, before=knob_before, edited=knob_edited, undo=knob_undo, redo=knob_redo)
+        results['A3_open_undo_redo'] = dict(ok=undo == first and redo == committed_style and knob_undo == knob_before and knob_redo == knob_edited, styleUndo=undo == first, styleRedo=redo == committed_style, pendingFrameChangedStyle=immediate_edited != edited, expectedStyle=committed_style, modelAtRest=edited, redoStyle=redo, before=knob_before, edited=knob_edited, undo=knob_undo, redo=knob_redo)
         app.call('editor-act', action='click', x=243.032, y=465)
         immediate_end = theme()
         wait_until(lambda: state()['displayLinks'] == 0, timeout=3, step=.02)

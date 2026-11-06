@@ -1882,9 +1882,17 @@ the retarget gate. All mutated sources were restored before normal builds.
 A live move between 1x and 2x remains unverified: this App session exposes
 only a 1x screen. Both scales retain the existing native layout checks.
 
-The real-App drag/redo assertion captures its expected committed style only
-after the last display frame completes. A post-merge run exposed the same
-read-before-frame race as the thumb check: redo restored the final knobs,
-but the assertion had saved an earlier preview as its expected style. The
-suite retains exact style/knob comparisons and records the immediate and
-committed styles as diagnostics. No timing budget or comparison is relaxed.
+A post-merge drag/redo assertion sampled the model before the last display
+frame: redo restored the final knobs, but the assertion had saved an earlier
+preview as its expected style. The commit-boundary gate below checks whether
+the model stays equal to the value registered for undo. It runs before any
+snapshot can flush a pending frame. The suite retains exact style/knob
+comparisons and records immediate, committed, idle, and redo values. No
+timing budget or comparison is relaxed.
+
+A3 also checks the product boundary: `ThemeEditSession` keeps the exact
+model theme captured for the Update Theme redo registration. The real-App
+`A3_committed_style_stable` row requires that style to equal the model at
+display-link idle and after another 120 ms, with no later preview write or
+commit. Undo/redo must restore that committed value exactly. The ledger is
+bounded transient state; it adds no timer or observation loop.

@@ -946,3 +946,10 @@ kind switch and suite. Model reads can precede a pending display frame: wait
 for `editor-state.pendingFrame=false` after a completed gesture before
 asserting its committed value. Snapshot checks use empty background regions,
 so the auto-archive education banner is not mistaken for a theme pixel.
+
+`editor-state` also exposes the theme session commit ledger: `commitSequence`,
+`committedStyle`, `commitPreviews`, `sessionPreviews`, and `undoActionName`.
+The committed value is captured in the same MainActor call as the model
+undo registration. `A3_committed_style_stable` compares it with the model
+after the final frame and after idle, rejects later previews, and checks
+the Update Theme action name. A3 undo/redo compares against that ledger.

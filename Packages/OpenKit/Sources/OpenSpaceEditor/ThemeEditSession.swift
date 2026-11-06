@@ -10,6 +10,12 @@ public final class ThemeEditSession {
     public private(set) var baseline: SpaceTheme
     public private(set) var draft: SpaceStyle?
     public let registry: ThemePreviewRegistry
+    public private(set) var previewCount = 0
+    public private(set) var commitSequence = 0
+    public private(set) var committedPreviewCount = 0
+    /// Exact value captured by commitSpaceTheme's redo registration. Both reads
+    /// run in one MainActor call with no suspension or intervening model write.
+    public private(set) var lastCommittedTheme: SpaceTheme?
     private let model: BrowserModel
     private let lease = UUID()
     private var closed = false
@@ -27,13 +33,20 @@ public final class ThemeEditSession {
         draft = style
         if live { registry.begin(lease, spaceID: spaceID) }
         else { registry.end(lease) }
+        previewCount += 1
         model.previewSpaceTheme(id: spaceID, theme: SpaceTheme(style: style))
         registry.publish(spaceID)
     }
     @discardableResult public func commit() -> Bool {
         guard !closed else { return false }
         defer { registry.end(lease); captureBaseline() }
-        return model.commitSpaceTheme(id: spaceID, from: baseline)
+        let committed = model.space(id: spaceID)?.theme
+        let changed = model.commitSpaceTheme(id: spaceID, from: baseline)
+        if changed {
+            lastCommittedTheme = committed
+            committedPreviewCount = previewCount; commitSequence += 1
+        }
+        return changed
     }
     public func restored(_ theme: SpaceTheme, publish: Bool = true) {
         baseline = theme; draft = SpaceStyle.seed(from: theme)
