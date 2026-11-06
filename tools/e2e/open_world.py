@@ -43,6 +43,9 @@ def run(app, results, tmp, new_tab, wait_until):
           __open.postMessage('p7:ready',{answer:42});'''
         app.call("script-add", id="p7-open", world="open", source=source,
                  matches=["http://127.0.0.1/open*"], allFrames=True, end=True)
+        app.call("script-add", id="p7-open-css", world="open", css=True,
+                 source="body { outline: 7px solid rgb(17, 34, 51) !important; }",
+                 matches=["http://127.0.0.1/open*"])
         # An extension really executes in a separate isolated world.
         fake_root = Path(tmp) / "p7-probe-root"
         extension = fake_root / "tools/e2e/fixtures/action-probe"; extension.mkdir(parents=True)
@@ -76,6 +79,11 @@ def run(app, results, tmp, new_tab, wait_until):
         ext = wait_until(lambda: app.eval(tab, "document.documentElement.getAttribute('data-p7-extension')"), timeout=10)
         other = new_tab(app, origin + "/unmatched", background=True)
         unmatched = app.call("eval", tab=other, world="open", js="typeof __p7")
+        outline = app.eval(tab, "getComputedStyle(document.body).outlineColor")
+        other_outline = app.eval(other, "getComputedStyle(document.body).outlineStyle")
+        results["open_world_stylesheet"] = {
+            "ok": outline == "rgb(17, 34, 51)" and other_outline == "none",
+            "matchedOutline": outline, "unmatchedOutline": other_outline}
         app.call("eval", tab=other, world="open", js="__openNative.postMessage('p7:named','{}')")
         named_receipt = app.call("open-world-messages", tab=other)["messages"]
         results["open_world_document_start"] = {
@@ -162,6 +170,7 @@ def run(app, results, tmp, new_tab, wait_until):
             "evaluation": evaluation}
     finally:
         app.call("script-remove", id="p7-open")
+        app.call("script-remove", id="p7-open-css")
         if extension_id:
             app.call("ext-manage", action="uninstall", extension=extension_id)
             pending = wait_until(lambda: app.call("ext-prompt").get("pending"), timeout=5)
