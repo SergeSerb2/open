@@ -68,11 +68,8 @@ def run(factory, results, tmp, root, wait_until, new_tab, frame, read_image, ext
         return all(abs(actual-expected) <= 1 for actual, expected in zip(a, [slot[0]+win[0], slot[1]+win[1], *slot[2:]]))
     def pin_result(key, value):
         duplicates = app.call("extensions")["duplicatesDropped"]
-        if duplicates:
-            results[key] = {"status":"BLOCKED", "reason":"engine defect, C5: duplicate E1 action IDs",
-                            "duplicatesDropped":duplicates, "assertion":value}
-        else:
-            results[key] = dict(value, duplicatesDropped=duplicates)
+        results[key] = dict(value, ok=bool(value.get("ok")) and duplicates == 0,
+                            duplicatesDropped=duplicates)
     try:
         for key, value in {"open.advanced.showToolbar": False,
                            "open.advanced.playSoundEffects": False}.items():
@@ -91,8 +88,8 @@ def run(factory, results, tmp, root, wait_until, new_tab, frame, read_image, ext
         moved = wait_until(lambda: strip()["ids"] == [probe] + ids[:2], timeout=5)
         pin_result("X2_pin_order_frames", {"ok": bool(pinned and moved)
             and [f[0] for f in pinned["frames"]] == [74, 102, 130], "strip":pinned, "moved":bool(moved)})
-        # The old engine's duplicate pin model crashes in MovePinnedAction on
-        # this drag. Keep the row blocked until the engine provides a clean list.
+        # Exact former crash sequence: pin uBO, Dark Reader, probe; move 2→0;
+        # then native drag 0→2. C5 repaired the model; duplicates now fail.
         if app.call("extensions")["duplicatesDropped"]:
             pin_result("X2_native_drag", {"ok":False,"reason":"MovePinnedAction crashes with duplicate engine IDs on 7b490905",
                 "receipt":".re/extensions-ui/engine-native-drag-crash.ips"})
@@ -103,7 +100,8 @@ def run(factory, results, tmp, root, wait_until, new_tab, frame, read_image, ext
             for event, slot in (("down",slots[0]),("drag",slots[2]),("up",slots[2])):
                 app.call("mouse", action=event, x=slot[0]+14, y=win_height-slot[1]-14)
             reordered = wait_until(lambda: strip()["ids"] == ids, timeout=5)
-            pin_result("X2_native_drag", {"ok":bool(reordered), "before":before_drag, "after":strip()})
+            pin_result("X2_native_drag", {"ok":bool(reordered), "before":before_drag, "after":strip(),
+                "sequence":"pin uBO Lite, Dark Reader, probe; move 2→0; native drag 0→2"})
         expected_order = strip()["ids"]
         app.call("command", id="new-window")
         second = wait_until(lambda: (lambda s:s if s["ids"]==expected_order else None)(hover()), timeout=10)
@@ -154,7 +152,8 @@ def run(factory, results, tmp, root, wait_until, new_tab, frame, read_image, ext
         clear = wait_until(lambda: action(probe).get("badge") in (None, ""), timeout=5)
         hover(); unbadged = capture("badge-empty")
         _, h, bp = read_image(badged); _, _, np = read_image(unbadged)
-        slot = strip()["frames"][0]
+        badge_strip = strip()
+        slot = badge_strip["frames"][badge_strip["ids"].index(probe)]
         # The snapshot is top-left; automation reports Cocoa window coordinates.
         x, y, w, hh = slot; y = h - y - hh
         difference = sum(bp(xx, yy) != np(xx, yy) for xx in range(int(x), int(x+w)) for yy in range(int(y), int(y+hh)))

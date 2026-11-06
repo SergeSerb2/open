@@ -330,7 +330,7 @@ def native_drag_safety(app, results, wait, action, factory):
         check("refuse negative automation index")
         snapshots[-1]["ok"] &= negative_refused
         for index in (len(expected), 99, 2**32 + 1, 2**63 - 1):
-            app.call("ext-move", extension=ubo, index=index)
+            app.call("ext-move", extension=ubo, index=index, engine=True)
             check("refuse index " + str(index))
         unknown = "a" * 32
         app.call("ext-pin", extension=unknown, pinned=True)

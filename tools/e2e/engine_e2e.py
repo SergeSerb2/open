@@ -4559,15 +4559,16 @@ def _actions_checks(app, results):
         [x["id"] for x in actions()["actions"]]), timeout=10)
     duplicates = app.call("extensions")["duplicatesDropped"]
     if duplicates:
-        results["pin_and_move"] = {"status": "BLOCKED", "reason": "engine defect, C5: duplicate E1 action IDs",
+        results["pin_and_move"] = {"ok": False, "reason": "duplicate E1 action IDs regressed after C5's engine fix",
             "duplicatesDropped": duplicates, "receipt": ".re/extensions-ui/engine-native-drag-crash.ips"}
     else:
         app.call("ext-move", extension=EXT["bitwarden"], index=0)
         moved = wait_until(lambda: (lambda xs: xs if [x["id"] for x in xs][:2] == [EXT["bitwarden"], ACTION_PROBE]
                                     and xs[0]["pinnedIndex"] == 0 and xs[1]["pinnedIndex"] == 1 else None)(
             actions()["actions"]), timeout=10)
-        results["pin_and_move"] = {"ok": bool(pinned) and bool(moved), "after_pin": pinned,
-                                   "duplicatesDropped": duplicates,
+        after_duplicates = app.call("extensions")["duplicatesDropped"]
+        results["pin_and_move"] = {"ok": bool(pinned) and bool(moved) and after_duplicates == 0, "after_pin": pinned,
+                                   "duplicatesDropped": after_duplicates,
                                    "after_move": moved and [(x["id"], x["pinnedIndex"]) for x in moved[:3]]}
 
     # The context menu is Chrome's (extension name, pin, options, ...); its

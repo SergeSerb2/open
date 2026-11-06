@@ -772,7 +772,11 @@
       case "ext-move":
         guard let id = a["extension"] as? String, let index = a["index"] as? Int else { throw Failure(message: "missing extension or index") }
         guard index >= 0 else { throw Failure(message: "index must be nonnegative") }
-        w.extensions.host?.movePinned(extensionID: id, to: index)
+        if a["engine"] as? Bool == true {
+          // C5's boundary checks deliberately exercise engine refusal before
+          // the App clamps a native drag's destination.
+          try focusedBrowser(w).moveExtensionAction(id, toPinnedIndex: UInt(index))
+        } else { w.extensions.host?.movePinned(extensionID: id, to: index) }
         return true
       case "ext-run":
         guard let id = a["extension"] as? String else { throw Failure(message: "missing extension") }
