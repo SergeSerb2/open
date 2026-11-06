@@ -36,9 +36,15 @@ extension AutomationController {
 
   /// Open's indicator over the pane that shows `page` (page-platform §4.4.2).
   private func swipeIndicatorState(_ page: OEWebContent) -> [String: Any] {
-    guard let w = try? window, let id = w.tabID(for: page),
-      let slot = w.controller?.container.slots.first(where: { $0.tabID == id }) else { return ["pane": false] }
-    guard let indicator = slot.swipeIndicator else { return ["pane": true, "made": false] }
+    guard let w = try? window else { return ["pane": false] }
+    let indicator: SwipeIndicatorView?
+    if let c = w.controller, c.hasPeekController, c.peekController.isShown,
+       (c.peekController.stack.last?.host as? EngineWebContentHost)?.content === page {
+      indicator = c.peekController.overlay.swipeIndicator
+    } else if let id = w.tabID(for: page), let slot = w.controller?.container.slots.first(where: { $0.tabID == id }) {
+      indicator = slot.swipeIndicator
+    } else { return ["pane": false] }
+    guard let indicator else { return ["pane": true, "made": false] }
     let f = indicator.circleFrame, pf = indicator.frame
     var out: [String: Any] = ["pane": true, "made": true, "active": indicator.isActive, "hidden": indicator.isHidden,
       "circle": [f.minX, f.minY, f.width, f.height], "page": [pf.minX, pf.minY, pf.width, pf.height],
