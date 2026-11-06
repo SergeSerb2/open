@@ -55,6 +55,14 @@ card rows with `Expected an in-window permission card`. Both negative runs have
 zero interruptions, clean owned-process shutdown and no forced cleanup.
 Production code was restored before final builds.
 
+The intentional visible-sheet failure (`little_dialog_alert`,
+`OPEN_E2E_LITTLE_CHROME_EARLY_FAILURE=1`) also completed cleanup: zero
+interruptions, zero owned windows or processes after quit, no forced cleanup.
+The full owner-watch suite passes all four scenarios, including active-download
+and beforeunload owner death. Their private receipts are
+`.re/s11-littleopen/results-visible-sheet-cleanup.json` and
+`.re/s11-littleopen/owner-watch-final/results.json`.
+
 ## Authorization prompt and fixture correction
 
 The first Little Open permission run used notifications, including Allow,
