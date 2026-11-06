@@ -35,6 +35,7 @@ pathlib.Path(sys.argv[2]).touch(); time.sleep(180)
         assert h.wait_until(ready.exists, timeout=5, step=.05)
         app = launch(fresh=True, directory=locked, OPEN_AUTOMATION_HISTORY_DELAY_MS='3000')
         app.call('defaults', key='open.firstRun.completed', value=None)
+        app.call('defaults', key='open.advanced.tabSleepMode', value=None)
         choose_history()
         assert h.wait_until(lambda: state()['historyInProgress'], timeout=15, step=.02), state()
         pings = [app.call('ping') for _ in range(3)]
@@ -160,16 +161,20 @@ pathlib.Path(sys.argv[2]).touch(); time.sleep(180)
         started = time.time()
         app.call('first-run', action='continue'); until('report')
         landed = saved_tabs()
+        intervals = [profile['settings']['autoArchiveAfter']
+            for profile in json.loads(Path(app.call('save')).read_text())['profiles']]
         app.call('first-run', action='continue'); app.call('first-run', action='finish')
         finished = saved_tabs()
         app.quit(); app = launch(directory=old)
         reloaded = saved_tabs()
         row('import_today_age_after_relaunch', today_id in finished and today_id in reloaded
+            and intervals == ['twelveHours']
             and landed[today_id]['lastActiveAt'] >= started
             and landed[pinned_id]['lastActiveAt'] == past + 978307200
             and landed[favorite_id]['lastActiveAt'] == past + 978307200
             and sidebar.read_bytes() == original,
-            sourceAgeHours=48, todayPresent=today_id in reloaded, sourceUnchanged=sidebar.read_bytes() == original)
+            sourceAgeHours=48, archiveIntervals=intervals, todayPresent=today_id in reloaded,
+            sourceUnchanged=sidebar.read_bytes() == original)
         repeat = settings_import()
         row('import_old_today_repeat', repeat.get('Imported tabs') == 0
             and saved_tabs()[today_id]['lastActiveAt'] == reloaded[today_id]['lastActiveAt'], outcome=repeat)

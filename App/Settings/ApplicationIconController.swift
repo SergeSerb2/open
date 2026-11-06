@@ -5,14 +5,13 @@ import OpenSettings
 /// AppKit asks for TIFF data when sending the icon to the Dock. Keep the
 /// worker's encoding so that the main-thread setter cannot encode it again.
 private final class RestoredApplicationIcon: NSImage {
-  private let encodedTIFF: Data
-  init(image: CGImage, encodedTIFF: Data) {
+  private var encodedTIFF: Data?
+  convenience init(image: CGImage, encodedTIFF: Data) {
+    self.init(size: .init(width: 1024, height: 1024))
     self.encodedTIFF = encodedTIFF
-    super.init(size: .init(width: 1024, height: 1024))
     addRepresentation(NSBitmapImageRep(cgImage: image))
   }
-  required init?(coder: NSCoder) { return nil }
-  override var tiffRepresentation: Data? { encodedTIFF }
+  override var tiffRepresentation: Data? { encodedTIFF ?? super.tiffRepresentation }
 }
 
 /// Changes only this process's icon. The signed application bundle is never written.
