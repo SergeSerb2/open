@@ -490,6 +490,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate, OEEngineDelegate, OEBr
   }
 
   func browserContext(_ context: OEBrowserContext, decideDestinationFor download: OEDownload, suggestedFilename: String, completion: @escaping @MainActor (URL?) -> Void) {
+    #if OPEN_AUTOMATION
+    if AutomationOwnerWatch.quittingWithoutPrompts { completion(nil); return }
+    #endif
     guard let owner = downloadOwner(download) else { completion(nil); return }
     owner.browserContext(context, decideDestinationFor: download, suggestedFilename: suggestedFilename, completion: completion)
   }
