@@ -55,9 +55,17 @@ def main():
                         app.call('suggest-remote', enabled=False)
                         app.call('window-frame', frame=[60,60,1360,860])
                         ids = []
-                        for name in ('first','second','third'):
+                        for name in ('first','second','third','fourth'):
                             tid = app.call('open', url=origin+'/'+name)['id']; app.call('wait', tab=tid); ids.append(tid)
-                        panes = app.call('split')
+                        app.call('select', tab=ids[2])
+                        app.call('sidebar-menu', node=ids[3], item='Open in Split View')
+                        tree = app.call('sidebar-tree')
+                        split_row = next(node for node in tree['today'] if node['kind']=='split')
+                        root_singles = {node['id'] for node in tree['today'] if node['kind']=='tab'}
+                        pane_ids = {node['id'] for node in split_row['children']}
+                        assert set(ids[:2]).issubset(root_singles) and pane_ids==set(ids[2:])
+                        receipt['fixture'] = dict(rootSingleCount=2, splitPaneCount=2, singleTargetsAreRootTabs=True, targetsAreDisjoint=True)
+                        panes = [{'id':node['id']} for node in split_row['children']]
                         for i,pane in enumerate(panes):
                             app.call('navigate', tab=pane['id'], url=origin+'/pane-'+str(i)); app.call('wait', tab=pane['id'])
                         tree = app.call('sidebar-tree')
