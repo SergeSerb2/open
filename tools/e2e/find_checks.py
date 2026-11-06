@@ -151,9 +151,17 @@ def run(h, factory, results, tmp):
         key('escape'); key('f', ['cmd','option']); p=pane(other)
         row('F20_find_replace_key', p['visible'] and p['focused'], pane=p)
         key('escape'); app.call('focus', tab=other)
-        app.eval(other, "window.selectFindText('far');window.scrollTo(0,0)")
-        key('j', ['cmd']); jumped = h.wait_until(lambda: app.eval(other, 'window.scrollY') > 1000, timeout=3, step=.05)
-        row('F21_jump_selection', bool(jumped), scroll=app.eval(other, 'window.scrollY'))
+        app.eval(other, "window.selectFindText('far')"); time.sleep(.1)
+        app.eval(other, 'window.scrollTo(0,0)'); time.sleep(.1)
+        selection_position = "(() => {let r=document.getElementById('far').getBoundingClientRect();return [scrollY,innerHeight,r.top,r.bottom]})()"
+        before_jump = app.eval(other, selection_position)
+        key('j', ['cmd'])
+        def centered_selection():
+            position=app.eval(other, selection_position)
+            return position if position[0]>1000 and abs((position[2]+position[3]-position[1])/2)<2 else None
+        jumped=h.wait_until(centered_selection, timeout=3, step=.05)
+        row('F21_jump_selection', before_jump[0]==0 and before_jump[2]>before_jump[1] and bool(jumped),
+            before=before_jump, after=app.eval(other, selection_position))
         app.eval(other, 'getSelection().removeAllRanges();window.scrollTo(0,0)')
         # Use Selection to Find has no 40-character ceiling; preserve Cmd+E registry.
         select(other, 'long'); selection_requests=state().get('requests',0)

@@ -7,7 +7,7 @@
 <p id="fortyone">12345678901234567890123456789012345678901</p>
 <p id="lines" style="white-space:pre">  alpha
 beta  </p>
-<input id="input" aria-label="Page input"><p id="far">A distant selected paragraph</p>
+<input id="input" aria-label="Page input"><p id="far">A distant selected paragraph</p><div style="height:1600px"></div>
 <script>
 window.findKeys=[];addEventListener('keydown',e=>findKeys.push(e.key));
 window.selectFindText=(id)=>{let r=document.createRange();r.selectNodeContents(document.getElementById(id));let s=getSelection();s.removeAllRanges();s.addRange(r);return s.toString()};
