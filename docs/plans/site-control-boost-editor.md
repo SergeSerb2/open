@@ -876,7 +876,12 @@ count in the band.
 
 JS notice (Open's words, unchanged): the first time the JS tab has text, a 28 pt dismissible row
 above the bottom bar: "JavaScript in a Boost runs on this site like the site's own code." with ×
-(stores `open.boosts.hasDismissedJSNotice`).
+(stores `open.boosts.hasDismissedJSNotice`). Open choice (lead 2026-11-06): height 28 pt,
+background #F2F2F4, top hairline 1 physical pixel of black 0.08. Text is 11 pt Regular,
+black 0.60, leading inset 12 pt, one line with tail “…” truncation. The dismiss button
+uses `xmark`, 9 pt Semibold, black 0.45, in a 20 × 20 pt hit area, centered vertically,
+6 pt from the trailing edge; AX label “Dismiss”. Every value is a token in
+`OpenDesign/SiteControlTokens.swift`.
 
 Editing rules:
 

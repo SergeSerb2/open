@@ -15,7 +15,12 @@ change when deciding whether to delete an untouched new Boost.
 The panel grows left to 480 by 588 points. Back restores the simple size. Left
 and bottom tracking strips save the final size as `open.boosts.codeEditorSize`;
 the minimum is 360 by 420. The existing screen margin still clamps the frame.
-The first JS notice uses `open.boosts.hasDismissedJSNotice`. Pick Selector stays
+The first JS notice uses `open.boosts.hasDismissedJSNotice`. Per the lead’s
+2026-11-06 ruling, it is 28 pt tall with #F2F2F4 fill and a one-physical-pixel
+black 0.08 top hairline. Its 11 pt Regular black 0.60 label uses a 12 pt leading
+inset, one line and tail truncation. The `xmark` is 9 pt Semibold, black 0.45,
+inside a 20 × 20 pt hit area, centered vertically, 6 pt from the trailing edge,
+with AX label “Dismiss”. All values are marked Open choice in the tokens. Pick Selector stays
 disabled until Step 8. Developer Tools uses the host's existing visibility hook.
 
 ## Verification procedure
@@ -85,4 +90,38 @@ negative proof. The pre-fix native code click failure is the focus negative proo
 The bar comparator rejected the earlier arrow and hammer at unchanged limits;
 the final recreated glyphs pass **11/11** (maximum non-text delta-E 1.15).
 
-Final verifier receipts are recorded below after the final gate.
+## Committed scene receipts and full regression
+
+The four `editor-code-*-light@1x/@2x.png` files are synthetic Open renders.
+`SHA256SUMS` records their integrity. These are new Step 7 receipts; no Step 4
+baseline or comparison threshold was changed. The receipt checker keeps the
+simple-editor set in Step 4 and checks the code-editor set here.
+
+After the notice ruling, `code-flows` passes **22/22**, including the notice’s
+font, color, single-line truncation, hit area, position and AX label, plus fill
+and one-pixel hairline probes at 1x/2x. The scene receipts and SHA checks pass
+**146/146**; load was 32.15/18.67/16.98 at entry and 41.64/21.19/17.89 at exit.
+Receipt negative proofs reject all four corrupted hashes and a missing manifest
+entry, then restore the original manifest; load was 53.33/24.84/19.26 at entry
+and 55.95/25.85/19.65 at exit. The initial notice-style assertion compared
+sRGB and generic-gray objects for equality; it now checks sRGB components
+without changing its numeric limits.
+
+The first full regression on `2e94108e` passed 23 of 24 suites. Site Control
+reported 1513/1518: four new code scenes still used the simple editor’s AX
+expectation, and the old receipt-set check expected the new scenes in Step 4.
+Those five harness failures were corrected by checking native CSS/JS text areas
+and using this separate Step 7 receipt set. The native focus check passed 11/11;
+code keystroke CPU p95 was 1.748 ms at load 12.39/14.88/16.81, with at most
+191 highlighted characters. The full run entered at 17.93/17.15/22.32 and
+finished at 12.36/14.83/16.78. This run predates the lead’s JS notice ruling
+and is not final acceptance.
+
+The production notice/AX negative run rejects **22/22** code gates, then restores
+all source files. It deliberately changes the notice font/fill and code AX labels
+in addition to the earlier functional faults. Entry load was 55.95/25.85/19.65;
+completion load was 13.50/20.77/23.40. `receipt-check` verifies all committed
+manifests offscreen.
+
+The final-head full summary, loads and review checklist are in the linked PR.
+

@@ -256,7 +256,8 @@ enum EditorFlows {
                 checks.append(.init(name: "knob-gradient probe \(Int(scale))x top darker / bottom lighter",pass: Int(top[0])+5<Int(mid[0]) && Int(mid[0])+5<Int(bottom[0])))
             }
             let dump = Flows.accessibilityDump(stage.view)
-            checks.append(.init(name: "render \(state) native AX hierarchy",pass: state == "editor-first-run" ? dump.contains("Make a Boost") && dump.contains("Maybe Later") : dump.contains("AXGroup label=Color") && dump.contains("AXSlider label=Hue") && dump.contains("AXSlider label=Intensity")))
+            let codeAX = dump.contains("AXTextArea label="+(state == "editor-code-css" ? "CSS code" : "JavaScript code")) && dump.contains("AXButton label=Back") && dump.contains("AXButton label=CSS") && dump.contains("AXButton label=JS") && !dump.contains("AXGroup label=Color")
+            checks.append(.init(name: "render \(state) native AX hierarchy",pass: state.hasPrefix("editor-code-") ? codeAX : state == "editor-first-run" ? dump.contains("Make a Boost") && dump.contains("Maybe Later") : dump.contains("AXGroup label=Color") && dump.contains("AXSlider label=Hue") && dump.contains("AXSlider label=Intensity")))
         } } }
         return checks
     }

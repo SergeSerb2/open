@@ -12,7 +12,7 @@ import OpenDesign
     private var editors: [BoostCodeLanguage: CodeEditorView] = [:]
     private var scrolls: [BoostCodeLanguage: NSScrollView] = [:]
     private var laidOut: Set<BoostCodeLanguage> = []
-    private let notice = NSTextField(wrappingLabelWithString: "JavaScript in a Boost runs on this site like the site's own code.")
+    private let notice = NSTextField(labelWithString: BoostEditorMetrics.codeNoticeText)
     public var editor: CodeEditorView { editors[language]! }
     public var showsRefreshToRun: Bool { language == .js && session.needsJSReload }
     public override var isFlipped: Bool { true }
@@ -27,8 +27,11 @@ import OpenDesign
         control("editor.code.pick")?.isEnabled = false
         add("editor.code.devtools","Show Developer Tools","hammer",.color) { [weak session] in session?.toggleDevTools() }
         add("editor.code.run","Refresh to Run","",.codeRun) { [weak session] in session?.refreshToRun() }
-        add("editor.code.dismissNotice","Dismiss JavaScript notice","xmark",.header) { [weak session] in session?.dismissJSNotice() }
-        notice.font = .systemFont(ofSize: BoostEditorMetrics.gutterFont);notice.textColor = BoostEditorColors.label.nsColor;addSubview(notice)
+        add("editor.code.dismissNotice",BoostEditorMetrics.codeNoticeDismissLabel,BoostEditorMetrics.codeNoticeDismissGlyph,.codeNoticeDismiss) { [weak session] in session?.dismissJSNotice() }
+        notice.font = .systemFont(ofSize: BoostEditorMetrics.codeNoticeFont,weight: BoostEditorMetrics.codeNoticeFontWeight)
+        notice.textColor = BoostEditorColors.codeNoticeText.nsColor
+        notice.maximumNumberOfLines = BoostEditorMetrics.codeNoticeLines;notice.lineBreakMode = BoostEditorMetrics.codeNoticeLineBreak
+        notice.cell?.wraps = false;notice.cell?.usesSingleLineMode = true;addSubview(notice)
         for kind in [BoostCodeLanguage.css,.js] {
             let text = CodeEditorView(),scroll = NSScrollView()
             scroll.wantsLayer = true;scroll.layer?.masksToBounds = true
@@ -88,13 +91,20 @@ import OpenDesign
         for (i,id) in ["pick","devtools"].enumerated() { control("editor.code."+id)?.frame = CGRect(x: m.codeBarInset+CGFloat(i)*(m.codeButton+m.codeBarGap),y: h-m.codeBottomBar+m.codeBarTop,width: m.codeButton,height: m.codeButton) }
         let width = ("Refresh to Run" as NSString).size(withAttributes: [.font: NSFont.systemFont(ofSize: m.codeControlFont,weight: .medium)]).width
         control("editor.code.run")?.frame = CGRect(x: w-m.codeBarInset-width,y: h-m.codeBottomBar+m.codeBarTop,width: width,height: m.codeButton)
-        notice.frame = CGRect(x: m.codeBarInset,y: h-m.codeBottomBar-noticeHeight+m.codeNoticeInset,width: w-2*m.codeBarInset-m.codeNoticeHeight,height: noticeHeight-m.codeNoticeInset)
-        control("editor.code.dismissNotice")?.frame = CGRect(x: w-m.codeNoticeHeight,y: h-m.codeBottomBar-noticeHeight,width: m.codeNoticeHeight,height: m.codeNoticeHeight)
+        let dismissX = w-m.codeNoticeDismissTrailing-m.codeNoticeDismissHit,noticeTop = h-m.codeBottomBar-noticeHeight
+        let textHeight = notice.intrinsicContentSize.height
+        notice.frame = CGRect(x: m.codeNoticeLeading,y: noticeTop+(noticeHeight-textHeight)/2,width: max(0,dismissX-m.codeNoticeLeading),height: textHeight)
+        control("editor.code.dismissNotice")?.frame = CGRect(x: dismissX,y: noticeTop+(noticeHeight-m.codeNoticeDismissHit)/2,width: m.codeNoticeDismissHit,height: m.codeNoticeDismissHit)
         for strip in subviews.compactMap({ $0 as? CodeResizeStrip }) { strip.frame = strip.edge == .left ? CGRect(x: 0,y: m.codeHeader,width: m.codeResizeStrip,height: h-m.codeHeader) : CGRect(x: 0,y: h-m.codeResizeStrip,width: w,height: m.codeResizeStrip) }
     }
     public override func draw(_ dirtyRect: NSRect) {
         BoostEditorColors.header.nsColor.setFill();CGRect(x: 0,y: 0,width: bounds.width,height: BoostEditorMetrics.codeHeader).fill()
         BoostEditorColors.hairline.nsColor.setFill();CGRect(x: 0,y: BoostEditorMetrics.codeHeader-1,width: bounds.width,height: 1).fill()
+        if !notice.isHidden {
+            let top = bounds.height-BoostEditorMetrics.codeBottomBar-BoostEditorMetrics.codeNoticeHeight
+            BoostEditorColors.codeNoticeBackground.nsColor.setFill();CGRect(x: 0,y: top,width: bounds.width,height: BoostEditorMetrics.codeNoticeHeight).fill()
+            BoostEditorColors.codeNoticeHairline.nsColor.setFill();CGRect(x: 0,y: top,width: bounds.width,height: BoostEditorMetrics.codeNoticeHairlinePixels/(window?.backingScaleFactor ?? 1)).fill()
+        }
     }
     public override func mouseDown(with event: NSEvent) { if convert(event.locationInWindow,from: nil).y<BoostEditorMetrics.codeHeader { window?.performDrag(with: event) } }
     @objc private func scrolled(_ notification: Notification) { editor.highlightVisible();scrolls[language]?.verticalRulerView?.needsDisplay = true }

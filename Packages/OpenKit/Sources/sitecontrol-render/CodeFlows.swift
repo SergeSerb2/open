@@ -53,7 +53,11 @@ import OpenBoosts
         let unsaved = stage.session.pendingCodeSaveDelays[.js] == 0.500 && store.boost(id:id)?.js == "" && !code.showsRefreshToRun
         stage.settle(0.58)
         check("F18 JS 500ms save never refreshes live; Refresh to Run appears for stored JS",unsaved && store.boost(id:id)?.js == "const answer = 42;\n" && stage.host.refreshes == jsRefreshes && code.showsRefreshToRun)
-        check("F18 JavaScript notice appears once, dismisses durably and keeps text",!stage.defaults.bool(forKey:"open.boosts.hasDismissedJSNotice") && stage.session.showsJSNotice && { stage.tap("editor.code.dismissNotice");return stage.defaults.bool(forKey:"open.boosts.hasDismissedJSNotice") && !stage.session.showsJSNotice && js.string == "const answer = 42;\n" }())
+        let notice = code.subviews.compactMap { $0 as? NSTextField }.first
+        let dismiss = code.control("editor.code.dismissNotice")
+        let noticeColor = notice?.textColor?.usingColorSpace(.sRGB)
+        let noticeStyle = notice?.font == NSFont.systemFont(ofSize:11,weight:.regular) && noticeColor?.redComponent == 0 && noticeColor?.greenComponent == 0 && noticeColor?.blueComponent == 0 && noticeColor?.alphaComponent == 0.60 && notice?.maximumNumberOfLines == 1 && notice?.lineBreakMode == .byTruncatingTail && notice?.frame.minX == 12 && dismiss?.frame == CGRect(x:454,y:494,width:20,height:20) && dismiss?.accessibilityLabel() == "Dismiss"
+        check("F18 JavaScript notice follows lead geometry/type, dismisses durably and keeps text",noticeStyle && !stage.defaults.bool(forKey:"open.boosts.hasDismissedJSNotice") && stage.session.showsJSNotice && { stage.tap("editor.code.dismissNotice");return stage.defaults.bool(forKey:"open.boosts.hasDismissedJSNotice") && !stage.session.showsJSNotice && js.string == "const answer = 42;\n" }())
         stage.tap("editor.code.run")
         let stillDirty = code.showsRefreshToRun
         stage.host.loadedScripts[id] = stage.host.boostStore.boost(id:id)?.js
@@ -115,9 +119,14 @@ import OpenBoosts
                 let stage = EditorStage(state:state,scale:scale),image = stage.editorImage()
                 let code = stage.view.codeView!
                 let header = CLI.pixel(image,x:Int(100*scale),y:Int(10*scale)),bar = CLI.pixel(image,x:Int(110*scale),y:Int(540*scale))
+                let ax = Flows.accessibilityDump(stage.view)
+                let codeAX = ax.contains("AXTextArea label="+(state == "editor-code-css" ? "CSS code" : "JavaScript code")) && ax.contains("AXButton label=Back") && ax.contains("AXButton label=CSS") && ax.contains("AXButton label=JS") && !ax.contains("AXGroup label=Color")
+                let noticeFill = CLI.pixel(image,x:Int(110*scale),y:Int(490*scale)+1)
+                let noticeLine = CLI.pixel(image,x:Int(110*scale),y:Int(490*scale))
+                let noticePixels = state != "editor-code-js-dirty" || noticeFill.prefix(3) == [242,242,244] && zip(noticeLine.prefix(3),[223,223,225]).allSatisfy { pair in abs(Int(pair.0)-pair.1)<=1 } && ax.contains("AXButton label=Dismiss")
                 var ink = 0
                 for y in Int(44*scale)..<Int(110*scale) { for x in Int(45*scale)..<Int(330*scale) { let pixel = CLI.pixel(image,x:x,y:y);if pixel[0]<220 || pixel[1]<220 || pixel[2]<220 { ink += 1 } } }
-                checks.append(.init(name:"render \(state) @\(Int(scale))x native header/body/bar geometry and nonempty pixels",pass:header[0] == 245 && header[1] == 245 && header[2] == 247 && bar[0] == 255 && bar[1] == 255 && bar[2] == 255 && ink>100 && image.width == Int(480*scale) && image.height == Int(588*scale) && code.control("editor.code.back")?.frame == BoostEditorMetrics.back && code.editor.enclosingScrollView?.frame.minY == 40 && code.control("editor.code.devtools")?.frame == CGRect(x:63,y:535,width:38,height:38) && code.language == (state == "editor-code-css" ? .css : .js) && code.showsRefreshToRun == (state == "editor-code-js-dirty") && !code.editor.string.isEmpty))
+                checks.append(.init(name:"render \(state) @\(Int(scale))x native header/body/bar geometry and nonempty pixels",pass:codeAX && noticePixels && header[0] == 245 && header[1] == 245 && header[2] == 247 && bar[0] == 255 && bar[1] == 255 && bar[2] == 255 && ink>100 && image.width == Int(480*scale) && image.height == Int(588*scale) && code.control("editor.code.back")?.frame == BoostEditorMetrics.back && code.editor.enclosingScrollView?.frame.minY == 40 && code.control("editor.code.devtools")?.frame == CGRect(x:63,y:535,width:38,height:38) && code.language == (state == "editor-code-css" ? .css : .js) && code.showsRefreshToRun == (state == "editor-code-js-dirty") && !code.editor.string.isEmpty))
             }
         } }
         return checks

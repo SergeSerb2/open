@@ -55,7 +55,7 @@ final class EditorButton: SiteControlButton {
     // Only fixed 26 x 26 cells at 1x/2x enter this 128-entry cache. On the M5,
     // the largest bitmap has a padded 224-byte row: 11,648 bytes / 1.43 MiB total.
     private static var fontImages: [FontImageKey: CGImage] = [:]
-    enum Kind { case header,name,color,font,row,half,primary,secondary,codeBack,codeSegment,codeRun }
+    enum Kind { case header,name,color,font,row,half,primary,secondary,codeBack,codeSegment,codeRun,codeNoticeDismiss }
     var kind = Kind.color
     var selected = false { didSet { if oldValue != selected { fadeSelection = true; needsDisplay = true } } }
     var caption = "" { didSet { if oldValue != caption { needsDisplay = true } } }
@@ -105,6 +105,7 @@ final class EditorButton: SiteControlButton {
         case .primary: fill = m.makeABoost.top.nsColor; color = .white
         case .secondary: color = m.maybeLater.nsColor
         case .codeBack,.codeRun: color = m.label.nsColor
+        case .codeNoticeDismiss: color = m.codeNoticeDismiss.nsColor
         case .codeSegment: fill = (selected ? m.codeSegmentSelected : m.codeSegmentIdle).nsColor;color = m.label.nsColor
         default: fill = selected ? (controlID == "editor.color.advanced" ? m.advancedOn : m.buttonOn).nsColor : (pressed ? m.buttonPressed : m.button).nsColor; if selected { color = .white }
         }
@@ -115,6 +116,9 @@ final class EditorButton: SiteControlButton {
                 let gradient = NSGradient(colorsAndLocations: (m.makeABoost.top.nsColor,0),(NSColor(srgbRed: 72/255,green: 72/255,blue: 1,alpha: 1),0.2),(m.makeABoost.bottom.nsColor,1))!
                 gradient.draw(in: bounds,angle: 90); NSGraphicsContext.restoreGraphicsState()
             }
+        }
+        if kind == .codeNoticeDismiss {
+            EditorRaster.glyph(BoostEditorMetrics.codeNoticeDismissGlyph,in: bounds,size: BoostEditorMetrics.codeNoticeDismissGlyphSize,color: color,weight: BoostEditorMetrics.codeNoticeDismissWeight);return
         }
         if kind == .codeBack {
             EditorRaster.glyph("arrow.left",in: CGRect(x: BoostEditorMetrics.codeBackGlyphOffset,y: 0,width: BoostEditorMetrics.codeBackGlyphWidth,height: bounds.height),size: BoostEditorMetrics.codeControlFont,color: BoostEditorColors.codeBackGlyph.nsColor,weight: .semibold)

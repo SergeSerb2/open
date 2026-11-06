@@ -87,11 +87,20 @@ public enum BoostEditorMetrics {           // §4, editor-window points; AX S2 1
     public static let codeHammerGlyph: CGFloat = 14.5 // optical extent calibrated to S2 10/0071
     public static let codeBackGlyphOffset: CGFloat = 3
     public static let codeBackGlyphWidth: CGFloat = 16, codeBackLabelX: CGFloat = 26, codeBackBaseline: CGFloat = 16
-    public static let codeSegmentTop: CGFloat = 8, codeControlFont: CGFloat = 13, codeButtonGlyph: CGFloat = 15, codeNoticeInset: CGFloat = 6
+    public static let codeSegmentTop: CGFloat = 8, codeControlFont: CGFloat = 13, codeButtonGlyph: CGFloat = 15
     public static let codeSegmentRadius: CGFloat = 6
     public static let codeFont: CGFloat = 12, codeLineHeight: CGFloat = 16, gutterFont: CGFloat = 10
     public static let codeInset = CGSize(width: 8,height: 6), codeResizeStrip: CGFloat = 8
-    public static let codeNoticeHeight: CGFloat = 28, codeBarInset: CGFloat = 15, codeBarTop: CGFloat = 17, codeBarGap: CGFloat = 10
+    public static let codeBarInset: CGFloat = 15, codeBarTop: CGFloat = 17, codeBarGap: CGFloat = 10
+    // Open choice (lead 2026-11-06): JavaScript notice.
+    public static let codeNoticeHeight: CGFloat = 28, codeNoticeHairlinePixels: CGFloat = 1
+    public static let codeNoticeFont: CGFloat = 11, codeNoticeFontWeight = NSFont.Weight.regular
+    public static let codeNoticeLeading: CGFloat = 12, codeNoticeLines = 1
+    public static let codeNoticeLineBreak = NSLineBreakMode.byTruncatingTail
+    public static let codeNoticeDismissHit: CGFloat = 20, codeNoticeDismissTrailing: CGFloat = 6
+    public static let codeNoticeDismissGlyphSize: CGFloat = 9, codeNoticeDismissWeight = NSFont.Weight.semibold
+    public static let codeNoticeDismissGlyph = "xmark", codeNoticeDismissLabel = "Dismiss"
+    public static let codeNoticeText = "JavaScript in a Boost runs on this site like the site's own code."
     public static let cssSaveDelay: TimeInterval = 0.150, jsSaveDelay: TimeInterval = 0.500
     public static let codeFadeOut: TimeInterval = 0.08, codeFadeIn: TimeInterval = 0.12
     public static let codeMinimum = CGSize(width: 360, height: 420), gutterWidth: CGFloat = 36   // o
@@ -128,6 +137,9 @@ public enum BoostEditorColors {            // light only; IS §20.15 and §20.6
     public static let codeSegmentSelected = RGBA(hex: 0xC8C8C8), codeSegmentIdle = RGBA(hex: 0xE4E4E4)
     public static let codeComment = RGBA(hex: 0x8E8E93), codeString = RGBA(hex: 0xC41A16), codeNumber = RGBA(hex: 0x1C00CF)
     public static let codeKeyword = RGBA(hex: 0x9B2393), codeProperty = RGBA(hex: 0x326D74), codeGutter = RGBA(hex: 0xA0A0A5)
+    // Open choice (lead 2026-11-06): JavaScript notice.
+    public static let codeNoticeBackground = RGBA(hex: 0xF2F2F4), codeNoticeHairline = RGBA.black(0.08)
+    public static let codeNoticeText = RGBA.black(0.60), codeNoticeDismiss = RGBA.black(0.45)
     public static let advancedMaterialOverWhite = RGBA(hex: 0xEDEDED)               // m (S2 10/0042, editor (91, 300)); calibration only
 }
 public extension SiteControlMetrics {
