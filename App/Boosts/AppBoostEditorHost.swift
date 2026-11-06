@@ -19,10 +19,16 @@ final class AppBoostEditorHost: BoostEditorHost {
     guard let host = boosts.factory(for: tabID)?.hosts[tabID], !host.closed else { return nil }
     return try? await host.content.takeSnapshot()
   }
+  func zapAvailability(tabID: ItemID) -> Bool {
+    // Blocked on P7: isolated world
+    false
+  }
   // Blocked on P7: isolated world and a native page-message channel.
-  func zapAvailability(tabID: ItemID) -> Bool { false }
   func enterZap(boostID: BoostID, tabID: ItemID) -> Bool { false }
-  func enterSelectorPicker(boostID: BoostID, tabID: ItemID) -> Bool { false }
+  func enterSelectorPicker(boostID: BoostID, tabID: ItemID) -> Bool {
+    // Blocked on P7: isolated world
+    false
+  }
   func exitZap(tabID: ItemID) {}
   func removeZapFromSession(_ selector: String, tabID: ItemID) {}
   func requestZapCounts(tabID: ItemID) {}
