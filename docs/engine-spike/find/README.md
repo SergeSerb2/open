@@ -20,15 +20,15 @@ The draft is **not accepted**. Current evidence before the final-head run:
 
 | Required evidence | State |
 |---|---|
-| Real-App behavior and native hit testing | 49/50 Release checks pass; native field keys, page Cmd+G, close click, selection boundaries, tab memory, document navigation/reload, Split View and Peek pass |
+| Real-App behavior and native hit testing | 49/50 Release checks pass after merging main through #176; native field keys, page Cmd+G, close click, selection boundaries, tab memory, document navigation/reload, Split View and Peek pass |
 | Own-window light/dark pixels | WindowServer snapshots pass: blank-middle background ΔE00 0.4977 light / 0.3836 dark, limit 2; radius, 300×32 frame, right 10, top 10/50 and narrow-pane checks pass |
-| First Cmd+F within one frame | FAIL: 11.5107 ms at load 9.81/10.55/11.74, against 4.1667 ms on AW2726DM, 1x, maximum 240 Hz; it also misses the 120 Hz reference interval of 8.3333 ms |
+| First Cmd+F within one frame | FAIL: 7.3319 ms at load 8.85/10.28/12.05, against 4.1667 ms on AW2726DM, 1x, maximum 240 Hz; it is within the 120 Hz reference interval of 8.3333 ms |
 | Coalescing and idle work | PASS: one typed request and at most one engine activation; all ten Find-scoped idle observer counters zero over two seconds with the bar open and page focused |
 | Negative proof for every new gate; forced early-Peek-failure cleanup | Pending; interrupted negative attempts are excluded |
-| e2e features, shell, window, commandbar, page; full verify-all | Final-head runs pending |
+| e2e features, shell, window, commandbar, page; full verify-all | features 19/19 PASS; remaining final-head runs pending |
 
-The complete normal receipt is `.re/find/find-functional-quiet.json`, with
-load and phase timings in `.re/find/find-fixed-quiet.log`. Earlier receipts
+The complete normal receipt is `.re/find/find-batched-quiet.json`, with
+load and phase timings in `.re/find/find-batched-quiet.log`. Earlier receipts
 precede the root extensions collision fix and are not current acceptance.
 Receipts stay under `.re/find/` in the implementation checkout. The harness
 also writes `docs/engine-spike/results-find-release.json` (not committed).
