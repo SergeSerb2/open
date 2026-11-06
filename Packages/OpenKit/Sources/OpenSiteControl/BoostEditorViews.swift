@@ -38,7 +38,7 @@ enum EditorRaster {
     }
     static func glyph(_ name: String,in rect: CGRect,size: CGFloat,color: NSColor,weight: NSFont.Weight = .regular) {
         let c = NSGraphicsContext.current!.cgContext,scale = hypot(c.ctm.a,c.ctm.b)
-        let fits: [String: CGSize] = ["lightbulb": CGSize(width: 9,height: 16),"lightbulb.fill": CGSize(width: 9,height: 16),"slider.horizontal.3": CGSize(width: 14,height: 12),"nosign": CGSize(width: 14,height: 14),"arrow.counterclockwise": CGSize(width: 13,height: 16),"chevron.down": CGSize(width: 11,height: 6),"arrow.left": CGSize(width: 11,height: 9),"hammer": CGSize(width: 18,height: 17)]
+        let fits: [String: CGSize] = ["lightbulb": CGSize(width: 9,height: 16),"lightbulb.fill": CGSize(width: 9,height: 16),"slider.horizontal.3": CGSize(width: 14,height: 12),"nosign": CGSize(width: 14,height: 14),"arrow.counterclockwise": CGSize(width: 13,height: 16),"chevron.down": CGSize(width: 11,height: 6)]
         guard let value = SiteControlGlyphRenderer.symbol(name,size: size,weight: weight,color: color,sparkles: .none,scale: scale,fit: fits[name],symbolScale: ["lightbulb","lightbulb.fill","slider.horizontal.3","nosign","arrow.counterclockwise"].contains(name) ? .small : nil) else { return }
         let frame = CGRect(x: floor((rect.midX-value.ink.width/2-value.ink.minX)*scale)/scale,y: floor((rect.midY-value.ink.height/2-value.ink.minY)*scale)/scale+(["lightbulb","lightbulb.fill","nosign","arrow.counterclockwise","chevron.down"].contains(name) ? 1 : 0),width: value.size.width,height: value.size.height)
         NSImage(cgImage: value.image,size: value.size).draw(in: frame,from: .zero,operation: .sourceOver,fraction: 1,respectFlipped: true,hints: nil)
@@ -117,7 +117,7 @@ final class EditorButton: SiteControlButton {
             }
         }
         if kind == .codeBack {
-            EditorRaster.glyph("arrow.left",in: CGRect(x: BoostEditorMetrics.codeBackGlyphOffset,y: 0,width: BoostEditorMetrics.codeBackGlyphWidth,height: bounds.height),size: BoostEditorMetrics.codeControlFont,color: BoostEditorColors.codeBackGlyph.nsColor)
+            EditorRaster.glyph("arrow.left",in: CGRect(x: BoostEditorMetrics.codeBackGlyphOffset,y: 0,width: BoostEditorMetrics.codeBackGlyphWidth,height: bounds.height),size: BoostEditorMetrics.codeControlFont,color: BoostEditorColors.codeBackGlyph.nsColor,weight: .semibold)
             SiteControlDrawing.text(caption,x: BoostEditorMetrics.codeBackLabelX,baseline: BoostEditorMetrics.codeBackBaseline,width: bounds.width-BoostEditorMetrics.codeBackLabelX,font: .systemFont(ofSize: BoostEditorMetrics.codeControlFont,weight: .medium),color: color);return
         }
         if kind == .codeSegment || kind == .codeRun {
@@ -140,7 +140,7 @@ final class EditorButton: SiteControlButton {
             if controlID == "editor.tool.zap",let count = accessibilityValue() as? Int,count>0 { SiteControlDrawing.text(String(count),x: bounds.width-43,baseline: 24,width: 28,font: Typography.editorButton.font,color: color,alignment: .right) }
             else { EditorRaster.glyph(symbol,in: CGRect(x: bounds.width-36,y: 0,width: 21,height: bounds.height),size: 15,color: color) }; return
         }
-        if !symbol.isEmpty { EditorRaster.glyph(symbol,in: bounds,size: controlID.hasPrefix("editor.code.") ? BoostEditorMetrics.codeButtonGlyph : controlID == "editor.done" ? 16 : 17,color: color) }
+        if !symbol.isEmpty { EditorRaster.glyph(symbol,in: controlID == "editor.code.devtools" ? bounds.offsetBy(dx: 0,dy: BoostEditorMetrics.codeHammerOffsetY) : bounds,size: controlID == "editor.code.devtools" ? BoostEditorMetrics.codeHammerGlyph : controlID.hasPrefix("editor.code.") ? BoostEditorMetrics.codeButtonGlyph : controlID == "editor.done" ? 16 : 17,color: controlID == "editor.code.devtools" ? BoostEditorColors.codeToolsGlyph.nsColor : color) }
         else if kind == .primary {
             let line = CTLineCreateWithAttributedString(NSAttributedString(string: caption,attributes: [.font: Typography.firstRunPrimary.font,.foregroundColor: color,.kern: BoostEditorMetrics.makeLabelKern]))
             let c = NSGraphicsContext.current!.cgContext,w = CTLineGetTypographicBounds(line,nil,nil,nil)
@@ -158,7 +158,7 @@ public final class BoostEditorView: NSView {
     public var onCodeMode: ((Bool)->Void)?
     public func setCodeMode(_ enabled: Bool) {
         guard isCodeMode != enabled else { return }
-        closeAdvanced();session.endInteractive();session.flushCode();isCodeMode = enabled
+        closeAdvanced();session.endInteractive();session.endCodeEditing();isCodeMode = enabled
         if enabled && codeView == nil {
             let code = BoostCodeView(session: session);code.onBack = { [weak self] in self?.onCodeMode?(false) };code.onKey = { [weak self] in self?.onKey?($0) ?? false }
             codeView = code;addSubview(code)

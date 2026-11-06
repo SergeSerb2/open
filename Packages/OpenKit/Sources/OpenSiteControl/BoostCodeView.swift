@@ -24,7 +24,7 @@ import OpenDesign
         add("editor.code.css","CSS","",.codeSegment) { [weak self] in self?.select(.css) }
         add("editor.code.js","JS","",.codeSegment) { [weak self] in self?.select(.js) }
         add("editor.code.pick","Pick Selector","eyedropper",.color) {}
-        control("editor.code.pick")?.isEnabled = false;control("editor.code.pick")?.tooltipTitle = "Pick Selector isn't available yet."
+        control("editor.code.pick")?.isEnabled = false
         add("editor.code.devtools","Show Developer Tools","hammer",.color) { [weak session] in session?.toggleDevTools() }
         add("editor.code.run","Refresh to Run","",.codeRun) { [weak session] in session?.refreshToRun() }
         add("editor.code.dismissNotice","Dismiss JavaScript notice","xmark",.header) { [weak session] in session?.dismissJSNotice() }
@@ -35,7 +35,7 @@ import OpenDesign
             scroll.hasVerticalScroller = true;scroll.autohidesScrollers = true;scroll.drawsBackground = true;scroll.backgroundColor = .white
             scroll.documentView = text;scroll.hasVerticalRuler = true;scroll.rulersVisible = true;scroll.verticalRulerView = CodeLineRuler(scrollView: scroll,editor: text)
             text.onEdit = { [weak session] in session?.editCode($0,language: kind) }
-            text.onEndEditing = { [weak session] in session?.flushCode(kind) }
+            text.onEndEditing = { [weak session] in session?.endCodeEditing(kind) }
             text.load(session.code(kind),language: kind)
             scroll.contentView.postsBoundsChangedNotifications = true
             NotificationCenter.default.addObserver(self,selector: #selector(scrolled(_:)),name: NSView.boundsDidChangeNotification,object: scroll.contentView)

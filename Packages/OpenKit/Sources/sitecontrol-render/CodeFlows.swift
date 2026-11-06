@@ -43,7 +43,7 @@ import OpenBoosts
         }
         check("F17 native highlighter colors comments, strings, units, at-rules and properties",color("comment",BoostEditorColors.codeComment.nsColor) && color("continued",BoostEditorColors.codeComment.nsColor) && color("body",BoostEditorColors.title.nsColor) && color("\"red\"",BoostEditorColors.codeString.nsColor) && color("16px",BoostEditorColors.codeNumber.nsColor) && color("@media",BoostEditorColors.codeKeyword.nsColor) && color("color:",BoostEditorColors.codeProperty.nsColor))
         stage.key(3,"f",modifiers:.command);stage.settle()
-        let findVisible = text.enclosingScrollView?.isFindBarVisible == true
+        let findVisible = text.enclosingScrollView?.isFindBarVisible == true && stage.session.undoManager.canUndo && stage.session.undoManager.undoActionName == "Edit CSS"
         let hideFind = NSMenuItem();hideFind.tag = NSTextFinder.Action.hideFindInterface.rawValue;text.performTextFinderAction(hideFind);focus()
         check("F17 plain text disables substitutions and enables native Find and undo",!text.isRichText && !text.isAutomaticQuoteSubstitutionEnabled && !text.isAutomaticDashSubstitutionEnabled && !text.isAutomaticTextReplacementEnabled && !text.isAutomaticSpellingCorrectionEnabled && !text.isContinuousSpellCheckingEnabled && !text.isAutomaticDataDetectionEnabled && text.usesFindBar && findVisible && text.allowsUndo && text.enclosingScrollView?.verticalRulerView?.ruleThickness == 36)
         stage.key(19,"2",modifiers:.command)
@@ -86,7 +86,17 @@ import OpenBoosts
         stage.controller.setCodeMode(false,animated:false);stage.controller.setCodeMode(true,animated:false);stage.settle()
         check("F17 resize persists 620x700, keeps right/top fixed and restores on Code entry",nativeResize && stage.defaults.string(forKey:"open.boosts.codeEditorSize") == "620x700" && stage.panel.frame.size == CGSize(width:620,height:700) && resized.maxX == simple.maxX && resized.maxY == simple.maxY)
         stage.controller.resizeCode(to:CGSize(width:1,height:1),persist:true)
-        check("F17 resize clamps to 360x420 minimum",stage.panel.frame.size == CGSize(width:360,height:420))
+        let minimumSize = stage.panel.frame.size == CGSize(width:360,height:420)
+        func restoredSize(_ raw: String) -> CGSize {
+            stage.controller.setCodeMode(false,animated:false)
+            stage.defaults.set(raw,forKey:"open.boosts.codeEditorSize")
+            stage.controller.setCodeMode(true,animated:false)
+            return stage.panel.frame.size
+        }
+        let atLimit = String(repeating:"0",count:57)+"620x700" // exactly 64 UTF-8 bytes
+        let accepted = restoredSize(atLimit) == CGSize(width:620,height:700)
+        let refused = ["0"+atLimit,"620x700xextra","nanx700","620xinf"].allSatisfy { restoredSize($0) == CGSize(width:480,height:588) }
+        check("F17 resize minimum and saved-size 64/65-byte boundary; malformed values fall back",minimumSize && accepted && refused)
         stage.panel.makeFirstResponder(text);stage.key(53,"\u{1b}")
         let ended = stage.view.isCodeMode && !(stage.panel.firstResponder is NSTextView)
         stage.key(53,"\u{1b}");stage.settle(0.3)

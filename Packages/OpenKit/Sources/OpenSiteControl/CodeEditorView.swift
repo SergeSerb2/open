@@ -63,7 +63,7 @@ public enum BoostCodeLanguage: String, Sendable { case css, js }
         super.draw(dirtyRect)
         if string.isEmpty {
             let value = language == .css ? "your css here" : "your javascript here"
-            (value as NSString).draw(at: CGPoint(x: textContainerInset.width+textContainer!.lineFragmentPadding,y: textContainerInset.height),withAttributes: [.font: font!, .foregroundColor: NSColor.black.withAlphaComponent(0.3)])
+            (value as NSString).draw(at: CGPoint(x: textContainerInset.width+textContainer!.lineFragmentPadding,y: textContainerInset.height),withAttributes: [.font: font!, .foregroundColor: BoostEditorColors.codePlaceholder.nsColor])
         }
     }
     public override func insertTab(_ sender: Any?) { insertText("  ",replacementRange: selectedRange()) }

@@ -8,7 +8,8 @@ after a bound-tab commit. A reload request does not itself mark the document cle
 
 CSS edits save after 150 ms and refresh the Profile. JS edits save after 500 ms
 without a live refresh. Focus loss, Back, close, and Refresh to Run flush pending
-text. Each language keeps its own native text undo stack. Code edits count as a
+text. Each language keeps its own native text undo stack; focus loss records one
+whole-Boost checkpoint for the simple editor Undo button (§4.9). Code edits count as a
 change when deciding whether to delete an untouched new Boost.
 
 The panel grows left to 480 by 588 points. Back restores the simple size. Left
@@ -20,8 +21,9 @@ disabled until Step 8. Developer Tools uses the host's existing visibility hook.
 ## Verification procedure
 
 Build with `heavy.sh swift build --package-path Packages/OpenKit --product
-sitecontrol-render -c release -j 6`. Run `code-flows`, `native-key-check`, and
-`compare --state editor-code-css` under the on-screen lock. `check` includes
+sitecontrol-render -c release -j 6`. `code-flows` and `compare --state
+editor-code-css` use only offscreen windows and an in-scroll-view find bar. Run
+`native-key-check` under the on-screen lock. `check` includes
 F17/F18, both new scenes at 1x/2x, and the code keystroke gate. The full verifier
 owns its existing on-screen wrapper; do not wrap the whole verifier in that lock.
 
@@ -31,7 +33,8 @@ The gate requires main-thread CPU p95 below 2 ms. It also requires incremental
 highlighting to touch fewer than 2,000 characters per key. The document has about
 81,000 characters. CPU p95 and all three load averages are printed. This uses
 the existing in-process CPU timing method; no new instruction baseline is added.
-A dedicated timing run takes the quiet lock before the on-screen lock.
+A dedicated offscreen timing run takes the quiet lock. Native timing runs take
+the quiet lock before the on-screen lock.
 
 The native focus extension clicks the actual empty code view in a registered
 harness app, while its browser parent is key. It checks that the editor becomes
@@ -62,4 +65,24 @@ The first native click check failed because loading an empty text view before
 its viewport existed left the document outside the visible clip. Code mode now
 establishes the native viewport before its initial caret scroll.
 
-Final receipts and negative proofs are recorded below after the final gate.
+The native focus run passed 11/11 at load1 46.34. The optimized keystroke run
+passed at CPU p95 1.139 ms, load 46.34/36.75/27.35, with at most 191 highlighted
+characters per key. This is a loaded-machine CPU receipt, not a quiet wall-time
+claim. Final-head receipts follow below.
+
+The production break-and-restore run made every new functional/render gate fail:
+**0/22 passed**. It broke code sizing, indentation, comments, undo, syntax colors,
+substitution flags, configured save delays, live-refresh policy, loaded-JS state,
+notice visibility, reload, Developer Tools, disabled picker state, tab switching,
+resize persistence/minimum, Escape, and untouched-new-Boost handling. The source
+was restored in `finally`. Load was 45.08/47.53/39.24 at build start and
+26.56/41.99/37.70 at completion. The final break-and-restore run also breaks
+the focus-loss Boost undo checkpoint and rejects all 22 gates; load was
+16.17/24.38/30.52 at start and 14.13/16.38/23.85 at completion. The resize
+flow includes valid 64-byte and refused 65-byte size preferences, trailing
+fields and non-finite numbers. The pre-fix 13.365 ms timing run is the budget
+negative proof. The pre-fix native code click failure is the focus negative proof.
+The bar comparator rejected the earlier arrow and hammer at unchanged limits;
+the final recreated glyphs pass **11/11** (maximum non-text delta-E 1.15).
+
+Final verifier receipts are recorded below after the final gate.

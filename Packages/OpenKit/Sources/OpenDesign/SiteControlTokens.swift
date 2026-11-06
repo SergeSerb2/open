@@ -83,6 +83,8 @@ public enum BoostEditorMetrics {           // §4, editor-window points; AX S2 1
     public static let advancedLabelY: [CGFloat] = [299, 361, 423], advancedSliderY: [CGFloat] = [318, 380, 442]
     public static let codeHeader: CGFloat = 40, codeBottomBar: CGFloat = 70, codeButton: CGFloat = 38
     public static let back = CGRect(x: 10, y: 9, width: 60, height: 23), segment = CGSize(width: 50, height: 24)
+    public static let codeHammerOffsetY: CGFloat = 1
+    public static let codeHammerGlyph: CGFloat = 14.5 // optical extent calibrated to S2 10/0071
     public static let codeBackGlyphOffset: CGFloat = 3
     public static let codeBackGlyphWidth: CGFloat = 16, codeBackLabelX: CGFloat = 26, codeBackBaseline: CGFloat = 16
     public static let codeSegmentTop: CGFloat = 8, codeControlFont: CGFloat = 13, codeButtonGlyph: CGFloat = 15, codeNoticeInset: CGFloat = 6
@@ -120,6 +122,8 @@ public enum BoostEditorColors {            // light only; IS §20.15 and §20.6
     public static let zapFrame = RGBA(hex: 0x3139FF), zapBar = RGBA(hex: 0xFBFBFD), zapDone = RGBA(hex: 0xEDEEFF)
     public static let zapBarTextPopupOpen = RGBA(hex: 0xDBDFFF)                     // m (darkest pixel, popup open)
     // S2 10/0071 code-header neutral fills (private capture, flat interior probes).
+    public static let codePlaceholder = RGBA.black(0.3)
+    public static let codeToolsGlyph = RGBA(hex: 0x323233) // opaque-core match for Open's SF raster
     public static let codeBackGlyph = RGBA(hex: 0x262626) // S2 10/0071, arrow opaque core
     public static let codeSegmentSelected = RGBA(hex: 0xC8C8C8), codeSegmentIdle = RGBA(hex: 0xE4E4E4)
     public static let codeComment = RGBA(hex: 0x8E8E93), codeString = RGBA(hex: 0xC41A16), codeNumber = RGBA(hex: 0x1C00CF)
