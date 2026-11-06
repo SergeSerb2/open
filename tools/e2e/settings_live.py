@@ -61,6 +61,11 @@ def run(factory, results, tmp, wait_until, restore_defaults):
         s = app.call('settings-state')
         results['settings_general_action_error'] = {'ok': s['pane'] == 'general'
             and s['generalError'] == 'An update feed is not available yet.', 'error': s['generalError']}
+        app.call('menu-perform', id='view-boosts')
+        s = app.call('settings-state')
+        results['settings_advanced_action_error'] = {'ok': s['pane'] == 'advanced'
+            and s['advancedStatus'] == 'Boost editing is not available in this build.',
+            'status': s['advancedStatus']}
 
         # The picker action writes the actual preference and replaces NSApp's actual image.
         app.call('settings-pane', pane='appIcon')
@@ -103,6 +108,19 @@ def run(factory, results, tmp, wait_until, restore_defaults):
         modes = app.call('sleep-mode')
         results['settings_sleep_launch_reconcile'] = {'ok': all(mode == 'off' for mode in modes.values()),
             'modes': list(modes.values())}
+
+        # A bad saved selection leaves the bundle icon and reports in the Icon pane.
+        app.call('defaults', key='open.appIcon.selectedID', value='unavailable-icon')
+        app.quit(); app = factory(urls=(url,))
+        failed_icon = wait_until(lambda: (lambda s: s if s['restoreStartedMs'] is not None else None)(
+            app.call('settings-icon')), timeout=10, step=.05)
+        app.call('settings-pane', pane='appIcon')
+        results['settings_app_icon_failure_in_pane'] = {'ok': bool(failed_icon)
+            and app.call('settings-state')['pane'] == 'appIcon'
+            and failed_icon['applied'] == 'openDefault'
+            and failed_icon['error'] == 'This application icon is not available.',
+            'error': failed_icon['error']}
+        app.call('settings-icon', select='openDefault')
 
         pairs = (('open.links.openPeekShiftClick', 'open.peek.shiftClick'),
                  ('open.links.openPeekOtherSites', 'open.peek.otherSites'))
