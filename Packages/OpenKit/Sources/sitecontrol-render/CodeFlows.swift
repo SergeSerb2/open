@@ -105,14 +105,16 @@ import OpenBoosts
         let ended = stage.view.isCodeMode && !(stage.panel.firstResponder is NSTextView)
         stage.key(53,"\u{1b}");stage.settle(0.3)
         check("F17 first Esc ends text editing; second Esc returns to simple mode",ended && !stage.view.isCodeMode && stage.controller.panel != nil)
-        return checks+reviewFlows()+renders()
+        stage.controller.close();stage.parent.close()
+        return checks+EditorNativeKey.run(review:true)+renders()
     }
     /// Real native field editing and window key dispatch, including hidden siblings.
     static func reviewFlows() -> [Flows.Check] {
         var checks: [Flows.Check] = []
         autoreleasepool {
-            let stage = EditorStage(state:"editor-code-css")
-            defer { stage.controller.close() }
+            let stage = EditorStage(state:"editor-code-css",onScreen:true)
+            defer { stage.controller.close();stage.parent.close() }
+            guard stage.nativeParentReady else { checks.append(.init(name:"R1-1 native app owns activation before review flow",pass:false));return }
             let code = stage.view.codeView!,css = code.editor
             stage.panel.makeKey();stage.panel.makeFirstResponder(css)
             typeJS(stage,"/* keep CSS */")
@@ -127,14 +129,26 @@ import OpenBoosts
             NSApp.mainMenu = menu
             defer { NSApp.mainMenu = previousMenu }
             stage.menu("Rename this Boost…")
+            if CommandLine.arguments.contains("--fail-sheet") {
+                let shown = stage.controller.activeAlert?.messageText == "Rename this Boost" && stage.controller.activeAlert?.window.isVisible == true
+                checks.append(.init(name:"R1 forced early failure after real rename sheet (visible=\(shown))",pass:false));return
+            }
+            // NSApp dispatch below proves the real keys. Also exercise AppKit's
+            // view-tree callback contract explicitly: this OS may send the key
+            // to the focused target before visiting unfocused sibling views.
+            @MainActor func refused(_ chars: String,_ key: UInt16) -> Bool {
+                let event = NSEvent.keyEvent(with:.keyDown,location:.zero,modifierFlags:.command,timestamp:CACurrentMediaTime(),windowNumber:stage.panel.windowNumber,context:nil,characters:chars,charactersIgnoringModifiers:chars,isARepeat:false,keyCode:key)!
+                return !css.performKeyEquivalent(with:event)
+            }
             var renameUndo = false
             if let alert = stage.controller.activeAlert,let field = alert.accessoryView as? NSTextField,let input = field.currentEditor() as? NSTextView {
                 let original = input.string
                 input.setSelectedRange(NSRange(location:(original as NSString).length,length:0));input.breakUndoCoalescing()
                 stage.key(0,"x",window:alert.window);input.breakUndoCoalescing()
                 let typed = input.string == original+"x"
+                let unfocusedRefused = refused("z",6)
                 stage.key(6,"z",modifiers:.command,window:alert.window)
-                renameUndo = typed && input.string == original && css.string == cssBefore
+                renameUndo = typed && unfocusedRefused && input.string == original && css.string == cssBefore
             }
             stage.alert("Cancel")
             stage.controller.setCodeMode(true,animated:false);code.select(.js)
@@ -142,15 +156,18 @@ import OpenBoosts
             stage.panel.makeKey();stage.panel.makeFirstResponder(js);typeJS(stage,"const kept = 1;")
             js.setSelectedRange(NSRange(location:0,length:(js.string as NSString).length))
             stage.key(44,"/",modifiers:.command)
-            let onlyJS = js.string == "// const kept = 1;" && css.string == cssBefore && css.enclosingScrollView?.isHidden == true
+            let hiddenRefused = refused("/",44)
+            let onlyJS = hiddenRefused && js.string == "// const kept = 1;" && css.string == cssBefore && css.enclosingScrollView?.isHidden == true
             print("R1-1 native rename Undo=\(renameUndo), hidden CSS unchanged and only JS commented=\(onlyJS)")
-            checks.append(.init(name:"R1-1 rename field owns Cmd+Z; hidden CSS cannot steal JS Cmd+/",pass:renameUndo && onlyJS))
+            checks.append(.init(name:"R1-1 unfocused callback refused; rename field owns Cmd+Z (\(renameUndo)); hidden callback refused and CSS cannot steal JS Cmd+/ (\(onlyJS))",pass:renameUndo && onlyJS))
         }
         var emptyDeleted = true,nonemptySaved = true
         for language in [BoostCodeLanguage.css,.js] {
             for finalText in [""," ","kept"] {
                 autoreleasepool {
-                    let stage = EditorStage(isNew:true)
+                    let stage = EditorStage(isNew:true,onScreen:true)
+                    defer { stage.controller.close();stage.parent.close() }
+                    guard stage.nativeParentReady else { emptyDeleted = false;nonemptySaved = false;return }
                     stage.controller.setCodeMode(true,animated:false)
                     let code = stage.view.codeView!;code.select(language)
                     let input = code.editor
@@ -167,7 +184,7 @@ import OpenBoosts
             }
         }
         print("R1-2 CSS/JS erased or whitespace-only new Boost deleted=\(emptyDeleted); pending nonempty code saved=\(nonemptySaved)")
-        checks.append(.init(name:"F16 erased CSS/JS and whitespace-only new Boosts delete on close; nonempty code flushes",pass:emptyDeleted && nonemptySaved))
+        checks.append(.init(name:"F16 erased CSS/JS and whitespace-only new Boosts delete on close (\(emptyDeleted)); nonempty code flushes (\(nonemptySaved))",pass:emptyDeleted && nonemptySaved))
         return checks
     }
     private static func typeJS(_ stage: EditorStage,_ value: String) { for c in value { stage.key(c == "\n" ? 36 : 0,c == "\n" ? "\r" : String(c)) } }

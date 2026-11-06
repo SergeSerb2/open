@@ -33,7 +33,7 @@ enum CLI {
         switch command {
         case "editor-native-key":
             guard let out = value(args,"--out"),let attempt = Int(value(args,"--focus-attempt") ?? "1"),(1...3).contains(attempt) else { throw CLIError(description:"native key flow requires --out and attempt 1...3") }
-            EditorNativeKey.enterAppLoop(out:out,rendererPID: value(args,"--renderer-pid").flatMap(Int32.init),attempt: attempt)
+            EditorNativeKey.enterAppLoop(out:out,rendererPID: value(args,"--renderer-pid").flatMap(Int32.init),attempt: attempt,review: args.contains("--review"))
         case "render":
             guard let out = value(args, "--out") else { throw CLIError(description: "render requires --out") }
             let image = render(state,scale: scale,appearance: appearance)
@@ -45,7 +45,7 @@ enum CLI {
         case "extensions-check": report(SectionFlows.extensions())
         case "code-bench": report(CodeFlows.bench())
         case "code-flows": report(CodeFlows.run())
-        case "code-review-flows": report(CodeFlows.reviewFlows())
+        case "code-review-flows": report(EditorNativeKey.run(review:true))
         case "flows": report(value(args,"--group") == "editor" ? EditorFlows.run() : Flows.run()+EditorFlows.run())
         case "cold-measure":
             guard args == ["cold-measure","--thread-instructions"] else { throw CLIError(description: "usage: sitecontrol-render cold-measure --thread-instructions") }
