@@ -22,6 +22,8 @@ public final class PeekOverlayView: NSView {
     public override var isHidden: Bool { didSet { backdrop.isHidden = isHidden } }
     public let panel = NSView()
     public let pageClip = NSView()
+    public private(set) var swipeIndicator: SwipeIndicatorView?
+    public var style: SpaceThemeStyle = .defaultTheme(system: .light) { didSet { swipeIndicator?.style = style } }
     public private(set) var buttons: [NSButton] = []
     public var contentRect = CGRect.zero { didSet { needsLayout = true } }
     /// The measured Peek base includes the window's right margin with an anchored sidebar.
@@ -66,11 +68,22 @@ public final class PeekOverlayView: NSView {
         pageClip.subviews.forEach { $0.frame = pageClip.bounds }
         panel.layer?.shadowPath = CGPath(roundedRect: panel.bounds, cornerWidth: PanelMetrics.cornerRadius, cornerHeight: PanelMetrics.cornerRadius, transform: nil)
     }
-    func clearHost() { pageClip.subviews.forEach { $0.removeFromSuperview() } }
+    func clearHost() { pageClip.subviews.forEach { $0.removeFromSuperview() }; swipeIndicator = nil }
     func showHost(_ host: any WebContentHost) {
-        pageClip.subviews.forEach { $0.removeFromSuperview() }
-        pageClip.addSubview(host.view); host.view.frame = pageClip.bounds; host.view.autoresizingMask = [.width, .height]
+        if host.view.superview !== pageClip {
+            clearHost()
+            pageClip.addSubview(host.view)
+        }
+        host.view.frame = pageClip.bounds; host.view.autoresizingMask = [.width, .height]
         host.view.alphaValue = host.isLoading ? 0 : 1
+    }
+    public func showHistorySwipe(_ event: SwipeIndicatorView.Event) {
+        let indicator: SwipeIndicatorView
+        if let swipeIndicator { indicator = swipeIndicator } else {
+            indicator = SwipeIndicatorView(frame: pageClip.bounds); indicator.style = style
+            swipeIndicator = indicator; pageClip.addSubview(indicator)
+        }
+        indicator.update(event)
     }
     public override func hitTest(_ point: NSPoint) -> NSView? {
         let hit = super.hitTest(point)
