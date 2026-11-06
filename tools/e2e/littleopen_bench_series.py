@@ -23,6 +23,8 @@ def main():
     parser.add_argument('--config', default='Release')
     parser.add_argument('--samples', type=int, default=10)
     parser.add_argument('--output', required=True)
+    parser.add_argument('--scenario', choices=('immediate', 'typed', 'external'), default='immediate')
+    parser.add_argument('--report-only', action='store_true', help='record measurements without a performance verdict')
     args = parser.parse_args()
     if not 10 <= args.samples <= 100:
         parser.error('10 to 100 samples per build are required')
@@ -30,7 +32,7 @@ def main():
     attempts = output.with_suffix('.attempts')
     attempts.mkdir(parents=True, exist_ok=False)
     priority = Path('/tmp/open-onscreen-priority')
-    receipt = {'samples': [], 'attempts': [], 'complete': False,
+    receipt = {'scenario': args.scenario, 'reportOnly': args.report_only, 'samples': [], 'attempts': [], 'complete': False,
                'screenLock': 'one interleaved pair per lock; low-load waits hold only the outer quiet lock'}
     output.write_text(json.dumps(receipt, indent=2) + '\n')
     for index in range(args.samples):
@@ -47,7 +49,9 @@ def main():
                        sys.executable, str(Path(__file__).with_name('littleopen_bench.py')),
                        '--main-bundle', args.main_bundle, '--branch-bundle', args.branch_bundle,
                        '--config', args.config, '--samples', str(args.samples),
-                       '--pair-index', str(index), '--output', str(path)]
+                       '--pair-index', str(index), '--output', str(path), '--scenario', args.scenario]
+            if args.report_only:
+                command.append('--report-only')
             with log.open('w') as stream:
                 result = subprocess.run(command, stdout=stream, stderr=subprocess.STDOUT)
             if result.returncode == 75:
@@ -73,7 +77,7 @@ def main():
                     or any(r['pair'] != index or max(r['load'][0], r['endLoad'][0]) > 12 for r in rows)):
                 raise RuntimeError('invalid paired receipt: ' + str(path))
             receipt['samples'].extend(rows)
-            for key in ('configuration', 'method', 'memory', 'mainBundle', 'branchBundle'):
+            for key in ('configuration', 'method', 'externalMethod', 'typedDelayMs', 'memory', 'mainBundle', 'branchBundle'):
                 receipt[key] = partial[key]
             output.write_text(json.dumps(receipt, indent=2) + '\n')
             print('pair %d/%d complete; load1=%s' %
@@ -85,18 +89,20 @@ def main():
         if len(rows) != args.samples:
             raise RuntimeError('incomplete sample count')
         summary = receipt['summary'][label] = {}
-        for metric in ('firstFrameMs', 'pageLoadMs', 'windowRSS', 'loadedRSS', 'browserCreationToReadyMs'):
+        for metric in ('firstFrameMs', 'pageLoadMs', 'openToFCPMs', 'windowRSS', 'loadedRSS', 'browserCreationToReadyMs'):
             values = sorted(r[metric] for r in rows if metric in r)
             if values:
                 summary[metric] = {'median': statistics.median(values),
                                    'p95': values[math.ceil(len(values) * .95) - 1]}
-    receipt['noSlower'] = all(receipt['summary']['branch'][metric][pct] <= receipt['summary']['main'][metric][pct]
-                             for metric in ('firstFrameMs', 'pageLoadMs') for pct in ('median', 'p95'))
+    if not args.report_only:
+        metrics = ('openToFCPMs',) if args.scenario == 'external' else ('firstFrameMs', 'pageLoadMs')
+        receipt['noSlower'] = all(receipt['summary']['branch'][metric][pct] <= receipt['summary']['main'][metric][pct]
+                             for metric in metrics for pct in ('median', 'p95'))
     receipt['extraHiddenBrowserRSS'] = receipt['summary']['branch']['windowRSS']['median'] - receipt['summary']['main']['windowRSS']['median']
     receipt['complete'] = True
     output.write_text(json.dumps(receipt, indent=2) + '\n')
-    print(json.dumps({k: receipt[k] for k in ('summary', 'noSlower', 'extraHiddenBrowserRSS')}, indent=2), flush=True)
-    if not receipt['noSlower']:
+    print(json.dumps({k: receipt[k] for k in ('summary', 'noSlower', 'extraHiddenBrowserRSS') if k in receipt}, indent=2), flush=True)
+    if not args.report_only and not receipt['noSlower']:
         raise SystemExit(1)
 
 
