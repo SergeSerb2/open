@@ -318,6 +318,7 @@ final class EngineWebContentHostFactory: NSResponder, WebContentHostFactory {
     // P1). Hosts that are not model tabs (Peek) stay Alloy: a Chrome style
     // page outside a strip would get its own Chrome window.
     let isModelTab = model.tab(id: tabID) != nil
+    if isModelTab { app.noteLaunchWindowNavigation(windowState.id) }
     config.runtimeStyle = isModelTab ? app.options.defaultStyle : .alloy
     config.showsChromeToolbar = app.options.chromeToolbar
     if isModelTab, model.tab(id: tabID)?.url.scheme == "chrome" { config.runtimeStyle = .chrome }
@@ -751,6 +752,7 @@ extension EngineWebContentHostFactory {
     candidate === window || candidate === popupPanel || auxiliaryPages.contains { $0.panel === candidate }
   }
   func navigateFromCommandBar(_ url: URL, current: Bool, background: Bool = false) {
+    app.noteLaunchWindowNavigation(windowState.id)
     if current, selectedContent != nil || selectedTab != nil {
       if let page = selectedContent, let host = hosts.values.first(where: { $0.content === page }) {
         commandBarNavigationFocus.insert(host.tabID); host.historyRecorder.markTyped()

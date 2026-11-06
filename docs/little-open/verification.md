@@ -29,19 +29,18 @@ and calls both sweeps. Coordinator activity and Profile policy changes rearm
 that scheduler. Little Open writes `littleOpen:` archive locations. Today
 education still uses only the Today controller's report.
 
-## Native verification in progress
+## Native verification
 
-M5 Pro, built-in 2x panel, recorded engine `f34400e7…`, Debug App, Chrome-style
-sidebar with Alloy Little Open pages. Every on-screen run takes
-`/usr/bin/lockf /tmp/open-onscreen-e2e.lock`. Builds use `heavy.sh` and export
+M5 Pro, 1x AW2726DM main display, recorded engine `f34400e7…`, Debug App,
+Chrome-style sidebar with Alloy Little Open pages. Every on-screen run takes
+`/usr/bin/lockf -k /tmp/open-onscreen-e2e.lock`. Builds use `heavy.sh` and export
 `OPEN_ENGINE_ROOT=$HOME/Developer/open-engine-s8-main`.
 
-The initial native run exposed a late Alloy focus request taking focus from
-the blank field. The native Little Open window now keeps renderer focus behind
-its open command bar. A subsequent run passed B4, B9, same-press, dedupe,
-sweeper, visibility, menus, Profile confirmation/cancel, and Cmd+O with no main
-window. It stopped at the native Space picker's automation readiness condition.
-The full suite, regression matrix and final verification are still pending.
+The first complete run passed all 30 Little Open rows, with no interrupted
+attempts and successful owned-process cleanup. The final three-run streak and
+regression matrix run after merging main `8db4ac86` (including #171, #172,
+#173 and #174). The Peek navigation policy is from merged branch
+`s9/peek-app` at `09f2e1a0`; its PR was not on main when integrated.
 
 B10 uses the real S2 19/0011 window capture kept in the shared `.re/` tree.
 The page, Profile name, host text and controls are excluded from color samples.
@@ -50,14 +49,29 @@ captures, ΔE00 0. The bar and capsule samples stay in the specified ranges.
 The reference is private and is never committed. The native Open PNG contains
 synthetic fixture data only.
 
-## Remaining acceptance
+## Negative proofs
 
-- `littleopen` three consecutive complete passes.
-- `routing`, `peek`, `window`, `sidebar`, `sidebar-completion`, `commandbar`,
-  `toolbar`, `numbering`, and `sleep`, with only TANDEM §4 machine exceptions.
-- `features-render check` and full final-head `verify-all`.
-- Deliberate break/revert proofs for single-timer, visibility and same-press.
-- Final checklist and status/plan updates.
+One real-App run deliberately removed the same-press comparison, added a
+retained 60-second coordinator Timer, omitted the Little Open visibility feed,
+changed the screen inset to 25 pt and changed the pill to red. The checks failed:
+
+| Deliberate break | Observed failure |
+|---|---|
+| Same-press comparison | Before 1 session; duplicate press 3; next press 4. |
+| 60-second poll | Native timer counts: empty 1, Never 1, expiring 2; scheduler count 1. Both timer rows fail. |
+| Visibility feed | Visible page reports `visibilityProtected: false`; visibility row fails. |
+| Frame inset | All three B9 frame rows fail. |
+| Pill color | B10 fails at ΔE00 54.497 (limit 2). |
+
+The same run threw immediately after the exact Profile alert reported visible.
+The suite's `finally` closed that alert. Cleanup passed: zero owned windows and
+no remaining owned processes. Source files were restored byte for byte from
+saved SHA-256 manifests before the accepted build. The temporary throw was
+removed as well. No threshold, baseline or allowlist changed.
+
+## Acceptance receipts
+
+The final suite matrix and verify-all receipt are recorded below after completion.
 
 ## User hand checks
 
@@ -68,10 +82,12 @@ synthetic fixture data only.
 
 ## App choices and limits
 
-- Guess: a first external delivery before any App input is a cold delivery.
-  `open(1)` can deliver its URL after AppKit reports a default launch. The App
-  handles that clock-free case as well as queued URLs and the native launch
-  notification. The first real input or earlier external destination ends it.
+- Lead decision: restore all saved windows. Explicitly tag only a freshly
+  created launch fallback, clear the tag on input/navigation, and consume it
+  at the first external destination. Only an unused fallback closes for Little
+  Open. It is removed from the snapshot as well. B6 checks two restored windows,
+  a windowless snapshot, input protection and navigation protection. No clock
+  or delay classifies the launch.
 - The final suite saves and restores `open.library.lastSection` as well as the
   six Little Open/education keys. An early development run omitted that Library
   key; its earlier value was not retained.

@@ -49,9 +49,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate, OEEngineDelegate, OEBr
   lazy var linkExecutor = AppLinkExecutor(app: self)
   lazy var linkIntake = ExternalLinkIntake(executor: linkExecutor, snapshot: { [unowned self] in self.linkExecutor.snapshot() })
   var lastLittleOpenRequest: LittleOpenRequest?
-  var coldExternalLaunchPending = false
   var executedExternalLink = false
-  var initialMainWindowUntouched = true
+  /// Only a fresh launch fallback is eligible for removal by its first Little Open link.
+  /// Saved standard windows are never tagged. Input or navigation clears this tag.
+  var autoCreatedLaunchWindowID: WindowID?
   var initialWindowInputMonitor: Any?
   /// Library ▸ Captures writer (page-platform §4.6.6); one per app, shared by every window.
   lazy var captureLibrary = CaptureLibraryWriter(app: self, root: directories.root)
@@ -85,8 +86,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate, OEEngineDelegate, OEBr
   }
 
   func applicationDidFinishLaunching(_ notification: Notification) {
-    coldExternalLaunchPending = !executedExternalLink &&
-      (notification.userInfo?[NSApplication.launchIsDefaultUserInfoKey] as? Bool == false)
     LaunchTiming.shared.mark("didFinishLaunching")
     NSApp.mainMenu = MainMenu.build()
     MainMenu.targetWindowCommands(frontWindowController.flatMap { hostFactories[$0.windowID] })
@@ -185,9 +184,16 @@ final class AppDelegate: NSObject, NSApplicationDelegate, OEEngineDelegate, OEBr
       FileHandle.standardError.write(Data(
         "Open: snapshot unreadable (kept as \(kept.lastPathComponent)), starting fresh: \(error)\n".utf8))
     }
-    let model = loaded ?? Self.makeDefaultModel()
+    let model: BrowserModel
+    if let loaded { model = loaded }
+    else {
+      model = Self.makeDefaultModel()
+      autoCreatedLaunchWindowID = model.windows.first?.id
+    }
     if model.windows.isEmpty, let space = model.spaces.first {
-      model.windows.append(BrowserWindowState(focusedSpaceID: space.id))
+      let state = BrowserWindowState(focusedSpaceID: space.id)
+      model.windows.append(state)
+      autoCreatedLaunchWindowID = state.id
     }
     do {
       try OpenDataRoot.prepare(root: root, model: model)
@@ -208,6 +214,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, OEEngineDelegate, OEBr
       let space = model.space(id: state.focusedSpaceID)
     {
       for url in options.initialURLs {
+        autoCreatedLaunchWindowID = nil
         let tab = model.newTab(in: space.id, url: url, at: 0)
         model.selectNode(windowID: state.id, spaceID: space.id, nodeID: tab.id)
       }
@@ -319,6 +326,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, OEEngineDelegate, OEBr
   }
 
   func windowDidClose(_ id: WindowID) {
+    noteLaunchWindowNavigation(id)
     todayAutoArchive?.detach(windowID: id)
     if model.windows.filter({ $0.style == .standard }).count > 1 {
       withoutWindowUndo { model.closeWindow(windowID: id) }
@@ -333,6 +341,15 @@ final class AppDelegate: NSObject, NSApplicationDelegate, OEEngineDelegate, OEBr
     MainMenu.targetWindowCommands(frontWindowController.flatMap { hostFactories[$0.windowID] })
     scheduleSave()
     settingsPresenter.refreshSpaceManagerContext()
+  }
+
+  func discardUnusedLaunchWindow(_ id: WindowID) {
+    guard let controller = windowControllers.first(where: { $0.windowID == id }) else { return }
+    controller.window?.close()
+    // The usual last-window close retains user state. This tagged fallback
+    // was absent from the saved session, so do not persist a phantom window.
+    withoutWindowUndo { model.closeWindow(windowID: id) }
+    scheduleSave()
   }
 
   static func makeDefaultModel() -> BrowserModel {
@@ -603,7 +620,7 @@ extension AppDelegate: CommandDispatcher {
     performCommand(id)
   }
   func performCommand(_ id: String) {
-    noteInitialWindowInput()
+    noteLaunchWindowInput(NSApp.keyWindow)
     if performLittleOpenCommand(id) { return }
     if SystemCommandActions.selectors[id] != nil { _ = SystemCommandActions.perform(id); return }
     if PageTools.isAppCommandEnabled(id) == true, PageTools.performAppCommand(id) { return }

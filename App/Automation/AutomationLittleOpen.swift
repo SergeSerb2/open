@@ -57,6 +57,7 @@ extension AutomationController {
     }
     return ["sessions": sessions, "hotkeyRegistered": app.hotkeyService?.isRegistered ?? false,
       "expiry": archiveState(), "mainWindows": app.windowControllers.count,
+      "autoCreatedLaunchWindow": app.autoCreatedLaunchWindowID?.description ?? "",
       "featureTimers": count.map { $0(6) } ?? NSNull()]
   }
 

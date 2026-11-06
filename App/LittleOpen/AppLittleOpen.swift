@@ -46,7 +46,7 @@ extension AppDelegate {
     media.visibility.littleOpenCoordinator = coordinator
     observeLittleOpenArchivePolicies()
     initialWindowInputMonitor = NSEvent.addLocalMonitorForEvents(matching: [.keyDown, .leftMouseDown, .rightMouseDown, .otherMouseDown, .scrollWheel]) { [weak self] event in
-      MainActor.assumeIsolated { self?.noteInitialWindowInput() }
+      MainActor.assumeIsolated { self?.noteLaunchWindowInput(event.window ?? NSApp.keyWindow) }
       return event
     }
   }
@@ -64,7 +64,6 @@ extension AppDelegate {
   }
 
   func openBlankLittleOpen(timestamp: TimeInterval? = nil) {
-    noteInitialWindowInput()
     littleOpenCoordinator.openBlank(focusURLField: true, keyDownTimestamp: timestamp)
     NSApp.activate()
   }
@@ -73,9 +72,14 @@ extension AppDelegate {
     littleOpenCoordinator?.controllers.values.first { $0.window === NSApp.keyWindow }
   }
 
-  func noteInitialWindowInput() {
-    initialMainWindowUntouched = false
-    coldExternalLaunchPending = false
+  func noteLaunchWindowInput(_ window: NSWindow?) {
+    guard let id = autoCreatedLaunchWindowID,
+      windowControllers.contains(where: { $0.windowID == id && $0.window === window }) else { return }
+    autoCreatedLaunchWindowID = nil
+  }
+
+  func noteLaunchWindowNavigation(_ id: WindowID) {
+    if autoCreatedLaunchWindowID == id { autoCreatedLaunchWindowID = nil }
   }
 
   func selectLittleOpenDestination(tabID: ItemID, spaceID: SpaceID? = nil, windowID: WindowID? = nil) {

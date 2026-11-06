@@ -25,13 +25,6 @@ final class ExternalLinkIntake {
   private(set) var queuedCount = 0
   private(set) var drainedCount = 0
   var pendingCount: Int { pending.count }
-  /// A cold link routed only to Little Open does not restore a main window.
-  var pendingOpensOnlyLittleOpen: Bool {
-    !pending.isEmpty && pending.allSatisfy { request in
-      if case .littleOpen? = evaluator.evaluate(request, in: snapshot()).resolved { return true }
-      return false
-    }
-  }
 
   init(executor: any LinkDestinationExecutor, snapshot: @escaping () -> RoutingSnapshot) {
     self.executor = executor; self.snapshot = snapshot
@@ -85,16 +78,14 @@ final class ExternalLinkIntake {
 }
 
 extension AppDelegate {
-  func consumeColdExternalLaunch(opensLittleOpen: Bool) {
-    // Guess: the first external delivery before any App input is a cold
-    // delivery. open(1) can send its launch URL after AppKit reports a default
-    // launch, so the notification alone cannot classify that real OS path.
-    let cold = coldExternalLaunchPending || (!executedExternalLink && initialMainWindowUntouched && options.initialURLs.isEmpty)
+  func consumeFirstExternalDestination(opensLittleOpen: Bool) {
+    guard !executedExternalLink else { return }
     executedExternalLink = true
-    defer { coldExternalLaunchPending = false }
-    if cold, opensLittleOpen {
-      for controller in Array(windowControllers) { controller.window?.close() }
-    }
+    defer { autoCreatedLaunchWindowID = nil }
+    // Lead decision (routing §9.7): preserve every restored window. Only the
+    // explicitly tagged, still-unused fallback can close for the first link.
+    guard opensLittleOpen, let id = autoCreatedLaunchWindowID else { return }
+    discardUnusedLaunchWindow(id)
   }
   func completeLinkRestoration() {
     #if OPEN_AUTOMATION
@@ -110,9 +101,6 @@ extension AppDelegate {
   }
 
   private func finishExternalLinkRestoration() {
-    if linkIntake.pendingOpensOnlyLittleOpen {
-      for controller in Array(windowControllers) { controller.window?.close() }
-    }
     linkIntake.markReady()
   }
 

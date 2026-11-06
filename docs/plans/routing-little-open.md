@@ -1387,6 +1387,17 @@ fire; the guard is still required because the order is not guaranteed.
 | Last main window closes while Little Open windows live | Nothing. Sessions persist; the app stays running (standard macOS browser behavior — Little Open windows are real windows). |
 | Quit with Little Open windows open | `closeAll` (no archive). Windows do not restore next launch in v1 (§0.2). |
 
+Lead decision (2026-11-05, §9.7): restore all saved standard windows unchanged.
+A cold Little Open link opens on top and takes key. “No main window is created”
+means no additional main window is created for that link; it never means closing
+saved windows. The one exception is a fresh default main window created only
+because the snapshot had no standard windows. Mark that window explicitly at
+creation. If the first external destination is Little Open, close that fallback
+only while it has received no user input or navigation. Keep saved windows in
+the snapshot. Do not use a clock or delay to infer launch intent. B6 covers both
+saved-window and windowless snapshots, plus input/navigation protection of the
+fresh fallback.
+
 ---
 
 ## 10. Settings UI data — `LinksSettingsModel.swift` (no views)

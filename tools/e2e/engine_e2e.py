@@ -6975,7 +6975,7 @@ def littleopen_checks(factory, results, tmp):
 
     try:
         for key in keys: subprocess.run(['defaults', 'delete', domain, key], capture_output=True)
-        for key, value in ((keys[0], True), (keys[1], True), (keys[2], True), (keys[3], True), (keys[5], True)):
+        for key, value in ((keys[0], True), (keys[1], True), (keys[3], True), (keys[5], True)):
             subprocess.run(['defaults', 'write', domain, key, '-bool', str(value).lower()], check=True)
         app = factory(urls=(), fresh=True)
         seed = snapshot_model()
@@ -7230,10 +7230,58 @@ def littleopen_checks(factory, results, tmp):
         app = factory(urls=(), extra_env=env)
         record('B6_quit_no_restore', not sessions(), state=state())
         app.quit()
-        cold_url = origin + '/cold-littleopen'
-        app = factory(urls=(), snapshot=fixture_path, extra_env=env, delivery_urls=(cold_url,))
+        # Lead decision: saved windows always restore. Only the explicitly
+        # tagged, unused default from a windowless snapshot can be removed.
+        cold_url = origin + '/cold-littleopen-saved'
+        saved_seed = copy.deepcopy(seed)
+        saved_second = copy.deepcopy(saved_seed['windows'][0])
+        saved_second['id'] = str(uuid.uuid4()).upper()
+        saved_second['focusedSpaceID'] = second_space['id']
+        saved_second['frameX'] += 48
+        saved_seed['windows'].append(saved_second)
+        saved_path = os.path.join(tmp, 'littleopen-saved-windows.json')
+        with open(saved_path, 'w') as stream: json.dump(saved_seed, stream)
+        app = factory(urls=(), snapshot=saved_path, extra_env=env, delivery_urls=(cold_url,))
         cold_reached = wait_until(lambda: any(r['url'] == cold_url and r['state'] == 'page' for r in sessions()), timeout=12)
-        record('B6_cold_external_only_little', cold_reached and state()['mainWindows'] == 0, state=state(), routing=app.call('routing-log'))
+        restored = snapshot_model()['windows']
+        expected_ids = {w['id'] for w in saved_seed['windows']}
+        restored_ids = {w['id'] for w in restored}
+        little_key = sessions()[0]['key'] and app.call('native-focus-state')['keyWindow'] == sessions()[0]['window']
+        record('B6_cold_saved_windows_stay', cold_reached and restored_ids == expected_ids
+               and state()['mainWindows'] == 2 and little_key and not state()['autoCreatedLaunchWindow'],
+               state=state(), restored=restored, expected=saved_seed['windows'])
+        app.quit()
+
+        empty_seed = copy.deepcopy(seed); empty_seed['windows'] = []
+        empty_path = os.path.join(tmp, 'littleopen-no-windows.json')
+        with open(empty_path, 'w') as stream: json.dump(empty_seed, stream)
+        cold_url = origin + '/cold-littleopen-no-saved-windows'
+        app = factory(urls=(), snapshot=empty_path, extra_env=env, delivery_urls=(cold_url,))
+        cold_reached = wait_until(lambda: any(r['url'] == cold_url and r['state'] == 'page' for r in sessions()), timeout=12)
+        record('B6_cold_no_saved_windows_only_little', cold_reached and state()['mainWindows'] == 0
+               and not snapshot_model()['windows'] and sessions()[0]['key'] and not state()['autoCreatedLaunchWindow'], state=state(), routing=app.call('routing-log'))
+        app.quit()
+
+        app = factory(urls=(), snapshot=empty_path, extra_env=env)
+        tagged_input = state()['autoCreatedLaunchWindow']
+        app.call('key', key='l', modifiers=['cmd']); app.call('key', key='escape')
+        input_url = origin + '/auto-main-user-input'
+        deliver(input_url)
+        reached = wait_until(lambda: any(r['url'] == input_url and r['state'] == 'page' for r in sessions()), timeout=10)
+        record('B6_auto_main_input_preserved', tagged_input and reached and state()['mainWindows'] == 1
+               and app.call('shell-windows')[0]['id'] == tagged_input, state=state())
+        app.quit()
+
+        app = factory(urls=(), snapshot=empty_path, extra_env=env)
+        tagged_navigation = state()['autoCreatedLaunchWindow']
+        navigated = new_tab(app, origin + '/auto-main-navigation')
+        nav_url = origin + '/auto-main-after-navigation'
+        deliver(nav_url)
+        reached = wait_until(lambda: any(r['url'] == nav_url and r['state'] == 'page' for r in sessions()), timeout=10)
+        record('B6_auto_main_navigation_preserved', tagged_navigation and reached and state()['mainWindows'] == 1
+               and app.call('shell-windows')[0]['id'] == tagged_navigation
+               and any(t['id'] == navigated for t in app.call('tabs')), state=state())
+
     finally:
         saved = {key: saved_domain.get(key) for key in keys}
         if app:

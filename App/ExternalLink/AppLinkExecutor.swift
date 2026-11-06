@@ -28,7 +28,7 @@ final class AppLinkExecutor: LinkDestinationExecutor {
   }
 
   func openInSpace(_ url: URL, spaceID: SpaceID) {
-    app.consumeColdExternalLaunch(opensLittleOpen: false)
+    app.consumeFirstExternalDestination(opensLittleOpen: false)
     guard app.model.space(id: spaceID) != nil else { return }
     var controller = orderedControllers.first
     if controller == nil {
@@ -48,7 +48,7 @@ final class AppLinkExecutor: LinkDestinationExecutor {
   }
 
   func openInLittleOpen(_ url: URL, profileHint: ProfileID?) {
-    app.consumeColdExternalLaunch(opensLittleOpen: true)
+    app.consumeFirstExternalDestination(opensLittleOpen: true)
     app.openLittleOpen(url: url, profileHint: profileHint)
   }
 
