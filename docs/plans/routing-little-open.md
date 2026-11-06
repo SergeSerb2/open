@@ -1845,7 +1845,10 @@ Then `tools/verify-all.sh` and the B10 compare once the App can show the window.
 `App/LittleOpen` uses standalone Alloy pages through the real App factory,
 outside the sidebar strip. App routing replaces the stub. Main includes #171,
 #172, #173 and #176; the implementation first merged Peek at `09f2e1a0` for
-its navigation hook, then merged main `ebcf08d2` with Peek's later commits.
+its navigation hook, then kept Peek's later commits. Final source `4426c9b8`
+includes main `e4d40ce0` and uses the matching Extensions P3 engine
+`7b490905…`. Debug and automation-enabled Release App builds pass. The full
+gate and all native acceptance run again after that engine update.
 
 Native `littleopen` passes 34/34 three consecutive runs: B4–B7/B9/B10,
 canonical-URL resurface, actual delayed key routing, Profile confirm/cancel,
@@ -1889,8 +1892,11 @@ missing visibility feed, disabled same-press guard, wrong frames and wrong
 pill color. A forced failure while the exact Profile alert is open still
 cleans up every owned window/process. A separate old-binary check catches
 the lost timestamp at delayed menu delivery. See the App receipt for counts
-and the final full-gate table in the PR.
-
+and the final full-gate table in the PR. Final new-engine acceptance uses source
+`4426c9b8`, main `e4d40ce0` and engine `7b490905…`: Little Open 34/34 ×3,
+the native regression table in the App receipt, and full gate 22 PASS with
+only commandbar #151 accepted by the Section 9 lead under rule 4g. The PR
+retains the raw failure, every timing attempt and the unchanged-source proof.
 
 ---
 

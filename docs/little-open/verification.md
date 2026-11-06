@@ -31,16 +31,18 @@ education still uses only the Today controller's report.
 
 ## Native verification
 
-M5 Pro, 1x AW2726DM main display, recorded engine `f34400e7…`, Debug App,
+M5 Pro, 1x AW2726DM main display, recorded engine `7b490905…`, Debug and automation-enabled Release Apps,
 Chrome-style sidebar with Alloy Little Open pages. Every on-screen run takes
 `/usr/bin/lockf -k /tmp/open-onscreen-e2e.lock`. Builds use `heavy.sh` and export
 `OPEN_ENGINE_ROOT=$HOME/Developer/open-engine-s8-main`.
 
 `littleopen` passes **34/34 three consecutive runs**, with zero interrupted
 attempts and successful owned-process cleanup in every run. Code includes main
-`ebcf08d2` (#171, #172, #173, #174 and #176). The initial integration merged
+`e4d40ce0` (#171, #172, #173, #174, #176, #177, #181 and #182). The initial integration merged
 `s9/peek-app` at `09f2e1a0` before #176 reached main; the final merge keeps its
-later commits too. Native key entry preserves the initiating timestamp through
+later commits too. The final native acceptance follows the Extensions P3 #177 merge and engine
+update. Its production source is `4426c9b8`; the full framework SHA-256 and
+per-suite results are in [the runtime receipt](runtime-receipt.json). Native key entry preserves the initiating timestamp through
 `OEApplication.sendEvent` and the App dispatcher, including delayed delivery.
 A File-menu request before engine readiness queues its timestamp until engine
 initialization, without adding a timer.
@@ -76,7 +78,8 @@ changed the screen inset to 25 pt and changed the pill to red. The checks failed
 The same run threw immediately after the exact Profile alert reported visible.
 The suite's `finally` closed that alert. Cleanup passed: zero owned windows and
 no remaining owned processes. Source files were restored byte for byte from
-saved SHA-256 manifests before the accepted build. The temporary throw was
+saved SHA-256 manifests before the accepted build. These break/revert runs
+use the pre-#177 engine; final positive acceptance uses `7b490905…`. The temporary throw was
 removed as well. No threshold, baseline or allowlist changed.
 
 The delayed-key check also fails on the older App binary with the library
@@ -90,22 +93,31 @@ not a second coordinator-only call.
 | Suite | Result | Notes |
 |---|---|---|
 | littleopen | 34/34 ×3 | No interruptions; cleanup PASS. |
-| routing | 9/9 | Real Little Open commit and window. |
-| peek | 42/42 | Includes main #176 changes. |
-| window | 76 PASS | Four required pixel rows PASS; two Release-budget rows SKIP in Debug. |
+| routing | 9 PASS | Real Little Open commit and window. |
+| peek | 42 PASS | 42 checks, including source visibility and menu promotion. |
+| window | 76 PASS | Release; four pixel rows PASS. Two known-main launch budget failures below. |
 | sidebar | 19 PASS | Pixel comparison PASS; durable-profile row delegated to profiles. |
 | sidebar-completion | 193 PASS | Metadata is not counted as a check. |
-| commandbar | 63/63 | PASS. |
-| toolbar | 10/10 | PASS. |
-| numbering | 3/3 | PASS. |
-| sleep | 20 PASS | Capture fixture BLOCKED; interrupted first attempt excluded and retried. |
+| commandbar | 63 PASS | PASS. |
+| toolbar | 10 PASS | PASS. |
+| numbering | 3 PASS | PASS. |
+| sleep | 20 PASS | Camera/microphone capture fixture BLOCKED. |
+| context-menus | 34 PASS | Includes the real Little Open entry. |
 
-All accepted runs report successful cleanup. Window first stopped because its
-Release render helper was missing. After building that helper with zero
-warnings/errors, one attempt lost foreground and was excluded; the complete
-rerun passed. Sidebar was also rerun with the helper. These are Debug App
-receipts, not Release cold-launch performance claims. The final full
-`verify-all.sh --with-arc-data` table is recorded in the PR.
+Accepted native runs use production source `4426c9b8`, main `e4d40ce0`, and required engine `7b490905…`. All report successful owned-process cleanup. The harness recorded 2 earlier foreground-interrupted attempts; those attempts are excluded from acceptance. Little Open has zero interruptions in all three consecutive runs.
+
+Release Window uses five samples per case. Cold medians are sidebarDrawn 380 ms and first paint 652 ms; warm medians are 392 / 666 ms. Both launch budget rows are known-main failures under CHILD-RULES 4h (≤400 / ≤700 ms); no threshold changed. Load1/5/15: `[13.75244140625, 10.513671875, 12.34228515625]`.
+
+The production-source full `verify-all.sh --with-arc-data` run has 22 PASS and one raw
+commandbar-render FAIL: only #151, +0.332 ms at load1/5/15 16.1/19.9/16.6.
+#150 passes at CPU p95 6.14 ms. The Section 9 lead accepted #151 as a
+load/noise row under rule 4g after six paired quiet runs. The measured target,
+all transitive source dependencies and Package.swift remain identical to
+the main control after #177. Two complete quiet branch runs pass 151/151.
+The PR contains all attempts, loads, the source proof, the decision and the
+full gate on the final receipt commit.
+No threshold, baseline or allowlist changed. commands-dump remains 0/0/0
+with the same 11 allowed-missing rows; Site Control passes 1469/1469.
 
 Native feature timer counts are 0 with no sessions, 0 with a Never session,
 1 with an expiring Little Open session, and 1 with both Today and Little Open

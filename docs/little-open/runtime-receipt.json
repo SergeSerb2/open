@@ -102,6 +102,7 @@
     },
     "ok": true,
     "pillDeltaE00": 0.0,
+    "png": "docs/little-open/page-state.png",
     "reference": {
       "capture": "S2 19/0011",
       "masks": "page, Profile name, host text, controls and traffic lights; measured element frames from section 9.3",
@@ -147,6 +148,177 @@
       ]
     }
   },
+  "appBuilds": [
+    {
+      "code": 0,
+      "configuration": "Debug",
+      "engineCodeSHA256": "7979934c0d84f4d9fedb3859826d0c7c65919834fc904ec2aee00a0b4e4dd8f2",
+      "engineDistributionSHA256": "7b49090502568f8189aa0e94f7cf23344beec5bed537136eff5f7fce573ad35a",
+      "load": "21:58  up 12:42, 7 users, load averages: 14.17 12.93 12.37",
+      "mainCommit": "e4d40ce015a76d1907dabb3464a5a45d20d1ea7d",
+      "sourceCommit": "4426c9b8e5d1765db44903dfa2cb35d54e534126"
+    },
+    {
+      "code": 0,
+      "configuration": "Release",
+      "engineCodeSHA256": "7979934c0d84f4d9fedb3859826d0c7c65919834fc904ec2aee00a0b4e4dd8f2",
+      "engineDistributionSHA256": "7b49090502568f8189aa0e94f7cf23344beec5bed537136eff5f7fce573ad35a",
+      "load": "21:59  up 12:43, 7 users, load averages: 18.70 14.74 13.11",
+      "mainCommit": "e4d40ce015a76d1907dabb3464a5a45d20d1ea7d",
+      "sourceCommit": "4426c9b8e5d1765db44903dfa2cb35d54e534126"
+    }
+  ],
+  "commandbar151Decision": {
+    "authority": "Section 9 lead, 2026-11-05 21:31",
+    "codeSections": {
+      "branch": {
+        "__TEXT,__text": {
+          "sha256": "b48ec85460805dd5e24a77cc591abb8592a3bbb4b07f46262909d4d45cb07228",
+          "size": 2692392
+        }
+      },
+      "main": {
+        "__TEXT,__text": {
+          "sha256": "08d5756508eac8837f89c060d4bda74d1722ce416b199b1f3b5a6b7858598e33",
+          "size": 2692392
+        }
+      }
+    },
+    "comparison": {
+      "allLoadEligible": true,
+      "branchClearlyWorse": true,
+      "branchMinusMainMs": 0.099,
+      "medians": {
+        "branch": 0.253,
+        "main": 0.154
+      }
+    },
+    "runs": [
+      {
+        "code": 0,
+        "details": [
+          "21:23  up 12:07, 7 users, load averages: 8.82 11.68 11.59",
+          "load average 7.8 11.0 11.4 on 18 cores, scale 2x, 218 keystrokes measured",
+          "inline completion adds (main-thread cycles at the off run's rate): p95 +0.253 ms over the plain p95 (budget +0.3); paired median +0.091 ms",
+          "151/151 passed",
+          "21:24  up 12:08, 7 users, load averages: 7.76 11.04 11.36"
+        ],
+        "inlineDeltaMs": 0.253,
+        "kind": "branch",
+        "load": "21:23  up 12:07, 7 users, load averages: 8.82 11.68 11.59",
+        "loadEligible": true,
+        "loadMax": 8.8154296875,
+        "loadMin": 7.75634765625,
+        "pair": 1
+      },
+      {
+        "code": 0,
+        "details": [
+          "21:24  up 12:08, 7 users, load averages: 7.76 11.04 11.36",
+          "load average 8.4 10.8 11.3 on 18 cores, scale 2x, 218 keystrokes measured",
+          "inline completion adds (main-thread cycles at the off run's rate): p95 +0.178 ms over the plain p95 (budget +0.3); paired median +0.084 ms",
+          "151/151 passed",
+          "21:25  up 12:08, 7 users, load averages: 8.35 10.79 11.25"
+        ],
+        "inlineDeltaMs": 0.178,
+        "kind": "main",
+        "load": "21:24  up 12:08, 7 users, load averages: 7.76 11.04 11.36",
+        "loadEligible": true,
+        "loadMax": 8.35498046875,
+        "loadMin": 7.2548828125,
+        "pair": 1
+      },
+      {
+        "code": 0,
+        "details": [
+          "21:25  up 12:08, 7 users, load averages: 8.35 10.79 11.25",
+          "load average 7.9 10.4 11.1 on 18 cores, scale 2x, 218 keystrokes measured",
+          "inline completion adds (main-thread cycles at the off run's rate): p95 +0.154 ms over the plain p95 (budget +0.3); paired median +0.186 ms",
+          "151/151 passed",
+          "21:25  up 12:09, 7 users, load averages: 7.85 10.36 11.07"
+        ],
+        "inlineDeltaMs": 0.154,
+        "kind": "main",
+        "load": "21:25  up 12:08, 7 users, load averages: 8.35 10.79 11.25",
+        "loadEligible": true,
+        "loadMax": 8.5908203125,
+        "loadMin": 7.6474609375,
+        "pair": 2
+      },
+      {
+        "code": 1,
+        "details": [
+          "21:25  up 12:09, 7 users, load averages: 7.85 10.36 11.07",
+          "load average 9.8 10.5 11.1 on 18 cores, scale 2x, 218 keystrokes measured",
+          "inline completion adds (main-thread cycles at the off run's rate): p95 +0.397 ms over the plain p95 (budget +0.3); paired median +0.130 ms",
+          "FAIL  inline completion adds \u2264 0.3 ms p95 over the plain keystroke (main-thread cycles); no extra panel layout pass (\u2264 1 per keystroke)  \u2014  p95 +0.397 ms, paired median +0.130 ms; layout passes on max 1 mean 0.11, off mean 0.11; 123 of 218 keystrokes completed",
+          "150/151 passed",
+          "21:26  up 12:10, 7 users, load averages: 9.84 10.53 11.10"
+        ],
+        "inlineDeltaMs": 0.397,
+        "kind": "branch",
+        "load": "21:25  up 12:09, 7 users, load averages: 7.85 10.36 11.07",
+        "loadEligible": true,
+        "loadMax": 9.841796875,
+        "loadMin": 7.85498046875,
+        "pair": 2
+      },
+      {
+        "code": 0,
+        "details": [
+          "21:26  up 12:10, 7 users, load averages: 8.97 10.28 11.00",
+          "load average 9.3 10.2 10.9 on 18 cores, scale 2x, 218 keystrokes measured",
+          "inline completion adds (main-thread cycles at the off run's rate): p95 -0.037 ms over the plain p95 (budget +0.3); paired median +0.151 ms",
+          "151/151 passed",
+          "21:27  up 12:11, 7 users, load averages: 9.26 10.20 10.93"
+        ],
+        "inlineDeltaMs": -0.037,
+        "kind": "branch",
+        "load": "21:26  up 12:10, 7 users, load averages: 8.97 10.28 11.00",
+        "loadEligible": true,
+        "loadMax": 9.7939453125,
+        "loadMin": 8.7314453125,
+        "pair": 3
+      },
+      {
+        "code": 0,
+        "details": [
+          "21:27  up 12:11, 7 users, load averages: 8.83 10.07 10.88",
+          "load average 8.6 9.9 10.8 on 18 cores, scale 2x, 218 keystrokes measured",
+          "inline completion adds (main-thread cycles at the off run's rate): p95 +0.149 ms over the plain p95 (budget +0.3); paired median +0.164 ms",
+          "151/151 passed",
+          "21:28  up 12:12, 7 users, load averages: 8.65 9.86 10.76"
+        ],
+        "inlineDeltaMs": 0.149,
+        "kind": "main",
+        "load": "21:27  up 12:11, 7 users, load averages: 8.83 10.07 10.88",
+        "loadEligible": true,
+        "loadMax": 8.826171875,
+        "loadMin": 8.357421875,
+        "pair": 3
+      }
+    ],
+    "sourceIdentity": {
+      "actionIndex": "New IDs have menuPath nil and are absent from SuggestAdapter.suggestOnlyIDs; makeSuggestActions excludes them.",
+      "branch": "4426c9b8e5d1765db44903dfa2cb35d54e534126",
+      "controlMain": "e79b0d532c5434e9c428e0a950294800ac4068b4",
+      "currentMain": "e4d40ce015a76d1907dabb3464a5a45d20d1ea7d",
+      "differencesFromControl": {
+        "HEAD": "",
+        "origin/main": ""
+      },
+      "packageManifestDifference": "",
+      "targetSources": [
+        "Packages/OpenKit/Sources/commandbar-render",
+        "Packages/OpenKit/Sources/OpenModel",
+        "Packages/OpenKit/Sources/OpenStore",
+        "Packages/OpenKit/Sources/OpenDesign",
+        "Packages/OpenKit/Sources/OpenSuggest",
+        "Packages/OpenKit/Sources/OpenCommandBar"
+      ]
+    },
+    "verdict": "ACCEPTED as a load/noise row under rule 4g; no threshold change."
+  },
   "configuration": "Debug",
   "delayedKeyOldBinary": {
     "before": 1,
@@ -158,8 +330,144 @@
   },
   "delayedKeyOldBinaryCleanup": true,
   "display": "M5 Pro, AW2726DM main display, 1x",
-  "engineDistributionSHA256": "f34400e71412d87a0b268fcd5658a8563cca34f600c8dd17b534a63e76aa7939",
-  "mainCommit": "ebcf08d2",
+  "engineCodeSHA256": "7979934c0d84f4d9fedb3859826d0c7c65919834fc904ec2aee00a0b4e4dd8f2",
+  "engineDistributionSHA256": "7b49090502568f8189aa0e94f7cf23344beec5bed537136eff5f7fce573ad35a",
+  "excludedAttempts": [
+    "Earlier foreground-interrupted attempts are recorded separately and not counted as checks; per-suite final counts are in regressions.",
+    "An earlier clean Peek run on 2563b952 failed hovered Undo (41/42); the later complete Peek run passes the same row.",
+    "A queued post182 Little Open harness invocation hit temporary merge markers before App launch; it is excluded. Both sides were resolved, syntax/diff checks passed, and both final App builds passed."
+  ],
+  "fullGate": {
+    "acceptedExceptionRows": [
+      "commandbar-render #151"
+    ],
+    "endLoad": "22:13  up 12:57, 7 users, load averages: 19.14 22.96 19.03",
+    "exitCode": 1,
+    "mainCommit": "e4d40ce015a76d1907dabb3464a5a45d20d1ea7d",
+    "note": "Raw 22 PASS and one commandbar-render timing FAIL: #151 +0.332 ms at benchmark load1/5/15 16.1/19.9/16.6; #150 passes at CPU p95 6.14 ms. Historical complete quiet branch runs 1 and 3 pass 151/151; explicit Section 9 decision accepts #151 under rule 4g with unchanged measured source.",
+    "quietLock": false,
+    "rows": [
+      {
+        "check": "build",
+        "result": "PASS",
+        "seconds": "3"
+      },
+      {
+        "check": "commands-demo",
+        "result": "PASS",
+        "seconds": "2"
+      },
+      {
+        "check": "roundtrip",
+        "result": "PASS",
+        "seconds": "0"
+      },
+      {
+        "check": "space-legacy",
+        "result": "PASS",
+        "seconds": "1"
+      },
+      {
+        "check": "space-editor",
+        "result": "PASS",
+        "seconds": "3"
+      },
+      {
+        "check": "space-pad-compare",
+        "result": "PASS",
+        "seconds": "2"
+      },
+      {
+        "check": "suggest-check",
+        "result": "PASS",
+        "seconds": "34"
+      },
+      {
+        "check": "commands-dump",
+        "result": "PASS",
+        "seconds": "0"
+      },
+      {
+        "check": "route",
+        "result": "PASS",
+        "seconds": "5"
+      },
+      {
+        "check": "favicons",
+        "result": "PASS",
+        "seconds": "2"
+      },
+      {
+        "check": "media-demo",
+        "result": "PASS",
+        "seconds": "0"
+      },
+      {
+        "check": "sleep-demo",
+        "result": "PASS",
+        "seconds": "1"
+      },
+      {
+        "check": "adblock-perf",
+        "result": "PASS",
+        "seconds": "1"
+      },
+      {
+        "check": "adblock-catalog",
+        "result": "PASS",
+        "seconds": "0"
+      },
+      {
+        "check": "profiles",
+        "result": "PASS",
+        "seconds": "1"
+      },
+      {
+        "check": "settings-preview",
+        "result": "PASS",
+        "seconds": "84"
+      },
+      {
+        "check": "sidebar-render",
+        "result": "PASS",
+        "seconds": "111"
+      },
+      {
+        "check": "sidebar-compare",
+        "result": "PASS",
+        "seconds": "164"
+      },
+      {
+        "check": "commandbar-render",
+        "result": "FAIL",
+        "seconds": "38"
+      },
+      {
+        "check": "features-render",
+        "result": "PASS",
+        "seconds": "88"
+      },
+      {
+        "check": "sitecontrol-render",
+        "result": "PASS",
+        "seconds": "208"
+      },
+      {
+        "check": "boosts",
+        "result": "PASS",
+        "seconds": "3"
+      },
+      {
+        "check": "import-arc",
+        "result": "PASS",
+        "seconds": "0"
+      }
+    ],
+    "sourceCommit": "4426c9b8e5d1765db44903dfa2cb35d54e534126",
+    "startLoad": "22:01  up 12:45, 7 users, load averages: 12.98 14.43 13.22",
+    "withArcDataReadOnly": true
+  },
+  "mainCommit": "e4d40ce015a76d1907dabb3464a5a45d20d1ea7d",
   "manualChecks": [
     "Real option-command-N from another app",
     "Real external HTTP(S) click from Mail",
@@ -172,12 +480,26 @@
     "todayAndLittleOpen": 1,
     "todayOnly": 1
   },
+  "nativeKeyFlow": {
+    "cleanup": true,
+    "engineDistributionSHA256": "7b49090502568f8189aa0e94f7cf23344beec5bed537136eff5f7fce573ad35a",
+    "results": {
+      "cmdL": true,
+      "cmdT": true,
+      "cmdW": true,
+      "engineRetired": true,
+      "escape": true,
+      "noArchive": true
+    },
+    "sourceCommit": "4426c9b8e5d1765db44903dfa2cb35d54e534126"
+  },
   "negativeCleanup": true,
   "negativeProof": {
     "dialogFailure": {
       "error": "deliberate Profile alert cleanup proof: visible=True",
       "ok": false
     },
+    "engineDistributionSHA256": "f34400e71412d87a0b268fcd5658a8563cca34f600c8dd17b534a63e76aa7939",
     "failedRows": [
       "B10_title_bar",
       "B9_bar_frame",
@@ -191,6 +513,7 @@
     ],
     "interrupted": [],
     "lock": "lockf -k",
+    "note": "Historical break/revert proof before the #177 engine update; source was restored before rebuilding.",
     "pillDeltaE00": 54.49725524513355,
     "samePress": {
       "before": 1,
@@ -209,49 +532,104 @@
   },
   "regressions": [
     {
+      "cleanup": true,
+      "configuration": "Debug",
+      "earlierInterruptedAttempts": 0,
+      "load": "22:13  up 12:57, 7 users, load averages: 18.97 22.86 19.02",
       "notes": "Real Little Open commit and window.",
-      "result": "9/9",
+      "result": "9 PASS",
+      "sourceCommit": "4426c9b8e5d1765db44903dfa2cb35d54e534126",
       "suite": "routing"
     },
     {
-      "notes": "Includes main #176 changes.",
-      "result": "42/42",
+      "cleanup": true,
+      "configuration": "Debug",
+      "earlierInterruptedAttempts": 0,
+      "load": "22:15  up 12:59, 7 users, load averages: 13.98 19.97 18.32",
+      "notes": "All 42 checks pass in the completed final attempt.",
+      "result": "42 PASS",
+      "sourceCommit": "4426c9b8e5d1765db44903dfa2cb35d54e534126",
       "suite": "peek"
     },
     {
-      "notes": "Four required pixel rows PASS; two Release-budget rows SKIP in Debug.",
+      "cleanup": true,
+      "configuration": "Release",
+      "earlierInterruptedAttempts": 0,
+      "load": "22:43  up 13:26, 7 users, load averages: 14.61 10.48 12.36",
+      "notes": "Release: 76 PASS including all four pixel rows; two known-main cold-launch budget failures meet the <=400/700 ms limits.",
       "result": "76 PASS",
+      "sourceCommit": "4426c9b8e5d1765db44903dfa2cb35d54e534126",
       "suite": "window"
     },
     {
+      "cleanup": true,
+      "configuration": "Debug",
+      "earlierInterruptedAttempts": 0,
+      "load": "22:18  up 13:02, 7 users, load averages: 19.78 19.47 18.34",
       "notes": "Pixel comparison PASS; durable-profile row delegated to profiles.",
       "result": "19 PASS",
+      "sourceCommit": "4426c9b8e5d1765db44903dfa2cb35d54e534126",
       "suite": "sidebar"
     },
     {
+      "cleanup": true,
+      "configuration": "Debug",
+      "earlierInterruptedAttempts": 2,
+      "load": "22:19  up 13:03, 7 users, load averages: 24.23 20.49 18.75",
       "notes": "Metadata is not counted as a check.",
       "result": "193 PASS",
+      "sourceCommit": "4426c9b8e5d1765db44903dfa2cb35d54e534126",
       "suite": "sidebar-completion"
     },
     {
+      "cleanup": true,
+      "configuration": "Debug",
+      "earlierInterruptedAttempts": 0,
+      "load": "22:24  up 13:07, 7 users, load averages: 17.63 17.54 17.84",
       "notes": "PASS.",
-      "result": "63/63",
+      "result": "63 PASS",
+      "sourceCommit": "4426c9b8e5d1765db44903dfa2cb35d54e534126",
       "suite": "commandbar"
     },
     {
+      "cleanup": true,
+      "configuration": "Debug",
+      "earlierInterruptedAttempts": 0,
+      "load": "22:27  up 13:11, 7 users, load averages: 18.55 16.63 17.29",
       "notes": "PASS.",
-      "result": "10/10",
+      "result": "10 PASS",
+      "sourceCommit": "4426c9b8e5d1765db44903dfa2cb35d54e534126",
       "suite": "toolbar"
     },
     {
+      "cleanup": true,
+      "configuration": "Debug",
+      "earlierInterruptedAttempts": 0,
+      "load": "22:28  up 13:12, 7 users, load averages: 15.33 15.95 16.97",
       "notes": "PASS.",
-      "result": "3/3",
+      "result": "3 PASS",
+      "sourceCommit": "4426c9b8e5d1765db44903dfa2cb35d54e534126",
       "suite": "numbering"
     },
     {
-      "notes": "Capture fixture BLOCKED; interrupted first attempt excluded and retried.",
+      "cleanup": true,
+      "configuration": "Debug",
+      "earlierInterruptedAttempts": 0,
+      "load": "22:31  up 13:15, 7 users, load averages: 13.63 15.98 16.88",
+      "notes": "20 PASS; camera/microphone capture fixture remains BLOCKED.",
       "result": "20 PASS",
+      "sourceCommit": "4426c9b8e5d1765db44903dfa2cb35d54e534126",
       "suite": "sleep"
+    },
+    {
+      "cleanup": true,
+      "configuration": "Debug",
+      "earlierInterruptedAttempts": 0,
+      "load": "22:33  up 13:16, 7 users, load averages: 7.92 13.52 15.83",
+      "notes": "34/34, including the real Little Open entry.",
+      "result": "34 PASS",
+      "sourceCommit": "4426c9b8e5d1765db44903dfa2cb35d54e534126",
+      "suite": "context-menus"
     }
   ],
   "rows": {
@@ -293,9 +671,11 @@
   "runs": [
     {
       "cleanup": true,
+      "engineDistributionSHA256": "7b49090502568f8189aa0e94f7cf23344beec5bed537136eff5f7fce573ad35a",
       "interruptedAttempts": 0,
+      "load": "22:37  up 13:21, 7 users, load averages: 6.51 9.44 13.33",
       "passed": 34,
-      "reportedAt": "2026-11-05 18:45:11",
+      "reportedAt": "2026-11-05 22:39:03",
       "run": 1,
       "samePress": {
         "before": 1,
@@ -305,13 +685,16 @@
         "route": "OEApplication.sendEvent with a five-second-old key-down stamp",
         "samePress": 2
       },
+      "sourceCommit": "4426c9b8e5d1765db44903dfa2cb35d54e534126",
       "total": 34
     },
     {
       "cleanup": true,
+      "engineDistributionSHA256": "7b49090502568f8189aa0e94f7cf23344beec5bed537136eff5f7fce573ad35a",
       "interruptedAttempts": 0,
+      "load": "22:39  up 13:23, 7 users, load averages: 7.91 8.79 12.54",
       "passed": 34,
-      "reportedAt": "2026-11-05 18:49:57",
+      "reportedAt": "2026-11-05 22:41:10",
       "run": 2,
       "samePress": {
         "before": 1,
@@ -321,13 +704,16 @@
         "route": "OEApplication.sendEvent with a five-second-old key-down stamp",
         "samePress": 2
       },
+      "sourceCommit": "4426c9b8e5d1765db44903dfa2cb35d54e534126",
       "total": 34
     },
     {
       "cleanup": true,
+      "engineDistributionSHA256": "7b49090502568f8189aa0e94f7cf23344beec5bed537136eff5f7fce573ad35a",
       "interruptedAttempts": 0,
+      "load": "22:41  up 13:25, 7 users, load averages: 11.36 9.37 12.19",
       "passed": 34,
-      "reportedAt": "2026-11-05 18:53:50",
+      "reportedAt": "2026-11-05 22:41:59",
       "run": 3,
       "samePress": {
         "before": 1,
@@ -337,42 +723,55 @@
         "route": "OEApplication.sendEvent with a five-second-old key-down stamp",
         "samePress": 2
       },
+      "sourceCommit": "4426c9b8e5d1765db44903dfa2cb35d54e534126",
       "total": 34
     }
   ],
-  "sourceCommit": "16cd3ed1",
-  "windowDebugTiming": {
-    "cold_fresh_profile": {
-      "median_ms": {
-        "engineStart": 468,
-        "engineStarted": 572,
-        "firstContentfulPaint": 742,
-        "main": 305,
-        "modelLoaded": 311,
-        "sidebarDrawn": 466
-      },
-      "reason": "Release timing budgets are not evaluated in Debug",
-      "samples": 5,
-      "status": "SKIP"
-    },
-    "warm_existing_profile": {
-      "median_ms": {
-        "engineStart": 476,
-        "engineStarted": 570,
-        "firstContentfulPaint": 754,
-        "main": 315,
-        "modelLoaded": 321,
-        "sidebarDrawn": 474
-      },
-      "reason": "Release timing budgets are not evaluated in Debug",
-      "samples": 5,
-      "status": "SKIP"
-    }
+  "sourceCommit": "4426c9b8e5d1765db44903dfa2cb35d54e534126",
+  "timeZone": "America/Vancouver",
+  "visibilityProof": {
+    "freezeDelay": 30,
+    "miniaturizedProtected": false,
+    "ok": true,
+    "tickAfter": 4,
+    "tickBefore": 3,
+    "visibleProtected": true
   },
   "windowPixelRows": {
     "chrome_dark_rings": true,
     "comparison": true,
     "traffic_light_look": true,
     "traffic_light_stale_hover": true
-  }
+  },
+  "windowReleaseTiming": {
+    "cold_fresh_profile": {
+      "median_ms": {
+        "engineStart": 381,
+        "engineStarted": 476,
+        "firstContentfulPaint": 652,
+        "main": 237,
+        "modelLoaded": 241,
+        "sidebarDrawn": 380
+      },
+      "ok": false,
+      "samples": 5
+    },
+    "warm_existing_profile": {
+      "median_ms": {
+        "engineStart": 393,
+        "engineStarted": 479,
+        "firstContentfulPaint": 666,
+        "main": 235,
+        "modelLoaded": 239,
+        "sidebarDrawn": 392
+      },
+      "ok": false,
+      "samples": 5
+    }
+  },
+  "windowReleaseTimingLoad": [
+    13.75244140625,
+    10.513671875,
+    12.34228515625
+  ]
 }
