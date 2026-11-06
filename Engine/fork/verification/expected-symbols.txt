@@ -34,6 +34,7 @@ _cef_extension_manager_create
 _cef_open_omnibox_create
 
 # P7: reserved Open renderer world.
+_cef_is_page_script_context
 _cef_get_open_script_context
 _cef_is_open_script_context
 _cef_get_script_document_identifier
