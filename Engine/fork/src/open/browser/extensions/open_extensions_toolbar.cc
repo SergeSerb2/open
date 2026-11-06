@@ -9,6 +9,7 @@
 #include <utility>
 
 #include "base/functional/bind.h"
+#include "base/logging.h"
 #include "base/strings/utf_string_conversions.h"
 #include "base/task/single_thread_task_runner.h"
 #include "cef/libcef/browser/image_impl.h"
@@ -25,6 +26,7 @@
 #include "content/public/browser/web_contents.h"
 #include "extensions/browser/extension_action.h"
 #include "extensions/browser/extension_action_manager.h"
+#include "extensions/browser/extension_prefs.h"
 #include "extensions/browser/extension_registry.h"
 #include "extensions/browser/permissions_manager.h"
 #include "extensions/browser/permissions/site_permissions_helper.h"
@@ -232,6 +234,24 @@ OpenExtensionsToolbar::OpenExtensionsToolbar(OpenTabStrip* strip,
           browser,
           ToolbarActionsModel::Get(browser->GetProfile()))),
       container_user_data_(browser->GetUnownedUserDataHost(), *model_) {
+  // Repair profiles written by Open's former non-idempotent pin setter.
+  // Preserve order and unloaded extensions; deduplicating only the exported
+  // list would leave MovePinnedAction's stored-neighbour lookup unsafe.
+  Profile* profile = browser->GetProfile();
+  if (!profile->IsOffTheRecord()) {
+    auto* prefs = extensions::ExtensionPrefs::Get(profile);
+    const auto stored = prefs->GetPinnedExtensions();
+    std::vector<std::string> unique;
+    for (const auto& id : stored) {
+      if (std::find(unique.begin(), unique.end(), id) == unique.end()) {
+        unique.push_back(id);
+      }
+    }
+    if (unique.size() != stored.size()) {
+      LOG(WARNING) << "Open repaired duplicate pinned extension preferences";
+      prefs->SetPinnedExtensions(unique);
+    }
+  }
   observation_.Observe(model_.get());
   if (model_->AreActionsInitialized()) {
     OnActionsInitialized();
@@ -417,18 +437,30 @@ void OpenExtensionsToolbar::SetPinned(const std::string& id, bool pinned) {
   // Repeating true appends the id to prefs again in Release builds, which
   // duplicates both live and profile action lists. Our public setter is
   // idempotent. Match Chrome's incognito and policy pin restrictions too.
-  if (Action(id) && !profile->IsOffTheRecord() &&
-      !model->IsActionForcePinned(id) && model->IsActionPinned(id) != pinned) {
+  if (!model->actions_initialized() || !model->HasAction(id) || !Action(id) ||
+      profile->IsOffTheRecord() || model->IsActionForcePinned(id)) {
+    LOG(WARNING) << "Open refused an invalid extension pin request";
+    return;
+  }
+  if (model->IsActionPinned(id) != pinned) {
     model->SetActionVisibility(id, pinned);
   }
 }
 
 void OpenExtensionsToolbar::MovePinned(const std::string& id, int index) {
-  const auto& pinned = model_->GetPinnedActionIds();
-  if (Action(id) && index >= 0 &&
-      std::find(pinned.begin(), pinned.end(), id) != pinned.end()) {
-    model_->MovePinnedAction(id, static_cast<size_t>(index));
+  Profile* profile = browser_->GetProfile();
+  auto* model = ToolbarActionsModel::Get(profile);
+  const auto& pinned = model->pinned_action_ids();
+  // Shell input must never reach Chromium's CHECKs or its unchecked target
+  // iterator. Validate against the real model, not the shell's cached list.
+  if (!model->actions_initialized() || !model->HasAction(id) || !Action(id) ||
+      profile->IsOffTheRecord() || model->IsActionForcePinned(id) || index < 0 ||
+      static_cast<size_t>(index) >= pinned.size() ||
+      std::find(pinned.begin(), pinned.end(), id) == pinned.end()) {
+    LOG(WARNING) << "Open refused an invalid extension move request";
+    return;
   }
+  model->MovePinnedAction(id, static_cast<size_t>(index));
 }
 
 bool OpenExtensionsToolbar::Execute(const std::string& id, int source) {

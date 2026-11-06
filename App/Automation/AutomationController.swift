@@ -759,6 +759,7 @@
         return true
       case "ext-move":
         guard let id = a["extension"] as? String, let index = a["index"] as? Int else { throw Failure(message: "missing extension or index") }
+        guard index >= 0 else { throw Failure(message: "index must be nonnegative") }
         try focusedBrowser(w).moveExtensionAction(id, toPinnedIndex: UInt(index))
         return true
       case "ext-run":

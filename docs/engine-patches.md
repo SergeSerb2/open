@@ -90,6 +90,21 @@ the old engine, including two entries with pinnedIndex 0. Its new
 unpin/repeated unpin: unique ids, exact pinned order, compact unique indices,
 and zero `extensions.duplicatesDropped` whenever the App guard is available.
 
+The native drag crash follow-up also checks inputs against
+`ToolbarActionsModel::pinned_action_ids()` before calling `MovePinnedAction`:
+unknown or unpinned ids, negative/out-of-range indices, and incognito or
+force-pinned changes are no-ops with a diagnostic. The ObjC bridge refuses
+`NSUInteger` values above `int` max before conversion. Window creation repairs
+the persisted duplicates produced by older Open builds, preserving the first
+occurrence and unloaded extension ids. This repairs the model itself, including
+the stored-neighbour lookup used by Chromium's move operation.
+`actions_native_drag_safety` replays uBO Lite + Dark Reader + Action Probe,
+Probe 2→0→2, repeated pinning, invalid shell requests, and a duplicate-profile
+relaunch. The pre-guard engine failed the same row: index equal to count moved
+the action, and 2³²+1 wrapped to index 1. The old pin setter separately produced
+duplicate ids; the lead's stock-engine crash receipt records the resulting
+unsafe `MovePinnedAction` call. No Chromium debugger was used.
+
 | # | Patch | Value | Effort (guess) | Needs |
 |---|---|---|---|---|
 | P1 | Tab-strip bridge: Open windows and tabs become Chrome windows and tabs, hosted in our NSViews | `chrome.tabs`/`chrome.windows` see sidebar tabs; extension-created tabs land in the sidebar; needed by P2 and P3 | 4–6 weeks | — |

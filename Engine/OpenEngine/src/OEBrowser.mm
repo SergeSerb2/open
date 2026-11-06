@@ -13,6 +13,7 @@
 #import "OEClient.h"
 
 #include <functional>
+#include <limits>
 #include <string_view>
 
 #include "include/internal/cef_types_mac.h"
@@ -943,6 +944,10 @@ class OETabStripHandler : public CefTabStripHandler {
 
 - (void)moveExtensionAction:(NSString*)extensionIdentifier
               toPinnedIndex:(NSUInteger)index {
+  if (index > static_cast<NSUInteger>(std::numeric_limits<int>::max())) {
+    NSLog(@"Open refused an extension move index outside the engine range");
+    return;
+  }
   if (_strip) {
     _strip->MoveExtensionAction(OECef(extensionIdentifier), (int)index);
   }

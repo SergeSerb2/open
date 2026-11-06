@@ -5,7 +5,7 @@ from pathlib import Path
 import shutil
 import time
 
-def fixtures(root, tmp):
+def fixtures(root, tmp, extensions):
     source = Path(root) / "tools/e2e/fixtures/action-probe"
     action = Path(tmp) / "action-probe-e2"
     shutil.copytree(source, action)
@@ -25,7 +25,10 @@ def fixtures(root, tmp):
             "manifest_version": 3, "name": "Pinned order probe " + suffix,
             "version": "1.0", "action": {"default_title": "Pin probe " + suffix}}))
         pin_probes.append(str(probe))
-    return [str(action), str(conflict), str(Path(root) / "tools/e2e/fixtures/tabs-probe")] + pin_probes
+    native_drag = [str(Path(extensions) / name) for name in ("ublock-lite", "darkreader")]
+    if not all((Path(p) / "manifest.json").is_file() for p in native_drag):
+        raise RuntimeError("extensions-e2 requires unpacked ublock-lite and darkreader in --extensions")
+    return [str(action), str(conflict), str(Path(root) / "tools/e2e/fixtures/tabs-probe")] + pin_probes + native_drag
 
 
 def run(app, results, tmp, root, wait, new_tab, factory):
@@ -71,6 +74,9 @@ def run(app, results, tmp, root, wait, new_tab, factory):
         focus = os.environ.get("OPEN_E2E_E2_SCOPE")
         if focus == "pins":
             pin_order(app, results, wait)
+            return
+        if focus == "drag":
+            app = native_drag_safety(app, results, wait, action, factory)
             return
         if focus == "tabs":
             tab_events(app, results, tabs, wait, new_tab)
@@ -218,6 +224,7 @@ def run(app, results, tmp, root, wait, new_tab, factory):
 
         pin_order(app, results, wait)
         tab_events(app, results, tabs, wait, new_tab)
+        app = native_drag_safety(app, results, wait, action, factory)
     finally:
         try:
             app.call("ext-windows", preference=True, value=preference)
@@ -272,6 +279,93 @@ def pin_order(app, results, wait):
         app.call("ext-pin", extension=id, pinned=False)
         check("repeat unpin " + id)
     results["actions_pin_move_unique"] = {"ok": all(s["ok"] for s in snapshots), "snapshots": snapshots}
+
+
+def native_drag_safety(app, results, wait, action, factory):
+    # Official keys in the real third-party fixtures, also used by the actions suite.
+    ubo, dark = "ddkjiahejlhfcafbddmgiahcphecmpfh", "eimadpbcbfnmbkopoojfekhnkhdbieeh"
+    ids = [ubo, dark, action]
+    ready = wait(lambda: set(ids) <= {a["id"] for a in app.call("actions")["actions"]}, timeout=30)
+    if not ready:
+        results["actions_native_drag_safety"] = {"ok": False, "error": "native drag fixtures not ready"}
+        return app
+    expected, snapshots = [], []
+    def check(stage):
+        def state():
+            rows = app.call("actions")["actions"]
+            all_ids = [a["id"] for a in rows]
+            pins = [a for a in rows if a["pinned"]]
+            guard = app.call("extensions")
+            return {"ok": len(all_ids) == len(set(all_ids)) and [a["id"] for a in pins] == expected
+                and [a["pinnedIndex"] for a in pins] == list(range(len(expected)))
+                and guard.get("duplicatesDropped", 0) == 0,
+                "stage": stage, "ids": all_ids, "pinned": [[a["id"], a["pinnedIndex"]] for a in pins],
+                "expected": list(expected), "duplicatesDropped": guard.get("duplicatesDropped", 0),
+                "appGuardPresent": "duplicatesDropped" in guard}
+        settled = wait(lambda: (lambda s: s if s["ok"] else None)(state()), timeout=1)
+        snapshots.append(settled or state())
+    try:
+        for id in ids: app.call("ext-pin", extension=id, pinned=False)
+        for id in ids:
+            app.call("ext-pin", extension=id, pinned=True); expected.append(id)
+        check("pin uBO, Dark Reader, probe")
+        app.call("ext-move", extension=action, index=0)
+        expected.remove(action); expected.insert(0, action)
+        check("probe 2 to 0")
+        app.call("ext-move", extension=action, index=2)
+        expected.remove(action); expected.append(action)
+        check("probe 0 to 2")
+        app.call("ext-pin", extension=action, pinned=True)
+        check("repeat pin probe")
+        negative_refused = False
+        try:
+            app.call("ext-move", extension=ubo, index=-1)
+        except RuntimeError as error:
+            negative_refused = "index must be nonnegative" in str(error)
+        check("refuse negative automation index")
+        snapshots[-1]["ok"] &= negative_refused
+        for index in (len(expected), 99, 2**32 + 1, 2**63 - 1):
+            app.call("ext-move", extension=ubo, index=index)
+            check("refuse index " + str(index))
+        unknown = "a" * 32
+        app.call("ext-pin", extension=unknown, pinned=True)
+        app.call("ext-move", extension=unknown, index=0)
+        check("refuse unknown id")
+        app.call("ext-pin", extension=action, pinned=False); expected.remove(action)
+        app.call("ext-move", extension=action, index=0)
+        check("refuse unpinned probe")
+        for id in ids: app.call("ext-pin", extension=id, pinned=False)
+        expected.clear()
+        app.call("ext-move", extension=ubo, index=0)
+        check("refuse empty pinned list")
+        # Reopen a real profile in the state left by the former pin setter.
+        # Only this suite's stopped, isolated Chromium profile is modified.
+        profile = Path(app.call("ping")["userData"])
+        if not profile.parent.name.startswith("Open-E2E-"):
+            raise RuntimeError("refusing to modify a non-E2E profile")
+        for id in ids: app.call("ext-pin", extension=id, pinned=True)
+        app.quit()
+        preferences = profile / "Default/Preferences"
+        stored = json.loads(preferences.read_text())
+        stored["extensions"]["pinned_extensions"] = ids + [action]
+        preferences.write_text(json.dumps(stored))
+        app = factory(urls=())
+        wait(lambda: app.call("actions")["ready"], timeout=30)
+        expected[:] = ids
+        check("repair persisted duplicate after relaunch")
+        app.call("ext-move", extension=action, index=0)
+        expected.remove(action); expected.insert(0, action)
+        check("repaired profile probe 2 to 0")
+        app.call("ext-move", extension=action, index=2)
+        expected.remove(action); expected.append(action)
+        check("repaired profile probe 0 to 2")
+        results["actions_native_drag_safety"] = {"ok": all(s["ok"] for s in snapshots),
+            "alive": app.call("ping") is not None, "snapshots": snapshots}
+    finally:
+        for id in ids:
+            try: app.call("ext-pin", extension=id, pinned=False)
+            except Exception: pass
+    return app
 
 
 def tab_events(app, results, extension, wait, new_tab):

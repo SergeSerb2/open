@@ -10370,7 +10370,7 @@ def main():
     extra = ["--use-mock-keychain"]
     if opts.only == "extensions-e2":
         import extensions_e2
-        dirs = extensions_e2.fixtures(ROOT, tmp)
+        dirs = extensions_e2.fixtures(ROOT, tmp, opts.extensions)
         extra += ["--load-extension=" + ",".join(dirs), "--disable-features=DisableLoadExtensionCommandLineSwitch"]
     if opts.only == "media":
         rules_path = os.path.join(tmp, "pip-site-rules.json")
