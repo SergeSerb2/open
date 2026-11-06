@@ -1,6 +1,6 @@
 # First run
 
-Implements [first-run.md §11 A/B](plans/first-run.md#11-implementation-order-small-prs-each-step-files-then-acceptance), including review round 1. Steps C/D now add the App window, startup detection, guarded completion save, shared import runner, model landing and Settings merge. History streaming and secrets remain later steps. The default-browser offer uses the existing App service only on its button click.
+Implements [first-run.md §11 A/B](plans/first-run.md#11-implementation-order-small-prs-each-step-files-then-acceptance), including review round 1. Steps C/D now add the App window, startup detection, guarded completion save, shared import runner, model landing and Settings merge. Background History uses the same runner and Profile stores for first run and Settings. Passwords and cookies remain capability OFF. The default-browser offer uses the existing App service only on its button click.
 
 `FirstRunViewModel` and `FirstRunView` live in OpenSettings. `FirstRunWindow.size` is 560 × 520 pt. OpenDesign Settings tokens supply the insets, grouped rows, typography and colors. `SettingsButtonStyle` supplies the prominent default button: accent/white while key, normal gray while inactive. Welcome uses a 28 pt semibold wordmark and 28 pt buttons. Import and Report pin the heading/footer around a scrolling middle with automatic indicators. Sparse screens center a visual and text above the footer. Step transitions use `Motion.selectionFade` and cut with Reduce Motion.
 
@@ -124,3 +124,42 @@ against native traffic-light frames. It never clicks the system-default setter.
 Receipts and images stay in the ignored suite output folder. See
 [automation.md](automation.md) for the command and launch overrides. Loaded
 Debug first-content samples do not qualify the idle 250 ms Release budget.
+
+
+## Steps E/F: background History
+
+`AppImportRunner` saves and opens the browser at the sidebar/archive landing
+gate. It then clears `importInProgress`; ordinary browser saves work while
+History runs. A separate runner guard rejects overlapping imports. The import
+task retains the flow when its window closes. It streams the existing
+`ArcHistoryReader` into `AppStores.history(for:)`, one batch of at most 5,000
+visits per transaction. The existing `history_import_keys` makes a repeat
+insert zero visits. No parallel history store or engine change is added.
+
+The importer returns the original source directory per Profile. Destination
+collision suffixes do not change the source or visit key. Existing Profile IDs
+and the Default mapping are authoritative on Settings re-import. Unmapped
+source Profiles are not merged into Default. Phase P-3 uses the probe estimate
+for determinate progress, and P-5 appears after landing. Both reports show the
+History count or E-2 after a failed read. When the source was uncountable, the
+failed count includes only visits known from the probe; no source count is
+invented.
+
+Passwords stay disabled. Both App adapters return capability OFF, and the
+runner contains no consent-token, crypto or secrets-reader call. The shared
+Continue Without Passwords action clears the selection. `ArcProbe` remains
+count-only. The F10 receipt states this code-path proof; it does not claim to
+intercept system Keychain APIs.
+
+The real-App suite adds a live WAL writer, a 5,000-visit import with browsing
+and saving before completion, closing the progress window, a History-only
+Settings repeat, and E-2 after a source becomes unreadable. OCR inspection runs
+on a utility worker after snapshot capture. Only `inspect` gets a bounded
+180-second client timeout. Assertions keep their original limits.
+
+Alternate application icons are rendered at selection time and saved below
+`Cache/AppIcons/<ID>-v1.png` in the data root. Restore reads and decodes that PNG
+off the main actor and sets the process icon on the main actor after content.
+Default selection performs no restore work. A missing or invalid cache reports
+an Icon pane error and can be repaired by selecting the icon again. Encoded
+images are limited to 16 MiB and decoded dimensions to exactly 1024 × 1024.

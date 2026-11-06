@@ -433,6 +433,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, OEEngineDelegate, OEBr
   /// available behind the panel. Saving remains guarded until saveNow succeeds.
   func showFirstRunBrowser() {
     guard windowControllers.isEmpty else { return }
+    LaunchTiming.shared.mark("firstRunLandingStarted")
     let states = model.windows.filter { $0.style == .standard }
     for state in states { createWindowController(state: state) }
     firstRunWindowController?.window?.makeKeyAndOrderFront(nil)

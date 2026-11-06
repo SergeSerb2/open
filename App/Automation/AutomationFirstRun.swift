@@ -3,6 +3,11 @@ import AppKit
 import OpenSettings
 import Vision
 
+private struct FirstRunTextLine: Sendable {
+  let text: String
+  let frame: [Double]
+}
+
 extension AutomationController {
   /// One surface for the real flow and the Settings wizard which shares its runner.
   func runFirstRun(_ args: [String: Any]) async throws -> [String: Any] {
@@ -28,6 +33,15 @@ extension AutomationController {
           let deadline = ContinuousClock.now.advanced(by: .seconds(10))
           while wizard.busy && ContinuousClock.now < deadline { try await Task.sleep(for: .milliseconds(10)) }
           wizard.review()
+        case "settings-select":
+          let deadline = ContinuousClock.now.advanced(by: .seconds(10))
+          while wizard.busy && ContinuousClock.now < deadline { try await Task.sleep(for: .milliseconds(10)) }
+          guard wizard.step == .choose, !wizard.busy else { throw Failure(message: "wizard is not on Choose") }
+          if let historyOnly = args["historyOnly"] as? Bool, historyOnly {
+            wizard.plan.spaces = false; wizard.plan.tabs = false; wizard.plan.favorites = false
+            wizard.plan.folders = false; wizard.plan.archive = false; wizard.plan.searchSettings = false
+          }
+          if let on = args["history"] as? Bool { wizard.plan.history = on }
         case "settings-run":
           guard firstRunActionTask == nil, wizard.step == .review else { throw Failure(message: "wizard is not ready") }
           firstRunActionTask = Task { @MainActor [weak self] in
@@ -51,6 +65,7 @@ extension AutomationController {
           if let on = args["spaces"] as? Bool { flow.includeSpacesAndTabs = on }
           if let on = args["archive"] as? Bool { flow.includeArchive = on }
           if let on = args["history"] as? Bool { flow.includeHistory = on }
+          if let on = args["secrets"] as? Bool { flow.includeSecrets = on }
         case "import":
           guard flow.step == .welcome else { throw Failure(message: "not on Welcome") }; flow.showImport()
         case "fresh":
@@ -84,7 +99,13 @@ extension AutomationController {
     var state: [String: Any] = ["active": app.firstRunWindowController?.window?.isVisible == true,
       "step": current?.step.rawValue ?? app.lastFirstRunStep,
       "importInProgress": app.importInProgress,
+      "historyInProgress": app.importRunner.historyInProgress,
+      "historyProcessed": app.importRunner.historyProcessed,
+      "importAllMilliseconds": app.importRunner.importAllMilliseconds,
       "completed": UserDefaults.standard.bool(forKey: "open.firstRun.completed")]
+    if let outcome = app.importRunner.lastOutcome {
+      state["lastOutcome"] = outcome.counts; state["lastFailures"] = outcome.failures
+    }
     if let current {
       state["welcome"] = current.welcomeStatus
       state["probeReady"] = current.probe != nil
@@ -97,6 +118,9 @@ extension AutomationController {
       state["defaultAttempted"] = current.defaultWasAttempted
       state["outcome"] = current.outcome?.counts ?? [:]
       state["failures"] = current.outcome?.failures ?? [:]
+      state["phase"] = current.phaseText
+      state["progress"] = current.progress ?? NSNull()
+      state["browserHasLanded"] = current.browserHasLanded
       if let window = app.firstRunWindowController?.window {
         state["frameSize"] = [window.frame.width, window.frame.height]
         state["key"] = window.isKeyWindow
@@ -110,7 +134,7 @@ extension AutomationController {
     }
     if action?.hasPrefix("settings-") == true || current == nil {
       // Reading normal launch status must keep Settings lazy.
-      if action?.hasPrefix("settings-") == true || app.importInProgress || app.importRunner.lastOutcome != nil {
+      if action?.hasPrefix("settings-") == true || app.importInProgress || app.importRunner.historyInProgress || app.importRunner.lastOutcome != nil {
         let wizard = app.settingsPresenter.settings.importWizard
         state["settingsStep"] = wizard.step.rawValue
         state["settingsOutcome"] = wizard.outcome?.counts ?? [:]
@@ -128,17 +152,20 @@ extension AutomationController {
     let url = FileManager.default.temporaryDirectory.appendingPathComponent("open-firstrun-\(UUID()).png")
     defer { try? FileManager.default.removeItem(at: url) }
     _ = try await WindowSnapshot.capture(window, to: url)
-    let request = VNRecognizeTextRequest()
-    request.recognitionLevel = .accurate
-    request.usesLanguageCorrection = false
-    try VNImageRequestHandler(url: url).perform([request])
-    return (request.results ?? []).prefix(128).compactMap { observation in
-      guard let line = observation.topCandidates(1).first else { return nil }
-      let r = observation.boundingBox
-      return ["text": String(line.string.prefix(512)),
-        "frame": [r.minX * window.frame.width, (1 - r.maxY) * window.frame.height,
-                  r.width * window.frame.width, r.height * window.frame.height]]
-    }
+    let width = Double(window.frame.width), height = Double(window.frame.height)
+    let lines = try await Task.detached(priority: .utility) {
+      let request = VNRecognizeTextRequest()
+      request.recognitionLevel = .accurate
+      request.usesLanguageCorrection = false
+      try VNImageRequestHandler(url: url).perform([request])
+      return (request.results ?? []).prefix(128).compactMap { observation -> FirstRunTextLine? in
+        guard let line = observation.topCandidates(1).first else { return nil }
+        let r = observation.boundingBox
+        return FirstRunTextLine(text: String(line.string.prefix(512)), frame:
+          [r.minX * width, (1 - r.maxY) * height, r.width * width, r.height * height])
+      }
+    }.value
+    return lines.map { ["text": $0.text, "frame": $0.frame] }
   }
 }
 #endif

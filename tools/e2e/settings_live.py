@@ -103,7 +103,8 @@ def run(factory, results, tmp, wait_until, restore_defaults):
         results['settings_app_icon_after_content'] = {'ok': bool(restored) and restored['applied'] == 'openDark'
             and restored['matchesApplication'] and restored['pixels'] == [[1024, 1024]]
             and restored['restoreStartedMs'] >= timing['windowShown']
-            and restored['restoreStartedMs'] >= timing['firstContentfulPaint'],
+            and restored['restoreStartedMs'] >= timing['firstContentfulPaint']
+            and restored['restoreElapsedMs'] < 5,
             'restore': restored, 'timing': timing, 'load': os.getloadavg()}
         modes = app.call('sleep-mode')
         results['settings_sleep_launch_reconcile'] = {'ok': all(mode == 'off' for mode in modes.values()),

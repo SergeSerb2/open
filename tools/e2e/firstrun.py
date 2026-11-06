@@ -1,6 +1,7 @@
 """Steps C/D through the real App, using only owned roots and synthetic data."""
 import json
 import os
+import runpy
 from pathlib import Path
 import sqlite3
 import shutil
@@ -80,6 +81,7 @@ def run(factory, results, tmp, h):
     app = None
     all_copy = []
     def launch(fresh=False, directory=source, **env):
+        nonlocal app
         app = factory(urls=(), fresh=fresh, extra_args=['--arc-dir=' + str(directory)], extra_env=env)
         app.call('first-run', action='focus') if app.call('first-run')['active'] else None
         return app
@@ -93,7 +95,7 @@ def run(factory, results, tmp, h):
         app.call('snapshot', path=path)
         return path
     def copy():
-        rows = app.call('first-run', action='inspect')['renderedText']
+        rows = app.call('first-run', action='inspect', timeout=180)['renderedText']
         text = '\n'.join(row['text'] for row in rows)
         all_copy.append(text)
         return text
@@ -146,7 +148,7 @@ def run(factory, results, tmp, h):
         imported_png = shot('import'); import_copy = copy()
         row('F2_import_choices', not state()['secretsEnabled'] and 'Import from Arc' in import_copy,
             png=imported_png, text=import_copy)
-        geometry = app.call('first-run', action='inspect')
+        geometry = app.call('first-run', action='inspect', timeout=180)
         heading = [r for r in geometry['renderedText'] if 'Import from Arc' in r['text']]
         light_bottom = max(r[1]+r[3] for r in geometry['trafficLights'])
         heading_top = min((r['frame'][1] for r in heading), default=0)
@@ -422,6 +424,7 @@ def run(factory, results, tmp, h):
         row('all_failed_continue', state()['completed'] and not state()['active']
             and len(app.call('spaces')) == 1 and app.call('tabs') == [])
         app.quit()
+        runpy.run_path(str(Path(h.ROOT)/"tools/e2e/firstrun_history.py"))["run"](launch, state, until, row, source, tmp, h)
         timings = []
         for _ in range(5):
             app = launch(fresh=True)

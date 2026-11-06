@@ -1,6 +1,6 @@
 # First run — Welcome, Import from Arc, and default browser
 
-Status: Steps A/B implemented in OpenSettings/OpenImport; Steps C/D add App lifecycle and the shared sidebar/archive runner. History streaming and secrets remain later work. This file is the complete brief for the coding agent that implements it. That agent has no other context. Read this file top to bottom, then read each source it names before you edit that area. Do not invent a second design.
+Status: Steps A–D implemented. Steps E/F add background History through the shared App runner, real-App verification and Release timing. Passwords and cookies remain capability OFF; only the count probe runs. This file is the complete brief for the coding agent that implements it. That agent has no other context. Read this file top to bottom, then read each source it names before you edit that area. Do not invent a second design.
 
 User-visible name rule: never use the Arc brand in UI text. "Little Arc" is "Little Open" in Open. The only exception is "Import from Arc" (`AGENTS.md`). Search aliases may keep old names.
 
@@ -576,7 +576,8 @@ These do not block Step A. Each names its default. Implementers: build the state
 | Q4 | Window size 560 × 520 and the one-sentence identity (W-2) are Open choices, not measured Arc values (Arc's onboarding is not being cloned; §1). | Ship them; the Opus design review (§3.7) may change the size once via `FirstRunWindow.size` and may re-word W-2 within the §4 rules (one sentence, no brand except the button, no sign-in). Any change updates §4 in the same PR. | Step A review |
 | Q5 | When the engine secret store lands, the secrets step's S-4 line ("copies nothing") becomes false. | That milestone updates S-4 and the §5.4 phase-4 body to store through the engine APIs (never Chromium SQLite directly, import-phase2 decision) and adds a stored-count line to the report. This plan's consent flow does not change. | Engine secret-store milestone |
 | Q6 | Should "Not Now" (skip import) still show the default-browser step? | Yes (§3.5: every completed path shows it once). It is one extra click, it is the only moment most users will ever be asked, and Settings remains the retry path. | Step F review |
-| Q7 | Profile mapping when the Arc folder holds multiple Chromium profiles (`User Data/<dir>`) but the sidebar maps to one Open profile set. | Follow `docs/model.md`: one Open profile per distinct `Space.profile` value (observed data: one). History/secrets phases iterate the Arc profile directories that the sidebar mapping names; an Arc profile with no Space is counted in the report's profile lines and its history is offered on the Settings re-import, not silently merged into the default profile. If the landed importer already resolves this differently, the importer wins and this row is deleted. | Step D |
+
+The landed importer resolves sidebar references plus unused profile metadata. Its `sourceProfileDirectories` mapping is authoritative for History; source directory names remain separate from collision-safe Open destination names. This replaces the former Q7 default.
 
 ## Appendix — evidence index (for reviewers; implementers do not need to re-derive)
 
