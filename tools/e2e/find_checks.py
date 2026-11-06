@@ -6,9 +6,6 @@ from pathlib import Path
 
 
 def run(h, factory, results, tmp):
-    while os.getloadavg()[0] > 60:
-        print('find: waiting for the 1-minute load average to fall to 60 or below', flush=True)
-        time.sleep(15)
     server, origin = h._static_server(os.path.join(h.ROOT, 'tools/e2e/fixtures/find'))
     # Reuse the real S8 scheduler/view observer, scoped to Find's executable
     # frames. This does not attach to a process or request macOS authorization.

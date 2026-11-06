@@ -104,7 +104,7 @@ final class EngineWebContentHostFactory: NSResponder, WebContentHostFactory {
   #endif
   private lazy var extensionBar = makeExtensionBar()
   private var extensionBarCreated = false
-  // Section 6's legacy root overlay can intersect the pane's Find surface.
+  // Temporary: remove when Section 6 replaces the root extensionBar
   var findOverlappingChrome: NSView? { extensionBarCreated ? extensionBar : nil }
 
   var dialogPolicy: String?
