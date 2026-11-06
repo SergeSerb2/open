@@ -1435,30 +1435,42 @@ paste the summary (`AGENTS.md` rule 10). Steps 1, 2, and 4 are open PRs that are
 ---
 
 
-Step 3 verification (child A, 2026-11-06; PR pending): Release `sitecontrol` records
-20 PASS, 2 FAIL (S11/S12), 3 BLOCKED (S2 Section 13 adapter, S4 Boost runtime,
-S10 incognito), cleanup PASS, no interruptions. The lead's interim S1 ruling verifies
-an unavailable ad-block row, its Advanced Settings action, and unchanged settings;
-opening the store alone never claims that an engine adapter exists. `extensions-ui`
-passes 56/56 including real-App X13. The first-draw p95 is 4.797 ms over all 35 opens
-(4.762 ms after 5 declared warm-ups; first cold open 21.851 ms), load 15.09/13.92/17.40.
-A real native delayed-draw canary measures 35.506 ms and is rejected. SCC idle has ten
-zero scheduler/view counters (timer canary 1 then 0); total App CPU is 1.75%, not zero.
-Scroll closed/open p95 is 4.5/4.3 ms with no dropped frames, load 12.41/13.39/17.28;
-a bounded slow-frame page canary is rejected at 12.6 ms. S11 retains the four measured
-values in `docs/followups.md`; S12 is 22/40 at unchanged limits. The lead accepts the material as interim while S11/S12 stay FAIL; the white/black
-page diagnostic checks R7. A separate lead PR owns the child-window fallback if needed. This is implemented App wiring, not visual
-acceptance. Full verification and regression results are recorded in the PR.
+Step 3 verification (child A, 2026-11-06; PR pending): the `04079d79` receipt,
+after merging main `712a4709`, records Release `sitecontrol` with 20 PASS, 2 FAIL (S11/S12), and 3 BLOCKED
+(S2 Section 13 adapter, S4 Boost runtime, S10 incognito), with no interruptions
+and cleanup PASS. S1 verifies the unavailable ad-block row, its Advanced Settings
+action, and unchanged settings. Opening the store does not supply an engine adapter.
+Both Section 12 suites use `tools/e2e/sitecontrol_fixtures.py`; only the SCC scroll
+page stays suite-local. The suite restores the sound, toolbar and Settings-pane
+defaults in `finally`. A separate forced failure with Advanced Settings open closes
+both owned windows and all owned processes, and restores its defaults.
 
-The receipt above predates the shared fixture alignment and review fixes. Both
-Section 12 suites now use `tools/e2e/sitecontrol_fixtures.py`; the SCC scroll page
-is suite-local. S5 clears the shared origin's cookie on `boost.html`, which does
-not set it again on reload. The first-draw callback alone opts into forced native
-display; shipping presentation keeps AppKit scheduling. Button refreshes read
-availability and enabled Boost state without building panel rows. Source changes
-are coalesced per tab on the next main-queue turn; title, favicon and loading
-updates do not invalidate SCC rows. Fresh App flows and page-load counters remain
-pending the explicit screen-clear message.
+P1 first-draw p95 is 6.190 ms across all 35 opens, 6.157 ms after 5 declared warm-ups
+(first cold open 16.149 ms), load 9.91/23.96/30.48. The native delayed-draw canary is
+rejected at 30.737 ms. Only the automation callback forces layout/display and first
+Core Animation submission; shipping presentation keeps AppKit scheduling. This
+receipt does not claim physical display presentation. The source-refresh diagnostic
+records snapshots/buttons/change-deliveries of 0/3/1 for a closed page load, 1/3/1
+for an open page load, and 0/5/0 for 250 title changes. Button reads avoid permission
+and ad-block rows; source changes coalesce per visible tab on the next main-queue
+turn. Title, favicon and loading changes do not invalidate SCC rows.
+
+P2 has ten zero scheduler/view counters and a timer canary of 1 then 0. Total App
+CPU is 3.014%, not zero (load 9.05/23.32/30.18). S13 scroll p95 is 4.9 ms closed and
+open, with zero dropped frames (load 10.72/24.59/30.78); the slow-frame canary is
+rejected at 13.0 ms. S11/S12 remain FAIL at unchanged limits. The lead accepts the
+`.hudWindow` material and Dark #686881 tint at 0.32 only as interim. R7's flat-page
+diagnostic changes the page from [255,255,255] to [0,0,0] and changes the material
+by up to 72 and 51 channel levels at (300,140) and (260,250), ΔE00 25.43 and 19.39
+(load 11.48/24.97/30.95). This demonstrates a backdrop response at those points;
+it does not establish visual parity or confirm the no-backdrop hypothesis. A
+separate lead-owned PR decides whether the child-window fallback is needed.
+Release `extensions-ui` passes 56/56 with cleanup PASS and no interruptions,
+including X13: first Cmd+E opens, second closes, third reopens; arrows, type-a,
+Return, reopen and Esc use the real App event path. The old App fails only the
+new toggle assertion (55/56), proving the fix. Regression, startup and full-verifier
+receipts are recorded in the PR. The later observer teardown fix retains the model
+independently of the weak factory until its observation token is removed.
 
 
 ## 11. Risks and open questions
