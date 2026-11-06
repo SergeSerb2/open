@@ -93,6 +93,7 @@
         return try await runHistoryCommand(cmd, a)
       case "archive-sweep", "archive-clock", "archive-state", "archive-wake", "profile-archive-setting", "archive-list", "archive-banner-state", "archive-banner-action":
         return try await runArchiveCommand(cmd, a)
+      case _ where Self.downloadCommands.contains(cmd): return try await runDownloadCommand(cmd, a)
       case "metrics": return await metrics(interval: a["interval"] as? Double ?? 1)
       case _ where Self.mediaCommands.contains(cmd): return try await runMediaCommand(cmd, a)
       case _ where Self.notificationCommands.contains(cmd): return try await runNotificationCommand(cmd, a)
@@ -125,6 +126,12 @@
       case "menu-state":
         NSApp.mainMenu?.update()
         return menuRows(NSApp.mainMenu)
+      case "command" where (a["id"] as? String).flatMap({ CommandRegistry.byID[$0] }).map({ $0.menuPath == nil }) == true:
+        guard let id = a["id"] as? String, CommandRegistry.byID[id] != nil,
+          let controller = try window.controller,
+          controller.isCommandEnabled(id, enabledKey: CommandRegistry.byID[id]?.enabledKey ?? EnabledKey.always)
+        else { throw Failure(message: "unknown or disabled command") }
+        controller.performCommand(id); return true
       case "menu-perform", "command":
         guard let id = a["id"] as? String, let (menu, index) = findMenuItem(id, in: NSApp.mainMenu) else { throw Failure(message: "unknown menu item") }
         let item = menu.item(at: index)!

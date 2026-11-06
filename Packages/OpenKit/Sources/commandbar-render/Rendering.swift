@@ -7,6 +7,12 @@ import QuartzCore
 import ImageIO
 import UniformTypeIdentifiers
 
+/// Native AppKit contents for one view whose private backing store cannot be copied reliably.
+@MainActor struct NativeLayerSnapshot {
+    let layer: CALayer
+    let image: CGImage
+}
+
 /// Renders an NSView tree offscreen, without a window, through Core Animation's
 /// own renderer (`CARenderer` into a Metal texture). Unlike `cacheDisplay` or
 /// `CALayer.render(in:)`, this path supports masks, shadows, replicators, and
@@ -59,7 +65,7 @@ final class OffscreenRenderer {
 
     /// Renders a view that is already in a window. With `presentation`, layers use
     /// their in-flight animation values (to capture a frame of a transition).
-    func snapshot(_ view: NSView, scale: CGFloat, presentation: Bool = false) -> CGImage {
+    func snapshot(_ view: NSView, scale: CGFloat, presentation: Bool = false, nativeLayer: NativeLayerSnapshot? = nil) -> CGImage {
         let size = view.bounds.size
         guard let rootLayer = view.layer else { fatalError("view is not layer-backed") }
         let w = Int((size.width * scale).rounded()), h = Int((size.height * scale).rounded())
@@ -83,7 +89,7 @@ final class OffscreenRenderer {
         host.anchorPoint = .zero
         host.position = .zero
         host.sublayerTransform = CATransform3DMakeScale(scale, scale, 1)
-        let copy = LayerCloner.clone(rootLayer, presentation: presentation)
+        let copy = LayerCloner.clone(rootLayer, presentation: presentation, nativeLayer: nativeLayer)
         copy.anchorPoint = .zero
         copy.position = .zero
         host.addSublayer(copy)
@@ -145,7 +151,7 @@ final class ScaledWindow: NSWindow {
 /// Copies a layer tree into plain Core Animation layers with the same look.
 @MainActor
 enum LayerCloner {
-    static func clone(_ model: CALayer, presentation: Bool = false) -> CALayer {
+    static func clone(_ model: CALayer, presentation: Bool = false, nativeLayer: NativeLayerSnapshot? = nil) -> CALayer {
         let src = presentation ? (model.presentation() ?? model) : model
         let dst: CALayer
         switch src {
@@ -195,8 +201,16 @@ enum LayerCloner {
         dst.shadowOffset = src.shadowOffset
         dst.shadowPath = src.shadowPath
         dst.allowsEdgeAntialiasing = src.allowsEdgeAntialiasing
-        if let m = model.mask { dst.mask = clone(m, presentation: presentation) }
-        for sub in model.sublayers ?? [] { dst.addSublayer(clone(sub, presentation: presentation)) }
+        if let m = model.mask { dst.mask = clone(m, presentation: presentation, nativeLayer: nativeLayer) }
+        if let nativeLayer, model === nativeLayer.layer {
+            // This is the real view's cacheDisplay result, not redrawn text. Keep its geometry,
+            // and replace the private AppKit backing-store children with the native pixels.
+            dst.contents = nativeLayer.image
+            dst.contentsGravity = .resize
+            dst.contentsRect = CGRect(x: 0, y: 0, width: 1, height: 1)
+        } else {
+            for sub in model.sublayers ?? [] { dst.addSublayer(clone(sub, presentation: presentation, nativeLayer: nativeLayer)) }
+        }
         return dst
     }
 }

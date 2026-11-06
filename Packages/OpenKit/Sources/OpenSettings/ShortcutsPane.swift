@@ -31,6 +31,12 @@ import OpenDesign
         return "\(conflict.shortcut.symbolDisplay) is used by \(names.joined(separator: " and ")). Clear one shortcut to save."
     }.joined(separator: "\n") }
     public var statusMessage:String {recordingCommandID != nil || banner.isEmpty ? statusText:banner}
+    public var extensionConflicts: [ExtensionShortcutConflict] {
+        // Read after each keybinding save and selected-profile change; the App owns conflict policy.
+        _ = store
+        return Array(root.actions.extensionShortcutConflicts(profileID: root.selectedProfileID).prefix(256))
+    }
+    public func openExtensionShortcuts() { root.actions.openURL(URL(string: "chrome://extensions/shortcuts")!, profileID: root.selectedProfileID) }
     public var commands: [CommandDefinition] { CommandRegistry.active.filter { command in
         (query.isEmpty || ([displayTitle(command), command.id] + command.aliases).contains { $0.localizedCaseInsensitiveContains(query) })
     }.sorted { displayTitle($0).localizedStandardCompare(displayTitle($1)) == .orderedAscending } }
@@ -100,9 +106,13 @@ public struct ShortcutsPane: View {
                     if model.recordingCommandID == nil && !model.banner.isEmpty {SettingsError(text:model.statusMessage).font(.system(size:11));Button("Revert"){model.revert()}}
                     if model.recordingCommandID != nil {KeyRecorder(model:model).frame(height:1)}
                     if (model.recordingCommandID != nil || model.banner.isEmpty) && !model.statusMessage.isEmpty {Text(model.statusMessage).font(.system(size:11)).foregroundStyle(.secondary)}
+                    if !model.extensionConflicts.isEmpty {
+                        ExtensionConflictNotice(conflicts: model.extensionConflicts, action: { model.openExtensionShortcuts() })
+                            .fixedSize(horizontal: false, vertical: true)
+                    }
                     Spacer(minLength:0)
                     HStack(spacing:6) {Spacer(minLength:0);Button("Reset All Shortcuts"){model.resetAll(confirmed:false)}.controlSize(.mini)
-                        Menu {Button("Revert Unsaved Changes"){model.revert()};Button("Shortcut Help"){model.root.actions.openHelp(topic:"shortcuts")}} label:{Image(systemName:"ellipsis")}.menuStyle(.borderlessButton).fixedSize()
+                        ShortcutsMoreMenu(model:model).frame(width:22,height:18)
                     }
                 }.frame(width:200,height:450,alignment:.topLeading)
             }
@@ -173,4 +183,66 @@ struct ShortcutsCallout: View {
         .frame(width: 359, height: 35)
         .background(Color(nsColor: SettingsTokens.button.nsColor), in: RoundedRectangle(cornerRadius: 6))
     }
+}
+
+/// The existing pane hosts AppKit notice lines and a link; extension commands never become list rows.
+private struct ExtensionConflictNotice: NSViewRepresentable {
+    var conflicts: [ExtensionShortcutConflict]
+    var action: @MainActor () -> Void
+    func makeNSView(context: Context) -> ExtensionConflictNoticeView { ExtensionConflictNoticeView() }
+    func updateNSView(_ view: ExtensionConflictNoticeView, context: Context) { view.update(conflicts, action: action) }
+}
+@MainActor private final class ExtensionConflictNoticeView: NSStackView {
+    private var notices: [String] = []
+    private var action: (@MainActor () -> Void)?
+    init() { super.init(frame: .zero); orientation = .vertical; alignment = .leading; spacing = 6 }
+    required init?(coder: NSCoder) { fatalError("init(coder:) is not supported") }
+    func update(_ conflicts: [ExtensionShortcutConflict], action: @escaping @MainActor () -> Void) {
+        self.action = action
+        let lines = conflicts.map(\.notice)
+        guard lines != notices else { return }
+        notices = lines
+        for view in arrangedSubviews { removeArrangedSubview(view); view.removeFromSuperview() }
+        for line in lines {
+            let label = NSTextField(wrappingLabelWithString: line)
+            label.font = .systemFont(ofSize: 11); label.textColor = .secondaryLabelColor
+            label.preferredMaxLayoutWidth = 200
+            label.setAccessibilityLabel(line)
+            addArrangedSubview(label)
+            label.widthAnchor.constraint(lessThanOrEqualToConstant: 200).isActive = true
+        }
+        if !lines.isEmpty {
+            let button = NSButton(title: "Extension Shortcuts…", target: self, action: #selector(openShortcuts))
+            button.isBordered = false; button.contentTintColor = SettingsTokens.link.nsColor
+            button.font = .systemFont(ofSize: 11); button.alignment = .left
+            addArrangedSubview(button)
+        }
+    }
+    @objc private func openShortcuts() { action?() }
+}
+
+/// Preserve the pane's native menu titles and order; build on demand with the current model.
+private struct ShortcutsMoreMenu: NSViewRepresentable {
+    let model: ShortcutsViewModel
+    func makeNSView(context: Context) -> ShortcutsMoreMenuButton { ShortcutsMoreMenuButton(model: model) }
+    func updateNSView(_ view: ShortcutsMoreMenuButton, context: Context) { view.model = model }
+}
+@MainActor private final class ShortcutsMoreMenuButton: NSPopUpButton {
+    var model: ShortcutsViewModel
+    init(model: ShortcutsViewModel) {
+        self.model = model
+        super.init(frame: .zero, pullsDown: true)
+        isBordered = false
+        setAccessibilityLabel("More shortcut actions")
+        let menu = NSMenu()
+        menu.addItem(withTitle: "", action: nil, keyEquivalent: "").image = NSImage(systemSymbolName: "ellipsis", accessibilityDescription: "More shortcut actions")
+        for (title, selector) in [("Revert Unsaved Changes", #selector(revert)), ("Shortcut Help", #selector(help)), ("Extension Shortcuts", #selector(extensions))] {
+            let item = menu.addItem(withTitle: title, action: selector, keyEquivalent: ""); item.target = self
+        }
+        self.menu = menu
+    }
+    required init?(coder: NSCoder) { fatalError("init(coder:) is not supported") }
+    @objc private func revert() { model.revert() }
+    @objc private func help() { model.root.actions.openHelp(topic: "shortcuts") }
+    @objc private func extensions() { model.openExtensionShortcuts() }
 }

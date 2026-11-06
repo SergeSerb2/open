@@ -272,7 +272,7 @@
  {
   "path": "Edit > Find",
   "title": "Use Selection to Find",
-  "shortcut": "Cmd+E",
+  "shortcut": "",
   "inScope": true
  },
  {

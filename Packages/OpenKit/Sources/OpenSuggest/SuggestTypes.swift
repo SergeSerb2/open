@@ -31,6 +31,7 @@ public struct SuggestContext: Sendable {
     public var searchEngineID: String?
     /// Set while Site Search is active (`SiteSearch.id`). The query then searches that site.
     public var siteSearchID: String?
+    public var extensionScopeID: String?
     /// The bar's last edit was an insertion at the end of the text with no selection (typing, or an IME
     /// commit at the end). Only then may the snapshot carry an inline completion (commandbar-completion §4.1.1).
     public var allowsInlineCompletion: Bool
@@ -44,6 +45,7 @@ public struct SuggestContext: Sendable {
         allowsRemoteSuggestions: Bool = true,
         searchEngineID: String? = nil,
         siteSearchID: String? = nil,
+        extensionScopeID: String? = nil,
         allowsInlineCompletion: Bool = false
     ) {
         self.mode = mode
@@ -54,6 +56,7 @@ public struct SuggestContext: Sendable {
         self.allowsRemoteSuggestions = allowsRemoteSuggestions
         self.searchEngineID = searchEngineID
         self.siteSearchID = siteSearchID
+        self.extensionScopeID = extensionScopeID
         self.allowsInlineCompletion = allowsInlineCompletion
     }
 }
@@ -76,6 +79,7 @@ public enum SuggestionKind: String, Sendable, Codable, CaseIterable {
     case siteSearch
     /// "Press Tab to search <Site>". Tab (or Return) enters Site Search; the row has no URL.
     case siteSearchHint
+    case extensionAction, extensionKeywordHint, extensionSuggestion
 }
 
 public enum IconHint: Sendable, Hashable {
@@ -84,6 +88,7 @@ public enum IconHint: Sendable, Hashable {
     case symbol(String)
     /// A tab's custom emoji icon.
     case emoji(String)
+    case `extension`(String)
 }
 
 /// Where a `switchToTab` row lives.
@@ -133,6 +138,12 @@ public struct Suggestion: Sendable, Identifiable, Hashable {
     public var title: String
     public var subtitle: String
     public var url: URL?
+    public var extensionID: String?
+    public var extensionContent: String?
+    /// UTF-16 offsets, as in the engine and AppKit text system.
+    public var boldRanges: [Range<Int>] = []
+    public var isDeletable = false
+    public var shortcutKeys: [String] = []
     public var actionID: String?
     public var icon: IconHint?
     /// Target tab for `switchToTab`.
@@ -160,13 +171,13 @@ public struct Suggestion: Sendable, Identifiable, Hashable {
 
     public init(
         id: String, kind: SuggestionKind, title: String, subtitle: String = "",
-        url: URL? = nil, actionID: String? = nil, icon: IconHint? = nil,
+        url: URL? = nil, actionID: String? = nil, extensionID: String? = nil, icon: IconHint? = nil,
         tabID: ItemID? = nil, tabLocation: TabLocation? = nil,
         spaceID: SpaceID? = nil, spaceTitle: String? = nil, siteSearchID: String? = nil,
         provider: String, scoreDetail: ScoreDetail, isWhatYouTyped: Bool = false
     ) {
         self.id = id; self.kind = kind; self.title = title; self.subtitle = subtitle
-        self.url = url; self.actionID = actionID; self.icon = icon
+        self.url = url; self.actionID = actionID; self.extensionID = extensionID; self.icon = icon
         self.tabID = tabID; self.tabLocation = tabLocation
         self.spaceID = spaceID; self.spaceTitle = spaceTitle; self.siteSearchID = siteSearchID
         self.providers = [provider]
@@ -211,6 +222,7 @@ public struct SuggestionSnapshot: Sendable {
 
 /// Top-hit rules in priority order. The first rule that applies picks the top hit.
 public enum TopHitRule: String, Sendable {
+    case extensionScope = "T1-extension-scope"
     case none = "T0-empty"
     case siteSearchScope = "T1-site-search-scope"
     case bestTab = "T2-search-tabs"

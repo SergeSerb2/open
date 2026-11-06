@@ -205,7 +205,7 @@ Menu path `—` means the command has no menu item (keys or command bar only).
 | `find-next` | Find Next | Cmd+G | window | Edit > Find |
 | `find-previous` | Find Previous | Cmd+Shift+G | window | Edit > Find |
 | `find-and-replace` | Find and Replace… | Cmd+Opt+F | window | Edit > Find |
-| `use-selection-to-find` | Use Selection to Find | Cmd+E | web-content | Edit > Find |
+| `use-selection-to-find` | Use Selection to Find | — | web-content | Edit > Find |
 | `jump-to-selection` | Jump to Selection | Cmd+J | web-content | Edit > Find |
 | `emoji-and-symbols` | Emoji & Symbols | Cmd+Ctrl+Space | web-content | Edit |
 | `toggle-sidebar` | Show/Hide Sidebar | Cmd+S | window | View |
@@ -262,6 +262,7 @@ Menu path `—` means the command has no menu item (keys or command bar only).
 | `view-archive` | View Archive | — | window | Archive |
 | `view-history` | View History | Cmd+Y | window | Archive |
 | `clear-archive` | Clear Archive | — | window | Archive |
+| `open-extensions-picker` | Open Extensions | Cmd+E | window | Extensions |
 | `manage-extensions` | Manage Extensions… | — | window | Extensions |
 | `add-extension` | Add Extension… | — | window | Extensions |
 | `view-downloads` | View Downloads | Cmd+Shift+J | window | Window |
@@ -309,6 +310,7 @@ Menu path `—` means the command has no menu item (keys or command bar only).
 | `font-italic` | Italic | Cmd+I | web-content | Edit > Format > Font |
 | `font-underline` | Underline | Cmd+U | web-content | Edit > Format > Font |
 | `show-fonts` | Show Fonts | Cmd+T | web-content | Edit > Format > Font |
+| `extension-shortcuts` | Extension Shortcuts | — | window | — |
 | `add-to-favorites` | Add to Favorites | — | window | — |
 | `remove-from-favorites` | Remove from Favorites | — | window | — |
 | `replace-pinned-url` | Replace Pinned URL with Current Site | — | window | — |
