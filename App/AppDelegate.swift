@@ -52,6 +52,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate, OEEngineDelegate, OEBr
   lazy var linkExecutor = AppLinkExecutor(app: self)
   lazy var linkIntake = ExternalLinkIntake(executor: linkExecutor, snapshot: { [unowned self] in self.linkExecutor.snapshot() })
   var lastLittleOpenRequest: LittleOpenRequest?
+  var executedExternalLink = false
+  /// Only a fresh launch fallback is eligible for removal by its first Little Open link.
+  /// Saved standard windows are never tagged. Input or navigation clears this tag.
+  var autoCreatedLaunchWindowID: WindowID?
+  var initialWindowInputMonitor: Any?
   /// Library ▸ Captures writer (page-platform §4.6.6); one per app, shared by every window.
   lazy var captureLibrary = CaptureLibraryWriter(app: self, root: directories.root)
   var keyBindings = KeyBindingStore.empty
@@ -62,7 +67,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate, OEEngineDelegate, OEBr
   var hotkeyAttempts = 0
   var menuRebuildTask: Task<Void, Never>?
   var afterPaintTask: Task<Void, Never>?
-  var littleOpenStub: NSWindowController?
+  var littleOpenCoordinator: LittleOpenCoordinator!
+  var pendingLittleOpenBlankStamps: [TimeInterval?] = []
+  var littleOpenProfileAlert: NSAlert?
+  var littleOpenHosts: [ItemID: EngineWebContentHost] = [:]
   var commandWindowObserver: (any NSObjectProtocol)?
   var commandDefaultsObserver: (any NSObjectProtocol)?
   private var numberedShortcutOptions = ""
@@ -95,7 +103,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, OEEngineDelegate, OEBr
 
   func applicationShouldHandleReopen(_ sender: NSApplication, hasVisibleWindows flag: Bool) -> Bool {
     if let frontWindowController { frontWindowController.showWindow(nil) }
-    else { showWindowsIfNeeded() }
+    else { showWindowsIfNeeded(ignoringLittleOpen: true) }
     return false
   }
 
@@ -131,6 +139,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, OEEngineDelegate, OEBr
     extensionPrompts.cancelAll()
     if let commandWindowObserver { NotificationCenter.default.removeObserver(commandWindowObserver) }; commandWindowObserver = nil
     if let commandDefaultsObserver { NotificationCenter.default.removeObserver(commandDefaultsObserver) }; commandDefaultsObserver = nil
+    if let initialWindowInputMonitor { NSEvent.removeMonitor(initialWindowInputMonitor) }; initialWindowInputMonitor = nil
     hotkeyService?.unregister(); afterPaintTask?.cancel(); menuRebuildTask?.cancel()
     stopAutoArchive()
     saveState()
@@ -183,9 +192,16 @@ final class AppDelegate: NSObject, NSApplicationDelegate, OEEngineDelegate, OEBr
       FileHandle.standardError.write(Data(
         "Open: snapshot unreadable (kept as \(kept.lastPathComponent)), starting fresh: \(error)\n".utf8))
     }
-    let model = loaded ?? Self.makeDefaultModel()
+    let model: BrowserModel
+    if let loaded { model = loaded }
+    else {
+      model = Self.makeDefaultModel()
+      autoCreatedLaunchWindowID = model.windows.first?.id
+    }
     if model.windows.isEmpty, let space = model.spaces.first {
-      model.windows.append(BrowserWindowState(focusedSpaceID: space.id))
+      let state = BrowserWindowState(focusedSpaceID: space.id)
+      model.windows.append(state)
+      autoCreatedLaunchWindowID = state.id
     }
     do {
       try OpenDataRoot.prepare(root: root, model: model)
@@ -206,6 +222,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, OEEngineDelegate, OEBr
       let space = model.space(id: state.focusedSpaceID)
     {
       for url in options.initialURLs {
+        autoCreatedLaunchWindowID = nil
         let tab = model.newTab(in: space.id, url: url, at: 0)
         model.selectNode(windowID: state.id, spaceID: space.id, nodeID: tab.id)
       }
@@ -213,6 +230,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, OEEngineDelegate, OEBr
     model.addObserver { [weak self] _ in self?.scheduleSave(); self?.scheduleMenuRebuild(); self?.purgeScriptingWrappers() }
     self.model = model
     self.directories = directories
+    prepareLittleOpen()
     startAutoArchiveIfNeeded()
     LaunchTiming.shared.mark("modelLoaded")
     return directories
@@ -220,9 +238,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate, OEEngineDelegate, OEBr
 
   /// Runs at the first of applicationDidFinishLaunching and
   /// engineDidInitialize (their order is not fixed).
-  private func showWindowsIfNeeded() {
+  private func showWindowsIfNeeded(ignoringLittleOpen: Bool = false) {
     prepareData()
     guard windowControllers.isEmpty else { return }
+    guard ignoringLittleOpen || littleOpenCoordinator.sessions.isEmpty else { return }
     let states = model.windows.filter { $0.style == .standard }
     for state in states.isEmpty ? Array(model.windows.prefix(1)) : states {
       createWindowController(state: state)
@@ -315,6 +334,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, OEEngineDelegate, OEBr
   }
 
   func windowDidClose(_ id: WindowID) {
+    noteLaunchWindowNavigation(id)
     todayAutoArchive?.detach(windowID: id)
     if model.windows.filter({ $0.style == .standard }).count > 1 {
       withoutWindowUndo { model.closeWindow(windowID: id) }
@@ -329,6 +349,15 @@ final class AppDelegate: NSObject, NSApplicationDelegate, OEEngineDelegate, OEBr
     MainMenu.targetWindowCommands(frontWindowController.flatMap { hostFactories[$0.windowID] })
     scheduleSave()
     settingsPresenter.refreshSpaceManagerContext()
+  }
+
+  func discardUnusedLaunchWindow(_ id: WindowID) {
+    guard let controller = windowControllers.first(where: { $0.windowID == id }) else { return }
+    controller.window?.close()
+    // The usual last-window close retains user state. This tagged fallback
+    // was absent from the saved session, so do not persist a phantom window.
+    withoutWindowUndo { model.closeWindow(windowID: id) }
+    scheduleSave()
   }
 
   static func makeDefaultModel() -> BrowserModel {
@@ -372,6 +401,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate, OEEngineDelegate, OEBr
     showWindowsIfNeeded()
     refreshScriptingEngine()
     for factory in hostFactories.values { factory.engineDidBecomeReady() }
+    // A fresh empty Space has no web paint to start T5. Register its shortcut
+    // after the native first frame without creating Settings or SuggestEngine.
+    reloadKeyBindings()
+    let pendingLittleOpen = pendingLittleOpenBlankStamps
+    pendingLittleOpenBlankStamps.removeAll()
+    for timestamp in pendingLittleOpen { openBlankLittleOpen(timestamp: timestamp) }
     completeLinkRestoration()
     EngineWebProfile.onPermissionChange = { [weak self] context in self?.tabSleep.permissionsChanged(context: context) }
     scheduleMenuRebuild()
@@ -411,6 +446,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, OEEngineDelegate, OEBr
     recordShutdownPhase("prepare")
     afterPaintTask?.cancel(); afterPaintTask = nil
     menuRebuildTask?.cancel(); menuRebuildTask = nil
+    littleOpenCoordinator?.closeAll()
     engineReady = false
     refreshScriptingEngine()
     for factory in Array(hostFactories.values) { factory.closeAll() }
@@ -569,27 +605,19 @@ extension AppDelegate: CommandDispatcher {
       let shortcut = keyBindings.effectiveShortcuts(for: command).first else { return }
     if hotkeyService == nil { hotkeyService = GlobalHotkeyService() }
     hotkeyAttempts += 1
-    do { try hotkeyService?.register(shortcut: shortcut) { [weak self] in Task { @MainActor in self?.showLittleOpenStub() } } }
+    do { try hotkeyService?.register(shortcut: shortcut, actionWithTimestamp: { [weak self] timestamp in
+      Task { @MainActor in self?.openBlankLittleOpen(timestamp: timestamp) }
+    }) }
     catch { hotkeyError = String(describing: error); Self.commandLog("Little Open hotkey registration failed: \(error)") }
   }
   static func commandLog(_ message: String) { FileHandle.standardError.write(Data("Open: \(message)\n".utf8)) }
-  func showLittleOpenStub() {
-    if littleOpenStub == nil {
-      let window = NSWindow(contentRect: NSRect(x: 0, y: 0, width: 720, height: 540), styleMask: [.titled, .closable, .resizable], backing: .buffered, defer: false)
-      window.title = "Little Open"; window.isReleasedWhenClosed = false
-      let label = NSTextField(labelWithString: "Little Open is not available in this build.")
-      label.frame = NSRect(x: 28, y: 260, width: 650, height: 24); window.contentView?.addSubview(label)
-      window.center(); littleOpenStub = NSWindowController(window: window)
-    }
-    littleOpenStub?.showWindow(nil); littleOpenStub?.window?.makeKeyAndOrderFront(nil); NSApp.activate()
-    scheduleMenuRebuild()
-  }
   func menuState(for id: String) -> CommandMenuState? {
     if id == "set-default-browser" { return CommandMenuState(isChecked: defaultBrowserService.isDefaultBrowser) }
     if id == "toggle-developer-mode" { return DeveloperMode.menuState(for: frontWindowController.flatMap { hostFactories[$0.windowID] }?.selectedContent?.url) }
     return PageTools.menuState(for: id)
   }
   func isCommandEnabled(_ id: String, enabledKey: String) -> Bool {
+    if let enabled = littleOpenCommandEnabled(id) { return enabled }
     if SystemCommandActions.selectors[id] != nil { return SystemCommandActions.isEnabled(id) }
     if let enabled = PageTools.isAppCommandEnabled(id) { return enabled }  // App/Page/PageToolsCommands.swift
     if ["archive-tab", "close-window"].contains(id) { return NSApp.keyWindow != nil }
@@ -608,6 +636,11 @@ extension AppDelegate: CommandDispatcher {
     performCommand(id)
   }
   func performCommand(_ id: String) {
+    performCommand(id, keyDownTimestamp: nil)
+  }
+  func performCommand(_ id: String, keyDownTimestamp: TimeInterval?) {
+    noteLaunchWindowInput(NSApp.keyWindow)
+    if performLittleOpenCommand(id) { return }
     if SystemCommandActions.selectors[id] != nil { _ = SystemCommandActions.perform(id); return }
     if PageTools.isAppCommandEnabled(id) == true, PageTools.performAppCommand(id) { return }
     switch id {
@@ -634,7 +667,7 @@ extension AppDelegate: CommandDispatcher {
       EssentialShortcutsWindowController.shared.show(near: frontWindowController?.window ?? NSApp.keyWindow, store: keyBindings)
     case "archive-tab": NSApp.keyWindow?.performClose(nil)
     case "manage-spaces": settingsPresenter.showLibrary(section: .spaces)
-    case "new-little-open-window", "little-open-global": showLittleOpenStub()
+    case "new-little-open-window", "little-open-global": openBlankLittleOpen(timestamp: keyDownTimestamp)
     case "help-center", "getting-started", "release-notes", "contact-team":
       let controller = frontWindowController ?? makeWindow()
       _ = controller.flatMap { hostFactories[$0.windowID] }?.openNewTab(url: AppCommand.helpURL(for: id), background: false)

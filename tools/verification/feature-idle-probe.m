@@ -49,7 +49,11 @@ static BOOL executableTimerCaller(void) {
             return strstr(info.dli_sname, "DownloadsCenter") || strstr(info.dli_sname, "HomeDownloadButton") ||
                    strstr(info.dli_sname, "DownloadRowView") || strstr(info.dli_sname, "downloadIdleProof");
         }
+#ifdef OPEN_APP_TIMER_PROBE
+        if (!strstr(path, "/Open.app/Contents/MacOS/Open")) return NO;
+#else
         if (!strstr(path, "/features-render")) return NO;
+#endif
         // Async harness waits can create transient Foundation timers too.
         // Attribute the first executable frame to the product or the canary.
         if (!info.dli_sname) return YES; // unresolved application frame: fail closed

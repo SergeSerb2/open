@@ -70,7 +70,7 @@ Small items found during review and verification. Each line: area — issue — 
 - Shell (P1) — pin and unpin requests extract a tab from its folder or split, and unpin puts it at the end of Today (Chrome puts it right after the pinned tabs). Refuse pin changes when the direct parent is a folder or split pane; insert an unpinned direct tab at the top of Today. — PR #53 shell review 5, 2026-10-26
 - Shell (P1) — requests for a tab whose page lives in another Open window return silently (no window raise); add a two-window check and either raise that window or document the refusal. A two-profile check waits for the profile layout fix. — PR #53 shell review 6, 2026-10-26
 - Shell (P1) — undo and redo of extension changes: redo of a removed tab creates a new page with a new `chrome.tabs` id and no `onCreated`. State the rule in the P1 docs and run one manual pass for undo of remove and pin. — PR #53 shell review 7, 2026-10-26
-- Shell (P1) — pages that are not sidebar tabs: sized `window.open` popups join the strip at the engine level but are not model tabs; Peek is Alloy (done in the port); Little Open, when it lands, must create its pages as Alloy or as tabs of its own window. — PR #53 shell review 8, 2026-10-26
+- Shell (P1) — pages that are not sidebar tabs: sized `window.open` popups join the strip at the engine level but are not model tabs; Peek is Alloy (done in the port); Little Open also uses standalone Alloy hosts (`App/LittleOpen`, e2e `littleopen`). — PR #53 shell review 8, 2026-10-26
 - Shell (P1) — add a tabstrip check that `navigator.userAgent` has the `Chrome/156` token and no `Open/0.1`. — PR #53 shell review 10, 2026-10-26
 - Shell — `--style=<typo>` silently selects Chrome; accept only `chrome` and `alloy`, Chrome when the flag is missing. — PR #53 shell review 11, 2026-10-26
 
@@ -122,16 +122,6 @@ Small items found during review and verification. Each line: area — issue — 
 - Key-window readiness — on final main 52212f17 one `window` soak run saw `NSApp.keyWindow === target` while `target.isKeyWindow` stayed false for 5 s right after the traffic-light full-screen checks. `be6ea83f` makes readiness wait for full-screen completion and `ensure_key()` retry the not-ready error; the contradiction did not recur in 30,198 traced samples, so its native cause is unproven (`.re/key-readiness/REPORT.md` in that worktree). If it returns, keep the logged predicate fields. — section 1, item 17, 2026-10-28
 - Sidebar compact toolbar (merged #126) — the "More options" menu content (Reload This Page / Stop Loading, Hide Sidebar) is a guess: the capture never opened it (C11). — section 1, A1, 2026-10-27
 - Hover preview page card (merged #127) — size 420 × min(560, H − 20) pt and x = sidebar width + 8 are Open values; capture C4 (`previews`: hover a pinned tab and a favorite for 2 s) is still requested to confirm them. — section 1, A2, 2026-10-28
-
-- Section 9 — reuse the App's `ExpirySweeper` merged in #130 for Little Open. Supply the minimum of
-  `TodayAutoArchiveController.nextExpiry(now:)` and the Little Open session deadline,
-  and call both domain sweeps from its sweep closure. Keep one App timer. Little Open
-  deadlines use session activity plus each Profile's `littleOpenAutoArchiveAfter`
-  (default 6 h; Never returns nil). Remove `LittleOpenCoordinator`'s existing 60 s
-  poll when that integration lands; the old polling instruction in
-  `docs/plans/routing-little-open.md` §9.6 is superseded. Keep `littleOpen:` archive
-  locations and trigger Today education only from the Today report. Merged #130
-  does not change Little Open. — Sidebar item 6, 2026-10-28
 
 - Section 9 activity rule (merged #130/#135) — reuse the model's shown-tab protection in both expiry
   and next-deadline queries. A focused Space's selected tab, or every pane of its
@@ -206,6 +196,8 @@ The gate "inline completion adds ≤ 0.3 ms p95" read +0.301 ms in one full `ver
 - `settings-preview`'s adblock-readiness row sometimes fails with "successful open did not enable edits". It failed once on unchanged `main` `b913e127` (2026-11-05 about 15:10, M5, load about 10, the M5 on a different network) and passed at `7254c0a3` and at about 15:00 the same day. Suspected cause (not proven): the check's `AdBlockStore` download policy (one attempt, 2 s request and 3 s resource timeouts) makes the result depend on the network and the machine load. Next step: give the check a local list fixture so it needs no network. Owner: section 13 (ad blocking) or section 7 (settings). The check itself is unchanged.
 
 ## S11 dialogs and permissions: remaining acceptance and engine API gaps
+
+- Little Open: JS dialogs and permission prompts in a standalone Little Open window. The factory has no controller, so `PageChromeCoordinator.isVisible` and `PermissionPromptPresenter.defaultAnchor` miss it; presentation is unverified. Owner: Section 11. Needs: an anchor or visibility hook for the Little Open window. A real-App probe on `f8ba4436` shows that `alert()` pauses page JavaScript and does not auto-dismiss during a three-second observation: five ticker requests arrive before the alert, none arrive after it, the post-alert request never arrives, and no native dialog or sheet appears. Closing the Little Open window succeeds; owned-process cleanup passes. Permission prompt presentation remains unverified. — Section 9, 2026-11-05.
 
 - App source `a7e73498` includes main `e4d40ce0` (#177) and required engine `7b490905`. All eight native suites complete with 316 PASS and zero FAIL; runner lifetime passes 4/4. Shell 7/7 and Window 76 PASS include all four native display rows. One interrupted Downloads attempt is excluded; its retry passes. The full verifier records 22 PASS and one command-bar timing FAIL (CPU p95 9.98 ms, load1 26.4). One targeted quiet rerun passes strictly (CPU p95 4.29 ms, inline +0.179 ms, load1 5.5), clearing all 23 gates without a timing exception; both results remain in the report. Window retains two Debug-only timing SKIPs and one DEFERRED material row; Page/Sleep retain their existing blocks. The PR stays a draft for lead review. See the runtime report for exact source and engine qualification.
 

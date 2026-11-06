@@ -136,6 +136,21 @@ final class EngineWebContentHostFactory: NSResponder, WebContentHostFactory {
       self?.commandBarSession?.controller?.editingUndoManager(for: window.firstResponder)
     }
     controller.keyBindingOverrides = app.keyBindings
+    let previousLinkPolicy = controller.container.onLinkClicked
+    controller.container.onLinkClicked = { [weak self] id, url, flags in
+      guard let self else { return false }
+      if flags.contains([.command, .option]) {
+        if UserDefaults.standard.object(forKey: "open.links.optionCommandClickLittleOpen") as? Bool ?? true {
+          self.app.openLittleOpen(url: url, profileHint: self.profile(for: id)?.id ?? self.focusedProfile?.id)
+        } else {
+          // The toggle-off contract is in-place navigation, including engines
+          // that classify this modifier pair as a new-tab/download request.
+          DispatchQueue.main.async { [weak self] in self?.hosts[id]?.load(url) }
+        }
+        return false
+      }
+      return previousLinkPolicy?(id, url, flags) ?? true
+    }
     controller.isApplicationActive = { [weak self] in NSApp.isActive || self?.window?.isKeyWindow == true }
     controller.ownsAdditionalKeyWindow = { [weak self] in self?.ownsKeyWindow($0) == true }
     extensions.attach()
@@ -321,6 +336,7 @@ final class EngineWebContentHostFactory: NSResponder, WebContentHostFactory {
     // P1). Hosts that are not model tabs (Peek) stay Alloy: a Chrome style
     // page outside a strip would get its own Chrome window.
     let isModelTab = model.tab(id: tabID) != nil
+    if isModelTab { app.noteLaunchWindowNavigation(windowState.id) }
     config.runtimeStyle = isModelTab ? app.options.defaultStyle : .alloy
     config.showsChromeToolbar = app.options.chromeToolbar
     if isModelTab, model.tab(id: tabID)?.url.scheme == "chrome" { config.runtimeStyle = .chrome }
@@ -732,6 +748,7 @@ extension EngineWebContentHostFactory {
     candidate === window || candidate === popupPanel || auxiliaryPages.contains { $0.panel === candidate } || pageChrome.owns(candidate)
   }
   func navigateFromCommandBar(_ url: URL, current: Bool, background: Bool = false) {
+    app.noteLaunchWindowNavigation(windowState.id)
     if current, selectedContent != nil || selectedTab != nil {
       if let page = selectedContent, let host = hosts.values.first(where: { $0.content === page }) {
         commandBarNavigationFocus.insert(host.tabID); host.historyRecorder.markTyped()

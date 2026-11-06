@@ -119,7 +119,8 @@ extension AutomationController {
             let count = await store.count(), rows = await store.recent(limit: limit)
             return ["count": count, "rows": rows.map { ["id": $0.id.description, "kind": $0.kind.rawValue,
                 "reason": $0.reason.rawValue, "space": $0.spaceID?.description ?? "", "profile": $0.profileID?.description ?? "",
-                "archivedAt": archiveISO($0.archivedAt)] as [String: Any] }] as [String: Any]
+                "archivedAt": archiveISO($0.archivedAt), "originalLocation": $0.originalLocation,
+                "url": $0.url.absoluteString, "title": $0.title] as [String: Any] }] as [String: Any]
         case "archive-banner-state":
             guard Set(args.keys).isSubset(of: ["window"]) else { throw Failure(message: "invalid banner-state arguments") }
             return archiveBannerState(try archiveBannerController(args))

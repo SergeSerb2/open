@@ -256,7 +256,8 @@ extension AppDelegate {
       guard !incognito else { return nil }
       return self?.makeWindow()?.windowID
     }
-    // Main has only showLittleOpenStub; no real section 9 executor exists yet.
+    // Standalone Little Open sessions are not model tabs. S11 still needs a
+    // standalone ScriptTab lookup before its app-level creation hook can return one.
     host.makeLittleTab = nil
     refreshScriptingEngine()
     host.purgeRemovedWrappers()

@@ -15,6 +15,17 @@ final class FeatureRootView: NSView {
 }
 
 @MainActor
+private final class LittleOpenNativeWindow: NSWindow {
+    var redirectPageFocus: ((NSResponder?) -> NSResponder?)?
+    var onLayoutPass: (() -> Void)?
+    override func makeFirstResponder(_ responder: NSResponder?) -> Bool {
+        super.makeFirstResponder(redirectPageFocus?(responder) ?? responder)
+    }
+    override func layoutIfNeeded() { super.layoutIfNeeded(); onLayoutPass?() }
+    override func displayIfNeeded() { super.layoutIfNeeded(); onLayoutPass?(); super.displayIfNeeded() }
+}
+
+@MainActor
 public final class LittleOpenWindowController: NSWindowController, NSWindowDelegate, CommandBarDelegate {
     public var contentView: NSView { root }
     public let session: LittleOpenSession
@@ -50,6 +61,7 @@ public final class LittleOpenWindowController: NSWindowController, NSWindowDeleg
     private let bannerButton = NSButton(title: "Got it", target: nil, action: nil)
     private var closed = false
     private var opening = true
+    private var placingTrafficLights = false
     public var currentURL: URL? { container.host(for: session.tab.id)?.currentURL }
     public var showsIntro: Bool { !banner.isHidden }
 
@@ -58,12 +70,22 @@ public final class LittleOpenWindowController: NSWindowController, NSWindowDeleg
         screen = coordinator.screenProvider()
         container = WebContentContainer(factory: factory)
         commandBar = CommandBarController(engine: SuggestEngine(model: coordinator.model, fetcher: nil))
-        let window = NSWindow(contentRect: root.bounds, styleMask: [.titled, .closable, .miniaturizable, .fullSizeContentView], backing: .buffered, defer: false)
+        let window = LittleOpenNativeWindow(contentRect: root.bounds, styleMask: [.titled, .closable, .miniaturizable, .fullSizeContentView], backing: .buffered, defer: false)
         window.isReleasedWhenClosed = false
+        // The App lists sessions itself, with stable ids and MRU ordering.
+        window.isExcludedFromWindowsMenu = true
         window.titleVisibility = .hidden; window.titlebarAppearsTransparent = true
         window.isMovableByWindowBackground = true; window.animationBehavior = .none
         super.init(window: window)
         window.contentView = root; window.delegate = self; window.title = "Little Open"
+        // Alloy can finish creating its renderer after the embedded field was
+        // focused. Keep that late native focus request behind the open bar.
+        window.redirectPageFocus = { [weak self] responder in
+            guard let self, self.commandBar.isPresented, let view = responder as? NSView,
+                  view === self.container || view.isDescendant(of: self.container) else { return nil }
+            return self.urlField
+        }
+        window.onLayoutPass = { [weak self] in self?.placeTrafficLights() }
         // S2 19/0003: top-right on the pointer's screen. No autosave or cascade.
         let size = LittleOpenMetrics.barSize, visible = screen.visibleFrame, inset = LittleOpenMetrics.screenInset
         window.setFrame(CGRect(x: visible.maxX - inset - size.width, y: visible.maxY - inset - size.height, width: size.width, height: size.height), display: false)
@@ -135,11 +157,17 @@ public final class LittleOpenWindowController: NSWindowController, NSWindowDeleg
         container.frame = CGRect(x: 0, y: 0, width: w, height: max(0, h - m.titleBarHeight - introHeight))
         commandBar.view.frame = root.bounds
         commandBar.view.overlayPanelWidth = isPage ? min(CommandBarMetrics.panelWidth, max(0, w - 2 * m.screenInset)) : nil
-        for (kind, frame) in zip([NSWindow.ButtonType.closeButton, .miniaturizeButton, .zoomButton], m.trafficLights) {
+        placeTrafficLights()
+    }
+    private func placeTrafficLights() {
+        guard !placingTrafficLights else { return }
+        placingTrafficLights = true; defer { placingTrafficLights = false }
+        for (kind, frame) in zip([NSWindow.ButtonType.closeButton, .miniaturizeButton, .zoomButton], LittleOpenMetrics.trafficLights) {
             guard let button = window?.standardWindowButton(kind) else { continue }
-            button.isHidden = !isPage
-            if isPage, let parent = button.superview {
-                button.frame = parent.convert(CGRect(x: frame.minX, y: h - frame.maxY, width: frame.width, height: frame.height), from: root)
+            if button.isHidden != (state != .page) { button.isHidden = state != .page }
+            if state == .page, let parent = button.superview {
+                let target = parent.convert(CGRect(x: frame.minX, y: root.bounds.height - frame.maxY, width: frame.width, height: frame.height), from: root)
+                if button.frame != target { button.frame = target }
             }
         }
     }
@@ -272,6 +300,7 @@ public final class LittleOpenWindowController: NSWindowController, NSWindowDeleg
     func updateVisibility() { session.windowIsVisible = window.map { $0.isVisible && !$0.isMiniaturized && $0.occlusionState.contains(.visible) } ?? false }
     public func windowDidResize(_ notification: Notification) { layoutContent() }
     public func windowDidBecomeKey(_ notification: Notification) { updateVisibility(); coordinator?.recordActivity(session.id) }
+    public func windowDidResignKey(_ notification: Notification) { updateVisibility(); coordinator?.onChange?() }
     public func windowDidMiniaturize(_ notification: Notification) { updateVisibility(); coordinator?.onChange?() }
     public func windowDidDeminiaturize(_ notification: Notification) { updateVisibility(); coordinator?.onChange?() }
     public func windowDidChangeOcclusionState(_ notification: Notification) { updateVisibility(); coordinator?.onChange?() }
