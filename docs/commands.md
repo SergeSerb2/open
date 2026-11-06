@@ -149,7 +149,7 @@ routing, and compares the built menu with
 from the RE report. It prints every missing, extra, and different item. The
 table keeps its reference titles. The comparison maps "New Little Arc Window"
 to "New Little Open Window" and "Open Little Arc or Peek in…" to
-"Move Little Open or Peek to Space…", then lists both under
+"Open Little Open or Peek in…", then lists both under
 `renamed (by design): 2`. The adapter must cover all 79 seed action ids.
 The only allowed gaps are the 11 out-of-scope Arc rows. Exit code is non-zero on
 any unexpected conflict or difference.
@@ -256,7 +256,7 @@ Menu path `—` means the command has no menu item (keys or command bar only).
 | `reset-all-tabs-in-space` | Reset all tabs in this Space | — | window | Tabs |
 | `peek-email` | Peek Email… | Cmd+Shift+E | window | Tabs |
 | `join-meeting` | Join Meeting | Cmd+Ctrl+J | window | Tabs |
-| `open-in-current-space` | Move Little Open or Peek to Space… | Cmd+O | window | Tabs |
+| `open-in-current-space` | Open Little Open or Peek in… | Cmd+O | window | Tabs |
 | `go-back` | Go Back | Cmd+[, Cmd+Left | window | Archive |
 | `go-forward` | Go Forward | Cmd+], Cmd+Right | window | Archive |
 | `view-archive` | View Archive | — | window | Archive |

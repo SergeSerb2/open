@@ -630,7 +630,7 @@ extension AppDelegate: CommandDispatcher {
     case "new-little-open-window", "little-open-global": showLittleOpenStub()
     case "help-center", "getting-started", "release-notes", "contact-team":
       let controller = frontWindowController ?? makeWindow()
-      _ = controller.flatMap { hostFactories[$0.windowID] }?.openNewTab(url: AppCommand.helpURL, background: false)
+      _ = controller.flatMap { hostFactories[$0.windowID] }?.openNewTab(url: AppCommand.helpURL(for: id), background: false)
     default:
       #if DEBUG
       if CommandRegistry.byID[id]?.isReserved != true { Self.commandLog("Unhandled app command: \(id)") }
