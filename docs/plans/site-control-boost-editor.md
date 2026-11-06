@@ -1472,7 +1472,13 @@ Step 3 verification (child A, 2026-11-06; PR pending): the `e0cb8699` receipt,
 after merging main `bfb7755a`, records Release `sitecontrol` with 21 PASS, 2 FAIL (S11/S12), and 3 BLOCKED
 (S2 Section 13 adapter, S4 Boost runtime, S10 incognito), with no interruptions
 and cleanup PASS. S1 verifies the unavailable ad-block row, its Advanced Settings
-action, and unchanged settings. Opening the store does not supply an engine adapter.
+action, and unchanged settings. The lead's 14:41 ruling keeps the actual main row,
+“Block Ads & Trackers”, `unavailable`, instead of S1's planned initial On state.
+The real tap must call `openAdBlockSettings` once and `toggle` zero times; automation
+records those action counts. The updated assertion still needs a fresh runtime
+receipt after the screen hold. Opening the store does not supply an engine adapter.
+S2 remains `blocked: section 13 ad-block adapter`; its real blocking flow stays
+ready and must pass when Section 13 binds the store. See the Section 13 follow-up.
 Both Section 12 suites use `tools/e2e/sitecontrol_fixtures.py`; only the SCC scroll
 page stays suite-local. The suite restores the sound, toolbar and Settings-pane
 defaults in `finally`. A separate forced failure with Advanced Settings open closes

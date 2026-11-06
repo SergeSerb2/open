@@ -69,7 +69,9 @@ def run(factory, results, tmp, env):
             # Closed state is the negative control for all visible SCC elements.
             record('S1_open', not before['presented'] and s['presented'] and {r['id'] for r in actions} == expected
                    and s['extensionsVisible'] and any(i['id'] == 'extension.add' and i['visible'] for i in s['extensionItems'])
-                   and row(s,'row.contentBlocking').get('state') in ('on','unavailable') and s['security'].get('title') == 'Connection: Insecure' and geometry,
+                   and row(s,'row.contentBlocking').get('title') == 'Block Ads & Trackers'
+                   and row(s,'row.contentBlocking').get('state') == 'unavailable'
+                   and s['security'].get('title') == 'Connection: Insecure' and geometry,
                    state=s, negative=before)
             app.call('snapshot', path=str(private/'S1-open.png'))
             toggled_closed=app.call('site-controls', action='open')
@@ -90,7 +92,9 @@ def run(factory, results, tmp, env):
                 settings_file=Path(app.user_data,'adblock-settings.json')
                 settings_before=settings_file.read_bytes() if settings_file.exists() else None
                 browser=app.call('window-state')['id']
-                app.call('site-controls',action='tap',id='row.contentBlocking')
+                actions_before=state()['sourceActions']
+                tapped=app.call('site-controls',action='tap',id='row.contentBlocking')
+                action_calls={key:tapped['sourceActions'][key]-actions_before[key] for key in actions_before}
                 settings=app.call('settings-state')
                 app.call('menu-perform',id='close-window')
                 app.call('window-focus',id=browser,activate=True)
@@ -98,7 +102,9 @@ def run(factory, results, tmp, env):
                 settings_after=settings_file.read_bytes() if settings_file.exists() else None
                 record('S1_unavailable_settings',settings['settings']>0 and settings['pane']=='advanced'
                        and row(unavailable,'row.contentBlocking').get('state')=='unavailable'
+                       and action_calls=={'toggle':0,'openAdBlockSettings':1}
                        and settings_before==settings_after,settings=settings,unchanged=settings_before==settings_after,
+                       sourceActionCalls=action_calls,
                        negative='opening the store in Settings does not make the missing engine adapter available')
                 blocked('S2_adblock', 'section 13 ad-block adapter', row=row(unavailable,'row.contentBlocking'))
             else:

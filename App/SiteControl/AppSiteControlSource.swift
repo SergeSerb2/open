@@ -37,6 +37,8 @@ final class AppSiteControlSource: SiteControlDataSource, SiteControlActions {
   private(set) var snapshotReadCount = 0
   private(set) var buttonReadCount = 0
   private(set) var changeDeliveryCount = 0
+  private(set) var toggleCallCount = 0
+  private(set) var openAdBlockSettingsCallCount = 0
   #endif
   private var adBlockStore: AdBlockStore? { factory?.app.stores.existingAdBlock }
   init(factory: EngineWebContentHostFactory) {
@@ -146,6 +148,9 @@ final class AppSiteControlSource: SiteControlDataSource, SiteControlActions {
         "capture-page": context.isWebsite, "capture-full-page": context.isWebsite])
   }
   func toggle(_ tile: SiteSettingTile, tabID: ItemID) {
+    #if OPEN_AUTOMATION
+    toggleCallCount += 1
+    #endif
     guard let factory, let snapshot = snapshot(for: tabID), snapshot.context.isWebsite else { return }
     switch tile.kind {
     case .contentBlocking:
@@ -192,7 +197,12 @@ final class AppSiteControlSource: SiteControlDataSource, SiteControlActions {
     guard factory?.selectedTab?.id == tabID else { return }; _ = factory?.openNewTab(url: url, background: false)
   }
   func reload(tabID: ItemID) { factory?.hosts[tabID]?.content.reload() }
-  func openAdBlockSettings(tabID: ItemID) { factory?.app.settingsPresenter.show(pane: .advanced) }
+  func openAdBlockSettings(tabID: ItemID) {
+    #if OPEN_AUTOMATION
+    openAdBlockSettingsCallCount += 1
+    #endif
+    factory?.app.settingsPresenter.show(pane: .advanced)
+  }
 
   private struct PermissionRow {
     let permission: SitePermission, engine: OEPermissionKind, id: String, title: String, symbol: String

@@ -104,6 +104,8 @@ extension AutomationController {
       "sourceReads": ["snapshots": (try? window.siteControlSource.snapshotReadCount) ?? 0,
         "buttons": (try? window.siteControlSource.buttonReadCount) ?? 0,
         "changeDeliveries": (try? window.siteControlSource.changeDeliveryCount) ?? 0],
+      "sourceActions": ["toggle": (try? window.siteControlSource.toggleCallCount) ?? 0,
+        "openAdBlockSettings": (try? window.siteControlSource.openAdBlockSettingsCallCount) ?? 0],
       "extensionItems": panel.hasExtensionItems ? panel.extensionsBody.items.map { ["id": $0.item.id, "title": $0.item.name, "visible": scc.isPresented && !$0.isHiddenOrHasHiddenAncestor] as [String: Any] } : controls.filter { $0["id"] as? String == "extension.add" },
       "extensionsFocusedID": panel.extensionsBody.focusedID ?? ""] as [String: Any]
   }
