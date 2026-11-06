@@ -106,7 +106,7 @@
       case _ where Self.sleepCommands.contains(cmd): return try await runSleepCommand(cmd, a)
       case "editor-open", "editor-act", "editor-close", "editor-state":
         if cmd == "editor-act" { nativeInputStart = ProcessInfo.processInfo.systemUptime }
-        return try runEditorCommand(cmd, a)
+        return try await runEditorCommand(cmd, a)
       case "ping":
         return [
           "pid": Int(getpid()), "chromium": OEEngine.shared.chromiumVersion, "cef": OEEngine.shared.cefVersion,

@@ -4,7 +4,7 @@ import OpenModel
 import OpenSpaceEditor
 
 extension AutomationController {
-  func runEditorCommand(_ cmd: String, _ a: [String: Any]) throws -> Any {
+  func runEditorCommand(_ cmd: String, _ a: [String: Any]) async throws -> Any {
     let w = try window
     switch cmd {
     case "editor-open":
@@ -38,21 +38,18 @@ extension AutomationController {
       if a["action"] as? String == "click", a["control"] as? String == "tone",
          let button = picker.toneButton(at: a["index"] as? Int ?? 0), let toneWindow = picker.toneWindow {
         let point = button.convert(CGPoint(x: button.bounds.midX, y: button.bounds.midY), to: nil)
-        for type in [NSEvent.EventType.leftMouseDown, .leftMouseUp] {
-          let event = NSEvent.mouseEvent(with: type, location: point, modifierFlags: [], timestamp: ProcessInfo.processInfo.systemUptime,
-            windowNumber: toneWindow.windowNumber, context: nil, eventNumber: 1, clickCount: 1, pressure: type == .leftMouseUp ? 0 : 1)!
-          NSApp.sendEvent(event)
-        }
+        _ = try await mouse(["action": "click", "window": toneWindow.windowNumber, "x": point.x,
+                             "y": toneWindow.frame.height - point.y, "queued": true], w)
         return true
       }
       guard a["action"] as? String == "click", let control = a["control"] as? String,
             let frame = picker.view.controlFrame(control, index: a["index"] as? Int ?? 0) else { throw Failure(message: "invalid picker control") }
       let point = picker.view.convert(CGPoint(x: frame.midX, y: frame.midY), to: nil)
-      for type in [NSEvent.EventType.leftMouseDown, .leftMouseUp] {
-        guard let event = NSEvent.mouseEvent(with: type, location: point, modifierFlags: (a["modifiers"] as? [String] ?? []).contains("ctrl") ? .control : [], timestamp: ProcessInfo.processInfo.systemUptime,
-          windowNumber: panel.windowNumber, context: nil, eventNumber: 1, clickCount: 1, pressure: type == .leftMouseUp ? 0 : 1) else { return false }
-        NSApp.sendEvent(event)
-      }
+      // Reuse the native queue path and wait for mouse-up delivery. Native
+      // controls can track synchronously; custom cells finish on mouse-up.
+      _ = try await mouse(["action": "click", "window": panel.windowNumber, "x": point.x,
+                           "y": panel.frame.height - point.y, "queued": true,
+                           "modifiers": a["modifiers"] as? [String] ?? []], w)
       return true
     default: throw Failure(message: "unknown editor command")
     }

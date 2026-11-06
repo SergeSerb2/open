@@ -99,8 +99,12 @@ public final class IconPickerController {
         Task { @MainActor in callback(icon) }
     }
     private func closeTones() {
-        if let tonePanel { panel.removeChildWindow(tonePanel); tonePanel.orderOut(nil) }
+        let closing = tonePanel
+        if let closing { panel.removeChildWindow(closing); closing.orderOut(nil) }
         tonePanel = nil; tones = []
+        // A native tone button can close its own window from its action.
+        // Keep that window alive until AppKit finishes the event dispatch.
+        if let closing { Task { @MainActor in _ = closing } }
     }
     private func showTones(_ entry: EmojiEntry, cell: NSView) {
         closeTones(); tones = entry.tones

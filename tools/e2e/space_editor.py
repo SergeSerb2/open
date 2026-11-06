@@ -6,6 +6,7 @@ def checks(factory, results, tmp, harness):
     app = factory(urls=(), fresh=True)
 
     def require(name, ok, **detail):
+        print(name, 'PASS' if ok else 'FAIL', flush=True)
         results[name] = dict(detail, ok=bool(ok))
         if not ok:
             raise AssertionError(name)
@@ -61,7 +62,9 @@ def checks(factory, results, tmp, harness):
 
         require('space_command_open', app.call('command', id='change-space-icon'))
         assert harness.wait_until(lambda: state().get('count', 0) > 0, timeout=5)
-        click('icons'); click('item', index=0)
+        click('icons')
+        require('space_icons_page', state()['page'] == 'icons')
+        click('item', index=0)
         require('space_named_pick', closed() and next(s for s in app.call('spaces') if s['id'] == space)['icon'] == {'type': 'named', 'value': 'star'})
         folder = app.call('folder', title='Picker folder', tabs=[tab], section='pinned')
         app.call('sidebar-menu', node=folder, item='Change Icon…')
@@ -96,7 +99,7 @@ def checks(factory, results, tmp, harness):
         app.call('space', space=space)
         opened(space=space)
         # An in-App outside click uses the normal AppKit event route.
-        app.call('mouse', action='click', x=400, y=300)
+        app.call('mouse', action='click', x=400, y=300, queued=True)
         require('outside_click_closes', closed())
         require('close_idempotent', app.call('editor-close') and closed())
     finally:
