@@ -1,5 +1,6 @@
 """P7 through the real App's OpenWeb automation path and a local page."""
 import json
+from concurrent.futures import ThreadPoolExecutor
 import runpy
 from pathlib import Path
 import threading
@@ -49,7 +50,8 @@ def run(app, results, tmp, new_tab, wait_until):
             "manifest_version": 3, "name": "Open P7 isolation probe", "version": "1.0",
             "content_scripts": [{"matches": ["http://127.0.0.1/*"], "js": ["probe.js"],
                                  "run_at": "document_start"}]}))
-        (extension / "probe.js").write_text('''const result = JSON.stringify({native:typeof __openNative,secret:typeof __p7});
+        (extension / "probe.js").write_text('''const result = JSON.stringify({native:typeof __openNative,secret:typeof __p7,
+          extension:typeof chrome !== 'undefined' && !!chrome.runtime && chrome.runtime.id || null});
           const mark=()=>document.documentElement.setAttribute('data-p7-extension',result);
           if(document.documentElement)mark();else new MutationObserver((m,o)=>{
           if(document.documentElement){o.disconnect();mark()}}).observe(document,{childList:true});''')
@@ -67,6 +69,9 @@ def run(app, results, tmp, new_tab, wait_until):
         app.call("navigate", tab=tab, url=origin + "/open")
         app.call("wait", tab=tab, timeout=15)
         page = app.eval(tab, "({start:pageAtStart,secret:typeof __p7,native:typeof __openNative,child:frames[0].document.documentElement.getAttribute('data-p7')})")
+        # Page eval keeps its existing user gesture. Let that transient
+        # activation expire before checking the Open world's evaluation.
+        time.sleep(6)
         isolated = evaluate("({secret:window.__p7 || null,gesture:navigator.userActivation.isActive})")
         ext = wait_until(lambda: app.eval(tab, "document.documentElement.getAttribute('data-p7-extension')"), timeout=10)
         other = new_tab(app, origin + "/unmatched", background=True)
@@ -80,7 +85,7 @@ def run(app, results, tmp, new_tab, wait_until):
                 and len(named_receipt) == 1 and named_receipt[0]["type"] == "p7:named",
             "page": page, "isolated": isolated, "unmatched": unmatched}
         results["open_world_extension_isolation"] = {
-            "ok": json.loads(ext or "{}") == {"native": "undefined", "secret": "undefined"},
+            "ok": json.loads(ext or "{}") == {"native": "undefined", "secret": "undefined", "extension": extension_id},
             "extension": json.loads(ext or "{}")}
         try:
             ready_receipt = messages()
@@ -125,12 +130,32 @@ def run(app, results, tmp, new_tab, wait_until):
         evaluate("for(let i=0;i<201;i++)__openNative.postMessage('p7:flood','{}')")
         after = messages()["statistics"]
         delta = {k: after[k] - boundary[k] for k in after}
+        source_limit = evaluate("17" + " " * (1024 * 1024 - 2)) == 17
+        refused_source = refused_result = False
+        try: evaluate("17" + " " * (1024 * 1024 - 1))
+        except RuntimeError: refused_source = True
+        result_limit = len(evaluate("'x'.repeat(1048574)")) == 1048574
+        try: evaluate("'x'.repeat(1048575)")
+        except RuntimeError: refused_result = True
+        def unresolved(_):
+            try: evaluate("new Promise(()=>{})")
+            except RuntimeError as error: return str(error)
+            return "unexpected resolution"
+        with ThreadPoolExecutor(max_workers=65) as executor:
+            pending = list(executor.map(unresolved, range(65)))
+        evaluation = {"sourceAtLimit": source_limit, "sourceOverLimit": refused_source,
+            "resultAtLimit": result_limit, "resultOverLimit": refused_result,
+            "pendingAtLimit": sum("timed out" in x for x in pending),
+            "pendingOverLimit": sum("over limit" in x for x in pending)}
         results["open_world_limits"] = {
             "ok": boundary["accepted"] - before["accepted"] == 1
                 and boundary["oversized"] - before["oversized"] == 3
                 and boundary["invalid"] - before["invalid"] == 1
-                and delta["accepted"] == 200 and delta["rateLimited"] == 1,
-            "sizeBoundary": {k: boundary[k] - before[k] for k in before}, "flood": delta}
+                and delta["accepted"] == 200 and delta["rateLimited"] == 1
+                and source_limit and refused_source and result_limit and refused_result
+                and evaluation["pendingAtLimit"] == 64 and evaluation["pendingOverLimit"] == 1,
+            "sizeBoundary": {k: boundary[k] - before[k] for k in before}, "flood": delta,
+            "evaluation": evaluation}
     finally:
         app.call("script-remove", id="p7-open")
         if extension_id:
