@@ -303,6 +303,16 @@ Implemented from [import-phase2.md](plans/import-phase2.md), with its Lead decis
 
 `ArcHistoryReader` copies History and its WAL, or the rollback journal in rollback mode, into a private mode-700 directory. It never copies SHM; SQLite rebuilds that file. Copy destinations are created exclusively with mode 600 before any bytes are written. The CLI removes user-owned import directories older than one hour at startup. SQLite opens and recovers only the private copy. A failed quick check gets one fresh-copy retry after 200 ms. The reader deletes its copy on success and failure. It accepts History meta versions 65–75, converts Chromium microseconds with integer epoch subtraction, keeps http/https/file visits, and filters internal schemes, subframes, invalid times, and times more than 24 hours ahead. It maps transition core bits and counts typed visits only for core 1. No source aggregate count overrides visit rows.
 
+`ArcImportResult.sourceProfileDirectories` maps each imported Profile ID to its original Chromium directory, before Open destination collision suffixes. The App uses that mapping for background History imports through its shared Profile stores.
+
+An App import starts each added Today tab's `lastActiveAt` at the import time,
+so startup auto-archive does not immediately remove old source tabs. Pinned tabs
+and Favorites keep their source activity times. Settings re-import also treats
+a stable tab/Favorite ID already in the target Profile's ArchiveStore as a
+duplicate. The App awaits one batched ID lookup per Profile on the archive
+queue, then passes the ID sets into the synchronous model merge. Live-ID
+deduplication stays unchanged. Neither rule changes Arc's source files.
+
 The reader retains the plan's array-returning API and adds an awaited batch-consumer overload. The CLI uses that overload to keep at most one 5,000-visit batch in flight, plus the source URL map. `HistoryStore(fileURL:)` accepts a full destination path. The writer uses one checked transaction per batch, reuses prepared statements, and rolls back all changes on failure. `history_import_keys` deduplicates by source profile directory and Chromium visit ID. The new `(url_id, time)` index supports count recomputation. A result success flag also detects a bad destination for an empty import.
 
 The upsert skips unchanged or empty replacement titles. This preserves the specified title result and avoids redundant FTS trigger work. The first F2 run, before this guard, failed the timing gate at 3.307 s. The final streaming implementation passed at 1.443 s. Re-import updates no visit count by hand and inserts no duplicate visit.
