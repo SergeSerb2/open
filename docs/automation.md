@@ -1,5 +1,18 @@
 # Automation channel (test harness)
 
+Extension E11/E12 acceptance runs with `tools/e2e/engine_e2e.py --config Release
+--style chrome --only extensions-e2 --extensions PATH` (`PATH` contains the
+unpacked `ublock-lite` and `darkreader` fixtures). It uses the real command bar's existing
+`key` and `commandbar-state` commands. Command-bar rows include `extension`,
+`content`, and `keycaps`. `ext-windows` lists only native extension popup windows:
+controller class, page/window/browser ids, Cocoa frame, title, style, autosave
+name, and whether the page is the content view. Numeric page handles work for
+these windows too. `ext-windows {preference:true}` reads the one frame-autosave
+entry; adding `value` writes or removes it so a suite can reset and restore it.
+`ext-omnibox` takes `extension` and `op` (`start`, `input`, `reply`, `default`,
+`cancel`). It exercises text/style bounds through the public engine API;
+`default` reports presence, UTF-16 lengths, and range counts, without page text.
+
 Open's end-to-end tests drive the real app through a local Unix socket. There is no computer use: nothing here moves the system mouse, types on the system keyboard, or touches another app. Key and mouse events are built inside Open and go only to Open's own windows. Pixels come only from Open's own windows.
 
 Every agent command that opens Open on screen must hold the machine-wide lock
@@ -108,7 +121,7 @@ Arguments are `key=value`; values that parse as JSON are sent as JSON.
 | `popup-close` | — | Close the open popup |
 | `actions` | — | The focused window's toolbar actions from Chrome's model (fork patch P2): `ready`, and per action id, name, title, tooltip, accessible name, badge and colors, enabled, has popup, pinned and pinned index, wants to run, site access, showing popup, `live` (from the live model, else the profile's list), and the toolbar image and plain icon (PNG byte count, hash, point width, `pixels`: each representation's pixel size, and `object`: the image object's identity) |
 | `ext-pin` | `extension`, `pinned` (default `true`) | Pin or unpin an action |
-| `ext-move` | `extension`, `index` | Move a pinned action to a pinned index |
+| `ext-move` | `extension`, `index` | Move a pinned action to a pinned index. Negative indices return an automation error; unknown/unpinned actions and indices outside the engine model's range are no-ops with engine diagnostics. |
 | `ext-prompt` | `answer` (`accept`/`cancel`), `hold`, `handler`, `clear`, `twice` | Pending consent: type, extension/name, Open title/buttons (§3.11), `chromiumTitle`/`chromiumButtons`, permissions/details/lines, retained files/devices and weak page/browser ids. Holds by default; `hold=false` releases without answering. `handler=false` preserves Chromium's dialogs. `clear` cancels the queue; `twice` checks duplicate-answer safety. Also returns registry events. |
 | `ext-manage` | `extension`, `action` (`enable`, `disable`, `uninstall`, `reload`, `install-webstore`, `install-crx`), `path` | Live per-profile management. Remove always prompts. Web Store completion is recorded in `ext-prompt.events`, leaving the socket free to answer consent. Local CRX is guarded by `--open-automation` and uses the real installer/prompt. |
 | `ext-commands` | — | `{ready, context, commands}`. Each command has extension, name, summary, Cocoa key equivalent/modifier flags, global and action-command flags. Uppercase letters encode Shift in Cocoa's pair. |
@@ -861,3 +874,17 @@ failure (`OPEN_DOWNLOADS_FAIL_IN_SHEET=1`). The receiver verifies the real Open
 document URL, bytes and SHA-256. Finder dispatch is recorded without opening a
 Finder window. Home geometry and the 60-second recent-download click rule remain the
 lead's marked guesses. No Little Open tray is added.
+
+The `extensions-e2` suite also checks three-action pin/move/unpin sequences through `ext-pin`, `ext-move`, and `actions`. It checks raw engine ids and pinned indices, plus `extensions.duplicatesDropped == 0` when the App guard is present. `OPEN_E2E_E2_SCOPE=pins` selects this reproduction alone.
+
+`OPEN_E2E_E2_SCOPE=drag` selects the native drag safety row. It pins real uBO
+Lite, Dark Reader, and Action Probe, moves Probe 2→0→2, repeats pinning, and
+tries unknown/unpinned actions, an empty pinned list, and negative, count,
+99, 2³²+1, and Int.max indices. Every snapshot requires unique ids, the exact
+order, compact indices, and zero dropped duplicates when the App guard exists.
+It then closes its isolated App, writes the old duplicate-pin preference state,
+relaunches that profile, and repeats the drag after repair.
+
+`OPEN_E2E_E2_FORCE_FAILURE=popup` stops the suite with its native popup open;
+`popup-quit` first quits the App to exercise restoration without the socket.
+Frame preferences are restored after quit through the shared defaults fallback.
