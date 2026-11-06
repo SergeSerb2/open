@@ -172,10 +172,19 @@ def run(factory, results, tmp, env):
                 # One window keeps eight hidden hosts. Use nine tabs plus a
                 # second window's tab to measure ten actual live pages.
                 original=app.call("window-state")["id"]
-                tabs=[tab]+[new_tab(app,origin+"/boost.html?tab="+str(i)) for i in range(8)]
-                handles=[t["page"]["identifier"] for t in app.call("tabs") if t["id"] in tabs]
-                peer=None;other=None
+                # Earlier restart rows retain sidebar tabs. Remove those unrelated
+                # pages before creating the measured nine-page window; otherwise
+                # its eight-hidden-host cap can evict a measured page.
+                close()
+                for existing in app.call("tabs"):
+                    if existing["id"] != tab: app.call("close",tab=existing["id"])
+                app.call("select",tab=tab);app.call("wait",tab=tab)
+                tabs=[tab];peer=None;other=None
                 try:
+                    tabs += [new_tab(app,origin+"/boost.html?tab="+str(i)) for i in range(8)]
+                    measured=[t for t in app.call("tabs") if t["id"] in tabs]
+                    assert len(measured) == 9 and all(t.get("page",{}).get("live") for t in measured), measured
+                    handles=[t["page"]["identifier"] for t in measured]
                     app.call("command",id="new-window")
                     peer=app.call("window-state")["id"]
                     other=new_tab(app,origin+"/boost.html?peer=1")
@@ -306,8 +315,10 @@ def run(factory, results, tmp, env):
                 app.call("menu-perform",id="new-little-open-window")
                 opened=next(s for s in app.call("little-open-state")["sessions"] if s["id"] not in previous)
                 sid=opened["id"]
-                app.call("key",window=opened["window"],text=origin+"/boost.html\r")
-                wait_until(lambda: any(s["id"] == sid and s["content"] and not s["loading"] for s in app.call("little-open-state")["sessions"]),timeout=10,step=.05)
+                app.call("key",window=opened["window"],text=origin+"/boost.html?little-open-boost=1\r")
+                # A distinct URL keeps the command bar from selecting an
+                # existing sidebar tab and closing this Little Open session.
+                assert wait_until(lambda: any(s["id"] == sid and s["state"] == "page" and s["content"] and not s["loading"] for s in app.call("little-open-state")["sessions"]),timeout=10,step=.05), app.call("little-open-state")
                 # B17's center drag leaves the saved font component intact.
                 def heading():
                     return app.call("little-open-eval",id=sid,js="getComputedStyle(document.querySelector('h1')).fontFamily")
@@ -374,8 +385,8 @@ def run(factory, results, tmp, env):
             row("B20_edit_disabled_match",b20)
             def b22():
                 boostID=call()["boost"]["id"];original=call()["boost"].get("fontFamily")
-                font="Avenir" if original != "Avenir" else "Courier"
-                tap("font."+font)
+                font="Courier" if (original or "").startswith("Avenir") else "Avenir"
+                tap("font."+font);expected=call()["boost"]["fontFamily"]
                 app.call("command",id="view-boosts")
                 app.call("boost-library",action="rename",boost=boostID,name="Library rename")
                 app.call("boost-library",action="enabled",boost=boostID,enabled=True)
@@ -388,8 +399,9 @@ def run(factory, results, tmp, env):
                 call("key",key="z",modifiers=["cmd","shift"])
                 redone=call()["boost"]
                 tap("case");edited=call()["boost"]
-                return dict(positive=undone.get("fontFamily") == original and redone.get("fontFamily") == font and all(b["name"] == "Library rename" and b["isEnabled"] for b in [undone,redone,edited]),
-                            negative=synced["boost"]["name"] != "Disabled Boost" and synced["boost"]["isEnabled"],editorStayedOpen=synced["open"],libraryAddedUndo=False)
+                return dict(positive=undone.get("fontFamily") == original and redone.get("fontFamily") == expected and all(b["name"] == "Library rename" and b["isEnabled"] for b in [undone,redone,edited]),
+                            negative=synced["boost"]["name"] != "Disabled Boost" and synced["boost"]["isEnabled"],editorStayedOpen=synced["open"],libraryAddedUndo=False,originalFont=original,expectedFont=expected,
+                            undo={k:undone.get(k) for k in ("name","isEnabled","fontFamily")},redo={k:redone.get(k) for k in ("name","isEnabled","fontFamily")})
             row("B22_library_reconcile_undo",b22)
             def b23():
                 boostID=call()["boost"]["id"]
