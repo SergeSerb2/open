@@ -1246,7 +1246,7 @@ No unit tests (rule 6). Two harnesses, both real-app/real-engine:
   `colorAdjustment`.
 - **Engine e2e**: new suite `boostcolor` in `tools/e2e/engine_e2e.py` (`--only boostcolor`,
   choices list at `engine_e2e.py:3736`), run under the on-screen lock (rule 11):
-  `/usr/bin/lockf /tmp/open-onscreen-e2e.lock tools/e2e/engine_e2e.py --style chrome --only boostcolor`.
+  `/usr/bin/lockf -k /tmp/open-onscreen-e2e.lock tools/e2e/engine_e2e.py --style chrome --only boostcolor`.
   The suite serves `tools/e2e/fixtures/boost-color/` from a local HTTP server on an ephemeral
   port and creates Boosts through the real automation/store path. Hosts: `a.boost.test` and
   `b.boost.test` via host-resolver rules (§9.3) — same site, different hosts. They share a

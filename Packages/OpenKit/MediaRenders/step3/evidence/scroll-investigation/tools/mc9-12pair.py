@@ -25,7 +25,7 @@ binaries = {'baseline': baseline_bin, 'head': repo / 'Packages/OpenKit/.build/re
 records = []
 def run(label, name):
     command = [str(binaries[label]), 'bench', '--rows', '1000'] + (['--media-card'] if label == 'head' else [])
-    if args.lock: command = ['/usr/bin/lockf', args.lock] + command
+    if args.lock: command = ['/usr/bin/lockf', '-k', args.lock] + command
     result = subprocess.run(command, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True, check=True)
     (out / (name + '.log')).write_text(result.stdout)
     assert 'rows match the model after edits: yes' in result.stdout

@@ -1155,7 +1155,7 @@ Limits and end-to-end coverage: `docs/favicons.md`.
 | `~/Library/Caches/OpenRE/scripts/heavy.sh swift build --package-path Packages/OpenKit -c release -j 6 --product features-render` then `features-render favicon-check` | Restored source: 25/25 PASS; 1000 rows each with a stored icon, scroll p95 2.423 ms at 2x (335 steps; ceiling 8.33 ms). Full gate measured 1.359 ms. Harness measurements only. |
 | Break-and-revert proof | Disable stored-row lookup and add a 5 ms delay to each favicon draw: cold row and replacement checks FAIL; scroll p95 30.880 ms FAIL. Restore byte-identical source (`a77d89965587c01f06e576f251e29abff168ef9933ea6089782f8a1198026002`), rebuild, 25/25 PASS. |
 | `~/Library/Caches/OpenRE/scripts/heavy.sh tools/build.sh` | PASS; Debug real App, no Swift warnings |
-| `/usr/bin/lockf /tmp/open-onscreen-e2e.lock python3 tools/e2e/engine_e2e.py --style chrome --only sidebar-completion` | 111/111 PASS (105 baseline + six favicon flows); zero focus interruptions; cleanup PASS |
+| `/usr/bin/lockf -k /tmp/open-onscreen-e2e.lock python3 tools/e2e/engine_e2e.py --style chrome --only sidebar-completion` | 111/111 PASS (105 baseline + six favicon flows); zero focus interruptions; cleanup PASS |
 
 Source review: input limits, bounded queues, callback lifetime and read-only automation
 receipts checked. The engine hook queues data and URL before a consumer callback can
@@ -1192,7 +1192,7 @@ the current A3 note, section 9 timer/activity guidance, and the favicon note.
 | `git diff --check` | PASS |
 | `~/Library/Caches/OpenRE/scripts/heavy.sh tools/verify-all.sh --only favicons,features-render,sidebar-render,roundtrip` | 5/5 targets PASS; `features-render` 350/350, `sidebar-render` 564/564; stored-icon scroll p95 1.127 ms at 1000 rows |
 | `~/Library/Caches/OpenRE/scripts/heavy.sh tools/build.sh` | PASS; Debug App, no Swift warnings |
-| `/usr/bin/lockf /tmp/open-onscreen-e2e.lock python3 tools/e2e/engine_e2e.py --style chrome --only sidebar-completion` | 125/125 PASS; all favicon and auto-archive rows; first attempt, zero focus interruptions; cleanup PASS |
+| `/usr/bin/lockf -k /tmp/open-onscreen-e2e.lock python3 tools/e2e/engine_e2e.py --style chrome --only sidebar-completion` | 125/125 PASS; all favicon and auto-archive rows; first attempt, zero focus interruptions; cleanup PASS |
 
 Focus interruptions permit at most three attempts, with three minutes between
 attempts. Retry spacing is applied temporarily for this verification and the
@@ -1219,7 +1219,7 @@ The fixes and bounds are described in `docs/favicons.md`, "PR #131 corrections".
 | `git diff --check` and duplicate audits | PASS |
 | `~/Library/Caches/OpenRE/scripts/heavy.sh tools/verify-all.sh --only favicons,features-render,sidebar-render,roundtrip` | 5/5 targets PASS; features 352/352, sidebar 564/564; FV13/FV15 PASS; scroll p95 1.027 ms |
 | `~/Library/Caches/OpenRE/scripts/heavy.sh tools/build.sh` | PASS; Debug App, no Swift warnings |
-| `/usr/bin/lockf /tmp/open-onscreen-e2e.lock python3 tools/e2e/engine_e2e.py --style chrome --only sidebar-completion` | 155/155 PASS; FV14, intents/menu and auto-archive rows; no focus interruptions; cleanup PASS |
+| `/usr/bin/lockf -k /tmp/open-onscreen-e2e.lock python3 tools/e2e/engine_e2e.py --style chrome --only sidebar-completion` | 155/155 PASS; FV14, intents/menu and auto-archive rows; no focus interruptions; cleanup PASS |
 
 The first final App run stopped at the existing E14 Option-click check before
 any favicon report (created/retained host counts unchanged, no new Today tab).
@@ -1261,7 +1261,7 @@ The real-App FV16 covers both cross-origin missing/404 destinations after restar
 | `~/Library/Caches/OpenRE/scripts/heavy.sh tools/verify-all.sh --only favicons,features-render,sidebar-render,roundtrip` | 5/5 targets PASS; features 357/357, sidebar 564/564; FV13, FV15 and all five row-level FV16 checks PASS; 1000-row scroll p95 1.060 ms |
 | `~/Library/Caches/OpenRE/scripts/heavy.sh tools/verify-all.sh` | 22/22 default targets PASS; no failures or skips; features 357/357; stored-icon scroll p95 0.863 ms |
 | `~/Library/Caches/OpenRE/scripts/heavy.sh tools/build.sh` | PASS after final host change; Debug App, no Swift warnings |
-| `/usr/bin/lockf /tmp/open-onscreen-e2e.lock python3 tools/e2e/engine_e2e.py --style chrome --only sidebar-completion` | 156/156 PASS; FV14 and FV16 PASS; both FV16 destinations have zero records and placeholder source/empty image hash after relaunch; first attempt, no focus interruption; cleanup PASS |
+| `/usr/bin/lockf -k /tmp/open-onscreen-e2e.lock python3 tools/e2e/engine_e2e.py --style chrome --only sidebar-completion` | 156/156 PASS; FV14 and FV16 PASS; both FV16 destinations have zero records and placeholder source/empty image hash after relaunch; first attempt, no focus interruption; cleanup PASS |
 
 Source review: input/decoded/disk bounds remain unchanged; the ownership probe
 returns two bounded URL strings, not document contents. Close and navigation
