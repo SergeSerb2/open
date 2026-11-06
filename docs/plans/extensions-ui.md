@@ -1784,8 +1784,8 @@ and `settings-preview` conflict scenes separately prove the library/UI paths.
 `commands-dump` keeps missing/extra/different 0/0/0 and 11 allowed-missing rows.
 
 [Closeout PR](https://github.com/SergeSerb2/open/pull/new/s6/closeout-docs)
-adds `extensions-ui X27_shortcuts_menu_singleton`, `X27_user_binding_conflict`
-and `X27_restored_extension_command`. The real pane's native menu item opens
+adds `extensions-ui X27_shortcuts_menu_singleton`, `X27_binding_input_bounds`,
+`X27_user_binding_conflict` and `X27_restored_extension_command`. The real pane's native menu item opens
 and reselects one Today shortcuts tab. Its `record()` saves a New Tab user
 binding through `KeyBindingStore` and `AppSettingsActions.keyBindingsDidChange`.
 The rendered notice is exactly "Action Probe: ⇧⌘U is used by New Tab…, so it is off."
