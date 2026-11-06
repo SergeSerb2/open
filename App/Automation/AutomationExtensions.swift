@@ -3,9 +3,11 @@ import AppKit
 import OpenEngine
 import OpenExtensionsUI
 import OpenDesign
+import OpenCommands
 
 extension AutomationController {
   func runExtensionCommand(_ cmd: String, _ args: [String: Any]) async throws -> Any {
+    if cmd == "ext-shortcuts" { return try await extensionShortcuts(args) }
     if cmd == "ext-windows" {
       let key = "NSWindow Frame ExtensionPopupWindow"
       if args["preference"] as? Bool == true {
@@ -117,6 +119,58 @@ extension AutomationController {
     default: throw Failure(message: "unknown management action")
     }
     return true
+  }
+  /// X-27 uses the actual Settings model/save callback, menu target and rendered
+  /// notice labels. It never constructs a second conflict list for the check.
+  private func extensionShortcuts(_ args: [String: Any]) async throws -> Any {
+    let adapter = app.settingsPresenter
+    let model = adapter.settings.shortcuts
+    let action = args["action"] as? String ?? "state"
+    if action == "close" { adapter.settingsPresenter.window?.close(); return true }
+    guard adapter.settings.selectedPane == .shortcuts,
+      let window = adapter.settingsPresenter.window, window.isVisible,
+      let content = window.contentView else { throw Failure(message: "show Settings Shortcuts first") }
+    switch action {
+    case "reset-all": model.resetAll(confirmed: true)
+    case "record", "reset":
+      guard let id = args["id"] as? String, let command = CommandRegistry.byID[id],
+        command.isCustomizable, !command.isReserved else { throw Failure(message: "unknown customizable command") }
+      if action == "reset" { model.reset(id) }
+      else {
+        guard let key = args["key"] as? String, key.utf8.count == 1,
+          let modifiers = args["modifiers"] as? [String], modifiers.count <= 4,
+          modifiers.allSatisfy({ ["command", "shift", "option", "control"].contains($0) }) else { throw Failure(message: "invalid shortcut") }
+        var flags: ShortcutModifiers = []
+        for modifier in modifiers {
+          switch modifier { case "command": flags.insert(.command); case "shift": flags.insert(.shift)
+          case "option": flags.insert(.option); default: flags.insert(.control) }
+        }
+        model.record(KeyboardShortcut(key: key, modifiers: flags), for: id)
+      }
+    case "state", "menu": break
+    default: throw Failure(message: "unknown shortcuts action")
+    }
+    // Allow SwiftUI to update its native representable after a saved binding.
+    try await Task.sleep(for: .milliseconds(50))
+    content.layoutSubtreeIfNeeded()
+    func descendants(_ view: NSView, depth: Int = 0) -> [NSView] {
+      guard depth < 64 else { return [] }
+      return [view] + view.subviews.flatMap { descendants($0, depth: depth + 1) }
+    }
+    let views = descendants(content)
+    guard let button = views.compactMap({ $0 as? NSPopUpButton }).first(where: {
+      $0.accessibilityLabel() == "More shortcut actions" && !$0.isHiddenOrHasHiddenAncestor
+    }), let menu = button.menu else { throw Failure(message: "no Shortcuts more menu") }
+    let titles = describeExtensionMenu(menu)
+    if action == "menu", let title = args["select"] as? String { try selectExtensionMenu(menu, title: title) }
+    let notices = views.compactMap { $0 as? NSTextField }.filter {
+      !$0.isHiddenOrHasHiddenAncestor && $0.stringValue.hasSuffix(", so it is off.")
+    }.map(\.stringValue)
+    let id = args["id"] as? String ?? ""
+    return ["menu": titles, "notices": notices, "status": model.statusText,
+      "bindingCount": model.store.bindings.count,
+      "openCommandTitle": CommandRegistry.byID[id]?.title ?? "",
+      "window": window.windowNumber] as [String: Any]
   }
 }
 #endif

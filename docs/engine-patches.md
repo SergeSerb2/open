@@ -309,8 +309,9 @@ Results: `docs/engine-spike/results-actions-p2.json`, `results-extensions-chrome
 
 ### Status: implemented (Section 6, `s6/engine-p3`)
 
-P3 implements E8/E9/E10 of extensions-ui §7. The App's designed sheets and
-in-window shortcut routing remain the lead's App step.
+P3 implements E8/E9/E10 of extensions-ui §7 ([#177](https://github.com/SergeSerb2/open/pull/177)).
+The App's designed sheets and in-window shortcut routing are now wired in
+[#189](https://github.com/SergeSerb2/open/pull/189); `extensions-ui` proves those paths.
 
 | Part | Implementation |
 |---|---|
@@ -319,7 +320,7 @@ in-window shortcut routing remain the lead's App step.
 | Consent hooks | Chromium `0305-open-extension-prompts.patch`: thin hooks in `extension_install_dialog_view.cc` and `extension_uninstall_dialog_impl.cc`. Header-only hook table, as with 0504: Chromium targets do not depend on libcef. No shell handler means the original platform dialog path. |
 | Web Store downloads | CEF `0305-open-webstore-downloads.patch`: its orphan-download guard permits only `EXTENSION_INSTALLER` downloads from an exact dummy WebContents owned by an active manager request. Chrome still chooses the target and verifies the manifest and CRX signature. Normal orphan downloads keep CEF's rejection path. |
 | OpenEngine | Live registry replaces `OEExtensions.mm`'s Preferences/manifest reader and watcher. Public prompt metadata, once-only accept/cancel and release-to-cancel, command snapshots/execution, action shortcut fields and registry delegate events. |
-| Automation | `AutomationExtensions.swift`: `ext-prompt`, `ext-manage`, `ext-commands`, `ext-run-command`. Automation owns pending prompts; no App UI design. `--only extensions-p3` uses a locally signed CRX3 through `CrxInstaller`, not `--load-extension`, for install consent. |
+| Automation | `AutomationExtensions.swift`: `ext-prompt`, `ext-manage`, `ext-commands`, `ext-run-command`. The shared App presenter owns pending prompts and designed Open sheets (#189); automation observes/answers them. `--only extensions-p3` uses a locally signed CRX3 through `CrxInstaller`, not `--load-extension`, for install consent. |
 | P2 review | Process-wide non-recycling menu ids reject stale toolbar generations (R2-5). `popup_` outlives `model_` (R2-11). Skip same-document refreshes and delete `_actionsNeedRefresh`'s duplicate rebuild (R2-10). Prune removed extensions' images; document main-thread menu release (R2-13). |
 
 Deviations and limits:
@@ -333,8 +334,9 @@ Deviations and limits:
   forwarded from the current API.
 - `byUser` is true for a fresh non-policy, non-command-line install and false
   for updates/startup command-line loads (guess (child): the registry observer
-  has no user-gesture argument). E11/E12 should use registry events and the
-  live `omniboxKeyword`; the omnibox event API and popup windows are not P3.
+  has no user-gesture argument). E11/E12 use registry events and the live
+  `omniboxKeyword`; those APIs/windows landed separately in #184, as described
+  in the summary above.
 - Bridge snapshots are limited to 1,024 extensions/commands/permission lines
   and 64 KiB per string. Manifest icons use at most 4 MiB encoded and
   2,048×2,048 decoded 8-bit pixels in known color models (16 MiB). There is no new polling timer.
@@ -541,7 +543,7 @@ Section 8 decisions (differences from page-platform §6, with the reason):
 2. `chrome.windows`: one Chrome window per Open window. Its tab strip holds every LIVE tab of that window across all Spaces (placeholders and sleeping tabs are absent until loaded); the focused tab is the active tab. Space switches do not churn the strip.
 3. ~~Folders map to `chrome.tabGroups` (title = folder name, collapsed = folder collapsed) after core P1 works.~~ Superseded (lead, 2026-10-25): follow Arc. There is no evidence that Arc maps folders to tab groups (docs/re/arccore-engine.md §4.3.1), so v1 has no tab groups (an Open decision, not an Arc fact): folder tabs keep their pinned state in `chrome.tabs` (`groupId` -1), and Open's hidden windows have no tab group model, so `chrome.tabs.group` fails with Chrome's own error and `chrome.tabGroups.query` is empty (patch `0304`, e2e `--only tabstrip` → `no_tab_groups`). Splits are not tab groups. Known v1 differences from Chrome (Open decisions, not Arc facts; docs/re/arccore-engine.md §4.3.1): `chrome.tabs.group` and `chrome.tabs.ungroup` reject with "Grouping is not supported by tabs in this window." (`ungroup` too, even for a tab in no group), `chrome.tabGroups.get/update/move` reject with no group for that id, `Tab.groupId` is -1 for every tab, and `tabGroups.on*` events never fire. Auto-grouping extensions and tab managers lose their grouping features.
 4. ~~Default profile engine data stays at `Profiles/Default/` (CEF's fixed default slot); other profiles use `Profiles/<dir>/Engine/`.~~ Superseded (lead, 2026-10-25): one engine root, `<root>/Engine/` = `root_cache_path`; `Engine/Default` for the default profile, `Engine/<dir>` for the others (CEF loads a disk profile only for a direct child of `root_cache_path`). Open's own files stay in `Profiles/<dir>/`. See docs/plans/profiles.md §6.2 and its appendix.
-5. Until P1 lands: extensions run in our own views; the Chrome-style window remains available (debug/advanced menu) for the Web Store and `chrome://extensions`.
+5. Historical pre-P1 fallback: extensions ran in our own views, with a Chrome-style debug window for the Web Store/management. Superseded by P1 and the native App wiring (#189): store/management pages now use Open tabs.
 
 ## Verification (Section 8, merged)
 
