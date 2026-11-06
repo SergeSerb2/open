@@ -1,19 +1,99 @@
 {
+  "cleanup": {
+    "ok": true,
+    "processes": [
+      {
+        "forced": false,
+        "ok": true,
+        "owned_pids": [
+          24231,
+          24242,
+          24243,
+          24244,
+          24245,
+          24247,
+          24248,
+          24310,
+          24325,
+          24391
+        ],
+        "remaining_processes": [],
+        "reply": true,
+        "windows_after_quit": {
+          "count": 0,
+          "windows": []
+        },
+        "windows_before_quit": 1
+      },
+      {
+        "forced": false,
+        "ok": true,
+        "owned_pids": [
+          24497,
+          24514,
+          24515,
+          24516,
+          24517,
+          24522,
+          24523
+        ],
+        "remaining_processes": [],
+        "reply": true,
+        "windows_after_quit": {
+          "count": 0,
+          "windows": []
+        },
+        "windows_before_quit": 1
+      },
+      {
+        "forced": false,
+        "ok": true,
+        "owned_pids": [
+          24575,
+          24591,
+          24592,
+          24593,
+          24594,
+          24596,
+          24597
+        ],
+        "remaining_processes": [],
+        "reply": true,
+        "windows_after_quit": {
+          "count": 0,
+          "windows": []
+        },
+        "windows_before_quit": 1
+      }
+    ]
+  },
   "config": "Debug",
   "engine": {
-    "distributionUUID": "4C4C44FE-5555-3144-A175-7398C5A1D4B4",
-    "embeddedUUID": "4C4C44FE-5555-3144-A175-7398C5A1D4B4",
+    "distributionCodeSHA256": "7979934c0d84f4d9fedb3859826d0c7c65919834fc904ec2aee00a0b4e4dd8f2",
+    "distributionSHA256": "7b49090502568f8189aa0e94f7cf23344beec5bed537136eff5f7fce573ad35a",
+    "distributionUUID": "4C4C446F-5555-3144-A1AB-0A55260E4EBE",
+    "embeddedCodeSHA256": "7979934c0d84f4d9fedb3859826d0c7c65919834fc904ec2aee00a0b4e4dd8f2",
+    "embeddedSHA256": "ec8cdb8039674748940441956a1ae529423ae15c05ac972a806a9afb12a657c0",
+    "embeddedUUID": "4C4C446F-5555-3144-A1AB-0A55260E4EBE",
+    "requiredSHA256": "7b49090502568f8189aa0e94f7cf23344beec5bed537136eff5f7fce573ad35a",
     "source": "fork",
-    "stamp": "fork /Users/serge/Developer/open-engine/chromium_git/chromium/src/cef/binary_distrib/cef_binary_156.0.14+g4fa4ab5+chromium-156.0.8078.48_macosarm64_minimal 1792989125"
+    "stamp": "fork $HOME/Developer/open-engine-s8-main/chromium_git/chromium/src/cef/binary_distrib/cef_binary_156.0.14+g4fa4ab5+chromium-156.0.8078.48_macosarm64_minimal 1793940850"
   },
+  "interrupted_attempts": [],
+  "pathRedactions": [
+    "$WORKTREE",
+    "$HOME",
+    "$TMPDIR"
+  ],
   "shell": {
     "fresh_model": {
       "ok": true,
       "spaces": [
         {
           "focused": true,
-          "id": "4A5ABB3F-7DAB-4E18-8DB5-E38EF223A642",
+          "id": "957F9762-0BB0-47DC-A30F-5A195B484329",
           "pinned": 0,
+          "profile": "489CA6F0-2B07-4AB2-864D-F06ADC847560",
           "title": "Space",
           "today": 0
         }
@@ -24,8 +104,8 @@
       "ok": true,
       "restored_same_id": true,
       "routes": {
-        "cmd_l_window": "NSTextView",
-        "cmd_t_app": "NSTextView"
+        "cmd_l_window": "CommandBarFieldEditor",
+        "cmd_t_app": "CommandBarFieldEditor"
       },
       "tabs": [
         3,
@@ -40,6 +120,83 @@
       "ok": true,
       "snapshot": "State/browser.json",
       "tabs": 4
+    },
+    "quit_order_owned_work": {
+      "ok": true,
+      "pendingBeforeQuit": {
+        "background": 1,
+        "captures": 1
+      },
+      "quit": {
+        "forced": false,
+        "ok": true,
+        "owned_pids": [
+          24575,
+          24591,
+          24592,
+          24593,
+          24594,
+          24596,
+          24597
+        ],
+        "remaining_processes": [],
+        "reply": true,
+        "windows_after_quit": {
+          "count": 0,
+          "windows": []
+        },
+        "windows_before_quit": 1
+      },
+      "trace": [
+        {
+          "asyncEngineCalls": {},
+          "backgroundTasks": 1,
+          "captureTasks": 1,
+          "closedFactories": 0,
+          "factories": 1,
+          "hosts": 1,
+          "lateAsyncEngineCalls": 0,
+          "phase": "prepare",
+          "selectionTasks": 0,
+          "uptime": 46943.53500891667
+        },
+        {
+          "asyncEngineCalls": {},
+          "backgroundTasks": 0,
+          "captureTasks": 0,
+          "closedFactories": 1,
+          "factories": 1,
+          "hosts": 0,
+          "lateAsyncEngineCalls": 0,
+          "phase": "hostsClosed",
+          "selectionTasks": 0,
+          "uptime": 46943.539560958336
+        },
+        {
+          "asyncEngineCalls": {},
+          "backgroundTasks": 0,
+          "captureTasks": 0,
+          "closedFactories": 1,
+          "factories": 1,
+          "hosts": 0,
+          "lateAsyncEngineCalls": 0,
+          "phase": "engineShutdownBegin",
+          "selectionTasks": 0,
+          "uptime": 46943.55291141667
+        },
+        {
+          "asyncEngineCalls": {},
+          "backgroundTasks": 0,
+          "captureTasks": 0,
+          "closedFactories": 1,
+          "factories": 1,
+          "hosts": 0,
+          "lateAsyncEngineCalls": 0,
+          "phase": "engineShutdownEnd",
+          "selectionTasks": 0,
+          "uptime": 46943.62096458334
+        }
+      ]
     },
     "split_view": {
       "ok": true,
@@ -68,15 +225,15 @@
       "strip": [
         [
           0,
-          "92763B7E-7A11-40A3-A65A-2F6DC696FDEC"
+          "8A0C4134-0327-4A11-860C-9345B112656D"
         ],
         [
           1,
-          "91F94C6E-4D68-4F55-B751-8C44C89C2156"
+          "B5364ABF-0042-4AD3-A146-3ED7FD3B277D"
         ],
         [
           2,
-          "6C1A9DDF-BB22-4311-8922-128D225B2EC9"
+          "06D243A6-407D-4E90-A4D9-1692C082FA8D"
         ]
       ]
     },
@@ -86,6 +243,11 @@
       "ok": true
     }
   },
-  "started": "2026-10-25 23:28:09",
-  "style": "alloy"
+  "source": {
+    "clean": true,
+    "diffSHA256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "head": "a7e73498c3e68336217d8db40fbebe6ce6b89773"
+  },
+  "started": "2026-11-05 22:18:35",
+  "style": "chrome"
 }

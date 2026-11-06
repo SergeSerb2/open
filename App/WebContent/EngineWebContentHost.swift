@@ -94,6 +94,7 @@ final class EngineWebContentHost: NSObject, WebContentHost, WebContentProviding,
     onURLChange = nil; onTitleChange = nil; onLoadingChange = nil; onFaviconChange = nil; shouldNavigate = nil
     onPageBackgroundChange = nil; onLiveStateChange = nil
     cachedFaviconImage = nil; cachedFaviconPNG = nil; cachedFaviconURL = nil; faviconImagePageURL = nil; lastReportedFavicon = nil
+    owner?.pageChrome.cancel(content)
     content.delegate = nil; content.close(); content.view.removeFromSuperview()
     owner?.hostDidClose(self)
   }
@@ -257,9 +258,10 @@ final class EngineWebContentHost: NSObject, WebContentHost, WebContentProviding,
     guard !closed else { return false }
     return !userGesture || shouldNavigate?(url, modifiers) != false
   }
-  func webContentDidRequestClose(_ page: OEWebContent) { if !closed { owner?.close(page: page) } }
+  func webContentDidRequestClose(_ page: OEWebContent) { if !closed { owner?.webContentDidRequestClose(page) } }
   func webContent(_ page: OEWebContent, handleKeyEventBeforePage event: NSEvent) -> Bool {
     guard !closed else { return false }
+    if owner?.pageChrome.handleKey(event) == true { return true }
     if owner?.controller?.handleKeyDown(event) == true { return true }
     // A key the page receives: tab sleep's form proxy (discard waits 5 min after typing).
     if event.type == .keyDown { owner?.app.tabSleep.pageKeyDown(tabID: tabID) }

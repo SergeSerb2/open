@@ -1,0 +1,1022 @@
+{
+  "cleanup": {
+    "ok": true,
+    "processes": [
+      {
+        "forced": false,
+        "ok": true,
+        "owned_pids": [
+          9209,
+          9680,
+          9685,
+          9720,
+          9729,
+          9730,
+          12814,
+          12999,
+          13001,
+          13003,
+          13004,
+          13005,
+          13006,
+          13007,
+          13008,
+          13009,
+          13180,
+          13181,
+          14215,
+          14585,
+          14721,
+          14723,
+          14724,
+          14725,
+          14726,
+          14727,
+          14728,
+          14729,
+          14731
+        ],
+        "remaining_processes": [],
+        "reply": true,
+        "windows_after_quit": {
+          "count": 0,
+          "windows": []
+        },
+        "windows_before_quit": 1
+      },
+      {
+        "error": "[Errno 2] No such file or directory",
+        "forced": false,
+        "ok": true,
+        "owned_pids": [
+          14747,
+          14766,
+          14767,
+          14768,
+          14769,
+          14774,
+          14786,
+          14796,
+          14797,
+          14819,
+          14821,
+          14822,
+          14824,
+          14825,
+          14826,
+          14827,
+          14828,
+          14830,
+          14831
+        ],
+        "remaining_processes": [],
+        "windows_after_quit": {
+          "count": 0,
+          "windows": []
+        },
+        "windows_before_quit": 0
+      }
+    ]
+  },
+  "config": "Debug",
+  "engine": {
+    "distributionCodeSHA256": "7979934c0d84f4d9fedb3859826d0c7c65919834fc904ec2aee00a0b4e4dd8f2",
+    "distributionSHA256": "7b49090502568f8189aa0e94f7cf23344beec5bed537136eff5f7fce573ad35a",
+    "distributionUUID": "4C4C446F-5555-3144-A1AB-0A55260E4EBE",
+    "embeddedCodeSHA256": "7979934c0d84f4d9fedb3859826d0c7c65919834fc904ec2aee00a0b4e4dd8f2",
+    "embeddedSHA256": "ec8cdb8039674748940441956a1ae529423ae15c05ac972a806a9afb12a657c0",
+    "embeddedUUID": "4C4C446F-5555-3144-A1AB-0A55260E4EBE",
+    "requiredSHA256": "7b49090502568f8189aa0e94f7cf23344beec5bed537136eff5f7fce573ad35a",
+    "source": "fork",
+    "stamp": "fork $HOME/Developer/open-engine-s8-main/chromium_git/chromium/src/cef/binary_distrib/cef_binary_156.0.14+g4fa4ab5+chromium-156.0.8078.48_macosarm64_minimal 1793940850"
+  },
+  "interrupted_attempts": [],
+  "page-chrome": {
+    "dialog_alert": {
+      "ok": true,
+      "result": "done",
+      "state": {
+        "buttons": [
+          "OK"
+        ],
+        "held": false,
+        "informativeText": "page message",
+        "kind": 0,
+        "message": "page message",
+        "pending": 1,
+        "promptWidth": 0,
+        "queued": false,
+        "sourceMessageBytes": 12,
+        "sourcePromptBytes": 0,
+        "suppressible": false,
+        "suppressionTitle": "",
+        "text": "",
+        "title": "127.0.0.1 says",
+        "visible": true,
+        "window": 128412
+      }
+    },
+    "dialog_alert_native_escape": {
+      "ok": true,
+      "state": {
+        "buttons": [
+          "OK"
+        ],
+        "held": false,
+        "informativeText": "native alert",
+        "kind": 0,
+        "message": "native alert",
+        "pending": 1,
+        "promptWidth": 0,
+        "queued": false,
+        "sourceMessageBytes": 12,
+        "sourcePromptBytes": 0,
+        "suppressible": false,
+        "suppressionTitle": "",
+        "text": "",
+        "title": "127.0.0.1 says",
+        "visible": true,
+        "window": 128562
+      }
+    },
+    "dialog_alert_native_return": {
+      "ok": true,
+      "state": {
+        "buttons": [
+          "OK"
+        ],
+        "held": false,
+        "informativeText": "native alert",
+        "kind": 0,
+        "message": "native alert",
+        "pending": 1,
+        "promptWidth": 0,
+        "queued": false,
+        "sourceMessageBytes": 12,
+        "sourcePromptBytes": 0,
+        "suppressible": false,
+        "suppressionTitle": "",
+        "text": "",
+        "title": "127.0.0.1 says",
+        "visible": true,
+        "window": 128560
+      }
+    },
+    "dialog_background_select": {
+      "ok": true,
+      "other": "74834ACD-1BDA-4718-9290-09D33A574203",
+      "shown": {
+        "buttons": [
+          "OK",
+          "Cancel"
+        ],
+        "held": false,
+        "informativeText": "background",
+        "kind": 1,
+        "message": "background",
+        "pending": 1,
+        "promptWidth": 0,
+        "queued": false,
+        "sourceMessageBytes": 10,
+        "sourcePromptBytes": 0,
+        "suppressible": false,
+        "suppressionTitle": "",
+        "text": "",
+        "title": "127.0.0.1 says",
+        "visible": true,
+        "window": 128552
+      },
+      "waiting": {
+        "buttons": [],
+        "held": false,
+        "informativeText": "",
+        "kind": 1,
+        "message": "background",
+        "pending": 1,
+        "promptWidth": 0,
+        "queued": true,
+        "sourceMessageBytes": 10,
+        "sourcePromptBytes": 0,
+        "suppressible": false,
+        "suppressionTitle": "",
+        "text": "",
+        "title": "127.0.0.1 says",
+        "visible": false,
+        "window": 0
+      }
+    },
+    "dialog_beforeunload_close": {
+      "keptHost": true,
+      "ok": true,
+      "state": {
+        "buttons": [
+          "OK",
+          "Cancel"
+        ],
+        "held": false,
+        "informativeText": "Changes you made may not be saved.",
+        "kind": 3,
+        "message": "Is it OK to leave/reload this page?",
+        "pending": 1,
+        "promptWidth": 0,
+        "queued": false,
+        "sourceMessageBytes": 35,
+        "sourcePromptBytes": 0,
+        "suppressible": false,
+        "suppressionTitle": "",
+        "text": "",
+        "title": "Leave site?",
+        "visible": true,
+        "window": 128566
+      }
+    },
+    "dialog_beforeunload_reload": {
+      "keptHost": true,
+      "ok": true,
+      "state": {
+        "buttons": [
+          "OK",
+          "Cancel"
+        ],
+        "held": false,
+        "informativeText": "Changes you made may not be saved.",
+        "kind": 3,
+        "message": "Is it OK to leave/reload this page?",
+        "pending": 1,
+        "promptWidth": 0,
+        "queued": false,
+        "sourceMessageBytes": 35,
+        "sourcePromptBytes": 0,
+        "suppressible": false,
+        "suppressionTitle": "",
+        "text": "",
+        "title": "Reload site?",
+        "visible": true,
+        "window": 128570
+      }
+    },
+    "dialog_close_once": {
+      "answers": [
+        {
+          "accepted": false,
+          "content": 54,
+          "kind": 1,
+          "tab": "F08EE1B8-F40D-45FE-B3E7-A0B7A66EB17B",
+          "time": 1793942044.3869581,
+          "type": "dialogAnswer"
+        }
+      ],
+      "ok": true
+    },
+    "dialog_confirm_cancel": {
+      "ok": true,
+      "result": false,
+      "state": {
+        "buttons": [
+          "OK",
+          "Cancel"
+        ],
+        "held": false,
+        "informativeText": "page message",
+        "kind": 1,
+        "message": "page message",
+        "pending": 1,
+        "promptWidth": 0,
+        "queued": false,
+        "sourceMessageBytes": 12,
+        "sourcePromptBytes": 0,
+        "suppressible": false,
+        "suppressionTitle": "",
+        "text": "",
+        "title": "127.0.0.1 says",
+        "visible": true,
+        "window": 128416
+      }
+    },
+    "dialog_confirm_ok": {
+      "ok": true,
+      "result": true,
+      "state": {
+        "buttons": [
+          "OK",
+          "Cancel"
+        ],
+        "held": false,
+        "informativeText": "page message",
+        "kind": 1,
+        "message": "page message",
+        "pending": 1,
+        "promptWidth": 0,
+        "queued": false,
+        "sourceMessageBytes": 12,
+        "sourcePromptBytes": 0,
+        "suppressible": false,
+        "suppressionTitle": "",
+        "text": "",
+        "title": "127.0.0.1 says",
+        "visible": true,
+        "window": 128414
+      }
+    },
+    "dialog_message_limit": {
+      "at": 8192,
+      "ok": true,
+      "over": 8193
+    },
+    "dialog_policy_accept": {
+      "ok": true,
+      "result": [
+        true,
+        "policy text"
+      ]
+    },
+    "dialog_policy_dismiss": {
+      "ok": true,
+      "result": [
+        false,
+        null
+      ]
+    },
+    "dialog_policy_hold": {
+      "ok": true
+    },
+    "dialog_prompt_cancel": {
+      "ok": true,
+      "result": null,
+      "state": {
+        "buttons": [
+          "OK",
+          "Cancel"
+        ],
+        "held": false,
+        "informativeText": "page message",
+        "kind": 2,
+        "message": "page message",
+        "pending": 1,
+        "promptWidth": 260,
+        "queued": false,
+        "sourceMessageBytes": 12,
+        "sourcePromptBytes": 4,
+        "suppressible": false,
+        "suppressionTitle": "",
+        "text": "seed",
+        "title": "127.0.0.1 says",
+        "visible": true,
+        "window": 128430
+      }
+    },
+    "dialog_prompt_limit": {
+      "at": 4096,
+      "ok": true,
+      "over": 4097
+    },
+    "dialog_prompt_native_return": {
+      "ok": true,
+      "state": {
+        "buttons": [
+          "OK",
+          "Cancel"
+        ],
+        "held": false,
+        "informativeText": "native prompt",
+        "kind": 2,
+        "message": "native prompt",
+        "pending": 1,
+        "promptWidth": 260,
+        "queued": false,
+        "sourceMessageBytes": 13,
+        "sourcePromptBytes": 4,
+        "suppressible": false,
+        "suppressionTitle": "",
+        "text": "seed",
+        "title": "127.0.0.1 says",
+        "visible": true,
+        "window": 128554
+      }
+    },
+    "dialog_prompt_ok": {
+      "ok": true,
+      "result": "typed response",
+      "state": {
+        "buttons": [
+          "OK",
+          "Cancel"
+        ],
+        "held": false,
+        "informativeText": "page message",
+        "kind": 2,
+        "message": "page message",
+        "pending": 1,
+        "promptWidth": 260,
+        "queued": false,
+        "sourceMessageBytes": 12,
+        "sourcePromptBytes": 4,
+        "suppressible": false,
+        "suppressionTitle": "",
+        "text": "seed",
+        "title": "127.0.0.1 says",
+        "visible": true,
+        "window": 128420
+      }
+    },
+    "dialog_quit_cancel": {
+      "ok": true,
+      "state": {
+        "buttons": [
+          "OK",
+          "Cancel"
+        ],
+        "held": false,
+        "informativeText": "Changes you made may not be saved.",
+        "kind": 3,
+        "message": "Is it OK to leave/reload this page?",
+        "pending": 1,
+        "promptWidth": 0,
+        "queued": false,
+        "sourceMessageBytes": 35,
+        "sourcePromptBytes": 0,
+        "suppressible": false,
+        "suppressionTitle": "",
+        "text": "",
+        "title": "Leave site?",
+        "visible": true,
+        "window": 128574
+      }
+    },
+    "dialog_quit_ok": {
+      "ok": true,
+      "state": {
+        "buttons": [
+          "OK",
+          "Cancel"
+        ],
+        "held": false,
+        "informativeText": "Changes you made may not be saved.",
+        "kind": 3,
+        "message": "Is it OK to leave/reload this page?",
+        "pending": 1,
+        "promptWidth": 0,
+        "queued": false,
+        "sourceMessageBytes": 35,
+        "sourcePromptBytes": 0,
+        "suppressible": false,
+        "suppressionTitle": "",
+        "text": "",
+        "title": "Leave site?",
+        "visible": true,
+        "window": 128593
+      }
+    },
+    "dialog_sheet_native_keys": {
+      "blocked": [
+        true,
+        true,
+        true
+      ],
+      "ok": true
+    },
+    "dialog_suppression": {
+      "first": {
+        "buttons": [
+          "OK"
+        ],
+        "held": false,
+        "informativeText": "first",
+        "kind": 0,
+        "message": "first",
+        "pending": 1,
+        "promptWidth": 0,
+        "queued": false,
+        "sourceMessageBytes": 5,
+        "sourcePromptBytes": 0,
+        "suppressible": false,
+        "suppressionTitle": "",
+        "text": "",
+        "title": "127.0.0.1 says",
+        "visible": true,
+        "window": 128507
+      },
+      "ok": true,
+      "result": [
+        false,
+        null,
+        true
+      ],
+      "second": {
+        "buttons": [
+          "OK",
+          "Cancel"
+        ],
+        "held": false,
+        "informativeText": "second",
+        "kind": 1,
+        "message": "second",
+        "pending": 1,
+        "promptWidth": 0,
+        "queued": false,
+        "sourceMessageBytes": 6,
+        "sourcePromptBytes": 0,
+        "suppressible": true,
+        "suppressionTitle": "Don't show this again",
+        "text": "",
+        "title": "127.0.0.1 says",
+        "visible": true,
+        "window": 128528
+      },
+      "suppressed": 3
+    },
+    "dialog_suppression_navigation_scope": {
+      "ok": true,
+      "sameSuppressed": 1,
+      "state": {
+        "buttons": [
+          "OK"
+        ],
+        "held": false,
+        "informativeText": "new document",
+        "kind": 0,
+        "message": "new document",
+        "pending": 1,
+        "promptWidth": 0,
+        "queued": false,
+        "sourceMessageBytes": 12,
+        "sourcePromptBytes": 0,
+        "suppressible": false,
+        "suppressionTitle": "",
+        "text": "",
+        "title": "127.0.0.1 says",
+        "visible": true,
+        "window": 128550
+      }
+    },
+    "dialog_suppression_reload_reset": {
+      "ok": true,
+      "state": {
+        "buttons": [
+          "OK"
+        ],
+        "held": false,
+        "informativeText": "after reload",
+        "kind": 0,
+        "message": "after reload",
+        "pending": 1,
+        "promptWidth": 0,
+        "queued": false,
+        "sourceMessageBytes": 12,
+        "sourcePromptBytes": 0,
+        "suppressible": false,
+        "suppressionTitle": "",
+        "text": "",
+        "title": "127.0.0.1 says",
+        "visible": true,
+        "window": 128544
+      }
+    },
+    "dialog_title_data": {
+      "ok": true,
+      "title": "This page says"
+    },
+    "dialog_title_file": {
+      "ok": true,
+      "title": "This page says"
+    },
+    "dialog_title_unicode_www": {
+      "ok": true,
+      "title": "www.bücher.localhost says"
+    },
+    "permission_allow_remember_data": {
+      "decisions": {
+        "decisions": [
+          {
+            "kind": 8,
+            "origin": "http://remember.localhost:63316",
+            "state": 1
+          }
+        ],
+        "ready": true
+      },
+      "ok": true,
+      "state": {
+        "anchor": {
+          "edge": 3,
+          "frame": [
+            88,
+            738,
+            212,
+            36
+          ],
+          "name": "sidebar-url"
+        },
+        "buttons": [
+          "Not Now",
+          "Allow"
+        ],
+        "decisions": 2,
+        "help": "Click the lock to change this any time",
+        "keyWindow": 128411,
+        "kinds": 8,
+        "origin": "http://remember.localhost:63316/",
+        "parent": 128411,
+        "pending": 1,
+        "pendingPage": 594,
+        "promptKey": true,
+        "question": "Allow remember.localhost to send you notifications?",
+        "selectedPage": 594,
+        "visible": true,
+        "window": 128576
+      },
+      "stored": 1
+    },
+    "permission_anchor_content-top-left": {
+      "ok": true,
+      "state": {
+        "anchor": {
+          "edge": 3,
+          "frame": [
+            114,
+            809,
+            1,
+            1
+          ],
+          "name": "content-top-left"
+        },
+        "buttons": [
+          "Not Now",
+          "Allow"
+        ],
+        "decisions": 7,
+        "help": "Click the lock to change this any time",
+        "keyWindow": 128411,
+        "kinds": 8,
+        "origin": "http://hidden-content-top-left.localhost:63316/",
+        "parent": 128411,
+        "pending": 1,
+        "pendingPage": 875,
+        "promptKey": true,
+        "question": "Allow hidden-content-top-left.localhost to send you notifications?",
+        "selectedPage": 875,
+        "visible": true,
+        "window": 128576
+      }
+    },
+    "permission_anchor_toolbar-url": {
+      "ok": true,
+      "state": {
+        "anchor": {
+          "edge": 3,
+          "frame": [
+            541,
+            786,
+            174,
+            16
+          ],
+          "name": "toolbar-url"
+        },
+        "buttons": [
+          "Not Now",
+          "Allow"
+        ],
+        "decisions": 8,
+        "help": "Click the lock to change this any time",
+        "keyWindow": 128411,
+        "kinds": 8,
+        "origin": "http://hidden-toolbar-url.localhost:63316/",
+        "parent": 128411,
+        "pending": 1,
+        "pendingPage": 937,
+        "promptKey": true,
+        "question": "Allow hidden-toolbar-url.localhost to send you notifications?",
+        "selectedPage": 937,
+        "visible": true,
+        "window": 128576
+      }
+    },
+    "permission_background_select": {
+      "appQueued": false,
+      "hidden": true,
+      "ok": true,
+      "other": "CF573A2E-4783-4365-9F11-95A0C2476BE3",
+      "state": {
+        "anchor": {
+          "edge": 3,
+          "frame": [
+            88,
+            738,
+            212,
+            36
+          ],
+          "name": "sidebar-url"
+        },
+        "buttons": [
+          "Not Now",
+          "Allow"
+        ],
+        "decisions": 6,
+        "help": "Click the lock to change this any time",
+        "keyWindow": 128411,
+        "kinds": 8,
+        "origin": "http://background.localhost:63316/",
+        "parent": 128411,
+        "pending": 1,
+        "pendingPage": 815,
+        "promptKey": true,
+        "question": "Allow background.localhost to send you notifications?",
+        "selectedPage": 815,
+        "visible": true,
+        "window": 128576
+      }
+    },
+    "permission_close_once": {
+      "events": [
+        {
+          "content": 758,
+          "decision": "dismiss",
+          "tab": "3B034A3B-F850-4F92-92A6-C00BBBA60B22",
+          "time": 1793942070.442521,
+          "type": "permissionAnswer"
+        }
+      ],
+      "ok": true
+    },
+    "permission_midi_real_request": {
+      "ok": true,
+      "state": {
+        "anchor": {
+          "edge": 3,
+          "frame": [
+            88,
+            738,
+            212,
+            36
+          ],
+          "name": "sidebar-url"
+        },
+        "buttons": [
+          "Not Now",
+          "Allow"
+        ],
+        "decisions": 9,
+        "help": "Click the lock to change this any time",
+        "keyWindow": 128411,
+        "kinds": 32,
+        "origin": "http://midi.localhost:63316/",
+        "parent": 128411,
+        "pending": 1,
+        "pendingPage": 1001,
+        "promptKey": true,
+        "question": "Allow midi.localhost to access your MIDI devices?",
+        "selectedPage": 1001,
+        "visible": true,
+        "window": 128576
+      }
+    },
+    "permission_native_escape": {
+      "ok": true,
+      "state": {
+        "anchor": {
+          "edge": 3,
+          "frame": [
+            88,
+            738,
+            212,
+            36
+          ],
+          "name": "sidebar-url"
+        },
+        "buttons": [
+          "Not Now",
+          "Allow"
+        ],
+        "decisions": 10,
+        "help": "Click the lock to change this any time",
+        "keyWindow": 128411,
+        "kinds": 8,
+        "origin": "http://keys-escape.localhost:63316/",
+        "parent": 128411,
+        "pending": 1,
+        "pendingPage": 1067,
+        "promptKey": true,
+        "question": "Allow keys-escape.localhost to send you notifications?",
+        "selectedPage": 1067,
+        "visible": true,
+        "window": 128576
+      }
+    },
+    "permission_native_l": {
+      "ok": true,
+      "state": {
+        "anchor": {
+          "edge": 3,
+          "frame": [
+            88,
+            738,
+            212,
+            36
+          ],
+          "name": "sidebar-url"
+        },
+        "buttons": [
+          "Not Now",
+          "Allow"
+        ],
+        "decisions": 14,
+        "help": "Click the lock to change this any time",
+        "keyWindow": 128411,
+        "kinds": 8,
+        "origin": "http://keys-l.localhost:63316/",
+        "parent": 128411,
+        "pending": 1,
+        "pendingPage": 1347,
+        "promptKey": true,
+        "question": "Allow keys-l.localhost to send you notifications?",
+        "selectedPage": 1347,
+        "visible": true,
+        "window": 128576
+      }
+    },
+    "permission_native_return": {
+      "ok": true,
+      "state": {
+        "anchor": {
+          "edge": 3,
+          "frame": [
+            88,
+            738,
+            212,
+            36
+          ],
+          "name": "sidebar-url"
+        },
+        "buttons": [
+          "Not Now",
+          "Allow"
+        ],
+        "decisions": 11,
+        "help": "Click the lock to change this any time",
+        "keyWindow": 128411,
+        "kinds": 8,
+        "origin": "http://keys-return.localhost:63316/",
+        "parent": 128411,
+        "pending": 1,
+        "pendingPage": 1135,
+        "promptKey": true,
+        "question": "Allow keys-return.localhost to send you notifications?",
+        "selectedPage": 1135,
+        "visible": true,
+        "window": 128576
+      }
+    },
+    "permission_native_t": {
+      "ok": true,
+      "state": {
+        "anchor": {
+          "edge": 3,
+          "frame": [
+            88,
+            738,
+            212,
+            36
+          ],
+          "name": "sidebar-url"
+        },
+        "buttons": [
+          "Not Now",
+          "Allow"
+        ],
+        "decisions": 13,
+        "help": "Click the lock to change this any time",
+        "keyWindow": 128411,
+        "kinds": 8,
+        "origin": "http://keys-t.localhost:63316/",
+        "parent": 128411,
+        "pending": 1,
+        "pendingPage": 1276,
+        "promptKey": true,
+        "question": "Allow keys-t.localhost to send you notifications?",
+        "selectedPage": 1276,
+        "visible": true,
+        "window": 128576
+      }
+    },
+    "permission_native_w": {
+      "ok": true,
+      "state": {
+        "anchor": {
+          "edge": 3,
+          "frame": [
+            88,
+            738,
+            212,
+            36
+          ],
+          "name": "sidebar-url"
+        },
+        "buttons": [
+          "Not Now",
+          "Allow"
+        ],
+        "decisions": 12,
+        "help": "Click the lock to change this any time",
+        "keyWindow": 128411,
+        "kinds": 8,
+        "origin": "http://keys-w.localhost:63316/",
+        "parent": 128411,
+        "pending": 1,
+        "pendingPage": 1205,
+        "promptKey": true,
+        "question": "Allow keys-w.localhost to send you notifications?",
+        "selectedPage": 1205,
+        "visible": true,
+        "window": 128576
+      }
+    },
+    "permission_navigate_once": {
+      "events": [
+        {
+          "content": 702,
+          "decision": "dismiss",
+          "tab": "8F8D7616-8400-4C87-A895-9840176F4D0E",
+          "time": 1793942068.594044,
+          "type": "permissionAnswer"
+        }
+      ],
+      "ok": true
+    },
+    "permission_notnow_once_copy_anchor": {
+      "ok": true,
+      "state": {
+        "anchor": {
+          "edge": 3,
+          "frame": [
+            88,
+            738,
+            212,
+            36
+          ],
+          "name": "sidebar-url"
+        },
+        "buttons": [
+          "Not Now",
+          "Allow"
+        ],
+        "decisions": 0,
+        "help": "Click the lock to change this any time",
+        "keyWindow": 128411,
+        "kinds": 8,
+        "origin": "http://notnow.localhost:63316/",
+        "parent": 128411,
+        "pending": 1,
+        "pendingPage": 544,
+        "promptKey": true,
+        "question": "Allow notnow.localhost to send you notifications?",
+        "selectedPage": 544,
+        "visible": true,
+        "window": 128576
+      },
+      "stored": 0
+    },
+    "permission_remember_relaunch": {
+      "decisions": {
+        "decisions": [
+          {
+            "kind": 8,
+            "origin": "http://keys-return.localhost:63316",
+            "state": 1
+          },
+          {
+            "kind": 8,
+            "origin": "http://remember.localhost:63316",
+            "state": 1
+          }
+        ],
+        "ready": true
+      },
+      "ok": true,
+      "result": "granted"
+    },
+    "permission_tab_switch_once": {
+      "events": [
+        {
+          "content": 647,
+          "decision": "dismiss",
+          "tab": "6D873ECB-DC92-4076-A20A-DC87F0EB6AAF",
+          "time": 1793942066.938263,
+          "type": "permissionAnswer"
+        }
+      ],
+      "ok": true
+    }
+  },
+  "pathRedactions": [
+    "$WORKTREE",
+    "$HOME",
+    "$TMPDIR"
+  ],
+  "source": {
+    "clean": true,
+    "diffSHA256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "head": "a7e73498c3e68336217d8db40fbebe6ce6b89773"
+  },
+  "started": "2026-11-05 22:13:44",
+  "style": "chrome"
+}
