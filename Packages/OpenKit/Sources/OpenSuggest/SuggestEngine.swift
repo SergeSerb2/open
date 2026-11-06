@@ -16,6 +16,22 @@ public final class SuggestEngine {
         set { indexer.model = newValue }
     }
     public var providers: [any SuggestProvider]
+    public weak var extensionSource: (any ExtensionCommandBarSource)? {
+        didSet {
+            cancel()
+            providers.removeAll { $0.id == "extensions" || $0.id == "extension-omnibox" }
+            if let extensionSource {
+                providers.append(ExtensionActionsProvider(source: extensionSource, siteSearches: { [weak self] in self?.siteSearches ?? [] }))
+                providers.append(ExtensionOmniboxProvider(source: extensionSource))
+            }
+        }
+    }
+    /// Exact extension keywords only. Site Search names and keywords always win (Q9).
+    public func extensionKeywordTrigger(for text: String) -> ExtensionKeyword? {
+        guard let source = extensionSource, !ExtensionActionsProvider.conflicts(text, sites: siteSearches) else { return nil }
+        let folded = TextMatching.fold(text.trimmingCharacters(in: .whitespaces))
+        return source.keywords.prefix(ExtensionProviderLimits.entries).first { TextMatching.fold($0.keyword) == folded }
+    }
     public var searchEngines: [SearchEngine]
     public var siteSearches: [SiteSearch] {
         didSet { siteIndex = SiteSearchIndex(siteSearches) }
@@ -93,6 +109,7 @@ public final class SuggestEngine {
         let run = QueryRun(text: text, input: makeInput(text, context: context), maxResults: maxResults)
         var operations: [(id: String, run: @Sendable () async -> [Suggestion]?)] = []
         for provider in providers {
+            if context.extensionScopeID != nil, provider.id != "extension-omnibox" { continue }
             let t0 = ContinuousClock.now
             let rows = provider.localSuggestions(for: run.input)
             if let op = provider.asyncOperation(for: run.input) { operations.append((provider.id, op)) }
