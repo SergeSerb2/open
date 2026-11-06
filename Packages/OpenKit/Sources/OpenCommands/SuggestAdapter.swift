@@ -119,7 +119,7 @@ public extension CommandRegistry {
         "reveal-current-tab": "sidebar.left", "clear-cache-and-refresh": "trash", "clear-cookies-and-refresh": "trash.circle",
         "appearance-automatic": "circle.lefthalf.filled", "appearance-light": "sun.max", "appearance-dark": "moon",
         "new-space": "plus.rectangle.on.rectangle", "next-space": "arrow.right", "previous-space": "arrow.left",
-        "manage-spaces": "square.grid.2x2", "rename-space": "pencil", "edit-theme": "paintpalette", "change-profile": "person.crop.circle",
+        "manage-spaces": "square.grid.2x2", "rename-space": "pencil", "edit-theme": "paintpalette", "change-space-icon": "face.smiling", "change-profile": "person.crop.circle",
         "next-tab": "arrow.down", "previous-tab": "arrow.up", "clear-unpinned-tabs": "xmark.circle",
         "new-folder": "folder.badge.plus", "duplicate-tab": "plus.square.on.square", "rename-tab": "pencil",
         "expand-all-folders": "folder", "collapse-all-folders": "folder.fill", "reset-tab": "arrow.counterclockwise",
