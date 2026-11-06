@@ -39,13 +39,12 @@ class FindBarView: NSView, NSTextFieldDelegate {
     (field.cell as? FindTextCell)?.editorProvider = { [weak self] in self?.makeEditor() }
     field.isEditable = true; field.isSelectable = true
     field.isBezeled = false; field.isBordered = false; field.drawsBackground = false
-    field.focusRingType = .none; field.font = .systemFont(ofSize: 13)
+    field.focusRingType = .none; field.font = FindBarResources.queryFont
     field.placeholderString = "Find in page..."
     field.cell?.isScrollable = true; field.cell?.wraps = false
     field.usesSingleLineMode = true; field.delegate = self
     field.setAccessibilityLabel("Find in page")
-    search.image = NSImage(systemSymbolName: "magnifyingglass", accessibilityDescription: nil)?
-      .withSymbolConfiguration(.init(pointSize: 15, weight: .regular))
+    search.image = FindBarResources.search
     search.imageScaling = .scaleNone
     for view in [search, field, close] { addSubview(view) }
     close.onPress = { [weak self] in self?.onClose?() }
@@ -73,17 +72,16 @@ class FindBarView: NSView, NSTextFieldDelegate {
     let dark = effectiveAppearance.bestMatch(from: [.aqua, .darkAqua]) == .darkAqua
     if appliedDark == dark, let cachedTint { results?.applyTint(cachedTint); return }
     appliedDark = dark
-    let background = NSColor(displayP3Red: dark ? 0.082 : 0.980, green: dark ? 0.110 : 0.984, blue: dark ? 0.188 : 1, alpha: 1)
-    layer?.backgroundColor = background.cgColor
-    layer?.shadowColor = NSColor(displayP3Red: 0.082, green: 0.110, blue: 0.196, alpha: 1).cgColor
+    let palette = dark ? FindBarResources.dark : FindBarResources.light
+    layer?.backgroundColor = palette.background.cgColor
+    layer?.shadowColor = FindBarResources.shadow.cgColor
     layer?.shadowOpacity = dark ? 0.80 : 0.30
-    field.textColor = dark ? NSColor.white.withAlphaComponent(0.80)
-      : NSColor(displayP3Red: 0.0549, green: 0.0588, blue: 0.0627, alpha: 0.90)
-    let tint = NSColor(displayP3Red: dark ? 0.980 : 0.055, green: dark ? 0.984 : 0.059, blue: dark ? 1 : 0.063, alpha: dark ? 0.90 : 0.80)
+    field.textColor = palette.text
+    let tint = palette.tint
     cachedTint = tint
     search.contentTintColor = tint
     close.contentTintColor = tint; results?.applyTint(tint)
-    separator.backgroundColor = NSColor(displayP3Red: 0, green: 0, blue: 0, alpha: 0.10).cgColor
+    separator.backgroundColor = FindBarResources.separator.cgColor
   }
   override func layout() {
     super.layout(); layoutCount += 1
@@ -173,9 +171,7 @@ private final class FindResultsView: NSView {
   override var isFlipped: Bool { true }
   override init(frame: NSRect) {
     super.init(frame: frame)
-    let features: [[NSFontDescriptor.FeatureKey: Int]] = [
-      [.typeIdentifier: 37, .selectorIdentifier: 1], [.typeIdentifier: 38, .selectorIdentifier: 1]]
-    count.font = NSFont(descriptor: NSFont.systemFont(ofSize: 12).fontDescriptor.addingAttributes([.featureSettings: features]), size: 12)
+    count.font = FindBarResources.countFont
     count.setAccessibilityLabel("Find matches")
     for view in [count, previous, next] { addSubview(view) }
     previous.onPress = { [weak self] in self?.onAction?(3) }
@@ -188,7 +184,7 @@ private final class FindResultsView: NSView {
   }
   func applyTint(_ tint: NSColor) {
     previous.contentTintColor = tint; next.contentTintColor = tint
-    count.textColor = notFound ? NSColor(displayP3Red: 0.788, green: 0.2, blue: 0.2, alpha: 1) : tint
+    count.textColor = notFound ? FindBarResources.error : tint
   }
   override func layout() {
     super.layout()
@@ -204,8 +200,7 @@ private final class FindButton: NSButton {
   var onPress: (() -> Void)?
   init(symbol: String, title: String) {
     super.init(frame: .zero)
-    image = NSImage(systemSymbolName: symbol, accessibilityDescription: title)?
-      .withSymbolConfiguration(.init(pointSize: 16, weight: .regular))
+    image = FindBarResources.image(symbol)
     imagePosition = .imageOnly; imageScaling = .scaleNone; isBordered = false
     toolTip = title; setAccessibilityLabel(title); target = self; action = #selector(pressed)
   }

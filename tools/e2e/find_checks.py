@@ -85,6 +85,7 @@ def run(h, factory, results, tmp):
             repeat = state()
             samples.append(dict(first=first.get('presentationPhases', {}).get('commit', 999),
                 repeat=repeat.get('presentationPhases', {}).get('commit', 999),
+                launch=app.call('timing', tab=tab),
                 lazy=not cold.get('created', bool(cold.get('panes'))),
                 visible=first_pane['visible'] and pane(tab)['visible'],
                 firstPhases=first.get('presentationPhases'), repeatPhases=repeat.get('presentationPhases'),
