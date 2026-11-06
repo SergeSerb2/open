@@ -38,7 +38,7 @@ Raw data and PNGs stay in `.re/s9-split/`. The final results below distinguish A
 
 The real App suite uses fresh data/cache roots, local HTTP pages and the automation socket. It saves and resets `open.advanced.showFullURLWithToolbar`, then restores the exact persistent value in `finally`, including after relaunch. Keys use `key route=app`. Divider events use the in-App pointer. Option-click uses native event dequeue so `NSApp.currentEvent` carries the flags. No desktop input is sent.
 
-Split IDs remain on OpenFeatures. The plus menu now disables Split for an empty selection, a Favorite and the four-pane cap. Pane chrome stays with cached hosts, with a separate fixed cap of eight parked views. Close, profile teardown and host transfer release the matching view. Repeated placeholder/chrome refreshes and unchanged display assignments are removed. Geometry, colors and motion tokens stay measured values.
+Split IDs remain on OpenFeatures. The plus menu now disables Split for an empty selection, a Favorite and the four-pane cap. Pane chrome stays with cached hosts, with a separate fixed cap of eight parked views. Close, profile teardown and host transfer release the matching view. Repeated placeholder/chrome refreshes and unchanged display assignments are removed. Geometry, colors and motion tokens stay measured values. Equal child frames are skipped only when their window-relative rectangle also stays equal; moving a cached pane still updates OpenEngine’s Chrome child window. The OpenEngine view’s frame setters call geometry synchronization even for equal values (`OEWebContent.mm:183–190,685–687`).
 
 The idle observer runs only inside the suite-owned first App. It starts before pane creation, attributes schedulers to split/container call sites, then watches the live view/layer tree after divider release. Five seconds require zero layout/draw/invalidation/scheduling events, live split-owned timers/display links and CA animation keys. Other framework/engine display links are reported separately; no nonzero split baseline is allowed. The socket sends no polling requests during the interval. This measures split-owned work, not whole-App CPU. The relaunched App used for latency has no idle observer.
 
@@ -52,6 +52,8 @@ The native endpoint does not add an explicit CA transaction or a completion bloc
 
 `tools/verification/split-app-speed.py` interleaves main, branch, main, branch, main, branch under one quiet/on-screen session. Each process has fresh data and 40 samples per path. Every sample and query-return diagnostic is retained. The branch must meet the relative main + 1 ms gate and absolute 25 ms ceiling on both paths. The standalone `split` row enforces the ceiling and reports the 16 ms target; the separate interleaved tool enforces the relative gate. Main is an archive of `8db4ac86` with only the identical benchmark observer and one automation dispatch hook; its production selection, container and chrome sources match the commit byte for byte (`timing-main-manifest.json`). Both locks use `lockf -k`. The quiet lock is acquired before the on-screen lock, using the priority flag while waiting. Before launching a timing receipt, the runner waits for load1 ≤12; no measured sample is discarded.
 
+The first `ebcf08d2` comparison failed the single relative gate: main/branch p95 19.151/20.448 ms (split 29.083/24.743 ms passed). It is retained, with all samples and loads, as `beforeFrameGuardFailedComparison` in the committed artifact. The final comparison below follows the geometry guard; no sample or threshold was removed.
+
 ## Motion investigation
 
 The 30 ms difference was a real cache-reuse defect, not noise. Every one of the three interleaved pairs showed the same result, both during ordinary selection and with the diagnostic transaction wrapper:
@@ -61,7 +63,7 @@ The 30 ms difference was a real cache-reuse defect, not noise. Every one of the 
 | Slot bounds/position | 0.22 s | 0.22 s |
 | Focus ring bounds/position | No independent animation | 0.25 s |
 
-Reused `PaneSlotView` layers already have geometry. Assigning the ring's new frame added default CA `bounds` and `position` animations. Fresh main layers did not add those animations. The fix disables implicit CA actions only while assigning the ring frame. The ring follows the slot's existing layout; the slot keeps `Motion.splitExpand` at 0.22 s. No measured color, frame or motion token changes. `pane_motion_no_extra_ring_animation` checks the real native animation records, including the diagnostic wrapped case. The new gate's negative proof also restores the old implicit-action behavior.
+Reused `PaneSlotView` layers already have geometry. Assigning the ring's new frame added default CA `bounds` and `position` animations. Fresh main layers did not add those animations. The fix disables implicit CA actions only while assigning the ring frame. The ring follows the slot's existing layout; the slot keeps `Motion.splitExpand` at 0.22 s. No measured color, frame or motion token changes. `pane_motion_no_extra_ring_animation` checks the real native animation records, including the diagnostic wrapped case. A separate negative proof adds a real 0.25-second ring geometry animation and requires the new motion gate to fail.
 
 Before this fix, the correctly scoped every-pane rAF comparison failed: main single/split p95 14.606/24.265 ms; branch 16.084/20.249 ms. These remain `app-paired-ring-before.json`, with all samples and per-run loads. The later comparison below must prove the approved relative/25 ms gate and removal of the extra ring animations. The 16 ms target is tracked separately in `docs/followups.md`.
 
@@ -83,7 +85,9 @@ Fault edits target the real App or real native sidebar workload. They are revert
 | Gate | Deliberate fault | Observed rejection |
 |---|---|---|
 | Idle after divider release | Split-owned repeating timers, live CA links and layout invalidation | 200 layouts, 100 invalidations, 3 live timers and 3 owned CA links after 5.025 s; FAIL. Load 5.12/12.91/16.19. |
-| Original tab-switch gate | 25 ms extra synchronous production work | Single/split p95 69.947/73.420 ms; FAIL. Load 5.10/12.27/15.87. The approved relative/25 ms rAF gate gets its own proof. |
+| Approved every-pane rAF / 25 ms ceiling | 25 ms extra synchronous production work | Single/split p95 41.329/41.149 ms; FAIL. Load 10.53/12.97/14.78; cleanup PASS. |
+| No extra ring motion | Explicit 0.25 s ring bounds animation in production layout | Six unexpected ring animations; FAIL. Load 8.64/12.47/14.00; cleanup PASS. |
+| Original tab-switch gate | 25 ms extra synchronous production work | Single/split p95 69.947/73.420 ms; FAIL. Load 5.10/12.27/15.87. The approved rAF/25 ms proof is listed above. |
 | Sidebar scroll ±10% | 10 ms extra in the real TabCellView layout | Median paired p95 3.46→51.58 ms, +1390.75%; FAIL. Load 9.02–10.32 / 9.75–9.96 / 10.47–10.51. Source and clean main binary restored. |
 | Ring PNG | Hide the real focused ring | Expected focus comes from the model; focused-ring pixel ΔE00 about 57 against ≤2; FAIL. |
 | Pane commands/geometry | Remove focus update, ignore maximize, distort divider/narrow frames, remove slot cap, enable invalid plus states | Focus, maximize, both divider, narrow-frame, cache-bound and three plus-enable rows FAIL. |

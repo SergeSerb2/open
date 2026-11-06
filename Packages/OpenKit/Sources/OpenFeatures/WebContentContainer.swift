@@ -15,6 +15,7 @@ public final class PaneSlotView: NSView {
     /// first swipe.
     public private(set) var swipeIndicator: SwipeIndicatorView?
     private var style: SpaceThemeStyle = .defaultTheme(system: .light)
+    private var lastHostWindowRect: CGRect?
     let clip = NSView()
     public let focusRing = CAShapeLayer()
     var isFocused = false
@@ -44,14 +45,14 @@ public final class PaneSlotView: NSView {
         // A sleeping tab whose page was discarded in place keeps its page object: showing it
         // reloads its entry (memory-fork §5.5), and the phase turns live at that commit.
         if let host, tab.live.sleepPhase == .live || tab.live.sleepPhase == .frozen || tab.live.sleepPhase == .sleeping {
-            if contentHostView !== host.view { contentHostView?.removeFromSuperview() }
+            if contentHostView !== host.view { contentHostView?.removeFromSuperview(); lastHostWindowRect = nil }
             placeholderView?.removeFromSuperview(); placeholderView = nil
             contentHostView = host.view; host.view.isHidden = false
             if host.view.superview !== clip { clip.addSubview(host.view, positioned: .below, relativeTo: paneChrome) }
         } else {
             contentHostView?.isHidden = true; contentHostView?.removeFromSuperview()
             placeholderView?.removeFromSuperview()
-            contentHostView = nil; let placeholder = PlaceholderContentView(tab: tab, style: style)
+            contentHostView = nil; lastHostWindowRect = nil; let placeholder = PlaceholderContentView(tab: tab, style: style)
             placeholderView = placeholder; clip.addSubview(placeholder, positioned: .below, relativeTo: paneChrome)
         }
         needsLayout = true
@@ -74,12 +75,20 @@ public final class PaneSlotView: NSView {
     }
     /// Updates slot geometry without forcing layout in the embedded web subtree.
     fileprivate func layoutContents() {
-        clip.frame = bounds
+        if clip.frame != bounds { clip.frame = bounds }
         let bar = paneChrome == nil ? 0 : SplitMetrics.barHeight
-        paneChrome?.frame = CGRect(x: 0, y: bounds.height - bar, width: bounds.width, height: bar)
+        let chromeFrame = CGRect(x: 0, y: bounds.height - bar, width: bounds.width, height: bar)
+        if paneChrome?.frame != chromeFrame { paneChrome?.frame = chromeFrame }
         let page = CGRect(x: 0, y: 0, width: bounds.width, height: max(0, bounds.height - bar))
-        contentHostView?.frame = page; placeholderView?.frame = page
-        swipeIndicator?.frame = page
+        // Frame setters enter OpenEngine's geometry bridge even for equal values.
+        // A cached slot can move while the page's local frame stays equal: keep
+        // that window-coordinate change so Chrome's child window still follows.
+        let hostWindowRect = clip.convert(page, to: nil)
+        if contentHostView?.frame != page || lastHostWindowRect != hostWindowRect {
+            contentHostView?.frame = page; lastHostWindowRect = hostWindowRect
+        }
+        if placeholderView?.frame != page { placeholderView?.frame = page }
+        if swipeIndicator?.frame != page { swipeIndicator?.frame = page }
         if focusRing.frame != bounds {
             // The ring follows the slot's 0.22 s view motion. A reused layer must
             // not add its own default 0.25 s bounds/position animation.

@@ -69,6 +69,8 @@ def main():
                         lost = tracker.loss()
                         if lost: raise h.FocusInterruption('foreground lost in paired benchmark', lost)
                         motion = app.call('split', op='bench', nodes=[ids[0],ids[1],split], motionOnly=True)
+                        lost = tracker.loss()
+                        if lost: raise h.FocusInterruption('foreground lost in paired motion probe', lost)
                         receipt.update(motion=motion, samples=measured, milliseconds={k:summary(v) for k,v in measured.items()},
                                        load_after=list(os.getloadavg()), uptime_after=subprocess.check_output(['uptime'],text=True).strip())
                     finally:
