@@ -2177,6 +2177,8 @@ def shutdown_order_checks(factory, results, tmp):
 
 
 def window_checks(app_factory, results, tmp, config, chrome_only=False):
+    import engine_activation
+    engine_activation.run(app_factory, results)
     window_chrome_followup_checks(app_factory, results, tmp)
     if chrome_only: return
     # Local deterministic text paints without DNS, TLS, or external requests.

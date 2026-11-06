@@ -259,6 +259,10 @@ OE_EXPORT @interface OEBrowser : NSObject
 /// Closes the popup and detaches every web content. Call when the window
 /// closes.
 - (void)close;
+/// Real-App lifetime regression probe, only with --open-automation. Closes
+/// the CefTabStrip while its embedder window stays open, then changes that
+/// window's key state before Chromium's deferred Browser deletion can run.
+- (NSDictionary<NSString*, id>*)probeCloseActivationForAutomation;
 @end
 
 /// One toolbar action's context menu (fork patch P2). Each menu has its own

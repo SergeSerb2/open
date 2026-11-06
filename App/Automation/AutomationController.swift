@@ -90,6 +90,7 @@
       // App lifecycle commands remain available after the final window closes.
       switch cmd {
       case "first-run": return try await runFirstRun(a)
+      case "engine-close-activation": return try probeEngineCloseActivation()
       case "timing" where app.frontWindowController == nil:
         var marks = LaunchTiming.shared.report
         marks["kernelProcessStart"] = LaunchTiming.shared.hasKernelProcessStart
