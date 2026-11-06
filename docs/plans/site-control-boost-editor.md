@@ -1468,7 +1468,11 @@ exports an alias. These package hooks do not wait for the B/C branches to merge.
 ---
 
 
-Step 3 verification (child A, 2026-11-06; PR pending): the `e0cb8699` receipt,
+Step 3 verification (child A, 2026-11-06; PR pending): current-head App flows,
+timing/pixel/color rows, startup comparison and full verification remain pending
+the screen holds. Debug and automation Release builds pass. The results below
+are historical pre-theme receipts; they do not qualify the current head.
+The `e0cb8699` receipt,
 after merging main `bfb7755a`, records Release `sitecontrol` with 21 PASS, 2 FAIL (S11/S12), and 3 BLOCKED
 (S2 Section 13 adapter, S4 Boost runtime, S10 incognito), with no interruptions
 and cleanup PASS. S1 verifies the unavailable ad-block row, its Advanced Settings
@@ -1497,9 +1501,9 @@ turn. Title, favicon and loading changes do not invalidate SCC rows.
 Review R1-1 retains the signposts in every build and limits forced synchronous
 layout/display/flush to the installed `onFirstDraw` callback (automation only).
 The new negative-control code delays layout, display and flush separately;
-native counters sampled at that callback prove each delayed phase is inside the
-receipt. R1-2 keeps the source/window coalescing and lightweight button query;
-its fresh counter receipt now loads the 2000-card heavy fixture with the panel
+it samples native counters at that callback to check that each delayed phase is
+inside the receipt. R1-2 keeps the source/window coalescing and lightweight button query;
+its counter flow now loads the 2000-card heavy fixture with the panel
 closed and open. The earlier counts above used the smaller fixtures and do not
 replace this required heavy-fixture receipt. R1-3 follows §3.6.1 lines 365–367:
 with no extensions, Cmd+E focuses the "+" tile and Return runs `add-extension`.
@@ -1526,15 +1530,17 @@ and permits the interim merge. Plan §11.1 sets the fallback: a borderless child
 window with `.behindWindow` blending. A separate lead-owned follow-up PR will
 handle it after this PR merges; this PR does not implement it. A fresh diagnostic
 and final runtime receipts remain pending the screen hold.
-Release `extensions-ui` passes 56/56 with cleanup PASS and no interruptions,
+Historical Release `extensions-ui` passes 56/56 with cleanup PASS and no interruptions,
 including X13: first Cmd+E opens, second closes, third reopens; arrows, type-a,
 Return, reopen and Esc use the real App event path. The old App fails only the
-new toggle assertion (55/56), proving the fix. Regression, startup and full-verifier
-receipts are recorded in the PR. The empty-picker flow rejects standard mode,
-focuses Add Extension with Cmd+E, and opens the store with Return. The source retains
+new toggle assertion (55/56), proving that earlier fix. Current regression,
+startup and full-verifier receipts are still pending. The empty-picker flow is
+ready to reject standard mode, focus Add Extension with Cmd+E, and open the
+store with Return. The source retains
 the model independently of the weak factory until its observation token is removed.
-Main `6d6fd687` (icon picker and first run) was then merged in `ecab648e`; the PR
-records its final regression, interleaved startup and full-verifier receipts.
+Main `6d6fd687` (icon picker and first run) was then merged in `ecab648e`, and
+the branch has since merged main `c6e05c94`. Fresh final receipts and the PR link
+will be added after validation. No interrupted or void theme-merge receipt counts.
 
 
 ## 11. Risks and open questions
