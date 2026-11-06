@@ -31,7 +31,11 @@ def run(factory, results, tmp, env):
     def items():
         return app.call("boosts", action="list")
     def probe(tab):
-        return app.eval(tab, "({filter:getComputedStyle(document.documentElement).filter,font:getComputedStyle(document.querySelector('h1')).fontFamily,zoom:getComputedStyle(document.documentElement).zoom,transform:getComputedStyle(document.body).textTransform})")
+        try:
+            return app.eval(tab, "({filter:getComputedStyle(document.documentElement).filter,font:getComputedStyle(document.querySelector('h1')).fontFamily,zoom:getComputedStyle(document.documentElement).zoom,transform:getComputedStyle(document.body).textTransform})")
+        except RuntimeError as error:
+            states=[t for t in app.call("tabs") if t["id"] == tab]
+            raise RuntimeError(str(error)+"; page state="+json.dumps(states)) from error
     def row(name, fn):
         try:
             evidence = fn()
@@ -163,10 +167,12 @@ def run(factory, results, tmp, env):
                 return dict(positive=closed and not active(),negative=negative)
             row("B11_navigation_tab_close",b11)
             def b12():
-                tabs=[tab]+[new_tab(app,origin+"/boost.html?tab="+str(i),background=True) for i in range(9)]
-                # Background tabs are lazy. Select each once to create ten live pages.
+                tabs=[tab]+[new_tab(app,origin+"/boost.html?tab="+str(i)) for i in range(9)]
                 for live in tabs:
-                    app.call("select",tab=live);app.call("wait",tab=live)
+                    app.call("select",tab=live)
+                    app.call("navigate",tab=live,url=origin+"/boost.html?live="+live)
+                    app.call("wait",tab=live)
+                    assert probe(live)["font"]
                 app.call("select",tab=tab);app.call("wait",tab=tab);call("open",boost=items()[0]["id"])
                 app.call("defaults",key="open.advanced.enableBoosts",value=False)
                 negative=bool(wait_until(lambda: all(probe(t)["filter"] == "none" for t in tabs),timeout=5,step=.02))
@@ -270,8 +276,11 @@ def run(factory, results, tmp, env):
             row("B17_automation_limits",b17)
             def b18():
                 panel=call()["window"]
-                opened=app.call("little-open-action",action="blank",then="submit",text=origin+"/boost.html")
-                sid=opened["after"]["sessions"][0]["id"]
+                previous={s["id"] for s in app.call("little-open-state")["sessions"]}
+                app.call("menu-perform",id="new-little-open-window")
+                opened=next(s for s in app.call("little-open-state")["sessions"] if s["id"] not in previous)
+                sid=opened["id"]
+                app.call("key",window=opened["window"],text=origin+"/boost.html\r")
                 wait_until(lambda: any(s["id"] == sid and s["content"] and not s["loading"] for s in app.call("little-open-state")["sessions"]),timeout=10,step=.05)
                 # B17's center drag leaves the saved font component intact.
                 def heading():
