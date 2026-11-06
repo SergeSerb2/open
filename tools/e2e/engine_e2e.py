@@ -116,7 +116,7 @@ class CheckedResults(dict):
 
 
 class Open:
-    def __init__(self, config, style, user_data, extra_args, log_path, urls=("about:blank",), extra_env=None, delivery_urls=()):
+    def __init__(self, config, style, user_data, extra_args, log_path, urls=("about:blank",), extra_env=None, delivery_urls=(), first_run=False):
         if os.path.exists(os.path.join(ROOT, ".re", "hold-on-screen")):
             raise RuntimeError("On-screen Open runs are held by the lead (.re/hold-on-screen)")
         self.user_data = user_data
@@ -149,7 +149,7 @@ class Open:
         env = dict(os.environ, OPEN_USER_DATA=user_data, OPEN_E2E_OWNER_PID=str(os.getpid()),
                    OPEN_AUTOMATION_SKIP_MAC_NOTIFICATIONS="1")
         env.update(extra_env or {})
-        args = [app, "--user-data-dir=" + user_data, "--style=%s" % style] + list(urls) + extra_args
+        args = [app, "--user-data-dir=" + user_data, "--style=%s" % style] + ([] if first_run else ["--skip-first-run"]) + list(urls) + extra_args
         self.log = open(log_path, "a")
         self.started = time.time()
         # A raw executable launch can have a visible window but no foreground
@@ -187,6 +187,7 @@ class Open:
             self.discover_owned_processes()
         foreground_input = cmd in ("key", "focus", "little-open-link-click", "editor-act") or (cmd == "window-focus" and args.get("activate"))
         if cmd in ("space-manager-drag", "sidebar-click", "sidebar-key", "hover"): foreground_input = True
+        if cmd == "first-run" and args.get("action") == "focus": foreground_input = True
         if foreground_input and self.pid and not self.call("native-focus-state").get("active", False):
             # `NSApp.activate()` is a request, not a grant. Renew the explicit
             # foreground request if another app took focus. Address the exact
@@ -4186,7 +4187,7 @@ def startup_failure_checks(factory, results, tmp):
     early_data = os.path.join(tmp, "early-quit")
     log = os.path.join(tmp, "early-quit.log")
     with open(log, "w") as stream:
-        proc = subprocess.run([app_path, "--use-mock-keychain", "--user-data-dir=" + early_data],
+        proc = subprocess.run([app_path, "--skip-first-run", "--use-mock-keychain", "--user-data-dir=" + early_data],
             env=dict(os.environ, OPEN_AUTOMATION_QUIT_BEFORE_ENGINE="1"), stdout=stream, stderr=subprocess.STDOUT, timeout=15)
     text = open(log).read()
     results["quit_before_engine"] = {"ok": proc.returncode == 0 and "termination before engine" in text
@@ -4216,7 +4217,7 @@ def startup_failure_checks(factory, results, tmp):
     failure_data = os.path.join(tmp, "engine-failure")
     failure_log = os.path.join(tmp, "engine-failure.log")
     with open(failure_log, "w") as stream:
-        failed = subprocess.run([os.path.join(failed_bundle, "Contents", "MacOS", "Open"), "--use-mock-keychain", "--user-data-dir=" + failure_data],
+        failed = subprocess.run([os.path.join(failed_bundle, "Contents", "MacOS", "Open"), "--skip-first-run", "--use-mock-keychain", "--user-data-dir=" + failure_data],
             env=dict(os.environ, OPEN_AUTOMATION_DISMISS_ENGINE_FAILURE="1"), stdout=stream, stderr=subprocess.STDOUT, timeout=15)
     text = open(failure_log).read()
     results["engine_failure_alert"] = {"ok": failed.returncode == 1 and "engine failed to start" in text
@@ -5093,7 +5094,7 @@ def profiles_checks(factory, results, tmp, config):
         env.update(env_extra)
         path = os.path.join(tmp, "migration-%s.log" % label)
         with open(path, "w") as log:
-            code = subprocess.run([binary, "--use-mock-keychain"], env=env, stdout=log, stderr=subprocess.STDOUT,
+            code = subprocess.run([binary, "--skip-first-run", "--use-mock-keychain"], env=env, stdout=log, stderr=subprocess.STDOUT,
                                   timeout=60).returncode
         return code, open(path).read()
 
@@ -9486,6 +9487,176 @@ def sidebar_intents_menu_checks(app, results, require, tmp):
         cancelled_alert(); app.call('library-close')
 
 
+def library_capture_checks(app, require, root, evidence):
+    """Real Library, stores, AX tree and App event routing; synthetic files only."""
+    index = os.path.join(root, 'State', 'captures.json')
+    mode = os.environ.get('OPEN_LIBRARY_CAPTURES_ONLY', '')
+
+    def state(**args):
+        try: return app.call('library-captures-state', **args)
+        except RuntimeError as error: return {'error': str(error)}
+
+    def key(name, modifiers=()):
+        return app.call('key', key=name, modifiers=list(modifiers), route='app', window=state()['window'])
+
+    def open_section(section):
+        app.call('library-open', section=section)
+        return wait_until(lambda: (lambda s: s if s.get('visible') and s.get('section') == section else None)(state()), timeout=5, step=.05)
+
+    def index_rows():
+        with open(index) as stream: return json.load(stream)
+
+    error_copy = ['Captures could not be loaded.', 'Open will try again next time you open the Library.']
+    if mode != 'keyboard':
+        server, origin = _fixture_server('Library')
+        try:
+            archived = app.call('open', url=origin + '/archive-isolation')['id']
+            app.call('wait', tab=archived)
+            app.call('history-state')  # Flush the real committed-navigation writer.
+            app.call('close', tab=archived)
+        finally:
+            server.shutdown(); server.server_close()
+        archive = open_section('archive')
+        archive_rows = wait_until(lambda: any(r['id'] == archived for r in app.call('settings-state')['archive']), timeout=5) if archive else False
+        require('library_corrupt_index_isolation', archive and archive['loadFailed'] and archive_rows
+                and archive['status'] == '' and app.call('settings-state')['sharedArchives'], state=state())
+        for section in ('history', 'downloads', 'spaces'):
+            current = open_section(section)
+            if section == 'history':
+                working = wait_until(lambda: app.call('settings-state')['historyRows'] > 0, timeout=5)
+            elif section == 'downloads': working = current and any('No downloads' in t for t in current['text'])
+            else: working = app.call('space-manager-state')['hostedManagers'] == 1
+            require('library_corrupt_index_' + section, current and current['loadFailed'] and working and current['status'] == '', state=state())
+        for section in ('captures', 'media'):
+            current = open_section(section)
+            path = os.path.join(evidence, section + '-index-error.png')
+            app.call('snapshot', path=path, window=current['window'])
+            require('library_corrupt_index_' + section + '_error', current and current['loadFailed'] and not current['items']
+                    and any(error_copy[0] in text for text in current['text']), state=current, png=path)
+        # A directory at the index path is a real unreadable-file case, including
+        # when the suite runs as the file owner (chmod alone would be unreliable).
+        app.call('library-close'); os.unlink(index); os.mkdir(index)
+        unreadable = open_section('captures')
+        require('library_unreadable_index_error', unreadable and unreadable['loadFailed']
+                and any(error_copy[0] in text for text in unreadable['text']), state=unreadable)
+        os.rmdir(index)
+        # Exercise the reader's limits through actual Library reopen, including
+        # the valid boundary. Keep the large fixture out of the visible grid.
+        for extra in (0, 1):
+            app.call('library-close')
+            with open(index, 'wb') as stream: stream.write(b'[]' + b' ' * (16 * 1024 * 1024 - 2 + extra))
+            boundary = open_section('archive')
+            require('library_index_byte_limit_' + ('over' if extra else 'at'), boundary['loadFailed'] == bool(extra)
+                    and boundary['captureCount'] == 0, state=boundary)
+        large = [dict(id='71000000-0000-0000-0000-%012d' % i, fileName='Example.png', createdAt=1800000000,
+                      kind='area', sourceHost='example.com') for i in range(50_001)]
+        for count in (50_000, 50_001):
+            app.call('library-close')
+            with open(index, 'w') as stream: json.dump(large[:count], stream)
+            boundary = open_section('archive')
+            require('library_index_row_limit_' + ('at' if count == 50_000 else 'over'),
+                    boundary['loadFailed'] == (count > 50_000) and boundary['captureCount'] == (count if count == 50_000 else 0),
+                    loadFailed=boundary['loadFailed'], captureCount=boundary['captureCount'])
+        del large
+
+    os.makedirs(os.path.dirname(index), exist_ok=True)
+    directory = os.path.join(root, 'Captures'); os.makedirs(directory, exist_ok=True)
+    # Code-generated 2x2 RGBA PNG, without assets or personal data.
+    import zlib
+    def chunk(kind, data): return struct.pack('>I', len(data)) + kind + data + struct.pack('>I', zlib.crc32(kind + data) & 0xffffffff)
+    png = b'\x89PNG\r\n\x1a\n' + chunk(b'IHDR', struct.pack('>IIBBBBB', 2, 2, 8, 6, 0, 0, 0))
+    png += chunk(b'IDAT', zlib.compress((b'\0' + b'\x30\x90\xe0\xff' * 2) * 2)) + chunk(b'IEND', b'')
+    rows = []
+    for number, kind in enumerate(['area', 'fullPage', 'portrait', 'area', 'fullPage', 'portrait', 'screenshot']):
+        ident = '70000000-0000-0000-0000-%012d' % number
+        name = 'Example Capture %d.png' % number
+        with open(os.path.join(directory, name), 'wb') as stream: stream.write(png)
+        rows.append(dict(id=ident, fileName=name, createdAt=1800000000-number, kind=kind, sourceHost='example.com'))
+    with open(index, 'w') as stream: json.dump(rows, stream)
+    app.call('library-close')
+    recovered = open_section('captures')
+    require('library_capture_reopen_recovers', recovered and not recovered['loadFailed'] and len(recovered['items']) == 6
+            and not any(error_copy[0] in t for t in recovered['text']), state=recovered)
+
+    for section in ('captures', 'media'):
+        current = open_section(section)
+        current = state(focus='sidebar', recordFileActions=True)
+        tab_path = []
+        for _ in range(16):
+            tab_path.append(key('tab'))
+            current = state()
+            if current['gridFocused']: break
+        require('library_' + section + '_tab_focus', current['gridFocused'] and len(current['selected']) == 1, state=current, tabPath=tab_path)
+        items, columns = current['items'], current['columns']
+        first_png = os.path.join(evidence, section + '-selection-first.png')
+        next_png = os.path.join(evidence, section + '-selection-next.png')
+        app.call('snapshot', path=first_png, window=current['window'])
+        key('right'); right = state()
+        app.call('snapshot', path=next_png, window=current['window'])
+        width, _, first_pixel = read_image(first_png)
+        _, _, next_pixel = read_image(next_png)
+        scale = width / 960
+        x, y, grid_width, _ = current['gridFrame']
+        card_width = (grid_width - 18 * (columns - 1)) / columns
+        points = [(x + 5, y + 30), (x + card_width + 23, y + 30)]
+        before_pixels = [first_pixel(px * scale, py * scale) for px, py in points]
+        after_pixels = [next_pixel(px * scale, py * scale) for px, py in points]
+        distance = lambda a, b: max(abs(v-w) for v, w in zip(a, b))
+        require('library_' + section + '_selection_pixels', distance(before_pixels[0], before_pixels[1]) >= 5
+                and distance(before_pixels[0], after_pixels[1]) <= 3 and distance(before_pixels[1], after_pixels[0]) <= 3,
+                before=before_pixels, after=after_pixels, firstPNG=first_png, nextPNG=next_png)
+        key('left'); left = state()
+        key('down'); down = state(); key('up'); up = state()
+        require('library_' + section + '_arrows', right['selected'] == [items[1]['id']] and left['selected'] == [items[0]['id']]
+                and down['selected'] == [items[min(columns, len(items)-1)]['id']] and up['selected'] == [items[0]['id']], columns=columns, right=right, left=left, down=down, up=up)
+        require('library_' + section + '_metadata_ax', any('Example Capture 0.png' in t and 'Capture' in t and 'bytes' in t and 'example.com' in t for t in up['text']), text=up['text'])
+        before_open = len(up['opened']); key('return'); opened = state()
+        require('library_' + section + '_return', len(opened['opened']) == before_open+1 and opened['opened'][-1] == items[0]['name'], state=opened)
+        app.call('pasteboard-write', text='capture-copy-sentinel'); key('c', ['cmd']); copied = state()
+        require('library_' + section + '_copy', copied['pasteboardHasImage'], state=copied)
+        key('space'); idle = state()
+        require('library_' + section + '_space_unchanged', idle['selected'] == up['selected'] and idle['opened'] == opened['opened']
+                and not idle['pendingDelete'] and idle['pasteboardHasImage'], state=idle)
+        path = os.path.join(evidence, section + '-keyboard-selection.png')
+        app.call('snapshot', path=path, window=current['window'])
+        key('delete')
+        confirmation = wait_until(lambda: state()['pendingDelete'] == items[0]['id'], timeout=5, step=.05)
+        require('library_' + section + '_delete_confirms', confirmation and os.path.exists(os.path.join(directory, items[0]['name']))
+                and len(index_rows()) == 7, state=state(), png=path)
+        alert = app.call('alert', window='library')
+        require('library_' + section + '_delete_specific_dialog', 'Delete Capture' in alert['buttons'], alert=alert)
+        if os.environ.get('OPEN_LIBRARY_DIALOG_EARLY_FAILURE') == '1':
+            raise AssertionError('deliberate failure with capture confirmation open')
+        app.call('alert', window='library', button='Cancel')
+        require('library_' + section + '_delete_cancel', wait_until(lambda: not state()['pendingDelete'], timeout=5)
+                and len(index_rows()) == 7, state=state())
+        # Exercise the actual destructive button once, then restore the fixture
+        # for the second section without changing its independent selection.
+        key('delete'); app.call('alert', window='library', button='Delete Capture')
+        deleted = wait_until(lambda: not os.path.exists(os.path.join(directory, items[0]['name'])), timeout=5, step=.05)
+        require('library_' + section + '_delete_file_and_index', deleted and len(index_rows()) == 6 and not state()['selected'], state=state())
+        with open(os.path.join(directory, rows[0]['fileName']), 'wb') as stream: stream.write(png)
+        with open(index, 'w') as stream: json.dump(rows, stream)
+        app.call('library-close')
+    # Browser shortcuts must keep their existing owners in this new focus context.
+    current = open_section('captures'); state(focus='sidebar')
+    for _ in range(16):
+        key('tab')
+        if state()['gridFocused']: break
+    tabs_before = sorted(t['id'] for t in app.call('tabs'))
+    key('escape'); escaped = state()
+    require('library_grid_escape', escaped['visible'] and escaped['gridFocused'] and not escaped['pendingDelete'], state=escaped)
+    shortcuts = []
+    for letter in ('l', 't'):
+        shortcuts.append(key(letter, ['cmd']))
+        app.call('key', key='escape', route='app')
+        open_section('captures')
+    key('w', ['cmd'])
+    require('library_grid_browser_shortcut_ownership', not state()['visible']
+            and sorted(t['id'] for t in app.call('tabs')) == tabs_before
+            and not app.call('commandbar-state')['presented'], keys=shortcuts, state=state())
+
+
 def space_manager_checks(results, tmp, config, style):
     """E5/E6: real Library injection, native reorder/undo, stores and lifetimes."""
     import plistlib
@@ -9545,11 +9716,16 @@ def space_manager_checks(results, tmp, config, style):
         info['CFBundleIdentifier'] = bundle_id
         with open(info_path, 'wb') as stream: plistlib.dump(info, stream)
         subprocess.run(['codesign', '--force', '--sign', '-', bundle], check=True, capture_output=True)
+        if os.environ.get('OPEN_LIBRARY_CAPTURES_ONLY') != 'keyboard' and os.environ.get('OPEN_SIDEBAR_INTENTS_ONLY') != '1':
+            os.makedirs(os.path.join(root, 'State'), exist_ok=True)
+            with open(os.path.join(root, 'State', 'captures.json'), 'w') as stream: stream.write('{deliberately corrupt capture index')
         app = launch((fixture('Manager One'),))
         first_window = app.call('shell-windows')[0]['id']
         if os.environ.get('OPEN_SIDEBAR_INTENTS_ONLY') == '1':
             sidebar_intents_menu_checks(app, results, require, tmp)
             return
+        library_capture_checks(app, require, root, evidence)
+        if os.environ.get('OPEN_LIBRARY_CAPTURES_ONLY'): return
         s1 = order(app)[0]
         s2 = app.call('space-create', title='Manager Two')
         s3 = app.call('space-create', title='Manager Three')
@@ -9560,7 +9736,12 @@ def space_manager_checks(results, tmp, config, style):
         # The rest capture shows the loaded page title, not a title still in flight.
         for row in app.call('tabs'): app.call('wait', tab=row['id'])
         app.call('menu-perform', id='manage-spaces')
-        ready = manager_ready(app)
+        # The capture checks already opened the Manager with one Space. Its
+        # hidden view reconciles newly added columns on the next observation
+        # turn. Wait for real column/header views before measuring geometry.
+        ready = wait_until(lambda: (lambda st: st if st['visible'] and st['section'] == 'spaces'
+                           and st['hostedManagers'] == 1 and len(st['columns']) == 3
+                           and all(c['column'][2] > 0 and c['header'] for c in st['columns']) else None)(state(app)), timeout=5)
         rest = capture(app, 'manager-rest')
         require('E5_menu_real_manager', ready and ready['section'] == 'spaces' and ready['managerClass'] == 'OpenSidebar.SpaceManagerView'
                 and ready['sameModel'] and ready['sameUndoManager'] and not ready['previewsEnabled'] and ready['globalPreviewsEnabled'],
@@ -10892,7 +11073,7 @@ def main():
     ap.add_argument("--engine-sha256", help="require this Vendor framework SHA-256 and matching embedded code before app launch")
     ap.add_argument("--engine-fingerprint-only", action="store_true", help="verify built engine artifacts and exit without launching Open")
     ap.add_argument("--extensions", default=os.path.join(ROOT, ".re", "ext", "unpacked"))
-    ap.add_argument("--only", choices=["find", "shell", "extensions", "features", "measure", "tabstrip", "window", "sidebar", "peek", "split",
+    ap.add_argument("--only", choices=["firstrun", "find", "shell", "extensions", "features", "measure", "tabstrip", "window", "sidebar", "peek", "split",
                                        "commandbar", "app-actions", "actions", "extensions-p3", "extensions-ui", "extensions-e2", "profiles", "sidebar-completion", "toolbar", "numbering", "media", "relaunch", "page", "page-chrome",
                                        "sleep", "context-menus", "routing", "littleopen", "history", "applescript", "downloads", "space-editor"])
     ap.add_argument("--window-chrome-only", action="store_true", help="run only the window-chrome follow-up flows in the window suite")
@@ -11004,7 +11185,7 @@ def main():
         if snapshot:
             os.makedirs(os.path.join(user_data, "State"), exist_ok=True)
             shutil.copyfile(snapshot, os.path.join(user_data, "State", "browser.json"))
-        app = Open(opts.config, opts.style, user_data, extra + list(extra_args or []), log, urls=urls, extra_env=extra_env, delivery_urls=delivery_urls)
+        app = Open(opts.config, opts.style, user_data, extra + list(extra_args or []), log, urls=urls, extra_env=extra_env, delivery_urls=delivery_urls, first_run=opts.only == "firstrun")
         app.focus_tracker = tracker
         tracker.apps.append(app)
         return app
@@ -11086,7 +11267,13 @@ def main():
         print(json.dumps(results['engine'], sort_keys=True), flush=True)
         return
     def execute():
-        if opts.only == "extensions-ui":
+        if opts.only == "firstrun":
+            results["firstrun"] = CheckedResults(tracker)
+            # The executable's -I shebang omits the script directory from
+            # sys.path. Load this owned sibling by its exact repository path.
+            runpy.run_path(os.path.join(ROOT, "tools", "e2e", "firstrun.py"))["run"](
+                factory, results["firstrun"], tmp, sys.modules[__name__])
+        elif opts.only == "extensions-ui":
             results["extensions-ui"] = CheckedResults(tracker)
             import extensions_ui
             extensions_ui.run(factory, results["extensions-ui"], tmp, ROOT, wait_until, new_tab, frame, read_image, EXT)
@@ -11249,14 +11436,14 @@ def main():
                                     else opts.config.lower()))
     with open(os.path.join(OUT, name), "w") as f:
         json.dump(results, f, indent=2, sort_keys=True)
-    for group in ("find", "shell", "extensions", "features", "measure", "tabstrip", "window", "sidebar", "peek", "split", "commandbar", "app-actions", "actions", "extensions-p3", "extensions-ui", "extensions-e2", "profiles", "sidebar-completion", "toolbar", "numbering", "media", "relaunch", "page", "page-chrome", "sleep", "context-menus", "routing", "littleopen", "history", "applescript", "downloads", "space-editor"):
+    for group in ("firstrun", "find", "shell", "extensions", "features", "measure", "tabstrip", "window", "sidebar", "peek", "split", "commandbar", "app-actions", "actions", "extensions-p3", "extensions-ui", "extensions-e2", "profiles", "sidebar-completion", "toolbar", "numbering", "media", "relaunch", "page", "page-chrome", "sleep", "context-menus", "routing", "littleopen", "history", "applescript", "downloads", "space-editor"):
         for k, v in results.get(group, {}).items():
             if isinstance(v, dict) and "ok" in v:
                 print("%-24s %s" % (k, "PASS" if v.get("ok") else "FAIL"))
             elif isinstance(v, dict) and v.get("status") in ("SKIP", "BLOCKED", "INTERRUPTED", "DEFERRED"):
                 print("%-24s %s: %s" % (k, v["status"], v.get("reason", "")))
     print("wrote", os.path.join(OUT, name))
-    failures = [k for group in ("find", "shell", "extensions", "features", "measure", "tabstrip", "window", "sidebar", "peek", "split", "commandbar", "app-actions", "actions", "extensions-p3", "extensions-ui", "extensions-e2", "sidebar-completion", "toolbar", "numbering", "media", "relaunch", "page", "page-chrome", "sleep", "context-menus", "routing", "littleopen", "history", "applescript", "downloads", "space-editor")
+    failures = [k for group in ("firstrun", "find", "shell", "extensions", "features", "measure", "tabstrip", "window", "sidebar", "peek", "split", "commandbar", "app-actions", "actions", "extensions-p3", "extensions-ui", "extensions-e2", "sidebar-completion", "toolbar", "numbering", "media", "relaunch", "page", "page-chrome", "sleep", "context-menus", "routing", "littleopen", "history", "applescript", "downloads", "space-editor")
                 for k, v in results.get(group, {}).items() if isinstance(v, dict) and v.get("ok") is False]
     if failures or not results["cleanup"]["ok"]:
         sys.exit(1)

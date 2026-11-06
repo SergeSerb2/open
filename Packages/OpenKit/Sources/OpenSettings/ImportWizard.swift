@@ -100,7 +100,7 @@ import OpenImport
 }
 public struct ImportWizard: View {
     @State private var model: ImportWizardViewModel
-    public init(root: SettingsViewModel) { _model = State(initialValue: ImportWizardViewModel(root: root)) }
+    public init(root: SettingsViewModel) { _model = State(initialValue: root.importWizard) }
     public init(model: ImportWizardViewModel) { _model = State(initialValue: model) }
     public var body: some View {
         VStack(alignment: .leading, spacing: 18) {

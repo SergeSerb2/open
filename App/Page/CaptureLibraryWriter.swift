@@ -49,7 +49,7 @@ final class CaptureLibraryWriter: CaptureLibrary {
     }
     saveCount += 1
     // The Library window (if open) shows the new row at once.
-    try? app.settingsPresenter.captures?.reload()
+    try? app.settingsPresenter.captures.reload()
     return id
   }
 
@@ -79,8 +79,7 @@ final class CaptureLibraryWriter: CaptureLibrary {
   }
 
   func delete(id: UUID) throws {
-    let provider = try app.settingsPresenter.captures ?? FileCapturesProvider(root: root)
-    try provider.remove(id: id)
+    try app.settingsPresenter.captures.remove(id: id)
   }
 
   func showInLibrary(id: UUID) {
