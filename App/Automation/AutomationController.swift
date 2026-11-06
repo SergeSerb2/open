@@ -132,6 +132,9 @@
       case "menu-state":
         NSApp.mainMenu?.update()
         return menuRows(NSApp.mainMenu)
+      case "menu-key-render":
+        guard let path = a["path"] as? String else { throw Failure(message: "missing render path") }
+        return try renderMenuKeys(to: path)
       case "command" where (a["id"] as? String).flatMap({ CommandRegistry.byID[$0] }).map({ $0.menuPath == nil }) == true:
         guard let id = a["id"] as? String, CommandRegistry.byID[id] != nil,
           let controller = try window.controller,
@@ -1584,6 +1587,7 @@
         // Validate first, as AppKit does before it shows a menu: validation can set the title (CC-32).
         let enabled = menuEnabled(item)
         return [["id": item.identifier?.rawValue ?? "", "title": item.title, "key": item.keyEquivalent,
+          "modifierMask": item.keyEquivalentModifierMask.rawValue,
           "enabled": enabled, "checked": item.state == .on, "hidden": item.isHidden, "targetNil": item.target == nil, "tag": item.tag, "action": item.action.map(NSStringFromSelector) ?? "", "payload": (item.representedObject as? [String: String])?["payload"] ?? ""]]
       }
     }
@@ -1921,7 +1925,7 @@
         "return": ("\r", 36), "escape": ("\u{1b}", 53), "tab": ("\t", 48), "space": (" ", 49),
         "delete": ("\u{7f}", 51), "forward-delete": (String(Character(UnicodeScalar(NSDeleteFunctionKey)!)), 117),
         "o": ("o", 31), ",": (",", 43), "z": ("z", 6), "n": ("n", 45), "t": ("t", 17), "w": ("w", 13), "l": ("l", 37), "f": ("f", 3), "g": ("g", 5), "s": ("s", 1), "a": ("a", 0),
-        "e": ("e", 14), "v": ("v", 9), "x": ("x", 7), "c": ("c", 8), "d": ("d", 2), "i": ("i", 34), "j": ("j", 38), "y": ("y", 16), "u": ("u", 32), "1": ("1", 18), "2": ("2", 19), "3": ("3", 20), "4": ("4", 21), "9": ("9", 25), "=": ("=", 24), "-": ("-", 27), "}": ("}", 30), "{": ("{", 33),
+        "e": ("e", 14), "r": ("r", 15), "k": ("k", 40), "v": ("v", 9), "x": ("x", 7), "c": ("c", 8), "d": ("d", 2), "i": ("i", 34), "j": ("j", 38), "y": ("y", 16), "u": ("u", 32), "1": ("1", 18), "2": ("2", 19), "3": ("3", 20), "4": ("4", 21), "9": ("9", 25), "=": ("=", 24), "-": ("-", 27), "}": ("}", 30), "{": ("{", 33),
         "control": ("", 59), "command": ("", 55),
         "down": (String(Character(UnicodeScalar(NSDownArrowFunctionKey)!)), 125),
         "up": (String(Character(UnicodeScalar(NSUpArrowFunctionKey)!)), 126),
@@ -1942,6 +1946,24 @@
       // equivalents such as Redo need "Z", even though the key router folds case.
       let eventCharacters = mods.contains(.shift) ? chars.uppercased() : chars
       let route = a["route"] as? String ?? "app"
+      let observeCommands = a["observeCommands"] as? Bool == true
+      var menuObserver: (any NSObjectProtocol)?
+      if observeCommands {
+        AutomationShortcutTrace.commands = []; AutomationShortcutTrace.recording = true
+        AutomationShortcutTrace.menuActions = []
+        menuObserver = NotificationCenter.default.addObserver(forName: NSMenu.didSendActionNotification, object: nil, queue: .main) { note in
+          let identifier = (note.userInfo?["MenuItem"] as? NSMenuItem)?.identifier?.rawValue
+          MainActor.assumeIsolated {
+            if let identifier, AutomationShortcutTrace.menuActions.count < 64 {
+              AutomationShortcutTrace.menuActions.append(identifier)
+            }
+          }
+        }
+      }
+      defer {
+        if let menuObserver { NotificationCenter.default.removeObserver(menuObserver) }
+        if observeCommands { AutomationShortcutTrace.recording = false }
+      }
       let dispatchStarted = ProcessInfo.processInfo.systemUptime
       // Modifier keys alone post one flagsChanged event (down: pass the modifier; up: none).
       let types: [NSEvent.EventType] = code == 59 || code == 55 ? [.flagsChanged] : [.keyDown, .keyUp]
@@ -1961,6 +1983,8 @@
       // turn, as a user-facing automation caller expects.
       try? await Task.sleep(for: .milliseconds(20))
       return ["dispatchMilliseconds": dispatchMilliseconds, "firstResponder": target.firstResponder.map { String(describing: type(of: $0)) } ?? "none",
+        "charactersIgnoringModifiers": eventCharacters,
+        "commands": observeCommands ? AutomationShortcutTrace.commands : [], "menuActions": observeCommands ? AutomationShortcutTrace.menuActions : [],
         "sidebarMode": w?.windowState.sidebarMode.rawValue ?? "", "barPresented": w?.commandBarSession?.isPresented == true,
         "keyWindow": NSApp.keyWindow?.windowNumber ?? 0] as [String: Any]
     }

@@ -174,6 +174,9 @@ extension EngineWebContentHostFactory {
   @discardableResult
   func performAppCommand(_ original: String, payload: String? = nil) -> Bool {
     let id = AppCommand.canonicalID(original)
+    #if OPEN_AUTOMATION
+    AutomationShortcutTrace.record(id)
+    #endif
     // Find owns its pane even when AppKit's field editor implements the native selector.
     if let tag = ["find": 1, "find-next": 2, "find-previous": 3, "find-and-replace": 12, "use-selection-to-find": 7][id] {
       guard selectedContent != nil else { return false }

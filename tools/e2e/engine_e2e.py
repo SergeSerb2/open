@@ -11281,6 +11281,8 @@ def main():
         elif opts.only == "space-editor":
             results[opts.only] = CheckedResults(tracker)
             space_editor_creation_checks(factory, results[opts.only], tmp)
+            runpy.run_path(os.path.join(ROOT, 'tools/e2e/menu_shift_checks.py'))['run'](
+                sys.modules[__name__], factory, results[opts.only], tmp)
         elif opts.only == "sidebar-completion":
             results[opts.only] = CheckedResults(tracker)
             space_manager_checks(results[opts.only], tmp, opts.config, opts.style)
