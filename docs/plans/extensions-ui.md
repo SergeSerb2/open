@@ -263,6 +263,15 @@ more button only.
 
 ### 3.4 Little Open toolbar
 
+**Lead update 2026-11-05 22:32:** Section 9 now owns a 47 pt title bar.
+The Extensions button is inside its URL capsule, left of Copy URL. Its
+glyph/hit frame is `[w − 252, 16, 16, 16]`, matching Copy URL's button
+style, with `LittleOpenMetrics.text` and symbol `puzzlepiece.extension`.
+While shown, host text ends at `extensions.minX − hostGap`; when hidden,
+the existing layout is unchanged. It shows for at least one action and
+uses the same menu and popup anchor below. This replaces the old frame
+and URL-field-width values below. **guess (lead), capture S-7.**
+
 Owner: `LittleOpenWindowController`. Add one `PlateButton`-style button
 "Extensions" (EX-3):
 

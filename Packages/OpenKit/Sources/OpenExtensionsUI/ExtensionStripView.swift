@@ -9,10 +9,10 @@ import OpenWeb
         didSet { buttons.forEach { $0.tooltipStyle = tooltipStyle }; moreButton.tooltipStyle = tooltipStyle }
     }
     public var hostTextWidth: CGFloat = 120 { didSet { if hostTextWidth != oldValue { needsLayout = true } } }
-    public var isFocused = true { didSet { needsLayout = true; updateVisibility() } }
-    public var hasPage = true { didSet { updateVisibility() } }
-    public var hovered = false { didSet { updateVisibility() } }
-    public var forcedVisibility: ExtensionsUIContext.ForcedVisibility = [] { didSet { updateVisibility() } }
+    public var isFocused = true { didSet { if isFocused != oldValue { needsLayout = true; updateVisibility() } } }
+    public var hasPage = true { didSet { if hasPage != oldValue { updateVisibility() } } }
+    public var hovered = false { didSet { if hovered != oldValue { updateVisibility() } } }
+    public var forcedVisibility: ExtensionsUIContext.ForcedVisibility = [] { didSet { if forcedVisibility != oldValue { updateVisibility() } } }
     public private(set) var layoutCount = 0
     public private(set) var geometry: ExtensionStripLayout
     public private(set) var buttons: [ExtensionActionButton] = []
@@ -21,6 +21,9 @@ import OpenWeb
     private var dragID: String?
     private var dragIndex = 0
     private weak var priorResponder: NSResponder?
+    private var observation: UUID?
+    public var onVisibilityChange: (() -> Void)?
+    public var showsActions: Bool { buttons.contains { !$0.isHidden } || !moreButton.isHidden }
     public override var isFlipped: Bool { true }
     public override var acceptsFirstResponder: Bool { dragID != nil }
     public init(style: ExtensionStripStyle, context: ExtensionsUIContext = ExtensionsUIContext()) {
@@ -33,7 +36,17 @@ import OpenWeb
         moreButton.setAccessibilityLabel("More Extensions"); moreButton.setAccessibilityIdentifier("extensions.more")
         moreButton.target = self; moreButton.action = #selector(openOverflow)
         addSubview(moreButton)
+        observation = context.observe { [weak self] change in
+            guard let self else { return }
+            switch change {
+            case .list: _ = self.setActions(self.context.actions)
+            case .action(let value): self.updateAction(value)
+            case .visibility: self.updateVisibility(); self.onVisibilityChange?()
+            }
+        }
+        _ = setActions(context.actions)
     }
+    isolated deinit { if let observation { context.removeObserver(observation) } }
     @available(*, unavailable) required init?(coder: NSCoder) { fatalError() }
     /// Structural changes alone relayout. Per-action badge/title/image events touch one button.
     @discardableResult public func setActions(_ actions: [ExtensionActionInfo]) -> Bool {
@@ -88,6 +101,7 @@ import OpenWeb
         updateVisibility()
     }
     public func updateVisibility() {
+        let wasVisible = showsActions
         // App sets .popup on the anchor strip. A popup elsewhere must not reveal this strip.
         let forced = !forcedVisibility.union(context.forcedVisibility).isEmpty || dragID != nil
         let visible = hasPage && (style != .paneBar || isFocused) && (style != .urlField || hovered || forced)
@@ -98,6 +112,7 @@ import OpenWeb
         moreButton.isHidden = !visible || geometry.moreFrame == nil
         if moreButton.isHidden { TooltipController.shared.cancel(for: moreButton) }
         moreButton.setAccessibilityElement(!moreButton.isHidden)
+        if wasVisible != showsActions { onVisibilityChange?() }
     }
     public override func hitTest(_ point: NSPoint) -> NSView? {
         let hit = super.hitTest(point); return hit === self ? nil : hit

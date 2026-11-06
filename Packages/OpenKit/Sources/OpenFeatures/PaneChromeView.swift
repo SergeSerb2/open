@@ -1,6 +1,7 @@
 import AppKit
 import OpenDesign
 import OpenModel
+import OpenExtensionsUI
 
 @MainActor
 final class ActionButton: NSButton {
@@ -56,6 +57,8 @@ public final class PaneChromeView: NSView {
     var fallbackColor: NSColor = .white
     let label = NSTextField(labelWithString: "")
     private var buttons: [ActionButton] = []
+    public var extensionsUI: ExtensionsUIContext? { didSet { if extensionsUI !== oldValue { extensionStrip?.removeFromSuperview(); extensionStrip = nil; needsLayout = true } } }
+    public private(set) var extensionStrip: ExtensionStripView?
     public var isFocused = false { didSet { update() } }
     /// F0081: the focused pane shows every control; an unfocused pane shows back,
     /// forward, the copy button, the host, and Close (AX and pixels).
@@ -95,16 +98,27 @@ public final class PaneChromeView: NSView {
     }
     public override func layout() {
         super.layout(); let w = bounds.width
+        let stripStyle: ExtensionStripStyle = role == .toolbar ? .toolbar : .paneBar
+        if extensionStrip?.style != stripStyle { extensionStrip?.removeFromSuperview(); extensionStrip = nil }
+        if extensionStrip == nil, let extensionsUI {
+            let strip = ExtensionStripView(style: stripStyle, context: extensionsUI); addSubview(strip); extensionStrip = strip
+        }
+        if let strip = extensionStrip {
+            strip.frame = bounds; strip.isFocused = isFocused || role == .toolbar; strip.hasPage = host != nil
+            strip.hostTextWidth = ceil((label.stringValue as NSString).size(withAttributes: [.font: label.font ?? .systemFont(ofSize: 13)]).width)
+            strip.layoutSubtreeIfNeeded()
+        }
         buttons[0].frame = SplitMetrics.back; buttons[1].frame = SplitMetrics.forward; buttons[2].frame = SplitMetrics.reload
         let toolbar = role == .toolbar, focused = isFocused || toolbar
-        buttons[4].frame = toolbar ? ToolbarMetrics.siteControls(width: w, extensionsShown: false) : CGRect(x: w - 105, y: 2, width: 32, height: 28)
+        buttons[4].frame = toolbar ? ToolbarMetrics.siteControls(width: w, stripWidth: extensionStrip?.geometry.stripWidth ?? 0) : CGRect(x: w - 105, y: 2, width: 32, height: 28)
         buttons[5].frame = CGRect(x: w - 69, y: 4, width: 32, height: 24)
         buttons[6].frame = CGRect(x: w - 37, y: 4, width: 32, height: 24)
         // Centered group (F0081 AX): copy 24 · 3 · host · 3 · an empty 24 pt slot, so the
         // host sits on the bar's center line. Narrow panes truncate the host; with no room
         // for a few characters, the host and copy button hide. guess: no narrow capture.
         let left = (focused ? buttons[2].frame.maxX : buttons[1].frame.maxX) + SplitMetrics.barControlGap
-        let right = (focused ? buttons[4].frame.minX : buttons[6].frame.minX) - SplitMetrics.barControlGap
+        let stripLeft = extensionStrip?.showsActions == true ? extensionStrip?.geometry.frames.map(\.minX).min() : nil
+        let right = min((focused ? buttons[4].frame.minX : buttons[6].frame.minX), stripLeft ?? .greatestFiniteMagnitude) - SplitMetrics.barControlGap
         let slot = SplitMetrics.hostSlot
         let text = ceil((label.stringValue as NSString).size(withAttributes: [.font: label.font ?? .systemFont(ofSize: 13)]).width) + 4
         let box = min(text, right - left - 2 * slot)

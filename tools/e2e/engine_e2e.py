@@ -10323,7 +10323,7 @@ def main():
     ap.add_argument("--engine-fingerprint-only", action="store_true", help="verify built engine artifacts and exit without launching Open")
     ap.add_argument("--extensions", default=os.path.join(ROOT, ".re", "ext", "unpacked"))
     ap.add_argument("--only", choices=["shell", "extensions", "features", "measure", "tabstrip", "window", "sidebar", "peek",
-                                       "commandbar", "app-actions", "actions", "extensions-p3", "profiles", "sidebar-completion", "toolbar", "numbering", "media", "relaunch", "page",
+                                       "commandbar", "app-actions", "actions", "extensions-p3", "extensions-ui", "profiles", "sidebar-completion", "toolbar", "numbering", "media", "relaunch", "page",
                                        "sleep", "context-menus", "routing", "history", "applescript", "downloads"])
     ap.add_argument("--window-chrome-only", action="store_true", help="run only the window-chrome follow-up flows in the window suite")
     ap.add_argument("--keep", action="store_true",
@@ -10391,6 +10391,11 @@ def main():
         dirs = [ACTION_PROBE_COPY, os.path.join(opts.extensions, "bitwarden")]
         if not all(os.path.isdir(d) for d in dirs):
             sys.exit("missing extensions: %s" % dirs)
+        extra += ["--load-extension=" + ",".join(dirs), "--disable-features=DisableLoadExtensionCommandLineSwitch"]
+    if opts.only == "extensions-ui":
+        dirs = [os.path.join(ROOT, "tools/e2e/fixtures/action-probe")] + [os.path.join(opts.extensions, d) for d in ("ublock-lite", "darkreader", "bitwarden")]
+        if not all(os.path.isdir(d) for d in dirs):
+            sys.exit("missing unpacked extensions in %s" % opts.extensions)
         extra += ["--load-extension=" + ",".join(dirs), "--disable-features=DisableLoadExtensionCommandLineSwitch"]
     if opts.only == "profiles":
         extra += ["--load-extension=" + os.path.join(ROOT, "tools", "e2e", "fixtures", "tabs-probe"),
@@ -10490,7 +10495,11 @@ def main():
         print(json.dumps(results['engine'], sort_keys=True), flush=True)
         return
     def execute():
-        if opts.only == "shell":
+        if opts.only == "extensions-ui":
+            results["extensions-ui"] = CheckedResults(tracker)
+            import extensions_ui
+            extensions_ui.run(factory, results["extensions-ui"], tmp, ROOT, wait_until, new_tab, frame, read_image, EXT)
+        elif opts.only == "shell":
             results["shell"] = CheckedResults(tracker)
             shell_checks(factory, results["shell"], tmp)
         elif opts.only == "relaunch":
@@ -10622,14 +10631,14 @@ def main():
                                     else opts.config.lower()))
     with open(os.path.join(OUT, name), "w") as f:
         json.dump(results, f, indent=2, sort_keys=True)
-    for group in ("shell", "extensions", "features", "measure", "tabstrip", "window", "sidebar", "peek", "commandbar", "app-actions", "actions", "extensions-p3", "profiles", "sidebar-completion", "toolbar", "numbering", "media", "relaunch", "page", "sleep", "context-menus", "routing", "history", "applescript", "downloads"):
+    for group in ("shell", "extensions", "features", "measure", "tabstrip", "window", "sidebar", "peek", "commandbar", "app-actions", "actions", "extensions-p3", "extensions-ui", "profiles", "sidebar-completion", "toolbar", "numbering", "media", "relaunch", "page", "sleep", "context-menus", "routing", "history", "applescript", "downloads"):
         for k, v in results.get(group, {}).items():
             if isinstance(v, dict) and "ok" in v:
                 print("%-24s %s" % (k, "PASS" if v.get("ok") else "FAIL"))
             elif isinstance(v, dict) and v.get("status") in ("SKIP", "BLOCKED", "INTERRUPTED", "DEFERRED"):
                 print("%-24s %s: %s" % (k, v["status"], v.get("reason", "")))
     print("wrote", os.path.join(OUT, name))
-    failures = [k for group in ("shell", "extensions", "features", "measure", "tabstrip", "window", "sidebar", "peek", "commandbar", "app-actions", "actions", "extensions-p3", "sidebar-completion", "toolbar", "numbering", "media", "relaunch", "page", "sleep", "context-menus", "routing", "history", "applescript", "downloads")
+    failures = [k for group in ("shell", "extensions", "features", "measure", "tabstrip", "window", "sidebar", "peek", "commandbar", "app-actions", "actions", "extensions-p3", "extensions-ui", "sidebar-completion", "toolbar", "numbering", "media", "relaunch", "page", "sleep", "context-menus", "routing", "history", "applescript", "downloads")
                 for k, v in results.get(group, {}).items() if isinstance(v, dict) and v.get("ok") is False]
     if failures or not results["cleanup"]["ok"]:
         sys.exit(1)

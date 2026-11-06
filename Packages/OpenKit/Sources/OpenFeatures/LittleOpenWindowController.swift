@@ -4,6 +4,7 @@ import OpenModel
 import OpenSuggest
 import OpenDesign
 import OpenCommandBar
+import OpenExtensionsUI
 
 @MainActor
 final class FeatureRootView: NSView {
@@ -26,6 +27,19 @@ public final class LittleOpenWindowController: NSWindowController, NSWindowDeleg
     public var pillSpaceID: SpaceID? { coordinator?.model.mostRecentlyFocusedSpace(profileID: session.profileID)?.id }
     public private(set) var spacePicker: LittleOpenSpacePicker?
     public private(set) var spacePopover: NSPopover?
+    /// The App supplies the context of this window's profile; no engine dependency here.
+    public var extensionsUI: ExtensionsUIContext? {
+        didSet {
+            if let extensionObservation { oldValue?.removeObserver(extensionObservation) }
+            extensionObservation = extensionsUI?.observe { [weak self] change in
+                if case .list = change { self?.refreshExtensions() }
+            }
+            refreshExtensions()
+        }
+    }
+    public var extensionsButton: NSButton { titleBar.extensionsButton }
+    private var extensionObservation: UUID?
+    private var extensionsMenu: NSMenu?
     private weak var coordinator: LittleOpenCoordinator?
     private let factory: any WebContentHostFactory
     private let defaults: UserDefaults
@@ -56,6 +70,7 @@ public final class LittleOpenWindowController: NSWindowController, NSWindowDeleg
         root.layer?.backgroundColor = LittleOpenMetrics.titleBarFill.cgColor
         root.layer?.cornerRadius = LittleOpenMetrics.windowCornerRadius; root.layer?.cornerCurve = .continuous; root.layer?.masksToBounds = true
         root.addSubview(container); root.addSubview(titleBar)
+        titleBar.onExtensions = { [weak self] in self?.showExtensionsMenu() }
         banner.wantsLayer = true; banner.layer?.backgroundColor = LittleOpenMetrics.titleBarFill.cgColor
         bannerLabel.font = .systemFont(ofSize: LittleOpenMetrics.fontSize); bannerLabel.textColor = LittleOpenMetrics.text.nsColor
         bannerButton.target = self; bannerButton.action = #selector(dismissIntro)
@@ -127,6 +142,24 @@ public final class LittleOpenWindowController: NSWindowController, NSWindowDeleg
                 button.frame = parent.convert(CGRect(x: frame.minX, y: h - frame.maxY, width: frame.width, height: frame.height), from: root)
             }
         }
+    }
+    public func refreshExtensions() {
+        titleBar.showsExtensions = !(extensionsUI?.actions.isEmpty ?? true)
+    }
+    public func makeExtensionsMenu() -> NSMenu {
+        ExtensionsMenuBuilder.menu(actions: extensionsUI?.actions ?? [], kind: .littleOpen,
+            run: { [weak self] id, source in
+                guard let self else { return }; self.extensionsUI?.run?(id, source, self.extensionsButton)
+            }, command: { [weak self] id in
+                if id == "manage-extensions" { self?.extensionsUI?.manageExtensions?() }
+                else { self?.extensionsUI?.addExtension?() }
+            })
+    }
+    @objc private func showExtensionsMenu() {
+        guard !extensionsButton.isHidden else { return }
+        let menu = makeExtensionsMenu(); extensionsMenu = menu
+        menu.popUp(positioning: nil, at: CGPoint(x: 0, y: extensionsButton.bounds.maxY), in: extensionsButton)
+        extensionsMenu = nil
     }
     private func observeChrome() {
         guard !closed else { return }
@@ -230,7 +263,11 @@ public final class LittleOpenWindowController: NSWindowController, NSWindowDeleg
         }
         return menu
     }
-    func prepareToClose() { closed = true; commandBar.dismiss(reason: .programmatic); spacePopover?.close(); spacePicker = nil }
+    func prepareToClose() {
+        closed = true; extensionsMenu?.cancelTrackingWithoutAnimation(); extensionsMenu = nil
+        if let extensionObservation { extensionsUI?.removeObserver(extensionObservation) }; extensionObservation = nil
+        commandBar.dismiss(reason: .programmatic); spacePopover?.close(); spacePicker = nil
+    }
     public func windowShouldClose(_ sender: NSWindow) -> Bool { coordinator?.close(sessionID: session.id, archiveReason: nil); return false }
     func updateVisibility() { session.windowIsVisible = window.map { $0.isVisible && !$0.isMiniaturized && $0.occlusionState.contains(.visible) } ?? false }
     public func windowDidResize(_ notification: Notification) { layoutContent() }

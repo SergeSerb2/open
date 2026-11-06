@@ -13,6 +13,8 @@ public enum ExtensionActionIntent {
     public var tooltipStyle: SpaceThemeStyle?
     public private(set) var hovered = false
     public private(set) var pressed = false
+    /// In-process acceptance counter: draw calls, not state assignments.
+    public private(set) var redrawCount = 0
     private var tracking: NSTrackingArea?
     private var down: CGPoint?
     private var dragging = false
@@ -32,9 +34,10 @@ public enum ExtensionActionIntent {
     public override func layout() { super.layout(); plate.frame = bounds }
     public func update(_ value: ExtensionActionInfo) {
         guard ExtensionsUIContext.accepts([value]) else { return }
+        let changed = action != value
         action = value
         setAccessibilityLabel(value.accessibleName); setAccessibilityIdentifier("extensionAction.\(value.id)")
-        updatePlate(animated: false); needsDisplay = true
+        updatePlate(animated: false); if changed { needsDisplay = true }
         if hovered && !isHiddenOrHasHiddenAncestor {
             TooltipController.shared.schedule(Tooltip(title: action.tooltip, keys: action.shortcutKeys,
                 style: tooltipStyle ?? .defaultTheme(system: contentAppearance)), for: self)
@@ -56,6 +59,7 @@ public enum ExtensionActionIntent {
     }
     public override func viewDidChangeEffectiveAppearance() { super.viewDidChangeEffectiveAppearance(); updatePlate(animated: false); needsDisplay = true }
     public override func draw(_ dirtyRect: NSRect) {
+        redrawCount += 1
         guard let image = action.toolbarImage else { return }
         Self.draw(image, centeredIn: bounds, scale: window?.backingScaleFactor ?? 2)
     }

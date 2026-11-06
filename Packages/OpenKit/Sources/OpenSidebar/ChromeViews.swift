@@ -1,4 +1,5 @@
 import AppKit
+import OpenExtensionsUI
 import OpenDesign
 import OpenModel
 
@@ -123,6 +124,7 @@ final class URLFieldView: NSView {
     private let label = TextLabel()
     let copyLink = PlateButton(glyph: .copyLink)
     let siteControls = PlateButton(glyph: .siteControls)
+    private(set) var extensionStrip: ExtensionStripView?
     private var pointerInside = false { didSet { if pointerInside != oldValue { needsLayout = true; needsDisplay = true } } }
     private var tracking: NSTrackingArea?
 
@@ -193,7 +195,23 @@ final class URLFieldView: NSView {
         CATransaction.commit()
         let hasPage = tracked({ context.hasPage }) { [weak self] in self?.needsLayout = true }
         label.font = (hasPage ? Typography.urlHost : Typography.urlField).font
-        let showAccessories = hasPage && tracked({ showsButtons }) { [weak self] in self?.needsLayout = true }
+        let hovered = tracked({ showsButtons }) { [weak self] in self?.needsLayout = true }
+        let extensionsUI = tracked({ context.extensionsUI }) { [weak self] in self?.needsLayout = true }
+        if extensionStrip?.context !== extensionsUI {
+            extensionStrip?.removeFromSuperview(); extensionStrip = nil
+            if let extensionsUI {
+                let strip = ExtensionStripView(style: .urlField, context: extensionsUI)
+                strip.onVisibilityChange = { [weak self] in self?.needsLayout = true }
+                addSubview(strip); extensionStrip = strip
+            }
+        }
+        if let strip = extensionStrip {
+            strip.frame = CGRect(x: -8, y: -46, width: bounds.width + 16, height: 82)
+            strip.hasPage = hasPage; strip.hovered = hovered
+            strip.tooltipStyle = context.focusedSpace.map(context.style(for:))
+            strip.layoutSubtreeIfNeeded()
+        }
+        let showAccessories = hasPage && (hovered || extensionStrip?.showsActions == true || !(extensionsUI?.forcedVisibility.isEmpty ?? true))
         let ox = URLFieldMetrics.insetX, oy = URLFieldMetrics.y
         magnifier.isHidden = hasPage
         magnifier.frame = URLFieldMetrics.magnifierFrame.offsetBy(dx: -ox, dy: -oy)
@@ -204,7 +222,12 @@ final class URLFieldView: NSView {
         copyLink.frame = siteControls.frame.offsetBy(dx: -URLFieldMetrics.accessoryPitch, dy: 0)
         copyLink.isHidden = !showAccessories
         siteControls.isHidden = !showAccessories
-        if showAccessories { right = copyLink.frame.minX - 2 }
+        if showAccessories {
+            right = copyLink.frame.minX - 2
+            if let strip = extensionStrip, strip.showsActions, let first = strip.geometry.frames.map(\.minX).min() {
+                right = first - ox - 2
+            }
+        }
         label.frame = CGRect(x: textX, y: URLFieldMetrics.textY - oy, width: max(0, right - textX), height: 18)
     }
 

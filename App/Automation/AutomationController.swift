@@ -9,6 +9,7 @@
   import OpenCommands
   import OpenSettings
   import OpenDesign
+  import OpenExtensionsUI
   import Synchronization
 
   /// Executes automation commands (docs/automation.md) on the main actor.
@@ -19,7 +20,7 @@
   final class AutomationController {
     struct Failure: Error { let message: String }
 
-    let extensionAutomation = AutomationExtensionHandler()
+    var extensionAutomation: ExtensionPromptPresenter { app.extensionPrompts }
     unowned let app: AppDelegate
     private let blockCounter = BlockCounter()
     /// An action menu kept by `ext-menu keep`, for a later `stale` select.
@@ -84,7 +85,7 @@
       extensionAutomation.registerContexts()
       // App lifecycle commands remain available after the final window closes.
       switch cmd {
-      case "ext-prompt", "ext-manage", "ext-commands", "ext-run-command":
+      case "ext-prompt", "ext-manage", "ext-commands", "ext-run-command", "ext-strip", "ext-click", "ext-popup-state", "ext-picker", "ext-hover", "ext-ui-menu":
         return try await runExtensionCommand(cmd, a)
       case "applescript": return try await runAppleScript(a)
       case "routing-log": return routingLog()
@@ -725,12 +726,13 @@
         if a["refresh"] as? Bool == true { browser.context.extensions.reload() }
         return [
           "ready": browser.context.extensions.isReady,
+          "duplicatesDropped": w.extensions.host?.duplicatesDropped ?? 0,
           "installed": browser.context.extensions.installedExtensions.map(describe),
-          "actions": EngineExtensionHost(browser).extensionActions.map {
-            [
-              "id": $0.extensionID, "title": $0.title, "icon": $0.iconPNG?.count ?? 0, "badge": $0.badgeText ?? NSNull(),
-              "enabled": $0.isEnabled, "popup": $0.hasPopup,
-            ] as [String: Any]
+          "actions": browser.extensionActions.map { action in
+            var value = describe(action)
+            value["icon"] = (value["icon"] as? [String: Any])?["bytes"] ?? 0
+            value["popup"] = action.hasPopup
+            return value
           },
         ]
       case "popup":
@@ -756,6 +758,10 @@
         guard let id = a["extension"] as? String else { throw Failure(message: "missing extension") }
         let browser = try focusedBrowser(w)
         browser.setExtensionAction(id, pinned: a["pinned"] as? Bool ?? true)
+        if let index = a["index"] as? Int {
+          guard index >= 0, index < 512 else { throw Failure(message: "invalid pinned index") }
+          browser.moveExtensionAction(id, toPinnedIndex: UInt(index))
+        }
         return true
       case "ext-move":
         guard let id = a["extension"] as? String, let index = a["index"] as? Int else { throw Failure(message: "missing extension or index") }
@@ -775,13 +781,13 @@
         guard let menu = browser.contextMenu(forExtensionAction: id, source: a["source"] as? String == "menu" ? .menuItem : .toolbarAction)
         else { throw Failure(message: "no menu") }
         func items(_ list: [OEContextMenuItem]) -> [[String: Any]] {
-          list.map { ["title": $0.title, "command": $0.commandIdentifier, "enabled": $0.isEnabled, "checked": $0.isChecked,
+          list.map { ["title": ExtensionsMenuBuilder.relabel($0.title), "command": $0.commandIdentifier, "enabled": $0.isEnabled, "checked": $0.isChecked,
                       "separator": $0.isSeparator, "submenu": items($0.submenu)] as [String: Any] }
         }
         let listed = items(menu.items)
         if let title = a["select"] as? String {
           func find(_ list: [OEContextMenuItem]) -> OEContextMenuItem? {
-            for item in list { if item.title == title { return item }; if let hit = find(item.submenu) { return hit } }
+            for item in list { if item.title == title || ExtensionsMenuBuilder.relabel(item.title) == title { return item }; if let hit = find(item.submenu) { return hit } }
             return nil
           }
           guard let item = find(menu.items) else { menu.cancel(); throw Failure(message: "no menu item \(title)") }
@@ -1817,7 +1823,7 @@
     /// sends it straight to the window's first responder (the page view when
     /// it has focus), which exercises the engine's pre-key hook. In-process
     /// only: the system keyboard is never touched.
-    private func sendKey(_ a: [String: Any], _ w: EngineWebContentHostFactory) async throws -> Any {
+    func sendKey(_ a: [String: Any], _ w: EngineWebContentHostFactory) async throws -> Any {
       guard let target = a["window"] as? String == "popup" ? w.popupPanel :
         (a["window"] as? Int).flatMap({ n in NSApp.windows.first { $0.windowNumber == n } }) ?? w.window
       else { throw Failure(message: "no window") }
@@ -1843,7 +1849,7 @@
         "return": ("\r", 36), "escape": ("\u{1b}", 53), "tab": ("\t", 48), "space": (" ", 49),
         "delete": ("\u{7f}", 51), "forward-delete": (String(Character(UnicodeScalar(NSDeleteFunctionKey)!)), 117),
         "o": ("o", 31), ",": (",", 43), "z": ("z", 6), "n": ("n", 45), "t": ("t", 17), "w": ("w", 13), "l": ("l", 37), "f": ("f", 3), "s": ("s", 1), "a": ("a", 0),
-        "e": ("e", 14), "v": ("v", 9), "x": ("x", 7), "c": ("c", 8), "d": ("d", 2), "i": ("i", 34), "j": ("j", 38), "y": ("y", 16), "1": ("1", 18), "2": ("2", 19), "9": ("9", 25), "=": ("=", 24),
+        "e": ("e", 14), "v": ("v", 9), "x": ("x", 7), "c": ("c", 8), "d": ("d", 2), "i": ("i", 34), "j": ("j", 38), "y": ("y", 16), "u": ("u", 32), "1": ("1", 18), "2": ("2", 19), "9": ("9", 25), "=": ("=", 24),
         "control": ("", 59), "command": ("", 55),
         "down": (String(Character(UnicodeScalar(NSDownArrowFunctionKey)!)), 125),
         "up": (String(Character(UnicodeScalar(NSUpArrowFunctionKey)!)), 126),

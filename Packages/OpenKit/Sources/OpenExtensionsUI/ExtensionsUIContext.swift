@@ -5,7 +5,15 @@ import OpenWeb
 @MainActor public final class ExtensionsUIContext {
     public private(set) var actions: [ExtensionActionInfo] = []
     public var popupOpenID: String?
-    public var forcedVisibility: ForcedVisibility = []
+    public var forcedVisibility: ForcedVisibility = [] { didSet { if forcedVisibility != oldValue { notify(.visibility) } } }
+    public enum Change { case list, action(ExtensionActionInfo), visibility }
+    private var observers: [UUID: (Change) -> Void] = [:]
+    @discardableResult public func observe(_ body: @escaping (Change) -> Void) -> UUID {
+        let id = UUID(); observers[id] = body; return id
+    }
+    public func removeObserver(_ id: UUID) { observers[id] = nil }
+    private func notify(_ change: Change) { for body in Array(observers.values) { body(change) } }
+    public func refreshVisibility() { notify(.visibility) }
     public struct ForcedVisibility: OptionSet, Sendable {
         public let rawValue: Int
         public init(rawValue: Int) { self.rawValue = rawValue }
@@ -36,11 +44,11 @@ import OpenWeb
     }
     @discardableResult public func setActions(_ value: [ExtensionActionInfo]) -> Bool {
         guard Self.accepts(value) else { return false }
-        actions = value; return true
+        if actions != value { actions = value; notify(.list) }; return true
     }
     @discardableResult public func updateAction(_ value: ExtensionActionInfo) -> Bool {
         guard Self.accepts([value]), let i = actions.firstIndex(where: { $0.id == value.id }) else { return false }
-        actions[i] = value; return true
+        if actions[i] != value { actions[i] = value; notify(.action(value)) }; return true
     }
     public static func ordered(_ actions: [ExtensionActionInfo]) -> [ExtensionActionInfo] {
         actions.sorted {

@@ -444,6 +444,8 @@ public enum LittleOpenMetrics {
     public static let closeGlyphSize: CGFloat = 11
     public static func capsule(width w: CGFloat) -> CGRect { CGRect(x: 84, y: 8, width: max(0, w - 289), height: 31) }
     public static func copy(width w: CGFloat) -> CGRect { CGRect(x: w - 228, y: 16, width: 16, height: 16) }
+    /// guess (lead), capture S-7: extension action menu inside the URL capsule.
+    public static func extensions(width w: CGFloat) -> CGRect { CGRect(x: w - 252, y: 16, width: 16, height: 16) }
     public static func pill(width w: CGFloat) -> CGRect { CGRect(x: w - 196, y: 8, width: 188, height: 30) }
     public static func pillButton(width w: CGFloat) -> CGRect { CGRect(x: w - 191, y: 15, width: 148, height: 17) }
     public static func chevron(width w: CGFloat) -> CGRect { CGRect(x: w - 29, y: 15, width: 16, height: 16) }

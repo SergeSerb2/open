@@ -45,6 +45,7 @@ public final class BrowserWindowController: NSWindowController, NSWindowDelegate
     /// Runtime menu state from the App (page-platform §7.1); nil keeps the item as built.
     public var onMenuState: ((String) -> CommandMenuState?)?
     /// Sees every key event of this window first (after the tab switcher); true consumes it.
+    public var onExtensionShortcut: ((NSEvent) -> Bool)?
     public var keyInterceptor: ((NSEvent) -> Bool)?
     public var ownsAdditionalKeyWindow: ((NSWindow) -> Bool)?
     public var isApplicationActive: (() -> Bool)?
@@ -889,6 +890,12 @@ public final class BrowserWindowController: NSWindowController, NSWindowDelegate
            let shortcut = KeyboardShortcut.from(event: event),
            let id = SystemCommandActions.command(for: shortcut, overrides: keyBindingOverrides),
            SystemCommandActions.isEnabled(id), SystemCommandActions.perform(id) {
+            lastKeyRoute = (eventWindow.windowNumber, event.keyCode, flags, event.timestamp, true)
+            return true
+        }
+        // Extensions run after Open's reserved and non-page-first bindings, before the page.
+        // The App drops conflicts with every Open default/user binding from this table.
+        if !routing.isCommandBarOpen, onExtensionShortcut?(event) == true {
             lastKeyRoute = (eventWindow.windowNumber, event.keyCode, flags, event.timestamp, true)
             return true
         }
