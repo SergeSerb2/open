@@ -10,6 +10,9 @@ final class ExtensionsMainMenuProvider: NSObject, NSMenuDelegate {
   func menuNeedsUpdate(_ menu: NSMenu) {
     for item in injected where item.menu === menu { menu.removeItem(item) }
     injected.removeAll()
+    // The first Little Open frame precedes its browser. Do not borrow a main
+    // window's actions during that gap.
+    if app.keyLittleOpen != nil && app.littleOpenExtensionFactory() == nil { return }
     guard let factory = app.littleOpenExtensionFactory() ?? NSApp.keyWindow.flatMap({ app.factory(forKeyWindow: $0) })
       ?? app.frontWindowController.flatMap({ app.hostFactories[$0.windowID] }) else { return }
     let built = ExtensionsMenuBuilder.menu(actions: factory.extensions.context.actions, kind: .bar,

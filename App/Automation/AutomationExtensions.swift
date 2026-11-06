@@ -59,7 +59,12 @@ extension AutomationController {
     }
     let factory: EngineWebContentHostFactory
     if args["surface"] as? String == "little" {
-      guard let little = app.littleOpenExtensionFactory() else { throw Failure(message: "no focused Little Open extension host") }
+      // A welcome tab may focus the main window between automation calls.
+      // Select the requested Little Open window; clicks still use native events.
+      let target: NSWindow? = if let number = args["window"] as? Int {
+        NSApp.window(withWindowNumber: number)
+      } else { NSApp.keyWindow }
+      guard let little = app.littleOpenExtensionFactory(window: target) else { throw Failure(message: "no Little Open extension host for window") }
       factory = little
     } else { factory = try window }
     if cmd == "ext-redraw-measure" {
@@ -185,12 +190,21 @@ extension AutomationController {
       little.contentView.layoutSubtreeIfNeeded()
       let button = little.extensionsButton, rect = button.convert(button.bounds, to: nil)
       if cmd == "ext-strip" {
+        if let retain = args["retainBrowser"] as? Bool {
+          WindowExtensions.retainedLittleOpenBrowser = retain ? ui.host?.browser : nil
+          WindowExtensions.retainedLittleOpenContext = retain ? ui.context : nil
+        }
+        let old = WindowExtensions.retainedLittleOpenBrowser
         return ["ids": ui.context.actions.map(\.id), "more": false,
           "frames": [[rect.minX, rect.minY, rect.width, rect.height]],
           "buttonFrame": [rect.minX, rect.minY, rect.width, rect.height],
           "visible": !button.isHiddenOrHasHiddenAncestor, "ready": ui.host?.actionsReady == true,
           "browser": ui.host?.browser.identifier ?? 0, "context": ui.host?.browser.context.identifier ?? "",
           "activeTab": ui.host?.browser.activeWebContent?.chromeTabIdentifier ?? -1,
+          "delegateMatches": ui.host?.browser.delegate === factory,
+          "retainedBrowser": old?.identifier ?? 0,
+          "retainedDelegateCleared": old != nil && old?.delegate == nil,
+          "retainedActionIDs": WindowExtensions.retainedLittleOpenContext?.actions.map(\.id) ?? [],
           "contextIDs": ui.context.actions.map(\.id)] as [String: Any]
       }
       if cmd == "ext-click" {
