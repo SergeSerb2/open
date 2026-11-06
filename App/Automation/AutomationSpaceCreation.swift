@@ -32,6 +32,11 @@ extension AutomationController {
         "profile": creation.profilePicker.selectedProfileID?.description ?? "", "creatingProfile": creation.profilePicker.isCreatingProfile,
         "widthClass": form.widthClass.rawValue, "pinnedSubmit": form.submitIsPinned,
         "localUndo": creation.localUndoManager.canUndo, "modelUndo": app.undoManager.canUndo,
+        "localUndoName": creation.localUndoManager.undoActionName, "localRedoName": creation.localUndoManager.redoActionName,
+        "windowUndoMatches": browser.window?.undoManager === creation.localUndoManager,
+        "nameUndoMatches": form.nameField.currentEditor()?.undoManager === creation.localUndoManager,
+        "themeUndoMatches": creation.themeEditor?.panel.undoManager === creation.localUndoManager,
+        "themeCommits": creation.themeEditor?.commitCount ?? 0,
         "themeOpen": creation.themeEditor != nil,
         "previewMatches": browser.background.targetStyle == form.style,
         "otherWindowsMatchModel": app.windowControllers.filter { $0 !== browser }.allSatisfy { controller in
