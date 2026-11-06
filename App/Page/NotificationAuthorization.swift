@@ -59,13 +59,17 @@ final class NotificationAuthorization {
     /// `suppressed` (an e2e run that must not show the macOS prompt), or
     /// `skipped:<status>` (macOS already answered).
     private(set) var requestLog: [String] = []
-    /// `OPEN_AUTOMATION_NOTIFICATION_AUTHORIZATION=record`: log the request
-    /// instead of showing the macOS prompt (the `page` suite, unless the user
-    /// runs U-N1).
-    let suppressesRequests = ProcessInfo.processInfo.environment["OPEN_AUTOMATION_NOTIFICATION_AUTHORIZATION"] == "record"
+    /// Record-only requests still read the native status. The e2e setup guard
+    /// also skips native status reads and activation observation, because even
+    /// notification registration can produce an ad-hoc signing disclosure.
+    let suppressesRequests = AutomationNotificationSetup.suppressesSystemSetup
+      || ProcessInfo.processInfo.environment["OPEN_AUTOMATION_NOTIFICATION_AUTHORIZATION"] == "record"
   #endif
 
   private init() {
+    #if OPEN_AUTOMATION
+    if AutomationNotificationSetup.suppressesSystemSetup { return }
+    #endif
     activationObserver = NotificationCenter.default.addObserver(
       forName: NSApplication.didBecomeActiveNotification, object: nil, queue: .main
     ) { _ in
@@ -79,9 +83,13 @@ final class NotificationAuthorization {
     Task { await self.readStatus() }
   }
 
-  /// Reads the status now and returns it.
+  /// Reads the status now. Suppressed e2e setup leaves it unknown without
+  /// registering with macOS.
   @discardableResult
   func readStatus() async -> Status {
+    #if OPEN_AUTOMATION
+    if AutomationNotificationSetup.suppressesSystemSetup { return status }
+    #endif
     let raw = await Self.authorizationStatus()
     update(Status(raw))
     return status
@@ -95,6 +103,12 @@ final class NotificationAuthorization {
   }
 
   private func requestIfNotDetermined() async {
+    #if OPEN_AUTOMATION
+    if AutomationNotificationSetup.suppressesSystemSetup {
+      requestLog.append("suppressed")
+      return
+    }
+    #endif
     let current = await readStatus()
     guard current == .notDetermined, !requestInFlight else {
       #if OPEN_AUTOMATION
