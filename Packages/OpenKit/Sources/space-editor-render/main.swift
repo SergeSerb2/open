@@ -14,6 +14,8 @@ enum RenderCLI {
     space-editor-render editor --out FILE.png [--scale 1|2] [--appearance dark|light]
                                [--style JSON] [--page N] [--hover CONTROL] [--backdrop RRGGBB] [--empty]
                                [--pressed CONTROL] [--focus CONTROL]
+    space-editor-render picker --out FILE.png --page emoji|icons [--target space|tab|folder]
+                               [--scale 1|2] [--appearance dark|light]
     space-editor-render window --out FILE.png --snapshot DIR|--synthetic [--space N] [--style JSON]
                                [--size 2216x1394] [--width 228] [--scale 1|2] [--appearance dark|light]
                                [--calibrated-import-intensity] [--fixed-p3-blend]
