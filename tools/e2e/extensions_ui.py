@@ -487,7 +487,8 @@ def run(factory, results, tmp, root, wait_until, new_tab, frame, read_image, ext
                     y=app.call("window-state")["frame"][3]-cancel[1]-cancel[3]/2)
                 closed = wait_until(lambda: not app.call("focus-state")["findVisible"] and app.call("focus-state")["owner"] == "page", timeout=3)
                 find_rows.append({"surface":surface, "ok":find["visible"] and find["controls"]["closeHitMatches"] and cancel[2]>0 and bool(closed)
-                    and bool(frames) and not any(overlaps(find["frame"], f) for f in frames) and strip()["visible"],
+                    and bool(frames) and not any(overlaps(find["frame"], f) for f in frames)
+                    and strip("url" if surface == "peek" else surface)["visible"],
                     "find":find, "stripFrames":frames, "closedByNativeClick":bool(closed)})
             finally:
                 if app.call("focus-state")["findVisible"]:

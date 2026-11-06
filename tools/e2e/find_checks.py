@@ -292,8 +292,13 @@ def run(h, factory, results, tmp):
         key('f', ['cmd']); key(text='quasar'); p = settled(count='1/5')
         row('F28_peek', p['visible'] and p['total'] == 5 and p['tab'] not in (tab, other) and rect_ok(p) and clear_of_chrome(p), pane=p)
         viewport_close('F33_peek_viewport_close')
-        old_peek=pane()['frame']; app.call('window-frame', frame=[100,70,1200,800]); resized_peek=pane()
-        row('F34_peek_live_resize', rect_ok(resized_peek) and clear_of_chrome(resized_peek) and old_peek!=resized_peek['frame'], before=old_peek, pane=resized_peek)
+        old_peek=pane()['frame']; old_viewport=pane()['viewportFrame']
+        app.call('window-frame', frame=[100,70,1200,800])
+        # Peek lays out its page viewport on the next AppKit layout pass. Wait
+        # for that input to change, then apply the same Find placement checks.
+        viewport_resized=h.wait_until(lambda: pane().get('viewportFrame') != old_viewport, timeout=3, step=.05)
+        resized_peek=pane()
+        row('F34_peek_live_resize', bool(viewport_resized) and rect_ok(resized_peek) and clear_of_chrome(resized_peek) and old_peek!=resized_peek['frame'], before=old_peek, viewportBefore=old_viewport, pane=resized_peek)
         if os.environ.get('OPEN_FIND_FAIL_AT_PEEK') == '1': raise RuntimeError('intentional Find cleanup proof with Peek open')
         key('escape')
         field_escape = not pane()['visible'] and app.call('peek-state')['shown']
