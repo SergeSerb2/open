@@ -41,7 +41,7 @@ public final class BoostEditorSession {
     private var deleted = false
     public private(set) var isZapActive = false
     public private(set) var isSelecting = false
-    public private(set) var zapAvailable = true
+    public var zapAvailable: Bool { host.zapAvailability(tabID: context.tabID) }
     /// Code-mode owner inserts through its NSTextView at the current CSS caret.
     public var insertSelectorAtCaret: ((String) -> Void)?
     private var pickerObservation: SiteControlObservationToken?
@@ -169,7 +169,6 @@ public final class BoostEditorSession {
         if isSelecting { endPickerSession() }
         endInteractive()
         isZapActive = host.enterZap(boostID: boost.id, tabID: context.tabID)
-        zapAvailable = isZapActive
         if isZapActive { host.requestZapCounts(tabID: context.tabID) }
         onChange?()
     }
@@ -182,8 +181,9 @@ public final class BoostEditorSession {
         onChange?()
     }
     /// App calls this on tab switch, navigation (including same-URL reload),
-    /// frame destruction, and transport loss. Close calls it as well.
+    /// frame destruction, and transport loss. Close sends its own unconditional exit.
     public func endPickerSession() {
+        guard isZapActive || isSelecting else { return }
         host.exitZap(tabID: context.tabID)
         isZapActive = false; isSelecting = false; onChange?()
     }
@@ -215,7 +215,8 @@ public final class BoostEditorSession {
         guard !isClosed else { return }
         if interactiveBefore != nil { endInteractive() }
         previewWork?.cancel(); previewWork = nil; sampleTask?.cancel()
-        endPickerSession()
+        host.exitZap(tabID: context.tabID)
+        isZapActive = false; isSelecting = false
         if let pickerObservation { host.removePickerObserver(pickerObservation); self.pickerObservation = nil }
         if isNew && boost.isEmpty && !deleted {
             _ = store.delete(id: boost.id); host.refresh(profile: context.profileID)

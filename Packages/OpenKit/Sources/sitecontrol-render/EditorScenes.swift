@@ -22,6 +22,7 @@ final class EditorHost: BoostEditorHost {
     var observers: [SiteControlObservationToken: @MainActor (ItemID,BoostPickerEvent)->Void] = [:]
     var globallyEnabled = true
     var zapEnabled = false
+    var failedZapEntries = 0
     var pickerCalls: [String] = []
     lazy var coordinator = BoostPickerCoordinator(store: boostStore)
     var pickerCommand: PickerOutbound?
@@ -65,9 +66,11 @@ final class EditorHost: BoostEditorHost {
         refreshDurations.append((CACurrentMediaTime()-start)*1000)
     }
     func pageSnapshot(tabID: ItemID) async -> Data? { if snapshotDelay > 0 { try? await Task.sleep(for: .seconds(snapshotDelay)) }; return snapshots }
+    func zapAvailability(tabID: ItemID) -> Bool { zapEnabled }
     func enterZap(boostID: BoostID,tabID: ItemID) -> Bool {
         pickerCalls.append("enter")
         guard zapEnabled else { return false }
+        if failedZapEntries > 0 { failedZapEntries -= 1; return false }
         pickerCommand = coordinator.enterZap(boostID: boostID, for: "fixture-document"); return pickerCommand != nil
     }
     func enterSelectorPicker(boostID: BoostID,tabID: ItemID) -> Bool {

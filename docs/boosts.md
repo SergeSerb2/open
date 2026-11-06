@@ -237,7 +237,12 @@ pages, and fan out `coordinator.lastEvent` after each accepted message.
 `BoostEditorSession` observes those events, reloads the stored count, and registers
 one full-Boost undo step per commit/reveal. `endPickerSession()` is the App hook for
 tab switch, same-URL reload, frame destruction, and transport loss. Close removes
-the observation. A failed host entry disables Zap with "Zap isn't available yet."
+the observation. Idle lifecycle notifications send no exit command or picker
+redraw; close still sends one unconditional exit. The required host query
+`zapAvailability(tabID:)` returns false before P7 or without an Open world. The
+button reads it on each refresh and shows "Zap isn't available yet." when false.
+A transient failed entry leaves Zap off and enabled while the host is available,
+so the user can retry.
 
 Select mode uses a separate native capability (`enterZap(..., mode: .select)`).
 Its "Use Selector" action sends `picker:selected` with selector and match count.
@@ -260,7 +265,8 @@ and exits", with the real store, coordinator, decoder, planner, and NSTextView.
 The host boundary is fake. `sitecontrol-render zap-flows` runs those package flows
 alone. New gate negative proofs and final counts are in the PR receipt.
 The PR includes the negative-proof logs in collapsed sections: 40 initial browser
-mutations plus 15 direct-choice mutations, and 12 native behavior mutations that
-cover all 14 new Zap/selector rows. Raw receipts remain in the shared `.re/`
-handoff directory. The new Zap-on scene has 1x/2x render receipts; existing
+mutations plus 15 direct-choice mutations, and 17 native behavior mutations that
+cover all 20 Zap/selector rows, including the round 1 lifecycle and retry fixes.
+Raw receipts remain in the shared `.re/` handoff directory. The new Zap-on scene
+has 1x/2x render receipts; existing
 baseline images, comparators, thresholds, and allowlists remain unchanged.

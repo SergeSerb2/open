@@ -1159,6 +1159,7 @@ As on PR #103 (lead round 1 and 2 changes kept), plus `browserWindowFrame(tabID:
     func preview(_ boost: Boost, tabID: ItemID)                     // §5.3 bound page only
     func refresh(profile: ProfileID)                                // §5.3 all matching pages
     func pageSnapshot(tabID: ItemID) async -> Data?                 // PNG for baseHue
+    func zapAvailability(tabID: ItemID) -> Bool                     // required query; false before P7 or without the Open world
     func enterZap(boostID: BoostID, tabID: ItemID) -> Bool           // coordinator + send; false if blocked (P7)
     func enterSelectorPicker(boostID: BoostID, tabID: ItemID) -> Bool // required select-mode capability; false if blocked
     func exitZap(tabID: ItemID)
@@ -1451,6 +1452,10 @@ session observer. The card behavior is the **Open choice (lead, 2026-11-06)** in
 §4.8: Cancel commits nothing; precise and direct-related choices each close the
 card, persist once, and undo once. `zap:replaced` decoding remains compatible.
 Negative-proof logs and counts belong in the PR; raw receipts remain in `.re/`.
+Idle lifecycle notifications send no exit command or picker redraw. Close still
+sends one unconditional exit. The required host query `zapAvailability(tabID:)`
+supplies the button state on each refresh; a transient failed entry leaves the
+button off and enabled when the host remains available, so the user can retry.
 
 **Step 8 package integration (S12-D):** `BoostEditorHost.enterSelectorPicker`
 is a plain protocol requirement without a default; the render harness fake host
