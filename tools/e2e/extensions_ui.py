@@ -458,7 +458,7 @@ def run(factory, results, tmp, root, wait_until, new_tab, frame, read_image, ext
             little=wait_until(lambda:next((row for row in app.call("little-open-state")["sessions"]
                 if row["id"]==little_id and row["state"]=="page" and not row["loading"]),None),timeout=15)
             little_strip=app.call("ext-strip",surface="little")
-            little_menu=app.call("ext-click",extension="more",surface="little")
+            little_menu=app.call("ext-click",extension="more",surface="little") if little_strip["visible"] else {"menu":[]}
             results["X19_button_menu"]={"ok":bool(little) and little_strip["visible"] and len(little_strip["ids"])>=4
                 and little["titleElements"].get("extensions")==[little["frame"][2]-252,16,16,16]
                 and [i["title"] for i in little_menu["menu"] if not i["separator"]][-2:]==["Manage Extensions…","Add Extension…"],
