@@ -649,7 +649,8 @@ final class EngineWebContentHostFactory: NSResponder, WebContentHostFactory {
       guard let tab = model.tab(id: id), tab.pinnedURL != nil else { return false }
       showCommandBar(.editCurrentURL, editingPinnedTab: tab.id); return true
     case .editSpaceTheme(let id): return controller?.editSpaceTheme(id) == true
-    case .showSiteControls, .changeSpaceIcon, .newProfile, .shareSpace,
+    case .newProfile(let space): app.settingsPresenter.showNewProfile(sourceSpace: space); return true
+    case .showSiteControls, .changeSpaceIcon, .shareSpace,
          .changeIcon, .customizePage:
       return false // Explicitly deferred UI entries; see docs/app-shell.md Step B.
     default: return nil

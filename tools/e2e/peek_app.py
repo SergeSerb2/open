@@ -8,8 +8,9 @@ def run(factory, results, tmp, harness):
     new_tab, wait_until = harness['new_tab'], harness['wait_until']
     server, port = harness['_sleep_server']()
     app = factory(urls=(), fresh=True)
-    keys = ('open.peek.otherSites', 'open.peek.shiftClick')
+    keys = ('open.links.openPeekOtherSites', 'open.links.openPeekShiftClick')
     saved = {key: app.call('defaults', key=key, persistent=True) for key in keys}
+    saved['open.settings.lastPane'] = app.call('defaults', key='open.settings.lastPane', persistent=True)
     for key in keys:
         app.call('defaults', key=key, value=None)
     def url(host='a.localhost', path='a.html'):
@@ -102,7 +103,12 @@ def run(factory, results, tmp, harness):
         clear()
         app.call('select', tab=source)
         for key, shifted in zip(keys, (False, True)):
+            app.call('settings-pane', pane='links')
+            settings = app.call('settings-state')
             for k in keys: app.call('defaults', key=k, value=k!=key)
+            # No Settings toggle UI driver exists. Write the exact key bound by the pane.
+            app.call('key', key='w', modifiers=['cmd'], window=settings['settings'], route='app')
+            app.call('window-focus', id=source_window, activate=True)
             target_tab = today if shifted else source
             app.call('select',tab=target_tab)
             navigate(target_tab, url())
@@ -111,6 +117,10 @@ def run(factory, results, tmp, harness):
                 different = wait_until(lambda: app.call('window-state')['id'] != source_window, timeout=5, step=.05)
                 no_peek = not state()['stack']
                 results['peek_setting_off_shiftClick'] = {'ok': bool(different) and no_peek, 'defaultNewWindow': bool(different)}
+                results['peek_settings_links_shift_disabled'] = {
+                    'ok': settings['pane'] == 'links' and bool(different) and no_peek,
+                    'path': 'Settings > Links; defaults writes open.links.openPeekShiftClick',
+                    'driver': 'canonical-key defaults automation; no Settings toggle UI driver'}
                 if different: app.call('window-close')
                 app.call('window-focus', id=source_window, activate=True)
             else:
