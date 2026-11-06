@@ -586,7 +586,7 @@ def context_menu_checks(factory, results, tmp, h):
                 app.call('key', key='e', modifiers=['command', 'shift'], route='app')
                 state = wait(lambda: (lambda s: s if s['shown'] else None)(app.call('peek-state')), timeout=5) or {}
                 content = state.get('stack', [{}])[-1].get('content')
-                urls = wait(lambda: [p['url'] for p in app.call('pages') if p['identifier'] == content and p['url'] == mail_url], timeout=5) or []
+                urls = (wait(lambda: [p['url'] for p in app.call('pages') if p['identifier'] == content and p['url'] == mail_url], timeout=5) or []) if content is not None else []
                 after = app.call('tabs')
                 focused = next(s['id'] for s in app.call('spaces') if s['focused'])
                 return {'ok': enabled and not any(t['selected'] for t in before) and focused == mail_space
