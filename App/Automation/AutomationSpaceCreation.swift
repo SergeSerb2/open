@@ -12,15 +12,8 @@ extension AutomationController {
     case "theme-get":
       guard let space = (args["space"] as? String).flatMap({ raw in app.model.spaces.first { $0.id.description == raw } }) ?? host.focusedSpace else { throw Failure(message: "unknown Space") }
       return ["style": try space.theme.style.map { try JSONSerialization.jsonObject(with: JSONEncoder().encode($0)) } ?? NSNull()]
-    case "editor-open":
-      switch args["kind"] as? String ?? "theme" {
-      case "create": return browser.beginSpaceCreation()
-      case "theme":
-        guard let creation = browser.spaceCreationController else { throw Failure(message: "model theme editor is not installed yet") }
-        creation.openThemeEditor(); return creation.themeEditor != nil
-      default: throw Failure(message: "unknown editor kind")
-      }
-    case "editor-close":
+    case "creation-open": return browser.beginSpaceCreation()
+    case "creation-close":
       if let editor = browser.spaceCreationController?.themeEditor { editor.close() }
       else { browser.spaceCreationController?.cancel() }
       return true
@@ -45,7 +38,7 @@ extension AutomationController {
           controller.context.focusedSpace.map { controller.background.targetStyle == controller.context.style(for: $0) } ?? true
         },
         "nameFocused": form.nameField.currentEditor() != nil] as [String: Any]
-    case "editor-act":
+    case "creation-act":
       guard let creation = browser.spaceCreationController else { throw Failure(message: "no creation form") }
       let form = creation.creationView
       switch args["action"] as? String {

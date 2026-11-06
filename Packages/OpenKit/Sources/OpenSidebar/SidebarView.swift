@@ -390,6 +390,22 @@ public final class SidebarView: NSView {
         pager.currentPage.map { convert($0.header.bounds, from: $0.header) }
     }
 
+    /// Icon anchors use AppKit window coordinates, including a floating sidebar.
+    public func headerIconFrame(for space: SpaceID) -> CGRect? {
+        guard let page = pager.currentPage, page.space.id == space else { return nil }
+        return page.header.iconFrameInWindow
+    }
+
+    public func rowIconFrame(for node: ItemID) -> CGRect? {
+        guard let page = pager.currentPage, let obj = context.model.node(id: node)?.object else { return nil }
+        let row = page.outline.row(forItem: obj)
+        guard row >= 0, page.outline.rows(in: page.outline.visibleRect).contains(row),
+              let cell = page.outline.view(atColumn: 0, row: row, makeIfNecessary: true) else { return nil }
+        if let tab = cell as? TabCellView { return tab.favicon.convert(tab.favicon.bounds, to: nil) }
+        if let folder = cell as? FolderCellView { return folder.icon.convert(folder.icon.bounds, to: nil) }
+        return nil
+    }
+
     /// Scrolls the focused page so the node's row is visible.
     public func reveal(nodeID: ItemID) {
         guard let page = pager.currentPage, let obj = context.model.node(id: nodeID)?.object else { return }

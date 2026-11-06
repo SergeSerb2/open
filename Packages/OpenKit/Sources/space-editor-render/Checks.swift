@@ -201,6 +201,7 @@ enum Checks {
         fixtureMath(); harmonyAndPad(); appearances(); costs(); textures(); cacheBounds(); displaySpaceBlend(); try persistence()
         try EditorChecks.run()
         try CreationChecks.run()
+        try PickerScene.check()
         print("checks: \(passed) passed, \(failed) failed")
         if failed > 0 { throw CLIError(description: "checks failed") }
     }

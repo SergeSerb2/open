@@ -9,6 +9,7 @@ import OpenCommands
 import OpenCommandBar
 import OpenSuggest
 import OpenSettings
+import OpenSpaceEditor
 
 // App has no window controller of its own.
 typealias BrowserWindowController = OpenFeatures.BrowserWindowController
@@ -74,6 +75,8 @@ final class EngineWebContentHostFactory: NSResponder, WebContentHostFactory {
   var hasFindSelectionTask: Bool { findController?.hasSelectionTask == true }
   var pendingSpaceProfileAlert: NSAlert?
   var pendingRenameAlert: NSAlert?
+  var iconPicker: IconPickerController?
+  var iconPickerSpaceID: SpaceID?
   var sidebarSharePicker: NSSharingServicePicker?
   /// The copy toast whose Share picker is open: it stays until the picker closes (page-platform §4.2.2).
   var shareToastHandle: ToastHandle?
@@ -97,6 +100,7 @@ final class EngineWebContentHostFactory: NSResponder, WebContentHostFactory {
   private(set) var lastNavigationFocusRestored = false
   func showCommandBar(_ mode: CommandBarMode, editingPinnedTab: ItemID? = nil) {
     guard !isClosing, !app.terminationRequested else { return }
+    iconPicker?.close()
     let requestedAt = LaunchTiming.shared.elapsedMilliseconds
     app.prepareCommandServices()
     if commandBarSession == nil { commandBarSession = AppCommandBarSession(factory: self) }
@@ -190,6 +194,9 @@ final class EngineWebContentHostFactory: NSResponder, WebContentHostFactory {
   func attach(_ controller: BrowserWindowController) {
     self.controller = controller
     controller.shouldDeferKeyToFirstResponder = { [weak self] event in
+      if let picker = self?.iconPicker, event.window === picker.panel || event.window === picker.toneWindow {
+        return event.modifierFlags.intersection([.command, .control]).isEmpty
+      }
       guard let self, event.window === self.window, self.findController?.owns(self.window?.firstResponder) == true,
         event.modifierFlags.intersection([.command, .control, .option]).isEmpty else { return false }
       return [36, 76, 53, 125, 126].contains(event.keyCode)
@@ -248,6 +255,7 @@ final class EngineWebContentHostFactory: NSResponder, WebContentHostFactory {
     controller.showsFullURLWithToolbar = UserDefaults.standard.bool(forKey: AppCommand.showFullURLKey)
     controller.onStateChange = { [weak self] in
       guard let self else { return }
+      if let id = self.iconPickerSpaceID, self.focusedSpace?.id != id { self.iconPicker?.close() }
       if self.app.engineReady { self.markVisibleTabsLive(); self.controller?.container.refreshPlaceholders() }
       // BrowserWindowController schedules its SnapshotStore once per committed change.
       self.mirror.sync(); self.extensions.focusChanged(); self.commandBarSession?.contextDidChange(); self.app.scheduleMenuRebuild()
@@ -493,6 +501,7 @@ final class EngineWebContentHostFactory: NSResponder, WebContentHostFactory {
   private func treeChanged(_ change: TreeChange) {
     guard !isClosing, !app.shutdownPrepared else { return }
     treeChangeCount += 1
+    if let id = iconPickerSpaceID, focusedSpace?.id != id || model.space(id: id) == nil { iconPicker?.close() }
     if case .spaceProfileChanged(let spaceID, _, _) = change, let space = model.space(id: spaceID) {
       let ids = Set((flattened(space.pinned) + flattened(space.today)).map(\.id))
       if let controller, controller.hasPeekController,
@@ -557,6 +566,7 @@ final class EngineWebContentHostFactory: NSResponder, WebContentHostFactory {
     let content = makeContent(for: tab, url: nil, requestContext: request.context); focus(space: space); select(nodeID: tab.id); return content
   }
   func focus(space: Space) {
+    if let id = iconPickerSpaceID, id != space.id { iconPicker?.close() }
     controller?.existingTabSwitcher?.cancel()
     withoutUndo { model.focusSpace(windowID: windowState.id, spaceID: space.id) }
     controller?.dismissSidebarReveal(); showSelection(); app.scheduleSave()
@@ -653,9 +663,10 @@ final class EngineWebContentHostFactory: NSResponder, WebContentHostFactory {
       // "Edit Pinned URL dialog" (FC §3.2 r3); Section 2's brief chose the command bar.
       guard let tab = model.tab(id: id), tab.pinnedURL != nil else { return false }
       showCommandBar(.editCurrentURL, editingPinnedTab: tab.id); return true
+    case .changeSpaceIcon(let id): return openSpaceIconPicker(id)
+    case .changeIcon(let id): return openNodeIconPicker(id)
     case .newProfile(let space): app.settingsPresenter.showNewProfile(sourceSpace: space); return true
-    case .showSiteControls, .changeSpaceIcon, .editSpaceTheme, .shareSpace,
-         .changeIcon, .customizePage:
+    case .showSiteControls, .editSpaceTheme, .shareSpace, .customizePage:
       return false // Explicitly deferred UI entries; see docs/app-shell.md Step B.
     default: return nil
     }
@@ -723,6 +734,7 @@ final class EngineWebContentHostFactory: NSResponder, WebContentHostFactory {
   func closeAll() {
     guard !isClosing else { return }
     isClosing = true
+    iconPicker?.close(); iconPicker = nil
     pageChrome.close()
     pageContextMenu?.cancel(); pageContextMenu = nil
     controller?.existingTabSwitcher?.cancel()
@@ -821,7 +833,7 @@ extension EngineWebContentHostFactory {
   @objc func focusAddressBar(_ sender: Any?) { showCommandBar(.editCurrentURL) }
 
   func ownsKeyWindow(_ candidate: NSWindow) -> Bool {
-    candidate === window || candidate === popupPanel || auxiliaryPages.contains { $0.panel === candidate } || pageChrome.owns(candidate)
+    candidate === window || candidate === iconPicker?.panel || candidate === iconPicker?.toneWindow || candidate === popupPanel || auxiliaryPages.contains { $0.panel === candidate } || pageChrome.owns(candidate)
   }
   func navigateFromCommandBar(_ url: URL, current: Bool, background: Bool = false) {
     app.noteLaunchWindowNavigation(windowState.id)
@@ -901,6 +913,10 @@ extension EngineWebContentHostFactory {
   }
 
   @objc func closeTab(_ sender: Any?) {
+    // Cmd+W closes the key picker, including its tone panel, before any tab.
+    if let picker = iconPicker, NSApp.keyWindow === picker.panel || NSApp.keyWindow === picker.toneWindow {
+      picker.close(); return
+    }
     if let key = NSApp.keyWindow, let page = pageChrome.permissionPage(in: key) {
       pageChrome.permissions.cancel(page: page)
       if let id = tabID(for: page) { closeTab(id: id) } else { close(page: page) }
