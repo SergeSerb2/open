@@ -234,3 +234,22 @@ Merged evidence: [#170](https://github.com/SergeSerb2/open/pull/170) (static pag
 - **Closed — Little Open: JS dialogs and permission prompts.** Standalone visibility feeds the shared NSAlert queue; Little Open uses an in-window permission card and the engine beforeunload close/quit preflight. Real-App `page-chrome` `little_*` rows cover replies, early loading, hidden windows, close Cancel/OK, MIDI persistence, focus and motion. Every new row has a missing-visibility negative proof; forced popovers fail the card rows. See [the S11 receipt](engine-spike/s11-littleopen-pagechrome.md) and [negative proof](engine-spike/s11-littleopen-negative-proof.json).
 - Little Open (Chrome-style tab load path): a Chrome-style tab of a hidden Browser loads 8–13 ms slower than an Alloy page (median +12 % for a typed URL, +5 % for an external link; p95 +6 % / +3.5 %). This affects Little Open since #185 and may affect every sidebar tab, which uses the same path. Owner: Section 16 or the next engine section, to profile where the time goes after the Browser is ready. Evidence: #185 receipts `docs/little-open/receipts/2026-11-06-realistic/` (20 interleaved pairs per path, engine 3f45b07b). — Section 9, 2026-11-06.
 - **Reference captures and system grants.** [Page-chrome §7](re/page-chrome.md#7-captures-that-would-settle-the-remaining-questions) still needs user-operated Arc captures. Permission width/edge and Downloads ring geometry/recent interval remain guesses. Combined camera/microphone and real macOS authorization/delivery remain BLOCKED under the no-credential-prompt rule; notifications/MIDI fixtures do not prove them (#180). Owner: user captures / lead, with the owning engine sections for system grants.
+
+
+- First run / Section 7: passwords and cookies remain capability OFF until the
+  engine supplies its secret writer. F10 uses the disabled selection and the
+  shared skip action's code path, with no real Keychain request. A missing
+  alternate-icon cache requires reselection; launch never renders replacement
+  SwiftUI artwork. The first-run Release 250 ms budget and imported-tab 700 ms
+  paint budget require the measured quiet-machine receipt; functional suite
+  passes alone do not qualify those budgets.
+  Per the lead's 2026-11-06 icon ruling, decode/TIFF representation preparation
+  runs off main; one utility-priority main-queue turn applies the icon at least
+  about one second after paint. Main preparation must be below 5 ms; AppKit/Dock
+  setter cost is reported separately and is accepted without further work.
+  Final M5 first-run runs pass 52/52 ×3, and the icon split passes the revised
+  target. Quiet Release first content is 371 ms (>250 ms); imported paint is
+  205 ms (≤700 ms). Normal launch is 382 ms on both main and branch, with no
+  measured regression; first run adds no cost. The 250 ms cold-launch budget
+  is the open Section 8 item 13 / Section 16 launch budget. All checks and loads
+  are in [the receipt](first-run/steps-ef-verification.md).

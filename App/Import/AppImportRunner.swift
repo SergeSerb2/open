@@ -6,18 +6,32 @@ import OpenSettings
 import OpenStore
 
 /// The sole App import implementation. Settings merges; first run installs.
-/// History (phase 3) and consent-gated secrets (phase 4) attach after this gate.
+/// History streams through the existing Profile stores after the landing gate.
 @MainActor
 final class AppImportRunner {
   unowned let app: AppDelegate
   private(set) var lastOutcome: ImportOutcome?
+  private var running = false
+  private(set) var historyInProgress = false
+  private(set) var historyProcessed = 0
+  private(set) var importAllMilliseconds: Double = 0
   init(app: AppDelegate) { self.app = app }
 
   func run(plan: ImportPlan, firstRun: Bool) async -> ImportOutcome {
-    guard !app.importInProgress else { return ImportOutcome(errorText: "An import is already running.") }
+    guard !running else { return ImportOutcome(errorText: "An import is already running.") }
+    running = true
+    lastOutcome = nil
     app.importInProgress = true
-    defer { app.importInProgress = false }
+    historyProcessed = 0
+    defer { app.importInProgress = false; historyInProgress = false; running = false }
     let flow = firstRun ? app.firstRunWindowController?.model : nil
+    let wizard = flow?.wizard ?? app.settingsPresenter.settings.importWizard
+    func progress(_ text: String, _ fraction: Double? = nil, landed: Bool = false) {
+      flow?.phaseText = text; flow?.progress = fraction
+      if landed { flow?.browserHasLanded = true }
+      wizard.phaseText = text; wizard.progress = fraction; wizard.browserHasLanded = landed
+    }
+    progress("Importing your Spaces and tabs…")
     flow?.phaseText = "Importing your Spaces and tabs…"
     // Let SwiftUI commit the progress step before any model construction.
     await Task.yield()
@@ -43,9 +57,11 @@ final class AppImportRunner {
       // graph on the main actor, once the progress view has been displayed.
       let directory = plan.directory
       let parsed = try await Task.detached(priority: .utility) { try ArcImporter(arcDirectory: directory).readSidebar() }.value
+      let started = CACurrentMediaTime()
       imported = try ArcImporter(arcDirectory: directory).importAll(sidebar: parsed,
         directoryNamesToAvoid: app.model.unavailableProfileDirectoryNames,
         existingDirectories: Dictionary(uniqueKeysWithValues: app.model.profiles.map { ($0.id, $0.dataDirectoryName) }))
+      importAllMilliseconds = (CACurrentMediaTime() - started) * 1_000
       guard imported.report.accountedTotal == imported.report.totalItems,
             !plan.archive || imported.report.archiveAccounted == imported.report.archiveTotal else { throw ImportError.malformedSidebar }
     } catch {
@@ -71,7 +87,7 @@ final class AppImportRunner {
       }
     }
     if plan.archive {
-      flow?.phaseText = "Importing your archive…"
+      progress("Importing your archive…")
       for (sourceID, records) in Dictionary(grouping: imported.archiveRecords, by: \.profileID) {
         guard let source = sourceID.flatMap({ imported.model.profile(id: $0) }) ?? imported.model.defaultProfile else { continue }
         let targetID = profileMapping[source.id] ?? source.id
@@ -97,9 +113,6 @@ final class AppImportRunner {
         } catch { failures["Archive"] = "Could not be read" }
       }
     }
-    // Phase 3 seam: the next milestone streams history after this landing gate.
-    // Never claim requested History as imported while that continuation is absent.
-    if plan.history { failures["History"] = "History import is not available yet. You can import it later from Settings." }
     // Phase 4 remains capability OFF. No consent token or secret API is called.
     guard !app.terminationRequested, !Task.isCancelled else { return result("Import stopped because Open is quitting.") }
     if firstRun {
@@ -114,11 +127,15 @@ final class AppImportRunner {
       }
       // An empty/all-failed selection has not landed data. Keep D3 intact;
       // Continue/Start Fresh owns the first save of the default model.
-      guard ImportOutcome(counts: counts).didImportAnything else {
+      guard ImportOutcome(counts: counts).didImportAnything || plan.history else {
         return result(failures.isEmpty ? nil : "Some selected data could not be imported. You can try again later from Settings.")
       }
       if plan.spaces && hasSidebarData {
         if !plan.searchSettings { for profile in imported.model.profiles { profile.settings = ProfileSettings() } }
+        let importedAt = Date()
+        for space in imported.model.spaces {
+          for tab in importTabs(space.today) { tab.lastActiveAt = importedAt }
+        }
         ensureSelection(in: imported.model)
         app.installModel(imported.model)
         app.settingsPresenter.modelWasInstalled()
@@ -133,9 +150,29 @@ final class AppImportRunner {
       }
     } else {
       do {
+        var archivedIDs: [ProfileID: Set<ItemID>] = [:]
+        if plan.tabs || plan.favorites {
+          let candidates = Set(imported.model.profiles.flatMap { $0.favorites.map(\.id) }
+            + imported.model.spaces.flatMap { importTabs($0.pinned + $0.today).map(\.id) })
+          var targets = Dictionary(uniqueKeysWithValues: app.model.profiles.map { ($0.id, $0) })
+          if plan.spaces || plan.favorites {
+            for profile in imported.model.profiles where targets[profileMapping[profile.id] ?? profile.id] == nil {
+              targets[profile.id] = profile
+            }
+          }
+          // The sink's queue also owns pending manual archives. Await one batch
+          // per Profile before the synchronous, ID-preserving model merge.
+          for profile in targets.values {
+            let store = app.model.profile(id: profile.id) == nil
+              ? ArchiveStore(fileURL: app.directories.archiveFileURL(for: profile))
+              : app.archiveSink.store(for: profile.id)
+            archivedIDs[profile.id] = try await store.existingIDs(in: candidates)
+          }
+        }
         let merged = try app.model.mergeImportedSidebar(imported.model, profileMapping: profileMapping,
           spaces: plan.spaces, tabs: plan.tabs, favorites: plan.favorites, folders: plan.folders,
-          searchSettings: plan.searchSettings, saving: { try app.snapshotStore.saveNow(model: app.model) })
+          searchSettings: plan.searchSettings, archivedIDsByProfile: archivedIDs,
+          importedAt: Date(), saving: { try app.snapshotStore.saveNow(model: app.model) })
         counts[ImportOutcomeKeys.spaces] = merged.spaces
         counts["Pinned and Today tabs"] = merged.tabs
         counts["Favorites"] = merged.favorites; counts["Folders"] = merged.folders
@@ -148,8 +185,91 @@ final class AppImportRunner {
         return result("Open could not save your data. The previous browser state was kept. Try again.")
       }
     }
+    // The snapshot and window are ready. Ordinary browser saves are now free
+    // to run; the separate runner guard still refuses overlapping imports.
+    app.importInProgress = false
     if plan.directory != ArcImporter().arcDirectory { UserDefaults.standard.set(plan.directory.path, forKey: "open.import.lastArcDir") }
+    if plan.history {
+      historyInProgress = true
+      progress("Importing your history…", 0, landed: true)
+      let estimate = wizard.probe?.historyVisits ?? 0
+      var failedVisits = 0
+      for source in imported.model.profiles {
+        let targetID = profileMapping[source.id] ?? source.id
+        guard let directory = imported.sourceProfileDirectories[source.id],
+              let target = app.model.profile(id: targetID),
+              let store = app.stores.history(for: target.id) else {
+          counts["History unmapped profiles", default: 0] += 1
+          continue
+        }
+        // The importer owns Profile resolution. Never treat a renamed Open
+        // destination directory as an Arc source directory or merge an orphan
+        // source Profile into Default.
+        guard !directory.isEmpty, directory.utf8.count <= 255, directory != ".", directory != "..",
+              !directory.contains("/"), !directory.contains("\\"),
+              !directory.unicodeScalars.contains(where: { CharacterSet.controlCharacters.contains($0) }) else {
+          failures["History"] = "Could not be read"; continue
+        }
+        let file = plan.directory.appendingPathComponent("User Data").appendingPathComponent(directory).appendingPathComponent("History")
+        let expected = wizard.probe?.profileCounts[source.id.description]?.historyVisits ?? 0
+        let write = await Task.detached(priority: .utility) { [self] in
+          var inserted = 0, duplicates = 0, processed = 0
+          var succeeded = true
+          do {
+            _ = try await ArcHistoryReader(historyFileURL: file).readBatches { batch in
+              guard succeeded, !Task.isCancelled else { return }
+              #if OPEN_AUTOMATION
+              // Hold the real pending batch before its transaction so the
+              // suite proves browsing while imported visits are still absent.
+              if let raw = ProcessInfo.processInfo.environment["OPEN_AUTOMATION_HISTORY_DELAY_MS"], let ms = Int(raw), ms > 0 {
+                try? await Task.sleep(for: .milliseconds(min(ms, 10_000)))
+              }
+              #endif
+              let visits = batch.map { ImportedHistoryVisit(chromiumVisitID: $0.chromiumVisitID,
+                urlString: $0.urlString, title: $0.title, time: $0.time, transition: $0.transition, isTyped: $0.isTyped) }
+              let result = await store.importHistoryBatch(visits, sourceProfileKey: directory)
+              succeeded = result.succeeded
+              inserted += result.insertedVisits; duplicates += result.duplicateVisits
+              processed += batch.count
+              await MainActor.run {
+                self.historyProcessed += batch.count
+                let fraction = estimate > 0 ? min(1, Double(self.historyProcessed) / Double(estimate)) : 0
+                flow?.progress = fraction; wizard.progress = fraction
+              }
+            }
+            // Validate an empty import too; a broken destination must not look
+            // like a successful zero-visit source.
+            let ready = await store.importHistoryBatch([], sourceProfileKey: directory)
+            succeeded = succeeded && ready.succeeded
+          } catch { succeeded = false }
+          return (inserted, duplicates, processed, succeeded)
+        }.value
+        counts["History", default: 0] += write.0
+        counts["History duplicates", default: 0] += write.1
+        counts["Duplicates", default: 0] += write.1
+        if !write.3 {
+          failures["History"] = "Could not be read"
+          failedVisits += max(0, expected - write.0 - write.1)
+        }
+      }
+      counts["History failed"] = failedVisits
+      counts[ImportOutcomeKeys.history] = counts["History", default: 0]
+      flow?.progress = 1; wizard.progress = 1
+      if failures["History"] != nil {
+        return result("Your Spaces and tabs are in. \(failedVisits.formatted()) history visits could not be read. You can import history later from Settings.")
+      }
+    }
     return result(failures.isEmpty ? nil : "Some selected data could not be imported. You can try again later from Settings.")
+  }
+
+  private func importTabs(_ nodes: [SidebarNode]) -> [Tab] {
+    nodes.flatMap { node in
+      switch node {
+      case .tab(let tab): return [tab]
+      case .folder(let folder): return importTabs(folder.children)
+      case .split(let split): return split.panes
+      }
+    }
   }
 
   private func ensureSelection(in model: BrowserModel) {
