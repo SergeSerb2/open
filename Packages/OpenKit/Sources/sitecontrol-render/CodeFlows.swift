@@ -128,6 +128,7 @@ import OpenBoosts
         let entered = stage.session.isSelecting && stage.host.pickerCalls.last == "select"
         let caret = css.selectedRange()
         stage.host.deliver("picker:selected",selector:".picked")
+        print("Selector text before=\(before.debugDescription), after=\(css.string.debugDescription)")
         let expected = (before as NSString).replacingCharacters(in:NSRange(location:5,length:0),with:".picked")
         let inserted = caret == NSRange(location:5,length:0) && css.string == expected && !stage.session.isSelecting && stage.host.pickerCalls.last == "exit"
         print("Selector flow: caret=\(caret); expected=\(css.string == expected); changed=\(css.string != before); selecting=\(stage.session.isSelecting); last=\(stage.host.pickerCalls.last ?? "none"); hidden=\(code.isHidden)")
