@@ -262,6 +262,7 @@ enum Flows {
         checks += CompletionFlows.run(env)
         checks += SplitFlows.run(env)
         checks += ScopeFlows.run(env)
+        checks += ExtensionFlows.run(env)
         do {
             let stage = Stage(size: LittleOpenMetrics.barSize, scale: 1, engine: env.engine, backdrop: .darkPage)
             stage.controller.present(Scenes.request(env, mode: .littleOpen), presentation: .embedded(width: 490))

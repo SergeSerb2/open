@@ -8,9 +8,17 @@ struct TextLine {
     let line: CTLine
     let width: CGFloat
 
-    init(_ string: String, font: NSFont, color: CGColor) {
+    init(_ string: String, font: NSFont, color: CGColor, boldRanges: [Range<Int>] = []) {
         let attrs: [NSAttributedString.Key: Any] = [.font: font, .foregroundColor: color]
-        line = CTLineCreateWithAttributedString(NSAttributedString(string: string, attributes: attrs))
+        if boldRanges.isEmpty {
+            line = CTLineCreateWithAttributedString(NSAttributedString(string: string, attributes: attrs))
+        } else {
+            let text = NSMutableAttributedString(string: string, attributes: attrs)
+            for range in boldRanges.prefix(256) where range.lowerBound >= 0 && range.upperBound <= text.length {
+                text.addAttribute(.font, value: NSFont.systemFont(ofSize: font.pointSize, weight: .semibold), range: NSRange(location: range.lowerBound, length: range.count))
+            }
+            line = CTLineCreateWithAttributedString(text)
+        }
         width = CGFloat(CTLineGetTypographicBounds(line, nil, nil, nil))
     }
 

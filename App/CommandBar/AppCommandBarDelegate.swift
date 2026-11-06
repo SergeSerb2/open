@@ -109,6 +109,9 @@ final class AppCommandBarSession: CommandBarDelegate {
     case .openSearchSettings(let profile):
       // Open keeps search engines per Profile: Settings ▸ Profiles for the bar's Profile (CC-42 "Search Settings…").
       factory.app.performCommand("search-settings", payload: (profile ?? factory.focusedProfile?.id)?.description)
+    case .runExtensionAction, .extensionOmnibox:
+      // S6 App step: the engine child wires these intents with EngineCommandBarSource.
+      NSSound.beep()
     case .dismissed: break // didChangePresentation runs after the bar releases its editor.
     }
   }

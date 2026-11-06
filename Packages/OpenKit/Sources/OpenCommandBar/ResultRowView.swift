@@ -10,6 +10,7 @@ final class ResultRowView: NSView {
     var row: CommandBarRow? { didSet { if row != oldValue { needsDisplay = true; updateSplitPlate() } } }
     var isSelected = false { didSet { if isSelected != oldValue { needsDisplay = true; updateSplitPlate() } } }
     var theme = CommandBarTheme.default { didSet { if theme != oldValue { needsDisplay = true; updateSplitPlate() } } }
+    var extensionIcon: (@MainActor (String) -> NSImage?)?
     weak var favicons: CommandBarFaviconSource?
     /// Diagnostics: draw passes since creation.
     private(set) var drawCount = 0
@@ -99,7 +100,7 @@ final class ResultRowView: NSView {
         let titleColor = isSelected ? CommandBarRole.rowTitleSelected : CommandBarRole.rowTitle
         let subColor = isSelected ? CommandBarRole.subtitleSelected : CommandBarRole.secondaryText
         let font = BarFont.row
-        var title = TextLine(row.title, font: font, color: titleColor.cgColor)
+        var title = TextLine(row.title, font: font, color: titleColor.cgColor, boldRanges: row.boldRanges)
         let available = textMaxX - m.titleX
         var subtitle: TextLine?
         if !row.subtitle.isEmpty {
@@ -120,6 +121,9 @@ final class ResultRowView: NSView {
         let m = CommandBarMetrics.self
         let frame = m.iconFrame
         switch icon {
+        case .extension(let id):
+            if let image = extensionIcon?(id) { image.drawFlipped(in: frame) }
+            else { drawSymbol("puzzlepiece.extension", plate: false, in: ctx) }
         case .favicon(let url, let fallback):
             if let image = favicons?.favicon(for: url, loaded: { [weak self] u in
                 if case .favicon(let current, _)? = self?.row?.icon, current == u { self?.needsDisplay = true }
@@ -220,6 +224,7 @@ final class ResultRowView: NSView {
 
     private func paneImage(_ icon: CommandBarIcon, size: CGFloat) -> NSImage? {
         switch icon {
+        case .extension(let id): return extensionIcon?(id)
         case .favicon(let url, let fallback):
             if let image = favicons?.favicon(for: url, loaded: { [weak self] u in
                 // Refresh only if this row still shows that pane (the view may hold another row by now).
