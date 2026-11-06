@@ -53,7 +53,7 @@ final class AppImportRunner {
       return result("Open could not read your Arc data.")
     }
     let report = imported.report
-    let hasSidebarData = report.spaces > 0 || report.importedTabNodes > 0 || report.folders > 0
+    let hasSidebarData = report.sourceSpaces > 0 || report.importedTabNodes > 0 || report.folders > 0
     guard !app.terminationRequested, !Task.isCancelled else { return result("Import stopped because Open is quitting.") }
     if plan.archive && report.archiveStatus == "present but unreadable" { failures["Archive"] = "Could not be read" }
     counts["Sidebar accounted"] = report.accountedTotal; counts["Sidebar total"] = report.totalItems
@@ -104,7 +104,7 @@ final class AppImportRunner {
     guard !app.terminationRequested, !Task.isCancelled else { return result("Import stopped because Open is quitting.") }
     if firstRun {
       if plan.spaces {
-        counts[ImportOutcomeKeys.spaces] = report.spaces
+        counts[ImportOutcomeKeys.spaces] = report.sourceSpaces
         counts["Pinned and Today tabs"] = report.pinnedTabs + report.todayTabs
         counts["Favorites"] = report.favorites; counts["Folders"] = report.folders
         counts["Imported tabs"] = report.importedTabNodes
