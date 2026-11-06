@@ -10,6 +10,7 @@
 #include "include/cef_app.h"
 #include "include/cef_browser.h"
 #include "include/cef_client.h"
+#include "include/cef_extension_manager.h"
 #include "include/cef_media_controller.h"
 #include "include/cef_navigation_history.h"
 #include "include/cef_open_page.h"
@@ -224,6 +225,8 @@ class OEDevToolsClient;
 
 @interface OEExtensionManager ()
 - (instancetype)initOEWithContext:(OEBrowserContext*)context;
+@property(nonatomic, readonly) CefRefPtr<CefExtensionManager> oe_manager;
+- (void)oe_contextClosed;
 @end
 
 @interface OEExtensionAction ()

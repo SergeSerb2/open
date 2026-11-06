@@ -29,7 +29,7 @@ For this plan:
 | P7 | Isolated-world scripts for Open's page runtimes | Zap picker and Boost applier out of the page's reach | 3–5 days | — |
 | P8 | Native ad-block engine | Already planned in [plans/adblock-fork.md](plans/adblock-fork.md); listed here only for order | see that plan | — |
 
-The series as built (P1 and P2). Two series with their own numbers:
+The extension series as built (P1–P3; excerpt). Two series with their own numbers:
 `Engine/fork/patches/chromium/series` for files outside `src/cef/`, and
 `Engine/fork/patches/cef/series` for files under it. New classes are overlay
 files (`Engine/fork/src/`), not patches; that includes the whole
@@ -42,19 +42,20 @@ wrappers `engine-apply` regenerates.
 0302-open-hidden-browser-ui.patch              # P1: Chrome UI that assumes "no BrowserView => unit test"
 0303-open-hosted-tab-lifecycle.patch           # P1: hosted tabs are never discarded or moved
 0304-open-hidden-browser-no-tab-groups.patch    # P1: hidden Browsers have no tab group model
+0305-open-extension-prompts.patch              # P3: install and uninstall consent, native fallback
 0401-open-media-session.patch                   # Media: tab volume; per-player PiP availability
 0402-open-video-pip-window.patch                # Media EM-4: Open's own video PiP window
 # cef/series (starts at 0302)
 0302-open-hosted-tabs.patch                    # P1: hosted Chrome style tabs
 0303-open-context-menu-submenu-commands.patch  # P1: submenu commands with their own delegate
 0304-open-extension-popups.patch               # P2: popup browser hosts (ChromeBrowserDelegate friend)
+0305-open-webstore-downloads.patch             # P3: active manager-owned internal Web Store downloads
 ```
 
-A new patch takes the next free number of its series, counting open PRs:
-#64 adds `chromium/0304-open-hidden-browser-no-tab-groups.patch`. Still
-planned: P3 (extension management API in the overlay; the install and
-uninstall prompts patch `chrome/browser/ui/views/extensions/`, so a
-Chromium series entry). P6 (audible state) landed without a patch of its
+A new patch takes the next free number of its series, counting open PRs.
+P3's management API is in the overlay; its two install/uninstall platform
+hooks are `chromium/0305-open-extension-prompts.patch`.
+P6 (audible state) landed without a patch of its
 own, inside the media controller overlay (Section 3, "Media"). Section 3
 uses `04xx`, Section 8 `05xx`.
 
@@ -110,7 +111,7 @@ Deviations from the plan:
 
 Review round 1 (PR #53; engine review by Opus, shell review by Muse; lead decisions 2026-10-26):
 
-- **Discards.** Chrome never discards a hosted tab: Open sleeps tabs itself. `chrome.tabs.discard(tabId)` becomes a request (`OnTabDiscardRequested` → `-browser:requestsDiscardOfWebContent:`). The shell unloads a tab that is not on screen and refuses the visible one (Chrome's "Cannot discard tab" error). On success the extension gets the tab object with `discarded: false`; the tab then leaves `chrome.tabs` when its page closes. `chrome.tabs.discard()` without an id finds nothing to discard. A replaced `WebContents` (only discards replace one) is logged, never reported as a page close.
+- **Discards.** Chrome never discards a hosted tab: Open sleeps tabs itself. `chrome.tabs.discard(tabId)` becomes a request (`OnTabDiscardRequested` → `-browser:requestsDiscardOfWebContent:`). The shell refuses the visible tab (Chrome's "Cannot discard tab" error). The current App uses `SleepController.debugSleepNow`: it discards a background renderer and keeps the sleeping page and its tab id until a later destroy deadline. `OEWebContent.isDiscarded` reports that renderer state. Desktop `chrome.tabs` still reports `discarded: false` because Chrome's own lifecycle unit did not perform the discard; this metadata mapping remains a P1 follow-up. The tab leaves `chrome.tabs` only when the page closes. `chrome.tabs.discard()` without an id finds nothing to discard. A replaced `WebContents` (only discards replace one) is logged, never reported as a page close.
 - **Windows own their tabs.** `tabs.move` to or from another window, `tabs.group` into another window, and `windows.create({tabId})` fail with "Tabs cannot be moved between windows in this browser." A hosted tab that still leaves its window by another path is put back. `-[OEBrowser insertWebContent:atIndex:]` refuses a page of another profile or another hidden window.
 - **`chrome.windows.remove`** on an Open window with tabs becomes `OnCloseRequested` → `-browserRequestsClose:`; v1 refuses and logs it, and the extension's call still resolves. "Last tab gone" and the shell's own `-close` close for real; `-close` marks the window's pages closing first, so they are not reported as page closes.
 - **Non-default profiles.** Round 1 refused a tab strip for a context whose disk profile CEF could not create (it fell back to an off-the-record profile of the default profile, whose incognito-allowed extensions could see its tabs). The profile layout fix (`<root>/Engine/<dir>`, a direct child of `root_cache_path`) gives every profile a real disk profile. `OEEngine` now refuses (nil) a context folder that is not a direct child of the root, and the guard stays as a backstop (`LOG(ERROR)`) for a CEF failure of any other kind (engine review r1, 88-3). e2e `--only profiles`: `extension_isolation` (the default profile's probe allowed in incognito sees no Work tab, in both directions) and `disk_profiles_on_disk` (each profile has its own `Preferences`, a `Local State` entry, and a Chrome window).
@@ -216,6 +217,53 @@ Results: `docs/engine-spike/results-actions-p2.json`, `results-extensions-chrome
 
 - Management API on `CefRequestContext` (or a new `CefExtensionManager`): list (`ExtensionRegistry`), enable/disable, reload, uninstall (`ExtensionRegistrar`/`ExtensionService`), install unpacked (`UnpackedInstaller`), install from the Web Store by id (`WebstoreInstallWithPrompt`), and events (`ExtensionRegistryObserver`: installed, uninstalled, loaded, unloaded; load errors). This replaces the Preferences-file reader in `OEExtensions.mm`.
 - Consent: `ExtensionInstallPrompt::GetDefaultShowDialogCallback()` (`chrome/browser/extensions/extension_install_prompt.h:61`) has one implementation per platform: Views `chrome/browser/ui/views/extensions/extension_install_dialog_view.cc:734`, Android `chrome/browser/ui/android/extensions/extension_install_dialog_view_android.cc:202`. A CEF implementation forwards the prompt (extension name, icon, permission messages, retained files and devices) to `CefExtensionHandler::OnInstallPrompt(prompt, callback)`. Uninstall and permission-increase prompts go the same way. This matches Arc's `webContents:askForExtensionInstallationConsent:completion:` (docs/re/arccore-engine.md §4.1).
+
+
+### Status: implemented (Section 6, `s6/engine-p3`)
+
+P3 implements E8/E9/E10 of extensions-ui §7. The App's designed sheets and
+in-window shortcut routing remain the lead's App step.
+
+| Part | Implementation |
+|---|---|
+| CEF API | Overlay `cef/include/cef_extension_manager.h`: per-context manager, handler, prompt and install completion. Experimental API; C API and wrappers generated by the CEF translator via `engine-apply`, never hand-edited. |
+| Registry/commands | Overlay `open/browser/extensions/open_extension_manager.mm`: observes each profile's registry, command service, load errors and readiness. Lists live non-component extensions, manages enable/disable/reload/uninstall/Web Store installs, creates `ExtensionCommandsGlobalRegistry` per profile, and dispatches named commands with the active tab and Chromium's activeTab grant. |
+| Consent hooks | Chromium `0305-open-extension-prompts.patch`: thin hooks in `extension_install_dialog_view.cc` and `extension_uninstall_dialog_impl.cc`. Header-only hook table, as with 0504: Chromium targets do not depend on libcef. No shell handler means the original platform dialog path. |
+| Web Store downloads | CEF `0305-open-webstore-downloads.patch`: its orphan-download guard permits only `EXTENSION_INSTALLER` downloads from an exact dummy WebContents owned by an active manager request. Chrome still chooses the target and verifies the manifest and CRX signature. Normal orphan downloads keep CEF's rejection path. |
+| OpenEngine | Live registry replaces `OEExtensions.mm`'s Preferences/manifest reader and watcher. Public prompt metadata, once-only accept/cancel and release-to-cancel, command snapshots/execution, action shortcut fields and registry delegate events. |
+| Automation | `AutomationExtensions.swift`: `ext-prompt`, `ext-manage`, `ext-commands`, `ext-run-command`. Automation owns pending prompts; no App UI design. `--only extensions-p3` uses a locally signed CRX3 through `CrxInstaller`, not `--load-extension`, for install consent. |
+| P2 review | Process-wide non-recycling menu ids reject stale toolbar generations (R2-5). `popup_` outlives `model_` (R2-11). Skip same-document refreshes and delete `_actionsNeedRefresh`'s duplicate rebuild (R2-10). Prune removed extensions' images; document main-thread menu release (R2-13). |
+
+Deviations and limits:
+
+- One new manager API, rather than methods on `CefRequestContext`; new code
+  stays in `//open`. Hooks cover the two platform dialog entry points and
+  CEF's orphan-download guard. The latter otherwise cancels the by-id
+  installer's dummy-page download with `USER_CANCELED`.
+- Chromium 156 removed retained files/devices from `InstallPromptData`.
+  Their public arrays are empty; permission messages and their details are
+  forwarded from the current API.
+- `byUser` is true for a fresh non-policy, non-command-line install and false
+  for updates/startup command-line loads (guess (child): the registry observer
+  has no user-gesture argument). E11/E12 should use registry events and the
+  live `omniboxKeyword`; the omnibox event API and popup windows are not P3.
+- Bridge snapshots are limited to 1,024 extensions/commands/permission lines
+  and 64 KiB per string. Manifest icons use at most 4 MiB encoded and
+  2,048×2,048 decoded 8-bit pixels in known color models (16 MiB). There is no new polling timer.
+- Global registration uses Chromium's profile registry. OS-level global key
+  delivery is not proved by an in-process command execution check.
+- Management installs keep at most 32 pending requestors per profile; duplicate
+  ids and excess requests fail their completion. No browsing page becomes an
+  install referrer. Chromium does not install into off-the-record profiles;
+  those requests fail explicitly before reaching `CrxInstaller`'s CHECK.
+
+Verification: the local-CRX `extensions-p3` suite passes all 14 feature rows,
+including the unchanged native-dialog fallback; its deliberate install-cancel
+fault fails X-1 and the restored run passes. Engine status is 8/8 with 20
+patches and distribution SHA-256
+`7b49090502568f8189aa0e94f7cf23344beec5bed537136eff5f7fce573ad35a`.
+See the [P3 receipt](engine-spike/extensions-p3-receipt.md) and the PR's final
+regression/full-verification tables.
 
 ## P4. Proprietary codecs and Widevine
 

@@ -19,6 +19,7 @@
   final class AutomationController {
     struct Failure: Error { let message: String }
 
+    let extensionAutomation = AutomationExtensionHandler()
     unowned let app: AppDelegate
     private let blockCounter = BlockCounter()
     /// An action menu kept by `ext-menu keep`, for a later `stale` select.
@@ -30,7 +31,7 @@
     // troubleshooting-setup recorder (page-platform Troubleshooting checks).
     private var revealedURLs: [URL] = []
 
-    init(app: AppDelegate) { self.app = app }
+    init(app: AppDelegate) { self.app = app; extensionAutomation.registerContexts() }
 
     var window: EngineWebContentHostFactory {
       get throws {
@@ -80,8 +81,11 @@
     // MARK: Dispatch
 
     private func run(_ cmd: String, _ a: [String: Any]) async throws -> Any {
+      extensionAutomation.registerContexts()
       // App lifecycle commands remain available after the final window closes.
       switch cmd {
+      case "ext-prompt", "ext-manage", "ext-commands", "ext-run-command":
+        return try await runExtensionCommand(cmd, a)
       case "applescript": return try await runAppleScript(a)
       case "routing-log": return routingLog()
       case "default-browser-state": return defaultBrowserState()
@@ -719,8 +723,9 @@
       // Extensions.
       case "extensions":
         let browser = try focusedBrowser(w)
-        browser.context.extensions.reload()
+        if a["refresh"] as? Bool == true { browser.context.extensions.reload() }
         return [
+          "ready": browser.context.extensions.isReady,
           "installed": browser.context.extensions.installedExtensions.map(describe),
           "actions": EngineExtensionHost(browser).extensionActions.map {
             [
@@ -732,7 +737,6 @@
       case "popup":
         guard let id = a["extension"] as? String else { throw Failure(message: "missing extension") }
         let browser = try focusedBrowser(w)
-        browser.context.extensions.reload()
         guard EngineExtensionHost(browser).executeAction(extensionID: id), let popup = browser.extensionPopup else {
           throw Failure(message: "action did not open a popup")
         }
@@ -786,8 +790,11 @@
           // before this one; this one is cancelled.
           if a["stale"] as? Bool == true, let older = staleMenu {
             staleMenu = nil
+            // Keep the newer model alive while selecting the older one. This
+            // also exposes any id collision across hidden-Browser generations.
+            let ran = older.select(command: item.commandIdentifier)
             menu.cancel()
-            return ["items": listed, "ran": older.select(command: item.commandIdentifier)] as [String: Any]
+            return ["items": listed, "ran": ran] as [String: Any]
           }
           return ["items": listed, "ran": menu.select(command: item.commandIdentifier)] as [String: Any]
         } else if a["keep"] as? Bool == true {
@@ -1165,7 +1172,7 @@
       return page
     }
 
-    private func focusedBrowser(_ w: EngineWebContentHostFactory) throws -> OEBrowser {
+    func focusedBrowser(_ w: EngineWebContentHostFactory) throws -> OEBrowser {
       guard let b = w.focusedBrowser else { throw Failure(message: "no browser") }
       return b
     }
@@ -1289,7 +1296,8 @@
         "enabled": action.isEnabled, "hasPopup": action.hasPopup, "pinned": action.isPinned,
         "pinnedIndex": action.pinnedIndex, "wantsToRun": action.wantsToRun, "siteAccess": action.siteAccess.rawValue,
         "showingPopup": action.isShowingPopup, "toolbarImage": pixels(action.toolbarImage), "icon": pixels(action.icon),
-        "live": action.isLive,
+        "live": action.isLive, "shortcutKeyEquivalent": action.shortcutKeyEquivalent ?? "",
+        "shortcutModifierFlags": action.shortcutModifierFlags.rawValue,
       ]
     }
 
@@ -1297,8 +1305,12 @@
       [
         "id": e.identifier, "name": e.name, "version": e.version, "enabled": e.isEnabled, "unpacked": e.isUnpacked,
         "manifestVersion": e.manifestVersion, "options": e.optionsURL?.absoluteString ?? "",
+        "directory": e.installDirectory.path,
         "icon": e.icon.map { "\(Int($0.size.width))x\(Int($0.size.height))" } ?? "",
         "permissions": e.permissions, "hostPermissions": e.hostPermissions,
+        "hasAction": e.hasAction, "fromWebStore": e.fromWebStore,
+        "homepage": e.homepageURL?.absoluteString ?? "", "disableReasons": e.disableReasons,
+        "omniboxKeyword": e.omniboxKeyword ?? "",
       ]
     }
     static let syntheticPointerTag = 0x4F50
