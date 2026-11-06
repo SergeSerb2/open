@@ -880,6 +880,15 @@ public final class BrowserWindowController: NSWindowController, NSWindowDelegate
               eventWindow === window || ownsAdditionalKeyWindow?(eventWindow) == true
                 || existingTabSwitcher?.acceptsEventWindow(eventWindow) == true else { return false }
         if existingTabSwitcher?.handle(event) == true { return true }
+        // Toggle before SCC's generic Command-key dismissal. Otherwise the
+        // same key closes the picker here and reopens it through the menu.
+        // Use the effective binding so user overrides keep the same behavior.
+        if eventWindow === window, siteControl?.isPresented == true, siteControl?.mode == .extensionPicker,
+           let command = CommandRegistry.byID["open-extensions-picker"],
+           let shortcut = KeyboardShortcut.from(event: event),
+           keyBindingOverrides.effectiveShortcuts(for: command).contains(shortcut) {
+            return presentExtensionPicker()
+        }
         if eventWindow === window, siteControl?.handleKey(event) == true { return true }
         // A window-anchored popover the App shows (the translate popover, page-platform §4.7.3)
         // takes Esc and Return before any other route.

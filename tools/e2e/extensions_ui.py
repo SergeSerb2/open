@@ -449,6 +449,10 @@ def run(factory, results, tmp, root, wait_until, new_tab, frame, read_image, ext
         picker_before = app.call("ext-picker")
         app.call("key", key="e", modifiers=["command"], route="app")
         picker = app.call("ext-picker")
+        app.call("key", key="e", modifiers=["command"], route="app")
+        picker_toggled_closed = app.call("ext-picker")
+        app.call("key", key="e", modifiers=["command"], route="app")
+        picker_toggled_open = app.call("ext-picker")
         picker_items = app.call("site-controls", action="state")["extensionItems"]
         # Four actions use rows; larger action sets use the five-column grid.
         forward, backward = ("right", "left") if len(picker_items) > 5 else ("down", "up")
@@ -467,6 +471,7 @@ def run(factory, results, tmp, root, wait_until, new_tab, frame, read_image, ext
         app.call("key", key="escape", route="app")
         picker_escaped = app.call("ext-picker")
         results["X13_picker"] = {"ok": not picker_before.get("presented") and picker.get("presented")
+            and not picker_toggled_closed.get("presented") and picker_toggled_open.get("presented")
             and bool(picker_items) and picker.get("focusedID") == picker_items[0]["id"]
             and len(picker_items) > 1 and picker_forward.get("focusedID") == picker_items[1]["id"]
             and picker_backward.get("focusedID") == picker_items[0]["id"]
@@ -474,6 +479,7 @@ def run(factory, results, tmp, root, wait_until, new_tab, frame, read_image, ext
             and bool(picker_ran) and not picker_after.get("presented") and picker_reopened.get("presented")
             and not picker_escaped.get("presented"), "state":picker, "selected":picker_selected,
             "negativeClosed":picker_before, "items":picker_items, "arrowKeys":[forward,backward],
+            "toggleClosed":picker_toggled_closed, "toggleOpen":picker_toggled_open,
             "afterForward":picker_forward, "afterBackward":picker_backward,
             "afterReturn":picker_after, "afterEscape":picker_escaped}
         bar = app.call("ext-ui-menu", kind="bar")

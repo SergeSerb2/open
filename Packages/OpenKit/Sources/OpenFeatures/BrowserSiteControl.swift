@@ -40,6 +40,10 @@ extension BrowserWindowController {
     @discardableResult public func presentExtensionPicker() -> Bool {
         guard let siteControl, let id = splitController.focusedTab?.id,
               !(hasPeekController && peekController.isShown) else { return false }
+        if siteControl.isPresented && siteControl.mode == .extensionPicker {
+            siteControl.dismiss(reason: .command, animated: false)
+            return true
+        }
         let anchor: SiteControlAnchor
         if let bar = container.slots.first(where: { $0.tabID == id })?.paneChrome, !bar.siteControlsAnchor.isHiddenOrHasHiddenAncestor {
             anchor = .paneBar(id)
