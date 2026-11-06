@@ -128,6 +128,8 @@ def run(factory, results, tmp, h):
             def permission(decision=decision):
                 url = page(host='little-' + decision)
                 call('permission', origin=url, kind=32, state=0); request(); state=visible(ps)
+                if state['presentation'] != 'card':
+                    return dict(ok=False, reason='Expected an in-window permission card', state=state)
                 x,y,w,height = state['frame']; content=current()['contentFrame']; window=current()['frame']
                 inside = x >= 0 and y >= 0 and x+w <= window[2] and y+height <= window[3]
                 content_top = window[3] - content[1]
