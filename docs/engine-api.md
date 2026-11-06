@@ -341,8 +341,8 @@ Each has a fork patch in [engine-patches.md](engine-patches.md):
 |---|---|---|
 | `chrome.tabs`/`chrome.windows` do not see Alloy pages | Fixed by P1 for Chrome style pages (the shell's default) | P1, done |
 | Pages that extensions open | Fixed by P1: adopted as Today tabs with their identity and opener | P1, done |
-| Dynamic action state | Fixed by P2: Chrome's toolbar model (icon, badge, title, enabled, pin, order, context menu, `onClicked`) and real popup hosts (`getViews({type: "popup"})`, `chrome.action.openPopup()`). P3 adds command snapshots, execution and shortcut fields; the shell must route in-window keys | P2/P3, engine done |
-| Install, uninstall, enable from our UI; our own consent prompts | P3 exposes live management and optional shell consent. Without a handler Chromium's dialogs remain. The App sheet UI is separate work. | P3, engine implemented |
+| Dynamic action state | Fixed by P2: Chrome's toolbar model (icon, badge, title, enabled, pin, order, context menu, `onClicked`) and real popup hosts (`getViews({type: "popup"})`, `chrome.action.openPopup()`). P3 adds commands/shortcut fields; App #189 routes in-window keys and draws native strips/panels. | P2/P3 and App, done |
+| Install, uninstall, enable from our UI; our own consent prompts | P3 exposes live management and optional shell consent (#177). App #189 supplies Open sheets/queue/toasts. Chromium dialogs remain only without a shell handler. Packed permission-increase update/re-enable acceptance remains unverified. | P3 and App, implemented |
 | H.264, AAC, Widevine | Not in stock CEF | P4 |
 | Audible state for Web Audio | Fixed: Chromium's tab audio signal through `CefMediaController` (no page probe) | P6, done |
 | Media session, tab volume, PiP without a gesture | Fixed: `OEMediaSession`, `mediaVolume`, `requestPictureInPicture` from the fork's `CefMediaController` | media 0401, done |
