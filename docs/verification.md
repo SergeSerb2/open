@@ -419,11 +419,7 @@ consumed the execution deadline. It failed after 180 s and left renderer PID
 resume audit; no owned renderer or harness app remained.
 
 `check.py` now runs an internal worker that **retains the shared lock itself**.
-It opens `/tmp/open-onscreen-e2e.lock` and passes that descriptor to
-`/usr/bin/lockf -s <fd>` using `pass_fds`. FD mode locks the shared open-file
-description, so the worker keeps the lock after the acquisition helper exits.
-It verifies that the locked inode still matches the path, reopening if a default
-lockf user unlinked the previous inode. No renderer or private suite root starts
+It opens `/tmp/open-onscreen-e2e.lock` and tries `fcntl.flock(fd, LOCK_EX | LOCK_NB)` every 0.25 seconds, observing cancellation between attempts. This uses the same shared open-file-description lock as `lockf`, without a spinning child. Default-mode callers use `lockf -k` to preserve the lock path. After acquisition, the worker checks that its inode still matches the current path and retries if an older caller unlinked or replaced it. No renderer or private suite root starts
 before acquisition; lock queue time has no suite deadline. The worker keeps the
 unchanged **180-second** renderer deadline, starts the renderer in a fresh process
 group, and terminates that group and reaps the renderer on timeout, exception or
