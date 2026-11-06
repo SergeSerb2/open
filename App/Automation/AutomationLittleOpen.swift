@@ -130,7 +130,9 @@ extension AutomationController {
               self.app.littleOpenCoordinator.close(sessionID: controller.session.id, archiveReason: nil)
               observed = ["opened": opened, "after": self.littleOpenState()]
               continuation.resume()
-              return true
+              // Continue through the real queued creation path after close.
+              // Its closed guard must prevent creation; the probe must not.
+              return false
             }
             // Return may wait for the real suggestion stream. Keep this test's
             // creation turn pending until its native navigation intent arrives.
