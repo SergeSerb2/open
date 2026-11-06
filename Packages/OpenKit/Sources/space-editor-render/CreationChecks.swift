@@ -7,7 +7,7 @@ import OpenStore
 
 /// Exercises the shipped page, controller, model and native field editor together.
 @MainActor
-final class CreationScene {
+final class CreationScene: NSObject, NSWindowDelegate {
     let model: BrowserModel
     let undo = UndoManager()
     let controller: SpaceCreationController
@@ -24,16 +24,19 @@ final class CreationScene {
         controller = SpaceCreationController(model: model, windowID: model.windows[0].id, options: resolvedOptions)
         controller.creationView.systemAppearance = light ? .light : .dark
         window = OffscreenRenderer.host(scene, scale: 1)
+        super.init()
+        window.delegate = self
         scene.sidebar.beginSpaceCreation(page: controller.view)
         controller.onDraftStyle = { [weak scene] in scene?.sidebar.previewSpaceCreation($0) }
         controller.onFinish = { [weak scene] in scene?.sidebar.endSpaceCreation(focus: $0?.id) }
         controller.updatePreview(); OffscreenRenderer.settle(scene); controller.focus()
     }
-    func key(_ code: UInt16, characters: String) {
-        let event = NSEvent.keyEvent(with: .keyDown, location: .zero, modifierFlags: [], timestamp: 0,
+    func windowWillReturnUndoManager(_ window: NSWindow) -> UndoManager? { controller.localUndoManager }
+    func key(_ code: UInt16, characters: String, modifiers: NSEvent.ModifierFlags = []) {
+        let event = NSEvent.keyEvent(with: .keyDown, location: .zero, modifierFlags: modifiers, timestamp: 0,
                                     windowNumber: window.windowNumber, context: nil, characters: characters,
                                     charactersIgnoringModifiers: characters, isARepeat: false, keyCode: code)!
-        window.sendEvent(event)
+        if !controller.handleKeyDown(event) { window.sendEvent(event) }
     }
     func close() { if !controller.isFinished { controller.cancel() }; window.contentView = nil; window.close() }
 }
@@ -76,6 +79,33 @@ final class CreationScene {
         let small = try CreationScene(height: 350); defer { small.close() }
         Checks.check(small.controller.creationView.submitIsPinned && small.controller.creationView.scroll.documentView!.bounds.height > small.controller.creationView.scroll.bounds.height,
                      "C1 short page pins submit and scrolls the cards")
+        let editing = try CreationScene(); defer { editing.close() }
+        editing.controller.openThemeEditor()
+        guard let themeEditor = editing.controller.themeEditor else { throw CLIError(description: "C1 draft editor did not open") }
+        themeEditor.apply(.selectPreset(index: 2)); themeEditor.flushPreviewFrame(); themeEditor.close()
+        let typingTheme = editing.controller.draftStyle
+        // Separate user input events, as the App's automation socket does.
+        OffscreenRenderer.settle(editing.scene, runLoop: 0.01)
+        editing.controller.focus()
+        guard let fieldEditor = editing.controller.creationView.nameField.currentEditor() as? NSTextView else {
+            throw CLIError(description: "C1 Name field has no native editor")
+        }
+        Checks.check(fieldEditor.allowsUndo && fieldEditor.undoManager === editing.controller.localUndoManager,
+                     "C1 native Name editor shares the draft undo manager")
+        fieldEditor.insertText("abc", replacementRange: fieldEditor.selectedRange())
+        OffscreenRenderer.settle(editing.scene, runLoop: 0.01)
+        editing.key(6, characters: "z", modifiers: .command)
+        Checks.check(editing.controller.creationView.nameField.stringValue.isEmpty && editing.controller.draftStyle == typingTheme,
+                     "C1 typing undo precedes the earlier theme edit")
+        editing.key(6, characters: "Z", modifiers: [.command, .shift])
+        Checks.check(editing.controller.creationView.nameField.stringValue == "abc" && editing.controller.draftStyle == typingTheme,
+                     "C1 Shift Command Z restores typing before theme undo")
+        editing.key(6, characters: "z", modifiers: .command); editing.key(6, characters: "z", modifiers: .command)
+        Checks.check(editing.controller.creationView.nameField.stringValue.isEmpty && editing.controller.draftStyle == nil,
+                     "C1 one stack undoes typing then theme")
+        editing.key(6, characters: "Z", modifiers: [.command, .shift]); editing.key(6, characters: "Z", modifiers: [.command, .shift])
+        Checks.check(editing.controller.creationView.nameField.stringValue == "abc" && editing.controller.draftStyle == typingTheme,
+                     "C1 one stack redoes theme then typing without a lost step")
         let scene = try CreationScene(); defer { scene.close() }
         let oldCount = scene.model.spaces.count, previous = scene.model.windows[0].focusedSpaceID
         scene.controller.creationView.nameField.stringValue = "Created in the form"

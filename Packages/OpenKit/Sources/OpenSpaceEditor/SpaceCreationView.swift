@@ -6,11 +6,11 @@ import OpenModel
 @MainActor
 public final class SpaceCreationView: NSView, NSTextFieldDelegate {
     public enum WidthClass: String { case compact, medium, full }
-    public let nameField = NSTextField()
+    public let nameField: NSTextField = CreationTextField()
     public let iconButton = NSButton(title: "", target: nil, action: nil)
     public let themeButton: NSButton = NSButton(title: "Choose a Theme", target: nil, action: nil)
     public let profilePopup: NSPopUpButton = CreationProfilePopup(frame: .zero, pullsDown: false)
-    public let profileNameField = NSTextField()
+    public let profileNameField: NSTextField = CreationTextField()
     public let createButton: NSButton = CreationSubmitButton(title: "Create Space", target: nil, action: nil)
     public let cancelButton = NSButton(title: "Cancel", target: nil, action: nil)
     public let profileInfo = NSButton(image: NSImage(systemSymbolName: "info.circle", accessibilityDescription: "About Profiles")!, target: nil, action: nil)
@@ -19,7 +19,13 @@ public final class SpaceCreationView: NSView, NSTextFieldDelegate {
     public var onTheme: (() -> Void)?
     public var onIcon: (() -> Void)?
     public var onProfile: ((Int) -> Void)?
-    public var localUndoManager: UndoManager?
+    public var localUndoManager: UndoManager? {
+        didSet {
+            for field in [nameField, profileNameField] {
+                (field as? CreationTextField)?.editor.draftUndoManager = localUndoManager
+            }
+        }
+    }
     public private(set) var widthClass: WidthClass = .full
     public private(set) var submitIsPinned = false
     public let scroll = NSScrollView()
@@ -180,6 +186,9 @@ public final class SpaceCreationView: NSView, NSTextFieldDelegate {
     }
 
     public func focusName() { window?.makeFirstResponder(nameField) }
+    public func breakTextUndoCoalescing() {
+        for field in [nameField, profileNameField] { (field as? CreationTextField)?.editor.breakUndoCoalescing() }
+    }
     public func animateEntrance() {
         guard !entered, window?.isVisible == true else { return }; entered = true
         for (i, view) in [header, nameCard, themeCard, profileCard, buttons].enumerated() {
@@ -206,6 +215,32 @@ public final class SpaceCreationView: NSView, NSTextFieldDelegate {
     @objc private func pickTheme() { onTheme?() }
     @objc private func pickIcon() { onIcon?() }
     @objc private func pickProfile() { onProfile?(profilePopup.indexOfSelectedItem) }
+}
+
+/// Keep typing on the same stack as theme/icon edits without changing the
+/// window's shared editor or the command bar's editor.
+@MainActor private final class CreationFieldEditor: NSTextView {
+    weak var draftUndoManager: UndoManager?
+    override var undoManager: UndoManager? { draftUndoManager }
+}
+
+@MainActor private final class CreationTextFieldCell: NSTextFieldCell {
+    weak var editor: NSTextView?
+    override func fieldEditor(for controlView: NSView) -> NSTextView? { editor ?? super.fieldEditor(for: controlView) }
+}
+
+@MainActor private final class CreationTextField: NSTextField {
+    let editor = CreationFieldEditor(usingTextLayoutManager: false)
+    override class var cellClass: AnyClass? {
+        get { CreationTextFieldCell.self }
+        set {}
+    }
+    override init(frame: NSRect) {
+        super.init(frame: frame)
+        editor.isFieldEditor = true; editor.allowsUndo = true
+        (cell as? CreationTextFieldCell)?.editor = editor
+    }
+    @available(*, unavailable) required init?(coder: NSCoder) { fatalError() }
 }
 
 @MainActor private final class CreationFlippedView: NSView {

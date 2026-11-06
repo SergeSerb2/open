@@ -36,7 +36,8 @@ public final class SpaceCreationController {
     public init(model: BrowserModel, windowID: WindowID, options: SpaceCreationOptions) {
         self.model = model; self.windowID = windowID; self.options = options
         profilePicker = SpaceCreationProfilePickerModel(model: model, windowID: windowID)
-        localUndoManager.groupsByEvent = false
+        // TextKit uses event groups for typing. Theme/icon edits register their
+        // own groups on this same manager.
         creationView.localUndoManager = localUndoManager
         creationView.nameField.stringValue = options.prefillTitle ?? ""
         creationView.onCreate = { [weak self] in self?.submit() }
@@ -68,6 +69,7 @@ public final class SpaceCreationController {
             || creationView.profileNameField.currentEditor() === responder
             || (responder as? NSView).map { $0 === view || $0.isDescendant(of: view) } == true
         guard ownsResponder else { return false }
+        creationView.breakTextUndoCoalescing()
         if event.modifierFlags.contains(.shift) { localUndoManager.redo() }
         else { localUndoManager.undo() }
         return true
@@ -78,6 +80,7 @@ public final class SpaceCreationController {
     }
     public func setDraftIcon(_ icon: SpaceIcon?) {
         guard !isFinished, draftIcon != icon else { return }
+        creationView.breakTextUndoCoalescing()
         let old = draftIcon
         localUndoManager.beginUndoGrouping()
         localUndoManager.registerUndo(withTarget: self) { target in MainActor.assumeIsolated { target.setDraftIcon(old) } }
@@ -95,6 +98,7 @@ public final class SpaceCreationController {
     }
     public func openThemeEditor() {
         guard !isFinished, let window = view.window else { return }
+        creationView.breakTextUndoCoalescing()
         if let themeEditor, !themeEditor.isClosed { themeEditor.show(); return }
         let editor = ThemeEditorController(draft: draftStyle, window: window,
             anchor: .card(creationView.themeButton.convert(creationView.themeButton.bounds, to: nil))) { [weak self] in self?.setDraftStyle($0) }
