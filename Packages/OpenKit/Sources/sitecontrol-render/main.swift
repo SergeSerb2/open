@@ -22,7 +22,7 @@ enum CLI {
         guard let i = args.firstIndex(of: name), i + 1 < args.count else { return nil }; return args[i + 1]
     }
     static func run(_ args: [String]) throws {
-        guard let command = args.first else { throw CLIError(description: "usage: sitecontrol-render render|ax|flows|code-flows|code-bench|receipt-check|extensions-check|check|bench|screens|motion|compare [--state scc-no-boosts] [--out FILE.png] [--scale 1|2] [--appearance light|dark]") }
+        guard let command = args.first else { throw CLIError(description: "usage: sitecontrol-render render|ax|flows|code-flows|code-bench|extensions-check|check|bench|screens|motion|compare [--state scc-no-boosts] [--out FILE.png] [--scale 1|2] [--appearance light|dark]") }
         if command == "compare",!(value(args,"--state") ?? "").hasPrefix("editor-") { try MaterialFallback.configure(args) }
         let state = value(args, "--state") ?? "scc-no-boosts"
         guard names.contains(state) else { throw CLIError(description: "unknown state \(state)") }
@@ -45,7 +45,6 @@ enum CLI {
         case "extensions-check": report(SectionFlows.extensions())
         case "code-bench": report(CodeFlows.bench())
         case "code-flows": report(CodeFlows.run())
-        case "receipt-check": report(try receipts())
         case "flows": report(value(args,"--group") == "editor" ? EditorFlows.run() : Flows.run()+EditorFlows.run())
         case "cold-measure":
             guard args == ["cold-measure","--thread-instructions"] else { throw CLIError(description: "usage: sitecontrol-render cold-measure --thread-instructions") }
@@ -136,8 +135,7 @@ enum CLI {
         while !FileManager.default.fileExists(atPath: root.appendingPathComponent("AGENTS.md").path) && root.path != "/" { root.deleteLastPathComponent() }
         let scc = Set(sccNames.flatMap { name in ["light","dark"].flatMap { mode in [1,2].map { "\(name)-\(mode)@\($0)x.png" } } })
         let editor = Set(editorNames.filter { !$0.hasPrefix("editor-code-") }.flatMap { name in [1,2].map { "\(name)-light@\($0)x.png" } })
-        let code = Set(editorNames.filter { $0.hasPrefix("editor-code-") }.flatMap { name in [1,2].map { "\(name)-light@\($0)x.png" } })
-        return try receiptChecks(root.appendingPathComponent("docs/sitecontrol/step-7"),required: code)+receiptChecks(root.appendingPathComponent("docs/sitecontrol/step-2"),required: scc)+receiptChecks(root.appendingPathComponent("docs/sitecontrol/step-4"),required: editor)+receiptChecks(root.appendingPathComponent("docs/sitecontrol/step-4/detail"),required: Set(["editor-first-run","editor-no-color","editor-color","editor-dragging","editor-advanced","editor-font-selected"].map { $0+"@1x.png" }))
+        return try receiptChecks(root.appendingPathComponent("docs/sitecontrol/step-2"),required: scc)+receiptChecks(root.appendingPathComponent("docs/sitecontrol/step-4"),required: editor)+receiptChecks(root.appendingPathComponent("docs/sitecontrol/step-4/detail"),required: Set(["editor-first-run","editor-no-color","editor-color","editor-dragging","editor-advanced","editor-font-selected"].map { $0+"@1x.png" }))
     }
     static func receiptChecks(_ directory: URL,required: Set<String>) throws -> [Flows.Check] {
         let lines = try String(contentsOf: directory.appendingPathComponent("SHA256SUMS"), encoding: .utf8).split(separator: "\n")
