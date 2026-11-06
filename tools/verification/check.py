@@ -839,15 +839,12 @@ def main():
         profiles(cli)
     elif name == "settings-preview":
         preview = str(root / "Packages/OpenKit/.build/release/settings-preview")
-        # Even offscreen AppKit previews join the shared screen queue. Keep the
-        # existing worker's priority, deadline and owned-process cleanup rules.
-        preview_command = [sys.executable, str(Path(__file__).resolve()), "onscreen-suite", preview]
-        all_passed(run(*preview_command, "check", timeout=None))
+        all_passed(run(preview, "check"))
         output = Path("settings-panes").resolve()
-        rendered = run(*preview_command, "render", "--out", str(output), timeout=None)
+        rendered = run(preview, "render", "--out", str(output))
         require("PREVIEWS-CONTROLS delay=absent popups=0 expected-labels=present" in rendered,
                 "missing rendered Previews control evidence")
-        dump = run(*preview_command, "dump-keys", "--root", str(output / "fixture"), timeout=None)
+        dump = run(preview, "dump-keys", "--root", str(output / "fixture"))
         require("snapshot profile Personal searchEngineID = google" in dump, "missing settings store receipt")
         require(not any(line.startswith("default open.general.previewsDelaySeconds =") for line in dump.splitlines()),
                 "removed preview delay default was registered")
