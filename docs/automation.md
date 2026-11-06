@@ -776,6 +776,14 @@ first-open (including lazy creation) and repeat-open medians and nearest-rank
 p95 from twenty fresh windows. Both p95 values must pass. The 240 Hz interval is
 printed for information. Take timing receipts with the quiet lock first,
 wait for low load while holding only that lock, then take the screen lock.
+Fonts, symbols and appearance colors are shared per process. After the first
+web paint, one main-queue turn primes those resources and an offscreen native
+bar/editor, then releases the temporary controls. `find-state.warmup` reports
+the run count, launch-relative times and temporary-control release. This adds
+no timer or repeating task. Automation builds accept
+`OPEN_FIND_DISABLE_PREWARM=1` for a cache-only comparison;
+`OPEN_FIND_COMPARE_PREWARM=1` alternates twenty cache-only and twenty enabled
+launches in the Find suite and records both phase and launch measurements.
 No shared defaults are changed by this suite. The toolbar toggle changes
 only its disposable browser model, and app appearance is restored in `finally`.
 `OPEN_FIND_FAIL_AT_PEEK=1` forces an early failure with Peek and Find open;

@@ -20,6 +20,14 @@ enum FindBarResources {
   static let separator = NSColor(displayP3Red: 0, green: 0, blue: 0, alpha: 0.10)
   static let shadow = NSColor(displayP3Red: 0.082, green: 0.110, blue: 0.196, alpha: 1)
 
+  static func prepareAll() {
+    _ = queryFont; _ = countFont
+    for image in [search, previous, next, close] { _ = image?.size }
+    for color in [light.background, light.text, light.tint, dark.background, dark.text, dark.tint, error, separator, shadow] {
+      _ = color.cgColor
+    }
+  }
+
   struct Palette {
     let background: NSColor
     let text: NSColor

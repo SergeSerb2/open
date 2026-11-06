@@ -665,6 +665,7 @@
       case "find-state":
         var state = w.findController?.automationState() ?? ["panes": [], "created": false, "pending": false]
         state["display"] = FindIdleProbe.displayInfo(window: w.window)
+        state["warmup"] = FindBarPrewarm.snapshot
         return state
       case "find-idle":
         return try FindIdleProbe.perform(a["action"] as? String ?? "read", factory: w)

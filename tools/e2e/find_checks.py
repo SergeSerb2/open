@@ -28,7 +28,7 @@ def run(h, factory, results, tmp):
     probe_source = probe_source.replace('if (!strstr(path, "/features-render")) return NO;',
         'if (!strstr(path, "/Open.app/Contents/MacOS/Open")) return NO;')
     probe_source = probe_source.replace('return strstr(info.dli_sname, "OpenFeatures") || strstr(info.dli_sname, "observerProof");',
-        'return strstr(info.dli_sname, "FindController") || strstr(info.dli_sname, "FindBarView") || strstr(info.dli_sname, "FindPaneOverlay") || strstr(info.dli_sname, "FindResultsView");')
+        'return strstr(info.dli_sname, "FindController") || strstr(info.dli_sname, "FindBarView") || strstr(info.dli_sname, "FindPaneOverlay") || strstr(info.dli_sname, "FindResultsView") || strstr(info.dli_sname, "FindBarResources") || strstr(info.dli_sname, "FindBarPrewarm");')
     source = os.path.join(tmp, 'find-idle-probe.m'); Path(source).write_text(probe_source)
     probe = os.path.join(tmp, 'idle-probe.dylib')
     subprocess.run(['xcrun', 'clang', '-dynamiclib', '-fblocks', '-fobjc-arc', '-Wno-deprecated-declarations', source,
@@ -65,9 +65,11 @@ def run(h, factory, results, tmp):
         return len(f) == 4 and len(area) == 4 and p['visible'] and abs(f[2]-width)<.1 and f[3] == 32 and abs(area[0]+area[2]-f[0]-f[2]-10)<.1 and abs(area[1]+area[3]-f[1]-f[3]-top)<.1
     try:
         samples = []
-        for sample in range(20):
+        compare = os.environ.get('OPEN_FIND_COMPARE_PREWARM') == '1'
+        for mode in (['cacheOnly', 'enabled'] * 20 if compare else ['enabled'] * 20):
             if app is not None: app.quit()
-            app = factory(urls=(origin + '/index.html',), fresh=True)
+            mode_env = {'OPEN_FIND_DISABLE_PREWARM': '1' if mode == 'cacheOnly' else '0'} if compare else {}
+            app = factory(urls=(origin + '/index.html',), fresh=True, extra_env=mode_env)
             tab = app.call('tabs')[0]['id']
             app.call('wait', tab=tab)
             window_ready = app.call('window-state')
@@ -85,28 +87,35 @@ def run(h, factory, results, tmp):
             repeat = state()
             samples.append(dict(first=first.get('presentationPhases', {}).get('commit', 999),
                 repeat=repeat.get('presentationPhases', {}).get('commit', 999),
-                launch=app.call('timing', tab=tab),
+                launch=app.call('timing', tab=tab), mode=mode, warmup=first.get('warmup', {}),
                 lazy=not cold.get('created', bool(cold.get('panes'))),
                 visible=first_pane['visible'] and pane(tab)['visible'],
                 firstPhases=first.get('presentationPhases'), repeatPhases=repeat.get('presentationPhases'),
                 firstDispatch=opening_key.get('dispatchMilliseconds'), repeatDispatch=repeat_key.get('dispatchMilliseconds'),
                 load=subprocess.check_output(['uptime'], text=True).strip()))
-        row('F01_lazy', all(s['lazy'] for s in samples), state=cold)
+        cache_samples = [s for s in samples if s['mode'] == 'cacheOnly']
+        samples = [s for s in samples if s['mode'] == 'enabled']
+        row('F01_lazy', all(s['lazy'] for s in samples + cache_samples), state=cold)
         p = pane(tab)
         row('F02_open_focus_placeholder', p['visible'] and p['focused'] and p['placeholder'] == 'Find in page...', pane=p)
         row('F03_frame', rect_ok(p) and p['radius'] == 5 and p.get('controls',{}).get('closeHitMatches') is True, pane=p)
         load = subprocess.check_output(['uptime'], text=True).strip()
         deadline=1000/120
-        def distribution(name):
-            values=sorted(s[name] for s in samples)
+        def distribution(name, source=samples):
+            values=sorted(s[name] for s in source)
             return dict(median=statistics.median(values), p95=values[math.ceil(.95*len(values))-1], samples=len(values))
         first, repeat = distribution('first'), distribution('repeat')
         row('F04_one_frame', all(s['visible'] for s in samples) and first['p95'] <= deadline and repeat['p95'] <= deadline,
             firstMilliseconds=first, repeatMilliseconds=repeat, samples=samples,
+            cacheOnly=dict(firstMilliseconds=distribution('first', cache_samples), repeatMilliseconds=distribution('repeat', cache_samples), samples=cache_samples) if cache_samples else {},
             scope='native key timestamp to flushed visible Find layer; first open includes lazy creation; repeat reuses the same window; twenty fresh App windows; focus completes in each action',
             deadline=deadline, informational240HzDeadline=1000/240, load=load)
         print('Find timing first median/p95 %.4f/%.4f ms; repeat %.4f/%.4f ms; 120 Hz gate %.4f ms; 240 Hz information %.4f ms' %
               (first['median'], first['p95'], repeat['median'], repeat['p95'], deadline, 1000/240), flush=True)
+        if cache_samples:
+            cache_first, cache_repeat = distribution('first', cache_samples), distribution('repeat', cache_samples)
+            print('Find cache-only first median/p95 %.4f/%.4f ms; repeat %.4f/%.4f ms' %
+                  (cache_first['median'], cache_first['p95'], cache_repeat['median'], cache_repeat['p95']), flush=True)
         if os.environ.get('OPEN_FIND_TIMING_ONLY') == '1': return
         requests_before = state()
         key(text='quasar'); p = settled(tab, '1/5')
@@ -268,7 +277,10 @@ def run(h, factory, results, tmp):
         before=state(); p0=pane(tab); time.sleep(2); after=state(); p1=pane(tab)
         observed=app.call('find-idle', action='read')
         row('F31_idle', p1['visible'] and not before.get('pending') and not after.get('pending') and before.get('requests') == after.get('requests')
-            and before.get('results') == after.get('results') and p0['layouts'] == p1['layouts'] and all(v == 0 for v in observed.values()), before=before, after=after, observer=observed, load=subprocess.check_output(['uptime'], text=True).strip())
+            and before.get('results') == after.get('results') and p0['layouts'] == p1['layouts'] and all(v == 0 for v in observed.values())
+            and before.get('warmup', {}).get('runs') == after.get('warmup', {}).get('runs') == 1
+            and after.get('warmup', {}).get('temporaryViewsReleased') is True,
+            before=before, after=after, observer=observed, load=subprocess.check_output(['uptime'], text=True).strip())
         canary=app.call('find-idle', action='invalidate')
         row('F31_observer_canary', any(canary[k] > 0 for k in ('invalidations','layout')), observer=canary)
         app.call('find-idle', action='end')

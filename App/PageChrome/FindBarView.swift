@@ -52,6 +52,24 @@ class FindBarView: NSView, NSTextFieldDelegate {
   }
   @available(*, unavailable) required init?(coder: NSCoder) { fatalError() }
 
+  /// Prime native control/font/image caches after first paint. The temporary
+  /// 300x32 surface never joins a window or becomes first responder.
+  static func prewarmNativeControls() {
+    FindBarResources.prepareAll()
+    let bar = FindBarView(frame: CGRect(x: 0, y: 0, width: 300, height: 32))
+    bar.setQuery("Find"); bar.update(active: 1, total: 5, final: true)
+    let editor = bar.makeEditor()
+    editor.font = FindBarResources.queryFont; editor.string = "Find"
+    _ = editor.inputContext
+    #if OPEN_AUTOMATION
+    FindBarPrewarm.observeTemporary(bar: bar, editor: editor)
+    #endif
+    bar.layoutSubtreeIfNeeded()
+    if let bitmap = bar.bitmapImageRepForCachingDisplay(in: bar.bounds) {
+      bar.cacheDisplay(in: bar.bounds, to: bitmap)
+    }
+  }
+
   private func makeEditor() -> FindFieldEditor {
     if let editorStorage { return editorStorage }
     let editor = FindFieldEditor(usingTextLayoutManager: false); editorStorage = editor
