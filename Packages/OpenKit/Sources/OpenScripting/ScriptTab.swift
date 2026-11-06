@@ -2,8 +2,8 @@ import AppKit
 import Foundation
 import OpenModel
 
-/// Tab KVC reads always resolve the current model. Specifiers prefer Space → tab ID;
-/// favorites use window → tab ID. A retained closed wrapper keeps its last specifier.
+/// Tab id/title/URL/loading/location KVC resolves the current model on every read.
+/// Specifiers prefer Space → tab ID; favorites use window → tab ID. Closed wrappers retain their last specifier.
 @MainActor
 @objc(ScriptTab)
 public final class ScriptTab: NSObject {

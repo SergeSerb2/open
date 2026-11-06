@@ -2,7 +2,8 @@ import AppKit
 import Foundation
 import OpenModel
 
-/// H1 fills these providers on the main actor. Every access reads the current model.
+/// H1 supplies the current live model, window mappings, creation hooks, and engine bridge.
+/// Pull-based wrapper caches retain identity; the App observer purges external removals.
 @MainActor
 public final class ScriptHost {
     public static let shared = ScriptHost()
