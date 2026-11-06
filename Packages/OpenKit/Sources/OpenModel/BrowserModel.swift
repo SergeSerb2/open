@@ -147,6 +147,8 @@ public final class BrowserModel {
     public var windows: [BrowserWindowState] { didSet { commitMutation() } }
     public var routingRules: [RoutingRule]
     public var defaultDestination: DefaultDestination
+    /// Session-only Space focus order; never persisted in a snapshot.
+    private var focusedSpaceOrder: [SpaceID] = []
 
     /// Injected services. Not persisted, not observed.
     @ObservationIgnored public var archiveSink: (any ArchiveSink)?
@@ -2409,11 +2411,29 @@ public final class BrowserModel {
         return true
     }
 
+    /// The Little Open pill asks the model for this Profile's last focused Space.
+    public func mostRecentlyFocusedSpace(profileID: ProfileID) -> Space? {
+        for id in focusedSpaceOrder {
+            if let space = space(id: id), space.profileID == profileID { return space }
+        }
+        for window in windows where window.style == .standard {
+            if let space = space(id: window.focusedSpaceID), space.profileID == profileID { return space }
+        }
+        return spaces.first { $0.profileID == profileID }
+    }
+
+    private func recordFocusedSpace(_ id: SpaceID) {
+        focusedSpaceOrder.removeAll { $0 == id || space(id: $0) == nil }
+        if space(id: id) != nil { focusedSpaceOrder.insert(id, at: 0) }
+    }
+
     public func focusSpace(windowID: WindowID, spaceID: SpaceID) {
         guard let window = windows.first(where: { $0.id == windowID }) else { return }
+        recordFocusedSpace(spaceID)
         let old = window.focusedSpaceID
         window.focusedSpaceID = spaceID
-        registerChange(undo: { window.focusedSpaceID = old }, redo: { window.focusedSpaceID = spaceID })
+        registerChange(undo: { [weak self] in window.focusedSpaceID = old; self?.recordFocusedSpace(old) },
+                       redo: { [weak self] in window.focusedSpaceID = spaceID; self?.recordFocusedSpace(spaceID) })
     }
 
     /// Every pane is visible when a split is selected or its keyboard focus changes.

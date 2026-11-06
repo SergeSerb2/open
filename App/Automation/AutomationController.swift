@@ -86,6 +86,7 @@
       switch cmd {
       case "ext-prompt", "ext-manage", "ext-commands", "ext-run-command":
         return try await runExtensionCommand(cmd, a)
+      case "applescript": return try await runAppleScript(a)
       case "routing-log": return routingLog()
       case "default-browser-state": return defaultBrowserState()
       case "history-state", "history-clear", "library-history-state", "library-history-delete":

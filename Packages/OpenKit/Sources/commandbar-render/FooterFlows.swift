@@ -138,7 +138,7 @@ enum FooterFlows {
                 m.key(.info, flags: .command)
                 m.controller.dismiss(reason: .programmatic)
                 m.controller.present(Scenes.request(env, mode: mode)); m.settle()
-                if atOpen || !opened || whileOpen || m.controller.showsPrivacyFooter { unasked.append(mode.rawValue) }
+                if atOpen || opened != (mode != .littleOpen) || whileOpen || m.controller.showsPrivacyFooter { unasked.append(mode.rawValue) }
             }
             check("Present in every mode shows no footer: fresh, while open, and after a close (D14)", unasked.isEmpty, "modes with a wrong footer state: \(unasked)")
         }

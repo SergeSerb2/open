@@ -2,8 +2,8 @@ import AppKit
 import Foundation
 import OpenModel
 
-// Verbs use the named object, never CommandDispatcher. The wrapper responds-to selectors
-// live here; make/count subclasses close the system-command gaps described in §6.7.
+/// Named tab/Space/window verbs and make/count/get Cocoa command glue (plan §6).
+/// The responds-to selectors use live model IDs, never the selected-page dispatcher.
 @MainActor
 enum ScriptTarget {
     private static func resolve<T>(_ command: NSScriptCommand, receiver: T?) -> T? {
@@ -214,7 +214,7 @@ public final class ScriptGetCommand: NSGetCommand {
         var specifier = directParameter as? NSScriptObjectSpecifier ?? receiversSpecifier
         while let current = specifier {
             if current.key == "appleScriptTabs", current.container == nil {
-                return fail(ScriptError.writeOnly, "Application tabs are write-only. Use tabs of a window or space.")
+                return fail(ScriptError.writeOnly, "tabs of application is write-only; make a new tab on application to create a Little Open window, or read tabs of a window or space.")
             }
             specifier = current.container
         }
@@ -236,7 +236,7 @@ public final class ScriptCountCommand: NSCountCommand {
     private func countObjects() -> Any? {
         let specifier = directParameter as? NSScriptObjectSpecifier ?? receiversSpecifier
         if specifier?.key == "appleScriptTabs", specifier?.container == nil {
-            return fail(ScriptError.writeOnly, "Application tabs are write-only. Use tabs of a window or space.")
+            return fail(ScriptError.writeOnly, "tabs of application is write-only; make a new tab on application to create a Little Open window, or read tabs of a window or space.")
         }
         return super.performDefaultImplementation()
     }

@@ -132,6 +132,9 @@ targets:
     platform: macOS
     sources:
       - path: App
+        excludes: [Resources/Open.sdef]
+      - path: App/Resources/Open.sdef
+        buildPhase: resources
     dependencies:
       - target: OpenEngine
         embed: true
@@ -155,6 +158,8 @@ targets:
         product: OpenCommandBar
       - package: OpenKit
         product: OpenCommands
+      - package: OpenKit
+        product: OpenScripting
       - package: OpenKit
         product: OpenSuggest
       - package: OpenKit
