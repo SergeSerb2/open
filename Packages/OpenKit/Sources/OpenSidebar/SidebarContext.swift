@@ -15,6 +15,8 @@ public final class SidebarContext {
     public let windowID: WindowID
     /// App-wide store injected by the host; each sidebar observes its own stable window list.
     public var media: MediaSourceStore?
+    /// Session download progress supplied by the App; no sidebar polling.
+    public var downloadBadge: DownloadBadgeState?
     public var displayedTabIDs: Set<ItemID> = []
     /// Render-only forced states, analogous to forcedHover.
     public var forcedMediaHover: SidebarMediaHover?
