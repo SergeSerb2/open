@@ -874,6 +874,16 @@ def main():
                       "profile-rename": (440, 180), "archive-scope": (500, 160)}
             expected = (440, 384) if png.name.startswith("essential-shortcuts-") else (560, 520) if png.name.startswith("first-run-") else ((960, 640) if png.name.startswith("library-") else ((640, 520) if png.name.startswith("import-") else (sheets[png.name.split("@")[0][6:]] if png.name.startswith("sheet-") else (684, 650))))
             require(data[:8] == b"\x89PNG\r\n\x1a\n" and struct.unpack(">II", data[16:24]) == tuple(n * scale for n in expected), "bad pane dimensions: " + png.name)
+    elif name == "extensions-render":
+        renderer = str(root / "Packages/OpenKit/.build/release/extensions-render")
+        for scale in (1, 2):
+            for appearance in ("light", "dark"):
+                run(renderer, "all", "--scale", str(scale), "--appearance", appearance,
+                    "--out", str(Path("extensions-renders") / f"{appearance}-{scale}x"))
+        text = run(renderer, "check")
+        matches(r"extensions-render check: [1-9]\d* passed, 0 failed", text)
+        require(not re.search(r"^FAIL\b", text, re.MULTILINE), "extensions check failure")
+        run(renderer, "menus", "--out", str(Path("extensions-menus")))
     elif name == "features-render":
         run("python3", str(root / "tools/generate-sounds.py"), "--check")
         text = run(str(root / "Packages/OpenKit/.build/release/features-render"), "check")
