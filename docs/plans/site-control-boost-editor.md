@@ -536,6 +536,8 @@ unless another frame is cited. The editor is always light; there are no dark tok
 | Close | Done (header), Esc (§4.12), the bound tab closes, or the profile closes. Close exits Zap, flushes pending state with `BoostStore.saveNow` (lead round 2), and deletes the Boost if it was created in this session and is still empty. |
 | Incognito | The four open commands are disabled (D-10). |
 | Global off | The commands stay enabled; the "Boosts are off" banner shows and live preview is skipped. |
+| Library Rename or Enable | **Open choice (lead, 2026-11-06):** keep the editor open. The session observes store changes for its own Boost ID without polling and immediately adopts the store's `name` and `isEnabled`; the header updates and no undo step is added. Every Undo/Redo restore keeps the current `isEnabled`. It also keeps the current `name`, except for the editor's own Rename step. All other fields restore as before. The reconciliation hook is in `OpenSiteControl/BoostEditorSession.swift`. |
+| Library Delete | Close every matching editor before deleting the Boost. |
 
 ### 4.2 Window and placement
 
