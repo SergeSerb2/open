@@ -21,7 +21,10 @@ public final class AppVisibilityProvider: SleepVisibilityProviding {
     isolated deinit { pending?.cancel() }
     public func attachHooks() {
         for controller in browserWindowControllers { controller.onVisibilityChange = { [weak self] in self?.visibilityChanged() } }
-        littleOpenCoordinator?.onChange = { [weak self] in self?.visibilityChanged() }
+        if let littleOpenCoordinator {
+            let previous = littleOpenCoordinator.onChange
+            littleOpenCoordinator.onChange = { [weak self] in previous?(); self?.visibilityChanged() }
+        }
         visibilityChanged()
     }
     public func sleepVisibility() -> SleepVisibilitySnapshot {

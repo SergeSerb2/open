@@ -1387,6 +1387,17 @@ fire; the guard is still required because the order is not guaranteed.
 | Last main window closes while Little Open windows live | Nothing. Sessions persist; the app stays running (standard macOS browser behavior — Little Open windows are real windows). |
 | Quit with Little Open windows open | `closeAll` (no archive). Windows do not restore next launch in v1 (§0.2). |
 
+Lead decision (2026-11-05, §9.7): restore all saved standard windows unchanged.
+A cold Little Open link opens on top and takes key. “No main window is created”
+means no additional main window is created for that link; it never means closing
+saved windows. The one exception is a fresh default main window created only
+because the snapshot had no standard windows. Mark that window explicitly at
+creation. If the first external destination is Little Open, close that fallback
+only while it has received no user input or navigation. Keep saved windows in
+the snapshot. Do not use a clock or delay to infer launch intent. B6 covers both
+saved-window and windowless snapshots, plus input/navigation protection of the
+fresh fallback.
+
 ---
 
 ## 10. Settings UI data — `LinksSettingsModel.swift` (no views)
@@ -1633,7 +1644,7 @@ quit open first: osascript -e "tell application id \"$BID\" to quit" || true
 | B3 | Source detection | `open -a "$APP" https://example.com/from-terminal` (sender: Terminal/`open`), then trigger the same URL from another app (for example a Mail draft link) if available. | Decision log (§6, surfaced by whatever debug UI the App exposes; at minimum the unified log via `log show --last 5m --predicate 'subsystem == "app.open"'` if the App logs there) shows the Terminal run's source bundle id and `unknown` for any `application(_:open:)` delivery. A rule with that source (§4.2, created in Settings data) matches only the known-source delivery. |
 | B4 | Little Open lifecycle | Agent path, through the automation socket only (2026-10-26, F11): `menu-perform id=new-little-open-window`; `key window=<number> text=example.com\r` (synthetic key events sent inside the app); then deliver one external URL twice with `open -a "$APP" <url>` (a delivery the test causes). User-run only: a real ⌥⌘N press from another app (agents never drive the desktop; `hotkey-state` shows the global hotkey registered). | Fresh Little Open with the field focused; page loads; the second delivery resurfaces the same window (`little-open-state` session count unchanged). |
 | B5 | Open in Space | Through the socket or user-run: In that window: press ⌘O (the pill's Space); in a second Little Open page window, open the chevron picker, type part of another Space's title, press Return. | Main window appears (created if it was closed), focused on the chosen Space (the pill's Space for ⌘O, the picked Space for the picker), page present as the top Today tab and selected; Little Open window closed; no archive row created for it (`openkit archive-list` on the data dir shows no new row). |
-| B6 | No-main-window matrix | Quit Open. `open -a "$APP" <URL-that-routes-to-Little-Open>`: only a Little Open window. Close all main windows, leave Little Open open: app stays running. Then Open in Space: main window is created. | Each row of §9.7's table holds. |
+| B6 | No-main-window matrix | Cold-deliver a Little Open link with saved standard windows: all are restored and remain, with Little Open key on top. Repeat with no saved standard windows: only Little Open remains. Close all main windows, leave Little Open open: app stays running. Then Open in Space: a main window is created. Also protect an auto-created launch fallback after input or navigation. | Each row of §9.7's table and its 2026-11-05 lead decision holds. |
 | B7 | Auto-archive | Step 7 adds a debug-only menu item "Archive Expired Little Open Windows Now" (Help → Troubleshooting pattern). It calls the same `archiveExpired(now:)` the Timer calls, with `now` advanced by 31 days so a 1-hour-threshold window counts as expired without waiting. Set the threshold to 1 hour, open a Little Open page, run the item. Then set Never, reopen the page, run the item again. | First run: window closes; `openkit archive-list` shows the page; restoring it lands in the focused Space's Today (§9.6). Second run: window stays. The debug item is the only clock shortcut; production code never advances `now`. |
 | B9 | Frames (LA-S2-1…3) | Through Open's automation socket only; no desktop input and no System Events (AGENTS.md rule 4). `menu-perform id=new-little-open-window` (the window-scope twin of the global hotkey) → `little-open-state` (new automation command, Step 6: per session the id, window number, screen frame, state `bar` / `page`, and the screen's `visibleFrame`) → read 1. `key window=<that number> text=example.com\r` (synthetic key events sent with `NSWindow.sendEvent` inside the app), `wait` until `little-open-state` reports `page` → read 2. `menu-perform id=new-little-open-window` again → read 3. The Carbon global hotkey is not pressed: `hotkey-state` must report `registered: true`. | First read: one Little Open window 490 × 329 whose right edge is 20 pt left of the screen's visible right edge and whose top is 20 pt below the menu bar. Second: the same window 1185 × 832 with the same top-right corner. Third: a second window 490 × 329 at the first frame; the first window is unchanged. |
 | B10 | Title bar (LA-S2-4) | `features-render render --scene little-page` and the App `snapshot` of a page-state window, compared with S2 19/0011 by the `docs/design.md` §7 method (page masked, Profile name masked). | Every element of LA-S2-4 within 1 pt. Pill fill within ΔE00 2 of `#050627`. Bar and capsule (probably translucent, guess): every sampled pixel inside the measured range widened by 4 levels per channel (bar `#202335` … `#2F2B38`, capsule `#383948` … `#42414D`); no ΔE00 target until the material is modeled. |
@@ -1829,9 +1840,35 @@ pre-review gate from the focused post-review verification.
 
 Then `tools/verify-all.sh` and the B10 compare once the App can show the window.
 
+### Step 6b — Real App verification (2026-11-05)
+
+`App/LittleOpen` uses standalone Alloy pages through the real App factory,
+outside the sidebar strip. App routing replaces the stub. Main includes #171,
+#172, #173 and #176; the implementation first merged Peek at `09f2e1a0` for
+its navigation hook, then kept Peek's later commits. Final source `4426c9b8`
+includes main `e4d40ce0` and uses the matching Extensions P3 engine
+`7b490905…`. Debug and automation-enabled Release App builds pass. The full
+gate and all native acceptance run again after that engine update.
+
+Native `littleopen` passes 34/34 three consecutive runs: B4–B7/B9/B10,
+canonical-URL resurface, actual delayed key routing, Profile confirm/cancel,
+Window/Dock menus, NUX, history, visibility and the no-main-window matrix.
+The first-frame entry queues until the engine initializes; it creates no
+pre-engine page or context. A native `OEApplication.sendEvent` carrying the
+same five-second-old key stamp as the global-delivery seam creates no second
+window. A fresh stamp creates another. Real global input remains a user check.
+
+The page-state [App PNG](../little-open/page-state.png) is compared against
+S2 19/0011 and §9.3. Non-text element frames, traffic lights and the content
+frame meet 1 pt; pill ΔE00 is 0. Bar/capsule samples meet B10's measured
+ranges plus four channel levels. The private reference is not committed.
+The full receipt, remaining regression results and user checks are in
+[Little Open verification](../little-open/verification.md).
+
 ### Step 7 — Sweeper, menus, polish of behavior (§9.6–§9.7)
 
-Files: coordinator sweeper + Timer, Show/Close All menu items (§9.2),
+Files: shared App `ExpirySweeper` (one minimum Today/Little Open deadline),
+Show/Close All menu items (§9.2),
 NUX banner (§9.3), Links-pane App wiring (bind the future designer's pane —
 or a minimal functional pane if none exists yet — to `LinksSettingsModel`,
 write `currentRouting()` into `BrowserModel` on save, refresh
@@ -1840,6 +1877,26 @@ write `currentRouting()` into `BrowserModel` on save, refresh
 Acceptance: §12 B7, and re-run B1–B6, B8 as a regression pass. Re-run
 Phase A's A1–A11 as well: the evaluator did not change, so any failure here
 means App-side snapshot construction drifted (§11.2).
+
+Step 7 verification (2026-11-05): the App's existing `ExpirySweeper` owns
+one minimum Today/Little Open deadline. Session activity and Profile policy
+changes rearm it. Native feature timers are 0 empty, 0 with Never, 1 with
+an expiring session, and 1 with both domains. Both sweeps run; Today education
+uses only the Today report. Real SQLite retains `littleOpen:` locations;
+Restore returns to focused Today. Manual close, Cmd+O, Close All and quit add
+no archive entry. Window session items and Show/Close All are runtime menus;
+the new ids use the existing code-only registry category.
+
+Deliberate break/revert checks under `lockf -k` fail for the 60 s poll,
+missing visibility feed, disabled same-press guard, wrong frames and wrong
+pill color. A forced failure while the exact Profile alert is open still
+cleans up every owned window/process. A separate old-binary check catches
+the lost timestamp at delayed menu delivery. See the App receipt for counts
+and the final full-gate table in the PR. Final new-engine acceptance uses source
+`4426c9b8`, main `e4d40ce0` and engine `7b490905…`: Little Open 34/34 ×3,
+the native regression table in the App receipt, and full gate 22 PASS with
+only commandbar #151 accepted by the Section 9 lead under rule 4g. The PR
+retains the raw failure, every timing attempt and the unchanged-source proof.
 
 ---
 

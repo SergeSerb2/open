@@ -23,6 +23,11 @@
 
 NS_ASSUME_NONNULL_BEGIN
 
+/// Native mouse modifiers survive the renderer's asynchronous navigation IPC.
+/// The next pointer/key event replaces them; only the originating window matches.
+NSEventModifierFlags OENavigationModifiersForWindow(NSWindow* _Nullable window);
+void OENoteNavigationInput(NSWindow* _Nullable window, NSEventModifierFlags modifiers);
+
 #pragma mark - String helpers
 
 inline NSString* OEString(const CefString& s) {
