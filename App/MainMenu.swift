@@ -11,16 +11,40 @@ enum MainMenu {
     let factory = factoryOverride ?? owner ?? (NSApp.keyWindow == nil ? app.frontWindowController.flatMap { app.hostFactories[$0.windowID] } : nil)
     let dispatcher: any CommandDispatcher
     if let controller = factory?.controller { dispatcher = controller } else { dispatcher = app }
-    return MenuBuilder.buildMainMenu(dispatcher: dispatcher,
+    let menu = MenuBuilder.buildMainMenu(dispatcher: dispatcher,
       spaces: app.model.spaces.map { SpaceMenuEntry(id: $0.id.description, title: app.model.displayTitle(for: $0)) },
       tabs: (factory.map { f in f.numberedItems.map { TabMenuEntry(id: $0.description, title: f.numberedTitle($0)) } } ?? []),
       overrides: app.keyBindings, switchToNinth: UserDefaults.standard.bool(forKey: "open.shortcuts.switchToNinthEnabled"))
+    if let windowMenu = menu.items.first(where: { $0.title == "Window" })?.submenu { app.appendLittleOpenMenuItems(to: windowMenu, sessions: true) }
+    #if DEBUG || OPEN_AUTOMATION
+    if let help = menu.items.first(where: { $0.title == "Help" })?.submenu,
+      let troubleshooting = help.items.first(where: { $0.title == "Troubleshooting" })?.submenu {
+      let archive = ClosureMenuItem(title: "Archive Expired Little Open Windows Now") { [weak app] in
+        _ = app?.littleOpenCoordinator.archiveExpired(now: Date().addingTimeInterval(31 * 24 * 3600))
+        app?.archiveSink.flushAll()
+      }
+      archive.identifier = NSUserInterfaceItemIdentifier("archive-expired-little-open-now")
+      troubleshooting.addItem(archive)
+    }
+    #endif
+    return menu
   }
   static func targetWindowCommands(_ target: EngineWebContentHostFactory?) { NSApp.mainMenu = build(factoryOverride: target) }
   static func performReservedShortcut(_ event: NSEvent) -> Bool {
     guard event.type == .keyDown, let app = NSApp.delegate as? AppDelegate else { return false }
     if app.hostFactories.values.contains(where: { $0.pageChrome.dialogs.blocksBrowserShortcut(event) }) { return true }
     app.prepareCommandServices()
+    // Preserve the initiating timestamp even if Carbon/menu delivery was delayed.
+    // Pointer and programmatic menu actions call performCommand without a key stamp.
+    let littleContext = RoutingContext(isAppActive: NSApp.isActive, isTextFocused: false)
+    if case .browserCommand(let id)? = app.fallbackKeyboard.route(event: event, context: littleContext, overrides: app.keyBindings),
+      ["new-little-open-window", "little-open-global"].contains(id),
+      app.isCommandEnabled(id, enabledKey: CommandRegistry.byID[id]?.enabledKey ?? EnabledKey.always) {
+      app.noteLaunchWindowInput(event.window ?? NSApp.keyWindow)
+      app.performCommand(id, keyDownTimestamp: event.timestamp)
+      return true
+    }
+    if app.handleLittleOpenKey(event) { return true }
     if let window = event.window, let factory = app.factory(forKeyWindow: window) {
       factory.findKeyRequestedAt = event.timestamp
       defer { factory.findKeyRequestedAt = nil }
@@ -30,7 +54,7 @@ enum MainMenu {
       isTextFocused: NSApp.keyWindow?.firstResponder is NSTextView || NSApp.keyWindow?.firstResponder is NSTextField)
     guard case .browserCommand(let id)? = app.fallbackKeyboard.route(event: event, context: context, overrides: app.keyBindings),
           app.isCommandEnabled(id, enabledKey: CommandRegistry.byID[id]?.enabledKey ?? EnabledKey.always) else { return false }
-    app.performCommand(id); return true
+    app.performCommand(id, keyDownTimestamp: event.timestamp); return true
   }
 }
 

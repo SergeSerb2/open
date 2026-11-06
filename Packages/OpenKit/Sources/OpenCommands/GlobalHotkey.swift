@@ -14,7 +14,7 @@ public final class GlobalHotkeyService: @unchecked Sendable {
 
     private var hotKeyRef: EventHotKeyRef?
     private var handlerRef: EventHandlerRef?
-    private var action: (@Sendable () -> Void)?
+    private var action: (@Sendable (TimeInterval) -> Void)?
 
     public private(set) var registeredShortcut: KeyboardShortcut?
 
@@ -26,20 +26,25 @@ public final class GlobalHotkeyService: @unchecked Sendable {
 
     /// Registers `shortcut` system-wide. Replaces any current registration.
     public func register(shortcut: KeyboardShortcut, action: @escaping @Sendable () -> Void) throws {
+        try register(shortcut: shortcut, actionWithTimestamp: { _ in action() })
+    }
+
+    /// Carbon and NSEvent use the same monotonic key-down clock.
+    public func register(shortcut: KeyboardShortcut, actionWithTimestamp: @escaping @Sendable (TimeInterval) -> Void) throws {
         unregister()
         guard let keyCode = shortcut.carbonKeyCode else {
             throw ServiceError.unsupportedKey(shortcut.key)
         }
-        self.action = action
+        self.action = actionWithTimestamp
 
         var handlerRef: EventHandlerRef?
         var eventType = EventTypeSpec(eventClass: OSType(kEventClassKeyboard), eventKind: UInt32(kEventHotKeyPressed))
         let selfPointer = Unmanaged.passUnretained(self).toOpaque()
         let installStatus = InstallEventHandler(
-            GetApplicationEventTarget(), { _, _, userData in
+            GetApplicationEventTarget(), { _, event, userData in
                 guard let userData else { return noErr }
                 let service = Unmanaged<GlobalHotkeyService>.fromOpaque(userData).takeUnretainedValue()
-                service.action?()
+                service.action?(event.map(GetEventTime) ?? ProcessInfo.processInfo.systemUptime)
                 return noErr
             }, 1, &eventType, selfPointer, &handlerRef
         )

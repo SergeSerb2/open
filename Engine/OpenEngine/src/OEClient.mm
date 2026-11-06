@@ -26,16 +26,10 @@ OEOpenDisposition OEMapDisposition(cef_window_open_disposition_t d) {
   }
 }
 
-// CEF navigation policy carries no modifier flags. Only a mouse event in this
-// page's window is evidence; never reuse another window's or an old key's flags.
+// CEF's user-gesture navigation IPC can arrive after NSApp.currentEvent changed.
+// OEApplication keeps the originating pointer flags until the next input event.
 NSEventModifierFlags OENavigationModifiers(OEWebContent* page) {
-  NSEvent* event = NSApp.currentEvent;
-  if ((event.type == NSEventTypeLeftMouseDown ||
-       event.type == NSEventTypeLeftMouseUp) &&
-      event.window && event.window == page.view.window) {
-    return event.modifierFlags;
-  }
-  return 0;
+  return OENavigationModifiersForWindow(page.view.window);
 }
 
 bool OECancelNavigation(OEWebContent* page, NSURL* url,
@@ -70,6 +64,12 @@ bool OEClient::OnBeforePopup(CefRefPtr<CefBrowser> browser,
                              CefRefPtr<CefDictionaryValue>& extra_info,
                              bool* no_javascript_access) {
   OEWebContent* source = view_;
+  NSEventModifierFlags modifiers = OENavigationModifiers(source);
+  if ((modifiers & (NSEventModifierFlagCommand | NSEventModifierFlagOption)) ==
+          (NSEventModifierFlagCommand | NSEventModifierFlagOption) &&
+      OECancelNavigation(source, OEURL(target_url), user_gesture, modifiers)) {
+    return true;
+  }
   if (target_disposition == CEF_WOD_NEW_WINDOW &&
       OECancelNavigation(source, OEURL(target_url), user_gesture,
                          NSEventModifierFlagShift)) {
@@ -618,6 +618,12 @@ bool OEClient::OnOpenURLFromTab(CefRefPtr<CefBrowser> browser,
                                 WindowOpenDisposition target_disposition,
                                 bool user_gesture) {
   OEWebContent* source = view_;
+  NSEventModifierFlags modifiers = OENavigationModifiers(source);
+  if ((modifiers & (NSEventModifierFlagCommand | NSEventModifierFlagOption)) ==
+          (NSEventModifierFlagCommand | NSEventModifierFlagOption) &&
+      OECancelNavigation(source, OEURL(target_url), user_gesture, modifiers)) {
+    return true;
+  }
   if (target_disposition == CEF_WOD_NEW_WINDOW &&
       OECancelNavigation(source, OEURL(target_url), user_gesture,
                          NSEventModifierFlagShift)) {

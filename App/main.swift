@@ -36,6 +36,9 @@ appDelegate.drawWindowsBeforeEngine()
 let firstFrame = FirstWindowFrameObserver(view: appDelegate.windowControllers.first?.window?.contentView)
 firstFrame.start()
 #if OPEN_AUTOMATION
+if ProcessInfo.processInfo.environment["OPEN_AUTOMATION_EARLY_LITTLE_OPEN"] == "1" {
+  appDelegate.openBlankLittleOpen(timestamp: ProcessInfo.processInfo.systemUptime)
+}
 if ProcessInfo.processInfo.environment["OPEN_AUTOMATION_QUIT_BEFORE_ENGINE"] == "1" {
   RunLoop.main.perform { MainActor.assumeIsolated { NSApp.terminate(nil) } }
 }
