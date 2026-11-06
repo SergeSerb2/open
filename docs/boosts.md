@@ -221,7 +221,9 @@ The picker uses the 3 px #3139FF frame, 56 px bottom bar, yellow hover tint, and
 428 × 90 action card specified in `plans/site-control-boost-editor.md` §4.8.
 A page click opens the card. "Zap this" commits a precise pick. "Zap all related
 elements" previews live matching rectangles; the count and selector appear in the
-card's band. A wider action replaces an existing precise commit when present.
+card's band. The card closes after every choice. The related action sends one
+direct commit, which makes one store mutation and one undo step. Cancel commits
+nothing (Open choice, lead, 2026-11-06). `zap:replaced` decoding remains supported.
 The closed shadow root and selector algorithm stay unchanged. Done/Escape exit;
 Cmd/Ctrl+Z and Undo remove the last session commit.
 
@@ -239,10 +241,17 @@ the observation. A failed host entry disables Zap with "Zap isn't available yet.
 Select mode uses a separate native capability (`enterZap(..., mode: .select)`).
 Its "Use Selector" action sends `picker:selected` with selector and match count.
 Neither JS nor the coordinator permits commits, hides, undo removals, or store
-writes in this mode. `BoostEditorHost.enterSelectorPicker` defaults to false until
-the App transport is ready. Code mode binds `session.insertSelectorAtCaret` to its
+writes in this mode. The App host must implement
+`BoostEditorHost.enterSelectorPicker(boostID:tabID:) -> Bool`; there is no default
+implementation. Code mode binds `session.insertSelectorAtCaret` to its
 CSS NSTextView and calls `session.pickSelector()`; selection inserts and exits.
 No App or engine wiring is supplied by this package change (B4 remains external).
+The coordinator owns `BoostPickerEvent`; OpenSiteControl exposes a public alias.
+App adapters fan out `lastEvent` only after coordinator validation. They must handle
+the added `labels` argument when matching `.listZaps`: selectors remain on the wire,
+and persisted labels populate reveal chips on re-entry. On accepted reveal, send
+`removeZap(selector:for:)` before refresh. Call `endPickerSession()` for tab/frame/
+transport changes and `updatePageURL` on navigation, including same-URL reloads.
 
 Verification: `boosts` runs real headless Chrome flows H0, A7, R1, A11, S1, R2.
 `sitecontrol-render` includes F13 and "Pick Selector inserts selector at CSS caret

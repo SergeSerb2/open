@@ -853,6 +853,11 @@ Page UI (in-page picker, restyled in Step 6 to Arc's look; S2 10/0058–0060, IS
 | Click popup | White card ≈ 428 × 90, corner 12, shadow: "Zap this" (red fill), "Zap all related elements" (orange fill), "Cancel" (grey fill), each ≈ 38 tall, white 13 pt text; a grey band below with "<count> <selector>" in 11 pt monospace | S2 10/0060 |
 | After a Zap | The bar offers "Click to reveal" with the zapped elements; clicking one reveals it (removes the Zap). Layout not captured: one chip per Zap, label = `ZappedElement.label` (guess). Hover on a chip previews the element (Arc `zapToPreview`). | notes 10:26:49 |
 
+**Open choice (lead, 2026-11-06):** the click card closes after every choice.
+"Zap this" makes one precise commit. "Zap all related elements" makes one direct
+related commit: one store mutation and one undo step, with no preliminary precise
+commit. Cancel makes no commit. Keep `zap:replaced` decoding for the bridge contract.
+
 The bar label change replaces "Zap mode"; keep the "Zap all related (N)" check in
 `tools/verification/boosts.mjs` by renaming it to the popup's "Zap all related elements" with the
 count in the band.

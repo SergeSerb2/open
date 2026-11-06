@@ -48,3 +48,37 @@ preview tint below popup: EXPECTED FAIL AssertionError [ERR_ASSERTION]: related 
 Negative proofs run on isolated copies of real runtime/resources and real Chrome flows.
 H0 SPA script errors: EXPECTED FAIL AssertionError [ERR_ASSERTION]: spa has no script errors
 1/1 mutations rejected. Source checkout was never modified.
+
+Open choice (lead, 2026-11-06): current card/direct-commit gates.
+Lead choice negative proofs: isolated runtime copies, real Chrome flows.
+precise choice does not use related selector load=(13.66357421875, 15.7783203125, 17.36376953125)
+precise choice does not use related selector: EXPECTED FAIL AssertionError [ERR_ASSERTION]: precise choice has one match
+related choice sends exactly one commit load=(14.4912109375, 15.91455078125, 17.40234375)
+related choice sends exactly one commit: EXPECTED FAIL AssertionError [ERR_ASSERTION]: related choice sends one direct commit and no replacement
+precise choice closes card load=(14.4912109375, 15.91455078125, 17.40234375)
+precise choice closes card: EXPECTED FAIL AssertionError [ERR_ASSERTION]: precise choice closes card
+Cancel closes card load=(14.4912109375, 15.91455078125, 17.40234375)
+Cancel closes card: EXPECTED FAIL AssertionError [ERR_ASSERTION]: Cancel closes card
+Cancel commits nothing load=(14.29150390625, 15.84912109375, 17.37060546875)
+Cancel commits nothing: EXPECTED FAIL AssertionError [ERR_ASSERTION]: Cancel commits nothing and creates no undo
+Cancel creates no undo load=(14.29150390625, 15.84912109375, 17.37060546875)
+Cancel creates no undo: EXPECTED FAIL AssertionError [ERR_ASSERTION]: Cancel commits nothing and creates no undo
+related direct commit has no preliminary precise commit load=(16.43017578125, 16.2666015625, 17.5087890625)
+related direct commit has no preliminary precise commit: EXPECTED FAIL AssertionError [ERR_ASSERTION]: related choice commits all three matches directly
+related commits rather than replaces load=(16.43017578125, 16.2666015625, 17.5087890625)
+related commits rather than replaces: EXPECTED FAIL AssertionError [ERR_ASSERTION]: related choice commits all three matches directly
+related choice uses wide selector load=(16.43017578125, 16.2666015625, 17.5087890625)
+related choice uses wide selector: EXPECTED FAIL             this.#timeoutError = new TimeoutError(`Waiting failed: ${options.timeout}ms exceeded`);
+related choice creates one undo step load=(15.42822265625, 16.05908203125, 17.42041015625)
+related choice creates one undo step: EXPECTED FAIL AssertionError [ERR_ASSERTION]: one undo restores all related posts
+precise choice creates one undo step load=(15.42822265625, 16.05908203125, 17.42041015625)
+precise choice creates one undo step: EXPECTED FAIL AssertionError [ERR_ASSERTION]: one undo restores the precise post
+related preview covers three live matches load=(15.42822265625, 16.05908203125, 17.42041015625)
+related preview covers three live matches: EXPECTED FAIL AssertionError [ERR_ASSERTION]: A11 previews all three articles before commit
+related hover commits nothing load=(15.3935546875, 16.041015625, 17.40576171875)
+related hover commits nothing: EXPECTED FAIL AssertionError [ERR_ASSERTION]: related preview commits nothing
+Use Selector closes card load=(15.3935546875, 16.041015625, 17.40576171875)
+Use Selector closes card: EXPECTED FAIL AssertionError [ERR_ASSERTION]: Use Selector closes card
+related choice closes card load=(15.60205078125, 16.0732421875, 17.4091796875)
+related choice closes card: EXPECTED FAIL AssertionError [ERR_ASSERTION]: related choice closes card
+15/15 lead-choice mutations rejected. Source checkout unchanged.

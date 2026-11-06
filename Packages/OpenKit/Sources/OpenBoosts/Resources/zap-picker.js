@@ -285,7 +285,7 @@
     });
     relatedButton.addEventListener("mouseenter", showRelated);
     relatedButton.addEventListener("mouseleave", () => { clearMulti(); updateBand(); });
-    relatedButton.addEventListener("click", replaceRelated);
+    relatedButton.addEventListener("click", commitRelated);
     document.documentElement.appendChild(host);
   }
   function position(box, r) { Object.assign(box.style, { left: r.x + "px", top: r.y + "px", width: r.width + "px", height: r.height + "px" }); }
@@ -314,7 +314,7 @@
     clearMulti();
     if (!lastPick?.wide) return;
     band.textContent = `${lastPick.wide.matches} ${lastPick.wide.selector}`;
-    // Measure live visible siblings after any precise commit.
+    // Preview every visible match before the one direct related commit.
     const nodes = queryAll(lastPick.entry.root, lastPick.wide.selector);
     for (const r of arrayFilter(arrayMap(arraySlice([...nodes], 0, 100), rect), r => r.width > 0 && r.height > 0)) {
       const box = document.createElement("div"); box.className = "hl-multi"; position(box, r); overlay.appendChild(box); arrayPush(multi, box);
@@ -365,7 +365,7 @@
     const chosen = list[0];
     const wide = arrayFind(list, c => c.matches > 1 && arrayEvery(c.nodes, n => n.tagName === e.tagName && n.parentElement === e.parentElement));
     const entry = { boostID, selector: chosen.selector, label: label(e, chosen.selector), root };
-    lastPick = { entry, chosen, wide, committed: false };
+    lastPick = { entry, chosen, wide };
     relatedButton.hidden = mode === "select";
     relatedButton.disabled = !wide || wide.selector === chosen.selector;
     query(overlay, ".this").hidden = mode === "select";
@@ -376,13 +376,14 @@
     hovered = null; lastMove = null; drawHover();
   }
   function updateBand() { if (lastPick) band.textContent = `${lastPick.chosen.matches} ${lastPick.entry.selector}`; }
-  function closePopup() { popup.hidden = true; bar.classList.remove("popup-open"); clearMulti(); }
+  function closePopup() { popup.hidden = true; lastPick = null; bar.classList.remove("popup-open"); clearMulti(); }
   function commitPick() {
-    if (mode !== "zap" || !lastPick || lastPick.committed) return;
+    if (mode !== "zap" || !lastPick) return;
     const { entry, chosen } = lastPick;
-    if (arraySome(session, z => z.selector === entry.selector)) return;
-    arrayPush(session, entry); knownZaps.set(entry.boostID + "\0" + entry.selector, entry); lastPick.committed = true;
+    if (arraySome(session, z => z.selector === entry.selector)) { closePopup(); return; }
+    arrayPush(session, entry); knownZaps.set(entry.boostID + "\0" + entry.selector, entry);
     refreshPreview();
+    closePopup();
     post("zap:committed", { selector: entry.selector, label: entry.label, matches: chosen.matches, inShadowRoot: entry.root instanceof ShadowRoot });
   }
   function renderReveals() {
@@ -410,17 +411,11 @@
     clearTimeout(flashTimer); flashTimer = setTimeout(() => { highlight.style.borderColor = "#3139FF"; }, 200);
     post("picker:error", { kind: "no-candidate" });
   }
-  function replaceRelated() {
+  function commitRelated() {
     if (mode !== "zap" || !lastPick?.wide) return;
-    const { entry, wide } = lastPick, oldSelector = entry.selector;
-    if (!lastPick.committed) {
-      lastPick.chosen = wide; entry.selector = wide.selector; commitPick();
-    } else {
-      knownZaps.delete(entry.boostID + "\0" + oldSelector); entry.selector = wide.selector; knownZaps.set(entry.boostID + "\0" + entry.selector, entry);
-      refreshPreview();
-      post("zap:replaced", { oldSelector, newSelector: entry.selector, label: entry.label, matches: wide.matches });
-    }
-    closePopup();
+    const { entry, wide } = lastPick;
+    lastPick.chosen = wide; entry.selector = wide.selector;
+    commitPick();
   }
   function undo() {
     if (!active || mode === "select") return false;

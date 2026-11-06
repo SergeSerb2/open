@@ -19,6 +19,14 @@ extension EditorFlows {
         check("F13 reveal undo restores one Zap", session.boost.zaps.count == 1)
         stage.key(6, "z", modifiers: .command)
         check("F13 commit undo restores empty Zaps", session.boost.zaps.isEmpty && !session.undoManager.canUndo)
+        let refreshes = host.refreshes
+        host.deliver("zap:committed", selector: "article.post", matches: 3)
+        host.boostStore.saveNow()
+        let persisted = BoostStore(root: host.root, profileID: host.profileID).load()
+        let relatedStored = persisted.first(where: { $0.id == session.boost.id })?.zaps.map(\.selector) == ["article.post"]
+        let oneRefresh = host.refreshes == refreshes + 1
+        stage.key(6, "z", modifiers: .command)
+        check("F13 direct related commit persists one selector and one undo step", relatedStored && oneRefresh && session.boost.zaps.isEmpty && !session.undoManager.canUndo)
         stage.tap("editor.tool.zap")
         check("F13 Zap off sends exit", !session.isZapActive && host.pickerCalls.last == "exit")
         stage.tap("editor.tool.zap"); host.deliver("picker:exited")

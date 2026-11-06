@@ -44,8 +44,3 @@ import OpenBoosts
     func currentURL(tabID: ItemID) -> URL?
     func showBoostsLibrary(profileID: ProfileID)
 }
-
-public extension BoostEditorHost {
-    /// App adapters opt in after the isolated-world select transport is wired.
-    func enterSelectorPicker(boostID: BoostID, tabID: ItemID) -> Bool { false }
-}

@@ -30,3 +30,11 @@ unavailable host load=(43.89208984375, 36.71826171875, 29.7646484375)
 | FAIL | F13 unavailable host disables Zap with exact tooltip |
 commit undo restores empty Zaps load=(45.650390625, 37.85498046875, 30.41748046875)
 | FAIL | F13 commit undo restores empty Zaps |
+
+Open choice (lead, 2026-11-06): direct-related undo.
+native related undo negative build start load=(18.73486328125, 16.78173828125, 17.7900390625)
+native negative flow load=(12.7060546875, 15.31982421875, 17.05224609375)
+| FAIL | F13 commit reloads store count and AX |
+| FAIL | F13 reveal undo restores one Zap |
+| FAIL | F13 direct related commit persists one selector and one undo step |
+PASS: new direct-related row rejects broken native undo
