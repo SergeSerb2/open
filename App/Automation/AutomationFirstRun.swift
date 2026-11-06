@@ -65,6 +65,7 @@ extension AutomationController {
         case "continue", "retry":
           if flow.step == .report {
             if flow.errorText == FirstRunViewModel.importedSaveError { app.finishFirstRun(imported: true) }
+            else if action == "retry", flow.errorText != nil, !flow.wizard.hasImportedData { flow.showImport() }
             else { flow.enterDefaultBrowser() }
           } else {
             guard firstRunActionTask == nil, [.importChoices, .failed].contains(flow.step) else { throw Failure(message: "import is not ready") }
