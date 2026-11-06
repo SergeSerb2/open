@@ -1,0 +1,28 @@
+diff --git a/cef/libcef/browser/download_manager_delegate_impl.cc b/cef/libcef/browser/download_manager_delegate_impl.cc
+--- a/cef/libcef/browser/download_manager_delegate_impl.cc
++++ b/cef/libcef/browser/download_manager_delegate_impl.cc
+@@ -3,6 +3,8 @@
+ // found in the LICENSE file.
+ 
+ #include "cef/libcef/browser/download_manager_delegate_impl.h"
++
++#include "open/browser/extensions/open_extension_hooks.h"
+ 
+ #include <tuple>
+ 
+@@ -380,6 +382,15 @@
+   // association from either method.
+   CefRefPtr<CefBrowserHostBase> browser = GetOrAssociateBrowser(item);
+   if (!browser) {
++    auto hook = open_engine::GetExtensionHooks().allow_download_without_browser;
++    if (hook && hook(item)) {
++      // Only a live manager-owned Web Store requestor qualifies. Keep an
++      // observer/map entry for callbacks, while Chrome handles its target.
++      if (item_browser_map_.emplace(item, nullptr).second) {
++        item->AddObserver(this);
++      }
++      return;
++    }
+     // If the download is rejected (e.g. ALT+click on an invalid protocol link)
+     // then an "interrupted" download will be started via DownloadManagerImpl::
+     // StartDownloadWithId (originating from CreateInterruptedDownload) with no

@@ -5,6 +5,10 @@ NS_HEADER_AUDIT_BEGIN(nullability, sendability)
 
 @class OEBrowserContext;
 @class OEExtension;
+@class OEWebContent;
+@class OEBrowser;
+@class OEExtensionManager;
+@class OEExtensionPrompt;
 
 /// One installed Chrome extension (ADK ExtensionInfo).
 NS_SWIFT_UI_ACTOR
@@ -14,6 +18,11 @@ OE_EXPORT @interface OEExtension : NSObject
 @property(nonatomic, readonly, copy) NSString* version;
 @property(nonatomic, readonly, copy) NSString* summary;
 @property(nonatomic, readonly) NSInteger manifestVersion;
+@property(nonatomic, readonly) BOOL hasAction;
+@property(nonatomic, readonly) BOOL fromWebStore;
+@property(nonatomic, readonly, copy, nullable) NSURL* homepageURL;
+@property(nonatomic, readonly) NSUInteger disableReasons;
+@property(nonatomic, readonly, copy, nullable) NSString* omniboxKeyword;
 @property(nonatomic, readonly, getter=isEnabled) BOOL enabled;
 /// Unpacked (developer or --load-extension) install, not a Web Store CRX.
 @property(nonatomic, readonly, getter=isUnpacked) BOOL unpacked;
@@ -91,43 +100,101 @@ OE_EXPORT @interface OEExtensionAction : NSObject
 /// From the window's live toolbar model: per-tab state, and the action can
 /// run. NO for the profile's list (no live Chrome tab in the window).
 @property(nonatomic, readonly, getter=isLive) BOOL live;
+@property(nonatomic, readonly, copy, nullable) NSString* shortcutKeyEquivalent;
+@property(nonatomic, readonly) NSEventModifierFlags shortcutModifierFlags;
+@end
+
+NS_SWIFT_UI_ACTOR
+OE_EXPORT @interface OEExtensionCommand : NSObject
+@property(nonatomic, readonly, copy) NSString* extensionIdentifier;
+@property(nonatomic, readonly, copy) NSString* name;
+@property(nonatomic, readonly, copy) NSString* summary;
+/// Chromium's Cocoa form: uppercase letters encode Shift; the modifier mask
+/// omits an implied Shift (e.g. "Y" + Command means Command-Shift-Y).
+@property(nonatomic, readonly, copy) NSString* keyEquivalent;
+@property(nonatomic, readonly) NSEventModifierFlags modifierFlags;
+@property(nonatomic, readonly, getter=isGlobal) BOOL global;
+@property(nonatomic, readonly, getter=isActionCommand) BOOL actionCommand;
+@end
+
+typedef NS_ENUM(NSInteger, OEExtensionPromptType) {
+  OEExtensionPromptTypeInstall,
+  OEExtensionPromptTypeReEnable,
+  OEExtensionPromptTypePermissions,
+  OEExtensionPromptTypeExternalInstall,
+  OEExtensionPromptTypeRemoteInstall,
+  OEExtensionPromptTypeRepair,
+  OEExtensionPromptTypeUninstall,
+};
+NS_SWIFT_UI_ACTOR
+OE_EXPORT @interface OEExtensionPermissionMessage : NSObject
+@property(nonatomic, readonly, copy) NSString* message;
+@property(nonatomic, readonly, copy) NSArray<NSString*>* details;
+@end
+
+/// Main-thread object. Retain until answered. Release without answering cancels.
+/// Answering twice is harmless. Continuations run on a later main-loop turn.
+NS_SWIFT_UI_ACTOR
+OE_EXPORT @interface OEExtensionPrompt : NSObject
+@property(nonatomic, readonly) OEExtensionPromptType type;
+@property(nonatomic, readonly, copy) NSString* extensionIdentifier;
+@property(nonatomic, readonly, copy) NSString* extensionName;
+@property(nonatomic, readonly, nullable) NSImage* icon;
+@property(nonatomic, readonly, copy) NSString* chromiumTitle;
+@property(nonatomic, readonly, copy) NSString* chromiumAcceptLabel;
+@property(nonatomic, readonly, copy) NSString* chromiumCancelLabel;
+@property(nonatomic, readonly, copy) NSArray<OEExtensionPermissionMessage*>* permissions;
+@property(nonatomic, readonly, copy) NSArray<NSString*>* retainedFiles;
+@property(nonatomic, readonly, copy) NSArray<NSString*>* retainedDevices;
+@property(nonatomic, readonly, copy, nullable) NSString* triggeringExtensionName;
+@property(nonatomic, readonly, weak, nullable) OEWebContent* webContent;
+@property(nonatomic, readonly, weak, nullable) OEBrowser* browser;
+- (void)accept;
+- (void)cancel;
 @end
 
 NS_SWIFT_UI_ACTOR
 @protocol OEExtensionManagerDelegate <NSObject>
 @optional
-/// The installed set or an extension's enabled state changed.
-- (void)extensionManagerDidChange;
+/// All events arrive outside Chromium model notifications. Callbacks may
+/// close or replace a context or window. Release managers on the main thread.
+- (void)extensionManagerDidChange:(OEExtensionManager*)manager;
+- (void)extensionManager:(OEExtensionManager*)manager
+    didInstallExtension:(OEExtension*)extension byUser:(BOOL)byUser
+    NS_SWIFT_NAME(extensionManager(_:didInstall:byUser:));
+- (void)extensionManager:(OEExtensionManager*)manager
+    didFailToLoadExtensionAt:(NSURL*)path error:(NSString*)message
+    NS_SWIFT_NAME(extensionManager(_:didFailToLoadExtensionAt:error:));
+- (void)extensionManagerDidBecomeReady:(OEExtensionManager*)manager;
+- (void)extensionManagerDidChangeCommands:(OEExtensionManager*)manager;
+/// Without this optional method Chromium keeps its existing native dialogs.
+- (void)extensionManager:(OEExtensionManager*)manager showPrompt:(OEExtensionPrompt*)prompt
+    NS_SWIFT_NAME(extensionManager(_:show:));
 @end
 
-/// Chrome extensions of one browser context (ADK
-/// BrowserContextExtensions).
-///
-/// Stock CEF removed its extension API in M128 (CefExtension and
-/// CefRequestContext::LoadExtension went away with the Alloy runtime), but
-/// the Chrome extension system still runs in every context. Until fork patch
-/// P3, this class reads the installed set from the profile's Preferences and
-/// each manifest, and watches the folder for changes. Install from the Web
-/// Store works through a Chrome-style web content; --load-extension works for
-/// the default context.
+/// Live Chromium extensions of this context, including non-default profiles.
+/// No Preferences reader, filesystem watcher, timer, or second state store.
 NS_SWIFT_UI_ACTOR
 OE_EXPORT @interface OEExtensionManager : NSObject
 @property(nonatomic, readonly, weak) OEBrowserContext* context;
 @property(nonatomic, weak, nullable) id<OEExtensionManagerDelegate> delegate;
-
-/// Installed extensions, sorted by name. Excludes Chromium component
-/// extensions (PDF viewer, Web Store helper, and so on).
+@property(nonatomic, readonly, getter=isReady) BOOL ready;
+/// Installed non-component extensions, sorted by name, including disabled ones.
 @property(nonatomic, readonly, copy) NSArray<OEExtension*>* installedExtensions;
+@property(nonatomic, readonly, copy) NSArray<OEExtensionCommand*>* commands;
 - (nullable OEExtension*)extensionWithIdentifier:(NSString*)identifier
     NS_SWIFT_NAME(extension(identifier:));
-
-/// Re-reads the installed set now (it also refreshes on its own when
-/// Chromium writes its preferences).
+/// Refreshes the live snapshot and notifies observers. No disk reads.
 - (void)reload;
-
-/// chrome://extensions (needs a Chrome-style web content in stock CEF).
+- (void)setEnabled:(BOOL)enabled forExtension:(NSString*)identifier;
+/// Always asks for removal consent first.
+- (void)uninstallExtension:(NSString*)identifier window:(nullable NSWindow*)window;
+- (void)reloadExtension:(NSString*)identifier;
+- (void)installFromWebStore:(NSString*)identifier window:(nullable NSWindow*)window
+    completion:(void (^)(BOOL installed, NSString* _Nullable error))completion;
+/// Real local CRX install, only with --open-automation. Uses Chromium consent.
+- (BOOL)installLocalCRX:(NSURL*)file webContent:(OEWebContent*)webContent;
 @property(class, nonatomic, readonly) NSURL* managementPageURL;
-/// https://chromewebstore.google.com/detail/<id>
 + (NSURL*)webStorePageURLForExtensionIdentifier:(NSString*)identifier
     NS_SWIFT_NAME(webStorePageURL(extensionIdentifier:));
 @end
