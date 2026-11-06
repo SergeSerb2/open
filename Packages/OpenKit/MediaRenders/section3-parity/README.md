@@ -192,12 +192,12 @@ Open.
 ~/Library/Caches/OpenRE/scripts/heavy.sh nice -n 10 swift build --package-path Packages/OpenKit -c release -j 6 --product sidebar-render
 ~/Library/Caches/OpenRE/scripts/heavy.sh nice -n 10 swift build --package-path Packages/OpenKit -c release -j 6 --product features-render
 # Local drivers in .re/section3/parity/ (not committed), one per lock:
-/usr/bin/lockf /tmp/open-onscreen-e2e.lock python3 rowwin.py ax ax          # AX titles (local only)
-/usr/bin/lockf /tmp/open-onscreen-e2e.lock python3 rowwin.py synthetic synthetic
-/usr/bin/lockf /tmp/open-onscreen-e2e.lock python3 rowwin.py ax ax2         # repeat
-/usr/bin/lockf /tmp/open-onscreen-e2e.lock python3 stack2win.py stack2
-/usr/bin/lockf /tmp/open-onscreen-e2e.lock python3 pipwin.py phase1
-/usr/bin/lockf /tmp/open-onscreen-e2e.lock pip/calibrate pip/calib          # corner calibration windows
+/usr/bin/lockf -k /tmp/open-onscreen-e2e.lock python3 rowwin.py ax ax          # AX titles (local only)
+/usr/bin/lockf -k /tmp/open-onscreen-e2e.lock python3 rowwin.py synthetic synthetic
+/usr/bin/lockf -k /tmp/open-onscreen-e2e.lock python3 rowwin.py ax ax2         # repeat
+/usr/bin/lockf -k /tmp/open-onscreen-e2e.lock python3 stack2win.py stack2
+/usr/bin/lockf -k /tmp/open-onscreen-e2e.lock python3 pipwin.py phase1
+/usr/bin/lockf -k /tmp/open-onscreen-e2e.lock pip/calibrate pip/calib          # corner calibration windows
 ./compare-rows.sh ax cmp-ax; ./compare-stack2.sh; pip/render.sh final
 features-render pip --out F.png --scale 1 --screen 2560x1410 --screen-frame 2560x1440 \
   --natural-size 1280x720 --first-open --geometry-report F.json --controls hidden|visible --site youtube

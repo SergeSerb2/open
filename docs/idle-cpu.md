@@ -168,7 +168,7 @@ stacks above directly establish that page JavaScript was running.
 ```sh
 export OPEN_ENGINE_ROOT=$HOME/Developer/open-engine-s8-main
 OPEN_AUTOMATION=1 ~/Library/Caches/OpenRE/scripts/heavy.sh tools/build.sh Release
-/usr/bin/lockf /tmp/open-m5-quiet.lock /usr/bin/lockf /tmp/open-onscreen-e2e.lock \
+/usr/bin/lockf -k /tmp/open-m5-quiet.lock /usr/bin/lockf -k /tmp/open-onscreen-e2e.lock \
   python3 tools/e2e/engine_e2e.py --config Release --style chrome --only measure \
   --engine-sha256 f34400e71412d87a0b268fcd5658a8563cca34f600c8dd17b534a63e76aa7939
 ```

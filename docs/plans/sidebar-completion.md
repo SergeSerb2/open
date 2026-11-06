@@ -1414,9 +1414,9 @@ A3 earlier scoped receipt, 2026-10-28 (before merged #128; based on A2 `2d51f14a
 |---|---|
 | `~/Library/Caches/OpenRE/scripts/heavy.sh tools/verify-all.sh --only features-render,sidebar-render,commands-demo` | PASS: package build; commands-demo 232/232; sidebar-render 564 passed, 0 failed, SW1–SW4 skipped by Q5; features-render 286/286 |
 | `~/Library/Caches/OpenRE/scripts/heavy.sh tools/build.sh` | Debug App build PASS |
-| `/usr/bin/lockf /tmp/open-onscreen-e2e.lock tools/e2e/engine_e2e.py --style chrome --only sidebar-completion` | 105/105 suite checks, plus engine fingerprint and owned-process cleanup PASS |
-| `/usr/bin/lockf /tmp/open-onscreen-e2e.lock tools/e2e/engine_e2e.py --style chrome --only app-actions` | 47/47 suite checks plus engine fingerprint and owned-process cleanup: 49/49 reported PASS |
-| `/usr/bin/lockf /tmp/open-onscreen-e2e.lock tools/e2e/engine_e2e.py --style chrome --only sidebar` | 18/18 suite checks plus engine fingerprint and cleanup PASS; durable-profile row retains its existing profiles-suite SKIP. Comparison PASS: worst position 1 pt, ΔE00 1.55 |
+| `/usr/bin/lockf -k /tmp/open-onscreen-e2e.lock tools/e2e/engine_e2e.py --style chrome --only sidebar-completion` | 105/105 suite checks, plus engine fingerprint and owned-process cleanup PASS |
+| `/usr/bin/lockf -k /tmp/open-onscreen-e2e.lock tools/e2e/engine_e2e.py --style chrome --only app-actions` | 47/47 suite checks plus engine fingerprint and owned-process cleanup: 49/49 reported PASS |
+| `/usr/bin/lockf -k /tmp/open-onscreen-e2e.lock tools/e2e/engine_e2e.py --style chrome --only sidebar` | 18/18 suite checks plus engine fingerprint and cleanup PASS; durable-profile row retains its existing profiles-suite SKIP. Comparison PASS: worst position 1 pt, ΔE00 1.55 |
 
 Receipts: `docs/engine-spike/results-sidebar-completion-debug.json`,
 `results-app-actions-debug.json`, `results-sidebar-debug.json`, and
