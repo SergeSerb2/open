@@ -388,6 +388,12 @@ def run(factory, results, tmp, env):
                 font="Courier" if (original or "").startswith("Avenir") else "Avenir"
                 tap("font."+font);expected=call()["boost"]["fontFamily"]
                 app.call("command",id="view-boosts")
+                app.call("boost-library",action="rename",boost=boostID,name="x"*16_384)
+                assert len(call()["boost"]["name"].encode()) == 16_384
+                refused=False
+                try:app.call("boost-library",action="rename",boost=boostID,name="x"*16_385)
+                except RuntimeError:refused=True
+                assert refused and len(call()["boost"]["name"].encode()) == 16_384
                 app.call("boost-library",action="rename",boost=boostID,name="Library rename")
                 app.call("boost-library",action="enabled",boost=boostID,enabled=True)
                 synced=call()
@@ -400,7 +406,7 @@ def run(factory, results, tmp, env):
                 redone=call()["boost"]
                 tap("case");edited=call()["boost"]
                 return dict(positive=undone.get("fontFamily") == original and redone.get("fontFamily") == expected and all(b["name"] == "Library rename" and b["isEnabled"] for b in [undone,redone,edited]),
-                            negative=synced["boost"]["name"] != "Disabled Boost" and synced["boost"]["isEnabled"],editorStayedOpen=synced["open"],libraryAddedUndo=False,originalFont=original,expectedFont=expected,
+                            negative=synced["boost"]["name"] != "Disabled Boost" and synced["boost"]["isEnabled"],editorStayedOpen=synced["open"],libraryAddedUndo=False,libraryNameBytesAccepted=16_384,libraryNameBytesRefused=16_385,originalFont=original,expectedFont=expected,
                             undo={k:undone.get(k) for k in ("name","isEnabled","fontFamily")},redo={k:redone.get(k) for k in ("name","isEnabled","fontFamily")})
             row("B22_library_reconcile_undo",b22)
             def b23():
