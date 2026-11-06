@@ -89,7 +89,7 @@
       case _ where Self.littleOpenCommands.contains(cmd): return try await runLittleOpenCommand(cmd, a)
       case "key": return try await sendKey(a, app.frontWindowController.flatMap { app.hostFactories[$0.windowID] })
       case "snapshot": return try await snapshot(a, app.frontWindowController.flatMap { app.hostFactories[$0.windowID] })
-      case "ext-prompt", "ext-manage", "ext-commands", "ext-run-command", "ext-strip", "ext-click", "ext-popup-state", "ext-picker", "ext-hover", "ext-ui-menu", "ext-redraw-measure":
+      case "ext-prompt", "ext-manage", "ext-commands", "ext-run-command", "ext-windows", "ext-omnibox", "ext-strip", "ext-click", "ext-popup-state", "ext-picker", "ext-hover", "ext-ui-menu", "ext-redraw-measure":
         return try await runExtensionCommand(cmd, a)
       case "applescript": return try await runAppleScript(a)
       case "routing-log": return routingLog()
@@ -771,6 +771,7 @@
         return true
       case "ext-move":
         guard let id = a["extension"] as? String, let index = a["index"] as? Int else { throw Failure(message: "missing extension or index") }
+        guard index >= 0 else { throw Failure(message: "index must be nonnegative") }
         w.extensions.host?.movePinned(extensionID: id, to: index)
         return true
       case "ext-run":
@@ -1187,6 +1188,10 @@
     /// `tab`: a tab UUID, a page identifier (number), "popup", or omitted
     /// for the selected tab.
     private func content(_ a: [String: Any], _ w: EngineWebContentHostFactory) throws -> OEWebContent {
+      if let id = a["tab"] as? Int,
+         let popup = ExtensionWindowController.windows.values.first(where: { $0.content.identifier == id }) {
+        return popup.content
+      }
       if let n = a["index"] as? Int {
         guard let page = w.ensureContent(for: try modelTab(["index": n], w)) else { throw Failure(message: "engine or profile is not ready") }
         return page

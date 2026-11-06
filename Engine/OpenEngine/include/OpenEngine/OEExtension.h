@@ -10,6 +10,23 @@ NS_HEADER_AUDIT_BEGIN(nullability, sendability)
 @class OEExtensionManager;
 @class OEExtensionPrompt;
 
+/// Parsed Chromium omnibox suggestion. Ranges use UTF-16 offsets.
+NS_SWIFT_UI_ACTOR
+OE_EXPORT @interface OEOmniboxSuggestion : NSObject
+@property(nonatomic, readonly, copy) NSString* content;
+@property(nonatomic, readonly, copy) NSString* descriptionText;
+@property(nonatomic, readonly, copy) NSArray<NSValue*>* matchRanges;
+@property(nonatomic, readonly, copy) NSArray<NSValue*>* dimRanges;
+@property(nonatomic, readonly, copy) NSArray<NSValue*>* urlRanges;
+@property(nonatomic, readonly, getter=isDeletable) BOOL deletable;
+@end
+
+typedef NS_ENUM(NSInteger, OEOmniboxDisposition) {
+  OEOmniboxDispositionCurrentTab,
+  OEOmniboxDispositionNewForegroundTab,
+  OEOmniboxDispositionNewBackgroundTab,
+};
+
 /// One installed Chrome extension (ADK ExtensionInfo).
 NS_SWIFT_UI_ACTOR
 OE_EXPORT @interface OEExtension : NSObject

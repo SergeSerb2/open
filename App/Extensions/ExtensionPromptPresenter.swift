@@ -47,6 +47,7 @@ final class ExtensionPromptPresenter: NSObject, OEExtensionManagerDelegate {
   var events: [[String: Any]] = []
   #if OPEN_AUTOMATION
   var handlesPrompts = true
+  var omniboxReply: [String: Any]?
   #endif
   init(app: AppDelegate) { self.app = app }
   func registerContexts() { for context in OEEngine.shared.contexts { register(context.extensions) } }
