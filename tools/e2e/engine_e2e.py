@@ -5878,7 +5878,8 @@ def media_checks(factory, results, tmp):
         def doc_window(): return pip().get("documentWindow")
         dp = open_tab(base + "docpip.html")
         dp_opened = gesture_eval(dp, "start()")
-        dp_win = wait_until(lambda: (lambda w: w if w and w["visible"] and w["pageInWindow"] else None)(doc_window()), timeout=3, step=.02)
+        dp_win = wait_until(lambda: (lambda w: w if w and w["visible"] and w["pageInWindow"] and w["pageSize"] == w["requested"]
+                                     else None)(doc_window()), timeout=3, step=.02)
         dp_page = app.eval(dp, "JSON.stringify(__pip)")
         # The PiP page learns its size from the panel a moment after requestWindow resolves.
         dp_size = wait_until(lambda: (lambda v: v if v == [400, 300] else None)(app.eval(dp,
@@ -5910,17 +5911,21 @@ def media_checks(factory, results, tmp):
         meet = open_tab(fx_file + "meet-like.html")
         meet_heard, _ = start_heard(meet)
         select(home)
-        meet_win = wait_until(lambda: (lambda w: w if w and w["visible"] and w["pageInWindow"] else None)(doc_window()), timeout=3, step=.02)
+        meet_win = wait_until(lambda: (lambda w: w if w and w["visible"] and w["pageInWindow"] and w["pageSize"] == w["requested"]
+                                       else None)(doc_window()), timeout=3, step=.02)
         meet_auto = app.eval(meet, "JSON.stringify(__auto)")
         meet_decision = (m(meet).get("decision") or {}).get("value")
-        meet_video_pip = pip()["state"]
+        # Chromium marks the opener as in PiP while its Document PiP is open, so Open's session holds the
+        # tab (no mini player card, protected from sleep) until the panel goes.
+        meet_session = {k: pip().get(k) for k in ("state", "tab", "automatic")}
         select(meet)
         meet_closed = wait_until(lambda: doc_window() is None, timeout=3, step=.02)
+        meet_session_after = wait_until(lambda: (lambda p: p if p["state"] != "active" else None)(pip()), timeout=3, step=.02)
         results["media_meet_auto_pip"] = {"ok": meet_heard and bool(meet_win) and json.loads(meet_auto)["entered"] == 1
-            and meet_decision == "chromiumAutoPiP" and meet_video_pip in ("idle", "closed") and bool(meet_closed)
-            and meet_win["requested"] == [320, 240],
-            "window": meet_win, "auto": meet_auto, "decision": meet_decision, "videoPiP": meet_video_pip,
-            "closedOnReturn": bool(meet_closed)}
+            and meet_decision == "chromiumAutoPiP" and meet_session == {"state": "active", "tab": meet, "automatic": False}
+            and bool(meet_closed) and bool(meet_session_after) and meet_win["requested"] == [320, 240] and meet_win["topBarHeight"] == 28,
+            "window": meet_win, "auto": meet_auto, "decision": meet_decision, "session": meet_session,
+            "closedOnReturn": bool(meet_closed), "sessionAfter": (meet_session_after or {}).get("state")}
         close_tab(meet)
         # Item 16 (criterion 6) with section 8's sleep controller (#156): a paused tab whose mini player
         # shows survives a pass that sleeps an idle background tab; after Close (the card goes) the same
