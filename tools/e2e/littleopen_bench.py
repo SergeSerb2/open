@@ -125,6 +125,7 @@ def main():
                            'processCount': len(after['processes'])}
                     if completed.get('browserCreationStartedAt') is not None:
                         row['browserCreationToReadyMs'] = (completed['observationStart'] - completed['browserCreationStartedAt']) * 1000
+                        row['firstFrameToBrowserCreationMs'] = (completed['browserCreationStartedAt'] - frame['uptime']) * 1000
                     rows.append(row)
                     print(json.dumps(row), flush=True)
                 finally:

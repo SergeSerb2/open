@@ -85,16 +85,19 @@ final class LittleOpenWebContent: NSObject, LittleOpenWebContentProviding, WebCo
     creationScheduled = true
     CATransaction.begin()
     CATransaction.setCompletionBlock { [weak self] in
-      DispatchQueue.main.async { [weak self] in
-        guard let self, !self.closed else { return }
-        self.firstFrameRead = ["browserID": self.browser.map { $0.identifier } as Any? ?? NSNull(),
-          "content": self.host?.content.identifier ?? 0, "visible": self.surfaceWindow?.isVisible ?? false,
-          "uptime": ProcessInfo.processInfo.systemUptime]
-        #if OPEN_AUTOMATION
-        let before = self.beforeCreationForAutomation; self.beforeCreationForAutomation = nil
-        if before?(self) == true { return }
-        #endif
-        self.createBrowser()
+      // A main-queue async block can drain within the current turn.
+      RunLoop.main.perform(inModes: [.default, .eventTracking, .modalPanel]) { [weak self] in
+        MainActor.assumeIsolated {
+          guard let self, !self.closed else { return }
+          self.firstFrameRead = ["browserID": self.browser.map { $0.identifier } as Any? ?? NSNull(),
+            "content": self.host?.content.identifier ?? 0, "visible": self.surfaceWindow?.isVisible ?? false,
+            "uptime": ProcessInfo.processInfo.systemUptime]
+          #if OPEN_AUTOMATION
+          let before = self.beforeCreationForAutomation; self.beforeCreationForAutomation = nil
+          if before?(self) == true { return }
+          #endif
+          self.createBrowser()
+        }
       }
     }
     window.displayIfNeeded()
