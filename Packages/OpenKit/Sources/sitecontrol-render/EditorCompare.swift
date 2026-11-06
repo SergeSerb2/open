@@ -38,7 +38,7 @@ enum EditorCompare {
                 let x = 15+i*48
                 fill(title+" button",CGRect(x:x+4,y:540,width:3,height:3))
             }
-            // Pick Selector remains disabled until Step 8, so its glyph differs by design.
+            // This fixture has no available picker host, so its glyph remains disabled.
             ink("Developer Tools glyph",CGRect(x:70,y:542,width:24,height:24))
         } else if advanced {
             for y in 2..<13 { elements.append(.init(name: "advanced arrow row \(y)",rect: CGRect(x: 104,y: y,width: 43,height: 1),kind: .arrow)) }

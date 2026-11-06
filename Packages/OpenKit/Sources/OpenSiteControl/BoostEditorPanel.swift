@@ -64,9 +64,9 @@ public final class BoostEditorController: NSObject {
         colorTask?.cancel();colorTask = nil;view?.closeAdvanced();session?.finish()
         if let defaultsObserver { NotificationCenter.default.removeObserver(defaultsObserver);self.defaultsObserver = nil }
         self.panel = nil;view = nil;session = nil
-        let finish: @MainActor @Sendable ()->Void = { [weak panel,weak parent] in guard let panel else { return };parent?.removeChildWindow(panel);panel.orderOut(nil);panel.close();parent?.makeKeyAndOrderFront(nil) }
+        let finish: @MainActor @Sendable ()->Void = { [weak panel,weak parent] in guard let panel else { return };parent?.removeChildWindow(panel);panel.orderOut(nil);panel.close();if parent?.isVisible == true { parent?.makeKeyAndOrderFront(nil) } }
         if animated { NSAnimationContext.runAnimationGroup { context in context.duration = Motion.boostEditorCloseDuration;panel.animator().alphaValue = 0 } completionHandler: { MainActor.assumeIsolated { finish() } } } else { finish() }
-        parent?.makeKeyAndOrderFront(nil);onClose?()
+        if parent?.isVisible == true { parent?.makeKeyAndOrderFront(nil) };onClose?()
     }
     public func boundContextDidChange(tabID: ItemID,profileID: ProfileID) { if let session,session.context.tabID != tabID || session.context.profileID != profileID { close() } }
     public func pageDidNavigate(tabID: ItemID,url: URL?) { if session?.context.tabID == tabID { session?.updatePageURL(url) } }

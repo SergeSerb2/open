@@ -5,7 +5,7 @@ import OpenBoosts
 
 @MainActor enum CodeFlows {
     static func run() -> [Flows.Check] {
-        let checks = autoreleasepool { editingFlows()+pickerFlow() }
+        let checks = autoreleasepool { editingFlows()+pickerFlow()+closeFlow() }
         // Complete deferred native teardown before another process takes focus.
         RunLoop.main.run(until:Date().addingTimeInterval(0.01))
         return checks+EditorNativeKey.run(review:true)+renders()
@@ -113,6 +113,14 @@ import OpenBoosts
         check("F17 first Esc ends text editing; second Esc returns to simple mode",ended && !stage.view.isCodeMode && stage.controller.panel != nil)
         stage.controller.close();stage.parent.close()
         return checks
+    }
+    static func closeFlow() -> [Flows.Check] {
+        let stage = EditorStage()
+        defer { stage.controller.close();stage.parent.close() }
+        stage.controller.close(animated:true)
+        stage.parent.close()
+        RunLoop.main.run(until:Date().addingTimeInterval(Motion.boostEditorCloseDuration+0.05))
+        return [.init(name:"F25 editor close completion never reopens a closed browser parent",pass:stage.controller.panel == nil && !stage.parent.isVisible)]
     }
     private static func pickerFlow() -> [Flows.Check] {
         let stage = EditorStage(state:"editor-code-css")

@@ -46,6 +46,7 @@ enum CLI {
         case "extensions-check": report(SectionFlows.extensions())
         case "code-bench": report(CodeFlows.bench())
         case "code-flows": report(CodeFlows.run())
+        case "code-close-flow": report(CodeFlows.closeFlow())
         case "code-review-flows": report(EditorNativeKey.run(review:true))
         case "flows": report(value(args,"--group") == "editor" ? EditorFlows.run() : Flows.run()+EditorFlows.run())
         case "cold-measure":
