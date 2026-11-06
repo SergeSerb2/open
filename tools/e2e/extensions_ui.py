@@ -173,7 +173,9 @@ def run(factory, results, tmp, root, wait_until, new_tab, frame, read_image, ext
             shown = popup(identifier)
             dimensions = app.eval(page(), "({width:document.documentElement.scrollWidth,height:document.documentElement.scrollHeight})") if shown else {}
             if name == "bitwarden":
-                results["X6_bitwarden"] = {"ok": bool(shown) and shown["key"] and frame(shown["contentSize"])[0] >= 350, "state":shown}
+                popup_active=app.eval(page(),"chrome.tabs.query({active:true,currentWindow:true}).then(ts=>ts[0].id)") if shown else None
+                results["X6_bitwarden"] = {"ok": bool(shown) and shown["key"] and frame(shown["contentSize"])[0] >= 350
+                    and popup_active==app.call("engine-sleep")["chromeTabId"], "state":shown,"activeTab":popup_active}
             else:
                 size = frame(shown["contentSize"]) if shown else [0,0]
                 results["X7_darkreader_resize"] = {"ok": bool(shown) and all(abs(a-b)<=1 for a,b in zip(size, (dimensions.get("width",0), dimensions.get("height",0))))
@@ -228,6 +230,7 @@ def run(factory, results, tmp, root, wait_until, new_tab, frame, read_image, ext
         for how in ("blur", "toggle", "escape", "window.close", "tab", "command-w", "sidebar-hide"):
             opened = popup(probe)
             if not opened: dismissals.append({"rule": how, "ok": False}); continue
+            tabs_before={t["id"] for t in app.call("tabs")}
             if how == "blur": app.call("window-focus", id=app.call("window-state")["id"], activate=True)
             elif how == "toggle": app.call("ext-click", extension=probe, surface="url")
             elif how == "escape": app.call("key", key="escape", window="popup", route="app")
@@ -237,7 +240,9 @@ def run(factory, results, tmp, root, wait_until, new_tab, frame, read_image, ext
             elif how == "sidebar-hide":
                 app.call("key", key="s", modifiers=["command"], window="popup", route="app")
             ended = wait_until(lambda: not app.call("ext-popup-state")["open"], timeout=5)
-            dismissals.append({"rule": how, "ok": bool(ended), "state":app.call("ext-popup-state"), "events":app.call("events")})
+            tabs_kept=how!="command-w" or tabs_before=={t["id"] for t in app.call("tabs")}
+            dismissals.append({"rule": how, "ok": bool(ended) and tabs_kept, "tabsKept":tabs_kept,
+                "state":app.call("ext-popup-state"), "events":app.call("events")})
             close()
             if app.call("window-state")["sidebarMode"] == "hidden": app.call("command", id="toggle-sidebar")
         results["X8_dismiss_D1_D5_F2_D7"] = {"ok": all(d["ok"] for d in dismissals), "rows": dismissals}
