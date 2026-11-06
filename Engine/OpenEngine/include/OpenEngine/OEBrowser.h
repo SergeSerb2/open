@@ -1,5 +1,6 @@
 #import <AppKit/AppKit.h>
 #import <OpenEngine/OEDefines.h>
+#import <OpenEngine/OEExtension.h>
 
 NS_HEADER_AUDIT_BEGIN(nullability, sendability)
 
@@ -37,6 +38,8 @@ typedef NS_ENUM(NSInteger, OEExtensionMenuSource) {
 NS_SWIFT_UI_ACTOR
 @protocol OEBrowserDelegate <NSObject>
 @optional
+- (void)browser:(OEBrowser*)browser
+    omniboxDefaultSuggestionDidChangeForExtension:(NSString*)extensionIdentifier;
 /// The list or the order of the toolbar actions changed (install,
 /// uninstall, enable, disable, pin, unpin, move), or the window's live
 /// model came or went (extensionActionsReady changed). Redraw from
@@ -157,6 +160,18 @@ OE_EXPORT @interface OEBrowser : NSObject
 @property(nonatomic, readonly) NSInteger chromeWindowIdentifier;
 @property(nonatomic, readonly) OEBrowserContext* context;
 @property(nonatomic, weak, nullable) id<OEBrowserDelegate> delegate;
+
+- (void)omniboxStartSessionForExtension:(NSString*)extensionIdentifier;
+/// Completion runs at most once, on the main thread, only for the latest text.
+/// Superseding, cancelling or closing drops the old completion. NO means no listener.
+- (BOOL)omniboxInputChanged:(NSString*)text forExtension:(NSString*)extensionIdentifier
+                 completion:(void (^NS_SWIFT_UI_ACTOR)(NSArray<OEOmniboxSuggestion*>*))completion
+    NS_SWIFT_DISABLE_ASYNC;
+- (nullable OEOmniboxSuggestion*)omniboxDefaultSuggestionForExtension:(NSString*)extensionIdentifier;
+- (void)omniboxInputEntered:(NSString*)text forExtension:(NSString*)extensionIdentifier
+                disposition:(OEOmniboxDisposition)disposition;
+- (void)omniboxInputCancelledForExtension:(NSString*)extensionIdentifier;
+- (void)omniboxDeleteSuggestion:(NSString*)content forExtension:(NSString*)extensionIdentifier;
 /// The shell window, for focus and bounds (chrome.windows.get/update).
 @property(nonatomic, weak, nullable) NSWindow* window;
 

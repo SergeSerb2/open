@@ -326,6 +326,13 @@ public final class CommandBarController: NSObject {
 
     // MARK: Query
 
+    /// Re-read a live default suggestion without changing the field or scope.
+    /// The App source reuses the current input's reply instead of sending another input event.
+    public func refreshExtensionSuggestions(extensionID: String) {
+        guard isPresented, extensionScope?.id == extensionID else { return }
+        runQuery(text)
+    }
+
     private func context() -> SuggestContext {
         let r = request ?? CommandBarRequest(mode: .newTab)
         var mode = r.mode.suggestMode
