@@ -406,3 +406,72 @@ public enum ToolbarMetrics {
         CGRect(x: w - (extensionsShown ? 73 : 37), y: 2, width: 32, height: 28)
     }
 }
+
+/// Little Open, capture session 2 item 19 (interaction-states §20.10).
+/// Frames use the window's top-left. Fixed dark colors are a v1 guess: the
+/// captured material and its Space tint source are unproven; use cheap solid fills.
+public enum LittleOpenMetrics {
+    /// S2 19/0003–0010, 0029: identical first frames; visibleFrame insets are a guess.
+    public static let barSize = CGSize(width: 490, height: 329)
+    public static let screenInset: CGFloat = 20
+    /// S2 19/0011: grows left/down; fixed default, clamp and no animation are guesses.
+    public static let pageSize = CGSize(width: 1185, height: 832)
+    public static let minimumPageSize = CGSize(width: 360, height: 240)
+    /// S2 19/0011, page begins at y 47; no inner page inset or corner.
+    public static let titleBarHeight: CGFloat = 47
+    public static let trafficLights = [9, 32, 55].map { CGRect(x: $0, y: 16, width: 16, height: 16) }
+    public static let titleBarFill = RGBA(hex: 0x272A37)
+    public static let capsuleFill = RGBA(hex: 0x3D3D4A)
+    public static let pillFill = RGBA(hex: 0x050627)
+    /// S2 19/0011: white approximately 0.8; host 13 Regular, Profile 13 Medium.
+    public static let text = RGBA.white(0.8)
+    public static let fontSize: CGFloat = 13
+    public static let capsuleRadius: CGFloat = 8
+    public static let pillRadius: CGFloat = 15
+    public static let profileIcon = CGRect(x: 97, y: 17, width: 14, height: 14)
+    public static let profileTextX: CGFloat = 114
+    public static let hostY: CGFloat = 15.5
+    public static let hostHeight: CGFloat = 16
+    /// Guess: small gap around the chip/host; fitted centering between chip and copy.
+    public static let hostGap: CGFloat = 8
+    public static let maximumProfileWidth: CGFloat = 140
+    public static let minimumHostWidth: CGFloat = 36
+    public static let dividerAlpha: Double = 0.2
+    public static let windowCornerRadius = CommandBarMetrics.cornerRadius
+    /// Bar close plate/glyph internals are guesses inside S2 19/0003's measured hit frame.
+    public static let closePlateInset: CGFloat = 1
+    public static let closePlateRadius: CGFloat = 6
+    public static let closeGlyphSize: CGFloat = 11
+    public static func capsule(width w: CGFloat) -> CGRect { CGRect(x: 84, y: 8, width: max(0, w - 289), height: 31) }
+    public static func copy(width w: CGFloat) -> CGRect { CGRect(x: w - 228, y: 16, width: 16, height: 16) }
+    public static func pill(width w: CGFloat) -> CGRect { CGRect(x: w - 196, y: 8, width: 188, height: 30) }
+    public static func pillButton(width w: CGFloat) -> CGRect { CGRect(x: w - 191, y: 15, width: 148, height: 17) }
+    public static func chevron(width w: CGFloat) -> CGRect { CGRect(x: w - 29, y: 15, width: 16, height: 16) }
+    /// Divider, keycap and hit regions fitted inside S2 19/0011's pill.
+    public static func divider(width w: CGFloat) -> CGRect { CGRect(x: w - 37, y: 14, width: 1, height: 18) }
+    public static let keycapWidth: CGFloat = 27
+    public static let keycapRadius: CGFloat = 4
+    /// S2 19/0023: approximately 244 wide, rows at pitch 46; remaining insets are guesses.
+    public static let pickerWidth: CGFloat = 244
+    public static let pickerHeader: CGFloat = 46
+    public static let pickerRowHeight: CGFloat = 46
+    public static let pickerInset: CGFloat = 8
+    public static let pickerIconSize: CGFloat = 30
+    public static let pickerIconRadius: CGFloat = 7
+    public static let pickerSearchHeight: CGFloat = 28
+    public static let pickerEmojiSize: CGFloat = 19
+    public static let pickerEmojiInset = CGSize(width: 5, height: 3)
+    public static let pickerSymbolInset: CGFloat = 7
+    public static let pickerVisibleRows = 8 // guess: bound the viewport; remaining Spaces scroll.
+    /// LA-9: guess layout, one 32 pt band below the title bar.
+    public static let bannerHeight: CGFloat = 32
+    public static let bannerInset: CGFloat = 12
+    public static let bannerButtonWidth: CGFloat = 56
+    public static let bannerLabelY: CGFloat = 8
+    public static let bannerButtonY: CGFloat = 3
+    public static let bannerText = "Little Open shows one page at a time. Press ⌘O to keep it in a Space."
+    /// Routing §9.2: two delivery paths from one key-down; never use wall time.
+    /// Guess only for a process without a display; render callers inject their screen.
+    public static let fallbackScreenFrame = CGRect(x: 0, y: 0, width: 1440, height: 900)
+    public static let samePressTolerance: TimeInterval = 0.05
+}

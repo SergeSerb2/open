@@ -2,7 +2,8 @@ import AppKit
 import Foundation
 import OpenModel
 
-// Application KVC keys. Name, version, and isActive remain AppKit-owned.
+/// Application KVC owns appleScriptWindows, write-only appleScriptTabs, insertion, and quit.
+/// Name, version, and isActive remain AppKit-owned; the App supplies live providers.
 extension NSApplication {
     @objc public dynamic var appleScriptWindows: [ScriptWindow] {
         guard let model = ScriptHost.shared.model else { return [] }
@@ -20,7 +21,7 @@ extension NSApplication {
     // collection during insertion, so creation must remain exempt from the read guard.
     @objc public dynamic var appleScriptTabs: [ScriptTab] {
         if let command = NSScriptCommand.current(), !(command is NSCreateCommand) {
-            command.fail(ScriptError.writeOnly, "Application tabs are write-only. Use tabs of a window or space.")
+            command.fail(ScriptError.writeOnly, "tabs of application is write-only; make a new tab on application to create a Little Open window, or read tabs of a window or space.")
         }
         return []
     }
