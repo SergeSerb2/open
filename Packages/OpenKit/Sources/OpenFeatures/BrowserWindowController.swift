@@ -857,7 +857,10 @@ public final class BrowserWindowController: NSWindowController, NSWindowDelegate
     }
     /// Shared window-local key path. Focus comes from AppKit's current responder.
     @discardableResult public func handleKeyDown(_ event: NSEvent, unconsumed: Bool = false) -> Bool {
-        guard let eventWindow = event.window ?? NSApp.keyWindow,
+        // Window-less events belong here only while this controller's theme
+        // panel is key. Engine events from other windows must keep their owner.
+        let eventWindow = event.window ?? themeEditor.flatMap { NSApp.keyWindow === $0.panel ? $0.panel : nil }
+        guard let eventWindow,
               eventWindow === window || eventWindow === themeEditor?.panel || ownsAdditionalKeyWindow?(eventWindow) == true
                 || existingTabSwitcher?.acceptsEventWindow(eventWindow) == true else { return false }
         if eventWindow === themeEditor?.panel {

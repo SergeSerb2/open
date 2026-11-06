@@ -436,7 +436,7 @@ after in the PR. If its ΔE00 worsens past 2, keep 0.64 for imported themes
 | Material | `NSVisualEffectView`, `.popover`, `.behindWindow`, `.active`, only in body `(13,13,356,508)`, continuous corner radius 20; outer 13 pt band transparent | Opus R1 F0137 corner fit SSE 0.009; replaces the full-frame radius-16 guess |
 | Outer size | 382 × 534 pt | §14 AX |
 | Content inset | 13 pt each side → content 356 × 508 | §14 AX |
-| Position | left = sidebar trailing edge in window coordinates (anchored sidebar: `sidebarWidth`; floating card: card frame `maxX`); top = window top + 35 pt. Clamp inside the screen's `visibleFrame` with 8 pt margins; if clamped horizontally, keep it fully on screen. | §14 (x 500 = sidebar width, y 35) |
+| Position | left = sidebar trailing edge in window coordinates (anchored sidebar: `sidebarWidth`; floating card: card frame `maxX`); top = window top + 35 pt. Clamp the visible material body inside the screen's `visibleFrame` with 8 pt margins; the transparent 13 pt outer band is excluded from the clamp. | §14 (x 500 = sidebar width, y 35) |
 | Opened from the creation form | top aligned with the Theme card's top, same left edge (**guess**) | §6 |
 | Appearance | forced Space Light/Dark overrides the system live; Automatic follows the system; tokens in §5.9 | Session 2 0158–0163, lead round 3 supersedes Q9 |
 | One per window | A second entry focuses the existing panel. A different Space commits the current gesture and retargets that same controller and panel (Section 4 child-A brief, 2026-11-06). | Open choice |

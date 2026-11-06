@@ -85,6 +85,25 @@ def run(factory, results, scratch, root, wait_until, read_image, delta_e):
         moved = state()['frame']
         results['owner_move_anchor'] = dict(ok=abs(moved[0] - panel_before[0] - 20) <= .5 and abs(moved[1] - panel_before[1] - 20) <= .5)
         app.call('window-frame', frame=base_frame)
+        # The panel has a transparent 13 pt band around its material body.
+        # Clamp that visible body at both opposite screen corners.
+        screen = next((s['frame'] for s in state()['screens']
+                       if s['frame'][0] <= base_frame[0] + 640 <= s['frame'][0] + s['frame'][2]
+                       and s['frame'][1] <= base_frame[1] + 400 <= s['frame'][1] + s['frame'][3]), state()['screens'][0]['frame'])
+        sx, sy, sw, sh = screen
+        margins = []
+        try:
+            for corner, frame in [('right-bottom', [sx + sw - 650, sy - 500, 1280, 800]),
+                                  ('left-top', [sx - 650, sy + sh - 600, 1280, 800])]:
+                app.call('window-frame', frame=frame, unconstrained=True)
+                p = state()['frame']; x, y, w, h = p
+                visible = [x + 13, y + 13, w - 26, h - 26]
+                edge = [sx + sw - x - w + 13, y + 13 - sy] if corner == 'right-bottom' else [x + 13 - sx, sy + sh - y - h + 13]
+                margins.append(dict(corner=corner, frame=p, visible=visible, margins=edge))
+        finally:
+            app.call('window-frame', frame=base_frame)
+        results['visible_panel_screen_margin'] = dict(ok=all(abs(m - 8) <= .5 for row in margins for m in row['margins']),
+            screen=screen, rows=margins)
         screens = state()['screens']; scale_before = state()['scale']
         other_screen = next((s for s in screens if s['scale'] != scale_before), None)
         if other_screen:

@@ -122,8 +122,11 @@ public final class ThemeEditorController {
         }
         if panel.renderScale == nil { panel.renderScale = window.backingScaleFactor }
         if let screen = window.screen?.visibleFrame {
-            frame.origin.x = min(max(frame.minX, screen.minX + 8), screen.maxX - frame.width - 8)
-            frame.origin.y = min(max(frame.minY, screen.minY + 8), screen.maxY - frame.height - 8)
+            // The outer band is transparent. Keep the material body's visible
+            // edge, rather than that transparent frame, 8 pt from the screen.
+            let band = ThemeEditorMetrics.contentInset
+            frame.origin.x = min(max(frame.minX, screen.minX + 8 - band), screen.maxX - frame.width - 8 + band)
+            frame.origin.y = min(max(frame.minY, screen.minY + 8 - band), screen.maxY - frame.height - 8 + band)
         }
         panel.setFrame(frame, display: false)
     }

@@ -1284,7 +1284,7 @@ this refresh retains their defect gates and adapts the delay assertions to main.
 The editor is a child `ThemeEditorPanel`, built lazily by the browser window.
 The `edit-theme` command and `.editSpaceTheme` sidebar intent share that
 controller. Each display tick writes the current draft through
-`ThemeEditSession`; a shared `ThemePreviewRegistry` then updates matching
+`ThemeEditSession`; a shared `OpenDesign.ThemePreviewRegistry` then updates matching
 sidebars in that transaction. Live gestures have no cross-fade. Discrete
 changes use `Motion.themeCrossfade`; other Spaces keep their field and rows.
 
@@ -1307,3 +1307,7 @@ flows remain separate work. When the sidebar is hidden or hover-revealed,
 the panel anchors at the window leading edge +8 pt (choice for the lead).
 Closing returns keyboard focus to browser chrome, so the shared model undo
 manager receives Cmd+Z before a page is focused again.
+The screen clamp keeps the visible material body 8 pt inside the screen's
+usable area; the panel's transparent 13 pt band can extend beyond that edge.
+Window-less key events fall back only to this controller's key theme panel.
+Other window-less events keep the existing refusal path.
