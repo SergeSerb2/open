@@ -17,7 +17,7 @@ enum FeatureCLI {
     static func defaults() -> UserDefaults {
         let name = "Open.M4.Harness.\(UUID().uuidString)"; defaultSuites.append(name)
         let d = UserDefaults(suiteName: name)!
-        d.register(defaults: ["open.peek.otherSites": true, "open.peek.shiftClick": true, "open.links.littleOpenNUXSeen": true]); return d
+        d.register(defaults: ["open.links.openPeekOtherSites": true, "open.links.openPeekShiftClick": true, "open.links.littleOpenNUXSeen": true]); return d
     }
     static func run(_ args: [String]) async throws {
         guard let cmd = args.first else { throw CLIError(description: RenderCLI.usage) }

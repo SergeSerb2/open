@@ -7,6 +7,12 @@ The App uses the fork API for renderer freeze, in-place discard and history rest
 
 `TabLiveState` holds runtime sleep phase, capture/PiP, DevTools, and form
 protection. Per-profile `sleepMode` and `keepAliveSites` live in the JSON snapshot.
+In the App, global `open.advanced.tabSleepMode` is authoritative: launch,
+Profile creation, and Settings edits reconcile the profile field without an
+extra Undo step, saving only changed values. Never (`off`) blocks freeze,
+discard, pressure eviction, and 24 h shell destruction. It also exempts loaded
+pages from the eight-hidden-host cache cap. The cache otherwise closes real
+loaded pages, not just unused host wrappers.
 Schema version remains 1; `TabDTO` is unchanged. Old profile settings without
 a sleep mode load as balanced. Quiet pinned tabs and favorites sleep like
 other tabs. Pin state alone does not protect them.
@@ -96,8 +102,8 @@ window factories' existing hosts; never a second page per tab), and
   change phase. Frozen tabs wait for their discard deadline, extended by any
   audio, load, form or retry grace deadline. It parks when every hidden tab
   with content waits for an event (keep-alive, notifications, audio, loading, capture, DevTools,
-  downloads, a known unload handler on a frozen page, a frozen page in off
-  mode). Sleeping shells schedule one pass at their 24 h destroy time. Every
+  downloads, a known unload handler on a frozen page, or any page in Never
+  mode). Sleeping shells outside Never schedule one pass at their 24 h destroy time. Every
   event hook and `setNeedsPass()` (mode, permission, Low Power Mode changes)
   brings a pass forward within five seconds. The real-App
   `sleep_frozen_deadline` check proves the scheduled policy delay is greater
@@ -252,7 +258,7 @@ that temporary store on exit. It does not save over its input snapshot.
 | Check | Observed result |
 |---|---|
 | `sleep-demo` | 148 checks passed, 0 failed; exit 0 (105 existing checks plus 43 keep-alive checks). Step G (2026-11-02): 172, adding 24 rows for the notification gate, Battery Saver, the audio stop event and the parked pass loop |
-| Timing | Freeze at 30 s; discard at 900/300/120 s; off freezes without timed discard; destroy at 24 h after discard |
+| Timing | Freeze at 30 s; discard at 900/300/120 s; Never stays live without freeze/discard/destroy; other modes destroy at 24 h after discard (Section 7 policy update) |
 | Never-sleep gates | Visible, keepAlive, audible, loading, capturing, PiP, DevTools, and downloading block freeze and debug discard |
 | Keep-alive scope | All 21 translated service rules plus x.com stay live for 48 simulated hours; Gmail outside `/mail`, excluded paths, fixed-TLD mismatches, and unrelated hosts sleep normally. Subdomains and multiple-label TLDs pass. |
 | Keep-alive user rules and navigation | Snapshot-stored user rule stays live; path and profile isolation hold. Model edits invalidate the cache without a restart or tree change; a live tab remains awake for another 48 h. Leaving Gmail freezes at hide+30 s and discards at +300 s. Navigation to Gmail during async discard recovers hidden live content. |
@@ -261,7 +267,7 @@ that temporary store on exit. It does not save over its input snapshot.
 | Discard-only gates | Unload/form allow freeze and block discard; refreshed unload state permits later discard |
 | Ownership | Per-profile modes apply to nested pinned tabs and favorites; selected split panes and other windows stay protected |
 | Engine ordering and failures | Capture → save → discard; capture/discard/freeze failures preserve phase; false completion cannot claim discard |
-| Pressure injection | Warning discards two eligible frozen tabs oldest first, including off mode; visible/audio/capture gates hold. Critical destroys those two sleeping shells and calls the engine hook |
+| Pressure injection | Warning discards two eligible frozen tabs oldest first in Conservative; Never is protected (Section 7 policy update); visible/audio/capture gates hold. Critical destroys those two sleeping shells and calls the engine hook |
 | Wake | Retained shell reload waits for commit; destroyed wake restores both navigation directions; unfreeze and destroyed wake logs emitted |
 | Storage | Equal-field round-trip, reload through a second SQLite connection, single/batch delete, missing read, all IDs and byte total pass |
 | Container cap | Exactly 2,097,152 bytes stored intact; 2,097,153-byte write rejected and logged, prior row retained |
