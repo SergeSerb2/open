@@ -25,6 +25,9 @@ final class PermissionPromptPresenter: NSObject, NSPopoverDelegate {
   var presentedPage: OEWebContent? { current?.page }
   private let popover = NSPopover()
   private let view = PermissionPromptView()
+  private var card: PermissionPromptCard?
+  private var presentedWindow: NSWindow? { card?.window ?? (popover.isShown ? view.window : nil) }
+  private var isShown: Bool { card?.superview != nil || popover.isShown }
   private var finishing = false
   private var closed = false
   private var observers: [any NSObjectProtocol] = []
@@ -86,19 +89,39 @@ final class PermissionPromptPresenter: NSObject, NSPopoverDelegate {
   }
   func presentPending() {
     guard !closed, !finishing, current == nil, let owner, !owner.isClosing,
-          owner.window?.attachedSheet == nil, NSApp.isActive,
+          NSApp.isActive,
           let index = entries.firstIndex(where: { owner.pageChrome.isVisible($0.page) }) else { return }
     let entry = entries[index]
+    guard let targetWindow = entry.page.view.window ?? owner.window, targetWindow.attachedSheet == nil else { return }
     // A permission can arrive in the same turn that creates the toolbar.
     // Resolve native geometry before NSPopover validates the anchor rect.
     owner.controller?.contentView.layoutSubtreeIfNeeded()
-    guard let anchor = anchorProvider?(entry.page) ?? defaultAnchor(for: entry.page), anchor.view.window != nil else { return }
+    let surface = owner.standaloneSurface
+    let standalone = surface?.surfacePage === entry.page
+    let anchor: Anchor
+    if standalone {
+      guard let surfaceAnchor = surface?.surfaceAnchor(),
+            let root = entry.page.view.superview else { return }
+      // A title-bar capsule is outside the page. In that case use its surface root.
+      let contentRoot = entry.page.view.isDescendant(of: surfaceAnchor.view) ? surfaceAnchor.view : root
+      anchor = Anchor(view: contentRoot, rect: contentRoot.bounds, name: "little-open-content")
+    } else {
+      guard let normal = anchorProvider?(entry.page) ?? defaultAnchor(for: entry.page) else { return }
+      anchor = normal
+    }
+    guard anchor.view.window != nil else { return }
     entries.remove(at: index); current = entry
     view.question.stringValue = Self.question(origin: entry.request.origin, kinds: entry.request.kinds)
     let symbol = SitePermissionStore.kinds.first(where: { entry.request.kinds.contains($0.0) })?.2 ?? "lock"
     view.symbol.image = NSImage(systemSymbolName: symbol, accessibilityDescription: nil)?.withSymbolConfiguration(.init(pointSize: 20, weight: .regular))
     let screen = anchor.view.window!.convertToScreen(anchor.view.convert(anchor.rect, to: nil))
     anchorState = ["name": anchor.name, "frame": [screen.minX, screen.minY, screen.width, screen.height], "edge": anchor.edge.rawValue]
+    if standalone {
+      card = PermissionPromptCard(prompt: view, root: anchor.view)
+      targetWindow.makeFirstResponder(view)
+      return
+    }
+    popover.contentViewController?.view = view
     popover.show(relativeTo: anchor.rect, of: anchor.view, preferredEdge: anchor.edge)
     if let promptWindow = view.window {
       if promptWindow.parent == nil { anchor.view.window?.addChildWindow(promptWindow, ordered: .above) }
@@ -108,13 +131,17 @@ final class PermissionPromptPresenter: NSObject, NSPopoverDelegate {
     view.window?.defaultButtonCell = view.allow.cell as? NSButtonCell
   }
   func visibilityChanged() {
-    if let current, owner?.selectedContent !== current.page { finish(nil) }
+    if let current {
+      let standalone = owner?.standaloneSurface?.surfacePage === current.page
+      let visible = standalone ? owner?.pageChrome.isVisible(current.page) == true : owner?.selectedContent === current.page
+      if !visible { finish(nil) }
+    }
     presentPending()
   }
   /// AppKit keeps the parent as NSApp.keyWindow for this NSPopover. Plain
   /// keys arriving at the page's native pre-key hook belong to the prompt.
   func handleKey(_ event: NSEvent) -> Bool {
-    guard popover.isShown, current != nil,
+    guard isShown, current != nil,
           event.window === owner?.window || event.window === view.window,
           event.modifierFlags.intersection([.command, .control, .option]).isEmpty else { return false }
     switch event.keyCode {
@@ -123,7 +150,7 @@ final class PermissionPromptPresenter: NSObject, NSPopoverDelegate {
     default: return false
     }
   }
-  func owns(_ window: NSWindow) -> Bool { popover.isShown && view.window === window }
+  func owns(_ window: NSWindow) -> Bool { isShown && presentedWindow === window }
   private func finish(_ decision: OEPermissionState?) {
     guard !finishing, let entry = current else { return }
     finishing = true; current = nil
@@ -143,7 +170,12 @@ final class PermissionPromptPresenter: NSObject, NSPopoverDelegate {
     decisions += 1
     owner?.app.tabSleep.permissionsChanged(context: entry.page.context)
     owner?.record("permissionAnswer", entry.page, ["decision": decision == .allow ? "allow" : decision == .block ? "notnow" : "dismiss"])
-    popover.close(); finishing = false; presentPending()
+    if let card {
+      self.card = nil
+      card.dismiss(animated: decision != nil && !closed)
+      if !closed, owner?.pageChrome.isVisible(entry.page) == true { entry.page.focusPage() }
+    } else { popover.close() }
+    finishing = false; presentPending()
   }
   func cancel(page: OEWebContent) {
     let removed = entries.filter { $0.page === page }; entries.removeAll { $0.page === page }
@@ -164,11 +196,14 @@ final class PermissionPromptPresenter: NSObject, NSPopoverDelegate {
   }
   func popoverDidClose(_ notification: Notification) { if !finishing, !popover.isShown { finish(nil) } }
   @discardableResult func press(_ answer: String) -> Bool {
-    guard popover.isShown, current != nil, ["allow", "notnow"].contains(answer) else { return false }
+    guard isShown, current != nil, ["allow", "notnow"].contains(answer) else { return false }
     (answer == "allow" ? view.allow : view.notNow).performClick(nil); return true
   }
   var state: [String: Any] {
-    ["visible": popover.isShown, "pending": entries.count + (current == nil ? 0 : 1), "decisions": decisions,
+    ["visible": isShown, "presentation": card == nil ? "popover" : "card",
+     "animationDuration": card?.animationDuration ?? 0, "opacity": card?.alphaValue ?? 1,
+     "shadowPath": card?.layer?.shadowPath != nil,
+     "frame": card.map { let r = $0.convert($0.bounds, to: nil); return [r.minX, r.minY, r.width, r.height] } ?? [], "pending": entries.count + (current == nil ? 0 : 1), "decisions": decisions,
      "question": current == nil ? "" : view.question.stringValue, "kinds": current?.request.kinds.rawValue ?? 0,
      "origin": current?.request.origin.absoluteString ?? "", "anchor": anchorState,
      "keyWindow": NSApp.keyWindow?.windowNumber ?? 0, "promptKey": view.window?.isKeyWindow == true,
@@ -176,43 +211,4 @@ final class PermissionPromptPresenter: NSObject, NSPopoverDelegate {
      "pendingPage": current?.page.identifier ?? 0, "buttons": [view.notNow.title, view.allow.title], "help": view.help.stringValue, "window": view.window?.windowNumber ?? 0]
   }
   isolated deinit { observers.forEach(NotificationCenter.default.removeObserver) }
-}
-
-@MainActor
-private final class PermissionPromptView: PageChromePopoverView {
-  let symbol = NSImageView()
-  let question = NSTextField(wrappingLabelWithString: "")
-  let help = NSTextField(labelWithString: "Click the lock to change this any time")
-  let allow = PermissionButton(title: "Allow")
-  let notNow = PermissionButton(title: "Not Now")
-  override var isFlipped: Bool { true }
-  init() {
-    super.init(frame: CGRect(x: 0, y: 0, width: 320, height: 156))
-    question.font = .systemFont(ofSize: 13, weight: .semibold); question.maximumNumberOfLines = 3
-    help.font = .systemFont(ofSize: 11); help.textColor = .secondaryLabelColor
-    for child in [symbol, question, help, notNow, allow] { addSubview(child) }
-    allow.keyEquivalent = "\r"; notNow.keyEquivalent = "\u{1b}"
-    onReturn = { [weak self] in self?.allow.performClick(nil) }
-    onEscape = { [weak self] in self?.notNow.performClick(nil) }
-  }
-  @available(*, unavailable) required init?(coder: NSCoder) { fatalError() }
-  override func layout() {
-    super.layout()
-    symbol.frame = CGRect(x: 16, y: 16, width: 20, height: 24)
-    question.frame = CGRect(x: 44, y: 16, width: 260, height: 48)
-    help.frame = CGRect(x: 16, y: 76, width: 288, height: 16)
-    notNow.frame = CGRect(x: 132, y: 112, width: 84, height: 28)
-    allow.frame = CGRect(x: 224, y: 112, width: 80, height: 28)
-  }
-}
-
-@MainActor
-private final class PermissionButton: NSButton {
-  var onPress: (() -> Void)?
-  init(title: String) {
-    super.init(frame: .zero); self.title = title; bezelStyle = .rounded
-    target = self; action = #selector(pressed)
-  }
-  @available(*, unavailable) required init?(coder: NSCoder) { fatalError() }
-  @objc private func pressed() { onPress?() }
 }

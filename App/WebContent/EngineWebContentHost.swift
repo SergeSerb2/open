@@ -264,6 +264,7 @@ final class EngineWebContentHost: NSObject, WebContentHost, WebContentProviding,
   }
   func webContentDidRequestClose(_ page: OEWebContent) {
     guard !closed else { return }
+    if owner?.pageChrome.pageRequestedClose(page) == true { return }
     if let onCloseRequest {
       // Match the main-window close path: retire the standalone host only
       // after Chromium's delegate callback returns.

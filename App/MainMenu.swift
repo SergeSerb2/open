@@ -33,7 +33,8 @@ enum MainMenu {
   static func targetWindowCommands(_ target: EngineWebContentHostFactory?) { NSApp.mainMenu = build(factoryOverride: target) }
   static func performReservedShortcut(_ event: NSEvent) -> Bool {
     guard event.type == .keyDown, let app = NSApp.delegate as? AppDelegate else { return false }
-    if app.hostFactories.values.contains(where: { $0.pageChrome.dialogs.blocksBrowserShortcut(event) }) { return true }
+    if (Array(app.hostFactories.values) + app.littleOpenHosts.values.compactMap(\.owner))
+      .contains(where: { $0.pageChrome.dialogs.blocksBrowserShortcut(event) }) { return true }
     app.prepareCommandServices()
     // Preserve the initiating timestamp even if Carbon/menu delivery was delayed.
     // Pointer and programmatic menu actions call performCommand without a key stamp.

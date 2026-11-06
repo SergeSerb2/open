@@ -29,6 +29,9 @@ final class PageChromeCoordinator {
     }
   }
   func isVisible(_ page: OEWebContent) -> Bool {
+    if let surface = owner.standaloneSurface, surface.surfacePage === page {
+      return surface.isSurfaceVisible
+    }
     if owner.visibleTabs.contains(where: { owner.contents[$0.id] === page }) { return true }
     return owner.selectedContent === page || owner.auxiliaryPages.contains { $0.content === page && $0.panel.isVisible }
   }
@@ -75,9 +78,9 @@ final class PageChromeCoordinator {
   /// mutation occur only after its close delegate callback, on the next turn.
   @discardableResult
   func requestClose(_ page: OEWebContent, completion: @escaping (Bool) -> Void) -> Bool {
-    guard page.hasUnloadHandlers, !dialogs.hasPending(page) else { return false }
     let key = ObjectIdentifier(page)
     guard closeRequests[key] == nil else { return true }
+    guard page.hasUnloadHandlers, !dialogs.hasPending(page) else { return false }
     closeRequests[key] = completion
     page.sendDevToolsMethod("Page.close", parameters: nil) { [weak self] _, error in
       if error != nil { self?.closeRequests.removeValue(forKey: key)?(false) }
@@ -92,8 +95,8 @@ final class PageChromeCoordinator {
 }
 
 /// Quit preflight uses the same engine-owned close flow, without deleting any
-/// sidebar tabs. Cancel returns to the running App; accepted pages are rebuilt
-/// on selection if a later page cancels the quit.
+/// sidebar tabs. Cancel returns to the running App; accepted sidebar pages are
+/// rebuilt on selection, while accepted standalone windows finish closing.
 @MainActor
 final class PageQuitCoordinator {
   unowned let app: AppDelegate
@@ -109,13 +112,18 @@ final class PageQuitCoordinator {
     #endif
     if accepted { return true }
     if running { return false }
-    remaining = app.hostFactories.values.flatMap { owner in owner.contents.values.filter(\.hasUnloadHandlers).map { (owner, $0) } }
+    var seen: Set<ObjectIdentifier> = []
+    let owners = Array(app.hostFactories.values) + app.littleOpenHosts.values.compactMap(\.owner)
+    remaining = owners.filter { seen.insert(ObjectIdentifier($0)).inserted }.flatMap { owner in
+      owner.contents.values.filter(\.hasUnloadHandlers).map { (owner, $0) }
+    }
     if remaining.isEmpty { return true }
     running = true; next(); return false
   }
   private func next() {
     guard !remaining.isEmpty else { running = false; accepted = true; NSApp.terminate(nil); return }
     let (owner, page) = remaining.removeFirst()
+    if let window = owner.standaloneSurface?.surfaceWindow { window.makeKeyAndOrderFront(nil); owner.standaloneSurfaceVisibilityChanged() }
     if let id = owner.tabID(for: page), let space = owner.space(containing: id) { owner.focus(space: space); owner.select(nodeID: id) }
     // Page.close destroys an accepted page before the normal quit snapshot.
     // Preserve its browser-owned history first, without stopping tab sleep
@@ -132,7 +140,14 @@ final class PageQuitCoordinator {
     let waits = owner.pageChrome.requestClose(page) { [weak self, weak owner, weak page] allowed in
       guard let self else { return }
       if allowed {
-        if let owner, let page, let id = owner.tabID(for: page) { owner.controller?.container.closeHost(for: id) }
+        if let owner, let page, let id = owner.tabID(for: page) {
+          if owner.standaloneSurface?.surfacePage === page {
+            // Page.close has destroyed the browser. On this deferred turn its
+            // unload handlers are gone, so the normal session close completes
+            // without another preflight or a stranded standalone host.
+            owner.hosts[id]?.onCloseRequest?()
+          } else { owner.controller?.container.closeHost(for: id) }
+        }
         self.next()
       } else { self.running = false; self.remaining.removeAll() }
     }
