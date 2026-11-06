@@ -25,6 +25,7 @@ extension AppDelegate {
       LittleOpenWebContent(app: self, profileID: profile)
     }
     littleOpenCoordinator = coordinator
+    installLittleOpenPageClose(on: coordinator)
     coordinator.onSwitchToTab = { [weak self] id, space in self?.selectLittleOpenDestination(tabID: id, spaceID: space) }
     coordinator.onOpenInMain = { [weak self] windowID, tabID, host in
       // Recreate through the sidebar's factory: host ownership stays local.

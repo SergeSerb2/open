@@ -1300,6 +1300,17 @@ the system authorization and tab-sleep notification hooks. No macOS location
 prompt is suppressed. Layout width 320 pt and the final anchor edge are the
 lead's stated guesses, not measured Arc visuals.
 
+Little Open uses the same dialog queue and NSAlert sheets on its standalone
+window. Its close preflight asks the engine before removing the session; Cancel
+keeps the page, including after repeated close requests. Quit includes standalone
+pages after the Downloads warning; automation owner-death quit stays prompt-free.
+Permissions use the shared content view in an in-window card, 10 pt from the
+content top/leading edges, at most 320 pt wide, with a 10 pt corner and the Find
+shadow. These dimensions and curves are lead-specified guesses. Show/hide fades
+use the evidenced 0.1 s duration and stop animating under Reduce Motion. Hidden,
+miniaturized or occluded surfaces do not present new requests. See the
+[Little Open receipt](engine-spike/s11-littleopen-pagechrome.md).
+
 Section 12 integration hooks:
 
 - `PermissionPromptPresenter.anchorProvider`: supply a view, its local bounds,

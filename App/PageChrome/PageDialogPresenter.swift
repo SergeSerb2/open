@@ -133,7 +133,7 @@ final class PageDialogPresenter {
   }
   func presentNext() {
     guard !closed, !entries.contains(where: { $0.alert != nil }),
-          let entry = entries.first(where: { !$0.held && isVisible($0.page) }), let window = entry.parentWindow ?? window else { return }
+          let entry = entries.first(where: { !$0.held && isVisible($0.page) }), let window = entry.page.view.window ?? entry.parentWindow ?? window else { return }
     if window.attachedSheet != nil {
       if sheetObserver == nil {
         sheetObserver = NotificationCenter.default.addObserver(forName: NSWindow.didEndSheetNotification, object: nil, queue: .main) { [weak self] _ in
@@ -181,7 +181,8 @@ final class PageDialogPresenter {
       "message": entry.dialog.message, "text": entry.field?.stringValue ?? "",
       "suppressionTitle": entry.suppression?.title ?? "", "promptWidth": entry.field?.frame.width ?? 0,
       "sourceMessageBytes": entry.dialog.message.utf8.count, "sourcePromptBytes": entry.dialog.defaultPromptText.utf8.count,
-      "buttons": entry.alert?.buttons.map(\.title) ?? [], "window": entry.alert?.window.windowNumber ?? 0]
+      "buttons": entry.alert?.buttons.map(\.title) ?? [], "parent": entry.alert?.window.sheetParent?.windowNumber ?? 0,
+      "window": entry.alert?.window.windowNumber ?? 0]
   }
   isolated deinit { if let sheetObserver { NotificationCenter.default.removeObserver(sheetObserver) } }
 }

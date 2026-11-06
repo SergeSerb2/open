@@ -11065,6 +11065,7 @@ def main():
             module = importlib.util.module_from_spec(spec); spec.loader.exec_module(module)
             results[opts.only] = CheckedResults(tracker)
             module.run(factory, results[opts.only], tmp, globals())
+            runpy.run_path(os.path.join(ROOT, "tools/e2e/littleopen_page_chrome.py"))["run"](factory, results[opts.only], tmp, globals())
         elif opts.only == "context-menus":
             import importlib.util
             spec = importlib.util.spec_from_file_location("open_context_menus", os.path.join(ROOT, "tools/e2e/context_menus.py"))

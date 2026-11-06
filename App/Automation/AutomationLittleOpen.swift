@@ -174,6 +174,7 @@ extension AutomationController {
     guard let action = args["action"] as? String else { throw Failure(message: "missing Little Open action") }
     switch action {
     case "close": app.littleOpenCoordinator.close(sessionID: controller.session.id, archiveReason: nil)
+    case "close-button": controller.window?.standardWindowButton(.closeButton)?.performClick(nil)
     case "miniaturize": controller.window?.miniaturize(nil)
     case "deminiaturize": controller.window?.deminiaturize(nil)
     case "focus": app.littleOpenCoordinator.resurface(controller.session.id); NSApp.activate()
