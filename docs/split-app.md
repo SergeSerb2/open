@@ -95,3 +95,23 @@ The combined Chrome negative run rejects 12 rows and cleanup passes (`negative-v
 No new product guess is introduced. The measured equal sidebar cell fills remain unchanged. Divider keyboard resizing stays skipped as plan §3.4 permits. Existing unresolved visual choices remain reported to the lead: orientation-only changes have no explicit 0.22-second frame animation; removed slots have no separate 0.14-second fade. The existing narrow-bar fallback guess can overlap fixed focused controls below roughly 220 pt. Narrow-window acceptance proves page frames and equal scaling, not redesigned bar metrics.
 
 Earlier instrumented latency runs accidentally re-injected a startup-armed idle observer on relaunch. Their numbers are diagnostic, not normal latency (`split-release-queued.json`, `split-layout.json`). Uninstrumented old-query retries and loads remain `switch-warm-redundancy.json`, `switch-warm-ui.json`, `switch-ack-overhead.json`. The visibility-only clock experiment (`clock-control.json`) is superseded by the approved every-pane rAF endpoint and does not count toward the three accepted runs. The intrusive CA animation-end experiment is retained above. Raw traces, logs and PNGs stay in `.re/s9-split/`.
+
+## Final interleaved receipt (1× display)
+
+Main is `8db4ac86`; the branch includes the accepted cached-ring fix and the merged Little Open full-bleed path. The relative gate **PASSes**. Target 16 ms is **NOT MET**. Physical presentation is out of scope. [All synthetic samples, diagnostics and native motion records](split-app-timings.json) are committed; raw process logs stay in `.re/s9-split/`.
+
+| Revision | Single median / p95 ms | Split median / p95 ms | Old query p95 single / split ms | Native p95 single / split ms |
+|---|---:|---:|---:|---:|
+| main | 8.910 / 13.147 | 17.382 / 20.815 | 18.143 / 25.445 | 9.549 / 17.212 |
+| branch | 9.060 / 13.000 | 13.372 / 17.269 | 13.957 / 22.354 | 8.993 / 13.549 |
+
+The branch is −0.147 ms on single p95 and −3.546 ms on split p95. Both are within main + 1 ms and below 25 ms. All three ordinary/wrapped motion cohorts show only the existing 0.22-second slot animations; no independent ring bounds/position animation remains.
+
+| Pair | Revision | Single p95 ms | Split p95 ms | Load before → after (1/5/15) |
+|---|---|---:|---:|---|
+| 1 | main | 14.852 | 20.815 | 10.72/12.21/15.33 → 11.27/12.28/15.32 |
+| 1 | branch | 13.612 | 18.332 | 11.73/12.36/15.33 → 11.27/12.25/15.27 |
+| 2 | main | 12.942 | 21.043 | 11.27/12.25/15.27 → 11.40/12.25/15.24 |
+| 2 | branch | 11.753 | 16.090 | 11.40/12.25/15.24 → 11.60/12.27/15.23 |
+| 3 | main | 12.361 | 20.144 | 11.60/12.27/15.23 → 14.08/12.78/15.37 |
+| 3 | branch | 12.217 | 15.352 | 14.08/12.78/15.37 → 14.39/12.86/15.39 |

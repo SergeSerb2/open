@@ -5,7 +5,7 @@ import OpenDesign
 @MainActor
 public final class PaneSlotView: NSView {
     var fullBleed = false {
-        didSet { clip.layer?.cornerRadius = fullBleed ? 0 : PanelMetrics.cornerRadius; layer?.shadowOpacity = fullBleed ? 0 : PanelMetrics.shadowOpacity }
+        didSet { if fullBleed != oldValue { clip.layer?.cornerRadius = fullBleed ? 0 : PanelMetrics.cornerRadius; layer?.shadowOpacity = fullBleed ? 0 : PanelMetrics.shadowOpacity } }
     }
     public let tabID: ItemID
     public private(set) var paneChrome: PaneChromeView?
@@ -97,7 +97,7 @@ public final class PaneSlotView: NSView {
 @MainActor
 public final class WebContentContainer: NSView {
     public static let maxCachedHiddenHosts = 8
-    public var fullBleed = false { didSet { for slot in slots { slot.fullBleed = fullBleed } } }
+    public var fullBleed = false { didSet { if fullBleed != oldValue { for slot in slots { slot.fullBleed = fullBleed } } } }
     /// The render server resizes this background with the panel while page
     /// layout stays at its final width. Clip the wider hide frame temporarily.
     public func setSidebarSliding(_ sliding: Bool) {
