@@ -192,7 +192,10 @@ extension EngineWebContentHostFactory {
       guard let self, !self.isClosing, !self.app.terminationRequested,
         self.model.space(id: spaceID)?.profileID == request.fromProfileID,
         self.model.profile(id: profileID) != nil else { return }
+      self.app.undoManager.beginUndoGrouping()
       self.model.moveSpace(id: spaceID, toProfile: profileID)
+      self.app.undoManager.setActionName("Change Profile")
+      self.app.undoManager.endUndoGrouping()
       self.app.scheduleSave(); self.app.scheduleMenuRebuild()
     }
     let preferences = UserDefaults.standard

@@ -1192,7 +1192,7 @@ socket only, no desktop input.
 | A4 | Quit and relaunch: `theme-get` returns the same `style`; background pixel sample within ΔE00 1. |
 | A5 | `new-space` → type a name (`type`), Return → `spaces` lists it with the name, Profile, and style; undo removes it. |
 | A6 | Icon picker on a tab: pick an emoji; `tabs` shows `iconOverride`; relaunch keeps it. |
-| A7 | Change Profile from the Space menu shows the warning, confirm moves the Space (`spaces` Profile id changes). |
+| A7 | Change Profile from the Space menu and `change-profile` shows the warning; confirmation moves the Space in one step named "Change Profile". Native Cmd+Z restores the old Profile, and Shift+Cmd+Z reapplies it. Folder conversion Undo restores the complete node list, the folder's position and ordered children exactly once; Redo puts those children in the new Space's Today section. |
 
 ## 13. Implementation order (files + acceptance per step)
 

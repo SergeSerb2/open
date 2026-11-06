@@ -10176,6 +10176,25 @@ def space_editor_creation_checks(factory, results, tmp):
         if isinstance(value, dict): return {k: shape(v) for k, v in value.items() if k != 'loaded'}
         if isinstance(value, list): return [shape(v) for v in value]
         return value
+    def node_list():
+        # Compare the full persisted tree, including invisible nodes in other
+        # Spaces/Profiles. Runtime loading and access times are not tree state.
+        snapshot = json.loads(Path(app.call('save')).read_text())
+        rows = []
+        def collect(nodes, parent):
+            for index, encoded in enumerate(nodes):
+                kind, payload = next(iter(encoded.items()))
+                node = payload['_0']
+                rows.append(dict(id=node['id'], kind=kind, parent=parent, index=index))
+                if kind == 'folder': collect(node['children'], node['id'])
+                elif kind == 'split':
+                    collect([dict(tab=dict(_0=pane)) for pane in node['panes']], node['id'])
+        for profile in snapshot['profiles']:
+            collect(profile['favorites'], profile['id'] + '/favorites')
+        for space in snapshot['spaces']:
+            for section in ('pinned', 'today'):
+                collect(space[section], space['id'] + '/' + section)
+        return rows
     try:
         app.call('window-frame', frame=[80, 60, 1120, 800])
         app.call('window-focus', id=app.call('window-state')['id'], activate=True)
@@ -10369,14 +10388,37 @@ def space_editor_creation_checks(factory, results, tmp):
             app.call('sidebar-key', key='escape')
         folder = app.call('folder', tabs=[a], title='Turned Space', section='pinned')
         app.call('sidebar-drop', nodes=[b], parent=dict(kind='folder', id=folder), index=1)
+        left = app.call('open', url=path.as_uri())['id']; app.call('wait', tab=left); app.call('pin', tab=left)
+        right = app.call('open', url=path.as_uri())['id']; app.call('wait', tab=right); app.call('pin', tab=right)
+        app.call('sidebar-drop', nodes=[left], parent=dict(kind='pinned', id=source), index=0)
         old = shape(tree()); count = len(spaces())
+        old_nodes = node_list()
+        require('turn_folder_position_fixture', [n['id'] for n in old['pinned']] == [left, folder, right])
         app.call('sidebar-menu', node=folder, item='Turn “Turned Space” into Space')
-        require('turn_form_prefill_no_early_mutation', state()['name'] == 'Turned Space' and shape(tree()) == old)
+        require('turn_form_prefill_no_early_mutation', state()['name'] == 'Turned Space' and shape(tree()) == old,
+                form=state(), before=old, after=shape(tree()))
         finish()
         require('turn_children_today_in_order', [n['id'] for n in tree()['today']] == [a, b] and tree()['pinned'] == []
                 and all(app.tab(n)['section'] == 'today' and not app.tab(n)['pinnedURL'] for n in (a, b)), tree=tree())
-        undo(); app.call('space', space=source)
-        require('turn_one_undo_restores_folder_sections', len(spaces()) == count and shape(tree()) == old)
+        turned_space = focused()['id']
+        turned_nodes = node_list()
+        app.call('sidebar-key', key='z', modifiers=['cmd'])
+        restored_nodes = node_list()
+        require('turn_one_undo_restores_folder_sections', focused()['id'] == source and len(spaces()) == count and shape(tree()) == old
+                and restored_nodes == old_nodes
+                and len({n['id'] for n in restored_nodes}) == len(restored_nodes)
+                and sum(n['id'] == folder for n in restored_nodes) == 1,
+                before=old_nodes, after=restored_nodes, tree=tree())
+        redo_menu = _menu_row(app, 'redo')
+        redo_event = app.call('sidebar-key', key='z', modifiers=['cmd', 'shift'], observeCommands=True)
+        redone_nodes = node_list()
+        require('turn_redo_recreates_space_today_without_duplicates', len(spaces()) == count + 1
+                and any(s['id'] == turned_space for s in spaces()) and redone_nodes == turned_nodes
+                and len({n['id'] for n in redone_nodes}) == len(redone_nodes)
+                and not any(n['id'] == folder for n in redone_nodes)
+                and [n['id'] for n in redone_nodes if n['parent'] == turned_space + '/today'] == [a, b],
+                before=turned_nodes, after=redone_nodes, menu=redo_menu, event=redo_event, spaces=spaces())
+        app.call('sidebar-key', key='z', modifiers=['cmd']); app.call('space', space=source)
         # A7 uses the header menu, warning text, Cancel, then confirmation.
         app.call('profile-menu', response='Default')
         app.call('menu-perform', id='change-profile')
@@ -10387,12 +10429,26 @@ def space_editor_creation_checks(factory, results, tmp):
                 and focused()['profile'] == previous['profile'], alert=alert)
         app.call('alert', button='Cancel')
         require('A7_cancel_no_change', focused()['profile'] == previous['profile'])
-        app.call('menu-perform', id='change-profile'); app.call('profile-menu', waitClosed=True)
-        app.call('alert', button='Change Profile')
-        require('A7_confirm_changes_profile', wait_until(lambda: focused()['profile'] != previous['profile'], timeout=5))
         app.call('profile-menu', close=True)
-        app.call('sidebar-key', key='z', modifiers=['cmd'])
-        require('A7_profile_undo', wait_until(lambda: focused()['profile'] == previous['profile'], timeout=5), space=focused())
+        for entry in ('command', 'space_menu'):
+            if entry == 'command':
+                app.call('profile-menu', response='Default')
+                app.call('menu-perform', id='change-profile'); app.call('profile-menu', waitClosed=True)
+            else:
+                app.call('sidebar-menu', item='Set Profile/Default')
+            require('A7_' + entry + '_specific_warning', 'Change Profile?' in app.call('alert')['texts'])
+            app.call('alert', button='Change Profile')
+            require('A7_' + entry + '_confirm_changes_profile', bool(wait_until(lambda: focused()['profile'] != previous['profile'], timeout=5)))
+            changed_profile = focused()['profile']
+            undo_item = _menu_row(app, 'undo')
+            require('A7_' + entry + '_undo_named', state().get('modelUndoName') == 'Change Profile', menu=undo_item, state=state())
+            app.call('sidebar-key', key='z', modifiers=['cmd'])
+            require('A7_' + entry + '_profile_undo', bool(wait_until(lambda: focused()['profile'] == previous['profile'], timeout=5)), space=focused())
+            redo_item = _menu_row(app, 'redo')
+            require('A7_' + entry + '_redo_named', state().get('modelRedoName') == 'Change Profile', menu=redo_item, state=state())
+            app.call('sidebar-key', key='z', modifiers=['cmd', 'shift'])
+            require('A7_' + entry + '_profile_redo', bool(wait_until(lambda: focused()['profile'] == changed_profile, timeout=5)), space=focused())
+            app.call('sidebar-key', key='z', modifiers=['cmd'])
         windows = app.call('shell-windows')
         app.call('menu-perform', id='blank-window'); key('escape')
         new_window = app.call('window-state')['id']; before_close_key = spaces()
@@ -10403,10 +10459,9 @@ def space_editor_creation_checks(factory, results, tmp):
         require('A5_window_close_discards_form', len(app.call('shell-windows')) == len(windows))
     finally:
         try:
-            app.call('editor-close')
-            app.call('profile-menu', close=True)
-            try: app.call('alert', button='Cancel')
-            except RuntimeError: pass
+            _try(lambda: app.call('editor-close', timeout=3))
+            _try(lambda: app.call('profile-menu', close=True, timeout=3))
+            _try(lambda: app.call('alert', button='Cancel', timeout=3))
         finally:
             _restore_defaults(app, saved)
             app.quit()
@@ -10777,7 +10832,7 @@ def _restore_defaults(app, saved):
         restored = False
         if app is not None and not app.closed:
             try:
-                app.call("defaults", key=key, value=value)
+                app.call("defaults", key=key, value=value, timeout=3)
                 restored = True
             except Exception:
                 pass

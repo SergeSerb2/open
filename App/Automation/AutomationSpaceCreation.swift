@@ -18,7 +18,10 @@ extension AutomationController {
       else { browser.spaceCreationController?.cancel() }
       return true
     case "creation-state":
-      guard let creation = browser.spaceCreationController else { return ["open": false, "modelUndoGeneration": app.model.undoGeneration] }
+      guard let creation = browser.spaceCreationController else {
+        return ["open": false, "modelUndoGeneration": app.model.undoGeneration,
+          "modelUndoName": app.undoManager.undoActionName, "modelRedoName": app.undoManager.redoActionName]
+      }
       let form = creation.creationView
       let style = try creation.draftStyle.map { try JSONSerialization.jsonObject(with: JSONEncoder().encode($0)) } ?? NSNull()
       return ["open": true, "modelUndoGeneration": app.model.undoGeneration, "name": form.nameField.stringValue, "style": style,

@@ -6,7 +6,6 @@ import OpenSidebar
 import OpenSpaceEditor
 import OpenCommands
 import OpenStore
-import OpenSpaceEditor
 
 @MainActor
 public final class BrowserWindowController: NSWindowController, NSWindowDelegate, SidebarDelegate, CommandDispatcher {

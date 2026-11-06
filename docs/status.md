@@ -568,7 +568,7 @@ Items 9–10 merged to `main` in #132; Manage Spaces was already merged in #124:
 | Entry | Dispatch and enablement | Real App evidence |
 |---|---|---|
 | Spaces ▸ Rename Space | Focused Space inline title editor when visible; Rename/Cancel dialog when hidden; disabled without a browser window or during a sheet | `I10_rename_space_inline/undo`, `I10_rename_hidden_sidebar_dialog`, `I10_rename_cancel_unchanged` |
-| Spaces ▸ Change Profile | Same Set Profile menu at the Space header; checked current Profile; `ChangeProfileRequest` warning with Cancel, confirmation, and a saved suppression choice; disabled without a browser window | `space-editor` A7; `I10_change_profile_opens_set_profile`, `I10_change_profile_choice_dispatches/undo` |
+| Spaces ▸ Change Profile | Same Set Profile menu at the Space header; checked current Profile; `ChangeProfileRequest` warning with Cancel, confirmation, and a saved suppression choice; one step named Change Profile with native Undo/Redo; disabled without a browser window | `space-editor` A7 command and Space menu warning/Undo/Redo; `I10_change_profile_opens_set_profile`, `I10_change_profile_choice_dispatches/undo` |
 | Spaces ▸ Manage Spaces… | Existing Library ▸ Spaces presenter, retained with no browser (existing design) | `I10_manage_spaces_menu`; existing E5 entry/reuse rows |
 | Archive ▸ Clear Archive | Existing Library confirmation and stores; Cancel is inert; disabled without a browser window or during a sheet | `I10_clear_archive_library_confirmation/cancel/confirm` |
 
