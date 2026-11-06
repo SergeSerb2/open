@@ -932,6 +932,9 @@
           }
         }
         return dismissed
+      case "window-material-probe":
+        guard let controller = w.controller else { throw Failure(message: "no window") }
+        return try await WindowMaterialMeasurement.shared.perform(a, controller: controller)
       case "window-motion":
         guard let controller = w.controller else { throw Failure(message: "no window") }
         if let reduced = a["reduced"] as? Bool { Motion.reduceMotionOverride = reduced }

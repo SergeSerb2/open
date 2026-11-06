@@ -308,6 +308,7 @@ uint64_t open_idle_count(int index) {
         for (unsigned i = 0; i < timerCount; i++) {
             if (!CFRunLoopTimerIsValid(timers[i])) continue;
             CFArrayRef modes = CFRunLoopCopyAllModes(loops[i]);
+            if (!modes) { events[5]++; continue; }
             for (CFIndex n = 0; n < CFArrayGetCount(modes); n++) {
                 if (CFRunLoopContainsTimer(loops[i], timers[i], CFArrayGetValueAtIndex(modes, n))) { count++; break; }
             }
