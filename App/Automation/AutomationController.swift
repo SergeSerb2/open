@@ -107,6 +107,9 @@
       case _ where Self.littleOpenCommands.contains(cmd): return try await runLittleOpenCommand(cmd, a)
       case "site-controls": return try await runSiteControl(a)
       case "site-controls-idle": return try siteControlIdle(a)
+      case "theme-get", "theme-set", "editor-open", "editor-act", "editor-close", "editor-state":
+        if cmd == "editor-act" { nativeInputStart = ProcessInfo.processInfo.systemUptime }
+        return try await runEditorCommand(cmd, a)
       case "key": return try await sendKey(a, app.frontWindowController.flatMap { app.hostFactories[$0.windowID] })
       case "snapshot": return try await snapshot(a, app.frontWindowController.flatMap { app.hostFactories[$0.windowID] })
       case "library-captures-state": return try libraryCapturesState(a)
@@ -124,9 +127,6 @@
       case _ where Self.mediaCommands.contains(cmd): return try await runMediaCommand(cmd, a)
       case _ where Self.notificationCommands.contains(cmd): return try await runNotificationCommand(cmd, a)
       case _ where Self.sleepCommands.contains(cmd): return try await runSleepCommand(cmd, a)
-      case "editor-open", "editor-act", "editor-close", "editor-state":
-        if cmd == "editor-act" { nativeInputStart = ProcessInfo.processInfo.systemUptime }
-        return try await runEditorCommand(cmd, a)
       case "ping":
         return [
           "pid": Int(getpid()), "chromium": OEEngine.shared.chromiumVersion, "cef": OEEngine.shared.cefVersion,
@@ -2017,9 +2017,9 @@
       }
       if a["window"] as? String == "library", app.settingsPresenter.libraryPresenter?.window == nil { throw Failure(message: "no Library window") }
       if a["window"] as? String == "editor" {
-        guard let panel = w?.iconPicker?.panel, panel.isVisible else { throw Failure(message: "no icon picker") }
-        let method = try await WindowSnapshot.capture(panel, to: url)
-        return ["path": path, "method": method]
+        guard let panel: NSWindow = w?.iconPicker?.panel ?? w?.controller?.themeEditor?.panel,
+              panel.isVisible else { throw Failure(message: "no editor") }
+        return ["path": path, "method": try await WindowSnapshot.capture(panel, to: url)]
       }
       let number = a["window"] as? String == "library" ? app.settingsPresenter.libraryPresenter?.window?.windowNumber : a["window"] as? Int
       guard let target = number.flatMap({ n in NSApp.windows.first { $0.windowNumber == n } }) ?? app.firstRunWindowController?.window ?? w?.window
