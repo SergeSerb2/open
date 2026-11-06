@@ -26,6 +26,7 @@ import math
 import glob
 import hashlib
 import re
+import runpy
 import os
 import shutil
 import signal
@@ -115,7 +116,7 @@ class CheckedResults(dict):
 
 
 class Open:
-    def __init__(self, config, style, user_data, extra_args, log_path, urls=("about:blank",), extra_env=None):
+    def __init__(self, config, style, user_data, extra_args, log_path, urls=("about:blank",), extra_env=None, delivery_urls=()):
         if os.path.exists(os.path.join(ROOT, ".re", "hold-on-screen")):
             raise RuntimeError("On-screen Open runs are held by the lead (.re/hold-on-screen)")
         self.user_data = user_data
@@ -156,7 +157,7 @@ class Open:
         # The first-frame timeout fixture also uses open without -W. Its
         # successful early launcher exit must not be mistaken for app exit.
         wait_args = [] if (extra_env or {}).get("OPEN_E2E_NO_LAUNCH_WAIT") == "1" else ["-W"]
-        launch = ["/usr/bin/open", "-n"] + wait_args + [self.bundle,
+        launch = ["/usr/bin/open", "-n"] + wait_args + ["-a", self.bundle] + list(delivery_urls) + [
                   "--stdout", self.launch_log_path, "--stderr", self.launch_log_path]
         for key, value in env.items():
             if key.startswith("OPEN_") or key in (extra_env or {}):
@@ -6450,12 +6451,14 @@ CAPTURE_BANDS = [(224, 64, 64), (64, 176, 80), (48, 96, 224), (224, 192, 48), (1
 
 def page_checks(factory, results, tmp, style="alloy"):
     """page-platform §8.3 `--only page`: one suite, one row group per feature."""
+    # D4 runs before foreground-sensitive groups, so consent-limited self-scripting
+    # evidence remains available even when a later group is interrupted.
+    page_tools_checks(factory, results, tmp, style)
     capture_checks(factory, results, tmp)
     page_commands_checks(factory, results, tmp)
     page_engine_checks(factory, results, tmp)
     page_notification_checks(factory, results, tmp)
     page_translate_checks(factory, results, tmp)
-    page_tools_checks(factory, results, tmp, style)
 
 
 def page_engine_checks(factory, results, tmp):
@@ -6920,6 +6923,187 @@ def numbering_checks(factory, results, tmp):
         results['numbering_edu_window'] = {'ok': bool(edu) and edu['level'] == 3 and bool(gone), 'window': edu}
     finally:
         app.quit(); server.shutdown(); server.server_close()
+
+
+def routing_checks(factory, results, tmp):
+    """Step 5: LaunchServices -> real kAEGetURL -> intake -> model/window.
+    Never sets a system default handler. Every delivery names this exact bundle.
+    """
+    import copy
+    import plistlib
+    import uuid
+    domain = 'io.github.sergeserb2.open'
+    keys = ('open.links.externalInLittleOpen', 'open.links.littleOpenHotkeyEnabled')
+    exported = subprocess.run(['defaults', 'export', domain, '-'], capture_output=True)
+    domain_before = plistlib.loads(exported.stdout) if exported.returncode == 0 else {}
+    saved = {key: domain_before.get(key) for key in keys}
+    server, origin = _fixture_server('Routing')
+    app = None
+
+    def record(name, ok, **details):
+        results[name] = dict(details, ok=bool(ok))
+
+    def log(): return app.call('routing-log')
+    def snapshot():
+        with open(app.call('save')) as stream: return json.load(stream)
+    def tab_count():
+        return sum(len(space['today']) for space in snapshot()['spaces'])
+    def entries(url): return [row for row in log()['entries'] if row['decision']['request']['url'] == url]
+    def deliver(url):
+        return subprocess.run(['/usr/bin/open', '-a', app.bundle, url], capture_output=True, text=True, timeout=15)
+    def landed(url, count=1):
+        return wait_until(lambda: len([t for t in app.call('tabs') if t['url'] == url]) == count, timeout=8, step=.05)
+
+    try:
+        # Capture actual persisted values, including absence, before resetting.
+        for key in keys: subprocess.run(['defaults', 'delete', domain, key], capture_output=True)
+        subprocess.run(['defaults', 'write', domain, keys[0], '-bool', 'true'], check=True)
+        subprocess.run(['defaults', 'write', domain, keys[1], '-bool', 'false'], check=True)
+        app = factory(urls=(), fresh=True)
+        state_before = app.call('default-browser-state')
+        seed = snapshot()
+        target = copy.deepcopy(seed['spaces'][0])
+        target['id'] = str(uuid.uuid4()).upper()
+        target['title'] = 'Routing target'
+        target['today'] = []; target['pinned'] = []
+        seed['spaces'].append(target)
+        seed['routingRules'] = [{'id': str(uuid.uuid4()).upper(),
+            'match': {'hostEquals': {'_0': '127.0.0.1'}}, 'destination': {'space': {'_0': target['id']}}}]
+        seed['defaultDestination'] = {'littleOpen': {}}
+        fixture_path = os.path.join(tmp, 'routing-snapshot.json')
+        with open(fixture_path, 'w') as stream: json.dump(seed, stream)
+        app.quit()
+        app = factory(urls=(), snapshot=fixture_path)
+        app.call('space', space=target['id'])
+        existing_url = origin + '/existing-today'
+        app.call('open', url=existing_url)
+        app.call('space', space=seed['spaces'][0]['id'])
+
+        warm = origin + '/warm-space'
+        sent = deliver(warm)
+        reached = landed(warm)
+        tabs = app.call('tabs')
+        record('routing_warm_space_rule', sent.returncode == 0 and reached
+               and next(s for s in app.call('spaces') if s['focused'])['id'] == target['id']
+               and tabs[0]['url'] == warm and tabs[0]['section'] == 'today' and tabs[0]['selected']
+               and tabs[1]['url'] == existing_url
+               and len(entries(warm)) == 1, tabs=tabs, log=log())
+
+        default_url = origin.replace('127.0.0.1', 'localhost') + '/default-little'
+        before = tab_count()
+        sent = deliver(default_url)
+        seen = wait_until(lambda: (log()['lastLittleOpenRequest'] or {}).get('url') == default_url, timeout=8, step=.05)
+        record('routing_warm_default_little_open', sent.returncode == 0 and seen
+               and tab_count() == before and len(entries(default_url)) == 1, log=log())
+
+        # Stored first window is on target B. Make a second, front window on
+        # A: using model order instead of AppKit z-order must now fail B8.
+        app.call('menu-perform', id='new-window')
+        app.call('dismiss')
+        app.call('space', space=seed['spaces'][0]['id'])
+        front_id = app.call('window-state')['id']
+        app.call('defaults', key=keys[0], value=False)
+        toggle_url = default_url + '?toggle=off'
+        sent = deliver(toggle_url)
+        reached = landed(toggle_url)
+        rows = entries(toggle_url)
+        off_ok = sent.returncode == 0 and reached \
+               and next(s for s in app.call('spaces') if s['focused'])['id'] == seed['spaces'][0]['id']
+        off_ok = off_ok and app.call('window-state')['id'] == front_id and len(app.call('shell-windows')) == 2 \
+               and rows and 'defaultSuppressedByToggle' in rows[-1]['decision']['via'] \
+               and 'Little Open off' in rows[-1]['summary']
+        off_log = log(); before = tab_count()
+        app.call('defaults', key=keys[0], value=True)
+        toggle_on = default_url + '?toggle=on'
+        sent = deliver(toggle_on)
+        seen = wait_until(lambda: (log()['lastLittleOpenRequest'] or {}).get('url') == toggle_on, timeout=8, step=.05)
+        record('routing_toggle_off_most_recent_space', off_ok and sent.returncode == 0 and seen and tab_count() == before,
+               off=off_log, on=log())
+
+        # Both deliveries are in one OS launch command: no socket round trip can
+        # accidentally move the second arrival outside the two-second window.
+        duplicate = origin + '/duplicate?preserve=Query%20Case'
+        before = tab_count(); dropped = log()['duplicatesDropped']
+        started = time.monotonic()
+        sent = subprocess.run(['/usr/bin/open', '-a', app.bundle, duplicate, duplicate], capture_output=True, text=True, timeout=15)
+        first = landed(duplicate)
+        within = wait_until(lambda: log()['duplicatesDropped'] == dropped + 1, timeout=1, step=.02)
+        first_log = log()
+        # A genuine second click after the fixed window must create another tab.
+        time.sleep(max(0, 2.15 - (time.monotonic() - started)))
+        again = deliver(duplicate)
+        second = landed(duplicate, 2)
+        record('routing_dedupe_2s', sent.returncode == 0 and again.returncode == 0 and first and within and second
+               and tab_count() == before + 2 and len(entries(duplicate)) == 2,
+               firstLog=first_log, finalLog=log(), loadAverage=list(os.getloadavg()))
+
+        rows = entries(warm)
+        record('routing_source_detected', rows and (rows[0]['sourceBundleID'] or (rows[0]['sourcePID'] or 0) > 0),
+               source=rows[0] if rows else None, delivery='/usr/bin/open -a <exact built bundle>')
+
+        rejected = 'ftp://127.0.0.1/non-http'
+        before = tab_count(); little_before = log()['lastLittleOpenRequest']
+        sent = deliver(rejected)
+        # LaunchServices may refuse a scheme absent from CFBundleURLTypes, or
+        # deliver it to the explicit app. In the latter case intake must log rejection.
+        if sent.returncode == 0:
+            wait_until(lambda: entries(rejected), timeout=3, step=.05)
+        rows = entries(rejected)
+        rejected_log = rows and 'rejectedNonHTTP' in rows[-1]['decision']['via'] and rows[-1]['decision'].get('resolved') is None
+        record('routing_non_http_rejected', tab_count() == before and log()['lastLittleOpenRequest'] == little_before
+               and (sent.returncode != 0 or rejected_log), exit=sent.returncode, stderr=sent.stderr.strip(), entries=rows,
+               launchServices='refused' if sent.returncode else 'delivered to explicit app')
+
+        while app.call('shell-windows'):
+            # The final retained model window must be on a different Space
+            # from the rule, so recreating it alone cannot satisfy this check.
+            app.call('space', space=seed['spaces'][0]['id'])
+            app.call('window-close')
+        none_before = app.call('shell-windows')
+        no_window = origin + '/no-window'
+        sent = deliver(no_window)
+        created = wait_until(lambda: app.call('shell-windows'), timeout=8, step=.05)
+        reached = landed(no_window) if created else False
+        record('routing_no_window', not none_before and sent.returncode == 0 and created and reached
+               and next(s for s in app.call('spaces') if s['focused'])['id'] == target['id']
+               and app.call('tabs')[0]['selected'], windows=app.call('shell-windows'), log=log())
+
+        # Cold URL is an open(1) URL operand, never an App argv URL. -n starts
+        # this exact bundle with this run's data dir and automation arguments.
+        app.quit()
+        fast_cold = origin + '/cold-fast'
+        app = factory(urls=(), snapshot=fixture_path, delivery_urls=(fast_cold,))
+        fast_reached = landed(fast_cold)
+        fast_log = log()
+        app.quit()
+        cold = origin + '/cold-launch'
+        # Also hold only the readiness handoff, to prove an event received
+        # before readiness stays pending. The real LaunchServices path is unchanged.
+        app = factory(urls=(), snapshot=fixture_path, delivery_urls=(cold,),
+                      extra_env={'OPEN_AUTOMATION_ROUTING_SLOW_READY': '1'})
+        pending = wait_until(lambda: (lambda state: state if state['pendingCount'] > 0 and not state['ready'] else None)(log()),
+                             timeout=1, step=.02)
+        reached = landed(cold)
+        cold_log = log()
+        record('routing_cold_launch_queue', fast_reached and pending and reached and cold_log['ready'] and cold_log['pendingCount'] == 0
+               and cold_log['queuedCount'] >= 1 and cold_log['drainedCount'] == cold_log['queuedCount']
+               and len(entries(cold)) == 1 and app.call('tabs')[0]['selected'], log=cold_log,
+               pending=pending, fastLaunch=fast_log,
+               command='open -n -a <exact built bundle> <URL> --args --user-data-dir=<suite root> ...')
+        state_after = app.call('default-browser-state')
+        record('routing_default_browser_read_only', state_before == state_after
+               and state_after['isDefaultBrowser'] == (state_after['http']['isDefault'] and state_after['https']['isDefault']),
+               before=state_before, after=state_after)
+    finally:
+        if app:
+            _restore_defaults(app, saved)
+            app.quit()
+        else:
+            # A failed initial launch still restores exactly the keys reset above.
+            for key, value in saved.items():
+                if value is None: subprocess.run(['defaults', 'delete', domain, key], capture_output=True)
+                else: subprocess.run(['defaults', 'write', domain, key, '-bool', 'true' if value else 'false'], check=True)
+        server.shutdown(); server.server_close()
 
 
 def commandbar_checks(factory, results, tmp, config):
@@ -9366,9 +9550,7 @@ def page_tools_apple_events_checks(app, results):
         "ok": not initial[1] and on[1] is True and off[1] is False, "stored": [initial[1], on[1], off[1]]}
     results["D4_allow_js_apple_events_checkmark"] = _menu_checks_row(
         [initial[0], on[0], off[0]], [False, True, False])
-    results["D4_allow_js_apple_events_osascript"] = _blocked(
-        "the App does not host OpenScripting yet (applescript plan Steps 5-7); the 1013 gate is in "
-        "ScriptCommands.executeJavascript and runs once the App wires ScriptHost")
+    runpy.run_path(os.path.join(ROOT, "tools/e2e/applescript.py"))["javascript_gate_checks"](app, results)
 
 
 def page_tools_troubleshooting_checks(app, results, tmp, port, style):
@@ -9488,10 +9670,10 @@ def page_tools_checks(factory, results, tmp, style):
         ws = app.call("window-state")
         app.call("window-focus", id=ws["id"], activate=True)
         app.call("wait", tab=app.call("tabs")[0]["id"])
+        page_tools_apple_events_checks(app, results)
         page_tools_appearance_checks(app, results, port, style)
         page_tools_clear_checks(app, results, port, style)
         page_tools_devtools_checks(app, results, port, style)
-        page_tools_apple_events_checks(app, results)
         page_tools_developer_mode_checks(app, results, port)
         page_tools_troubleshooting_checks(app, results, tmp, port, style)
         page_tools_quit_with_devtools_check(app, results, saved)
@@ -9519,6 +9701,8 @@ def _restore_defaults(app, saved):
                 subprocess.run(["defaults", "delete", "io.github.sergeserb2.open", key], capture_output=True)
             elif isinstance(value, bool):
                 subprocess.run(["defaults", "write", "io.github.sergeserb2.open", key, "-bool", "true" if value else "false"], capture_output=True)
+            elif isinstance(value, (list, dict)):
+                runpy.run_path(os.path.join(ROOT, "tools/e2e/restore_defaults.py"))["write_collection"](key, value)
             else:
                 subprocess.run(["defaults", "write", "io.github.sergeserb2.open", key, "-string", str(value)], capture_output=True)
 
@@ -10092,7 +10276,7 @@ def main():
     ap.add_argument("--extensions", default=os.path.join(ROOT, ".re", "ext", "unpacked"))
     ap.add_argument("--only", choices=["shell", "extensions", "features", "measure", "tabstrip", "window", "sidebar", "peek", "split",
                                        "commandbar", "app-actions", "actions", "profiles", "sidebar-completion", "toolbar", "numbering", "media", "relaunch", "page",
-                                       "sleep", "history"])
+                                       "sleep", "routing", "history", "applescript"])
     ap.add_argument("--window-chrome-only", action="store_true", help="run only the window-chrome follow-up flows in the window suite")
     ap.add_argument("--keep", action="store_true",
                     help="keep this run's data root, cache root and scratch folder (paths printed at the end)")
@@ -10173,14 +10357,14 @@ def main():
     tracker = FocusTracker()
     _ACTIVE_FOCUS_TRACKER = tracker
 
-    def factory(urls=("about:blank",), fresh=False, snapshot=None, extra_env=None, extra_args=None):
+    def factory(urls=("about:blank",), fresh=False, snapshot=None, extra_env=None, extra_args=None, delivery_urls=()):
         if fresh or snapshot:
             shutil.rmtree(user_data, ignore_errors=True)
             shutil.rmtree(user_caches, ignore_errors=True)
         if snapshot:
             os.makedirs(os.path.join(user_data, "State"), exist_ok=True)
             shutil.copyfile(snapshot, os.path.join(user_data, "State", "browser.json"))
-        app = Open(opts.config, opts.style, user_data, extra + list(extra_args or []), log, urls=urls, extra_env=extra_env)
+        app = Open(opts.config, opts.style, user_data, extra + list(extra_args or []), log, urls=urls, extra_env=extra_env, delivery_urls=delivery_urls)
         app.focus_tracker = tracker
         tracker.apps.append(app)
         return app
@@ -10277,6 +10461,10 @@ def main():
             results[opts.only] = CheckedResults(tracker)
             space_manager_checks(results[opts.only], tmp, opts.config, opts.style)
             folder_peek_checks(factory, results[opts.only], tmp)
+        elif opts.only == "applescript":
+            results["applescript"] = CheckedResults(tracker)
+            runpy.run_path(os.path.join(ROOT, "tools/e2e/applescript.py"))["run"](
+                factory, results["applescript"], tmp, _fixture_server, _restore_defaults, wait_until)
         elif opts.only == "page":
             results["page"] = CheckedResults(tracker)
             page_checks(factory, results["page"], tmp, opts.style)
@@ -10287,13 +10475,15 @@ def main():
             results["media"] = CheckedResults(tracker)
             media_checks(factory, results["media"], tmp)
         elif opts.only == "history":
-            import runpy
             results["history"] = CheckedResults(tracker)
             runpy.run_path(os.path.join(ROOT, "tools/e2e/history_e2e.py"))["history_checks"](
                 factory, results["history"], tmp, wait_until, _restore_defaults)
         elif opts.only == "sleep":
             results["sleep"] = CheckedResults(tracker)
             sleep_checks(factory, results["sleep"], tmp, opts.style)
+        elif opts.only == "routing":
+            results["routing"] = CheckedResults(tracker)
+            routing_checks(factory, results["routing"], tmp)
         elif opts.only == "window":
             results["window"] = CheckedResults(tracker)
             window_checks(factory, results["window"], tmp, opts.config, chrome_only=opts.window_chrome_only)
@@ -10376,14 +10566,14 @@ def main():
                                     else opts.config.lower()))
     with open(os.path.join(OUT, name), "w") as f:
         json.dump(results, f, indent=2, sort_keys=True)
-    for group in ("shell", "extensions", "features", "measure", "tabstrip", "window", "sidebar", "peek", "split", "commandbar", "app-actions", "actions", "profiles", "sidebar-completion", "toolbar", "numbering", "media", "relaunch", "page", "sleep", "history"):
+    for group in ("shell", "extensions", "features", "measure", "tabstrip", "window", "sidebar", "peek", "split", "commandbar", "app-actions", "actions", "profiles", "sidebar-completion", "toolbar", "numbering", "media", "relaunch", "page", "sleep", "routing", "history", "applescript"):
         for k, v in results.get(group, {}).items():
             if isinstance(v, dict) and "ok" in v:
                 print("%-24s %s" % (k, "PASS" if v.get("ok") else "FAIL"))
             elif isinstance(v, dict) and v.get("status") in ("SKIP", "BLOCKED", "INTERRUPTED", "DEFERRED"):
                 print("%-24s %s: %s" % (k, v["status"], v.get("reason", "")))
     print("wrote", os.path.join(OUT, name))
-    failures = [k for group in ("shell", "extensions", "features", "measure", "tabstrip", "window", "sidebar", "peek", "split", "commandbar", "app-actions", "actions", "sidebar-completion", "toolbar", "numbering", "media", "relaunch", "page", "sleep", "history")
+    failures = [k for group in ("shell", "extensions", "features", "measure", "tabstrip", "window", "sidebar", "peek", "split", "commandbar", "app-actions", "actions", "sidebar-completion", "toolbar", "numbering", "media", "relaunch", "page", "sleep", "routing", "history", "applescript")
                 for k, v in results.get(group, {}).items() if isinstance(v, dict) and v.get("ok") is False]
     if failures or not results["cleanup"]["ok"]:
         sys.exit(1)

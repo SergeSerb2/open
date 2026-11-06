@@ -45,6 +45,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate, OEEngineDelegate, OEBr
   private var sleepQuitTask: Task<Void, Never>?
   private var sleepQuitCaptured = false
   lazy var settingsPresenter = AppSettingsActions(app: self)
+  let defaultBrowserService = DefaultBrowserService()
+  lazy var linkExecutor = AppLinkExecutor(app: self)
+  lazy var linkIntake = ExternalLinkIntake(executor: linkExecutor, snapshot: { [unowned self] in self.linkExecutor.snapshot() })
+  var lastLittleOpenRequest: LittleOpenRequest?
   /// Library ▸ Captures writer (page-platform §4.6.6); one per app, shared by every window.
   lazy var captureLibrary = CaptureLibraryWriter(app: self, root: directories.root)
   var keyBindings = KeyBindingStore.empty
@@ -56,8 +60,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, OEEngineDelegate, OEBr
   var menuRebuildTask: Task<Void, Never>?
   var afterPaintTask: Task<Void, Never>?
   var littleOpenStub: NSWindowController?
-  var commandWindowObserver: NSObjectProtocol?
-  var commandDefaultsObserver: NSObjectProtocol?
+  var commandWindowObserver: (any NSObjectProtocol)?
+  var commandDefaultsObserver: (any NSObjectProtocol)?
   private var numberedShortcutOptions = ""
   private var currentNumberedShortcutOptions: String {
     "\(UserDefaults.standard.bool(forKey: "open.shortcuts.includeFavoritesInTabNumbering")):\(UserDefaults.standard.bool(forKey: "open.shortcuts.switchToNinthEnabled"))"
@@ -83,6 +87,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, OEEngineDelegate, OEBr
     // engine (docs/architecture.md, launch tactics). Pages created before
     // the engine is ready wait inside OpenEngine.
     showWindowsIfNeeded()
+    installScripting()
   }
 
   func applicationShouldHandleReopen(_ sender: NSApplication, hasVisibleWindows flag: Bool) -> Bool {
@@ -198,7 +203,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, OEEngineDelegate, OEBr
         model.selectNode(windowID: state.id, spaceID: space.id, nodeID: tab.id)
       }
     }
-    model.addObserver { [weak self] _ in self?.scheduleSave(); self?.scheduleMenuRebuild() }
+    model.addObserver { [weak self] _ in self?.scheduleSave(); self?.scheduleMenuRebuild(); self?.purgeScriptingWrappers() }
     self.model = model
     self.directories = directories
     startAutoArchiveIfNeeded()
@@ -310,6 +315,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, OEEngineDelegate, OEBr
       model.setWindowContentVisible(windowID: id, visible: false)
     }
     windowControllers.removeAll { $0.windowID == id }; hostFactories[id] = nil
+    purgeScriptingWrappers()
     media.windowClosed(id)
     tabSleep.visibilityChanged()
     if activeWindowID == id { activeWindowID = windowControllers.last?.windowID }
@@ -357,7 +363,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate, OEEngineDelegate, OEBr
     LaunchTiming.shared.mark("engineInitialized")
     engineReady = true
     showWindowsIfNeeded()
+    refreshScriptingEngine()
     for factory in hostFactories.values { factory.engineDidBecomeReady() }
+    completeLinkRestoration()
     EngineWebProfile.onPermissionChange = { [weak self] context in self?.tabSleep.permissionsChanged(context: context) }
     scheduleMenuRebuild()
     #if OPEN_AUTOMATION
@@ -397,6 +405,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, OEEngineDelegate, OEBr
     afterPaintTask?.cancel(); afterPaintTask = nil
     menuRebuildTask?.cancel(); menuRebuildTask = nil
     engineReady = false
+    refreshScriptingEngine()
     for factory in Array(hostFactories.values) { factory.closeAll() }
     recordShutdownPhase("hostsClosed")
   }
@@ -564,6 +573,7 @@ extension AppDelegate: CommandDispatcher {
     scheduleMenuRebuild()
   }
   func menuState(for id: String) -> CommandMenuState? {
+    if id == "set-default-browser" { return CommandMenuState(isChecked: defaultBrowserService.isDefaultBrowser) }
     if id == "toggle-developer-mode" { return DeveloperMode.menuState(for: frontWindowController.flatMap { hostFactories[$0.windowID] }?.selectedContent?.url) }
     return PageTools.menuState(for: id)
   }

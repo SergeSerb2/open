@@ -262,11 +262,11 @@ enum FeatureChecks {
         check(!session.windowIsVisible, "R6 unordered Little Open stays hidden after key deminiaturize and occlusion callbacks")
         little.resurface(session.id)
         check(!session.windowIsVisible, "R6 resurfacing an offscreen Little Open derives actual window visibility")
-        check(littleModel.windows.isEmpty && lc.contentView.bounds.size == CGSize(width: 720, height: 540), "L1 720x540 session without main window")
+        check(littleModel.windows.isEmpty && lc.state == .page, "L1 loaded page session without main window")
         little.open(url: URL(string: "https://EXAMPLE.com:443/path#two")!, profileHint: nil)
         check(little.sessions.count == 1, "L1 canonical URL resurface dedupe")
-        little.openBlank(focusURLField: true); little.openBlank(focusURLField: true)
-        check(little.sessions.count == 2, "L1 blank key session reused")
+        little.openBlank(focusURLField: true)
+        check(little.sessions.count == 2, "L1 blank session stays separate from loaded page")
         little.moveToSpace(sessionID: session.id, spaceID: littleModel.spaces[0].id)
         check(littleModel.windows.count == 1 && littleModel.spaces[0].today.first?.tab?.url.absoluteString.contains("example.com/path") == true && little.sessions.count == 1, "L2 move creates main window and selected Today-top tab")
         let count = littleModel.index.count
@@ -347,6 +347,7 @@ enum FeatureChecks {
         try await CaptureChecks.run { check($0, $1) }
         try await ToastChecks.run { check($0, $1) }
         try await SwipeChecks.run { check($0, $1) }
+        try await LittleOpenChecks.run { condition, label in check(condition, label) }
         print("features-render check: \(passed) passed, \(failed) failed")
         if failed > 0 { throw CLIError(description: "\(failed) feature scenarios failed") }
     }

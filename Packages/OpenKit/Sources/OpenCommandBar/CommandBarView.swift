@@ -1,11 +1,26 @@
 import AppKit
 import OpenDesign
 
+public enum CommandBarPresentation: Sendable, Equatable {
+    case overlay
+    case embedded(width: CGFloat)
+    var isEmbedded: Bool { if case .embedded = self { true } else { false } }
+}
+
 /// The overlay. The App adds it above the web content and the sidebar, filling the
 /// window's content view. It is transparent: Arc does not dim the page (interaction-states
 /// §9.1); only the panel's wide shadow darkens it. A click outside the panel closes the bar.
 @MainActor
 public final class CommandBarView: NSView {
+    public internal(set) var presentation: CommandBarPresentation = .overlay {
+        didSet {
+            container.drawsShadow = !presentation.isEmbedded
+            panel.input.embedded = presentation.isEmbedded
+            needsLayout = true
+        }
+    }
+    /// Little Open's page overlay keeps 20 pt margins (§9.3); all other callers use the existing layout.
+    public var overlayPanelWidth: CGFloat? { didSet { needsLayout = true } }
     let container = PanelContainerView(frame: .zero)
     var panel: PanelView { container.panel }
     /// Called for a mouse-down outside the panel.
@@ -39,7 +54,12 @@ public final class CommandBarView: NSView {
         }
     }
 
-    public var panelFrame: CGRect { CommandBarMetrics.panelFrame(windowSize: bounds.size, rows: visibleRowCount, footer: showsFooter) }
+    public var panelFrame: CGRect {
+        if case .embedded(let width) = presentation { return CGRect(x: 0, y: 0, width: width, height: bounds.height) }
+        var frame = CommandBarMetrics.panelFrame(windowSize: bounds.size, rows: visibleRowCount, footer: showsFooter)
+        if let width = overlayPanelWidth { frame.size.width = width; frame.origin.x = (bounds.width - width) / 2 }
+        return frame
+    }
 
     /// Shows or hides the whole overlay in one frame: Arc's bar appears and goes between two
     /// video frames, with no scale or fade (CC-44, D12). No implicit layer animation runs.
@@ -74,13 +94,16 @@ public final class CommandBarView: NSView {
 
     /// The trailing item: "info", "hint <Site>", "hint+space <Site>", or "none".
     public var debugTrailing: String {
-        switch panel.input.input.trailing {
+        switch panel.input.embedded ? CommandBarTrailing.none : panel.input.input.trailing {
         case .info: "info"
         case .siteSearchHint(let name, let space): "\(space ? "hint+space" : "hint") \(name)"
         case .none: "none"
         }
     }
     /// The input row as drawn.
+    public var debugCloseFrame: CGRect { panel.input.closeButton.frame }
+    public var debugHasCloseButton: Bool { !panel.input.closeButton.isHiddenOrHasHiddenAncestor }
+    public var inputField: NSTextField { panel.input.field }
     public var debugInput: CommandBarInput { panel.input.input }
     /// Row draw passes since creation.
     public var debugRowDrawCount: Int { panel.results.rowDrawCount }
@@ -104,6 +127,7 @@ public final class CommandBarView: NSView {
         let target: NSView?
         switch control {
         case "info": target = panel.input.infoButton
+        case "close": target = panel.input.closeButton
         case "searchSettings": target = panel.footer.settingsButton
         case "dismiss": target = panel.footer.dismissButton
         case "privacyLink": target = panel.footer.link
@@ -143,6 +167,7 @@ public final class CommandBarView: NSView {
 @MainActor
 final class PanelContainerView: NSView {
     let panel = PanelView(frame: .zero)
+    var drawsShadow = true { didSet { shadowLayer.isHidden = !drawsShadow } }
     private let shadowLayer = CALayer()
     private let shadowMask = CAShapeLayer()
 

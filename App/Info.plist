@@ -35,6 +35,12 @@
 	<string>OEApplication</string>
 	<key>NSHighResolutionCapable</key>
 	<true/>
+	<key>NSAppleScriptEnabled</key>
+	<true/>
+	<key>OSAScriptingDefinition</key>
+	<string>Open.sdef</string>
+	<key>NSAppleEventsUsageDescription</key>
+	<string>Scripts control Open windows, spaces, and tabs.</string>
 	<key>NSSupportsAutomaticGraphicsSwitching</key>
 	<true/>
 	<key>NSUserNotificationAlertStyle</key>
@@ -52,13 +58,17 @@
 	<key>CFBundleURLTypes</key>
 	<array>
 		<dict>
+			<key>CFBundleTypeRole</key>
+			<string>Viewer</string>
 			<key>CFBundleURLName</key>
-			<string>Web site URL</string>
+			<string>io.github.sergeserb2.open</string>
 			<key>CFBundleURLSchemes</key>
 			<array>
 				<string>http</string>
 				<string>https</string>
 			</array>
+			<key>LSHandlerRank</key>
+			<string>Default</string>
 		</dict>
 	</array>
 	<key>SUFeedURL</key>

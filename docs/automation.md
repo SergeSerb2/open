@@ -71,6 +71,7 @@ Arguments are `key=value`; values that parse as JSON are sent as JSON.
 | Command | Args | Result |
 |---|---|---|
 | `ping` | — | pid, Chromium and CEF versions, engine root (`Profiles/`) and data root |
+| `applescript` | `body` (at most 1,048,576 UTF-8 bytes); optional `unavailable` (`model`, `engine`, `window`) for readiness fixtures | Automation-build TCC fallback: in-process `NSAppleScript` compiles with this bundle's terms and sends real Apple events to current application. Returns `{number,message,text}`. The optional fixture temporarily removes a provider and restores it after the script. This changes no macOS consent. See `docs/scripting.md` for external-sender limits. |
 | `tabs` | optional `sidebar:true` | Plain response is an array; `sidebar:true` adds `{tabs,rows,folders,selectedNode}` native row/state readback. Sidebar tabs of the focused Space in row order: id, title, url, section (`favorites`/`pinned`/`today`), selected, visible, loaded, loading, audible, crashed, favicon, and `page` (engine state, below) when loaded |
 | `tab-state` | `tab` | Model/live state of one tab, including an inactive Space's tab |
 | `tab-strip` | — | Actual engine strips: all-Spaces model IDs, content IDs, active model tab, membership |
