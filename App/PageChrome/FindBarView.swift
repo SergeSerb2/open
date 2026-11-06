@@ -25,14 +25,17 @@ class FindBarView: NSView, NSTextFieldDelegate {
   var navigationVisible: Bool { hasResult && results?.navigationVisible == true }
   var separatorVisible: Bool { !separator.isHidden }
   override var isFlipped: Bool { true }
+  override var wantsDefaultClipping: Bool { false }
+  override var wantsUpdateLayer: Bool { true }
+  override func updateLayer() { applyColors() }
 
   override init(frame: NSRect) {
     super.init(frame: frame)
-    // The controls keep their native input/accessibility behavior while AppKit
-    // draws this small surface into one backing layer.
-    canDrawSubviewsIntoLayer = true
+    // The background needs no drawing context. Native controls own their
+    // backing layers, so image views can submit cached symbol contents.
     wantsLayer = true
     layer?.cornerRadius = 5
+    layer?.masksToBounds = false
     layer?.shadowRadius = 5
     layer?.shadowOffset = CGSize(width: 0, height: -3)
     layer?.addSublayer(separator)
@@ -46,7 +49,7 @@ class FindBarView: NSView, NSTextFieldDelegate {
     field.setAccessibilityLabel("Find in page")
     search.image = FindBarResources.search
     search.imageScaling = .scaleNone
-    for view in [search, field, close] { addSubview(view) }
+    for view in [search, field, close] { view.wantsLayer = true; addSubview(view) }
     close.onPress = { [weak self] in self?.onClose?() }
     update(active: 0, total: 0, final: false)
   }
@@ -58,16 +61,15 @@ class FindBarView: NSView, NSTextFieldDelegate {
     FindBarResources.prepareAll()
     let bar = FindBarView(frame: CGRect(x: 0, y: 0, width: 300, height: 32))
     bar.setQuery("Find"); bar.update(active: 1, total: 5, final: true)
-    let editor = bar.makeEditor()
-    editor.font = FindBarResources.queryFont; editor.string = "Find"
-    _ = editor.inputContext
+    _ = bar.makeEditor()
     #if OPEN_AUTOMATION
-    FindBarPrewarm.observeTemporary(bar: bar, editor: editor)
+    FindBarPrewarm.observeTemporary(bar: bar, editor: bar.makeEditor())
     #endif
     bar.layoutSubtreeIfNeeded()
     if let bitmap = bar.bitmapImageRepForCachingDisplay(in: bar.bounds) {
       bar.cacheDisplay(in: bar.bounds, to: bitmap)
     }
+    CATransaction.flush()
   }
 
   private func makeEditor() -> FindFieldEditor {
@@ -191,7 +193,7 @@ private final class FindResultsView: NSView {
     super.init(frame: frame)
     count.font = FindBarResources.countFont
     count.setAccessibilityLabel("Find matches")
-    for view in [count, previous, next] { addSubview(view) }
+    for view in [count, previous, next] { view.wantsLayer = true; addSubview(view) }
     previous.onPress = { [weak self] in self?.onAction?(3) }
     next.onPress = { [weak self] in self?.onAction?(2) }
   }
@@ -272,7 +274,6 @@ final class FindPaneOverlay: FindBarView {
   var bar: FindBarView { self }
   private var parentObserver: (any NSObjectProtocol)?
   var topInset: CGFloat = 10 { didSet { if topInset != oldValue { updatePlacement() } } }
-  override var wantsDefaultClipping: Bool { false }
   override var isHidden: Bool {
     didSet { if isHidden { stopObserving() } else { observeParent(); updatePlacement() } }
   }
