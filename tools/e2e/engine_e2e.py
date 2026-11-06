@@ -5867,7 +5867,61 @@ def media_checks(factory, results, tmp):
             results["media_pip_keep_on_top"] = {"status": "BLOCKED", "reason": "EM-4: the Keep Window on Top menu is in Open's own PiP window"}
         select(fv); wait_pip("closed")
         close_tab(fv)
-        results["media_document_pip"] = {"status": "BLOCKED", "reason": "EM-7: Document PiP disposition"}
+        # E-M13 (EM-7): documentPictureInPicture.requestWindow() opens Open's Document PiP panel (28 pt top
+        # bar, the PiP page in it at the requested size); the page's element moves into it, and Close
+        # gives it back (the PiP document's pagehide). A navigation of the opener closes the panel.
+        # requestWindow needs a user gesture: Runtime.evaluate with userGesture.
+        def gesture_eval(tab, js):
+            r = app.call("devtools", tab=tab, method="Runtime.evaluate",
+                         params={"expression": js, "userGesture": True, "returnByValue": True, "awaitPromise": True})
+            return (r or {}).get("result", {}).get("value")
+        def doc_window(): return pip().get("documentWindow")
+        dp = open_tab(base + "docpip.html")
+        dp_opened = gesture_eval(dp, "start()")
+        dp_win = wait_until(lambda: (lambda w: w if w and w["visible"] and w["pageInWindow"] else None)(doc_window()), timeout=3, step=.02)
+        dp_page = app.eval(dp, "JSON.stringify(__pip)")
+        # The PiP page learns its size from the panel a moment after requestWindow resolves.
+        dp_size = wait_until(lambda: (lambda v: v if v == [400, 300] else None)(app.eval(dp,
+            "documentPictureInPicture.window ? [documentPictureInPicture.window.innerWidth, documentPictureInPicture.window.innerHeight] : null")),
+            timeout=3, step=.02)
+        dp_moved = app.eval(dp, "document.getElementById('player') === null")
+        dp_level = dp_win["level"] if dp_win else None
+        app.call("pip-action", action="close")
+        dp_gone = wait_until(lambda: doc_window() is None, timeout=3, step=.02)
+        dp_back = wait_until(lambda: app.eval(dp, "__pip.closed === 1 && document.getElementById('player') !== null"), timeout=3, step=.05)
+        # Failure path: the opener navigates while its Document PiP is open (Chromium's rule closes it).
+        dp_reopened = gesture_eval(dp, "start()")
+        dp_win2 = wait_until(lambda: doc_window(), timeout=3, step=.02)
+        app.eval(dp, "location.href = 'plain.html'; true")
+        dp_nav_gone = wait_until(lambda: doc_window() is None, timeout=5, step=.02)
+        results["media_document_pip"] = {"ok": dp_opened is True and bool(dp_win) and dp_win["topBarHeight"] == 28
+            and dp_win["requested"] == [400, 300] and dp_win["pageSize"] == [400, 300] and dp_win["class"].endswith("PiPPanel")
+            and json.loads(dp_page)["opened"] == 1 and dp_size == [400, 300]
+            and dp_moved is True and bool(dp_gone) and dp_back is True and dp_reopened is True and bool(dp_win2) and bool(dp_nav_gone),
+            "window": dp_win, "page": dp_page, "innerSize": dp_size, "moved": dp_moved, "level": dp_level, "closed": bool(dp_gone), "elementBack": dp_back,
+            "navigationCloses": bool(dp_nav_gone), "videoPiP": pip()["state"]}
+        close_tab(dp)
+
+        # EM-6 + EM-7, the Meet path: a playing page that registers "enterpictureinpicture" gets Chromium's
+        # own auto-PiP on a tab leave (the hidden tab strip tells Chromium's helper; no setter needed), and
+        # its handler opens Document PiP in Open's panel. Open's rule yields (decision chromiumAutoPiP). Back
+        # on the tab, Chromium closes its auto PiP. Chromium auto-PiPs only https:// and file:// pages.
+        fx_file = "file://" + os.path.join(ROOT, "tools", "e2e", "fixtures", "media") + "/"
+        meet = open_tab(fx_file + "meet-like.html")
+        meet_heard, _ = start_heard(meet)
+        select(home)
+        meet_win = wait_until(lambda: (lambda w: w if w and w["visible"] and w["pageInWindow"] else None)(doc_window()), timeout=3, step=.02)
+        meet_auto = app.eval(meet, "JSON.stringify(__auto)")
+        meet_decision = (m(meet).get("decision") or {}).get("value")
+        meet_video_pip = pip()["state"]
+        select(meet)
+        meet_closed = wait_until(lambda: doc_window() is None, timeout=3, step=.02)
+        results["media_meet_auto_pip"] = {"ok": meet_heard and bool(meet_win) and json.loads(meet_auto)["entered"] == 1
+            and meet_decision == "chromiumAutoPiP" and meet_video_pip in ("idle", "closed") and bool(meet_closed)
+            and meet_win["requested"] == [320, 240],
+            "window": meet_win, "auto": meet_auto, "decision": meet_decision, "videoPiP": meet_video_pip,
+            "closedOnReturn": bool(meet_closed)}
+        close_tab(meet)
         # Item 16 (criterion 6) with section 8's sleep controller (#156): a paused tab whose mini player
         # shows survives a pass that sleeps an idle background tab; after Close (the card goes) the same
         # pass may sleep it. The controller's clock moves; no wall-clock wait.

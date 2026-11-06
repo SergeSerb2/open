@@ -49,6 +49,13 @@ bool OEClient::OnBeforePopup(CefRefPtr<CefBrowser> browser,
                              bool* no_javascript_access) {
   OEWebContent* source = view_;
   id<OEWebContentDelegate> delegate = source.delegate;
+  // Document PiP of a Chrome-style page: CEF uses Chromium's default creation,
+  // where the fork's EM-7 hook (chromium/0403) shows it through the shell's
+  // pictureInPictureDelegate, or Chromium's own window without one.
+  if (source && target_disposition == CEF_WOD_NEW_PICTURE_IN_PICTURE &&
+      source.runtimeStyle == OERuntimeStyleChrome) {
+    return false;
+  }
   if (!source ||
       ![delegate respondsToSelector:@selector(webContent:
                                         createWebContentForOpenRequest:)]) {

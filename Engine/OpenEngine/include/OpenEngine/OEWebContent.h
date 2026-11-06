@@ -458,9 +458,9 @@ typedef NS_ENUM(NSInteger, OEOpenDisposition) {
   OEOpenDispositionNewWindow,
   OEOpenDispositionOffTheRecord,
   OEOpenDispositionSaveToDisk,
-  /// documentPictureInPicture.requestWindow() (EM-7). Return a web content
-  /// and host its view in a Document PiP panel; its
-  /// requestedPictureInPictureSize arrives with OEWebContentChangePictureInPicture.
+  /// documentPictureInPicture.requestWindow() from an Alloy-style page.
+  /// Chrome-style pages do not ask: their Document PiP opens through
+  /// OEEngine.pictureInPictureDelegate (OEPictureInPictureKindDocument, EM-7).
   OEOpenDispositionNewPictureInPicture,
 };
 

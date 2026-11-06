@@ -14,6 +14,8 @@ paths: chrome/browser/ui/browser.cc
 paths: content/browser/media/media_web_contents_observer.h content/browser/media/session/media_session_impl.h content/browser/media/session/media_session_impl.cc content/browser/media/session/media_session_controllers_manager.h content/browser/media/session/media_session_controllers_manager.cc
 # 0402-open-video-pip-window.patch
 paths: chrome/browser/ui/views/overlay/video_overlay_window_views.cc
+# 0403-open-document-pip-window.patch
+paths: chrome/browser/ui/navigator/browser_navigator.cc
 # 0501-page-history-swipe-hooks.patch
 paths: chrome/browser/ui/cocoa/history_overlay_controller.mm
 # 0504-page-notification-click.patch

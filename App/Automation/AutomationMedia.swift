@@ -156,6 +156,8 @@ extension AutomationController {
         default: throw Failure(message: "unknown pip action")
         }
       }
+      // EM-7: the Document PiP panel's close button path.
+      if let document = media.documentPiP, a["action"] as? String == "close" { document.close(); return true }
       // Phase 1 has Chromium's own PiP window; these run the same session paths its controls end in.
       guard let source = media.session.activeSource else { throw Failure(message: "no active PiP") }
       switch a["action"] as? String ?? "" {
@@ -313,6 +315,16 @@ extension AutomationController {
       state["openWindow"] = ["number": window.windowNumber, "frame": [window.frame.minX, window.frame.minY, window.frame.width, window.frame.height],
                              "level": window.level.rawValue, "visible": window.isVisible, "closing": media.pipWindow?.isClosing ?? false,
                              "tab": media.pipHost?.tabID.description ?? ""] as [String: Any]
+    }
+    // EM-7: the Document PiP panel (its top bar and the PiP page's view).
+    if let document = media.documentPiP, let controller = document.window, let window = controller.window {
+      let page = document.pip.videoView
+      state["documentWindow"] = ["number": window.windowNumber, "frame": [window.frame.minX, window.frame.minY, window.frame.width, window.frame.height],
+                                 "level": window.level.rawValue, "visible": window.isVisible, "tab": document.openerTabID.description,
+                                 "class": NSStringFromClass(type(of: window)), "topBarHeight": controller.topBar.frame.height,
+                                 "pageSize": [page.frame.width, page.frame.height], "pageInWindow": page.window === window,
+                                 "requested": [document.pip.naturalSize.width, document.pip.naturalSize.height],
+                                 "valid": document.pip.webContent != nil] as [String: Any]
     }
     state["phase"] = media.hostsPictureInPicture ? 2 : 1
     state["snoozed"] = media.session.snoozed.map(\.description).sorted()

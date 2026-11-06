@@ -2640,6 +2640,37 @@ Branch `s3/em4-pip-window`. Video Picture in Picture now opens in the App's own 
   never controllable, so it gets no card; the fixture records 3 s of WebM in `start()`
   and plays it from a file.
 
+### 14.6 Step 11: the Meet path (EM-6) and Document PiP (EM-7)
+
+Branch `s3/step11`.
+
+- **EM-6 needs no code.** Probe `.re/section3/tools/dbg-em6.py` (file:// `meet-like.html`, playing and
+  audible): about 0.3 s after a tab leave, Chromium's `AutoPictureInPictureTabHelper` calls the page's
+  `enterpictureinpicture` handler (`__auto.entered` 1), and Open's rule yields (decision
+  `chromiumAutoPiP`, `AutoPiPPolicy.swift`). Open's hidden tab strip (P1) already tells the helper
+  about tab activation, so the `setActiveForAutoPictureInPicture:` setter of §6 is not added. Chromium
+  auto-PiPs only `https://` and `file://` pages and needs audible playback (or capture), so the e2e row
+  loads the fixture from `file://`. Its tone now resumes in `start()` (as Step 7's fixtures).
+- **EM-7: Document PiP in Open's panel.** CEF sends a Chrome-style page's Document PiP through
+  Chromium's default creation, not through `OnBeforePopup` adoption. So fork patch `chromium/0403`
+  hooks `Navigate()` where Chromium's own standalone path takes the child, and the overlay's
+  `OpenDocumentPipHost` (modelled on Chromium's `DocumentPipHost`) owns the PiP page. Chromium's
+  controller keeps its rules (one PiP app-wide; close when the opener navigates or goes). The App gets
+  the session through the EM-4 delegate as an `OEPictureInPicture` of kind `.document` and shows it in
+  #101's `DocumentPiPWindowController` (28 pt top bar, bottom-right, the requested size). The CEF API
+  did not change.
+- Close (the panel's ×) runs the PiP document's `pagehide`, so the page takes its elements back. In
+  Chromium's auto-PiP, returning to the tab closes the panel.
+- Limits: Alloy-style pages get no Document PiP. Camera and microphone requests from inside the PiP
+  document are refused (Chromium's host wires permission prompts; follow-up). Chromium's "allow
+  auto picture-in-picture" prompt (content setting ASK) lives in Chromium's own PiP frame, so Open
+  shows none and Chromium treats ASK as allowed, as on a first visit in Chrome. Right after
+  `requestWindow()` resolves, the PiP window's `innerWidth` is 0; the page gets its size a moment later
+  (follow-up: compare with Chrome).
+- Automation: `pip` reports `documentWindow` (panel frame, level, top bar height, page size, requested
+  size); `pip-action close` closes the panel through its close path (`docs/automation.md`).
+- e2e: `media_document_pip` (E-M13; was BLOCKED) and `media_meet_auto_pip` (Step 11 acceptance).
+
 ## Appendix — Lead decisions (2026-10-25)
 
 - Approved as the media controls + Picture in Picture plan. Steps 1–5 start now: they need no App window. Step 6 and later App steps wait for app-shell Step B (#52) and Step G (sleep).
