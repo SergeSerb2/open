@@ -102,7 +102,14 @@ def run(factory, results, tmp, root, wait_until, new_tab, frame, read_image, ext
         second = wait_until(lambda: (lambda s:s if s["ids"]==expected_order else None)(hover()), timeout=10)
         pin_result("X2_second_window", {"ok":bool(second), "strip":second})
         app.call("window-close")
-        app.quit(); app = factory(urls=("about:blank",))
+        app.quit()
+        # This run owns the profile. Disable Chromium's automatic pin policy
+        # while it is closed so a user install can exercise the toast's Pin.
+        for path in Path(app.user_data).rglob("Preferences"):
+            preferences=json.loads(path.read_text())
+            preferences.setdefault("extensions",{})["pinned_by_default"]=False
+            path.write_text(json.dumps(preferences))
+        app = factory(urls=("about:blank",))
         wait_until(lambda: len(actions()) >= 4, timeout=30)
         app.call("window-frame", frame=[80,60,1200,800])
         persisted = wait_until(lambda: (lambda s:s if s["ids"]==expected_order else None)(hover()), timeout=10)
@@ -185,7 +192,7 @@ def run(factory, results, tmp, root, wait_until, new_tab, frame, read_image, ext
         server=ThreadingHTTPServer(("127.0.0.1",0),LocalPage)
         threading.Thread(target=server.serve_forever,daemon=True).start()
         local_origin="http://127.0.0.1:"+str(server.server_port)
-        ubo_page=new_tab(app,"chrome-extension://"+extensions["ublock"]+"/options.html")
+        ubo_page=new_tab(app,"chrome-extension://"+extensions["ublock"]+"/dashboard.html")
         dnr_rule={"id":2147483000,"priority":2147483000,"action":{"type":"block"},
             "condition":{"urlFilter":local_origin+"/open-extension-blocked/","resourceTypes":["xmlhttprequest"]}}
         app.eval(ubo_page,"Promise.all([chrome.declarativeNetRequest.setExtensionActionOptions({displayActionCountAsBadgeText:true}),"
@@ -291,6 +298,24 @@ def run(factory, results, tmp, root, wait_until, new_tab, frame, read_image, ext
             if previous_bindings is None: bindings.unlink(missing_ok=True)
             else: bindings.write_bytes(previous_bindings)
             app.call("reload-keybindings")
+        command_settings=new_tab(app,"chrome://extensions/shortcuts")
+        wait_until(lambda: app.eval(command_settings,"typeof chrome.developerPrivate.updateExtensionCommand")=="function",timeout=10)
+        def bind_named(keys):
+            return app.eval(command_settings,"new Promise(done=>chrome.developerPrivate.updateExtensionCommand("+
+                json.dumps({"extensionId":probe,"commandName":"probe-named","keybinding":keys})+
+                ",()=>done(chrome.runtime.lastError?.message||true)))")
+        try:
+            updated=bind_named("Command+T")
+            conflict=wait_until(lambda:(lambda rows:rows if any(c["dropped"] and c["openCommandID"]=="new-tab" for c in rows) else None)(
+                [c for c in app.call("ext-commands")["commands"] if c["extension"]==probe and c["name"]=="probe-named"]),timeout=5)
+            app.call("key",key="t",modifiers=["command"],route="app")
+            bar=app.call("commandbar-state")
+            app.call("key",key="escape",route="app")
+            results["X12_default_conflict"]={"ok":updated is True and bool(conflict) and bar.get("presented"),"rows":conflict,"bar":bar,"update":updated}
+        finally:
+            bind_named("Command+Shift+U")
+            app.call("close",tab=command_settings)
+            app.call("select",tab=control)
         picker = app.call("ext-picker")
         results["X13_picker"] = {"status":"BLOCKED", "reason":picker.get("blocked", "SCC extension picker not presented"), "state":picker}
         bar = app.call("ext-ui-menu", kind="bar")
@@ -345,6 +370,8 @@ def run(factory, results, tmp, root, wait_until, new_tab, frame, read_image, ext
             app.call("toast-action",index=0)
             pinned_toast = wait_until(lambda: action(installs[-1]["prompt"]["extension"]).get("pinned"),timeout=5)
             pin_result("install_toast_pin",{"ok":bool(pinned_toast),"toast":toast})
+        else:
+            results["install_toast_pin"]={"ok":False,"reason":"fresh user install should be unpinned with pinned_by_default=false","toast":toast}
         if installs[-1].get("prompt"):
             installed_id = installs[-1]["prompt"]["extension"]
             app.call("ext-menu", extension=installed_id, select="Remove from Open…")
@@ -357,6 +384,15 @@ def run(factory, results, tmp, root, wait_until, new_tab, frame, read_image, ext
             removed = wait_until(lambda: not action(installed_id), timeout=10)
             results["X15_remove_sheet"] = {"ok": bool(request and removed and retained) and request["sheetVisible"]
                 and request["buttons"] == ["Cancel","Remove Extension"], "prompt": request}
+        second_crx=pack_probe(root,tmp,prefix="ui-queued")
+        for path in (crx,second_crx):
+            app.call("ext-manage",extension="local",action="install-crx",path=path)
+        first=wait_until(lambda:(lambda p:p if p.get("queued")==2 else None)(app.call("ext-prompt")),timeout=10)
+        if first: app.call("key",key="escape",window=first["sheet"],route="app")
+        second=wait_until(lambda:(lambda p:p if p.get("pending") and p.get("sheetVisible") and first and p["extension"]!=first["extension"] else None)(app.call("ext-prompt")),timeout=10)
+        if second: app.call("key",key="escape",window=second["sheet"],route="app")
+        drained=wait_until(lambda:not app.call("ext-prompt").get("pending"),timeout=5)
+        results["prompt_fifo"]={"ok":bool(first and second and drained) and first["sheetVisible"],"first":first,"second":second,"drained":bool(drained)}
         for appearance in ("light", "dark"):
             close(); app.call("select",tab=blank)
             app.call("appearance", name=appearance)
@@ -390,9 +426,10 @@ def run(factory, results, tmp, root, wait_until, new_tab, frame, read_image, ext
                 try:
                     app.call("ext-prompt", clear=True)
                     close()
-                finally:
-                    # Restore the real shared domain even after a crashed App.
-                    from engine_e2e import _restore_defaults
-                    _restore_defaults(app,saved)
-        finally: app.quit()
-        if server: server.shutdown();server.server_close()
+                except (OSError,RuntimeError,json.JSONDecodeError): pass
+        finally:
+            # Restore the real shared domain even after a crashed App.
+            from engine_e2e import _restore_defaults
+            _restore_defaults(app,saved)
+            app.quit()
+            if server: server.shutdown();server.server_close()
