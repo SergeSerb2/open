@@ -1687,3 +1687,40 @@ Review fixes keep pin/order updates local to each strip's rendered state when
 hosts share one context. Picker arrows and type-select reveal the focused item
 inside the scroll viewport before Return can run it. The render CLIs exercise
 both flows, including the SCC's capped height.
+
+## Verification notes — App wiring
+
+Steps 2, 3, 5 and 6 now use `App/Extensions` adapters and the shared
+`OpenExtensionsUI` views. The temporary root extension bar and its popup panel
+path are removed. Per-action events update one action; list changes normalize
+duplicate IDs by first occurrence in engine order, log the dropped count and
+expose `extensions.duplicatesDropped`. C5's engine fix (#184, distribution
+`3f45b07b`) makes every pin/order/native drag row require that count to be zero.
+The App still guards moves against its normalized pinned list, clamps the
+destination and skips a no-op. The suite replays pin uBO Lite, Dark Reader and
+probe; move 2 to 0; native drag 0 to 2.
+
+`tools/e2e/engine_e2e.py --config Release --only extensions-ui` exercises the
+real App. Its packed local CRX uses the same install, permission and removal
+sheets as non-automation runs. Native key and pointer events stay inside
+`NSApplication.sendEvent`; no desktop input is used. Receipts, deliberate
+source-break proofs and light/dark Open-only captures stay in
+`.re/extensions-ui/`, as for the UI kit.
+
+Two App presentation dependencies remain explicit:
+
+- X-13 is BLOCKED: App has no `SiteControlController` presenter or data source;
+  `showSiteControls` is a stub. Section 12 owns the presenter. The per-window
+  `extensionsUIContext` and action-refresh seam are ready.
+- X-19 run/popup/activeTab/tabs.query is BLOCKED: waits for Section 9's
+  Chrome-style Little Open page. Its real App button, menu, profile action list
+  and zero-action hiding are wired. The target is always the Little Open
+  window's own `OEBrowser`; it never falls back to a main window's tab.
+
+Until Section 11's Find PR merges, the marked placement bridge in
+`EngineWebContentHostFactory.layoutViews` positions Find in the focused page
+viewport. The second PR to merge removes the bridge in favor of Section 11's
+placement. `find_strip_no_overlap_native_close` opens Find for URL, pane and
+toolbar surfaces, checks its actual window frames against every visible strip
+button and clicks its native cancel glyph through `NSApplication.sendEvent`.
+It requires Find to close and the strip to stay visible.
