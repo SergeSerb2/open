@@ -53,8 +53,9 @@ CefRefPtr<CefDictionaryValue> Row(const std::string& content,
     }
     row->SetList(name, ranges);
   }
-  // Five rows x 16K UTF-16 strings and 256 ranges: under 1 MiB, including
-  // dictionaries. The largest string allocation is 64 KiB of UTF-8.
+  // At most five rows, 16K UTF-16 strings and 256 classifications per row.
+  // Raw UTF-8 is capped at 64 KiB before conversion; even rejected input's
+  // UTF-16 buffer is at most 128 KiB, far below PartitionAlloc's ceiling.
   return row;
 }
 

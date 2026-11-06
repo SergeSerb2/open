@@ -69,7 +69,7 @@ Engine receipt (M5, 2026-11-05): baseline `engine-status` 8 PASS, 20 patches,
 47 overlays, 24 symbols; distribution
 `7b49090502568f8189aa0e94f7cf23344beec5bed537136eff5f7fce573ad35a`.
 After this change: 8 PASS, 21 patches, 50 overlays, 25 symbols; distribution
-`c6830913c38ef982b01a428aa3c0f705e271b67ad0720b21d2279c64a675c6a7`.
+`cdb3ffe57d1dbaa27331ed1cf8ef220d270122f277a7c1ff3734908eda02b37f`.
 The engine build uses the `open-engine-s8` root, `nice`, the engine lock,
 and 10 jobs. The main distribution root is not changed.
 
@@ -78,6 +78,17 @@ resizable style, action keycaps, default-suggestion mapping, and exact moved-tab
 hint produced FAILs in their matching rows. Restoring the implementation and
 rebuilding returned all rows to PASS. Both failing runs and the restored run
 passed owned-process cleanup. Raw receipts remain in `.re/extensions-e2/`.
+
+Pin setter follow-up: `OpenExtensionsToolbar::SetPinned` now checks the current
+pin state before calling `ToolbarActionsModel::SetActionVisibility`. Chromium's
+setter requires a transition (`DCHECK_NE` in `toolbar_actions_model.cc`) and
+appends to the stored list on every true call in Release. Repeating true was
+the source of duplicate action ids; neither the live nor profile id merge
+created the duplicate. The real-App three-action sequence reproduces this on
+the old engine, including two entries with pinnedIndex 0. Its new
+`actions_pin_move_unique` row checks every pin/repeated pin/move/repeated move/
+unpin/repeated unpin: unique ids, exact pinned order, compact unique indices,
+and zero `extensions.duplicatesDropped` whenever the App guard is available.
 
 | # | Patch | Value | Effort (guess) | Needs |
 |---|---|---|---|---|

@@ -17,7 +17,15 @@ def fixtures(root, tmp):
     (conflict / "manifest.json").write_text(json.dumps({
         "manifest_version": 3, "name": "YouTube Conflict Probe", "version": "1.0",
         "omnibox": {"keyword": "yt"}}))
-    return [str(action), str(conflict), str(Path(root) / "tools/e2e/fixtures/tabs-probe")]
+    pin_probes = []
+    for suffix in ("B", "C"):
+        probe = Path(tmp) / ("pin-probe-" + suffix)
+        probe.mkdir()
+        (probe / "manifest.json").write_text(json.dumps({
+            "manifest_version": 3, "name": "Pinned order probe " + suffix,
+            "version": "1.0", "action": {"default_title": "Pin probe " + suffix}}))
+        pin_probes.append(str(probe))
+    return [str(action), str(conflict), str(Path(root) / "tools/e2e/fixtures/tabs-probe")] + pin_probes
 
 
 def run(app, results, tmp, root, wait, new_tab, factory):
@@ -61,6 +69,9 @@ def run(app, results, tmp, root, wait, new_tab, factory):
 
     try:
         focus = os.environ.get("OPEN_E2E_E2_SCOPE")
+        if focus == "pins":
+            pin_order(app, results, wait)
+            return
         if focus == "tabs":
             tab_events(app, results, tabs, wait, new_tab)
             return
@@ -205,12 +216,62 @@ def run(app, results, tmp, root, wait, new_tab, factory):
         app.call("ext-omnibox", extension=action, op="cancel")
         js("chrome.omnibox.setDefaultSuggestion({description:'Probe: %s'}).then(()=>true)")
 
+        pin_order(app, results, wait)
         tab_events(app, results, tabs, wait, new_tab)
     finally:
         try:
             app.call("ext-windows", preference=True, value=preference)
         finally:
             app.quit()
+
+
+def pin_order(app, results, wait):
+    names = {"Action Probe", "Pinned order probe B", "Pinned order probe C"}
+    available = wait(lambda: (lambda rows: rows if len([a for a in rows if a["name"] in names]) == 3 else None)(
+        app.call("actions")["actions"]), timeout=10)
+    if not available:
+        results["actions_pin_move_unique"] = {"ok": False, "error": "three live actions not ready"}
+        return
+    ids = [a["id"] for a in available if a["name"] in names]
+    expected, snapshots = [], []
+
+    def check(stage):
+        def state():
+            rows = app.call("actions")["actions"]
+            all_ids = [a["id"] for a in rows]
+            pinned = [a for a in rows if a["pinned"]]
+            extension_state = app.call("extensions")
+            dropped = extension_state.get("duplicatesDropped", 0)
+            ok = len(all_ids) == len(set(all_ids)) and [a["id"] for a in pinned] == expected \
+                and [a["pinnedIndex"] for a in pinned] == list(range(len(expected))) and dropped == 0
+            return {"ok": ok, "stage": stage, "ids": all_ids,
+                "pinned": [[a["id"], a["pinnedIndex"]] for a in pinned],
+                "expected": list(expected), "duplicatesDropped": dropped,
+                "appGuardPresent": "duplicatesDropped" in extension_state}
+        settled = wait(lambda: (lambda s: s if s["ok"] else None)(state()), timeout=1)
+        snapshots.append(settled or state())
+
+    for id in ids: app.call("ext-pin", extension=id, pinned=False)
+    check("all unpinned")
+    for id in ids:
+        app.call("ext-pin", extension=id, pinned=True); expected.append(id)
+        check("pin " + id)
+        app.call("ext-pin", extension=id, pinned=True)
+        check("repeat pin " + id)
+        app.call("ext-move", extension=id, index=0)
+        expected.remove(id); expected.insert(0, id)
+        check("move to first " + id)
+        app.call("ext-move", extension=id, index=0)
+        check("repeat move " + id)
+    for id in reversed(ids):
+        app.call("ext-move", extension=id, index=len(expected) - 1)
+        expected.remove(id); expected.append(id)
+        check("move to last " + id)
+        app.call("ext-pin", extension=id, pinned=False); expected.remove(id)
+        check("unpin " + id)
+        app.call("ext-pin", extension=id, pinned=False)
+        check("repeat unpin " + id)
+    results["actions_pin_move_unique"] = {"ok": all(s["ok"] for s in snapshots), "snapshots": snapshots}
 
 
 def tab_events(app, results, extension, wait, new_tab):

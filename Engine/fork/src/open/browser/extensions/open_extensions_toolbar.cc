@@ -411,9 +411,15 @@ CefRefPtr<CefImage> OpenExtensionsToolbar::Image(const std::string& id,
 }
 
 void OpenExtensionsToolbar::SetPinned(const std::string& id, bool pinned) {
-  if (Action(id)) {
-    ToolbarActionsModel::Get(browser_->GetProfile())
-        ->SetActionVisibility(id, pinned);
+  Profile* profile = browser_->GetProfile();
+  auto* model = ToolbarActionsModel::Get(profile);
+  // SetActionVisibility requires a transition (DCHECK_NE in Chromium).
+  // Repeating true appends the id to prefs again in Release builds, which
+  // duplicates both live and profile action lists. Our public setter is
+  // idempotent. Match Chrome's incognito and policy pin restrictions too.
+  if (Action(id) && !profile->IsOffTheRecord() &&
+      !model->IsActionForcePinned(id) && model->IsActionPinned(id) != pinned) {
+    model->SetActionVisibility(id, pinned);
   }
 }
 

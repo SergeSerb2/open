@@ -815,3 +815,5 @@ failure (`OPEN_DOWNLOADS_FAIL_IN_SHEET=1`). The receiver verifies the real Open
 document URL, bytes and SHA-256. Finder dispatch is recorded without opening a
 Finder window. Home geometry and the 60-second recent-download click rule remain the
 lead's marked guesses. No Little Open tray is added.
+
+The `extensions-e2` suite also checks three-action pin/move/unpin sequences through `ext-pin`, `ext-move`, and `actions`. It checks raw engine ids and pinned indices, plus `extensions.duplicatesDropped == 0` when the App guard is present. `OPEN_E2E_E2_SCOPE=pins` selects this reproduction alone.
