@@ -147,7 +147,11 @@ Arguments are `key=value`; values that parse as JSON are sent as JSON.
 | `window-frame` | `frame` `[x, y, w, h]`, `unconstrained` | Move/resize the main window; `unconstrained: true` keeps the exact frame even past the screen (capture-size comparisons on a smaller display) |
 | `snapshot` | `path`, `window` or `tab` | PNG of one of Open's windows (default: the main window), or of one page |
 | `policy` | `dialogs`, `prompt`, `permissions`, `contextMenu`, `fullscreen` | Answer JS dialogs (`accept`/`dismiss`/`hold`), permissions (`grant`/`deny`), record context menus (`record`: the event lists `items` and `commands` with ids, titles, submenus, and `openItems`, the titles of the menu Open would show, its own items included) or run one command (`run:<id>`, after the right click returns) or one of Open's own items by title (`run-open:<title>`), keep the window size on page fullscreen |
-| `dialog` | `accept`, `text` | Complete a held dialog |
+| `dialog` | `accept`, `text` | Complete a held dialog; when visible, click its real OK/Cancel button |
+| `dialog-state` | — | Pending count, real sheet title/body/buttons, prompt text, suppression visibility, held/queued flags, and sheet window number |
+| `dialog-button` | `accept`, `text`, `suppress` | Click the visible sheet's real OK/Cancel button, optionally edit its prompt and suppression checkbox |
+| `permission-prompt` | optional `answer`: `allow`/`notnow` | State: visible, question, kinds, buttons, anchor frame in screen points, window, pending and completion counts. With an answer, call `performClick` on the real button |
+| `permission-decisions` | — | Profile data hook: index `ready` and persisted non-ask origin/kind/state rows |
 | `events` | — | Drain the event log: `change`, `load`, `loadError`, `open`, `dialog`, `permission`, `contextMenu`, `fullscreen`, `download`, `console`, `devtools`, `extensionPopup`, `tab-request` and `window-request` (P1 requests from Chromium, with `refused` when the shell said no) |
 | `script-add` / `script-remove` | `id`, `source`, `css`, `end`, `matches`, `allFrames` | Boost-style user scripts (through the OpenWeb `WebProfile` protocol) |
 | `filter` / `filter-stats` | `block` (substrings) | Request filter (ad-block hook) and its counters |
@@ -785,9 +789,28 @@ profile and Chromium preference lives in its fresh data root. Its `finally`
 answers pending prompts and closes all owned auxiliary surfaces; the harness
 then quits and checks every process it started.
 
+### S11 dialog and permission acceptance
+
+Run `tools/e2e/engine_e2e.py --only page-chrome` under the on-screen lock.
+It launches the real App, serves loopback pages, checks native sheet and
+popover state, clicks their actual buttons, sends keys through
+`OEApplication.sendEvent`, and verifies Profile persistence after relaunch.
+The `dialog` event adds `title`, `buttons`, `suppressible`, and `queued`;
+automatically answered suppressed dialogs also carry `suppressed:true`.
+`dialogAnswer` and `permissionAnswer` record one completion per owned request.
+`OPEN_E2E_PAGE_CHROME_EARLY_FAILURE=1` forces failure while the first real
+sheet is visible; cleanup must still leave zero owned processes/windows.
+
 ## Runner lifetime
 
-E2e launchers pass `OPEN_E2E_OWNER_PID`: the shared `Open` launcher supplies it through LaunchServices, and the direct migration fixture sets it in its subprocess environment. Automation builds watch that runner with a process exit dispatch source before preparing data or windows. A missing owner exits immediately; owner death logs `Open: e2e owner <pid> exited; quitting` and requests normal shutdown (engine close skips beforeunload, download quit confirmation is skipped, active transfers and save choices are cancelled, and new download destination prompts are refused). A background deadline forces exit after five seconds if shutdown stalls. There is no polling or idle timer. Normal builds compile out the watcher and environment handling.
+E2e launchers pass `OPEN_E2E_OWNER_PID`: the shared `Open` launcher supplies it through LaunchServices, and the direct migration fixture sets it in its subprocess environment. Automation builds watch that runner with a process exit dispatch source before preparing data or windows. A missing owner exits immediately; owner death logs `Open: e2e owner <pid> exited; quitting` and requests normal shutdown (the App's page-beforeunload preflight and engine close prompts are skipped, download quit confirmation is skipped, active transfers and save choices are cancelled, and new download destination prompts are refused). A background deadline forces exit after five seconds if shutdown stalls. There is no polling or idle timer. Normal builds compile out the watcher and environment handling.
+
+`tools/e2e/owner_watch_e2e.py <output-directory>` exercises four real-App
+cases: owner death, a missing-owner-environment negative control, an active
+download, and a page with a beforeunload handler. `--before-unload` runs only
+the last case. That case first observes and cancels a normal held beforeunload
+request, then kills the runner and requires shutdown without another request.
+Run it under the on-screen lock. Normal user quit keeps the page preflight.
 
 ## Session downloads (S11)
 

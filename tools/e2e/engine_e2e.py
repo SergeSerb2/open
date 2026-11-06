@@ -9811,11 +9811,9 @@ def page_notification_checks(factory, results, tmp):
         pages.append(tab['page']['identifier'])
         return tab
 
-    def sheet():
-        try:
-            return app.call('alert')
-        except RuntimeError:
-            return None
+    def permission_prompt():
+        state = app.call('permission-prompt')
+        return state if state['visible'] else None
 
     def blocked(reason, **evidence):
         return dict(evidence, status='BLOCKED', reason=reason)
@@ -9825,13 +9823,13 @@ def page_notification_checks(factory, results, tmp):
         tab = live_tab(origin + '/notify.html')
         page = tab['page']['identifier']
 
-        # N1: the user allows the site in Open's prompt (the real sheet button), Chromium shows
+        # N1: the user allows the site in Open's popover (the real Allow button), Chromium shows
         # the banner, and the Allow asks macOS once (§4.5.3).
         before = app.call('notification-authorization')
         app.call('click', tab=page, selector='#ask')
-        prompt_sheet = wait_until(sheet, timeout=10, step=.1)
-        if prompt_sheet:
-            app.call('alert', button='Allow')
+        permission_view = wait_until(permission_prompt, timeout=10, step=.1)
+        if permission_view:
+            app.call('permission-prompt', answer='allow')
         granted = wait_until(lambda: 'permission:granted' in app.eval(page, 'log'), timeout=10, step=.1)
         after = wait_until(lambda: (lambda s: s if len(s['requests']) > len(before['requests']) else None)(
             app.call('notification-authorization')), timeout=10, step=.1) or app.call('notification-authorization')
@@ -9839,9 +9837,10 @@ def page_notification_checks(factory, results, tmp):
         expected = (('requested' if prompt else 'suppressed') if before['status'] == 'notDetermined'
                     else 'skipped:' + before['status'])
         results['N1_allow_asks_macos'] = {
-            'ok': bool(prompt_sheet) and any(origin.split('//')[1].split(':')[0] in t for t in prompt_sheet['texts'])
+            'ok': bool(permission_view) and permission_view['question'] == 'Allow 127.0.0.1 to send you notifications?'
+                  and permission_view['buttons'] == ['Not Now', 'Allow']
                   and bool(granted) and entry == expected and len(after['requests']) == len(before['requests']) + 1,
-            'sheet': prompt_sheet, 'granted': bool(granted), 'statusBefore': before['status'],
+            'prompt': permission_view, 'granted': bool(granted), 'statusBefore': before['status'],
             'request': entry, 'expected': expected, 'requests': after['requests']}
         if prompt and before['status'] == 'notDetermined':
             print('U-N1: click Allow in the macOS notification prompt for Open (waiting up to 120 s)', flush=True)
@@ -10323,7 +10322,7 @@ def main():
     ap.add_argument("--engine-fingerprint-only", action="store_true", help="verify built engine artifacts and exit without launching Open")
     ap.add_argument("--extensions", default=os.path.join(ROOT, ".re", "ext", "unpacked"))
     ap.add_argument("--only", choices=["shell", "extensions", "features", "measure", "tabstrip", "window", "sidebar", "peek",
-                                       "commandbar", "app-actions", "actions", "extensions-p3", "extensions-e2", "profiles", "sidebar-completion", "toolbar", "numbering", "media", "relaunch", "page",
+                                       "commandbar", "app-actions", "actions", "extensions-p3", "extensions-e2", "profiles", "sidebar-completion", "toolbar", "numbering", "media", "relaunch", "page", "page-chrome",
                                        "sleep", "context-menus", "routing", "history", "applescript", "downloads"])
     ap.add_argument("--window-chrome-only", action="store_true", help="run only the window-chrome follow-up flows in the window suite")
     ap.add_argument("--keep", action="store_true",
@@ -10422,6 +10421,9 @@ def main():
         return app
 
     results = {"style": opts.style, "config": opts.config, "started": time.strftime("%Y-%m-%d %H:%M:%S")}
+    source_diff = subprocess.check_output(["git", "diff", "HEAD", "--", "App", "Packages/OpenKit/Sources", "tools/e2e"], cwd=ROOT)
+    results["source"] = {"head": subprocess.check_output(["git", "rev-parse", "HEAD"], cwd=ROOT, text=True).strip(),
+                         "clean": not source_diff, "diffSHA256": hashlib.sha256(source_diff).hexdigest()}
     def framework_uuid(path):
         proc = subprocess.run(['dwarfdump', '--uuid', path], capture_output=True, text=True)
         match = re.search(r'UUID: ([0-9A-F-]+)', proc.stdout)
@@ -10507,6 +10509,12 @@ def main():
             results[opts.only] = CheckedResults(tracker)
             space_manager_checks(results[opts.only], tmp, opts.config, opts.style)
             folder_peek_checks(factory, results[opts.only], tmp)
+        elif opts.only == "page-chrome":
+            import importlib.util
+            spec = importlib.util.spec_from_file_location("page_chrome", os.path.join(ROOT, "tools/e2e/page_chrome.py"))
+            module = importlib.util.module_from_spec(spec); spec.loader.exec_module(module)
+            results[opts.only] = CheckedResults(tracker)
+            module.run(factory, results[opts.only], tmp, globals())
         elif opts.only == "context-menus":
             import importlib.util
             spec = importlib.util.spec_from_file_location("open_context_menus", os.path.join(ROOT, "tools/e2e/context_menus.py"))
@@ -10629,14 +10637,14 @@ def main():
                                     else opts.config.lower()))
     with open(os.path.join(OUT, name), "w") as f:
         json.dump(results, f, indent=2, sort_keys=True)
-    for group in ("shell", "extensions", "features", "measure", "tabstrip", "window", "sidebar", "peek", "commandbar", "app-actions", "actions", "extensions-p3", "extensions-e2", "profiles", "sidebar-completion", "toolbar", "numbering", "media", "relaunch", "page", "sleep", "context-menus", "routing", "history", "applescript", "downloads"):
+    for group in ("shell", "extensions", "features", "measure", "tabstrip", "window", "sidebar", "peek", "commandbar", "app-actions", "actions", "extensions-p3", "extensions-e2", "profiles", "sidebar-completion", "toolbar", "numbering", "media", "relaunch", "page", "page-chrome", "sleep", "context-menus", "routing", "history", "applescript", "downloads"):
         for k, v in results.get(group, {}).items():
             if isinstance(v, dict) and "ok" in v:
                 print("%-24s %s" % (k, "PASS" if v.get("ok") else "FAIL"))
             elif isinstance(v, dict) and v.get("status") in ("SKIP", "BLOCKED", "INTERRUPTED", "DEFERRED"):
                 print("%-24s %s: %s" % (k, v["status"], v.get("reason", "")))
     print("wrote", os.path.join(OUT, name))
-    failures = [k for group in ("shell", "extensions", "features", "measure", "tabstrip", "window", "sidebar", "peek", "commandbar", "app-actions", "actions", "extensions-p3", "extensions-e2", "sidebar-completion", "toolbar", "numbering", "media", "relaunch", "page", "sleep", "context-menus", "routing", "history", "applescript", "downloads")
+    failures = [k for group in ("shell", "extensions", "features", "measure", "tabstrip", "window", "sidebar", "peek", "commandbar", "app-actions", "actions", "extensions-p3", "extensions-e2", "sidebar-completion", "toolbar", "numbering", "media", "relaunch", "page", "page-chrome", "sleep", "context-menus", "routing", "history", "applescript", "downloads")
                 for k, v in results.get(group, {}).items() if isinstance(v, dict) and v.get("ok") is False]
     if failures or not results["cleanup"]["ok"]:
         sys.exit(1)
