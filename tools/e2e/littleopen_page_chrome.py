@@ -25,8 +25,8 @@ def run(factory, results, tmp, h):
     server = http.server.ThreadingHTTPServer(('127.0.0.1', 0), Handler)
     threading.Thread(target=server.serve_forever, daemon=True).start()
     origin = 'http://127.0.0.1:%d' % server.server_address[1]
+    # MIDI is hardware-free and never requests macOS notification authorization.
     app = factory(urls=(origin + '/main',), fresh=True,
-                  extra_env={'OPEN_AUTOMATION_NOTIFICATION_AUTHORIZATION': 'record'},
                   extra_args=['--host-resolver-rules=MAP *.localhost 127.0.0.1'])
     saved = {}
     row = None
@@ -123,18 +123,18 @@ def run(factory, results, tmp, h):
                 gone = wait(lambda: current() is None, timeout=4)
                 return dict(ok=kept and bool(gone) and state['title'] == 'Leave site?' and state['parent'] == row['window'], kept=kept, state=state)
             gate('little_beforeunload_' + close, unload)
-        def request(): ev('window.permissionResult="pending";Notification.requestPermission().then(v=>permissionResult=v);true')
+        def request(): ev('window.permissionResult="pending";navigator.requestMIDIAccess({sysex:true}).then(()=>permissionResult="granted",()=>permissionResult="denied");true')
         for decision in ['allow', 'notnow']:
             def permission(decision=decision):
                 url = page(host='little-' + decision)
-                call('permission', origin=url, kind=8, state=0); request(); state=visible(ps)
+                call('permission', origin=url, kind=32, state=0); request(); state=visible(ps)
                 x,y,w,height = state['frame']; content=current()['contentFrame']; window=current()['frame']
                 inside = x >= 0 and y >= 0 and x+w <= window[2] and y+height <= window[3]
                 content_top = window[3] - content[1]
                 positioned = abs(x - 10) < 1 and abs(y + height - (content_top - 10)) < 1 and w == 320
                 assert call('permission-prompt', answer=decision)
                 assert wait(lambda: ev('permissionResult') != 'pending', timeout=3)
-                actual=ev('permissionResult'); stored=call('permission', origin=url, kind=8)
+                actual=ev('permissionResult'); stored=call('permission', origin=url, kind=32)
                 ev('location.reload();true')
                 assert wait(lambda: current() and not current()['loading'], timeout=8)
                 request()
@@ -147,7 +147,7 @@ def run(factory, results, tmp, h):
                             and (decision!='allow' or ev('permissionResult')=='granted')
                             and state['buttons']==['Not Now','Allow']
                             and state['help']=='Click the lock to change this any time'
-                            and state['question']=='Allow little-'+decision+'.localhost to send you notifications?', state=state, second=second, stored=stored, inside=inside, positioned=positioned)
+                            and state['question']=='Allow little-'+decision+'.localhost to access your MIDI devices?', state=state, second=second, stored=stored, inside=inside, positioned=positioned)
             gate('little_permission_' + decision, permission)
         for key in ['escape','return','w','t','l']:
             def keys(key=key):
@@ -208,10 +208,12 @@ def run(factory, results, tmp, h):
                 assert wait(lambda:call('engine-sleep',tab=current()['content'])['unloadHandlers'],timeout=3)
                 app.call('quit'); state=visible(ds); answer()
                 exited=wait(lambda:app.process_path(app.pid)!=app.executable,timeout=8)
-                results['little_quit_ok']=dict(ok=bool(exited) and state['parent']==row['window'],state=state)
                 app.quit()
+                results['little_quit_ok']=dict(ok=bool(exited) and state['parent']==row['window'],state=state)
             except h['FocusInterruption']: raise
-            except Exception as error: results['little_quit_ok']=dict(ok=False,error=str(error))
+            except Exception as error:
+                app.quit()
+                results['little_quit_ok']=dict(ok=False,error=str(error))
             print('little_quit_ok ' + ('PASS' if results['little_quit_ok']['ok'] else 'FAIL'),flush=True)
     finally:
         h['_try'](cleanup)

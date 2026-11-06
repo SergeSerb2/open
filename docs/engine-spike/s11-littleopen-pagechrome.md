@@ -48,3 +48,19 @@ beforeunload and permission-persistence flows. Its Cmd+T assertion used the
 wrong expected destination and was corrected to the main command bar.
 Subsequent attempts were INTERRUPTED by foreground loss to macOS
 UserNotificationCenter and are not acceptance evidence.
+
+## Authorization prompt and fixture correction
+
+The first Little Open permission run used notifications, including Allow,
+with `OPEN_AUTOMATION_NOTIFICATION_AUTHORIZATION=record`. Its timing overlaps
+the 05:18 macOS notification-authorization dialog. Saved app output does not
+prove which process requested that dialog; treat this run as its likely source.
+The lead confirmed the last UserNotificationCenter window closed at 05:25:39.
+Runs before 05:26 that lost focus remain INTERRUPTED, not failed acceptance.
+
+All new Little Open permission rows now use real
+`navigator.requestMIDIAccess({sysex:true})` and `OEPermissionKind.MIDI` (32).
+MIDI needs no attached device or macOS notification grant. No real OS
+authorization prompt or notification delivery is part of this acceptance.
+The existing normal-window page-chrome fixture retains its record-only
+notification authorization setting.
