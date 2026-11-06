@@ -189,6 +189,8 @@ def main():
         paragraphs.extend(['Public MPL source location: ' + (source_location or 'UNSET (U-8 pending)'), ''])
     paragraphs.extend(['License texts', ''])
     texts = ['MPL-2.0.txt'] + (['GPL-3.0.txt'] if gpl else []) + ['MIT-Sparkle.txt', 'BSD-CEF.txt']
+    if any(row[0] == 'Unicode emoji data' for row in shipped):
+        texts.append('Unicode-3.0.txt')
     for name in texts:
         text = (a.inventory.parent / 'licenses' / name).read_text(encoding='utf-8')
         if len(text) < 500:

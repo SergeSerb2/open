@@ -17,18 +17,28 @@ import OpenTranslate
 final class AppSettingsActions: SettingsActions, LibraryActions, DownloadsProvider {
   unowned let app: AppDelegate
   init(app: AppDelegate) { self.app = app }
-  @ObservationIgnored lazy var settings: SettingsViewModel = {
+  @ObservationIgnored private var settingsStorage: SettingsViewModel?
+  var settings: SettingsViewModel {
+    if let settingsStorage { return settingsStorage }
     let vm = SettingsViewModel(model: app.model, actions: self, defaults: .standard,
       root: app.directories.root, snapshot: app.snapshotStore,
       focusedProfileID: app.frontWindowController.flatMap { app.hostFactories[$0.windowID]?.focusedProfile?.id })
-    if let store = app.stores.adBlock { vm.attach(adBlockStore: store) }
-    else { vm.statusText = "Ad blocking settings could not be opened." }
-    app.defaultBrowserService.onChange = { [weak vm] state in
+    if !app.isFirstRun || app.firstRunSaved {
+      if let store = app.stores.adBlock { vm.attach(adBlockStore: store) }
+      else { vm.advanced.statusText = "Ad blocking settings could not be opened." }
+    }
+    app.defaultBrowserService.onChange = { [weak vm, weak app] state in
       vm?.general.refresh()
       vm?.links.isDefaultBrowser = state.values.allSatisfy { $0 }
+      app?.firstRunWindowController?.model.refreshDefaultBrowserStatus()
     }
+    settingsStorage = vm
     return vm
-  }()
+  }
+  func modelWasInstalled() { settingsStorage = nil }
+  func attachBrowserStores() {
+    if settings.adBlock == nil, let store = app.stores.adBlock { settings.attach(adBlockStore: store) }
+  }
   @ObservationIgnored lazy var settingsPresenter = SettingsPresenter(viewModel: settings)
   @ObservationIgnored lazy var captures = try? FileCapturesProvider(root: app.directories.root)
   @ObservationIgnored private(set) var library: LibraryViewModel?
@@ -37,6 +47,10 @@ final class AppSettingsActions: SettingsActions, LibraryActions, DownloadsProvid
   func showProfileSettings(profileID: ProfileID) {
     guard app.model.profile(id: profileID) != nil else { return }
     settings.profiles.select(profileID); show(pane: .profiles)
+  }
+  func showNewProfile(sourceSpace: SpaceID? = nil) {
+    settings.profiles.beginCreate(sourceSpace: sourceSpace)
+    show(pane: .profiles)
   }
   func showLibrary(section: LibrarySection? = nil) {
     app.downloadsCenter.refreshFiles()
@@ -192,7 +206,17 @@ final class AppSettingsActions: SettingsActions, LibraryActions, DownloadsProvid
     library?.refreshSpaceManagerView()
   }
   var downloads: [DownloadItemSnapshot] { app.downloadsCenter.downloads }
-  private func status(_ message: String) { settings.statusText = message; AppDelegate.commandLog(message) }
+  private func status(_ message: String, pane: PaneID? = nil) {
+    switch pane ?? settings.selectedPane {
+    case .general: settings.general.errorText = message
+    case .profiles: settings.profiles.errorText = message
+    case .advanced: settings.advanced.statusText = message
+    case .appIcon: settings.appIcon.errorText = message
+    case .links: settings.linksError = message
+    case .shortcuts: settings.shortcuts.statusText = message
+    }
+    AppDelegate.commandLog(message)
+  }
   var canImportPasswordsAndCookies: Bool { false }
   func isDefaultBrowser() -> Bool { app.defaultBrowserService.isDefaultBrowser }
   func setAsDefaultBrowser() -> String? {
@@ -204,7 +228,7 @@ final class AppSettingsActions: SettingsActions, LibraryActions, DownloadsProvid
     }
     return nil
   }
-  func checkForUpdates() { status("An update feed is not available yet."); show(pane: .general) }
+  func checkForUpdates() { status("An update feed is not available yet.", pane: .general); show(pane: .general) }
   func openMoreSettings() { openURL(URL(string: "chrome://settings")!, profileID: settings.selectedProfileID) }
   // One source with Help ▸ Troubleshooting (page-platform §4.11.3–4).
   func revealOpenDataFolder() { TroubleshootingActions.shared.revealOpenData() }
@@ -249,22 +273,21 @@ final class AppSettingsActions: SettingsActions, LibraryActions, DownloadsProvid
   }
   func keyBindingsDidChange(store: KeyBindingStore) { app.reloadKeyBindings() }
   func openEssentialShortcuts() { app.performCommand("keyboard-shortcuts-edu", payload: nil) }
-  func runImport(plan: ImportPlan) async -> ImportOutcome { ImportOutcome(errorText: "Import is not available in this build. No data was imported.") }
-  func setAdBlockEnabled(_ on: Bool, profileID: ProfileID) { status("Ad blocking is not active in this build. Your preferences were saved.") }
+  func runImport(plan: ImportPlan) async -> ImportOutcome { await app.importRunner.run(plan: plan, firstRun: false) }
+  func setAdBlockEnabled(_ on: Bool, profileID: ProfileID) { status("Ad blocking is not active in this build. Your preferences were saved.", pane: .advanced) }
   func setEnabledBlockLists(_ ids: [String], profileID: ProfileID) { setAdBlockEnabled(true, profileID: profileID) }
   func setAdBlockExcludedDomains(_ domains: [String], profileID: ProfileID) { setAdBlockEnabled(true, profileID: profileID) }
   func adBlockDebugInfo(profileID: ProfileID) -> String { "App engine filter adapter: pending Step D" }
   func setTabSleepMode(_ mode: TabSleepMode) {
-    for profile in app.model.profiles { var settings = profile.settings; settings.sleepMode = mode.modelMode; app.model.updateProfileSettings(id: profile.id, settings: settings) }; app.scheduleSave()
-    app.tabSleep.modeChanged()
+    app.tabSleep.reconcileSettingsPolicy()
   }
-  func setApplicationIcon(id: String) { status("Application icon switching is not connected yet.") }
+  func setApplicationIcon(id: String) { settings.appIcon.errorText = app.applicationIcon.apply(id: id) ?? "" }
   /// Settings ▸ Advanced "Reset Translated-site Prompts" (page-platform §4.7.7): app scope, every profile.
   func resetTranslatePrompts(profileID: ProfileID) -> String? { TranslatePreferences().reset(); return nil }
   func openURL(_ url: URL, profileID: ProfileID) {
     guard let space = app.model.spaces.first(where: { $0.profileID == profileID }),
       let controller = app.frontWindowController ?? app.makeWindow(focusedSpaceID: space.id),
-      let factory = app.hostFactories[controller.windowID] else { return }
+      let factory = app.hostFactories[controller.windowID] else { status("This Profile needs a Space before it can open a page."); return }
     app.focusWindow(controller.windowID, activate: true); factory.focus(space: space)
     if url.scheme == "chrome", url.host() == "extensions", url.query == nil, url.fragment == nil {
       let path = url.path.trimmingCharacters(in: CharacterSet(charactersIn: "/"))
@@ -277,7 +300,7 @@ final class AppSettingsActions: SettingsActions, LibraryActions, DownloadsProvid
   }
   func openHelp(topic: String) { if let profile = app.model.defaultProfile { openURL(AppCommand.helpURL, profileID: profile.id) } }
   func copyText(_ text: String) { NSPasteboard.general.clearContents(); NSPasteboard.general.setString(text, forType: .string) }
-  func openLibrary() { showLibrary() }
+  func openLibrary() { settingsPresenter.window?.orderOut(nil); showLibrary(section: .archive) }
   // Library owns the durable archive/capture mutations. These are notifications.
   func restoreArchived(id: ItemID) { app.scheduleSave(); app.scheduleMenuRebuild() }
   func deleteArchived(id: ItemID) { app.scheduleMenuRebuild() }

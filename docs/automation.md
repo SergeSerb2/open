@@ -44,6 +44,33 @@ on-screen lock around one suite only; take the heavy slot around build steps.
 - Release builds include it only with `OPEN_AUTOMATION=1 tools/build.sh Release` (used for measurements). A normal Release build has no socket code at all.
 - Socket: `<data root>/automation.sock`, mode 0600. The data root is `$OPEN_USER_DATA` or `--user-data-dir=DIR`, else `~/Library/Application Support/Open-Dev` (Debug) or `.../Open` (Release); it holds `State/browser.json` and `Profiles/<dir>/{Engine,State}` (docs/plans/profiles.md §5). `--automation-socket=PATH` or `$OPEN_AUTOMATION_SOCKET` override the socket path. Code: `App/Automation/AutomationServer.swift`.
 
+First run is detected once, before data-root preparation, when
+`State/browser.json` does not exist. `--skip-first-run` or
+`OPEN_SKIP_FIRST_RUN=1` selects the normal browser path. `--arc-dir=PATH`
+overrides the read-only import source for tests and support. Always use a
+disposable Open root and a synthetic source for first-run automation.
+
+The shared e2e `Open` launcher adds `--skip-first-run` by default. Its direct
+early-quit, missing-engine, and migration launches do the same. All suite
+modules, peer launches, and benchmarks use that launcher. `tools/run.sh` and
+the release smoke launch also pass the switch. `tools/openctl` connects to
+an existing socket and never launches the App. `verify-all.sh` runs package
+CLIs, not the App. Only the `firstrun` suite opts into first run.
+
+The dev launcher `tools/run.sh` always passes `--skip-first-run`. To see first
+run by hand, launch the built App binary directly with a disposable data root,
+inside the screen lock (omit `--skip-first-run`):
+
+```sh
+first_run_root=$(mktemp -d /tmp/open-first-run.XXXXXX)
+OPEN_USER_DATA="$first_run_root" \
+  /usr/bin/lockf -k /tmp/open-onscreen-e2e.lock \
+  build/Debug/Open.app/Contents/MacOS/Open --user-data-dir="$first_run_root" --arc-dir=/path/to/synthetic-arc
+```
+
+Use a synthetic source folder for this check. Quit the App before removing
+the temporary root.
+
 ## Protocol
 
 One JSON object per line in each direction.
@@ -80,6 +107,42 @@ Arguments are `key=value`; values that parse as JSON are sent as JSON.
 - No `tab`: the selected tab.
 
 ## Commands
+
+`first-run` returns `{active, step, completed}` even when there is no browser
+window. Optional `action` drives the same view-model methods as the buttons:
+`import`, `fresh`, `continue`, `notnow`, `back`, `finish`, `retry`, or
+`choose-dir` with `directory=PATH`. `select` sets optional `spaces`, `archive`,
+and `history` checkbox booleans on Import. `retry` on a save-error Report retries
+the pending model's save. Directory strings are limited to 4096 UTF-8 bytes;
+action names to 32. There is no action that changes the system default browser.
+
+For native evidence, `focus` grants input focus to this instance's first-run
+window. `inspect` reads its rendered text and top-left text frames using
+Vision on a snapshot of that window only. State includes its native frame
+size, key flag, and traffic-light frames. `snapshot` prefers the first-run
+panel while it exists. `OPEN_AUTOMATION_IMPORT_DELAY_MS` (automation builds
+only, at most 5000 ms) holds the real progress view for animation captures.
+`OPEN_AUTOMATION_PROBE_DELAY_MS` (the same limit) delays probe work so the suite
+can close and reopen Welcome before counting finishes. Reopen restarts a
+cancelled probe when counts have not landed.
+
+State also includes `importInProgress`; while a Settings import runs,
+`settingsStep` reports `Importing`. The same command also drives the visible Settings sheet after first run:
+`settings-import` with `directory=PATH`, `settings-next`, `settings-run`,
+and `settings-done`. State then includes `settingsStep`, `settingsOutcome`,
+and `settingsError`. These actions use the real cached wizard and shared App
+runner. History has an explicit phase-3 seam; passwords/cookies stay disabled.
+
+Run the synthetic first-run flow with:
+
+```sh
+/usr/bin/lockf -k /tmp/open-onscreen-e2e.lock python3 tools/e2e/engine_e2e.py --config Debug --style chrome --only firstrun
+```
+
+The suite restores shared defaults in `finally`, checks owned-process/window
+cleanup, and writes uncommitted receipts and native PNGs under
+`docs/engine-spike/`. Its five first-content timing samples include loads;
+loaded Debug numbers are upper bounds, not idle Release budget acceptance.
 
 | Command | Args | Result |
 |---|---|---|
@@ -301,7 +364,9 @@ Additional socket commands:
 | `menu-state`, `menu-perform id=…` | Read native menu validation or invoke an enabled native menu item. |
 | `reload-keybindings` | Load the actual `State/keybindings.json`, validate conflicts, and rebuild menus and the global registration. |
 | `sidebar-duplicate id=…`, `sidebar-tree` | Send the production SidebarDelegate intent; read fresh subtree IDs and load flags. |
-| `settings-state`, `settings-toggle name=hotkey\|external` | Read the shared real presenters; commit the live Links settings model. |
+| `settings-state`, `settings-toggle name=hotkey\|external` | Read the shared real presenters, including pane-local `generalError`/`advancedStatus`; commit the live Links settings model. |
+| `settings-profile` | Read the actual Profiles create-sheet state: `creating`, attached native `sheet` window number, `pane`, selected `spaces`, and `error`. `cancel=true` dismisses through the existing sheet state. |
+| `settings-icon` | Read `selected`, `applied`, pane `error`, `matchesApplication` (exact pixel equality in the actual NSApp icon's output color space and component format, including float16; AppKit copies NSImage), `imageObject` (cache identity), bitmap `pixels`, and `restoreStartedMs`/`restoreElapsedMs`. `select=<AppIconOption ID>` uses the real picker action. Default resets `NSApp.applicationIconImage` to nil. |
 | `settings-custom-engine template=…` | Save a custom engine through the live Profiles settings model. |
 | `library-restore id=…`, `library-history-open url=…` | Exercise the live Library restore transaction or its profile-scoped history action. |
 | `history-state` | Optional `profile` UUID and `query`. Drains accepted history writes, then returns the Profile store path, search rows, commit-to-enqueue samples (ms, automation only, bounded at 4,096) and writer operation count. Store opens/searches stay on the HistoryStore actor. |
@@ -480,7 +545,7 @@ Commands in `App/Automation/AutomationSleep.swift`, automation builds only. `tab
 | `sleep-now` | `tab` | OpenSleep's debug sleep (freeze + discard now, every gate honored). Returns `refusedBy` (the gate, or null) and the tab's state after. |
 | `sleep-tick` | `pressure` (optional: `warning`, `critical`) | Waits for a running pass, then runs one controller pass (or a memory-pressure pass) now. Returns `sleep-state`. |
 | `sleep-clock` | `advance` (seconds, 0…604800) and/or `reset` | Moves the controller's clock (hide times, grace periods, delays). Returns `offset`. |
-| `sleep-mode` | `mode` (`off`, `conservative`, `balanced`, `aggressive`; optional) | Writes every Profile's `sleepMode` as Settings ▸ Advanced does. Returns the mode per Profile. |
+| `sleep-mode` | `mode` (`off`, `conservative`, `balanced`, `aggressive`; optional) | Writes the global Settings key through the actual Advanced setter (`off`→`never`, `balanced`→`automatic`) and reconciles every Profile. Returns the mode per Profile. |
 | `sleep-power` | `lowPower` (`true`, `false`, or `null` to follow macOS) | Battery Saver override. Returns `lowPowerMode`, `override`, `system`, `toasts`, `lastToast` (front window). |
 | `sleep-start` | — | Starts the controller as T5 does (for flows that never paint). |
 | `sleep-store` | — | Every row of every Profile's `sleep.sqlite3`: `tab`, `url`, `title`, `entries`, `pageState`, `tag`, `file`. |
@@ -961,3 +1026,24 @@ any screen HOLD:
 ```sh
 /usr/bin/lockf -k /tmp/open-onscreen-e2e.lock python3 tools/e2e/engine_e2e.py --style chrome --only sitedata
 ```
+
+## Section 7 Settings flows
+
+The `peek` suite opens Settings ▸ Links and uses `defaults` to write the
+canonical `open.links.openPeekShiftClick` key bound by that pane; there is no
+Settings switch UI driver. It then proves a real Shift-click does not Peek.
+The `commandbar` suite includes `settings_live.py`: native New Profile menu
+and sidebar sheet, Cmd+, typing guard and Escape, local action errors, actual
+1024 px App icon application/cache/reset, restore after content with measured
+cost, Peek migration/precedence, and global sleep reconciliation on create and
+launch. `OPEN_SETTINGS_FAIL_IN_SHEET=1` forces a failure with Create Profile
+open; finally cancels the sheet, restores exact saved preferences, and quits.
+
+The sleep suite uses existing `sleep-clock` and `sleep-tick` hooks to pass the
+30 s freeze deadline and 48 h without changing production delays. Never
+retains ten loaded hidden pages past the eight-host cap and critical pressure,
+and keeps a previously discarded shell beyond the 24 h destroy deadline.
+`defaults` changes to `open.advanced.tabSleepMode` also reconcile policy.
+These suites save/reset/restore touched keys in the shared defaults domain. The runner also saves canonical Peek values before the first App launch, so startup migration and later Find/Escape launches cannot change the original stored values after cleanup.
+Launch marks `appIconRestoreStarted` and `appIconRestored` report deferred icon
+work after `windowShown` and first content paint (or the no-paint fallback).

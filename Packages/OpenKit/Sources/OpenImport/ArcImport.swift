@@ -8,6 +8,8 @@ public struct ImportReport: Sendable {
     public var chromiumDirsFound: Int = 0
     public var chromiumDirsMissing: Int = 0
     public var spaces: Int = 0
+    /// Actual source Spaces, excluding the fallback Space needed by an empty model.
+    public var sourceSpaces: Int = 0
     public var pinnedTabs: Int = 0
     public var todayTabs: Int = 0
     public var favorites: Int = 0
@@ -390,6 +392,7 @@ public struct ArcImporter {
             }
             i += 2
         }
+        report.sourceSpaces = spacesRaw.count
 
         let sourceProfiles=sourceProfiles(spacesRaw:spacesRaw,holder:holder,itemsByID:itemsByID,directoryNamesToAvoid:directoryNamesToAvoid,existingDirectories:existingDirectories,report:&report)
         let profiles=sourceProfiles.profiles.map {Profile(id:$0.id,name:$0.name,dataDirectoryName:$0.dataDirectoryName)}

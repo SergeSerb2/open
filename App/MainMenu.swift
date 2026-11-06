@@ -47,6 +47,8 @@ enum MainMenu {
       return true
     }
     if app.handleLittleOpenKey(event) { return true }
+    if event.charactersIgnoringModifiers == ",", event.modifierFlags.intersection(.deviceIndependentFlagsMask) == .command,
+       app.settingsShortcutCaptured { return true }
     if let factory = app.littleOpenExtensionFactory(window: event.window ?? NSApp.keyWindow),
       let browser = factory.focusedBrowser,
       app.extensionPrompts.table(browser.context.extensions).handle(event, factory: factory) { return true }
@@ -80,7 +82,7 @@ enum AppCommand {
   static func canonicalID(_ id: String) -> String {
     ["reveal-tab-in-sidebar": "reveal-current-tab", "keyboard-shortcuts": "keyboard-shortcuts-edu"][id] ?? id
   }
-  static let implemented: Set<String> = ["peek-email", "exit-modal", "new-tab", "open-command-bar", "search-tabs", "search-actions", "new-window", "blank-window", "archive-tab", "restore-last-closed-tab", "pin-unpin-tab", "pin-tab", "unpin-tab", "duplicate-tab", "rename-tab", "reset-tab", "replace-pinned-url", "clear-unpinned-tabs", "next-tab", "previous-tab", "cycle-tab-forward", "cycle-tab-backward", "tab-switcher-forward", "tab-switcher-backward", "next-space", "previous-space", "new-space", "new-folder", "focus-space", "reload", "force-reload", "stop-loading", "go-back", "go-forward", "zoom-in", "zoom-out", "zoom-actual-size", "print", "save-page-as", "share-page", "copy-url", "copy-url-markdown", "copy-url-quote", "developer-tools", "javascript-console", "view-source", "inspect-elements", "toggle-sidebar", "toggle-toolbar", "reveal-current-tab", "expand-pinned-section", "collapse-pinned-section", "settings", "search-settings", "air-traffic-control", "import-from-browser", "set-default-browser", "check-for-updates", "view-archive", "view-history", "view-downloads", "view-library", "view-media", "view-boosts", "manage-extensions", "add-extension", "extension-shortcuts", "open-extensions-picker", "new-little-open-window", "little-open-global", "help-center", "keyboard-shortcuts-edu", "getting-started", "release-notes", "contact-team", "expand-all-folders", "collapse-all-folders", "add-to-favorites", "remove-from-favorites", "mute-all-tabs", "unmute-all-tabs", "reset-all-tabs-in-space", "manage-spaces", "rename-space", "change-profile", "clear-archive", "capture-page", "capture-full-page", "capture-portrait"]
+  static let implemented: Set<String> = ["peek-email", "exit-modal", "new-tab", "open-command-bar", "search-tabs", "search-actions", "new-window", "blank-window", "archive-tab", "restore-last-closed-tab", "pin-unpin-tab", "pin-tab", "unpin-tab", "duplicate-tab", "rename-tab", "reset-tab", "replace-pinned-url", "clear-unpinned-tabs", "next-tab", "previous-tab", "cycle-tab-forward", "cycle-tab-backward", "tab-switcher-forward", "tab-switcher-backward", "next-space", "previous-space", "new-space", "new-folder", "new-profile", "focus-space", "reload", "force-reload", "stop-loading", "go-back", "go-forward", "zoom-in", "zoom-out", "zoom-actual-size", "print", "save-page-as", "share-page", "copy-url", "copy-url-markdown", "copy-url-quote", "developer-tools", "javascript-console", "view-source", "inspect-elements", "toggle-sidebar", "toggle-toolbar", "reveal-current-tab", "expand-pinned-section", "collapse-pinned-section", "settings", "search-settings", "air-traffic-control", "import-from-browser", "set-default-browser", "check-for-updates", "view-archive", "view-history", "view-downloads", "view-library", "view-media", "view-boosts", "manage-extensions", "add-extension", "extension-shortcuts", "open-extensions-picker", "new-little-open-window", "little-open-global", "help-center", "keyboard-shortcuts-edu", "getting-started", "release-notes", "contact-team", "expand-all-folders", "collapse-all-folders", "add-to-favorites", "remove-from-favorites", "mute-all-tabs", "unmute-all-tabs", "reset-all-tabs-in-space", "manage-spaces", "rename-space", "change-space-icon", "change-profile", "clear-archive", "capture-page", "capture-full-page", "capture-portrait"]
 }
 
 import OpenEngine
@@ -110,6 +112,7 @@ extension EngineWebContentHostFactory {
 
   func isAppCommandEnabled(_ original: String, enabledKey: String? = nil, payload: String? = nil) -> Bool {
     let id = AppCommand.canonicalID(original)
+    if id == "settings", app.settingsShortcutCaptured { return false }
     if ["find", "find-next", "find-previous", "find-and-replace", "use-selection-to-find", "jump-to-selection"].contains(id) { return selectedContent != nil }
     if id == "peek-email" { return controller != nil && peekEmailTab != nil }
     // Post-v1: Join Meeting needs calendar live data (lead decision S2 on live-data sources).
@@ -125,7 +128,7 @@ extension EngineWebContentHostFactory {
     }
     guard AppCommand.implemented.contains(id) || id == "go-to-last-tab" || id.hasPrefix("go-to-tab-") || id.hasPrefix("go-to-space-") else { return false }
     if id == "go-to-last-tab" { return !numberedItems.isEmpty }
-    if ["rename-space", "change-profile", "clear-archive"].contains(id) {
+    if ["rename-space", "change-space-icon", "change-profile", "clear-archive"].contains(id) {
       return !isClosing && controller != nil && window?.isVisible == true && window?.attachedSheet == nil
         && focusedSpace != nil && spaceProfileMenu == nil
     }
@@ -198,6 +201,7 @@ extension EngineWebContentHostFactory {
       selectNumberedItem(payload.flatMap(UUID.init(uuidString:)).map { ItemID(rawValue: $0) } ?? item); return true
     }
     switch id {
+    case "change-space-icon": return focusedSpace.map { openSpaceIconPicker($0.id) } ?? false
     case "peek-email": return peekEmail()
     case "exit-modal": return controller?.exitModal() == true
     case "new-tab": newTab(nil)

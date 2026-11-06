@@ -8,7 +8,7 @@ public enum ThemeEditorAnchor {
 }
 
 @MainActor
-public final class ThemeEditorPanel: NSPanel {
+public final class ThemeEditorPanel: EditorPopoverPanel {
     var editorUndoManager: UndoManager?
     var undoProvider: (@MainActor () -> UndoManager?)?
     public var onEscape: (@MainActor () -> Void)?

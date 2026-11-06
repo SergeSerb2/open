@@ -379,6 +379,7 @@ public enum CommandRegistry {
     // MARK: - Code-only commands (no menu item; keys live in code, not in the nib)
 
     static let codeOnly: [CommandDefinition] = [
+        CommandDefinition(id: "change-space-icon", title: "Change Space Icon…", aliases: ["Space Icon", "Change Icon", "Emoji"]),
         // Runtime App menus only, like dynamic window rows; the RE menu dump stays static.
         CommandDefinition(id: "show-little-open-windows", title: "Show Little Open Windows"),
         CommandDefinition(id: "close-little-open-windows", title: "Close Little Open Windows"),

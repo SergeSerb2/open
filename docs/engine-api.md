@@ -390,6 +390,7 @@ world shares the DOM, with separate globals and DOM wrappers. It grants no
 user gesture, awaits promises, returns JSON-compatible values (undefined is
 null), and reports exceptions. Open evaluation limits: 1 MiB source (UTF-16
 units), 1 MiB UTF-8 result, 64 pending calls, 10-second completion deadline.
+Open source containing NUL or malformed Unicode is refused before conversion.
 Page evaluation keeps its existing behavior.
 
 Only Open's reserved world exposes `__openNative.postMessage(type, payloadJSON)`.

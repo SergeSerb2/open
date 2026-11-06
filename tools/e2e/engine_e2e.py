@@ -116,7 +116,7 @@ class CheckedResults(dict):
 
 
 class Open:
-    def __init__(self, config, style, user_data, extra_args, log_path, urls=("about:blank",), extra_env=None, delivery_urls=()):
+    def __init__(self, config, style, user_data, extra_args, log_path, urls=("about:blank",), extra_env=None, delivery_urls=(), first_run=False):
         if os.path.exists(os.path.join(ROOT, ".re", "hold-on-screen")):
             raise RuntimeError("On-screen Open runs are held by the lead (.re/hold-on-screen)")
         self.user_data = user_data
@@ -149,7 +149,7 @@ class Open:
         env = dict(os.environ, OPEN_USER_DATA=user_data, OPEN_E2E_OWNER_PID=str(os.getpid()),
                    OPEN_AUTOMATION_SKIP_MAC_NOTIFICATIONS="1")
         env.update(extra_env or {})
-        args = [app, "--user-data-dir=" + user_data, "--style=%s" % style] + list(urls) + extra_args
+        args = [app, "--user-data-dir=" + user_data, "--style=%s" % style] + ([] if first_run else ["--skip-first-run"]) + list(urls) + extra_args
         self.log = open(log_path, "a")
         self.started = time.time()
         # A raw executable launch can have a visible window but no foreground
@@ -185,8 +185,9 @@ class Open:
     def call(self, cmd, timeout=120, **args):
         if cmd in ("window-close", "popup-close", "quit") or (cmd == "devtools" and args.get("method") == "Page.crash"):
             self.discover_owned_processes()
-        foreground_input = cmd in ("key", "focus", "little-open-link-click") or (cmd == "window-focus" and args.get("activate"))
+        foreground_input = cmd in ("key", "focus", "little-open-link-click", "editor-act") or (cmd == "window-focus" and args.get("activate"))
         if cmd in ("space-manager-drag", "sidebar-click", "sidebar-key", "hover"): foreground_input = True
+        if cmd == "first-run" and args.get("action") == "focus": foreground_input = True
         if foreground_input and self.pid and not self.call("native-focus-state").get("active", False):
             # `NSApp.activate()` is a request, not a grant. Renew the explicit
             # foreground request if another app took focus. Address the exact
@@ -4189,7 +4190,7 @@ def startup_failure_checks(factory, results, tmp):
     early_data = os.path.join(tmp, "early-quit")
     log = os.path.join(tmp, "early-quit.log")
     with open(log, "w") as stream:
-        proc = subprocess.run([app_path, "--use-mock-keychain", "--user-data-dir=" + early_data],
+        proc = subprocess.run([app_path, "--skip-first-run", "--use-mock-keychain", "--user-data-dir=" + early_data],
             env=dict(os.environ, OPEN_AUTOMATION_QUIT_BEFORE_ENGINE="1"), stdout=stream, stderr=subprocess.STDOUT, timeout=15)
     text = open(log).read()
     results["quit_before_engine"] = {"ok": proc.returncode == 0 and "termination before engine" in text
@@ -4219,7 +4220,7 @@ def startup_failure_checks(factory, results, tmp):
     failure_data = os.path.join(tmp, "engine-failure")
     failure_log = os.path.join(tmp, "engine-failure.log")
     with open(failure_log, "w") as stream:
-        failed = subprocess.run([os.path.join(failed_bundle, "Contents", "MacOS", "Open"), "--use-mock-keychain", "--user-data-dir=" + failure_data],
+        failed = subprocess.run([os.path.join(failed_bundle, "Contents", "MacOS", "Open"), "--skip-first-run", "--use-mock-keychain", "--user-data-dir=" + failure_data],
             env=dict(os.environ, OPEN_AUTOMATION_DISMISS_ENGINE_FAILURE="1"), stdout=stream, stderr=subprocess.STDOUT, timeout=15)
     text = open(failure_log).read()
     results["engine_failure_alert"] = {"ok": failed.returncode == 1 and "engine failed to start" in text
@@ -5096,7 +5097,7 @@ def profiles_checks(factory, results, tmp, config):
         env.update(env_extra)
         path = os.path.join(tmp, "migration-%s.log" % label)
         with open(path, "w") as log:
-            code = subprocess.run([binary, "--use-mock-keychain"], env=env, stdout=log, stderr=subprocess.STDOUT,
+            code = subprocess.run([binary, "--skip-first-run", "--use-mock-keychain"], env=env, stdout=log, stderr=subprocess.STDOUT,
                                   timeout=60).returncode
         return code, open(path).read()
 
@@ -6058,7 +6059,9 @@ def sleep_checks(factory, results, tmp, style):
             return fn()
         except Exception:
             return None
-    for key in SLEEP_MEDIA_KEYS:
+    sleep_keys = SLEEP_MEDIA_KEYS + ("open.advanced.tabSleepMode",)
+    saved_sleep_defaults = {key: app.call("defaults", key=key, persistent=True) for key in sleep_keys}
+    for key in sleep_keys:
         app.call("defaults", key=key, value=None)
     app.call("sleep-power", lowPower=False)
     try:
@@ -6176,10 +6179,37 @@ def sleep_checks(factory, results, tmp, style):
                 mode_rows[mode] = {"ok": early == "frozen" and late == "sleeping", "before": early, "at": late}
             else:
                 advance(48 * 3600); tick(); late = phase(t)
-                mode_rows[mode] = {"ok": late == "frozen", "after48h": late}
+                live = app.call("engine-sleep", tab=t, op="state")
+                pressure = tick(pressure="critical")
+                mode_rows[mode] = {"ok": late == "live" and phase(t) == "live" and not live['frozen'] and not live['discarded'],
+                                   "after48h": late, "engine": live}
             app.call("close", tab=t)
         app.call("sleep-mode", mode="balanced")
         results["sleep_modes"] = {"ok": all(r["ok"] for r in mode_rows.values()), "modes": mode_rows}
+
+        # Never protects loaded hidden pages beyond both the freeze deadline and
+        # the eight-host cache cap. A previously discarded shell is not destroyed.
+        shell = open_live(site(3, "a.html?never-shell"))
+        select(home); advance(15); sleep_now(shell)
+        shell_before = ts(shell)
+        app.call("sleep-mode", mode="off")
+        awake = [open_live(site(40 + i, "ticker.html")) for i in range(10)]
+        select(home); tick(); advance(31); tick()
+        past_freeze = [ts(tab) for tab in awake]
+        advance(48 * 3600); tick(); tick(pressure="critical")
+        retained = [ts(tab) for tab in awake]
+        engine = [app.call("engine-sleep", tab=tab, op="state") for tab in awake]
+        shell_after = ts(shell)
+        results["sleep_never_live_and_cache"] = {
+            "ok": all(s["phase"] == "live" and s["hosts"] == 1 for s in past_freeze + retained)
+                  and all(not s["frozen"] and not s["discarded"] for s in engine)
+                  and shell_before["phase"] == "sleeping" and shell_before["hosts"] == 1
+                  and shell_after["phase"] == "sleeping" and shell_after["hosts"] == 1,
+            "hiddenLoadedPages": len(awake), "freezeDelay": 30, "elapsedBeforeFirstPass": 31,
+            "phases": [s["phase"] for s in retained], "hosts": [s["hosts"] for s in retained],
+            "sleepingShellHostsAfter48h": shell_after["hosts"], "load": os.getloadavg()}
+        for tab in awake + [shell]: app.call("close", tab=tab)
+        app.call("sleep-mode", mode="balanced")
 
         # F1: sleeping drops renderer processes. Eight distinct sites, then sleep them all.
         select(home)
@@ -6457,6 +6487,7 @@ def sleep_checks(factory, results, tmp, style):
             app.call("window-frame", frame=[80, 60, 1280, 820])
             wait_until(lambda: app.call("tabs"), timeout=10)
             app.call("wait", tab=home)
+            assert wait_until(lambda: state().get("started"), timeout=10, step=.05), "sleep did not start after relaunch"
             n1 = len(state()["log"])
             select(victim)
             # No `wait` here: the first page (the refused restore) closes, and its replacement loads
@@ -6473,8 +6504,7 @@ def sleep_checks(factory, results, tmp, style):
         try:
             if not app.closed:
                 app.call("sleep-power", lowPower=None)
-                for key in SLEEP_MEDIA_KEYS:
-                    app.call("defaults", key=key, value=None)
+            _restore_defaults(app, saved_sleep_defaults)
         except Exception:
             pass
         app.quit()
@@ -7701,6 +7731,10 @@ def commandbar_checks(factory, results, tmp, config):
     threading.Thread(target=server.serve_forever, daemon=True).start()
     origin = 'http://127.0.0.1:%d' % server.server_address[1]
     app = factory(urls=(origin + '/start',), fresh=True)
+    settings_keys = ('open.settings.lastPane', 'open.links.littleOpenHotkeyEnabled',
+                     'open.links.externalInLittleOpen', 'open.general.searchSuggestNoticeDismissed')
+    saved_settings_defaults = {key: app.call('defaults', key=key, persistent=True) for key in settings_keys}
+    for key in settings_keys: app.call('defaults', key=key, value=None)
     state = lambda: app.call('commandbar-state')
     def bar(key, route='app'):
         routing = app.call('key', key=key, modifiers=['cmd'], route=route)
@@ -8053,7 +8087,11 @@ def commandbar_checks(factory, results, tmp, config):
         results['settings_persist_relaunch'] = {'ok': app.call('settings-state')['external'] != original_external}
         app.call('settings-toggle', name='external')
     finally:
+        _restore_defaults(app, saved_settings_defaults)
         app.quit(); server.shutdown(); server.server_close()
+
+    import settings_live
+    settings_live.run(factory, results, tmp, wait_until, _restore_defaults)
 
 
 def commandbar_footer_checks(app, results, tmp, bar, press, tab):
@@ -10273,7 +10311,7 @@ def _restore_defaults(app, saved):
     domain = getattr(app, "preferences_domain", "io.github.sergeserb2.open")
     for key, value in saved.items():
         restored = False
-        if not app.closed:
+        if app is not None and not app.closed:
             try:
                 app.call("defaults", key=key, value=value)
                 restored = True
@@ -10858,15 +10896,23 @@ def main():
     ap.add_argument("--engine-sha256", help="require this Vendor framework SHA-256 and matching embedded code before app launch")
     ap.add_argument("--engine-fingerprint-only", action="store_true", help="verify built engine artifacts and exit without launching Open")
     ap.add_argument("--extensions", default=os.path.join(ROOT, ".re", "ext", "unpacked"))
-    ap.add_argument("--only", choices=["find", "shell", "extensions", "features", "measure", "tabstrip", "window", "sidebar", "peek", "split",
+    ap.add_argument("--only", choices=["firstrun", "find", "shell", "extensions", "features", "measure", "tabstrip", "window", "sidebar", "peek", "split",
                                        "commandbar", "app-actions", "actions", "extensions-p3", "extensions-ui", "extensions-e2", "profiles", "sidebar-completion", "toolbar", "numbering", "media", "relaunch", "page", "page-chrome",
-                                       "sleep", "context-menus", "routing", "littleopen", "history", "applescript", "downloads", "sitedata"])
+                                       "sleep", "context-menus", "routing", "littleopen", "history", "applescript", "downloads", "space-editor", "sitedata"])
     ap.add_argument("--window-chrome-only", action="store_true", help="run only the window-chrome follow-up flows in the window suite")
     ap.add_argument("--keep", action="store_true",
                     help="keep this run's data root, cache root and scratch folder (paths printed at the end)")
     ap.add_argument("--focus-retry-delay-seconds", type=int, default=0,
                     help="wait between interrupted foreground attempts (0–600 seconds)")
     opts = ap.parse_args()
+    # Startup itself may migrate legacy Peek choices before the socket answers.
+    # Preserve the pre-launch stored values, including absence, across every app
+    # and every retry (the Peek suite also launches a second Find/Escape app).
+    import plistlib
+    exported = subprocess.run(['defaults', 'export', 'io.github.sergeserb2.open', '-'], capture_output=True)
+    domain_before = plistlib.loads(exported.stdout) if exported.returncode == 0 else {}
+    startup_peek = {key: domain_before.get(key) for key in
+                    ('open.links.openPeekShiftClick', 'open.links.openPeekOtherSites')}
     if not 0 <= opts.focus_retry_delay_seconds <= 600:
         ap.error("--focus-retry-delay-seconds must be between 0 and 600")
     if opts.only is None and not opts.engine_fingerprint_only:
@@ -10962,12 +11008,13 @@ def main():
         if snapshot:
             os.makedirs(os.path.join(user_data, "State"), exist_ok=True)
             shutil.copyfile(snapshot, os.path.join(user_data, "State", "browser.json"))
-        app = Open(opts.config, opts.style, user_data, extra + list(extra_args or []), log, urls=urls, extra_env=extra_env, delivery_urls=delivery_urls)
+        app = Open(opts.config, opts.style, user_data, extra + list(extra_args or []), log, urls=urls, extra_env=extra_env, delivery_urls=delivery_urls, first_run=opts.only == "firstrun")
         app.focus_tracker = tracker
         tracker.apps.append(app)
         return app
 
-    results = {"style": opts.style, "config": opts.config, "started": time.strftime("%Y-%m-%d %H:%M:%S")}
+    results = {"style": opts.style, "config": opts.config, "started": time.strftime("%Y-%m-%d %H:%M:%S"),
+               "load": os.getloadavg()}
     source_diff = subprocess.check_output(["git", "diff", "HEAD", "--", "App", "Packages/OpenKit/Sources", "tools/e2e"], cwd=ROOT)
     results["source"] = {"head": subprocess.check_output(["git", "rev-parse", "HEAD"], cwd=ROOT, text=True).strip(),
                          "clean": not source_diff, "diffSHA256": hashlib.sha256(source_diff).hexdigest()}
@@ -11043,7 +11090,13 @@ def main():
         print(json.dumps(results['engine'], sort_keys=True), flush=True)
         return
     def execute():
-        if opts.only == "extensions-ui":
+        if opts.only == "firstrun":
+            results["firstrun"] = CheckedResults(tracker)
+            # The executable's -I shebang omits the script directory from
+            # sys.path. Load this owned sibling by its exact repository path.
+            runpy.run_path(os.path.join(ROOT, "tools", "e2e", "firstrun.py"))["run"](
+                factory, results["firstrun"], tmp, sys.modules[__name__])
+        elif opts.only == "extensions-ui":
             results["extensions-ui"] = CheckedResults(tracker)
             import extensions_ui
             extensions_ui.run(factory, results["extensions-ui"], tmp, ROOT, wait_until, new_tab, frame, read_image, EXT)
@@ -11100,6 +11153,10 @@ def main():
         elif opts.only == "media":
             results["media"] = CheckedResults(tracker)
             media_checks(factory, results["media"], tmp)
+        elif opts.only == "space-editor":
+            import space_editor
+            results["space-editor"] = CheckedResults(tracker)
+            space_editor.checks(factory, results["space-editor"], tmp, sys.modules[__name__])
         elif opts.only == "downloads":
             import downloads
             results["downloads"] = CheckedResults(tracker)
@@ -11182,6 +11239,7 @@ def main():
         finally:
             for instance in _OWNED_APPS:
                 instance.quit()
+            _restore_defaults(None, startup_peek)
         if interruption is None:
             break
         interrupted_attempts.append(dict(interruption, attempt=attempt, status="INTERRUPTED",
@@ -11205,14 +11263,14 @@ def main():
                                     else opts.config.lower()))
     with open(os.path.join(OUT, name), "w") as f:
         json.dump(results, f, indent=2, sort_keys=True)
-    for group in ("find", "shell", "extensions", "features", "measure", "tabstrip", "window", "sidebar", "peek", "split", "commandbar", "app-actions", "actions", "extensions-p3", "extensions-ui", "extensions-e2", "profiles", "sidebar-completion", "toolbar", "numbering", "media", "relaunch", "page", "page-chrome", "sleep", "context-menus", "routing", "littleopen", "history", "applescript", "downloads", "sitedata"):
+    for group in ("firstrun", "find", "shell", "extensions", "features", "measure", "tabstrip", "window", "sidebar", "peek", "split", "commandbar", "app-actions", "actions", "extensions-p3", "extensions-ui", "extensions-e2", "profiles", "sidebar-completion", "toolbar", "numbering", "media", "relaunch", "page", "page-chrome", "sleep", "context-menus", "routing", "littleopen", "history", "applescript", "downloads", "space-editor", "sitedata"):
         for k, v in results.get(group, {}).items():
             if isinstance(v, dict) and "ok" in v:
                 print("%-24s %s" % (k, "PASS" if v.get("ok") else "FAIL"))
             elif isinstance(v, dict) and v.get("status") in ("SKIP", "BLOCKED", "INTERRUPTED", "DEFERRED"):
                 print("%-24s %s: %s" % (k, v["status"], v.get("reason", "")))
     print("wrote", os.path.join(OUT, name))
-    failures = [k for group in ("find", "shell", "extensions", "features", "measure", "tabstrip", "window", "sidebar", "peek", "split", "commandbar", "app-actions", "actions", "extensions-p3", "extensions-ui", "extensions-e2", "sidebar-completion", "toolbar", "numbering", "media", "relaunch", "page", "page-chrome", "sleep", "context-menus", "routing", "littleopen", "history", "applescript", "downloads", "sitedata")
+    failures = [k for group in ("firstrun", "find", "shell", "extensions", "features", "measure", "tabstrip", "window", "sidebar", "peek", "split", "commandbar", "app-actions", "actions", "extensions-p3", "extensions-ui", "extensions-e2", "sidebar-completion", "toolbar", "numbering", "media", "relaunch", "page", "page-chrome", "sleep", "context-menus", "routing", "littleopen", "history", "applescript", "downloads", "space-editor", "sitedata")
                 for k, v in results.get(group, {}).items() if isinstance(v, dict) and v.get("ok") is False]
     if failures or not results["cleanup"]["ok"]:
         sys.exit(1)

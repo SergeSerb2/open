@@ -214,3 +214,59 @@ editor wheel math. Managed runtime injection requires the isolated-world engine
 contract above; document-start remains unverified Arc timing. See the [harness README](../Packages/OpenKit/Sources/OpenBoosts/Harness/README.md)
 for operation and limits: CSP, arbitrary JS effects, icon fonts, partial-invert media,
 pre-injection closed roots, and per-frame engine work.
+
+## Section 12 package: Zap restyle and selector selection
+
+The picker uses the 3 px #3139FF frame, 56 px bottom bar, yellow hover tint, and
+428 × 90 action card specified in `plans/site-control-boost-editor.md` §4.8.
+A page click opens the card. "Zap this" commits a precise pick. "Zap all related
+elements" previews live matching rectangles; the count and selector appear in the
+card's band. The card closes after every choice. The related action sends one
+direct commit, which makes one store mutation and one undo step. Cancel commits
+nothing. **Open choice (lead, 2026-11-06):** every choice closes the card;
+related commits directly. `zap:replaced` decoding remains supported.
+The closed shadow root and selector algorithm stay unchanged. Done/Escape exit;
+Cmd/Ctrl+Z and Undo remove the last session commit.
+
+"Click to reveal" chips use persisted labels. Hover temporarily overrides the
+preview hide styles; leaving restores them. Clicking sends authenticated
+`zap:revealRequested`. The coordinator persists removal and emits `.removed`.
+The App adapter must send `coordinator.removeZap(selector:for:)`, refresh matching
+pages, and fan out `coordinator.lastEvent` after each accepted message.
+
+`BoostEditorSession` observes those events, reloads the stored count, and registers
+one full-Boost undo step per commit/reveal. `endPickerSession()` is the App hook for
+tab switch, same-URL reload, frame destruction, and transport loss. Close removes
+the observation. Idle lifecycle notifications send no exit command or picker
+redraw; close still sends one unconditional exit. The required host query
+`zapAvailability(tabID:)` returns false before P7 or without an Open world. The
+button reads it on each refresh and shows "Zap isn't available yet." when false.
+A transient failed entry leaves Zap off and enabled while the host is available,
+so the user can retry.
+
+Select mode uses a separate native capability (`enterZap(..., mode: .select)`).
+Its "Use Selector" action sends `picker:selected` with selector and match count.
+Neither JS nor the coordinator permits commits, hides, undo removals, or store
+writes in this mode. The App host must implement
+`BoostEditorHost.enterSelectorPicker(boostID:tabID:) -> Bool`; there is no default
+implementation. Code mode binds `session.insertSelectorAtCaret` to its
+CSS NSTextView and calls `session.pickSelector()`; selection inserts and exits.
+No App or engine wiring is supplied by this package change (B4 remains external).
+The coordinator owns `BoostPickerEvent`; OpenSiteControl exposes a public alias.
+App adapters fan out `lastEvent` only after coordinator validation. They must handle
+the added `labels` argument when matching `.listZaps`: selectors remain on the wire,
+and persisted labels populate reveal chips on re-entry. On accepted reveal, send
+`removeZap(selector:for:)` before refresh. Call `endPickerSession()` for tab/frame/
+transport changes and `updatePageURL` on navigation, including same-URL reloads.
+
+Verification: `boosts` runs real headless Chrome flows H0, A7, R1, A11, S1, R2.
+`sitecontrol-render` includes F13 and "Pick Selector inserts selector at CSS caret
+and exits", with the real store, coordinator, decoder, planner, and NSTextView.
+The host boundary is fake. `sitecontrol-render zap-flows` runs those package flows
+alone. New gate negative proofs and final counts are in the PR receipt.
+The PR includes the negative-proof logs in collapsed sections: 40 initial browser
+mutations plus 15 direct-choice mutations, and 17 native behavior mutations that
+cover all 20 Zap/selector rows, including the round 1 lifecycle and retry fixes.
+Raw receipts remain in the shared `.re/` handoff directory. The new Zap-on scene
+has 1x/2x render receipts; existing
+baseline images, comparators, thresholds, and allowlists remain unchanged.
