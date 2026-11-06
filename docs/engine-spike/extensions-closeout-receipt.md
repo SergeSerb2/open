@@ -1,7 +1,7 @@
 # Extensions Section 6 closeout
 
 2026-11-06, M5 Pro. Branch `s6/closeout-docs`.
-[Closeout PR](https://github.com/SergeSerb2/open/pull/new/s6/closeout-docs).
+[Closeout PR](https://github.com/SergeSerb2/open/pull/190).
 Main contains [#175](https://github.com/SergeSerb2/open/pull/175),
 [#177](https://github.com/SergeSerb2/open/pull/177),
 [#179](https://github.com/SergeSerb2/open/pull/179),
@@ -81,7 +81,7 @@ The real-App command is:
 ```sh
 /usr/bin/lockf -k /tmp/open-onscreen-e2e.lock python3 tools/e2e/engine_e2e.py \
   --config Release --style chrome --only extensions-ui \
-  --extensions /Users/serge/.t3/projects/open/.re/ext/unpacked \
+  --extensions "$HOME/.t3/projects/open/.re/ext/unpacked" \
   --engine-sha256 3f45b07b885e03b6aecc461c6b6bff7612814a2ad23b6cf37b2b142d828f0738
 ```
 
@@ -97,3 +97,33 @@ X-19 execution stays BLOCKED on Section 9's own Chrome-style Little Open page.
 Global OS command delivery, packed permission-increase updates, Section 10's
 per-Profile UI gaps and Section 11's page-menu Manage hook remain separate
 follow-ups. `chrome.sidePanel` remains outside v1 (Q6).
+
+## Closeout results
+
+| Gate | Result | Receipt |
+|---|---|---|
+| Release `extensions-ui` | 46 PASS, 0 FAIL, 2 BLOCKED (X-13 / X-19 execution only) | `ui-final.json` / `ui-final.log` |
+| X-27 negative / restored | Required conflict FAIL, then all core X-27 PASS; identical restored source hash | `negative-manifest.json`, `ui-negative.json`, `ui-restored.json` |
+| Debug / Release App | BUILD SUCCEEDED | `build-debug-final.log`, `build-release-restored.log` |
+| Targeted verification | Build + settings-preview + commands-dump + extensions-render PASS | `verify-targeted/summary.txt` |
+| 1x window pixel rows | All four PASS; comparison worst 1 pt / ΔE00 1.55 | `window-rerun.json` |
+| Full verification before PR | 23/23 PASS, no SKIP | `verify-prepr-clean/summary.txt` |
+| Owned cleanup | PASS, zero interruptions and remaining processes/windows in UI / window receipts | JSON cleanup and interrupted-attempt records |
+
+Receipt paths in this table are relative to `.re/extensions-closeout/`.
+The full pre-PR pass used head `06f6c25e`, load1 5.72→5.96.
+The final-head summary and SHA are recorded in PR #190 after committing its
+links; App and suite source did not change after the passing UI receipt.
+Debug window timing rows were SKIP and the inherited card-material row was
+DEFERRED; those do not count as Release performance or material acceptance.
+
+Keep the earlier failures visible: the first full run had two FP expanded-folder
+hover eligibility failures in `sidebar-render` (622 PASS / 2 FAIL). The
+independently built unchanged-main control and the branch rerun each passed
+624/624; the fresh full run also passed. The OpenKit tree is identical on
+both refs (`e983e5ed538d672fc2cb6eb3f7a6df858dc89dc0`). This remains an unresolved
+transient observation, not a claimed reproducible main failure. No shared
+sidebar code, baseline, tolerance or allowlist changed. The initial window
+run stopped before comparison because the Release sidebar-render binary was
+absent; after the CLI build, its complete rerun passed. All raw attempts stay
+in the receipt directory.
