@@ -2,6 +2,7 @@ import AppKit
 import OpenEngine
 
 /// chrome.windows popup windows have their own hidden Browser and native frame.
+/// One hosted page per popup is a guess (child); multi-URL popups are refused.
 @MainActor
 final class ExtensionWindowController: NSWindowController, NSWindowDelegate, OEWebContentDelegate {
   private(set) static var windows: [Int: ExtensionWindowController] = [:]
