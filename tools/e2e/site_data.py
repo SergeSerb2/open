@@ -11,7 +11,7 @@ import threading
 def run(factory, results, tmp, new_tab, wait_until):
     hits = Counter()
     mutex = threading.Lock()
-    pixel = base64.b64decode('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+aH1kAAAAASUVORK5CYII=')
+    pixel = base64.b64decode('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAAC0lEQVR4nGP4DwQACfsD/fteaysAAAAASUVORK5CYII=')
 
     class Page(BaseHTTPRequestHandler):
         def log_message(self, *args): pass
