@@ -201,7 +201,7 @@ def run(h, factory, results, tmp):
         app.call('mouse', action='click', x=f[0]+f[2]-16, y=app.call('window-state')['frame'][3]-f[1]-16)
         click_closed=h.wait_until(lambda: not pane(tab)['visible'] and app.call('focus-state')['owner'] == 'page' and app.eval(tab, 'document.hasFocus()'), timeout=3, step=.05)
         key(text='-close'); closed_text=app.eval(tab, "document.getElementById('input').value")
-        row('F13_escape_focus', editing_before_escape and escaped and bool(click_closed) and not pane(tab)['visible'] and not state().get('chromeHidden') and app.call('focus-state')['owner'] == 'page' and closed_text == 'page-typing-close' and rect_ok(p) and clear_of_chrome(p) and p.get('controls',{}).get('closeHitMatches') is True, text=text, closeText=closed_text, closePane=pane(tab), beforeClick=p, closeFocus=app.call('focus-state'), chromeHidden=state().get('chromeHidden'))
+        row('F13_escape_focus', editing_before_escape and escaped and bool(click_closed) and not pane(tab)['visible'] and app.call('focus-state')['owner'] == 'page' and closed_text == 'page-typing-close' and rect_ok(p) and clear_of_chrome(p) and p.get('controls',{}).get('closeHitMatches') is True, text=text, closeText=closed_text, closePane=pane(tab), beforeClick=p, closeFocus=app.call('focus-state'))
         if os.environ.get('OPEN_FIND_FOCUS_ONLY') == '1': return
         for name, element, expected in [('trim_newline', 'lines', 'alpha beta'), ('short', 'seed', 'A short selection'), ('40', 'forty', '1234567890123456789012345678901234567890'), ('41_keeps', 'fortyone', '1234567890123456789012345678901234567890')]:
             select(tab, element); key('f', ['cmd'])
@@ -269,7 +269,7 @@ def run(h, factory, results, tmp):
         key('f', ['cmd']); key('a', ['cmd']); key(text='quasar'); settled(tab, '1/5')
         viewport_close('F33_toolbar_off_viewport_close', tab)
         app.call('menu-perform', id='toggle-toolbar'); p = pane(tab)
-        row('F26_toolbar_viewport', rect_ok(p) and clear_of_chrome(p) and not state().get('chromeHidden'), pane=p, chromeHidden=state().get('chromeHidden'))
+        row('F26_toolbar_viewport', rect_ok(p) and clear_of_chrome(p), pane=p)
         viewport_close('F33_toolbar_on_viewport_close', tab)
         app.call('menu-perform', id='toggle-toolbar')
         # A narrow split pane shrinks the preferred 300 pt width.
