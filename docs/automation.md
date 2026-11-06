@@ -301,7 +301,9 @@ Additional socket commands:
 | `menu-state`, `menu-perform id=…` | Read native menu validation or invoke an enabled native menu item. |
 | `reload-keybindings` | Load the actual `State/keybindings.json`, validate conflicts, and rebuild menus and the global registration. |
 | `sidebar-duplicate id=…`, `sidebar-tree` | Send the production SidebarDelegate intent; read fresh subtree IDs and load flags. |
-| `settings-state`, `settings-toggle name=hotkey\|external` | Read the shared real presenters; commit the live Links settings model. |
+| `settings-state`, `settings-toggle name=hotkey\|external` | Read the shared real presenters, including pane-local `generalError`/`advancedStatus`; commit the live Links settings model. |
+| `settings-profile` | Read the actual Profiles create-sheet state: `creating`, attached native `sheet` window number, `pane`, selected `spaces`, and `error`. `cancel=true` dismisses through the existing sheet state. |
+| `settings-icon` | Read `selected`, `applied`, pane `error`, `matchesApplication` (exact pixel equality in the actual NSApp icon's output color space and component format, including float16; AppKit copies NSImage), `imageObject` (cache identity), bitmap `pixels`, and `restoreStartedMs`/`restoreElapsedMs`. `select=<AppIconOption ID>` uses the real picker action. Default resets `NSApp.applicationIconImage` to nil. |
 | `settings-custom-engine template=…` | Save a custom engine through the live Profiles settings model. |
 | `library-restore id=…`, `library-history-open url=…` | Exercise the live Library restore transaction or its profile-scoped history action. |
 | `history-state` | Optional `profile` UUID and `query`. Drains accepted history writes, then returns the Profile store path, search rows, commit-to-enqueue samples (ms, automation only, bounded at 4,096) and writer operation count. Store opens/searches stay on the HistoryStore actor. |
@@ -480,7 +482,7 @@ Commands in `App/Automation/AutomationSleep.swift`, automation builds only. `tab
 | `sleep-now` | `tab` | OpenSleep's debug sleep (freeze + discard now, every gate honored). Returns `refusedBy` (the gate, or null) and the tab's state after. |
 | `sleep-tick` | `pressure` (optional: `warning`, `critical`) | Waits for a running pass, then runs one controller pass (or a memory-pressure pass) now. Returns `sleep-state`. |
 | `sleep-clock` | `advance` (seconds, 0…604800) and/or `reset` | Moves the controller's clock (hide times, grace periods, delays). Returns `offset`. |
-| `sleep-mode` | `mode` (`off`, `conservative`, `balanced`, `aggressive`; optional) | Writes every Profile's `sleepMode` as Settings ▸ Advanced does. Returns the mode per Profile. |
+| `sleep-mode` | `mode` (`off`, `conservative`, `balanced`, `aggressive`; optional) | Writes the global Settings key through the actual Advanced setter (`off`→`never`, `balanced`→`automatic`) and reconciles every Profile. Returns the mode per Profile. |
 | `sleep-power` | `lowPower` (`true`, `false`, or `null` to follow macOS) | Battery Saver override. Returns `lowPowerMode`, `override`, `system`, `toasts`, `lastToast` (front window). |
 | `sleep-start` | — | Starts the controller as T5 does (for flows that never paint). |
 | `sleep-store` | — | Every row of every Profile's `sleep.sqlite3`: `tab`, `url`, `title`, `entries`, `pageState`, `tag`, `file`. |
@@ -923,9 +925,9 @@ Frame preferences are restored after quit through the shared defaults fallback.
 
 | Command | Arguments | Result |
 |---|---|---|
-| `boosts` | `action: list|get`, optional `profile` UUID, `boost` UUID for get | Values from the App's loaded Profile store. No mutation API. |
+| `boosts` | `action: list\|get`, optional `profile` UUID, `boost` UUID for get | Values from the App's loaded Profile store. No mutation API. |
 | `boost-library` | `action: rename\|enabled\|delete`, `boost` UUID, `name` or `enabled` | Requires a visible Boosts Library row; calls its real LibraryActions boundary after confirmation. It does not prove native button or confirmation input. |
-| `boost-editor` | `action: open|close|state|drag|key|tap|type`, optional `boost`, `tab` for open | Real simple editor and session. Private or non-http(s) tabs refuse open. |
+| `boost-editor` | `action: open\|close\|state\|drag\|key\|tap\|type`, optional `boost`, `tab` for open | Real simple editor and session. Private or non-http(s) tabs refuse open. |
 
 `drag` takes 2–512 finite `[x,y]` points within the color pad, in editor-view
 coordinates. It sends mouse down, drag through the final point, then mouse up.
@@ -947,3 +949,24 @@ row requires ten live matching pages with nine hidden pages. B4 is blocked by P7
 Code mode. Every row includes a real negative control. The suite restores all
 preference keys in `finally` and uses
 an ephemeral local fixture server plus the runner's isolated roots/cleanup.
+
+## Section 7 Settings flows
+
+The `peek` suite opens Settings ▸ Links and uses `defaults` to write the
+canonical `open.links.openPeekShiftClick` key bound by that pane; there is no
+Settings switch UI driver. It then proves a real Shift-click does not Peek.
+The `commandbar` suite includes `settings_live.py`: native New Profile menu
+and sidebar sheet, Cmd+, typing guard and Escape, local action errors, actual
+1024 px App icon application/cache/reset, restore after content with measured
+cost, Peek migration/precedence, and global sleep reconciliation on create and
+launch. `OPEN_SETTINGS_FAIL_IN_SHEET=1` forces a failure with Create Profile
+open; finally cancels the sheet, restores exact saved preferences, and quits.
+
+The sleep suite uses existing `sleep-clock` and `sleep-tick` hooks to pass the
+30 s freeze deadline and 48 h without changing production delays. Never
+retains ten loaded hidden pages past the eight-host cap and critical pressure,
+and keeps a previously discarded shell beyond the 24 h destroy deadline.
+`defaults` changes to `open.advanced.tabSleepMode` also reconcile policy.
+These suites save/reset/restore touched keys in the shared defaults domain. The runner also saves canonical Peek values before the first App launch, so startup migration and later Find/Escape launches cannot change the original stored values after cleanup.
+Launch marks `appIconRestoreStarted` and `appIconRestored` report deferred icon
+work after `windowShown` and first content paint (or the no-paint fallback).

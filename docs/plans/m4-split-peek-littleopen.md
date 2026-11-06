@@ -635,7 +635,7 @@ lives in `PeekPolicy.decision` (§2.3) so the CLI can check it (§9.2).
 | Never Peek | Opt+Cmd-click (goes to Little Open, R-§9.5 — check it **before** Peek), Cmd-click / middle-click (new tab, existing behavior), clicks with a `download` attribute, `javascript:` / non-http(s) URLs, same-page fragment links (`#…` with identical base URL). | — |
 
 Settings storage: two booleans in `UserDefaults`,
-`open.peek.otherSites` (default true) and `open.peek.shiftClick`
+`open.links.openPeekOtherSites` (default true) and `open.links.openPeekShiftClick`
 (default true), registered at launch like the routing plan's
 `open.links.*` keys (R-§10.4 pattern). The Links settings pane binds
 them later (designer-owned visuals); this milestone only reads them.
