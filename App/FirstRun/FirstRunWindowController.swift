@@ -9,7 +9,8 @@ private final class FirstRunNativeWindow: NSWindow {}
 final class FirstRunWindowController: NSWindowController, NSWindowDelegate {
   let model: FirstRunViewModel
   private var probeTask: Task<Void, Never>?
-  private var probeStarted = false
+  private var hasDisplayed = false
+  private var probeRequest: UUID?
 
   init(model: FirstRunViewModel) {
     self.model = model
@@ -28,15 +29,32 @@ final class FirstRunWindowController: NSWindowController, NSWindowDelegate {
     window.delegate = self; window.center()
   }
   required init?(coder: NSCoder) { fatalError("init(coder:) has not been implemented") }
-  override func showWindow(_ sender: Any?) { super.showWindow(sender); window?.makeKeyAndOrderFront(sender) }
+  override func showWindow(_ sender: Any?) {
+    super.showWindow(sender); window?.makeKeyAndOrderFront(sender)
+    if hasDisplayed && model.probe == nil {
+      window?.displayIfNeeded()
+      startProbeAfterDisplay()
+    }
+  }
   func startProbeAfterDisplay() {
-    guard !probeStarted else { return }; probeStarted = true
+    hasDisplayed = true
+    guard probeTask == nil, model.probe == nil else { return }
+    let request = UUID(); probeRequest = request
     probeTask = Task { [weak self] in
       guard let self else { return }
+      defer { if probeRequest == request { probeTask = nil } }
+      #if OPEN_AUTOMATION
+      if let raw = ProcessInfo.processInfo.environment["OPEN_AUTOMATION_PROBE_DELAY_MS"], let delay = Int(raw), delay > 0 {
+        try? await Task.sleep(for: .milliseconds(min(delay, 5_000)))
+      }
+      #endif
+      guard !Task.isCancelled else { return }
       await model.refreshProbe()
       guard !Task.isCancelled else { return }
       model.arcIsRunning = NSWorkspace.shared.runningApplications.contains { $0.bundleIdentifier == "company.thebrowser.Browser" }
     }
   }
-  func windowWillClose(_ notification: Notification) { probeTask?.cancel(); probeTask = nil }
+  func windowWillClose(_ notification: Notification) {
+    probeRequest = nil; probeTask?.cancel(); probeTask = nil
+  }
 }

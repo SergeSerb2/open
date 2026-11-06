@@ -57,6 +57,20 @@ the release smoke launch also pass the switch. `tools/openctl` connects to
 an existing socket and never launches the App. `verify-all.sh` runs package
 CLIs, not the App. Only the `firstrun` suite opts into first run.
 
+The dev launcher `tools/run.sh` always passes `--skip-first-run`. To see first
+run by hand, launch the built App binary directly with a disposable data root,
+inside the screen lock (omit `--skip-first-run`):
+
+```sh
+first_run_root=$(mktemp -d /tmp/open-first-run.XXXXXX)
+OPEN_USER_DATA="$first_run_root" \
+  /usr/bin/lockf -k /tmp/open-onscreen-e2e.lock \
+  build/Debug/Open.app/Contents/MacOS/Open --user-data-dir="$first_run_root" --arc-dir=/path/to/synthetic-arc
+```
+
+Use a synthetic source folder for this check. Quit the App before removing
+the temporary root.
+
 ## Protocol
 
 One JSON object per line in each direction.
@@ -108,8 +122,12 @@ Vision on a snapshot of that window only. State includes its native frame
 size, key flag, and traffic-light frames. `snapshot` prefers the first-run
 panel while it exists. `OPEN_AUTOMATION_IMPORT_DELAY_MS` (automation builds
 only, at most 5000 ms) holds the real progress view for animation captures.
+`OPEN_AUTOMATION_PROBE_DELAY_MS` (the same limit) delays probe work so the suite
+can close and reopen Welcome before counting finishes. Reopen restarts a
+cancelled probe when counts have not landed.
 
-The same command also drives the visible Settings sheet after first run:
+State also includes `importInProgress`; while a Settings import runs,
+`settingsStep` reports `Importing`. The same command also drives the visible Settings sheet after first run:
 `settings-import` with `directory=PATH`, `settings-next`, `settings-run`,
 and `settings-done`. State then includes `settingsStep`, `settingsOutcome`,
 and `settingsError`. These actions use the real cached wizard and shared App

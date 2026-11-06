@@ -408,13 +408,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate, OEEngineDelegate, OEBr
   }
 
   func scheduleSave() {
-    guard let model, (!isFirstRun || firstRunSaved), !importInProgress else { return }
+    guard let model, (!isFirstRun || firstRunSaved) else { return }
     snapshotStore.scheduleSave(model: model)
   }
 
   /// Called after the message loop returns, before the engine shuts down.
   func saveState() {
-    guard let model, (!isFirstRun || firstRunSaved), !importInProgress else { return }
+    guard let model, (!isFirstRun || firstRunSaved) else { return }
     for controller in windowControllers { controller.saveWindowState() }
     do {
       try snapshotStore.saveNow(model: model)
@@ -688,9 +688,14 @@ extension AppDelegate: CommandDispatcher {
     if id == "toggle-developer-mode" { return DeveloperMode.menuState(for: frontWindowController.flatMap { hostFactories[$0.windowID] }?.selectedContent?.url) }
     return PageTools.menuState(for: id)
   }
+  private static let firstRunCommands: Set<String> = [
+    "quit-open", "hide-open", "hide-others", "show-all", "about-open", "archive-tab", "close-window"
+  ]
+  private func allowsFirstRunCommand(_ id: String) -> Bool {
+    firstRunWindowController == nil || firstRunSaved || Self.firstRunCommands.contains(id)
+  }
   func isCommandEnabled(_ id: String, enabledKey: String) -> Bool {
-    if firstRunWindowController != nil && !firstRunSaved,
-       !["quit-open", "hide-open", "hide-others", "show-all", "about-open", "archive-tab", "close-window"].contains(id) { return false }
+    guard allowsFirstRunCommand(id) else { return false }
     if let enabled = littleOpenCommandEnabled(id) { return enabled }
     if SystemCommandActions.selectors[id] != nil { return SystemCommandActions.isEnabled(id) }
     if let enabled = PageTools.isAppCommandEnabled(id) { return enabled }  // App/Page/PageToolsCommands.swift
@@ -698,8 +703,7 @@ extension AppDelegate: CommandDispatcher {
     return ["new-window", "blank-window", "new-tab", "settings", "search-settings", "air-traffic-control", "import-from-browser", "set-default-browser", "check-for-updates", "view-archive", "view-history", "view-library", "view-downloads", "view-media", "view-boosts", "quit-open", "new-little-open-window", "little-open-global", "about-open", "hide-open", "hide-others", "show-all", "help-center", "keyboard-shortcuts-edu", "getting-started", "release-notes", "contact-team", "manage-spaces"].contains(id)
   }
   func performCommand(_ id: String, payload: String?) {
-    if firstRunWindowController != nil && !firstRunSaved,
-       !["quit-open", "hide-open", "hide-others", "show-all", "about-open", "archive-tab", "close-window"].contains(id) { return }
+    guard allowsFirstRunCommand(id) else { return }
     // Search engines live in Settings ▸ Profiles: open the named Profile, else the front window's.
     // An action row's payload is a Space ID, which names no Profile, so it falls back too.
     if id == "search-settings" {
@@ -715,8 +719,7 @@ extension AppDelegate: CommandDispatcher {
     performCommand(id, keyDownTimestamp: nil)
   }
   func performCommand(_ id: String, keyDownTimestamp: TimeInterval?) {
-    if firstRunWindowController != nil && !firstRunSaved,
-       !["quit-open", "hide-open", "hide-others", "show-all", "about-open", "archive-tab", "close-window"].contains(id) { return }
+    guard allowsFirstRunCommand(id) else { return }
     noteLaunchWindowInput(NSApp.keyWindow)
     if performLittleOpenCommand(id) { return }
     if SystemCommandActions.selectors[id] != nil { _ = SystemCommandActions.perform(id); return }

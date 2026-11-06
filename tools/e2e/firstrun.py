@@ -115,7 +115,7 @@ def run(factory, results, tmp, h):
         return app.call('archive-list')
     try:
         app = launch(fresh=True, OPEN_AUTOMATION_IMPORT_DELAY_MS='1500')
-        for key in ('open.firstRun.completed', 'open.import.lastArcDir', 'open.settings.lastPane'):
+        for key in ('open.firstRun.completed', 'open.import.lastArcDir', 'open.settings.lastPane', 'open.advanced.tabSleepMode'):
             saved[key] = app.call('defaults', key=key, persistent=True)
             app.call('defaults', key=key, value=None)
         s = state(); welcome = shot('welcome'); welcome_copy = copy()
@@ -178,8 +178,28 @@ def run(factory, results, tmp, h):
         app.call('first-run', action='finish')
         row('F4_finish', not state()['active'] and state()['completed'] and len(app.call('shell-windows')) == 1)
         # Never invoke the system-default action. No stub replaces the service.
+        # Exercise Profile insertion on the model swapped in by first run,
+        # before a relaunch could reinstall a missing onProfileCreated hook.
+        never_source = Path(tmp) / 'arc-never-profile'
+        shutil.rmtree(never_source, ignore_errors=True)
+        shutil.copytree(source, never_source)
+        (never_source/'StorableProfiles.json').write_text(json.dumps({'profiles': [
+            'synthetic-never', {'id': 'synthetic-never', 'name': 'Example Imported Profile',
+                                'directory': 'Profile-Never'}]}))
+        never_before = app.call('sleep-mode', mode='off')
+        app.call('first-run', action='settings-import', directory=str(never_source))
+        app.call('first-run', action='settings-next'); app.call('first-run', action='settings-run')
+        assert h.wait_until(lambda: state().get('settingsStep') == 'Report', timeout=15, step=.05), state()
+        never_after = app.call('sleep-mode')
+        app.call('first-run', action='settings-done')
         app.quit(); app = launch()
         row('F4_relaunch', not state()['active'] and {s['title'] for s in app.call('spaces')} == {'Alpha','Beta'})
+        never_reloaded = app.call('sleep-mode')
+        row('settings_import_never_policy', len(never_after) == len(never_before) + 1
+            and set(never_before.values()) == {'off'} and set(never_after.values()) == {'off'}
+            and never_reloaded == never_after
+            and app.call('defaults', key='open.advanced.tabSleepMode') == 'never',
+            before=never_before, after=never_after, reloaded=never_reloaded)
         before_tabs = {t['id'] for t in app.call('tabs')}
         app.call('first-run', action='settings-import', directory=str(source))
         if os.environ.get('OPEN_E2E_FIRSTRUN_FORCE_FAILURE') == 'settings-sheet':
@@ -237,6 +257,72 @@ def run(factory, results, tmp, h):
             and {t['id'] for t in app.call('tabs')} == undone_tabs, error=state()['settingsError'])
         snapshot_path().rmdir(); snapshot_path().write_bytes(previous)
         app.call('first-run', action='settings-done')
+        app.quit()
+        # Quit during the runner's real, cancellable progress delay. Browser
+        # edits still use the normal debounced/quit save while Settings imports.
+        app = launch(OPEN_AUTOMATION_IMPORT_DELAY_MS='5000')
+        rename_space = app.call('spaces')[0]['id']
+        app.call('space', space=rename_space)
+        app.call('first-run', action='settings-import', directory=str(expanded))
+        app.call('first-run', action='settings-next'); app.call('first-run', action='settings-run')
+        assert h.wait_until(lambda: state().get('importInProgress'), timeout=3, step=.02), state()
+        app.call('window-focus', id=app.call('shell-windows')[0]['id'], activate=True)
+        app.call('menu-perform', id='rename-space')
+        app.call('key', text='Renamed During Import')
+        app.call('key', key='return', route='app')
+        during_import = state()
+        renamed = next(s for s in app.call('spaces') if s['id'] == rename_space)
+        assert during_import.get('importInProgress') and during_import.get('settingsStep') == 'Importing', during_import
+        assert renamed['title'] == 'Renamed During Import', renamed
+        app.quit(); import_quit = app.quit_report
+        app = launch()
+        landed_rename = next(s for s in app.call('spaces') if s['id'] == rename_space)
+        row('R1_settings_import_quit_save', landed_rename['title'] == 'Renamed During Import'
+            and new_id not in {t['id'] for t in app.call('tabs')}
+            and not import_quit.get('forced'), space=landed_rename,
+            duringImport=during_import, cleanup=import_quit)
+        app.quit()
+        # A readable zero-item source still offers Spaces. Its importer-created
+        # fallback model must not replace the unsaved first-run default model.
+        zero = Path(tmp) / 'arc-zero-items'; zero.mkdir(exist_ok=True)
+        (zero/'StorableSidebar.json').write_text(json.dumps(
+            {'sidebar': {'containers': ['synthetic', {'items': [], 'spaces': []}]}}))
+        app = launch(fresh=True, directory=zero)
+        app.call('defaults', key='open.firstRun.completed', value=None)
+        default_spaces = app.call('spaces')
+        app.call('first-run', action='import')
+        app.call('first-run', action='select', spaces=True, archive=False, history=False)
+        app.call('first-run', action='continue'); zero_report = until('report')
+        row('R2_empty_sidebar_report', zero_report['outcome'].get('Imported Spaces') == 0
+            and zero_report['outcome'].get('Imported tabs') == 0
+            and not zero_report['outcome'].get('Search settings', 0)
+            and app.call('spaces') == default_spaces and not snapshot_path().exists()
+            and not app.call('shell-windows'), outcome=zero_report['outcome'])
+        # Stop before Finish if a regression swapped models: the old Debug
+        # assertion would crash and put a system dialog on the shared display.
+        assert app.call('spaces') == default_spaces, 'empty import replaced the default model; do not finish'
+        app.call('first-run', action='continue'); until('defaultBrowser')
+        app.call('first-run', action='finish')
+        row('R2_empty_sidebar_continue', not state()['active'] and state()['completed']
+            and [s['id'] for s in app.call('spaces')] == [s['id'] for s in default_spaces]
+            and app.call('tabs') == []
+            and snapshot_path().is_file())
+        app.quit()
+        # Cmd+W cancels the pending probe. The actual Dock-reopen delegate must
+        # restart it after display, without changing the Welcome step.
+        app = launch(fresh=True, OPEN_AUTOMATION_PROBE_DELAY_MS='5000')
+        app.call('defaults', key='open.firstRun.completed', value=None)
+        counting = state()
+        assert not counting['probeReady'], counting
+        app.call('key', key='w', modifiers=['command'])
+        closed = state()
+        assert not closed['active'] and not closed['probeReady'], closed
+        app.call('window-reopen'); app.call('first-run', action='focus')
+        assert h.wait_until(lambda: state().get('probeReady'), timeout=15, step=.05), state()
+        reopened = state()
+        row('R3_reopen_restarts_probe', reopened['active'] and reopened['step'] == 'welcome'
+            and reopened['counts'].get('Spaces') == 2 and reopened['counts'].get('Archive') == 2
+            and not snapshot_path().exists() and not app.call('shell-windows'), state=reopened)
         app.quit()
         app = launch(fresh=True)
         app.call('defaults', key='open.firstRun.completed', value=None)

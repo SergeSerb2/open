@@ -83,6 +83,7 @@ extension AutomationController {
     let current = app.firstRunWindowController?.model
     var state: [String: Any] = ["active": app.firstRunWindowController?.window?.isVisible == true,
       "step": current?.step.rawValue ?? app.lastFirstRunStep,
+      "importInProgress": app.importInProgress,
       "completed": UserDefaults.standard.bool(forKey: "open.firstRun.completed")]
     if let current {
       state["welcome"] = current.welcomeStatus
@@ -109,7 +110,7 @@ extension AutomationController {
     }
     if action?.hasPrefix("settings-") == true || current == nil {
       // Reading normal launch status must keep Settings lazy.
-      if action?.hasPrefix("settings-") == true || app.importRunner.lastOutcome != nil {
+      if action?.hasPrefix("settings-") == true || app.importInProgress || app.importRunner.lastOutcome != nil {
         let wizard = app.settingsPresenter.settings.importWizard
         state["settingsStep"] = wizard.step.rawValue
         state["settingsOutcome"] = wizard.outcome?.counts ?? [:]

@@ -53,6 +53,7 @@ final class AppImportRunner {
       return result("Open could not read your Arc data.")
     }
     let report = imported.report
+    let hasSidebarData = report.spaces > 0 || report.importedTabNodes > 0 || report.folders > 0
     guard !app.terminationRequested, !Task.isCancelled else { return result("Import stopped because Open is quitting.") }
     if plan.archive && report.archiveStatus == "present but unreadable" { failures["Archive"] = "Could not be read" }
     counts["Sidebar accounted"] = report.accountedTotal; counts["Sidebar total"] = report.totalItems
@@ -63,7 +64,7 @@ final class AppImportRunner {
     counts["Imported welcome"] = report.importedWelcome
     counts["Session selections"] = report.sessionAppliedSelections
     var profileMapping: [ProfileID: ProfileID] = [:]
-    if !firstRun || !plan.spaces {
+    if !firstRun || !plan.spaces || !hasSidebarData {
       for profile in imported.model.profiles {
         if let live = app.model.profile(id: profile.id) { profileMapping[profile.id] = live.id }
         else if profile.dataDirectoryName == "Default", let live = app.model.defaultProfile { profileMapping[profile.id] = live.id }
@@ -103,21 +104,24 @@ final class AppImportRunner {
     guard !app.terminationRequested, !Task.isCancelled else { return result("Import stopped because Open is quitting.") }
     if firstRun {
       if plan.spaces {
-        if !plan.searchSettings { for profile in imported.model.profiles { profile.settings = ProfileSettings() } }
-        ensureSelection(in: imported.model)
-        app.installModel(imported.model)
-        app.settingsPresenter.modelWasInstalled()
         counts[ImportOutcomeKeys.spaces] = report.spaces
         counts["Pinned and Today tabs"] = report.pinnedTabs + report.todayTabs
         counts["Favorites"] = report.favorites; counts["Folders"] = report.folders
         counts["Imported tabs"] = report.importedTabNodes
         counts[ImportOutcomeKeys.tabs] = report.importedTabNodes
-        if plan.searchSettings { counts["Search settings"] = imported.model.profiles.count }
+        // A fallback Profile in an empty source is not imported data.
+        if plan.searchSettings && hasSidebarData { counts["Search settings"] = imported.model.profiles.count }
       }
       // An empty/all-failed selection has not landed data. Keep D3 intact;
       // Continue/Start Fresh owns the first save of the default model.
       guard ImportOutcome(counts: counts).didImportAnything else {
         return result(failures.isEmpty ? nil : "Some selected data could not be imported. You can try again later from Settings.")
+      }
+      if plan.spaces && hasSidebarData {
+        if !plan.searchSettings { for profile in imported.model.profiles { profile.settings = ProfileSettings() } }
+        ensureSelection(in: imported.model)
+        app.installModel(imported.model)
+        app.settingsPresenter.modelWasInstalled()
       }
       app.showFirstRunBrowser()
       do {
