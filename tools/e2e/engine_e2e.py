@@ -10469,7 +10469,6 @@ def main():
             results["media"] = CheckedResults(tracker)
             media_checks(factory, results["media"], tmp)
         elif opts.only == "history":
-            import runpy
             results["history"] = CheckedResults(tracker)
             runpy.run_path(os.path.join(ROOT, "tools/e2e/history_e2e.py"))["history_checks"](
                 factory, results["history"], tmp, wait_until, _restore_defaults)
