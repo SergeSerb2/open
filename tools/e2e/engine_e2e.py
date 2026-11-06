@@ -9945,8 +9945,10 @@ def space_editor_creation_checks(factory, results, tmp):
         app.call('window-frame', frame=[80, 60, 1120, 800])
         app.call('window-focus', id=app.call('window-state')['id'], activate=True)
         pref = 'open.profiles.confirmInterProfileMove'
-        saved[pref] = app.call('defaults', key=pref)
+        for pref_key in (pref, 'open.sidebar.hideHintShown'):
+            saved[pref_key] = app.call('defaults', key=pref_key)
         app.call('defaults', key=pref, value=True)
+        app.call('defaults', key='open.sidebar.hideHintShown', value=True)
         source = app.call('space-create', title='Creation Source', profile='Creation Profile')
         previous = focused()
         original_window = app.call('window-state')['id']
