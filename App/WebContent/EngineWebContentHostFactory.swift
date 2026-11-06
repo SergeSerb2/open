@@ -662,7 +662,8 @@ final class EngineWebContentHostFactory: NSResponder, WebContentHostFactory {
       // "Edit Pinned URL dialog" (FC §3.2 r3); Section 2's brief chose the command bar.
       guard let tab = model.tab(id: id), tab.pinnedURL != nil else { return false }
       showCommandBar(.editCurrentURL, editingPinnedTab: tab.id); return true
-    case .changeSpaceIcon, .editSpaceTheme, .newProfile, .shareSpace,
+    case .newProfile(let space): app.settingsPresenter.showNewProfile(sourceSpace: space); return true
+    case .changeSpaceIcon, .editSpaceTheme, .shareSpace,
          .changeIcon, .customizePage:
       return false // Explicitly deferred UI entries; see docs/app-shell.md Step B.
     default: return nil

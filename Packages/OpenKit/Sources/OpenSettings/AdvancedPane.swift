@@ -57,6 +57,7 @@ public struct AdvancedPane: View {
                 SettingsRow(height:44,divider:ad.hasOtherBlocker) { HStack { Text("Block lists");Text(ad.isReady ? ad.enabledIDs.joined(separator:", "):"Loading…").foregroundStyle(.secondary).lineLimit(1);Spacer();Button("Ad Block Settings…") { showsAdBlock=true } } }
                 if ad.hasOtherBlocker { SettingsRow(height:44,divider:false) { Text("More than one ad blocker is on. Blocking may break sites.").foregroundStyle(.orange) } }
             }.id("advanced-adblock").sheet(isPresented:$showsAdBlock) { AdBlockSettingsSheet(model:ad,onDone:{showsAdBlock=false}) }
+            SettingsError(text:ad.errorText)
         }
         SettingsGroup {
             SettingsRow(height:64,divider:false) { VStack(alignment:.leading,spacing:5) {
