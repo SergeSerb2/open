@@ -739,7 +739,7 @@ data=Path(tempfile.mkdtemp(prefix='smoke-',dir=e.parent)).resolve()
 with socket.socket() as sock:sock.bind(('127.0.0.1',0));port=sock.getsockname()[1]
 result={}
 with e.with_suffix('.log').open('w') as log:
- proc=subprocess.Popen([str(Path(app)/'Contents/MacOS/Open'),'--user-data-dir='+str(data),'--open-remote-debugging-port='+str(port),'https://example.com'],env=dict(os.environ,OPEN_USER_DATA=str(data)),stdout=log,stderr=subprocess.STDOUT,start_new_session=True)
+ proc=subprocess.Popen([str(Path(app)/'Contents/MacOS/Open'),'--skip-first-run','--user-data-dir='+str(data),'--open-remote-debugging-port='+str(port),'https://example.com'],env=dict(os.environ,OPEN_USER_DATA=str(data)),stdout=log,stderr=subprocess.STDOUT,start_new_session=True)
  try:
   deadline=time.monotonic()+60
   while time.monotonic()<deadline:

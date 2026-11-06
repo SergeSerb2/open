@@ -25,7 +25,11 @@ import OpenAdBlock
     @ObservationIgnored public private(set) lazy var shortcuts = ShortcutsViewModel(root: self)
     public func attach(adBlockStore: AdBlockStore) { adBlock = AdBlockSettingsModel(root: self, store: adBlockStore) }
     public var showsPreviews = false
-    public var showsImport = false
+    public var showsImport = false { didSet {
+        if showsImport && !oldValue { importWizard = ImportWizardViewModel(root: self) }
+    } }
+    /// One wizard per presentation, shared by the visible sheet and App adapter.
+    @ObservationIgnored public private(set) lazy var importWizard = ImportWizardViewModel(root: self)
     public var showsSearchEngines = false
     @ObservationIgnored public private(set) lazy var profiles = ProfilesViewModel(root: self)
     @ObservationIgnored public private(set) lazy var general = GeneralViewModel(root: self)

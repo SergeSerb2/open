@@ -54,6 +54,18 @@ The snapshot DTOs stay at `schemaVersion` 1. The `littleArc` → `littleOpen` sn
 
 ### Commands
 
+`mergeImportedSidebar(_:profileMapping:spaces:tabs:favorites:folders:searchSettings:saving:)`
+is the Settings import command. It copies new IDs, appends new Spaces, and
+keeps live Space metadata, Profile assignments, item order, and selections.
+It merges search-engine fields only when selected. Equal routing rule bodies
+are duplicates even when the source importer assigns a new rule ID; the live
+default destination stays authoritative. Source objects are unchanged.
+Structural edits emit precise insert/remove events; new containers emit
+reloads. The caller's synchronous snapshot save is part of the command.
+Failure reverses the edits and registers no undo. Success registers one undo
+step for the sidebar/search/routing merge. Archive rows have their own
+per-Profile transaction and are not removed by sidebar Undo.
+
 Space editor inputs live in `SpaceTheme.style: SpaceStyle?`. A style stores
 only its key color, count, wheel, appearance, noise, texture, intensity, and
 `mathVersion` (currently 1). Derived palettes are not persisted. Count is
@@ -214,6 +226,11 @@ Writes are atomic: write a temp file, then rename over the target.
 `load()` rebuilds the live model and calls `OpenDataRoot.prepare()` before returning. A missing file prepares the root and returns nil.
 
 ### ArchiveStore (SQLite)
+
+App import uses throwing `importRecords(_:checking:)`: an unavailable store
+or failed transaction is a per-kind import failure, never a duplicate count.
+Only an existing ID counts as a duplicate. The legacy nonthrowing overload
+remains available to package callers and returns zero counts on write failure.
 
 `ArchiveStore(fileURL:)` opens a Profile file from `ProfileDirectories.archiveFileURL(for:)`. `ProfileArchiveSink` routes each model batch by Profile and forwards undo discards to every created store.
 
