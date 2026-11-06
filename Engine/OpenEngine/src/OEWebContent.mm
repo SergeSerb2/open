@@ -1225,6 +1225,14 @@ typedef void (^OEOpenWorldCompletion)(id _Nullable, NSError* _Nullable);
         userInfo:@{NSLocalizedDescriptionKey:@"Open-world request unavailable or over limit"}]);
     return;
   }
+  // OECef uses a C string. Refuse text that would truncate or fail conversion
+  // before it can become a different valid JavaScript program.
+  if (![source canBeConvertedToEncoding:NSUTF8StringEncoding] ||
+      [source rangeOfCharacterFromSet:[NSCharacterSet characterSetWithRange:NSMakeRange(0, 1)]].location != NSNotFound) {
+    completion(nil, [NSError errorWithDomain:OEErrorDomain code:OEErrorJavaScriptException
+        userInfo:@{NSLocalizedDescriptionKey:@"Open-world source contains invalid Unicode or NUL"}]);
+    return;
+  }
   if (!_openWorldCallbacks) _openWorldCallbacks = [NSMutableDictionary dictionary];
   // Never reuse request IDs; refuse exhaustion instead of accepting stale replies.
   if (_nextOpenWorldID == INT_MAX) {

@@ -134,6 +134,9 @@ def run(app, results, tmp, new_tab, wait_until):
         refused_source = refused_result = False
         try: evaluate("17" + " " * (1024 * 1024 - 1))
         except RuntimeError: refused_source = True
+        refused_nul = False
+        try: evaluate("17\0+1")
+        except RuntimeError: refused_nul = True
         result_limit = len(evaluate("'x'.repeat(1048574)")) == 1048574
         try: evaluate("'x'.repeat(1048575)")
         except RuntimeError: refused_result = True
@@ -144,6 +147,7 @@ def run(app, results, tmp, new_tab, wait_until):
         with ThreadPoolExecutor(max_workers=65) as executor:
             pending = list(executor.map(unresolved, range(65)))
         evaluation = {"sourceAtLimit": source_limit, "sourceOverLimit": refused_source,
+            "sourceNULRefused": refused_nul,
             "resultAtLimit": result_limit, "resultOverLimit": refused_result,
             "pendingAtLimit": sum("timed out" in x for x in pending),
             "pendingOverLimit": sum("over limit" in x for x in pending)}
@@ -152,7 +156,7 @@ def run(app, results, tmp, new_tab, wait_until):
                 and boundary["oversized"] - before["oversized"] == 3
                 and boundary["invalid"] - before["invalid"] == 1
                 and delta["accepted"] == 200 and delta["rateLimited"] == 1
-                and source_limit and refused_source and result_limit and refused_result
+                and source_limit and refused_source and refused_nul and result_limit and refused_result
                 and evaluation["pendingAtLimit"] == 64 and evaluation["pendingOverLimit"] == 1,
             "sizeBoundary": {k: boundary[k] - before[k] for k in before}, "flood": delta,
             "evaluation": evaluation}
