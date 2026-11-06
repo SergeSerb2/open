@@ -11042,9 +11042,11 @@ def main():
         return
     def execute():
         if opts.only == "firstrun":
-            import firstrun
             results["firstrun"] = CheckedResults(tracker)
-            firstrun.run(factory, results["firstrun"], tmp, sys.modules[__name__])
+            # The executable's -I shebang omits the script directory from
+            # sys.path. Load this owned sibling by its exact repository path.
+            runpy.run_path(os.path.join(ROOT, "tools", "e2e", "firstrun.py"))["run"](
+                factory, results["firstrun"], tmp, sys.modules[__name__])
         elif opts.only == "extensions-ui":
             results["extensions-ui"] = CheckedResults(tracker)
             import extensions_ui
