@@ -114,6 +114,11 @@ final class AppImportRunner {
         counts[ImportOutcomeKeys.tabs] = report.importedTabNodes
         if plan.searchSettings { counts["Search settings"] = imported.model.profiles.count }
       }
+      // An empty/all-failed selection has not landed data. Keep D3 intact;
+      // Continue/Start Fresh owns the first save of the default model.
+      guard ImportOutcome(counts: counts).didImportAnything else {
+        return result(failures.isEmpty ? nil : "Some selected data could not be imported. You can try again later from Settings.")
+      }
       app.showFirstRunBrowser()
       do {
         try app.snapshotStore.saveNow(model: app.model)

@@ -314,6 +314,19 @@ def run(factory, results, tmp, h):
             failures=s['failures'], outcome=s['outcome'])
         app.call('first-run', action='continue'); app.call('first-run', action='finish')
         app.quit()
+        app = launch(fresh=True, directory=partial)
+        app.call('defaults', key='open.firstRun.completed', value=None)
+        app.call('first-run', action='import')
+        app.call('first-run', action='select', spaces=False, archive=True, history=False)
+        app.call('first-run', action='continue'); s = until('report')
+        text = copy(); shot('report-all-failed')
+        row('all_failed_unsaved', not s['completed'] and not snapshot_path().exists()
+            and not app.call('shell-windows') and s['failures'].get('Archive') == 'Could not be read'
+            and 'Try Again' in text and 'Continue' in text, text=text)
+        app.call('first-run', action='continue'); app.call('first-run', action='finish')
+        row('all_failed_continue', state()['completed'] and not state()['active']
+            and len(app.call('spaces')) == 1 and app.call('tabs') == [])
+        app.quit()
         timings = []
         for _ in range(5):
             app = launch(fresh=True)

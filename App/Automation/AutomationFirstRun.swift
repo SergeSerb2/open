@@ -46,6 +46,11 @@ extension AutomationController {
           guard let window = app.firstRunWindowController?.window else { throw Failure(message: "no first-run window") }
           try await activateForInput(window)
         case "inspect": break
+        case "select":
+          guard flow.step == .importChoices else { throw Failure(message: "not on Import") }
+          if let on = args["spaces"] as? Bool { flow.includeSpacesAndTabs = on }
+          if let on = args["archive"] as? Bool { flow.includeArchive = on }
+          if let on = args["history"] as? Bool { flow.includeHistory = on }
         case "import":
           guard flow.step == .welcome else { throw Failure(message: "not on Welcome") }; flow.showImport()
         case "fresh":

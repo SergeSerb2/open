@@ -97,7 +97,8 @@ Arguments are `key=value`; values that parse as JSON are sent as JSON.
 `first-run` returns `{active, step, completed}` even when there is no browser
 window. Optional `action` drives the same view-model methods as the buttons:
 `import`, `fresh`, `continue`, `notnow`, `back`, `finish`, `retry`, or
-`choose-dir` with `directory=PATH`. `retry` on a save-error Report retries
+`choose-dir` with `directory=PATH`. `select` sets optional `spaces`, `archive`,
+and `history` checkbox booleans on Import. `retry` on a save-error Report retries
 the pending model's save. Directory strings are limited to 4096 UTF-8 bytes;
 action names to 32. There is no action that changes the system default browser.
 

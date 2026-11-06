@@ -103,7 +103,10 @@ public enum FirstRunWindow {public static let size=SettingsTokens.firstRunSize}
         guard let outcome else {return}
         imported=wizard.hasImportedData
         errorText=outcome.errorText
-        step=outcome.errorText != nil && !imported ? .failed:.report
+        // Sidebar failure is E-1. Per-kind failures after parsing belong on
+        // Report, including an all-failed selection that can Continue fresh.
+        let sidebarFailed=outcome.failures["Spaces"] != nil || outcome.failures.isEmpty
+        step=outcome.errorText != nil && !imported && sidebarFailed ? .failed:.report
     }
     public func choose(directory:URL) async {wizard.plan.directory=directory;probe=nil;await refreshProbe()}
     public func refreshProbe() async {
@@ -263,7 +266,7 @@ public struct FirstRunView:View {
             if let duplicates=model.duplicateSummary {Text(duplicates).font(section).foregroundStyle(secondary).fixedSize(horizontal:false,vertical:true)}
             if let note=model.reportNote {Text(note).font(section).foregroundStyle(model.reportNoteIsError ? Color.red:secondary).fixedSize(horizontal:false,vertical:true)}
         }.frame(maxWidth:.infinity,alignment:.leading)}.scrollIndicators(.automatic)
-        HStack {Spacer();if model.errorText == FirstRunViewModel.importedSaveError {primary("Try Again"){model.actions.finishFirstRun(imported:true)}} else {primary("Continue"){model.enterDefaultBrowser()}}}.fixedSize(horizontal:false,vertical:true)
+        HStack {Spacer();if model.errorText == FirstRunViewModel.importedSaveError {primary("Try Again"){model.actions.finishFirstRun(imported:true)}} else if model.errorText != nil && !model.wizard.hasImportedData {Button("Continue"){model.enterDefaultBrowser()};primary("Try Again"){model.showImport()}} else {primary("Continue"){model.enterDefaultBrowser()}}}.fixedSize(horizontal:false,vertical:true)
     }}
     private var defaultBrowser:some View {VStack(spacing:16) {
         sparse {VStack(spacing:8) {
