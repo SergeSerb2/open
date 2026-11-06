@@ -78,3 +78,11 @@ extension Typography {
     /// Toast subtitle (the quote offer, the trace timer). guess.
     public static let toastSubtitle = FontToken(12, .regular)
 }
+
+// Extensions plan §3.9, §3.11; provisional until captures S-4/S-5.
+extension Typography {
+    public static let extensionName = FontToken(13, .regular)
+    public static let promptTitle = FontToken(15, .semibold)
+    public static let promptBody = FontToken(13, .regular)
+    public static let promptDetail = FontToken(12, .regular)
+}
