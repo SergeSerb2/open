@@ -60,6 +60,12 @@ def run(factory, results, tmp, env):
             reopened=app.call('site-controls', action='open')
             record('S1_toggle', not toggled_closed['presented'] and reopened['presented'],
                    closed=toggled_closed['presented'], reopened=reopened['presented'])
+            close()
+            point=dict(x=anchor[0]+anchor[2]/2,y=anchor[1]+anchor[3]/2,queued=True)
+            app.call('mouse',action='click',modifiers=['option'],**point)
+            option_closed=not state()['presented']
+            app.call('mouse',action='click',**point)
+            record('S1_option_click',option_closed and state()['presented'],negativeOptionIgnored=option_closed)
             # Main's App ad-block adapter has not opened this profile. Never
             # count the unavailable row or a synthetic filter as a passing S2.
             if row(s,'row.contentBlocking').get('state') == 'unavailable':
