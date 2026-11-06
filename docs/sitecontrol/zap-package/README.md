@@ -11,7 +11,7 @@ boundary is fake. `zap-flows` creates only offscreen windows at the harness's
 synthetic coordinates. Full `check` includes its registered native harness under
 the on-screen lock.
 
-Negative proof: `negative-browser.txt` records 39 independent mutations of copied
+Negative proof: `negative-browser.txt` records 40 independent mutations of copied
 runtime resources, each rejected by the real Chrome flow. The working source was
 never changed by those mutations. Native break-and-restore results are recorded in `negative-native.txt`
 (11 behavior mutations, including every new F13/selector flow row). No baseline, comparator, threshold, or allowlist was changed.

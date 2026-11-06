@@ -45,3 +45,6 @@ Negative proofs run on isolated copies of real runtime/resources and real Chrome
 popup above preview tint: EXPECTED FAIL AssertionError [ERR_ASSERTION]: Expected values to be strictly equal:
 preview tint below popup: EXPECTED FAIL AssertionError [ERR_ASSERTION]: related tint stays below popup
 2/2 mutations rejected. Source checkout was never modified.
+Negative proofs run on isolated copies of real runtime/resources and real Chrome flows.
+H0 SPA script errors: EXPECTED FAIL AssertionError [ERR_ASSERTION]: spa has no script errors
+1/1 mutations rejected. Source checkout was never modified.

@@ -75,6 +75,15 @@ try {
     const response = await page.goto(`${origin}/Harness/${fixture}.html`, { waitUntil: 'load' });
     assert.equal(response.status(), 200);
     await page.waitForFunction(() => window.__openBoosts?.version === 1 && window.__openZap?.version === 1);
+    if (fixture === 'spa') {
+      await page.click('#fixture-F1');
+      await page.click('#go-view-b');
+      await page.waitForSelector('#view-b-marker');
+      await page.waitForFunction(() => getComputedStyle(document.querySelector('#promo-banner')).display === 'none');
+      await page.click('#reset-head');
+      await page.waitForSelector('#view-a-marker');
+      await page.waitForFunction(() => getComputedStyle(document.querySelector('#promo-banner')).display === 'none');
+    }
     assert.deepEqual(await page.evaluate(() => window.__harness.errors), []);
     assert.deepEqual(errors, [], `${fixture} has no script errors`);
   }
