@@ -10,5 +10,5 @@ CONFIG="Debug"
 if [[ "${1:-}" == "Debug" || "${1:-}" == "Release" ]]; then CONFIG="$1"; shift; fi
 [[ "${1:-}" == "--" ]] && shift
 APP="$ROOT/build/$CONFIG/Open.app"
-if [[ ! -d "$APP" ]]; then "$ROOT/tools/build.sh" "$CONFIG"; fi
-exec "$APP/Contents/MacOS/Open" "$@"
+if [[ ! -d "$APP" ]]; then "$HOME/Library/Caches/OpenRE/scripts/heavy.sh" "$ROOT/tools/build.sh" "$CONFIG"; fi
+exec "$APP/Contents/MacOS/Open" --skip-first-run "$@"

@@ -20,11 +20,15 @@ struct LaunchOptions {
   var verboseLogging = false
   var automationSocket: URL?
   var chromeToolbar = false
+  /// Test/support overrides. Normal launches detect first run from the snapshot.
+  var skipFirstRun = false
+  var arcDirectory: URL?
   /// Debug and automation builds: replaces Open's PiP site-rule file (media-pip §4.5.4, e2e).
   var pipSiteRules: URL?
 
   init(arguments: [String]) {
     let env = ProcessInfo.processInfo.environment
+    skipFirstRun = env["OPEN_SKIP_FIRST_RUN"] == "1"
     let support = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0]
     #if DEBUG
       let defaultDir = support.appendingPathComponent("Open-Dev", isDirectory: true)
@@ -42,6 +46,10 @@ struct LaunchOptions {
       }
       if let v = value("user-data-dir") {
         userDataDirectory = path(v)
+      } else if arg == "--skip-first-run" {
+        skipFirstRun = true
+      } else if let v = value("arc-dir") {
+        arcDirectory = path(v)
       } else if let v = value("style") {
         defaultStyle = v == "alloy" ? .alloy : .chrome
       } else if let v = value("open-remote-debugging-port") {

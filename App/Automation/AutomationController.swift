@@ -31,6 +31,7 @@
     private var nativeInputStart: Double = 0
     private var managerUndoObserver: (any NSObjectProtocol)?
     private var managerUndoCount = 0
+    var firstRunActionTask: Task<Void, Never>?
     // troubleshooting-setup recorder (page-platform Troubleshooting checks).
     private var revealedURLs: [URL] = []
 
@@ -56,6 +57,7 @@
         let args = request["args"] as? [String: Any] ?? [:]
         inputCommand = cmd == "editor-act" || cmd == "key" || cmd == "focus" || cmd == "little-open-link-click" || (cmd == "window-focus" && args["activate"] as? Bool == true)
         if ["space-manager-drag", "sidebar-click", "sidebar-key", "hover"].contains(cmd) { inputCommand = true }
+        if cmd == "first-run", args["action"] as? String == "focus" { inputCommand = true }
         if inputCommand { nativeInputStart = 0 }
         let result = try await run(cmd, args)
         response = ["id": id, "ok": true, "result": result]
@@ -87,12 +89,28 @@
       extensionAutomation.registerContexts()
       // App lifecycle commands remain available after the final window closes.
       switch cmd {
+      case "first-run": return try await runFirstRun(a)
+      case "timing" where app.frontWindowController == nil:
+        var marks = LaunchTiming.shared.report
+        marks["kernelProcessStart"] = LaunchTiming.shared.hasKernelProcessStart
+        return marks
+      case "startup" where app.frontWindowController == nil: return app.startupEvidence
+      case "spaces" where app.frontWindowController == nil:
+        return app.model.spaces.map { ["id": $0.id.description, "title": $0.title ?? "", "profile": $0.profileID.description, "pinned": $0.pinned.count, "today": $0.today.count, "focused": false] as [String: Any] }
+      case "tabs" where app.frontWindowController == nil: return [] as [String]
+      case "windows" where app.frontWindowController == nil:
+        return NSApp.windows.map { nativeWindow in
+          var row = describe(nativeWindow)
+          if a["accessibility"] as? Bool == true { row["text"] = windowText(nativeWindow) }
+          return row
+        }
       case _ where Self.littleOpenCommands.contains(cmd): return try await runLittleOpenCommand(cmd, a)
       case "theme-get", "theme-set", "editor-open", "editor-act", "editor-close", "editor-state":
         if cmd == "editor-act" { nativeInputStart = ProcessInfo.processInfo.systemUptime }
         return try await runEditorCommand(cmd, a)
       case "key": return try await sendKey(a, app.frontWindowController.flatMap { app.hostFactories[$0.windowID] })
       case "snapshot": return try await snapshot(a, app.frontWindowController.flatMap { app.hostFactories[$0.windowID] })
+      case "library-captures-state": return try libraryCapturesState(a)
       case "ext-prompt", "ext-manage", "ext-commands", "ext-run-command", "ext-windows", "ext-omnibox", "ext-strip", "ext-click", "ext-popup-state", "ext-picker", "ext-hover", "ext-ui-menu", "ext-redraw-measure", "ext-shortcuts":
         return try await runExtensionCommand(cmd, a)
       case "applescript": return try await runAppleScript(a)
@@ -1496,7 +1514,7 @@
 
     /// Bounded accessibility text from this process's own windows. Used to
     /// identify Chromium's uninstall confirmation, not merely any new window.
-    private func windowText(_ window: NSWindow) -> [String] {
+    func windowText(_ window: NSWindow) -> [String] {
       var seen: Set<ObjectIdentifier> = [], text: Set<String> = []
       func walk(_ object: NSObject, depth: Int) {
         guard depth <= 16, seen.count < 512, seen.insert(ObjectIdentifier(object)).inserted else { return }
@@ -1917,7 +1935,7 @@
     /// only: the system keyboard is never touched.
     func sendKey(_ a: [String: Any], _ w: EngineWebContentHostFactory?) async throws -> Any {
       guard let target = a["window"] as? String == "popup" ? w?.popupPanel :
-        (a["window"] as? Int).flatMap({ n in NSApp.windows.first { $0.windowNumber == n } }) ?? w?.window
+        (a["window"] as? Int).flatMap({ n in NSApp.windows.first { $0.windowNumber == n } }) ?? app.firstRunWindowController?.window ?? w?.window
       else { throw Failure(message: "no window") }
       try await activateForInput(target)
       if let text = a["text"] as? String {
@@ -1945,6 +1963,8 @@
         "control": ("", 59), "command": ("", 55),
         "down": (String(Character(UnicodeScalar(NSDownArrowFunctionKey)!)), 125),
         "up": (String(Character(UnicodeScalar(NSUpArrowFunctionKey)!)), 126),
+        "left": (String(Character(UnicodeScalar(NSLeftArrowFunctionKey)!)), 123),
+        "right": (String(Character(UnicodeScalar(NSRightArrowFunctionKey)!)), 124),
       ]
       guard let (chars, code) = keys[a["key"] as? String ?? "return"] else { throw Failure(message: "unknown key") }
       var mods: NSEvent.ModifierFlags = []
@@ -1998,7 +2018,7 @@
         return ["path": path, "method": try await WindowSnapshot.capture(panel, to: url)]
       }
       let number = a["window"] as? String == "library" ? app.settingsPresenter.libraryPresenter?.window?.windowNumber : a["window"] as? Int
-      guard let target = number.flatMap({ n in NSApp.windows.first { $0.windowNumber == n } }) ?? w?.window
+      guard let target = number.flatMap({ n in NSApp.windows.first { $0.windowNumber == n } }) ?? app.firstRunWindowController?.window ?? w?.window
       else { throw Failure(message: "no window") }
       var keyTime: Double?
       var capturedAfterKey: Double?
