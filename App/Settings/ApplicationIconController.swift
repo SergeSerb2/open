@@ -2,18 +2,6 @@ import AppKit
 import ImageIO
 import OpenSettings
 
-/// AppKit asks for TIFF data when sending the icon to the Dock. Keep the
-/// worker's encoding so that the main-thread setter cannot encode it again.
-private final class RestoredApplicationIcon: NSImage {
-  private var encodedTIFF: Data?
-  convenience init(image: CGImage, encodedTIFF: Data) {
-    self.init(size: .init(width: 1024, height: 1024))
-    self.encodedTIFF = encodedTIFF
-    addRepresentation(NSBitmapImageRep(cgImage: image))
-  }
-  override var tiffRepresentation: Data? { encodedTIFF ?? super.tiffRepresentation }
-}
-
 /// Changes only this process's icon. The signed application bundle is never written.
 @MainActor final class ApplicationIconController {
   unowned let app: AppDelegate
@@ -96,8 +84,7 @@ private final class RestoredApplicationIcon: NSImage {
         LaunchTiming.shared.mark("appIconRestoreStarted")
         let started = ProcessInfo.processInfo.systemUptime
         self.restorePreparationMs = 0; self.restoreSetterMs = 0
-        if let cgImage = decoded.image, let tiff = decoded.tiff {
-          let image = RestoredApplicationIcon(image: cgImage, encodedTIFF: tiff)
+        if let image = decoded.image {
           self.restorePreparationMs = (ProcessInfo.processInfo.systemUptime - started) * 1_000
           let setterStarted = ProcessInfo.processInfo.systemUptime
           NSApp.applicationIconImage = image
@@ -113,16 +100,15 @@ private final class RestoredApplicationIcon: NSImage {
     }
   }
 
-  private struct DecodedIcon: @unchecked Sendable {
-    // Immutable CGImage; the worker completes before the main actor receives it.
-    let image: CGImage?
-    let tiff: Data?
+  private struct DecodedIcon: Sendable {
+    // Fully prepared on the worker, which never touches it after publication.
+    let image: NSImage?
     let milliseconds: Double
   }
   nonisolated private static func decode(_ file: URL) -> DecodedIcon {
     let started = ProcessInfo.processInfo.systemUptime
-    func result(_ image: CGImage? = nil, _ tiff: Data? = nil) -> DecodedIcon {
-      DecodedIcon(image: image, tiff: tiff, milliseconds: (ProcessInfo.processInfo.systemUptime - started) * 1_000)
+    func result(_ image: NSImage? = nil) -> DecodedIcon {
+      DecodedIcon(image: image, milliseconds: (ProcessInfo.processInfo.systemUptime - started) * 1_000)
     }
     // Bound both encoded bytes and decoded dimensions before allocating pixels.
     // PNG's largest pixel format is 16-bit RGBA: 1024 * 1024 * 8 = 8,388,608 bytes.
@@ -135,7 +121,10 @@ private final class RestoredApplicationIcon: NSImage {
           properties[kCGImagePropertyPixelHeight] as? Int == 1024,
           let image = CGImageSourceCreateImageAtIndex(source, 0,
             [kCGImageSourceShouldCacheImmediately: true] as CFDictionary),
-          let tiff = NSBitmapImageRep(cgImage: image).representation(using: .tiff, properties: [:]) else { return result() }
-    return result(image, tiff)
+          let tiff = NSBitmapImageRep(cgImage: image).representation(using: .tiff, properties: [:]),
+          let representation = NSBitmapImageRep(data: tiff) else { return result() }
+    let prepared = NSImage(size: .init(width: 1024, height: 1024))
+    prepared.addRepresentation(representation)
+    return result(prepared)
   }
 }

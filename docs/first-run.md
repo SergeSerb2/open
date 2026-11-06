@@ -155,11 +155,24 @@ The real-App suite adds a live WAL writer, a 5,000-visit import with browsing
 and saving before completion, closing the progress window, a History-only
 Settings repeat, and E-2 after a source becomes unreadable. OCR inspection runs
 on a utility worker after snapshot capture. Only `inspect` gets a bounded
-180-second client timeout. Assertions keep their original limits.
+180-second client timeout. Vision `CRImageReaderError` code 1 gets one retry
+after 250 ms; `ocrRetries` records it. Assertions keep their original limits.
 
 Alternate application icons are rendered at selection time and saved below
 `Cache/AppIcons/<ID>-v1.png` in the data root. Restore reads and decodes that PNG
-off the main actor and sets the process icon on the main actor after content.
+off the main actor, including TIFF preparation. One utility-priority main-queue
+turn sets the process icon at least about one second after content. Read-back
+separates worker preparation, main preparation and the AppKit setter. Main
+decode/preparation must stay below 5 ms; setter cost is reported separately.
 Default selection performs no restore work. A missing or invalid cache reports
 an Icon pane error and can be repaired by selecting the icon again. Encoded
 images are limited to 16 MiB and decoded dimensions to exactly 1024 × 1024.
+
+
+Import age starts when Open adds a Today tab. Pinned tabs and Favorites keep
+the source times. A Settings merge treats IDs already in the target Profile's
+archive as duplicates, after one off-main batch query per Profile. The real-App
+fixture uses 48-hour-old Today tabs with the normal twelve-hour archive setting,
+then finishes, relaunches and imports again. It also closes a tab and a former
+Favorite through production commands before repeat import. Source files stay
+unchanged. See [the Steps E/F receipt](first-run/steps-ef-verification.md).
