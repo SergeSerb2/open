@@ -5,7 +5,7 @@ import OpenBoosts
 
 @MainActor enum CodeFlows {
     static func run() -> [Flows.Check] {
-        let checks = autoreleasepool { editingFlows() }
+        let checks = autoreleasepool { editingFlows()+pickerFlow() }
         // Complete deferred native teardown before another process takes focus.
         RunLoop.main.run(until:Date().addingTimeInterval(0.01))
         return checks+EditorNativeKey.run(review:true)+renders()
@@ -113,6 +113,31 @@ import OpenBoosts
         check("F17 first Esc ends text editing; second Esc returns to simple mode",ended && !stage.view.isCodeMode && stage.controller.panel != nil)
         stage.controller.close();stage.parent.close()
         return checks
+    }
+    private static func pickerFlow() -> [Flows.Check] {
+        let stage = EditorStage(state:"editor-code-css")
+        defer { stage.controller.close();stage.parent.close() }
+        let code = stage.view.codeView!,css = code.editor
+        let before = css.string
+        css.setSelectedRange(NSRange(location:5,length:0))
+        let unavailable = code.control("editor.code.pick")?.isEnabled == false
+        stage.host.zapEnabled = true;stage.session.onChange?()
+        let enabled = code.control("editor.code.pick")?.isEnabled == true
+        stage.tap("editor.code.pick")
+        let entered = stage.session.isSelecting && stage.host.pickerCalls.last == "select"
+        stage.host.deliver("picker:selected",selector:".picked")
+        let expected = (before as NSString).replacingCharacters(in:NSRange(location:5,length:0),with:".picked")
+        let inserted = css.string == expected && !stage.session.isSelecting && stage.host.pickerCalls.last == "exit"
+        stage.panel.makeKey();stage.panel.makeFirstResponder(css)
+        stage.key(6,"z",modifiers:.command)
+        let undone = css.string == before
+        // A late result while JS owns the view must never edit either language.
+        stage.tap("editor.code.pick");code.select(.js)
+        let js = code.editor,jsBefore = js.string
+        let jsDisabled = code.control("editor.code.pick")?.isEnabled == false
+        stage.host.deliver("picker:selected",selector:".late")
+        let isolated = css.string == before && js.string == jsBefore && !stage.session.isSelecting
+        return [.init(name:"Pick Selector real CSS view: unavailable disabled (\(unavailable)), enabled (\(enabled)), entered (\(entered)), caret insertion (\(inserted)), one Cmd+Z (\(undone)); JS disabled and late result ignored (\(jsDisabled && isolated))",pass:unavailable && enabled && entered && inserted && undone && jsDisabled && isolated)]
     }
     /// Real native field editing and window key dispatch, including hidden siblings.
     static func reviewFlows() -> [Flows.Check] {

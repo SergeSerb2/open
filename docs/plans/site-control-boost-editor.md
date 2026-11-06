@@ -1444,7 +1444,7 @@ paste the summary (`AGENTS.md` rule 10). Steps 1, 2, and 4 are open PRs that are
 | 5 | new (App) | App editor host (placement frame, preview/refresh), Boost commands, Library Boosts section | B1–B3, B6–B10 PASS; `settings-preview check` PASS |
 | 6 | [S12-D #197](https://github.com/SergeSerb2/open/pull/197) | Zap: picker restyle (frame, bar, popup, "Click to reveal"), count on the button, picker events | F13 PASS; `boosts` harness PASS; B4 after P7 |
 | 7 | package: `s12/code-mode` (PR pending); App: Step 5 host | Code mode (480 × 588 window, header, native text view, bottom bar, CSS live, JS refresh, devtools, size persistence). Evidence and negative-proof logs are in the package PR body. | Package F17/F18 and review-fix receipts are recorded in the PR; B5 pending App host `loadedJS` and bound-commit wiring. |
-| 8 | [S12-D package #197](https://github.com/SergeSerb2/open/pull/197); code-mode binding by the lead after merge | "Pick Selector": picker select mode (`zap:enter` with `mode: "select"`; page → native `picker:selected {boostID, sessionNonce, selector, matches}`; no commit, no hide); the editor inserts the selector at the CSS caret | `boosts` harness incl. a check that select mode commits nothing; flow "Pick Selector inserts the selector" |
+| 8 | [S12-D package #197](https://github.com/SergeSerb2/open/pull/197); code-mode binding in `s12/code-mode` | "Pick Selector": picker select mode (`zap:enter` with `mode: "select"`; page → native `picker:selected {boostID, sessionNonce, selector, matches}`; no commit, no hide); the editor inserts the selector at the CSS caret | `boosts` harness incl. a check that select mode commits nothing; flow "Pick Selector inserts the selector" |
 | 9 | new | Engine items E1–E4 as they land | interim rows switch |
 
 **Step 6 package integration (S12-D):** the App adapter fans out validated
@@ -1464,7 +1464,7 @@ button off and enabled when the host remains available, so the user can retry.
 
 **Step 8 package integration (S12-D):** `BoostEditorHost.enterSelectorPicker`
 is a plain protocol requirement without a default; the render harness fake host
-implements it. The lead binds the App host and code-mode button after merge:
+implements it. The lead binds the App host after merge; code mode binds the available selector picker:
 call `session.pickSelector()` and bind `insertSelectorAtCaret` to the CSS
 NSTextView caret. Selection inserts the selector and exits without a store write
 or hidden content. The coordinator owns `BoostPickerEvent`; OpenSiteControl

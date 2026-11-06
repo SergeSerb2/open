@@ -23,8 +23,10 @@ import OpenDesign
         add("editor.code.back","Back","arrow.left",.codeBack) { [weak self] in self?.onBack?() }
         add("editor.code.css","CSS","",.codeSegment) { [weak self] in self?.select(.css) }
         add("editor.code.js","JS","",.codeSegment) { [weak self] in self?.select(.js) }
-        add("editor.code.pick","Pick Selector","eyedropper",.color) {}
-        control("editor.code.pick")?.isEnabled = false
+        add("editor.code.pick","Pick Selector","eyedropper",.color) { [weak self] in
+            guard let self, self.language == .css, self.session.zapAvailable else { return }
+            self.session.pickSelector()
+        }
         add("editor.code.devtools","Show Developer Tools","hammer",.color) { [weak session] in session?.toggleDevTools() }
         add("editor.code.run","Refresh to Run","",.codeRun) { [weak session] in session?.refreshToRun() }
         add("editor.code.dismissNotice",BoostEditorMetrics.codeNoticeDismissLabel,BoostEditorMetrics.codeNoticeDismissGlyph,.codeNoticeDismiss) { [weak session] in session?.dismissJSNotice() }
@@ -44,6 +46,13 @@ import OpenDesign
             NotificationCenter.default.addObserver(self,selector: #selector(scrolled(_:)),name: NSView.boundsDidChangeNotification,object: scroll.contentView)
             editors[kind] = text;scrolls[kind] = scroll;addSubview(scroll)
         }
+        session.insertSelectorAtCaret = { [weak self] selector in
+            guard let self, self.language == .css, !self.isHidden, self.session.isEditable,
+                  let css = self.editors[.css] else { return }
+            css.breakUndoCoalescing()
+            css.insertText(selector,replacementRange: css.selectedRange())
+            css.breakUndoCoalescing()
+        }
         for edge in [CodeResizeStrip.Edge.left,.bottom] {
             let strip = CodeResizeStrip(edge: edge);strip.onResize = { [weak self] size,end in self?.onResize?(size,end) };addSubview(strip)
         }
@@ -61,6 +70,8 @@ import OpenDesign
     public func refresh() {
         for (kind,text) in editors { if text.string != session.code(kind) { text.load(session.code(kind),language: kind) };scrolls[kind]?.isHidden = kind != language }
         for kind in [BoostCodeLanguage.css,.js] { let b = control("editor.code."+kind.rawValue) as? EditorButton;b?.selected = language == kind;b?.setAccessibilityValue(language == kind) }
+        control("editor.code.pick")?.isEnabled = language == .css && session.isEditable && session.zapAvailable
+        (control("editor.code.pick") as? EditorButton)?.selected = session.isSelecting
         control("editor.code.run")?.isHidden = !showsRefreshToRun
         (control("editor.code.devtools") as? EditorButton)?.selected = session.devToolsVisible
         let showsNotice = language == .js && session.showsJSNotice
