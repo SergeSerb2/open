@@ -47,7 +47,14 @@ def run(factory, results, tmp, root, wait_until, new_tab, frame, read_image, ext
         if command:
             app.call("key", key="y", modifiers=["command", "shift"], route="app")
         else:
-            hover(); app.call("ext-click", extension=identifier, surface=surface)
+            hover()
+            current = strip(surface)
+            if identifier in current["ids"]:
+                app.call("ext-click", extension=identifier, surface=surface)
+            elif current["more"]:
+                app.call("ext-click", extension="more", surface=surface, select=action(identifier)["name"])
+            else:
+                raise RuntimeError("action has neither a visible slot nor an overflow menu: " + identifier)
         return wait_until(lambda: (lambda s: s if s.get("visible") else None)(app.call("ext-popup-state")), timeout=15)
     def page(): return app.call("ext-popup")["page"]["identifier"]
     def capture(name, window=None):
