@@ -589,6 +589,7 @@
         guard w.controller?.sidebar(w.controller!.sidebar, didRequest: intent) == true else { throw Failure(message: "pin refused") }
         return describe(tab, in: w)
       case "split":
+        if a["op"] != nil { return try await splitCommand(a, w) }
         w.addSplitView(nil)
         return w.visibleTabs.map { describe($0, in: w) }
       case "navigate":
@@ -1764,8 +1765,26 @@
         // Real input arrives after the display cycle has laid the window out (the window
         // buttons are placed at its end); run that pass before hit-testing.
         target.layoutIfNeeded()
-        if let up = click(.leftMouseUp) { NSApp.postEvent(up, atStart: false) }
-        if let down = click(.leftMouseDown) { NSApp.sendEvent(down) }
+        if a["queued"] as? Bool == true {
+          // Controls that read NSApp.currentEvent (Option-click pane Close) need
+          // native dequeue, not a direct sendEvent with an unrelated current event.
+          let delivered = Mutex(false)
+          let monitor = NSEvent.addLocalMonitorForEvents(matching: .leftMouseUp) { event in
+            if event.windowNumber == number && event.locationInWindow == point { delivered.withLock { $0 = true } }
+            return event
+          }
+          defer { if let monitor { NSEvent.removeMonitor(monitor) } }
+          if let down = click(.leftMouseDown) { NSApp.postEvent(down, atStart: false) }
+          if let up = click(.leftMouseUp) { NSApp.postEvent(up, atStart: false) }
+          let deadline = ContinuousClock.now.advanced(by: .seconds(3))
+          while !delivered.withLock({ $0 }) {
+            guard ContinuousClock.now < deadline else { throw Failure(message: "pointer click was not dequeued") }
+            try await Task.sleep(for: .milliseconds(5))
+          }
+        } else {
+          if let up = click(.leftMouseUp) { NSApp.postEvent(up, atStart: false) }
+          if let down = click(.leftMouseDown) { NSApp.sendEvent(down) }
+        }
       } else if let start = a["from"] as? [Double], let end = a["to"] as? [Double], start.count == 2, end.count == 2 {
         // The real resize handle consumes these own-window events through
         // NSWindow.nextEvent. No system cursor or keyboard is touched.
@@ -1873,7 +1892,7 @@
         "return": ("\r", 36), "escape": ("\u{1b}", 53), "tab": ("\t", 48), "space": (" ", 49),
         "delete": ("\u{7f}", 51), "forward-delete": (String(Character(UnicodeScalar(NSDeleteFunctionKey)!)), 117),
         "o": ("o", 31), ",": (",", 43), "z": ("z", 6), "n": ("n", 45), "t": ("t", 17), "w": ("w", 13), "l": ("l", 37), "f": ("f", 3), "s": ("s", 1), "a": ("a", 0),
-        "e": ("e", 14), "v": ("v", 9), "x": ("x", 7), "c": ("c", 8), "d": ("d", 2), "i": ("i", 34), "j": ("j", 38), "y": ("y", 16), "1": ("1", 18), "2": ("2", 19), "9": ("9", 25), "=": ("=", 24),
+        "e": ("e", 14), "v": ("v", 9), "x": ("x", 7), "c": ("c", 8), "d": ("d", 2), "i": ("i", 34), "j": ("j", 38), "y": ("y", 16), "1": ("1", 18), "2": ("2", 19), "3": ("3", 20), "4": ("4", 21), "9": ("9", 25), "=": ("=", 24), "-": ("-", 27), "}": ("}", 30), "{": ("{", 33),
         "control": ("", 59), "command": ("", 55),
         "down": (String(Character(UnicodeScalar(NSDownArrowFunctionKey)!)), 125),
         "up": (String(Character(UnicodeScalar(NSUpArrowFunctionKey)!)), 126),
