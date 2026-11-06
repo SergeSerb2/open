@@ -14,8 +14,8 @@ final class AppBoosts: BoostsProvider {
   private struct State { let store: BoostStore; var matcher: BoostMatcher }
   @ObservationIgnored private var profiles: [ProfileID: State] = [:]
   @ObservationIgnored private var observers: [SiteControlObservationToken: @MainActor () -> Void] = [:]
-  @ObservationIgnored private var defaultsObserver: NSObjectProtocol?
-  @ObservationIgnored private var windowObserver: NSObjectProtocol?
+  @ObservationIgnored private var defaultsObserver: (any NSObjectProtocol)?
+  @ObservationIgnored private var windowObserver: (any NSObjectProtocol)?
   private(set) var revision = 0
   private(set) var boostsGloballyEnabled: Bool
   @ObservationIgnored lazy var adapter = BoostEngineAdapter(boosts: self)
@@ -28,9 +28,9 @@ final class AppBoosts: BoostsProvider {
     defaultsObserver = NotificationCenter.default.addObserver(forName: UserDefaults.didChangeNotification, object: nil, queue: .main) { [weak self] _ in
       MainActor.assumeIsolated { self?.preferencesChanged() }
     }
-    windowObserver = NotificationCenter.default.addObserver(forName: NSWindow.didBecomeKeyNotification, object: nil, queue: .main) { [weak self] notification in
+    windowObserver = NotificationCenter.default.addObserver(forName: NSWindow.didBecomeKeyNotification, object: nil, queue: .main) { [weak self] _ in
       MainActor.assumeIsolated {
-        guard let self, let window = notification.object as? NSWindow, window.windowController is LittleOpenWindowController else { return }
+        guard let self, let window = NSApp.keyWindow, window.windowController is LittleOpenWindowController else { return }
         for factory in self.app.hostFactories.values { factory.controller?.boostEditor?.close(returnFocus: false) }
       }
     }
