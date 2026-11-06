@@ -144,6 +144,8 @@ class OpenExtensionsToolbar : public ExtensionsToolbarViewModel::Delegate,
 
   const raw_ptr<OpenTabStrip> strip_;
   const raw_ptr<Browser> browser_;
+  // The action model destructors read popup state. Keep it alive until after model_.
+  std::unique_ptr<OpenExtensionPopup> popup_;
   std::unique_ptr<ExtensionsToolbarViewModel> model_;
   ui::ScopedUnownedUserData<ExtensionsContainer> container_user_data_;
   base::ScopedObservation<ExtensionsToolbarViewModel,
@@ -151,7 +153,6 @@ class OpenExtensionsToolbar : public ExtensionsToolbarViewModel::Delegate,
       observation_{this};
   base::flat_map<std::string, base::CallbackListSubscription>
       icon_subscriptions_;
-  std::unique_ptr<OpenExtensionPopup> popup_;
   // Counts popups, so a deferred close cannot hit a later popup.
   int popup_serial_ = 0;
   // The user source of the action that runs now (Execute); a popup that
@@ -159,7 +160,6 @@ class OpenExtensionsToolbar : public ExtensionsToolbarViewModel::Delegate,
   int running_source_ = -1;
   // GetExtensionActionMenu: each returned menu's own model, by menu id.
   std::map<int, OpenMenu> menus_;
-  int next_menu_id_ = 1;
   bool list_changed_ = false;
   std::set<std::string> updated_;
   bool flush_scheduled_ = false;

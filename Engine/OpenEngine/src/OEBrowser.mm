@@ -244,8 +244,6 @@ class OETabStripHandler : public CefTabStripHandler {
   // Pages Chromium is creating in the strip, until OnTabCreated.
   NSMutableArray<OEWebContent*>* _chromiumTabs;
   BOOL _stripSyncScheduled;
-  // Action state is per tab: refresh it once the strip's active tab is set.
-  BOOL _actionsNeedRefresh;
   BOOL _stripRefused;
   BOOL _closed;
 }
@@ -375,11 +373,9 @@ class OETabStripHandler : public CefTabStripHandler {
     return;
   }
   _activeWebContent = activeWebContent;
-  if (_strip) {
-    // Action state (badge, title) is per tab: oe_syncTabStrip reports it
-    // once Chromium's active tab matches.
-    _actionsNeedRefresh = YES;
-  }
+  // Invalidate only. Chromium sends the change event; a same-turn caller
+  // (for example a focused-pane context menu) can already read fresh state.
+  _actions = nil;
   [self oe_setNeedsTabStripSync];
 }
 
@@ -483,10 +479,6 @@ class OETabStripHandler : public CefTabStripHandler {
   OEWebContent* active = _activeWebContent;
   if (active.oe_hostBrowser == self && active.oe_browser) {
     _strip->ActivateTab(active.oe_browser);
-  }
-  if (_actionsNeedRefresh) {
-    _actionsNeedRefresh = NO;
-    [self oe_extensionsChanged];
   }
 }
 
@@ -633,6 +625,13 @@ class OETabStripHandler : public CefTabStripHandler {
   if (!state) {
     return nil;
   }
+  for (OEExtensionCommand* command in _context.extensions.commands) {
+    if (command.actionCommand && [command.extensionIdentifier isEqualToString:identifier]) {
+      state->SetString("shortcutKeyEquivalent", OECef(command.keyEquivalent));
+      state->SetInt("shortcutModifierFlags", static_cast<int>(command.modifierFlags));
+      break;
+    }
+  }
   NSString* key = [identifier stringByAppendingString:@"/"];
   return [[OEExtensionAction alloc]
       initOEWithIdentifier:identifier
@@ -707,6 +706,14 @@ class OETabStripHandler : public CefTabStripHandler {
   _actions = nil;
   if (!self.extensionActionsReady) {
     [_actionImages removeAllObjects];
+  } else {
+    std::vector<CefString> ids;
+    _strip->GetExtensionActionIds(ids);
+    NSMutableSet* live = [NSMutableSet set];
+    for (const auto& id : ids) [live addObject:OEString(id)];
+    for (NSString* id in _actionImages.allKeys) {
+      if (![live containsObject:[id componentsSeparatedByString:@"/"].firstObject]) [_actionImages removeObjectForKey:id];
+    }
   }
   if ([_delegate respondsToSelector:@selector
                  (browserDidUpdateExtensionActions:)]) {
@@ -748,6 +755,18 @@ class OETabStripHandler : public CefTabStripHandler {
   if (_strip) {
     _strip->MoveExtensionAction(OECef(extensionIdentifier), (int)index);
   }
+}
+
+- (BOOL)executeExtensionCommand:(NSString*)name forExtension:(NSString*)identifier {
+  if (_stripSyncScheduled) [self oe_syncTabStrip];
+  for (OEExtensionCommand* command in _context.extensions.commands) {
+    if ([command.extensionIdentifier isEqualToString:identifier] && [command.name isEqualToString:name]) {
+      if (command.actionCommand) return [self executeExtensionAction:identifier source:OEExtensionActionSourceCommand];
+      auto manager = _context.extensions.oe_manager;
+      return manager && _activeWebContent.oe_browser && manager->ExecuteCommand(OECef(identifier), OECef(name), _activeWebContent.oe_browser);
+    }
+  }
+  return NO;
 }
 
 - (BOOL)executeExtensionAction:(NSString*)extensionIdentifier
