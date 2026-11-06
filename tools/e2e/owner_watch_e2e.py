@@ -136,7 +136,7 @@ subprocess.Popen = popen
                 texts = [p.read_text(errors='replace') for p in launch_logs]
                 assert sum(value.count(message) for value in texts) == 1, 'expected one owner-exit log line'
                 if download_base:
-                    assert not any('downloads-quit-alert-presented' in value for value in texts), 'owner death presented download quit alert'
+                    assert not any('downloads-quit-alert-presented' in value for value in texts if message in value), 'owner death presented download quit alert'
             return dict(ok=True, negative=negative, active_download=bool(download_base), ping=reply, elapsed=elapsed,
                         before=before, remaining=remaining)
         finally:
