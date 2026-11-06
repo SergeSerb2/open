@@ -79,8 +79,10 @@ A page-invented nonce cannot pass the native session check.
 
 ## App runtime and editor (Section 12, Step 5)
 
-`AppBoosts` owns one store and matcher per loaded Profile. Editor commits, undo,
-Library switches, rename and delete rebuild the matcher at the same boundary.
+`AppBoosts` owns one store per loaded Profile. Editor commits, undo, Library
+switches, rename and delete rebuild two cached matchers at the same boundary:
+an enabled-only runtime matcher, and a matcher that also returns disabled Boosts
+for Site Control and Edit Boost. The latter returns the original stored flags.
 The global preference uses a UserDefaults notification; the runtime has no timer
 or idle polling. The Site Control provider methods are present without protocol
 conformance so the parallel Site Control App adapter can adopt them.

@@ -119,7 +119,10 @@ final class AppBoosts: BoostsProvider {
     controller.boostEditor = editor
     let context = SiteControlContext(tabID: tabID, profileID: host.profileID, url: url, displayHost: url.host ?? "")
     // new-legacy-boost uses simple mode until Step 7 supplies Code mode.
-    _ = editor.present(parent: window, contentRect: controller.container.bounds, context: context, boostID: boostID)
+    if editor.present(parent: window, contentRect: controller.container.bounds, context: context, boostID: boostID), editor.session?.isNew == true {
+      // present creates the draft in the shared store before any control edit.
+      refresh(profile: host.profileID)
+    }
   }
   func editCurrent(tabID: ItemID) {
     guard let factory = factory(for: tabID), let host = factory.hosts[tabID], let url = host.content.url else { return }

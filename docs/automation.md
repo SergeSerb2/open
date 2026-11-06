@@ -938,7 +938,8 @@ limit). CSS/JS typing reports blocked until Code mode exists.
 State includes the Boost value, bound tab/Profile, interstitial, global and scope
 state, undo state, controls, panel frame/key state, specific active alert, and
 last completed live refresh timing/page count. The `boosteditor` suite exercises
-B1–B3 and B6–B10, plus navigation/close, ten-page refresh, Library and saved-script
-flows. B4 is blocked by P7; B5 is blocked by Code mode. Every row includes a real
-negative control. The suite restores all preference keys in `finally` and uses
+B1–B3 and B6–B10, plus navigation/close, ten-page refresh, Library, saved-script,
+and Edit Boost for a disabled saved Boost. B4 is blocked by P7; B5 is blocked by
+Code mode. Every row includes a real negative control. The suite restores all
+preference keys in `finally` and uses
 an ephemeral local fixture server plus the runner's isolated roots/cleanup.
