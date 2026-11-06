@@ -9688,6 +9688,15 @@ def space_manager_checks(results, tmp, config, style):
             return
         library_capture_checks(app, require, root, evidence)
         if os.environ.get('OPEN_LIBRARY_CAPTURES_ONLY'): return
+        # Independent fixtures: the existing Manager cache checkpoint starts
+        # with its first Library opening after three Spaces already exist.
+        # Do not carry capture selections, stores or an earlier Manager into it.
+        app.quit()
+        require('library_capture_fixture_quit', app.quit_report.get('ok') and not app.quit_report.get('forced'), receipt=app.quit_report)
+        subprocess.run(['defaults', 'delete', bundle_id], capture_output=True)
+        for folder in (root, cache): shutil.rmtree(folder, ignore_errors=True)
+        app = launch((fixture('Manager One'),))
+        first_window = app.call('shell-windows')[0]['id']
         s1 = order(app)[0]
         s2 = app.call('space-create', title='Manager Two')
         s3 = app.call('space-create', title='Manager Three')
