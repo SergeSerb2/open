@@ -924,6 +924,7 @@ Frame preferences are restored after quit through the shared defaults fallback.
 | Command | Arguments | Result |
 |---|---|---|
 | `boosts` | `action: list|get`, optional `profile` UUID, `boost` UUID for get | Values from the App's loaded Profile store. No mutation API. |
+| `boost-library` | `action: rename\|enabled\|delete`, `boost` UUID, `name` or `enabled` | Requires a visible Boosts Library row; calls its real LibraryActions boundary after confirmation. It does not prove native button or confirmation input. |
 | `boost-editor` | `action: open|close|state|drag|key|tap|type`, optional `boost`, `tab` for open | Real simple editor and session. Private or non-http(s) tabs refuse open. |
 
 `drag` takes 2–512 finite `[x,y]` points within the color pad, in editor-view
@@ -937,9 +938,12 @@ limit). CSS/JS typing reports blocked until Code mode exists.
 
 State includes the Boost value, bound tab/Profile, interstitial, global and scope
 state, undo state, controls, panel frame/key state, specific active alert, and
-last completed live refresh timing/page count. The `boosteditor` suite exercises
+refresh generation/completion, timing, delivered/skipped page counts, JavaScript
+delivery count and apply-failure count. The `boosteditor` suite exercises
 B1–B3 and B6–B10, plus navigation/close, ten-page refresh, Library, saved-script,
-and Edit Boost for a disabled saved Boost. B4 is blocked by P7; B5 is blocked by
+Edit Boost for a disabled saved Boost, discard/wake refresh, Library metadata
+reconciliation, Undo/Redo preservation, and Library Delete. The ten-page timing
+row requires ten live matching pages with nine hidden pages. B4 is blocked by P7; B5 is blocked by
 Code mode. Every row includes a real negative control. The suite restores all
 preference keys in `finally` and uses
 an ephemeral local fixture server plus the runner's isolated roots/cleanup.

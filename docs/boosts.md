@@ -96,6 +96,10 @@ separate document-start script; live preview/refresh never executes it. Commits
 and SPA address changes update the bound page. No matching Boost and no old live
 plan causes no JavaScript evaluation or runtime injection.
 
+Refresh skips closed or discarded web contents without a retry or error toast.
+Profile scripts stay current, so a slept tab takes the current plan at document
+start when it wakes or reloads. A close racing an engine reply is also ignored.
+
 Global off removes scripts and clears live pages. Global on rebuilds scripts and
 refreshes pages. Ephemeral contexts use the incognito planner policy; existing
 Boosts apply, while editor commands refuse ephemeral and non-http(s) pages.
@@ -110,7 +114,11 @@ OEApplication before page edit routing and use the editor's own undo stack.
 `new-boost`, `edit-boost`, `new-legacy-boost`, Customize Page and `view-boosts`
 are wired. Legacy opens simple mode until Code mode lands. Gallery is disabled.
 Library Boosts uses the same stores and a Profile picker, with Edit, Rename,
-Delete, enable switches, the empty state and global Turn On action.
+Delete, enable switches, the empty state and global Turn On action. Library Rename
+and enable changes update an open editor immediately without adding an undo step.
+Undo/Redo preserve the current enabled flag and current Library name, except
+that the editor's own Rename step restores its recorded name. Library Delete
+closes matching editors before deleting the stored Boost.
 
 **Limits:** managed scripts currently run in the main world. Overlay secrecy is
 not proven. P7 isolated-world/native message support blocks Zap; `enterZap`
