@@ -51,8 +51,13 @@ def run(factory, results, tmp, env):
             tab = new_tab(app, origin + '/ads.html')
             app.call('filter', block=['ad.js'])
             app.call('navigate', tab=tab, url=origin+'/ads.html'); app.call('wait', tab=tab)
+            adblock_open_before = Path(app.user_data, '.adblock-lock').exists()
             before = state()
             s = opened()
+            record('S1_lazy_adblock_owner', not adblock_open_before
+                   and not Path(app.user_data, '.adblock-lock').exists(),
+                   openedBefore=adblock_open_before,
+                   openedAfter=Path(app.user_data, '.adblock-lock').exists())
             actions = [r for r in s['controls'] if r['id'].startswith('action.')]
             expected = {'action.share','action.newBoost','action.capture','action.captureFull'}
             anchor, tip, body = s['anchor'], s['tip'], s['body']
