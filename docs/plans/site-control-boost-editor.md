@@ -1466,8 +1466,9 @@ button off and enabled when the host remains available, so the user can retry.
 is a plain protocol requirement without a default; the render harness fake host
 implements it. The lead binds the App host after merge; code mode binds the available selector picker:
 call `session.pickSelector()` and bind `insertSelectorAtCaret` to the CSS
-NSTextView caret. Selection inserts the selector and exits without a store write
-or hidden content. The coordinator owns `BoostPickerEvent`; OpenSiteControl
+NSTextView caret as one undoable insertion. The button follows host availability
+and is disabled on JS. A late selection on JS changes neither text view. The picker
+commits no Zap and hides no content; CSS insertion uses the normal save debounce. The coordinator owns `BoostPickerEvent`; OpenSiteControl
 exports an alias. These package hooks do not wait for the B/C branches to merge.
 
 ---
