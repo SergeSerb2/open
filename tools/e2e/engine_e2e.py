@@ -9698,7 +9698,12 @@ def space_manager_checks(results, tmp, config, style):
         # The rest capture shows the loaded page title, not a title still in flight.
         for row in app.call('tabs'): app.call('wait', tab=row['id'])
         app.call('menu-perform', id='manage-spaces')
-        ready = manager_ready(app)
+        # The capture checks already opened the Manager with one Space. Its
+        # hidden view reconciles newly added columns on the next observation
+        # turn. Wait for real column/header views before measuring geometry.
+        ready = wait_until(lambda: (lambda st: st if st['visible'] and st['section'] == 'spaces'
+                           and st['hostedManagers'] == 1 and len(st['columns']) == 3
+                           and all(c['column'][2] > 0 and c['header'] for c in st['columns']) else None)(state(app)), timeout=5)
         rest = capture(app, 'manager-rest')
         require('E5_menu_real_manager', ready and ready['section'] == 'spaces' and ready['managerClass'] == 'OpenSidebar.SpaceManagerView'
                 and ready['sameModel'] and ready['sameUndoManager'] and not ready['previewsEnabled'] and ready['globalPreviewsEnabled'],
