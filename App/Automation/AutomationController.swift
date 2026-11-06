@@ -51,7 +51,7 @@
         else { throw Failure(message: "expected {\"cmd\": …}") }
         id = request["id"] ?? NSNull()
         let args = request["args"] as? [String: Any] ?? [:]
-        inputCommand = cmd == "key" || cmd == "focus" || (cmd == "window-focus" && args["activate"] as? Bool == true)
+        inputCommand = cmd == "key" || cmd == "focus" || cmd == "little-open-link-click" || (cmd == "window-focus" && args["activate"] as? Bool == true)
         if ["space-manager-drag", "sidebar-click", "sidebar-key", "hover"].contains(cmd) { inputCommand = true }
         if inputCommand { nativeInputStart = 0 }
         let result = try await run(cmd, args)
@@ -84,6 +84,9 @@
       extensionAutomation.registerContexts()
       // App lifecycle commands remain available after the final window closes.
       switch cmd {
+      case _ where Self.littleOpenCommands.contains(cmd): return try await runLittleOpenCommand(cmd, a)
+      case "key": return try await sendKey(a, app.frontWindowController.flatMap { app.hostFactories[$0.windowID] })
+      case "snapshot": return try await snapshot(a, app.frontWindowController.flatMap { app.hostFactories[$0.windowID] })
       case "ext-prompt", "ext-manage", "ext-commands", "ext-run-command":
         return try await runExtensionCommand(cmd, a)
       case "applescript": return try await runAppleScript(a)
@@ -1820,7 +1823,7 @@
         fullscreenTransition: app.windowControllers.first { $0.window === target }?.isChangingFullScreen ?? false)
     }
 
-    private func activateForInput(_ target: NSWindow, timeout: Double = 5) async throws {
+    func activateForInput(_ target: NSWindow, timeout: Double = 5) async throws {
       // Activation is asynchronous. Never inject into an inactive app after a
       // fixed grace period: its production router correctly declines the key.
       // Make the requested window key again once activation has completed.
@@ -1829,6 +1832,17 @@
       while true {
         // Retain the same predicate values for the grant and any refusal.
         let readiness = inputReadiness(target)
+        // AppKit keeps the Little Open parent as NSApp.keyWindow while its
+        // native NSPopoverWindow reports isKeyWindow and owns the field editor.
+        // Accept only that exact, visible picker and its key parent.
+        let littlePicker = app.littleOpenCoordinator?.controllers.values.first {
+          $0.spacePicker?.view.window === target && $0.window === NSApp.keyWindow
+        }
+        if readiness.active, readiness.targetIsKey, target.isVisible,
+          littlePicker?.window?.isKeyWindow == true, !readiness.fullscreenTransition {
+          nativeInputStart = ProcessInfo.processInfo.systemUptime
+          return
+        }
         if readiness.ready {
           nativeInputStart = ProcessInfo.processInfo.systemUptime
           return
@@ -1847,9 +1861,9 @@
     /// sends it straight to the window's first responder (the page view when
     /// it has focus), which exercises the engine's pre-key hook. In-process
     /// only: the system keyboard is never touched.
-    private func sendKey(_ a: [String: Any], _ w: EngineWebContentHostFactory) async throws -> Any {
-      guard let target = a["window"] as? String == "popup" ? w.popupPanel :
-        (a["window"] as? Int).flatMap({ n in NSApp.windows.first { $0.windowNumber == n } }) ?? w.window
+    private func sendKey(_ a: [String: Any], _ w: EngineWebContentHostFactory?) async throws -> Any {
+      guard let target = a["window"] as? String == "popup" ? w?.popupPanel :
+        (a["window"] as? Int).flatMap({ n in NSApp.windows.first { $0.windowNumber == n } }) ?? w?.window
       else { throw Failure(message: "no window") }
       try await activateForInput(target)
       if let text = a["text"] as? String {
@@ -1893,10 +1907,12 @@
       let route = a["route"] as? String ?? "app"
       // Modifier keys alone post one flagsChanged event (down: pass the modifier; up: none).
       let types: [NSEvent.EventType] = code == 59 || code == 55 ? [.flagsChanged] : [.keyDown, .keyUp]
+      let eventTimestamp = a["eventTimestamp"] as? Double ?? ProcessInfo.processInfo.systemUptime
+      guard eventTimestamp.isFinite else { throw Failure(message: "eventTimestamp must be finite") }
       for type in types {
         guard
           let event = NSEvent.keyEvent(
-            with: type, location: .zero, modifierFlags: mods, timestamp: ProcessInfo.processInfo.systemUptime,
+            with: type, location: .zero, modifierFlags: mods, timestamp: eventTimestamp,
             windowNumber: target.windowNumber, context: nil, characters: chars, charactersIgnoringModifiers: chars,
             isARepeat: false, keyCode: code)
         else { continue }
@@ -1906,21 +1922,22 @@
       // turn, as a user-facing automation caller expects.
       try? await Task.sleep(for: .milliseconds(20))
       return ["firstResponder": target.firstResponder.map { String(describing: type(of: $0)) } ?? "none",
-        "sidebarMode": w.windowState.sidebarMode.rawValue, "barPresented": w.commandBarSession?.isPresented == true,
+        "sidebarMode": w?.windowState.sidebarMode.rawValue ?? "", "barPresented": w?.commandBarSession?.isPresented == true,
         "keyWindow": NSApp.keyWindow?.windowNumber ?? 0] as [String: Any]
     }
 
-    private func snapshot(_ a: [String: Any], _ w: EngineWebContentHostFactory) async throws -> Any {
+    private func snapshot(_ a: [String: Any], _ w: EngineWebContentHostFactory?) async throws -> Any {
       let path = a["path"] as? String ?? NSTemporaryDirectory() + "open-snapshot.png"
       let url = URL(fileURLWithPath: path)
       if a["tab"] != nil || a["page"] as? Bool == true {
+        guard let w else { throw Failure(message: "no browser window") }
         let page: any WebContent = try content(a, w)
         try await page.snapshotPNG().write(to: url)
         return ["path": path, "method": "devtools"]
       }
       if a["window"] as? String == "library", app.settingsPresenter.libraryPresenter?.window == nil { throw Failure(message: "no Library window") }
       let number = a["window"] as? String == "library" ? app.settingsPresenter.libraryPresenter?.window?.windowNumber : a["window"] as? Int
-      guard let target = number.flatMap({ n in NSApp.windows.first { $0.windowNumber == n } }) ?? w.window
+      guard let target = number.flatMap({ n in NSApp.windows.first { $0.windowNumber == n } }) ?? w?.window
       else { throw Failure(message: "no window") }
       var keyTime: Double?
       var capturedAfterKey: Double?

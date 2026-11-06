@@ -184,9 +184,9 @@ class Open:
     def call(self, cmd, timeout=120, **args):
         if cmd in ("window-close", "popup-close", "quit") or (cmd == "devtools" and args.get("method") == "Page.crash"):
             self.discover_owned_processes()
-        foreground_input = cmd in ("key", "focus") or (cmd == "window-focus" and args.get("activate"))
+        foreground_input = cmd in ("key", "focus", "little-open-link-click") or (cmd == "window-focus" and args.get("activate"))
         if cmd in ("space-manager-drag", "sidebar-click", "sidebar-key", "hover"): foreground_input = True
-        if foreground_input and self.pid and not self.call("window-state").get("appActive", False):
+        if foreground_input and self.pid and not self.call("native-focus-state").get("active", False):
             # `NSApp.activate()` is a request, not a grant. Renew the explicit
             # foreground request if another app took focus. Address the exact
             # verified PID; a bundle identifier can name another Open worktree.
@@ -6974,6 +6974,399 @@ def numbering_checks(factory, results, tmp):
         app.quit(); server.shutdown(); server.server_close()
 
 
+def littleopen_checks(factory, results, tmp):
+    """Routing Steps 6/7: real App windows, engine, menus, archive and visibility.
+    Input stays inside the automation socket. Shared defaults are restored even on failure.
+    """
+    import copy
+    import plistlib
+    import uuid
+    domain = 'io.github.sergeserb2.open'
+    keys = ('open.links.externalInLittleOpen', 'open.links.littleOpenHotkeyEnabled',
+            'open.links.optionCommandClickLittleOpen', 'open.links.littleOpenNUXSeen',
+            'open.links.littleOpenProfileSwitchConfirmed', 'open.sidebar.autoArchiveBannerDismissed', 'open.library.lastSection')
+    exported = subprocess.run(['defaults', 'export', domain, '-'], capture_output=True)
+    saved_domain = plistlib.loads(exported.stdout) if exported.returncode == 0 else {}
+    server, port = _sleep_server()
+    origin = 'http://127.0.0.1:%d' % port
+    app = None
+    probe = os.path.join(tmp, 'littleopen-idle-probe.dylib')
+    subprocess.run(['xcrun', 'clang', '-dynamiclib', '-fblocks', '-fobjc-arc', '-Wno-deprecated-declarations',
+                    '-DOPEN_APP_TIMER_PROBE', os.path.join(ROOT, 'tools/verification/feature-idle-probe.m'),
+                    '-framework', 'AppKit', '-framework', 'QuartzCore', '-framework', 'CoreVideo', '-o', probe], check=True)
+    env = {'DYLD_INSERT_LIBRARIES': probe, 'OPEN_LITTLEOPEN_TIMER_PROBE': '1'}
+
+    def record(name, ok, **details): results[name] = dict(details, ok=bool(ok))
+    def state(): return app.call('little-open-state')
+    def sessions(): return state()['sessions']
+    def session(sid): return next((s for s in sessions() if s['id'] == sid), None)
+    def action(sid, name, **kw): return app.call('little-open-action', id=sid, action=name, **kw)
+    def close_all():
+        for row in sessions(): action(row['id'], 'close')
+    def menu(cid):
+        wait_until(lambda: any(m['id'] == cid for m in app.call('menu-state')), timeout=3)
+        return app.call('menu-perform', id=cid)
+    def page(url):
+        before = {s['id'] for s in sessions()}
+        menu('new-little-open-window')
+        row = next(s for s in sessions() if s['id'] not in before)
+        app.call('key', window=row['window'], text=url + '\r')
+        loaded = wait_until(lambda: (lambda s: s if s and s['state'] == 'page' and not s['loading'] else None)(session(row['id'])), timeout=12)
+        if not loaded: raise RuntimeError('Little Open page did not load: ' + json.dumps(state()))
+        return loaded
+    def deliver(url): return subprocess.run(['/usr/bin/open', '-a', app.bundle, url], capture_output=True, timeout=15)
+    def rect_equal(a, b): return len(a) == len(b) and max(abs(x-y) for x, y in zip(a, b)) <= 1
+    def snapshot_model():
+        with open(app.call('save')) as stream: return json.load(stream)
+
+    try:
+        for key in keys: subprocess.run(['defaults', 'delete', domain, key], capture_output=True)
+        for key, value in ((keys[0], True), (keys[1], True), (keys[3], True), (keys[5], True)):
+            subprocess.run(['defaults', 'write', domain, key, '-bool', str(value).lower()], check=True)
+        app = factory(urls=(), fresh=True, extra_env={'OPEN_AUTOMATION_EARLY_LITTLE_OPEN': '1'})
+        early = sessions()
+        startup = app.call('startup')
+        record('startup_deferred_little_open', len(early) == 1 and early[0]['state'] == 'bar'
+               and early[0]['fieldFocused'] and not early[0]['sidebarTab']
+               and startup['pagesBeforeEngine'] == startup['contextsBeforeEngine'] == 0,
+               state=state(), startup=startup)
+        app.quit()
+        app = factory(urls=(), fresh=True)
+        seed = snapshot_model()
+        # Two real Profiles, with separate engine directories, plus a second Space.
+        seed['profiles'][0]['settings']['autoArchiveAfter'] = 'never'
+        seed['profiles'][0]['settings']['littleOpenAutoArchiveAfter'] = 'never'
+        second_profile = copy.deepcopy(seed['profiles'][0])
+        second_profile.update(id=str(uuid.uuid4()).upper(), name='Little Open second', dataDirectoryName='LittleOpenSecond')
+        seed['profiles'].append(second_profile)
+        second_space = copy.deepcopy(seed['spaces'][0])
+        second_space.update(id=str(uuid.uuid4()).upper(), title='Little Open target', pinned=[], today=[])
+        seed['spaces'].append(second_space)
+        seed['defaultDestination'] = {'littleOpen': {}}
+        fixture_path = os.path.join(tmp, 'littleopen-snapshot.json')
+        with open(fixture_path, 'w') as stream: json.dump(seed, stream)
+        app.quit(); app = factory(urls=(), snapshot=fixture_path, extra_env=env)
+        base = state()
+        menu('new-little-open-window')
+        bar = sessions()[0]
+        vf = bar['visibleFrame']
+        expected_bar = [vf[0]+vf[2]-510, vf[1]+vf[3]-349, 490, 329]
+        record('B9_bar_frame', bar['state'] == 'bar' and rect_equal(bar['frame'], expected_bar), session=bar)
+        record('B4_field_and_hotkey', bar['fieldFocused'] and state()['hotkeyRegistered']
+               and app.call('hotkey-state')['registered'], session=bar, hotkey=app.call('hotkey-state'))
+        url = origin + '/ticker.html?littleopen=first'
+        app.call('key', window=bar['window'], text=url + '\r')
+        loaded = wait_until(lambda: (lambda s: s if s and s['state'] == 'page' and not s['loading'] else None)(session(bar['id'])), timeout=12)
+        if not loaded: raise RuntimeError('B4 navigation failed: ' + json.dumps(state()))
+        w, h = min(1185, vf[2]-40), min(832, vf[3]-40)
+        expected_page = [vf[0]+vf[2]-20-w, vf[1]+vf[3]-20-h, w, h]
+        record('B9_page_frame', loaded['window'] == bar['window'] and rect_equal(loaded['frame'], expected_page), session=loaded)
+        record('B4_real_engine', loaded['url'] == url and loaded['runtimeStyle'] == 'alloy' and not loaded['sidebarTab']
+               and loaded['content'] > 0, session=loaded)
+        menu('new-little-open-window')
+        second = next(s for s in sessions() if s['id'] != bar['id'])
+        record('B9_second_first_frame', rect_equal(second['frame'], expected_bar)
+               and rect_equal(session(bar['id'])['frame'], expected_page), session=second)
+        action(second['id'], 'close')
+
+        before = len(sessions()); timestamp = time.monotonic() - 5
+        app.call('little-open-action', action='blank', timestamp=timestamp)
+        app.call('little-open-action', action='blank', timestamp=timestamp)
+        same = len(sessions())
+        # The Carbon delivery above and this real App key route carry the same
+        # old stamp. Queue age must never turn the menu twin into another press.
+        main_number = app.call('shell-windows')[0]['number']
+        app.call('key', window=main_number, key='n', modifiers=['cmd', 'option'], eventTimestamp=timestamp)
+        twin = len(sessions())
+        app.call('key', window=main_number, key='n', modifiers=['cmd', 'option'], eventTimestamp=time.monotonic())
+        record('same_press_guard', same == twin == before + 1 and len(sessions()) == before + 2,
+               before=before, samePress=same, delayedMenuTwin=twin, nextPress=len(sessions()),
+               route='OEApplication.sendEvent with a five-second-old key-down stamp')
+        for row in sessions():
+            if row['id'] != bar['id']: action(row['id'], 'close')
+
+        # Real LaunchServices deliveries, separated beyond intake's 2 s dedupe:
+        # the coordinator must resurface its page rather than making a new one.
+        first_delivery = deliver(url)
+        time.sleep(2.1)
+        second_delivery = deliver(url + '#same-document')
+        record('B4_delivery_resurfaces', first_delivery.returncode == second_delivery.returncode == 0
+               and len(sessions()) == 1 and sessions()[0]['id'] == bar['id']
+               and sessions()[0]['content'] == loaded['content'], state=state())
+
+        action(bar['id'], 'focus')
+        shot_dir = os.path.join(ROOT, '.re', 'littleopen')
+        os.makedirs(shot_dir, exist_ok=True)
+        png = os.path.join(shot_dir, 'page-state.png')
+        app.call('snapshot', window=bar['window'], path=png)
+        loaded = session(bar['id']); elements = loaded['titleElements']
+        expected = {'capsule': [84, 8, w-289, 31], 'pill': [w-196, 8, 188, 30],
+                    'copy': [w-228, 16, 16, 16], 'chevron': [w-29, 15, 16, 16],
+                    'profileIcon': [97, 17, 14, 14], 'open': [w-191, 15, 148, 17],
+                    'divider': [w-37, 14, 1, 18]}
+        geometry = all(rect_equal(elements[k], v) for k, v in expected.items())
+        geometry = geometry and all(rect_equal(a, b) for a, b in zip(loaded['trafficLights'], [[9,16,16,16],[32,16,16,16],[55,16,16,16]]))
+        width_px, _, px = read_image(png, srgb=True); scale = width_px / w
+        samples = {'bar': px(80*scale, 4*scale), 'capsule': px(90*scale, 12*scale), 'pill': px((w-100)*scale, 10*scale)}
+        bands = {'bar': ((0x20, 0x23, 0x35), (0x2f, 0x2b, 0x38)),
+                 'capsule': ((0x38, 0x39, 0x48), (0x42, 0x41, 0x4d))}
+        colors = all(all(lo[i]-4 <= samples[k][i] <= hi[i]+4 for i in range(3)) for k, (lo, hi) in bands.items())
+        pill_delta = chrome_delta_e(samples['pill'], (5, 6, 39))
+        capture_roots = [os.path.join(ROOT, '.re/runtime/sessions/20261026-103403-19-little-arc'),
+                         '/Users/serge/.t3/projects/open/.re/runtime/sessions/20261026-103403-19-little-arc']
+        captures = [path for root in capture_roots for path in glob.glob(os.path.join(root, '0011*/win-*.png'))]
+        reference = {'status': 'ABSENT', 'comparison': 'section 9.3 measured numbers'}
+        reference_ok = True
+        if captures:
+            # Read a private copy. Never change the recorded capture or expose its page/Profile text.
+            reference_png = os.path.join(shot_dir, 'reference-private.png')
+            shutil.copyfile(captures[0], reference_png)
+            ref_w, ref_h, ref_px = read_image(reference_png, srgb=True)
+            ref_samples = {'bar': ref_px(80, 4), 'capsule': ref_px(90, 12), 'pill': ref_px(1185-100, 10)}
+            reference_delta = chrome_delta_e(samples['pill'], ref_samples['pill'])
+            reference_ok = (ref_w, ref_h) == (1185, 832) and reference_delta <= 2
+            reference = {'status': 'PRESENT', 'capture': 'S2 19/0011', 'size': [ref_w, ref_h],
+                         'samples': ref_samples, 'pillDeltaE00': reference_delta,
+                         'masks': 'page, Profile name, host text, controls and traffic lights; measured element frames from section 9.3'}
+        record('B10_title_bar', geometry and colors and pill_delta <= 2 and reference_ok and rect_equal(loaded['contentFrame'], [0, 47, w, h-47]),
+               frames=elements, expected=expected, samples=samples, pillDeltaE00=pill_delta, png=png, reference=reference)
+
+        idle_with = state()
+        record('sweeper_no_poll_never', base['featureTimers'] == idle_with['featureTimers'] == 0
+               and idle_with['expiry']['armedTimerCount'] == 0, baseline=base, withSession=idle_with)
+        action(bar['id'], 'archive-policy', interval='oneHour')
+        timed = state()
+        record('sweeper_one_timer', timed['featureTimers'] == timed['expiry']['armedTimerCount'] == 1,
+               state=timed, rule='one ExpirySweeper, no per-session timer')
+        action(bar['id'], 'archive-policy', interval='never')
+        # Clock jump exceeds the real hidden-freeze delay; the visible ticker keeps running.
+        tick = app.call('little-open-eval', id=bar['id'], js="Number(document.querySelector('#ticks').textContent)")
+        app.call('sleep-clock', advance=35); app.call('sleep-tick')
+        time.sleep(1.2)
+        tick_after = app.call('little-open-eval', id=bar['id'], js="Number(document.querySelector('#ticks').textContent)")
+        visible = session(bar['id'])
+        action(bar['id'], 'miniaturize')
+        hidden = wait_until(lambda: (lambda s: s if s and s['miniaturized'] and not s['visibilityProtected'] else None)(session(bar['id'])), timeout=4)
+        action(bar['id'], 'deminiaturize'); action(bar['id'], 'focus')
+        again = wait_until(lambda: session(bar['id'])['visibilityProtected'], timeout=4)
+        record('visibility_feed_and_ticker', visible['visibilityProtected'] and tick_after > tick and hidden and again,
+               visible=visible, hidden=hidden, tickBefore=tick, tickAfter=tick_after, freezeDelay=30)
+        app.call('sleep-clock', reset=True)
+
+        menus = app.call('menu-state'); dock = app.call('little-open-dock-menu')
+        record('window_and_dock_menus', any(m['id'] == 'little-open-session:' + bar['id'] for m in menus)
+               and all(any(m['id'] == cid for m in rows) for rows in (menus, dock)
+                       for cid in ('show-little-open-windows', 'close-little-open-windows')), dock=dock)
+        action(bar['id'], 'miniaturize'); menu('show-little-open-windows')
+        shown = wait_until(lambda: not session(bar['id'])['miniaturized'] and session(bar['id'])['visible'], timeout=4)
+        record('show_all', shown, state=state())
+
+        # Real Profile NSAlert buttons, including cancel and suppression persistence.
+        old_content = session(bar['id'])['content']
+        action(bar['id'], 'switch-profile', profile=second_profile['id'])
+        alert = app.call('little-open-profile-alert')
+        app.call('little-open-profile-alert', action='cancel', suppress=True)
+        cancelled = session(bar['id'])['content'] == old_content and session(bar['id'])['profile'] == seed['profiles'][0]['id'] and not app.call('defaults', key=keys[4])
+        action(bar['id'], 'switch-profile', profile=second_profile['id'])
+        app.call('little-open-profile-alert', action='confirm', suppress=True)
+        switched = wait_until(lambda: (lambda s: s if s['profile'] == second_profile['id'] and s['content'] != old_content and not s['loading'] else None)(session(bar['id'])), timeout=10)
+        record('profile_confirm_cancel', cancelled and switched and alert['visible']
+               and alert['message'] == 'Open this page in another Profile?'
+               and alert['buttons'] == ['Switch Profile', 'Cancel']
+               and alert['informative'] == 'Each Profile has different browser data, so this webpage might look a little different.'
+               and alert['suppression'] == "Don't ask again"
+               and app.call('defaults', key=keys[4]) is True, alert=alert, switched=switched)
+        close_all()
+
+        moved = page(origin + '/move-current')
+        archive_before = app.call('archive-list')['count']
+        for main in app.call('shell-windows'): app.call('window-close', id=main['id'])
+        record('B6_last_main_closed', state()['mainWindows'] == 0 and len(sessions()) == 1 and app.call('ping')['pid'] > 0, state=state())
+        app.call('key', window=moved['window'], key='o', modifiers=['cmd'])
+        moved_ok = wait_until(lambda: not sessions() and state()['mainWindows'] == 1, timeout=8)
+        tabs = app.call('tabs')
+        record('B5_cmd_o_creates_main', moved_ok and tabs[0]['url'] == origin + '/move-current'
+               and tabs[0]['selected'] and tabs[0]['section'] == 'today'
+               and app.call('archive-list')['count'] == archive_before, tabs=tabs)
+        picked = page(origin + '/move-picker')
+        action(picked['id'], 'picker'); picker = session(picked['id'])
+        app.call('key', window=picker['pickerWindow'], text='Little Open target')
+        app.call('key', window=picker['pickerWindow'], key='return')
+        picked_ok = wait_until(lambda: not sessions(), timeout=5)
+        tabs = app.call('tabs')
+        record('B5_picker', picked_ok and tabs[0]['url'] == origin + '/move-picker' and tabs[0]['selected']
+               and next(s for s in app.call('spaces') if s['focused'])['id'] == second_space['id'], tabs=tabs)
+
+        expiring = page(origin + '/archive-one-hour')
+        action(expiring['id'], 'archive-policy', interval='oneHour')
+        app.call('archive-sweep', offsetSeconds=3601)
+        archived = app.call('archive-list')
+        record('B7_one_hour_archive', not sessions() and archived['count'] == archive_before+1
+               and archived['rows'][0]['originalLocation'].startswith('littleOpen:')
+               and archived['rows'][0]['reason'] == 'autoArchived'
+               and app.call('archive-state')['lastSweep']['archivedCount'] == 0, archive=archived)
+        app.call('archive-clock', reset=True)
+        app.call('library-open', section='archive')
+        restored_id = archived['rows'][0]['id']
+        restored = wait_until(lambda: (lambda message: message if message.startswith('Restored to ') else None)(app.call('library-restore', id=restored_id)), timeout=5)
+        tabs = app.call('tabs')
+        record('B7_restore_focused_today', restored and any(t['id'] == restored_id and t['section'] == 'today' for t in tabs)
+               and app.call('archive-list')['count'] == archive_before, tabs=tabs)
+        app.call('library-close')
+        kept = page(origin + '/archive-never')
+        action(kept['id'], 'archive-policy', interval='never')
+        menu('archive-expired-little-open-now')
+        record('B7_never', len(sessions()) == 1 and app.call('archive-list')['count'] == archive_before, state=state())
+        menu('close-little-open-windows')
+        record('close_all_no_archive', not sessions() and app.call('archive-list')['count'] == archive_before, state=state())
+        history_url = origin + '/history-littleopen'
+        history_page = page(history_url)
+        app.call('little-open-eval', id=history_page['id'], js="document.title='Little Open history title'; true")
+        wait_until(lambda: session(history_page['id'])['title'] == 'Little Open history title', timeout=5)
+        action(history_page['id'], 'close')
+        history = app.call('history-state', query=history_url)
+        record('history', any(r['url'] == history_url and r['title'] == 'Little Open history title' for r in history['rows']), history=history)
+
+        app.call('defaults', key=keys[3], value=False)
+        intro = page(origin + '/intro-first')
+        action(intro['id'], 'dismiss-intro')
+        dismissed = not session(intro['id'])['intro']
+        next_intro = page(origin + '/intro-second')
+        record('NUX_once', intro['intro'] and dismissed and not next_intro['intro'] and app.call('defaults', key=keys[3]) is True,
+               first=intro, second=next_intro)
+        close_all()
+
+        source = new_tab(app, origin + '/option-command-source')
+        original_url = app.eval(source, 'location.href')
+        def modifier_click(target):
+            point = app.eval(source, """(() => { const a=document.createElement('a'); a.textContent='Little Open link';
+                a.href=%s; document.body.replaceChildren(a); const r=a.getBoundingClientRect(); return [r.x+r.width/2,r.y+r.height/2] })()""" % json.dumps(target))
+            app.eval(source, "window.__littleClicks=[]; ['mousedown','mouseup','click'].forEach(k=>document.addEventListener(k,e=>window.__littleClicks.push([k,e.clientX,e.clientY,e.metaKey,e.altKey,e.target.tagName]))); true")
+            return app.call('little-open-link-click', tab=source, x=point[0], y=point[1])
+        source_profile = next(t['profile'] for t in app.call('tabs') if t['id'] == source)
+        source_count = len(app.call('tabs'))
+        target_url = origin + '/option-command-little'
+        click_diagnostics = modifier_click(target_url)
+        clicked = wait_until(lambda: any(r['url'] == target_url and r['state'] == 'page' for r in sessions()), timeout=10)
+        record('option_command_click', clicked and app.eval(source, 'location.href') == original_url
+               and len(app.call('tabs')) == source_count and sessions()[0]['profile'] == source_profile,
+               state=state(), source=app.eval(source, 'location.href'), events=app.call('events'), click=click_diagnostics, input=app.eval(source, 'window.__littleClicks || []'))
+        close_all()
+        app.call('defaults', key=keys[2], value=False)
+        off_target = origin + '/option-command-off'
+        click_diagnostics = modifier_click(off_target)
+        in_place = wait_until(lambda: app.eval(source, 'location.href') == off_target, timeout=10)
+        record('option_command_toggle_off', in_place and not sessions() and len(app.call('tabs')) == source_count, source=app.eval(source, 'location.href'), state=state(), events=app.call('events'), click=click_diagnostics, input=app.eval(source, 'window.__littleClicks || []'))
+        app.call('defaults', key=keys[2], value=True)
+
+        # Both domains share the same native timer. Sweep reports keep the Today
+        # education count separate from the Little Open archive count.
+        new_tab(app, origin + '/today-expiring-peer')
+        new_tab(app, origin + '/today-visible-peer')
+        app.call('profile-archive-setting', profile=seed['profiles'][0]['id'], interval='oneHour', scope='profile')
+        main_timer = wait_until(lambda: (lambda st: st if st['expiry']['armedTimerCount'] == 1 else None)(state()), timeout=4)
+        combined = page(origin + '/combined-expiry')
+        action(combined['id'], 'archive-policy', interval='oneHour')
+        both_timer = state()
+        before_combined = app.call('archive-list')['count']
+        swept = app.call('archive-sweep', offsetSeconds=3601)
+        archive_combined = app.call('archive-list')
+        record('sweeper_shared_today_timer', main_timer and main_timer['featureTimers'] == both_timer['featureTimers'] == 1
+               and not sessions() and swept['lastSweep']['archivedCount'] > 0
+               and swept['archivedCount'] == swept['lastSweep']['archivedCount'] + 1
+               and archive_combined['count'] - before_combined == swept['archivedCount'],
+               mainOnly=main_timer, withLittleOpen=both_timer, sweep=swept)
+        app.call('archive-clock', reset=True)
+        app.call('profile-archive-setting', profile=seed['profiles'][0]['id'], interval='never', scope='profile')
+
+        # No main window: blank, bar Cmd+O, external intake, and quit/relaunch.
+        for main in app.call('shell-windows'): app.call('window-close', id=main['id'])
+        app.call('little-open-action', action='blank', timestamp=time.monotonic())
+        blank = sessions()[0]
+        app.call('key', window=blank['window'], key='o', modifiers=['cmd'])
+        record('B6_blank_no_main_bar_cmd_o', state()['mainWindows'] == 0 and len(sessions()) == 1 and sessions()[0]['state'] == 'bar', state=state())
+        close_all()
+        delivery_url = origin + '/no-main-external'
+        deliver(delivery_url)
+        reached = wait_until(lambda: any(r['url'] == delivery_url and r['state'] == 'page' for r in sessions()), timeout=10)
+        record('B6_external_no_main', reached and state()['mainWindows'] == 0, state=state())
+        app.quit()
+        app = factory(urls=(), extra_env=env)
+        record('B6_quit_no_restore', not sessions(), state=state())
+        app.quit()
+        # Lead decision: saved windows always restore. Only the explicitly
+        # tagged, unused default from a windowless snapshot can be removed.
+        cold_url = origin + '/cold-littleopen-saved'
+        saved_seed = copy.deepcopy(seed)
+        saved_second = copy.deepcopy(saved_seed['windows'][0])
+        saved_second['id'] = str(uuid.uuid4()).upper()
+        saved_second['focusedSpaceID'] = second_space['id']
+        saved_second['frameX'] += 48
+        saved_seed['windows'].append(saved_second)
+        saved_path = os.path.join(tmp, 'littleopen-saved-windows.json')
+        with open(saved_path, 'w') as stream: json.dump(saved_seed, stream)
+        app = factory(urls=(), snapshot=saved_path, extra_env=env, delivery_urls=(cold_url,))
+        cold_reached = wait_until(lambda: any(r['url'] == cold_url and r['state'] == 'page' for r in sessions()), timeout=12)
+        restored = snapshot_model()['windows']
+        expected_ids = {w['id'] for w in saved_seed['windows']}
+        restored_ids = {w['id'] for w in restored}
+        little_key = sessions()[0]['key'] and app.call('native-focus-state')['keyWindow'] == sessions()[0]['window']
+        record('B6_cold_saved_windows_stay', cold_reached and restored_ids == expected_ids
+               and state()['mainWindows'] == 2 and little_key and not state()['autoCreatedLaunchWindow'],
+               state=state(), restored=restored, expected=saved_seed['windows'])
+        app.quit()
+
+        empty_seed = copy.deepcopy(seed); empty_seed['windows'] = []
+        empty_path = os.path.join(tmp, 'littleopen-no-windows.json')
+        with open(empty_path, 'w') as stream: json.dump(empty_seed, stream)
+        cold_url = origin + '/cold-littleopen-no-saved-windows'
+        app = factory(urls=(), snapshot=empty_path, extra_env=env, delivery_urls=(cold_url,))
+        cold_reached = wait_until(lambda: any(r['url'] == cold_url and r['state'] == 'page' for r in sessions()), timeout=12)
+        record('B6_cold_no_saved_windows_only_little', cold_reached and state()['mainWindows'] == 0
+               and not snapshot_model()['windows'] and sessions()[0]['key'] and not state()['autoCreatedLaunchWindow'], state=state(), routing=app.call('routing-log'))
+        app.quit()
+
+        app = factory(urls=(), snapshot=empty_path, extra_env=env)
+        tagged_input = state()['autoCreatedLaunchWindow']
+        app.call('key', key='l', modifiers=['cmd']); app.call('key', key='escape')
+        input_url = origin + '/auto-main-user-input'
+        deliver(input_url)
+        reached = wait_until(lambda: any(r['url'] == input_url and r['state'] == 'page' for r in sessions()), timeout=10)
+        record('B6_auto_main_input_preserved', tagged_input and reached and state()['mainWindows'] == 1
+               and app.call('shell-windows')[0]['id'] == tagged_input, state=state())
+        app.quit()
+
+        app = factory(urls=(), snapshot=empty_path, extra_env=env)
+        tagged_navigation = state()['autoCreatedLaunchWindow']
+        navigated = new_tab(app, origin + '/auto-main-navigation')
+        nav_url = origin + '/auto-main-after-navigation'
+        deliver(nav_url)
+        reached = wait_until(lambda: any(r['url'] == nav_url and r['state'] == 'page' for r in sessions()), timeout=10)
+        record('B6_auto_main_navigation_preserved', tagged_navigation and reached and state()['mainWindows'] == 1
+               and app.call('shell-windows')[0]['id'] == tagged_navigation
+               and any(t['id'] == navigated for t in app.call('tabs')), state=state())
+
+    finally:
+        saved = {key: saved_domain.get(key) for key in keys}
+        if app:
+            if not app.closed:
+                try: app.call('little-open-profile-alert', action='cancel')
+                except Exception: pass
+            _restore_defaults(app, saved)
+            app.quit()
+        else:
+            for key, value in saved.items():
+                if value is None: subprocess.run(['defaults', 'delete', domain, key], capture_output=True)
+                elif isinstance(value, bool): subprocess.run(['defaults', 'write', domain, key, '-bool', str(value).lower()], check=True)
+                else: subprocess.run(['defaults', 'write', domain, key, '-string', str(value)], check=True)
+        evidence = os.path.join(ROOT, '.re', 'littleopen', 'logs-' + str(os.getpid()))
+        os.makedirs(evidence, exist_ok=True)
+        for path in glob.glob(os.path.join(tmp, 'open.log*')):
+            if os.path.isfile(path): shutil.copyfile(path, os.path.join(evidence, os.path.basename(path)))
+        server.shutdown(); server.server_close()
+
+
+
 def routing_checks(factory, results, tmp):
     """Step 5: LaunchServices -> real kAEGetURL -> intake -> model/window.
     Never sets a system default handler. Every delivery names this exact bundle.
@@ -6982,7 +7375,7 @@ def routing_checks(factory, results, tmp):
     import plistlib
     import uuid
     domain = 'io.github.sergeserb2.open'
-    keys = ('open.links.externalInLittleOpen', 'open.links.littleOpenHotkeyEnabled')
+    keys = ('open.links.externalInLittleOpen', 'open.links.littleOpenHotkeyEnabled', 'open.links.littleOpenNUXSeen')
     exported = subprocess.run(['defaults', 'export', domain, '-'], capture_output=True)
     domain_before = plistlib.loads(exported.stdout) if exported.returncode == 0 else {}
     saved = {key: domain_before.get(key) for key in keys}
@@ -7041,9 +7434,14 @@ def routing_checks(factory, results, tmp):
         default_url = origin.replace('127.0.0.1', 'localhost') + '/default-little'
         before = tab_count()
         sent = deliver(default_url)
-        seen = wait_until(lambda: (log()['lastLittleOpenRequest'] or {}).get('url') == default_url, timeout=8, step=.05)
+        seen = wait_until(lambda: (log()['lastLittleOpenRequest'] or {}).get('url') == default_url
+                          and any(row['state'] == 'page' and row['url'] == default_url and row['visible']
+                                  and not row['loading'] and row['content'] > 0 and not row['sidebarTab']
+                                  for row in app.call('little-open-state')['sessions']), timeout=12, step=.05)
         record('routing_warm_default_little_open', sent.returncode == 0 and seen
-               and tab_count() == before and len(entries(default_url)) == 1, log=log())
+               and tab_count() == before and len(entries(default_url)) == 1
+               and any(row['state'] == 'page' and row['url'] == default_url and row['visible']
+                       for row in app.call('little-open-state')['sessions']), log=log(), littleOpen=app.call('little-open-state'))
 
         # Stored first window is on target B. Make a second, front window on
         # A: using model order instead of AppKit z-order must now fail B8.
@@ -7079,7 +7477,9 @@ def routing_checks(factory, results, tmp):
         within = wait_until(lambda: log()['duplicatesDropped'] == dropped + 1, timeout=1, step=.02)
         first_log = log()
         # A genuine second click after the fixed window must create another tab.
-        time.sleep(max(0, 2.15 - (time.monotonic() - started)))
+        # Start after observing the first intake, not before LaunchServices
+        # starts its process. OS launch latency is outside the fixed dedupe window.
+        time.sleep(2.15)
         again = deliver(duplicate)
         second = landed(duplicate, 2)
         record('routing_dedupe_2s', sent.returncode == 0 and again.returncode == 0 and first and within and second
@@ -10325,7 +10725,7 @@ def main():
     ap.add_argument("--extensions", default=os.path.join(ROOT, ".re", "ext", "unpacked"))
     ap.add_argument("--only", choices=["shell", "extensions", "features", "measure", "tabstrip", "window", "sidebar", "peek", "split",
                                        "commandbar", "app-actions", "actions", "extensions-p3", "profiles", "sidebar-completion", "toolbar", "numbering", "media", "relaunch", "page", "page-chrome",
-                                       "sleep", "context-menus", "routing", "history", "applescript", "downloads"])
+                                       "sleep", "context-menus", "routing", "littleopen", "history", "applescript", "downloads"])
     ap.add_argument("--window-chrome-only", action="store_true", help="run only the window-chrome follow-up flows in the window suite")
     ap.add_argument("--keep", action="store_true",
                     help="keep this run's data root, cache root and scratch folder (paths printed at the end)")
@@ -10550,6 +10950,9 @@ def main():
         elif opts.only == "sleep":
             results["sleep"] = CheckedResults(tracker)
             sleep_checks(factory, results["sleep"], tmp, opts.style)
+        elif opts.only == "littleopen":
+            results["littleopen"] = CheckedResults(tracker)
+            littleopen_checks(factory, results["littleopen"], tmp)
         elif opts.only == "routing":
             results["routing"] = CheckedResults(tracker)
             routing_checks(factory, results["routing"], tmp)
@@ -10638,14 +11041,14 @@ def main():
                                     else opts.config.lower()))
     with open(os.path.join(OUT, name), "w") as f:
         json.dump(results, f, indent=2, sort_keys=True)
-    for group in ("shell", "extensions", "features", "measure", "tabstrip", "window", "sidebar", "peek", "split", "commandbar", "app-actions", "actions", "extensions-p3", "profiles", "sidebar-completion", "toolbar", "numbering", "media", "relaunch", "page", "page-chrome", "sleep", "context-menus", "routing", "history", "applescript", "downloads"):
+    for group in ("shell", "extensions", "features", "measure", "tabstrip", "window", "sidebar", "peek", "split", "commandbar", "app-actions", "actions", "extensions-p3", "profiles", "sidebar-completion", "toolbar", "numbering", "media", "relaunch", "page", "page-chrome", "sleep", "context-menus", "routing", "littleopen", "history", "applescript", "downloads"):
         for k, v in results.get(group, {}).items():
             if isinstance(v, dict) and "ok" in v:
                 print("%-24s %s" % (k, "PASS" if v.get("ok") else "FAIL"))
             elif isinstance(v, dict) and v.get("status") in ("SKIP", "BLOCKED", "INTERRUPTED", "DEFERRED"):
                 print("%-24s %s: %s" % (k, v["status"], v.get("reason", "")))
     print("wrote", os.path.join(OUT, name))
-    failures = [k for group in ("shell", "extensions", "features", "measure", "tabstrip", "window", "sidebar", "peek", "split", "commandbar", "app-actions", "actions", "extensions-p3", "sidebar-completion", "toolbar", "numbering", "media", "relaunch", "page", "page-chrome", "sleep", "context-menus", "routing", "history", "applescript", "downloads")
+    failures = [k for group in ("shell", "extensions", "features", "measure", "tabstrip", "window", "sidebar", "peek", "split", "commandbar", "app-actions", "actions", "extensions-p3", "sidebar-completion", "toolbar", "numbering", "media", "relaunch", "page", "page-chrome", "sleep", "context-menus", "routing", "littleopen", "history", "applescript", "downloads")
                 for k, v in results.get(group, {}).items() if isinstance(v, dict) and v.get("ok") is False]
     if failures or not results["cleanup"]["ok"]:
         sys.exit(1)
