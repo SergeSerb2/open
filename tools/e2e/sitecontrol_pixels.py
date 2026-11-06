@@ -4,6 +4,29 @@ import os
 import statistics
 
 
+def background_response(app, tab, private, env, scale):
+    """R7 diagnostic only: sample identical panel points over flat web colors."""
+    import time
+    points = [(300, 140), (260, 250)]
+    captures = {}
+    for name, color in [('white', '#ffffff'), ('black', '#000000')]:
+        app.eval(tab, "document.documentElement.style.background=" + repr(color)
+                 + ";document.body.style.background=" + repr(color)
+                 + ";Array.from(document.body.children).forEach(e=>e.style.visibility='hidden');true")
+        app.eval(tab, 'new Promise(done=>requestAnimationFrame(()=>requestAnimationFrame(()=>done(true))))')
+        time.sleep(.4)
+        path = str(Path(private) / ('R7-' + name + '.png'))
+        app.call('snapshot', path=path)
+        _, _, pixel = env['read_image'](path, srgb=True)
+        captures[name] = dict(snapshot=path, rgb=[list(pixel(x*scale, y*scale)) for x,y in points])
+    probes = [dict(point=list(point), whiteRGB=white, blackRGB=black,
+                   deltaE00=env['chrome_delta_e'](white, black),
+                   maxChannelChange=max(abs(a-b) for a,b in zip(white, black)))
+              for point,white,black in zip(points,captures['white']['rgb'],captures['black']['rgb'])]
+    return dict(probes=probes, captures=captures, load=list(os.getloadavg()),
+                diagnosticOnly=True, interpretation='A small change is evidence for R7; this does not alter S11/S12 acceptance.')
+
+
 def compare_live(path, state, scale, private, env, negative_path=None):
     captures = Path(env['ROOT'], '.re/runtime/sessions')
     frames = list(captures.glob('*09-site-controls-first/0010-*/win-73938.png'))

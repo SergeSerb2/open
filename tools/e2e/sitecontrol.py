@@ -194,8 +194,9 @@ def run(factory, results, tmp, env):
             _,_,closed_pixels=env['read_image'](closed_path,srgb=True)
             closed_fit=all(max(abs(a-b) for a,b in zip(closed_pixels(x*scale,y*scale),rgb))<=3 for x,y,rgb in targets[:2])
             record('S11_material',fits and validation and not closed_fit,probes=probes,snapshot=path,negative=closed_path,negativeRejected=not closed_fit,scale=scale,state=s)
-            from sitecontrol_pixels import compare_live
+            from sitecontrol_pixels import compare_live, background_response
             results['S12_elements']=compare_live(path, s, scale, private, env,negative_path=closed_path)
+            results['S11_material']['backgroundResponse']=background_response(app,tab,private,env,scale)
             app.call('navigate',tab=tab,url=origin+'/heavy.html');app.call('wait',tab=tab);close()
             js='''new Promise(done=>{scrollTo(0,0);let last=0,frames=[];function tick(t){if(last)frames.push(t-last);last=t;scrollBy(0,12);if(frames.length<240)requestAnimationFrame(tick);else done(frames)}requestAnimationFrame(tick)})'''
             baseline=app.eval(tab,js);opened();shown=app.eval(tab,js)
