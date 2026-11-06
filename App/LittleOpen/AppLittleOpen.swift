@@ -78,7 +78,7 @@ extension AppDelegate {
   func openBlankLittleOpen(timestamp: TimeInterval? = nil) {
     // The File menu can run during the shell's first frame, before CEF is ready.
     // Keep the press stamp and create the real host at engine initialization.
-    guard engineReady else { pendingLittleOpenBlankStamps.append(timestamp); return }
+    guard engineReady, firstRunWindowController == nil else { pendingLittleOpenBlankStamps.append(timestamp); return }
     littleOpenCoordinator.openBlank(focusURLField: true, keyDownTimestamp: timestamp)
     NSApp.activate()
   }

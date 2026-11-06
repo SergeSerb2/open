@@ -13,7 +13,8 @@ public enum LibrarySection: String, CaseIterable, Sendable {
 }
 public enum OriginFilter: String, CaseIterable, Sendable { case all, spaces, littleOpen }
 @MainActor public protocol DownloadsProvider: AnyObject { var downloads: [DownloadItemSnapshot] { get } }
-@MainActor public protocol CapturesProvider: AnyObject { var captures: [CaptureItemSnapshot] { get }; var directory: URL { get }; func remove(id: UUID) throws }
+@MainActor public protocol CapturesProvider: AnyObject { var captures: [CaptureItemSnapshot] { get }; var directory: URL { get }; var loadFailed: Bool { get }; func remove(id: UUID) throws }
+public extension CapturesProvider { var loadFailed: Bool { false } }
 @MainActor public protocol LibraryActions: AnyObject {
     func setBoostEnabled(id: String, enabled: Bool, profileID: ProfileID)
     func renameBoost(id: String, to name: String, profileID: ProfileID)
@@ -47,12 +48,27 @@ extension LibraryActions { public func flushHistoryWrites() async {} }
     public let directory: URL
     public let indexURL: URL
     public private(set) var captures: [CaptureItemSnapshot] = []
-    public init(root: URL) throws { directory = root.appendingPathComponent("Captures"); indexURL = root.appendingPathComponent("State/captures.json"); try reload() }
+    public private(set) var loadFailed = false
+    /// Keep the provider alive after a read failure so the next Library opening can retry.
+    public init(root: URL) { directory = root.appendingPathComponent("Captures"); indexURL = root.appendingPathComponent("State/captures.json"); try? reload() }
     public func reload() throws {
-        guard FileManager.default.fileExists(atPath: indexURL.path) else { captures = []; return }
-        let decoder = JSONDecoder(); decoder.dateDecodingStrategy = .secondsSince1970
-        captures = try decoder.decode([CaptureItemSnapshot].self, from: Data(contentsOf: indexURL))
-        guard captures.allSatisfy({ Self.safeName($0.fileName) }), Set(captures.map(\.id)).count == captures.count else { throw CocoaError(.fileReadCorruptFile) }
+        do {
+            // Match the capture writer's 16 MiB input ceiling. A bounded read also
+            // refuses a file that grows between opening and reading it.
+            let file: FileHandle
+            do { file = try FileHandle(forReadingFrom: indexURL) }
+            catch let error as CocoaError where error.code == .fileReadNoSuchFile { captures = []; loadFailed = false; return }
+            defer { try? file.close() }
+            let data = try file.read(upToCount: 16 * 1024 * 1024 + 1) ?? Data()
+            guard data.count <= 16 * 1024 * 1024 else { throw CocoaError(.fileReadTooLarge) }
+            let decoder = JSONDecoder(); decoder.dateDecodingStrategy = .secondsSince1970
+            let next = try decoder.decode([CaptureItemSnapshot].self, from: data)
+            guard next.count <= 50_000, next.allSatisfy({ Self.safeName($0.fileName) }), Set(next.map(\.id)).count == next.count else { throw CocoaError(.fileReadCorruptFile) }
+            captures = next; loadFailed = false
+        } catch {
+            captures = []; loadFailed = true
+            throw error
+        }
     }
     public static func safeName(_ name: String) -> Bool { !name.isEmpty && !name.hasPrefix(".") && !name.contains("/") && !name.contains("\\") && URL(fileURLWithPath: name).lastPathComponent == name }
     public func remove(id: UUID) throws {

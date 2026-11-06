@@ -1,6 +1,6 @@
 # First run — Welcome, Import from Arc, and default browser
 
-Status: Steps A and B implemented in OpenSettings/OpenImport; Steps C–F remain app-shell work. This file is the complete brief for the coding agent that implements it. That agent has no other context. Read this file top to bottom, then read each source it names before you edit that area. Do not invent a second design.
+Status: Steps A/B implemented in OpenSettings/OpenImport; Steps C/D add App lifecycle and the shared sidebar/archive runner. History streaming and secrets remain later work. This file is the complete brief for the coding agent that implements it. That agent has no other context. Read this file top to bottom, then read each source it names before you edit that area. Do not invent a second design.
 
 User-visible name rule: never use the Arc brand in UI text. "Little Arc" is "Little Open" in Open. The only exception is "Import from Arc" (`AGENTS.md`). Search aliases may keep old names.
 
@@ -361,7 +361,7 @@ Unknown-count Passwords body (shared with the wizard): `Open didn't read or copy
 | E-2 | `Your Spaces and tabs are in. %d history visits could not be read. You can import history later from Settings.` (partial: history failed after landing) |
 | E-3 | `Keychain access was not granted. No passwords or cookies were read. You can try again later from Settings.` |
 | E-4 | `Open could not be set as your default browser. You can try again in Settings.` |
-| E-5 | `Open could not save your data. Your imported items are still open in this window. Try again.` (imported path); `Open could not save your data. Try Start Fresh again.` (fresh path) |
+| E-5 | `Open could not save your data. Your imported items are still open in the browser window behind this panel. Try again.` (imported path); `Open could not save your data. Try Start Fresh again.` (fresh path) |
 | E-6 | `Skipped: 2 Easels` (example); combines nonzero kinds in order: `%d Easels`, `%d Notes`, `%d unsupported items`; singular: `Skipped: 1 Easel` / `1 Note` / `1 unsupported item` |
 
 Report row labels, in order: `Spaces`, `Pinned and Today tabs`, `Favorites`, `Folders`, `Archive`, `History`, `Search engine`, `Passwords and cookies`. Values: the imported count, `Not selected`, `Not imported`, or red `Could not be read`. Partial found totals append ` (partial)` when at least one source profile could not be counted. Only one report note appears (E-2, E-3, E-5 or E-6).
