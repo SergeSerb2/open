@@ -1,22 +1,36 @@
 # S11 dialogs and permissions: real App evidence
 
-2026-11-05. Clean App source `7cddbb141e4324370acd17e57509b443739024cf` includes main `e79b0d53` (Downloads #181, extension commands #179, and Peek #176). Debug, Chrome style, main engine `f34400e7` (code `1bc8b604`), main NSScreen `AW2726DM` at 1x. Every suite uses the real App automation socket and a separate screen-lock invocation. No unit tests, desktop input, Arc launch, or engine source changes.
+2026-11-05. Latest App source `43ba07a2118b9a45d325397fb28480c87ea9058c` includes main `e86f3b8d` (runner lifetime #182, Downloads #181, extension commands #179, and Peek #176). Debug, Chrome style, main engine `f34400e7` (code `1bc8b604`), main NSScreen `AW2726DM` at 1x. Every suite uses the real App automation socket and a separate screen-lock invocation. No unit tests, desktop input, Arc launch, or engine source changes.
+
+## Latest main integration
+
+The #182 integration skips the App's beforeunload preflight when the automation runner dies. Normal quit still asks the page. Debug build and focused verifier `features-render` PASS. Page-chrome passes **41/41** on `43ba07a2`, with no interrupted attempt and clean owned-process/window teardown: [current receipt](results-page-chrome-debug.json). Its main NSScreen before/after is `AW2726DM`, scale 1; load at invocation start is **9.06 / 11.71 / 12.30**.
+
+The [runner-lifetime receipt](results-page-chrome-owner-debug.json) records all four cases PASS: ordinary owner death, the missing-owner-environment negative control, active download, and beforeunload. The beforeunload case first observes kind 3 on normal quit and cancels it. After owner death it sees no pending dialog, exits in **0.200 s**, and leaves zero owned processes. Ordinary owner shutdown takes **0.203 s**; active-download shutdown takes **0.362 s**.
+
+Negative proof on `9789d3d5`, before the integration fix: owner death re-enters beforeunload. The harness sees pending state in 33 observations (not 33 callbacks); shutdown uses the five-second fallback (**5.462 s**). The new assertion FAILS as expected, and cleanup leaves no owned process. Raw observations remain in `.re/page-chrome-owner-{negative,positive}/`.
+
+Final verification after the next main merge remains pending.
+
+## Previous broad regression checkpoint
+
+Clean App source `7cddbb141e4324370acd17e57509b443739024cf` includes main `e79b0d53`, before #182.
 
 **199 PASS, 0 FAIL across five complete suites; two suites INTERRUPTED.** The accepted Page invocation excludes one earlier interrupted attempt. Page-chrome has no interrupted attempt. All owned teardown checks pass.
 
-**Remaining integration gate:** Shell and Window are INTERRUPTED on the merged head. Each had two invocations of three bounded attempts. The latest attempts could not obtain key focus: `active=false`, `frontmost=OpenTodos`. Cleanup passed. No partial rows from those invocations count toward acceptance. They need a quiet foreground interval; the App and harness were not changed to bypass that requirement. This PR remains a draft.
+**Remaining integration gate at this checkpoint:** Shell and Window are INTERRUPTED on `7cddbb14`. Each had two invocations of three bounded attempts. The latest attempts could not obtain key focus: `active=false`, `frontmost=OpenTodos`. Cleanup passed. No partial rows from those invocations count toward acceptance. They need a quiet foreground interval; the App and harness were not changed to bypass that requirement. This PR remains a draft.
 
 | Suite | Result | PASS counted | Other status | Interrupted attempts in this invocation | Cleanup | App source | Receipt |
 |---|---|---:|---|---:|---|---|---|
-| page-chrome | PASS | 41 | none | 0 | PASS | `7cddbb14` | [results-page-chrome-debug.json](results-page-chrome-debug.json) |
-| features | PASS | 19 | none | 0 | PASS | `7cddbb14` | [results-features-chrome.json](results-features-chrome.json) |
-| shell | INTERRUPTED | 0 | INTERRUPTED: 1 | 3 | PASS | `7cddbb14` | [results-shell-debug.json](results-shell-debug.json) |
-| window | INTERRUPTED | 0 | INTERRUPTED: 1 | 3 | PASS | `7cddbb14` | [results-window-debug.json](results-window-debug.json) |
-| page | PASS | 85 | BLOCKED: 4, DEFERRED: 1 | 1 | PASS | `7cddbb14` | [results-page-chrome.json](results-page-chrome.json) |
-| sleep | PASS | 20 | BLOCKED: 1 | 0 | PASS | `7cddbb14` | [results-sleep-debug.json](results-sleep-debug.json) |
-| downloads | PASS | 34 | none | 0 | PASS | `7cddbb14` | [results-downloads-debug.json](results-downloads-debug.json) |
+| page-chrome | PASS | 41 | none | 0 | PASS | `7cddbb14` | [results-page-chrome-debug.json](https://github.com/SergeSerb2/open/blob/b34d8a714877d0c88e28885f9d934396dd8436e3/docs/engine-spike/results-page-chrome-debug.json) |
+| features | PASS | 19 | none | 0 | PASS | `7cddbb14` | [results-features-chrome.json](https://github.com/SergeSerb2/open/blob/b34d8a714877d0c88e28885f9d934396dd8436e3/docs/engine-spike/results-features-chrome.json) |
+| shell | INTERRUPTED | 0 | INTERRUPTED: 1 | 3 | PASS | `7cddbb14` | [results-shell-debug.json](https://github.com/SergeSerb2/open/blob/b34d8a714877d0c88e28885f9d934396dd8436e3/docs/engine-spike/results-shell-debug.json) |
+| window | INTERRUPTED | 0 | INTERRUPTED: 1 | 3 | PASS | `7cddbb14` | [results-window-debug.json](https://github.com/SergeSerb2/open/blob/b34d8a714877d0c88e28885f9d934396dd8436e3/docs/engine-spike/results-window-debug.json) |
+| page | PASS | 85 | BLOCKED: 4, DEFERRED: 1 | 1 | PASS | `7cddbb14` | [results-page-chrome.json](https://github.com/SergeSerb2/open/blob/b34d8a714877d0c88e28885f9d934396dd8436e3/docs/engine-spike/results-page-chrome.json) |
+| sleep | PASS | 20 | BLOCKED: 1 | 0 | PASS | `7cddbb14` | [results-sleep-debug.json](https://github.com/SergeSerb2/open/blob/b34d8a714877d0c88e28885f9d934396dd8436e3/docs/engine-spike/results-sleep-debug.json) |
+| downloads | PASS | 34 | none | 0 | PASS | `7cddbb14` | [results-downloads-debug.json](https://github.com/SergeSerb2/open/blob/b34d8a714877d0c88e28885f9d934396dd8436e3/docs/engine-spike/results-downloads-debug.json) |
 
-Before the latest main merge, all six required suites completed on clean App source `deeec4c3`: **248 PASS, 0 FAIL**, with all four native Window display rows passing. Those are historical receipts, not merged-head acceptance: [Shell 7/7](https://github.com/SergeSerb2/open/blob/b9f8cbcd31e980b3fc78b44a91655a4b0999b7c8/docs/engine-spike/results-shell-debug.json), [Window 76/76](https://github.com/SergeSerb2/open/blob/b9f8cbcd31e980b3fc78b44a91655a4b0999b7c8/docs/engine-spike/results-window-debug.json). The earlier complete raw receipts remain in `.re/pre-main181/`. The first post-merge page-chrome, shell, and window batches each ended INTERRUPTED after three foreground-loss attempts; raw batches remain in `.re/rerun-*/`.
+Before the #181/#179 merge, all six required suites completed on clean App source `deeec4c3`: **248 PASS, 0 FAIL**, with all four native Window display rows passing. Those are historical receipts, not merged-head acceptance: [Shell 7/7](https://github.com/SergeSerb2/open/blob/b9f8cbcd31e980b3fc78b44a91655a4b0999b7c8/docs/engine-spike/results-shell-debug.json), [Window 76/76](https://github.com/SergeSerb2/open/blob/b9f8cbcd31e980b3fc78b44a91655a4b0999b7c8/docs/engine-spike/results-window-debug.json). The earlier complete raw receipts remain in `.re/pre-main181/`. The first post-merge page-chrome, shell, and window batches each ended INTERRUPTED after three foreground-loss attempts; raw batches remain in `.re/rerun-*/`.
 
 ## Negative proof and failure cleanup
 
@@ -38,13 +52,13 @@ An [intentional failure while the real alert sheet was visible](results-page-chr
 
 The user operates Arc for the remaining page-chrome §7 captures: light/dark sheets, default prompt selection, repeat suppression, close/reload beforeunload, background tabs, and permission popovers with sidebar/toolbar on/off. On fresh synthetic origins capture Allow/Not Now, revisit/relaunch, combined camera/microphone, clipboard/MIDI, Site Control values, and any separate macOS alert. The 320 pt permission width and final popover edge remain the lead’s stated visual guesses. No Arc pixel acceptance is claimed.
 
-The PR body contains the full `verify-all` summary and review-checklist table. Historical results from before the monitor restoration remain separate; the former built-in-display failure exceptions do not apply to these final runs.
+The PR body contains the full `verify-all` summary and review-checklist table. Historical results from before the monitor restoration remain separate; the former built-in-display failure exceptions do not apply to these restored-display runs.
 
 Committed JSON receipts redact machine paths as `$WORKTREE`, `$HOME`, and `$TMPDIR`. Raw receipts remain in `.re/*-final.json`.
 Earlier page-chrome batches ended INTERRUPTED after three foreground-loss attempts each. None of their partial rows contribute to the final 41 PASS.
 Generated Open window/PDF PNGs are archived locally in `.re/final-native-pngs/`. Existing illustrative PNGs are restored; no comparison baseline changed.
 
-## Final integration and full verification
+## Previous full verification on 7cddbb14
 
 The main merge preserves Downloads quit preflight before page-beforeunload, both e2e suites, and both documentation sections. Debug build PASS. The compiler reports eight Swift warning sites on unchanged main source lines; the new page-chrome code adds none.
 
@@ -78,7 +92,7 @@ The main merge preserves Downloads quit preflight before page-beforeunload, both
 
 ## Retained timing history
 
-The final command bar check passes in one full invocation with the original thresholds. No performance improvement is attributed to this feature. Earlier measurements were considered under lead interim rule 4b; the final full run needs no timing exception.
+The `7cddbb14` command bar check passes in one full invocation with the original thresholds. No performance improvement is attributed to this feature. Earlier measurements were considered under lead interim rule 4b; that full run needs no timing exception.
 
 | Invocation | Result | Main-thread CPU p95 / inline delta | Load1 |
 |---|---|---|---:|

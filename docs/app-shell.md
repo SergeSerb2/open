@@ -1321,6 +1321,10 @@ Section 12 integration hooks:
 The public engine API has no graceful close method; the App uses its existing
 `sendDevToolsMethod("Page.close", ...)` entry point for beforeunload close/quit.
 Runtime acceptance of this path is recorded with the S11 PR's e2e receipts.
+After an automation runner dies, quit skips the App's beforeunload preflight
+as well as the engine close prompt. Normal quit keeps the preflight. The
+runner-lifetime suite first observes/cancels a normal request, then kills its
+runner and requires shutdown without another request.
 Protocol-handler permission copy cannot be selected from `OEPermissionKind`:
 that API has no protocol-handler case or protocol metadata. Combined camera
 and microphone still uses the shared list-joining code when the engine asks.
@@ -1328,11 +1332,18 @@ and microphone still uses the shared list-joining code when the engine asks.
 `page-chrome` e2e uses real loopback requests and the automation socket.
 `dialogPolicy` accept/dismiss/hold and `permissionPolicy` grant/deny remain.
 `dialog-button` and `permission-prompt` answers click the real AppKit buttons.
-The [S11 runtime report](engine-spike/s11-dialogs-permissions.md) records clean
-Chrome-style Debug App source `7cddbb14`, including Downloads #181 and
-extension commands #179, on the 1x `AW2726DM`: page-chrome 41 PASS, features
+The [S11 runtime report](engine-spike/s11-dialogs-permissions.md) records
+latest Chrome-style Debug App source `43ba07a2`, including main #182:
+page-chrome 41/41 PASS without interruption, runner lifetime 4/4 PASS, and
+clean owned-process/window teardown. Before the owner-death fix, the new
+beforeunload assertion FAILS; after it, owner death creates no pending request
+and shutdown takes 0.200 s. The report qualifies its full-verifier and broad
+native reruns by source commit.
+
+The previous broad checkpoint `7cddbb14`, including Downloads #181 and
+extension commands #179, ran on the 1x `AW2726DM`: page-chrome 41 PASS, features
 19, page 85, sleep 20, and Downloads 34. These five complete suites have zero
-FAIL and clean teardown. Shell and Window are INTERRUPTED on this merged
+FAIL and clean teardown. Shell and Window are INTERRUPTED on that
 head after two invocations of three foreground-loss attempts each; the latest
 attempts report `active=false`, `frontmost=OpenTodos`. A quiet foreground
 interval remains a merge gate. Earlier Shell 7/7 and Window 76/76 receipts

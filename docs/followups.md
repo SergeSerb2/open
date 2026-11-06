@@ -205,7 +205,7 @@ The gate "inline completion adds ≤ 0.3 ms p95" read +0.301 ms in one full `ver
 
 ## S11 dialogs and permissions: remaining acceptance and engine API gaps
 
-- Merged App source `7cddbb14` passes page-chrome 41/41 and full verifier 23/23. Post-merge Shell and Window each ended INTERRUPTED in two invocations of three attempts: the latest could not obtain key focus while OpenTodos was frontmost. Cleanup passes. Rerun both during a quiet foreground interval; earlier `deeec4c3` green receipts are historical, not merged-head acceptance. The PR remains a draft pending that gate.
+- Latest App source `43ba07a2` includes main #182 and passes page-chrome 41/41 and runner lifetime 4/4. The automation-only owner-death bypass has negative proof: before the fix, shutdown re-enters held beforeunload and uses the five-second fallback; after it, no new request appears and shutdown takes 0.200 s. The runtime report qualifies full verification and broad reruns separately. Previous `7cddbb14` passes full verifier 23/23, but Shell/Window each ended INTERRUPTED in two invocations of three attempts; the latest could not obtain key focus while OpenTodos was frontmost. Cleanup passes. Earlier `deeec4c3` green receipts are historical. The PR remains a draft pending current-source native gates.
 
 - The lead must resolve the design's "truncated" versus checkpoint "refusal" wording. Open currently refuses messages over 8 KiB and prompt defaults over 4 KiB. Real-page tests cover both boundaries. No threshold was changed.
 - `OEPermissionKind` has no protocol-handler kind or protocol metadata, so the requested default-mail-app question cannot be selected. An engine API addition belongs to the engine owner.

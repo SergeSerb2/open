@@ -6,36 +6,35 @@
         "forced": false,
         "ok": true,
         "owned_pids": [
-          59412,
-          59489,
-          59490,
-          59491,
-          59492,
-          59493,
-          59494,
-          60482,
-          60601,
-          60602,
-          60603,
-          60604,
-          60605,
-          60606,
-          60607,
-          60608,
-          60609,
-          60737,
-          60739,
-          61661,
-          61992,
-          62092,
-          62094,
-          62095,
-          62096,
-          62097,
-          62098,
-          62099,
-          62100,
-          62101
+          91052,
+          91064,
+          91065,
+          91066,
+          91068,
+          91069,
+          91808,
+          91851,
+          91852,
+          91853,
+          91854,
+          91855,
+          91856,
+          91857,
+          91858,
+          91860,
+          92004,
+          92006,
+          92842,
+          93093,
+          93224,
+          93226,
+          93227,
+          93229,
+          93232,
+          93233,
+          93234,
+          93235,
+          93236
         ],
         "remaining_processes": [],
         "reply": true,
@@ -50,26 +49,26 @@
         "forced": false,
         "ok": true,
         "owned_pids": [
-          62112,
-          62123,
-          62124,
-          62125,
-          62127,
-          62128,
-          62129,
-          62134,
-          62144,
-          62145,
-          62165,
-          62167,
-          62168,
-          62169,
-          62170,
-          62171,
-          62172,
-          62173,
-          62174,
-          62175
+          93245,
+          93248,
+          93249,
+          93250,
+          93251,
+          93252,
+          93253,
+          93256,
+          93266,
+          93267,
+          93286,
+          93289,
+          93290,
+          93291,
+          93292,
+          93293,
+          93294,
+          93295,
+          93296,
+          93297
         ],
         "remaining_processes": [],
         "windows_after_quit": {
@@ -115,7 +114,7 @@
         "text": "",
         "title": "127.0.0.1 says",
         "visible": true,
-        "window": 103942
+        "window": 110203
       }
     },
     "dialog_alert_native_escape": {
@@ -138,7 +137,7 @@
         "text": "",
         "title": "127.0.0.1 says",
         "visible": true,
-        "window": 103995
+        "window": 110366
       }
     },
     "dialog_alert_native_return": {
@@ -161,12 +160,12 @@
         "text": "",
         "title": "127.0.0.1 says",
         "visible": true,
-        "window": 103993
+        "window": 110364
       }
     },
     "dialog_background_select": {
       "ok": true,
-      "other": "35895E8C-1240-484F-9B89-3EF185D94266",
+      "other": "5DECA9A6-C348-4113-8DFA-34130139DFED",
       "shown": {
         "buttons": [
           "OK",
@@ -186,7 +185,7 @@
         "text": "",
         "title": "127.0.0.1 says",
         "visible": true,
-        "window": 103985
+        "window": 110299
       },
       "waiting": {
         "buttons": [],
@@ -229,7 +228,7 @@
         "text": "",
         "title": "Leave site?",
         "visible": true,
-        "window": 103999
+        "window": 110370
       }
     },
     "dialog_beforeunload_reload": {
@@ -254,7 +253,7 @@
         "text": "",
         "title": "Reload site?",
         "visible": true,
-        "window": 104003
+        "window": 110374
       }
     },
     "dialog_close_once": {
@@ -263,8 +262,8 @@
           "accepted": false,
           "content": 54,
           "kind": 1,
-          "tab": "629A0215-7B27-48E8-898E-13140BE8637C",
-          "time": 1793935939.424787,
+          "tab": "FC26A8E2-D273-4390-AB90-768F19A94CB5",
+          "time": 1793937600.441935,
           "type": "dialogAnswer"
         }
       ],
@@ -292,7 +291,7 @@
         "text": "",
         "title": "127.0.0.1 says",
         "visible": true,
-        "window": 103946
+        "window": 110207
       }
     },
     "dialog_confirm_ok": {
@@ -317,7 +316,7 @@
         "text": "",
         "title": "127.0.0.1 says",
         "visible": true,
-        "window": 103944
+        "window": 110205
       }
     },
     "dialog_message_limit": {
@@ -364,7 +363,7 @@
         "text": "seed",
         "title": "127.0.0.1 says",
         "visible": true,
-        "window": 103957
+        "window": 110248
       }
     },
     "dialog_prompt_limit": {
@@ -393,7 +392,7 @@
         "text": "seed",
         "title": "127.0.0.1 says",
         "visible": true,
-        "window": 103987
+        "window": 110357
       }
     },
     "dialog_prompt_ok": {
@@ -418,7 +417,7 @@
         "text": "seed",
         "title": "127.0.0.1 says",
         "visible": true,
-        "window": 103948
+        "window": 110221
       }
     },
     "dialog_quit_cancel": {
@@ -442,7 +441,7 @@
         "text": "",
         "title": "Leave site?",
         "visible": true,
-        "window": 104007
+        "window": 110378
       }
     },
     "dialog_quit_ok": {
@@ -466,7 +465,7 @@
         "text": "",
         "title": "Leave site?",
         "visible": true,
-        "window": 104020
+        "window": 110391
       }
     },
     "dialog_sheet_native_keys": {
@@ -496,7 +495,7 @@
         "text": "",
         "title": "127.0.0.1 says",
         "visible": true,
-        "window": 103969
+        "window": 110282
       },
       "ok": true,
       "result": [
@@ -523,7 +522,7 @@
         "text": "",
         "title": "127.0.0.1 says",
         "visible": true,
-        "window": 103971
+        "window": 110284
       },
       "suppressed": 3
     },
@@ -548,7 +547,7 @@
         "text": "",
         "title": "127.0.0.1 says",
         "visible": true,
-        "window": 103983
+        "window": 110297
       }
     },
     "dialog_suppression_reload_reset": {
@@ -571,7 +570,7 @@
         "text": "",
         "title": "127.0.0.1 says",
         "visible": true,
-        "window": 103977
+        "window": 110291
       }
     },
     "dialog_title_data": {
@@ -591,7 +590,7 @@
         "decisions": [
           {
             "kind": 8,
-            "origin": "http://remember.localhost:61394",
+            "origin": "http://remember.localhost:59004",
             "state": 1
           }
         ],
@@ -615,17 +614,17 @@
         ],
         "decisions": 2,
         "help": "Click the lock to change this any time",
-        "keyWindow": 103941,
+        "keyWindow": 110202,
         "kinds": 8,
-        "origin": "http://remember.localhost:61394/",
-        "parent": 103941,
+        "origin": "http://remember.localhost:59004/",
+        "parent": 110202,
         "pending": 1,
         "pendingPage": 594,
         "promptKey": true,
         "question": "Allow remember.localhost to send you notifications?",
         "selectedPage": 594,
         "visible": true,
-        "window": 104009
+        "window": 110380
       },
       "stored": 1
     },
@@ -648,17 +647,17 @@
         ],
         "decisions": 7,
         "help": "Click the lock to change this any time",
-        "keyWindow": 103941,
+        "keyWindow": 110202,
         "kinds": 8,
-        "origin": "http://hidden-content-top-left.localhost:61394/",
-        "parent": 103941,
+        "origin": "http://hidden-content-top-left.localhost:59004/",
+        "parent": 110202,
         "pending": 1,
         "pendingPage": 875,
         "promptKey": true,
         "question": "Allow hidden-content-top-left.localhost to send you notifications?",
         "selectedPage": 875,
         "visible": true,
-        "window": 104009
+        "window": 110380
       }
     },
     "permission_anchor_toolbar-url": {
@@ -680,24 +679,24 @@
         ],
         "decisions": 8,
         "help": "Click the lock to change this any time",
-        "keyWindow": 103941,
+        "keyWindow": 110202,
         "kinds": 8,
-        "origin": "http://hidden-toolbar-url.localhost:61394/",
-        "parent": 103941,
+        "origin": "http://hidden-toolbar-url.localhost:59004/",
+        "parent": 110202,
         "pending": 1,
         "pendingPage": 937,
         "promptKey": true,
         "question": "Allow hidden-toolbar-url.localhost to send you notifications?",
         "selectedPage": 937,
         "visible": true,
-        "window": 104009
+        "window": 110380
       }
     },
     "permission_background_select": {
       "appQueued": false,
       "hidden": true,
       "ok": true,
-      "other": "5A8487E5-D28A-4D29-858A-21CE0BA2E880",
+      "other": "BBD3B0F3-B4F0-4D0F-A535-A81ABE6A3BD3",
       "state": {
         "anchor": {
           "edge": 3,
@@ -715,17 +714,17 @@
         ],
         "decisions": 6,
         "help": "Click the lock to change this any time",
-        "keyWindow": 103941,
+        "keyWindow": 110202,
         "kinds": 8,
-        "origin": "http://background.localhost:61394/",
-        "parent": 103941,
+        "origin": "http://background.localhost:59004/",
+        "parent": 110202,
         "pending": 1,
         "pendingPage": 815,
         "promptKey": true,
         "question": "Allow background.localhost to send you notifications?",
         "selectedPage": 815,
         "visible": true,
-        "window": 104009
+        "window": 110380
       }
     },
     "permission_close_once": {
@@ -733,8 +732,8 @@
         {
           "content": 758,
           "decision": "dismiss",
-          "tab": "ECDF041E-36B8-496B-9D55-4A4049124FA2",
-          "time": 1793935961.880755,
+          "tab": "50647291-C09E-4FC7-A280-186C59773C5E",
+          "time": 1793937625.062238,
           "type": "permissionAnswer"
         }
       ],
@@ -759,17 +758,17 @@
         ],
         "decisions": 9,
         "help": "Click the lock to change this any time",
-        "keyWindow": 103941,
+        "keyWindow": 110202,
         "kinds": 32,
-        "origin": "http://midi.localhost:61394/",
-        "parent": 103941,
+        "origin": "http://midi.localhost:59004/",
+        "parent": 110202,
         "pending": 1,
         "pendingPage": 1001,
         "promptKey": true,
         "question": "Allow midi.localhost to access your MIDI devices?",
         "selectedPage": 1001,
         "visible": true,
-        "window": 104009
+        "window": 110380
       }
     },
     "permission_native_escape": {
@@ -791,17 +790,17 @@
         ],
         "decisions": 10,
         "help": "Click the lock to change this any time",
-        "keyWindow": 103941,
+        "keyWindow": 110202,
         "kinds": 8,
-        "origin": "http://keys-escape.localhost:61394/",
-        "parent": 103941,
+        "origin": "http://keys-escape.localhost:59004/",
+        "parent": 110202,
         "pending": 1,
         "pendingPage": 1067,
         "promptKey": true,
         "question": "Allow keys-escape.localhost to send you notifications?",
         "selectedPage": 1067,
         "visible": true,
-        "window": 104009
+        "window": 110380
       }
     },
     "permission_native_l": {
@@ -823,17 +822,17 @@
         ],
         "decisions": 14,
         "help": "Click the lock to change this any time",
-        "keyWindow": 103941,
+        "keyWindow": 110202,
         "kinds": 8,
-        "origin": "http://keys-l.localhost:61394/",
-        "parent": 103941,
+        "origin": "http://keys-l.localhost:59004/",
+        "parent": 110202,
         "pending": 1,
         "pendingPage": 1347,
         "promptKey": true,
         "question": "Allow keys-l.localhost to send you notifications?",
         "selectedPage": 1347,
         "visible": true,
-        "window": 104009
+        "window": 110380
       }
     },
     "permission_native_return": {
@@ -855,17 +854,17 @@
         ],
         "decisions": 11,
         "help": "Click the lock to change this any time",
-        "keyWindow": 103941,
+        "keyWindow": 110202,
         "kinds": 8,
-        "origin": "http://keys-return.localhost:61394/",
-        "parent": 103941,
+        "origin": "http://keys-return.localhost:59004/",
+        "parent": 110202,
         "pending": 1,
         "pendingPage": 1135,
         "promptKey": true,
         "question": "Allow keys-return.localhost to send you notifications?",
         "selectedPage": 1135,
         "visible": true,
-        "window": 104009
+        "window": 110380
       }
     },
     "permission_native_t": {
@@ -887,17 +886,17 @@
         ],
         "decisions": 13,
         "help": "Click the lock to change this any time",
-        "keyWindow": 103941,
+        "keyWindow": 110202,
         "kinds": 8,
-        "origin": "http://keys-t.localhost:61394/",
-        "parent": 103941,
+        "origin": "http://keys-t.localhost:59004/",
+        "parent": 110202,
         "pending": 1,
         "pendingPage": 1276,
         "promptKey": true,
         "question": "Allow keys-t.localhost to send you notifications?",
         "selectedPage": 1276,
         "visible": true,
-        "window": 104009
+        "window": 110380
       }
     },
     "permission_native_w": {
@@ -919,17 +918,17 @@
         ],
         "decisions": 12,
         "help": "Click the lock to change this any time",
-        "keyWindow": 103941,
+        "keyWindow": 110202,
         "kinds": 8,
-        "origin": "http://keys-w.localhost:61394/",
-        "parent": 103941,
+        "origin": "http://keys-w.localhost:59004/",
+        "parent": 110202,
         "pending": 1,
         "pendingPage": 1205,
         "promptKey": true,
         "question": "Allow keys-w.localhost to send you notifications?",
         "selectedPage": 1205,
         "visible": true,
-        "window": 104009
+        "window": 110380
       }
     },
     "permission_navigate_once": {
@@ -937,8 +936,8 @@
         {
           "content": 702,
           "decision": "dismiss",
-          "tab": "61F84CC6-EA5B-4E21-85FF-7746EFB89F39",
-          "time": 1793935960.356854,
+          "tab": "E9929A0E-0FD4-4992-94D8-08E6A9879A67",
+          "time": 1793937623.589548,
           "type": "permissionAnswer"
         }
       ],
@@ -963,17 +962,17 @@
         ],
         "decisions": 0,
         "help": "Click the lock to change this any time",
-        "keyWindow": 103941,
+        "keyWindow": 110202,
         "kinds": 8,
-        "origin": "http://notnow.localhost:61394/",
-        "parent": 103941,
+        "origin": "http://notnow.localhost:59004/",
+        "parent": 110202,
         "pending": 1,
         "pendingPage": 544,
         "promptKey": true,
         "question": "Allow notnow.localhost to send you notifications?",
         "selectedPage": 544,
         "visible": true,
-        "window": 104009
+        "window": 110380
       },
       "stored": 0
     },
@@ -982,12 +981,12 @@
         "decisions": [
           {
             "kind": 8,
-            "origin": "http://keys-return.localhost:61394",
+            "origin": "http://keys-return.localhost:59004",
             "state": 1
           },
           {
             "kind": 8,
-            "origin": "http://remember.localhost:61394",
+            "origin": "http://remember.localhost:59004",
             "state": 1
           }
         ],
@@ -1001,8 +1000,8 @@
         {
           "content": 647,
           "decision": "dismiss",
-          "tab": "4110626C-1B47-4A59-9933-FDD7A8FB3315",
-          "time": 1793935959.252571,
+          "tab": "2932043A-6FC4-4C0F-8134-FF2D6DFC7101",
+          "time": 1793937622.234483,
           "type": "permissionAnswer"
         }
       ],
@@ -1017,8 +1016,8 @@
   "source": {
     "clean": true,
     "diffSHA256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
-    "head": "7cddbb141e4324370acd17e57509b443739024cf"
+    "head": "43ba07a2118b9a45d325397fb28480c87ea9058c"
   },
-  "started": "2026-11-05 20:31:57",
+  "started": "2026-11-05 20:59:41",
   "style": "chrome"
 }

@@ -778,7 +778,14 @@ sheet is visible; cleanup must still leave zero owned processes/windows.
 
 ## Runner lifetime
 
-E2e launchers pass `OPEN_E2E_OWNER_PID`: the shared `Open` launcher supplies it through LaunchServices, and the direct migration fixture sets it in its subprocess environment. Automation builds watch that runner with a process exit dispatch source before preparing data or windows. A missing owner exits immediately; owner death logs `Open: e2e owner <pid> exited; quitting` and requests normal shutdown (engine close skips beforeunload, download quit confirmation is skipped, active transfers and save choices are cancelled, and new download destination prompts are refused). A background deadline forces exit after five seconds if shutdown stalls. There is no polling or idle timer. Normal builds compile out the watcher and environment handling.
+E2e launchers pass `OPEN_E2E_OWNER_PID`: the shared `Open` launcher supplies it through LaunchServices, and the direct migration fixture sets it in its subprocess environment. Automation builds watch that runner with a process exit dispatch source before preparing data or windows. A missing owner exits immediately; owner death logs `Open: e2e owner <pid> exited; quitting` and requests normal shutdown (the App's page-beforeunload preflight and engine close prompts are skipped, download quit confirmation is skipped, active transfers and save choices are cancelled, and new download destination prompts are refused). A background deadline forces exit after five seconds if shutdown stalls. There is no polling or idle timer. Normal builds compile out the watcher and environment handling.
+
+`tools/e2e/owner_watch_e2e.py <output-directory>` exercises four real-App
+cases: owner death, a missing-owner-environment negative control, an active
+download, and a page with a beforeunload handler. `--before-unload` runs only
+the last case. That case first observes and cancels a normal held beforeunload
+request, then kills the runner and requires shutdown without another request.
+Run it under the on-screen lock. Normal user quit keeps the page preflight.
 
 ## Session downloads (S11)
 
