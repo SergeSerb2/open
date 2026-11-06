@@ -9965,6 +9965,10 @@ def space_editor_creation_checks(factory, results, tmp):
         for shortcut in ('t', 'l'):
             key(shortcut, ['cmd'])
             require('A5_form_cmd_' + shortcut, bool(wait_until(lambda: app.call('commandbar-state')['presented'], timeout=5)) and state()['open'])
+            if shortcut == 't':
+                app.call('key', text='word', route='app'); key('z', ['cmd'])
+                require('A5_bar_text_undo_keeps_form_draft', app.call('commandbar-state')['text'] == ''
+                        and state()['name'] == 'Created Space' and spaces() == before)
             key('escape')
             after_bar = app.call('commandbar-state'); after_form = state()
             require('A5_bar_escape_keeps_form_' + shortcut, not after_bar['presented'] and after_form['open'], bar=after_bar, form=after_form)
@@ -10005,6 +10009,24 @@ def space_editor_creation_checks(factory, results, tmp):
         app.call('editor-open', kind='create'); app.call('type', text='   '); finish()
         require('A5_blank_is_untitled_no_theme', focused()['title'] == '' and app.call('theme-get')['style'] is None)
         undo(); require('A5_blank_one_undo', spaces() == before)
+        # Text and theme share one draft stack, in the user's edit order.
+        app.call('editor-open', kind='create')
+        app.call('editor-act', action='click', control='theme')
+        app.call('editor-act', action='preset', index=2)
+        typing_theme = state()['style']
+        app.call('editor-close'); app.call('editor-open', kind='create')
+        app.call('type', text='abc')
+        require('A5_text_typing_after_theme', state()['name'] == 'abc' and state()['style'] == typing_theme)
+        key('z', ['cmd'])
+        require('A5_text_undo_before_theme', state()['name'] == '' and state()['style'] == typing_theme, state=state())
+        key('z', ['cmd', 'shift'])
+        require('A5_text_redo_before_theme', state()['name'] == 'abc' and state()['style'] == typing_theme, state=state())
+        key('z', ['cmd']); key('z', ['cmd'])
+        require('A5_theme_undo_after_typing', state()['name'] == '' and state()['style'] is None, state=state())
+        key('z', ['cmd', 'shift']); key('z', ['cmd', 'shift'])
+        require('A5_text_theme_redo_keeps_both_steps', state()['name'] == 'abc' and state()['style'] == typing_theme
+                and spaces() == before, state=state())
+        key('escape')
         # A hidden sidebar is temporarily shown without a persisted mode change.
         app.call('menu-perform', id='toggle-sidebar')
         require('A5_hidden_sidebar_fixture', app.call('window-state')['sidebarMode'] == 'hidden')
