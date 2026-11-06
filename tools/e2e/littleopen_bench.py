@@ -45,9 +45,12 @@ def main():
     parser.add_argument('--config', default='Debug')
     parser.add_argument('--samples', type=int, default=10)
     parser.add_argument('--output', required=True)
+    parser.add_argument('--pair-index', type=int, help='emit one partial pair for the lock-releasing series runner; not an acceptance receipt')
     args = parser.parse_args()
     if not 10 <= args.samples <= 100:
         parser.error('10 to 100 samples per build are required')
+    if args.pair_index is not None and not 0 <= args.pair_index < 100:
+        parser.error('pair index must be 0 to 99')
     scratch = Path(tempfile.mkdtemp(prefix='open-lo-bench-'))
     probe = scratch / 'frame.dylib'
     subprocess.run(['xcrun', 'clang', '-dynamiclib', '-fobjc-arc', '-Wno-deprecated-declarations',
@@ -62,10 +65,11 @@ def main():
     receipt = {'configuration': args.config, 'samples': rows,
                'method': 'automation request start to first native display-link tick; page submit to loading=false plus document complete and first contentful paint',
                'memory': 'App metrics totalRSS: App and owned helpers; one loaded window minus baseline',
+               'partialPair': args.pair_index,
                'mainBundle': str(Path(args.main_bundle).resolve()), 'branchBundle': str(Path(args.branch_bundle).resolve())}
     try:
         subprocess.run(['defaults', 'write', domain, key, '-bool', 'true'], check=True)
-        for index in range(args.samples):
+        for index in (range(args.samples) if args.pair_index is None else (args.pair_index,)):
             # Alternate the first build of each pair to bound order/cache bias.
             for label in (('main', 'branch') if index % 2 == 0 else ('branch', 'main')):
                 if os.getloadavg()[0] > 12:
@@ -154,7 +158,7 @@ def main():
         else:
             subprocess.run(['defaults', 'delete', domain, key], capture_output=True)
         shutil.rmtree(scratch, ignore_errors=True)
-    if not receipt.get('noSlower', False):
+    if args.pair_index is None and not receipt.get('noSlower', False):
         raise SystemExit(1)
 
 
