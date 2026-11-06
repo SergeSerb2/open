@@ -39,6 +39,9 @@ extension AutomationController {
       "imageObject": icon.appliedImage.map { String(describing: ObjectIdentifier($0)) } ?? "bundle",
       "pixels": icon.appliedImage?.representations.map { [$0.pixelsWide, $0.pixelsHigh] } ?? [],
       "restoreStartedMs": icon.restoreStartedMs ?? NSNull(),
+      "restoreDecodeMs": icon.restoreDecodeMs ?? NSNull(),
+      "restorePreparationMs": icon.restorePreparationMs ?? NSNull(),
+      "restoreSetterMs": icon.restoreSetterMs ?? NSNull(),
       "restoreElapsedMs": icon.restoreElapsedMs ?? NSNull()]
   }
 

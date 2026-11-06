@@ -79,6 +79,8 @@ public struct ArcImportResult {
     public var model: BrowserModel
     public var report: ImportReport
     public var archiveRecords: [ArchivedTabRecord]
+    /// Original Chromium directory, before destination collision suffixes.
+    public var sourceProfileDirectories: [ProfileID: String] = [:]
 }
 
 public enum ImportError: Error {
@@ -945,7 +947,8 @@ public struct ArcImporter {
         }
 
         let model = BrowserModel(profiles: profiles, spaces: spaces, windows: windows, routingRules: rules, defaultDestination: defaultDestination)
-        return ArcImportResult(model: model, report: report, archiveRecords: archiveRecords)
+        return ArcImportResult(model: model, report: report, archiveRecords: archiveRecords,
+            sourceProfileDirectories: Dictionary(uniqueKeysWithValues: sourceProfiles.profiles.map { ($0.id, $0.sourceDirectory) }))
     }
 
     private func parseDestination(_ raw: Any?, arcSpaceIDToOpen: [String: SpaceID]) -> DefaultDestination? {

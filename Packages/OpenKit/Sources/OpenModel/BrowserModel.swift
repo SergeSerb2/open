@@ -605,7 +605,9 @@ public final class BrowserModel {
     public func mergeImportedSidebar(_ source: BrowserModel, profileMapping: [ProfileID: ProfileID],
                                      spaces includeSpaces: Bool, tabs includeTabs: Bool,
                                      favorites includeFavorites: Bool, folders includeFolders: Bool,
-                                     searchSettings includeSearch: Bool, saving: () throws -> Void) throws -> ImportCounts {
+                                     searchSettings includeSearch: Bool,
+                                     archivedIDsByProfile: [ProfileID: Set<ItemID>] = [:],
+                                     importedAt: Date = Date(), saving: () throws -> Void) throws -> ImportCounts {
         typealias Edit = (apply: @MainActor (BrowserModel) -> Void, undo: Revert)
         var edits: [Edit] = []
         var counts = ImportCounts()
@@ -613,11 +615,17 @@ public final class BrowserModel {
                      undo: @escaping Revert) {
             apply(self); edits.append((apply, undo))
         }
-        func copyTab(_ tab: Tab) -> Tab {
-            Tab(id: tab.id, url: tab.url, title: tab.title, customTitle: tab.customTitle,
+        func copyTab(_ tab: Tab, into parent: NodeParent) -> Tab {
+            let activity: Date
+            if case .spaceToday? = section(of: parent) { activity = importedAt }
+            else { activity = tab.lastActiveAt }
+            return Tab(id: tab.id, url: tab.url, title: tab.title, customTitle: tab.customTitle,
                 pinnedURL: tab.pinnedURL, customIcon: tab.customIcon, iconOverride: tab.iconOverride,
-                createdAt: tab.createdAt, lastActiveAt: tab.lastActiveAt, isMuted: tab.isMuted,
+                createdAt: tab.createdAt, lastActiveAt: activity, isMuted: tab.isMuted,
                 openerID: tab.openerID, isUnread: tab.isUnread)
+        }
+        func duplicate(_ id: ItemID, into parent: NodeParent) -> Bool {
+            node(id: id) != nil || owner(of: parent).profile.map { archivedIDsByProfile[$0]?.contains(id) == true } == true
         }
         func add(_ node: SidebarNode, to parent: NodeParent) {
             let slot: Int
@@ -648,14 +656,14 @@ public final class BrowserModel {
                     } else { merge(folder.children, into: parent) }
                 case .tab(let tab):
                     guard includeTabs else { continue }
-                    if self.node(id: tab.id) != nil { counts.duplicates += 1 }
-                    else { add(.tab(copyTab(tab)), to: parent); counts.tabs += 1 }
+                    if duplicate(tab.id, into: parent) { counts.duplicates += 1 }
+                    else { add(.tab(copyTab(tab, into: parent)), to: parent); counts.tabs += 1 }
                 case .split(let split):
                     guard includeTabs else { continue }
                     let panes = split.panes.filter { tab in
-                        if self.node(id: tab.id) != nil { counts.duplicates += 1; return false }
+                        if duplicate(tab.id, into: parent) { counts.duplicates += 1; return false }
                         return true
-                    }.map(copyTab)
+                    }.map { copyTab($0, into: parent) }
                     if self.node(id: split.id) != nil {
                         for tab in panes { add(.tab(tab), to: parent); counts.tabs += 1 }
                     } else if panes.count >= 2 {
@@ -696,8 +704,8 @@ public final class BrowserModel {
             }
             if includeFavorites {
                 for tab in imported.favorites {
-                    if node(id: tab.id) != nil { counts.duplicates += 1 }
-                    else { add(.tab(copyTab(tab)), to: .favorites(id)); counts.favorites += 1 }
+                    if duplicate(tab.id, into: .favorites(id)) { counts.duplicates += 1 }
+                    else { add(.tab(copyTab(tab, into: .favorites(id))), to: .favorites(id)); counts.favorites += 1 }
                 }
             }
         }
