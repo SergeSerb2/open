@@ -357,13 +357,17 @@ final class EngineWebContentHostFactory: NSResponder, WebContentHostFactory {
     let host = EngineWebContentHost(tabID: tabID, profileID: profileID, content: content, owner: self)
     hosts[tabID] = host
     if let browser {
+      // Hosted Chrome creation is synchronous. Seed an already submitted URL
+      // before insertion, so it creates the target instead of navigating a
+      // throwaway about:blank page first (deferred Little Open).
+      if let url, history == nil { host.load(url) }
       browser.insert(content, at: 0)
       browser.activeWebContent = content
     }
     if typedNavigationTabs.remove(tabID) != nil { host.historyRecorder.markTyped() }
     if model.tab(id: tabID) != nil { modelHostIDs.insert(tabID) }
     mirror.sync()
-    if let url, history == nil { host.load(url) }
+    if let url, history == nil, browser == nil { host.load(url) }
     app.tabSleep.contentCreated(tabID: tabID, host: host)
     return host
   }

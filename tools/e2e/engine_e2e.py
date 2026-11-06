@@ -7046,6 +7046,46 @@ def littleopen_checks(factory, results, tmp):
         fixture_path = os.path.join(tmp, 'littleopen-snapshot.json')
         with open(fixture_path, 'w') as stream: json.dump(seed, stream)
         app.quit(); app = factory(urls=(), snapshot=fixture_path, extra_env=env)
+        # Atomic native events exercise Return/close before any queued turn.
+        baseline = state()['browserCount']
+        immediate_url = origin + '/plain.html?littleopen=immediate'
+        immediate = app.call('little-open-action', action='blank', then='submit', text=immediate_url)
+        early = immediate['opened']['sessions'][0]
+        submitted = wait_until(lambda: (lambda s: s if s and s['state'] == 'page' and not s['loading'] else None)(session(early['id'])), timeout=12)
+        ready = app.call('little-open-eval', id=early['id'], js='location.href') if submitted else None
+        submitted_early = immediate['after']['sessions'][0]
+        record('littleopen_submit_before_browser', early.get('browserID') is None
+               and early['content'] == 0 and submitted_early.get('submittedBeforeBrowser') is True
+               and ready == immediate_url,
+               opened=early, beforeCreation=submitted_early, submitted=submitted, ready=ready,
+               route='OEApplication.sendEvent on the first committed-frame creation turn, before Browser creation')
+        deferred = session(early['id'])
+        first = deferred.get('firstFrameRead') or {}
+        record('littleopen_browser_deferred', early.get('browserID') is None and early['content'] == 0
+               and not early['surface']['visible'] and first.get('visible') is True
+               and first.get('browserID') is None and first.get('content') == 0
+               and deferred.get('browserID') is not None
+               and deferred.get('browserCreationStartedAt', 0) >= first.get('uptime', float('inf')),
+               opened=early, firstFrame=first, after=deferred)
+        close_all()
+        closed = app.call('little-open-action', action='blank', then='close')
+        closed_early = closed['opened']['sessions'][0]
+        # Pump later native turns too: canceled work must never create a Browser.
+        app.call('ping'); app.call('ping')
+        time.sleep(.1)
+        accepted_limit = app.call('little-open-action', action='blank', then='close', text='x' * 8192)
+        refused_limit = False
+        try:
+            app.call('little-open-action', action='blank', then='close', text='x' * 8193)
+        except RuntimeError as error:
+            refused_limit = '8 KiB' in str(error)
+        closed_state = state()
+        record('littleopen_close_before_browser', closed_early.get('browserID') is None
+               and closed_early['content'] == 0 and not closed_state['sessions']
+               and closed['after']['browserCount'] == closed_state['browserCount'] == baseline
+               and accepted_limit['after']['browserCount'] == baseline and refused_limit,
+               opened=closed_early, after=closed_state, baseline=baseline,
+               inputLimit={'acceptedBytes': 8192, 'refusedBytes': 8193, 'refused': refused_limit})
         app.call('open', url=origin + '/main-browser-control')
         base = state()
         menu('new-little-open-window')
@@ -7069,12 +7109,13 @@ def littleopen_checks(factory, results, tmp):
         second = next(s for s in sessions() if s['id'] != bar['id'])
         record('B9_second_first_frame', rect_equal(second['frame'], expected_bar)
                and rect_equal(session(bar['id'])['frame'], expected_page), session=second)
+        second = wait_until(lambda: (lambda s: s if s and s.get('browser') else None)(session(second['id'])), timeout=4) or second
         second_browser = second.get('browser') or {}
         second_browser_id = second_browser.get('id')
         action(second['id'], 'close')
         second_browser_gone = wait_until(lambda: second_browser_id not in state()['browserIDs'], timeout=4)
         page_browser = loaded.get('browser') or {}
-        bar_browser = bar.get('browser') or {}
+        bar_browser = surface_bar.get('browser') or {}
         main_browser_ids = state()['mainBrowserIDs']
 
         before = len(sessions()); timestamp = time.monotonic() - 5
@@ -7344,6 +7385,13 @@ def littleopen_checks(factory, results, tmp):
         deliver(delivery_url)
         reached = wait_until(lambda: any(r['url'] == delivery_url and r['state'] == 'page' for r in sessions()), timeout=10)
         record('B6_external_no_main', reached and state()['mainWindows'] == 0, state=state())
+        external = next((s for s in sessions() if s['url'] == delivery_url), {})
+        external_first = external.get('firstFrameRead') or {}
+        results['littleopen_browser_deferred']['externalFirstFrame'] = external_first
+        results['littleopen_browser_deferred']['ok'] &= (external_first.get('visible') is True
+            and external_first.get('browserID') is None and external_first.get('content') == 0
+            and external.get('browserID') is not None)
+
         app.quit()
         app = factory(urls=(), extra_env=env)
         record('B6_quit_no_restore', not sessions(), state=state())

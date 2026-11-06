@@ -102,6 +102,7 @@ def main():
                             return None
                         ready = raw_call(app, 'little-open-eval', id=session['id'], js='({ready:document.readyState,url:location.href,fcp:performance.getEntriesByName("first-contentful-paint")[0]?.startTime ?? null})')
                         result = ready['result']
+                        ready['browserCreationStartedAt'] = current.get('browserCreationStartedAt')
                         return ready if result['ready'] == 'complete' and result['url'] == target and result['fcp'] is not None else None
                     completed = e.wait_until(page_loaded, timeout=15, step=.002)
                     if not completed:
@@ -118,6 +119,8 @@ def main():
                            'firstContentfulPaintMs': completed['result']['fcp'], 'baselineRSS': before['totalRSS'], 'loadedRSS': after['totalRSS'],
                            'windowRSS': after['totalRSS'] - before['totalRSS'],
                            'processCount': len(after['processes'])}
+                    if completed.get('browserCreationStartedAt') is not None:
+                        row['browserCreationToReadyMs'] = (completed['observationStart'] - completed['browserCreationStartedAt']) * 1000
                     rows.append(row)
                     print(json.dumps(row), flush=True)
                 finally:
@@ -133,6 +136,10 @@ def main():
             for metric in ('firstFrameMs', 'pageLoadMs', 'windowRSS', 'loadedRSS'):
                 values = sorted(r[metric] for r in selected)
                 result[metric] = {'median': statistics.median(values), 'p95': values[math.ceil(len(values) * .95)-1]}
+            creation = [r['browserCreationToReadyMs'] for r in selected if 'browserCreationToReadyMs' in r]
+            if creation:
+                values = sorted(creation)
+                result['browserCreationToReadyMs'] = {'median': statistics.median(values), 'p95': values[math.ceil(len(values) * .95)-1]}
             return result
         receipt['summary'] = {label: summary(label) for label in ('main', 'branch')}
         receipt['noSlower'] = all(receipt['summary']['branch'][metric][pct] <= receipt['summary']['main'][metric][pct]

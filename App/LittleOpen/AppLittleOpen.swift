@@ -38,8 +38,12 @@ extension AppDelegate {
     }
     coordinator.confirmProfileSwitch = { [weak self] profile, completion in self?.confirmLittleOpenProfileSwitch(profile, completion: completion) }
     // Fan out to the shared visibility feed, deadline and menus.
-    coordinator.onChange = { [weak self] in
-      guard let self else { return }
+    coordinator.onChange = { [weak self, weak coordinator] in
+      guard let self, let coordinator else { return }
+      for controller in coordinator.controllers.values {
+        let view = controller.container.host(for: controller.session.tab.id)?.view as? LittleOpenSurfaceView
+        view?.owner?.windowOrderedFront()
+      }
       self.media.visibility.visibilityChanged()
       for host in self.littleOpenHosts.values {
         host.owner?.standaloneSurfaceVisibilityChanged()
