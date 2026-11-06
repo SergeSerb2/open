@@ -30,6 +30,9 @@ final class AppSiteControlSource: SiteControlDataSource, SiteControlActions {
   private var modelToken: UUID?
   private var pendingTabs: Set<ItemID> = []
   private var refreshPending = false
+  // Keep the token's owner alive until removal. The weak factory can already
+  // be nil when its stored source is released during window teardown.
+  private let model: BrowserModel
   #if OPEN_AUTOMATION
   private(set) var snapshotReadCount = 0
   private(set) var buttonReadCount = 0
@@ -38,13 +41,14 @@ final class AppSiteControlSource: SiteControlDataSource, SiteControlActions {
   private let adBlockStore: AdBlockStore?
   init(factory: EngineWebContentHostFactory) {
     self.factory = factory
+    model = factory.model
     // Open the shared store before a click. Snapshot reads never acquire its
     // directory lease or read global settings on the presentation path.
     adBlockStore = factory.app.stores.adBlock
     // Structural edits and page title/favicon/loading changes do not change
     // SCC rows. The window owns selection/dismissal; only a Profile rebind
     // needs a data-source notification here.
-    modelToken = factory.model.addObserver { [weak self] change in
+    modelToken = model.addObserver { [weak self] change in
       guard case .spaceProfileChanged(let id, _, _) = change,
             self?.factory?.focusedSpace?.id == id else { return }
       self?.refresh()
@@ -56,7 +60,7 @@ final class AppSiteControlSource: SiteControlDataSource, SiteControlActions {
     }
   }
   isolated deinit {
-    if let modelToken { factory?.model.removeObserver(modelToken) }
+    if let modelToken { model.removeObserver(modelToken) }
     if let boostToken { boostProvider?.removeBoostObserver(boostToken) }
     notifications.forEach(NotificationCenter.default.removeObserver)
   }
