@@ -18,6 +18,67 @@ For this plan:
 
 ## Summary
 
+### E11/E12 and tab event follow-ups (2026-11-05)
+
+The E11 window hook is `chromium/0306-open-extension-windows-tabs.patch`.
+It owns `tabs_api.cc`; that file's P1 move/discard guards moved out of 0303
+to keep patch manifests disjoint. 0303 still owns the lifecycle-unit discard
+guard. New behavior lives in the overlay, not in generated C API files.
+
+`OpenTabStrip::CreateExtensionWindow` makes a hidden `TYPE_POPUP` Browser,
+with its own strip and hosted page. `OEBrowser` adopts it, then calls the
+engine delegate outside the model observer stack. The App hosts that page in
+`ExtensionWindowController`, a standard titled, closable, miniaturizable,
+resizable window with no toolbar or sidebar. Explicit frames take priority;
+otherwise AppKit restores `ExtensionPopupWindow`, or the App centers a 400×600
+frame on its parent. Window bounds/focus come from the actual native window.
+Normal windows requested by an extension become selected Today tabs in the
+active Open window of the profile, retaining that window's id (guess (lead)).
+Popup requests with multiple URLs are refused: this native surface hosts one
+page (guess (child)). Sized page `window.open` panels and Peek action Q4 remain
+separate follow-ups.
+
+`CefOpenOmnibox` uses Chromium's `ExtensionOmniboxEventRouter` and
+`OmniboxSuggestionsWatcher`, with enabled-keyword and profile guards. It sends
+start/change/enter/cancel/delete events, reads Chromium's parsed default
+suggestion, and reports default changes. Negative process-wide request ids
+stay separate from Chromium's positive autocomplete ids. Only the first
+reply to the latest text is delivered. The App bridges cancellation and
+supersession to nil async replies and provides enabled actions, keyword
+scopes, icons, and Cocoa shortcut keycaps to the command bar. Default refresh
+reuses the current reply and sends no extra input event.
+
+The minimal sidebar-to-Chromium event mapping is:
+
+| Open change | Equivalent strip change and extension event |
+|---|---|
+| Reorder within a Space | Move the live tab to its new flattened index; native `tabs.onMoved`. |
+| Move to another Space in the same profile | Move to the new flattened index, retaining tab/window ids; native `onMoved`. A Space change that leaves the strip index unchanged has no Chrome equivalent event. |
+| Pin/unpin | Change Chrome's pinned state and its required strip position; native `onUpdated({pinned})` and any corresponding `onMoved`. Favorites remain pinned. |
+| Focus another Split View pane | Activate and single-highlight the focused pane; native `onActivated` and `onHighlighted`. Other visible panes remain background strip tabs. |
+| Extension `tabs.update({pinned})` | Request the model's pin/unpin operation, then mirror the result. Favorites stay Favorites. |
+
+No synthetic duplicate events are sent. Array `tabs.move` requests capture
+neighbour WebContents in the observer, before later moves or shell syncs can
+change the model; the deferred bridge resolves those neighbours by identity.
+
+The real-App acceptance suite is `--only extensions-e2`; P3, actions,
+extensions, tabstrip and the shell regressions remain separate gates.
+
+Engine receipt (M5, 2026-11-05): baseline `engine-status` 8 PASS, 20 patches,
+47 overlays, 24 symbols; distribution
+`7b49090502568f8189aa0e94f7cf23344beec5bed537136eff5f7fce573ad35a`.
+After this change: 8 PASS, 21 patches, 50 overlays, 25 symbols; distribution
+`c6830913c38ef982b01a428aa3c0f705e271b67ad0720b21d2279c64a675c6a7`.
+The engine build uses the `open-engine-s8` root, `nice`, the engine lock,
+and 10 jobs. The main distribution root is not changed.
+
+Release `extensions-e2`: 24/24 rows PASS. Deliberately removing the popup's
+resizable style, action keycaps, default-suggestion mapping, and exact moved-tab
+hint produced FAILs in their matching rows. Restoring the implementation and
+rebuilding returned all rows to PASS. Both failing runs and the restored run
+passed owned-process cleanup. Raw receipts remain in `.re/extensions-e2/`.
+
 | # | Patch | Value | Effort (guess) | Needs |
 |---|---|---|---|---|
 | P1 | Tab-strip bridge: Open windows and tabs become Chrome windows and tabs, hosted in our NSViews | `chrome.tabs`/`chrome.windows` see sidebar tabs; extension-created tabs land in the sidebar; needed by P2 and P3 | 4–6 weeks | — |
@@ -40,9 +101,10 @@ wrappers `engine-apply` regenerates.
 # chromium/series
 0301-open-headless-browser-window.patch        # P1: Browser features without a BrowserView
 0302-open-hidden-browser-ui.patch              # P1: Chrome UI that assumes "no BrowserView => unit test"
-0303-open-hosted-tab-lifecycle.patch           # P1: hosted tabs are never discarded or moved
+0303-open-hosted-tab-lifecycle.patch           # P1: lifecycle-unit discard guard
 0304-open-hidden-browser-no-tab-groups.patch    # P1: hidden Browsers have no tab group model
 0305-open-extension-prompts.patch              # P3: install and uninstall consent, native fallback
+0306-open-extension-windows-tabs.patch         # E11: AppKit windows; P1: tabs API move/discard guards
 0401-open-media-session.patch                   # Media: tab volume; per-player PiP availability
 0402-open-video-pip-window.patch                # Media EM-4: Open's own video PiP window
 # cef/series (starts at 0302)
@@ -134,7 +196,7 @@ Cost (`--only measure --style chrome`, `results-measure-release-p1.json`, load a
 
 Not done in this step:
 
-- `chrome.windows.create({url})` still makes a Chrome Views window (`OEDefaultClient` reloads its URL into an Open tab, losing identity).
+- Extension `chrome.windows.create({url})` was a gap in P1; E11 above now routes normal requests to Today tabs and popup requests to native windows, retaining identity.
 - Moving a hosted tab to another window or profile is refused (review round 1, above).
 
 ## P2. Extension actions and popups for our UI

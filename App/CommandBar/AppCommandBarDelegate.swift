@@ -4,12 +4,14 @@ import OpenFeatures
 import OpenDesign
 import OpenModel
 import OpenSuggest
+import OpenEngine
 
 /// One lazy native command-bar controller for one standard window.
 @MainActor
 final class AppCommandBarSession: CommandBarDelegate {
   unowned let factory: EngineWebContentHostFactory
   private(set) var controller: CommandBarController?
+  private lazy var extensionSource = EngineCommandBarSource(factory: factory)
   private var openedAt = 0.0
   private var queryAt = 0.0
   private var queryRevision = 0
@@ -33,11 +35,16 @@ final class AppCommandBarSession: CommandBarDelegate {
     }
     windowController.dismissSidebarReveal()
     let engine = factory.app.stores.suggest(for: profile.id)
+    engine.extensionSource = extensionSource
     if controller?.engine !== engine {
       controller?.dismiss(reason: .programmatic)
       controller?.view.removeFromSuperview()
       let bar = CommandBarController(engine: engine)
       bar.delegate = self
+      extensionSource.onRowsChanged = { [weak bar] id in bar?.refreshExtensionSuggestions(extensionID: id) }
+      bar.extensionIcon = { [weak self] id in
+        self?.factory.focusedBrowser?.extensionActions.first { $0.extensionIdentifier == id }?.icon
+      }
       bar.isActionEnabled = { [weak self] id, space in self?.factory.isAppCommandEnabled(id, payload: space?.description) ?? false }
       bar.onQueryStarted = { [weak self] _ in
         guard let self else { return }
@@ -109,9 +116,12 @@ final class AppCommandBarSession: CommandBarDelegate {
     case .openSearchSettings(let profile):
       // Open keeps search engines per Profile: Settings ▸ Profiles for the bar's Profile (CC-42 "Search Settings…").
       factory.app.performCommand("search-settings", payload: (profile ?? factory.focusedProfile?.id)?.description)
-    case .runExtensionAction, .extensionOmnibox:
-      // S6 App step: the engine child wires these intents with EngineCommandBarSource.
-      NSSound.beep()
+    case .runExtensionAction(let id):
+      factory.focusedBrowser?.executeExtensionAction(id, source: .menuEntry)
+    case .extensionOmnibox(let id, let content, let destination, let modifiers):
+      let disposition: OEOmniboxDisposition = modifiers.contains(.command) ? .newBackgroundTab
+        : destination == .currentTab ? .currentTab : .newForegroundTab
+      extensionSource.enter(content, extensionID: id, disposition: disposition)
     case .dismissed: break // didChangePresentation runs after the bar releases its editor.
     }
   }
@@ -140,6 +150,7 @@ final class AppCommandBarSession: CommandBarDelegate {
       "scope": bar.scope?.title ?? "", "fieldText": bar.fieldText, "pinnedEdit": pinnedEditTabID?.description ?? "",
       "rows": bar.suggestions.map { ["id": $0.id, "kind": $0.kind.rawValue, "title": $0.title,
         "url": $0.url?.absoluteString ?? "", "tab": $0.tabID?.description ?? "",
-        "space": $0.spaceID?.description ?? "", "action": $0.actionID ?? ""] }] as [String: Any]
+        "space": $0.spaceID?.description ?? "", "action": $0.actionID ?? "",
+        "extension": $0.extensionID ?? "", "content": $0.extensionContent ?? "", "keycaps": $0.shortcutKeys] }] as [String: Any]
   }
 }

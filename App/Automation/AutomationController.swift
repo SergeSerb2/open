@@ -84,7 +84,7 @@
       extensionAutomation.registerContexts()
       // App lifecycle commands remain available after the final window closes.
       switch cmd {
-      case "ext-prompt", "ext-manage", "ext-commands", "ext-run-command":
+      case "ext-prompt", "ext-manage", "ext-commands", "ext-run-command", "ext-windows", "ext-omnibox":
         return try await runExtensionCommand(cmd, a)
       case "applescript": return try await runAppleScript(a)
       case "routing-log": return routingLog()
@@ -1161,6 +1161,10 @@
     /// `tab`: a tab UUID, a page identifier (number), "popup", or omitted
     /// for the selected tab.
     private func content(_ a: [String: Any], _ w: EngineWebContentHostFactory) throws -> OEWebContent {
+      if let id = a["tab"] as? Int,
+         let popup = ExtensionWindowController.windows.values.first(where: { $0.content.identifier == id }) {
+        return popup.content
+      }
       if let n = a["index"] as? Int {
         guard let page = w.ensureContent(for: try modelTab(["index": n], w)) else { throw Failure(message: "engine or profile is not ready") }
         return page

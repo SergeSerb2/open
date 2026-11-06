@@ -119,6 +119,36 @@ One per shell window and profile. With fork patch P1 (docs/engine-patches.md) it
 | `contextMenu(forExtensionAction:source:)` | `OEExtensionActionMenu`: Chrome's action context menu (`ExtensionContextMenuModel`) as `OEContextMenuItem`s (name, site access, options, remove, pin, manage, inspect popup). Show it, then call `select(command:)` (returns `false` if the menu was used or is gone, or the item is not an enabled item) or `cancel()` once. Each menu owns its Chrome model until then (or until it is released, the action goes away, or the live model goes away), so several menus can be open at once. Titles are Chromium's ("&&" comes as "&"): the shell relabels them (plans/extensions-ui.md §3.6). `source`: `.toolbarAction` or `.menuItem`. |
 | `close()` | |
 
+### Extension windows and omnibox
+
+`OEEngineDelegate.engine(_:didOpenExtensionWindow:content:requestedFrame:extension:)`
+delivers a popup's own `OEBrowser` and page outside Chromium observers. Retain
+them, put `content.view` in an AppKit window, and set `browser.window`. The
+requested frame uses Cocoa screen coordinates; zero means no explicit bounds.
+`engine(_:extensionWindow:requestsFrame:focused:)` reports bounds/focus requests.
+`chrome.windows.remove` calls the page delegate's `webContentDidRequestClose`.
+The App's `ExtensionWindowController` owns the native frame and its
+`ExtensionPopupWindow` autosave entry. Extension-created normal windows become
+selected Today tabs in the active Open window of the profile; the API returns
+that window's existing id (guess (lead)).
+
+Each `OEBrowser` has one extension omnibox session:
+
+| Call | Contract |
+|---|---|
+| `omniboxStartSession(forExtension:)` | Enabled keyword extensions only; repeated start does not resend the event. |
+| `omniboxInputChanged(_:forExtension:completion:)` | Returns whether a listener exists. Completion is main-thread, at most once, and only for the latest text. Superseded completions are dropped; App async callers resolve them as nil on cancellation. |
+| `omniboxDefaultSuggestion(forExtension:)` | Parsed `OEOmniboxSuggestion`, with literal `%s` placeholders for the shell to replace. |
+| `omniboxInputEntered(_:forExtension:disposition:)` | Flushes pending tab sync and ends the session. Dispositions: current, new foreground, new background tab. The extension performs navigation. |
+| `omniboxInputCancelled(forExtension:)` | Sends cancellation once per session. |
+| `omniboxDeleteSuggestion(_:forExtension:)` | Sends the selected suggestion's exact content. |
+
+`browser(_:omniboxDefaultSuggestionDidChangeForExtension:)` tells the shell to
+refresh the current default row. Suggestions carry content, plain description,
+UTF-16 match/dim/url ranges, and deletability. The bridge accepts at most four
+async rows plus the default; text is capped at 16,384 UTF-16 units and style
+ranges at 256 per row. Request ids are process-wide and never reused.
+
 `OEBrowserDelegate`: `browserDidUpdateExtensionActions(_:)` (the list or the order changed: install, uninstall, enable, pin, move, model ready), `browser(_:didUpdate:)` (one action's state changed: icon, badge, title, enabled, wants-to-run, site access, popup shown, or the active tab changed; at most once per action per run loop turn; without this method the engine sends `browserDidUpdateExtensionActions` instead), `browser(_:didOpenExtensionPopup:for:)` (host `popup.view` in a panel at the button, hidden until ready), `browser(_:didResizeExtensionPopup:to:)` (Chrome's limits, 25×25 to 800×600), `browser(_:extensionPopupIsReady:)` (the popup's first load stopped: show it now, as Chrome shows its bubble), `browser(_:didCloseExtensionPopup:)` (`window.close()` in the popup, Escape, the action run again, `closeExtensionPopup()`, the active tab changed (as Chrome does), the extension unloaded, reloaded, updated or crashed, or the window closed; calls caused by `closeExtensionPopup()` and `executeExtensionAction` arrive inside them), `browser(_:requestsContextMenuForExtensionAction:)` (the user ran a disabled action: Chrome shows the action's context menu instead, so show `contextMenu(forExtensionAction:source:)` at its button).
 
 Popup keys: `ExtensionViewHost`, not CEF, is the popup's `WebContentsDelegate`. Escape closes the popup inside Chrome. A popup's keys reach its `OEWebContentDelegate` like a tab's: `handleKeyEventBeforePage` first (`ExtensionViewHost` pre-handles keys through the hidden Browser's delegate, which is CEF's), then the page, then `handleUnconsumedKeyEvent` for keys the page did not consume. The shell must treat a popup's before-page keys as the popup's: a reserved shortcut there acts on the window otherwise (Cmd+W would close the tab; plan rule F2 closes the popup). A popup whose renderer crashed is gone: Chrome terminates the extension and its action leaves the list until the extension reloads, so the shell must not reload a popup page.
@@ -212,7 +242,7 @@ Fork API `cef/include/cef_open_page.h` (docs/engine-patches.md, "Page platform")
 
 ### Context menu items
 
-A Chrome style page gets Chrome's full page context menu. OpenEngine keeps only the items on an explicit allowlist (`Engine/OpenEngine/src/OEContextMenuAllowlist.mm`, applied in `OEClient::OnBeforeContextMenu`). It then removes empty submenus and extra separators. An item a later Chromium adds stays hidden until it is added to the list. Alloy style menus are CEF's short list and are not filtered. The shell adds Open's own items (Capture, Share, Copy URL, Little Open, Split View, and Arc's "Manage Extensions", EX-18) to what remains. `select(command:)` runs only the id of an enabled item in the delivered `items` (submenus included); any other id is refused, logged, and the menu is cancelled, because CEF would run it directly without checking the list. Not filtered: Alloy pages (Peek; CEF's short list, by design) and the short-lived Chrome windows that `chrome.windows.create` still opens (`OEDefaultClient`, P1 follow-up).
+A Chrome style page gets Chrome's full page context menu. OpenEngine keeps only the items on an explicit allowlist (`Engine/OpenEngine/src/OEContextMenuAllowlist.mm`, applied in `OEClient::OnBeforeContextMenu`). It then removes empty submenus and extra separators. An item a later Chromium adds stays hidden until it is added to the list. Alloy style menus are CEF's short list and are not filtered. The shell adds Open's own items (Capture, Share, Copy URL, Little Open, Split View, and Arc's "Manage Extensions", EX-18) to what remains. `select(command:)` runs only the id of an enabled item in the delivered `items` (submenus included); any other id is refused, logged, and the menu is cancelled, because CEF would run it directly without checking the list. Alloy pages (Peek; CEF's short list, by design) are not filtered. Extension windows use hosted Chrome style pages and the same allowlist.
 
 Kept (Chromium `IDC_*` ids):
 
@@ -285,7 +315,7 @@ The caller makes lazy images load first (`img[loading=lazy]` → `eager`, wait �
 
 | Member | Behavior |
 |---|---|
-| `isReady`, `installedExtensions`, `extension(identifier:)` | Non-component installed extensions, including disabled ones, sorted by name. `OEExtension` has id, name, version, summary, manifest version, enabled, unpacked, directory, icon, options URL, required permissions/hosts, `hasAction`, `fromWebStore`, `homepageURL`, `disableReasons`, and `omniboxKeyword`. The keyword is available now; E12's omnibox events are separate work. |
+| `isReady`, `installedExtensions`, `extension(identifier:)` | Non-component installed extensions, including disabled ones, sorted by name. `OEExtension` has id, name, version, summary, manifest version, enabled, unpacked, directory, icon, options URL, required permissions/hosts, `hasAction`, `fromWebStore`, `homepageURL`, `disableReasons`, and `omniboxKeyword`. The command bar filters disabled extensions before it exposes keywords. |
 | `setEnabled(_:forExtension:)` | Disable/enable through the registrar. Re-enabling an extension disabled for increased permissions first asks for Chromium's re-enable consent; it never grants those permissions silently. |
 | `uninstallExtension(_:window:)` | Shows removal consent first. Cancel keeps the extension; accept uses Chromium's uninstall dialog controller. |
 | `reloadExtension(_:)` | Registrar reload, including its normal load-error reporting. |

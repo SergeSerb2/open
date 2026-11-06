@@ -12,6 +12,8 @@ function record(type, data) {
 
 chrome.tabs.onActivated.addListener((info) =>
   record("activated", { tabId: info.tabId, windowId: info.windowId }));
+chrome.tabs.onHighlighted.addListener((info) =>
+  record("highlighted", { tabIds: info.tabIds, windowId: info.windowId }));
 chrome.tabs.onCreated.addListener((tab) =>
   record("created", { tabId: tab.id, windowId: tab.windowId,
                       url: tab.pendingUrl || tab.url, active: tab.active }));

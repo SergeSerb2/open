@@ -17,14 +17,48 @@
 
 #include "include/internal/cef_types_mac.h"
 
+@interface OEOmniboxSuggestion ()
+- (instancetype)initOEWithRow:(CefRefPtr<CefDictionaryValue>)row;
+@end
+
+@implementation OEOmniboxSuggestion
+- (instancetype)initOEWithRow:(CefRefPtr<CefDictionaryValue>)row {
+  if ((self = [super init])) {
+    _content = OEString(row->GetString("content"));
+    _descriptionText = OEString(row->GetString("description"));
+    _deletable = row->GetBool("deletable");
+    auto ranges = [&](const char* key) -> NSArray<NSValue*>* {
+      NSMutableArray* result = [NSMutableArray array];
+      auto list = row->GetList(key);
+      for (size_t i = 0; list && i < MIN(list->GetSize(), size_t(256)); ++i) {
+        auto range = list->GetDictionary(i);
+        if (!range) continue;
+        int location = range->GetInt("location"), length = range->GetInt("length");
+        if (location >= 0 && length >= 0 && size_t(location) + size_t(length) <= _descriptionText.length)
+          [result addObject:[NSValue valueWithRange:NSMakeRange(location, length)]];
+      }
+      return result;
+    };
+    _matchRanges = ranges("match"); _dimRanges = ranges("dim"); _urlRanges = ranges("url");
+  }
+  return self;
+}
+@end
+
 @interface OEBrowser ()
+- (void)oe_extensionWindowCreated:(CefRefPtr<CefTabStrip>)strip
+                             frame:(NSRect)frame extension:(NSString*)identifier;
+- (void)oe_extensionWindowFrame:(NSRect)frame focused:(BOOL)focused;
+- (void)oe_omniboxSuggestions:(CefRefPtr<CefListValue>)rows request:(int)request;
+- (void)oe_omniboxDefaultChanged:(NSString*)identifier;
 - (void)oe_prepareChromiumTabClient:(CefRefPtr<CefClient>&)client
                            settings:(CefBrowserSettings&)settings
                           extraInfo:(CefRefPtr<CefDictionaryValue>&)extraInfo;
 - (void)oe_chromiumTabCreated:(CefRefPtr<CefBrowser>)browser
                        active:(BOOL)active;
 - (void)oe_activationRequested:(CefRefPtr<CefBrowser>)browser;
-- (void)oe_moveRequested:(CefRefPtr<CefBrowser>)browser toStripIndex:(int)index;
+- (void)oe_moveRequested:(CefRefPtr<CefBrowser>)browser
+                previous:(CefRefPtr<CefBrowser>)previous next:(CefRefPtr<CefBrowser>)next;
 - (void)oe_pinRequested:(CefRefPtr<CefBrowser>)browser pinned:(BOOL)pinned;
 - (BOOL)oe_discardRequested:(CefRefPtr<CefBrowser>)browser;
 - (void)oe_closeRequested;
@@ -47,6 +81,20 @@
 @end
 
 namespace {
+
+class OEOmniboxHandler : public CefOpenOmniboxHandler {
+ public:
+  explicit OEOmniboxHandler(OEBrowser* browser) : browser_(browser) {}
+  void OnSuggestions(int request, CefRefPtr<CefListValue> rows) override {
+    [browser_ oe_omniboxSuggestions:rows request:request];
+  }
+  void OnDefaultChanged(const CefString& id) override {
+    [browser_ oe_omniboxDefaultChanged:OEString(id)];
+  }
+ private:
+  __weak OEBrowser* browser_;
+  IMPLEMENT_REFCOUNTING(OEOmniboxHandler);
+};
 
 // Chrome's popup size limits (extension_popup.h: kMinWidth/kMinHeight,
 // kMaxWidth/kMaxHeight).
@@ -134,6 +182,21 @@ class OETabStripHandler : public CefTabStripHandler {
  public:
   explicit OETabStripHandler(OEBrowser* browser) : browser_(browser) {}
 
+  static NSRect CocoaFrame(const CefRect& frame) {
+    if (frame.IsEmpty()) return NSZeroRect;
+    return NSMakeRect(frame.x, NSScreen.screens.firstObject.frame.size.height - frame.y - frame.height,
+                      frame.width, frame.height);
+  }
+  void OnExtensionWindowCreated(CefRefPtr<CefTabStrip> parent,
+      CefRefPtr<CefTabStrip> window, const CefRect& frame,
+      const CefString& extension) override {
+    [browser_ oe_extensionWindowCreated:window frame:CocoaFrame(frame) extension:OEString(extension)];
+  }
+  void OnExtensionWindowFrameRequested(CefRefPtr<CefTabStrip> window,
+      const CefRect& frame, bool focused) override {
+    [browser_ oe_extensionWindowFrame:CocoaFrame(frame) focused:focused];
+  }
+
   void OnBeforeTabCreated(CefRefPtr<CefTabStrip> tab_strip,
                           const CefString& target_url,
                           CefRefPtr<CefClient>& client,
@@ -155,8 +218,9 @@ class OETabStripHandler : public CefTabStripHandler {
   }
   void OnTabMoveRequested(CefRefPtr<CefTabStrip> tab_strip,
                           CefRefPtr<CefBrowser> browser,
-                          int index) override {
-    [browser_ oe_moveRequested:browser toStripIndex:index];
+                          int index, CefRefPtr<CefBrowser> previous,
+                          CefRefPtr<CefBrowser> next) override {
+    [browser_ oe_moveRequested:browser previous:previous next:next];
   }
   void OnTabPinRequested(CefRefPtr<CefTabStrip> tab_strip,
                          CefRefPtr<CefBrowser> browser,
@@ -223,6 +287,14 @@ class OETabStripHandler : public CefTabStripHandler {
 }  // namespace
 
 @implementation OEBrowser {
+  NSMutableArray<OEBrowser*>* _pendingExtensionWindows;
+  __weak OEBrowser* _extensionWindowParent;
+  NSString* _extensionWindowIdentifier;
+  NSRect _extensionWindowFrame;
+  BOOL _extensionWindowOpened;
+  CefRefPtr<CefOpenOmnibox> _omnibox;
+  void (^_omniboxCompletion)(NSArray<OEOmniboxSuggestion*>*);
+  int _omniboxRequest;
   NSMutableArray<OEWebContent*>* _tabs;
   NSHashTable<OEWebContent*>* _pinned;
   NSArray<OEExtensionAction*>* _actions;
@@ -243,6 +315,7 @@ class OETabStripHandler : public CefTabStripHandler {
   CefRefPtr<CefTabStrip> _strip;
   // Pages Chromium is creating in the strip, until OnTabCreated.
   NSMutableArray<OEWebContent*>* _chromiumTabs;
+  NSMutableOrderedSet<OEWebContent*>* _shellMoves;
   BOOL _stripSyncScheduled;
   BOOL _stripRefused;
   BOOL _closed;
@@ -257,6 +330,7 @@ class OETabStripHandler : public CefTabStripHandler {
     _tabs = [NSMutableArray array];
     _pinned = [NSHashTable weakObjectsHashTable];
     _chromiumTabs = [NSMutableArray array];
+    _shellMoves = [NSMutableOrderedSet orderedSet];
     _actionImages = [NSMutableDictionary dictionary];
     [[OEEngine shared] oe_registerBrowser:self];
   }
@@ -264,6 +338,7 @@ class OETabStripHandler : public CefTabStripHandler {
 }
 
 - (void)dealloc {
+  if (_omnibox) _omnibox->Close();
   if (_strip) {
     // The Browser leaves Chromium's collection before its asynchronous
     // deletion. Native key notifications during popup/window teardown must
@@ -346,6 +421,7 @@ class OETabStripHandler : public CefTabStripHandler {
   }
   [_tabs removeObjectAtIndex:current];
   [_tabs insertObject:webContent atIndex:MIN(index, _tabs.count)];
+  [_shellMoves addObject:webContent];
   [self oe_setNeedsTabStripSync];
 }
 
@@ -389,6 +465,13 @@ class OETabStripHandler : public CefTabStripHandler {
 }
 
 - (void)close {
+  OEBrowser* parent = _extensionWindowParent;
+  _extensionWindowParent = nil;
+  if (parent) [parent->_pendingExtensionWindows removeObjectIdenticalTo:self];
+  for (OEBrowser* window in [_pendingExtensionWindows copy]) [window close];
+  [_pendingExtensionWindows removeAllObjects];
+  _omniboxCompletion = nil; _omniboxRequest = 0;
+  if (_omnibox) { _omnibox->Close(); _omnibox = nullptr; }
   if (_popupDelegateDepth) {
     // Keep this browser alive until Chromium's popup callback unwinds too.
     dispatch_async(dispatch_get_main_queue(), ^{ [self close]; });
@@ -471,8 +554,17 @@ class OETabStripHandler : public CefTabStripHandler {
           addObject:content];
     }
   }
+  NSArray<OEWebContent*>* ordered = [pinned arrayByAddingObjectsFromArray:unpinned];
+  // Preserve the model operation's identity: a move to the end must move that
+  // page, rather than shift every neighbour forward and omit its onMoved event.
+  for (OEWebContent* content in _shellMoves) {
+    NSUInteger position = [ordered indexOfObjectIdenticalTo:content];
+    if (position != NSNotFound)
+      _strip->UpdateTab(content.oe_browser, (int)position, [_pinned containsObject:content]);
+  }
+  [_shellMoves removeAllObjects];
   int index = 0;
-  for (OEWebContent* content in [pinned arrayByAddingObjectsFromArray:unpinned]) {
+  for (OEWebContent* content in ordered) {
     _strip->UpdateTab(content.oe_browser, index++,
                       [_pinned containsObject:content]);
   }
@@ -527,6 +619,23 @@ class OETabStripHandler : public CefTabStripHandler {
     return;
   }
   [_chromiumTabs removeObject:content];
+  if (_extensionWindowIdentifier) {
+    [self insertWebContent:content atIndex:_tabs.count];
+    self.activeWebContent = content;
+    if (!_extensionWindowOpened) {
+      _extensionWindowOpened = YES;
+      OEBrowser* retainedSelf = self;
+      OEBrowser* parent = _extensionWindowParent;
+      if (parent) [parent->_pendingExtensionWindows removeObjectIdenticalTo:retainedSelf];
+      _extensionWindowParent = nil;
+      OEEngine* engine = OEEngine.shared;
+      if ([engine.delegate respondsToSelector:@selector(engine:didOpenExtensionWindow:content:requestedFrame:extension:)]) {
+        [engine.delegate engine:engine didOpenExtensionWindow:retainedSelf content:content
+                 requestedFrame:_extensionWindowFrame extension:_extensionWindowIdentifier];
+      } else { [self close]; }
+    }
+    return;
+  }
   if ([_delegate respondsToSelector:@selector(browser:
                                         didOpenWebContent:active:)]) {
     [_delegate browser:self didOpenWebContent:content active:active];
@@ -551,15 +660,14 @@ class OETabStripHandler : public CefTabStripHandler {
 }
 
 - (void)oe_moveRequested:(CefRefPtr<CefBrowser>)browser
-            toStripIndex:(int)index {
+                previous:(CefRefPtr<CefBrowser>)previousBrowser
+                    next:(CefRefPtr<CefBrowser>)nextBrowser {
   OEWebContent* content = [self oe_contentForBrowser:browser];
   if (content && [_tabs containsObject:content]) {
     // Chromium already moved the tab: place it before the tab that now
     // follows it in the strip, else after the one before it.
-    OEWebContent* next = [self oe_contentForBrowser:_strip->GetTabAt(index + 1)];
-    OEWebContent* previous =
-        index > 0 ? [self oe_contentForBrowser:_strip->GetTabAt(index - 1)]
-                  : nil;
+    OEWebContent* next = [self oe_contentForBrowser:nextBrowser];
+    OEWebContent* previous = [self oe_contentForBrowser:previousBrowser];
     NSMutableArray* others = [_tabs mutableCopy];
     [others removeObjectIdenticalTo:content];
     NSUInteger target = others.count;
@@ -603,12 +711,39 @@ class OETabStripHandler : public CefTabStripHandler {
 }
 
 - (void)oe_closeRequested {
+  if (_extensionWindowIdentifier) {
+    OEWebContent* content = _tabs.firstObject;
+    if ([content.delegate respondsToSelector:@selector(webContentDidRequestClose:)])
+      [content.delegate webContentDidRequestClose:content];
+    else [self close];
+    return;
+  }
   if ([_delegate respondsToSelector:@selector(browserRequestsClose:)]) {
     [_delegate browserRequestsClose:self];
   } else {
     NSLog(@"OEBrowser %ld: refused a window close from Chromium",
           (long)_identifier);
   }
+}
+
+- (void)oe_extensionWindowCreated:(CefRefPtr<CefTabStrip>)strip
+                             frame:(NSRect)frame extension:(NSString*)identifier {
+  OEBrowser* window = [[OEBrowser alloc] initWithContext:_context];
+  window->_strip = strip;
+  window->_extensionWindowIdentifier = [identifier copy];
+  window->_extensionWindowFrame = frame;
+  window->_extensionWindowParent = self;
+  strip->SetHandler(new OETabStripHandler(window));
+  if (!_pendingExtensionWindows) _pendingExtensionWindows = [NSMutableArray array];
+  [_pendingExtensionWindows addObject:window];
+}
+
+- (void)oe_extensionWindowFrame:(NSRect)frame focused:(BOOL)focused {
+  if (!_extensionWindowIdentifier || _closed) return;
+  if (!_extensionWindowOpened) { _extensionWindowFrame = frame; return; }
+  OEEngine* engine = OEEngine.shared;
+  if ([engine.delegate respondsToSelector:@selector(engine:extensionWindow:requestsFrame:focused:)])
+    [engine.delegate engine:engine extensionWindow:self requestsFrame:frame focused:focused];
 }
 
 #pragma mark Extension actions
@@ -719,6 +854,62 @@ class OETabStripHandler : public CefTabStripHandler {
                  (browserDidUpdateExtensionActions:)]) {
     [_delegate browserDidUpdateExtensionActions:self];
   }
+}
+
+#pragma mark Extension omnibox
+
+- (void)omniboxStartSessionForExtension:(NSString*)identifier {
+  if (_closed || !_context.oe_isReady) return;
+  if (!_omnibox) _omnibox = CefOpenOmnibox::Create(_context.oe_requestContext, new OEOmniboxHandler(self));
+  if (_omnibox) _omnibox->Start(OECef(identifier));
+}
+
+- (BOOL)omniboxInputChanged:(NSString*)text forExtension:(NSString*)identifier
+                 completion:(void (^)(NSArray<OEOmniboxSuggestion*>*))completion {
+  _omniboxCompletion = nil; _omniboxRequest = 0;
+  if (_closed || !_omnibox || text.length > 16384) return NO;
+  _omniboxRequest = _omnibox->InputChanged(OECef(identifier), OECef(text));
+  if (!_omniboxRequest) return NO;
+  _omniboxCompletion = [completion copy];
+  return YES;
+}
+
+- (nullable OEOmniboxSuggestion*)omniboxDefaultSuggestionForExtension:(NSString*)identifier {
+  auto row = _omnibox ? _omnibox->GetDefault(OECef(identifier)) : nullptr;
+  return row ? [[OEOmniboxSuggestion alloc] initOEWithRow:row] : nil;
+}
+
+- (void)omniboxInputEntered:(NSString*)text forExtension:(NSString*)identifier
+                disposition:(OEOmniboxDisposition)disposition {
+  _omniboxCompletion = nil; _omniboxRequest = 0;
+  if (_stripSyncScheduled) [self oe_syncTabStrip];
+  if (_omnibox && _activeWebContent.oe_browser)
+    _omnibox->Enter(OECef(identifier), OECef(text), _activeWebContent.oe_browser, (int)disposition);
+}
+
+- (void)omniboxInputCancelledForExtension:(NSString*)identifier {
+  _omniboxCompletion = nil; _omniboxRequest = 0;
+  if (_omnibox) _omnibox->Cancel(OECef(identifier));
+}
+
+- (void)omniboxDeleteSuggestion:(NSString*)content forExtension:(NSString*)identifier {
+  if (_omnibox) _omnibox->DeleteSuggestion(OECef(identifier), OECef(content));
+}
+
+- (void)oe_omniboxSuggestions:(CefRefPtr<CefListValue>)rows request:(int)request {
+  if (_closed || request != _omniboxRequest || !_omniboxCompletion) return;
+  auto completion = _omniboxCompletion;
+  _omniboxCompletion = nil; _omniboxRequest = 0;
+  NSMutableArray* result = [NSMutableArray array];
+  for (size_t i = 0; rows && i < MIN(rows->GetSize(), size_t(4)); ++i) {
+    if (auto row = rows->GetDictionary(i)) [result addObject:[[OEOmniboxSuggestion alloc] initOEWithRow:row]];
+  }
+  completion(result);
+}
+
+- (void)oe_omniboxDefaultChanged:(NSString*)identifier {
+  if (!_closed && [_delegate respondsToSelector:@selector(browser:omniboxDefaultSuggestionDidChangeForExtension:)])
+    [_delegate browser:self omniboxDefaultSuggestionDidChangeForExtension:identifier];
 }
 
 - (void)oe_extensionActionUpdated:(NSString*)identifier {

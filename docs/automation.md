@@ -1,5 +1,17 @@
 # Automation channel (test harness)
 
+Extension E11/E12 acceptance runs with `tools/e2e/engine_e2e.py --config Release
+--style chrome --only extensions-e2`. It uses the real command bar's existing
+`key` and `commandbar-state` commands. Command-bar rows include `extension`,
+`content`, and `keycaps`. `ext-windows` lists only native extension popup windows:
+controller class, page/window/browser ids, Cocoa frame, title, style, autosave
+name, and whether the page is the content view. Numeric page handles work for
+these windows too. `ext-windows {preference:true}` reads the one frame-autosave
+entry; adding `value` writes or removes it so a suite can reset and restore it.
+`ext-omnibox` takes `extension` and `op` (`start`, `input`, `reply`, `default`,
+`cancel`). It exercises text/style bounds through the public engine API;
+`default` reports presence, UTF-16 lengths, and range counts, without page text.
+
 Open's end-to-end tests drive the real app through a local Unix socket. There is no computer use: nothing here moves the system mouse, types on the system keyboard, or touches another app. Key and mouse events are built inside Open and go only to Open's own windows. Pixels come only from Open's own windows.
 
 Every agent command that opens Open on screen must hold the machine-wide lock
