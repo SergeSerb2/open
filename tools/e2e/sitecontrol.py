@@ -49,7 +49,8 @@ def run(factory, results, tmp, env):
             app.call('window-frame', frame=[80,60,1200,800])
             app.call('window-focus', id=app.call('window-state')['id'], activate=True)
             tab = new_tab(app, origin + '/ads.html')
-            app.call('filter', block=['ad.js'])
+            # S2 must exercise the bound AdBlockStore adapter. A synthetic
+            # request filter here would replace the Profile's real filter.
             app.call('navigate', tab=tab, url=origin+'/ads.html'); app.call('wait', tab=tab)
             adblock_open_before = Path(app.user_data, '.adblock-lock').exists()
             before = state()
