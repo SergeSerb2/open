@@ -35,14 +35,9 @@ def run(h, factory, results, tmp):
                          navigationVisible=False, separatorVisible=False, frame=[], paneFrame=[], topInset=0,
                          placeholder='', radius=0, querySelection=[], layouts=0))
     def settled(tab=None, count=None):
-        expected_total=int(count.rsplit('/',1)[1]) if count and '/' in count else (0 if count=='Not Found' else None)
         def ready():
             p=pane(tab)
-            if count is None or p['countText']==count: return p
-            # This fixture's text is static. A displayed final total that is
-            # wrong cannot be repaired by advancing the active ordinal.
-            if expected_total is not None and p['countText'] and p['total']!=expected_total and not state().get('pending'): return p
-            return None
+            return p if count is None or p['countText']==count else None
         return h.wait_until(ready, timeout=3, step=.05) or pane(tab)
     def query(value):
         key('f', ['cmd']); key('a', ['cmd']); key(text=value)
