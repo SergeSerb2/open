@@ -28,8 +28,8 @@ extension AutomationController {
     // copy back to sRGB would add a second, lossy color transform to that side.
     let matchesApplication: Bool
     if let expected = icon.appliedImage.flatMap(iconCGImage),
-       let actual = NSApp.applicationIconImage.flatMap(iconCGImage), let space = actual.colorSpace,
-       let expectedPixels = iconPixels(expected, space: space), let actualPixels = iconPixels(actual, space: space) {
+       let actual = NSApp.applicationIconImage.flatMap(iconCGImage),
+       let expectedPixels = iconPixels(expected, matching: actual), let actualPixels = iconPixels(actual, matching: actual) {
       matchesApplication = expectedPixels == actualPixels
     } else { matchesApplication = icon.appliedID == "openDefault" && icon.appliedImage == nil }
     return ["selected": settings.appIcon.selected, "applied": icon.appliedID,
@@ -48,12 +48,22 @@ extension AutomationController {
     return CGImageSourceCreateImageAtIndex(source, 0, nil)
   }
 
-  private func iconPixels(_ image: CGImage, space: CGColorSpace) -> Data? {
-    guard let context = CGContext(data: nil, width: 1024, height: 1024, bitsPerComponent: 8,
-        bytesPerRow: 4096, space: space,
-        bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue), let pixels = context.data else { return nil }
+  private func iconPixels(_ image: CGImage, matching actual: CGImage) -> Data? {
+    // AppKit can copy the icon as float16 in the monitor's profile. That
+    // extended color space cannot make an 8-bit context. Preserve its format.
+    guard image.width == 1024, image.height == 1024,
+      actual.width == 1024, actual.height == 1024, let space = actual.colorSpace,
+      space.model == .rgb, [8, 16, 32].contains(actual.bitsPerComponent) else { return nil }
+    let bytesPerRow = 1024 * 4 * (actual.bitsPerComponent / 8)
+    let format = actual.bitmapInfo.intersection([.floatComponents, .byteOrderMask]).rawValue
+      | CGImageAlphaInfo.premultipliedLast.rawValue
+    // Fixed 1024 px RGBA; the largest permitted read-back allocation is 16 MiB.
+    guard let context = CGContext(data: nil, width: 1024, height: 1024,
+      bitsPerComponent: actual.bitsPerComponent, bytesPerRow: bytesPerRow,
+      space: space, bitmapInfo: format) else { return nil }
     context.draw(image, in: CGRect(x: 0, y: 0, width: 1024, height: 1024))
-    return Data(bytes: pixels, count: 4_194_304)
+    guard let pixels = context.data else { return nil }
+    return Data(bytes: pixels, count: bytesPerRow * 1024)
   }
 }
 #endif
