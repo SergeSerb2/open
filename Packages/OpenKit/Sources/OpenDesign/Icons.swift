@@ -11,6 +11,7 @@ public enum Glyph: String, CaseIterable, Sendable {
     case spaceMore, audioPlaying, audioMuted
     case library, bottomPlus
     case globe
+    case extensions, extensionsMore
     case mediaPlay, mediaPause, mediaPrevious, mediaNext, mediaPiP, mediaClose, mediaVolume, mediaVolumeMuted
     case mediaMicrophone, mediaMicrophoneMuted, mediaCamera, mediaCameraOff, mediaVolumeLow, mediaVolumeHigh
     case pipClose, pipMinimize, pipSettings, pipPlay, pipPause, pipPrevious, pipNext, pipMute, pipUnmute, pipHangUp
@@ -45,6 +46,8 @@ public enum Glyph: String, CaseIterable, Sendable {
         case .disclosureDown: Spec(symbol: "chevron.down", pointSize: 12, weight: .bold, arcInk: nil, note: "Space header on hover (pinned shown)")
         case .disclosureRight: Spec(symbol: "chevron.right", pointSize: 12, weight: .bold, arcInk: nil, note: "Space header on hover (pinned collapsed)")
         case .clearArrow: Spec(symbol: "arrow.down", pointSize: 9, weight: .semibold, arcInk: nil, note: "Today divider \"Clear\" (AX frame 12×9)")
+        case .extensions: Spec(symbol: "puzzlepiece.extension", pointSize: 16, weight: .regular, arcInk: nil, note: "extensions plan §3.4; own SF glyph")
+        case .extensionsMore: Spec(symbol: "ellipsis", pointSize: 13, weight: .bold, arcInk: nil, note: "extensions plan §3.2")
         case .spaceMore: Spec(symbol: "ellipsis", pointSize: 13, weight: .bold, arcInk: nil, note: "Space header on hover")
         case .audioPlaying: Spec(symbol: "speaker.wave.3", pointSize: 14, weight: .regular, arcInk: CGSize(width: 19, height: 11), note: "leading row speaker, outline; Arc draws SF speaker 14 Medium plus three waves of its own (SpeakerIcon), so Open uses wave.3; size and weight fitted to the 50 % ink box (media plan §4.1 Step 2b; S2 12/0022)")
         case .audioMuted: Spec(symbol: "speaker.slash", pointSize: 15.5, weight: .regular, arcInk: CGSize(width: 14, height: 14), note: "leading row speaker, outline; size fitted to the 50 % ink box (media plan §4.1 Step 2b; S2 12/0027)")
