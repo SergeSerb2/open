@@ -549,13 +549,8 @@ Hotkeys. Menu keys come from the same rows (78 rows carry a key). Code-only keys
 ### 2.3 Gaps in the reference data
 
 - Closed: `expected-menu.json` now has Tabs ▸ "Reveal Tab in Sidebar" (line 652) and the registry has `reveal-tab-in-sidebar` (`CommandRegistry.swift:184`). Step C maps it to `reveal-current-tab` (#85). Rerun `commands-dump` to confirm the counts; this refresh did not run it.
-<<<<<<< HEAD
-- `docs/commands.md` still names the Cmd+O command "Move Little Open or Peek to Space…". The registry uses "Open Little Open or Peek in…" (`open-in-current-space`). Fix the doc title. See §6.1.
-- Gestures are not in the registry and not counted above: page swipe back/forward (#158/#162, SW1–SW4), Space swipe (done), sidebar edge swipe (planned, sidebar-completion), pinch zoom (not verified), Opt+Cmd-click Little Open (done; §1.9), Shift-click Peek (done), hold Cmd for shortcut hints (planned, #70), Cmd+Shift drag Capture (#154, C5/C6), double-click rename (done).
-=======
 - Cmd+O documentation now matches the registry: “Open Little Open or Peek in…” (`open-in-current-space`). The 11 allowed-missing menu rows are unchanged.
-- Gestures are not in the registry and not counted above: page swipe back/forward (#158/#162, SW1–SW4), Space swipe (done), sidebar edge swipe (planned, sidebar-completion), pinch zoom (not verified), Opt+Cmd-click Little Open (planned, conditional), Shift-click Peek (done), hold Cmd for shortcut hints (planned, #70), Cmd+Shift drag Capture (#154, C5/C6), double-click rename (done).
->>>>>>> origin/main
+- Gestures are not in the registry and not counted above: page swipe back/forward (#158/#162, SW1–SW4), Space swipe (done), sidebar edge swipe (planned, sidebar-completion), pinch zoom (not verified), Opt+Cmd-click Little Open (done; §1.9), Shift-click Peek (done), hold Cmd for shortcut hints (planned, #70), Cmd+Shift drag Capture (#154, C5/C6), double-click rename (done).
 - New: Copy URL as Quote dispatches, but writes the Markdown form. `copy-url-quote` and `copy-url-markdown` write the same "[title](url)" text (`App/MainMenu.swift:141`). A quote needs the page selection. See §6.1.
 
 ### 2.4 Missing lists
