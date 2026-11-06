@@ -373,6 +373,32 @@ the racy path again and `malloc_zones_early` fails.
 
 Relaunch proof (section 8, 2026-11-02): `engine_e2e.py --only relaunch --config Release` relaunched one profile 50 times (two runs of 25, load 26–44): 0 aborts, 0 `No zone found` lines, 0 new crash reports. Receipts: `docs/engine-spike/results-relaunch-release-run1.json`, `-run2.json`.
 
+## Automation notification opt-out (0506, 2026-11-06)
+
+`--open-automation-skip-macos-notifications` makes the macOS
+`NotificationPlatformBridge::Create()` return null before creating either
+dispatcher. This prevents the `NotificationDispatcherMojo` constructor's
+`CheckIfServiceCanBeTerminated()` force-start, including the in-process banner
+provider and out-of-process Alerts provider. The existing
+`NotificationPlatformBridgeDelegator` handles a null native bridge through its
+message-center path (`ENABLE_CHROME_NOTIFICATIONS=1` in the recorded build).
+Without the switch, the original dispatchers and provider factory run unchanged.
+
+This is Chromium patch `0506-page-automation-notification-guard.patch`, the
+next free page-platform number after 0501, 0504 and 0505. The App emits it only
+for opted-out automation launches. Notification fixtures opt in to the native
+path; U-N1 still owns real macOS authorization and delivery.
+
+The Section 6 root `~/Developer/open-engine-s8` was applied, built with
+`--target "cefsimple cefclient" --jobs 10`, and packaged with
+`engine-distrib --run --skip-build`. Status: 8 PASS, 0 FAIL, 0 WARN; 22 active
+patches, 50 overlay files, 25 symbols, 117/117 CEF patches. Distribution SHA-256:
+`af4b3cc3ad1b42439b229d79c8f7a869b13b0d3165733fba6c023e202340d1a5`.
+This is the existing dev engine configuration packaged for the fresh Release
+App proof; it does not change the official Release/PGO packaging gate above.
+`~/Developer/open-engine-s8-main` is left for the lead's post-merge refresh.
+See the [acceptance receipt](engine-spike/automation-notification-guard-blocked.md).
+
 ## Rebase watch list
 
 Things Open copies from upstream or relies on without a patch, so no patch
