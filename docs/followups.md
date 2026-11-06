@@ -246,4 +246,9 @@ Merged evidence: [#170](https://github.com/SergeSerb2/open/pull/170) (static pag
   runs off main; one utility-priority main-queue turn applies the icon at least
   about one second after paint. Main preparation must be below 5 ms; AppKit/Dock
   setter cost is reported separately and is accepted without further work.
-  Final icon, first-run and timing runs wait for the screen hold to clear.
+  Final M5 first-run runs pass 52/52 ×3, and the icon split passes the revised
+  target. Quiet Release first content is 371 ms (>250 ms); imported paint is
+  205 ms (≤700 ms). Normal launch is 382 ms on both main and branch, with no
+  measured regression; first run adds no cost. The 250 ms cold-launch budget
+  is the open Section 8 item 13 / Section 16 launch budget. All checks and loads
+  are in [the receipt](first-run/steps-ef-verification.md).

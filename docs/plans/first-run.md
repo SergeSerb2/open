@@ -1,6 +1,6 @@
 # First run — Welcome, Import from Arc, and default browser
 
-Status: Steps A–F implemented. Final Steps E/F runtime verification and Release timing remain pending under the Section 7 lead's screen hold on both machines (2026-11-06 14:29). Passwords and cookies remain capability OFF; only the count probe runs. This file is the complete brief for the coding agent that implements it. That agent has no other context. Read this file top to bottom, then read each source it names before you edit that area. Do not invent a second design.
+Status: Steps A–F implemented and functionally verified on the M5 (2026-11-06). Three final first-run runs pass 52/52 rows; full M5 verification passes. The Release first-content target is NOT MET: 371 ms against 250 ms. The 250 ms cold-launch budget is the open Section 8 item 13 / Section 16 launch budget; first run adds no cost. Imported-tab paint passes at 205 ms; normal launch is 382 ms on both main and the branch. Passwords and cookies remain capability OFF; only the count probe runs. See docs/first-run/steps-ef-verification.md for all receipts and loads. This file is the complete brief for the coding agent that implements it. That agent has no other context. Read this file top to bottom, then read each source it names before you edit that area. Do not invent a second design.
 
 User-visible name rule: never use the Arc brand in UI text. "Little Arc" is "Little Open" in Open. The only exception is "Import from Arc" (`AGENTS.md`). Search aliases may keep old names.
 

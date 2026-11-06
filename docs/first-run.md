@@ -176,3 +176,11 @@ fixture uses 48-hour-old Today tabs with the normal twelve-hour archive setting,
 then finishes, relaunches and imports again. It also closes a tab and a former
 Favorite through production commands before repeat import. Source files stay
 unchanged. See [the Steps E/F receipt](first-run/steps-ef-verification.md).
+
+Final M5 acceptance (2026-11-06): `firstrun` passes 52/52 rows in three
+consecutive runs. Shell, features, routing, commandbar and the full M5 gate
+pass. F12: first-run first content 371 ms vs 250 ms budget: NOT MET; normal launch 382 ms on main and branch, so first run adds no cost; the 250 ms cold-launch budget is the open Section 8 item 13 / Section 16 launch budget.
+Selected imported-tab paint passes at 205 ms against 700 ms.
+Icon worker preparation is 8.556–9.096 ms; main preparation is
+below 0.001 ms and the accepted AppKit setter is 24.163–25.298 ms. The
+[receipt](first-run/steps-ef-verification.md) keeps every attempt and load.

@@ -313,6 +313,10 @@ total main cost separately. The acceptance target is main decode/preparation
 below 5 ms; AppKit/Dock setter cost is reported separately, per the Section 7
 lead's 2026-11-06 ruling. The signed bundle is never changed. A missing or bad
 cache leaves the bundle icon and asks the user to select the icon again.
+The final quiet Release receipt measured worker preparation at 8.556–9.096 ms,
+main preparation below 0.001 ms, and the accepted setter at 24.163–25.298 ms
+(load1 7.06–7.46). Default selection has zero restore work. See the
+[cost split](first-run/steps-ef-verification.md#alternate-icon-restore-split).
 
 Actions use the triggering pane's existing status/error line. Links renders
 model issues per rule and default destination; errors block Save, warnings

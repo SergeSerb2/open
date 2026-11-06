@@ -131,7 +131,7 @@ State also includes `importInProgress`, `historyInProgress`, `historyProcessed`,
 `settings-import` with `directory=PATH`, `settings-select` with `history=true` and optional `historyOnly=true`, `settings-next`, `settings-run`,
 and `settings-done`. State then includes `settingsStep`, `settingsOutcome`,
 and `settingsError`. These actions use the real cached wizard and shared App
-runner. `lastOutcome` and `lastFailures` remain readable after the first-run window closes. History streams through the existing Profile stores; passwords/cookies stay disabled. `OPEN_AUTOMATION_HISTORY_DELAY_MS` (automation builds only, at most 10000 ms per batch) pauses after a real batch so the suite can verify browsing before completion.
+runner. `lastOutcome` and `lastFailures` remain readable after the first-run window closes. History streams through the existing Profile stores; passwords/cookies stay disabled. `OPEN_AUTOMATION_HISTORY_DELAY_MS` (automation builds only, at most 10000 ms per batch) pauses after the reader yields a real batch, before its transaction, so the suite can verify browsing while imported visits are still absent.
 
 Run the synthetic first-run flow with:
 
