@@ -65,6 +65,19 @@ MainActor.assumeIsolated {
     let visible = rows.filter { !$0.hidden }
     print("counts: commands=\(CommandRegistry.all.count) active=\(CommandRegistry.active.count) reserved=\(CommandRegistry.all.count - CommandRegistry.active.count) menuItems=\(rows.count) visible=\(visible.count) shortcuts=\(CommandRegistry.active.reduce(0) { $0 + $1.defaultShortcuts.count })")
 
+    // The picker is a hidden key carrier; it has no visible row in expected-menu.json.
+    // The expectation table removes Cmd+E from Use Selection to Find; allowed-missing stays 11.
+    if let picker = menu.items.first(where: { $0.title == "Extensions" })?.submenu?.items.first(where: { $0.identifier?.rawValue == "open-extensions-picker" }) {
+        if !picker.isHidden || !picker.allowsKeyEquivalentWhenHidden || picker.keyEquivalent != "e" || picker.keyEquivalentModifierMask != .command { fail("extension picker hidden shortcut carrier") }
+        picker.menu?.update(); menu.update()
+        if let event = NSEvent.keyEvent(with: .keyDown, location: .zero, modifierFlags: .command, timestamp: 0, windowNumber: 0, context: nil, characters: "e", charactersIgnoringModifiers: "e", isARepeat: false, keyCode: 14),
+           picker.menu?.performKeyEquivalent(with: event) != true || dispatcher.performed.last != "open-extensions-picker" { fail("Cmd+E did not dispatch the hidden picker; enabled=\(picker.isEnabled), received=\(dispatcher.performed)") }
+    } else { fail("missing hidden extensions picker") }
+    if KeyboardRouter().route(shortcut: .cmd("e"), context: RoutingContext()) != .browserCommand("open-extensions-picker") { fail("Cmd+E router owner") }
+    if CommandRegistry.byID["use-selection-to-find"]?.defaultShortcuts.isEmpty != true || CommandRegistry.byID["extension-shortcuts"]?.menuPath != nil { fail("extension command registry defaults") }
+
+    if !Set(CommandRegistry.makeSuggestActions().map(\.id)).isSuperset(of: ["open-extensions-picker", "extension-shortcuts"]) { fail("extension commands missing from command-bar adapter") }
+
     // 2. Conflict checker on default bindings.
     print("== Conflicts (defaults) ==")
     let conflicts = ConflictChecker.check()

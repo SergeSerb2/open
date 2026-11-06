@@ -20,6 +20,10 @@ public final class CommandBarController: NSObject {
     public var favicons: CommandBarFaviconSource? {
         didSet { panel.results.favicons = favicons; panel.input.favicons = favicons }
     }
+    /// Synchronous engine icon lookup, like the favicon source; no image conversion during draw.
+    public var extensionIcon: (@MainActor (String) -> NSImage?)? {
+        didSet { panel.results.extensionIcon = extensionIcon; panel.input.extensionIcon = extensionIcon }
+    }
     public var theme = CommandBarTheme.default {
         didSet { applyScopeTheme(); panel.input.theme = theme }
     }
@@ -76,6 +80,33 @@ public final class CommandBarController: NSObject {
     private var streamTask: Task<Void, Never>?
     private var generation = 0
     private var siteHint: SiteSearch?
+    private var extensionHint: ExtensionKeyword?
+    private weak var sessionSource: (any ExtensionCommandBarSource)?
+    private var sessionExtensionID: String?
+    private weak var sessionWindow: NSWindow?
+    private var sessionObservers: [NSObjectProtocol] = []
+    public var extensionScope: ExtensionKeyword? { if case .extension(let e)? = scope { e } else { nil } }
+
+    private func endExtensionSession(cancel: Bool = true) {
+        let source = sessionSource, id = sessionExtensionID
+        sessionExtensionID = nil; sessionSource = nil; sessionWindow = nil
+        for observer in sessionObservers { NotificationCenter.default.removeObserver(observer) }
+        sessionObservers.removeAll()
+        if cancel, let id { source?.cancelSession(extensionID: id) }
+    }
+    private func observeSessionWindow() {
+        guard sessionExtensionID != nil, let window = view.window else { return }
+        if let previous = sessionWindow {
+            if previous !== window { dismiss(reason: .programmatic) }
+            return
+        }
+        sessionWindow = window
+        for name in [NSWindow.didResignKeyNotification, NSWindow.willCloseNotification] {
+            sessionObservers.append(NotificationCenter.default.addObserver(forName: name, object: window, queue: .main) { [weak self] _ in
+                MainActor.assumeIsolated { self?.dismiss(reason: .programmatic) }
+            })
+        }
+    }
     /// The text `siteHint` was computed for.
     private var hintText = ""
     private var hintAllowsSpace = false
@@ -95,6 +126,7 @@ public final class CommandBarController: NSObject {
         view.onClickOutside = { [weak self] in self?.dismiss(reason: .clickOutside) }
         let field = panel.input.field
         field.delegate = self
+        panel.input.editor.onShiftDelete = { [weak self] flags in self?.handle(#selector(NSResponder.deleteForward(_:)), flags: flags) ?? false }
         panel.input.editor.onModifiedReturn = { [weak self] flags in self?.handle(#selector(NSResponder.insertNewline(_:)), flags: flags) ?? false }
         panel.input.editor.onCompositionEnded = { [weak self] in
             self?.queriedText = nil
@@ -106,7 +138,11 @@ public final class CommandBarController: NSObject {
             self.togglePrivacyFooter()
             return true
         }
-        view.onMoveToWindow = { [weak self] in self?.focusInput() }
+        view.onMoveToWindow = { [weak self] in
+            guard let self else { return }
+            if self.sessionExtensionID != nil, self.view.window == nil { self.dismiss(reason: .programmatic) }
+            self.observeSessionWindow(); self.focusInput()
+        }
         panel.input.closeButton.action = { [weak self] in self?.dismiss(reason: .escape) }
         panel.input.infoButton.action = { [weak self] in self?.togglePrivacyFooter() }
         panel.input.onChipClose = { [weak self] in self?.exitSiteSearch() }
@@ -130,6 +166,7 @@ public final class CommandBarController: NSObject {
     /// Opens the bar (or switches it to another mode while open). The panel shows in the next
     /// frame at full size and opacity: Arc's bar has no open animation (CC-44, D12).
     public func present(_ request: CommandBarRequest, presentation: CommandBarPresentation = .overlay) {
+        endExtensionSession()
         view.presentation = presentation
         pendingReturn = nil
         panel.input.editor.resetSession()
@@ -162,6 +199,7 @@ public final class CommandBarController: NSObject {
 
     /// Shows fixed content without a query: renders, design review, and docs.
     public func presentPreview(_ preview: CommandBarPreview, presentation: CommandBarPresentation = .overlay) {
+        endExtensionSession()
         view.presentation = presentation
         pendingReturn = nil
         panel.input.editor.resetSession()
@@ -207,6 +245,8 @@ public final class CommandBarController: NSObject {
         pendingReturn = nil
         panel.input.editor.resetSession()
         guard isPresented else { return }
+        endExtensionSession()
+        scope = nil
         completion.reset()
         let mode = request?.mode ?? .newTab
         isPresented = false
@@ -292,11 +332,11 @@ public final class CommandBarController: NSObject {
         switch scope {
         case .actions?: mode = .searchActions
         case .tabs?: mode = .searchTabs
-        case .site?, nil: if mode.isScoped { mode = .newTab }
+        case .site?, .extension?, nil: if mode.isScoped { mode = .newTab }
         }
         return SuggestContext(mode: mode, profileID: r.profileID, spaceID: r.spaceID, currentTabID: r.currentTabID,
                               currentTabURL: r.currentTabURL, allowsRemoteSuggestions: r.allowsRemoteSuggestions,
-                              searchEngineID: r.searchEngineID, siteSearchID: siteScope?.id, allowsInlineCompletion: queryAllowsCompletion)
+                              searchEngineID: r.searchEngineID, siteSearchID: siteScope?.id, extensionScopeID: extensionScope?.id, allowsInlineCompletion: queryAllowsCompletion)
     }
 
     /// Opening applies ready local rows before cold focus work. Text edits
@@ -338,7 +378,7 @@ public final class CommandBarController: NSObject {
         let appliedGeneration = generation
         let r = request
         let visible = snapshot.suggestions.filter {
-            guard $0.kind != .siteSearchHint else { return false }
+            guard $0.kind != .siteSearchHint, $0.kind != .extensionKeywordHint else { return false }
             if $0.kind == .action, let id = $0.actionID { return isActionEnabled?(id, $0.spaceID) ?? true }
             return true
         }
@@ -391,10 +431,16 @@ public final class CommandBarController: NSObject {
     private func updateSiteHint(_ text: String) {
         let trimmed = text.trimmingCharacters(in: .whitespaces)
         siteHint = nil
+        extensionHint = nil
         hintText = text
         hintAllowsSpace = false
         guard scope == nil, !trimmed.isEmpty, !trimmed.contains(" ") else { return }
-        if let site = engine.siteSearchTrigger(for: trimmed) {
+        // An exact extension keyword beats a site's partial name. Exact conflicts were
+        // already removed by extensionKeywordTrigger (Q9).
+        if let keyword = engine.extensionKeywordTrigger(for: trimmed) {
+            extensionHint = keyword
+            hintAllowsSpace = true
+        } else if let site = engine.siteSearchTrigger(for: trimmed) {
             siteHint = site
             // Scope keywords offer Tab only: Space types a space ("tabs vs spaces", §4.3.2).
             if site.isScope { return }
@@ -410,7 +456,8 @@ public final class CommandBarController: NSObject {
         var input = CommandBarInput(placeholder: CommandBarText.placeholder, leadingIcon: .symbol("magnifyingglass", plate: false))
         if let scope {
             input.placeholder = CommandBarText.scopePlaceholder
-            input.chip = .init(name: scope.title)
+            input.chip = .init(name: scope.title, extensionID: extensionScope?.id)
+            if let extensionScope { input.placeholder = CommandBarText.siteSearchPlaceholder(extensionScope.name) }
         }
         let typed = text
         if typed.isEmpty || scope != nil {
@@ -433,6 +480,8 @@ public final class CommandBarController: NSObject {
         if let site = siteHint {
             // Never "or Space" while a completion shows (CC-5, CC-40).
             input.trailing = .siteSearchHint(name: site.name, space: hintAllowsSpace && completion.shown == nil)
+        } else if let keyword = extensionHint {
+            input.trailing = .siteSearchHint(name: keyword.name, space: completion.shown == nil)
         } else if scope != nil {
             input.trailing = .none // no (i) inside a scope (S2 18/0016, 0018)
         } else if r?.mode == .littleOpen || !allowsSearchHelp {
@@ -456,7 +505,13 @@ public final class CommandBarController: NSObject {
         let before = restoring ?? text
         if let editor = activeEditor { completion.hide(in: editor) }
         completion.reset()
+        endExtensionSession()
         self.scope = scope
+        if case .extension(let keyword) = scope, let source = engine.extensionSource {
+            sessionSource = source; sessionExtensionID = keyword.id
+            source.startSession(extensionID: keyword.id)
+            observeSessionWindow()
+        }
         queryBeforeEnteringScope = before
         panel.input.setText(remainder)
         panel.input.needsLayout = true
@@ -469,6 +524,7 @@ public final class CommandBarController: NSObject {
     /// opened by command leaves an empty Cmd+T bar.
     public func exitSiteSearch() {
         guard scope != nil else { return }
+        endExtensionSession()
         scope = nil
         let restored = queryBeforeEnteringScope ?? ""
         queryBeforeEnteringScope = nil
@@ -525,6 +581,13 @@ public final class CommandBarController: NSObject {
             intent = s.tabID.map { .switchToTab($0, spaceID: s.spaceID) }
         case .action:
             intent = s.actionID.map { .runAction(id: $0, spaceID: s.spaceID) }
+        case .extensionAction:
+            intent = s.extensionID.map { .runExtensionAction(extensionID: $0) }
+        case .extensionSuggestion:
+            intent = s.extensionID.map { .extensionOmnibox(extensionID: $0, content: s.extensionContent ?? text, destination: destination, modifiers: modifiers) }
+        case .extensionKeywordHint:
+            if let keyword = engine.extensionKeywordTrigger(for: text) { enterScope(.extension(keyword)) }
+            return
         case .calculator:
             intent = .copy(s.title)
         case .siteSearchHint:
@@ -532,6 +595,8 @@ public final class CommandBarController: NSObject {
             return
         }
         guard let intent else { return }
+        // Accepted omnibox input is completed by the intent; it must not send onInputCancelled first.
+        if s.kind == .extensionSuggestion { endExtensionSession(cancel: false) }
         dismiss(reason: .selection)
         delegate?.commandBar(self, perform: intent)
     }
@@ -541,6 +606,19 @@ public final class CommandBarController: NSObject {
     /// Handles a text-system command from the field editor. Returns true when consumed.
     func handle(_ selector: Selector, flags: NSEvent.ModifierFlags) -> Bool {
         guard isPresented, !panel.input.editor.hasMarkedText(), !panel.input.editor.isUpdatingComposition else { return false }
+        if flags.intersection([.shift, .command, .option, .control]) == .shift,
+           selector == #selector(NSResponder.deleteBackward(_:)) || selector == #selector(NSResponder.deleteForward(_:)),
+           let s = selectedSuggestion, s.kind == .extensionSuggestion, s.isDeletable,
+           let id = s.extensionID, let content = s.extensionContent {
+            sessionSource?.deleteSuggestion(content, extensionID: id)
+            // Keep the current rows and selection; do not issue another onInputChanged for a deletion.
+            engine.cancel(); streamTask?.cancel(); generation += 1
+            suggestions.removeAll { $0.id == s.id }
+            rows.removeAll { $0.id == s.id }
+            panel.results.setRows(rows, selected: min(selectedIndex ?? 0, max(0, rows.count - 1)))
+            view.visibleRowCount = min(rows.count, CommandBarMetrics.maxVisibleRows)
+            return true
+        }
         switch selector {
         case #selector(NSResponder.moveUp(_:)):
             moveSelection(by: -1); return true
@@ -555,6 +633,7 @@ public final class CommandBarController: NSObject {
                 enterSiteSearch(site)
                 return true
             }
+            if let keyword = extensionHint { enterScope(.extension(keyword)); return true }
             return false // Without a Site Search hint, use normal AppKit focus traversal.
         case #selector(NSResponder.insertBacktab(_:)):
             return false
@@ -692,6 +771,10 @@ public final class CommandBarController: NSObject {
         // completion showed: then Space only types a space (CC-5).
         if scope == nil, let site = siteHint, hintAllowsSpace, hidden == nil, t == hintText + " " {
             enterScope(.site(site), restoring: hintText)
+            return
+        }
+        if scope == nil, let keyword = extensionHint, hidden == nil, t == hintText + " " {
+            enterScope(.extension(keyword), restoring: hintText)
             return
         }
         // A character that continues the completion keeps it on screen until the new snapshot (§4.1.5).
