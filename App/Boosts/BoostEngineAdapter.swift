@@ -63,7 +63,8 @@ final class BoostEngineAdapter {
     deliver(plan(url: url, profile: host.profileID, ephemeral: host.content.context.isEphemeral, matcher: BoostMatcher(boosts: values)), to: host, url: url)
   }
   private func refreshPages(profile: ProfileID?, start: TimeInterval) {
-    let hosts = boosts.app.hostFactories.values.flatMap { $0.hosts.values }.filter { !$0.closed && (profile == nil || $0.profileID == profile) }
+    let pages = boosts.app.hostFactories.values.flatMap { Array($0.hosts.values) } + Array(boosts.app.littleOpenHosts.values)
+    let hosts = Dictionary(pages.map { (ObjectIdentifier($0), $0) }, uniquingKeysWith: { first, _ in first }).values.filter { !$0.closed && (profile == nil || $0.profileID == profile) }
     lastRefreshPageCount = hosts.count; refreshCount += 1
     // Dispatch all page requests in this actor turn; no serial per-tab round trips.
     let tasks = hosts.compactMap { host -> Task<Void, Never>? in

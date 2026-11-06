@@ -24,7 +24,8 @@ def run(factory, results, tmp, env):
     keys = {"open.advanced.enableBoosts": True,
             "open.boosts.hasDismissedInterstitial": False,
             "open.boosts.hasDismissedJSNotice": False,
-            "open.boosts.codeEditorSize": "480x588"}
+            "open.boosts.codeEditorSize": "480x588",
+            "open.library.lastSection": "spaces"}
     def call(action="state", **kw):
         return app.call("boost-editor", action=action, **kw)
     def items():
@@ -250,6 +251,23 @@ def run(factory, results, tmp, env):
                 except RuntimeError:refused.append(True)
                 return dict(positive=accepted and len(refused) == 4,negative=before == items(),acceptedCounts=[2,512],refusedCounts=[1,513])
             row("B17_automation_limits",b17)
+            def b18():
+                panel=call()["window"]
+                opened=app.call("little-open-action",action="blank",then="submit",text=origin+"/boost.html")
+                sid=opened["after"]["sessions"][0]["id"]
+                wait_until(lambda: any(s["id"] == sid and s["content"] and not s["loading"] for s in app.call("little-open-state")["sessions"]),timeout=10,step=.05)
+                # B17's center drag leaves the saved font component intact.
+                def heading():
+                    return app.call("little-open-eval",id=sid,js="getComputedStyle(document.querySelector('h1')).fontFamily")
+                initial=heading()
+                app.call("defaults",key="open.advanced.enableBoosts",value=False)
+                negative=bool(wait_until(lambda: not heading().startswith("Avenir"),timeout=5,step=.02))
+                app.call("defaults",key="open.advanced.enableBoosts",value=True)
+                ok=wait_until(lambda: heading().startswith("Avenir"),timeout=5,step=.02)
+                editorClosed=not any(w["number"] == panel and w["visible"] for w in app.call("windows"))
+                app.call("little-open-action",id=sid,action="close")
+                return dict(positive=bool(ok) and initial.startswith("Avenir") and editorClosed,negative=negative)
+            row("B18_little_open_live",b18)
         finally:
             if app and not app.closed:
                 try:
