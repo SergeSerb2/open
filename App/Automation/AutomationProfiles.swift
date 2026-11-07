@@ -22,7 +22,8 @@ extension AutomationController {
       vm.confirmsDelete=false;vm.confirmsUnused=false;vm.showsCreate=false;vm.showsSuggestNotice=false
       adapter.profileIconPicker?.close()
     case "press":
-      guard let label=args["label"] as? String, let owner=adapter.settingsPresenter.window,
+      let owner = args["library"] as? Bool == true ? adapter.libraryPresenter?.window : adapter.settingsPresenter.window
+      guard let label=args["label"] as? String, let owner,
         let control=profileAX(owner.attachedSheet ?? owner,label:label) else { throw Failure(message:"Profile control not found") }
       let press=NSSelectorFromString("accessibilityPerformPress")
       guard control.responds(to:press) else { throw Failure(message:"Profile control has no press action") }
@@ -72,6 +73,7 @@ extension AutomationController {
     }
     await Task.yield()
     let owner=adapter.settingsPresenter.window, sheet=owner?.attachedSheet
+    let managerSheet = adapter.libraryPresenter?.window?.attachedSheet
     let delete=sheet.flatMap {profileAX($0,label:"Delete")}
     let enabled:Bool?=delete.flatMap {object in
       if let element=object as? any NSAccessibilityProtocol { return element.isAccessibilityEnabled() }
@@ -90,6 +92,9 @@ extension AutomationController {
       "deleteAXClass":delete.map {String(reflecting:type(of:$0))} ?? "",
       "deleteText":vm.deleteConfirmation,"deleteNames":vm.deletionProfiles.map(\.name),
       "sheet":sheet?.windowNumber ?? 0,"sheetText":sheet.map(windowText) ?? [],"settings":owner?.windowNumber ?? 0,
+      "managerSheet":managerSheet?.windowNumber ?? 0,"managerSheetText":managerSheet.map(windowText) ?? [],
+      "managerSheetParent":managerSheet?.sheetParent?.windowNumber ?? 0,
+      "undoName":app.undoManager.undoActionName,
       "error":vm.errorText,"canUndo":app.undoManager.canUndo,
       "noticeShown":app.missingProfileNoticeCount,"noticeTitles":app.missingProfileNoticeTitles,
       "noticeVisible":app.missingProfileNotice?.window.isVisible ?? false,

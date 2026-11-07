@@ -13,7 +13,8 @@ def run(factory, results, tmp, api, defaults_before):
     wait = api['wait_until']
     restore = api['_restore_defaults']
     server, origin = api['_fixture_server']('Profiles shell')
-    keys = ('open.general.searchSuggestNoticeDismissed', 'open.links.littleOpenNUXSeen')
+    confirm_key = 'open.profiles.confirmInterProfileMove'
+    keys = ('open.general.searchSuggestNoticeDismissed', 'open.links.littleOpenNUXSeen', confirm_key)
     saved = {key: defaults_before.get(key) for key in keys}
     app = None
 
@@ -21,6 +22,8 @@ def run(factory, results, tmp, api, defaults_before):
         nonlocal app
         app = factory(urls=(), **args)
         for key in keys:
+            app.call('defaults', key=key, value=None)
+        for key in keys[:2]:
             app.call('defaults', key=key, value=True)
         return app
 
@@ -100,8 +103,69 @@ def run(factory, results, tmp, api, defaults_before):
         raw.replace(destination)
         return dict(shot, path=str(destination), nativeScale=scale)
 
-    def press(label):
-        return state(action='press', label=label)
+    def press(label, **args):
+        return state(action='press', label=label, **args)
+
+    def manager_profile_checks():
+        state(action='create', name='Manager Work')
+        source = app.call('spaces')[0]
+        target = profile('Manager Work')
+        # Close every browser. The Library must not manufacture a new factory.
+        for window in list(app.call('incognito-state')['windows']):
+            app.call('window-focus', id=window['id'], activate=True)
+            app.call('window-close')
+        assert wait(lambda: not app.call('incognito-state')['windows'], timeout=5)
+        manager = app.call('library-open')
+
+        def request():
+            app.call('space-manager-menu', space=source['id'], item='Set Profile/Manager Work')
+            return wait(lambda: state() if state()['managerSheet'] else None, timeout=3)
+
+        def assigned():
+            return next(s['profile'] for s in app.call('spaces') if s['id'] == source['id'])
+
+        shown = request()
+        text = shown['managerSheetText'] if shown else []
+        warning = ('Each Profile has different browser data, so you might get logged out or lose your progress in '
+                   + (source['title'] or 'Space 1') + '. Its tabs will reopen with Manager Work data.')
+        results['shell_manager_profile_alert'] = {
+            'ok': bool(shown) and shown['managerSheetParent'] == manager['window']
+                  and all(t in text for t in ('Change Profile?', warning, 'Change Profile', 'Cancel', "Don't show again"))
+                  and not app.call('incognito-state')['windows'] and assigned() == source['profile'],
+            'text': text, 'parent': shown['managerSheetParent'] if shown else 0, 'library': manager['window']}
+        assert results['shell_manager_profile_alert']['ok'], 'Change Profile sheet missing from Library'
+        if os.environ.get('OPEN_PROFILES_SHELL_FORCE_MANAGER_DIALOG_FAILURE') == '1':
+            raise AssertionError('intentional early Manager sheet failure for cleanup proof')
+        press('Cancel', library=True)
+        assert wait(lambda: state()['managerSheet'] == 0, timeout=5)
+        results['shell_manager_profile_cancel'] = {'ok': assigned() == source['profile']}
+        assert request(), 'Change Profile sheet missing after Cancel'
+        press('Change Profile', library=True)
+        changed = wait(lambda: assigned() == target['id'] and state()['managerSheet'] == 0, timeout=5)
+        undo_name = state()['undoName']
+        app.call('key', window=manager['window'], key='z', modifiers=['cmd'], route='app')
+        undone = wait(lambda: assigned() == source['profile'], timeout=5)
+        results['shell_manager_profile_confirm_undo'] = {'ok': bool(changed and undone) and undo_name == 'Change Profile',
+                                                        'changed': bool(changed), 'undone': bool(undone), 'undoName': undo_name}
+        assert request(), 'Change Profile sheet missing before suppression'
+        press("Don't show again", library=True)
+        press('Cancel', library=True)
+        assert wait(lambda: state()['managerSheet'] == 0, timeout=5)
+        results['shell_manager_profile_cancel_suppression'] = {
+            'ok': app.call('defaults', key=confirm_key, persistent=True) is None and assigned() == source['profile']}
+        assert request(), 'Cancel must not save suppression'
+        press("Don't show again", library=True)
+        press('Change Profile', library=True)
+        assert wait(lambda: assigned() == target['id'] and state()['managerSheet'] == 0, timeout=5)
+        suppressed = app.call('defaults', key=confirm_key, persistent=True) is False
+        app.call('key', window=manager['window'], key='z', modifiers=['cmd'], route='app')
+        assert wait(lambda: assigned() == source['profile'], timeout=5)
+        app.call('space-manager-menu', space=source['id'], item='Set Profile/Manager Work')
+        results['shell_manager_profile_suppressed'] = {
+            'ok': suppressed and assigned() == target['id'] and state()['managerSheet'] == 0
+                  and not app.call('incognito-state')['windows']}
+        app.call('defaults', key=confirm_key, value=None)
+        app.call('library-close')
 
     def show(name=None):
         state(action='show', **({'profile': name} if name else {}))
@@ -124,6 +188,11 @@ def run(factory, results, tmp, api, defaults_before):
         launch(fresh=True)
         one = state()
         results['shell_indicator_one_profile'] = {'ok': len(one['profiles']) == 1 and one['indicators'] == [], 'indicators': one['indicators']}
+        manager_profile_checks()
+        if os.environ.get('OPEN_PROFILES_SHELL_MANAGER_ONLY') == '1':
+            return
+        app.quit()
+        launch(fresh=True)
         if os.environ.get('OPEN_PROFILES_SHELL_PAGES_ONLY') == '1':
             check_pages('Default', has_space=True)
             state(action='create', name='Page Without Space')
@@ -188,7 +257,7 @@ def run(factory, results, tmp, api, defaults_before):
             app.call('window-close')
             app.call('window-focus', id=normal['id'], activate=True)
         # Native window evidence uses the display's real backing scale.
-        # 2x hardware captures stay deferred while the M1 is on hold.
+        # Native 2x hardware captures are recorded separately on the M1.
         evidence = Path(api['ROOT']) / 'docs/profiles-shell'
         evidence.mkdir(parents=True, exist_ok=True)
         app.call('window-frame', frame=[100, 100, 1000, 700])
@@ -423,6 +492,7 @@ def run(factory, results, tmp, api, defaults_before):
         if app is not None:
             if not app.closed:
                 try:
+                    app.call('library-close', timeout=3)
                     app.call('profiles-shell', action='cancel', timeout=3)
                     app.call('profiles-shell', action='notice-ok', timeout=3)
                 except Exception:
