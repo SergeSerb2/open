@@ -181,7 +181,7 @@ final class AppBoosts: BoostsProvider, ProfileDataOwner {
   func retireProfile(_ profileID: ProfileID, directory: String) async {
     // Block new work first. Closing an editor can flush its draft, so retire the
     // retained store before closing the session. No folder removal belongs here.
-    retiredProfiles.insert(profileID)
+    guard retiredProfiles.insert(profileID).inserted else { return }
     profiles.removeValue(forKey: profileID)?.store.retire()
     for factory in app.hostFactories.values {
       if factory.controller?.boostEditor?.session?.context.profileID == profileID {
