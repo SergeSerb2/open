@@ -62,8 +62,9 @@ def run(factory, results, tmp, root, wait):
         app.call('profiles-shell', profile=original)
         row('selected_profile_restored', True)
         app.call('ext-manage', extension=KNOWN, action='uninstall')
-        prompt = wait(lambda: (lambda p: p if p.get('pending') else None)(app.call('ext-prompt')), timeout=10)
+        prompt = wait(lambda: (lambda p: p if p.get('pending') and p.get('sheetVisible') else None)(app.call('ext-prompt')), timeout=10)
         assert prompt and prompt['type'] == 'uninstall'
+        results['AD1_uninstall_prompt'] = {'ok': True, 'type': prompt['type'], 'sheetVisible': prompt['sheetVisible']}
         if os.environ.get('OPEN_E2E_ADBLOCK_FAIL_IN_UNINSTALL') == '1':
             raise AssertionError('forced failure with the real uninstall prompt open')
         app.call('ext-prompt', answer='accept')

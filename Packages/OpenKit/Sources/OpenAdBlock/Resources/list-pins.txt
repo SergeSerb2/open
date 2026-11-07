@@ -2,5 +2,5 @@
 # <local-name> <official-url> <sha256-hex-lowercase>
 # Update only through tools/fetch-adblock-lists.sh --update-pins and review the change.
 # Lists retain their upstream licenses (GPLv3+ or CC BY-SA 3.0+); text is not committed.
-easylist.txt https://easylist.to/easylist/easylist.txt 03d9539e6aa3e9d376494317e2365cce04451545aa3cbbad72494cc1a411c40a
-easyprivacy.txt https://easylist.to/easylist/easyprivacy.txt 6d25b173761203a3df346f938355573eb1f32d5917ae1a6ffcca71a454a89683
+easylist.txt https://easylist.to/easylist/easylist.txt 29b108fd009848df943b983aab4c1e84d3b1716aa0710307d447ee710cb5ca3a
+easyprivacy.txt https://easylist.to/easylist/easyprivacy.txt 4f17cf7ea32f1ba41ccee0d292471efd0d6c876acfa10a97f5345f07feb6a697
