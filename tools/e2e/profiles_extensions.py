@@ -128,9 +128,15 @@ def run(factory, results, tmp, root, wait):
             # The existing OS CPU sampler, without enabling Chromium metrics.
             app.call('command', id='new-window')
             time.sleep(30)
+            work_before = app.call('frame-save-counters')
+            sleep_before = app.call('sleep-state')
             idle = process_cpu_window(app)
+            work_after = app.call('frame-save-counters')
+            sleep_after = app.call('sleep-state')
             row('two_window_idle_cpu', idle['complete'] and len(app.call('shell-windows')) == 2, measurement=idle,
-                contexts=context_ids(), windows=len(app.call('shell-windows')), scope='receipt; docs/idle-cpu.md defines no absolute CPU budget')
+                contexts=context_ids(), windows=len(app.call('shell-windows')),
+                workBefore=work_before, workAfter=work_after, sleepPasses=[sleep_before['passes'], sleep_after['passes']],
+                scope='receipt; docs/idle-cpu.md defines no absolute CPU budget')
             return
 
         default_tab = opened()
@@ -197,7 +203,7 @@ def run(factory, results, tmp, root, wait):
         from engine_e2e import scheduled_spring
         focus(window_a)
         app.call('space', space=work_space)
-        attached = strip_ids()
+        attached = wait(lambda: (lambda s: s if s['ids'] == [work_id] else None)(strip_ids()), timeout=10) or strip_ids()
         row('loaded_empty_space_actions', attached['ids'] == [work_id] and context_ids() == contexts, strip=attached, contexts=context_ids())
         app.call('select', tab=work_tab)
         same_space = app.call('space-create', title='Default Second', profile='Default')
@@ -240,7 +246,8 @@ def run(factory, results, tmp, root, wait):
         no_space_little = wait(lambda: next((s for s in app.call('little-open-state')['sessions']
             if s['profile'] == no_space['id'] and s['content'] and not s['loading']), None), timeout=20)
         assert no_space_little, 'No-Space Profile did not open its management page'
-        app.call('ext-click', surface='little', window=no_space_little['window'], extension='more', select='Manage Extensions…')
+        app.call('little-open-action', id=no_space_little['id'], action='focus')
+        app.call('ext-ui-menu', kind='bar', select='Manage Extensions…')
         managed_little = wait(lambda: next((s for s in app.call('little-open-state')['sessions']
             if s['id'] != no_space_little['id'] and s['profile'] == no_space['id'] and s['content'] and not s['loading']), None), timeout=20)
         no_space_url = app.call('little-open-eval', id=managed_little['id'], js='location.href') if managed_little else ''
