@@ -312,7 +312,7 @@ def checks(factory, results, tmp, config, harness):
         library(); wait(lambda: bool(row(paused)))
         app.call('download-row', id=paused, action='Pause')
         wait(lambda: item(paused).get('state') == 'paused')
-        for label, seconds in [('Last hour', 3600), ('Last 24 hours', 86400), ('Last 7 days', 604800), ('All time', None)]:
+        for label, seconds in [('Last hour', 3600), ('Last 24 hours', 86400), ('Last 7 days', 604800), ('Last 4 weeks', 2419200), ('All time', None)]:
             dismiss_library()
             inside = start('/fast'); outside = start('/fast')
             failed = start('/fail'); cancelled = start('/slow')
@@ -326,7 +326,7 @@ def checks(factory, results, tmp, config, harness):
             hashes = {str(p): hashlib.sha256(p.read_bytes()).hexdigest() for p in paths}
             before = {v['id'] for v in state()['items']}
             history_before = app.call('history-state', profile=profile)['rows']
-            invalid = app.call('settings-clear-data', profile=profile, kinds=11, range=label)
+            invalid = app.call('settings-clear-data', profile=profile, kinds=0, range=label)
             check('clear_validate_before_mutation_' + label, invalid['status'] != 'Done'
                   and {v['id'] for v in state()['items']} == before
                   and app.call('history-state', profile=profile)['rows'] == history_before, response=invalid)

@@ -45,6 +45,7 @@ def run(factory, results, tmp, harness, config):
             space1 = next(s['id'] for s in app.call('spaces') if s['focused'])
             tab1 = E.new_tab(app, 'data:text/html,<title>First restore selection</title>')
             app.call('window-frame', frame=[110, 140, 920, 660])
+            app.call('mouse', **{'from': [228, 300], 'to': [280, 300]})
             space2 = app.call('space-create', profile='Restore second', title='Restore second')
             tab2 = E.new_tab(app, 'data:text/html,<title>Second restore selection</title>')
             app.call('space', space=space1)
@@ -53,6 +54,7 @@ def run(factory, results, tmp, harness, config):
             app.call('key', key='escape', route='app')
             app.call('space', space=space2); app.call('select', tab=tab2)
             app.call('window-frame', frame=[260, 270, 1000, 700])
+            app.call('mouse', **{'from': [228, 300], 'to': [310, 300]})
             # Focus the older window last: creation order is not focus recency.
             app.call('window-focus', id=first, activate=True)
             app.call('select', tab=tab1)
@@ -69,6 +71,7 @@ def run(factory, results, tmp, harness, config):
             state = app.call('window-state')
             if restore:
                 check('restore_on_windows_frames_selection', len(after) == 2 and set(after) == set(before)
+                      and before[first]['sidebarWidth'] != before[second]['sidebarWidth']
                       and all(after[i]['frame'] == before[i]['frame']
                               and after[i]['sidebarWidth'] == before[i]['sidebarWidth']
                               and after[i]['space'] == before[i]['space']
