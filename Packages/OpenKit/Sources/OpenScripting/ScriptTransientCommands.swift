@@ -27,8 +27,11 @@ enum ScriptTransientTarget {
               let replacement = NSScriptCommandDescription(suiteName: original.suiteName,
                 commandName: original.commandName, dictionary: ["AppleEventClassCode": "core", "AppleEventCode": "setd",
                     "CommandClass": "ScriptSetCommand",
+                    "UnnamedArgument": ["Type": "NSScriptObjectSpecifier"],
                     "Arguments": ["Value": ["AppleEventCode": "data", "Type": "NSObject"]]]) else { return }
         registry.register(replacement)
+        NSLog("Open scripting set registration class=%@ arguments=%@", replacement.commandClassName,
+            replacement.argumentNames as NSArray)
     }
 }
 
