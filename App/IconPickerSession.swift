@@ -3,6 +3,15 @@ import OpenModel
 import OpenSpaceEditor
 
 extension EngineWebContentHostFactory {
+  func openDraftSpaceIconPicker(current: SpaceIcon?, anchor: CGRect,
+                                onPick: @escaping @MainActor (SpaceIcon?) -> Void) {
+    guard let window, controller?.spaceCreationController != nil, !isClosing else { return }
+    controller?.spaceCreationController?.themeEditor?.close()
+    iconPicker?.close()
+    let picker = IconPickerController(target: .space, current: current, window: window, anchor: anchor, onPick: onPick)
+    presentIconPicker(picker, space: focusedSpace?.id)
+  }
+
   @discardableResult
   func openSpaceIconPicker(_ id: SpaceID) -> Bool {
     guard let space = model.space(id: id), let controller, let window, !isClosing else { return false }

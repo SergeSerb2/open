@@ -688,6 +688,13 @@ buttons), each fading in and rising 6 pt over 0.2 s ease-out (constants
   undo stack is the form's local undo (Cmd+Z inside the form), discarded on
   cancel.
 
+Lead decision (2026-11-06): Name and inline Profile use normal macOS
+field-session typing history, separate from the form's theme/icon history.
+Native menu Undo uses the focused field's typing steps first, then the draft
+steps. Redo restores undone draft steps before the field's typing. Starting
+or ending a field session must never clear the draft history; AppKit may
+discard that field's typing history when its editing session ends.
+
 ### 6.4 Create
 
 1. `model.createSpace(title:profileID:icon:theme:at:moving:)` (§10.1), one
@@ -1185,7 +1192,7 @@ socket only, no desktop input.
 | A4 | Quit and relaunch: `theme-get` returns the same `style`; background pixel sample within ΔE00 1. |
 | A5 | `new-space` → type a name (`type`), Return → `spaces` lists it with the name, Profile, and style; undo removes it. |
 | A6 | Icon picker on a tab: pick an emoji; `tabs` shows `iconOverride`; relaunch keeps it. |
-| A7 | Change Profile from the Space menu shows the warning, confirm moves the Space (`spaces` Profile id changes). |
+| A7 | Change Profile from the Space menu and `change-profile` shows the warning; confirmation moves the Space in one step named "Change Profile". Native Cmd+Z restores the old Profile, and Shift+Cmd+Z reapplies it. Folder conversion Undo restores the complete node list, the folder's position and ordered children exactly once; Redo puts those children in the new Space's Today section. |
 
 ## 13. Implementation order (files + acceptance per step)
 
@@ -1255,7 +1262,7 @@ on both pages; the same editor in macOS Light.
 | 9 blend | 2026-11-06 | Section 4 child B: display-space underlay/fill composition and own-art denim/sand ported onto main `3ab71a04`. Editor 186/186; session2-pad 41/41 offscreen and real-window; input boundaries 26/26. All new blend and spatial gates have source-break proofs. Focused verifier 6/6 PASS: 3 frozen legacy PNGs unchanged, 13/13 sidebar tables byte-identical, CU5 2/2, sidebar-render PASS. Fresh M5 color/cost and proposed tolerance/art choices are in §17.5; final-head full verifier and App regression results are in the PR body. |
 | 5 | 2026-11-06 | `s4/theme-live`: real App menu/command/header/switcher entries, one panel per window, live sessions, shared undo/save and all E8 close triggers. Focused native E7/E8/B1 PASS; B1 main-thread p95 1.849 ms, wall p95 1.874 ms, load 30.90/26.89/19.20, 240 ticks with two matching windows, no new tiles/layout. Real-App close/idle and undo after close PASS; negative controls fail. Final full-gate table is in the PR. |
 | 6 | 2026-11-06 | Shared App icon picker for Spaces, tabs and folders; native Emoji/Icons pages, removal, search, categories, tones, keyboard selection and close cleanup. Unicode Emoji 17.0 is pinned and licensed; 3,944 fully-qualified sequences in 100,766 bytes, filtered once off the main thread for single-glyph AppleColorEmoji support on the running OS. I1: 19 picker rows, including a runtime glyph gate and break-and-revert negative proofs. `commands-dump`: missing/extra/different 0/0/0, same 11 allowed-missing rows. Real-App A6, Space and folder pick/relaunch flows are in e2e `space-editor`; final Release runs and regression receipts are in the Step 6 PR. Open-only Light/Dark renders are available; Arc visual calibration remains open. |
-| 7 | | |
+| 7 | 2026-11-06 | New Space sidebar page and C1 implemented. All five widths render in both appearances; Name-card 44→45 pt negative proof fails all ten geometry rows, restored C1 passes. Tab moves preserve Pinned/Today (lead decision, changes main’s Pinned-only helper); folder children use Today and the empty folder is removed atomically. Hidden rename uses Rename/Cancel; Profile picks use ChangeProfileRequest. Final App and regression receipts are recorded in the PR body. |
 | 8 (theme) | 2026-11-06 | Generic theme automation and `engine_e2e.py --only space-editor`: three final-build 33/33 PASS runs (`.re/s4-theme-live/ready-space-editor-{1,3,4}.{log,json}`). A1 checks panel geometry/rendering; A2 checks three windows; A3 compares the exact undo-registered style with the idle model and redo, plus style/knob undo and redo while open and after close; A4 preserves style and background pixels (ΔE00 0). E8 close triggers, one-save gesture and idle rows PASS. The merged Step 6 records icon/A6 work separately; New Space and A5/A7 remain separate work. Live 1x→2x transition is UNVERIFIED: only a 1x screen is exposed in this session. |
 | 9 | 2026-10-26 | §17: 29/29 session2-pad rows; color max ΔE00 1.034, preset raster max 1 pt, texture L* sd errors ≤0.042. Editor 172/172, including exact range/saturation/knob undo and redo. Break proofs: old laws fail 31 native and 26 capture rows; missing paired undo fails the existing redo-knob and new state-restoration rows; restored source passes. Merged focused build, space-legacy, space-editor, sidebar-render, and all 13 byte-identical sidebar tables PASS. F0069 legacy/diagnostic 2.38/2.29, legacy retained; F0139 editor-style diagnostic 0.84→1.89 reported below. Full verification and review-checklist receipts are in the PR body. Steps 5–8 remain deferred. |
 
