@@ -4,41 +4,58 @@ import OpenModel
 import OpenStore
 import Darwin
 
-/// The only deletion adapter that releases engine contexts. releaseContext is
-/// a page-close barrier, not proof of Chromium Profile destruction. Until the
-/// engine supplies that proof, a previously loaded directory waits for launch.
+/// Deletion waits for native Profile destruction before removing its folders.
+/// The pending list covers interrupted or failed cleanup only.
 @MainActor
 final class ProfileTeardown {
   unowned let app: AppDelegate
   private var loaded: [ProfileID: String] = [:]
+  private var unloaded: Set<ProfileID> = []
   init(app: AppDelegate) { self.app = app }
 
-  func didLoad(_ profile: Profile) { loaded[profile.id] = profile.dataDirectoryName }
+  func didLoad(_ profile: Profile) { didLoad(profileID: profile.id, directory: profile.dataDirectoryName) }
+  func didLoad(profileID: ProfileID, directory: String) { loaded[profileID] = directory }
   func wasLoaded(_ id: ProfileID) -> Bool { loaded[id] != nil }
 
-  func unload(profileID: ProfileID) async -> Bool {
-    guard let directory = loaded[profileID] else { return true }
+  func unload(profileID: ProfileID) async throws {
+    guard let directory = loaded[profileID], !unloaded.contains(profileID) else { return }
     for session in app.littleOpenCoordinator?.sessions.filter({ $0.profileID == profileID }) ?? [] {
       app.littleOpenCoordinator.close(sessionID: session.id, archiveReason: nil)
     }
-    for factory in app.hostFactories.values where !factory.isIncognito { factory.retireProfile(profileID, directory: directory) }
-    guard let context = OEEngine.shared.contexts.first(where: { $0.identifier == directory }) else { return true }
-    guard context !== OEEngine.shared.defaultContext else { return false }
-    await withCheckedContinuation { continuation in
-      OEEngine.shared.releaseContext(context) { continuation.resume() }
+    for controller in app.windowControllers where
+      app.hostFactories[controller.windowID]?.incognitoSession?.parent.id == profileID {
+      controller.window?.close()
     }
-    return true
+    for factory in app.hostFactories.values where !factory.isIncognito { factory.retireProfile(profileID, directory: directory) }
+    guard let context = OEEngine.shared.contexts.first(where: { $0.identifier == directory }),
+      context !== OEEngine.shared.defaultContext else {
+      throw Self.failure("The Profile context is unavailable for deletion.")
+    }
+    try await OEEngine.shared.deleteContext(context)
+    unloaded.insert(profileID)
   }
 
   func wipe(profileID: ProfileID, directory: String) async throws {
-    guard await unload(profileID: profileID) else { throw Self.failure("The Profile context could not be released.") }
+    // Journal before teardown so any engine or filesystem failure remains
+    // recoverable. Errors preserve all folders until a later safe launch.
+    try Self.enqueue(directory, directories: app.directories)
     await app.stores.flushHistory()
     app.archiveSink.flushAll()
-    // Queue first so an interrupted wipe is retried. Even an unloaded Profile
-    // needs a launch-time Local State edit: Chromium owns that file in-session.
-    try Self.enqueue(directory, directories: app.directories)
+    // An unopened Profile may still have native data/attributes from a prior
+    // launch. Load that context for Chromium's ordered metadata cleanup too.
+    if loaded[profileID] == nil,
+      FileManager.default.fileExists(atPath: app.directories.engineDirectory(dataDirectoryName: directory).path) {
+      guard app.engineReady, app.engine.result.layout == .engine,
+        EngineWebContentHostFactory.createRegularContext(
+          profileID: profileID, directory: directory, app: app) != nil else {
+        throw Self.failure("The Profile context is unavailable for deletion.")
+      }
+      loaded[profileID] = directory
+    }
+    try await unload(profileID: profileID)
     try Self.removeIfPresent(app.directories.profileDirectory(dataDirectoryName: directory))
-    if !wasLoaded(profileID) { try Self.wipeEngine(directory, directories: app.directories) }
+    try Self.wipeEngine(directory, directories: app.directories)
+    try Self.dequeue(directory, directories: app.directories)
   }
 
   private static func pendingURL(_ directories: ProfileDirectories) -> URL {
@@ -78,6 +95,11 @@ final class ProfileTeardown {
     let url = pendingURL(directories)
     try FileManager.default.createDirectory(at:url.deletingLastPathComponent(),withIntermediateDirectories:true,attributes:[.posixPermissions:0o700])
     try writeAtomically(data,to:url)
+  }
+  private static func dequeue(_ directory: String, directories: ProfileDirectories) throws {
+    let remaining = try pending(directories).filter { $0 != directory }
+    if remaining.isEmpty { try removeIfPresent(pendingURL(directories)) }
+    else { try writeAtomically(JSONEncoder().encode(remaining), to: pendingURL(directories)) }
   }
   private static func removeIfPresent(_ url: URL) throws {
     if FileManager.default.fileExists(atPath:url.path) {
