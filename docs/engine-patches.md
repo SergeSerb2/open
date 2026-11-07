@@ -355,6 +355,50 @@ patches and distribution SHA-256
 See the [P3 receipt](engine-spike/extensions-p3-receipt.md) and the PR's final
 regression/full-verification tables.
 
+### Local CRX completion (Section 10, 0704)
+
+0704 uses the next Section 10 number, but belongs to the **03xx extensions
+area**. It is an overlay-only change to `cef_extension_manager.h` and
+`open/browser/extensions/open_extension_manager.mm`; the CEF series/manifest
+record that ownership without adding an empty upstream patch. `engine-apply`
+generates `cef_install_local_crx`, the C API, wrappers and API hashes.
+
+The missing delegate error has a concrete upstream cause:
+`CrxInstaller::ReportFailureFromUIThread` calls
+`LoadErrorReporter::ReportError(error.message(), false)`
+(`extensions/browser/crx_installer.cc`). `ReportError` stores/logs the text;
+only `ReportLoadError` sends `Observer::OnLoadFailure`
+(`extensions/browser/load_error_reporter.cc`). Local CRX completion therefore
+uses the installer's result, rather than extending the unpacked-load delegate.
+
+`OEExtensionManager.installLocalCRX(_:completion:)` reports installed with its
+extension ID, user Cancel, or failure with Chromium's error text. The old
+page-based initiation selector remains a wrapper. No result is routed through
+the manager delegate, and the production Web Store path stays as before.
+
+Chromium 156 names the completion API `CrxInstaller::AddInstallerCallback`
+(`extensions/browser/crx_installer.h`), rather than the design's
+`set_installer_callback`. It posts a once callback with an optional
+`CrxInstallError` after the registry install or unpack failure. The manager
+retains at most 32 installers through this callback, erases each request before
+delivery, and fails pending requests once at context closure. Callers run on a
+later main-queue turn and can close their context safely. Only Chromium's
+`USER_CANCELED` detail maps to cancelled; `USER_ABORTED`, policy rejection and
+signature rejection map to failed. Messages are bounded to 65,536 UTF-16 units.
+
+The new selector needs no requesting page: Chromium's profile/native-window
+prompt constructor uses the manager's profile and the existing shell presenter.
+A supplied page in the old API must still belong to that profile. Neither path
+permits silent installation or an ephemeral profile.
+
+Real-App acceptance lives in `extensions_p3.py`: signed CRX -> installed + ID,
+corrupt RSA signature -> failed + `CRX_SIGNATURE_VERIFICATION_FAILED`, Cancel,
+main-thread delivery and exactly-one completion counts. Those rows and the
+drop-callback negative proof remain **BLOCKED** until the lead sends "M5 clear".
+The Section 14 import-queue rerun is a separate acceptance gate.
+The [off-screen receipt](engine-spike/extensions-local-crx-completion-blocked.md)
+records the distribution, completed checks, load tuples and blocked reruns.
+
 ## P4. Proprietary codecs and Widevine
 
 - Measured on stock CEF: H.264 `false`, AAC `false`, HEVC `false`; VP9, AV1, Opus `true` (results-features-alloy.json, `codecs`). Widevine EME works in stock CEF once Chromium's component updater has downloaded the CDM (final run: a Widevine stream played), and is unavailable until then.

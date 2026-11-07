@@ -55,6 +55,63 @@ def pack_probe(root, tmp, prefix="probe", icon_png=None):
     return str(crx)
 
 
+def local_crx_completion(app, results, tmp, root, wait_until):
+    """0704: real CRX verification and completion, independent of delegates."""
+    crx = pack_probe(root, tmp, "completion")
+    damaged = Path(tmp) / "completion-bad-signature.crx"
+    data = bytearray(Path(crx).read_bytes())
+    signature = (Path(tmp) / "completion-signature").read_bytes()
+    header_end = 12 + struct.unpack_from("<I", data, 8)[0]
+    offset = data.index(signature, 12, header_end)
+    data[offset] ^= 1  # Preserve the CRX header and ZIP; corrupt only RSA proof.
+    damaged.write_bytes(data)
+    pending = lambda: app.call("ext-prompt").get("pending")
+    def completions(request):
+        return [event for event in app.call("ext-prompt")["events"]
+                if event.get("event") == "localInstallComplete" and event.get("request") == request]
+    def installed(identifier):
+        return next((row for row in app.call("extensions")["installed"] if row["id"] == identifier), None)
+    identifier = None
+    try:
+        app.call("ext-manage", action="install-crx-completion", extension="0704-valid", path=crx)
+        prompt = wait_until(lambda: app.call("ext-prompt") if pending() else None, timeout=20)
+        if prompt:
+            identifier = prompt["extension"]
+            app.call("ext-prompt", answer="accept", twice=True)
+        valid = wait_until(lambda: completions("0704-valid"), timeout=20) or []
+        results["0704_installed_completion"] = {"ok": bool(prompt and len(valid) == 1
+            and valid[0]["result"] == "installed" and valid[0]["id"] == identifier
+            and not valid[0]["error"] and valid[0]["mainThread"] and installed(identifier)), "events": valid}
+        app.call("ext-manage", action="install-crx-completion", extension="0704-signature", path=str(damaged))
+        failed = wait_until(lambda: completions("0704-signature"), timeout=20) or []
+        results["0704_signature_failure_completion"] = {"ok": len(failed) == 1
+            and failed[0]["result"] == "failed" and not failed[0]["id"]
+            and "CRX_SIGNATURE_VERIFICATION_FAILED" in failed[0]["error"]
+            and failed[0]["mainThread"], "events": failed, "timedOut": not failed}
+        # A separate signed package avoids an update/re-enable prompt.
+        cancel_crx = pack_probe(root, tmp, "completion-cancel")
+        app.call("ext-manage", action="install-crx-completion", extension="0704-cancel", path=cancel_crx)
+        cancel_prompt = wait_until(lambda: app.call("ext-prompt") if pending() else None, timeout=20)
+        if cancel_prompt: app.call("ext-prompt", answer="cancel", twice=True)
+        cancelled = wait_until(lambda: completions("0704-cancel"), timeout=20) or []
+        results["0704_cancelled_completion"] = {"ok": bool(cancel_prompt and len(cancelled) == 1
+            and cancelled[0]["result"] == "cancelled" and not cancelled[0]["id"]
+            and not cancelled[0]["error"] and cancelled[0]["mainThread"]
+            and not installed(cancel_prompt["extension"])), "events": cancelled}
+        # Allow later UI turns to expose accidental duplicate completion calls.
+        time.sleep(1)
+        counts = {request: len(completions(request)) for request in
+                  ("0704-valid", "0704-signature", "0704-cancel")}
+        results["0704_completion_exactly_once"] = {"ok": all(count == 1 for count in counts.values()), "counts": counts}
+    finally:
+        if pending(): app.call("ext-prompt", answer="cancel")
+        if identifier and installed(identifier):
+            app.call("ext-manage", action="uninstall", extension=identifier)
+            if wait_until(pending, timeout=10): app.call("ext-prompt", answer="accept")
+            removed = wait_until(lambda: not installed(identifier), timeout=10)
+            results["0704_fixture_cleanup"] = {"ok": bool(removed)}
+
+
 def run(app, results, tmp, root, wait_until, new_tab):
     crx = pack_probe(root, tmp)
     pending = lambda: (lambda p: p if p.get("pending") else None)(app.call("ext-prompt"))
@@ -88,6 +145,7 @@ def run(app, results, tmp, root, wait_until, new_tab):
         app.call("ext-prompt", handler=True, clear=True)
         ready = wait_until(lambda: app.call("ext-commands").get("ready"), timeout=20)
         results["registry_ready"] = {"ok": bool(ready)}
+        local_crx_completion(app, results, tmp, root, wait_until)
         first = install()
         if not first:
             results["X1_local_install_prompt"] = {"ok": False, "reason": "no prompt for real signed CRX"}
