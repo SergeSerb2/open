@@ -89,6 +89,8 @@
       extensionAutomation.registerContexts()
       // App lifecycle commands remain available after the final window closes.
       switch cmd {
+      case "incognito-state": return try incognitoState(a)
+      case "incognito-screen": return try incognitoScreen(a)
       case "first-run": return try await runFirstRun(a)
       case "timing" where app.frontWindowController == nil:
         var marks = LaunchTiming.shared.report
@@ -667,7 +669,11 @@
 
       // Pages (any live web content).
       case "pages":
-        return OEEngine.shared.allWebContents.map { describe($0, in: w) }
+        return OEEngine.shared.allWebContents.filter { content in
+          a["private"] as? Bool == true || !app.hostFactories.values.contains {
+            $0.isIncognito && $0.incognitoSession?.context === content.context
+          }
+        }.map { describe($0, in: w) }
       case "eval":
         guard let js = a["js"] as? String else { throw Failure(message: "missing js") }
         // Through the OpenWeb protocol, as OpenKit features will call it.
@@ -1219,7 +1225,7 @@
 
     private func modelTab(_ a: [String: Any], _ w: EngineWebContentHostFactory) throws -> Tab {
       if let s = a["tab"] as? String {
-        guard let uuid = UUID(uuidString: s), let tab = app.model.tab(id: ItemID(rawValue: uuid)) else {
+        guard let uuid = UUID(uuidString: s), let tab = w.model.tab(id: ItemID(rawValue: uuid)) else {
           throw Failure(message: "no tab \(s)")
         }
         return tab
@@ -1266,7 +1272,7 @@
       let section: String
       if w.focusedProfile?.favorites.contains(where: { $0.id == tab.id }) == true {
         section = "favorites"
-      } else if app.model.isPinned(tabID: tab.id) {
+      } else if w.model.isPinned(tabID: tab.id) {
         section = "pinned"
       } else {
         section = "today"
@@ -1316,7 +1322,7 @@
       }
       let pageColor = w.hosts.values.first { $0.content === c }?.pageBackgroundColor
       return [
-        "identifier": c.identifier, "kind": kind, "live": c.isLive, "url": c.url?.absoluteString ?? "",
+        "identifier": c.identifier, "kind": kind, "live": c.isLive, "ephemeral": c.context.isEphemeral, "url": c.url?.absoluteString ?? "",
         "title": c.title, "loading": c.isLoading, "style": c.runtimeStyle == .chrome ? "chrome" : "alloy",
         "audible": c.isAudible, "muted": c.isMuted, "crash": c.crashState.rawValue, "fullscreen": c.isFullscreen,
         "favicon": c.favicon != nil, "context": c.context.identifier, "canGoBack": c.canGoBack,

@@ -22,7 +22,7 @@ final class AppSettingsActions: SettingsActions, LibraryActions, DownloadsProvid
     if let settingsStorage { return settingsStorage }
     let vm = SettingsViewModel(model: app.model, actions: self, defaults: .standard,
       root: app.directories.root, snapshot: app.snapshotStore,
-      focusedProfileID: app.frontWindowController.flatMap { app.hostFactories[$0.windowID]?.focusedProfile?.id })
+      focusedProfileID: app.frontStandardWindowController.flatMap { app.hostFactories[$0.windowID]?.focusedProfile?.id })
     vm.routingSnapshotProvider = { [unowned app] in app.linkExecutor.snapshot() }
     if !app.isFirstRun || app.firstRunSaved {
       if let store = app.stores.adBlock { vm.attach(adBlockStore: store) }
@@ -79,7 +79,7 @@ final class AppSettingsActions: SettingsActions, LibraryActions, DownloadsProvid
   func makeSpaceManagerView() -> NSView? {
     // Closing the last browser retains its model window for normal reopen.
     // Prefer a live browser, then that existing state; never create a window here.
-    let id = app.frontWindowController?.windowID ?? app.model.windows.first(where: { $0.style == .standard })?.id
+    let id = app.frontStandardWindowController?.windowID ?? app.model.windows.first(where: { $0.style == .standard })?.id
     guard let id, app.model.windows.contains(where: { $0.id == id }) else { spaceManager = nil; return nil }
     if let spaceManager, spaceManager.context.windowID == id { spaceManager.prepareForPresentation(); return spaceManager }
     let context = SidebarContext(model: app.model, windowID: id, previewPreferences: managerPreferences)
@@ -267,7 +267,7 @@ final class AppSettingsActions: SettingsActions, LibraryActions, DownloadsProvid
   }
   func openPreviewsSettings() {} // General owns its one sheet.
   func extensionShortcutConflicts(profileID: ProfileID) -> [ExtensionShortcutConflict] {
-    guard let factory = app.hostFactories.values.first,
+    guard let factory = app.hostFactories.values.first(where: { !$0.isIncognito }),
           let context = factory.context(for: profileID) else { return [] }
     return app.extensionPrompts.table(context.extensions).conflicts
   }
@@ -286,7 +286,7 @@ final class AppSettingsActions: SettingsActions, LibraryActions, DownloadsProvid
   func resetTranslatePrompts(profileID: ProfileID) -> String? { TranslatePreferences().reset(); return nil }
   func openURL(_ url: URL, profileID: ProfileID) {
     guard let space = app.model.spaces.first(where: { $0.profileID == profileID }),
-      let controller = app.frontWindowController ?? app.makeWindow(focusedSpaceID: space.id),
+      let controller = app.frontStandardWindowController ?? app.makeWindow(focusedSpaceID: space.id),
       let factory = app.hostFactories[controller.windowID] else { status("This Profile needs a Space before it can open a page."); return }
     app.focusWindow(controller.windowID, activate: true); factory.focus(space: space)
     if url.scheme == "chrome", url.host() == "extensions", url.query == nil, url.fragment == nil {
@@ -337,7 +337,7 @@ final class AppSettingsActions: SettingsActions, LibraryActions, DownloadsProvid
   func openHistoryItem(url: URL) { if let profileID = library?.historyProfileID { openURL(url, profileID: profileID) } }
   func flushHistoryWrites() async { await app.stores.flushHistory() }
   func viewSpace(id: SpaceID) {
-    guard let controller = app.frontWindowController ?? app.makeWindow(focusedSpaceID: id), let space = app.model.space(id: id), let factory = app.hostFactories[controller.windowID] else { return }
+    guard let controller = app.frontStandardWindowController ?? app.makeWindow(focusedSpaceID: id), let space = app.model.space(id: id), let factory = app.hostFactories[controller.windowID] else { return }
     app.focusWindow(controller.windowID, activate: true); factory.focus(space: space)
   }
 }

@@ -1,0 +1,57 @@
+{
+  "cleanup": {
+    "ok": true,
+    "processes": [
+      {
+        "forced": false,
+        "ok": true,
+        "owned_pids": [
+          41809,
+          41815,
+          41816,
+          41817,
+          41822,
+          41823,
+          41914
+        ],
+        "remaining_processes": [],
+        "reply": true,
+        "windows_after_quit": {
+          "count": 0,
+          "windows": []
+        },
+        "windows_before_quit": 2
+      }
+    ]
+  },
+  "config": "Debug",
+  "engine": {
+    "distributionCodeSHA256": "49529fd0e9fcab132dcd741c7276e9d1b7190a10cd62bf547673d40069771e66",
+    "distributionSHA256": "af4b3cc3ad1b42439b229d79c8f7a869b13b0d3165733fba6c023e202340d1a5",
+    "distributionUUID": "4C4C4483-5555-3144-A118-B2FC582D5923",
+    "embeddedCodeSHA256": "49529fd0e9fcab132dcd741c7276e9d1b7190a10cd62bf547673d40069771e66",
+    "embeddedSHA256": "52608c56cdff1ab875219e3d6896a147e51a4b533bbc533616d65b6c1317bc19",
+    "embeddedUUID": "4C4C4483-5555-3144-A118-B2FC582D5923",
+    "requiredSHA256": "",
+    "source": "fork",
+    "stamp": "fork /Users/serge/Developer/open-engine-s8-main/chromium_git/chromium/src/cef/binary_distrib/cef_binary_156.0.14+g4fa4ab5+chromium-156.0.8078.48_macosarm64_minimal 1793975938"
+  },
+  "incognito": {
+    "cookie_normal_absent_private": {
+      "ok": false
+    }
+  },
+  "interrupted_attempts": [],
+  "load": [
+    15.12646484375,
+    32.8828125,
+    45.60498046875
+  ],
+  "source": {
+    "clean": false,
+    "diffSHA256": "fea9fa806edd7684a7958daa0069d3817bd4c9e044f8ec69599b44cf1133fe14",
+    "head": "98350a07f42ff19abb1852869e00ba81d922e772"
+  },
+  "started": "2026-11-06 16:57:43",
+  "style": "alloy"
+}
