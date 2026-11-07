@@ -3,24 +3,25 @@
 Settings deletes a Profile after an exact typed-name confirmation. Delete
 Unused Profiles lists the captured unused set and requires `DELETE`.
 Default and assigned Profiles cannot be deleted. Model removal disables Undo
-registration and clears older Undo actions. The App releases any context,
-removes Open-owned data, and saves the snapshot synchronously.
+registration and clears older Undo actions. The App closes the Profile's
+Little Open and private windows, awaits native context deletion, removes its
+Open-owned, engine and cache folders, and saves the snapshot synchronously.
 
-`ProfileTeardown` owns release and pending cleanup. It records every
-non-default context loaded this launch. Loaded engine/cache directories wait
-for the next launch; never-loaded directories are removed immediately.
-Both paths queue Local State cleanup for launch. The journal is bounded at
-64 KiB, 1024 unique names, and 255 UTF-8 bytes per name. It rejects Default,
-path components, malformed JSON and oversized input. Atomic writes sync the
-file and parent before cleanup proceeds. Launch cleanup runs with the data
-root locked, before `OEEngine.start`, and removes `profile.info_cache`,
-`profile.last_used` and `profile.last_active_profiles` references. A cleanup
-failure stops startup before the engine can use partially cleaned data.
+`ProfileTeardown` records each non-default context loaded this launch. Its
+`unload` calls `OEEngine.deleteContext`, which waits for actual Chromium
+Profile destruction and committed Local State cleanup. A Profile with data
+from a prior launch is loaded for this native metadata cleanup too. Successful
+deletion removes loaded engine/cache directories in the current session.
 
-The engine's current `releaseContext` completion proves that pages closed.
-It does not prove Chromium Profile destruction. In-session deletion of
-previously loaded engine data remains deferred until the engine supplies
-that stronger barrier. No restart prompt is part of the shell flow.
+A synced `Profiles/.pending-wipe.json` journal covers interrupted or failed
+cleanup. The journal is bounded at 64 KiB, 1024 unique names, and 255 UTF-8
+bytes per name. It rejects Default, path components, malformed JSON and
+oversized input. Atomic writes sync the file and parent before cleanup.
+Recovery runs with the data root locked, before `OEEngine.start`, and removes
+remaining folders plus `profile.info_cache`, `profile.last_used` and
+`profile.last_active_profiles` references. A recovery failure stops startup
+before the engine can use partially cleaned data. Successful in-session
+native deletion needs no App-side Local State JSON edit.
 
 App bootstrap repairs missing Profile references before store preparation or
 host creation. Every `installModel` path enforces the same rule. Repairs are
@@ -73,19 +74,20 @@ source observations.
   has not been captured.
 - User-editable Profile icons and the destination for Profile pages without
   a Space are guesses. The shell follows the Section 10 lead's design.
-- These checks do not claim Chromium Profile-destruction completion or Arc
-  pixel parity for the new multi-Profile indicator. The existing
+- The native engine rows now prove Chromium Profile destruction. They do not
+  claim Arc pixel parity for the new multi-Profile indicator. The existing
   single-Profile sidebar baselines stay authoritative.
 
 ## Acceptance
 
 The real-App `profiles` suite includes missing-reference repair and saved
-relaunch, exact typed deletion, immediate Open-owned removal, deferred
-engine and Local State cleanup, never-loaded engine/cache removal, no Undo
+relaunch, exact typed deletion, immediate Open-owned/engine/cache removal,
+committed native Local State cleanup, never-loaded removal, no Undo
 restoration, same-name cookie isolation, bulk deletion, native indicators,
 the shared icon picker, and Passwords for a Profile without a Space.
 Settings preview renders both deletion states and the bulk dialog at 1x/2x.
-The merged Debug/Chrome runs pass Profiles 41/41 (27 shell rows), Sidebar
+The initial shell-only Debug/Chrome receipt (before 0701–0703) passed
+Profiles 41/41 (27 shell rows), Sidebar
 19 rows, Little Open 39/39, Features 19/19, Window 76 rows and Incognito
 26 rows. Sidebar's durability row is covered by Profiles. Window's two
 Release timing rows are skipped in Debug; its existing card-material row
