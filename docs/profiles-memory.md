@@ -14,9 +14,11 @@ installer and native consent sheets. Keys use `OEApplication.sendEvent`.
 The harness resets and restores its defaults, uses disposable data roots,
 and checks cleanup without a debugger or desktop input.
 
-Native App source was built after merging main `c5a7c4be` (ATC #214,
-sidebar resize #210 and window material #211). Harness-only corrections
-followed that build. Raw receipts are private in the primary checkout's
+Measurements below use the App built after merging main `c5a7c4be` (ATC
+#214, sidebar resize #210 and window material #211). Later integration
+merged main `94c7561c` (New Space, menu-key fixes and Code mode), rebuilt
+Debug and automation Release, and repeated the full gate and App suites.
+The subsequent `7b3ab45f` merge changes docs only. Raw receipts are private in the primary checkout's
 `.re/s10/profiles-lazy-ext/`; no user data or raw process inventories are
 committed here.
 
@@ -163,10 +165,32 @@ excluded from these measurements. No App change was needed.
 ## Validation and remaining evidence
 
 Debug App, automation Release App and OpenKit Release builds passed through
-`s10-heavy.sh`. Full `verify-all.sh --with-arc-data` passed **24/24**, with
-no FAIL or SKIP, after the main merge. Full-gate start load was
+`s10-heavy.sh`. The first full `verify-all.sh --with-arc-data` passed **24/24**,
+with no FAIL or SKIP, after the `c5a7c4be` merge. Full-gate start load was
 12.28/12.21/11.98; the command-bar CPU p95 was 5.10 ms against 8 ms and
-completion added 0.124 ms against 0.3 ms. No timing retry was needed.
+completion added 0.124 ms against 0.3 ms. No timing retry was needed in that run.
+
+After the `94c7561c` integration, both App configurations and the full
+OpenKit Release build passed again (zero build warnings/errors). The full
+gate recorded **22 PASS, 2 timing FAIL, no SKIP**. Its start load was
+52.23/54.60/39.37. All functional rows passed. The Section 10 lead's 20:18
+rule 4l makes timing misses under the sustained engine build non-blocking;
+these remain measured misses, with the existing limits unchanged.
+
+| Timing row | Measured | Existing limit | Load (1/5/15) |
+|---|---:|---:|---|
+| commandbar-render 151, cycle-based completion overhead | +0.410 ms (paired median +0.136 ms) | <=0.3 ms | 107.5/84.7/61.1 |
+| sitecontrol-render, 2,000-line CSS code highlight | 2.157 ms (+0.157 ms late) | <2 ms | 74.22/77.60/63.09 |
+
+Command-bar CPU p95 still passed at 7.69 ms against 8 ms; its CPU completion
+delta was +0.266 ms and maximum layout passes stayed one. Code highlighting
+processed at most 191 of 80,999 characters. The existing simple-editor
+diagnostic INFO row measured CPU p95 17.230 ms against 12 ms. A queued quiet
+command-bar rerun was canceled before any check started when rule 4l
+arrived; the functional suite load hold was also removed before it launched
+an App. No failed result was relabeled PASS.
+
+The following initial App regressions use the `c5a7c4be` build:
 
 | Required real-App suite | Config | PASS | Other rows | Cleanup |
 |---|---|---:|---|---|
@@ -187,7 +211,7 @@ removed so its final receipt also has clean provenance.
 
 `sidebar.durable_profile_storage` is the existing duplicate SKIP; the
 passing `profiles.durable_second_profile` checks the cookie across relaunch.
-The only two real `window` FAIL rows are the known main sidebar-startup
+The only two `window` FAIL rows in that initial receipt are the known main sidebar-startup
 budget misses, accepted by TANDEM §4a:
 
 | Launch median (five samples each) | Sidebar drawn | First contentful paint | Suite start load (1/5/15) |
@@ -199,6 +223,35 @@ Both stay within the lead's unchanged-main bounds (sidebar <=400 ms, paint
 <=700 ms). The original <=250 ms sidebar budget remains unmet. Metadata
 dictionaries (`launch_runs`, capture sample and snapshot-file inventory)
 are receipts, not additional failing checks.
+
+The integration reruns use the rebuilt `94c7561c` App; the later main merge
+is docs only:
+
+| Suite | New result | Cleanup | Start load (1/5/15) |
+|---|---|---|---|
+| extensions-ui | 71 PASS / existing X13 BLOCKED, including all 16 P10 rows | PASS | 99.47/68.01/52.08 |
+| extensions | 8 PASS | PASS | 76.52/77.55/66.61 |
+| actions | 26 PASS | PASS | 78.62/76.88/69.11 |
+| extensions-e2 | 26 PASS | PASS | 35.06/60.12/63.64 |
+| profiles | INTERRUPTED after three key-focus attempts | PASS | 24.70/43.78/55.89 |
+| littleopen / sidebar / window | DEFERRED after the foreground interruption | Not launched again | — |
+
+The first integrated `X17_manage_singleton` attempt counted zero tabs
+because its URL comparison omitted Chromium's committed trailing slash.
+The App already handles both forms. The corrected harness requires the
+same single selected tab after each of two commands and records both
+states. Its passing receipt shows that same ID across
+`chrome://extensions` to `chrome://extensions/`; the Work management lookup
+accepts precisely those two root forms too. The first failed attempt and
+its successful cleanup remain in `extensions-ui-integration-first.json`.
+
+Profiles' new attempt reported `active=false`, `keyWindow=0`, with
+`UserNotificationCenter` frontmost in all three attempts. Each owned App
+exited without forced termination, surviving processes or surviving
+windows. This is an external foreground interruption, not a product FAIL
+or a passing receipt. Further screen launches are deferred under the
+lead's general ruling for unavailable external evidence. The earlier
+complete native receipts above remain separate.
 
 Cmd+E's Site Control picker remains Section 12's `X13_picker BLOCKED`.
 Global OS shortcut delivery, packed permission-increase updates and the
