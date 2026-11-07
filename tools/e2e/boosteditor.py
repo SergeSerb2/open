@@ -542,6 +542,8 @@ def run(factory, results, tmp, env):
                     app.quit()
                 return dict(positive=app.quit_report.get("ok") is True,negative=caught,cleanup=app.quit_report)
             row("B19_failure_sheet_cleanup",b19)
+            if app and not app.closed:
+                app.quit()
             from boost_profile_retirement import run as profile_retirement
             profile_retirement(factory, results, tmp, env)
         finally:

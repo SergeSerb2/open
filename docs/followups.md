@@ -303,9 +303,8 @@ User-operated Arc captures are still needed for the editor layout and destinatio
   engine lane's Step 4R; filters can affect images/video/canvas.
 - Code mode is integrated from #203, including live CSS and document-bound JS
   reload state. Gallery stays disabled; P7 still blocks selector picking.
-- Incognito planning is available in the package. Private-window presenter
-  integration remains deferred (lead, 2026-11-06 16:12); private windows have
-  no persistent Boost store and receive no plan from this App adapter.
+- Private windows refuse Boosts. The App skips registration, script installation and live plans for OTR contexts; editor commands and Customize Page refuse. The same-parent Profile row and deliberate script-leak negative proof cover this boundary.
+- Profile deletion retires the registered Boost owner before folder removal. The store discards dirty state, cancels and drains writes, and stays closed for the process lifetime. B27 covers Settings delete → debounce → quit → relaunch with a deliberate disabled-retirement negative proof.
 
 ## Section 14: multi-profile import boundaries
 
