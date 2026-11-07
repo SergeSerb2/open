@@ -162,6 +162,57 @@ final class CreationScene: NSObject, NSWindowDelegate {
         folderScene.undo.redo()
         Checks.check(folderScene.model.spaces.last?.today.map(\.id) == moving && folderScene.model.node(id: folder) == nil,
                      "C1 folder conversion redo replays the transaction")
+        // The shipped form must not undo through a non-undoable Today sweep.
+        // Use the real model archiver after native Return, including the split
+        // collapse that changes the moved node's identity.
+        for convertingFolder in [true, false] {
+            let swept = try CreationScene(prepare: { model in
+                let source = model.spaces[0]
+                let a = model.newTab(in: source.id, url: URL(string: "https://example.invalid/expired")!)
+                let b = model.newTab(in: source.id, url: URL(string: "https://example.invalid/survivor")!)
+                guard let split = model.makeSplit(tabIDs: [a.id, b.id]) else { return .init() }
+                if convertingFolder,
+                   let folder = model.createFolder(in: .spacePinned(source.id), title: "Swept Split", withNodes: [split.id]) {
+                    return .init(moving: [split.id], placement: .today, removingEmptyFolder: folder.id)
+                }
+                return .init(moving: [split.id], placement: .today)
+            })
+            defer { swept.close() }
+            let model = swept.model, source = model.spaces[0]
+            guard let splitID = swept.controller.options.moving.first,
+                  let split = model.node(id: splitID)?.split, split.panes.count == 2 else {
+                throw CLIError(description: "C1 sweep fixture needs a two-pane split")
+            }
+            let expired = split.panes[0], survivor = split.panes[1]
+            let removedFolder = swept.controller.options.removingEmptyFolder
+            guard convertingFolder == (removedFolder != nil) else {
+                throw CLIError(description: "C1 sweep fixture folder conversion was not prepared")
+            }
+            swept.key(36, characters: "\r")
+            guard let created = model.spaces.last, created.id != source.id else {
+                throw CLIError(description: "C1 sweep fixture form did not create a Space")
+            }
+            swept.undo.disableUndoRegistration()
+            model.focusSpace(windowID: model.windows[0].id, spaceID: source.id)
+            swept.undo.enableUndoRegistration()
+            let now = Date()
+            for tab in model.index.values.compactMap(\.tab) { tab.lastActiveAt = now }
+            expired.lastActiveAt = now.addingTimeInterval(-13 * 3600)
+            for profile in model.profiles { profile.settings.autoArchiveAfter = .never }
+            model.profile(id: created.profileID)?.settings.autoArchiveAfter = .twelveHours
+            let count = model.archiveExpiredTabs(now: now)
+            let kind = convertingFolder ? "folder conversion" : "split move"
+            Checks.check(count == 1 && model.node(id: splitID) == nil && model.tab(id: expired.id) == nil
+                && created.today.map(\.id) == [survivor.id],
+                "C1 \(kind) real Today sweep dissolves the moved split")
+            let afterSweep = try encoder.encode(SnapshotMapper.dto(from: model))
+            swept.undo.undo()
+            let afterUndo = try encoder.encode(SnapshotMapper.dto(from: model))
+            Checks.check(afterUndo == afterSweep && model.tab(id: survivor.id) === survivor
+                && model.space(id: created.id) === created && model.tab(id: expired.id) == nil
+                && (removedFolder.map { model.node(id: $0) == nil } ?? true) && !swept.undo.canRedo,
+                "C1 \(kind) stale Undo refuses without losing the surviving tab or changing the snapshot")
+        }
         let refused = try CreationScene(options: .init(moving: [ItemID()]))
         defer { refused.close() }
         let refusedBefore = try encoder.encode(SnapshotMapper.dto(from: refused.model))

@@ -1932,6 +1932,7 @@ public final class BrowserModel {
         guard self.space(id: space.id) == nil, profile(id: space.profileID) != nil,
               canCreateSpace(at: i, moving: ids, removingEmptyFolder: folderID) else { return nil }
         let previousFocus = windows.map { ($0.id, $0.focusedSpaceID) }
+        let originalParents = ids.compactMap { parentByID[$0] }
         let folder = folderID.flatMap { index[$0]?.folder }
         let folderParent = folderID.flatMap { parentByID[$0] }
         let folderPosition = folderID.flatMap { id in folderParent.flatMap { position(of: id, in: $0) } }
@@ -1964,15 +1965,23 @@ public final class BrowserModel {
         let committedEvents = spaceCreationEvents ?? []; spaceCreationEvents = nil
         for event in committedEvents { emit(event) }
         let reverts = moves
+        let committedPinned = space.pinned.map(\.id), committedToday = space.today.map(\.id)
         return { model in
-            guard model.space(id: space.id) === space else { return false }
-            // A non-undoable Today sweep must never resurrect removed nodes.
+            // A Today sweep can dissolve a moved split into its surviving tab.
+            // Refuse stale Undo before restoring the folder or moving anything;
+            // removing the Space after a failed relocation would lose survivors.
+            guard model.space(id: space.id) === space,
+                  space.pinned.map(\.id) == committedPinned, space.today.map(\.id) == committedToday,
+                  zip(ids, destinations).allSatisfy({ model.index[$0.0] != nil && model.parentByID[$0.0] == $0.1 }),
+                  originalParents.allSatisfy({ parent in
+                      if let folderID, parent == .folder(folderID) { return true }
+                      return model.parentExists(parent)
+                  }) else { return false }
             if let folder, let folderParent, let folderPosition {
-                guard model.index[folder.id] == nil else { return false }
-                if case .folder(let parentID) = folderParent, model.index[parentID]?.folder == nil { return false }
+                guard model.index[folder.id] == nil, model.parentExists(folderParent) else { return false }
                 guard model.attach(.folder(folder), to: folderParent, at: folderPosition) != nil else { return false }
             }
-            for revert in reverts.reversed() { _ = revert(model) }
+            for revert in reverts.reversed() { guard revert(model) else { return false } }
             let focused = Set(model.windows.filter { $0.focusedSpaceID == space.id }.map(\.id))
             model.removeSpace(space.id)
             for (id, old) in previousFocus where focused.contains(id) && model.space(id: old) != nil {
