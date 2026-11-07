@@ -5,6 +5,7 @@ _cef_shutdown
 _cef_version_info
 # Open fork API (P1, cef/include/cef_tab_strip.h)
 _cef_tab_strip_create
+_cef_get_open_browser_activation_diagnostics
 # Open fork API: tab sleeping (memory fork; cef/include/cef_page_lifecycle.h,
 # cef/include/cef_navigation_history.h)
 _cef_set_page_frozen
@@ -27,3 +28,8 @@ _cef_simulate_notification_click
 _cef_set_website_color_scheme
 # Open fork API (media-pip EM-1b/EM-2/EM-3/EM-5, cef/include/cef_media_controller.h)
 _cef_media_controller_get_for_browser
+
+# P3 live per-profile extension manager (seen with nm in the built distribution).
+_cef_extension_manager_create
+# E12 omnibox session bridge (generated C API).
+_cef_open_omnibox_create

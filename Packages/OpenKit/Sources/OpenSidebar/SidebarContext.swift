@@ -4,6 +4,7 @@ import OpenDesign
 import OpenModel
 import OpenMedia
 import OpenStore
+import OpenExtensionsUI
 
 /// Shared state for every sidebar view: the model, the window it shows, and
 /// view-only state that is not part of the model (window active, command bar
@@ -13,6 +14,9 @@ import OpenStore
 public final class SidebarContext {
     public let model: BrowserModel
     public let windowID: WindowID
+    public let incognitoTitle: String?
+    public var isIncognito: Bool { incognitoTitle != nil }
+    public var extensionsUI: ExtensionsUIContext?
     /// App-wide store injected by the host; each sidebar observes its own stable window list.
     public var media: MediaSourceStore?
     /// Session download progress supplied by the App; no sidebar polling.
@@ -22,6 +26,9 @@ public final class SidebarContext {
     public var forcedMediaHover: SidebarMediaHover?
     public var mediaDrawers: Set<ItemID> = []
     public let selection = SidebarSelection()
+    /// Shared across every window; transient and never saved.
+    public var livePreviewSpaces: Set<SpaceID> { ThemePreviewRegistry.shared.livePreviewSpaces }
+    public func isLiveThemePreview(_ spaceID: SpaceID) -> Bool { livePreviewSpaces.contains(spaceID) }
     /// Preview/banner preferences; the App uses .standard, harnesses use a suite.
     @ObservationIgnored public let previewPreferences: UserDefaults
     @ObservationIgnored private var hoverPreviewStorage: HoverPreviewTracker?
@@ -99,9 +106,10 @@ public final class SidebarContext {
     @ObservationIgnored public var faviconProvider: (@MainActor (Tab) -> NSImage?)?
     @ObservationIgnored weak var sidebar: SidebarView?
 
-    public init(model: BrowserModel, windowID: WindowID, previewPreferences: UserDefaults = .standard) {
+    public init(model: BrowserModel, windowID: WindowID, previewPreferences: UserDefaults = .standard, incognitoTitle: String? = nil) {
         self.model = model
         self.windowID = windowID
+        self.incognitoTitle = incognitoTitle
         self.previewPreferences = previewPreferences
         selection.onChange = { [weak self] in
             guard let outline = self?.sidebar?.focusedOutline else { return }
@@ -210,7 +218,7 @@ public final class SidebarContext {
     }
 
     public func style(for space: Space) -> SpaceThemeStyle {
-        StyleCache.style(for: space.theme, system: systemAppearance)
+        isIncognito ? .incognito : StyleCache.style(for: space.theme, system: systemAppearance)
     }
 
     public func appearance(for space: Space) -> ContentAppearance {
@@ -219,7 +227,7 @@ public final class SidebarContext {
 
     /// Display title of a Space: untitled Spaces read "Space N" (1-based position).
     public func title(of space: Space) -> String {
-        model.displayTitle(for: space)
+        incognitoTitle ?? model.displayTitle(for: space)
     }
 
     @discardableResult

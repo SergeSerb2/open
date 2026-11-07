@@ -635,7 +635,7 @@ lives in `PeekPolicy.decision` (§2.3) so the CLI can check it (§9.2).
 | Never Peek | Opt+Cmd-click (goes to Little Open, R-§9.5 — check it **before** Peek), Cmd-click / middle-click (new tab, existing behavior), clicks with a `download` attribute, `javascript:` / non-http(s) URLs, same-page fragment links (`#…` with identical base URL). | — |
 
 Settings storage: two booleans in `UserDefaults`,
-`open.peek.otherSites` (default true) and `open.peek.shiftClick`
+`open.links.openPeekOtherSites` (default true) and `open.links.openPeekShiftClick`
 (default true), registered at launch like the routing plan's
 `open.links.*` keys (R-§10.4 pattern). The Links settings pane binds
 them later (designer-owned visuals); this milestone only reads them.
@@ -1295,7 +1295,7 @@ numbers only here — the same discipline as routing.md and sleep.md.
 | 7 | 2026-10-25 | PASS: V1; visible split/Peek/Little Open and minimized/PiP states; sleep-demo 105/105. |
 | 8 | 2026-10-25 | OUT OF SCOPE: App-target intake/default browser/global hotkey. |
 | 9 | 2026-10-25 | OUT OF SCOPE: real engine adapter. A1–A7 remain UNVERIFIED for the real engine. |
-| 10 | 2026-10-25 | Not requested as a separate step. Static/fake-host checks and render limits are recorded in docs/m4.md. |
+| 10 | 2026-11-06 | Split real-App `split` 40/40 ×3 consecutive Chrome Release runs: C1–C5, two/four pages, app-route focus/Esc, native divider movement, four-pane orientations, narrow equal scaling, close/separate selection, relaunch orientation/fractions/focus, E5 sleep/wake and real PNG. OpenFeatures retains dispatch. Idle zero; approved relative/25 ms switch gate PASS; sidebar: machine noise, not a branch regression (lead ruling; both identical-main controls retained). Target 16 ms remains open across tested heads and loads (earlier 7b490905-engine quiet run: 17.710 ms; current controlled split p95: 10.060 ms). Plus enablement and repeated chrome work fixed; eight parked-view cap; extra cached-ring 0.25 s animation removed. Full final verify table is in the PR; audit, samples and permitted destination-callback drag limit: `docs/split-app.md`. Peek/Little Open receipts remain separate. |
 | 4 / 7 / 9 — Peek in the App | 2026-11-05 | Section 9: real main audit and negative proofs, wrapper-only navigation policy, App Exit, native shown state and immediate shared visibility feed, native swipe indicator, Cmd+O Today-top placement, and Chrome history/scroll/form fallback. Full receipt and final checks: [s9-peek-receipt.md](s9-peek-receipt.md). No Chromium fork build or measured visual changes. |
 
 

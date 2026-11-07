@@ -3,6 +3,7 @@ import QuartzCore
 import OpenModel
 import OpenDesign
 import OpenBoosts
+import OpenExtensionsUI
 
 @MainActor
 public final class SiteControlController: NSObject, NSMenuDelegate {
@@ -14,6 +15,21 @@ public final class SiteControlController: NSObject, NSMenuDelegate {
     public var geometry: ((SiteControlAnchor) -> SiteControlGeometry?)?
     public var onDismiss: ((SiteControlDismissReason) -> Void)?
     public var onUnavailable: ((ItemID) -> Void)?
+    /// Optional until the App wiring step. Refresh explicitly on engine action events.
+    public var extensionsUIContext: ExtensionsUIContext? {
+        didSet {
+            view.panel.extensionsContext = extensionsUIContext
+            configureExtensions()
+            if isPresented { configureKeys(); layout() }
+        }
+    }
+    public func refreshExtensions() {
+        let restoreFocus = extensionsUIContext != nil && view.window?.firstResponder === view.panel.extensionsBody
+        view.panel.reloadExtensions(); configureKeys(); if isPresented { layout() }
+        // Removing/reinserting the document's section makes AppKit drop its responder.
+        // The shared body retains the selected ID across action updates.
+        if restoreFocus && isPresented { view.window?.makeFirstResponder(view.panel.extensionsBody) }
+    }
     public var onMenu: ((NSMenu,String?) -> Void)?
     public private(set) var preferredMenuItemTitle: String?
     private var activeMenu: NSMenu?
@@ -77,6 +93,23 @@ public final class SiteControlController: NSObject, NSMenuDelegate {
             self.refreshView(animated: true)
         }
     }
+    private func configureExtensions() {
+        guard extensionsUIContext != nil else { return }
+        view.panel.extensionsBody.onClose = { [weak self] in self?.dismiss(reason: .escape, animated: false) }
+        view.panel.extensionsBody.onUnhandledKey = { [weak self] in self?.handleKey($0) ?? false }
+        view.panel.extensionsBody.onIntent = { [weak self] intent in
+            guard let self, self.isPresented, let context = self.extensionsUIContext else { return }
+            switch intent {
+            case let .run(id, anchor):
+                self.dismiss(reason: .action, animated: false); context.run?(id, .menuEntry, anchor)
+            case let .togglePin(id): context.togglePin?(id)
+            case let .contextMenu(id, anchor, event): context.contextMenu?(id, anchor, event)
+            case .addExtension:
+                if let add = context.addExtension { self.dismiss(reason: .action, animated: false); add() }
+                else { self.view.panel.onAddExtension?() }
+            }
+        }
+    }
     isolated deinit { if let changeObserver { source.removeChangeObserver(changeObserver) } }
     public func toggle(anchor: SiteControlAnchor, tabID: ItemID, animated: Bool = true) {
         if isPresented && self.anchor == anchor && self.tabID == tabID { dismiss(reason: .anchor, animated: animated) }
@@ -86,15 +119,19 @@ public final class SiteControlController: NSObject, NSMenuDelegate {
         guard let snapshot = source.snapshot(for: tabID), geometry?(anchor) != nil else { reportUnavailable(tabID); return }
         if isPresented && self.anchor != anchor { dismiss(reason: .anchor,animated: false) }
         if !isPresented { previousResponder = view.window?.firstResponder }
-        self.anchor = anchor; self.tabID = tabID; self.mode = mode
+        self.anchor = anchor; self.tabID = tabID
+        self.mode = mode == .extensionPicker && extensionsUIContext?.actions.isEmpty == true ? .standard : mode
+        if extensionsUIContext != nil { view.panel.extensionsBody.pickerMode = false }
         presentationGeneration += 1
         isPresented = true; view.isHidden = false; view.isActive = true
         view.panel.showsReload = false
-        view.panel.apply(snapshot); configureKeys(); layout()
+        view.panel.apply(snapshot)
+        if extensionsUIContext != nil { view.panel.reloadExtensions() }
+        configureKeys(); layout()
         guard isPresented else { return }
         unavailableTabs.remove(tabID)
         view.window?.makeFirstResponder(view)
-        if mode == .extensionPicker { view.panel.focusExtensionPickerItem() }
+        if self.mode == .extensionPicker { view.panel.focusExtensionPickerItem() }
         animateOpen(animated)
     }
     public func layout() { layout(preservingStructureMotion: false) }
@@ -166,6 +203,15 @@ public final class SiteControlController: NSObject, NSMenuDelegate {
         guard !controls.isEmpty else { return false }
         let current = controls.firstIndex { view.window?.firstResponder === $0 }
         if event.keyCode == 48 {
+            let backwards = event.modifierFlags.contains(.shift)
+            if view.panel.extensionsContext != nil, let section = controls.firstIndex(where: { $0.controlID == "section.extensions" }) {
+                if view.window?.firstResponder === view.panel.extensionsBody {
+                    view.panel.focus(controls[min(controls.count - 1, section + (backwards ? 0 : 1))]); return true
+                }
+                if current == section && !backwards || current == section + 1 && backwards {
+                    view.panel.focusExtensionPickerItem(); return true
+                }
+            }
             let delta = event.modifierFlags.contains(.shift) ? -1 : 1
             let index = current.map { ($0 + delta + controls.count) % controls.count } ?? (delta > 0 ? 0 : controls.count - 1)
             view.panel.focus(controls[index]); return true
@@ -199,6 +245,9 @@ public final class SiteControlController: NSObject, NSMenuDelegate {
         guard let tabID else { return }
         guard let snapshot = source.snapshot(for: tabID) else { reportUnavailable(tabID); return }
         let focused = view.window?.firstResponder as? SiteControlButton
+        // apply() rebuilds the document and reinserts the shared extensions body, which makes
+        // AppKit drop its responder (as in refreshExtensions). The body keeps its focused ID.
+        let extensionsFocused = extensionsUIContext != nil && view.window?.firstResponder === view.panel.extensionsBody
         let oldHeight = view.panel.frame.height
         let structure = view.panel.captureStructure(extra: [view.panelShadow])
         CATransaction.begin(); CATransaction.setDisableActions(true)
@@ -208,6 +257,8 @@ public final class SiteControlController: NSObject, NSMenuDelegate {
             if let control = view.panel.focusableControls.first(where: { $0.controlID == focused.controlID }) {
                 view.panel.focus(control,keyboard: focused.showsKeyboardFocus)
             } else { view.window?.makeFirstResponder(view) }
+        } else if extensionsFocused, view.panel.extensionsBody.superview != nil {
+            view.window?.makeFirstResponder(view.panel.extensionsBody)
         }
         view.prepareAnimationAnchor()
         if animated,oldHeight != view.panel.frame.height {

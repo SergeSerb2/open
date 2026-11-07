@@ -23,6 +23,7 @@
 #include "chrome/browser/tab_contents/tab_util.h"
 #include "chrome/browser/ui/browser.h"
 #include "chrome/browser/ui/browser_window/public/create_browser_window.h"
+#include "chrome/browser/ui/browser_window/public/global_browser_collection.h"
 #include "chrome/browser/ui/tabs/tab_enums.h"
 #include "chrome/browser/ui/tabs/tab_strip_model.h"
 #include "components/sessions/content/session_tab_helper.h"
@@ -34,6 +35,7 @@
 #include "extensions/browser/extension_action_manager.h"
 #include "extensions/browser/extension_registry.h"
 #include "open/browser/extensions/open_extensions_toolbar.h"
+#include "open/browser/extensions/open_extension_window_hooks.h"
 #include "open/browser/tab_strip/hidden_browser.h"
 #include "open/browser/tab_strip/tab_groups.h"
 #include "open/browser/tab_strip/open_browser_window.h"
@@ -58,6 +60,63 @@ OpenTabStrip::OpenTabStrip(CefRefPtr<CefRequestContextImpl> request_context,
       request_context_(request_context),
       handler_(handler) {
   Strips()[id_] = this;
+  GetExtensionWindowHooks().create = &OpenTabStrip::CreateExtensionWindow;
+}
+
+BrowserWindowInterface* OpenTabStrip::CreateExtensionWindow(Profile* profile,
+    bool popup, const gfx::Rect& frame, const std::string& extension_id,
+    const std::vector<GURL>& urls, bool focused) {
+  OpenTabStrip* parent = nullptr;
+  // Prefer the last active standard Open window, even while its extension
+  // popup is key. Window selection intentionally follows activation history.
+  GlobalBrowserCollection::GetInstance()->ForEach([&](BrowserWindowInterface* browser) {
+    auto* candidate = FromBrowser(browser);
+    if (!candidate || candidate->closed_ || candidate->extension_window_ ||
+        candidate->GetProfile() != profile || !candidate->handler_) return true;
+    parent = candidate;
+    return false;
+  }, BrowserCollection::Order::kActivation);
+  if (!parent) return nullptr;
+  CefRefPtr<OpenTabStrip> strip = parent;
+  if (popup) {
+    strip = new OpenTabStrip(parent->request_context_, parent->handler_);
+    strip->extension_window_ = true;
+    if (!strip->EnsureBrowser()) return nullptr;
+    gfx::Rect initial = frame;
+    if (initial.IsEmpty()) {
+      initial = parent->window_->GetBounds();
+      initial.ClampToCenteredSize(gfx::Size(400, 600));
+    }
+    strip->window_->SetInitialBounds(initial);
+    // Establish only the new bridge/handler. The public open event follows
+    // OnTabCreated, outside this API call and all TabStripModel observers.
+    parent->handler_->OnExtensionWindowCreated(parent, strip,
+        CefRect(frame.x(), frame.y(), frame.width(), frame.height()), extension_id);
+  }
+  const std::vector<GURL> blank{GURL("about:blank")};
+  for (const auto& url : urls.empty() ? blank : urls) {
+    CefRefPtr<CefClient> client;
+    CefBrowserSettings settings;
+    CefRefPtr<CefDictionaryValue> extra;
+    strip->handler_->OnBeforeTabCreated(strip, url.spec(), client, settings, extra);
+    auto browser = strip->CreateTab(client, url.spec(), settings, extra, -1, false);
+    auto* contents = strip->ContentsFor(browser);
+    if (contents) strip->PostRequest(Request::kCreated, contents,
+        strip->browser_->tab_strip_model()->GetIndexOfWebContents(contents), true);
+    else if (popup) strip->RequestClose();
+  }
+  if (popup) strip->RequestFrame(gfx::Rect(), focused);
+  else if (focused) strip->window_->Show();
+  return strip->browser_;
+}
+
+void OpenTabStrip::RequestFrame(const gfx::Rect& frame, bool focused) {
+  if (!extension_window_ || closed_ || !handler_) return;
+  CEF_POST_TASK(CEF_UIT, base::BindOnce([](base::WeakPtr<OpenTabStrip> self,
+      gfx::Rect frame, bool focused) {
+    if (self && !self->closed_ && self->handler_) self->handler_->OnExtensionWindowFrameRequested(
+        self.get(), CefRect(frame.x(), frame.y(), frame.width(), frame.height()), focused);
+  }, weak_ptr_factory_.GetWeakPtr(), frame, focused));
 }
 
 OpenTabStrip::~OpenTabStrip() {
@@ -605,7 +664,7 @@ Browser* OpenTabStrip::EnsureBrowser() {
     return nullptr;
   }
 
-  BrowserWindowCreateParams chrome_params(BrowserWindowInterface::TYPE_NORMAL,
+  BrowserWindowCreateParams chrome_params(extension_window_ ? BrowserWindowInterface::TYPE_POPUP : BrowserWindowInterface::TYPE_NORMAL,
                                           profile,
                                           /*from_user_gesture=*/false);
   // Open restores its own windows; Chrome's session service must not.
@@ -640,6 +699,9 @@ Browser* OpenTabStrip::EnsureBrowser() {
 void OpenTabStrip::OnBrowserDidClose(BrowserWindowInterface* browser) {
   if (browser != browser_.get()) {
     return;
+  }
+  if (window_) {
+    window_->OnBrowserClosing();
   }
   // Chrome deletes the Browser (and its window) on the next turn.
   const bool had_actions = toolbar_ && toolbar_->IsReady();
@@ -681,15 +743,26 @@ void OpenTabStrip::PostRequest(Request request,
   }
   // Deliver after the TabStripModel notification unwinds: the embedder
   // answers with UpdateTab/ActivateTab, and TabStripModel is not re-entrant.
+  base::WeakPtr<content::WebContents> previous, next;
+  if (request == Request::kMove && browser_) {
+    auto* model = browser_->tab_strip_model();
+    if (index > 0 && index <= model->count())
+      previous = model->GetWebContentsAt(index - 1)->GetWeakPtr();
+    if (index >= 0 && index + 1 < model->count())
+      next = model->GetWebContentsAt(index + 1)->GetWeakPtr();
+  }
   CEF_POST_TASK(CEF_UIT, base::BindOnce(&OpenTabStrip::DeliverRequest,
                                         weak_ptr_factory_.GetWeakPtr(), request,
-                                        contents->GetWeakPtr(), index, flag));
+                                        contents->GetWeakPtr(), index, flag,
+                                        previous, next));
 }
 
 void OpenTabStrip::DeliverRequest(Request request,
                                   base::WeakPtr<content::WebContents> contents,
                                   int index,
-                                  bool flag) {
+                                  bool flag,
+                                  base::WeakPtr<content::WebContents> previous,
+                                  base::WeakPtr<content::WebContents> next) {
   if (!handler_ || !contents || closed_) {
     return;
   }
@@ -715,7 +788,9 @@ void OpenTabStrip::DeliverRequest(Request request,
       handler_->OnTabActivateRequested(self, host.get());
       break;
     case Request::kMove:
-      handler_->OnTabMoveRequested(self, host.get(), index);
+      handler_->OnTabMoveRequested(self, host.get(), index,
+          previous ? ChromeBrowserHostImpl::GetBrowserForContents(previous.get()) : nullptr,
+          next ? ChromeBrowserHostImpl::GetBrowserForContents(next.get()) : nullptr);
       break;
     case Request::kPin:
       handler_->OnTabPinRequested(self, host.get(), flag);

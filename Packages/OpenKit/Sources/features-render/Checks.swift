@@ -178,9 +178,9 @@ enum FeatureChecks {
         check(FeatureSite.shouldPeek(source: pinned.url, target: pinned.url, pinned: false, flags: .shift, defaults: defaults), "P1 Today Shift opens Peek")
         check(!FeatureSite.shouldPeek(source: pinned.url, target: URL(string: "https://other.org")!, pinned: true, flags: [.option, .command], defaults: defaults), "P1 Opt+Cmd excluded before Peek (Step 8 intake deferred)")
         check(!FeatureSite.shouldPeek(source: pinned.url, target: URL(string: pinned.url.absoluteString + "#section")!, pinned: true, flags: .shift, defaults: defaults), "P1 fragment never Peeks")
-        defaults.set(false, forKey: "open.peek.otherSites"); defaults.set(false, forKey: "open.peek.shiftClick")
+        defaults.set(false, forKey: "open.links.openPeekOtherSites"); defaults.set(false, forKey: "open.links.openPeekShiftClick")
         check(!FeatureSite.shouldPeek(source: pinned.url, target: URL(string: "https://other.org")!, pinned: true, flags: .shift, defaults: defaults), "P1 toggles off navigate")
-        defaults.set(true, forKey: "open.peek.otherSites"); defaults.set(true, forKey: "open.peek.shiftClick")
+        defaults.set(true, forKey: "open.links.openPeekOtherSites"); defaults.set(true, forKey: "open.links.openPeekShiftClick")
         let favorite = model.newTab(in: space.id, url: URL(string: "https://favorite.example.com")!, title: "Favorite")
         _ = model.addFavorite(tabID: favorite.id, to: space.profileID); favorite.live.sleepPhase = .live
         // A favorite's Peek is visible even when the Space selection is another node.
@@ -348,6 +348,7 @@ enum FeatureChecks {
         try await ToastChecks.run { check($0, $1) }
         try await SwipeChecks.run { check($0, $1) }
         try await LittleOpenChecks.run { condition, label in check(condition, label) }
+        SaveSheetScenes.check { check($0, $1) }
         print("features-render check: \(passed) passed, \(failed) failed")
         if failed > 0 { throw CLIError(description: "\(failed) feature scenarios failed") }
     }

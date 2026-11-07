@@ -137,7 +137,7 @@ public enum CommandRegistry {
                           defaultShortcuts: [KeyboardShortcut(key: "f", modifiers: [.command, .option])],
                           enabledKey: EnabledKey.currentTab),
         CommandDefinition(id: "use-selection-to-find", title: "Use Selection to Find", menuPath: ["Edit", "Find"],
-                          defaultShortcuts: [.cmd("e")], scope: .webContent),
+                          scope: .webContent),
         CommandDefinition(id: "jump-to-selection", title: "Jump to Selection", menuPath: ["Edit", "Find"],
                           defaultShortcuts: [.cmd("j")], scope: .webContent),
         CommandDefinition(id: "emoji-and-symbols", title: "Emoji & Symbols", menuPath: ["Edit"],
@@ -287,6 +287,9 @@ public enum CommandRegistry {
     // MARK: - Extensions, Window, Help
 
     static let extensionsMenu: [CommandDefinition] = [
+        CommandDefinition(id: "open-extensions-picker", title: "Open Extensions", menuPath: ["Extensions"],
+                          defaultShortcuts: [.cmd("e")], isCustomizable: true,
+                          aliases: ["Extensions picker", "Pinned extensions", "Run extension"]),
         CommandDefinition(id: "manage-extensions", title: "Manage Extensions…", menuPath: ["Extensions"], aliases: ["Extensions"]),
         CommandDefinition(id: "add-extension", title: "Add Extension…", menuPath: ["Extensions"], aliases: ["Chrome Web Store"]),
     ]
@@ -376,6 +379,11 @@ public enum CommandRegistry {
     // MARK: - Code-only commands (no menu item; keys live in code, not in the nib)
 
     static let codeOnly: [CommandDefinition] = [
+        CommandDefinition(id: "change-space-icon", title: "Change Space Icon…", aliases: ["Space Icon", "Change Icon", "Emoji"]),
+        // Runtime App menus only, like dynamic window rows; the RE menu dump stays static.
+        CommandDefinition(id: "show-little-open-windows", title: "Show Little Open Windows"),
+        CommandDefinition(id: "close-little-open-windows", title: "Close Little Open Windows"),
+        CommandDefinition(id: "extension-shortcuts", title: "Extension Shortcuts"),
         CommandDefinition(id: "add-to-favorites", title: "Add to Favorites",
                           enabledKey: EnabledKey.currentTabNotFavorite, aliases: ["Favorite", "Move to Favorites"]),
         CommandDefinition(id: "remove-from-favorites", title: "Remove from Favorites",
@@ -388,7 +396,7 @@ public enum CommandRegistry {
         CommandDefinition(id: "search-tabs", title: "Search Tabs", isCustomizable: true, aliases: ["Tabs"]),
         CommandDefinition(id: "mute-all-tabs", title: "Mute All Tabs", aliases: ["Mute"]),
         CommandDefinition(id: "unmute-all-tabs", title: "Unmute All Tabs", aliases: ["Unmute"]),
-        CommandDefinition(id: "air-traffic-control", title: "Air Traffic Control", aliases: ["Link Routing"]),
+        CommandDefinition(id: "air-traffic-control", title: "Air Traffic Control", aliases: ["Link Routing", "Link Preferences", "Air Traffic Controller"]),
         CommandDefinition(id: "manage-passwords", title: "Manage Passwords", aliases: ["Passwords"]),
         CommandDefinition(id: "search-settings", title: "Search Settings",
                           aliases: ["Manage Search Settings", "Search Engine", "Default Search Engine"]),

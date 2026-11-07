@@ -151,44 +151,83 @@ public final class ArchiveStore: ArchiveSink {
         queue.sync {}
     }
 
+    /// One queued batch lookup, ordered after manual archive writes. Scan only
+    /// UUID keys, retaining at most the candidate set, with no payload decoding
+    /// or SQL bind-count ceiling. Each input row is bounded to 36 bytes.
+    public func existingIDs(in candidates: Set<ItemID>) async throws -> Set<ItemID> {
+        guard !candidates.isEmpty else { return [] }
+        return try await withCheckedThrowingContinuation { continuation in
+            queue.async { [self] in
+                do {
+                    try openOnQueue()
+                    guard let db, let statement = db.prepare("SELECT id FROM archived_tabs WHERE length(CAST(id AS BLOB)) = 36") else {
+                        throw archiveFailure()
+                    }
+                    defer { sqlite3_finalize(statement) }
+                    var found = Set<ItemID>()
+                    while true {
+                        let status = sqlite3_step(statement)
+                        if status == SQLITE_DONE { break }
+                        guard status == SQLITE_ROW else { throw archiveFailure() }
+                        if let key = db.columnText(statement, 0), let uuid = UUID(uuidString: key) {
+                            let id = ItemID(rawValue: uuid)
+                            if candidates.contains(id) { found.insert(id) }
+                        }
+                    }
+                    continuation.resume(returning: found)
+                } catch { continuation.resume(throwing: error) }
+            }
+        }
+    }
+
     /// Stores imported archive records. A record whose ID is already stored
     /// counts as a duplicate and keeps the stored row. This makes re-import
     /// idempotent by Arc item ID (the importer maps Arc IDs to stable Open IDs).
     public func importRecords(_ records: [ArchivedTabRecord]) async -> (inserted: Int, duplicates: Int) {
+        (try? await importRecords(records, checking: true)) ?? (0, 0)
+    }
+
+    /// App import needs a checked result: an unavailable store is a failure,
+    /// never a duplicate. The entire Profile batch commits or rolls back.
+    public func importRecords(_ records: [ArchivedTabRecord], checking: Bool) async throws -> (inserted: Int, duplicates: Int) {
         guard !records.isEmpty else { return (0, 0) }
-        return await withCheckedContinuation { continuation in
-            queue.async { [weak self] in
-                guard let self else { continuation.resume(returning: (0, records.count)); return }
-                try? self.openOnQueue()
-                guard let db = self.db else { continuation.resume(returning: (0, records.count)); return }
-                var inserted = 0
-                var duplicates = 0
-                db.exec("BEGIN IMMEDIATE")
-                let check = db.prepare("SELECT 1 FROM archived_tabs WHERE id = ? LIMIT 1")
-                let insert = db.prepare("INSERT INTO archived_tabs(id,url,title,space_id,profile_id,archived_at,reason,original_location,payload,kind) VALUES(?,?,?,?,?,?,?,?,?,?)")
-                for record in records {
-                    let key = record.id.rawValue.uuidString
-                    db.bindText(check, 1, key)
-                    let exists = sqlite3_step(check) == SQLITE_ROW
-                    sqlite3_reset(check)
-                    if exists { duplicates += 1; continue }
-                    db.bindText(insert, 1, key)
-                    db.bindText(insert, 2, record.url.absoluteString)
-                    db.bindText(insert, 3, record.title)
-                    db.bindText(insert, 4, record.spaceID?.rawValue.uuidString)
-                    db.bindText(insert, 5, record.profileID?.rawValue.uuidString)
-                    db.bindDouble(insert, 6, record.archivedAt.timeIntervalSince1970)
-                    db.bindText(insert, 7, record.reason.rawValue)
-                    db.bindText(insert, 8, record.originalLocation)
-                    db.bindText(insert, 9, record.payloadJSON)
-                    db.bindText(insert, 10, record.kind.rawValue)
-                    if sqlite3_step(insert) == SQLITE_DONE { inserted += 1 } else { duplicates += 1 }
-                    sqlite3_reset(insert)
-                }
-                sqlite3_finalize(check)
-                sqlite3_finalize(insert)
-                db.exec("COMMIT")
-                continuation.resume(returning: (inserted, duplicates))
+        return try await withCheckedThrowingContinuation { continuation in
+            queue.async { [self] in
+                do {
+                    try openOnQueue()
+                    guard let db else { throw archiveFailure() }
+                    guard db.exec("BEGIN IMMEDIATE") else { throw archiveFailure() }
+                    var committed = false
+                    defer { if !committed { db.exec("ROLLBACK") } }
+                    guard let check = db.prepare("SELECT 1 FROM archived_tabs WHERE id = ? LIMIT 1") else { throw archiveFailure() }
+                    defer { sqlite3_finalize(check) }
+                    guard let insert = db.prepare("INSERT INTO archived_tabs(id,url,title,space_id,profile_id,archived_at,reason,original_location,payload,kind) VALUES(?,?,?,?,?,?,?,?,?,?)") else { throw archiveFailure() }
+                    defer { sqlite3_finalize(insert) }
+                    var inserted = 0, duplicates = 0
+                    for record in records {
+                        let key = record.id.rawValue.uuidString
+                        db.bindText(check, 1, key)
+                        let status = sqlite3_step(check)
+                        sqlite3_reset(check)
+                        if status == SQLITE_ROW { duplicates += 1; continue }
+                        guard status == SQLITE_DONE else { throw archiveFailure() }
+                        db.bindText(insert, 1, key)
+                        db.bindText(insert, 2, record.url.absoluteString)
+                        db.bindText(insert, 3, record.title)
+                        db.bindText(insert, 4, record.spaceID?.rawValue.uuidString)
+                        db.bindText(insert, 5, record.profileID?.rawValue.uuidString)
+                        db.bindDouble(insert, 6, record.archivedAt.timeIntervalSince1970)
+                        db.bindText(insert, 7, record.reason.rawValue)
+                        db.bindText(insert, 8, record.originalLocation)
+                        db.bindText(insert, 9, record.payloadJSON)
+                        db.bindText(insert, 10, record.kind.rawValue)
+                        guard sqlite3_step(insert) == SQLITE_DONE else { throw archiveFailure() }
+                        inserted += 1; sqlite3_reset(insert)
+                    }
+                    guard db.exec("COMMIT") else { throw archiveFailure() }
+                    committed = true
+                    continuation.resume(returning: (inserted, duplicates))
+                } catch { continuation.resume(throwing: error) }
             }
         }
     }

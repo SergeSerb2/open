@@ -11,36 +11,84 @@ enum MainMenu {
     let factory = factoryOverride ?? owner ?? (NSApp.keyWindow == nil ? app.frontWindowController.flatMap { app.hostFactories[$0.windowID] } : nil)
     let dispatcher: any CommandDispatcher
     if let controller = factory?.controller { dispatcher = controller } else { dispatcher = app }
-    return MenuBuilder.buildMainMenu(dispatcher: dispatcher,
-      spaces: app.model.spaces.map { SpaceMenuEntry(id: $0.id.description, title: app.model.displayTitle(for: $0)) },
+    let menu = MenuBuilder.buildMainMenu(dispatcher: dispatcher,
+      spaces: (factory?.model ?? app.model).spaces.map { SpaceMenuEntry(id: $0.id.description, title: (factory?.model ?? app.model).displayTitle(for: $0)) },
       tabs: (factory.map { f in f.numberedItems.map { TabMenuEntry(id: $0.description, title: f.numberedTitle($0)) } } ?? []),
       overrides: app.keyBindings, switchToNinth: UserDefaults.standard.bool(forKey: "open.shortcuts.switchToNinthEnabled"))
+    menu.items.first { $0.submenu?.title == "Extensions" }?.submenu?.delegate = app.extensionsMainMenu
+    if let windowMenu = menu.items.first(where: { $0.title == "Window" })?.submenu { app.appendLittleOpenMenuItems(to: windowMenu, sessions: true) }
+    #if DEBUG || OPEN_AUTOMATION
+    if let help = menu.items.first(where: { $0.title == "Help" })?.submenu,
+      let troubleshooting = help.items.first(where: { $0.title == "Troubleshooting" })?.submenu {
+      let archive = ClosureMenuItem(title: "Archive Expired Little Open Windows Now") { [weak app] in
+        _ = app?.littleOpenCoordinator.archiveExpired(now: Date().addingTimeInterval(31 * 24 * 3600))
+        app?.archiveSink.flushAll()
+      }
+      archive.identifier = NSUserInterfaceItemIdentifier("archive-expired-little-open-now")
+      troubleshooting.addItem(archive)
+    }
+    #endif
+    return menu
   }
   static func targetWindowCommands(_ target: EngineWebContentHostFactory?) { NSApp.mainMenu = build(factoryOverride: target) }
   static func performReservedShortcut(_ event: NSEvent) -> Bool {
     guard event.type == .keyDown, let app = NSApp.delegate as? AppDelegate else { return false }
+    if let sheet = event.window as? SavePromptSheet, sheet.isVisible {
+      if event.modifierFlags.contains(.command), ["w", "t", "l"].contains(event.charactersIgnoringModifiers ?? "") { return true }
+      // The sheet's NSPanel/default button owns Return, Esc and Cmd-., before
+      // the browser's reserved key router can consume them.
+      return false
+    }
+    if (Array(app.hostFactories.values) + app.littleOpenHosts.values.compactMap(\.owner))
+      .contains(where: { $0.pageChrome.dialogs.blocksBrowserShortcut(event) }) { return true }
     app.prepareCommandServices()
+    // Preserve the initiating timestamp even if Carbon/menu delivery was delayed.
+    // Pointer and programmatic menu actions call performCommand without a key stamp.
+    let littleContext = RoutingContext(isAppActive: NSApp.isActive, isTextFocused: false)
+    if case .browserCommand(let id)? = app.fallbackKeyboard.route(event: event, context: littleContext, overrides: app.keyBindings),
+      ["new-little-open-window", "little-open-global"].contains(id),
+      app.isCommandEnabled(id, enabledKey: CommandRegistry.byID[id]?.enabledKey ?? EnabledKey.always) {
+      app.noteLaunchWindowInput(event.window ?? NSApp.keyWindow)
+      app.performCommand(id, keyDownTimestamp: event.timestamp)
+      return true
+    }
+    if app.handleLittleOpenKey(event) { return true }
+    if event.charactersIgnoringModifiers == ",", event.modifierFlags.intersection(.deviceIndependentFlagsMask) == .command,
+       app.settingsShortcutCaptured { return true }
+    if let factory = app.littleOpenExtensionFactory(window: event.window ?? NSApp.keyWindow),
+      let browser = factory.focusedBrowser,
+      app.extensionPrompts.table(browser.context.extensions).handle(event, factory: factory) { return true }
     if let window = event.window, let factory = app.factory(forKeyWindow: window) {
+      factory.findKeyRequestedAt = event.timestamp
+      defer { factory.findKeyRequestedAt = nil }
       return factory.controller?.handleKeyDown(event) == true
     }
     let context = RoutingContext(isAppActive: NSApp.isActive,
       isTextFocused: NSApp.keyWindow?.firstResponder is NSTextView || NSApp.keyWindow?.firstResponder is NSTextField)
     guard case .browserCommand(let id)? = app.fallbackKeyboard.route(event: event, context: context, overrides: app.keyBindings),
           app.isCommandEnabled(id, enabledKey: CommandRegistry.byID[id]?.enabledKey ?? EnabledKey.always) else { return false }
-    app.performCommand(id); return true
+    app.performCommand(id, keyDownTimestamp: event.timestamp); return true
   }
 }
 
 @MainActor
 enum AppCommand {
   static let helpURL = URL(string: "https://github.com/SergeSerb2/open/blob/main/docs/commands.md")!
+  static func helpURL(for id: String) -> URL {
+    switch id {
+    case "getting-started": URL(string: "https://github.com/SergeSerb2/open#readme")!
+    case "release-notes": URL(string: "https://github.com/SergeSerb2/open/releases")!
+    case "contact-team": URL(string: "https://github.com/SergeSerb2/open/issues/new")!
+    default: helpURL
+    }
+  }
   /// Settings ▸ Advanced "Show full URL when Toolbar is enabled" (CC-37).
   static let showFullURLKey = "open.advanced.showFullURLWithToolbar"
-  static let featureIDs: Set<String> = ["add-split-view", "close-split-pane", "expand-current-split", "separate-from-split-view", "next-split-pane", "previous-split-pane", "open-in-current-space"]
+  static let featureIDs: Set<String> = ["edit-theme", "add-split-view", "close-split-pane", "expand-current-split", "separate-from-split-view", "next-split-pane", "previous-split-pane", "open-in-current-space"]
   static func canonicalID(_ id: String) -> String {
     ["reveal-tab-in-sidebar": "reveal-current-tab", "keyboard-shortcuts": "keyboard-shortcuts-edu"][id] ?? id
   }
-  static let implemented: Set<String> = ["exit-modal", "new-tab", "open-command-bar", "search-tabs", "search-actions", "new-window", "blank-window", "archive-tab", "restore-last-closed-tab", "pin-unpin-tab", "pin-tab", "unpin-tab", "duplicate-tab", "rename-tab", "reset-tab", "replace-pinned-url", "clear-unpinned-tabs", "next-tab", "previous-tab", "cycle-tab-forward", "cycle-tab-backward", "tab-switcher-forward", "tab-switcher-backward", "next-space", "previous-space", "new-space", "new-folder", "focus-space", "reload", "force-reload", "stop-loading", "go-back", "go-forward", "zoom-in", "zoom-out", "zoom-actual-size", "print", "save-page-as", "share-page", "copy-url", "copy-url-markdown", "copy-url-quote", "developer-tools", "javascript-console", "view-source", "inspect-elements", "toggle-sidebar", "toggle-toolbar", "reveal-current-tab", "expand-pinned-section", "collapse-pinned-section", "settings", "search-settings", "air-traffic-control", "import-from-browser", "set-default-browser", "check-for-updates", "view-archive", "view-history", "view-downloads", "view-library", "view-media", "view-boosts", "manage-extensions", "add-extension", "new-little-open-window", "little-open-global", "help-center", "keyboard-shortcuts-edu", "getting-started", "release-notes", "contact-team", "expand-all-folders", "collapse-all-folders", "add-to-favorites", "remove-from-favorites", "mute-all-tabs", "unmute-all-tabs", "reset-all-tabs-in-space", "manage-spaces", "rename-space", "change-profile", "clear-archive", "capture-page", "capture-full-page", "capture-portrait"]
+  static let implemented: Set<String> = ["new-incognito-window", "peek-email", "exit-modal", "new-tab", "open-command-bar", "search-tabs", "search-actions", "new-window", "blank-window", "archive-tab", "restore-last-closed-tab", "pin-unpin-tab", "pin-tab", "unpin-tab", "duplicate-tab", "rename-tab", "reset-tab", "replace-pinned-url", "clear-unpinned-tabs", "next-tab", "previous-tab", "cycle-tab-forward", "cycle-tab-backward", "tab-switcher-forward", "tab-switcher-backward", "next-space", "previous-space", "new-space", "new-folder", "new-profile", "focus-space", "reload", "force-reload", "stop-loading", "go-back", "go-forward", "zoom-in", "zoom-out", "zoom-actual-size", "print", "save-page-as", "share-page", "copy-url", "copy-url-markdown", "copy-url-quote", "developer-tools", "javascript-console", "view-source", "inspect-elements", "toggle-sidebar", "toggle-toolbar", "reveal-current-tab", "expand-pinned-section", "collapse-pinned-section", "settings", "search-settings", "air-traffic-control", "import-from-browser", "set-default-browser", "check-for-updates", "view-archive", "view-history", "view-downloads", "view-library", "view-media", "view-boosts", "manage-passwords", "manage-extensions", "add-extension", "extension-shortcuts", "open-extensions-picker", "new-little-open-window", "little-open-global", "help-center", "keyboard-shortcuts-edu", "getting-started", "release-notes", "contact-team", "expand-all-folders", "collapse-all-folders", "add-to-favorites", "remove-from-favorites", "mute-all-tabs", "unmute-all-tabs", "reset-all-tabs-in-space", "manage-spaces", "rename-space", "change-space-icon", "change-profile", "clear-archive", "capture-page", "capture-full-page", "capture-portrait"]
 }
 
 import OpenEngine
@@ -64,12 +112,18 @@ extension EngineWebContentHostFactory {
     guard let context = selectionCommandContext(for: id) else { return nil }
     guard context.isSelectionCommandEnabled(id) else { return false }
     let result = context.performSelectionCommand(id)
-    if result { app.scheduleSave(); app.scheduleMenuRebuild() }
+    if result { scheduleSave(); app.scheduleMenuRebuild() }
     return result
   }
 
   func isAppCommandEnabled(_ original: String, enabledKey: String? = nil, payload: String? = nil) -> Bool {
     let id = AppCommand.canonicalID(original)
+    if isIncognito, ["pin-unpin-tab", "pin-tab", "unpin-tab", "add-to-favorites", "remove-from-favorites", "restore-last-closed-tab", "new-space", "new-folder", "new-profile", "rename-space", "change-space-icon", "change-profile", "clear-archive", "edit-theme", "manage-spaces", "view-library", "view-archive", "view-history", "view-downloads", "view-boosts", "manage-passwords", "new-little-open-window"].contains(id) { return false }
+    if id == "settings", app.settingsShortcutCaptured { return false }
+    if ["find", "find-next", "find-previous", "find-and-replace", "use-selection-to-find", "jump-to-selection"].contains(id) { return selectedContent != nil }
+    if id == "peek-email" { return controller != nil && peekEmailTab != nil }
+    // Post-v1: Join Meeting needs calendar live data (lead decision S2 on live-data sources).
+    if id == "join-meeting" { return false }
     if id == "exit-modal" {
       return window === NSApp.keyWindow && windowState.style == .standard && controller?.canExitModal == true
     }
@@ -81,7 +135,7 @@ extension EngineWebContentHostFactory {
     }
     guard AppCommand.implemented.contains(id) || id == "go-to-last-tab" || id.hasPrefix("go-to-tab-") || id.hasPrefix("go-to-space-") else { return false }
     if id == "go-to-last-tab" { return !numberedItems.isEmpty }
-    if ["rename-space", "change-profile", "clear-archive"].contains(id) {
+    if ["rename-space", "change-space-icon", "change-profile", "clear-archive"].contains(id) {
       return !isClosing && controller != nil && window?.isVisible == true && window?.attachedSheet == nil
         && focusedSpace != nil && spaceProfileMenu == nil
     }
@@ -130,6 +184,16 @@ extension EngineWebContentHostFactory {
   @discardableResult
   func performAppCommand(_ original: String, payload: String? = nil) -> Bool {
     let id = AppCommand.canonicalID(original)
+    #if OPEN_AUTOMATION
+    AutomationShortcutTrace.record(id)
+    #endif
+    if isIncognito && !isAppCommandEnabled(id, payload: payload) { return false }
+    // Find owns its pane even when AppKit's field editor implements the native selector.
+    if let tag = ["find": 1, "find-next": 2, "find-previous": 3, "find-and-replace": 12, "use-selection-to-find": 7][id] {
+      guard selectedContent != nil else { return false }
+      ensureFindController().perform(tag: tag); return true
+    }
+    if id == "jump-to-selection", selectedContent != nil { ensureFindController().jumpToSelection(); return true }
     // A Find bar keeps Esc even when the Exit menu is disabled (no Peek/split).
     if id == "exit-modal", window === NSApp.keyWindow, windowState.style == .standard,
        dismissFindForExit() { return true }
@@ -148,6 +212,8 @@ extension EngineWebContentHostFactory {
       selectNumberedItem(payload.flatMap(UUID.init(uuidString:)).map { ItemID(rawValue: $0) } ?? item); return true
     }
     switch id {
+    case "change-space-icon": return focusedSpace.map { openSpaceIconPicker($0.id) } ?? false
+    case "peek-email": return peekEmail()
     case "exit-modal": return controller?.exitModal() == true
     case "new-tab": newTab(nil)
     case "open-command-bar": focusAddressBar(nil)
@@ -196,7 +262,7 @@ extension EngineWebContentHostFactory {
     // docs/commands.md lists all four entries with “—”.
     case "rename-space":
       guard let controller else { return false }
-      if windowState.sidebarMode == .hidden { controller.toggleSidebar() }
+      if windowState.sidebarMode == .hidden { return showRenameSpaceDialog() }
       controller.sidebar.layoutSubtreeIfNeeded()
       controller.sidebar.beginRename(nodeID: nil)
     case "change-profile":
@@ -206,7 +272,7 @@ extension EngineWebContentHostFactory {
       return showSpaceProfileMenu()
     case "clear-archive":
       app.settingsPresenter.requestClearArchive()
-    case "new-space": if let profile = focusedProfile { focus(space: model.createSpace(title: "Space", profileID: profile.id)) }
+    case "new-space": return controller?.beginSpaceCreation() == true
     case "new-folder": if let space = focusedSpace { _ = model.createFolder(in: .spacePinned(space.id)) }
     case "reload": selectedContent?.reload()
     case "force-reload": selectedContent?.reloadIgnoringCache()
@@ -227,7 +293,23 @@ extension EngineWebContentHostFactory {
     case "toggle-toolbar": return controller?.toggleToolbar() != nil
     case "reveal-current-tab": if let id = selectedTab?.id { if windowState.sidebarMode == .hidden { controller?.toggleSidebar() }; controller?.sidebar.reveal(nodeID: id); window?.makeFirstResponder(controller?.sidebar.focusedOutline) }
     case "expand-pinned-section", "collapse-pinned-section": if let space = focusedSpace { model.setPinnedSectionCollapsed(spaceID: space.id, collapsed: id == "collapse-pinned-section") }
-    case "manage-extensions", "add-extension": openExtensionsPage(nil)
+    case "manage-passwords":
+      guard let space = focusedSpace, openAutofillPage(.passwords, in: space) else { return false }
+    case "manage-extensions", "extension-shortcuts":
+      let url = URL(string: id == "manage-extensions" ? "chrome://extensions" : "chrome://extensions/shortcuts")!
+      if let space = focusedSpace, let tab = flattened(space.pinned + space.today).first(where: {
+        // WebUI commits add a trailing slash to the root URL. Compare the same page.
+        $0.url.scheme == url.scheme && $0.url.host() == url.host()
+          && $0.url.path.trimmingCharacters(in: CharacterSet(charactersIn: "/")) == url.path.trimmingCharacters(in: CharacterSet(charactersIn: "/"))
+          && $0.url.query == url.query
+      }) {
+        selectTabForCommand(tab.id, spaceID: space.id)
+      } else { _ = openNewTab(url: url, background: false) }
+    case "add-extension": _ = openNewTab(url: URL(string: "https://chromewebstore.google.com/category/extensions")!, background: false)
+    case "open-extensions-picker":
+      // S6 App step: this factory has no reachable SiteControlController entry point yet.
+      // The SCC integration supplies the §3.10 anchor and .extensionPicker presentation.
+      NSSound.beep()
     case "expand-all-folders", "collapse-all-folders":
       // The key window's focused Space only; one undo step (completion §3.4).
       if let space = focusedSpace { _ = model.setAllFoldersExpanded(spaceID: space.id, expanded: id == "expand-all-folders") }
@@ -242,7 +324,7 @@ extension EngineWebContentHostFactory {
       }
     default: app.performCommand(id)
     }
-    app.scheduleSave(); app.scheduleMenuRebuild(); return true
+    scheduleSave(); app.scheduleMenuRebuild(); return true
   }
   private func savePage() {
     guard !isClosing, app.engineReady, !app.terminationRequested,

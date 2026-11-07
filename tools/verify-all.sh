@@ -12,7 +12,7 @@ QUICK=0
 ONLY=
 ARC=0
 KEEP=0
-NAMES='commands-demo roundtrip space-legacy space-editor space-pad-compare suggest-check commands-dump route favicons media-demo sleep-demo adblock-perf adblock-catalog profiles settings-preview sidebar-render sidebar-compare commandbar-render features-render sitecontrol-render boosts import-arc'
+NAMES='commands-demo roundtrip space-legacy space-editor space-pad-compare suggest-check commands-dump route favicons media-demo sleep-demo adblock-perf adblock-catalog profiles settings-preview sidebar-render sidebar-compare commandbar-render features-render extensions-render sitecontrol-render boosts import-arc verify-secrets-fixture'
 
 usage() {
     cat <<EOF
@@ -150,7 +150,7 @@ available() {
         space-editor)
             [ -f "$BIN/space-editor-render" ] || { echo 'space-editor-render target does not exist'; return 1; }
             ;;
-        commands-dump|sidebar-render|commandbar-render|features-render|sitecontrol-render|settings-preview)
+        commands-dump|sidebar-render|commandbar-render|features-render|extensions-render|sitecontrol-render|settings-preview)
             [ -f "$BIN/$1" ] || { echo "target $1 does not exist"; return 1; }
             ;;
         boosts)

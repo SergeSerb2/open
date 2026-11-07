@@ -430,6 +430,12 @@ class OENotificationListCallback : public CefNotificationListCallback {
   return self;
 }
 
+- (void)dealloc {
+  // A presenter may retain the manager after this context goes away. Its
+  // CEF profile/observers must still close with the owning context.
+  [_extensions oe_contextClosed];
+}
+
 - (CefRefPtr<CefRequestContext>)oe_requestContext {
   return _context;
 }
@@ -449,7 +455,18 @@ class OENotificationListCallback : public CefNotificationListCallback {
 - (void)oe_contextInitialized {
   _ready = YES;
   // Notification clicks reach the delegate (page-platform EP-6).
-  CefSetOpenNotificationHandler(_context, new OENotificationHandler(self));
+  // Read the App-supplied configuration, not raw process arguments. Normal
+  // Release Open never installs these switches in its configuration.
+  NSArray<NSString*>* switches = OEEngine.shared.configuration.additionalSwitches;
+  const BOOL automation = [switches containsObject:@"--open-automation"];
+  if (automation && [switches containsObject:@"--open-automation-skip-macos-notifications"]) {
+    // The notification observer constructs Chromium's display service, whose
+    // macOS dispatcher force-starts the Alerts helper even without delivery.
+    fprintf(stderr, "OpenEngine: automation macOS notification setup skipped\n");
+  } else {
+    if (automation) fprintf(stderr, "OpenEngine: automation macOS notification setup reached\n");
+    CefSetOpenNotificationHandler(_context, new OENotificationHandler(self));
+  }
   NSArray<dispatch_block_t>* blocks = [_whenReady copy];
   [_whenReady removeAllObjects];
   for (dispatch_block_t b in blocks) {

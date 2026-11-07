@@ -186,8 +186,8 @@ final class SpacePageView: NSView, NSOutlineViewDataSource, NSOutlineViewDelegat
 
     func computeRoot() -> [AnyObject] {
         var r: [AnyObject] = [spacer]
-        if !space.isPinnedCollapsed { r += space.pinned.map(\.object) }
-        if !space.today.isEmpty { r.append(divider) }
+        if !context.isIncognito, !space.isPinnedCollapsed { r += space.pinned.map(\.object) }
+        if !context.isIncognito, !space.today.isEmpty { r.append(divider) }
         r.append(newTab)
         r += space.today.map(\.object)
         return r
@@ -757,7 +757,7 @@ final class SpacePageView: NSView, NSOutlineViewDataSource, NSOutlineViewDelegat
         case let t as Tab: return context.model.isPinned(tabID: t.id) ? menus.pinnedTab(t) : menus.todayTab(t)
         case let f as Folder: return menus.folder(f)
         case let s as Split: return menus.split(s)
-        default: return menus.space(space)
+        default: return context.isIncognito ? menus.emptyIncognito() : menus.space(space)
         }
     }
 
@@ -1148,13 +1148,16 @@ final class SpaceHeaderView: NSView {
     private let title = TextLabel()
     var displayedTitle: String { title.text() }
     private let icon = SpaceIconView()
+    var iconFrameInWindow: CGRect { icon.convert(icon.bounds, to: nil) }
     let chevron = PlateButton(glyph: .disclosureDown)
     let more = PlateButton(glyph: .spaceMore)
+    let profileIndicator: ProfileIndicatorButton
     var pointerInside = false { didSet { if pointerInside != oldValue { needsDisplay = true; needsLayout = true } } }
 
     init(context: SidebarContext, space: Space) {
         self.context = context
         self.space = space
+        profileIndicator = ProfileIndicatorButton(context:context,space:space)
         super.init(frame: .zero)
         wantsLayer = true
         layerContentsRedrawPolicy = .onSetNeedsDisplay
@@ -1163,6 +1166,7 @@ final class SpaceHeaderView: NSView {
         layer?.addSublayer(fill)
         icon.space = space
         icon.context = context
+        if context.isIncognito { icon.setAccessibilityElement(true); icon.setAccessibilityRole(.image); icon.setAccessibilityLabel("eyeglasses") }
         title.font = Typography.spaceTitle.font
         title.baseline = SpaceListMetrics.headerTitleBaselineOffset
         title.inset = SpaceListMetrics.headerTextInset
@@ -1175,9 +1179,10 @@ final class SpaceHeaderView: NSView {
         chevron.action = { [unowned context, space] in context.send(.setPinnedCollapsed(space: space.id, collapsed: !space.isPinnedCollapsed)) }
         more.glyphTint = { _ in SidebarRole.spaceTitle.nsColor }
         more.menuProvider = { [weak self] in self?.page.map { $0.menus.space($0.space) } }
+        profileIndicator.menuProvider = { [weak self] in self?.page.map { $0.menus.profile($0.space) } }
         chevron.context = context
         more.context = context
-        addSubview(icon); addSubview(title); addSubview(chevron); addSubview(more)
+        addSubview(icon); addSubview(title); addSubview(chevron); addSubview(more); addSubview(profileIndicator)
     }
 
     @available(*, unavailable) required init?(coder: NSCoder) { fatalError() }
@@ -1211,23 +1216,31 @@ final class SpaceHeaderView: NSView {
         CATransaction.commit()
         icon.frame = m.headerIconFrame
         chevron.frame = m.headerIconFrame
-        icon.isHidden = hovered
-        chevron.isHidden = !hovered
+        icon.isHidden = hovered && !context.isIncognito
+        chevron.isHidden = !hovered || context.isIncognito
         chevron.glyphView.glyph = space.isPinnedCollapsed ? .disclosureRight : .disclosureDown
         let s = m.headerMoreSize
         more.frame = CGRect(x: w - m.headerMoreTrailing - s, y: (m.headerHeight - s) / 2, width: s, height: s)
-        more.isHidden = !hovered
-        let right = hovered ? more.frame.minX - 2 : w - 17
+        more.isHidden = !hovered || context.isIncognito
+        var right = hovered ? more.frame.minX - 2 : w - 17
+        let hasProfiles = tracked({ !context.isIncognito && context.model.profiles.count > 1 }) { [weak self] in self?.needsLayout=true }
+        profileIndicator.isHidden = !hasProfiles
+        if hasProfiles {
+            let size = ProfileIndicatorMetrics.hitSize
+            profileIndicator.frame = CGRect(x:right-size,y:(m.headerHeight-size)/2,width:size,height:size)
+            right -= size + ProfileIndicatorMetrics.gap
+        }
         title.frame = CGRect(x: m.headerTitleX, y: m.headerTitleY, width: max(0, right - m.headerTitleX), height: 18)
     }
 
-    override func menu(for event: NSEvent) -> NSMenu? { page.map { $0.menus.space($0.space) } }
+    override func menu(for event: NSEvent) -> NSMenu? { context.isIncognito ? nil : page.map { $0.menus.space($0.space) } }
 
     override func mouseDown(with event: NSEvent) {
         if event.clickCount == 2 { beginRename() }
     }
 
     func beginRename() {
+        guard !context.isIncognito else { return }
         context.suppressPreviews(.rename, true)
         let field = RenameField(frame: title.frame.insetBy(dx: -2, dy: -1))
         field.stringValue = context.title(of: space)

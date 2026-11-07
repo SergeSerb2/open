@@ -3,6 +3,7 @@ import ImageIO
 import OpenModel
 import OpenBoosts
 import OpenAdBlock
+import OpenDesign
 
 public struct BoostScopeChoice: Sendable, Equatable {
     public let title: String
@@ -39,6 +40,62 @@ public final class BoostEditorSession {
     private var sampleTask: Task<Double?, Never>?
     private var sampleGeneration = 0
     private var deleted = false
+    /// The exact configured delays of pending native edits; cleared when flushed.
+    public private(set) var pendingCodeSaveDelays: [BoostCodeLanguage: TimeInterval] = [:]
+    private var codeWork: [BoostCodeLanguage: DispatchWorkItem] = [:]
+    private var codeBefore: [BoostCodeLanguage: Boost] = [:]
+    private var codeDrafts: [BoostCodeLanguage: String] = [:]
+    public private(set) var devToolsVisible = false
+    public var showsJSNotice: Bool { !(codeDrafts[.js] ?? boost.js).isEmpty && !defaults.bool(forKey: "open.boosts.hasDismissedJSNotice") }
+    public var needsJSReload: Bool { boost.js != (host.loadedJS(boostID: boost.id,tabID: context.tabID) ?? "") }
+    public func code(_ language: BoostCodeLanguage) -> String { codeDrafts[language] ?? (language == .css ? boost.css : boost.js) }
+    public func editCode(_ text: String,language: BoostCodeLanguage) {
+        guard isEditable else { return }
+        if codeBefore[language] == nil { codeBefore[language] = boost }
+        let noticeBefore = showsJSNotice
+        codeDrafts[language] = text;codeWork[language]?.cancel()
+        let work = DispatchWorkItem { [weak self] in MainActor.assumeIsolated { self?.flushCode(language) } }
+        codeWork[language] = work
+        let delay = language == .css ? BoostEditorMetrics.cssSaveDelay : BoostEditorMetrics.jsSaveDelay
+        pendingCodeSaveDelays[language] = delay
+        DispatchQueue.main.asyncAfter(deadline: .now()+delay,execute: work)
+        if noticeBefore != showsJSNotice { onChange?() }
+    }
+    public func flushCode(_ language: BoostCodeLanguage? = nil) {
+        for kind in language.map({ [$0] }) ?? [.css,.js] {
+            codeWork.removeValue(forKey: kind)?.cancel();pendingCodeSaveDelays.removeValue(forKey: kind)
+            guard let text = codeDrafts.removeValue(forKey: kind),isEditable else { continue }
+            if kind == .css { boost.css = text } else { boost.js = text }
+            boost = store.upsert(boost)
+            if kind == .css { host.refresh(profile: context.profileID) }
+        }
+        onChange?()
+    }
+    /// Text undo stays native while focused. Leaving the field records one
+    /// whole-Boost checkpoint, as the simple editor's Undo button expects.
+    public func endCodeEditing(_ language: BoostCodeLanguage? = nil) {
+        flushCode(language)
+        for kind in language.map({ [$0] }) ?? [.css,.js] {
+            guard let before = codeBefore.removeValue(forKey: kind),isEditable else { continue }
+            let changed = kind == .css ? before.css != boost.css : before.js != boost.js
+            if changed { registerRestore(before,name: kind == .css ? "Edit CSS" : "Edit JavaScript") }
+        }
+        onChange?()
+    }
+    public func boundPageDidCommit() { guard !isClosed else { return };onChange?() }
+    public func refreshToRun() {
+        guard isEditable else { return }
+        flushCode();host.reload(tabID: context.tabID)
+    }
+    public func toggleDevTools() { guard isEditable else { return };devToolsVisible.toggle();host.setDevToolsVisible(devToolsVisible,tabID: context.tabID);onChange?() }
+    public func dismissJSNotice() { defaults.set(true,forKey: "open.boosts.hasDismissedJSNotice");onChange?() }
+
+    public private(set) var isZapActive = false
+    public private(set) var isSelecting = false
+    public var zapAvailable: Bool { host.zapAvailability(tabID: context.tabID) }
+    /// Code-mode owner inserts through its NSTextView at the current CSS caret.
+    public var insertSelectorAtCaret: ((String) -> Void)?
+    private var pickerObservation: SiteControlObservationToken?
     private var currentPageURL: URL?
 
     public init(context: SiteControlContext, boost: Boost, isNew: Bool = false,
@@ -49,8 +106,12 @@ public final class BoostEditorSession {
         colorsReady = boost.colorWheel != nil
         sampledHue = boost.colorWheel?.baseHue
         undoManager.groupsByEvent = false
+        pickerObservation = host.observePickerEvents { [weak self] tab, event in
+            guard let self, tab == self.context.tabID, !self.isClosed else { return }
+            self.handlePickerEvent(event)
+        }
     }
-    isolated deinit { previewWork?.cancel(); sampleTask?.cancel() }
+    isolated deinit { previewWork?.cancel(); sampleTask?.cancel();codeWork.values.forEach { $0.cancel() } }
     public var isEditable: Bool { !context.isIncognito && !isClosed }
     public var globallyEnabled: Bool { defaults.object(forKey: "open.advanced.enableBoosts") as? Bool ?? true }
     public var showsInterstitial: Bool { !defaults.bool(forKey: "open.boosts.hasDismissedInterstitial") }
@@ -76,6 +137,7 @@ public final class BoostEditorSession {
     public func updatePageURL(_ url: URL?) {
         let changed = currentPageURL != url
         currentPageURL = url
+        endPickerSession()
         if changed && boost.colorWheel == nil { restartColorSampling() }
         onChange?()
     }
@@ -146,15 +208,57 @@ public final class BoostEditorSession {
         }
     }
     public func resetAll() {
+        flushCode()
         change("Reset all edits") { b in
             b.colorWheel = nil; b.colorAdjustment = nil; b.fontFamily = nil
             b.textZoom = nil; b.textTransform = nil; b.zaps = []; b.css = ""; b.js = ""
         }
         restartColorSampling()
     }
+    public func toggleZap() {
+        guard isEditable, globallyEnabled, isActiveOnPage, zapAvailable else { return }
+        if isZapActive { endPickerSession(); return }
+        if isSelecting { endPickerSession() }
+        endInteractive()
+        isZapActive = host.enterZap(boostID: boost.id, tabID: context.tabID)
+        if isZapActive { host.requestZapCounts(tabID: context.tabID) }
+        onChange?()
+    }
+    public func pickSelector() {
+        guard isEditable, globallyEnabled, isActiveOnPage else { return }
+        if isSelecting { endPickerSession(); return }
+        if isZapActive { endPickerSession() }
+        endInteractive()
+        isSelecting = host.enterSelectorPicker(boostID: boost.id, tabID: context.tabID)
+        onChange?()
+    }
+    /// App calls this on tab switch, navigation (including same-URL reload),
+    /// frame destruction, and transport loss. Close sends its own unconditional exit.
+    public func endPickerSession() {
+        guard isZapActive || isSelecting else { return }
+        host.exitZap(tabID: context.tabID)
+        isZapActive = false; isSelecting = false; onChange?()
+    }
+    private func handlePickerEvent(_ event: BoostPickerEvent) {
+        switch event {
+        case let .committed(value), let .removed(value):
+            guard value.id == boost.id, let saved = store.boost(id: boost.id) else { return }
+            let before = boost
+            boost = saved
+            if boost != before { registerRestore(before, name: "Change Zap") }
+        case .exited: isZapActive = false; isSelecting = false
+        case let .selected(selector, _):
+            guard isSelecting else { return }
+            insertSelectorAtCaret?(selector)
+            endPickerSession()
+        case .listResult: break
+        }
+        onChange?()
+    }
     public func showAllBoosts() { host.showBoostsLibrary(profileID: context.profileID) }
     public func delete() {
         guard isEditable else { return }
+        codeWork.values.forEach { $0.cancel() };codeWork.removeAll();pendingCodeSaveDelays.removeAll();codeDrafts.removeAll();codeBefore.removeAll()
         previewWork?.cancel(); sampleTask?.cancel(); deleted = true
         previewWork = nil; interactiveBefore = nil; interactiveOwner = nil
         _ = store.delete(id: boost.id); store.saveNow(); host.refresh(profile: context.profileID)
@@ -163,8 +267,11 @@ public final class BoostEditorSession {
     public func finish() {
         guard !isClosed else { return }
         if interactiveBefore != nil { endInteractive() }
+        flushCode()
         previewWork?.cancel(); previewWork = nil; sampleTask?.cancel()
         host.exitZap(tabID: context.tabID)
+        isZapActive = false; isSelecting = false
+        if let pickerObservation { host.removePickerObserver(pickerObservation); self.pickerObservation = nil }
         if isNew && boost.isEmpty && !deleted {
             _ = store.delete(id: boost.id); host.refresh(profile: context.profileID)
         }
@@ -202,6 +309,7 @@ public final class BoostEditorSession {
     private func change(_ name: String, edit: (inout Boost) -> Void) {
         guard isEditable else { return }
         if interactiveBefore != nil { endInteractive() }
+        endCodeEditing()
         let before = boost; var candidate = boost; edit(&candidate); boost = BoostStore.normalizedForPreview(candidate)
         commit(before: before, name: name)
     }
@@ -226,7 +334,11 @@ public final class BoostEditorSession {
             MainActor.assumeIsolated { target.restore(inverse, name: name) }
         }
         undoManager.setActionName(name)
+        for zap in boost.zaps where !value.zaps.contains(where: { $0.selector == zap.selector }) {
+            host.removeZapFromSession(zap.selector, tabID: context.tabID)
+        }
         boost = store.upsert(value)
+        if isZapActive { host.requestZapCounts(tabID: context.tabID) }
         host.refresh(profile: context.profileID); onChange?()
     }
     private func schedulePreview() {

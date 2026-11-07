@@ -1,5 +1,6 @@
 #import <AppKit/AppKit.h>
 #import <OpenEngine/OEDefines.h>
+#import <OpenEngine/OEExtension.h>
 
 NS_HEADER_AUDIT_BEGIN(nullability, sendability)
 
@@ -37,6 +38,8 @@ typedef NS_ENUM(NSInteger, OEExtensionMenuSource) {
 NS_SWIFT_UI_ACTOR
 @protocol OEBrowserDelegate <NSObject>
 @optional
+- (void)browser:(OEBrowser*)browser
+    omniboxDefaultSuggestionDidChangeForExtension:(NSString*)extensionIdentifier;
 /// The list or the order of the toolbar actions changed (install,
 /// uninstall, enable, disable, pin, unpin, move), or the window's live
 /// model came or went (extensionActionsReady changed). Redraw from
@@ -157,6 +160,18 @@ OE_EXPORT @interface OEBrowser : NSObject
 @property(nonatomic, readonly) NSInteger chromeWindowIdentifier;
 @property(nonatomic, readonly) OEBrowserContext* context;
 @property(nonatomic, weak, nullable) id<OEBrowserDelegate> delegate;
+
+- (void)omniboxStartSessionForExtension:(NSString*)extensionIdentifier;
+/// Completion runs at most once, on the main thread, only for the latest text.
+/// Superseding, cancelling or closing drops the old completion. NO means no listener.
+- (BOOL)omniboxInputChanged:(NSString*)text forExtension:(NSString*)extensionIdentifier
+                 completion:(void (^NS_SWIFT_UI_ACTOR)(NSArray<OEOmniboxSuggestion*>*))completion
+    NS_SWIFT_DISABLE_ASYNC;
+- (nullable OEOmniboxSuggestion*)omniboxDefaultSuggestionForExtension:(NSString*)extensionIdentifier;
+- (void)omniboxInputEntered:(NSString*)text forExtension:(NSString*)extensionIdentifier
+                disposition:(OEOmniboxDisposition)disposition;
+- (void)omniboxInputCancelledForExtension:(NSString*)extensionIdentifier;
+- (void)omniboxDeleteSuggestion:(NSString*)content forExtension:(NSString*)extensionIdentifier;
 /// The shell window, for focus and bounds (chrome.windows.get/update).
 @property(nonatomic, weak, nullable) NSWindow* window;
 
@@ -209,6 +224,11 @@ OE_EXPORT @interface OEBrowser : NSObject
 /// is open closes it. A disabled action asks for its context menu instead
 /// (browser:requestsContextMenuForExtensionAction:). Returns NO for an
 /// unknown id and without a live model (extensionActionsReady NO).
+/// Runs an active named command with the active tab, or an action command
+/// through executeExtensionAction with source command. Flushes pending tab sync.
+- (BOOL)executeExtensionCommand:(NSString*)name forExtension:(NSString*)identifier
+    NS_SWIFT_NAME(executeExtensionCommand(_:forExtension:));
+
 - (BOOL)executeExtensionAction:(NSString*)extensionIdentifier
                         source:(OEExtensionActionSource)source
     NS_SWIFT_NAME(executeExtensionAction(_:source:));
@@ -239,6 +259,14 @@ OE_EXPORT @interface OEBrowser : NSObject
 /// Closes the popup and detaches every web content. Call when the window
 /// closes.
 - (void)close;
+/// Real-App lifetime regression probe, only with --open-automation. Closes
+/// the CefTabStrip while its embedder window stays open, then changes that
+/// window's key state before Chromium's deferred Browser deletion can run.
+- (NSDictionary<NSString*, id>*)probeCloseActivationForAutomation;
+/// Reads the engine diagnostic only with --open-automation. No URLs or
+/// profile data are returned. Normal launches return an empty dictionary.
++ (NSDictionary<NSString*, id>*)activationStateForAutomation:(BOOL)reset
+    NS_SWIFT_NAME(activationStateForAutomation(reset:));
 @end
 
 /// One toolbar action's context menu (fork patch P2). Each menu has its own
@@ -246,6 +274,8 @@ OE_EXPORT @interface OEBrowser : NSObject
 /// away, so several menus can be open at once. The model also goes away
 /// with the action or with the window's live model.
 NS_SWIFT_UI_ACTOR
+/// Keep, answer, and release this object on the main thread. Each menu owns a
+/// Chromium model; an id from a destroyed toolbar generation is refused.
 OE_EXPORT @interface OEExtensionActionMenu : NSObject
 @property(nonatomic, readonly, copy) NSString* extensionIdentifier;
 /// Radio items come as checked items.

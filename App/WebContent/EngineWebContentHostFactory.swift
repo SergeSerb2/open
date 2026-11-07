@@ -4,13 +4,24 @@ import OpenFeatures
 import OpenModel
 import OpenStore
 import OpenSidebar
+import OpenSpaceEditor
 import OpenCommands
 import OpenCommandBar
 import OpenSuggest
 import OpenSettings
+import OpenSpaceEditor
 
 // App has no window controller of its own.
 typealias BrowserWindowController = OpenFeatures.BrowserWindowController
+
+/// A page hosted outside the sidebar's BrowserWindowController.
+@MainActor
+protocol StandalonePageSurface: AnyObject {
+  var surfaceWindow: NSWindow? { get }
+  var surfacePage: OEWebContent? { get }
+  var isSurfaceVisible: Bool { get }
+  func surfaceAnchor() -> (view: NSView, rect: CGRect)?
+}
 
 @MainActor
 final class AuxiliaryPage {
@@ -29,8 +40,35 @@ final class EngineWebContentHostFactory: NSResponder, WebContentHostFactory {
   unowned let app: AppDelegate
   let windowState: BrowserWindowState
   weak var controller: BrowserWindowController?
-  var window: NSWindow? { controller?.window }
-  var model: BrowserModel { app.model }
+  weak var standaloneSurface: (any StandalonePageSurface)?
+  weak var standaloneBrowser: OEBrowser?
+  weak var littleOpenController: LittleOpenWindowController?
+  private weak var littleOpenContent: OEWebContent?
+  private weak var littleOpenBrowser: OEBrowser?
+  // Unshown extension-created pages awaiting their first real address.
+  private var pendingLittleOpenExtensionTabs: [Int: OEWebContent] = [:]
+  var window: NSWindow? { controller?.window ?? standaloneSurface?.surfaceWindow ?? littleOpenController?.window }
+  private(set) var savePrompts: SavePromptPresenter?
+  private func attachSavePrompts() {
+    guard savePrompts == nil, let window else { return }
+    savePrompts = SavePromptPresenter(window: window) { [weak self] page in
+      guard let self, let content = self.selectedContent else { return false }
+      return page == AnyHashable(content.identifier)
+    }
+  }
+  private func savePromptFocusChanged() {
+    savePrompts?.pageDidBecomeFocused(AnyHashable(selectedContent?.identifier ?? 0))
+  }
+  let model: BrowserModel
+  let incognitoSession: IncognitoSession?
+  /// Section 12's read-only private-state hook (lead ruling 16:12).
+  var isIncognito: Bool { incognitoSession != nil }
+  func scheduleSave() { if !isIncognito { app.scheduleSave() } }
+  private lazy var privateSuggest = SuggestEngine(model: model, historyStore: { _ in nil }, actions: CommandRegistry.makeSuggestRegistry())
+  func suggestEngine() -> SuggestEngine? {
+    guard let profile = focusedProfile else { return nil }
+    return isIncognito ? privateSuggest : app.stores.suggest(for: profile.id)
+  }
   var contentContainer: NSView { controller!.container }
   private(set) var hosts: [ItemID: EngineWebContentHost] = [:]
   private var developerModeObserver: (any NSObjectProtocol)?
@@ -52,9 +90,13 @@ final class EngineWebContentHostFactory: NSResponder, WebContentHostFactory {
   private(set) var isClosing = false
   var saveCaptureTasks: [UUID: Task<Void, Never>] = [:]
   var pendingSaveChoice: ((URL?) -> Void)?
-  private var findSelectionTask: Task<Void, Never>?
-  var hasFindSelectionTask: Bool { findSelectionTask != nil }
+  var findController: FindController?
+  var findKeyRequestedAt: TimeInterval?
+  var hasFindSelectionTask: Bool { findController?.hasSelectionTask == true }
+  var pendingSpaceProfileAlert: NSAlert?
   var pendingRenameAlert: NSAlert?
+  var iconPicker: IconPickerController?
+  var iconPickerSpaceID: SpaceID?
   var sidebarSharePicker: NSSharingServicePicker?
   /// The copy toast whose Share picker is open: it stays until the picker closes (page-platform §4.2.2).
   var shareToastHandle: ToastHandle?
@@ -78,6 +120,7 @@ final class EngineWebContentHostFactory: NSResponder, WebContentHostFactory {
   private(set) var lastNavigationFocusRestored = false
   func showCommandBar(_ mode: CommandBarMode, editingPinnedTab: ItemID? = nil) {
     guard !isClosing, !app.terminationRequested else { return }
+    iconPicker?.close()
     let requestedAt = LaunchTiming.shared.elapsedMilliseconds
     app.prepareCommandServices()
     if commandBarSession == nil { commandBarSession = AppCommandBarSession(factory: self) }
@@ -92,48 +135,141 @@ final class EngineWebContentHostFactory: NSResponder, WebContentHostFactory {
     if onPinnedPage {
       if let content = hosts[id]?.content { content.load(url) } else { tab.url = url }
     }
-    controller?.refresh(); mirror.sync(); app.scheduleSave()
+    controller?.refresh(); mirror.sync(); scheduleSave()
   }
   private var enteredWindowFullscreenForPage = false
   private(set) var auxiliaryPages: [AuxiliaryPage] = []
-  private(set) var popupPanel: NSPanel?
+  var popupPanel: NSPanel? { extensions.popup.panel }
+  private(set) lazy var extensions = WindowExtensions(factory: self)
   #if OPEN_AUTOMATION
   var popupCallbackClose: (phase: String, toggle: Bool)?
-  func releaseBrowsersForAutomation() -> [String: Any] { mirror.releaseWithoutClosingForAutomation() }
+  func releaseBrowsersForAutomation() -> [String: Any] {
+    extensions.releaseBrowserOwnershipForAutomation(); return mirror.releaseWithoutClosingForAutomation()
+  }
   #endif
-  private lazy var extensionBar = makeExtensionBar()
-  private lazy var findField = makeFindField()
-  private var extensionBarCreated = false
-  private var findFieldCreated = false
 
   var dialogPolicy: String?
   var permissionPolicy: String?
   var promptText: String?
   var contextMenuPolicy: String?
+  var pageContextMenu: PageContextMenuBuilder?
+  var pageContextMenuHooks = PageContextMenuHooks()
   var fullscreenPolicy: String?
   var pendingSavePanel: NSSavePanel?
   var savePageRequestCount = 0
+  private lazy var privateDownloads = IncognitoDownloads()
   var downloadDirectory: URL?
   private(set) var events: [[String: Any]] = []
   private(set) var lastFindResult: OEFindResult?
-  private(set) var pendingDialogs: [OEJavaScriptDialog] = []
+  func standaloneSurfaceVisibilityChanged() {
+    // Setting even the same window re-enters Chromium's SetHostView path.
+    // Window geometry follows the page view's existing native observers.
+    if let browser = standaloneBrowser, browser.window !== standaloneSurface?.surfaceWindow {
+      browser.window = standaloneSurface?.surfaceWindow
+    }
+    pageChrome.visibilityChanged()
+  }
 
-  init(app: AppDelegate, state: BrowserWindowState) {
-    self.app = app; windowState = state
+  lazy var pageChrome = PageChromeCoordinator(owner: self)
+  var pendingDialogs: [OEJavaScriptDialog] { pageChrome.dialogs.pendingDialogs }
+
+  init(app: AppDelegate, state: BrowserWindowState, model: BrowserModel? = nil, incognitoSession: IncognitoSession? = nil) {
+    self.app = app; windowState = state; self.model = model ?? app.model
+    self.incognitoSession = incognitoSession
     super.init()
-    observerID = model.addObserver { [weak self] change in self?.treeChanged(change) }
+    observerID = self.model.addObserver { [weak self] change in self?.treeChanged(change) }
   }
   @available(*, unavailable) required init?(coder: NSCoder) { fatalError() }
   isolated deinit { if let observerID { model.removeObserver(observerID) } }
 
+  func attachLittleOpen(_ controller: LittleOpenWindowController, content: OEWebContent) {
+    // Section 9 owns creation and closing. Never synthesize a browser here or
+    // borrow a main window's active tab while the first frame is pending.
+    guard let browser = standaloneBrowser, content.browser === browser else { return }
+    guard littleOpenController !== controller || littleOpenContent !== content || littleOpenBrowser !== browser else { return }
+    if let previous = littleOpenBrowser, previous !== browser {
+      extensions.closeAll()
+      if previous.delegate === self { previous.delegate = nil }
+    }
+    littleOpenController = controller; littleOpenContent = content
+    attachSavePrompts()
+    littleOpenBrowser = browser; browser.window = controller.window; browser.delegate = self
+    controller.onCloseRequested = { [weak self] in
+      self?.savePrompts?.cancelAll()
+      guard let self, let window = self.window else { return }; self.app.extensionPrompts.cancel(window: window)
+    }
+    controller.extensionsUI = extensions.context
+    extensions.attach()
+    controller.titleBar.onExtensions = { [weak self, weak controller] in
+      guard let controller else { return }; self?.extensions.showLittleOpenMenu(controller)
+    }
+    // A Profile without a Space keeps management pages in Little Open (S10 guess).
+    extensions.context.manageExtensions = { [weak self] in self?.performLittleOpenExtensionManagement("manage-extensions") }
+    extensions.context.addExtension = { [weak self] in self?.performLittleOpenExtensionManagement("add-extension") }
+  }
+  func performLittleOpenExtensionManagement(_ command: String) {
+    guard let profile = littleOpenController?.session.profileID else { return }
+    guard let space = model.mostRecentlyFocusedSpace(profileID: profile) else {
+      let address = command == "add-extension" ? "https://chromewebstore.google.com/category/extensions" : command == "extension-shortcuts" ? "chrome://extensions/shortcuts" : "chrome://extensions"
+      app.openProfilePage(URL(string:address)!,profileID:profile); return
+    }
+    guard
+          let controller = app.windowControllers.first(where: { app.hostFactories[$0.windowID]?.focusedProfile?.id == profile })
+            ?? app.makeWindow(focusedSpaceID: space.id), let factory = app.hostFactories[controller.windowID] else { return }
+    app.focusWindow(controller.windowID, activate: true); _ = factory.performAppCommand(command)
+  }
+
   func attach(_ controller: BrowserWindowController) {
     self.controller = controller
+    attachSavePrompts()
+    controller.shouldDeferKeyToFirstResponder = { [weak self] event in
+      if let picker = self?.iconPicker, event.window === picker.panel || event.window === picker.toneWindow {
+        return event.modifierFlags.intersection([.command, .control]).isEmpty
+      }
+      guard let self, event.window === self.window, self.findController?.owns(self.window?.firstResponder) == true,
+        event.modifierFlags.intersection([.command, .control, .option]).isEmpty else { return false }
+      return [36, 76, 53, 125, 126].contains(event.keyCode)
+    }
     controller.onTextUndoManager = { [weak self] window in
       self?.commandBarSession?.controller?.editingUndoManager(for: window.firstResponder)
     }
+    controller.onSpaceCreationIcon = { [weak self] current, anchor, onPick in
+      self?.openDraftSpaceIconPicker(current: current, anchor: anchor, onPick: onPick)
+    }
+    controller.onExitPageFullscreen = { [weak self] in
+      guard let page = self?.selectedContent else { return false }
+      do { try page.exitFullscreen(); return true }
+      catch { return false }
+    }
     controller.keyBindingOverrides = app.keyBindings
+    let previousLinkPolicy = controller.container.onLinkClicked
+    controller.container.onLinkClicked = { [weak self] id, url, flags in
+      guard let self else { return false }
+      if flags.contains([.command, .option]) {
+        if UserDefaults.standard.object(forKey: "open.links.optionCommandClickLittleOpen") as? Bool ?? true {
+          if self.isIncognito { self.openNewTab(url: url, background: false, opener: id) }
+          else { self.app.openLittleOpen(url: url, profileHint: self.profile(for: id)?.id ?? self.focusedProfile?.id) }
+        } else {
+          // The toggle-off contract is in-place navigation, including engines
+          // that classify this modifier pair as a new-tab/download request.
+          DispatchQueue.main.async { [weak self] in self?.hosts[id]?.load(url) }
+        }
+        return false
+      }
+      return previousLinkPolicy?(id, url, flags) ?? true
+    }
     controller.isApplicationActive = { [weak self] in NSApp.isActive || self?.window?.isKeyWindow == true }
     controller.ownsAdditionalKeyWindow = { [weak self] in self?.ownsKeyWindow($0) == true }
+    extensions.attach()
+    controller.onCloseRequested = { [weak self] in
+      self?.savePrompts?.cancelAll()
+      guard let self, let window = self.window else { return }
+      self.app.extensionPrompts.cancel(window: window)
+    }
+    controller.onExtensionShortcut = { [weak self] event in
+      guard let self, let browser = self.focusedBrowser else { return false }
+      return self.app.extensionPrompts.table(browser.context.extensions).handle(event, factory: self)
+    }
     controller.onCommand = { [weak self] in self?.performAppCommand($0) == true }
     controller.onCommandWithPayload = { [weak self] in self?.performAppCommand($0, payload: $1) == true }
     controller.onCommandValidation = { [weak self] id, key in
@@ -150,7 +286,7 @@ final class EngineWebContentHostFactory: NSResponder, WebContentHostFactory {
         self.app.scheduleMenuRebuild()
       }
     }
-    controller.onLayout = { [weak self] in self?.layoutViews() }
+    controller.onLayout = { [weak self] in self?.findController?.sync() }
     controller.captureLibrary = app.captureLibrary
     controller.onFocus = { [weak self] in guard let self else { return }; self.app.didFocusWindow(self.windowState.id) }
     controller.nextResponder = self; nextResponder = NSApp
@@ -158,11 +294,15 @@ final class EngineWebContentHostFactory: NSResponder, WebContentHostFactory {
     controller.showsFullURLWithToolbar = UserDefaults.standard.bool(forKey: AppCommand.showFullURLKey)
     controller.onStateChange = { [weak self] in
       guard let self else { return }
+      if let id = self.iconPickerSpaceID, self.focusedSpace?.id != id { self.iconPicker?.close() }
       if self.app.engineReady { self.markVisibleTabsLive(); self.controller?.container.refreshPlaceholders() }
       // BrowserWindowController schedules its SnapshotStore once per committed change.
-      self.mirror.sync(); self.commandBarSession?.contextDidChange(); self.app.scheduleMenuRebuild()
+      self.mirror.sync(); self.extensions.focusChanged(); self.commandBarSession?.contextDidChange(); self.app.scheduleMenuRebuild()
       self.app.media.windowChanged(self)
       self.translate.focusDidChange()
+      self.findController?.sync()
+      self.pageChrome.visibilityChanged()
+      self.savePromptFocusChanged()
     }
     // History swipes (page-platform §4.4.1): macOS's "Swipe between pages" setting, re-read when
     // Open becomes active, and paused while the Capture overlay is up.
@@ -172,7 +312,7 @@ final class EngineWebContentHostFactory: NSResponder, WebContentHostFactory {
     }
     // Chained: MediaCoordinator.attach wraps this hook later and keeps it.
     let previousVisibility = controller.onVisibilityChange
-    controller.onVisibilityChange = { [weak self] in previousVisibility?(); self?.translate.visibilityDidChange() }
+    controller.onVisibilityChange = { [weak self] in previousVisibility?(); self?.translate.visibilityDidChange(); self?.pageChrome.visibilityChanged(); self?.extensions.sidebarVisibilityChanged(); self?.savePromptFocusChanged() }
     controller.onOpenCommandBar = { [weak self] source, _ in
       if source == .urlField { self?.focusAddressBar(nil) } else { self?.newTab(nil) }
     }
@@ -197,15 +337,15 @@ final class EngineWebContentHostFactory: NSResponder, WebContentHostFactory {
   #endif
 
   var focusedSpace: Space? { model.space(id: windowState.focusedSpaceID) ?? model.spaces.first }
-  var focusedProfile: Profile? { focusedSpace.flatMap { model.profile(id: $0.profileID) } }
+  var focusedProfile: Profile? { littleOpenController.flatMap { model.profile(id: $0.session.profileID) } ?? focusedSpace.flatMap { model.profile(id: $0.profileID) } }
   var selectedNodeID: ItemID? { focusedSpace.flatMap { windowState.selectedNodeBySpace[$0.id] } }
-  var selectedTab: Tab? { controller?.splitController.focusedTab }
+  var selectedTab: Tab? { controller?.splitController.focusedTab ?? littleOpenController?.session.tab }
   var visibleTabs: [Tab] { controller?.splitController.split?.panes ?? selectedTab.map { [$0] } ?? [] }
   var selectedContent: OEWebContent? {
     if let controller, controller.hasPeekController, controller.peekController.isShown {
       return (controller.peekController.stack.last?.host as? EngineWebContentHost)?.content
     }
-    return selectedTab.flatMap { hosts[$0.id]?.content }
+    return littleOpenContent ?? selectedTab.flatMap { hosts[$0.id]?.content }
   }
   var orderedTabs: [Tab] {
     (focusedProfile?.favorites ?? []) + (focusedSpace.map { flattened($0.pinned) + flattened($0.today) } ?? [])
@@ -258,12 +398,24 @@ final class EngineWebContentHostFactory: NSResponder, WebContentHostFactory {
     return model.profiles.first { $0.favorites.contains { $0.id == tabID } }
   }
   func profile(for context: OEBrowserContext) -> Profile? {
-    context === OEEngine.shared.defaultContext ? model.defaultProfile : model.profiles.first { $0.dataDirectoryName == context.identifier }
+    isIncognito ? (context === incognitoSession?.context ? model.profiles.first : nil)
+      : (context === OEEngine.shared.defaultContext ? model.defaultProfile : model.profiles.first { $0.dataDirectoryName == context.identifier })
   }
-  func context(for profileID: ProfileID) -> OEBrowserContext? {
+  func context(for profileID: ProfileID, create: Bool = true) -> OEBrowserContext? {
     guard app.engineReady, let profile = model.profile(id: profileID) else { return nil }
+    if isIncognito {
+      guard let context = incognitoSession?.context else { return nil }
+      app.extensionPrompts.register(context.extensions)
+      return WebsiteAppearance.prepare(context)
+    }
+    if !create {
+      return OEEngine.shared.contexts.first { $0.identifier == profile.dataDirectoryName }
+    }
     // Website appearance is app-wide (page-platform §4.8): every context gets it at creation.
-    if profile.id == model.defaultProfile?.id { return WebsiteAppearance.prepare(OEEngine.shared.defaultContext) }
+    if profile.id == model.defaultProfile?.id {
+      let context = WebsiteAppearance.prepare(OEEngine.shared.defaultContext)
+      app.extensionPrompts.register(context.extensions); return context
+    }
     guard app.engine.result.layout == .engine else {
       // The old layout has no disk folder for other profiles (CEF refused
       // Profiles/<dir>/Engine). Their pages wait for the next launch, whose
@@ -274,16 +426,40 @@ final class EngineWebContentHostFactory: NSResponder, WebContentHostFactory {
       }
       return nil
     }
-    return OEEngine.shared.context(identifier: profile.dataDirectoryName, directory: app.directories.engineDirectory(dataDirectoryName: profile.dataDirectoryName))
+    let context = OEEngine.shared.context(identifier: profile.dataDirectoryName, directory: app.directories.engineDirectory(dataDirectoryName: profile.dataDirectoryName))
       .map(WebsiteAppearance.prepare)
+    if let context { app.profileTeardown.didLoad(profile); app.extensionPrompts.register(context.extensions) }; return context
+  }
+  func retireProfile(_ id: ProfileID, directory: String) {
+    for (tab, host) in hosts where host.content.context.identifier == directory {
+      host.close(); hosts.removeValue(forKey:tab); modelHostIDs.remove(tab); queuedNavigations.removeValue(forKey:tab)
+    }
+    mirror.retireProfile(id)
   }
   private static var legacyRefusals: Set<String> = []
   var focusedBrowser: OEBrowser? {
-    guard app.engineReady, let profile = focusedProfile else { return nil }; return mirror.browser(for: profile.id)
+    focusedBrowser(create: false)
+  }
+  /// A real focus change may attach this window to an already loaded Profile.
+  /// This never creates a request context for an empty, unvisited Profile.
+  func prepareFocusedExtensionBrowser() -> OEBrowser? {
+    if standaloneBrowser != nil || littleOpenController != nil || standaloneSurface != nil { return focusedBrowser }
+    guard app.engineReady, let profile = focusedProfile else { return nil }
+    return mirror.browser(for: profile.id, loadContext: false)
+  }
+  /// Focus, menu validation and read-only automation must not load a Profile.
+  /// Explicit extension interactions opt in; focus attaches loaded contexts separately.
+  func focusedBrowser(create: Bool) -> OEBrowser? {
+    if let standaloneBrowser { return standaloneBrowser }
+    if littleOpenController != nil || standaloneSurface != nil { return nil }
+    guard app.engineReady, let profile = focusedProfile else { return nil }
+    let browser = mirror.browser(for: profile.id, create: create)
+    if create { extensions.focusChanged() }
+    return browser
   }
   func tabID(for content: OEWebContent) -> ItemID? { hosts.first { $0.value.content === content }?.key }
   private func withoutUndo(_ body: () -> Void) {
-    app.undoManager.disableUndoRegistration(); defer { app.undoManager.enableUndoRegistration() }; body()
+    let undo = model.undoManager; undo?.disableUndoRegistration(); defer { undo?.enableUndoRegistration() }; body()
   }
 
   func makeHost(tabID: ItemID, profileID: ProfileID, url: URL?) -> (any WebContentHost)? {
@@ -292,18 +468,18 @@ final class EngineWebContentHostFactory: NSResponder, WebContentHostFactory {
   /// `history`: a sleeping tab's stored back/forward list (memory-fork §5.2–§5.3). The page is
   /// created without a renderer and gets the history before it is shown; it loads the current
   /// entry when it shows, or `url` (the fallback) if the engine refuses the history.
-  func makeHost(tabID: ItemID, profileID: ProfileID, url: URL?, history: OENavigationHistory?) -> (any WebContentHost)? {
+  func makeHost(tabID: ItemID, profileID: ProfileID, url: URL?, history: OENavigationHistory?, browser: OEBrowser? = nil) -> (any WebContentHost)? {
     guard let context = context(for: profileID) else {
       if let url, model.tab(id: tabID) != nil { queuedNavigations[tabID] = url }
       return nil
     }
     if let host = hosts[tabID], !host.closed { return host }
     let config = OEWebContentConfiguration(context: context)
-    // Sidebar tabs are tabs of the window's hidden Chrome window (fork patch
-    // P1). Hosts that are not model tabs (Peek) stay Alloy: a Chrome style
-    // page outside a strip would get its own Chrome window.
+    // Sidebar and Little Open pages attach to a hidden Chrome window (P1).
+    // Other non-model hosts (Peek) remain Alloy.
     let isModelTab = model.tab(id: tabID) != nil
-    config.runtimeStyle = isModelTab ? app.options.defaultStyle : .alloy
+    if isModelTab { app.noteLaunchWindowNavigation(windowState.id) }
+    config.runtimeStyle = browser != nil ? .chrome : (isModelTab ? app.options.defaultStyle : .alloy)
     config.showsChromeToolbar = app.options.chromeToolbar
     if isModelTab, model.tab(id: tabID)?.url.scheme == "chrome" { config.runtimeStyle = .chrome }
     contentCreationCount += 1
@@ -313,15 +489,27 @@ final class EngineWebContentHostFactory: NSResponder, WebContentHostFactory {
     content.view.isHidden = true
     let host = EngineWebContentHost(tabID: tabID, profileID: profileID, content: content, owner: self)
     hosts[tabID] = host
+    if let browser {
+      // Hosted Chrome creation is synchronous. Seed an already submitted URL
+      // before insertion, so it creates the target instead of navigating a
+      // throwaway about:blank page first (deferred Little Open).
+      if let url, history == nil { host.load(url) }
+      browser.insert(content, at: 0)
+      browser.activeWebContent = content
+    }
     if typedNavigationTabs.remove(tabID) != nil { host.historyRecorder.markTyped() }
     if model.tab(id: tabID) != nil { modelHostIDs.insert(tabID) }
     mirror.sync()
-    if let url, history == nil { host.load(url) }
+    if let url, history == nil, browser == nil { host.load(url) }
     app.tabSleep.contentCreated(tabID: tabID, host: host)
     return host
   }
   func hostDidClose(_ host: EngineWebContentHost) {
+    savePrompts?.pageDidClose(AnyHashable(host.content.identifier))
+    pageChrome.cancel(host.content)
+    if pageContextMenu?.belongs(to: host.content) == true { pageContextMenu?.cancel(); pageContextMenu = nil }
     translate.contentDidClose(host.content)
+    findController?.hostClosed(host.tabID)
     commandBarNavigationFocus.remove(host.tabID)
     typedNavigationTabs.remove(host.tabID)
     app.media.hostClosed(tabID: host.tabID)
@@ -384,6 +572,7 @@ final class EngineWebContentHostFactory: NSResponder, WebContentHostFactory {
   private func treeChanged(_ change: TreeChange) {
     guard !isClosing, !app.shutdownPrepared else { return }
     treeChangeCount += 1
+    if let id = iconPickerSpaceID, focusedSpace?.id != id || model.space(id: id) == nil { iconPicker?.close() }
     if case .spaceProfileChanged(let spaceID, _, _) = change, let space = model.space(id: spaceID) {
       let ids = Set((flattened(space.pinned) + flattened(space.today)).map(\.id))
       if let controller, controller.hasPeekController,
@@ -416,11 +605,11 @@ final class EngineWebContentHostFactory: NSResponder, WebContentHostFactory {
   func showSelection(focus: Bool = true) {
     guard let controller else { return }
     if app.engineReady { markVisibleTabsLive() }
-    controller.refresh(); mirror.sync()
-    window?.title = selectedTab?.displayTitle.isEmpty == false ? selectedTab!.displayTitle : "Open"
+    controller.refresh(); mirror.sync(); extensions.focusChanged()
+    window?.title = selectedTab?.displayTitle.isEmpty == false ? selectedTab!.displayTitle : (isIncognito ? "Incognito" : "Open")
     if focus { selectedContent?.focusPage() }
     commandBarSession?.contextDidChange(); app.scheduleMenuRebuild()
-    layoutViews()
+    findController?.sync()
     // Auto-PiP runs in the same turn as the selection change, after the new tab is attached (§4.5.3).
     app.media.windowChanged(self)
   }
@@ -429,7 +618,7 @@ final class EngineWebContentHostFactory: NSResponder, WebContentHostFactory {
     guard let space = focusedSpace else { return }
     withoutUndo { model.selectNode(windowID: windowState.id, spaceID: space.id, nodeID: nodeID) }
     controller?.dismissSidebarReveal()
-    showSelection(focus: focus); app.scheduleSave()
+    showSelection(focus: focus); scheduleSave()
   }
   @discardableResult
   func openNewTab(url: URL, background: Bool, opener: ItemID? = nil, typed: Bool = false) -> Tab? {
@@ -438,7 +627,7 @@ final class EngineWebContentHostFactory: NSResponder, WebContentHostFactory {
     let tab = model.newTab(in: space.id, url: url, at: 0, unread: background); tab.openerID = opener
     if typed { typedNavigationTabs.insert(tab.id) }
     if !background { select(nodeID: tab.id) }
-    app.scheduleSave(); return tab
+    scheduleSave(); return tab
   }
   func adoptUnownedRequest(_ request: OEOpenRequest) -> OEWebContent? {
     guard app.engineReady else { return nil }
@@ -448,14 +637,34 @@ final class EngineWebContentHostFactory: NSResponder, WebContentHostFactory {
     let content = makeContent(for: tab, url: nil, requestContext: request.context); focus(space: space); select(nodeID: tab.id); return content
   }
   func focus(space: Space) {
+    if let id = iconPickerSpaceID, id != space.id { iconPicker?.close() }
     controller?.existingTabSwitcher?.cancel()
     withoutUndo { model.focusSpace(windowID: windowState.id, spaceID: space.id) }
-    controller?.dismissSidebarReveal(); showSelection(); app.scheduleSave()
+    controller?.dismissSidebarReveal(); showSelection(); scheduleSave()
   }
 
   /// Only model-only cases fall back to the package. Unsupported later-step
   /// editors return false, so no successful no-op reaches the sidebar.
   func performSidebar(_ intent: SidebarIntent) -> Bool? {
+    if isIncognito {
+      switch intent {
+      case .newSpace, .newFolder, .manageSpaces, .showLibrary, .setPinnedCollapsed,
+           .selectFavorite, .openProfileSettings, .dismissAutoArchiveBanner,
+           .pin, .unpin, .setPinned, .resetToPinnedURL, .replacePinnedURL, .editPinnedURL,
+           .newNestedFolder, .turnFolderIntoSpace, .newFolderFromSelection,
+           .moveNodesToSpace, .moveNodesToNewSpace, .moveToSpace, .moveToNewSpace,
+           .addFavorite, .moveFavorite, .removeFavorite, .changeSpaceIcon, .renameSpace,
+           .editSpaceTheme, .setSpaceProfile, .newProfile, .shareSpace,
+           .exportSpaceIntoFolder, .deleteSpace, .moveSpace: return false
+      case .archiveNodes(let ids): return model.archiveNodes(ids: ids) > 0
+      case .close(let id) where model.tab(id: id) == nil:
+        guard model.node(id: id) != nil else { return false }
+        model.closeTab(id: id); return true
+      case .move(_, let parent, _), .moveNodes(_, let parent, _), .openURL(_, let parent, _):
+        guard case .spaceToday(let id) = parent, id == focusedSpace?.id else { return false }
+      default: break
+      }
+    }
     switch intent {
     case .dismissAutoArchiveBanner: app.dismissAutoArchiveEducation(); return true
     case .openProfileSettings(let id):
@@ -464,7 +673,7 @@ final class EngineWebContentHostFactory: NSResponder, WebContentHostFactory {
     case .toggleSidebar: controller?.toggleSidebar(); return true
     case .select(let id, let spaceID):
       guard model.space(id: spaceID) != nil, model.node(id: id) != nil else { return false }
-      withoutUndo { model.focusSpace(windowID: windowState.id, spaceID: spaceID) }
+      if focusedSpace?.id != spaceID { withoutUndo { model.focusSpace(windowID: windowState.id, spaceID: spaceID) } }
       select(nodeID: id); return true
     case .selectFavorite(let id): guard model.tab(id: id) != nil else { return false }; select(nodeID: id); return true
     case .switchSpace(let id): guard let space = model.space(id: id) else { return false }; focus(space: space); return true
@@ -489,7 +698,7 @@ final class EngineWebContentHostFactory: NSResponder, WebContentHostFactory {
       for id in loaded { controller?.container.closeHost(for: id); hosts[id]?.close() }
       if let selected = selectedTab?.id, ids.contains(selected) {
         select(nodeID: model.sidebarSelectionID(for: orderedTabs.first { !ids.contains($0.id) }?.id))
-      } else { controller?.refresh(); mirror.sync(); app.scheduleSave() }
+      } else { controller?.refresh(); mirror.sync(); scheduleSave() }
       return true
     case .goBack: guard let page = selectedContent, page.canGoBack else { return false }; page.goBack(); return true
     case .goForward: guard let page = selectedContent, page.canGoForward else { return false }; page.goForward(); return true
@@ -498,12 +707,20 @@ final class EngineWebContentHostFactory: NSResponder, WebContentHostFactory {
     case .copyCurrentURL:
       return copyURL()
     case .toggleMute(let id):
-      guard let tab = model.tab(id: id) else { return false }; model.setMuted(tabID: id, muted: !tab.isMuted); hosts[id]?.content.isMuted = tab.isMuted; app.scheduleSave(); return true
+      guard let tab = model.tab(id: id) else { return false }; model.setMuted(tabID: id, muted: !tab.isMuted); hosts[id]?.content.isMuted = tab.isMuted; scheduleSave(); return true
     case .media(let intent): return app.media.perform(intent)
     case .resetToPinnedURL(let id):
-      guard let tab = model.tab(id: id), let url = tab.pinnedURL else { return false }; model.resetPinnedTab(id: id); hosts[id]?.load(url); app.scheduleSave(); return true
+      guard let tab = model.tab(id: id), let url = tab.pinnedURL else { return false }; model.resetPinnedTab(id: id); hosts[id]?.load(url); scheduleSave(); return true
+    case .renameSpace(let id, let title):
+      guard let space = model.space(id: id) else { return false }
+      let trimmed = title.trimmingCharacters(in: .whitespacesAndNewlines)
+      guard space.title != (trimmed.isEmpty ? nil : trimmed) else { return true }
+      app.undoManager.beginUndoGrouping()
+      model.renameSpace(id: id, title: title); app.undoManager.setActionName("Rename Space")
+      app.undoManager.endUndoGrouping(); scheduleSave(); return true
+    case .setSpaceProfile(let space, let profile): return requestSpaceProfileChange(spaceID: space, profileID: profile)
     case .newSpace:
-      guard let profile = focusedProfile else { return false }; focus(space: model.createSpace(title: "Space", profileID: profile.id)); return true
+      return controller?.beginSpaceCreation() == true
     case .openURL(let url, let parent, let index):
       let before = Set(model.index.keys)
       guard let context = controller?.context, ModelSidebarActions(context: context).perform(.openURL(url, in: parent, index: index)),
@@ -516,14 +733,9 @@ final class EngineWebContentHostFactory: NSResponder, WebContentHostFactory {
     case .moveNodesToNewSpace(let ids): return moveSelectionToNewSpace(ids: ids)
     case .moveToNewSpace(let id): return moveSelectionToNewSpace(ids: [id])
     case .turnFolderIntoSpace(let id):
-      // The App disables event grouping. Name the action while this explicit
-      // group is open, before the model's one-step registration is closed.
-      app.undoManager.beginUndoGrouping()
-      defer { app.undoManager.endUndoGrouping() }
-      guard let space = model.turnFolderIntoSpace(id: id) else { return false }
-      let actionName: String = "New Space"
-      app.undoManager.setActionName(actionName)
-      focus(space: space); app.scheduleSave(); app.scheduleMenuRebuild(); return true
+      guard let folder = model.node(id: id)?.folder else { return false }
+      return controller?.beginSpaceCreation(options: SpaceCreationOptions(moving: folder.children.map(\.id),
+        prefillTitle: folder.title, placement: .today, removingEmptyFolder: id)) == true
     case .share(let id): return shareSidebarTab(id)
     case .duplicate(let id): return model.duplicateNode(id: id) != nil
     case .showLibrary:
@@ -541,8 +753,12 @@ final class EngineWebContentHostFactory: NSResponder, WebContentHostFactory {
       // "Edit Pinned URL dialog" (FC §3.2 r3); Section 2's brief chose the command bar.
       guard let tab = model.tab(id: id), tab.pinnedURL != nil else { return false }
       showCommandBar(.editCurrentURL, editingPinnedTab: tab.id); return true
-    case .showSiteControls, .changeSpaceIcon, .editSpaceTheme, .newProfile, .shareSpace,
-         .changeIcon, .customizePage:
+    case .editSpaceTheme(let id):
+      iconPicker?.close(); return controller?.editSpaceTheme(id) == true
+    case .changeSpaceIcon(let id): return openSpaceIconPicker(id)
+    case .changeIcon(let id): return openNodeIconPicker(id)
+    case .newProfile(let space): app.settingsPresenter.showNewProfile(sourceSpace: space); return true
+    case .showSiteControls, .shareSpace, .customizePage:
       return false // Explicitly deferred UI entries; see docs/app-shell.md Step B.
     default: return nil
     }
@@ -579,17 +795,22 @@ final class EngineWebContentHostFactory: NSResponder, WebContentHostFactory {
   }
 
   private func moveSelectionToNewSpace(ids: [ItemID]) -> Bool {
-    guard let profile = focusedProfile, controller?.context.canMoveNodesToNewSpace(ids) == true,
-      let space = model.createSpace(title: "Space", profileID: profile.id, icon: nil, theme: SpaceTheme(), at: nil, moving: ids)
-    else { return false }
-    focus(space: space); app.scheduleSave(); app.scheduleMenuRebuild(); return true
+    guard controller?.context.canMoveNodesToNewSpace(ids) == true else { return false }
+    return controller?.beginSpaceCreation(options: SpaceCreationOptions(moving: ids, placement: .preserveSection)) == true
   }
 
   /// One close rule for Cmd-W, the sidebar, window.close() and
   /// chrome.tabs.remove: pinned tabs and favorites stay in the sidebar and
   /// unload; Today tabs close (archived).
   func closeTab(id: ItemID) {
+    if let page = hosts[id]?.content, pageChrome.requestClose(page, completion: { [weak self] accepted in
+      if accepted { self?.finishClosingTab(id: id) }
+    }) { return }
+    finishClosingTab(id: id)
+  }
+  private func finishClosingTab(id: ItemID) {
     guard model.tab(id: id) != nil else { return }
+    findController?.forget(id)
     let order = orderedTabs.map(\.id), index = order.firstIndex(of: id) ?? 0
     let wasSelected = selectedTab?.id == id
     var isFavorite = false
@@ -600,11 +821,16 @@ final class EngineWebContentHostFactory: NSResponder, WebContentHostFactory {
     if wasSelected {
       let remaining = orderedTabs.map(\.id).filter { $0 != id }
       select(nodeID: remaining.isEmpty ? nil : remaining[min(index, remaining.count - 1)])
-    } else { controller?.refresh(); mirror.sync(); app.scheduleSave() }
+    } else { controller?.refresh(); mirror.sync(); scheduleSave() }
   }
   func closeAll() {
     guard !isClosing else { return }
     isClosing = true
+    savePrompts?.cancelAll()
+    iconPicker?.close(); iconPicker = nil
+    pageChrome.close()
+    privateDownloads.close()
+    pageContextMenu?.cancel(); pageContextMenu = nil
     controller?.existingTabSwitcher?.cancel()
     translate.closeAll()
     for task in saveCaptureTasks.values { task.cancel() }
@@ -612,12 +838,14 @@ final class EngineWebContentHostFactory: NSResponder, WebContentHostFactory {
     for task in pageTasks.values { task.cancel() }
     pageTasks.removeAll()
     shareToastHandle = nil
-    findSelectionTask?.cancel(); findSelectionTask = nil
+    findController?.closeAll()
     pendingSaveChoice = nil
     if let panel = pendingSavePanel { window?.endSheet(panel, returnCode: .cancel); panel.orderOut(nil) }
     pendingSavePanel = nil
     if let sheet = pendingRenameAlert?.window { window?.endSheet(sheet, returnCode: .cancel); sheet.orderOut(nil) }
     pendingRenameAlert = nil
+    if let sheet = pendingSpaceProfileAlert?.window { window?.endSheet(sheet, returnCode: .cancel); sheet.orderOut(nil) }
+    pendingSpaceProfileAlert = nil
     sidebarSharePicker?.close(); sidebarSharePicker = nil
     spaceProfileMenu?.cancelTrackingWithoutAnimation(); spaceProfileMenu = nil
     #if OPEN_AUTOMATION
@@ -629,7 +857,17 @@ final class EngineWebContentHostFactory: NSResponder, WebContentHostFactory {
     commandBarSession?.dismiss()
     controller?.container.closeAll(); for host in Array(hosts.values) { host.close() }
     for page in auxiliaryPages { closeAuxiliary(page); page.panel.close() }
-    popupPanel?.close(); mirror.close()
+    extensions.closeAll()
+    for content in pendingLittleOpenExtensionTabs.values {
+      content.delegate = nil
+      DispatchQueue.main.async { content.close() }
+    }
+    pendingLittleOpenExtensionTabs.removeAll()
+    // Clear the delegate before Section 9 closes/replaces the standalone page.
+    // A retained old browser must not deliver actions to the new Profile UI.
+    if littleOpenBrowser?.delegate === self { littleOpenBrowser?.delegate = nil }
+    littleOpenBrowser = nil; littleOpenContent = nil
+    mirror.close()
   }
   func content(forAutomationHandle handle: Any?) -> OEWebContent? {
     switch handle {
@@ -647,60 +885,15 @@ final class EngineWebContentHostFactory: NSResponder, WebContentHostFactory {
   }
   func drainEvents() -> [[String: Any]] { defer { events.removeAll() }; return events }
   func completePendingDialog(accept: Bool, text: String?) -> Bool {
-    guard !pendingDialogs.isEmpty else { return false }; pendingDialogs.removeFirst().complete(accepted: accept, text: text); return true
-  }
-  private func makeFindField() -> NSSearchField {
-    let field = NSSearchField(); field.placeholderString = "Find in page"; field.target = self; field.delegate = self
-    field.action = #selector(findFieldChanged(_:)); field.isHidden = true
-    controller?.contentView.addSubview(field); findFieldCreated = true; return field
-  }
-  private func makeExtensionBar() -> NSStackView {
-    let bar = NSStackView(); bar.orientation = .horizontal; bar.spacing = 4
-    controller?.contentView.addSubview(bar); extensionBarCreated = true; return bar
-  }
-  private func layoutViews() {
-    guard let controller else { return }; let panel = controller.container.frame
-    if findFieldCreated { findField.frame = CGRect(x: panel.maxX - 268, y: panel.minY + 8, width: 260, height: 24) }
-    if extensionBarCreated { extensionBar.frame = CGRect(x: panel.maxX - 210, y: panel.minY + 8, width: 200, height: 26) }
+    pageChrome.dialogs.answer(accepted: accept, text: text)
   }
   private func updateChrome() { window?.title = selectedTab?.displayTitle ?? "Open" }
 }
 
 extension EngineWebContentHostFactory {
-  // Mark before starting a command-bar navigation; redirect commits retain it.
-  private func reloadExtensionBar() {
-    guard app.engineReady else { return }
-    extensionBar.arrangedSubviews.forEach { $0.removeFromSuperview() }
-    for action in focusedBrowser?.extensionActions ?? [] {
-      // Fork patch P2: Chrome's toolbar image (badge, disabled state).
-      // A copy: the snapshot's image keeps its own size.
-      let image =
-        (action.toolbarImage ?? action.icon)?.copy() as? NSImage
-        ?? NSImage(systemSymbolName: "puzzlepiece.extension", accessibilityDescription: nil)!
-      image.size = NSSize(width: 18, height: 18)
-      let button = NSButton(image: image, target: self, action: #selector(extensionButtonClicked(_:)))
-      button.bezelStyle = .accessoryBarAction
-      button.isBordered = false
-      button.toolTip = action.title
-      button.identifier = .init(action.extensionIdentifier)
-      button.isEnabled = action.isEnabled
-      extensionBar.addArrangedSubview(button)
-    }
-    let manage = NSButton(title: "⋯", target: self, action: #selector(openExtensionsPage(_:)))
-    manage.bezelStyle = .accessoryBarAction
-    manage.toolTip = "Manage extensions"
-    extensionBar.addArrangedSubview(manage)
-    layoutViews()
-  }
-
-  @objc private func extensionButtonClicked(_ sender: NSButton) {
-    guard let id = sender.identifier?.rawValue else { return }
-    focusedBrowser?.executeExtensionAction(id)
-  }
-
   // MARK: Panels
 
-  private func makePanel(size: NSSize, title: String, titled: Bool = true) -> NSPanel {
+  private func makeAuxiliaryPanel(size: NSSize, title: String, titled: Bool = true) -> NSPanel {
     let style: NSWindow.StyleMask = titled ? [.titled, .closable, .resizable] : [.borderless]
     let panel = NSPanel(
       contentRect: NSRect(origin: .zero, size: size), styleMask: style, backing: .buffered, defer: false)
@@ -734,9 +927,11 @@ extension EngineWebContentHostFactory {
   @objc func focusAddressBar(_ sender: Any?) { showCommandBar(.editCurrentURL) }
 
   func ownsKeyWindow(_ candidate: NSWindow) -> Bool {
-    candidate === window || candidate === popupPanel || auxiliaryPages.contains { $0.panel === candidate }
+    if candidate === controller?.themeEditor?.panel || candidate === controller?.spaceCreationController?.themeEditor?.panel { return true }
+    return candidate === window || candidate === iconPicker?.panel || candidate === iconPicker?.toneWindow || candidate === popupPanel || auxiliaryPages.contains { $0.panel === candidate } || pageChrome.owns(candidate)
   }
   func navigateFromCommandBar(_ url: URL, current: Bool, background: Bool = false) {
+    app.noteLaunchWindowNavigation(windowState.id)
     if current, selectedContent != nil || selectedTab != nil {
       if let page = selectedContent, let host = hosts.values.first(where: { $0.content === page }) {
         commandBarNavigationFocus.insert(host.tabID); host.historyRecorder.markTyped()
@@ -745,7 +940,7 @@ extension EngineWebContentHostFactory {
         typedNavigationTabs.insert(id)
       }
       if !app.engineReady, let tab = selectedTab {
-        queuedNavigations[tab.id] = url; tab.url = url; app.scheduleSave()
+        queuedNavigations[tab.id] = url; tab.url = url; scheduleSave()
       } else { selectedContent?.load(url); selectedContent?.focusPage() }
     } else if let tab = openNewTab(url: url, background: background, typed: true) {
       if background { _ = ensureContent(for: tab) }
@@ -786,7 +981,7 @@ extension EngineWebContentHostFactory {
     let view = responder as? NSView
     var owner = "other"
     if responder == nil || responder === window { owner = "window" }
-    else if findFieldCreated, responder === findField || responder === findField.currentEditor() { owner = "find" }
+    else if findController?.owns(responder) == true { owner = "find" }
     else if commandBarSession?.controller?.editingUndoManager(for: responder) != nil { owner = "commandbar" }
     else if let view, let sidebar = controller?.sidebar,
             view === sidebar || view.isDescendant(of: sidebar)
@@ -794,8 +989,8 @@ extension EngineWebContentHostFactory {
     else if let page = selectedContent, let view, view === page.view || view.isDescendant(of: page.view) { owner = "page" }
     return ["owner": owner, "responder": responder.map { String(describing: type(of: $0)) } ?? "none",
       "navigationDecisions": navigationFocusDecisions, "lastNavigationRestored": lastNavigationFocusRestored,
-      "findVisible": findFieldCreated && !findField.isHidden,
-      "findText": findFieldCreated ? findField.stringValue : "", "sheet": window?.attachedSheet != nil]
+      "findVisible": findController?.visible == true,
+      "findText": findController?.query ?? "", "sheet": window?.attachedSheet != nil]
   }
   func selectTabForCommand(_ id: ItemID, spaceID: SpaceID? = nil) {
     guard let tab = model.tab(id: id) else { return }
@@ -813,6 +1008,15 @@ extension EngineWebContentHostFactory {
   }
 
   @objc func closeTab(_ sender: Any?) {
+    // Cmd+W closes the key picker, including its tone panel, before any tab.
+    if let picker = iconPicker, NSApp.keyWindow === picker.panel || NSApp.keyWindow === picker.toneWindow {
+      picker.close(); return
+    }
+    if let key = NSApp.keyWindow, let page = pageChrome.permissionPage(in: key) {
+      pageChrome.permissions.cancel(page: page)
+      if let id = tabID(for: page) { closeTab(id: id) } else { close(page: page) }
+      return
+    }
     // Cmd+W in the Essential Keyboard Shortcuts window closes that window, never a tab (§4.5.1).
     if let edu = EssentialShortcutsWindowController.shared.window, NSApp.keyWindow === edu { edu.close(); return }
     if let popupPanel, NSApp.keyWindow === popupPanel {
@@ -858,7 +1062,7 @@ extension EngineWebContentHostFactory {
   @objc func resetZoom(_ sender: Any?) { selectedContent?.resetZoom() }
   @objc func showDevTools(_ sender: Any?) { selectedContent?.showDevTools() }
 
-  @objc func openExtensionsPage(_ sender: Any?) { _ = openNewTab(url: OEExtensionManager.managementPageURL, background: false) }
+  @objc func openExtensionsPage(_ sender: Any?) { _ = performAppCommand("manage-extensions") }
   @objc func toggleSidebar(_ sender: Any?) { controller?.toggleSidebar() }
   @objc func newWindow(_ sender: Any?) { app.newWindow(nil) }
 
@@ -921,38 +1125,13 @@ extension EngineWebContentHostFactory {
     focus(space: model.spaces[(i + delta + model.spaces.count) % model.spaces.count])
   }
 
-  /// The App's Exit route offers Esc to a shown Find bar before Peek/split.
-  /// Section 11 replaces the field with its per-page coordinator at this seam.
+  @objc func showFind(_ sender: Any?) { ensureFindController().show() }
+  func findPrevious() { ensureFindController().advance(forward: false) }
+  @objc func findNext(_ sender: Any?) { ensureFindController().advance(forward: true) }
+  /// Offer Exit/Esc to the focused pane's Find bar before Peek or split UI.
   func dismissFindForExit() -> Bool {
-    guard findFieldCreated, !findField.isHidden else { return false }
-    findField.isHidden = true
-    selectedContent?.stopFinding(clearSelection: true); selectedContent?.focusPage()
-    return true
-  }
-
-  @objc func showFind(_ sender: Any?) {
-    _ = findField; layoutViews(); findField.isHidden = false
-    window?.makeFirstResponder(findField)
-  }
-
-  func findPrevious() {
-    guard findFieldCreated, !findField.stringValue.isEmpty else { return }
-    selectedContent?.find(findField.stringValue, forward: false, caseSensitive: false)
-  }
-
-  @objc func findNext(_ sender: Any?) {
-    guard !findField.stringValue.isEmpty else { return }
-    selectedContent?.find(findField.stringValue, forward: true, caseSensitive: false)
-  }
-
-  @objc private func findFieldChanged(_ sender: NSSearchField) {
-    if sender.stringValue.isEmpty {
-      selectedContent?.stopFinding(clearSelection: true)
-      findField.isHidden = true
-      selectedContent?.focusPage()
-    } else {
-      selectedContent?.find(sender.stringValue, forward: true, caseSensitive: false)
-    }
+    guard let findController, findController.visible, let id = findController.focusedID else { return false }
+    findController.close(id); return true
   }
 
   /// URL for address-field input: a URL, a host, or a search.
@@ -981,6 +1160,7 @@ extension EngineWebContentHostFactory {
   }
 
   func closeAuxiliary(_ page: AuxiliaryPage) {
+    pageChrome.cancel(page.content)
     guard auxiliaryPages.contains(where: { $0 === page }) else { return }
     auxiliaryPages.removeAll { $0 === page }
     if let observer = page.closeObserver { NotificationCenter.default.removeObserver(observer) }
@@ -991,19 +1171,18 @@ extension EngineWebContentHostFactory {
   }
 }
 
-extension EngineWebContentHostFactory: NSSearchFieldDelegate {
-  func control(_ control: NSControl, textView: NSTextView, doCommandBy commandSelector: Selector) -> Bool {
-    if control === findField, commandSelector == #selector(NSResponder.cancelOperation(_:)) {
-      findField.isHidden = true; selectedContent?.stopFinding(clearSelection: true); selectedContent?.focusPage(); return true
-    }
-    return false
-  }
-}
-
 // MARK: - OEWebContentDelegate
 
 extension EngineWebContentHostFactory: OEWebContentDelegate {
   func webContent(_ webContent: OEWebContent, didChange changes: OEWebContentChange) {
+    if pendingLittleOpenExtensionTabs[webContent.identifier] === webContent {
+      if changes.contains(.URL), let url = webContent.url, url.absoluteString != "about:blank" {
+        routeLittleOpenExtensionTab(webContent, url: url)
+      } else if changes.contains(.live), !webContent.isLive {
+        pendingLittleOpenExtensionTabs[webContent.identifier] = nil; webContent.delegate = nil
+      }
+      return
+    }
     if let popup = auxiliaryPages.first(where: { $0.content === webContent }) {
       if changes.contains(.loading), webContent.isLoading { popup.historyRecorder?.loadingChanged(true) }
       if changes.contains(.URL), let url = webContent.url {
@@ -1070,7 +1249,7 @@ extension EngineWebContentHostFactory: OEWebContentDelegate {
       popup.delegate = self
       var size = request.requestedFrame.size
       if size.width < 100 || size.height < 100 { size = NSSize(width: 600, height: 500) }
-      let panel = makePanel(size: size, title: request.url?.host() ?? "Popup")
+      let panel = makeAuxiliaryPanel(size: size, title: request.url?.host() ?? "Popup")
       host(popup, in: panel)
       panel.center()
       present(panel)
@@ -1086,7 +1265,7 @@ extension EngineWebContentHostFactory: OEWebContentDelegate {
       return popup
     case .newWindow:
       let sourceSpace = tabID(for: webContent).flatMap { space(for: $0) } ?? hosts.values.first { $0.content === webContent }?.spaceID.flatMap { model.space(id: $0) }
-      guard let controller = app.makeWindow(focusedSpaceID: sourceSpace?.id), let target = app.hostFactories[controller.windowID] else { return nil }
+      guard let controller = isIncognito ? app.makeIncognitoWindow(parent: incognitoSession?.parent) : app.makeWindow(focusedSpaceID: sourceSpace?.id), let target = app.hostFactories[controller.windowID] else { return nil }
       if webContent.runtimeStyle == .chrome, let url = request.url {
         // The engine would make the page a tab of the opener window's hidden
         // Chrome window (P1), which closes with that window. A new window
@@ -1128,6 +1307,7 @@ extension EngineWebContentHostFactory: OEWebContentDelegate {
   /// Key events that reach the page view directly (not through
   /// NSApplication.sendEvent) still get the reserved app shortcuts.
   func webContent(_ webContent: OEWebContent, handleKeyEventBeforePage event: NSEvent) -> Bool {
+    if pageChrome.handleKey(event) { return true }
     // An action popup's keys arrive here too (Chrome's ExtensionViewHost
     // pre-handles them through the hidden window, whose delegate is CEF's).
     // Cmd+W closes the popup, not the tab (extensions plan §3.7 F2).
@@ -1146,148 +1326,35 @@ extension EngineWebContentHostFactory: OEWebContentDelegate {
   }
 
   func webContentDidRequestClose(_ webContent: OEWebContent) {
-    if let page = auxiliaryPages.first(where: { $0.content === webContent }) {
-      closeAuxiliary(page)
-    } else if let id = tabID(for: webContent) {
-      closeTab(id: id)
+    if pageChrome.pageRequestedClose(webContent) { return }
+    // Chromium has already accepted beforeunload. Do not ask it to close
+    // again, or destroy its host from inside the engine delegate callback.
+    DispatchQueue.main.async { [weak self, weak webContent] in
+      guard let self, let webContent else { return }
+      if let id = self.tabID(for: webContent) { self.finishClosingTab(id: id) }
+      else { self.close(page: webContent) }
     }
   }
 
   func webContent(_ webContent: OEWebContent, runJavaScriptDialog dialog: OEJavaScriptDialog) -> Bool {
-    record(
-      "dialog", webContent,
-      ["kind": dialog.kind.rawValue, "message": dialog.message, "default": dialog.defaultPromptText])
-    switch dialogPolicy {
-    case "accept":
-      dialog.complete(accepted: true, text: promptText ?? dialog.defaultPromptText)
-      return true
-    case "dismiss":
-      dialog.complete(accepted: false, text: nil)
-      return true
-    case "hold":
-      pendingDialogs.append(dialog)
-      return true
-    default:
-      guard let window = webContent.view.window else { return false }
-      let alert = NSAlert()
-      alert.messageText = webContent.url?.host() ?? "This page says"
-      alert.informativeText = dialog.message
-      alert.addButton(withTitle: "OK")
-      if dialog.kind != .alert { alert.addButton(withTitle: "Cancel") }
-      let field = NSTextField(frame: NSRect(x: 0, y: 0, width: 260, height: 24))
-      if dialog.kind == .prompt {
-        field.stringValue = dialog.defaultPromptText
-        alert.accessoryView = field
-      }
-      alert.beginSheetModal(for: window) { response in
-        dialog.complete(accepted: response == .alertFirstButtonReturn, text: field.stringValue)
-      }
-      return true
-    }
+    pageChrome.run(dialog, page: webContent)
   }
 
   func webContent(_ webContent: OEWebContent, decidePermissionRequest request: OEPermissionRequest) -> Bool {
-    record("permission", webContent, ["origin": request.origin.absoluteString, "kinds": request.kinds.rawValue])
-    switch permissionPolicy {
-    case "grant":
-      request.grant(); app.tabSleep.permissionsChanged(context: webContent.context)
-      return true
-    case "deny":
-      request.deny(); app.tabSleep.permissionsChanged(context: webContent.context)
-      return true
-    default:
-      guard let window = webContent.view.window else { return false }
-      let alert = NSAlert()
-      alert.messageText = "\(request.origin.host() ?? "This site") wants permission"
-      alert.informativeText = "Requested: \(request.kinds.rawValue)"
-      alert.addButton(withTitle: "Allow")
-      alert.addButton(withTitle: "Block")
-      alert.beginSheetModal(for: window) { [weak self, weak webContent] response in
-        guard response == .alertFirstButtonReturn else {
-          request.deny(); self?.app.tabSleep.permissionsChanged(context: webContent?.context); return
-        }
-        request.grant()
-        self?.app.tabSleep.permissionsChanged(context: webContent?.context)
-        // The user allowed a site's notifications: ask macOS once (page-platform §4.5.3).
-        if request.kinds.contains(.notifications) { NotificationAuthorization.shared.userAllowedNotifications() }
-      }
-      return true
-    }
+    pageChrome.request(request, page: webContent)
   }
 
   func webContent(_ webContent: OEWebContent, showContextMenu menu: OEContextMenu) -> Bool {
-    let ns = NSMenu()
-    if let link = menu.linkURL {
-      let opener = tabID(for: webContent)
-      ns.addItem(
-        ClosureMenuItem(title: "Open Link in New Tab") { [weak self] in
-          self?.openNewTab(url: link, background: true, opener: opener)
-        })
-      ns.addItem(.separator())
-    }
-    // Translate: Open's own item (Chromium's needs a Google API key, page-platform §2.1 T-1).
-    let translateItem = translate.contextMenuItem(for: webContent)
-    for item in menu.items {
-      if item.isSeparator {
-        ns.addItem(.separator())
-        continue
-      }
-      let command = item.commandIdentifier
-      let mi = ClosureMenuItem(title: item.title) { menu.select(command: command) }
-      mi.isEnabled = item.isEnabled
-      ns.addItem(mi)
-    }
-    if let translateItem, menu.linkURL == nil {
-      let mi = ClosureMenuItem(title: translateItem.title) { [weak self] in self?.translate.perform(translateItem.action) }
-      // After Chromium's page items, before its last group (Inspect).
-      if let last = ns.items.lastIndex(where: \.isSeparatorItem) { ns.insertItem(mi, at: last) } else { ns.addItem(mi) }
-    }
-    let openItems = addCaptureItems(to: ns, for: webContent)
-    func commands(_ items: [OEContextMenuItem], in submenu: String = "") -> [[String: Any]] {
-      items.flatMap { item -> [[String: Any]] in
-        if item.isSeparator { return [] }
-        if !item.submenu.isEmpty { return commands(item.submenu, in: item.title) }
-        return [["id": item.commandIdentifier, "title": item.title, "enabled": item.isEnabled, "submenu": submenu]]
-      }
-    }
-    record(
-      "contextMenu", webContent,
-      [
-        "items": menu.items.map(\.title), "commands": commands(menu.items),
-        "link": menu.linkURL?.absoluteString ?? "", "targets": menu.targets.rawValue,
-        "openItems": ns.items.filter { !$0.isSeparatorItem }.map(\.title),
-        "open": openItems, "shown": ns.items.map { $0.isSeparatorItem ? "-" : $0.title },
-      ])
-    if contextMenuPolicy == "record" {
-      menu.cancel()
-      return true
-    }
-    if let policy = contextMenuPolicy, policy.hasPrefix("run-open:") {
-      // Runs one of Open's own items by title, after the right click returns.
-      let title = String(policy.dropFirst(9))
-      menu.cancel()
-      DispatchQueue.main.async { if let index = ns.items.firstIndex(where: { $0.title == title }) { ns.performActionForItem(at: index) } }
-      return true
-    }
-    if let policy = contextMenuPolicy, policy.hasPrefix("run:"), let command = Int(policy.dropFirst(4)) {
-      // After the right click returns, as a picked menu item would.
-      DispatchQueue.main.async { menu.select(command: command) }
-      return true
-    }
-    let point = menu.location
-    let view = webContent.view
-    DispatchQueue.main.async {
-      let picked = ns.popUp(positioning: nil, at: point, in: view)
-      if !picked { menu.cancel() }
-    }
+    pageContextMenu?.cancel()
+    let session = PageContextMenuBuilder(request: menu, page: webContent, owner: self)
+    pageContextMenu = session
+    session.buildAndShow()
     return true
   }
 
   func webContent(_ webContent: OEWebContent, didUpdateFindResult result: OEFindResult) {
     lastFindResult = result
-    if result.isFinal {
-      if findFieldCreated { findField.placeholderString = "\(result.activeMatchIndex)/\(result.matchCount)" }
-    }
+    findController?.didUpdate(result, page: webContent)
   }
 
   func webContent(_ webContent: OEWebContent, didRequestFullscreen fullscreen: Bool) {
@@ -1312,6 +1379,10 @@ extension EngineWebContentHostFactory: OEWebContentDelegate {
   }
 
   func webContent(_ webContent: OEWebContent, didFinishLoadWithStatus status: Int) {
+    if pendingLittleOpenExtensionTabs[webContent.identifier] === webContent {
+      routeLittleOpenExtensionTab(webContent, url: webContent.url)
+      return
+    }
     finishCommandBarNavigation(webContent)
     app.prepareCommandsAfterPaint(webContent)
     if tabID(for: webContent) != nil { LaunchTiming.shared.mark("firstLoadEnd"); translate.pageDidFinishLoad(webContent, status: status) }
@@ -1324,6 +1395,7 @@ extension EngineWebContentHostFactory: OEWebContentDelegate {
   }
 
   func webContent(_ webContent: OEWebContent, didReceiveDevToolsEvent method: String, parameters: [String: Any]) {
+    pageChrome.event(method, parameters: parameters, page: webContent)
     record("devtools", webContent, ["method": method, "params": parameters])
   }
 
@@ -1352,54 +1424,36 @@ extension EngineWebContentHostFactory: OEBrowserDelegate {
 
   func browserDidUpdateExtensionActions(_ browser: OEBrowser) {
     record("extensionActions", nil, ["browser": browser.identifier, "ready": browser.extensionActionsReady])
-    if browser === focusedBrowser { reloadExtensionBar() }
+    if extensions.host?.browser === browser { extensions.host?.reload() }
   }
-
+  func browser(_ browser: OEBrowser, didUpdate action: OEExtensionAction) {
+    if extensions.host?.browser === browser { extensions.host?.didUpdate(action) }
+  }
   func browser(_ browser: OEBrowser, didOpenExtensionPopup popup: OEWebContent, for action: OEExtensionAction) {
-    popupPanel?.orderOut(nil)
-    popup.delegate = self  // dialogs, console, context menu like any page
-    let panel = makePanel(size: NSSize(width: 360, height: 480), title: action.title)
-    popupPanel = panel
-    host(popup, in: panel)
-    if let button = extensionBar.arrangedSubviews.first(where: {
-      $0.identifier?.rawValue == action.extensionIdentifier
-    }), let win = window {
-      let r = win.convertToScreen(button.convert(button.bounds, to: nil))
-      panel.setFrameTopLeftPoint(NSPoint(x: r.minX, y: r.minY - 4))
-    }
-    present(panel)
+    extensions.popup.opened(browser: browser, page: popup, action: action)
     record("extensionPopup", popup, ["extension": action.extensionIdentifier, "open": true])
     closePopupInCallbackForAutomation(browser, popup: popup, phase: "open")
   }
-
   func browser(_ browser: OEBrowser, didResizeExtensionPopup popup: OEWebContent, to size: NSSize) {
     record("extensionPopup", popup, ["resize": [size.width, size.height]])
+    extensions.popup.resized(popup, size: size)
     closePopupInCallbackForAutomation(browser, popup: popup, phase: "resize")
-    guard let panel = popupPanel else { return }
-    let frame = panel.frameRect(forContentRect: NSRect(origin: .zero, size: size))
-    var f = panel.frame
-    f.origin.y += f.height - frame.height
-    f.size = frame.size
-    panel.setFrame(f, display: true)
   }
-
-  /// Fork patch P2: the popup's first load stopped.
   func browser(_ browser: OEBrowser, extensionPopupIsReady popup: OEWebContent) {
     record("extensionPopup", popup, ["ready": true])
+    extensions.popup.ready(popup)
     closePopupInCallbackForAutomation(browser, popup: popup, phase: "ready")
   }
-
   func browser(_ browser: OEBrowser, didCloseExtensionPopup popup: OEWebContent) {
-    popup.view.removeFromSuperview()
-    popupPanel?.orderOut(nil)
-    popupPanel = nil
+    pageChrome.cancel(popup)
+    extensions.popup.closed(popup)
     record("extensionPopup", popup, ["open": false])
   }
-
-  /// A disabled action ran: Chrome shows its context menu (this shell only
-  /// records it).
   func browser(_ browser: OEBrowser, requestsContextMenuForExtensionAction extensionIdentifier: String) {
     record("extensionMenuRequest", nil, ["extension": extensionIdentifier])
+    if let anchor = extensions.strips.flatMap(\.buttons).first(where: { $0.action.id == extensionIdentifier && !$0.isHiddenOrHasHiddenAncestor }) {
+      extensions.showContextMenu(extensionIdentifier, anchor: anchor)
+    }
   }
 }
 
@@ -1417,6 +1471,20 @@ extension EngineWebContentHostFactory {
   /// index and openerTabId are not applied (documented P1 gap).
   @objc(browser:didOpenWebContent:active:)
   func browser(_ browser: OEBrowser, didOpen webContent: OEWebContent, active: Bool) {
+    if controller == nil {
+      // guess (child), Section 6 lead ruling: Little Open keeps one page;
+      // extra extension tabs open selected in the most recent main window.
+      // Hosted Chrome contents cannot change browsers. OnTabCreated can
+      // precede navigation, so retain the unshown page until its URL arrives.
+      // Arc parity is unconfirmed and needs a capture.
+      record("standaloneExtraTabRouted", webContent, ["browser": browser.identifier])
+      pendingLittleOpenExtensionTabs[webContent.identifier] = webContent
+      webContent.delegate = self
+      if let url = webContent.url, url.absoluteString != "about:blank" {
+        routeLittleOpenExtensionTab(webContent, url: url)
+      }
+      return
+    }
     guard let space = space(forNewTabIn: browser), let profileID = profile(for: browser.context)?.id else {
       webContent.close()
       return
@@ -1428,6 +1496,43 @@ extension EngineWebContentHostFactory {
     if active {
       if space.id != focusedSpace?.id { focus(space: space) }
       select(nodeID: tab.id)
+    }
+  }
+
+  private func routeLittleOpenExtensionTab(_ content: OEWebContent, url: URL?) {
+    guard pendingLittleOpenExtensionTabs.removeValue(forKey: content.identifier) === content else { return }
+    content.delegate = nil
+    let sourceProfileID = profile(for: content.context)?.id
+    // Recreate the URL in the destination before closing the original, after
+    // the source engine callback returns. Close on every failure too, so the
+    // unshown source cannot remain in Little Open's Chrome tab strip.
+    DispatchQueue.main.async {
+      defer { content.close() }
+      guard let url, url.absoluteString != "about:blank" else {
+        self.record("standaloneExtraTabDropped", content, ["reason": "blank-url"]); return
+      }
+      guard let profileID = sourceProfileID,
+        let space = self.model.mostRecentlyFocusedSpace(profileID: profileID) else {
+        self.record("standaloneExtraTabDropped", content, ["reason": "no-profile-space"]); return
+      }
+      var controller = self.app.linkExecutor.orderedControllers.first {
+        $0.context.focusedSpace?.profileID == profileID
+      }
+      if controller == nil {
+        // makeWindow can reuse the retained final main window. Set its Space
+        // before composition, so no page is created in a different Profile.
+        if self.app.windowControllers.isEmpty,
+          let retained = self.model.windows.first(where: { $0.style == .standard }) {
+          self.model.focusSpace(windowID: retained.id, spaceID: space.id)
+        }
+        controller = self.app.makeWindow(focusedSpaceID: space.id)
+      }
+      guard let controller, controller.context.focusedSpace?.profileID == profileID,
+        let target = self.app.hostFactories[controller.windowID],
+        target.openNewTab(url: url, background: false) != nil else {
+        self.record("standaloneExtraTabDropped", content, ["reason": "target-unavailable"]); return
+      }
+      self.app.focusWindow(controller.windowID, activate: true)
     }
   }
 
@@ -1492,7 +1597,7 @@ extension EngineWebContentHostFactory {
   @objc(browser:requestsPinned:forWebContent:)
   func browser(_ browser: OEBrowser, requestsPinned pinned: Bool, for webContent: OEWebContent) {
     defer { mirror.sync() }
-    guard let id = requestTabID(for: webContent), let parent = model.parent(of: id) else { return }
+    guard !isIncognito, let id = requestTabID(for: webContent), let parent = model.parent(of: id) else { return }
     if case .favorites = parent {
       record("tab-request", webContent, ["request": pinned ? "pin" : "unpin", "refused": true])
       return
@@ -1607,11 +1712,17 @@ extension EngineWebContentHostFactory: OEBrowserContextDelegate {
     _ context: OEBrowserContext, decideDestinationFor download: OEDownload, suggestedFilename: String,
     completion: @escaping @MainActor (URL?) -> Void
   ) {
-    app.downloadsCenter.decide(download, context: context, filename: suggestedFilename, window: window, directoryOverride: downloadDirectory, completion: completion)
+    if isIncognito {
+      privateDownloads.decide(download, filename: suggestedFilename, directory: downloadDirectory,
+        profile: incognitoSession?.parent, window: window, completion: completion)
+    } else {
+      app.downloadsCenter.decide(download, context: context, filename: suggestedFilename, window: window, directoryOverride: downloadDirectory, completion: completion)
+    }
   }
 
   func browserContext(_ context: OEBrowserContext, downloadDidUpdate download: OEDownload) {
-    app.tabSleep.downloadUpdated(download, factory: self)
+    if isIncognito { privateDownloads.updated(download) }
+    else { app.tabSleep.downloadUpdated(download, factory: self) }
     record(
       "download", download.webContent,
       [
@@ -1642,28 +1753,12 @@ final class ClosureMenuItem: NSMenuItem {
 // Undo/Redo use AppKit itself and the window delegate's selected UndoManager.
 extension EngineWebContentHostFactory: NSMenuItemValidation {
   @objc func performFindPanelAction(_ sender: Any?) {
-    switch (sender as? NSMenuItem)?.tag ?? 1 {
-    case 1: showFind(nil)
-    case 2: findNext(nil)
-    case 3: findPrevious()
-    case 7:
-      guard !isClosing, app.engineReady, !app.terminationRequested, let page = selectedContent else { return }
-      findSelectionTask?.cancel()
-      findSelectionTask = Task { @MainActor [weak self, weak page] in
-        guard let self, let page, !Task.isCancelled, !self.isClosing,
-              self.app.engineReady, !self.app.terminationRequested else { return }
-        self.app.noteAsyncEngineCall("findSelection")
-        let value = try? await page.evaluateJavaScript("window.getSelection().toString()") as? String
-        guard !Task.isCancelled, !self.isClosing, self.app.engineReady, !self.app.terminationRequested else { return }
-        self.findSelectionTask = nil
-        if let value, !value.isEmpty { self.findField.stringValue = value; self.findNext(nil) }
-      }
-    default: break
-    }
+    ensureFindController().perform(tag: (sender as? NSMenuItem)?.tag ?? 1)
   }
+
   func validateMenuItem(_ item: NSMenuItem) -> Bool {
     switch item.action {
-    case #selector(performFindPanelAction(_:)): return selectedContent != nil
+    case #selector(performFindPanelAction(_:)), #selector(performTextFinderAction(_:)), #selector(centerSelectionInVisibleArea(_:)): return selectedContent != nil
     default: return true
     }
   }

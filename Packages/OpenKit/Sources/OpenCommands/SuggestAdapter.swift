@@ -82,7 +82,7 @@ public extension CommandRegistry {
     private static let suggestOnlyIDs: Set<String> = [
         "add-to-favorites", "remove-from-favorites", "replace-pinned-url",
         "mute-all-tabs", "unmute-all-tabs", "air-traffic-control",
-        "manage-passwords", "search-settings",
+        "manage-passwords", "search-settings", "extension-shortcuts",
     ]
 
     /// Menu commands with no command-bar row (text, spelling, chrome, help detail).
@@ -105,6 +105,7 @@ public extension CommandRegistry {
     ]
 
     private static let symbols: [String: String] = [
+        "open-extensions-picker": "puzzlepiece.extension", "extension-shortcuts": "command",
         "new-tab": "plus", "contact-team": "ellipsis.bubble", "new-window": "macwindow.badge.plus", "new-incognito-window": "eyeglasses",
         "new-little-open-window": "macwindow.on.rectangle", "archive-tab": "archivebox",
         "restore-last-closed-tab": "arrow.uturn.backward", "print": "printer", "save-page-as": "square.and.arrow.down",
@@ -118,7 +119,7 @@ public extension CommandRegistry {
         "reveal-current-tab": "sidebar.left", "clear-cache-and-refresh": "trash", "clear-cookies-and-refresh": "trash.circle",
         "appearance-automatic": "circle.lefthalf.filled", "appearance-light": "sun.max", "appearance-dark": "moon",
         "new-space": "plus.rectangle.on.rectangle", "next-space": "arrow.right", "previous-space": "arrow.left",
-        "manage-spaces": "square.grid.2x2", "rename-space": "pencil", "edit-theme": "paintpalette", "change-profile": "person.crop.circle",
+        "manage-spaces": "square.grid.2x2", "rename-space": "pencil", "edit-theme": "paintpalette", "change-space-icon": "face.smiling", "change-profile": "person.crop.circle",
         "next-tab": "arrow.down", "previous-tab": "arrow.up", "clear-unpinned-tabs": "xmark.circle",
         "new-folder": "folder.badge.plus", "duplicate-tab": "plus.square.on.square", "rename-tab": "pencil",
         "expand-all-folders": "folder", "collapse-all-folders": "folder.fill", "reset-tab": "arrow.counterclockwise",

@@ -853,6 +853,11 @@ Page UI (in-page picker, restyled in Step 6 to Arc's look; S2 10/0058–0060, IS
 | Click popup | White card ≈ 428 × 90, corner 12, shadow: "Zap this" (red fill), "Zap all related elements" (orange fill), "Cancel" (grey fill), each ≈ 38 tall, white 13 pt text; a grey band below with "<count> <selector>" in 11 pt monospace | S2 10/0060 |
 | After a Zap | The bar offers "Click to reveal" with the zapped elements; clicking one reveals it (removes the Zap). Layout not captured: one chip per Zap, label = `ZappedElement.label` (guess). Hover on a chip previews the element (Arc `zapToPreview`). | notes 10:26:49 |
 
+**Open choice (lead, 2026-11-06):** the click card closes after every choice.
+"Zap this" makes one precise commit. "Zap all related elements" makes one direct
+related commit: one store mutation and one undo step, with no preliminary precise
+commit. Cancel makes no commit. Keep `zap:replaced` decoding for the bridge contract.
+
 The bar label change replaces "Zap mode"; keep the "Zap all related (N)" check in
 `tools/verification/boosts.mjs` by renaming it to the popup's "Zap all related elements" with the
 count in the band.
@@ -876,7 +881,12 @@ count in the band.
 
 JS notice (Open's words, unchanged): the first time the JS tab has text, a 28 pt dismissible row
 above the bottom bar: "JavaScript in a Boost runs on this site like the site's own code." with ×
-(stores `open.boosts.hasDismissedJSNotice`).
+(stores `open.boosts.hasDismissedJSNotice`). Open choice (lead 2026-11-06): height 28 pt,
+background #F2F2F4, top hairline 1 physical pixel of black 0.08. Text is 11 pt Regular,
+black 0.60, leading inset 12 pt, one line with tail “…” truncation. The dismiss button
+uses `xmark`, 9 pt Semibold, black 0.45, in a 20 × 20 pt hit area, centered vertically,
+6 pt from the trailing edge; AX label “Dismiss”. Every value is a token in
+`OpenDesign/SiteControlTokens.swift`.
 
 Editing rules:
 
@@ -1154,7 +1164,9 @@ As on PR #103 (lead round 1 and 2 changes kept), plus `browserWindowFrame(tabID:
     func preview(_ boost: Boost, tabID: ItemID)                     // §5.3 bound page only
     func refresh(profile: ProfileID)                                // §5.3 all matching pages
     func pageSnapshot(tabID: ItemID) async -> Data?                 // PNG for baseHue
+    func zapAvailability(tabID: ItemID) -> Bool                     // required query; false before P7 or without the Open world
     func enterZap(boostID: BoostID, tabID: ItemID) -> Bool           // coordinator + send; false if blocked (P7)
+    func enterSelectorPicker(boostID: BoostID, tabID: ItemID) -> Bool // required select-mode capability; false if blocked
     func exitZap(tabID: ItemID)
     func removeZapFromSession(_ selector: String, tabID: ItemID)
     func requestZapCounts(tabID: ItemID)                            // zap:list
@@ -1168,8 +1180,11 @@ As on PR #103 (lead round 1 and 2 changes kept), plus `browserWindowFrame(tabID:
 }
 ```
 
-`BoostPickerEvent` is a small enum in OpenSiteControl that the App fills from
-`BoostPickerCoordinator.handle` results. The App's adapter stays the only code that touches
+`BoostPickerEvent` is declared in OpenBoosts and aliased by OpenSiteControl. The App
+publishes the coordinator’s `lastEvent` after `handle`. Its cases include
+`.selected(selector:matches:)` for the select capability. The code editor binds
+`session.insertSelectorAtCaret` to its CSS NSTextView caret and calls
+`session.pickSelector()`. The session exits select mode after insertion. The App's adapter stays the only code that touches
 `BridgeDecode` and the engine.
 
 ### 6.4 Controller wiring (OpenFeatures)
@@ -1271,7 +1286,7 @@ Flows (each asserts the fake's recorded calls and the view state):
 | F13 | Zap on/off, picker exit, commit (count updates), reveal | host calls in order; button label and AX |
 | F14 | Undo / redo after F10–F13 | store returns to each previous value |
 | F15 | Rename (Done, Cancel, empty), Shuffle, Reset all Edits (Cancel, Reset), Delete (Cancel, Delete) | store values; editor closed after Delete |
-| F16 | Close a new untouched Boost; close after one change; "Maybe Later" on a new Boost | deleted, kept, deleted |
+| F16 | Close a new untouched Boost; close after a nonempty change; "Maybe Later" on a new Boost; type CSS/JS then erase it or leave only whitespace | deleted, kept, deleted; after pending code is flushed, an empty new Boost is deleted (lead review R1-2, 2026-11-06) |
 | F17 | Code editor: type CSS, wait 150 ms (Step 7) | one `upsert` with the text, one `refresh`; Tab inserts 2 spaces; Return after `{` indents; Cmd+/ comments |
 | F18 | JS tab: type; "Refresh to Run" appears; host reload; after reload with equal JS it hides (Step 7) | host calls in order; button visibility |
 | F19 | First-run "Make a Boost" sets the flag; "Maybe Later" does not | UserDefaults (suite-scoped) |
@@ -1427,10 +1442,34 @@ paste the summary (`AGENTS.md` rule 10). Steps 1, 2, and 4 are open PRs that are
 | 4 | #103 (rework) | `BoostColorWheel` (as is); `OpenDesign/ColorPad.swift` (§12.4); editor window, placement, header, name menu with scope submenu, pad, color buttons, advanced popover, font grid, Size/Case/Zap/Code (Zap and Code disabled), first-run card, banners | F10–F12, F14–F16, F19, F24, F25 PASS; `check` knob-gradient probe; `editor-*` simple states; `boosts` harness 26/26 |
 | 4R | new (engine lane) | **Boost color remap (engine)**, Q12 ruling. Starts after #103 merges; runs beside Steps 5–7. (a) RE study of ArcCore's `EffectsAgent` (a separate task; findings land in `docs/re/features-advanced.md` as **BO-23**, the next free id; BO-12 is "Editor lifecycle" and stays as cited in §4.13). (b) An engine plan (`docs/plans/`) for a paint-time color remap in our fork, the same kind of mechanism as Chromium's auto dark mode (`DarkModeFilter`, which classifies images separately): page colors remap toward the pad's two knob colors, while images, video, and canvas stay untouched. (c) Implementation in the fork, then the App switches Boost colors from filters to the remap. | No Boost color: zero added paint cost (measured; zero within the noise band the engine plan defines). One Boost color: scroll p95 and paint time on three heavy pages (named by the engine plan) within the budget the engine plan sets. B2 rewritten to probe a white background and an image pixel (tinted vs. unchanged). |
 | 5 | new (App) | App editor host (placement frame, preview/refresh), Boost commands, Library Boosts section | B1–B3, B6–B10 PASS; `settings-preview check` PASS |
-| 6 | new | Zap: picker restyle (frame, bar, popup, "Click to reveal"), count on the button, picker events | F13 PASS; `boosts` harness PASS; B4 after P7 |
-| 7 | new | Code mode (480 × 588 window, header, code view, bottom bar, CSS live, JS refresh, devtools, size persistence) | F17, F18, B5 PASS |
-| 8 | new | "Pick Selector": picker select mode (`zap:enter` with `mode: "select"`; page → native `picker:selected {boostID, sessionNonce, selector, matches}`; no commit, no hide); the editor inserts the selector at the CSS caret | `boosts` harness incl. a check that select mode commits nothing; flow "Pick Selector inserts the selector" |
+| 6 | [S12-D #197](https://github.com/SergeSerb2/open/pull/197) | Zap: picker restyle (frame, bar, popup, "Click to reveal"), count on the button, picker events | F13 PASS; `boosts` harness PASS; B4 after P7 |
+| 7 | package: [Code mode #203](https://github.com/SergeSerb2/open/pull/203); App: Step 5 host | Code mode (480 × 588 window, header, native text view, bottom bar, CSS live, JS refresh, devtools, size persistence). Evidence and negative-proof logs are in the package PR body. | Package F17/F18 and review-fix receipts are recorded in the PR; B5 pending App host `loadedJS` and bound-commit wiring. |
+| 8 | [S12-D package #197](https://github.com/SergeSerb2/open/pull/197); code-mode binding in [Code mode #203](https://github.com/SergeSerb2/open/pull/203) | "Pick Selector": picker select mode (`zap:enter` with `mode: "select"`; page → native `picker:selected {boostID, sessionNonce, selector, matches}`; no commit, no hide); the editor inserts the selector at the CSS caret | `boosts` harness incl. a check that select mode commits nothing; flow "Pick Selector inserts the selector" |
 | 9 | new | Engine items E1–E4 as they land | interim rows switch |
+
+**Step 6 package integration (S12-D):** the App adapter fans out validated
+`coordinator.lastEvent` to the editor sessions. Handle the added `labels` argument
+of `.listZaps` so reveal chips retain their stored labels. After an accepted
+reveal, send `removeZap(selector:for:)` before refreshing matching pages. Call
+`endPickerSession()` on tab switch, frame destruction, and transport loss, and
+`updatePageURL` on navigation, including same-URL reloads. `finish()` removes the
+session observer. The card behavior is the **Open choice (lead, 2026-11-06)** in
+§4.8: Cancel commits nothing; precise and direct-related choices each close the
+card, persist once, and undo once. `zap:replaced` decoding remains compatible.
+Negative-proof logs and counts belong in the PR; raw receipts remain in `.re/`.
+Idle lifecycle notifications send no exit command or picker redraw. Close still
+sends one unconditional exit. The required host query `zapAvailability(tabID:)`
+supplies the button state on each refresh; a transient failed entry leaves the
+button off and enabled when the host remains available, so the user can retry.
+
+**Step 8 package integration (S12-D):** `BoostEditorHost.enterSelectorPicker`
+is a plain protocol requirement without a default; the render harness fake host
+implements it. The lead binds the App host after merge; code mode binds the available selector picker:
+call `session.pickSelector()` and bind `insertSelectorAtCaret` to the CSS
+NSTextView caret as one undoable insertion. The button follows host availability
+and is disabled on JS. A late selection on JS changes neither text view. The picker
+commits no Zap and hides no content; CSS insertion uses the normal save debounce. The coordinator owns `BoostPickerEvent`; OpenSiteControl
+exports an alias. These package hooks do not wait for the B/C branches to merge.
 
 ---
 
@@ -1444,7 +1483,7 @@ paste the summary (`AGENTS.md` rule 10). Steps 1, 2, and 4 are open PRs that are
 | R-2 | **Interim only (#103 → Step 4R).** CSS filters cannot tint white or grey pages; Arc's remap does (S2-22). Boosts on white sites look weak until the engine remap lands. | Step 4R replaces the filter runtime in v1 (Q12 ruling). Until then the neutral-page hint points to Invert lightness. |
 | R-3 | Live preview through `evaluateJavaScript` per frame could cost the renderer. | ≤ 60 Hz, bound page only, small plans; drop to 30 Hz if page frame time grows > 4 ms. |
 | R-4 | Main-world picker and applier before P7 leak Boost state to page scripts. | Zap stays disabled until P7. |
-| R-5 | Users lose a Boost by closing a new one quickly. | Only an unchanged new Boost is deleted (F16). |
+| R-5 | Users lose a Boost by closing a new one quickly. | Only a new Boost that is empty after pending changes are flushed is deleted (F16). |
 | R-6 | The overlay must stay above web content in every layout. | Reuse the command bar overlay container order; `scc-pane-anchor`, full-screen e2e. |
 | R-7 | A `.withinWindow` material may not blur the engine's remote layer content; it costs a re-blur on every page frame while the panel is open; and the blur may "swim" while the container scales during the 0.20 s open (§3.2). | S11 and S12 on the real app in Step 3; the §7 scroll budget (S13); the swim is accepted and recorded by the `motion` check. Fallback: host the panel in a borderless child window with `.behindWindow` blending. That changes key handling (`becomesKeyOnlyIfNeeded = false`, a key-window check against `BrowserWindowController.windowDidResignKey`, whose inactive look follows key status) and reworks the §3.12 focus restore and the dismissal code; Steps 1–2 harness flows survive. |
 | R-8 | The editor straddles the browser window's right edge. On a full-width window, in full screen (the right edge is the screen edge), or when the right edge is on a display join, the clamp moves it fully inside the window's screen and it covers the right 183 pt of the page. | Clamp rule and screen choice (§4.2); the user can drag it. |

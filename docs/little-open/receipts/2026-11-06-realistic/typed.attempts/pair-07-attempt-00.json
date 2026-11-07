@@ -1,0 +1,113 @@
+{
+  "configuration": "Release",
+  "scenario": "typed",
+  "reportOnly": true,
+  "samples": [
+    {
+      "build": "branch",
+      "pair": 7,
+      "scenario": "typed",
+      "load": [
+        5.3212890625,
+        5.78271484375,
+        6.5439453125
+      ],
+      "endLoad": [
+        5.3212890625,
+        5.78271484375,
+        6.5439453125
+      ],
+      "uptime": "4:47  up 19:31, 7 users, load averages: 5.32 5.78 6.54",
+      "firstContentfulPaintMs": 28,
+      "baselineRSS": 569049088,
+      "loadedRSS": 956153856,
+      "windowRSS": 387104768,
+      "processCount": 6,
+      "foregroundInterruptions": [],
+      "firstFrameMs": 66.27733333152719,
+      "pageLoadMs": 71.74329165718518,
+      "openResponseToSubmitMs": 404.02245800000003,
+      "openRequestToSubmitMs": 458.3347083389526,
+      "browserCreationToReadyMs": 462.96158332552295,
+      "firstFrameToBrowserCreationMs": 0.8390833390876651,
+      "cleanupOK": true
+    },
+    {
+      "build": "main",
+      "pair": 7,
+      "scenario": "typed",
+      "load": [
+        5.21533203125,
+        5.7529296875,
+        6.52880859375
+      ],
+      "endLoad": [
+        5.21533203125,
+        5.7529296875,
+        6.52880859375
+      ],
+      "uptime": "4:47  up 19:31, 7 users, load averages: 5.22 5.75 6.53",
+      "firstContentfulPaintMs": 36,
+      "baselineRSS": 570572800,
+      "loadedRSS": 952074240,
+      "windowRSS": 381501440,
+      "processCount": 6,
+      "foregroundInterruptions": [],
+      "firstFrameMs": 93.45450000546407,
+      "pageLoadMs": 61.28879166499246,
+      "openResponseToSubmitMs": 402.8294160000003,
+      "openRequestToSubmitMs": 448.69091667351313,
+      "cleanupOK": true
+    }
+  ],
+  "method": "automation request start to first native display-link tick; page submit to loading=false plus document complete and first contentful paint",
+  "externalMethod": "time before LaunchServices open(1) delivery to performance.timeOrigin + FCP; wall/monotonic clock stability checked",
+  "typedDelayMs": 400,
+  "memory": "App metrics totalRSS: App and owned helpers; one loaded window minus baseline",
+  "partialPair": 7,
+  "mainBundle": "<main-worktree>/build/Release/Open.app",
+  "branchBundle": "<branch-worktree>/build/Release/Open.app",
+  "summary": {
+    "main": {
+      "firstFrameMs": {
+        "median": 93.45450000546407,
+        "p95": 93.45450000546407
+      },
+      "pageLoadMs": {
+        "median": 61.28879166499246,
+        "p95": 61.28879166499246
+      },
+      "windowRSS": {
+        "median": 381501440,
+        "p95": 381501440
+      },
+      "loadedRSS": {
+        "median": 952074240,
+        "p95": 952074240
+      }
+    },
+    "branch": {
+      "firstFrameMs": {
+        "median": 66.27733333152719,
+        "p95": 66.27733333152719
+      },
+      "pageLoadMs": {
+        "median": 71.74329165718518,
+        "p95": 71.74329165718518
+      },
+      "windowRSS": {
+        "median": 387104768,
+        "p95": 387104768
+      },
+      "loadedRSS": {
+        "median": 956153856,
+        "p95": 956153856
+      },
+      "browserCreationToReadyMs": {
+        "median": 462.96158332552295,
+        "p95": 462.96158332552295
+      }
+    }
+  },
+  "extraHiddenBrowserRSS": 5603328
+}

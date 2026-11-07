@@ -1,12 +1,25 @@
 # Automation channel (test harness)
 
+Extension E11/E12 acceptance runs with `tools/e2e/engine_e2e.py --config Release
+--style chrome --only extensions-e2 --extensions PATH` (`PATH` contains the
+unpacked `ublock-lite` and `darkreader` fixtures). It uses the real command bar's existing
+`key` and `commandbar-state` commands. Command-bar rows include `extension`,
+`content`, and `keycaps`. `ext-windows` lists only native extension popup windows:
+controller class, page/window/browser ids, Cocoa frame, title, style, autosave
+name, and whether the page is the content view. Numeric page handles work for
+these windows too. `ext-windows {preference:true}` reads the one frame-autosave
+entry; adding `value` writes or removes it so a suite can reset and restore it.
+`ext-omnibox` takes `extension` and `op` (`start`, `input`, `reply`, `default`,
+`cancel`). It exercises text/style bounds through the public engine API;
+`default` reports presence, UTF-16 lengths, and range counts, without page text.
+
 Open's end-to-end tests drive the real app through a local Unix socket. There is no computer use: nothing here moves the system mouse, types on the system keyboard, or touches another app. Key and mouse events are built inside Open and go only to Open's own windows. Pixels come only from Open's own windows.
 
 Every agent command that opens Open on screen must hold the machine-wide lock
 for one suite or diagnostic invocation, including launch and cleanup:
 
 ```sh
-/usr/bin/lockf /tmp/open-onscreen-e2e.lock python3 tools/e2e/engine_e2e.py --config Debug --style chrome --only window
+/usr/bin/lockf -k /tmp/open-onscreen-e2e.lock python3 tools/e2e/engine_e2e.py --config Debug --style chrome --only window
 ```
 
 Release the lock between suite invocations. Do not hold it during builds,
@@ -15,7 +28,7 @@ that suite's existing lock; they do not acquire it again. The lock serializes
 agents, while native-focus interruption tracking still covers user activity.
 
 Builds, `swift build`, and every `tools/verify-all.sh` invocation use the separate
-machine-wide heavy-job slot script (two jobs at a time):
+machine-wide heavy-job slot script (capacity is set by the lead):
 
 ```sh
 ~/Library/Caches/OpenRE/scripts/heavy.sh nice -n 10 tools/build.sh Debug
@@ -30,6 +43,56 @@ on-screen lock around one suite only; take the heavy slot around build steps.
 - Debug builds always include it (`SWIFT_ACTIVE_COMPILATION_CONDITIONS = DEBUG OPEN_AUTOMATION`, `project.yml`).
 - Release builds include it only with `OPEN_AUTOMATION=1 tools/build.sh Release` (used for measurements). A normal Release build has no socket code at all.
 - Socket: `<data root>/automation.sock`, mode 0600. The data root is `$OPEN_USER_DATA` or `--user-data-dir=DIR`, else `~/Library/Application Support/Open-Dev` (Debug) or `.../Open` (Release); it holds `State/browser.json` and `Profiles/<dir>/{Engine,State}` (docs/plans/profiles.md §5). `--automation-socket=PATH` or `$OPEN_AUTOMATION_SOCKET` override the socket path. Code: `App/Automation/AutomationServer.swift`.
+
+First run is detected once, before data-root preparation, when
+`State/browser.json` does not exist. `--skip-first-run` or
+`OPEN_SKIP_FIRST_RUN=1` selects the normal browser path. `--arc-dir=PATH`
+overrides the read-only import source for tests and support. Always use a
+disposable Open root and a synthetic source for first-run automation.
+
+The shared e2e `Open` launcher adds `--skip-first-run` by default. Its direct
+early-quit, missing-engine, and migration launches do the same. All suite
+modules, peer launches, and benchmarks use that launcher. `tools/run.sh` and
+the release smoke launch also pass the switch. `tools/openctl` connects to
+an existing socket and never launches the App. `verify-all.sh` runs package
+CLIs, not the App. Only the `firstrun` suite opts into first run.
+
+The dev launcher `tools/run.sh` always passes `--skip-first-run`. To see first
+run by hand, launch the built App binary directly with a disposable data root,
+inside the screen lock (omit `--skip-first-run`):
+
+```sh
+first_run_root=$(mktemp -d /tmp/open-first-run.XXXXXX)
+OPEN_USER_DATA="$first_run_root" \
+  /usr/bin/lockf -k /tmp/open-onscreen-e2e.lock \
+  build/Debug/Open.app/Contents/MacOS/Open --user-data-dir="$first_run_root" --arc-dir=/path/to/synthetic-arc
+```
+
+Use a synthetic source folder for this check. Quit the App before removing
+the temporary root.
+
+## Profile context reads
+
+`engine-contexts` returns the sorted identifiers of live engine contexts,
+including Default. It works after the last standard window closes.
+`focusedBrowser` reads, extension/menu scans, and Settings shortcut-conflict
+reads do not load a Profile. A real focus change can attach a window Browser
+only when that Profile context is already loaded.
+
+Automation extension, popup, permission, script, filter and download commands
+use existing Browsers by default. Pass `create: true` only when a test intends
+an extension or site interaction to load the focused Profile. Unloaded read
+lists are empty (`extensions.loaded` is false); mutations that need a Browser
+return a not-loaded error. Notification reads likewise use an existing context.
+A pending Little Open window never borrows a standard window's Browser.
+
+The real-App `extensions-ui` suite includes `P10_*` rows for empty-Space focus,
+Settings/read laziness, two-window Profile actions, key-window menus and
+shortcuts, Work popups/management, context reuse, Little Open, unloaded
+Profile deletion and five-second quit cleanup. `OPEN_E2E_EXTENSIONS_UI_SCOPE=profiles`
+selects these rows alone. `profiles-memory` selects five fresh two-Profile
+launches and the existing OS idle CPU sampler; see [the receipt](profiles-memory.md).
+Both modes reset and restore their shared defaults keys in `finally`.
 
 ## Protocol
 
@@ -68,6 +131,68 @@ Arguments are `key=value`; values that parse as JSON are sent as JSON.
 
 ## Commands
 
+`first-run` returns `{active, step, completed}` even when there is no browser
+window. Optional `action` drives the same view-model methods as the buttons:
+`import`, `fresh`, `continue`, `notnow`, `back`, `finish`, `retry`, or
+`choose-dir` with `directory=PATH`. `select` sets optional `spaces`, `archive`,
+`history`, and `secrets` checkbox booleans on Import. Capability OFF still excludes passwords from the plan. `retry` on a save-error Report retries
+the pending model's save. Directory strings are limited to 4096 UTF-8 bytes;
+action names to 32. There is no action that changes the system default browser.
+
+For native evidence, `focus` grants input focus to this instance's first-run
+window. `inspect` reads its rendered text and top-left text frames using
+Vision on a snapshot of that window only. OCR runs on a utility worker and retries only `TextRecognition.CRImageReaderError` code 1, once after 250 ms. `ocrRetries` records 0 or 1; the suite keeps its bounded 180-second timeout and all copy/geometry assertions. State includes its native frame
+size, key flag, and traffic-light frames. `snapshot` prefers the first-run
+panel while it exists. `OPEN_AUTOMATION_IMPORT_DELAY_MS` (automation builds
+only, at most 5000 ms) holds the real progress view for animation captures.
+`OPEN_AUTOMATION_PROBE_DELAY_MS` (the same limit) delays probe work so the suite
+can close and reopen Welcome before counting finishes. Reopen restarts a
+cancelled probe when counts have not landed.
+
+State also includes `importInProgress`, `historyInProgress`, `historyProcessed`, and the main-thread `importAllMilliseconds`. The landing gate clears `importInProgress` before History starts. Progress includes `phase`, `progress`, and `browserHasLanded`. While a Settings import runs,
+`settingsStep` reports `Importing`. The same command also drives the visible Settings sheet after first run:
+`settings-import` with `directory=PATH`, `settings-select` with `history=true` and optional `historyOnly=true`, `settings-next`, `settings-run`,
+and `settings-done`. State then includes `settingsStep`, `settingsOutcome`,
+and `settingsError`. These actions use the real cached wizard and shared App
+runner. `lastOutcome` and `lastFailures` remain readable after the first-run window closes. History streams through the existing Profile stores; passwords/cookies stay disabled. `OPEN_AUTOMATION_HISTORY_DELAY_MS` (automation builds only, at most 10000 ms per batch) pauses after the reader yields a real batch, before its transaction, so the suite can verify browsing while imported visits are still absent.
+
+`import-extensions` reads the report's candidate rows, selection, per-row
+status, queue state, and final counts. It omits manifest and Profile names.
+`action=toggle row=ROW on=BOOL` changes an unprocessed checkbox;
+`action=install` uses the report's Install Extensions action and returns while
+the serial queue waits for normal `ext-prompt` consent. `action=registries`
+reads installed IDs by Open Profile for synthetic isolation checks.
+`action=fixtures files='{"<candidate-id>":"<signed-local-crx>"}'` supplies at
+most 4,096 automation-only ID/file mappings (32 a–p characters per ID and
+4,096 UTF-8 bytes per path). Production has no fixture path.
+`action=inspect` scrolls and reads pixels from the report window; it is
+available only after synthetic fixture mappings are configured. Use it only
+with synthetic data. `OPEN_E2E_IMPORT_EXT_ONLY=1` runs this block alone inside
+`firstrun`. `OPEN_E2E_IMPORT_EXT_NEGATIVE=detection` and `queue` deliberately
+change fixture ownership/classification and real actions, so the matching EI
+gates must FAIL; clear both variables for normal acceptance.
+The synthetic second Profile uses `custom._0.directoryBasename = Profile 2`.
+`EI_default_role_mapping` reimports into a live Default with a different ID;
+`EI_default_role_target` checks its actual manager and the other Profile.
+The fixture mapping may name a missing file to verify App initiation failure.
+Once a local install starts, no App timeout completes it or cancels its sheet.
+`EI_failure_reported_engine` stays BLOCKED until the engine supplies completion
+for damaged signatures. `OPEN_E2E_IMPORT_EXT_NETWORK=1` adds one INFO Web Store
+receipt (no fixture mapping), observed for at most two minutes; no answer leaves
+the queue pending. `OPEN_E2E_IMPORT_EXT_NEGATIVE=detection` and `queue` apply
+real source/action faults to qualify the EI gates; normal runs restore them.
+
+Run the synthetic first-run flow with:
+
+```sh
+/usr/bin/lockf -k /tmp/open-onscreen-e2e.lock python3 tools/e2e/engine_e2e.py --config Debug --style chrome --only firstrun
+```
+
+The suite restores shared defaults in `finally`, checks owned-process/window
+cleanup, and writes uncommitted receipts and native PNGs under
+`docs/engine-spike/`. Its five first-content timing samples include loads;
+loaded Debug numbers are upper bounds, not idle Release budget acceptance.
+
 | Command | Args | Result |
 |---|---|---|
 | `ping` | — | pid, Chromium and CEF versions, engine root (`Profiles/`) and data root |
@@ -99,14 +224,31 @@ Arguments are `key=value`; values that parse as JSON are sent as JSON.
 | `mouse` | `window`, `x`, `y`; `action=move`, `action=hover`, `action=down`, `action=drag`, `action=up`, or `action=click` with `clickCount` and `modifiers` (`option`, `command`, `shift`, `control`); or `from` / `to` point pairs | Own-window click, queued pointer motion, or native resize drag; system cursor stays unchanged. Down/drag/up and the from/to drag send real NSEvents through `OEApplication.sendEvent`; separate actions let a check inspect or snapshot a held drag. The resize handle uses AppKit mouse callbacks, so the socket stays responsive. A double-click uses `clickCount=2` (the suite also sends the first click). `click` runs the window's layout pass first (as real input follows a display cycle) and queues the mouse-up before sending the mouse-down, so controls that track the mouse (the window buttons) finish. Motion events carry a tag; from the first one on, pointer-driven window logic (the sidebar hover reveal) ignores the hardware pointer, so someone using the Mac cannot disturb a check. `move` and `click` also set the automation pointer at once (`BrowserWindowController.automationPointer`), and `hover` sets it after it has delivered enter, move, and exit (it rebuilds every tracking area first, and those rebuilds must still see the old point). A `move` delivers no enter or exit, so it clears `hover`'s record of entered owners and the next `hover` enters the owners under its point again; state that reads where the pointer is, not an event (the window buttons' hover after a full-screen exit, a restore, or a show), reads it instead of the hardware pointer. `hover` also delivers enter, move, and exit to the owners of the tracking areas under the point, title bar included (tracking areas follow the hardware pointer), and returns the owners it found. macOS's own window-button glyphs and tiling menu follow only the hardware pointer |
 | `focus` | `tab` | Give the page keyboard focus |
 | `find` / `zoom` / `mute` | `tab`, … | Find in page, zoom level, mute |
+| `find-state` | — | Read-only lazy Find state: `created`, focused tab, and one row per used pane (`visible`, `query`, `countText`, `active`, `total`, `notFound`, native field focus/selection, placeholder, navigation/separator visibility, bar/pane/page-viewport frames and visible chrome/extension-strip frames in window coordinates with a bottom-left origin; native close-button frame and hit-test owner). Also request/result/layout counters, pending work, and presentation phases (layout, draw, layer flush, field focus). The commit time starts at the native key event timestamp; it measures the flushed layer, not physical display scanout. Reading state creates no Find controller. |
+| `find-idle` | `action=begin`, `watch`, `reset`, `read`, `invalidate`, `end` | Harness-only bridge to the already-injected S8 idle observer. Reports draw/layout/display, invalidation, scheduling, timer, and display-link counters. `invalidate` marks the real Find view for layout as an observer canary. No observer library is loaded or attached by this command. Unknown actions fail. |
 | `print-pdf` | `tab`, `path` | Print to a PDF file |
 | `devtools-open`, `fullscreen-exit` | `tab` | — |
-| `extensions` | — | Installed extensions and the window's toolbar actions (through the OpenWeb `ExtensionHost` protocol) |
+| `extensions` | — | Installed extensions and the window's toolbar actions, with `duplicatesDropped` from the App's first-occurrence normalization. Action fields match `actions` below. |
 | `popup` | `extension` | Run the action like a click on its button; returns the popup page |
 | `popup-close` | — | Close the open popup |
 | `actions` | — | The focused window's toolbar actions from Chrome's model (fork patch P2): `ready`, and per action id, name, title, tooltip, accessible name, badge and colors, enabled, has popup, pinned and pinned index, wants to run, site access, showing popup, `live` (from the live model, else the profile's list), and the toolbar image and plain icon (PNG byte count, hash, point width, `pixels`: each representation's pixel size, and `object`: the image object's identity) |
-| `ext-pin` | `extension`, `pinned` (default `true`) | Pin or unpin an action |
-| `ext-move` | `extension`, `index` | Move a pinned action to a pinned index |
+| `ext-pin` | `extension`, `pinned` (default `true`), optional `index` | Pin or unpin an action; optionally move it through the guarded App host. |
+| `ext-move` | `extension`, `index`, optional `engine` | Move only a currently pinned action. Negative automation indices return an error. Clamp to the normalized pinned list and skip a no-op, as a native drag does. `engine=true` directly probes the engine's invalid-index refusal instead. |
+| `ext-prompt` | `answer` (`accept`/`cancel`), `hold`, `handler`, `clear`, `twice` | Pending consent: type, extension/name, Open title/buttons (§3.11), `chromiumTitle`/`chromiumButtons`, permissions/details/lines, retained files/devices and weak page/browser ids. Holds by default; `hold=false` releases without answering. `handler=false` preserves Chromium's dialogs. `clear` cancels the queue; `twice` checks duplicate-answer safety. Also returns registry events. |
+| `save-prompt` | One of `mock: {kind, host}`, `answer: save\|never\|dismiss`, `state: true`, `withdraw: true` | Automation builds only. `mock` enqueues synthetic metadata for the focused page in the front browser window. Kinds: `password`, `passwordUpdate` (alias `update`), `card`, `address`, `addressUpdate`. State and events use the canonical names. Host limit: 4096 UTF-8 bytes, no control characters; unknown fields/kinds are refused. `answer` clicks the visible sheet's real NSButton; `withdraw` releases it unanswered. State: `visible`, `kind`, `title`, `body`, left-to-right `buttons`, `defaultButton`, `cancelButton`, native sheet `window`, `queueLength` (waiting requests, excludes visible sheet). The `key` command accepts this window number and `.` for Cmd-.. `events` drains `savePrompt` events `{kind, displayHost, answer}` with answer `save`, `never`, `dismiss`, or `ignored` on unanswered release, even after the final window closes. No credentials or storage are involved. |
+| `ext-manage` | `extension`, `action` (`enable`, `disable`, `uninstall`, `reload`, `install-webstore`, `install-crx`), `path` | Live per-profile management. Remove always prompts. Web Store completion is recorded in `ext-prompt.events`, leaving the socket free to answer consent. Local CRX is guarded by `--open-automation` and uses the real installer/prompt. |
+| `ext-commands` | optional `surface: little` | `{ready, context, commands}`. Each command has extension, name, summary, Cocoa key equivalent/modifier flags, global and action-command flags, normalized shortcut, `dropped` and conflicting `openCommandID`. Uppercase letters encode Shift in Cocoa's pair. |
+| `ext-shortcuts` | `action`: `state` (default), `menu` (+ optional `select` title), `record` (+ `id`, one ASCII `key`, `modifiers`), `reset` (+ `id`), `reset-all`, `close` | X-27 real Settings pane. First show `settings-pane pane=shortcuts`. Finds the visible native More shortcut actions menu and performs its actual enabled item; records/resets through `ShortcutsViewModel` → `KeyBindingStore` save → App callback. Returns rendered native `notices`, menu, status, binding count, real command title and window number. `close` closes that window. Suite must restore the binding file and shared defaults in `finally`. |
+| `ext-windows` | optional `preference: true`, optional `value` (null removes) | Lists native extension popup controllers with browser/page/window ids, Chrome window id, frame, title, visibility, style, autosave name, toolbar flag and page/content-view identity. Preference mode reads/writes the single `NSWindow Frame ExtensionPopupWindow` entry; reset/restore it in `finally`. |
+| `ext-omnibox` | optional `surface: little`, `extension`, `op`: `start`, `cancel`, `default`, `input` (+ `text`), `reply` | Calls the public engine omnibox path. `input` returns whether Chromium accepted it; `reply` reports the latest completion count. `default` reports presence, title/content UTF-16 lengths and match-range count. No page text is returned. |
+| `ext-run-command` | `extension`, `name`, optional `surface: little` | `executeExtensionCommand`: named event with active tab, or action with source command; unknown/inactive commands return false. |
+| `ext-strip` | `surface` (`url`, `pane`, `toolbar`, `little`) | Visible action ids in order, button and more frames in Cocoa window coordinates, visibility, layout/redraw counts and image conversions. `strips` includes unfocused panes. A missing App presenter reports `blocked`. |
+| `ext-hover` | `inside` (default true) | Tagged mouse-moved and tracking events inside Open, over or away from the sidebar. Does not move the hardware pointer. |
+| `ext-click` | `extension` (or `more`), `surface`, `button` (`left` or `right`), optional `select` title | Native in-process events to the visible slot; right-click, a disabled left-click, or More returns the rendered menu. `select` performs its actual enabled item. Hidden slots refuse clicks. Little Open's More targets its own button/menu/browser. |
+| `ext-ui-menu` | `kind: bar`, or `extension`; optional `select` title | Updates the real Extensions menu through `menuNeedsUpdate`, or builds the rendered action context menu. Selection executes the enabled native menu item. |
+| `ext-popup-state` | optional `surface: little` | Shell panel open/visible/ready/key flags, panel/content/anchor frames, anchor kind, ready-to-visible timing and blur keep-open state. Little Open selects its own host. |
+| `ext-redraw-measure` | optional `start: true`, optional `surface: little` | Starts a display-frame measurement on the host's real strips; a call without `start` stops it and returns per-action redraw/frame counts and `maxPerActionPerFrame`. Uses the host's actual draw counters, not a synthetic badge counter. |
+| `ext-picker` | `keys` | Sends native keys to the presented SCC picker and returns `focusedID`; reports the exact missing App hook while SCC presentation is unavailable. |
 | `ext-run` | `extension`, `source` (`toolbar` default, `menu`, `command`) | Run the action as the user would; returns whether it ran (a popup opens, or `chrome.action.onClicked` fires) |
 | `ext-menu` | `extension`, `source` (`toolbar` default, `menu`), `select`, `keep`, `stale` | The action's context menu items (title, command, enabled, checked, separator, submenu); with `select`, run the item with that title and return `items` and `ran`. `keep` keeps this menu open (not cancelled); `select` with `stale` then runs the item on that kept menu and cancels the new one |
 | `ext-popup` | — | The open popup: `open`, its page, its extension, its source (`user`, `command`, `api`), and `staysOpenOnBlur` |
@@ -114,6 +256,8 @@ Arguments are `key=value`; values that parse as JSON are sent as JSON.
 | `windows` | — | Open's windows: number, class, frame, key, first responder |
 | `shell-windows` | — | Standard controller IDs and native window numbers |
 | `window-state` | `id` (optional: another standard window, not made key) | Frame, sidebar mode/width/reveal, panel frame, traffic-light centers, frames, and visibility, the title bar frame, the hardware pointer in window coordinates (read only), hover-reveal state (`reveal`: phase, show/hide counts, last dwell, zone, the card's frame and on-screen offset), chrome geometry (`chrome`: URL field, favorites section, Space header band, title frame and baseline, hover states), window buttons (`trafficLightsDimmed`, `trafficLightsHovered`, per button alpha and action, the window's AX button attributes `axWindowButtons` with role and subrole), the automation pointer (`automationPointer`, window coordinates, or null when it is in another window or never moved), `key`, `appActive`, `miniaturized`, `zoomed`, selection, shown page IDs, engine URL/active ID, native and HTML full-screen state, transition state and completed transition count. Runs the window's pending layout first |
+| `window-interrupt` | `kind`: `key`, `sheet`, `end-sheet` | Own window only: order out the browser for native key loss, begin a small native sheet, or end that sheet. Used after tagged down/drag events without mouse-up to exercise resize cancellation. No system input. |
+| `undo-state` | `clear` (optional bool) | Model undo generation, `canUndo`, and `canRedo`. `clear=true` clears this isolated App's undo stack before a gesture proof. Undo itself uses `sidebar-key` Cmd+Z (focuses the outline, then the App key path). |
 | `window-focus` | `id`, `activate`, `readinessTimeout` | Make that own window key; optional own-app activation. Native readiness timeout: 0–5 seconds, default 5. |
 | `window-motion` | `reduced` (optional bool), `sampleCard` (optional bool) | Motion tokens and actual animations read back from the sidebar, panel, card, shadow, and Space-pager layers when scheduled; retained after completion. Response and damping come from the scheduled spring's physical values; `mass`, `stiffness`, `physicalDamping`, and `settlingDuration` expose those values and the CA settling estimate. The scheduled `duration` must equal `settlingDuration`; response is not the animation lifetime (Space response 0.20 s, visibly settled ≈ 0.27 s in S2 §20.12). `scheduledDelay` is the scheduled begin time minus its explicit scheduling reference in the layer's clock. `cardCurve` evaluates `Motion.springProgress` in the app. `sampleCard` records the real visible card's presentation offset every 4 ms for 0.32 s; it is off by default. `reduced` overrides only this process, without changing macOS settings. `window-state` also reports the live/model widths, resize-active state, width-commit and gesture-notification counts, geometry changes, and `spaceSwitcherFrames` in root coordinates for native switcher clicks. |
 | `appearance` | `name` (`light`, `dark`, or anything else for the system's) | Open's own appearance (`NSApp.appearance`); the system setting is untouched |
@@ -131,7 +275,11 @@ Arguments are `key=value`; values that parse as JSON are sent as JSON.
 | `window-frame` | `frame` `[x, y, w, h]`, `unconstrained` | Move/resize the main window; `unconstrained: true` keeps the exact frame even past the screen (capture-size comparisons on a smaller display) |
 | `snapshot` | `path`, `window` or `tab` | PNG of one of Open's windows (default: the main window), or of one page |
 | `policy` | `dialogs`, `prompt`, `permissions`, `contextMenu`, `fullscreen` | Answer JS dialogs (`accept`/`dismiss`/`hold`), permissions (`grant`/`deny`), record context menus (`record`: the event lists `items` and `commands` with ids, titles, submenus, and `openItems`, the titles of the menu Open would show, its own items included) or run one command (`run:<id>`, after the right click returns) or one of Open's own items by title (`run-open:<title>`), keep the window size on page fullscreen |
-| `dialog` | `accept`, `text` | Complete a held dialog |
+| `dialog` | `accept`, `text` | Complete a held dialog; when visible, click its real OK/Cancel button |
+| `dialog-state` | — | Pending count, real sheet title/body/buttons, prompt text, suppression visibility, held/queued flags, and sheet window number |
+| `dialog-button` | `accept`, `text`, `suppress` | Click the visible sheet's real OK/Cancel button, optionally edit its prompt and suppression checkbox |
+| `permission-prompt` | optional `answer`: `allow`/`notnow` | State: visible, question, kinds, buttons, anchor frame in screen points, window, pending and completion counts. `presentation` is `popover` or `card`; `frame` gives the card rectangle in window coordinates. Pass a Little Open window number in `window` to inspect or answer its prompt. With an answer, call `performClick` on the real button |
+| `permission-decisions` | — | Profile data hook: index `ready` and persisted non-ask origin/kind/state rows |
 | `events` | — | Drain the event log: `change`, `load`, `loadError`, `open`, `dialog`, `permission`, `contextMenu`, `fullscreen`, `download`, `console`, `devtools`, `extensionPopup`, `tab-request` and `window-request` (P1 requests from Chromium, with `refused` when the shell said no) |
 | `script-add` / `script-remove` | `id`, `source`, `css`, `end`, `matches`, `allFrames` | Boost-style user scripts (through the OpenWeb `WebProfile` protocol) |
 | `filter` / `filter-stats` | `block` (substrings) | Request filter (ad-block hook) and its counters |
@@ -146,6 +294,24 @@ Arguments are `key=value`; values that parse as JSON are sent as JSON.
 | `save` | — | Write the snapshot now; returns its path |
 | `quit` | — | Quit Open normally |
 
+## Deferred Little Open Browser
+
+`little-open-state` reports `browserID: null`, `content: 0`, and a non-visible
+surface until the window's deferred Browser and page exist. `firstFrameRead`
+records those absent objects at the first native frame. The later state exposes
+the owned Browser, `browserCreationStartedAt` (system uptime), and its Chrome tab.
+`browserCount` and `littleOpenBrowserCreations` distinguish live Browsers from
+cumulative Little Open creation, including a Browser that immediately closes.
+
+`little-open-action {action:"blank"}` follows the normal deferred path. For
+the real-event race checks, add `then:"submit", text:"URL"` or `then:"close"`.
+The automation hook runs native `OEApplication.sendEvent` typing/Return or close
+before the queued creation. It returns `opened` and `after` state. Text is limited
+to 8,192 UTF-8 bytes; 8,193 bytes fail. Submit requires nonempty text. The submit
+hook waits for the real navigation intent before resuming creation. The close
+hook continues through the production cancellation guard. Normal creation uses
+neither hook. See [the deferred Browser report](little-open/deferred-browser.md).
+
 ## Window pixels
 
 `snapshot` captures only Open's windows, from inside Open, so it needs no Screen Recording permission:
@@ -159,22 +325,24 @@ Arguments are `key=value`; values that parse as JSON are sent as JSON.
 
 ```sh
 ~/Library/Caches/OpenRE/scripts/heavy.sh nice -n 10 tools/build.sh Debug
-/usr/bin/lockf /tmp/open-onscreen-e2e.lock python3 tools/e2e/engine_e2e.py --only shell                       # model, keyboard, split, persistence
-/usr/bin/lockf /tmp/open-onscreen-e2e.lock python3 tools/e2e/engine_e2e.py --only window --config Release     # startup, lifecycle failures, real window, persistence, static comparison
-/usr/bin/lockf /tmp/open-onscreen-e2e.lock python3 tools/e2e/engine_e2e.py --only window --window-chrome-only # focused §3.3 widths, motion, session-2 live pixels
-/usr/bin/lockf /tmp/open-onscreen-e2e.lock python3 tools/e2e/engine_e2e.py --only sidebar                     # intents, correct live page, cache eviction, static comparison
-/usr/bin/lockf /tmp/open-onscreen-e2e.lock python3 tools/e2e/engine_e2e.py --only peek                        # promotion identity, cleanup, model strip, live pane color
-/usr/bin/lockf /tmp/open-onscreen-e2e.lock python3 tools/e2e/engine_e2e.py --only features --style alloy      # engine features
-/usr/bin/lockf /tmp/open-onscreen-e2e.lock python3 tools/e2e/engine_e2e.py --only extensions --style alloy    # needs .re/ext/unpacked/*
-/usr/bin/lockf /tmp/open-onscreen-e2e.lock python3 tools/e2e/engine_e2e.py --only extensions --style chrome
-/usr/bin/lockf /tmp/open-onscreen-e2e.lock python3 tools/e2e/engine_e2e.py --only tabstrip --style chrome     # fork patch P1: chrome.tabs sees Open's tabs
-/usr/bin/lockf /tmp/open-onscreen-e2e.lock python3 tools/e2e/engine_e2e.py --only page                       # page-platform §8.3: capture C1–C7, then translation X1–X6
-/usr/bin/lockf /tmp/open-onscreen-e2e.lock python3 tools/e2e/engine_e2e.py --only actions --style chrome      # fork patch P2: toolbar actions and popups
-/usr/bin/lockf /tmp/open-onscreen-e2e.lock python3 tools/e2e/engine_e2e.py --only media --style chrome        # media-pip §8.4: mini players, auto-PiP, Now Playing, sleep feed
-/usr/bin/lockf /tmp/open-onscreen-e2e.lock python3 tools/e2e/engine_e2e.py --only sleep --style chrome        # app-shell Step G: tab sleep, memory-fork §11 F0–F5
+/usr/bin/lockf -k /tmp/open-onscreen-e2e.lock python3 tools/e2e/engine_e2e.py --only shell                       # model, keyboard, split, persistence
+/usr/bin/lockf -k /tmp/open-onscreen-e2e.lock python3 tools/e2e/engine_e2e.py --only window --config Release     # startup, lifecycle failures, real window, persistence, static comparison
+/usr/bin/lockf -k /tmp/open-onscreen-e2e.lock python3 tools/e2e/engine_e2e.py --only window --window-chrome-only # focused §3.3 widths, motion, session-2 live pixels
+/usr/bin/lockf -k /tmp/open-onscreen-e2e.lock python3 tools/e2e/engine_e2e.py --only sidebar                     # intents, correct live page, cache eviction, static comparison
+/usr/bin/lockf -k /tmp/open-onscreen-e2e.lock python3 tools/e2e/engine_e2e.py --only peek                        # promotion identity, cleanup, model strip, live pane color
+/usr/bin/lockf -k /tmp/open-onscreen-e2e.lock python3 tools/e2e/engine_e2e.py --only features --style alloy      # engine features
+/usr/bin/lockf -k /tmp/open-onscreen-e2e.lock python3 tools/e2e/engine_e2e.py --only passwords --style chrome    # M-* save sheets (mock metadata only)
+/usr/bin/lockf -k /tmp/open-onscreen-e2e.lock python3 tools/e2e/engine_e2e.py --only extensions --style alloy    # needs .re/ext/unpacked/*
+/usr/bin/lockf -k /tmp/open-onscreen-e2e.lock python3 tools/e2e/engine_e2e.py --only extensions --style chrome
+/usr/bin/lockf -k /tmp/open-onscreen-e2e.lock python3 tools/e2e/engine_e2e.py --only extensions-p3 --style chrome --config Release # local signed CRX3, no network dependency
+/usr/bin/lockf -k /tmp/open-onscreen-e2e.lock python3 tools/e2e/engine_e2e.py --only tabstrip --style chrome     # fork patch P1: chrome.tabs sees Open's tabs
+/usr/bin/lockf -k /tmp/open-onscreen-e2e.lock python3 tools/e2e/engine_e2e.py --only page                       # page-platform §8.3: capture C1–C7, then translation X1–X6
+/usr/bin/lockf -k /tmp/open-onscreen-e2e.lock python3 tools/e2e/engine_e2e.py --only actions --style chrome      # fork patch P2: toolbar actions and popups
+/usr/bin/lockf -k /tmp/open-onscreen-e2e.lock python3 tools/e2e/engine_e2e.py --only media --style chrome        # media-pip §8.4: mini players, auto-PiP, Now Playing, sleep feed
+/usr/bin/lockf -k /tmp/open-onscreen-e2e.lock python3 tools/e2e/engine_e2e.py --only sleep --style chrome        # app-shell Step G: tab sleep, memory-fork §11 F0–F5
 OPEN_AUTOMATION=1 ~/Library/Caches/OpenRE/scripts/heavy.sh nice -n 10 tools/build.sh Release
-/usr/bin/lockf /tmp/open-onscreen-e2e.lock python3 tools/e2e/engine_e2e.py --only measure --config Release    # launch, memory, idle CPU
-/usr/bin/lockf /tmp/open-onscreen-e2e.lock python3 tools/e2e/engine_e2e.py --only relaunch --config Release   # N same-profile relaunches (OPEN_E2E_RELAUNCH_COUNT, default 20)
+/usr/bin/lockf -k /tmp/open-onscreen-e2e.lock python3 tools/e2e/engine_e2e.py --only measure --config Release    # launch, memory, idle CPU
+/usr/bin/lockf -k /tmp/open-onscreen-e2e.lock python3 tools/e2e/engine_e2e.py --only relaunch --config Release   # N same-profile relaunches (OPEN_E2E_RELAUNCH_COUNT, default 20)
 ```
 
 The `relaunch` suite (section 8 item 14) builds one profile with three local file tabs, then relaunches it `OPEN_E2E_RELAUNCH_COUNT` times (default 20). Each launch must reach automation, restore the same tabs, load only the selected tab, quit with no owned process left, and write no `No zone found` allocator FATAL to its launch log. The suite also fails on any new `Open*`/`cefsimple*` report in `~/Library/Logs/DiagnosticReports`. It is the regression check for the PartitionAlloc launch-zone race (`docs/engine-fork.md`, "PartitionAlloc and the launch race").
@@ -246,10 +414,17 @@ Additional socket commands:
 | `commandbar-state` | Read actual bar mode, text, rows, selection, and monotonic first-result timings. Also `footer` (the (i) privacy footer shows), `hidden`, `panelOpacity` (the panel's presentation opacity), `animationKeys` (bar layers, the self-blinking caret excluded) and `allAnimationKeys`, `panelFrame` (window points, top-left origin), `fieldWidth`, `allowsRemote`. Does not create the bar. |
 | `settings-pane` | `pane`: a Settings pane id (`general`, `profiles`, `links`, `shortcuts`, `appIcon`, `advanced`). Shows Settings on that pane through the App's presenter (a fixture step before a check that must switch panes). |
 | `commandbar-press` | `control`: `info`, `dismiss`, `searchSettings`, or `privacyLink`. Performs that bar control's AX press action (the control's real action). Returns `pressed` and the new `commandbar-state`. |
-| `menu-state`, `menu-perform id=…` | Read native menu validation or invoke an enabled native menu item. |
+| `menu-state`, `menu-perform id=…` | Read native menu validation (including `key`, raw `modifierMask`, nil-target/action and hidden state), or invoke an enabled native menu item. |
+| `key observeCommands=true` | Scope a dispatch trace to this real in-process key event. Returns the actual `charactersIgnoringModifiers`, window command entries in `commands`, and native menu dispatches in `menuActions`. It changes no route or target and installs no observer at rest. |
+| `menu-key-render path=…` | Copy the real Shift+letter items into an AppKit menu, capture this App's native popup, then cancel it without an action. Run under the on-screen lock. |
+| `editor-open kind=create`, `creation-state` | Open or focus the New Space sidebar page; page fullscreen exits before presentation. Read its draft, Profile, native Name focus, actual visibility, theme preview and undo state. The Profile popup stays visible during inline creation; selecting an existing Profile preserves the draft. `themeKey`, `windowActive` and `backgroundActive` report the draft panel and its owning window material. When the form is closed, state includes `modelUndoName` and `modelRedoName` for the actual model step. |
+| `editor-act`, `editor-close` | Use the creation form's controls (`click control=theme/icon/create/cancel`, `profile name=…`) or a draft theme preset (`preset index=0…8`). Close the theme editor first, else cancel creation. |
 | `reload-keybindings` | Load the actual `State/keybindings.json`, validate conflicts, and rebuild menus and the global registration. |
 | `sidebar-duplicate id=…`, `sidebar-tree` | Send the production SidebarDelegate intent; read fresh subtree IDs and load flags. |
-| `settings-state`, `settings-toggle name=hotkey\|external` | Read the shared real presenters; commit the live Links settings model. |
+| `settings-state`, `settings-toggle name=hotkey\|external` | Read the shared real presenters, including pane-local `generalError`/`advancedStatus`; commit the live Links settings model. |
+| `settings-profile` | Read the actual Profiles create-sheet state: `creating`, attached native `sheet` window number, `pane`, selected `spaces`, and `error`. `cancel=true` dismisses through the existing sheet state. |
+| `settings-profile-page` | `profile`: an existing Profile ID, `page`: `passwords`, `paymentMethods`, `privacy`, or `notifications`. Selects that Profile in the real Profiles view model and runs its row action (`openProfileSubpage`). Keeps the Settings adapter's Space choice and no-Space fallback. |
+| `settings-icon` | Read `selected`, `applied`, pane `error`, `matchesApplication` (exact pixel equality in the actual NSApp icon's output color space and component format, including float16; AppKit copies NSImage), `imageObject` (cache identity), bitmap `pixels`, and `restoreStartedMs`/`restoreElapsedMs` (total main work), `restorePreparationMs` (main preparation), `restoreSetterMs` (AppKit setter), `restoreDecodeMs` (worker decode/TIFF preparation). Restore uses one low-priority turn at least about 1 s after paint. `select=<AppIconOption ID>` uses the real picker action. Default resets `NSApp.applicationIconImage` to nil and does no restore work. |
 | `settings-custom-engine template=…` | Save a custom engine through the live Profiles settings model. |
 | `library-restore id=…`, `library-history-open url=…` | Exercise the live Library restore transaction or its profile-scoped history action. |
 | `history-state` | Optional `profile` UUID and `query`. Drains accepted history writes, then returns the Profile store path, search rows, commit-to-enqueue samples (ms, automation only, bounded at 4,096) and writer operation count. Store opens/searches stay on the HistoryStore actor. |
@@ -353,7 +528,8 @@ renderers and compilation do not require removing the file.
 ### Step C review: focus and shutdown observations
 
 Automation responses include `observationStart` (process monotonic uptime).
-`focus-state` reports the current responder owner, Find text/visibility, sheet
+`focus-state` reports the current responder owner, Find text/visibility, its
+window-coordinate `findFrame` and native `findCancelFrame`, sheet
 state, and the count/result of post-navigation focus decisions. It accepts an
 optional standard-window `id` without activating that window. `activation-events`
 starts before the first window/engine turn and reports native resignation and
@@ -414,7 +590,7 @@ Commands in `App/Automation/AutomationNotifications.swift`.
 `OPEN_AUTOMATION_NOTIFICATION_AUTHORIZATION=record` (automation builds only): when the user allows a site's notifications and macOS has not been asked yet, the App logs `suppressed` instead of showing the macOS prompt. The `page` suite sets it, so a normal run needs no person. For U-N1 (page-platform §8.4), run the suite once with `OPEN_E2E_NOTIFICATION_PROMPT=1` and click Allow in the macOS prompt:
 
 ```sh
-OPEN_E2E_NOTIFICATION_PROMPT=1 /usr/bin/lockf /tmp/open-onscreen-e2e.lock python3 tools/e2e/engine_e2e.py --only page --style chrome
+OPEN_E2E_NOTIFICATION_PROMPT=1 /usr/bin/lockf -k /tmp/open-onscreen-e2e.lock python3 tools/e2e/engine_e2e.py --only page --style chrome
 ```
 
 ## Tab sleep (app-shell Step G)
@@ -427,7 +603,7 @@ Commands in `App/Automation/AutomationSleep.swift`, automation builds only. `tab
 | `sleep-now` | `tab` | OpenSleep's debug sleep (freeze + discard now, every gate honored). Returns `refusedBy` (the gate, or null) and the tab's state after. |
 | `sleep-tick` | `pressure` (optional: `warning`, `critical`) | Waits for a running pass, then runs one controller pass (or a memory-pressure pass) now. Returns `sleep-state`. |
 | `sleep-clock` | `advance` (seconds, 0…604800) and/or `reset` | Moves the controller's clock (hide times, grace periods, delays). Returns `offset`. |
-| `sleep-mode` | `mode` (`off`, `conservative`, `balanced`, `aggressive`; optional) | Writes every Profile's `sleepMode` as Settings ▸ Advanced does. Returns the mode per Profile. |
+| `sleep-mode` | `mode` (`off`, `conservative`, `balanced`, `aggressive`; optional) | Writes the global Settings key through the actual Advanced setter (`off`→`never`, `balanced`→`automatic`) and reconciles every Profile. Returns the mode per Profile. |
 | `sleep-power` | `lowPower` (`true`, `false`, or `null` to follow macOS) | Battery Saver override. Returns `lowPowerMode`, `override`, `system`, `toasts`, `lastToast` (front window). |
 | `sleep-start` | — | Starts the controller as T5 does (for flows that never paint). |
 | `sleep-store` | — | Every row of every Profile's `sleep.sqlite3`: `tab`, `url`, `title`, `entries`, `pageState`, `tag`, `file`. |
@@ -477,7 +653,7 @@ On M1, hold the outer validation lock once per job, plus the on-screen lock
 for one suite invocation:
 
 ```sh
-/usr/bin/lockf /tmp/open-m1-validation.lock /usr/bin/lockf /tmp/open-onscreen-e2e.lock python3 tools/e2e/engine_e2e.py --only sidebar-completion
+/usr/bin/lockf -k /tmp/open-m1-validation.lock /usr/bin/lockf -k /tmp/open-onscreen-e2e.lock python3 tools/e2e/engine_e2e.py --only sidebar-completion
 ```
 
 The suite saves rest/hover PNGs, its App log, and `cleanup.json` in
@@ -760,6 +936,71 @@ the real key path for Esc, and the result card's own buttons.
 The page context menu event (`policy contextMenu=record`) also lists `open` (Open's own
 items, "Capture" and "Capture Full Page") and `shown` (the whole menu as it would show).
 
+P3 negative proof: `OPEN_E2E_P3_CANCEL_INSTALL=1` (automation builds only)
+forces the prompt handler to cancel an install acceptance. The
+`extensions-p3` X1 row must FAIL. Unset the flag and rerun for PASS. The
+suite restores no shared defaults because it changes none; every install,
+profile and Chromium preference lives in its fresh data root. Its `finally`
+answers pending prompts and closes all owned auxiliary surfaces; the harness
+then quits and checks every process it started.
+
+### S11 dialog and permission acceptance
+
+Run `tools/e2e/engine_e2e.py --only page-chrome` under the on-screen lock.
+It launches the real App, serves loopback pages, checks native sheet and
+popover state, clicks their actual buttons, sends keys through
+`OEApplication.sendEvent`, and verifies Profile persistence after relaunch.
+The `dialog` event adds `title`, `buttons`, `suppressible`, and `queued`;
+automatically answered suppressed dialogs also carry `suppressed:true`.
+`dialogAnswer` and `permissionAnswer` record one completion per owned request.
+`OPEN_E2E_PAGE_CHROME_EARLY_FAILURE=1` forces failure while the first real
+sheet is visible; cleanup must still leave zero owned processes/windows.
+
+## Find in page (Section 11)
+
+Run `--only find --style chrome` through the on-screen lock. The suite serves
+`tools/e2e/fixtures/find/` on a unique loopback port and drives the native
+application event route. It covers the field editor, page shortcuts, tab
+state, navigation, Split View, Peek, selection seeding, query limits, pane
+viewport frames, chrome intersections, native close clicks and live resizes
+with the toolbar on/off, in Split View and in Peek. It also checks light/dark
+window pixels (ΔE00 ≤ 2) and idle request/result/layout counters. PNGs stay in `.re/find/`; JSON uses the ordinary suite receipt.
+The Find timing gate uses the project's 120 Hz reference: 8.33 ms from the
+native Cmd+F timestamp to the visible layer commit. It reports separate
+first-open (including lazy creation) and repeat-open medians and nearest-rank
+p95 from twenty fresh windows. Both p95 values must pass. The 240 Hz interval is
+printed for information. Take timing receipts with the quiet lock first,
+wait for low load while holding only that lock, then take the screen lock.
+Fonts, symbols and appearance colors are shared per process. After the first
+web paint, one main-queue turn primes those resources and an offscreen native
+bar/editor, then releases the temporary controls. `find-state.warmup` reports
+the run count, launch-relative times and temporary-control release. This adds
+no timer or repeating task. Automation builds accept
+`OPEN_FIND_DISABLE_PREWARM=1` for a cache-only comparison;
+`OPEN_FIND_COMPARE_PREWARM=1` alternates twenty cache-only and twenty enabled
+launches in the Find suite and records both phase and launch measurements.
+No shared defaults are changed by this suite. The toolbar toggle changes
+only its disposable browser model, and app appearance is restored in `finally`.
+`OPEN_FIND_FAIL_AT_PEEK=1` forces an early failure with Peek and Find open;
+the normal owned-process cleanup must still pass.
+
+Find and Replace opens Find in web pages. Jump to Selection scrolls the
+selection's containing element to the center via the existing main-world
+JavaScript API; this API does not provide an isolated world. Use Selection
+to Find uses the native menu action and has the 1,000-byte query cap without
+the 40-character seed limit. This work changes no command bindings.
+
+## Runner lifetime
+
+E2e launchers pass `OPEN_E2E_OWNER_PID`: the shared `Open` launcher supplies it through LaunchServices, and the direct migration fixture sets it in its subprocess environment. Automation builds watch that runner with a process exit dispatch source before preparing data or windows. A missing owner exits immediately; owner death logs `Open: e2e owner <pid> exited; quitting` and requests normal shutdown (the App's page-beforeunload preflight and engine close prompts are skipped, download quit confirmation is skipped, active transfers and save choices are cancelled, and new download destination prompts are refused). A background deadline forces exit after five seconds if shutdown stalls. There is no polling or idle timer. Normal builds compile out the watcher and environment handling.
+
+`tools/e2e/owner_watch_e2e.py <output-directory>` exercises four real-App
+cases: owner death, a missing-owner-environment negative control, an active
+download, and a page with a beforeunload handler. `--before-unload` runs only
+the last case. That case first observes and cancels a normal held beforeunload
+request, then kills the runner and requires shutdown without another request.
+Run it under the on-screen lock. Normal user quit keeps the page preflight.
+
 ## Session downloads (S11)
 
 `--only downloads` in `tools/e2e/engine_e2e.py` serves known-length, unknown-length,
@@ -786,3 +1027,99 @@ failure (`OPEN_DOWNLOADS_FAIL_IN_SHEET=1`). The receiver verifies the real Open
 document URL, bytes and SHA-256. Finder dispatch is recorded without opening a
 Finder window. Home geometry and the 60-second recent-download click rule remain the
 lead's marked guesses. No Little Open tray is added.
+
+The `extensions-e2` suite also checks three-action pin/move/unpin sequences through `ext-pin`, `ext-move`, and `actions`. It checks raw engine ids and pinned indices, plus `extensions.duplicatesDropped == 0` when the App guard is present. `OPEN_E2E_E2_SCOPE=pins` selects this reproduction alone.
+
+`OPEN_E2E_E2_SCOPE=drag` selects the native drag safety row. It pins real uBO
+Lite, Dark Reader, and Action Probe, moves Probe 2→0→2, repeats pinning, and
+tries unknown/unpinned actions, an empty pinned list, and negative, count,
+99, 2³²+1, and Int.max indices. Every snapshot requires unique ids, the exact
+order, compact indices, and zero dropped duplicates when the App guard exists.
+It then closes its isolated App, writes the old duplicate-pin preference state,
+relaunches that profile, and repeats the drag after repair.
+
+`OPEN_E2E_E2_FORCE_FAILURE=popup` stops the suite with its native popup open;
+`popup-quit` first quits the App to exercise restoration without the socket.
+Frame preferences are restored after quit through the shared defaults fallback.
+
+
+## Space editors (Section 4)
+
+Theme commands use the real App model and the same window controller as the
+menu and command bar. Coordinates for `editor-act` are panel content points
+from its top-left (including the transparent 13 pt band). Named controls use
+`control` with the names returned by `editor-state.controls`.
+
+| Command | Arguments | Result |
+|---|---|---|
+| `theme-get` | optional `space` (focused by default) | stored `style` or null, derived light/dark palette hex, `contentAppearance` |
+| `theme-set` | optional `space`, `style` object or null | session preview/commit, one Update Theme undo step and save |
+| `editor-open` | `kind=theme/icon`, optional `space`; icon also accepts `node` | true; unknown kinds return false |
+| `editor-act` | `action=click/hover`, `x/y` or named `control` | own-panel NSEvents |
+| `editor-act` | `action=drag`, `from/to` point arrays, optional `steps` (1–240) | own-panel mouse down, drag frames, up |
+| `editor-act` | `action=down/drag/up`, `x/y` | one event, for interrupted gestures |
+| `editor-act` | `action=key`, `key`, optional `modifiers` | `NSApplication.sendEvent`, app routing |
+| `editor-state` | — | kind, Space, frame, scale, controls, knob, commit/preview/frame counters, pending frame and process-wide editor display-link count |
+| `editor-close` | — | flush and close; safe when already closed |
+| `snapshot` | `window=editor`, `path` | real panel PNG |
+
+`command id=edit-theme` reuses the generic menu command runner. The native
+`space-editor` e2e suite runs both theme and icon row sets; creation can extend
+the kind switch and suite. Model reads can precede a pending display frame: wait
+for `editor-state.pendingFrame=false` after a completed gesture before
+asserting its committed value. Snapshot checks use empty background regions,
+so the auto-archive education banner is not mistaken for a theme pixel.
+
+`editor-state` also exposes the theme session commit ledger: `commitSequence`,
+`committedStyle`, `commitPreviews`, `sessionPreviews`, and `undoActionName`.
+The committed value is captured in the same MainActor call as the model
+undo registration. `A3_committed_style_stable` compares it with the model
+after the final frame and after idle, rejects later previews, and checks
+the Update Theme action name. A3 undo/redo compares against that ledger.
+
+## Section 7 Settings flows
+
+The `peek` suite opens Settings ▸ Links and uses `defaults` to write the
+canonical `open.links.openPeekShiftClick` key bound by that pane; there is no
+Settings switch UI driver. It then proves a real Shift-click does not Peek.
+The `commandbar` suite includes `settings_live.py`: native New Profile menu
+and sidebar sheet, Cmd+, typing guard and Escape, local action errors, actual
+1024 px App icon application/cache/reset, restore after content with measured
+cost, Peek migration/precedence, and global sleep reconciliation on create and
+launch. `OPEN_SETTINGS_FAIL_IN_SHEET=1` forces a failure with Create Profile
+open; finally cancels the sheet, restores exact saved preferences, and quits.
+
+The sleep suite uses existing `sleep-clock` and `sleep-tick` hooks to pass the
+30 s freeze deadline and 48 h without changing production delays. Never
+retains ten loaded hidden pages past the eight-host cap and critical pressure,
+and keeps a previously discarded shell beyond the 24 h destroy deadline.
+`defaults` changes to `open.advanced.tabSleepMode` also reconcile policy.
+These suites save/reset/restore touched keys in the shared defaults domain. The runner also saves canonical Peek values before the first App launch, so startup migration and later Find/Escape launches cannot change the original stored values after cleanup.
+Launch marks `appIconRestoreStarted` and `appIconRestored` report deferred icon
+work after `windowShown` and first content paint (or the no-paint fallback).
+
+Sidebar resize interruption proof (`window` suite): `resize_lost_up_key` and
+`resize_lost_up_sheet_hides` inspect the held drag, native interruption, stale
+drag/up rejection, edge-hover recovery, and a new drag. `window-state` exposes
+`sidebarResizeHandleDragging`, `sidebarResizeHandleVisible`, `sidebarResizeHasStart`,
+and nullable `sidebarWidthOverride` for complete cleanup evidence. `drag_undo_single`
+checks three live crossings and two Cmd+Z events through the outline and App key path; `drag_undo_same_mode`
+checks that returning to the start mode adds no action. Width commits and the
+hidden-gesture notification remain mouse-up effects. The `window` and `sidebar`
+suites set the hide-hint flag to a fixed value at each attempt and restore its
+pre-launch value (including absence) in `finally`.
+
+## Passwords Step 0 probe
+
+Run `python3 -I tools/e2e/engine_e2e.py --config Debug --style chrome --only passwords-probe`
+under the on-screen lock, after the shared priority check. Export the current
+`OPEN_ENGINE_ROOT` as for builds. This uses only temporary App data and the
+mock Keychain. It records selected PR-1 through PR-9 rows as observations, with
+per-row App liveness and new-crash-report checks. It saves no screenshots or secret values.
+The reusable fixture server and URL/switch dictionary are documented in
+[the fixtures README](../tools/e2e/fixtures/passwords/README.md).
+
+PR-7 stays blocked pending an approved engine-fix distribution hash. After the
+lead clears a prior crash dialog, resume remaining rows with
+`--passwords-probe-rows PR-8,PR-9`; do not replay the crashed row. Selected runs
+write a separate receipt so the primary crash evidence survives.

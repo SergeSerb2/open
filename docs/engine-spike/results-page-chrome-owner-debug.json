@@ -1,0 +1,58 @@
+{
+  "appSource": "a7e73498c3e68336217d8db40fbebe6ce6b89773",
+  "beforeFixAppSource": "9789d3d5",
+  "checks": [
+    {
+      "ok": true,
+      "negativeOwnerEnvironmentControl": false,
+      "activeDownload": false,
+      "beforeUnload": false,
+      "elapsedSeconds": 0.1946366669999997
+    },
+    {
+      "ok": true,
+      "negativeOwnerEnvironmentControl": true,
+      "activeDownload": false,
+      "beforeUnload": false,
+      "elapsedSeconds": 10.020602457999999
+    },
+    {
+      "ok": true,
+      "negativeOwnerEnvironmentControl": false,
+      "activeDownload": true,
+      "beforeUnload": false,
+      "elapsedSeconds": 0.18113175000000226
+    },
+    {
+      "ok": true,
+      "negativeOwnerEnvironmentControl": false,
+      "activeDownload": false,
+      "beforeUnload": true,
+      "elapsedSeconds": 0.20162162500000136
+    }
+  ],
+  "beforeUnloadNegative": {
+    "expectedFailure": true,
+    "observedFailure": true,
+    "reason": "Owner death re-entered beforeunload",
+    "pendingObservations": 33,
+    "elapsedSeconds": 5.461766291,
+    "remainingProcesses": 0
+  },
+  "beforeUnloadPositive": {
+    "ok": true,
+    "normalQuitKind": 3,
+    "normalQuitCancelled": true,
+    "ownerDeathPendingObservations": 0,
+    "elapsedSeconds": 0.20162162500000136,
+    "remainingProcesses": 0
+  },
+  "cleanup": {
+    "ok": true,
+    "remainingOwnedProcesses": 0
+  },
+  "rawEvidence": {
+    "negative": ".re/page-chrome-owner-negative/",
+    "positive": ".re/main177-owner/"
+  }
+}

@@ -18,22 +18,24 @@ import OpenModel
 ///    base in linear light, the result is encoded to sRGB (sign-preserving).
 /// 4. The gradient is drawn with `layerAlpha` over a neutral underlay. The
 ///    underlay is darker while the window is key/active and lighter when it is not.
-///    Editor styles mix in encoded Display P3; legacy styles retain sRGB.
 ///
-/// Legacy snapshots keep the original 0.64/sRGB fit byte for byte. Editor
-/// styles use 0.2 + 0.55·intensity and encoded Display P3; F0139
-/// remains a documented 1.89 ΔE00 regression versus the older 0.84 fit.
+/// Legacy snapshots keep the original 0.64/sRGB fit, precomputed by
+/// `makeImage`, byte for byte. Editor styles use 0.2 + 0.55·intensity and
+/// `composition`: CoreAnimation blends the unblended fill over the underlay
+/// in the display's own encoded space (§17 "Display-space blend"). On a
+/// Display P3 target this equals the encoded-P3 law of `Evaluator.color`.
 public enum ThemeField {
     /// Decoded §17.2 opacity. At intensity 0.8 it retains the fitted 0.64.
     public static func layerAlpha(intensity: Double) -> Double {
         ThemeTuning.intensityAlphaFloor + ThemeTuning.intensityAlphaSlope * min(1, max(0, intensity.isFinite ? intensity : 0))
     }
-    /// Underlay gray for `translucencyStyle: light`, active and inactive window.
+    /// Underlay gray for `translucencyStyle: light`, active and inactive window. Light
+    /// imports and editor themes keep this fit while inactive; the default light theme
+    /// and every dark window use `WindowMaterial.inactiveShift` (derived from it).
     public static let lightUnderlayActive: Double = 0.694
     public static let lightUnderlayInactive: Double = 0.83
     /// guess: no `translucencyStyle: dark` theme was observed.
     public static let darkUnderlayActive: Double = 0.16
-    public static let darkUnderlayInactive: Double = 0.10
 
     /// CSS-style lines through the window center. Angle 0° points up, 90° right.
     public struct Line: Sendable, Hashable {
@@ -81,9 +83,25 @@ public enum ThemeField {
         let alpha: Double
         let underlay: Double
         let legacy: Bool
+        let solidKey: P3?
         let solidColor: (Double, Double, Double)?
+        let translucency: SpaceThemeStyle.Translucency
+        let isActive: Bool
+        let cardTint: Bool
+        /// Light imports and editor themes keep their fitted inactive underlay (0.694 → 0.83
+        /// behind the theme's alpha): it fits Arc's inactive light frame better than a constant
+        /// backdrop shift (sidebar-compare `static-inactive`, worst ΔE00 1.17 against 1.85).
+        let usesInactiveUnderlayFit: Bool
+        /// True when the fill's coverage is the same everywhere (no overlay stops).
+        var hasConstantCoverage: Bool { overlay.count != 2 }
 
-        public init(style: SpaceThemeStyle, windowSize: CGSize, isActive: Bool) {
+        /// `isActive: false` moves the active field to the inactive backdrop;
+        /// `cardTint` gives the tint drawn at `1 − w` over the blurred page
+        /// (`WindowMaterial`). The active field is the reference for both.
+        public init(style: SpaceThemeStyle, windowSize: CGSize, isActive: Bool, cardTint: Bool = false) {
+            translucency = style.backdropScheme
+            self.isActive = isActive
+            self.cardTint = cardTint
             legacy = style.usesLegacyIntensity
             let solidKey: P3?
             switch style.fill {
@@ -102,10 +120,13 @@ public enum ThemeField {
             baseParam = Param(ThemeField.endpoints(ThemeField.baseLine, size: windowSize))
             overlayParam = Param(ThemeField.endpoints(ThemeField.overlayLine, size: windowSize))
             alpha = style.usesLegacyIntensity ? 0.64 : ThemeField.layerAlpha(intensity: style.intensityFactor)
+            var isCorners = false
+            if case .corners = style.fill { isCorners = true }
+            usesInactiveUnderlayFit = !isActive && !cardTint && translucency == .light && !isCorners
             let fitted: Double
             switch style.translucency {
-            case .light: fitted = isActive ? ThemeField.lightUnderlayActive : ThemeField.lightUnderlayInactive
-            case .dark: fitted = isActive ? ThemeField.darkUnderlayActive : ThemeField.darkUnderlayInactive
+            case .light: fitted = usesInactiveUnderlayFit ? ThemeField.lightUnderlayInactive : ThemeField.lightUnderlayActive
+            case .dark: fitted = ThemeField.darkUnderlayActive
             }
             // §17.2: preserve U0 at and above the wash cap. Light's uncaptured
             // white-wash branch remains today's fitted underlay (documented guess).
@@ -113,19 +134,30 @@ public enum ThemeField {
                 ? fitted * (1 - ThemeTuning.darkWashAlpha * min(alpha, ThemeTuning.washOpacityCap))
                     / (1 - ThemeTuning.darkWashAlpha * ThemeTuning.washOpacityCap)
                 : fitted
+            self.solidKey = solidKey
             if let key = solidKey {
                 let u0 = underlay * (1 - alpha)
                 solidColor = P3Transfer.toSRGB(P3(key.r * alpha + u0, key.g * alpha + u0, key.b * alpha + u0))
             } else { solidColor = nil }
         }
 
-        /// Final color (extended, gamma-encoded sRGB) at window uv.
+        /// Final color (extended, gamma-encoded sRGB) at window uv. Editor
+        /// fills use the encoded Display P3 mix: what a P3 display shows.
         public func color(u: Double, v: Double) -> (Double, Double, Double) {
-            func mixP3(_ color: P3, alpha: Double) -> (Double, Double, Double) {
-                let u0 = underlay * (1 - alpha)
-                return P3Transfer.toSRGB(P3(color.r * alpha + u0, color.g * alpha + u0, color.b * alpha + u0))
-            }
+            let (r, g, b) = activeColor(u: u, v: v)
+            if cardTint { return (WindowMaterial.tint(r, translucency), WindowMaterial.tint(g, translucency), WindowMaterial.tint(b, translucency)) }
+            if !isActive, !usesInactiveUnderlayFit { return (WindowMaterial.inactive(r, translucency), WindowMaterial.inactive(g, translucency), WindowMaterial.inactive(b, translucency)) }
+            return (r, g, b)
+        }
+
+        /// The active window's color: every theme fit's reference.
+        private func activeColor(u: Double, v: Double) -> (Double, Double, Double) {
             if let solidColor { return solidColor }
+            if !legacy, corners.isEmpty {
+                let (color, a) = fill(u: u, v: v)
+                let u0 = underlay * (1 - a)
+                return P3Transfer.toSRGB(P3(color.r * a + u0, color.g * a + u0, color.b * a + u0))
+            }
             if !corners.isEmpty {
                 let c = corners
                 func lerp(_ a: Double, _ b: Double, _ t: Double) -> Double { a + (b - a) * t }
@@ -134,6 +166,22 @@ public enum ThemeField {
                 }
                 return (ch(\.red), ch(\.green), ch(\.blue))
             }
+            let (r, g, bl, outA) = linearFill(u: u, v: v)
+            let er = OKLab.encode(r), eg = OKLab.encode(g), eb = OKLab.encode(bl)
+            let u0 = underlay * (1 - outA)
+            return (er * outA + u0, eg * outA + u0, eb * outA + u0)
+        }
+
+        /// Unblended editor fill at window uv: encoded Display P3 and its
+        /// coverage (`alpha`, raised by an overlay stop).
+        public func fill(u: Double, v: Double) -> (P3, Double) {
+            if let solidKey { return (solidKey, alpha) }
+            let (r, g, b, a) = linearFill(u: u, v: v)
+            return (P3Transfer.fromLinearSRGB(r, g, b), a)
+        }
+
+        /// Base and overlay gradients in linear sRGB, before the underlay.
+        private func linearFill(u: Double, v: Double) -> (Double, Double, Double, Double) {
             let b: OKLab.Lab
             if base.count >= 2 {
                 let t = min(max(baseParam.at(u, v) * ThemeField.baseParameterScale, 0), 1)
@@ -156,19 +204,68 @@ public enum ThemeField {
                     bl = (ob * oa + bl * ba * (1 - oa)) / outA
                 }
             }
-            if !legacy { return mixP3(P3Transfer.fromLinearSRGB(r, g, bl), alpha: outA) }
-            let er = OKLab.encode(r), eg = OKLab.encode(g), eb = OKLab.encode(bl)
-            let u0 = underlay * (1 - outA)
-            return (er * outA + u0, eg * outA + u0, eb * outA + u0)
+            return (r, g, bl, outA)
         }
+    }
+
+    /// Editor fill drawn as layers (§17 "Display-space blend"). CoreAnimation
+    /// mixes the unblended fill over the opaque underlay gray in the
+    /// destination's encoded space, as Arc's opacity layers do: Display P3
+    /// math on a P3 display, the panel's own space elsewhere.
+    public struct Composition {
+        /// Opaque gray. Equal encoded values in every D65 sRGB-curve space.
+        public let underlay: CGColor
+        /// One key color at `alpha`; no image.
+        public let solid: CGColor?
+        /// Gradient fill, premultiplied by its per-pixel coverage.
+        public let image: CGImage?
+    }
+
+    /// Nil for legacy imports and the default theme: they keep `makeImage`.
+    public static func composition(style: SpaceThemeStyle, windowSize: CGSize, isActive: Bool, resolution: Int = 64) -> Composition? {
+        guard !style.usesLegacyIntensity, case .blended = style.fill,
+              let p3 = CGColorSpace(name: CGColorSpace.displayP3), let srgb = CGColorSpace(name: CGColorSpace.sRGB) else { return nil }
+        let e = Evaluator(style: style, windowSize: windowSize, isActive: isActive)
+        var underlayGray = e.underlay
+        if !isActive, !e.usesInactiveUnderlayFit {
+            // The inactive shift moves only the underlay: exact while the fill's coverage is
+            // constant and the moved gray stays in range; otherwise draw the baked field.
+            guard e.hasConstantCoverage, e.alpha < 1 else { return nil }
+            underlayGray += WindowMaterial.inactiveShift(style.backdropScheme) / (1 - e.alpha)
+            guard (0...1).contains(underlayGray) else { return nil }
+        }
+        let gray = CGFloat(underlayGray)
+        let underlay = CGColor(colorSpace: srgb, components: [gray, gray, gray, 1])!
+        if let key = e.solidKey {
+            let solid = CGColor(colorSpace: p3, components: [CGFloat(key.r), CGFloat(key.g), CGFloat(key.b), CGFloat(e.alpha)])
+            return Composition(underlay: underlay, solid: solid, image: nil)
+        }
+        let n = max(resolution, 2)
+        var pixels = [Float](repeating: 0, count: n * n * 4)
+        for y in 0..<n {
+            let v = (Double(y) + 0.5) / Double(n)
+            for x in 0..<n {
+                let (c, a) = e.fill(u: (Double(x) + 0.5) / Double(n), v: v)
+                let i = (y * n + x) * 4
+                pixels[i] = Float(c.r * a); pixels[i + 1] = Float(c.g * a); pixels[i + 2] = Float(c.b * a); pixels[i + 3] = Float(a)
+            }
+        }
+        let data = pixels.withUnsafeBytes { Data($0) }
+        guard let provider = CGDataProvider(data: data as CFData) else { return nil }
+        let info = CGBitmapInfo(rawValue: CGImageAlphaInfo.premultipliedLast.rawValue
+                                | CGBitmapInfo.floatComponents.rawValue | CGBitmapInfo.byteOrder32Little.rawValue)
+        let image = CGImage(width: n, height: n, bitsPerComponent: 32, bitsPerPixel: 128, bytesPerRow: n * 16,
+                            space: p3, bitmapInfo: info, provider: provider, decode: nil,
+                            shouldInterpolate: true, intent: .defaultIntent)
+        return Composition(underlay: underlay, solid: nil, image: image)
     }
 
     /// The whole-window field as a small float image in uv space. Stretch it over
     /// the window with linear filtering; the field is smooth, so 64×64 samples
     /// stay within a fraction of a level of the exact math.
-    public static func makeImage(style: SpaceThemeStyle, windowSize: CGSize, isActive: Bool, resolution: Int = 64) -> CGImage? {
+    public static func makeImage(style: SpaceThemeStyle, windowSize: CGSize, isActive: Bool, cardTint: Bool = false, resolution: Int = 64) -> CGImage? {
         let n = max(resolution, 2)
-        let e = Evaluator(style: style, windowSize: windowSize, isActive: isActive)
+        let e = Evaluator(style: style, windowSize: windowSize, isActive: isActive, cardTint: cardTint)
         var pixels = [Float](repeating: 1, count: n * n * 4)
         for y in 0..<n {
             let v = (Double(y) + 0.5) / Double(n)

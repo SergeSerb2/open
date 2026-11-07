@@ -15,6 +15,15 @@ final class AppDelegate: NSObject, NSApplicationDelegate, OEEngineDelegate, OEBr
   var expirySweeper: ExpirySweeper?
   var options = LaunchOptions(arguments: [])
   private(set) var model: BrowserModel!
+  private(set) var isFirstRun = false
+  var firstRunSaved = false
+  var firstRunWindowController: FirstRunWindowController?
+  var lastFirstRunStep = "none"
+  var importInProgress = false
+  private var modelSaveObserver: UUID?
+  private weak var firstRunDefaultModel: BrowserModel?
+  lazy var importRunner = AppImportRunner(app: self)
+  var firstContentView: NSView? { firstRunWindowController?.window?.contentView ?? windowControllers.first?.window?.contentView }
   private(set) var snapshotStore: SnapshotStore!
   private(set) var archiveSink: ProfileArchiveSink!
   private(set) var directories: ProfileDirectories!
@@ -22,6 +31,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, OEEngineDelegate, OEBr
   private(set) var engine: OpenDataRoot.EnginePreparation!
   private(set) var hostFactories: [WindowID: EngineWebContentHostFactory] = [:]
   private(set) var windowControllers: [BrowserWindowController] = []
+  let incognitoSessions = IncognitoSessions()
   // CEF pumps AppKit without a normal per-event undo group boundary. The
   // model opens one group per command; multi-operation UI actions may nest.
   let undoManager: UndoManager = { let manager = UndoManager(); manager.groupsByEvent = false; return manager }()
@@ -37,6 +47,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate, OEEngineDelegate, OEBr
   private var asyncEngineCalls: [String: Int] = [:]
   private var shutdownTrace: [[String: Any]] = []
   lazy var stores = AppStores(app: self)
+  lazy var profileTeardown = ProfileTeardown(app: self)
+  var pendingMissingProfileTitles: [String] = []
+  var missingProfileNotice: NSAlert?
+  var missingProfileNoticeTitles: [String] = []
+  var missingProfileNoticeCount = 0
+  lazy var extensionPrompts = ExtensionPromptPresenter(app: self)
+  lazy var extensionsMainMenu = ExtensionsMainMenuProvider(app: self)
   /// Mini players, auto-PiP and the media sleep feed (media-pip §7.2).
   lazy var media = MediaCoordinator(app: self, rulesURL: options.pipSiteRules)
   /// Tab sleep (app-shell §4.7, Step G): one SleepController, started after first paint.
@@ -45,11 +62,17 @@ final class AppDelegate: NSObject, NSApplicationDelegate, OEEngineDelegate, OEBr
   private var sleepQuitTask: Task<Void, Never>?
   private var sleepQuitCaptured = false
   lazy var settingsPresenter = AppSettingsActions(app: self)
+  lazy var applicationIcon = ApplicationIconController(app: self)
   lazy var downloadsCenter = DownloadsCenter(app: self)
   let defaultBrowserService = DefaultBrowserService()
   lazy var linkExecutor = AppLinkExecutor(app: self)
   lazy var linkIntake = ExternalLinkIntake(executor: linkExecutor, snapshot: { [unowned self] in self.linkExecutor.snapshot() })
   var lastLittleOpenRequest: LittleOpenRequest?
+  var executedExternalLink = false
+  /// Only a fresh launch fallback is eligible for removal by its first Little Open link.
+  /// Saved standard windows are never tagged. Input or navigation clears this tag.
+  var autoCreatedLaunchWindowID: WindowID?
+  var initialWindowInputMonitor: Any?
   /// Library ▸ Captures writer (page-platform §4.6.6); one per app, shared by every window.
   lazy var captureLibrary = CaptureLibraryWriter(app: self, root: directories.root)
   var keyBindings = KeyBindingStore.empty
@@ -60,7 +83,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate, OEEngineDelegate, OEBr
   var hotkeyAttempts = 0
   var menuRebuildTask: Task<Void, Never>?
   var afterPaintTask: Task<Void, Never>?
-  var littleOpenStub: NSWindowController?
+  var littleOpenCoordinator: LittleOpenCoordinator!
+  var pendingLittleOpenBlankStamps: [TimeInterval?] = []
+  var littleOpenProfileAlert: NSAlert?
+  var littleOpenHosts: [ItemID: EngineWebContentHost] = [:]
   var commandWindowObserver: (any NSObjectProtocol)?
   var commandDefaultsObserver: (any NSObjectProtocol)?
   private var numberedShortcutOptions = ""
@@ -81,6 +107,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, OEEngineDelegate, OEBr
 
   func applicationDidFinishLaunching(_ notification: Notification) {
     LaunchTiming.shared.mark("didFinishLaunching")
+    SettingsDefaults.register(in: .standard)
     NSApp.mainMenu = MainMenu.build()
     MainMenu.targetWindowCommands(frontWindowController.flatMap { hostFactories[$0.windowID] })
     NSApp.setActivationPolicy(.regular)
@@ -88,14 +115,17 @@ final class AppDelegate: NSObject, NSApplicationDelegate, OEEngineDelegate, OEBr
     // engine (docs/architecture.md, launch tactics). Pages created before
     // the engine is ready wait inside OpenEngine.
     showWindowsIfNeeded()
+    tabSleep.installSettingsPolicy()
     installScripting()
   }
 
   func applicationShouldHandleReopen(_ sender: NSApplication, hasVisibleWindows flag: Bool) -> Bool {
     if let frontWindowController { frontWindowController.showWindow(nil) }
-    else { showWindowsIfNeeded() }
+    else { showWindowsIfNeeded(ignoringLittleOpen: true) }
     return false
   }
+
+  private lazy var pageQuit = PageQuitCoordinator(app: self)
 
   func applicationShouldTerminate(_ sender: NSApplication) -> NSApplication.TerminateReply {
     if historyQuitTask != nil || faviconShutdownTask != nil || sleepQuitTask != nil { return .terminateCancel }
@@ -109,6 +139,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, OEEngineDelegate, OEBr
       }
       return .terminateCancel
     }
+    if engineReady, !shutdownPrepared, !pageQuit.shouldTerminate() { return .terminateCancel }
     if !sleepQuitCaptured, engineReady, !shutdownPrepared, tabSleep.controller != nil {
       // OEApplication has no terminateLater: capture sleep history first (bounded at 3 s),
       // then ask again. The snapshot save and engine shutdown follow below.
@@ -121,10 +152,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate, OEEngineDelegate, OEBr
       return .terminateCancel
     }
     let wasEngineReady = engineReady
-    let icons = wasEngineReady ? stores.sidebarFavicons : nil
+    let icons = wasEngineReady && !windowControllers.isEmpty ? stores.sidebarFavicons : nil
     terminationRequested = true
+    for controller in windowControllers { controller.closeThemeEditor() }
+    extensionPrompts.cancelAll()
     if let commandWindowObserver { NotificationCenter.default.removeObserver(commandWindowObserver) }; commandWindowObserver = nil
     if let commandDefaultsObserver { NotificationCenter.default.removeObserver(commandDefaultsObserver) }; commandDefaultsObserver = nil
+    if let initialWindowInputMonitor { NSEvent.removeMonitor(initialWindowInputMonitor) }; initialWindowInputMonitor = nil
     hotkeyService?.unregister(); afterPaintTask?.cancel(); menuRebuildTask?.cancel()
     stopAutoArchive()
     saveState()
@@ -150,11 +184,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate, OEEngineDelegate, OEBr
   func prepareData() -> ProfileDirectories {
     if let directories { return directories }
     let root = options.userDataDirectory
+    isFirstRun = !options.skipFirstRun && !FileManager.default.fileExists(atPath: root.appendingPathComponent("State/browser.json").path)
     // Chromium's data layout is its own step, before the snapshot loads. A
     // migration problem selects the old layout for this launch (retried on
     // the next one); it never touches the model.
     do {
       engine = try OpenDataRoot.prepareEngineLayout(root: root)
+      try ProfileTeardown.finishPendingWipes(directories: ProfileDirectories(root: engine.root))
     } catch {
       FileHandle.standardError.write(Data("Open: data root \(root.path) unavailable: \(error)\n".utf8))
       exit(1)
@@ -177,46 +213,82 @@ final class AppDelegate: NSObject, NSApplicationDelegate, OEEngineDelegate, OEBr
       FileHandle.standardError.write(Data(
         "Open: snapshot unreadable (kept as \(kept.lastPathComponent)), starting fresh: \(error)\n".utf8))
     }
-    let model = loaded ?? Self.makeDefaultModel()
+    let model: BrowserModel
+    if let loaded { model = loaded }
+    else {
+      model = Self.makeDefaultModel()
+      autoCreatedLaunchWindowID = model.windows.first?.id
+    }
+    let repaired = repairMissingProfiles(in: model)
     if model.windows.isEmpty, let space = model.spaces.first {
-      model.windows.append(BrowserWindowState(focusedSpaceID: space.id))
+      let state = BrowserWindowState(focusedSpaceID: space.id)
+      model.windows.append(state)
+      autoCreatedLaunchWindowID = state.id
     }
     do {
       try OpenDataRoot.prepare(root: root, model: model)
+      if repaired { try snapshotStore.saveNow(model: model) }
     } catch {
       FileHandle.standardError.write(Data("Open: data root \(root.path) unavailable: \(error)\n".utf8))
       exit(1)
     }
     let directories = ProfileDirectories(root: root.standardizedFileURL.resolvingSymlinksInPath())
-    archiveSink = ProfileArchiveSink(directories: directories) { [weak model] id in
-      let profile = id.flatMap { model?.profile(id: $0) } ?? model?.defaultProfile
-      return profile?.dataDirectoryName ?? "Default"
-    }
-    model.archiveSink = archiveSink
-    model.undoManager = undoManager
+    self.directories = directories
+    if isFirstRun { firstRunDefaultModel = model }
+    installModel(model)
     // Launch URLs enter the snapshot-backed model before window composition.
     // Only the final selection gets a page after engine readiness.
     if let state = model.windows.first(where: { $0.style == .standard }),
       let space = model.space(id: state.focusedSpaceID)
     {
-      for url in options.initialURLs {
+      for url in isFirstRun ? [] : options.initialURLs {
+        autoCreatedLaunchWindowID = nil
         let tab = model.newTab(in: space.id, url: url, at: 0)
         model.selectNode(windowID: state.id, spaceID: space.id, nodeID: tab.id)
       }
     }
-    model.addObserver { [weak self] _ in self?.scheduleSave(); self?.scheduleMenuRebuild(); self?.purgeScriptingWrappers() }
-    self.model = model
-    self.directories = directories
-    startAutoArchiveIfNeeded()
+    if !isFirstRun { prepareLittleOpen() }
+    if !isFirstRun { startAutoArchiveIfNeeded() }
     LaunchTiming.shared.mark("modelLoaded")
     return directories
   }
 
+  /// One observer/service seam for initial load and the first-run model swap.
+  func installModel(_ model: BrowserModel) {
+    if repairMissingProfiles(in: model) {
+      do { try snapshotStore.saveNow(model: model) }
+      catch { FileHandle.standardError.write(Data("Open: repaired Profiles could not be saved: \(error)\n".utf8)); exit(1) }
+    }
+    if let modelSaveObserver { self.model?.removeObserver(modelSaveObserver) }
+    self.model = model
+    if isFirstRun { autoCreatedLaunchWindowID = nil }
+    archiveSink = ProfileArchiveSink(directories: directories) { [weak model] id in
+      let profile = id.flatMap { model?.profile(id: $0) } ?? model?.defaultProfile
+      return profile?.dataDirectoryName ?? "Default"
+    }
+    model.archiveSink = archiveSink; model.undoManager = undoManager
+    modelSaveObserver = model.addObserver { [weak self] _ in self?.scheduleSave(); self?.scheduleMenuRebuild(); self?.purgeScriptingWrappers() }
+    // Profile creation belongs to the currently installed model, including an import swap.
+    tabSleep.installSettingsPolicy()
+    purgeScriptingWrappers()
+  }
+
   /// Runs at the first of applicationDidFinishLaunching and
   /// engineDidInitialize (their order is not fixed).
-  private func showWindowsIfNeeded() {
+  private func showWindowsIfNeeded(ignoringLittleOpen: Bool = false) {
     prepareData()
+    if isFirstRun && !firstRunSaved && windowControllers.isEmpty {
+      if firstRunWindowController == nil {
+        let actions = AppFirstRunActions(app: self)
+        let viewModel = FirstRunViewModel(settings: settingsPresenter.settings, actions: actions, directory: options.arcDirectory)
+        firstRunWindowController = FirstRunWindowController(model: viewModel)
+        lastFirstRunStep = "welcome"
+      }
+      firstRunWindowController?.showWindow(nil)
+      return
+    }
     guard windowControllers.isEmpty else { return }
+    guard ignoringLittleOpen || littleOpenCoordinator?.sessions.isEmpty != false else { return }
     let states = model.windows.filter { $0.style == .standard }
     for state in states.isEmpty ? Array(model.windows.prefix(1)) : states {
       createWindowController(state: state)
@@ -227,6 +299,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, OEEngineDelegate, OEBr
 
   func drawWindowsBeforeEngine() {
     showWindowsIfNeeded()
+    firstRunWindowController?.window?.contentView?.layoutSubtreeIfNeeded()
+    firstRunWindowController?.window?.displayIfNeeded()
     for controller in windowControllers {
       controller.prepareForInitialDisplay()
       controller.window?.contentView?.layoutSubtreeIfNeeded()
@@ -242,31 +316,35 @@ final class AppDelegate: NSObject, NSApplicationDelegate, OEEngineDelegate, OEBr
   }
 
   @discardableResult
-  private func createWindowController(state: BrowserWindowState) -> BrowserWindowController {
-    model.setWindowContentVisible(windowID: state.id, visible: true)
-    let factory = EngineWebContentHostFactory(app: self, state: state)
+  private func createWindowController(state: BrowserWindowState, privateModel: BrowserModel? = nil, session: IncognitoSession? = nil) -> BrowserWindowController {
+    let windowModel = privateModel ?? model!
+    windowModel.setWindowContentVisible(windowID: state.id, visible: true)
+    let factory = EngineWebContentHostFactory(app: self, state: state, model: windowModel, incognitoSession: session)
     hostFactories[state.id] = factory
-    let controller = BrowserWindowController(model: model, windowID: state.id, factory: factory, snapshotStore: snapshotStore)
-    controller.context.storedFavicons = stores.sidebarFavicons
+    let title = session.map { model.profiles.count > 1 ? "Incognito · " + $0.parent.name : "Incognito" }
+    let controller = BrowserWindowController(model: windowModel, windowID: state.id, factory: factory,
+      snapshotStore: session == nil ? snapshotStore : nil, incognitoTitle: title)
+    if session == nil { controller.context.storedFavicons = stores.sidebarFavicons }
     factory.attach(controller)
     windowControllers.append(controller)
-    media.attach(factory)
-    tabSleep.attach(factory)
+    if session == nil { media.attach(factory); tabSleep.attach(factory) }
     activeWindowID = state.id
     MainMenu.targetWindowCommands(factory)
-    todayAutoArchive?.attach(context: controller.context)
+    if session == nil { todayAutoArchive?.attach(context: controller.context) }
     controller.showWindow(nil)
+    if session == nil { showMissingProfileNoticeIfNeeded(on: controller.window) }
     if engineReady { factory.engineDidBecomeReady() }
     return controller
   }
 
   @discardableResult
   func makeWindow(focusedSpaceID: SpaceID? = nil) -> BrowserWindowController? {
+    guard firstRunWindowController == nil || firstRunSaved else { return nil }
     // Closing the final window keeps its state for reopen and relaunch.
-    if windowControllers.isEmpty, let state = model.windows.first(where: { $0.style == .standard }) {
+    if frontStandardWindowController == nil, let state = model.windows.first(where: { $0.style == .standard }) {
       return createWindowController(state: state)
     }
-    guard let spaceID = focusedSpaceID ?? frontWindowController?.context.focusedSpace?.id ?? model.spaces.first?.id,
+    guard let spaceID = focusedSpaceID ?? frontStandardWindowController?.context.focusedSpace?.id ?? model.spaces.first?.id,
       let state = withoutWindowUndo({ model.createWindow(focusedSpaceID: spaceID) }) else { return nil }
     let offset = Double(windowControllers.count * 24)
     state.frameX += offset; state.frameY -= offset
@@ -274,6 +352,28 @@ final class AppDelegate: NSObject, NSApplicationDelegate, OEEngineDelegate, OEBr
     state.showsToolbar = frontWindowController?.context.window?.showsToolbar ?? false
     let controller = createWindowController(state: state)
     scheduleSave(); return controller
+  }
+
+  var frontStandardWindowController: BrowserWindowController? {
+    let normal = windowControllers.filter { hostFactories[$0.windowID]?.isIncognito == false }
+    return NSApp.orderedWindows.compactMap { window in normal.first { $0.window === window } }.first ?? normal.first
+  }
+
+  @discardableResult
+  func makeIncognitoWindow(parent: Profile? = nil, url: URL? = nil) -> BrowserWindowController? {
+    guard engineReady, let parent = parent ?? frontStandardWindowController?.context.focusedSpace.flatMap({ model.profile(id: $0.profileID) }) ?? model.defaultProfile else { return nil }
+    let session = incognitoSessions.acquire(parent: parent)
+    let profile = Profile(name: parent.name, settings: parent.settings, dataDirectoryName: "Incognito")
+    let space = Space(title: "Incognito", icon: .symbol("eyeglasses"), profileID: profile.id)
+    let state = BrowserWindowState(focusedSpaceID: space.id)
+    let memory = BrowserModel(profiles: [profile], spaces: [space], windows: [state])
+    let undo = UndoManager(); undo.groupsByEvent = false; memory.undoManager = undo
+    let controller = createWindowController(state: state, privateModel: memory, session: session)
+    if let factory = hostFactories[state.id] {
+      if let url { factory.openNewTab(url: url, background: false) }
+      else { factory.showCommandBar(.newTab) }
+    }
+    return controller
   }
 
   @objc func newWindow(_ sender: Any?) { makeUserWindow() }
@@ -309,6 +409,16 @@ final class AppDelegate: NSObject, NSApplicationDelegate, OEEngineDelegate, OEBr
   }
 
   func windowDidClose(_ id: WindowID) {
+    guard let factory = hostFactories[id] else { return }
+    if let session = factory.incognitoSession {
+      windowControllers.removeAll { $0.windowID == id }; hostFactories[id] = nil
+      if session.windows == 1, let context = session.context { extensionPrompts.unregister(context.extensions) }
+      incognitoSessions.release(session)
+      if activeWindowID == id { activeWindowID = windowControllers.last?.windowID }
+      MainMenu.targetWindowCommands(frontWindowController.flatMap { hostFactories[$0.windowID] })
+      return
+    }
+    noteLaunchWindowNavigation(id)
     todayAutoArchive?.detach(windowID: id)
     if model.windows.filter({ $0.style == .standard }).count > 1 {
       withoutWindowUndo { model.closeWindow(windowID: id) }
@@ -323,6 +433,15 @@ final class AppDelegate: NSObject, NSApplicationDelegate, OEEngineDelegate, OEBr
     MainMenu.targetWindowCommands(frontWindowController.flatMap { hostFactories[$0.windowID] })
     scheduleSave()
     settingsPresenter.refreshSpaceManagerContext()
+  }
+
+  func discardUnusedLaunchWindow(_ id: WindowID) {
+    guard let controller = windowControllers.first(where: { $0.windowID == id }) else { return }
+    controller.window?.close()
+    // The usual last-window close retains user state. This tagged fallback
+    // was absent from the saved session, so do not persist a phantom window.
+    withoutWindowUndo { model.closeWindow(windowID: id) }
+    scheduleSave()
   }
 
   static func makeDefaultModel() -> BrowserModel {
@@ -342,13 +461,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate, OEEngineDelegate, OEBr
   }
 
   func scheduleSave() {
-    guard let model else { return }
+    guard let model, (!isFirstRun || firstRunSaved) else { return }
     snapshotStore.scheduleSave(model: model)
   }
 
   /// Called after the message loop returns, before the engine shuts down.
   func saveState() {
-    guard let model else { return }
+    guard let model, (!isFirstRun || firstRunSaved) else { return }
     for controller in windowControllers { controller.saveWindowState() }
     do {
       try snapshotStore.saveNow(model: model)
@@ -356,6 +475,44 @@ final class AppDelegate: NSObject, NSApplicationDelegate, OEEngineDelegate, OEBr
       FileHandle.standardError.write(Data("Open: saving the snapshot failed: \(error)\n".utf8))
     }
     archiveSink.flushAll()
+  }
+
+  /// Used after import (including an E-5 save error) so the imported items are
+  /// available behind the panel. Saving remains guarded until saveNow succeeds.
+  func showFirstRunBrowser() {
+    guard windowControllers.isEmpty else { return }
+    LaunchTiming.shared.mark("firstRunLandingStarted")
+    let states = model.windows.filter { $0.style == .standard }
+    for state in states { createWindowController(state: state) }
+    firstRunWindowController?.window?.makeKeyAndOrderFront(nil)
+  }
+
+  func finishFirstRun(imported: Bool) {
+    guard firstRunWindowController != nil else { return }
+    assert(imported || model === firstRunDefaultModel, "A fresh finish must keep the original default model")
+    do {
+      try snapshotStore.saveNow(model: model)
+      firstRunSaved = true
+      UserDefaults.standard.set(true, forKey: "open.firstRun.completed")
+    } catch {
+      firstRunWindowController?.model.reportSaveFailure(imported: imported)
+      return
+    }
+    lastFirstRunStep = firstRunWindowController?.model.step.rawValue ?? lastFirstRunStep
+    firstRunWindowController?.close(); firstRunWindowController = nil
+    prepareLittleOpen()
+    showWindowsIfNeeded()
+    frontWindowController?.window?.makeKeyAndOrderFront(nil)
+    settingsPresenter.attachBrowserStores()
+    startAutoArchiveIfNeeded(); todayAutoArchive?.finishStartupComposition()
+    for url in options.initialURLs {
+      _ = frontWindowController.flatMap { hostFactories[$0.windowID] }?.openNewTab(url: url, background: false)
+    }
+    completeLinkRestoration()
+    reloadKeyBindings()
+    let pendingLittleOpen = pendingLittleOpenBlankStamps
+    pendingLittleOpenBlankStamps.removeAll()
+    for timestamp in pendingLittleOpen { openBlankLittleOpen(timestamp: timestamp) }
   }
 
   // MARK: OEEngineDelegate
@@ -366,7 +523,15 @@ final class AppDelegate: NSObject, NSApplicationDelegate, OEEngineDelegate, OEBr
     showWindowsIfNeeded()
     refreshScriptingEngine()
     for factory in hostFactories.values { factory.engineDidBecomeReady() }
-    completeLinkRestoration()
+    // A fresh empty Space has no web paint to start T5. Register its shortcut
+    // after the native first frame without creating Settings or SuggestEngine.
+    if !isFirstRun || firstRunSaved { reloadKeyBindings() }
+    if firstRunWindowController == nil {
+      let pendingLittleOpen = pendingLittleOpenBlankStamps
+      pendingLittleOpenBlankStamps.removeAll()
+      for timestamp in pendingLittleOpen { openBlankLittleOpen(timestamp: timestamp) }
+    }
+    if !isFirstRun || firstRunWindowController == nil { completeLinkRestoration() }
     EngineWebProfile.onPermissionChange = { [weak self] context in self?.tabSleep.permissionsChanged(context: context) }
     scheduleMenuRebuild()
     #if OPEN_AUTOMATION
@@ -385,7 +550,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate, OEEngineDelegate, OEBr
   }
 
   func engineWebContent(forUnownedOpenRequest request: OEOpenRequest) -> OEWebContent? {
-    frontWindowController.flatMap { hostFactories[$0.windowID]?.adoptUnownedRequest(request) }
+    let owner = hostFactories.values.first { $0.isIncognito && $0.incognitoSession?.context === request.context }
+      ?? frontStandardWindowController.flatMap { hostFactories[$0.windowID] }
+    return owner?.adoptUnownedRequest(request)
   }
 
   func engineWillShutDown() {
@@ -399,15 +566,18 @@ final class AppDelegate: NSObject, NSApplicationDelegate, OEEngineDelegate, OEBr
   /// defensively before CefShutdown if the message loop ends by another path.
   func prepareForEngineShutdown() {
     guard !shutdownPrepared else { return }
+    ExtensionWindowController.closeAll()
     stopAutoArchive()
     tabSleep.stop()
     shutdownPrepared = true
     recordShutdownPhase("prepare")
     afterPaintTask?.cancel(); afterPaintTask = nil
     menuRebuildTask?.cancel(); menuRebuildTask = nil
+    littleOpenCoordinator?.closeAll()
     engineReady = false
     refreshScriptingEngine()
     for factory in Array(hostFactories.values) { factory.closeAll() }
+    incognitoSessions.closeAll()
     recordShutdownPhase("hostsClosed")
   }
 
@@ -454,6 +624,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate, OEEngineDelegate, OEBr
   }
 
   func browserContext(_ context: OEBrowserContext, decideDestinationFor download: OEDownload, suggestedFilename: String, completion: @escaping @MainActor (URL?) -> Void) {
+    #if OPEN_AUTOMATION
+    if AutomationOwnerWatch.quittingWithoutPrompts { completion(nil); return }
+    #endif
     guard let owner = downloadOwner(download) else { completion(nil); return }
     owner.browserContext(context, decideDestinationFor: download, suggestedFilename: suggestedFilename, completion: completion)
   }
@@ -484,7 +657,7 @@ extension AppDelegate: CommandDispatcher {
   /// No suggestion index, history, hotkey or settings work before first paint.
   func prepareCommandsAfterPaint(_ page: OEWebContent) {
     guard engineReady, !shutdownPrepared, !terminationRequested,
-          !commandServicesPrepared || !tabSleep.isStarted, afterPaintTask == nil else { return }
+          !commandServicesPrepared || !tabSleep.isStarted || !FindBarPrewarm.isScheduled, afterPaintTask == nil else { return }
     afterPaintTask = Task { @MainActor [weak self, weak page] in
       defer { self?.afterPaintTask = nil }
       for _ in 0..<40 {
@@ -494,10 +667,12 @@ extension AppDelegate: CommandDispatcher {
         if painted == true {
           if !self.commandServicesPrepared {
             self.prepareCommandServices()
-            if let id = self.frontWindowController?.windowID, let profile = self.hostFactories[id]?.focusedProfile { self.stores.prewarm(profileID: profile.id) }
+            if let id = self.frontStandardWindowController?.windowID, let profile = self.hostFactories[id]?.focusedProfile { self.stores.prewarm(profileID: profile.id) }
           }
           // Startup T5: the sleep controller starts after first paint, never before.
           self.tabSleep.start()
+          FindBarPrewarm.schedule(afterPaintIn: self)
+          self.applicationIcon.restoreAfterContent()
           return
         }
         try? await Task.sleep(for: .milliseconds(50))
@@ -505,6 +680,7 @@ extension AppDelegate: CommandDispatcher {
       // A page that never reports a paint (about:blank): start sleep after the same 2 s budget.
       guard let self, self.engineReady, !self.shutdownPrepared, !self.terminationRequested, !Task.isCancelled else { return }
       self.tabSleep.start()
+      self.applicationIcon.restoreAfterContent()
     }
   }
   func prepareCommandServices() {
@@ -550,6 +726,7 @@ extension AppDelegate: CommandDispatcher {
       keyBindings = .empty; Self.commandLog("Key bindings could not be loaded: \(error)")
     }
     for controller in windowControllers { controller.keyBindingOverrides = keyBindings }
+    extensionPrompts.rebuildShortcuts()
     updateLittleOpenHotkey(); scheduleMenuRebuild()
   }
   func updateLittleOpenHotkey() {
@@ -559,33 +736,40 @@ extension AppDelegate: CommandDispatcher {
       let shortcut = keyBindings.effectiveShortcuts(for: command).first else { return }
     if hotkeyService == nil { hotkeyService = GlobalHotkeyService() }
     hotkeyAttempts += 1
-    do { try hotkeyService?.register(shortcut: shortcut) { [weak self] in Task { @MainActor in self?.showLittleOpenStub() } } }
+    do { try hotkeyService?.register(shortcut: shortcut, actionWithTimestamp: { [weak self] timestamp in
+      Task { @MainActor in self?.openBlankLittleOpen(timestamp: timestamp) }
+    }) }
     catch { hotkeyError = String(describing: error); Self.commandLog("Little Open hotkey registration failed: \(error)") }
   }
   static func commandLog(_ message: String) { FileHandle.standardError.write(Data("Open: \(message)\n".utf8)) }
-  func showLittleOpenStub() {
-    if littleOpenStub == nil {
-      let window = NSWindow(contentRect: NSRect(x: 0, y: 0, width: 720, height: 540), styleMask: [.titled, .closable, .resizable], backing: .buffered, defer: false)
-      window.title = "Little Open"; window.isReleasedWhenClosed = false
-      let label = NSTextField(labelWithString: "Little Open is not available in this build.")
-      label.frame = NSRect(x: 28, y: 260, width: 650, height: 24); window.contentView?.addSubview(label)
-      window.center(); littleOpenStub = NSWindowController(window: window)
-    }
-    littleOpenStub?.showWindow(nil); littleOpenStub?.window?.makeKeyAndOrderFront(nil); NSApp.activate()
-    scheduleMenuRebuild()
-  }
   func menuState(for id: String) -> CommandMenuState? {
     if id == "set-default-browser" { return CommandMenuState(isChecked: defaultBrowserService.isDefaultBrowser) }
     if id == "toggle-developer-mode" { return DeveloperMode.menuState(for: frontWindowController.flatMap { hostFactories[$0.windowID] }?.selectedContent?.url) }
     return PageTools.menuState(for: id)
   }
+  private static let firstRunCommands: Set<String> = [
+    "quit-open", "hide-open", "hide-others", "show-all", "about-open", "archive-tab", "close-window"
+  ]
+  private func allowsFirstRunCommand(_ id: String) -> Bool {
+    firstRunWindowController == nil || firstRunSaved || Self.firstRunCommands.contains(id)
+  }
+  var settingsShortcutCaptured: Bool {
+    hostFactories.values.contains { factory in
+      factory.commandBarSession?.isPresented == true &&
+        factory.commandBarSession?.controller?.editingUndoManager(for: NSApp.keyWindow?.firstResponder) != nil
+    }
+  }
   func isCommandEnabled(_ id: String, enabledKey: String) -> Bool {
+    guard allowsFirstRunCommand(id) else { return false }
+    if id == "settings", settingsShortcutCaptured { return false }
+    if let enabled = littleOpenCommandEnabled(id) { return enabled }
     if SystemCommandActions.selectors[id] != nil { return SystemCommandActions.isEnabled(id) }
     if let enabled = PageTools.isAppCommandEnabled(id) { return enabled }  // App/Page/PageToolsCommands.swift
     if ["archive-tab", "close-window"].contains(id) { return NSApp.keyWindow != nil }
-    return ["new-window", "blank-window", "new-tab", "settings", "search-settings", "air-traffic-control", "import-from-browser", "set-default-browser", "check-for-updates", "view-archive", "view-history", "view-library", "view-downloads", "view-media", "view-boosts", "quit-open", "new-little-open-window", "little-open-global", "about-open", "hide-open", "hide-others", "show-all", "help-center", "keyboard-shortcuts-edu", "getting-started", "release-notes", "contact-team", "manage-spaces"].contains(id)
+    return ["new-incognito-window", "new-window", "blank-window", "new-tab", "new-profile", "settings", "search-settings", "air-traffic-control", "import-from-browser", "set-default-browser", "check-for-updates", "view-archive", "view-history", "view-library", "view-downloads", "view-media", "view-boosts", "quit-open", "new-little-open-window", "little-open-global", "about-open", "hide-open", "hide-others", "show-all", "help-center", "keyboard-shortcuts-edu", "getting-started", "release-notes", "contact-team", "manage-spaces"].contains(id)
   }
   func performCommand(_ id: String, payload: String?) {
+    guard allowsFirstRunCommand(id) else { return }
     // Search engines live in Settings ▸ Profiles: open the named Profile, else the front window's.
     // An action row's payload is a Space ID, which names no Profile, so it falls back too.
     if id == "search-settings" {
@@ -598,16 +782,31 @@ extension AppDelegate: CommandDispatcher {
     performCommand(id)
   }
   func performCommand(_ id: String) {
+    performCommand(id, keyDownTimestamp: nil)
+  }
+  func performCommand(_ id: String, keyDownTimestamp: TimeInterval?) {
+    guard allowsFirstRunCommand(id) else { return }
+    noteLaunchWindowInput(NSApp.keyWindow)
+    if performLittleOpenCommand(id) { return }
     if SystemCommandActions.selectors[id] != nil { _ = SystemCommandActions.perform(id); return }
     if PageTools.isAppCommandEnabled(id) == true, PageTools.performAppCommand(id) { return }
     switch id {
+    case "new-incognito-window": makeIncognitoWindow()
     case "new-window", "blank-window": makeUserWindow()
     case "new-tab":
       let controller = frontWindowController ?? makeWindow()
       controller.flatMap { hostFactories[$0.windowID] }?.newTab(nil)
-    case "settings": settingsPresenter.show()
+    case "settings": if !settingsShortcutCaptured { settingsPresenter.show() }
+    case "new-profile": settingsPresenter.showNewProfile()
     case "search-settings": performCommand(id, payload: nil)
-    case "air-traffic-control": settingsPresenter.show(pane: .links)
+    case "air-traffic-control":
+      settingsPresenter.settings.scrollTarget = nil
+      settingsPresenter.show(pane: .links)
+      // A repeated invocation must scroll again even if Settings was left on Links.
+      Task { @MainActor [weak self] in
+        await Task.yield()
+        self?.settingsPresenter.settings.scrollTarget = "links-rules"
+      }
     case "import-from-browser": settingsPresenter.show(pane: .general); settingsPresenter.settings.showsImport = true
     case "set-default-browser": settingsPresenter.settings.general.setDefault()
     case "check-for-updates": settingsPresenter.checkForUpdates()
@@ -618,16 +817,16 @@ extension AppDelegate: CommandDispatcher {
     case "view-media": settingsPresenter.showLibrary(section: .media)
     case "view-archive": settingsPresenter.showLibrary(section: .archive)
     case "view-history": settingsPresenter.showLibrary(section: .history)
-    case "view-boosts": settingsPresenter.show(); settingsPresenter.settings.statusText = "Boost editing is not available in this build."
+    case "view-boosts": settingsPresenter.show(pane: .advanced); settingsPresenter.settings.advanced.statusText = "Boost editing is not available in this build."
     case "keyboard-shortcuts-edu":
       // Help ▸ Essential Keyboard Shortcuts: Arc's floating EDU window (commandbar-completion §4.5, CC-27).
       EssentialShortcutsWindowController.shared.show(near: frontWindowController?.window ?? NSApp.keyWindow, store: keyBindings)
     case "archive-tab": NSApp.keyWindow?.performClose(nil)
     case "manage-spaces": settingsPresenter.showLibrary(section: .spaces)
-    case "new-little-open-window", "little-open-global": showLittleOpenStub()
+    case "new-little-open-window", "little-open-global": openBlankLittleOpen(timestamp: keyDownTimestamp)
     case "help-center", "getting-started", "release-notes", "contact-team":
       let controller = frontWindowController ?? makeWindow()
-      _ = controller.flatMap { hostFactories[$0.windowID] }?.openNewTab(url: AppCommand.helpURL, background: false)
+      _ = controller.flatMap { hostFactories[$0.windowID] }?.openNewTab(url: AppCommand.helpURL(for: id), background: false)
     default:
       #if DEBUG
       if CommandRegistry.byID[id]?.isReserved != true { Self.commandLog("Unhandled app command: \(id)") }

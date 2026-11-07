@@ -98,8 +98,8 @@ import OpenStore
     }
     public var filterIdentity: String { "\(section.rawValue)|\(query)|\(archiveSpaceFilter?.description ?? "")|\(archiveReasonFilter?.rawValue ?? "")|\(archiveOriginFilter.rawValue)|\(historyProfileID)" }
     public func refreshExternalState() async {
-        do { try (captures as? FileCapturesProvider)?.reload() }
-        catch { statusText = "Could not read captures. \(error.localizedDescription)" }
+        // Capture read failures belong to the capture sections, not the shared status bar.
+        try? (captures as? FileCapturesProvider)?.reload()
         await reload()
     }
     public func reload() async { refreshProfiles(); if section == .archive { await reloadArchive() }; if section == .history { await reloadHistory() } }
@@ -245,7 +245,7 @@ import OpenStore
     }
     public func deleteCaptureConfirmed() {
         guard let id = pendingCaptureDelete else { return }; pendingCaptureDelete = nil
-        do { try captures.remove(id: id); thumbnails.removeValue(forKey: id); thumbnailImages.removeValue(forKey:id); actions.deleteCapture(id: id); statusText = "Capture deleted." }
+        do { try captures.remove(id: id); selectedIDs.remove(id.uuidString); thumbnails.removeValue(forKey: id); thumbnailImages.removeValue(forKey:id); actions.deleteCapture(id: id); statusText = "Capture deleted." }
         catch { statusText = "Could not delete the capture. \(error.localizedDescription)" }
     }
     public func saveCapture(_ item: CaptureItemSnapshot, to url: URL) { statusText = actions.saveCapture(id: item.id, to: url) ?? "Saved." }

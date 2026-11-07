@@ -1022,10 +1022,10 @@ While `picking`:
 | Input | Behavior |
 |---|---|
 | `mousemove` | rAF-throttle (store last event, process once per frame). Compute hovered element (§7.5 entry). Move highlight. Update label chip text to `tagName` + best selector preview (first candidate's selector, truncated to 60 chars). Cost budget §11. |
-| `click` (capture, on document) | If click hits bottom-bar buttons, handle button. Else: `preventDefault()` + `stopPropagation()` (do not let the page navigate). Compute candidates (§7.5). Take candidate[0] as the zap. Preview-hide it (§7.4). Send `zap:committed` (§9.2). Push onto session undo stack (§7.6). Stay in picking (user can zap more). If candidates is empty (element unselectable, §7.5), flash the highlight border red for 200 ms and send `zap:error { kind: "no-candidate" }`. Do not exit. |
+| `click` (capture, on document) | Ignore Open controls. Otherwise prevent the page action, compute candidates, and open the §4.8 action card without committing or hiding. "Zap this" commits the precise candidate, preview-hides it, sends one `zap:committed`, pushes one undo entry, and closes the card. Cancel only closes the card. Stay in picking. No candidate flashes the highlight and sends `picker:error { kind: "no-candidate" }`. |
 | `keydown` Esc | Exit picker (remove overlay listeners, hide overlay, send `picker:exited { reason: "esc" }`). |
 | `keydown` Cmd/Ctrl+Z | Undo last zap (§7.6). Also the bar Undo button does this. |
-| "Zap all related" | After a click, if candidate list has an entry with `matches > 1`, the bottom bar shows `Zap all related (N)`. Clicking it re-commits using that wider candidate instead (replace the last zap: send `zap:replaced` — see §9.2 — or undo+commit pair; §9 fixes `zap:replaced`). Before commit, show all rects via `rectsForSelector` highlights for 1 preview state: implement as — hovering the button highlights all matching rects (draw extra highlight boxes), clicking commits. Keep implementation simple: on button hover, draw N extra `.hl-multi` boxes; on leave, remove them. |
+| "Zap all related elements" | The click card offers the wider sibling candidate when available. Hover draws all matching `.hl-multi` rectangles and shows its count and selector in the band; leave clears them. Click sends one direct `zap:committed` for the wider selector, preview-hides its matches, pushes one undo entry, and closes the card. No preliminary precise commit or replacement (Open choice, lead, 2026-11-06; `site-control-boost-editor.md` §4.8). |
 | Done button / bridge `zap:exit` | Exit with reason `"done"`. |
 | Scroll / resize | Reposition highlight to the last hovered element's fresh rect (recompute via stored element reference, not coordinates). If the element left the DOM, hide the highlight. |
 
@@ -1513,14 +1513,26 @@ Transport (abstract, per task prompt):
 
 ### 9.2 Page → native messages (complete list)
 
+Every `picker:*` and `zap:*` payload also carries `boostID` and the native-issued
+`sessionNonce`. Native binds the pair to its engine document identity. Missing,
+foreign, or expired pairs are ignored. Native records the mode with the capability;
+a select capability cannot change the store, even if it sends a commit or reveal.
+The restyled overlay in `site-control-boost-editor.md` §4.8 supersedes §7.2/§7.3's
+original pill and immediate-click UI. A page click opens the action card. "Zap this"
+makes one precise commit; the related action makes one direct wider commit. Both
+close the card, and Cancel closes without committing (Open choice, lead,
+2026-11-06). `zap:replaced` decoding remains for bridge compatibility.
+
 | Type | Payload (exact keys) | Sent when | Native effect (§8.3) |
 |---|---|---|---|
 | `picker:ready` | `{ boostID }` | Picker finishes `enter` (overlay live, listeners attached) | none |
 | `picker:exited` | `{ boostID, reason }` reason ∈ `"esc" \| "done" \| "bridge"` | Picker exits (any path) | none |
 | `picker:error` | `{ kind, selector? }` kind ∈ `"no-candidate" \| "already-active"` | §7.3 / §7.7 | log only |
 | `zap:committed` | `{ boostID, selector, label, matches, inShadowRoot }` | Click commits a zap (§7.4). `matches` = candidate match count at generation time. `label` = suggested label: `tagName` lowercased plus `#id` when the chosen selector is an id selector, else `tagName`. | persist zap |
-| `zap:replaced` | `{ boostID, oldSelector, newSelector, label, matches }` | "Zap all related" replaces the just-committed zap | swap zap |
+| `zap:replaced` | `{ boostID, oldSelector, newSelector, label, matches }` | Compatibility message; the current related action sends one direct `zap:committed` | swap zap |
 | `zap:removed` | `{ boostID, selector, via }` via ∈ `"undo" \| "native"` | Undo pops a zap (`"undo"`), or picker echoes a native-initiated removal (`"native"`) | undo → persist removal; native → no-op |
+| `zap:revealRequested` | `{ boostID, sessionNonce, selector }` | Click a "Click to reveal" chip | coordinator removes the stored Zap and emits `.removed`; adapter sends `zap:remove` and refreshes the plan |
+| `picker:selected` | `{ boostID, sessionNonce, selector, matches }` | "Use Selector" in select mode | coordinator emits `.selected` only for a select capability; editor inserts at CSS caret and exits; no store change |
 | `zap:list-result` | `{ boostID, entries: [{ selector, label, matchCount, truncated }] }` | Reply to `zap:list` (§7.6) | cache for editor |
 | `boost:applied` | `{ planID }` | Applier finishes `apply` (including no-op same-plan applies? No — only when CSS actually changed or first apply). Fire once per distinct planID per page. | log only |
 | `boost:error` | `{ kind, selector? }` kind ∈ `"invalid-zap-selector"` | Applier skips a bad zap selector (§6.3) | log only |
@@ -1538,11 +1550,17 @@ Else label = `"<tag>"` (for example `div`). Native stores it as `ZappedElement.l
 |---|---|---|---|
 | `boost:apply` | `{ planID, boosts: [{ boostID, css, zaps: [string] }], colorAdjustment: { hueRotateDegrees, saturation, brightness, contrast, invert } \| null, fontFamily: string \| null, js: string }` | applier `apply()` | §6. Field names match `InjectionPlan` exactly. `js` is the planner's `combinedJS`. Empty plan is sent as `boosts: [], js: "", colorAdjustment: null, fontFamily: null` with `planID: "empty"` and must behave as clear. |
 | `boost:clear` | `{}` | applier `clear()` | §6.2. |
-| `zap:enter` | `{ boostID }` | picker `enter({ boostID })` | §7.3. If picker file not yet injected, the engine injects it first (§8.4). |
-| `zap:exit` | `{}` | picker `exit()` with reason `"bridge"` | §7.3. |
-| `zap:list` | `{ boostID }` | picker replies `zap:list-result` | §7.6. |
-| `zap:remove` | `{ boostID, selector }` | picker removes preview + echoes `zap:removed` via `"native"` | §7.6. The real un-hide comes from the follow-up `boost:apply` without that zap. |
-| `zap:undo` | `{}` | picker `undo()` | Same as Cmd/Ctrl+Z. For editor Undo buttons that live natively. |
+| `zap:enter` | `{ boostID, sessionNonce, mode?: "zap" \| "select" }` | picker `enter(options)` | §7.3. If picker file not yet injected, the engine injects it first (§8.4). |
+| `zap:exit` | `{ boostID, sessionNonce }` | picker `exit()` with reason `"bridge"` | §7.3. |
+| `zap:list` | `{ boostID, sessionNonce, selectors: [string], labels?: {selector: label} }` | picker replies `zap:list-result` | §7.6. |
+| `zap:remove` | `{ boostID, sessionNonce, selector }` | picker removes preview + echoes `zap:removed` via `"native"` | §7.6. The real un-hide comes from the follow-up `boost:apply` without that zap. |
+| `zap:undo` | `{ boostID, sessionNonce }` | picker `undo()` | Same as Cmd/Ctrl+Z. For editor Undo buttons that live natively. |
+
+`mode` defaults to `"zap"`. Select mode keeps the frame and tint, replaces Zap
+actions with "Use Selector" and Cancel, and never commits, hides, or writes data.
+`zap:list` supplies labels for persisted reveal chips; older senders may omit labels
+and the picker falls back to the selector. The coordinator's `lastEvent` is cleared
+on each `handle` call and contains only an authenticated, mode-appropriate event.
 
 Ordering guarantee the JS side may assume: for one page, native sends `boost:apply`
 messages in plan order; a `zap:enter` for a page always follows any pending
@@ -1870,14 +1888,17 @@ Static page (`static.html`):
   → one rect with positive width/height. Eval `hoveredAt(x, y).hash` starts with
   `DIV#promo-banner` (hash format `TAG#id.class...@siblingIndex`, §7.5 entry —
   assert prefix only).
-- **A11 — Zap all related.** Fresh navigate. Enter Zap. Click the first
-  `article.post`. Eval last committed selector matches 1 element (the generator's
-  top pick may already be the shared class — handle both: if the committed
-  `matches === 3`, the check passes at this step). Else the bar shows
-  **Zap all related (3)**; hover it (multi-rects visible — snapshot),
-  click it. Messages contain `zap:replaced` (or a second committed) whose selector
-  has `matches === 3`. Eval all three articles' display → `"none"`. Implementer
-  records which branch occurred; both are pass if the end state holds.
+- **A11 — Zap all related.** Fresh navigate. Enter Zap and click the first
+  `article.post`. Cancel closes the card without a commit, store mutation, hide,
+  or undo entry. Pick again and choose **Zap this**: one precise commit with
+  `matches === 1`, one hidden post, and a closed card; one undo restores it and
+  empties the store, and another undo does nothing. Fresh navigate and enter
+  again. Click the first post and hover **Zap all related elements**: all three
+  rectangles are visible, the band shows count 3 and the wider selector, and no
+  commit or store mutation occurs. Click the action: exactly one `zap:committed`
+  with `matches === 3`, no `zap:replaced`, one stored selector, all three articles
+  hidden, and the card closed. One undo restores all three and empties the store;
+  another undo does nothing. Snapshot the three live related-preview rectangles.
 
 SPA page (`spa.html`):
 
@@ -2227,6 +2248,12 @@ PR-a: Steps 1–3. PR-b: Steps 4–5. PR-c: Steps 6–8. PR-d: Step 9.
 - No network access in `OpenBoosts` or the runtime files. No telemetry.
 
 ### 13.3 Import from Arc (explicit non-goal with a hook)
+
+Update 2026-11-06 (Section 14 C2): the historical gate below is superseded by
+[Boost storage evidence](../re/boosts-store.md). Storable holds local enablement
+only; the bounded Firestore offline-cache parser is in OpenImport. CLI writes
+use the existing data-root lock. The App remains report-only until Section 12's
+sole `app.stores.boosts` owner merges; no second BoostStore may be created.
 
 `StorableBoostsData.json` has never been observed (data-model.md §2.6, model.md
 "boosts: not imported"). Do not write a parser. The hook: `Boost` field names

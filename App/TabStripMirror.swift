@@ -7,11 +7,24 @@ import OpenModel
 final class TabStripMirror {
   unowned let owner: EngineWebContentHostFactory
   private var browsers: [ProfileID: OEBrowser] = [:]
-  init(owner: EngineWebContentHostFactory) { self.owner = owner }
+  private var moveObserver: UUID?
+  init(owner: EngineWebContentHostFactory) {
+    self.owner = owner
+    moveObserver = owner.model.addObserver { [weak self] change in
+      guard let self, case .move(_, _, _, _, let id) = change,
+        let profile = self.owner.profile(for: id), let browser = self.browsers[profile.id],
+        let content = self.owner.contents[id],
+        let index = self.owner.tabs(in: profile.id).filter({ self.owner.contents[$0.id] != nil }).firstIndex(where: { $0.id == id })
+      else { return }
+      browser.move(content, to: UInt(index))
+      self.sync()
+    }
+  }
 
-  func browser(for profileID: ProfileID) -> OEBrowser? {
+  func browser(for profileID: ProfileID, create: Bool = true, loadContext: Bool = true) -> OEBrowser? {
     if let browser = browsers[profileID] { return browser }
-    guard let context = owner.context(for: profileID) else { return nil }
+    guard create else { return nil }
+    guard let context = owner.context(for: profileID, create: loadContext) else { return nil }
     let browser = OEBrowser(context: context)
     browser.delegate = owner; browser.window = owner.window
     browser.context.delegate = owner.app
@@ -41,7 +54,11 @@ final class TabStripMirror {
     }
   }
 
-  func close() { for browser in browsers.values { browser.close() }; browsers.removeAll() }
+  func close() {
+    if let moveObserver { owner.model.removeObserver(moveObserver); self.moveObserver = nil }
+    for browser in browsers.values { browser.close() }; browsers.removeAll()
+  }
+  func retireProfile(_ id: ProfileID) { browsers.removeValue(forKey:id)?.close() }
   #if OPEN_AUTOMATION
   /// Exercise OEBrowser.dealloc, not its explicit -close path. Web contents
   /// and the engine registry hold only weak browser references.

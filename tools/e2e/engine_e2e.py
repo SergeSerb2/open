@@ -21,6 +21,7 @@ import argparse
 import atexit
 import base64
 import ctypes
+import contextlib
 import json
 import math
 import glob
@@ -116,7 +117,7 @@ class CheckedResults(dict):
 
 
 class Open:
-    def __init__(self, config, style, user_data, extra_args, log_path, urls=("about:blank",), extra_env=None, delivery_urls=()):
+    def __init__(self, config, style, user_data, extra_args, log_path, urls=("about:blank",), extra_env=None, delivery_urls=(), first_run=False):
         if os.path.exists(os.path.join(ROOT, ".re", "hold-on-screen")):
             raise RuntimeError("On-screen Open runs are held by the lead (.re/hold-on-screen)")
         self.user_data = user_data
@@ -146,9 +147,10 @@ class Open:
         self.observation_steps = []
         self.activation_trace = []
         self.focus_tracker = None
-        env = dict(os.environ, OPEN_USER_DATA=user_data)
+        env = dict(os.environ, OPEN_USER_DATA=user_data, OPEN_E2E_OWNER_PID=str(os.getpid()),
+                   OPEN_AUTOMATION_SKIP_MAC_NOTIFICATIONS="1")
         env.update(extra_env or {})
-        args = [app, "--user-data-dir=" + user_data, "--style=%s" % style] + list(urls) + extra_args
+        args = [app, "--user-data-dir=" + user_data, "--style=%s" % style] + ([] if first_run else ["--skip-first-run"]) + list(urls) + extra_args
         self.log = open(log_path, "a")
         self.started = time.time()
         # A raw executable launch can have a visible window but no foreground
@@ -184,9 +186,12 @@ class Open:
     def call(self, cmd, timeout=120, **args):
         if cmd in ("window-close", "popup-close", "quit") or (cmd == "devtools" and args.get("method") == "Page.crash"):
             self.discover_owned_processes()
-        foreground_input = cmd in ("key", "focus") or (cmd == "window-focus" and args.get("activate"))
+        foreground_input = cmd in ("key", "focus", "little-open-link-click", "editor-act") or (cmd == "window-focus" and args.get("activate"))
         if cmd in ("space-manager-drag", "sidebar-click", "sidebar-key", "hover"): foreground_input = True
-        if foreground_input and self.pid and not self.call("window-state").get("appActive", False):
+        if cmd == "first-run" and args.get("action") == "focus": foreground_input = True
+        if cmd == "profiles-shell" and args.get("action") in ("press", "type-delete", "icon-symbol", "indicator-menu"):
+            foreground_input = True
+        if foreground_input and self.pid and not self.call("native-focus-state").get("active", False):
             # `NSApp.activate()` is a request, not a grant. Renew the explicit
             # foreground request if another app took focus. Address the exact
             # verified PID; a bundle identifier can name another Open worktree.
@@ -428,6 +433,43 @@ def new_tab(app, url, **kw):
     return t["id"]
 
 
+@contextlib.contextmanager
+def passwords_fixture_server():
+    """Own one loopback server/ephemeral port; share URLs and engine switches.
+
+    Pass ``engine_switches`` as factory(extra_args=...). CEF receives the
+    App's argv (OEEngine.mm, CefMainArgs), in addition to additionalSwitches.
+    No form values or HTTP headers are logged by the server.
+    """
+    import select
+    server = os.path.join(ROOT, 'tools/e2e/fixtures/passwords/server.py')
+    proc = subprocess.Popen([sys.executable, '-I', server, '--port', '0'],
+                            stdout=subprocess.PIPE, stderr=subprocess.DEVNULL, text=True)
+    try:
+        if not select.select([proc.stdout], [], [], 10)[0]:
+            raise RuntimeError('passwords fixture server startup timed out')
+        port = int(proc.stdout.readline().strip())
+        local = 'http://localhost:%d' % port
+        login = 'http://login.example.com'
+        yield {'port': port, 'login': login + '/login.html',
+               'change': login + '/change.html', 'signup': login + '/signup.html',
+               'iframe': 'http://other.example.com/iframe.html',
+               'address': login + '/address.html', 'card': local + '/card.html',
+               'webauthn': local + '/webauthn.html', 'basic': login + '/basic',
+               'set_cookies': login + '/set-cookies', 'echo_cookies': login + '/echo-cookies',
+               'local_login': local + '/login.html',
+               'engine_switches': ['--host-resolver-rules=MAP *.example.com 127.0.0.1:%d' % port,
+                                   '--no-proxy-server']}
+    finally:
+        proc.terminate()
+        try:
+            proc.wait(timeout=5)
+        except subprocess.TimeoutExpired:
+            proc.kill()
+            proc.wait()
+        proc.stdout.close()
+
+
 def frame(f):
     return [float(x) for x in f.replace("{", "").replace("}", "").split(",")]
 
@@ -446,6 +488,7 @@ def wav_data_uri(seconds=2, freq=440, rate=22050):
 
 
 def extension_checks(app, style, results):
+    app.call("ext-prompt", handler=False)
     def ext_list():
         lst = app.call("extensions")
         return lst if len(lst["installed"]) >= 4 else None
@@ -1151,7 +1194,10 @@ def tabstrip_checks(app, results):
         return strip_ids(page) == [p["chromeTabId"] for _, p in live()]
 
     wait_until(lambda: any(e["id"] == PROBE for e in app.call("extensions")["installed"]), timeout=30)
-    first = app.call("tabs")[0]["id"]
+    # The live registry can be ready before Bitwarden opens its welcome tab.
+    # Finish that install side effect before establishing selected-tab state.
+    wait_until(lambda: [t for t in app.call("tabs") if "bitwarden.com" in t["url"]], timeout=15)
+    first = next(t["id"] for t in app.call("tabs") if t["url"].startswith("https://example.com"))
     a = new_tab(app, "https://example.org/")
     b = new_tab(app, "https://www.iana.org/help/example-domains")
     app.call("select", tab=first)
@@ -1311,27 +1357,48 @@ def tabstrip_checks(app, results):
         "today_tab_gone_from_sidebar": bool(gone), "pinned_and_favorite_unloaded_in_place": bool(stays),
         "results": [removed_pinned, removed_fav]}
 
-    # chrome.tabs.discard asks Open: a background tab unloads in place; the
-    # visible tab is refused. Chromium never discards on its own.
+    # chrome.tabs.discard asks Open's sleep controller: a background renderer
+    # is discarded in place; the visible tab is refused. The sleeping page
+    # object stays until the controller's later destroy deadline.
     bg = f2
     bg_cid = chrome_id(bg)
+    discard_initial = []
+    def ready_to_discard():
+        state = next(iter(app.call("sleep-state", tab=bg).get("tabs", [])), {})
+        if not discard_initial: discard_initial.append(state)
+        # A recent network commit has the controller's existing 10 s loading
+        # grace. Establish an eligible background tab before sending one
+        # discard request; a correct refusal during that grace is not failure.
+        return state if state.get("content") and state.get("phase") == "live" \
+            and state.get("discardGate") is None else None
+    discard_ready = wait_until(ready_to_discard, timeout=20)
     discard_bg = ext_call(pop, "chrome.tabs.discard(%d).then(t => ({id: t.id, discarded: t.discarded}))" % bg_cid)
-    unloaded = wait_until(lambda: (lambda r: r if r and not r["loaded"] else None)(row(bg)), timeout=10)
+    def discarded_in_place():
+        state = app.call("sleep-state", tab=bg)
+        tab = next(iter(state.get("tabs", [])), {})
+        return tab if tab.get("phase") == "sleeping" and tab.get("discarded") else None
+    asleep = wait_until(discarded_in_place, timeout=10)
+    chromium_after = ext_call(pop, "chrome.tabs.get(%d).then(t => ({id: t.id, discarded: t.discarded}))" % bg_cid)
     visible = [t for t in app.call("tabs") if t["visible"]][0]
     discard_visible = ext_call(pop, "chrome.tabs.discard(%d)" % visible["page"]["chromeTabId"])
     time.sleep(0.5)
     results["tabs_discard"] = {
-        "ok": "ok" in discard_bg and bool(unloaded) and "error" in discard_visible
+        "ok": bool(discard_ready) and "ok" in discard_bg and bool(asleep) and bool(row(bg))
+              and chromium_after.get("ok", {}).get("id") == bg_cid and "error" in discard_visible
               and bool(row(visible["id"])) and row(visible["id"])["loaded"],
-        "background": discard_bg, "background_unloaded_in_place": bool(unloaded),
-        "visible": discard_visible}
+        "background": discard_bg, "background_sleeping_in_place": bool(asleep),
+        "eligible_before_request": discard_ready,
+        "initial_eligibility": discard_initial[0] if discard_initial else None,
+        "sleep_state": asleep or app.call("sleep-state", tab=bg), "chromium_after": chromium_after,
+        "visible": discard_visible,
+        "note": "P1 returns discarded:false in desktop chrome.tabs metadata; the engine's renderer-discard flag and sleeping phase prove the discard."}
 
     # Tabs stay in their Open window: windows.create({tabId}) and moves to
     # or from another window are refused.
     open_window = live()[0][1]["chromeWindowId"]
     some = chrome_id(b)
     create_with_tab = ext_call(pop, "chrome.windows.create({tabId: %d}).then(w => w.id)" % some)
-    other = ext_call(pop, "chrome.windows.create({url: 'about:blank', focused: false})"
+    other = ext_call(pop, "chrome.windows.create({type: 'popup', url: 'about:blank', focused: false})"
                           ".then(w => ({id: w.id, tab: w.tabs[0].id}))")
     out_move = into_move = group_here = other_group = group_move_in = None
     strip_before = strip_ids(pop)
@@ -2149,8 +2216,15 @@ def shutdown_order_checks(factory, results, tmp):
         and not os.path.exists(destination), 'pendingBeforeQuit': pending, 'quit': app.quit_report, 'trace': trace}
 
 
-def window_checks(app_factory, results, tmp, config, chrome_only=False):
+def window_checks(app_factory, results, tmp, config, chrome_only=False, material_only=False):
+    if material_only:
+        window_material_checks(app_factory, results, tmp)
+        return
+    import engine_activation
+    engine_activation.run(app_factory, results)
+    sidebar_resize_gesture_checks(app_factory, results, tmp)
     window_chrome_followup_checks(app_factory, results, tmp)
+    window_material_checks(app_factory, results, tmp)
     if chrome_only: return
     # Local deterministic text paints without DNS, TLS, or external requests.
     fixture = "data:text/html,<title>Open launch fixture</title><h1>Open launch fixture</h1>"
@@ -3173,6 +3247,228 @@ def scheduled_spring(a, response, damping, path=None, relative_to_group=False):
             and (path is None or a.get("keyPath") == path))
 
 
+# Section 5 window material (docs/design.md §16.6, OpenDesign/WindowMaterial.swift): the window
+# background is (1 - w) x tint + w x backdrop, w = 0.115. Active: backdrop gray 0.91 (dark);
+# inactive: black (dark) / white (light, guess); the hover-reveal card: the blurred page.
+MATERIAL_W = 0.115
+MATERIAL_SHIFT = {"dark": -MATERIAL_W * 0.91 * 255, "light": MATERIAL_W * (1 - 0.574) * 255}
+MATERIAL_DARK_PAGE = ("data:text/html,<title>Dark</title><body style='margin:0;background:rgb(16,20,24)'>"
+                      "<div style='position:absolute;top:600px;height:200px;left:0;right:0;background:rgb(112,112,112)'></div>")
+
+
+def window_material_checks(factory, results, tmp):
+    """Translucent card over the blurred page, and the inactive window, against the model and
+    against capture session 2 (05 frames 0009 / 0029, 03 frame 0016)."""
+    private = tempfile.mkdtemp(prefix="window-material-", dir=tmp)
+    common = subprocess.check_output(["git", "rev-parse", "--git-common-dir"], cwd=ROOT, text=True).strip()
+    capture_root = os.environ.get("OPEN_ARC_CAPTURE_ROOT", os.path.join(os.path.dirname(os.path.realpath(os.path.join(ROOT, common))), ".re"))
+    sessions = os.path.join(capture_root, "runtime", "sessions")
+    def arc_frame(session, frame):
+        found = glob.glob(os.path.join(sessions, session, "%04d-*" % frame, "win-70352.png"))
+        return found[0] if found else None
+    def region_mean(path, x0, x1, y0, y1, srgb=False, step=4):
+        w, h, P = read_image(path, srgb=srgb); sx = w / 1728.0
+        px = [P(x * sx, y * sx) for x in range(x0, x1, step) for y in range(y0, y1, step)]
+        return [round(statistics.mean(c[k] for c in px), 2) for k in range(3)]
+    app = factory(urls=(white_fixture("Material"),), fresh=True)
+    try:
+        app.call("appearance", name="dark")
+        wid = app.call("window-state")["id"]
+        app.call("window-focus", id=wid, activate=True)
+        place_away_from_cursor(app, 1728, 1084)
+        app.call("wait", tab=app.call("tabs")[0]["id"])
+        def snap(name, **kw):
+            path = os.path.join(private, name + ".png"); app.call("snapshot", path=path, **kw); return path
+        def card_snapshots(name):
+            ensure_key(app, wid)
+            anchored = snap(name + "-anchored")
+            app.call("key", key="s", modifiers=["cmd"], route="app"); sidebar_hidden(app)
+            card = reveal_card_and_wait(app)
+            app.call("mouse", action="move", x=120, y=400); time.sleep(.4)
+            ensure_key(app, wid)
+            shown = snap(name + "-card")
+            drawn = app.call("window-state")["reveal"].get("pageBlur")
+            app.call("mouse", action="move", x=700, y=400); wait_card(app, False); time.sleep(.3)
+            base = snap(name + "-base")
+            app.call("key", key="s", modifiers=["cmd"], route="app"); sidebar_anchored(app); time.sleep(.3)
+            return anchored, shown, base, bool(card), drawn
+        rows = {}
+        # 1. Card over a white page and over a dark page with a light band.
+        white = card_snapshots("white")
+        app.call("open", url=MATERIAL_DARK_PAGE); time.sleep(1.5)
+        app.call("wait", tab=app.call("tabs")[0]["id"])
+        dark = card_snapshots("dark")
+        flat = (120, 220, 420, 560)
+        arc_white, arc_dark = arc_frame("20261026-101324-05-reveal-card", 9), arc_frame("20261026-101324-05-reveal-card", 29)
+        for label, (anchored, shown, base, revealed, drawn), page, arc in (("white", white, 255, arc_white), ("dark", dark, 16, arc_dark)):
+            a, c = region_mean(anchored, *flat), region_mean(shown, *flat)
+            delta = [round(cv - av, 2) for cv, av in zip(c, a)]
+            expected = MATERIAL_W * (page - 0.91 * 255)
+            arc_rgb = region_mean(arc, *flat, srgb=True) if arc else None
+            rows[label] = {"revealed": revealed, "page_blur_layer": drawn, "anchored": a, "card": c, "card_minus_anchored": delta,
+                           "model": round(expected, 2), "arc_card": arc_rgb,
+                           "delta_e00_vs_arc": chrome_delta_e(arc_rgb, region_mean(shown, *flat, srgb=True)) if arc_rgb else None}
+        # Blur: over the band (page y 600-800 = window y 610-810 while hidden) the card lifts by
+        # w x (112 - 16); at the band's top edge about half of it (a Gaussian, not a hard edge);
+        # 75 pt above the edge (3 sigma) almost none.
+        _, shown, base, _, _ = dark
+        def lum(path, y): return statistics.mean(region_mean(path, 120, 220, y - 4, y + 4, step=2))
+        flat_l = lum(shown, 450); full = lum(shown, 710) - flat_l; edge = lum(shown, 610) - flat_l; above = lum(shown, 535) - flat_l
+        band_model = MATERIAL_W * (112 - 16)
+        rows["band"] = {"lift_center": round(full, 2), "lift_edge": round(edge, 2), "lift_75pt_above": round(above, 2), "model_center": round(band_model, 2)}
+        ok_rows = []
+        for label in ("white", "dark"):
+            r = rows[label]
+            r["ok"] = r["revealed"] and r["page_blur_layer"] is True and all(abs(d - r["model"]) <= 2.5 for d in r["card_minus_anchored"]) \
+                and (r["delta_e00_vs_arc"] is None or r["delta_e00_vs_arc"] <= 2)
+            ok_rows.append(r["ok"])
+        b = rows["band"]
+        b["ok"] = abs(b["lift_center"] - band_model) <= 2.5 and .3 * band_model <= b["lift_edge"] <= .7 * band_model and b["lift_75pt_above"] <= .15 * band_model
+        results["chrome_card_material"] = {"ok": all(ok_rows) and b["ok"] and arc_white is not None, "rows": rows,
+            "arc_frames": "SKIP: capture session 2 absent" if arc_white is None else "S2 05/0009, 05/0029", "region": "x 120-220, y 420-560 (window pt)",
+            "load_average": list(os.getloadavg())}
+        # 2. Inactive window, every theme kind: default dark (vs Arc 03/0016), default light (guess),
+        # a one-color dark editor theme (underlay path), a three-color dark editor theme (baked
+        # path) and a light editor theme. A second Open window takes key; the first is measured.
+        space = app.call("theme-get")
+        def inactive_pair(name):
+            ensure_key(app, wid); time.sleep(.3)
+            active = snap(name + "-active")
+            app.call("key", key="n", modifiers=["cmd"], route="app")
+            other = state_when(app, lambda st: st["id"] != wid) or app.call("window-state")
+            app.call("window-frame", frame=[2000, 80, 420, 360]); time.sleep(.5)
+            first = app.call("window-state", id=wid)
+            inactive = snap(name + "-inactive", window=first["number"])
+            app.call("window-close"); state_when(app, lambda st: st["id"] == wid)
+            return active, inactive, first["key"]
+        themes = [("default-dark", "dark", None, "dark"),
+                  ("editor-dark-1", "dark", {"mathVersion": 1, "keyColor": {"red": .35, "green": .45, "blue": .7, "alpha": 1}, "colorCount": 1,
+                                             "wheel": "analogous", "appearance": "dark", "noiseFactor": 0, "texture": "grain", "intensityFactor": .8}, "dark"),
+                  ("editor-dark-3", "dark", {"mathVersion": 1, "keyColor": {"red": .7, "green": .35, "blue": .4, "alpha": 1}, "colorCount": 3,
+                                             "wheel": "analogous", "appearance": "dark", "noiseFactor": 0, "texture": "grain", "intensityFactor": .8}, "dark"),
+                  ("editor-light-1", "light", {"mathVersion": 1, "keyColor": {"red": .55, "green": .75, "blue": .6, "alpha": 1}, "colorCount": 1,
+                                               "wheel": "analogous", "appearance": "light", "noiseFactor": 0, "texture": "grain", "intensityFactor": .8}, "light"),
+                  ("default-light", "light", None, "light")]
+        inactive_rows = {}
+        for name, system, style, scheme in themes:
+            app.call("appearance", name=system)
+            app.call("theme-set", style=style); time.sleep(.6)
+            active, inactive, still_key = inactive_pair(name)
+            row = {"scheme": scheme, "window_was_key": still_key, "style_applied": app.call("theme-get").get("style") == style or style is None}
+            for area, box in (("sidebar", (30, 200, 440, 1000)), ("right_margin", (1720, 1726, 400, 800))):
+                a, i = region_mean(active, *box, step=2), region_mean(inactive, *box, step=2)
+                row[area] = {"active": a, "inactive": i, "shift": [round(iv - av, 2) for av, iv in zip(a, i)]}
+            expected = MATERIAL_SHIFT[scheme]
+            row["model_shift"] = round(expected, 2)
+            row["ok"] = not still_key and row["style_applied"] and all(abs(d - expected) <= 2 for area in ("sidebar", "right_margin") for d in row[area]["shift"])
+            if name == "default-dark":
+                arc = arc_frame("20261026-100848-03-active-window", 16)
+                if arc:
+                    ca = region_mean(arc, 30, 200, 440, 1000, srgb=True, step=4)
+                    co = region_mean(inactive, 30, 200, 440, 1000, srgb=True, step=4)
+                    row["arc_inactive"], row["delta_e00_vs_arc"] = ca, chrome_delta_e(ca, co)
+                    row["ok"] = row["ok"] and row["delta_e00_vs_arc"] <= 2
+            if scheme == "light":
+                row["guess"] = "light inactive backdrop (white) and active backdrop (0.574) are derived, not captured"
+            inactive_rows[name] = row
+        app.call("theme-set", style=None); app.call("appearance", name="system")
+        results["chrome_inactive_material"] = {"ok": all(r["ok"] for r in inactive_rows.values()), "rows": inactive_rows,
+                                               "load_average": list(os.getloadavg())}
+    finally:
+        try: app.call("appearance", name="system")
+        except Exception: pass
+        app.quit()
+
+
+def sidebar_resize_gesture_checks(factory, results, tmp):
+    """Held native resize events, native interruption, and the App's Cmd+Z route."""
+    app = factory(urls=(white_fixture("Resize interruption and undo"),), fresh=True)
+    def state(): return app.call("window-state")
+    def pointer(action, x):
+        app.call("mouse", action=action, x=x, y=400)
+        return state()
+    def settled():
+        wait_until(lambda: not app.call("window-motion")["active"]["sidebar"], timeout=3, step=.01)
+    def focus(): app.call("window-focus", id=state()["id"], activate=True)
+    def toggle():
+        app.call("key", key="s", modifiers=["cmd"], route="app")
+        settled()
+    def undo():
+        app.call("sidebar-key", key="z", modifiers=["cmd"])
+        settled()
+        return state()
+    def reset():
+        if state()["sidebarMode"] == "hidden": toggle()
+        settled()
+        pointer("down", state()["sidebarWidth"])
+        pointer("drag", 228); pointer("up", 228); settled()
+        return app.call("undo-state", clear=True)
+    def restored(st, before):
+        return (not st["sidebarResizeActive"] and not st["sidebarResizeHandleDragging"]
+            and not st["sidebarResizeHasStart"] and st["sidebarWidthOverride"] is None
+            and st["sidebarResizeHandleVisible"] and st["sidebarMode"] == before["sidebarMode"]
+            and st["sidebarWidth"] == st["sidebarLiveWidth"] == st["panel"][0] == before["sidebarWidth"]
+            and st["sidebarWidthCommits"] == before["sidebarWidthCommits"]
+            and st["sidebarGestureHides"] == before["sidebarGestureHides"])
+    hint_key = "open.sidebar.hideHintShown"
+    saved_hint = app.call("defaults", key=hint_key)
+    try:
+        app.call("defaults", key=hint_key, value=True)
+        focus()
+        app.call("window-frame", frame=[40, 40, 1280, 800])
+        app.call("wait", tab=app.call("tabs")[0]["id"])
+        for kind, name, x in (("key", "resize_lost_up_key", 450), ("sheet", "resize_lost_up_sheet_hides", 60)):
+            generation = reset()["generation"]; before = state()
+            pointer("down", 228); held = pointer("drag", x)
+            app.call("window-interrupt", kind=kind)
+            cancelled = state()
+            no_undo = app.call("undo-state")["generation"] == generation
+            if kind == "sheet": app.call("window-interrupt", kind="end-sheet")
+            focus()
+            # Hover must work before a later mouse-up can clean a broken resize.
+            if state()["sidebarMode"] == "anchored": toggle()
+            card = reveal_card_and_wait(app)
+            app.call("mouse", action="move", x=700, y=400)
+            if state()["sidebarMode"] == "hidden": toggle()
+            pointer("drag", 500); late = pointer("up", 500); settled()
+            later = state()
+            # A fresh mouse-down must still start a usable handle after cancellation.
+            pointer("down", later["sidebarWidth"])
+            restarted = pointer("drag", 300)
+            pointer("up", 300); settled()
+            results[name] = {"ok": held["sidebarResizeActive"] and restored(cancelled, before) and no_undo
+                and bool(card) and restored(late, before) and restarted["sidebarResizeActive"]
+                and restarted["sidebarLiveWidth"] == 300,
+                "held_mode": held["sidebarMode"], "cancelled": cancelled, "late": late,
+                "no_undo": no_undo, "hover_revealed": bool(card), "load_average": list(os.getloadavg())}
+        generation = reset()["generation"]; before = state()
+        pointer("down", 228)
+        crossings = [pointer("drag", x) for x in (60, 228, 60)]
+        ended = pointer("up", 60); settled()
+        recorded = app.call("undo-state")
+        first = undo(); after_first = app.call("undo-state")
+        second = undo()
+        results["drag_undo_single"] = {"ok": [s["sidebarMode"] for s in crossings] == ["hidden", "anchored", "hidden"]
+            and ended["sidebarMode"] == "hidden" and recorded["generation"] - generation == 1
+            and ended["sidebarWidthCommits"] == before["sidebarWidthCommits"]
+            and ended["sidebarGestureHides"] == before["sidebarGestureHides"] + 1
+            and first["sidebarMode"] == second["sidebarMode"] == "anchored"
+            and first["sidebarWidth"] == second["sidebarWidth"] == first["panel"][0] == before["sidebarWidth"]
+            and not after_first["canUndo"], "registered": recorded["generation"] - generation,
+            "first_mode": first["sidebarMode"], "second_mode": second["sidebarMode"],
+            "remaining_undo": after_first["canUndo"], "load_average": list(os.getloadavg())}
+        generation = reset()["generation"]
+        pointer("down", 228); pointer("drag", 60); pointer("drag", 228); same = pointer("up", 228)
+        recorded = app.call("undo-state")
+        results["drag_undo_same_mode"] = {"ok": same["sidebarMode"] == "anchored"
+            and recorded["generation"] == generation and not recorded["canUndo"],
+            "registered": recorded["generation"] - generation, "canUndo": recorded["canUndo"],
+            "load_average": list(os.getloadavg())}
+    finally:
+        _restore_defaults(app, {hint_key: saved_hint})
+        app.quit()
+
+
 def window_chrome_followup_checks(factory, results, tmp):
     """App-shell §3.3. All input enters OEApplication.sendEvent, including held drags."""
     private = tempfile.mkdtemp(prefix="window-chrome-104-", dir=tmp)
@@ -3358,7 +3654,7 @@ def window_chrome_followup_checks(factory, results, tmp):
         shutil.copytree(private, saved, dirs_exist_ok=True)
         results["chrome_capture_compare"], results["chrome_dark_rings"] = chrome_capture_comparison(saved)
         card_row = next((r for r in results["chrome_capture_compare"].get("rows", []) if r["state"] == "card-revealed"), None)
-        results["chrome_card_material"] = {"status":"DEFERRED", "reason":"Part B: card material and inactive theme are explicitly excluded from Part A", "measurement":card_row}
+        results["chrome_card_capture_sample"] = {"measurement": card_row, "note": "single 3x3 sample; the card material gate is chrome_card_material (window_material_checks)"}
     finally:
         if down:
             try: pointer("up", 600)
@@ -3948,7 +4244,10 @@ def page_commands_checks(factory, results, tmp):
 
 def sidebar_checks(factory, results, tmp):
     app = factory(urls=(), fresh=True)
+    confirm_key = 'open.profiles.confirmInterProfileMove'
+    saved = {confirm_key: app.call('defaults', key=confirm_key)}
     try:
+        app.call('defaults', key=confirm_key, value=True)
         results["empty"] = {"ok": app.call("tabs") == [] and app.call("window-state")["shownPages"] == []}
         a = new_tab(app, fixture("Sidebar A"))
         b = app.call("open", url=fixture("Sidebar B"), background=True)["id"]
@@ -3996,6 +4295,8 @@ def sidebar_checks(factory, results, tmp):
         app.call("select", tab=a)
         first_page = check_page(app, a, "Sidebar A")
         # Click the real switcher through OEApplication.sendEvent; no direct intent dispatch.
+        # A socket-ready launch can still be waiting for its activation grant.
+        app.call("window-focus", id=app.call("window-state")["id"], activate=True)
         app.call("window-motion", reduced=False)
         frame = app.call("window-state")["spaceSwitcherFrames"][s2]
         app.call("mouse", action="click", x=frame[0]+frame[2]/2, y=frame[1]+frame[3]/2)
@@ -4021,6 +4322,9 @@ def sidebar_checks(factory, results, tmp):
         app.call("select", tab=e)
         previous = app.page(e)["identifier"]
         changed = app.call("space-profile", space=s2, profile="Work New")
+        warning = app.call('alert')
+        results['profile_change_warning'] = {'ok': 'Change Profile?' in warning['texts'], 'alert': warning}
+        app.call('alert', button='Change Profile')
         selected_auto_created = app.tab(e)["loaded"]
         live_page = check_page(app, e, "Sidebar E")
         reset = app.call("tab-state", tab=background)
@@ -4062,6 +4366,7 @@ def sidebar_checks(factory, results, tmp):
             and app.call("host-counts")["retained"] <= 9, "retained_before_wake": retained}
         results["window_png"] = {"ok": True, "file": shot(app, "sidebar-window.png")}
     finally:
+        _restore_defaults(app, saved)
         app.quit()
     static_window_comparison(factory, results, tmp, "sidebar")
 
@@ -4158,7 +4463,7 @@ def startup_failure_checks(factory, results, tmp):
     early_data = os.path.join(tmp, "early-quit")
     log = os.path.join(tmp, "early-quit.log")
     with open(log, "w") as stream:
-        proc = subprocess.run([app_path, "--user-data-dir=" + early_data],
+        proc = subprocess.run([app_path, "--skip-first-run", "--use-mock-keychain", "--user-data-dir=" + early_data],
             env=dict(os.environ, OPEN_AUTOMATION_QUIT_BEFORE_ENGINE="1"), stdout=stream, stderr=subprocess.STDOUT, timeout=15)
     text = open(log).read()
     results["quit_before_engine"] = {"ok": proc.returncode == 0 and "termination before engine" in text
@@ -4188,7 +4493,7 @@ def startup_failure_checks(factory, results, tmp):
     failure_data = os.path.join(tmp, "engine-failure")
     failure_log = os.path.join(tmp, "engine-failure.log")
     with open(failure_log, "w") as stream:
-        failed = subprocess.run([os.path.join(failed_bundle, "Contents", "MacOS", "Open"), "--user-data-dir=" + failure_data],
+        failed = subprocess.run([os.path.join(failed_bundle, "Contents", "MacOS", "Open"), "--skip-first-run", "--use-mock-keychain", "--user-data-dir=" + failure_data],
             env=dict(os.environ, OPEN_AUTOMATION_DISMISS_ENGINE_FAILURE="1"), stdout=stream, stderr=subprocess.STDOUT, timeout=15)
     text = open(failure_log).read()
     results["engine_failure_alert"] = {"ok": failed.returncode == 1 and "engine failed to start" in text
@@ -4206,10 +4511,19 @@ ACTION_PROBE_COPY = None
 
 
 def actions_checks(app, results):
+    app.call("ext-prompt", handler=False)
+    # Popup key routing must not depend on the user's per-site mode state.
+    # This App key lives in the shared defaults domain, even with a test root.
+    key = "open.developer.modeHosts"
+    previous = app.call("defaults", key=key)
     try:
+        app.call("defaults", key=key, value=None)
         _actions_checks(app, results)
     finally:
-        app.cleanup_surfaces()
+        try:
+            app.call("defaults", key=key, value=previous)
+        finally:
+            app.cleanup_surfaces()
 
 
 def _actions_checks(app, results):
@@ -4404,9 +4718,12 @@ def _actions_checks(app, results):
     api = {}
     if state:
         popup_eval(state, "chrome.storage.session.set({openPopup: ''}).then(() => true)")
+        popup_eval(state, "chrome.runtime.sendMessage('open-popup').then(() => true)")
+        # D1 now closes the shell popup when its parent becomes key. Send the
+        # delayed request first, while its requesting page still exists.
         api["key"] = make_key()
-        popup_eval(state, "chrome.runtime.sendMessage('open-popup')"
-                          ".then(() => { setTimeout(() => window.close(), 50); return true; })")
+        api["blurClosedRequestingPopup"] = bool(wait_until(lambda:
+            app.call("ext-popup").get("page", {}).get("identifier") != state["page"]["identifier"], timeout=2))
 
         def api_popup():
             s = app.call("ext-popup")
@@ -4422,7 +4739,8 @@ def _actions_checks(app, results):
             state = open_popup(ACTION_PROBE)
             api["result"] = popup_eval(state, "chrome.storage.session.get('openPopup').then(r => r.openPopup)") if state else None
             close_popup()
-    results["open_popup_api"] = {"ok": api.get("key") is True and api.get("source") == "api" and api.get("result") == "ok",
+    results["open_popup_api"] = {"ok": api.get("key") is True and api.get("blurClosedRequestingPopup")
+                                 and api.get("source") == "api" and api.get("result") == "ok",
                                  **api}
 
     # While a popup is open, openPopup() is refused (as Chrome's desktop
@@ -4431,6 +4749,10 @@ def _actions_checks(app, results):
     state = open_popup(ACTION_PROBE)
     if state:
         popup_eval(state, "chrome.storage.session.set({openPopup: ''}).then(() => true)")
+        # Inspect keeps the popup open across D1, so this tests refusal with
+        # both an active browser window and an existing popup.
+        app.call("devtools-open", tab=state["page"]["identifier"])
+        refusal["inspected"] = bool(wait_until(lambda: app.call("ext-popup").get("staysOpenOnBlur"), timeout=5))
         refusal["key"] = make_key()
         popup_eval(state, "chrome.runtime.sendMessage('open-popup-now').then(() => true)")
         refusal["result"] = wait_until(lambda: popup_eval(state, "chrome.storage.session.get('openPopup')"
@@ -4438,9 +4760,10 @@ def _actions_checks(app, results):
         after = app.call("ext-popup")
         refusal["same_popup"] = (after.get("open") and after["source"] == "user"
                                  and after["page"]["identifier"] == state["page"]["identifier"])
+        app.call("devtools-close", tab=state["page"]["identifier"])
         close_popup()
     results["open_popup_refused_while_open"] = {
-        "ok": refusal.get("key") is True and refusal.get("result") == "Failed to open popup." and bool(refusal.get("same_popup")),
+        "ok": refusal.get("inspected") and refusal.get("key") is True and refusal.get("result") == "Failed to open popup." and bool(refusal.get("same_popup")),
         **refusal}
     # Running the action whose popup is open closes it (Chrome's toolbar).
     if not app.call("ext-popup").get("open"):
@@ -4514,12 +4837,19 @@ def _actions_checks(app, results):
     app.call("ext-pin", extension=EXT["bitwarden"], pinned=True)
     pinned = wait_until(lambda: (lambda ids: ids if ids[:2] == [ACTION_PROBE, EXT["bitwarden"]] else None)(
         [x["id"] for x in actions()["actions"]]), timeout=10)
-    app.call("ext-move", extension=EXT["bitwarden"], index=0)
-    moved = wait_until(lambda: (lambda xs: xs if [x["id"] for x in xs][:2] == [EXT["bitwarden"], ACTION_PROBE]
-                                and xs[0]["pinnedIndex"] == 0 and xs[1]["pinnedIndex"] == 1 else None)(
-        actions()["actions"]), timeout=10)
-    results["pin_and_move"] = {"ok": bool(pinned) and bool(moved), "after_pin": pinned,
-                               "after_move": moved and [(x["id"], x["pinnedIndex"]) for x in moved[:3]]}
+    duplicates = app.call("extensions")["duplicatesDropped"]
+    if duplicates:
+        results["pin_and_move"] = {"ok": False, "reason": "duplicate E1 action IDs regressed after C5's engine fix",
+            "duplicatesDropped": duplicates, "receipt": ".re/extensions-ui/engine-native-drag-crash.ips"}
+    else:
+        app.call("ext-move", extension=EXT["bitwarden"], index=0)
+        moved = wait_until(lambda: (lambda xs: xs if [x["id"] for x in xs][:2] == [EXT["bitwarden"], ACTION_PROBE]
+                                    and xs[0]["pinnedIndex"] == 0 and xs[1]["pinnedIndex"] == 1 else None)(
+            actions()["actions"]), timeout=10)
+        after_duplicates = app.call("extensions")["duplicatesDropped"]
+        results["pin_and_move"] = {"ok": bool(pinned) and bool(moved) and after_duplicates == 0, "after_pin": pinned,
+                                   "duplicatesDropped": after_duplicates,
+                                   "after_move": moved and [(x["id"], x["pinnedIndex"]) for x in moved[:3]]}
 
     # The context menu is Chrome's (extension name, pin, options, ...); its
     # pin item unpins.
@@ -4575,10 +4905,19 @@ def popup_key_checks(app, results, open_popup, close_popup):
         if state:
             app.call("focus", tab=state["page"]["identifier"])
             app.call("events")
-            app.call("key", key="d", modifiers=["ctrl"], window="popup", route="window")
-            stages = wait_until(lambda: (lambda e: e if {"beforePage", "unconsumed"} <= {x.get("phase") for x in e} else None)(
-                [x for x in app.call("events") if x["type"] == "popupKey"]), timeout=5)
-            keys["ctrl_d_stages"] = sorted({x.get("phase") for x in stages or []})
+            # Ctrl-D is Toggle Developer Mode in the current App and is
+            # correctly consumed before the page. Use an unbound chord to
+            # exercise the unconsumed callback (the original P2 contract).
+            app.call("key", key="d", modifiers=["ctrl", "shift"], window="popup", route="window")
+            # The socket drains events. CEF can deliver the before-page and
+            # unconsumed callbacks in separate polls; retain both observations.
+            observed = []
+            def key_stages():
+                observed.extend(x for x in app.call("events") if x["type"] == "popupKey")
+                return observed if {"beforePage", "unconsumed"} <= {x.get("phase") for x in observed} else None
+            stages = wait_until(key_stages, timeout=5)
+            keys["unbound_key_stages"] = sorted({x.get("phase") for x in stages or []})
+            keys["events"] = observed
             keys["still_open"] = bool(app.call("ext-popup").get("open"))
             app.call("key", key="w", modifiers=["cmd"], window="popup", route="app")
             keys["closed"] = bool(wait_until(lambda: not app.call("ext-popup").get("open"), timeout=5))
@@ -4586,7 +4925,7 @@ def popup_key_checks(app, results, open_popup, close_popup):
             if not keys["closed"]:
                 close_popup()
         results["popup_keys"] = {
-            "ok": keys["opened"] and keys.get("ctrl_d_stages") == ["beforePage", "unconsumed"] and keys.get("still_open")
+            "ok": keys["opened"] and keys.get("unbound_key_stages") == ["beforePage", "unconsumed"] and keys.get("still_open")
                   and keys.get("closed") and keys.get("tabs_kept"), **keys}
     finally:
         app.cleanup_surfaces()
@@ -4853,21 +5192,30 @@ def profiles_checks(factory, results, tmp, config):
         and whether it may run in incognito. Chrome loads --load-extension
         into each profile when it starts."""
         wait_until(lambda: any(e["id"] == PROBE for e in app.call("extensions")["installed"]), timeout=30)
+        app.call("window-focus", id=app.call("window-state")["id"], activate=True)
 
         def open_popup():
             try:
                 return app.call("popup", extension=PROBE)["identifier"]
             except RuntimeError:
                 return None  # the action is not ready for this tab yet
-        pop = wait_until(open_popup, timeout=20)
-        if pop is None:
-            raise RuntimeError("tabs probe popup did not open")
-        wait_until(lambda: app.eval(pop, "window.currentTab !== undefined"), timeout=20)
-        seen = app.eval(pop, "Promise.all([chrome.tabs.query({}), chrome.windows.getAll(),"
-                             " chrome.extension.isAllowedIncognitoAccess()]).then(([ts, ws, incognito]) =>"
-                             " ({urls: ts.map(t => t.url || t.pendingUrl), windows: ws.map(w => w.id), incognito}))")
-        app.call("popup-close")
-        return seen
+        # A queued tab/focus change can close the first popup (Chrome's rule).
+        # Use the same bounded reopen policy as tabstrip_checks; isolation
+        # assertions still use a live extension popup in the chosen Profile.
+        for attempt in range(3):
+            try:
+                pop = wait_until(open_popup, timeout=20)
+                if pop is None:
+                    raise RuntimeError("tabs probe popup did not open")
+                wait_until(lambda: app.eval(pop, "window.currentTab !== undefined"), timeout=20)
+                return app.eval(pop, "Promise.all([chrome.tabs.query({}), chrome.windows.getAll(),"
+                                     " chrome.extension.isAllowedIncognitoAccess()]).then(([ts, ws, incognito]) =>"
+                                     " ({urls: ts.map(t => t.url || t.pendingUrl), windows: ws.map(w => w.id), incognito}))")
+            except RuntimeError as error:
+                if not ("error 4." in str(error) or "no page for" in str(error)) or attempt == 2:
+                    raise
+            finally:
+                app.call("popup-close")
 
     def allow_probe_in_incognito(app):
         """The E5 threat: a default-profile extension allowed in incognito.
@@ -5026,10 +5374,12 @@ def profiles_checks(factory, results, tmp, config):
 
     def run_binary(label, **env_extra):
         """One launch of the real app; returns its exit code and output."""
-        env = dict(os.environ, OPEN_USER_DATA=root, **env_extra)
+        env = dict(os.environ, OPEN_USER_DATA=root, OPEN_E2E_OWNER_PID=str(os.getpid()),
+                   OPEN_AUTOMATION_SKIP_MAC_NOTIFICATIONS="1")
+        env.update(env_extra)
         path = os.path.join(tmp, "migration-%s.log" % label)
         with open(path, "w") as log:
-            code = subprocess.run([binary, "--use-mock-keychain"], env=env, stdout=log, stderr=subprocess.STDOUT,
+            code = subprocess.run([binary, "--skip-first-run", "--use-mock-keychain"], env=env, stdout=log, stderr=subprocess.STDOUT,
                                   timeout=60).returncode
         return code, open(path).read()
 
@@ -6015,7 +6365,9 @@ def sleep_checks(factory, results, tmp, style):
     server, port = _sleep_server()
     base = "http://127.0.0.1:%d/" % port
     def site(n, path="a.html"): return "http://t%d.localhost:%d/%s" % (n, port, path)
-    app = factory(urls=(base + "a.html",), fresh=True)
+    app = factory(urls=(base + "a.html",), fresh=True,
+                  extra_env={"OPEN_AUTOMATION_SKIP_MAC_NOTIFICATIONS": "0",
+                             "OPEN_AUTOMATION_NOTIFICATION_AUTHORIZATION": "record"})
     def state(tab=None): return app.call("sleep-state", **({"tab": tab} if tab else {}))
     def ts(tab): return state(tab)["tabs"][0]
     def tick(**kw): return app.call("sleep-tick", **kw)
@@ -6048,7 +6400,9 @@ def sleep_checks(factory, results, tmp, style):
             return fn()
         except Exception:
             return None
-    for key in SLEEP_MEDIA_KEYS:
+    sleep_keys = SLEEP_MEDIA_KEYS + ("open.advanced.tabSleepMode",)
+    saved_sleep_defaults = {key: app.call("defaults", key=key, persistent=True) for key in sleep_keys}
+    for key in sleep_keys:
         app.call("defaults", key=key, value=None)
     app.call("sleep-power", lowPower=False)
     try:
@@ -6166,10 +6520,37 @@ def sleep_checks(factory, results, tmp, style):
                 mode_rows[mode] = {"ok": early == "frozen" and late == "sleeping", "before": early, "at": late}
             else:
                 advance(48 * 3600); tick(); late = phase(t)
-                mode_rows[mode] = {"ok": late == "frozen", "after48h": late}
+                live = app.call("engine-sleep", tab=t, op="state")
+                pressure = tick(pressure="critical")
+                mode_rows[mode] = {"ok": late == "live" and phase(t) == "live" and not live['frozen'] and not live['discarded'],
+                                   "after48h": late, "engine": live}
             app.call("close", tab=t)
         app.call("sleep-mode", mode="balanced")
         results["sleep_modes"] = {"ok": all(r["ok"] for r in mode_rows.values()), "modes": mode_rows}
+
+        # Never protects loaded hidden pages beyond both the freeze deadline and
+        # the eight-host cache cap. A previously discarded shell is not destroyed.
+        shell = open_live(site(3, "a.html?never-shell"))
+        select(home); advance(15); sleep_now(shell)
+        shell_before = ts(shell)
+        app.call("sleep-mode", mode="off")
+        awake = [open_live(site(40 + i, "ticker.html")) for i in range(10)]
+        select(home); tick(); advance(31); tick()
+        past_freeze = [ts(tab) for tab in awake]
+        advance(48 * 3600); tick(); tick(pressure="critical")
+        retained = [ts(tab) for tab in awake]
+        engine = [app.call("engine-sleep", tab=tab, op="state") for tab in awake]
+        shell_after = ts(shell)
+        results["sleep_never_live_and_cache"] = {
+            "ok": all(s["phase"] == "live" and s["hosts"] == 1 for s in past_freeze + retained)
+                  and all(not s["frozen"] and not s["discarded"] for s in engine)
+                  and shell_before["phase"] == "sleeping" and shell_before["hosts"] == 1
+                  and shell_after["phase"] == "sleeping" and shell_after["hosts"] == 1,
+            "hiddenLoadedPages": len(awake), "freezeDelay": 30, "elapsedBeforeFirstPass": 31,
+            "phases": [s["phase"] for s in retained], "hosts": [s["hosts"] for s in retained],
+            "sleepingShellHostsAfter48h": shell_after["hosts"], "load": os.getloadavg()}
+        for tab in awake + [shell]: app.call("close", tab=tab)
+        app.call("sleep-mode", mode="balanced")
 
         # F1: sleeping drops renderer processes. Eight distinct sites, then sleep them all.
         select(home)
@@ -6447,6 +6828,7 @@ def sleep_checks(factory, results, tmp, style):
             app.call("window-frame", frame=[80, 60, 1280, 820])
             wait_until(lambda: app.call("tabs"), timeout=10)
             app.call("wait", tab=home)
+            assert wait_until(lambda: state().get("started"), timeout=10, step=.05), "sleep did not start after relaunch"
             n1 = len(state()["log"])
             select(victim)
             # No `wait` here: the first page (the refused restore) closes, and its replacement loads
@@ -6463,8 +6845,7 @@ def sleep_checks(factory, results, tmp, style):
         try:
             if not app.closed:
                 app.call("sleep-power", lowPower=None)
-                for key in SLEEP_MEDIA_KEYS:
-                    app.call("defaults", key=key, value=None)
+            _restore_defaults(app, saved_sleep_defaults)
         except Exception:
             pass
         app.quit()
@@ -6988,6 +7369,508 @@ def numbering_checks(factory, results, tmp):
         app.quit(); server.shutdown(); server.server_close()
 
 
+def littleopen_checks(factory, results, tmp):
+    """Routing Steps 6/7: real App windows, engine, menus, archive and visibility.
+    Input stays inside the automation socket. Shared defaults are restored even on failure.
+    """
+    import copy
+    import plistlib
+    import uuid
+    domain = 'io.github.sergeserb2.open'
+    keys = ('open.links.externalInLittleOpen', 'open.links.littleOpenHotkeyEnabled',
+            'open.links.optionCommandClickLittleOpen', 'open.links.littleOpenNUXSeen',
+            'open.links.littleOpenProfileSwitchConfirmed', 'open.sidebar.autoArchiveBannerDismissed', 'open.library.lastSection')
+    exported = subprocess.run(['defaults', 'export', domain, '-'], capture_output=True)
+    saved_domain = plistlib.loads(exported.stdout) if exported.returncode == 0 else {}
+    server, port = _sleep_server()
+    origin = 'http://127.0.0.1:%d' % port
+    app = None
+    probe = os.path.join(tmp, 'littleopen-idle-probe.dylib')
+    subprocess.run(['xcrun', 'clang', '-dynamiclib', '-fblocks', '-fobjc-arc', '-Wno-deprecated-declarations',
+                    '-DOPEN_APP_TIMER_PROBE', os.path.join(ROOT, 'tools/verification/feature-idle-probe.m'),
+                    '-framework', 'AppKit', '-framework', 'QuartzCore', '-framework', 'CoreVideo', '-o', probe], check=True)
+    env = {'DYLD_INSERT_LIBRARIES': probe, 'OPEN_LITTLEOPEN_TIMER_PROBE': '1'}
+
+    def record(name, ok, **details): results[name] = dict(details, ok=bool(ok))
+    def state(): return app.call('little-open-state')
+    def sessions(): return state()['sessions']
+    def session(sid): return next((s for s in sessions() if s['id'] == sid), None)
+    def action(sid, name, **kw): return app.call('little-open-action', id=sid, action=name, **kw)
+    def close_all():
+        for row in sessions(): action(row['id'], 'close')
+    def menu(cid):
+        wait_until(lambda: any(m['id'] == cid for m in app.call('menu-state')), timeout=3)
+        return app.call('menu-perform', id=cid)
+    def page(url):
+        before = {s['id'] for s in sessions()}
+        menu('new-little-open-window')
+        row = next(s for s in sessions() if s['id'] not in before)
+        app.call('key', window=row['window'], text=url + '\r')
+        loaded = wait_until(lambda: (lambda s: s if s and s['state'] == 'page' and not s['loading'] else None)(session(row['id'])), timeout=12)
+        if not loaded: raise RuntimeError('Little Open page did not load: ' + json.dumps(state()))
+        return loaded
+    def deliver(url): return subprocess.run(['/usr/bin/open', '-a', app.bundle, url], capture_output=True, timeout=15)
+    def rect_equal(a, b): return len(a) == len(b) and max(abs(x-y) for x, y in zip(a, b)) <= 1
+    def snapshot_model():
+        with open(app.call('save')) as stream: return json.load(stream)
+
+    try:
+        for key in keys: subprocess.run(['defaults', 'delete', domain, key], capture_output=True)
+        for key, value in ((keys[0], True), (keys[1], True), (keys[3], True), (keys[5], True)):
+            subprocess.run(['defaults', 'write', domain, key, '-bool', str(value).lower()], check=True)
+        app = factory(urls=(), fresh=True, extra_env={'OPEN_AUTOMATION_EARLY_LITTLE_OPEN': '1'})
+        early = sessions()
+        startup = app.call('startup')
+        record('startup_deferred_little_open', len(early) == 1 and early[0]['state'] == 'bar'
+               and early[0]['fieldFocused'] and not early[0]['sidebarTab']
+               and startup['pagesBeforeEngine'] == startup['contextsBeforeEngine'] == 0,
+               state=state(), startup=startup)
+        app.quit()
+        app = factory(urls=(), fresh=True)
+        seed = snapshot_model()
+        # Two real Profiles, with separate engine directories, plus a second Space.
+        seed['profiles'][0]['settings']['autoArchiveAfter'] = 'never'
+        seed['profiles'][0]['settings']['littleOpenAutoArchiveAfter'] = 'never'
+        second_profile = copy.deepcopy(seed['profiles'][0])
+        second_profile.update(id=str(uuid.uuid4()).upper(), name='Little Open second', dataDirectoryName='LittleOpenSecond')
+        seed['profiles'].append(second_profile)
+        second_space = copy.deepcopy(seed['spaces'][0])
+        second_space.update(id=str(uuid.uuid4()).upper(), title='Little Open target', pinned=[], today=[])
+        seed['spaces'].append(second_space)
+        seed['defaultDestination'] = {'littleOpen': {}}
+        fixture_path = os.path.join(tmp, 'littleopen-snapshot.json')
+        with open(fixture_path, 'w') as stream: json.dump(seed, stream)
+        app.quit(); app = factory(urls=(), snapshot=fixture_path, extra_env=env)
+        # Atomic native events exercise Return/close before any queued turn.
+        baseline = state()['browserCount']
+        immediate_url = origin + '/plain.html?littleopen=immediate'
+        immediate = app.call('little-open-action', action='blank', then='submit', text=immediate_url)
+        early = immediate['opened']['sessions'][0]
+        submitted = wait_until(lambda: (lambda s: s if s and s['state'] == 'page' and s['content'] and not s['loading'] else None)(session(early['id'])), timeout=12)
+        ready = app.call('little-open-eval', id=early['id'], js='location.href') if submitted else None
+        submitted_early = immediate['after']['sessions'][0]
+        record('littleopen_submit_before_browser', early.get('browserID') is None
+               and early['content'] == 0 and submitted_early.get('submittedBeforeBrowser') is True
+               and ready == immediate_url,
+               opened=early, beforeCreation=submitted_early, submitted=submitted, ready=ready,
+               route='OEApplication.sendEvent on the first committed-frame creation turn, before Browser creation')
+        deferred = session(early['id'])
+        first = deferred.get('firstFrameRead') or {}
+        record('littleopen_browser_deferred', early.get('browserID') is None and early['content'] == 0
+               and not early['surface']['visible'] and first.get('visible') is True
+               and first.get('browserID') is None and first.get('content') == 0
+               and deferred.get('browserID') is not None
+               and deferred.get('browserCreationStartedAt', 0) >= first.get('uptime', float('inf')),
+               opened=early, firstFrame=first, after=deferred)
+        close_all()
+        creation_baseline = state()['littleOpenBrowserCreations']
+        closed = app.call('little-open-action', action='blank', then='close')
+        closed_early = closed['opened']['sessions'][0]
+        # Pump later native turns too: canceled work must never create a Browser.
+        app.call('ping'); app.call('ping')
+        time.sleep(.1)
+        accepted_limit = app.call('little-open-action', action='blank', then='close', text='x' * 8192)
+        refused_limit = False
+        try:
+            app.call('little-open-action', action='blank', then='close', text='x' * 8193)
+        except RuntimeError as error:
+            refused_limit = '8 KiB' in str(error)
+        closed_state = state()
+        record('littleopen_close_before_browser', closed_early.get('browserID') is None
+               and closed_early['content'] == 0 and not closed_state['sessions']
+               and closed['after']['browserCount'] == closed_state['browserCount'] == baseline
+               and closed_state['littleOpenBrowserCreations'] == creation_baseline
+               and accepted_limit['after']['browserCount'] == baseline and refused_limit,
+               opened=closed_early, after=closed_state, baseline=baseline,
+               creationBaseline=creation_baseline,
+               inputLimit={'acceptedBytes': 8192, 'refusedBytes': 8193, 'refused': refused_limit})
+        app.call('open', url=origin + '/main-browser-control')
+        base = state()
+        menu('new-little-open-window')
+        bar = sessions()[0]
+        vf = bar['visibleFrame']
+        expected_bar = [vf[0]+vf[2]-510, vf[1]+vf[3]-349, 490, 329]
+        record('B9_bar_frame', bar['state'] == 'bar' and rect_equal(bar['frame'], expected_bar), session=bar)
+        record('B4_field_and_hotkey', bar['fieldFocused'] and state()['hotkeyRegistered']
+               and app.call('hotkey-state')['registered'], session=bar, hotkey=app.call('hotkey-state'))
+        surface_bar = wait_until(lambda: (lambda s: s if s.get('surface', {}).get('visible') else None)(session(bar['id'])), timeout=4) or session(bar['id'])
+        url = origin + '/ticker.html?littleopen=first'
+        app.call('key', window=bar['window'], text=url + '\r')
+        loaded = wait_until(lambda: (lambda s: s if s and s['state'] == 'page' and not s['loading'] else None)(session(bar['id'])), timeout=12)
+        if not loaded: raise RuntimeError('B4 navigation failed: ' + json.dumps(state()))
+        w, h = min(1185, vf[2]-40), min(832, vf[3]-40)
+        expected_page = [vf[0]+vf[2]-20-w, vf[1]+vf[3]-20-h, w, h]
+        record('B9_page_frame', loaded['window'] == bar['window'] and rect_equal(loaded['frame'], expected_page), session=loaded)
+        record('B4_real_engine', loaded['url'] == url and loaded['runtimeStyle'] == 'chrome' and not loaded['sidebarTab']
+               and loaded['content'] > 0, session=loaded)
+        menu('new-little-open-window')
+        second = next(s for s in sessions() if s['id'] != bar['id'])
+        record('B9_second_first_frame', rect_equal(second['frame'], expected_bar)
+               and rect_equal(session(bar['id'])['frame'], expected_page), session=second)
+        second = wait_until(lambda: (lambda s: s if s and s.get('browser') else None)(session(second['id'])), timeout=4) or second
+        second_browser = second.get('browser') or {}
+        second_browser_id = second_browser.get('id')
+        action(second['id'], 'close')
+        second_browser_gone = wait_until(lambda: second_browser_id not in state()['browserIDs'], timeout=4)
+        page_browser = loaded.get('browser') or {}
+        bar_browser = surface_bar.get('browser') or {}
+        main_browser_ids = state()['mainBrowserIDs']
+
+        before = len(sessions()); timestamp = time.monotonic() - 5
+        app.call('little-open-action', action='blank', timestamp=timestamp)
+        app.call('little-open-action', action='blank', timestamp=timestamp)
+        same = len(sessions())
+        # The Carbon delivery above and this real App key route carry the same
+        # old stamp. Queue age must never turn the menu twin into another press.
+        main_number = app.call('shell-windows')[0]['number']
+        app.call('key', window=main_number, key='n', modifiers=['cmd', 'option'], eventTimestamp=timestamp)
+        twin = len(sessions())
+        app.call('key', window=main_number, key='n', modifiers=['cmd', 'option'], eventTimestamp=time.monotonic())
+        record('same_press_guard', same == twin == before + 1 and len(sessions()) == before + 2,
+               before=before, samePress=same, delayedMenuTwin=twin, nextPress=len(sessions()),
+               route='OEApplication.sendEvent with a five-second-old key-down stamp')
+        for row in sessions():
+            if row['id'] != bar['id']: action(row['id'], 'close')
+
+        # Real LaunchServices deliveries, separated beyond intake's 2 s dedupe:
+        # the coordinator must resurface its page rather than making a new one.
+        first_delivery = deliver(url)
+        time.sleep(2.1)
+        second_delivery = deliver(url + '#same-document')
+        record('B4_delivery_resurfaces', first_delivery.returncode == second_delivery.returncode == 0
+               and len(sessions()) == 1 and sessions()[0]['id'] == bar['id']
+               and sessions()[0]['content'] == loaded['content'], state=state())
+
+        action(bar['id'], 'focus')
+        shot_dir = os.path.join(ROOT, '.re', 'littleopen')
+        os.makedirs(shot_dir, exist_ok=True)
+        png = os.path.join(shot_dir, 'page-state.png')
+        app.call('snapshot', window=bar['window'], path=png)
+        loaded = session(bar['id']); elements = loaded['titleElements']
+        expected = {'capsule': [84, 8, w-289, 31], 'pill': [w-196, 8, 188, 30],
+                    'copy': [w-228, 16, 16, 16], 'chevron': [w-29, 15, 16, 16],
+                    'profileIcon': [97, 17, 14, 14], 'open': [w-191, 15, 148, 17],
+                    'divider': [w-37, 14, 1, 18]}
+        geometry = all(rect_equal(elements[k], v) for k, v in expected.items())
+        geometry = geometry and all(rect_equal(a, b) for a, b in zip(loaded['trafficLights'], [[9,16,16,16],[32,16,16,16],[55,16,16,16]]))
+        width_px, _, px = read_image(png, srgb=True); scale = width_px / w
+        samples = {'bar': px(80*scale, 4*scale), 'capsule': px(90*scale, 12*scale), 'pill': px((w-100)*scale, 10*scale)}
+        bands = {'bar': ((0x20, 0x23, 0x35), (0x2f, 0x2b, 0x38)),
+                 'capsule': ((0x38, 0x39, 0x48), (0x42, 0x41, 0x4d))}
+        colors = all(all(lo[i]-4 <= samples[k][i] <= hi[i]+4 for i in range(3)) for k, (lo, hi) in bands.items())
+        pill_delta = chrome_delta_e(samples['pill'], (5, 6, 39))
+        capture_roots = [os.path.join(ROOT, '.re/runtime/sessions/20261026-103403-19-little-arc'),
+                         '/Users/serge/.t3/projects/open/.re/runtime/sessions/20261026-103403-19-little-arc']
+        captures = [path for root in capture_roots for path in glob.glob(os.path.join(root, '0011*/win-*.png'))]
+        reference = {'status': 'ABSENT', 'comparison': 'section 9.3 measured numbers'}
+        reference_ok = True
+        if captures:
+            # Read a private copy. Never change the recorded capture or expose its page/Profile text.
+            reference_png = os.path.join(shot_dir, 'reference-private.png')
+            shutil.copyfile(captures[0], reference_png)
+            ref_w, ref_h, ref_px = read_image(reference_png, srgb=True)
+            ref_samples = {'bar': ref_px(80, 4), 'capsule': ref_px(90, 12), 'pill': ref_px(1185-100, 10)}
+            reference_delta = chrome_delta_e(samples['pill'], ref_samples['pill'])
+            reference_ok = (ref_w, ref_h) == (1185, 832) and reference_delta <= 2
+            reference = {'status': 'PRESENT', 'capture': 'S2 19/0011', 'size': [ref_w, ref_h],
+                         'samples': ref_samples, 'pillDeltaE00': reference_delta,
+                         'masks': 'page, Profile name, host text, controls and traffic lights; measured element frames from section 9.3'}
+        record('B10_title_bar', geometry and colors and pill_delta <= 2 and reference_ok and rect_equal(loaded['contentFrame'], [0, 47, w, h-47]),
+               frames=elements, expected=expected, samples=samples, pillDeltaE00=pill_delta, png=png, reference=reference)
+
+        surface_page = loaded
+        capsule = elements['capsule']
+        # Automation reports native NSWindow coordinates (bottom-left origin).
+        expected_anchor = [capsule[0], h - 47 + capsule[1], capsule[2], capsule[3]]
+        anchor = surface_page.get('surface', {}).get('anchorRectInWindow') or []
+        surface_page_ok = (surface_page.get('surface', {}).get('registered') is True
+                           and surface_page['surface']['visible'] is True
+                           and surface_page['surface']['anchorName'] == 'url-capsule'
+                           and rect_equal(anchor, expected_anchor)
+                           and len(anchor) == 4 and h - 47 <= anchor[1]
+                           and anchor[1] + anchor[3] <= h)
+
+        idle_with = state()
+        record('sweeper_no_poll_never', base['featureTimers'] == idle_with['featureTimers'] == 0
+               and idle_with['expiry']['armedTimerCount'] == 0, baseline=base, withSession=idle_with)
+        action(bar['id'], 'archive-policy', interval='oneHour')
+        timed = state()
+        record('sweeper_one_timer', timed['featureTimers'] == timed['expiry']['armedTimerCount'] == 1,
+               state=timed, rule='one ExpirySweeper, no per-session timer')
+        action(bar['id'], 'archive-policy', interval='never')
+        # Clock jump exceeds the real hidden-freeze delay; the visible ticker keeps running.
+        tick = app.call('little-open-eval', id=bar['id'], js="Number(document.querySelector('#ticks').textContent)")
+        app.call('sleep-clock', advance=35); app.call('sleep-tick')
+        time.sleep(1.2)
+        tick_after = app.call('little-open-eval', id=bar['id'], js="Number(document.querySelector('#ticks').textContent)")
+        visible = session(bar['id'])
+        action(bar['id'], 'miniaturize')
+        hidden = wait_until(lambda: (lambda s: s if s and s['miniaturized'] and not s['visibilityProtected'] else None)(session(bar['id'])), timeout=4)
+        action(bar['id'], 'deminiaturize'); action(bar['id'], 'focus')
+        again = wait_until(lambda: session(bar['id'])['visibilityProtected'], timeout=4)
+        surface_restored = session(bar['id'])
+        record('visibility_feed_and_ticker', visible['visibilityProtected'] and tick_after > tick and hidden and again,
+               visible=visible, hidden=hidden, tickBefore=tick, tickAfter=tick_after, freezeDelay=30)
+        app.call('sleep-clock', reset=True)
+
+        menus = app.call('menu-state'); dock = app.call('little-open-dock-menu')
+        record('window_and_dock_menus', any(m['id'] == 'little-open-session:' + bar['id'] for m in menus)
+               and all(any(m['id'] == cid for m in rows) for rows in (menus, dock)
+                       for cid in ('show-little-open-windows', 'close-little-open-windows')), dock=dock)
+        action(bar['id'], 'miniaturize'); menu('show-little-open-windows')
+        shown = wait_until(lambda: not session(bar['id'])['miniaturized'] and session(bar['id'])['visible'], timeout=4)
+        record('show_all', shown, state=state())
+
+        # Real Profile NSAlert buttons, including cancel and suppression persistence.
+        old_content = session(bar['id'])['content']
+        action(bar['id'], 'switch-profile', profile=second_profile['id'])
+        alert = app.call('little-open-profile-alert')
+        app.call('little-open-profile-alert', action='cancel', suppress=True)
+        cancelled = session(bar['id'])['content'] == old_content and session(bar['id'])['profile'] == seed['profiles'][0]['id'] and not app.call('defaults', key=keys[4])
+        action(bar['id'], 'switch-profile', profile=second_profile['id'])
+        app.call('little-open-profile-alert', action='confirm', suppress=True)
+        switched = wait_until(lambda: (lambda s: s if s['profile'] == second_profile['id'] and s['content'] > 0 and s['content'] != old_content and not s['loading'] else None)(session(bar['id'])), timeout=10)
+        record('profile_confirm_cancel', cancelled and switched and alert['visible']
+               and alert['message'] == 'Open this page in another Profile?'
+               and alert['buttons'] == ['Switch Profile', 'Cancel']
+               and alert['informative'] == 'Each Profile has different browser data, so this webpage might look a little different.'
+               and alert['suppression'] == "Don't ask again"
+               and app.call('defaults', key=keys[4]) is True, alert=alert, switched=switched)
+        switched_browser = switched.get('browser') if switched else None
+        old_browser_gone = page_browser.get('id') not in state()['browserIDs']
+        close_all()
+        browsers_closed = wait_until(lambda: state()['browserCount'] == base['browserCount'], timeout=4)
+        record('littleopen_chrome_window', loaded['runtimeStyle'] == 'chrome'
+               and page_browser.get('id') == bar_browser.get('id')
+               and (surface_page.get('browser') or {}).get('id') == page_browser.get('id')
+               and page_browser.get('id') != second_browser_id
+               and main_browser_ids and page_browser.get('id') not in main_browser_ids and second_browser_id not in main_browser_ids
+               and page_browser.get('tabs') == [loaded['content']]
+               and page_browser.get('active') == loaded['content']
+               and page_browser.get('chromeWindowID', -1) >= 0 and page_browser.get('windowMatches') is True
+               and second_browser.get('tabs') == [second['content']]
+               and second_browser_gone and old_browser_gone and browsers_closed
+               and switched_browser and switched_browser['id'] != page_browser['id']
+               and switched_browser['context'] != page_browser['context'],
+               bar=bar_browser, page=page_browser, second=second_browser, mainBrowserIDs=main_browser_ids,
+               switched=switched_browser, oldBrowserGone=old_browser_gone,
+               closedBrowserCount=state()['browserCount'], baselineBrowserCount=base['browserCount'],
+               proof='OpenEngine P1 strip state; Section 6 owns real extension X-19 checks')
+        surface_closed = session(bar['id']) is None
+        bar_surface = surface_bar.get('surface', {})
+        bar_anchor = bar_surface.get('anchorRectInWindow') or []
+        bar_content = surface_bar['contentFrame']
+        expected_bar_anchor = [24, surface_bar['frame'][3] - bar_content[1] - 1, 1, 1]
+        record('littleopen_surface_hook', bar_surface.get('registered') is True
+               and bar_surface.get('visible') is True
+               and bar_surface.get('anchorName') == 'content-top-left'
+               and rect_equal(bar_anchor, expected_bar_anchor) and surface_page_ok
+               and hidden and hidden.get('surface', {}).get('visible') is False
+               and surface_restored.get('surface', {}).get('visible') is True and surface_closed,
+               bar=bar_surface, page=surface_page.get('surface'), expectedPageAnchor=expected_anchor,
+               hidden=hidden.get('surface') if hidden else None,
+               restored=surface_restored.get('surface'), closed=surface_closed)
+
+        moved = page(origin + '/move-current')
+        archive_before = app.call('archive-list')['count']
+        for main in app.call('shell-windows'): app.call('window-close', id=main['id'])
+        record('B6_last_main_closed', state()['mainWindows'] == 0 and len(sessions()) == 1 and app.call('ping')['pid'] > 0, state=state())
+        app.call('key', window=moved['window'], key='o', modifiers=['cmd'])
+        moved_ok = wait_until(lambda: not sessions() and state()['mainWindows'] == 1, timeout=8)
+        tabs = app.call('tabs')
+        record('B5_cmd_o_creates_main', moved_ok and tabs[0]['url'] == origin + '/move-current'
+               and tabs[0]['selected'] and tabs[0]['section'] == 'today'
+               and app.call('archive-list')['count'] == archive_before, tabs=tabs)
+        picked = page(origin + '/move-picker')
+        action(picked['id'], 'picker'); picker = session(picked['id'])
+        app.call('key', window=picker['pickerWindow'], text='Little Open target')
+        app.call('key', window=picker['pickerWindow'], key='return')
+        picked_ok = wait_until(lambda: not sessions(), timeout=5)
+        tabs = app.call('tabs')
+        record('B5_picker', picked_ok and tabs[0]['url'] == origin + '/move-picker' and tabs[0]['selected']
+               and next(s for s in app.call('spaces') if s['focused'])['id'] == second_space['id'], tabs=tabs)
+
+        expiring = page(origin + '/archive-one-hour')
+        action(expiring['id'], 'archive-policy', interval='oneHour')
+        app.call('archive-sweep', offsetSeconds=3601)
+        archived = app.call('archive-list')
+        record('B7_one_hour_archive', not sessions() and archived['count'] == archive_before+1
+               and archived['rows'][0]['originalLocation'].startswith('littleOpen:')
+               and archived['rows'][0]['reason'] == 'autoArchived'
+               and app.call('archive-state')['lastSweep']['archivedCount'] == 0, archive=archived)
+        app.call('archive-clock', reset=True)
+        app.call('library-open', section='archive')
+        restored_id = archived['rows'][0]['id']
+        restored = wait_until(lambda: (lambda message: message if message.startswith('Restored to ') else None)(app.call('library-restore', id=restored_id)), timeout=5)
+        tabs = app.call('tabs')
+        record('B7_restore_focused_today', restored and any(t['id'] == restored_id and t['section'] == 'today' for t in tabs)
+               and app.call('archive-list')['count'] == archive_before, tabs=tabs)
+        app.call('library-close')
+        kept = page(origin + '/archive-never')
+        action(kept['id'], 'archive-policy', interval='never')
+        menu('archive-expired-little-open-now')
+        record('B7_never', len(sessions()) == 1 and app.call('archive-list')['count'] == archive_before, state=state())
+        menu('close-little-open-windows')
+        record('close_all_no_archive', not sessions() and app.call('archive-list')['count'] == archive_before, state=state())
+        history_url = origin + '/history-littleopen'
+        history_page = page(history_url)
+        app.call('little-open-eval', id=history_page['id'], js="document.title='Little Open history title'; true")
+        wait_until(lambda: session(history_page['id'])['title'] == 'Little Open history title', timeout=5)
+        action(history_page['id'], 'close')
+        history = app.call('history-state', query=history_url)
+        record('history', any(r['url'] == history_url and r['title'] == 'Little Open history title' for r in history['rows']), history=history)
+
+        app.call('defaults', key=keys[3], value=False)
+        intro = page(origin + '/intro-first')
+        action(intro['id'], 'dismiss-intro')
+        dismissed = not session(intro['id'])['intro']
+        next_intro = page(origin + '/intro-second')
+        record('NUX_once', intro['intro'] and dismissed and not next_intro['intro'] and app.call('defaults', key=keys[3]) is True,
+               first=intro, second=next_intro)
+        close_all()
+
+        source = new_tab(app, origin + '/option-command-source')
+        original_url = app.eval(source, 'location.href')
+        def modifier_click(target):
+            point = app.eval(source, """(() => { const a=document.createElement('a'); a.textContent='Little Open link';
+                a.href=%s; document.body.replaceChildren(a); const r=a.getBoundingClientRect(); return [r.x+r.width/2,r.y+r.height/2] })()""" % json.dumps(target))
+            app.eval(source, "window.__littleClicks=[]; ['mousedown','mouseup','click'].forEach(k=>document.addEventListener(k,e=>window.__littleClicks.push([k,e.clientX,e.clientY,e.metaKey,e.altKey,e.target.tagName]))); true")
+            return app.call('little-open-link-click', tab=source, x=point[0], y=point[1])
+        source_profile = next(t['profile'] for t in app.call('tabs') if t['id'] == source)
+        source_count = len(app.call('tabs'))
+        target_url = origin + '/option-command-little'
+        click_diagnostics = modifier_click(target_url)
+        clicked = wait_until(lambda: any(r['url'] == target_url and r['state'] == 'page' for r in sessions()), timeout=10)
+        record('option_command_click', clicked and app.eval(source, 'location.href') == original_url
+               and len(app.call('tabs')) == source_count and sessions()[0]['profile'] == source_profile,
+               state=state(), source=app.eval(source, 'location.href'), events=app.call('events'), click=click_diagnostics, input=app.eval(source, 'window.__littleClicks || []'))
+        close_all()
+        app.call('defaults', key=keys[2], value=False)
+        off_target = origin + '/option-command-off'
+        click_diagnostics = modifier_click(off_target)
+        in_place = wait_until(lambda: app.eval(source, 'location.href') == off_target, timeout=10)
+        record('option_command_toggle_off', in_place and not sessions() and len(app.call('tabs')) == source_count, source=app.eval(source, 'location.href'), state=state(), events=app.call('events'), click=click_diagnostics, input=app.eval(source, 'window.__littleClicks || []'))
+        app.call('defaults', key=keys[2], value=True)
+
+        # Both domains share the same native timer. Sweep reports keep the Today
+        # education count separate from the Little Open archive count.
+        new_tab(app, origin + '/today-expiring-peer')
+        new_tab(app, origin + '/today-visible-peer')
+        app.call('profile-archive-setting', profile=seed['profiles'][0]['id'], interval='oneHour', scope='profile')
+        main_timer = wait_until(lambda: (lambda st: st if st['expiry']['armedTimerCount'] == 1 else None)(state()), timeout=4)
+        combined = page(origin + '/combined-expiry')
+        action(combined['id'], 'archive-policy', interval='oneHour')
+        both_timer = state()
+        before_combined = app.call('archive-list')['count']
+        swept = app.call('archive-sweep', offsetSeconds=3601)
+        archive_combined = app.call('archive-list')
+        record('sweeper_shared_today_timer', main_timer and main_timer['featureTimers'] == both_timer['featureTimers'] == 1
+               and not sessions() and swept['lastSweep']['archivedCount'] > 0
+               and swept['archivedCount'] == swept['lastSweep']['archivedCount'] + 1
+               and archive_combined['count'] - before_combined == swept['archivedCount'],
+               mainOnly=main_timer, withLittleOpen=both_timer, sweep=swept)
+        app.call('archive-clock', reset=True)
+        app.call('profile-archive-setting', profile=seed['profiles'][0]['id'], interval='never', scope='profile')
+
+        # No main window: blank, bar Cmd+O, external intake, and quit/relaunch.
+        for main in app.call('shell-windows'): app.call('window-close', id=main['id'])
+        app.call('little-open-action', action='blank', timestamp=time.monotonic())
+        blank = sessions()[0]
+        app.call('key', window=blank['window'], key='o', modifiers=['cmd'])
+        record('B6_blank_no_main_bar_cmd_o', state()['mainWindows'] == 0 and len(sessions()) == 1 and sessions()[0]['state'] == 'bar', state=state())
+        close_all()
+        delivery_url = origin + '/no-main-external'
+        deliver(delivery_url)
+        def external_loaded():
+            row = next((s for s in sessions() if s['url'] == delivery_url), None)
+            if not row or row['state'] != 'page' or not row['content'] or row['loading']:
+                return None
+            return row if app.call('little-open-eval', id=row['id'], js='location.href') == delivery_url else None
+        external = wait_until(external_loaded, timeout=10) or {}
+        record('B6_external_no_main', bool(external) and state()['mainWindows'] == 0, state=state())
+        external_first = external.get('firstFrameRead') or {}
+        results['littleopen_browser_deferred']['externalFirstFrame'] = external_first
+        results['littleopen_browser_deferred']['ok'] &= (external_first.get('visible') is True
+            and external_first.get('browserID') is None and external_first.get('content') == 0
+            and external.get('browserID') is not None)
+
+        app.quit()
+        app = factory(urls=(), extra_env=env)
+        record('B6_quit_no_restore', not sessions(), state=state())
+        app.quit()
+        # Lead decision: saved windows always restore. Only the explicitly
+        # tagged, unused default from a windowless snapshot can be removed.
+        cold_url = origin + '/cold-littleopen-saved'
+        saved_seed = copy.deepcopy(seed)
+        saved_second = copy.deepcopy(saved_seed['windows'][0])
+        saved_second['id'] = str(uuid.uuid4()).upper()
+        saved_second['focusedSpaceID'] = second_space['id']
+        saved_second['frameX'] += 48
+        saved_seed['windows'].append(saved_second)
+        saved_path = os.path.join(tmp, 'littleopen-saved-windows.json')
+        with open(saved_path, 'w') as stream: json.dump(saved_seed, stream)
+        app = factory(urls=(), snapshot=saved_path, extra_env=env, delivery_urls=(cold_url,))
+        cold_reached = wait_until(lambda: any(r['url'] == cold_url and r['state'] == 'page' for r in sessions()), timeout=12)
+        restored = snapshot_model()['windows']
+        expected_ids = {w['id'] for w in saved_seed['windows']}
+        restored_ids = {w['id'] for w in restored}
+        little_key = sessions()[0]['key'] and app.call('native-focus-state')['keyWindow'] == sessions()[0]['window']
+        record('B6_cold_saved_windows_stay', cold_reached and restored_ids == expected_ids
+               and state()['mainWindows'] == 2 and little_key and not state()['autoCreatedLaunchWindow'],
+               state=state(), restored=restored, expected=saved_seed['windows'])
+        app.quit()
+
+        empty_seed = copy.deepcopy(seed); empty_seed['windows'] = []
+        empty_path = os.path.join(tmp, 'littleopen-no-windows.json')
+        with open(empty_path, 'w') as stream: json.dump(empty_seed, stream)
+        cold_url = origin + '/cold-littleopen-no-saved-windows'
+        app = factory(urls=(), snapshot=empty_path, extra_env=env, delivery_urls=(cold_url,))
+        cold_reached = wait_until(lambda: any(r['url'] == cold_url and r['state'] == 'page' for r in sessions()), timeout=12)
+        record('B6_cold_no_saved_windows_only_little', cold_reached and state()['mainWindows'] == 0
+               and not snapshot_model()['windows'] and sessions()[0]['key'] and not state()['autoCreatedLaunchWindow'], state=state(), routing=app.call('routing-log'))
+        app.quit()
+
+        app = factory(urls=(), snapshot=empty_path, extra_env=env)
+        tagged_input = state()['autoCreatedLaunchWindow']
+        app.call('key', key='l', modifiers=['cmd']); app.call('key', key='escape')
+        input_url = origin + '/auto-main-user-input'
+        deliver(input_url)
+        reached = wait_until(lambda: any(r['url'] == input_url and r['state'] == 'page' for r in sessions()), timeout=10)
+        record('B6_auto_main_input_preserved', tagged_input and reached and state()['mainWindows'] == 1
+               and app.call('shell-windows')[0]['id'] == tagged_input, state=state())
+        app.quit()
+
+        app = factory(urls=(), snapshot=empty_path, extra_env=env)
+        tagged_navigation = state()['autoCreatedLaunchWindow']
+        navigated = new_tab(app, origin + '/auto-main-navigation')
+        nav_url = origin + '/auto-main-after-navigation'
+        deliver(nav_url)
+        reached = wait_until(lambda: any(r['url'] == nav_url and r['state'] == 'page' for r in sessions()), timeout=10)
+        record('B6_auto_main_navigation_preserved', tagged_navigation and reached and state()['mainWindows'] == 1
+               and app.call('shell-windows')[0]['id'] == tagged_navigation
+               and any(t['id'] == navigated for t in app.call('tabs')), state=state())
+
+    finally:
+        saved = {key: saved_domain.get(key) for key in keys}
+        if app:
+            if not app.closed:
+                try: app.call('little-open-profile-alert', action='cancel')
+                except Exception: pass
+            _restore_defaults(app, saved)
+            app.quit()
+        else:
+            for key, value in saved.items():
+                if value is None: subprocess.run(['defaults', 'delete', domain, key], capture_output=True)
+                elif isinstance(value, bool): subprocess.run(['defaults', 'write', domain, key, '-bool', str(value).lower()], check=True)
+                else: subprocess.run(['defaults', 'write', domain, key, '-string', str(value)], check=True)
+        evidence = os.path.join(ROOT, '.re', 'littleopen', 'logs-' + str(os.getpid()))
+        os.makedirs(evidence, exist_ok=True)
+        for path in glob.glob(os.path.join(tmp, 'open.log*')):
+            if os.path.isfile(path): shutil.copyfile(path, os.path.join(evidence, os.path.basename(path)))
+        server.shutdown(); server.server_close()
+
+
+
 def routing_checks(factory, results, tmp):
     """Step 5: LaunchServices -> real kAEGetURL -> intake -> model/window.
     Never sets a system default handler. Every delivery names this exact bundle.
@@ -6996,7 +7879,7 @@ def routing_checks(factory, results, tmp):
     import plistlib
     import uuid
     domain = 'io.github.sergeserb2.open'
-    keys = ('open.links.externalInLittleOpen', 'open.links.littleOpenHotkeyEnabled')
+    keys = ('open.links.externalInLittleOpen', 'open.links.littleOpenHotkeyEnabled', 'open.links.littleOpenNUXSeen', 'open.settings.lastPane')
     exported = subprocess.run(['defaults', 'export', domain, '-'], capture_output=True)
     domain_before = plistlib.loads(exported.stdout) if exported.returncode == 0 else {}
     saved = {key: domain_before.get(key) for key in keys}
@@ -7025,21 +7908,33 @@ def routing_checks(factory, results, tmp):
         app = factory(urls=(), fresh=True)
         state_before = app.call('default-browser-state')
         seed = snapshot()
+        work_profile = copy.deepcopy(seed['profiles'][0])
+        work_profile.update(id=str(uuid.uuid4()).upper(), name='Routing Work',
+                            dataDirectoryName='Routing-Work', favorites=[])
+        seed['profiles'].append(work_profile)
+        default_profile = seed['profiles'][0]['id']
         target = copy.deepcopy(seed['spaces'][0])
+        target['profileID'] = work_profile['id']
         target['id'] = str(uuid.uuid4()).upper()
         target['title'] = 'Routing target'
         target['today'] = []; target['pinned'] = []
         seed['spaces'].append(target)
-        seed['routingRules'] = [{'id': str(uuid.uuid4()).upper(),
+        seed['routingRules'] = [
+            {'id': str(uuid.uuid4()).upper(), 'match': {'urlPrefix': {'_0': origin + '/profile-little'}},
+             'destination': {'littleOpen': {'profile': work_profile['id']}}},
+            {'id': str(uuid.uuid4()).upper(),
             'match': {'hostEquals': {'_0': '127.0.0.1'}}, 'destination': {'space': {'_0': target['id']}}}]
         seed['defaultDestination'] = {'littleOpen': {}}
         fixture_path = os.path.join(tmp, 'routing-snapshot.json')
         with open(fixture_path, 'w') as stream: json.dump(seed, stream)
         app.quit()
         app = factory(urls=(), snapshot=fixture_path)
+        default_tab = new_tab(app, origin + '/default-context')
+        app.eval(default_tab, 'document.cookie="atc_default=1; max-age=3600"; 1')
         app.call('space', space=target['id'])
         existing_url = origin + '/existing-today'
-        app.call('open', url=existing_url)
+        work_tab = new_tab(app, existing_url)
+        app.eval(work_tab, 'document.cookie="atc_work=1; max-age=3600"; 1')
         app.call('space', space=seed['spaces'][0]['id'])
 
         warm = origin + '/warm-space'
@@ -7052,12 +7947,60 @@ def routing_checks(factory, results, tmp):
                and tabs[1]['url'] == existing_url
                and len(entries(warm)) == 1, tabs=tabs, log=log())
 
+        warm_tab = next(t['id'] for t in tabs if t['url'] == warm)
+        app.call('wait', tab=warm_tab)
+        work_cookies = app.eval(warm_tab, 'document.cookie')
+        work_context = app.page(warm_tab)['context']
+        app.call('space', space=seed['spaces'][0]['id'])
+        app.call('select', tab=default_tab); app.call('wait', tab=default_tab)
+        default_cookies = app.eval(default_tab, 'document.cookie')
+        record('routing_second_profile_context', reached and 'atc_work=1' in work_cookies
+               and 'atc_default=' not in work_cookies and 'atc_work=' not in default_cookies
+               and 'atc_default=1' in default_cookies and work_context not in (None, 'Default'),
+               workContext=work_context, workCookiePresent='atc_work=1' in work_cookies,
+               defaultIsolated='atc_work=' not in default_cookies)
+
+        profile_url = origin + '/profile-little-initial'
+        sent = deliver(profile_url)
+        def little_page(url, profile):
+            return next((row for row in app.call('little-open-state')['sessions']
+                         if row['url'] == url and row['profile'] == profile and row['visible']
+                         and not row['loading'] and row['content'] > 0), None)
+        little_work = wait_until(lambda: little_page(profile_url, work_profile['id']), timeout=12, step=.05)
+        little_work_cookies = app.call('little-open-eval', id=little_work['id'], js='document.cookie') if little_work else ''
+        record('routing_little_open_profile_rule', sent.returncode == 0 and little_work
+               and (log()['lastLittleOpenRequest'] or {}).get('profileHint') == work_profile['id']
+               and 'atc_work=1' in little_work_cookies and 'atc_default=' not in little_work_cookies,
+               session=little_work, profileHint=(log()['lastLittleOpenRequest'] or {}).get('profileHint'))
+
+        # Open the identical URL through the real Little Open URL field in Default.
+        # This bypasses routing by design; the later OS delivery must obey the B rule.
+        collision = origin + '/profile-little-collision'
+        app.call('space', space=seed['spaces'][0]['id'])
+        app.call('little-open-action', action='blank', then='submit', text=collision)
+        default_little = wait_until(lambda: little_page(collision, default_profile), timeout=12, step=.05)
+        sessions_before = app.call('little-open-state')['sessions']
+        sent = deliver(collision)
+        second_profile = wait_until(lambda: little_page(collision, work_profile['id']), timeout=12, step=.05)
+        sessions_after = app.call('little-open-state')['sessions']
+        record('routing_same_url_little_open_profile', default_little and sent.returncode == 0 and second_profile
+               and default_little['id'] != second_profile['id']
+               and len(sessions_after) == len(sessions_before) + 1
+               and {row['profile'] for row in sessions_after if row['url'] == collision}
+                   == {default_profile, work_profile['id']},
+               before=sessions_before, after=sessions_after)
+
         default_url = origin.replace('127.0.0.1', 'localhost') + '/default-little'
         before = tab_count()
         sent = deliver(default_url)
-        seen = wait_until(lambda: (log()['lastLittleOpenRequest'] or {}).get('url') == default_url, timeout=8, step=.05)
+        seen = wait_until(lambda: (log()['lastLittleOpenRequest'] or {}).get('url') == default_url
+                          and any(row['state'] == 'page' and row['url'] == default_url and row['visible']
+                                  and not row['loading'] and row['content'] > 0 and not row['sidebarTab']
+                                  for row in app.call('little-open-state')['sessions']), timeout=12, step=.05)
         record('routing_warm_default_little_open', sent.returncode == 0 and seen
-               and tab_count() == before and len(entries(default_url)) == 1, log=log())
+               and tab_count() == before and len(entries(default_url)) == 1
+               and any(row['state'] == 'page' and row['url'] == default_url and row['visible']
+                       for row in app.call('little-open-state')['sessions']), log=log(), littleOpen=app.call('little-open-state'))
 
         # Stored first window is on target B. Make a second, front window on
         # A: using model order instead of AppKit z-order must now fail B8.
@@ -7093,7 +8036,9 @@ def routing_checks(factory, results, tmp):
         within = wait_until(lambda: log()['duplicatesDropped'] == dropped + 1, timeout=1, step=.02)
         first_log = log()
         # A genuine second click after the fixed window must create another tab.
-        time.sleep(max(0, 2.15 - (time.monotonic() - started)))
+        # Start after observing the first intake, not before LaunchServices
+        # starts its process. OS launch latency is outside the fixed dedupe window.
+        time.sleep(2.15)
         again = deliver(duplicate)
         second = landed(duplicate, 2)
         record('routing_dedupe_2s', sent.returncode == 0 and again.returncode == 0 and first and within and second
@@ -7153,19 +8098,18 @@ def routing_checks(factory, results, tmp):
                and len(entries(cold)) == 1 and app.call('tabs')[0]['selected'], log=cold_log,
                pending=pending, fastLaunch=fast_log,
                command='open -n -a <exact built bundle> <URL> --args --user-data-dir=<suite root> ...')
+        app.call('command', id='air-traffic-control')
+        settings = wait_until(lambda: (lambda row: row if row['settingsVisible'] and row['pane'] == 'links'
+                              and row['scrollTarget'] == 'links-rules' else None)(app.call('settings-state')),
+                              timeout=4, step=.05)
+        record('routing_air_traffic_control_entry', bool(settings), settings=settings)
         state_after = app.call('default-browser-state')
         record('routing_default_browser_read_only', state_before == state_after
                and state_after['isDefaultBrowser'] == (state_after['http']['isDefault'] and state_after['https']['isDefault']),
                before=state_before, after=state_after)
     finally:
-        if app:
-            _restore_defaults(app, saved)
-            app.quit()
-        else:
-            # A failed initial launch still restores exactly the keys reset above.
-            for key, value in saved.items():
-                if value is None: subprocess.run(['defaults', 'delete', domain, key], capture_output=True)
-                else: subprocess.run(['defaults', 'write', domain, key, '-bool', 'true' if value else 'false'], check=True)
+        _restore_defaults(app, saved)
+        if app: app.quit()
         server.shutdown(); server.server_close()
 
 
@@ -7182,6 +8126,10 @@ def commandbar_checks(factory, results, tmp, config):
     threading.Thread(target=server.serve_forever, daemon=True).start()
     origin = 'http://127.0.0.1:%d' % server.server_address[1]
     app = factory(urls=(origin + '/start',), fresh=True)
+    settings_keys = ('open.settings.lastPane', 'open.links.littleOpenHotkeyEnabled',
+                     'open.links.externalInLittleOpen', 'open.general.searchSuggestNoticeDismissed')
+    saved_settings_defaults = {key: app.call('defaults', key=key, persistent=True) for key in settings_keys}
+    for key in settings_keys: app.call('defaults', key=key, value=None)
     state = lambda: app.call('commandbar-state')
     def bar(key, route='app'):
         routing = app.call('key', key=key, modifiers=['cmd'], route=route)
@@ -7330,7 +8278,7 @@ def commandbar_checks(factory, results, tmp, config):
         time.sleep(.1)
         menu = app.call('menu-state')
         results['dynamic_menus'] = {'ok': any(x['id'] == 'dynamic-space-' + second_space for x in menu) and any(x['id'] == 'dynamic-tab-' + target for x in menu), 'entries': len(menu)}
-        results['unsupported_disabled'] = {'ok': any(x['id'] == 'new-incognito-window' and not x['enabled'] for x in menu)}
+        results['incognito_available'] = {'ok': any(x['id'] == 'new-incognito-window' and x['enabled'] for x in menu)}
         before = app.call('host-counts'); tree = app.call('sidebar-tree'); app.call('menu-perform', id='duplicate-tab')
         after = app.call('sidebar-tree'); copies = [x for x in after['today'] if x['id'] not in {n['id'] for n in tree['today']}]
         results['duplicate_tab_lazy'] = {'ok': len(copies) == 1 and copies[0]['url'] == origin + '/cross' and not copies[0]['loaded'] and before['created'] == app.call('host-counts')['created'], 'copies': copies}
@@ -7534,7 +8482,11 @@ def commandbar_checks(factory, results, tmp, config):
         results['settings_persist_relaunch'] = {'ok': app.call('settings-state')['external'] != original_external}
         app.call('settings-toggle', name='external')
     finally:
+        _restore_defaults(app, saved_settings_defaults)
         app.quit(); server.shutdown(); server.server_close()
+
+    import settings_live
+    settings_live.run(factory, results, tmp, wait_until, _restore_defaults)
 
 
 def commandbar_footer_checks(app, results, tmp, bar, press, tab):
@@ -8434,7 +9386,9 @@ def sidebar_completion_a3_checks(app, results, require, evidence, tmp, launch):
     require('A3_move_existing_space_order_unread', roots('today') == abc and all(app.tab(n)['unread'] for n in abc), tree=tree())
     undo(); app.call('space', space=space); select(abc); spaces_before = len(app.call('spaces'))
     app.call('sidebar-menu', node=a, item='Move to/New Space…')
-    require('A3_move_new_space_atomic', len(app.call('spaces')) == spaces_before + 1 and roots('pinned') == abc and roots('today') == [] and selection() == [], tree=tree(), selection=selection())
+    app.call('type', text='Space'); app.call('key', key='return', route='app')
+    wait_until(lambda: not app.call('creation-state')['open'], timeout=5)
+    require('A3_move_new_space_atomic', len(app.call('spaces')) == spaces_before + 1 and roots('today') == abc and roots('pinned') == [] and selection() == [], tree=tree(), selection=selection())
     undo(); app.call('space', space=space)
     require('A3_move_new_space_one_undo', len(app.call('spaces')) == spaces_before and roots('today') == abc + [control])
     # E4: noncontiguous move, same-parent pre-removal index, invalid descendant.
@@ -8783,7 +9737,10 @@ def sidebar_intents_menu_checks(app, results, require, tmp):
         except RuntimeError as error:
             if 'no attached alert sheet' not in str(error): raise
     browser = state()['id']
+    confirm_key = 'open.profiles.confirmInterProfileMove'
+    saved_defaults = {confirm_key: app.call('defaults', key=confirm_key)}
     try:
+        app.call('defaults', key=confirm_key, value=True)
         # Same-profile conversion, with nested descendants, preserved order and live host.
         source = app.call('space-create', title='Intents Source', profile='Intents Profile')
         a, b, c = [opened('Convert %s' % name, True) for name in ('A', 'B', 'C')]
@@ -8804,6 +9761,7 @@ def sidebar_intents_menu_checks(app, results, require, tmp):
             actual = app.call('pasteboard').splitlines()
             require('I9_copy_folder_' + ('markdown' if markdown else 'plain'), actual == expected, actual=actual, expected=expected, tree=tree())
         menu(folder, 'Turn “Converted Folder” into Space')
+        app.call('key', key='return', route='app'); wait_until(lambda: not app.call('creation-state')['open'], timeout=5)
         created = current_space()
         require('I9_folder_into_space_today_same_profile', len(spaces()) == count + 1 and created['title'] == 'Converted Folder'
                 and created['profile'] == profile and roots('pinned') == [] and roots('today') == [a, nested]
@@ -8818,14 +9776,17 @@ def sidebar_intents_menu_checks(app, results, require, tmp):
         # A folder with no children is also a valid conversion, with one undo.
         empty = app.call('folder-create', title='Empty Conversion'); before_empty = tree()
         menu(empty, 'Turn “Empty Conversion” into Space')
+        app.call('key', key='return', route='app'); wait_until(lambda: not app.call('creation-state')['open'], timeout=5)
         require('I9_empty_folder_conversion', current_space()['title'] == 'Empty Conversion' and tree() == {'pinned': [], 'today': []})
         undo(); app.call('space', space=source)
         require('I9_empty_folder_conversion_undo', tree() == before_empty)
-        # Single-item Move to uses A3's plain New Space helper (Pinned placement).
+        # Single-item Move to preserves Today through the creation form.
         single = opened('Move Single'); before_move = tree(); count = len(spaces())
-        menu(single, 'Move to/New Space…'); moved = current_space()
+        menu(single, 'Move to/New Space…')
+        app.call('type', text='Space'); app.call('key', key='return', route='app')
+        wait_until(lambda: not app.call('creation-state')['open'], timeout=5); moved = current_space()
         require('I9_move_single_to_new_space', len(spaces()) == count + 1 and moved['title'] == 'Space' and moved['profile'] == profile
-                and roots('pinned') == [single] and roots('today') == [], space=moved)
+                and roots('today') == [single] and roots('pinned') == [], space=moved)
         undo(); app.call('space', space=source)
         # A3's fallback-Space undo can unload background pages; compare the
         # complete saved structure, not that transient loaded flag.
@@ -8850,11 +9811,11 @@ def sidebar_intents_menu_checks(app, results, require, tmp):
         finally:
             app.call('key', key='escape', route='app')
         undo(); require('I10_rename_space_undo', current_space()['title'] == original)
-        # Hidden-sidebar entry still starts the same inline editor, by revealing it.
+        # Hidden-sidebar rename uses the dialog and keeps the sidebar hidden.
         app.call('menu-perform', id='toggle-sidebar'); app.call('menu-perform', id='rename-space')
         try:
-            require('I10_rename_hidden_sidebar_reveals', state()['sidebarMode'] == 'anchored')
-            app.call('key', text='Cancelled Rename'); app.call('key', key='escape', route='app')
+            require('I10_rename_hidden_sidebar_dialog', state()['sidebarMode'] == 'hidden' and 'Rename' in app.call('alert')['buttons'])
+            app.call('alert', button='Cancel')
             require('I10_rename_cancel_unchanged', current_space()['title'] == original)
         finally:
             app.call('key', key='escape', route='app')
@@ -8874,6 +9835,7 @@ def sidebar_intents_menu_checks(app, results, require, tmp):
         try:
             app.call('menu-perform', id='change-profile')
             chosen = app.call('profile-menu', waitClosed=True)
+            app.call('alert', button='Change Profile')
             require('I10_change_profile_choice_dispatches', chosen and chosen.get('chosen') == 'Default' and chosen.get('shown') and chosen.get('trackingBegan') and chosen.get('closed') and not chosen['pending'] and current_space()['profile'] != profile, menu=chosen)
         finally:
             app.call('profile-menu', close=True)
@@ -8926,11 +9888,184 @@ def sidebar_intents_menu_checks(app, results, require, tmp):
     finally:
         # Run even after a failed assertion, so no tracked menu, share picker,
         # rename field, or confirmation can hold the next suite open.
-        if app.call('shell-windows'):
-            app.call('sidebar-share', close=True, dismiss=False)
-            app.call('profile-menu', close=True)
-            app.call('key', key='escape', route='app')
-        cancelled_alert(); app.call('library-close')
+        try:
+            if app.call('shell-windows'):
+                app.call('sidebar-share', close=True, dismiss=False)
+                app.call('profile-menu', close=True)
+                app.call('key', key='escape', route='app')
+            cancelled_alert(); app.call('library-close')
+        finally:
+            _restore_defaults(app, saved_defaults)
+
+
+def library_capture_checks(app, require, root, evidence):
+    """Real Library, stores, AX tree and App event routing; synthetic files only."""
+    index = os.path.join(root, 'State', 'captures.json')
+    mode = os.environ.get('OPEN_LIBRARY_CAPTURES_ONLY', '')
+
+    def state(**args):
+        try: return app.call('library-captures-state', **args)
+        except RuntimeError as error: return {'error': str(error)}
+
+    def key(name, modifiers=()):
+        return app.call('key', key=name, modifiers=list(modifiers), route='app', window=state()['window'])
+
+    def open_section(section):
+        app.call('library-open', section=section)
+        return wait_until(lambda: (lambda s: s if s.get('visible') and s.get('section') == section else None)(state()), timeout=5, step=.05)
+
+    def index_rows():
+        with open(index) as stream: return json.load(stream)
+
+    error_copy = ['Captures could not be loaded.', 'Open will try again next time you open the Library.']
+    if mode != 'keyboard':
+        server, origin = _fixture_server('Library')
+        try:
+            archived = app.call('open', url=origin + '/archive-isolation')['id']
+            app.call('wait', tab=archived)
+            app.call('history-state')  # Flush the real committed-navigation writer.
+            app.call('close', tab=archived)
+        finally:
+            server.shutdown(); server.server_close()
+        archive = open_section('archive')
+        archive_rows = wait_until(lambda: any(r['id'] == archived for r in app.call('settings-state')['archive']), timeout=5) if archive else False
+        require('library_corrupt_index_isolation', archive and archive['loadFailed'] and archive_rows
+                and archive['status'] == '' and app.call('settings-state')['sharedArchives'], state=state())
+        for section in ('history', 'downloads', 'spaces'):
+            current = open_section(section)
+            if section == 'history':
+                working = wait_until(lambda: app.call('settings-state')['historyRows'] > 0, timeout=5)
+            elif section == 'downloads': working = current and any('No downloads' in t for t in current['text'])
+            else: working = app.call('space-manager-state')['hostedManagers'] == 1
+            require('library_corrupt_index_' + section, current and current['loadFailed'] and working and current['status'] == '', state=state())
+        for section in ('captures', 'media'):
+            current = open_section(section)
+            path = os.path.join(evidence, section + '-index-error.png')
+            app.call('snapshot', path=path, window=current['window'])
+            require('library_corrupt_index_' + section + '_error', current and current['loadFailed'] and not current['items']
+                    and any(error_copy[0] in text for text in current['text']), state=current, png=path)
+        # A directory at the index path is a real unreadable-file case, including
+        # when the suite runs as the file owner (chmod alone would be unreliable).
+        app.call('library-close'); os.unlink(index); os.mkdir(index)
+        unreadable = open_section('captures')
+        require('library_unreadable_index_error', unreadable and unreadable['loadFailed']
+                and any(error_copy[0] in text for text in unreadable['text']), state=unreadable)
+        os.rmdir(index)
+        # Exercise the reader's limits through actual Library reopen, including
+        # the valid boundary. Keep the large fixture out of the visible grid.
+        for extra in (0, 1):
+            app.call('library-close')
+            with open(index, 'wb') as stream: stream.write(b'[]' + b' ' * (16 * 1024 * 1024 - 2 + extra))
+            boundary = open_section('archive')
+            require('library_index_byte_limit_' + ('over' if extra else 'at'), boundary['loadFailed'] == bool(extra)
+                    and boundary['captureCount'] == 0, state=boundary)
+        large = [dict(id='71000000-0000-0000-0000-%012d' % i, fileName='Example.png', createdAt=1800000000,
+                      kind='area', sourceHost='example.com') for i in range(50_001)]
+        for count in (50_000, 50_001):
+            app.call('library-close')
+            with open(index, 'w') as stream: json.dump(large[:count], stream)
+            boundary = open_section('archive')
+            require('library_index_row_limit_' + ('at' if count == 50_000 else 'over'),
+                    boundary['loadFailed'] == (count > 50_000) and boundary['captureCount'] == (count if count == 50_000 else 0),
+                    loadFailed=boundary['loadFailed'], captureCount=boundary['captureCount'])
+        del large
+
+    os.makedirs(os.path.dirname(index), exist_ok=True)
+    directory = os.path.join(root, 'Captures'); os.makedirs(directory, exist_ok=True)
+    # Code-generated 2x2 RGBA PNG, without assets or personal data.
+    import zlib
+    def chunk(kind, data): return struct.pack('>I', len(data)) + kind + data + struct.pack('>I', zlib.crc32(kind + data) & 0xffffffff)
+    png = b'\x89PNG\r\n\x1a\n' + chunk(b'IHDR', struct.pack('>IIBBBBB', 2, 2, 8, 6, 0, 0, 0))
+    png += chunk(b'IDAT', zlib.compress((b'\0' + b'\x30\x90\xe0\xff' * 2) * 2)) + chunk(b'IEND', b'')
+    rows = []
+    for number, kind in enumerate(['area', 'fullPage', 'portrait', 'area', 'fullPage', 'portrait', 'screenshot']):
+        ident = '70000000-0000-0000-0000-%012d' % number
+        name = 'Example Capture %d.png' % number
+        with open(os.path.join(directory, name), 'wb') as stream: stream.write(png)
+        rows.append(dict(id=ident, fileName=name, createdAt=1800000000-number, kind=kind, sourceHost='example.com'))
+    with open(index, 'w') as stream: json.dump(rows, stream)
+    app.call('library-close')
+    recovered = open_section('captures')
+    require('library_capture_reopen_recovers', recovered and not recovered['loadFailed'] and len(recovered['items']) == 6
+            and not any(error_copy[0] in t for t in recovered['text']), state=recovered)
+
+    for section in ('captures', 'media'):
+        current = open_section(section)
+        current = state(focus='sidebar', recordFileActions=True)
+        tab_path = []
+        for _ in range(16):
+            tab_path.append(key('tab'))
+            current = state()
+            if current['gridFocused']: break
+        require('library_' + section + '_tab_focus', current['gridFocused'] and len(current['selected']) == 1, state=current, tabPath=tab_path)
+        items, columns = current['items'], current['columns']
+        first_png = os.path.join(evidence, section + '-selection-first.png')
+        next_png = os.path.join(evidence, section + '-selection-next.png')
+        app.call('snapshot', path=first_png, window=current['window'])
+        key('right'); right = state()
+        app.call('snapshot', path=next_png, window=current['window'])
+        width, _, first_pixel = read_image(first_png)
+        _, _, next_pixel = read_image(next_png)
+        scale = width / 960
+        x, y, grid_width, _ = current['gridFrame']
+        card_width = (grid_width - 18 * (columns - 1)) / columns
+        points = [(x + 5, y + 30), (x + card_width + 23, y + 30)]
+        before_pixels = [first_pixel(px * scale, py * scale) for px, py in points]
+        after_pixels = [next_pixel(px * scale, py * scale) for px, py in points]
+        distance = lambda a, b: max(abs(v-w) for v, w in zip(a, b))
+        require('library_' + section + '_selection_pixels', distance(before_pixels[0], before_pixels[1]) >= 5
+                and distance(before_pixels[0], after_pixels[1]) <= 3 and distance(before_pixels[1], after_pixels[0]) <= 3,
+                before=before_pixels, after=after_pixels, firstPNG=first_png, nextPNG=next_png)
+        key('left'); left = state()
+        key('down'); down = state(); key('up'); up = state()
+        require('library_' + section + '_arrows', right['selected'] == [items[1]['id']] and left['selected'] == [items[0]['id']]
+                and down['selected'] == [items[min(columns, len(items)-1)]['id']] and up['selected'] == [items[0]['id']], columns=columns, right=right, left=left, down=down, up=up)
+        require('library_' + section + '_metadata_ax', any('Example Capture 0.png' in t and 'Capture' in t and 'bytes' in t and 'example.com' in t for t in up['text']), text=up['text'])
+        before_open = len(up['opened']); key('return'); opened = state()
+        require('library_' + section + '_return', len(opened['opened']) == before_open+1 and opened['opened'][-1] == items[0]['name'], state=opened)
+        app.call('pasteboard-write', text='capture-copy-sentinel'); key('c', ['cmd']); copied = state()
+        require('library_' + section + '_copy', copied['pasteboardHasImage'], state=copied)
+        key('space'); idle = state()
+        require('library_' + section + '_space_unchanged', idle['selected'] == up['selected'] and idle['opened'] == opened['opened']
+                and not idle['pendingDelete'] and idle['pasteboardHasImage'], state=idle)
+        path = os.path.join(evidence, section + '-keyboard-selection.png')
+        app.call('snapshot', path=path, window=current['window'])
+        key('delete')
+        confirmation = wait_until(lambda: state()['pendingDelete'] == items[0]['id'], timeout=5, step=.05)
+        require('library_' + section + '_delete_confirms', confirmation and os.path.exists(os.path.join(directory, items[0]['name']))
+                and len(index_rows()) == 7, state=state(), png=path)
+        alert = app.call('alert', window='library')
+        require('library_' + section + '_delete_specific_dialog', 'Delete Capture' in alert['buttons'], alert=alert)
+        if os.environ.get('OPEN_LIBRARY_DIALOG_EARLY_FAILURE') == '1':
+            raise AssertionError('deliberate failure with capture confirmation open')
+        app.call('alert', window='library', button='Cancel')
+        require('library_' + section + '_delete_cancel', wait_until(lambda: not state()['pendingDelete'], timeout=5)
+                and len(index_rows()) == 7, state=state())
+        # Exercise the actual destructive button once, then restore the fixture
+        # for the second section without changing its independent selection.
+        key('delete'); app.call('alert', window='library', button='Delete Capture')
+        deleted = wait_until(lambda: not os.path.exists(os.path.join(directory, items[0]['name'])), timeout=5, step=.05)
+        require('library_' + section + '_delete_file_and_index', deleted and len(index_rows()) == 6 and not state()['selected'], state=state())
+        with open(os.path.join(directory, rows[0]['fileName']), 'wb') as stream: stream.write(png)
+        with open(index, 'w') as stream: json.dump(rows, stream)
+        app.call('library-close')
+    # Browser shortcuts must keep their existing owners in this new focus context.
+    current = open_section('captures'); state(focus='sidebar')
+    for _ in range(16):
+        key('tab')
+        if state()['gridFocused']: break
+    tabs_before = sorted(t['id'] for t in app.call('tabs'))
+    key('escape'); escaped = state()
+    require('library_grid_escape', escaped['visible'] and escaped['gridFocused'] and not escaped['pendingDelete'], state=escaped)
+    shortcuts = []
+    for letter in ('l', 't'):
+        shortcuts.append(key(letter, ['cmd']))
+        app.call('key', key='escape', route='app')
+        open_section('captures')
+    key('w', ['cmd'])
+    require('library_grid_browser_shortcut_ownership', not state()['visible']
+            and sorted(t['id'] for t in app.call('tabs')) == tabs_before
+            and not app.call('commandbar-state')['presented'], keys=shortcuts, state=state())
 
 
 def space_manager_checks(results, tmp, config, style):
@@ -8992,11 +10127,16 @@ def space_manager_checks(results, tmp, config, style):
         info['CFBundleIdentifier'] = bundle_id
         with open(info_path, 'wb') as stream: plistlib.dump(info, stream)
         subprocess.run(['codesign', '--force', '--sign', '-', bundle], check=True, capture_output=True)
+        if os.environ.get('OPEN_LIBRARY_CAPTURES_ONLY') != 'keyboard' and os.environ.get('OPEN_SIDEBAR_INTENTS_ONLY') != '1':
+            os.makedirs(os.path.join(root, 'State'), exist_ok=True)
+            with open(os.path.join(root, 'State', 'captures.json'), 'w') as stream: stream.write('{deliberately corrupt capture index')
         app = launch((fixture('Manager One'),))
         first_window = app.call('shell-windows')[0]['id']
         if os.environ.get('OPEN_SIDEBAR_INTENTS_ONLY') == '1':
             sidebar_intents_menu_checks(app, results, require, tmp)
             return
+        library_capture_checks(app, require, root, evidence)
+        if os.environ.get('OPEN_LIBRARY_CAPTURES_ONLY'): return
         s1 = order(app)[0]
         s2 = app.call('space-create', title='Manager Two')
         s3 = app.call('space-create', title='Manager Three')
@@ -9007,7 +10147,12 @@ def space_manager_checks(results, tmp, config, style):
         # The rest capture shows the loaded page title, not a title still in flight.
         for row in app.call('tabs'): app.call('wait', tab=row['id'])
         app.call('menu-perform', id='manage-spaces')
-        ready = manager_ready(app)
+        # The capture checks already opened the Manager with one Space. Its
+        # hidden view reconciles newly added columns on the next observation
+        # turn. Wait for real column/header views before measuring geometry.
+        ready = wait_until(lambda: (lambda st: st if st['visible'] and st['section'] == 'spaces'
+                           and st['hostedManagers'] == 1 and len(st['columns']) == 3
+                           and all(c['column'][2] > 0 and c['header'] for c in st['columns']) else None)(state(app)), timeout=5)
         rest = capture(app, 'manager-rest')
         require('E5_menu_real_manager', ready and ready['section'] == 'spaces' and ready['managerClass'] == 'OpenSidebar.SpaceManagerView'
                 and ready['sameModel'] and ready['sameUndoManager'] and not ready['previewsEnabled'] and ready['globalPreviewsEnabled'],
@@ -9391,6 +10536,386 @@ def _blocked(reason, **evidence):
     return dict(evidence, status="BLOCKED", reason=reason)
 
 
+def space_editor_creation_checks(factory, results, tmp):
+    """Section 4 C1/A5/A7: real form, native keys, menus, model and engine."""
+    app = factory(urls=(), fresh=True)
+    saved = {}
+    def require(name, condition, **details):
+        results[name] = dict(details, ok=bool(condition))
+        if not condition: raise AssertionError(name)
+    def spaces(): return app.call('spaces')
+    def focused(): return next(s for s in spaces() if s['focused'])
+    def state(): return app.call('creation-state')
+    def key(name, mods=()): return app.call('key', key=name, modifiers=list(mods), route='app')
+    def finish():
+        key('return')
+        require('creation_submit_finishes_' + str(len(results)),
+                wait_until(lambda: not state()['open'], timeout=5), state=state())
+    def undo(): return key('z', ['cmd'])
+    def pick_emoji():
+        app.call('editor-act', action='click', control='icon')
+        require('A5_draft_icon_picker_opens', bool(wait_until(lambda: app.call('editor-state').get('count', 0) > 0, timeout=5)))
+        app.call('editor-act', action='key', key='grinning face')
+        require('A5_draft_icon_search', bool(wait_until(lambda: app.call('editor-state').get('search') == 'grinning face'
+                and app.call('editor-state')['count'] < 20, timeout=3)))
+        app.call('editor-act', action='key', key='down')
+        app.call('editor-act', action='key', key='return')
+        require('A5_draft_icon_pick', bool(wait_until(lambda: not app.call('editor-state')['open'], timeout=3))
+                and state()['icon'] == {'type': 'emoji', 'value': '😀'})
+    def tree(): return app.call('sidebar-tree')
+    def shape(value):
+        if isinstance(value, dict): return {k: shape(v) for k, v in value.items() if k != 'loaded'}
+        if isinstance(value, list): return [shape(v) for v in value]
+        return value
+    def node_list():
+        # Compare the full persisted tree, including invisible nodes in other
+        # Spaces/Profiles. Runtime loading and access times are not tree state.
+        snapshot = json.loads(Path(app.call('save')).read_text())
+        rows = []
+        def collect(nodes, parent):
+            for index, encoded in enumerate(nodes):
+                kind, payload = next(iter(encoded.items()))
+                node = payload['_0']
+                rows.append(dict(id=node['id'], kind=kind, parent=parent, index=index))
+                if kind == 'folder': collect(node['children'], node['id'])
+                elif kind == 'split':
+                    collect([dict(tab=dict(_0=pane)) for pane in node['panes']], node['id'])
+        for profile in snapshot['profiles']:
+            collect(profile['favorites'], profile['id'] + '/favorites')
+        for space in snapshot['spaces']:
+            for section in ('pinned', 'today'):
+                collect(space[section], space['id'] + '/' + section)
+        return rows
+    try:
+        app.call('window-frame', frame=[80, 60, 1120, 800])
+        app.call('window-focus', id=app.call('window-state')['id'], activate=True)
+        pref = 'open.profiles.confirmInterProfileMove'
+        for pref_key in (pref, 'open.sidebar.hideHintShown'):
+            saved[pref_key] = app.call('defaults', key=pref_key)
+        app.call('defaults', key=pref, value=True)
+        app.call('defaults', key='open.sidebar.hideHintShown', value=True)
+        source = app.call('space-create', title='Creation Source', profile='Creation Profile')
+        previous = focused()
+        original_window = app.call('window-state')['id']
+        app.call('menu-perform', id='blank-window')
+        app.call('space', space=source)
+        app.call('window-focus', id=original_window, activate=True)
+        full_tab = app.call('open', url=white_fixture('Space creation page fullscreen'))['id']
+        app.call('wait', tab=full_tab)
+        request = app.eval(full_tab, 'document.documentElement.requestFullscreen().then(() => "ok", e => e.message)')
+        entered = wait_until(lambda: app.call('window-state')['pageFullscreen']
+                             and not app.call('window-state')['fullscreenTransition'], timeout=15, step=.1)
+        full_before = spaces()
+        full_generation = state()['modelUndoGeneration']
+        app.call('menu-perform', id='new-space')
+        visible = wait_until(lambda: state().get('open') and state().get('visible') and state().get('nameFocused')
+                             and not app.call('window-state')['pageFullscreen']
+                             and not app.call('window-state')['fullscreenTransition'], timeout=15, step=.1)
+        presented_form, presented_window = state(), app.call('window-state')
+        key('escape')
+        cancelled = not state()['open'] and spaces() == full_before and state()['modelUndoGeneration'] == full_generation
+        # Restore the fixture even on old code, where Escape only cancels the invisible form.
+        if app.call('window-state')['pageFullscreen']: app.call('fullscreen-exit', tab=full_tab)
+        wait_until(lambda: not app.call('window-state')['pageFullscreen']
+                   and not app.call('window-state')['fullscreenTransition'], timeout=15, step=.1)
+        results['A5_page_fullscreen_new_space_visible_focused'] = dict(ok=request == 'ok' and bool(entered)
+            and bool(visible) and presented_window['sidebarVisible'] and cancelled,
+            entered=bool(entered), form=presented_form, window=presented_window, cancelled=cancelled)
+        before = spaces()
+        app.call('menu-perform', id='new-space')
+        require('A5_form_focused_default_profile_no_theme', state()['open'] and state()['nameFocused']
+                and state()['profile'] == previous['profile'] and state()['style'] is None, state=state())
+        icon_generation = state()['modelUndoGeneration']
+        pick_emoji()
+        require('A5_draft_icon_has_no_model_write', spaces() == before and state()['modelUndoGeneration'] == icon_generation)
+        app.call('editor-open', kind='create'); undo()
+        require('A5_draft_icon_native_undo', state()['icon'] is None and spaces() == before)
+        key('z', ['cmd', 'shift'])
+        require('A5_draft_icon_native_redo', state()['icon'] == {'type': 'emoji', 'value': '😀'} and spaces() == before)
+        app.call('type', text='Created Space')
+        app.call('command', id='new-space')
+        require('A5_second_entry_keeps_draft', state()['name'] == 'Created Space' and spaces() == before)
+        for shortcut in ('t', 'l'):
+            key(shortcut, ['cmd'])
+            require('A5_form_cmd_' + shortcut, bool(wait_until(lambda: app.call('commandbar-state')['presented'], timeout=5)) and state()['open'])
+            if shortcut == 't':
+                app.call('key', text='word', route='app'); key('z', ['cmd'])
+                require('A5_bar_text_undo_keeps_form_draft', app.call('commandbar-state')['text'] == ''
+                        and state()['name'] == 'Created Space' and spaces() == before)
+                key('z', ['cmd', 'shift'])
+                require('A5_bar_text_native_redo_keeps_form_draft', app.call('commandbar-state')['text'] == 'word'
+                        and state()['name'] == 'Created Space' and spaces() == before)
+                key('z', ['cmd'])
+            key('escape')
+            after_bar = app.call('commandbar-state'); after_form = state()
+            require('A5_bar_escape_keeps_form_' + shortcut, not after_bar['presented'] and after_form['open'], bar=after_bar, form=after_form)
+            app.call('editor-open', kind='create')
+            require('A5_form_refocus_' + shortcut, state()['nameFocused'] and state()['name'] == 'Created Space' and spaces() == before)
+        # Theme input goes through the actual card and panel swatch, local undo.
+        app.call('editor-act', action='click', control='theme')
+        app.call('editor-act', action='preset', index=2)
+        draft = state()['style']
+        require('A5_theme_is_local_draft', draft is not None and spaces() == before and state()['previewMatches'] and state()['otherWindowsMatchModel'], state=state())
+        app.call('editor-close')
+        app.call('window-focus', id=app.call('window-state')['id'], activate=True)
+        # The draft panel takes key, but its owning window must keep the active
+        # material just like Edit Theme. Compare the actual right-margin pixels.
+        owner_state = app.call('window-state')
+        active_png, panel_png = (os.path.join(tmp, 'creation-theme-' + name + '.png') for name in ('active', 'panel'))
+        time.sleep(.3)
+        app.call('snapshot', path=active_png, window=owner_state['number'])
+        app.call('editor-open', kind='theme')
+        panel_key = wait_until(lambda: state().get('themeKey'), timeout=3)
+        panel_state = state()
+        time.sleep(.3)
+        app.call('snapshot', path=panel_png, window=owner_state['number'])
+        def margin_rgb(path):
+            width, height, pixel = read_image(path)
+            sx, sy = width / owner_state['frame'][2], height / owner_state['frame'][3]
+            return [statistics.mean(pixel(int(x * sx), int(y * sy))[c]
+                    for x in range(int(owner_state['frame'][2]) - 8, int(owner_state['frame'][2]) - 2)
+                    for y in range(400, 440, 4)) for c in range(3)]
+        active_rgb, panel_rgb = margin_rgb(active_png), margin_rgb(panel_png)
+        app.call('editor-close')
+        app.call('window-focus', id=original_window, activate=True)
+        require('A5_draft_theme_panel_keeps_active_material', bool(panel_key) and panel_state['windowActive']
+                and panel_state['backgroundActive'] and max(abs(a - b) for a, b in zip(active_rgb, panel_rgb)) <= 2,
+                state=panel_state, activeRGB=active_rgb, panelRGB=panel_rgb)
+        app.call('editor-open', kind='create')
+        key('z', ['cmd'])
+        require('A5_form_local_theme_undo', state()['style'] is None and spaces() == before, state=state())
+        key('z', ['cmd', 'shift'])
+        require('A5_form_local_theme_redo', state()['style'] == draft and spaces() == before, state=state())
+        # The shared controller's lifecycle closes dismiss only the draft panel.
+        # Keep the form, its local history and the model unchanged until Create.
+        close_rows = []
+        for trigger in ('outside', 'deactivate', 'space'):
+            app.call('editor-open', kind='theme')
+            local_manager = state()['themeUndoMatches']
+            if trigger == 'outside':
+                owner_number = next(w['number'] for w in app.call('shell-windows') if w['id'] == original_window)
+                app.call('mouse', window=owner_number, action='click', x=700, y=650, queued=True)
+            elif trigger == 'deactivate':
+                peer = app.foreground_peer()
+                try:
+                    app.accept_owned_handoff(peer)
+                    wait_until(lambda: not state().get('themeOpen', False), timeout=3)
+                finally: peer.quit()
+                app.call('window-focus', id=original_window, activate=True)
+            else:
+                other_space = next(s['id'] for s in spaces() if s['id'] != source)
+                app.call('space', space=other_space)
+                wait_until(lambda: not state().get('themeOpen', False), timeout=3)
+                app.call('space', space=source)
+            closed = bool(wait_until(lambda: not state().get('themeOpen', False), timeout=3))
+            form = state()
+            ok = closed and local_manager and form['open'] and form['name'] == 'Created Space' \
+                and form['style'] == draft and form['icon'] == {'type': 'emoji', 'value': '😀'} \
+                and form['localUndo'] and spaces() == before
+            close_rows.append(dict(trigger=trigger, ok=ok, form=form))
+            if not form['open']: break
+        require('A5_draft_editor_close_keeps_form', len(close_rows) == 3 and all(r['ok'] for r in close_rows), triggers=close_rows)
+        app.call('editor-open', kind='create')
+        finish(); created = focused()
+        require('A5_return_creates_at_end_with_profile', created['title'] == 'Created Space' and created['profile'] == previous['profile']
+                and len(spaces()) == len(before) + 1 and spaces()[-1]['id'] == created['id']
+                and app.call('theme-get')['style'] == draft and created['icon'] == {'type': 'emoji', 'value': '😀'}, spaces=spaces())
+        undo()
+        require('A5_create_one_undo_restores_previous_focus', spaces() == before and focused()['id'] == source, spaces=spaces())
+        app.call('split', op='plus', item='New Space…')
+        require('A5_plus_menu_opens_form', state()['open'] and state()['nameFocused'])
+        key('escape'); require('A5_plus_cancel_no_change', spaces() == before)
+        cancel_icon_generation = state()['modelUndoGeneration']
+        app.call('editor-open', kind='create'); pick_emoji()
+        app.call('editor-open', kind='create'); key('escape')
+        require('A5_draft_icon_escape_no_space_or_model_step', spaces() == before and not state()['open']
+                and state()['modelUndoGeneration'] == cancel_icon_generation)
+        # Escape discards the theme stack and text, and never registers model undo.
+        cancel_generation = state()['modelUndoGeneration']
+        app.call('editor-open', kind='create')
+        app.call('type', text='Cancelled')
+        app.call('editor-act', action='click', control='theme')
+        app.call('editor-act', action='preset', index=3)
+        app.call('editor-close')
+        app.call('editor-open', kind='create')
+        key('escape')
+        require('A5_cancel_changes_nothing', spaces() == before and not state()['open']
+                and state()['modelUndoGeneration'] == cancel_generation)
+        app.call('editor-open', kind='create'); app.call('type', text='   '); finish()
+        require('A5_blank_is_untitled_no_theme', focused()['title'] == '' and app.call('theme-get')['style'] is None)
+        undo(); require('A5_blank_one_undo', spaces() == before)
+        # Native field typing is session-local. Its Undo falls back to the
+        # form's persistent draft stack after the typing steps are exhausted.
+        app.call('editor-open', kind='create')
+        app.call('editor-act', action='click', control='theme')
+        app.call('editor-act', action='preset', index=2)
+        typing_theme = state()['style']
+        app.call('editor-close'); app.call('editor-open', kind='create')
+        app.call('type', text='abc')
+        require('A5_text_typing_after_theme', state()['name'] == 'abc' and state()['style'] == typing_theme)
+        key('z', ['cmd'])
+        require('A5_text_undo_before_theme', state()['name'] == '' and state()['style'] == typing_theme, state=state())
+        key('z', ['cmd'])
+        require('A5_theme_undo_after_typing', state()['name'] == '' and state()['style'] is None, state=state())
+        key('z', ['cmd', 'shift'])
+        require('A5_theme_redo_before_typing', state()['name'] == '' and state()['style'] == typing_theme, state=state())
+        key('z', ['cmd', 'shift'])
+        require('A5_text_theme_redo_keeps_both_steps', state()['name'] == 'abc' and state()['style'] == typing_theme
+                and spaces() == before, state=state())
+        pick_emoji()
+        app.call('editor-open', kind='create')
+        existing_profile, existing_title = state()['profile'], state()['profileMenuTitle']
+        app.call('editor-act', action='profile', name='New Profile…')
+        app.call('type', text='Draft typing')
+        profile_menu_visible = state()['profilePopupVisible']
+        if profile_menu_visible:
+            app.call('editor-act', action='profile', name=existing_title)
+        returned = state()
+        require('A5_inline_profile_returns_without_losing_draft', profile_menu_visible
+                and not returned['creatingProfile'] and returned['profile'] == existing_profile
+                and returned['name'] == 'abc' and returned['style'] == typing_theme
+                and returned['icon'] == {'type': 'emoji', 'value': '😀'}
+                and returned['localUndo'] and spaces() == before, state=returned)
+        app.call('editor-act', action='profile', name='New Profile…')
+        app.call('type', text='Draft typing')
+        app.call('editor-open', kind='create')
+        require('A5_draft_survives_name_and_profile_field_sessions', state()['style'] == typing_theme
+                and state()['localUndo'] and state()['nameFocused'] and spaces() == before, state=state())
+        key('escape')
+        # A hidden sidebar is temporarily shown without a persisted mode change.
+        app.call('menu-perform', id='toggle-sidebar')
+        require('A5_hidden_sidebar_fixture', app.call('window-state')['sidebarMode'] == 'hidden')
+        cancel_generation = state()['modelUndoGeneration']
+        app.call('editor-open', kind='create')
+        require('A5_hidden_form_has_focus', state()['nameFocused'] and app.call('window-state')['sidebarMode'] == 'hidden')
+        key('escape')
+        require('A5_hidden_cancel_keeps_mode_and_undo', not state()['open']
+                and app.call('window-state')['sidebarMode'] == 'hidden' and state()['modelUndoGeneration'] == cancel_generation)
+        app.call('menu-perform', id='rename-space')
+        require('rename_hidden_specific_dialog', 'Rename Space' in app.call('alert')['texts'] and 'Rename' in app.call('alert')['buttons'])
+        rename_window = app.call('window-state')['attachedSheet']
+        app.call('key', key='a', modifiers=['cmd'], window=rename_window, route='app')
+        app.call('key', text='Renamed Source', window=rename_window, route='app')
+        app.call('key', key='return', window=rename_window, route='app')
+        require('rename_hidden_return_keeps_sidebar_hidden', bool(wait_until(lambda: focused()['title'] == 'Renamed Source', timeout=5))
+                and app.call('window-state')['sidebarMode'] == 'hidden', spaces=spaces(), window=app.call('window-state'))
+        # Showing the sidebar is itself undoable. Undo Rename while the
+        # sidebar is still hidden, before adding that window-mode action.
+        undo()
+        require('rename_hidden_one_undo', spaces() == before
+                and app.call('window-state')['sidebarMode'] == 'hidden', spaces=spaces())
+        app.call('menu-perform', id='toggle-sidebar')
+        # Create an inline Profile in the same one-step transaction.
+        app.call('editor-open', kind='create')
+        app.call('editor-act', action='profile', name='New Profile…')
+        key('return')
+        require('A5_invalid_profile_keeps_form', state()['open'] and state()['creatingProfile'] and spaces() == before)
+        app.call('type', text='Inline Creation Profile')
+        finish()
+        require('A5_inline_profile_creates', focused()['profile'] != previous['profile'])
+        undo(); require('A5_inline_profile_one_undo', spaces() == before)
+
+        # Single and multiple moves preserve source section kinds.
+        path = Path(tmp) / 'creation.html'; path.write_text('<title>Creation Fixture</title>')
+        a = app.call('open', url=path.as_uri())['id']; app.call('wait', tab=a)
+        app.call('pin', tab=a)
+        b = app.call('open', url=path.as_uri())['id']; app.call('wait', tab=b)
+        for ids in ([a], [b], [a, b]):
+            app.call('space', space=source)
+            app.call('sidebar-click', node=ids[0])
+            for node in ids[1:]: app.call('sidebar-click', node=node, modifiers=['cmd'])
+            old = shape(tree()); count = len(spaces())
+            app.call('sidebar-menu', node=ids[0], item='Move to/New Space…')
+            require('move_form_no_early_mutation_' + ('pinned' if ids == [a] else 'today' if ids == [b] else 'mixed'), len(spaces()) == count and shape(tree()) == old)
+            app.call('type', text='Moved Space'); finish()
+            moved = tree()
+            require('move_preserves_sections_' + ('pinned' if ids == [a] else 'today' if ids == [b] else 'mixed'),
+                    [n['id'] for n in moved['today']] == ([b] if b in ids else [])
+                    and [n['id'] for n in moved['pinned']] == ([a] if a in ids else []), tree=moved)
+            undo(); app.call('space', space=source)
+            require('move_one_undo_' + ('pinned' if ids == [a] else 'today' if ids == [b] else 'mixed'), len(spaces()) == count and shape(tree()) == old)
+            app.call('sidebar-key', key='escape')
+        folder = app.call('folder', tabs=[a], title='Turned Space', section='pinned')
+        app.call('sidebar-drop', nodes=[b], parent=dict(kind='folder', id=folder), index=1)
+        left = app.call('open', url=path.as_uri())['id']; app.call('wait', tab=left); app.call('pin', tab=left)
+        right = app.call('open', url=path.as_uri())['id']; app.call('wait', tab=right); app.call('pin', tab=right)
+        app.call('sidebar-drop', nodes=[left], parent=dict(kind='pinned', id=source), index=0)
+        old = shape(tree()); count = len(spaces())
+        old_nodes = node_list()
+        require('turn_folder_position_fixture', [n['id'] for n in old['pinned']] == [left, folder, right])
+        app.call('sidebar-menu', node=folder, item='Turn “Turned Space” into Space')
+        require('turn_form_prefill_no_early_mutation', state()['name'] == 'Turned Space' and shape(tree()) == old,
+                form=state(), before=old, after=shape(tree()))
+        finish()
+        require('turn_children_today_in_order', [n['id'] for n in tree()['today']] == [a, b] and tree()['pinned'] == []
+                and all(app.tab(n)['section'] == 'today' and not app.tab(n)['pinnedURL'] for n in (a, b)), tree=tree())
+        turned_space = focused()['id']
+        turned_nodes = node_list()
+        app.call('sidebar-key', key='z', modifiers=['cmd'])
+        restored_nodes = node_list()
+        require('turn_one_undo_restores_folder_sections', focused()['id'] == source and len(spaces()) == count and shape(tree()) == old
+                and restored_nodes == old_nodes
+                and len({n['id'] for n in restored_nodes}) == len(restored_nodes)
+                and sum(n['id'] == folder for n in restored_nodes) == 1,
+                before=old_nodes, after=restored_nodes, tree=tree())
+        redo_menu = _menu_row(app, 'redo')
+        redo_event = app.call('sidebar-key', key='z', modifiers=['cmd', 'shift'], observeCommands=True)
+        redone_nodes = node_list()
+        require('turn_redo_recreates_space_today_without_duplicates', len(spaces()) == count + 1
+                and any(s['id'] == turned_space for s in spaces()) and redone_nodes == turned_nodes
+                and len({n['id'] for n in redone_nodes}) == len(redone_nodes)
+                and not any(n['id'] == folder for n in redone_nodes)
+                and [n['id'] for n in redone_nodes if n['parent'] == turned_space + '/today'] == [a, b],
+                before=turned_nodes, after=redone_nodes, menu=redo_menu, event=redo_event, spaces=spaces())
+        app.call('sidebar-key', key='z', modifiers=['cmd']); app.call('space', space=source)
+        # A7 uses the header menu, warning text, Cancel, then confirmation.
+        app.call('profile-menu', response='Default')
+        app.call('menu-perform', id='change-profile')
+        app.call('profile-menu', waitClosed=True)
+        alert = app.call('alert')
+        require('A7_warning_precedes_change', 'Change Profile?' in alert['texts']
+                and any('you might get logged out or lose your progress' in t for t in alert['texts'])
+                and focused()['profile'] == previous['profile'], alert=alert)
+        app.call('alert', button='Cancel')
+        require('A7_cancel_no_change', focused()['profile'] == previous['profile'])
+        app.call('profile-menu', close=True)
+        for entry in ('command', 'space_menu'):
+            if entry == 'command':
+                app.call('profile-menu', response='Default')
+                app.call('menu-perform', id='change-profile'); app.call('profile-menu', waitClosed=True)
+            else:
+                app.call('sidebar-menu', item='Set Profile/Default')
+            require('A7_' + entry + '_specific_warning', 'Change Profile?' in app.call('alert')['texts'])
+            app.call('alert', button='Change Profile')
+            require('A7_' + entry + '_confirm_changes_profile', bool(wait_until(lambda: focused()['profile'] != previous['profile'], timeout=5)))
+            changed_profile = focused()['profile']
+            undo_item = _menu_row(app, 'undo')
+            require('A7_' + entry + '_undo_named', state().get('modelUndoName') == 'Change Profile', menu=undo_item, state=state())
+            app.call('sidebar-key', key='z', modifiers=['cmd'])
+            require('A7_' + entry + '_profile_undo', bool(wait_until(lambda: focused()['profile'] == previous['profile'], timeout=5)), space=focused())
+            redo_item = _menu_row(app, 'redo')
+            require('A7_' + entry + '_redo_named', state().get('modelRedoName') == 'Change Profile', menu=redo_item, state=state())
+            app.call('sidebar-key', key='z', modifiers=['cmd', 'shift'])
+            require('A7_' + entry + '_profile_redo', bool(wait_until(lambda: focused()['profile'] == changed_profile, timeout=5)), space=focused())
+            app.call('sidebar-key', key='z', modifiers=['cmd'])
+        windows = app.call('shell-windows')
+        app.call('menu-perform', id='blank-window'); key('escape')
+        new_window = app.call('window-state')['id']; before_close_key = spaces()
+        app.call('editor-open', kind='create'); key('w', ['cmd'])
+        require('A5_form_cmd_w_does_not_submit', spaces() == before_close_key)
+        if any(w['id'] == new_window for w in app.call('shell-windows')):
+            app.call('window-focus', id=new_window, activate=True); app.call('window-close')
+        require('A5_window_close_discards_form', len(app.call('shell-windows')) == len(windows))
+    finally:
+        try:
+            _try(lambda: app.call('editor-close', timeout=3))
+            _try(lambda: app.call('profile-menu', close=True, timeout=3))
+            _try(lambda: app.call('alert', button='Cancel', timeout=3))
+        finally:
+            _restore_defaults(app, saved)
+            app.quit()
+
+
 def _menu_checks_row(menu, expected):
     """Checkmarks (or hidden flags) as the validated menu shows them, one entry per step."""
     return {"ok": menu == expected, "menu": menu, "expected": expected}
@@ -9754,9 +11279,9 @@ def _restore_defaults(app, saved):
     domain = getattr(app, "preferences_domain", "io.github.sergeserb2.open")
     for key, value in saved.items():
         restored = False
-        if not app.closed:
+        if app is not None and not app.closed:
             try:
-                app.call("defaults", key=key, value=value)
+                app.call("defaults", key=key, value=value, timeout=3)
                 restored = True
             except Exception:
                 pass
@@ -9792,10 +11317,11 @@ def page_tools_quit_with_devtools_check(app, results, saved):
 def page_notification_checks(factory, results, tmp):
     """page-platform §8.3 N1–N4, N6: web notifications in the real App (Steps 7 and 16).
 
-    macOS delivery needs the user's one-time Allow (U-N1). A normal run starts the App with
-    OPEN_AUTOMATION_NOTIFICATION_AUTHORIZATION=record: the App logs its authorization request
-    instead of showing the macOS prompt, so no human is needed, and the macOS-delivery rows
-    report BLOCKED: U-N1 until macOS has authorized Open. For U-N1, run the suite once with
+    These fixtures explicitly opt into macOS notification setup. The record-only guard
+    suppresses the App's authorization request, but Chromium's Alerts helper registration
+    can still show a disclosure after an ad-hoc signature change (R-4). Under a no-system-
+    prompts rule, native setup/delivery verification is BLOCKED on U-N1 for that identity.
+    Only a user-operated U-N1 run may show or answer the system prompt. Run it once with
     OPEN_E2E_NOTIFICATION_PROMPT=1 and click Allow in the macOS prompt. The engine's own list and
     clicks come from EP-7 (fork patch 0504, `--open-automation` builds only). This suite writes no
     preferences keys.
@@ -9813,7 +11339,8 @@ def page_notification_checks(factory, results, tmp):
     origin = 'http://127.0.0.1:%d' % server.server_address[1]
     prompt = os.environ.get('OPEN_E2E_NOTIFICATION_PROMPT') == '1'
     app = factory(urls=(origin + '/notify.html',), fresh=True,
-                  extra_env={} if prompt else {'OPEN_AUTOMATION_NOTIFICATION_AUTHORIZATION': 'record'})
+                  extra_env={'OPEN_AUTOMATION_SKIP_MAC_NOTIFICATIONS': '0',
+                             **({} if prompt else {'OPEN_AUTOMATION_NOTIFICATION_AUTHORIZATION': 'record'})})
     pages = []
 
     def live_tab(url):
@@ -9827,11 +11354,9 @@ def page_notification_checks(factory, results, tmp):
         pages.append(tab['page']['identifier'])
         return tab
 
-    def sheet():
-        try:
-            return app.call('alert')
-        except RuntimeError:
-            return None
+    def permission_prompt():
+        state = app.call('permission-prompt')
+        return state if state['visible'] else None
 
     def blocked(reason, **evidence):
         return dict(evidence, status='BLOCKED', reason=reason)
@@ -9841,13 +11366,13 @@ def page_notification_checks(factory, results, tmp):
         tab = live_tab(origin + '/notify.html')
         page = tab['page']['identifier']
 
-        # N1: the user allows the site in Open's prompt (the real sheet button), Chromium shows
+        # N1: the user allows the site in Open's popover (the real Allow button), Chromium shows
         # the banner, and the Allow asks macOS once (§4.5.3).
         before = app.call('notification-authorization')
         app.call('click', tab=page, selector='#ask')
-        prompt_sheet = wait_until(sheet, timeout=10, step=.1)
-        if prompt_sheet:
-            app.call('alert', button='Allow')
+        permission_view = wait_until(permission_prompt, timeout=10, step=.1)
+        if permission_view:
+            app.call('permission-prompt', answer='allow')
         granted = wait_until(lambda: 'permission:granted' in app.eval(page, 'log'), timeout=10, step=.1)
         after = wait_until(lambda: (lambda s: s if len(s['requests']) > len(before['requests']) else None)(
             app.call('notification-authorization')), timeout=10, step=.1) or app.call('notification-authorization')
@@ -9855,9 +11380,10 @@ def page_notification_checks(factory, results, tmp):
         expected = (('requested' if prompt else 'suppressed') if before['status'] == 'notDetermined'
                     else 'skipped:' + before['status'])
         results['N1_allow_asks_macos'] = {
-            'ok': bool(prompt_sheet) and any(origin.split('//')[1].split(':')[0] in t for t in prompt_sheet['texts'])
+            'ok': bool(permission_view) and permission_view['question'] == 'Allow 127.0.0.1 to send you notifications?'
+                  and permission_view['buttons'] == ['Not Now', 'Allow']
                   and bool(granted) and entry == expected and len(after['requests']) == len(before['requests']) + 1,
-            'sheet': prompt_sheet, 'granted': bool(granted), 'statusBefore': before['status'],
+            'prompt': permission_view, 'granted': bool(granted), 'statusBefore': before['status'],
             'request': entry, 'expected': expected, 'requests': after['requests']}
         if prompt and before['status'] == 'notDetermined':
             print('U-N1: click Allow in the macOS notification prompt for Open (waiting up to 120 s)', flush=True)
@@ -10338,19 +11864,46 @@ def main():
     ap.add_argument("--engine-sha256", help="require this Vendor framework SHA-256 and matching embedded code before app launch")
     ap.add_argument("--engine-fingerprint-only", action="store_true", help="verify built engine artifacts and exit without launching Open")
     ap.add_argument("--extensions", default=os.path.join(ROOT, ".re", "ext", "unpacked"))
-    ap.add_argument("--only", choices=["shell", "extensions", "features", "measure", "tabstrip", "window", "sidebar", "peek",
-                                       "commandbar", "app-actions", "actions", "profiles", "sidebar-completion", "toolbar", "numbering", "media", "relaunch", "page",
-                                       "sleep", "routing", "history", "applescript", "downloads"])
+    ap.add_argument("--only", choices=["firstrun", "find", "shell", "extensions", "features", "measure", "tabstrip", "window", "sidebar", "peek", "split",
+                                       "commandbar", "app-actions", "actions", "extensions-p3", "extensions-ui", "extensions-e2", "profiles", "sidebar-completion", "toolbar", "numbering", "media", "relaunch", "page", "page-chrome",
+                                       "sleep", "context-menus", "routing", "littleopen", "history", "applescript", "downloads", "space-editor", "incognito", "passwords", "passwords-probe"])
     ap.add_argument("--window-chrome-only", action="store_true", help="run only the window-chrome follow-up flows in the window suite")
+    ap.add_argument("--firstrun-boosts-only", action="store_true", help="run only the Boost import seam and CLI lock flows in firstrun")
+    ap.add_argument("--window-material-only", action="store_true", help="run only the window material real-App flows in the window suite")
+    ap.add_argument("--profiles-shell-only", action="store_true", help="run only the Section 10 real-App Profiles shell flows")
+    ap.add_argument('--passwords-probe-rows', help='run only named Step 0 rows, e.g. PR-8,PR-9; never replay a crashed row')
     ap.add_argument("--keep", action="store_true",
                     help="keep this run's data root, cache root and scratch folder (paths printed at the end)")
     ap.add_argument("--focus-retry-delay-seconds", type=int, default=0,
                     help="wait between interrupted foreground attempts (0–600 seconds)")
     opts = ap.parse_args()
+    if opts.firstrun_boosts_only and opts.only != "firstrun":
+        ap.error("--firstrun-boosts-only requires --only firstrun")
+    # Startup itself may migrate legacy Peek choices before the socket answers.
+    # Preserve the pre-launch stored values, including absence, across every app
+    # and every retry (the Peek suite also launches a second Find/Escape app).
+    import plistlib
+    exported = subprocess.run(['defaults', 'export', 'io.github.sergeserb2.open', '-'], capture_output=True)
+    domain_before = plistlib.loads(exported.stdout) if exported.returncode == 0 else {}
+    startup_peek = {key: domain_before.get(key) for key in
+                    ('open.links.openPeekShiftClick', 'open.links.openPeekOtherSites')}
+    if opts.only in ('window', 'sidebar'):
+        startup_peek['open.sidebar.hideHintShown'] = domain_before.get('open.sidebar.hideHintShown')
+    if opts.only == 'passwords-probe':
+        for key in ('open.links.littleOpenNUXSeen', 'open.general.searchSuggestNoticeDismissed'):
+            startup_peek[key] = domain_before.get(key)
     if not 0 <= opts.focus_retry_delay_seconds <= 600:
         ap.error("--focus-retry-delay-seconds must be between 0 and 600")
     if opts.only is None and not opts.engine_fingerprint_only:
         ap.error("--only is required unless --engine-fingerprint-only is set")
+    if opts.only == 'passwords-probe' and opts.style != 'chrome':
+        ap.error('passwords-probe requires --style chrome')
+    if opts.passwords_probe_rows is not None and (opts.only != 'passwords-probe' or
+            not re.fullmatch(r'PR-[1-9](,PR-[1-9])*', opts.passwords_probe_rows) or
+            len(set(opts.passwords_probe_rows.split(','))) != len(opts.passwords_probe_rows.split(','))):
+        ap.error('--passwords-probe-rows requires passwords-probe and unique PR-1 through PR-9 ids')
+    probe_result_name = ('results-passwords-probe-%s.json' % '-'.join(opts.passwords_probe_rows.split(','))
+                         if opts.passwords_probe_rows else 'results-passwords-probe.json')
     if opts.engine_sha256 and not re.fullmatch(r"[0-9a-f]{64}", opts.engine_sha256):
         ap.error("--engine-sha256 must be 64 lowercase hexadecimal characters")
 
@@ -10362,6 +11915,8 @@ def main():
     # its name is unique per run, so the cache root is too.
     # Keep AF_UNIX's 104-byte sun_path limit with this suite's longer name.
     root_kind = "sidebarc" if opts.only == "sidebar-completion" else opts.only
+    if opts.only == 'passwords-probe':
+        root_kind = 'pwprobe'  # Leave room for automation.sock in macOS sun_path.
     run_name = "Open-E2E-%s-%s-%d-%s" % (root_kind, opts.style, os.getpid(), os.urandom(4).hex())
     sweep_stale_runs()
     user_data = os.path.expanduser("~/Library/Application Support/" + run_name)
@@ -10385,6 +11940,10 @@ def main():
     for sig in (signal.SIGTERM, signal.SIGHUP):
         signal.signal(sig, lambda *_: sys.exit(128 + 15))
     extra = ["--use-mock-keychain"]
+    if opts.only == "extensions-e2":
+        import extensions_e2
+        dirs = extensions_e2.fixtures(ROOT, tmp, opts.extensions)
+        extra += ["--load-extension=" + ",".join(dirs), "--disable-features=DisableLoadExtensionCommandLineSwitch"]
     if opts.only == "media":
         rules_path = os.path.join(tmp, "pip-site-rules.json")
         with open(rules_path, "w") as f:
@@ -10408,6 +11967,16 @@ def main():
         if not all(os.path.isdir(d) for d in dirs):
             sys.exit("missing extensions: %s" % dirs)
         extra += ["--load-extension=" + ",".join(dirs), "--disable-features=DisableLoadExtensionCommandLineSwitch"]
+    if opts.only == "extensions-ui":
+        probe_copy = Path(tmp) / "action-probe-ui"
+        shutil.copytree(Path(ROOT) / "tools/e2e/fixtures/action-probe", probe_copy)
+        probe_manifest = json.loads((probe_copy / "manifest.json").read_text())
+        probe_manifest["name"] = "Action Probe"  # Same display name as extensions-e2 / X-27.
+        (probe_copy / "manifest.json").write_text(json.dumps(probe_manifest))
+        dirs = [str(probe_copy)] + [os.path.join(opts.extensions, d) for d in ("ublock-lite", "darkreader", "bitwarden")]
+        if not all(os.path.isdir(d) for d in dirs):
+            sys.exit("missing unpacked extensions in %s" % opts.extensions)
+        extra += ["--load-extension=" + ",".join(dirs), "--disable-features=DisableLoadExtensionCommandLineSwitch"]
     if opts.only == "profiles":
         extra += ["--load-extension=" + os.path.join(ROOT, "tools", "e2e", "fixtures", "tabs-probe"),
                   "--disable-features=DisableLoadExtensionCommandLineSwitch"]
@@ -10421,19 +11990,24 @@ def main():
     tracker = FocusTracker()
     _ACTIVE_FOCUS_TRACKER = tracker
 
-    def factory(urls=("about:blank",), fresh=False, snapshot=None, extra_env=None, extra_args=None, delivery_urls=()):
+    def factory(urls=("about:blank",), fresh=False, snapshot=None, extra_env=None, extra_args=None, delivery_urls=(), load_extensions=True):
         if fresh or snapshot:
             shutil.rmtree(user_data, ignore_errors=True)
             shutil.rmtree(user_caches, ignore_errors=True)
         if snapshot:
             os.makedirs(os.path.join(user_data, "State"), exist_ok=True)
             shutil.copyfile(snapshot, os.path.join(user_data, "State", "browser.json"))
-        app = Open(opts.config, opts.style, user_data, extra + list(extra_args or []), log, urls=urls, extra_env=extra_env, delivery_urls=delivery_urls)
+        launch_args = [arg for arg in extra if load_extensions or not arg.startswith("--load-extension=")]
+        app = Open(opts.config, opts.style, user_data, launch_args + list(extra_args or []), log, urls=urls, extra_env=extra_env, delivery_urls=delivery_urls, first_run=opts.only == "firstrun")
         app.focus_tracker = tracker
         tracker.apps.append(app)
         return app
 
-    results = {"style": opts.style, "config": opts.config, "started": time.strftime("%Y-%m-%d %H:%M:%S")}
+    results = {"style": opts.style, "config": opts.config, "started": time.strftime("%Y-%m-%d %H:%M:%S"),
+               "load": os.getloadavg()}
+    source_diff = subprocess.check_output(["git", "diff", "HEAD", "--", "App", "Packages/OpenKit/Sources", "tools/e2e"], cwd=ROOT)
+    results["source"] = {"head": subprocess.check_output(["git", "rev-parse", "HEAD"], cwd=ROOT, text=True).strip(),
+                         "clean": not source_diff, "diffSHA256": hashlib.sha256(source_diff).hexdigest()}
     def framework_uuid(path):
         proc = subprocess.run(['dwarfdump', '--uuid', path], capture_output=True, text=True)
         match = re.search(r'UUID: ([0-9A-F-]+)', proc.stdout)
@@ -10498,6 +12072,8 @@ def main():
                          'embeddedSHA256': embedded_sha, 'distributionSHA256': vendor_sha,
                          'requiredSHA256': opts.engine_sha256 or '',
                          'embeddedCodeSHA256': embedded_code_sha, 'distributionCodeSHA256': vendor_code_sha}
+    if opts.only == 'passwords-probe':
+        results['engine']['stamp'] = 'fork main recorded distribution' if stamp.startswith('fork ') else 'unconfirmed'
     if embedded_code_sha != vendor_code_sha or (opts.engine_sha256 and vendor_sha != opts.engine_sha256):
         sys.exit('ENGINE_FINGERPRINT_MISMATCH before app launch: expectedVendor=%s vendor=%s embeddedCode=%s vendorCode=%s' %
                  (opts.engine_sha256, vendor_sha, embedded_code_sha, vendor_code_sha))
@@ -10506,7 +12082,34 @@ def main():
         print(json.dumps(results['engine'], sort_keys=True), flush=True)
         return
     def execute():
-        if opts.only == "shell":
+        if opts.only == 'passwords-probe':
+            results[opts.only] = {}
+            results['probeMetadata'] = runpy.run_path(os.path.join(ROOT, 'tools/e2e/passwords_probe.py'))['run'](
+                sys.modules[__name__], factory, results[opts.only], tmp,
+                row_ids=opts.passwords_probe_rows.split(',') if opts.passwords_probe_rows else None,
+                result_name=probe_result_name,
+                engine_distribution_sha256=results['engine']['distributionSHA256'])
+        elif opts.only == "firstrun":
+            results["firstrun"] = CheckedResults(tracker)
+            # The executable's -I shebang omits the script directory from
+            # sys.path. Load this owned sibling by its exact repository path.
+            if not opts.firstrun_boosts_only:
+                runpy.run_path(os.path.join(ROOT, "tools", "e2e", "firstrun.py"))["run"](
+                    factory, results["firstrun"], tmp, sys.modules[__name__])
+            if os.environ.get("OPEN_E2E_IMPORT_EXT_ONLY") != "1":
+                runpy.run_path(os.path.join(ROOT, "tools", "e2e", "firstrun_boosts.py"))["run"](
+                    factory, results["firstrun"], tmp, sys.modules[__name__])
+        elif opts.only == "extensions-ui":
+            results["extensions-ui"] = CheckedResults(tracker)
+            import extensions_ui
+            extensions_ui.run(factory, results["extensions-ui"], tmp, ROOT, wait_until, new_tab, frame, read_image, EXT)
+        elif opts.only == "split":
+            import importlib.util
+            spec = importlib.util.spec_from_file_location('split_checks', os.path.join(ROOT, 'tools/e2e/split_checks.py'))
+            module = importlib.util.module_from_spec(spec); spec.loader.exec_module(module)
+            results["split"] = CheckedResults(tracker)
+            module.split_checks(factory, results["split"], tmp, sys.modules[__name__])
+        elif opts.only == "shell":
             results["shell"] = CheckedResults(tracker)
             shell_checks(factory, results["shell"], tmp)
         elif opts.only == "relaunch":
@@ -10515,10 +12118,34 @@ def main():
         elif opts.only in ("commandbar", "app-actions"):
             results[opts.only] = CheckedResults(tracker)
             commandbar_checks(factory, results[opts.only], tmp, opts.config)
+        elif opts.only == "space-editor":
+            results[opts.only] = CheckedResults(tracker)
+            space_editor_creation_checks(factory, results[opts.only], tmp)
+            runpy.run_path(os.path.join(ROOT, 'tools/e2e/menu_shift_checks.py'))['run'](
+                sys.modules[__name__], factory, results[opts.only], tmp)
+            import space_editor
+            space_editor.checks(factory, results[opts.only], tmp, sys.modules[__name__])
         elif opts.only == "sidebar-completion":
             results[opts.only] = CheckedResults(tracker)
             space_manager_checks(results[opts.only], tmp, opts.config, opts.style)
             folder_peek_checks(factory, results[opts.only], tmp)
+        elif opts.only == "find":
+            results["find"] = CheckedResults(tracker)
+            runpy.run_path(os.path.join(ROOT, "tools/e2e/find_checks.py"))["run"](sys.modules[__name__], factory, results["find"], tmp)
+        elif opts.only == "page-chrome":
+            import importlib.util
+            spec = importlib.util.spec_from_file_location("page_chrome", os.path.join(ROOT, "tools/e2e/page_chrome.py"))
+            module = importlib.util.module_from_spec(spec); spec.loader.exec_module(module)
+            results[opts.only] = CheckedResults(tracker)
+            module.run(factory, results[opts.only], tmp, globals())
+            runpy.run_path(os.path.join(ROOT, "tools/e2e/littleopen_page_chrome.py"))["run"](factory, results[opts.only], tmp, globals())
+        elif opts.only == "context-menus":
+            import importlib.util
+            spec = importlib.util.spec_from_file_location("open_context_menus", os.path.join(ROOT, "tools/e2e/context_menus.py"))
+            module = importlib.util.module_from_spec(spec)
+            spec.loader.exec_module(module)
+            results[opts.only] = CheckedResults(tracker)
+            module.context_menu_checks(factory, results[opts.only], tmp, sys.modules[__name__])
         elif opts.only == "applescript":
             results["applescript"] = CheckedResults(tracker)
             runpy.run_path(os.path.join(ROOT, "tools/e2e/applescript.py"))["run"](
@@ -10536,6 +12163,10 @@ def main():
             import downloads
             results["downloads"] = CheckedResults(tracker)
             downloads.checks(factory, results["downloads"], tmp, opts.config, sys.modules[__name__])
+        elif opts.only == "incognito":
+            import incognito
+            results["incognito"] = CheckedResults(tracker)
+            incognito.checks(factory, results["incognito"], tmp, sys.modules[__name__])
         elif opts.only == "history":
             results["history"] = CheckedResults(tracker)
             runpy.run_path(os.path.join(ROOT, "tools/e2e/history_e2e.py"))["history_checks"](
@@ -10543,12 +12174,16 @@ def main():
         elif opts.only == "sleep":
             results["sleep"] = CheckedResults(tracker)
             sleep_checks(factory, results["sleep"], tmp, opts.style)
+        elif opts.only == "littleopen":
+            results["littleopen"] = CheckedResults(tracker)
+            littleopen_checks(factory, results["littleopen"], tmp)
         elif opts.only == "routing":
             results["routing"] = CheckedResults(tracker)
             routing_checks(factory, results["routing"], tmp)
         elif opts.only == "window":
             results["window"] = CheckedResults(tracker)
-            window_checks(factory, results["window"], tmp, opts.config, chrome_only=opts.window_chrome_only)
+            window_checks(factory, results["window"], tmp, opts.config, chrome_only=opts.window_chrome_only,
+                          material_only=opts.window_material_only)
         elif opts.only == "sidebar":
             results["sidebar"] = CheckedResults(tracker)
             sidebar_checks(factory, results["sidebar"], tmp)
@@ -10556,13 +12191,19 @@ def main():
             results["peek"] = CheckedResults(tracker)
             peek_checks(factory, results["peek"], tmp)
         elif opts.only == "profiles":
-            results["profiles"] = {}
-            profiles_checks(factory, results["profiles"], tmp, opts.config)
+            results["profiles"] = CheckedResults(tracker)
+            if not opts.profiles_shell_only:
+                profiles_checks(factory, results["profiles"], tmp, opts.config)
+            runpy.run_path(os.path.join(ROOT, "tools/e2e/profiles_shell.py"))["run"](
+                factory, results["profiles"], tmp, globals(), domain_before)
+        elif opts.only == "passwords":
+            results["passwords"] = CheckedResults(tracker)
+            runpy.run_path(os.path.join(ROOT, "tools/e2e/passwords.py"))["run"](factory, results["passwords"], tmp, globals())
         elif opts.only == "measure":
             results["measure"] = CheckedResults(tracker)
             measure(factory, results["measure"], tmp)
         else:
-            app = factory(urls=("https://example.com/",))
+            app = factory(urls=("about:blank" if opts.only == "extensions-p3" else "https://example.com/",))
             try:
                 results["ping"] = app.call("ping")
                 app.call("window-frame", frame=[80, 60, 1360, 860])
@@ -10577,18 +12218,31 @@ def main():
                     tabstrip_checks(app, results["tabstrip"])
                 elif opts.only == "actions":
                     actions_checks(app, results["actions"])
+                elif opts.only == "extensions-p3":
+                    import extensions_p3
+                    extensions_p3.run(app, results["extensions-p3"], tmp, ROOT, wait_until, new_tab)
+                elif opts.only == "extensions-e2":
+                    import extensions_e2
+                    extensions_e2.run(app, results["extensions-e2"], tmp, ROOT, wait_until, new_tab, factory, _restore_defaults)
                 else:
                     feature_checks(app, opts.style, results["features"], tmp)
             finally:
                 app.quit()
 
     interrupted_attempts = []
-    for attempt in range(1, 4):
+    # Never replay a potentially crashing probe row after foreground loss.
+    for attempt in range(1, 2 if opts.only == 'passwords-probe' else 4):
         tracker = FocusTracker()
         _ACTIVE_FOCUS_TRACKER = tracker
         shutil.rmtree(user_data, ignore_errors=True)
         interruption = None
         try:
+            if opts.only == 'passwords-probe':
+                _restore_defaults(None, {'open.links.littleOpenNUXSeen': True,
+                                         'open.general.searchSuggestNoticeDismissed': True})
+            if opts.only in ('window', 'sidebar'):
+                # Deterministic chrome captures; restore the user's value in finally.
+                _restore_defaults(None, {'open.sidebar.hideHintShown': True})
             execute()
         except FocusInterruption as error:
             interruption = {"reason": str(error), "focus": error.evidence}
@@ -10605,14 +12259,15 @@ def main():
         finally:
             for instance in _OWNED_APPS:
                 instance.quit()
+            _restore_defaults(None, startup_peek)
         if interruption is None:
             break
         interrupted_attempts.append(dict(interruption, attempt=attempt, status="INTERRUPTED",
                                          checks=dict(results.get(opts.only, {}))))
         print("%s attempt %d INTERRUPTED: %s" % (opts.only, attempt, interruption["reason"]), flush=True)
-        if attempt == 3:
+        if attempt == 3 or opts.only == 'passwords-probe':
             dict.__setitem__(results.setdefault(opts.only, {}), "suite", {
-                "status": "INTERRUPTED", "reason": interruption["reason"], "focus": interruption["focus"], "attempts": 3})
+                "status": "INTERRUPTED", "reason": interruption["reason"], "focus": interruption["focus"], "attempts": attempt})
         elif opts.focus_retry_delay_seconds:
             print("retrying interrupted foreground flow in %ds" % opts.focus_retry_delay_seconds, flush=True)
             remaining = opts.focus_retry_delay_seconds
@@ -10623,20 +12278,25 @@ def main():
     results["cleanup"] = {"ok": all(instance.quit_report.get("ok") for instance in _OWNED_APPS),
                           "processes": [instance.quit_report for instance in _OWNED_APPS]}
     print("owned_process_cleanup    " + ("PASS" if results["cleanup"]["ok"] else "FAIL"), flush=True)
-    name = ("results-actions-p2.json" if opts.only == "actions" else
-            "results-%s-%s.json" % (opts.only, opts.style if opts.only in ("extensions", "features", "tabstrip", "page")
+    name = (probe_result_name if opts.only == 'passwords-probe' else
+            "results-actions-p2.json" if opts.only == "actions" else
+            "results-%s-%s.json" % (opts.only, opts.style if opts.only in ("extensions", "features", "tabstrip", "page", "context-menus")
                                     else opts.config.lower()))
     with open(os.path.join(OUT, name), "w") as f:
         json.dump(results, f, indent=2, sort_keys=True)
-    for group in ("shell", "extensions", "features", "measure", "tabstrip", "window", "sidebar", "peek", "commandbar", "app-actions", "actions", "profiles", "sidebar-completion", "toolbar", "numbering", "media", "relaunch", "page", "sleep", "routing", "history", "applescript", "downloads"):
+    for group in ("firstrun", "find", "shell", "extensions", "features", "measure", "tabstrip", "window", "sidebar", "peek", "split", "commandbar", "app-actions", "actions", "extensions-p3", "extensions-ui", "extensions-e2", "profiles", "sidebar-completion", "toolbar", "numbering", "media", "relaunch", "page", "page-chrome", "sleep", "context-menus", "routing", "littleopen", "history", "applescript", "downloads", "space-editor", "incognito", "passwords"):
         for k, v in results.get(group, {}).items():
             if isinstance(v, dict) and "ok" in v:
                 print("%-24s %s" % (k, "PASS" if v.get("ok") else "FAIL"))
             elif isinstance(v, dict) and v.get("status") in ("SKIP", "BLOCKED", "INTERRUPTED", "DEFERRED"):
                 print("%-24s %s: %s" % (k, v["status"], v.get("reason", "")))
     print("wrote", os.path.join(OUT, name))
-    failures = [k for group in ("shell", "extensions", "features", "measure", "tabstrip", "window", "sidebar", "peek", "commandbar", "app-actions", "actions", "sidebar-completion", "toolbar", "numbering", "media", "relaunch", "page", "sleep", "routing", "history", "applescript", "downloads")
+    failures = [k for group in ("firstrun", "find", "shell", "extensions", "features", "measure", "tabstrip", "window", "sidebar", "peek", "split", "commandbar", "app-actions", "actions", "extensions-p3", "extensions-ui", "extensions-e2", "profiles", "sidebar-completion", "toolbar", "numbering", "media", "relaunch", "page", "page-chrome", "sleep", "context-menus", "routing", "littleopen", "history", "applescript", "downloads", "space-editor", "incognito", "passwords")
                 for k, v in results.get(group, {}).items() if isinstance(v, dict) and v.get("ok") is False]
+    if opts.only == 'passwords-probe':
+        failures += [k for k, v in results[opts.only].items() if v.get('ok') is False]
+        if any(v.get('status') in ('NOT_RUN', 'UNVERIFIED') for v in results[opts.only].values()):
+            failures.append('probe-incomplete')
     if failures or not results["cleanup"]["ok"]:
         sys.exit(1)
     if any(isinstance(v, dict) and v.get("status") == "INTERRUPTED" for v in results.get(opts.only, {}).values()):

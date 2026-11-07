@@ -1,0 +1,1513 @@
+{
+  "scenario": "external",
+  "reportOnly": true,
+  "samples": [
+    {
+      "build": "main",
+      "pair": 0,
+      "scenario": "external",
+      "load": [
+        4.31494140625,
+        5.3759765625,
+        6.328125
+      ],
+      "endLoad": [
+        4.31494140625,
+        5.3759765625,
+        6.328125
+      ],
+      "uptime": "4:49  up 19:32, 7 users, load averages: 4.31 5.38 6.33",
+      "firstContentfulPaintMs": 116,
+      "baselineRSS": 568164352,
+      "loadedRSS": 945537024,
+      "windowRSS": 377372672,
+      "processCount": 6,
+      "foregroundInterruptions": [],
+      "openToFCPMs": 285.85986328125,
+      "clockDriftMs": -0.003469734374903055,
+      "openToReadyMs": 288.977625,
+      "requestWallMs": 1793965744839.1401,
+      "fcpWallMs": 1793965745125,
+      "routing": {
+        "profileHint": "<fresh-generated-profile>",
+        "url": "http://127.0.0.1:52704/plain.html?sample=0"
+      },
+      "cleanupOK": true
+    },
+    {
+      "build": "branch",
+      "pair": 0,
+      "scenario": "external",
+      "load": [
+        4.20947265625,
+        5.33642578125,
+        6.30859375
+      ],
+      "endLoad": [
+        4.20947265625,
+        5.33642578125,
+        6.30859375
+      ],
+      "uptime": "4:49  up 19:33, 7 users, load averages: 4.21 5.34 6.31",
+      "firstContentfulPaintMs": 108,
+      "baselineRSS": 568279040,
+      "loadedRSS": 954449920,
+      "windowRSS": 386170880,
+      "processCount": 6,
+      "foregroundInterruptions": [],
+      "openToFCPMs": 283.576904296875,
+      "clockDriftMs": -0.004176765625061307,
+      "openToReadyMs": 286.54562500000003,
+      "requestWallMs": 1793965746735.423,
+      "fcpWallMs": 1793965747019,
+      "routing": {
+        "profileHint": "<fresh-generated-profile>",
+        "url": "http://127.0.0.1:52704/plain.html?sample=0"
+      },
+      "browserCreationToReadyMs": 121.55537500802893,
+      "firstFrameToBrowserCreationMs": 0.7448333344655111,
+      "cleanupOK": true
+    },
+    {
+      "build": "branch",
+      "pair": 1,
+      "scenario": "external",
+      "load": [
+        4.20947265625,
+        5.33642578125,
+        6.30859375
+      ],
+      "endLoad": [
+        4.20947265625,
+        5.33642578125,
+        6.30859375
+      ],
+      "uptime": "4:49  up 19:33, 7 users, load averages: 4.21 5.34 6.31",
+      "firstContentfulPaintMs": 112,
+      "baselineRSS": 568180736,
+      "loadedRSS": 956235776,
+      "windowRSS": 388055040,
+      "processCount": 6,
+      "foregroundInterruptions": [],
+      "openToFCPMs": 273.771728515625,
+      "clockDriftMs": -0.01005565624996052,
+      "openToReadyMs": 276.007541,
+      "requestWallMs": 1793965749514.9282,
+      "fcpWallMs": 1793965749788.7,
+      "routing": {
+        "profileHint": "<fresh-generated-profile>",
+        "url": "http://127.0.0.1:52743/plain.html?sample=1"
+      },
+      "browserCreationToReadyMs": 124.81524999020621,
+      "firstFrameToBrowserCreationMs": 0.23341667838394642,
+      "cleanupOK": true
+    },
+    {
+      "build": "main",
+      "pair": 1,
+      "scenario": "external",
+      "load": [
+        4.4326171875,
+        5.36376953125,
+        6.3125
+      ],
+      "endLoad": [
+        4.4326171875,
+        5.36376953125,
+        6.3125
+      ],
+      "uptime": "4:49  up 19:33, 7 users, load averages: 4.43 5.36 6.31",
+      "firstContentfulPaintMs": 108,
+      "baselineRSS": 573079552,
+      "loadedRSS": 949616640,
+      "windowRSS": 376537088,
+      "processCount": 6,
+      "foregroundInterruptions": [],
+      "openToFCPMs": 272.428955078125,
+      "clockDriftMs": -0.002678703124843196,
+      "openToReadyMs": 275.11300000000017,
+      "requestWallMs": 1793965751502.271,
+      "fcpWallMs": 1793965751774.7,
+      "routing": {
+        "profileHint": "<fresh-generated-profile>",
+        "url": "http://127.0.0.1:52743/plain.html?sample=1"
+      },
+      "cleanupOK": true
+    },
+    {
+      "build": "main",
+      "pair": 2,
+      "scenario": "external",
+      "load": [
+        4.4326171875,
+        5.36376953125,
+        6.3125
+      ],
+      "endLoad": [
+        4.4326171875,
+        5.36376953125,
+        6.3125
+      ],
+      "uptime": "4:49  up 19:33, 7 users, load averages: 4.43 5.36 6.31",
+      "firstContentfulPaintMs": 108,
+      "baselineRSS": 568016896,
+      "loadedRSS": 945635328,
+      "windowRSS": 377618432,
+      "processCount": 6,
+      "foregroundInterruptions": [],
+      "openToFCPMs": 269.328125,
+      "clockDriftMs": -0.003825203124847576,
+      "openToReadyMs": 275.2005,
+      "requestWallMs": 1793965754261.3718,
+      "fcpWallMs": 1793965754530.7,
+      "routing": {
+        "profileHint": "<fresh-generated-profile>",
+        "url": "http://127.0.0.1:52788/plain.html?sample=2"
+      },
+      "cleanupOK": true
+    },
+    {
+      "build": "branch",
+      "pair": 2,
+      "scenario": "external",
+      "load": [
+        4.39794921875,
+        5.3408203125,
+        6.298828125
+      ],
+      "endLoad": [
+        4.39794921875,
+        5.3408203125,
+        6.298828125
+      ],
+      "uptime": "4:49  up 19:33, 7 users, load averages: 4.40 5.34 6.30",
+      "firstContentfulPaintMs": 104,
+      "baselineRSS": 568803328,
+      "loadedRSS": 955924480,
+      "windowRSS": 387121152,
+      "processCount": 6,
+      "foregroundInterruptions": [],
+      "openToFCPMs": 283.337158203125,
+      "clockDriftMs": -0.0039540937498259154,
+      "openToReadyMs": 292.1888749999999,
+      "requestWallMs": 1793965756211.263,
+      "fcpWallMs": 1793965756494.6,
+      "routing": {
+        "profileHint": "<fresh-generated-profile>",
+        "url": "http://127.0.0.1:52788/plain.html?sample=2"
+      },
+      "browserCreationToReadyMs": 123.75866666843649,
+      "firstFrameToBrowserCreationMs": 0.229833327466622,
+      "cleanupOK": true
+    },
+    {
+      "build": "branch",
+      "pair": 3,
+      "scenario": "external",
+      "load": [
+        4.39794921875,
+        5.3408203125,
+        6.298828125
+      ],
+      "endLoad": [
+        4.39794921875,
+        5.3408203125,
+        6.298828125
+      ],
+      "uptime": "4:49  up 19:33, 7 users, load averages: 4.40 5.34 6.30",
+      "firstContentfulPaintMs": 108,
+      "baselineRSS": 568164352,
+      "loadedRSS": 952352768,
+      "windowRSS": 384188416,
+      "processCount": 6,
+      "foregroundInterruptions": [],
+      "openToFCPMs": 282.4677734375,
+      "clockDriftMs": -0.00570801562497536,
+      "openToReadyMs": 289.21287500000005,
+      "requestWallMs": 1793965758978.2322,
+      "fcpWallMs": 1793965759260.7,
+      "routing": {
+        "profileHint": "<fresh-generated-profile>",
+        "url": "http://127.0.0.1:52826/plain.html?sample=3"
+      },
+      "browserCreationToReadyMs": 125.20762499480043,
+      "firstFrameToBrowserCreationMs": 0.1947083364939317,
+      "cleanupOK": true
+    },
+    {
+      "build": "main",
+      "pair": 3,
+      "scenario": "external",
+      "load": [
+        4.39794921875,
+        5.3408203125,
+        6.298828125
+      ],
+      "endLoad": [
+        4.68603515625,
+        5.384765625,
+        6.30859375
+      ],
+      "uptime": "4:49  up 19:33, 7 users, load averages: 4.69 5.38 6.31",
+      "firstContentfulPaintMs": 108,
+      "baselineRSS": 568573952,
+      "loadedRSS": 945258496,
+      "windowRSS": 376684544,
+      "processCount": 6,
+      "foregroundInterruptions": [],
+      "openToFCPMs": 263.160888671875,
+      "clockDriftMs": -0.0018447187500214568,
+      "openToReadyMs": 268.3632079999998,
+      "requestWallMs": 1793965760866.339,
+      "fcpWallMs": 1793965761129.5,
+      "routing": {
+        "profileHint": "<fresh-generated-profile>",
+        "url": "http://127.0.0.1:52826/plain.html?sample=3"
+      },
+      "cleanupOK": true
+    },
+    {
+      "build": "main",
+      "pair": 4,
+      "scenario": "external",
+      "load": [
+        4.68603515625,
+        5.384765625,
+        6.30859375
+      ],
+      "endLoad": [
+        4.68603515625,
+        5.384765625,
+        6.30859375
+      ],
+      "uptime": "4:49  up 19:33, 7 users, load averages: 4.69 5.38 6.31",
+      "firstContentfulPaintMs": 108,
+      "baselineRSS": 570146816,
+      "loadedRSS": 949338112,
+      "windowRSS": 379191296,
+      "processCount": 6,
+      "foregroundInterruptions": [],
+      "openToFCPMs": 263.495849609375,
+      "clockDriftMs": -0.011978515624832653,
+      "openToReadyMs": 268.1041249999998,
+      "requestWallMs": 1793965763725.1042,
+      "fcpWallMs": 1793965763988.6,
+      "routing": {
+        "profileHint": "<fresh-generated-profile>",
+        "url": "http://127.0.0.1:52877/plain.html?sample=4"
+      },
+      "cleanupOK": true
+    },
+    {
+      "build": "branch",
+      "pair": 4,
+      "scenario": "external",
+      "load": [
+        4.68603515625,
+        5.384765625,
+        6.30859375
+      ],
+      "endLoad": [
+        4.87109375,
+        5.4111328125,
+        6.3125
+      ],
+      "uptime": "4:49  up 19:33, 7 users, load averages: 4.87 5.41 6.31",
+      "firstContentfulPaintMs": 116,
+      "baselineRSS": 568508416,
+      "loadedRSS": 954384384,
+      "windowRSS": 385875968,
+      "processCount": 6,
+      "foregroundInterruptions": [],
+      "openToFCPMs": 291.641845703125,
+      "clockDriftMs": -0.007776359374759068,
+      "openToReadyMs": 294.988166,
+      "requestWallMs": 1793965765721.8582,
+      "fcpWallMs": 1793965766013.5,
+      "routing": {
+        "profileHint": "<fresh-generated-profile>",
+        "url": "http://127.0.0.1:52877/plain.html?sample=4"
+      },
+      "browserCreationToReadyMs": 129.82604166609235,
+      "firstFrameToBrowserCreationMs": 0.7052083383314312,
+      "cleanupOK": true
+    },
+    {
+      "build": "branch",
+      "pair": 5,
+      "scenario": "external",
+      "load": [
+        4.87109375,
+        5.4111328125,
+        6.3125
+      ],
+      "endLoad": [
+        4.87109375,
+        5.4111328125,
+        6.3125
+      ],
+      "uptime": "4:49  up 19:33, 7 users, load averages: 4.87 5.41 6.31",
+      "firstContentfulPaintMs": 112,
+      "baselineRSS": 568295424,
+      "loadedRSS": 952860672,
+      "windowRSS": 384565248,
+      "processCount": 6,
+      "foregroundInterruptions": [],
+      "openToFCPMs": 267.1201171875,
+      "clockDriftMs": -0.008181640625025466,
+      "openToReadyMs": 270.1600420000001,
+      "requestWallMs": 1793965768471.68,
+      "fcpWallMs": 1793965768738.8,
+      "routing": {
+        "profileHint": "<fresh-generated-profile>",
+        "url": "http://127.0.0.1:52920/plain.html?sample=5"
+      },
+      "browserCreationToReadyMs": 125.76949999493081,
+      "firstFrameToBrowserCreationMs": 0.7937500049592927,
+      "cleanupOK": true
+    },
+    {
+      "build": "main",
+      "pair": 5,
+      "scenario": "external",
+      "load": [
+        4.87109375,
+        5.4111328125,
+        6.3125
+      ],
+      "endLoad": [
+        5.04150390625,
+        5.4375,
+        6.31640625
+      ],
+      "uptime": "4:49  up 19:33, 7 users, load averages: 5.04 5.44 6.32",
+      "firstContentfulPaintMs": 104,
+      "baselineRSS": 569737216,
+      "loadedRSS": 948535296,
+      "windowRSS": 378798080,
+      "processCount": 6,
+      "foregroundInterruptions": [],
+      "openToFCPMs": 260.64990234375,
+      "clockDriftMs": -0.008331046874729964,
+      "openToReadyMs": 262.9392500000001,
+      "requestWallMs": 1793965770283.85,
+      "fcpWallMs": 1793965770544.5,
+      "routing": {
+        "profileHint": "<fresh-generated-profile>",
+        "url": "http://127.0.0.1:52920/plain.html?sample=5"
+      },
+      "cleanupOK": true
+    },
+    {
+      "build": "main",
+      "pair": 6,
+      "scenario": "external",
+      "load": [
+        5.04150390625,
+        5.4375,
+        6.31640625
+      ],
+      "endLoad": [
+        5.04150390625,
+        5.4375,
+        6.31640625
+      ],
+      "uptime": "4:49  up 19:33, 7 users, load averages: 5.04 5.44 6.32",
+      "firstContentfulPaintMs": 108,
+      "baselineRSS": 569819136,
+      "loadedRSS": 950403072,
+      "windowRSS": 380583936,
+      "processCount": 6,
+      "foregroundInterruptions": [],
+      "openToFCPMs": 266.49609375,
+      "clockDriftMs": -0.008705078125046839,
+      "openToReadyMs": 271.3332500000001,
+      "requestWallMs": 1793965773034.7039,
+      "fcpWallMs": 1793965773301.2,
+      "routing": {
+        "profileHint": "<fresh-generated-profile>",
+        "url": "http://127.0.0.1:52957/plain.html?sample=6"
+      },
+      "cleanupOK": true
+    },
+    {
+      "build": "branch",
+      "pair": 6,
+      "scenario": "external",
+      "load": [
+        5.04150390625,
+        5.4375,
+        6.31640625
+      ],
+      "endLoad": [
+        5.04150390625,
+        5.4375,
+        6.31640625
+      ],
+      "uptime": "4:49  up 19:33, 7 users, load averages: 5.04 5.44 6.32",
+      "firstContentfulPaintMs": 108,
+      "baselineRSS": 567836672,
+      "loadedRSS": 954171392,
+      "windowRSS": 386334720,
+      "processCount": 6,
+      "foregroundInterruptions": [],
+      "openToFCPMs": 265.962890625,
+      "clockDriftMs": -0.00027734375021282176,
+      "openToReadyMs": 271.6957080000002,
+      "requestWallMs": 1793965774868.237,
+      "fcpWallMs": 1793965775134.2,
+      "routing": {
+        "profileHint": "<fresh-generated-profile>",
+        "url": "http://127.0.0.1:52957/plain.html?sample=6"
+      },
+      "browserCreationToReadyMs": 124.30833332473412,
+      "firstFrameToBrowserCreationMs": 0.6894999969517812,
+      "cleanupOK": true
+    },
+    {
+      "build": "branch",
+      "pair": 7,
+      "scenario": "external",
+      "load": [
+        6.1591796875,
+        5.66259765625,
+        6.390625
+      ],
+      "endLoad": [
+        6.1591796875,
+        5.66259765625,
+        6.390625
+      ],
+      "uptime": "4:49  up 19:33, 7 users, load averages: 6.16 5.66 6.39",
+      "firstContentfulPaintMs": 112,
+      "baselineRSS": 568164352,
+      "loadedRSS": 954171392,
+      "windowRSS": 386007040,
+      "processCount": 6,
+      "foregroundInterruptions": [],
+      "openToFCPMs": 287.074951171875,
+      "clockDriftMs": -0.00880860937485295,
+      "openToReadyMs": 293.2355419999999,
+      "requestWallMs": 1793965777643.225,
+      "fcpWallMs": 1793965777930.3,
+      "routing": {
+        "profileHint": "<fresh-generated-profile>",
+        "url": "http://127.0.0.1:53001/plain.html?sample=7"
+      },
+      "browserCreationToReadyMs": 128.90199999674223,
+      "firstFrameToBrowserCreationMs": 0.7383333431789652,
+      "cleanupOK": true
+    },
+    {
+      "build": "main",
+      "pair": 7,
+      "scenario": "external",
+      "load": [
+        6.1591796875,
+        5.66259765625,
+        6.390625
+      ],
+      "endLoad": [
+        6.1591796875,
+        5.66259765625,
+        6.390625
+      ],
+      "uptime": "4:49  up 19:33, 7 users, load averages: 6.16 5.66 6.39",
+      "firstContentfulPaintMs": 104,
+      "baselineRSS": 568164352,
+      "loadedRSS": 945455104,
+      "windowRSS": 377290752,
+      "processCount": 6,
+      "foregroundInterruptions": [],
+      "openToFCPMs": 281.6259765625,
+      "clockDriftMs": -0.005821296875069493,
+      "openToReadyMs": 286.4797499999998,
+      "requestWallMs": 1793965779656.074,
+      "fcpWallMs": 1793965779937.7,
+      "routing": {
+        "profileHint": "<fresh-generated-profile>",
+        "url": "http://127.0.0.1:53001/plain.html?sample=7"
+      },
+      "cleanupOK": true
+    },
+    {
+      "build": "main",
+      "pair": 8,
+      "scenario": "external",
+      "load": [
+        6.22607421875,
+        5.6845703125,
+        6.39404296875
+      ],
+      "endLoad": [
+        6.22607421875,
+        5.6845703125,
+        6.39404296875
+      ],
+      "uptime": "4:49  up 19:33, 7 users, load averages: 6.23 5.68 6.39",
+      "firstContentfulPaintMs": 104,
+      "baselineRSS": 568557568,
+      "loadedRSS": 946683904,
+      "windowRSS": 378126336,
+      "processCount": 6,
+      "foregroundInterruptions": [],
+      "openToFCPMs": 270.7490234375,
+      "clockDriftMs": -0.008796875000030013,
+      "openToReadyMs": 274.2646660000001,
+      "requestWallMs": 1793965782428.351,
+      "fcpWallMs": 1793965782699.1,
+      "routing": {
+        "profileHint": "<fresh-generated-profile>",
+        "url": "http://127.0.0.1:53058/plain.html?sample=8"
+      },
+      "cleanupOK": true
+    },
+    {
+      "build": "branch",
+      "pair": 8,
+      "scenario": "external",
+      "load": [
+        6.22607421875,
+        5.6845703125,
+        6.39404296875
+      ],
+      "endLoad": [
+        6.22607421875,
+        5.6845703125,
+        6.39404296875
+      ],
+      "uptime": "4:49  up 19:33, 7 users, load averages: 6.23 5.68 6.39",
+      "firstContentfulPaintMs": 112,
+      "baselineRSS": 570736640,
+      "loadedRSS": 956645376,
+      "windowRSS": 385908736,
+      "processCount": 6,
+      "foregroundInterruptions": [],
+      "openToFCPMs": 267.2421875,
+      "clockDriftMs": -0.004537109374950887,
+      "openToReadyMs": 270.26870900000023,
+      "requestWallMs": 1793965784279.358,
+      "fcpWallMs": 1793965784546.6,
+      "routing": {
+        "profileHint": "<fresh-generated-profile>",
+        "url": "http://127.0.0.1:53058/plain.html?sample=8"
+      },
+      "browserCreationToReadyMs": 125.788041666965,
+      "firstFrameToBrowserCreationMs": 0.20195833349134773,
+      "cleanupOK": true
+    },
+    {
+      "build": "branch",
+      "pair": 9,
+      "scenario": "external",
+      "load": [
+        6.04736328125,
+        5.65625,
+        6.3798828125
+      ],
+      "endLoad": [
+        6.04736328125,
+        5.65625,
+        6.3798828125
+      ],
+      "uptime": "4:49  up 19:33, 7 users, load averages: 6.05 5.66 6.38",
+      "firstContentfulPaintMs": 120,
+      "baselineRSS": 567951360,
+      "loadedRSS": 952664064,
+      "windowRSS": 384712704,
+      "processCount": 6,
+      "foregroundInterruptions": [],
+      "openToFCPMs": 297.55908203125,
+      "clockDriftMs": -0.006010749999973086,
+      "openToReadyMs": 305.04495799999984,
+      "requestWallMs": 1793965787161.6409,
+      "fcpWallMs": 1793965787459.2,
+      "routing": {
+        "profileHint": "<fresh-generated-profile>",
+        "url": "http://127.0.0.1:53106/plain.html?sample=9"
+      },
+      "browserCreationToReadyMs": 138.19012499880046,
+      "firstFrameToBrowserCreationMs": 0.223333336180076,
+      "cleanupOK": true
+    },
+    {
+      "build": "main",
+      "pair": 9,
+      "scenario": "external",
+      "load": [
+        6.04736328125,
+        5.65625,
+        6.3798828125
+      ],
+      "endLoad": [
+        6.04736328125,
+        5.65625,
+        6.3798828125
+      ],
+      "uptime": "4:49  up 19:33, 7 users, load averages: 6.05 5.66 6.38",
+      "firstContentfulPaintMs": 104,
+      "baselineRSS": 570327040,
+      "loadedRSS": 949977088,
+      "windowRSS": 379650048,
+      "processCount": 6,
+      "foregroundInterruptions": [],
+      "openToFCPMs": 239.7060546875,
+      "clockDriftMs": -0.0022490156249830306,
+      "openToReadyMs": 246.33362499999967,
+      "requestWallMs": 1793965789174.094,
+      "fcpWallMs": 1793965789413.8,
+      "routing": {
+        "profileHint": "<fresh-generated-profile>",
+        "url": "http://127.0.0.1:53106/plain.html?sample=9"
+      },
+      "cleanupOK": true
+    },
+    {
+      "build": "main",
+      "pair": 10,
+      "scenario": "external",
+      "load": [
+        5.80322265625,
+        5.61181640625,
+        6.35986328125
+      ],
+      "endLoad": [
+        5.80322265625,
+        5.61181640625,
+        6.35986328125
+      ],
+      "uptime": "4:49  up 19:33, 7 users, load averages: 5.80 5.61 6.36",
+      "firstContentfulPaintMs": 104,
+      "baselineRSS": 569573376,
+      "loadedRSS": 949911552,
+      "windowRSS": 380338176,
+      "processCount": 6,
+      "foregroundInterruptions": [],
+      "openToFCPMs": 272.22509765625,
+      "clockDriftMs": -0.005540046875069038,
+      "openToReadyMs": 275.935083,
+      "requestWallMs": 1793965792015.875,
+      "fcpWallMs": 1793965792288.1,
+      "routing": {
+        "profileHint": "<fresh-generated-profile>",
+        "url": "http://127.0.0.1:53143/plain.html?sample=10"
+      },
+      "cleanupOK": true
+    },
+    {
+      "build": "branch",
+      "pair": 10,
+      "scenario": "external",
+      "load": [
+        5.80322265625,
+        5.61181640625,
+        6.35986328125
+      ],
+      "endLoad": [
+        5.80322265625,
+        5.61181640625,
+        6.35986328125
+      ],
+      "uptime": "4:49  up 19:33, 7 users, load averages: 5.80 5.61 6.36",
+      "firstContentfulPaintMs": 108,
+      "baselineRSS": 570490880,
+      "loadedRSS": 957022208,
+      "windowRSS": 386531328,
+      "processCount": 6,
+      "foregroundInterruptions": [],
+      "openToFCPMs": 257.23095703125,
+      "clockDriftMs": -0.00979687500006321,
+      "openToReadyMs": 262.8439170000001,
+      "requestWallMs": 1793965793820.669,
+      "fcpWallMs": 1793965794077.9,
+      "routing": {
+        "profileHint": "<fresh-generated-profile>",
+        "url": "http://127.0.0.1:53143/plain.html?sample=10"
+      },
+      "browserCreationToReadyMs": 123.87004165793769,
+      "firstFrameToBrowserCreationMs": 0.6948750087758526,
+      "cleanupOK": true
+    },
+    {
+      "build": "branch",
+      "pair": 11,
+      "scenario": "external",
+      "load": [
+        5.65869140625,
+        5.5849609375,
+        6.345703125
+      ],
+      "endLoad": [
+        5.65869140625,
+        5.5849609375,
+        6.345703125
+      ],
+      "uptime": "4:49  up 19:33, 7 users, load averages: 5.66 5.58 6.35",
+      "firstContentfulPaintMs": 104,
+      "baselineRSS": 570540032,
+      "loadedRSS": 956710912,
+      "windowRSS": 386170880,
+      "processCount": 6,
+      "foregroundInterruptions": [],
+      "openToFCPMs": 278.255126953125,
+      "clockDriftMs": -0.005574218749984539,
+      "openToReadyMs": 283.8134170000002,
+      "requestWallMs": 1793965796675.345,
+      "fcpWallMs": 1793965796953.6,
+      "routing": {
+        "profileHint": "<fresh-generated-profile>",
+        "url": "http://127.0.0.1:53181/plain.html?sample=11"
+      },
+      "browserCreationToReadyMs": 120.70483333081938,
+      "firstFrameToBrowserCreationMs": 0.2420833334326744,
+      "cleanupOK": true
+    },
+    {
+      "build": "main",
+      "pair": 11,
+      "scenario": "external",
+      "load": [
+        5.65869140625,
+        5.5849609375,
+        6.345703125
+      ],
+      "endLoad": [
+        5.65869140625,
+        5.5849609375,
+        6.345703125
+      ],
+      "uptime": "4:49  up 19:33, 7 users, load averages: 5.66 5.58 6.35",
+      "firstContentfulPaintMs": 108,
+      "baselineRSS": 568164352,
+      "loadedRSS": 946831360,
+      "windowRSS": 378667008,
+      "processCount": 6,
+      "foregroundInterruptions": [],
+      "openToFCPMs": 260.06494140625,
+      "clockDriftMs": -0.0027363281250813998,
+      "openToReadyMs": 265.0874170000002,
+      "requestWallMs": 1793965798566.635,
+      "fcpWallMs": 1793965798826.7,
+      "routing": {
+        "profileHint": "<fresh-generated-profile>",
+        "url": "http://127.0.0.1:53181/plain.html?sample=11"
+      },
+      "cleanupOK": true
+    },
+    {
+      "build": "main",
+      "pair": 12,
+      "scenario": "external",
+      "load": [
+        5.60546875,
+        5.5751953125,
+        6.33740234375
+      ],
+      "endLoad": [
+        5.60546875,
+        5.5751953125,
+        6.33740234375
+      ],
+      "uptime": "4:50  up 19:33, 7 users, load averages: 5.61 5.58 6.34",
+      "firstContentfulPaintMs": 108,
+      "baselineRSS": 568049664,
+      "loadedRSS": 946274304,
+      "windowRSS": 378224640,
+      "processCount": 6,
+      "foregroundInterruptions": [],
+      "openToFCPMs": 262.427001953125,
+      "clockDriftMs": -0.003969718750056472,
+      "openToReadyMs": 263.4445830000001,
+      "requestWallMs": 1793965801317.373,
+      "fcpWallMs": 1793965801579.8,
+      "routing": {
+        "profileHint": "<fresh-generated-profile>",
+        "url": "http://127.0.0.1:53216/plain.html?sample=12"
+      },
+      "cleanupOK": true
+    },
+    {
+      "build": "branch",
+      "pair": 12,
+      "scenario": "external",
+      "load": [
+        5.60546875,
+        5.5751953125,
+        6.33740234375
+      ],
+      "endLoad": [
+        5.60546875,
+        5.5751953125,
+        6.33740234375
+      ],
+      "uptime": "4:50  up 19:33, 7 users, load averages: 5.61 5.58 6.34",
+      "firstContentfulPaintMs": 116,
+      "baselineRSS": 568213504,
+      "loadedRSS": 953122816,
+      "windowRSS": 384909312,
+      "processCount": 6,
+      "foregroundInterruptions": [],
+      "openToFCPMs": 282.6298828125,
+      "clockDriftMs": -0.006411140624834388,
+      "openToReadyMs": 288.6663339999997,
+      "requestWallMs": 1793965803230.27,
+      "fcpWallMs": 1793965803512.9,
+      "routing": {
+        "profileHint": "<fresh-generated-profile>",
+        "url": "http://127.0.0.1:53216/plain.html?sample=12"
+      },
+      "browserCreationToReadyMs": 132.662749994779,
+      "firstFrameToBrowserCreationMs": 0.7307916675927117,
+      "cleanupOK": true
+    },
+    {
+      "build": "branch",
+      "pair": 13,
+      "scenario": "external",
+      "load": [
+        5.60546875,
+        5.5751953125,
+        6.33740234375
+      ],
+      "endLoad": [
+        5.716796875,
+        5.5986328125,
+        6.3408203125
+      ],
+      "uptime": "4:50  up 19:34, 7 users, load averages: 5.72 5.60 6.34",
+      "firstContentfulPaintMs": 112,
+      "baselineRSS": 568623104,
+      "loadedRSS": 955924480,
+      "windowRSS": 387301376,
+      "processCount": 6,
+      "foregroundInterruptions": [],
+      "openToFCPMs": 277.700927734375,
+      "clockDriftMs": -0.0033925781249308784,
+      "openToReadyMs": 280.4902089999999,
+      "requestWallMs": 1793965806096.799,
+      "fcpWallMs": 1793965806374.5,
+      "routing": {
+        "profileHint": "<fresh-generated-profile>",
+        "url": "http://127.0.0.1:53269/plain.html?sample=13"
+      },
+      "browserCreationToReadyMs": 125.6124166684458,
+      "firstFrameToBrowserCreationMs": 0.21158333402127028,
+      "cleanupOK": true
+    },
+    {
+      "build": "main",
+      "pair": 13,
+      "scenario": "external",
+      "load": [
+        5.716796875,
+        5.5986328125,
+        6.3408203125
+      ],
+      "endLoad": [
+        5.716796875,
+        5.5986328125,
+        6.3408203125
+      ],
+      "uptime": "4:50  up 19:34, 7 users, load averages: 5.72 5.60 6.34",
+      "firstContentfulPaintMs": 108,
+      "baselineRSS": 568459264,
+      "loadedRSS": 945520640,
+      "windowRSS": 377061376,
+      "processCount": 6,
+      "foregroundInterruptions": [],
+      "openToFCPMs": 277.66015625,
+      "clockDriftMs": -0.007708000000263837,
+      "openToReadyMs": 281.21429200000006,
+      "requestWallMs": 1793965808045.14,
+      "fcpWallMs": 1793965808322.8,
+      "routing": {
+        "profileHint": "<fresh-generated-profile>",
+        "url": "http://127.0.0.1:53269/plain.html?sample=13"
+      },
+      "cleanupOK": true
+    },
+    {
+      "build": "main",
+      "pair": 14,
+      "scenario": "external",
+      "load": [
+        5.716796875,
+        5.5986328125,
+        6.3408203125
+      ],
+      "endLoad": [
+        5.5791015625,
+        5.57177734375,
+        6.32666015625
+      ],
+      "uptime": "4:50  up 19:34, 7 users, load averages: 5.58 5.57 6.33",
+      "firstContentfulPaintMs": 104,
+      "baselineRSS": 566837248,
+      "loadedRSS": 945192960,
+      "windowRSS": 378355712,
+      "processCount": 6,
+      "foregroundInterruptions": [],
+      "openToFCPMs": 260.458984375,
+      "clockDriftMs": -0.0016679687501550688,
+      "openToReadyMs": 264.6874590000001,
+      "requestWallMs": 1793965810795.441,
+      "fcpWallMs": 1793965811055.9,
+      "routing": {
+        "profileHint": "<fresh-generated-profile>",
+        "url": "http://127.0.0.1:53321/plain.html?sample=14"
+      },
+      "cleanupOK": true
+    },
+    {
+      "build": "branch",
+      "pair": 14,
+      "scenario": "external",
+      "load": [
+        5.5791015625,
+        5.57177734375,
+        6.32666015625
+      ],
+      "endLoad": [
+        5.5791015625,
+        5.57177734375,
+        6.32666015625
+      ],
+      "uptime": "4:50  up 19:34, 7 users, load averages: 5.58 5.57 6.33",
+      "firstContentfulPaintMs": 108,
+      "baselineRSS": 570949632,
+      "loadedRSS": 956760064,
+      "windowRSS": 385810432,
+      "processCount": 6,
+      "foregroundInterruptions": [],
+      "openToFCPMs": 284.225830078125,
+      "clockDriftMs": -0.005820312499849933,
+      "openToReadyMs": 291.4334169999999,
+      "requestWallMs": 1793965812699.674,
+      "fcpWallMs": 1793965812983.9,
+      "routing": {
+        "profileHint": "<fresh-generated-profile>",
+        "url": "http://127.0.0.1:53321/plain.html?sample=14"
+      },
+      "browserCreationToReadyMs": 125.79016666859388,
+      "firstFrameToBrowserCreationMs": 0.24579167074989527,
+      "cleanupOK": true
+    },
+    {
+      "build": "branch",
+      "pair": 15,
+      "scenario": "external",
+      "load": [
+        5.5791015625,
+        5.57177734375,
+        6.32666015625
+      ],
+      "endLoad": [
+        5.69287109375,
+        5.59521484375,
+        6.33056640625
+      ],
+      "uptime": "4:50  up 19:34, 7 users, load averages: 5.69 5.60 6.33",
+      "firstContentfulPaintMs": 108,
+      "baselineRSS": 571064320,
+      "loadedRSS": 956432384,
+      "windowRSS": 385368064,
+      "processCount": 6,
+      "foregroundInterruptions": [],
+      "openToFCPMs": 278.761962890625,
+      "clockDriftMs": -0.0013398281251397748,
+      "openToReadyMs": 283.1557500000001,
+      "requestWallMs": 1793965815571.138,
+      "fcpWallMs": 1793965815849.9,
+      "routing": {
+        "profileHint": "<fresh-generated-profile>",
+        "url": "http://127.0.0.1:53372/plain.html?sample=15"
+      },
+      "browserCreationToReadyMs": 123.71495833212975,
+      "firstFrameToBrowserCreationMs": 0.7451249985024333,
+      "cleanupOK": true
+    },
+    {
+      "build": "main",
+      "pair": 15,
+      "scenario": "external",
+      "load": [
+        5.69287109375,
+        5.59521484375,
+        6.33056640625
+      ],
+      "endLoad": [
+        5.69287109375,
+        5.59521484375,
+        6.33056640625
+      ],
+      "uptime": "4:50  up 19:34, 7 users, load averages: 5.69 5.60 6.33",
+      "firstContentfulPaintMs": 108,
+      "baselineRSS": 570540032,
+      "loadedRSS": 949813248,
+      "windowRSS": 379273216,
+      "processCount": 6,
+      "foregroundInterruptions": [],
+      "openToFCPMs": 276.60302734375,
+      "clockDriftMs": -0.009735359374872132,
+      "openToReadyMs": 281.35004200000014,
+      "requestWallMs": 1793965817561.397,
+      "fcpWallMs": 1793965817838,
+      "routing": {
+        "profileHint": "<fresh-generated-profile>",
+        "url": "http://127.0.0.1:53372/plain.html?sample=15"
+      },
+      "cleanupOK": true
+    },
+    {
+      "build": "main",
+      "pair": 16,
+      "scenario": "external",
+      "load": [
+        5.69287109375,
+        5.59521484375,
+        6.33056640625
+      ],
+      "endLoad": [
+        5.23681640625,
+        5.501953125,
+        6.29345703125
+      ],
+      "uptime": "4:50  up 19:34, 7 users, load averages: 5.24 5.50 6.29",
+      "firstContentfulPaintMs": 108,
+      "baselineRSS": 568918016,
+      "loadedRSS": 945881088,
+      "windowRSS": 376963072,
+      "processCount": 6,
+      "foregroundInterruptions": [],
+      "openToFCPMs": 257.830078125,
+      "clockDriftMs": -0.011433593750098225,
+      "openToReadyMs": 260.9549170000001,
+      "requestWallMs": 1793965820325.67,
+      "fcpWallMs": 1793965820583.5,
+      "routing": {
+        "profileHint": "<fresh-generated-profile>",
+        "url": "http://127.0.0.1:53420/plain.html?sample=16"
+      },
+      "cleanupOK": true
+    },
+    {
+      "build": "branch",
+      "pair": 16,
+      "scenario": "external",
+      "load": [
+        5.23681640625,
+        5.501953125,
+        6.29345703125
+      ],
+      "endLoad": [
+        5.23681640625,
+        5.501953125,
+        6.29345703125
+      ],
+      "uptime": "4:50  up 19:34, 7 users, load averages: 5.24 5.50 6.29",
+      "firstContentfulPaintMs": 112,
+      "baselineRSS": 570179584,
+      "loadedRSS": 955596800,
+      "windowRSS": 385417216,
+      "processCount": 6,
+      "foregroundInterruptions": [],
+      "openToFCPMs": 271.317138671875,
+      "clockDriftMs": -0.009787109374769898,
+      "openToReadyMs": 273.8541250000002,
+      "requestWallMs": 1793965822125.983,
+      "fcpWallMs": 1793965822397.3,
+      "routing": {
+        "profileHint": "<fresh-generated-profile>",
+        "url": "http://127.0.0.1:53420/plain.html?sample=16"
+      },
+      "browserCreationToReadyMs": 125.19983333186246,
+      "firstFrameToBrowserCreationMs": 0.21862499124836177,
+      "cleanupOK": true
+    },
+    {
+      "build": "branch",
+      "pair": 17,
+      "scenario": "external",
+      "load": [
+        5.23681640625,
+        5.501953125,
+        6.29345703125
+      ],
+      "endLoad": [
+        5.23681640625,
+        5.501953125,
+        6.29345703125
+      ],
+      "uptime": "4:50  up 19:34, 7 users, load averages: 5.24 5.50 6.29",
+      "firstContentfulPaintMs": 112,
+      "baselineRSS": 570245120,
+      "loadedRSS": 955498496,
+      "windowRSS": 385253376,
+      "processCount": 6,
+      "foregroundInterruptions": [],
+      "openToFCPMs": 263.805908203125,
+      "clockDriftMs": -0.004229500000178632,
+      "openToReadyMs": 266.639834,
+      "requestWallMs": 1793965824888.7942,
+      "fcpWallMs": 1793965825152.6,
+      "routing": {
+        "profileHint": "<fresh-generated-profile>",
+        "url": "http://127.0.0.1:53471/plain.html?sample=17"
+      },
+      "browserCreationToReadyMs": 125.2551666693762,
+      "firstFrameToBrowserCreationMs": 0.6545416690642014,
+      "cleanupOK": true
+    },
+    {
+      "build": "main",
+      "pair": 17,
+      "scenario": "external",
+      "load": [
+        6.4990234375,
+        5.7587890625,
+        6.37939453125
+      ],
+      "endLoad": [
+        6.4990234375,
+        5.7587890625,
+        6.37939453125
+      ],
+      "uptime": "4:50  up 19:34, 7 users, load averages: 6.50 5.76 6.38",
+      "firstContentfulPaintMs": 104,
+      "baselineRSS": 568147968,
+      "loadedRSS": 947453952,
+      "windowRSS": 379305984,
+      "processCount": 6,
+      "foregroundInterruptions": [],
+      "openToFCPMs": 267.260009765625,
+      "clockDriftMs": -0.008747078124827112,
+      "openToReadyMs": 271.5831249999998,
+      "requestWallMs": 1793965826845.94,
+      "fcpWallMs": 1793965827113.2,
+      "routing": {
+        "profileHint": "<fresh-generated-profile>",
+        "url": "http://127.0.0.1:53471/plain.html?sample=17"
+      },
+      "cleanupOK": true
+    },
+    {
+      "build": "main",
+      "pair": 18,
+      "scenario": "external",
+      "load": [
+        6.4990234375,
+        5.7587890625,
+        6.37939453125
+      ],
+      "endLoad": [
+        6.4990234375,
+        5.7587890625,
+        6.37939453125
+      ],
+      "uptime": "4:50  up 19:34, 7 users, load averages: 6.50 5.76 6.38",
+      "firstContentfulPaintMs": 108,
+      "baselineRSS": 567902208,
+      "loadedRSS": 949305344,
+      "windowRSS": 381403136,
+      "processCount": 6,
+      "foregroundInterruptions": [],
+      "openToFCPMs": 259.77099609375,
+      "clockDriftMs": -0.008918937499856838,
+      "openToReadyMs": 263.1790829999998,
+      "requestWallMs": 1793965829831.229,
+      "fcpWallMs": 1793965830091,
+      "routing": {
+        "profileHint": "<fresh-generated-profile>",
+        "url": "http://127.0.0.1:53521/plain.html?sample=18"
+      },
+      "cleanupOK": true
+    },
+    {
+      "build": "branch",
+      "pair": 18,
+      "scenario": "external",
+      "load": [
+        6.458984375,
+        5.7626953125,
+        6.376953125
+      ],
+      "endLoad": [
+        6.458984375,
+        5.7626953125,
+        6.376953125
+      ],
+      "uptime": "4:50  up 19:34, 7 users, load averages: 6.46 5.76 6.38",
+      "firstContentfulPaintMs": 108,
+      "baselineRSS": 567951360,
+      "loadedRSS": 954187776,
+      "windowRSS": 386236416,
+      "processCount": 6,
+      "foregroundInterruptions": [],
+      "openToFCPMs": 270.10107421875,
+      "clockDriftMs": -0.002755859374872216,
+      "openToReadyMs": 276.02045899999973,
+      "requestWallMs": 1793965831645.999,
+      "fcpWallMs": 1793965831916.1,
+      "routing": {
+        "profileHint": "<fresh-generated-profile>",
+        "url": "http://127.0.0.1:53521/plain.html?sample=18"
+      },
+      "browserCreationToReadyMs": 124.43579165847041,
+      "firstFrameToBrowserCreationMs": 0.7184166752267629,
+      "cleanupOK": true
+    },
+    {
+      "build": "branch",
+      "pair": 19,
+      "scenario": "external",
+      "load": [
+        6.458984375,
+        5.7626953125,
+        6.376953125
+      ],
+      "endLoad": [
+        6.458984375,
+        5.7626953125,
+        6.376953125
+      ],
+      "uptime": "4:50  up 19:34, 7 users, load averages: 6.46 5.76 6.38",
+      "firstContentfulPaintMs": 112,
+      "baselineRSS": 570195968,
+      "loadedRSS": 956104704,
+      "windowRSS": 385908736,
+      "processCount": 6,
+      "foregroundInterruptions": [],
+      "openToFCPMs": 273.612060546875,
+      "clockDriftMs": -0.009822249999956512,
+      "openToReadyMs": 277.55637500000006,
+      "requestWallMs": 1793965834417.688,
+      "fcpWallMs": 1793965834691.3,
+      "routing": {
+        "profileHint": "<fresh-generated-profile>",
+        "url": "http://127.0.0.1:53556/plain.html?sample=19"
+      },
+      "browserCreationToReadyMs": 126.45304166653659,
+      "firstFrameToBrowserCreationMs": 0.2323333319509402,
+      "cleanupOK": true
+    },
+    {
+      "build": "main",
+      "pair": 19,
+      "scenario": "external",
+      "load": [
+        6.982421875,
+        5.8828125,
+        6.41552734375
+      ],
+      "endLoad": [
+        6.982421875,
+        5.8828125,
+        6.41552734375
+      ],
+      "uptime": "4:50  up 19:34, 7 users, load averages: 6.98 5.88 6.42",
+      "firstContentfulPaintMs": 112,
+      "baselineRSS": 570884096,
+      "loadedRSS": 950829056,
+      "windowRSS": 379944960,
+      "processCount": 6,
+      "foregroundInterruptions": [],
+      "openToFCPMs": 261.447021484375,
+      "clockDriftMs": -0.00023145312502492743,
+      "openToReadyMs": 263.3637500000003,
+      "requestWallMs": 1793965836407.053,
+      "fcpWallMs": 1793965836668.5,
+      "routing": {
+        "profileHint": "<fresh-generated-profile>",
+        "url": "http://127.0.0.1:53556/plain.html?sample=19"
+      },
+      "cleanupOK": true
+    }
+  ],
+  "attempts": [
+    {
+      "pair": 0,
+      "attempt": 1,
+      "exit": 0,
+      "receipt": "pair-00-attempt-00.json",
+      "log": "pair-00-attempt-00.log"
+    },
+    {
+      "pair": 1,
+      "attempt": 1,
+      "exit": 0,
+      "receipt": "pair-01-attempt-00.json",
+      "log": "pair-01-attempt-00.log"
+    },
+    {
+      "pair": 2,
+      "attempt": 1,
+      "exit": 0,
+      "receipt": "pair-02-attempt-00.json",
+      "log": "pair-02-attempt-00.log"
+    },
+    {
+      "pair": 3,
+      "attempt": 1,
+      "exit": 0,
+      "receipt": "pair-03-attempt-00.json",
+      "log": "pair-03-attempt-00.log"
+    },
+    {
+      "pair": 4,
+      "attempt": 1,
+      "exit": 0,
+      "receipt": "pair-04-attempt-00.json",
+      "log": "pair-04-attempt-00.log"
+    },
+    {
+      "pair": 5,
+      "attempt": 1,
+      "exit": 0,
+      "receipt": "pair-05-attempt-00.json",
+      "log": "pair-05-attempt-00.log"
+    },
+    {
+      "pair": 6,
+      "attempt": 1,
+      "exit": 0,
+      "receipt": "pair-06-attempt-00.json",
+      "log": "pair-06-attempt-00.log"
+    },
+    {
+      "pair": 7,
+      "attempt": 1,
+      "exit": 0,
+      "receipt": "pair-07-attempt-00.json",
+      "log": "pair-07-attempt-00.log"
+    },
+    {
+      "pair": 8,
+      "attempt": 1,
+      "exit": 0,
+      "receipt": "pair-08-attempt-00.json",
+      "log": "pair-08-attempt-00.log"
+    },
+    {
+      "pair": 9,
+      "attempt": 1,
+      "exit": 0,
+      "receipt": "pair-09-attempt-00.json",
+      "log": "pair-09-attempt-00.log"
+    },
+    {
+      "pair": 10,
+      "attempt": 1,
+      "exit": 0,
+      "receipt": "pair-10-attempt-00.json",
+      "log": "pair-10-attempt-00.log"
+    },
+    {
+      "pair": 11,
+      "attempt": 1,
+      "exit": 0,
+      "receipt": "pair-11-attempt-00.json",
+      "log": "pair-11-attempt-00.log"
+    },
+    {
+      "pair": 12,
+      "attempt": 1,
+      "exit": 0,
+      "receipt": "pair-12-attempt-00.json",
+      "log": "pair-12-attempt-00.log"
+    },
+    {
+      "pair": 13,
+      "attempt": 1,
+      "exit": 0,
+      "receipt": "pair-13-attempt-00.json",
+      "log": "pair-13-attempt-00.log"
+    },
+    {
+      "pair": 14,
+      "attempt": 1,
+      "exit": 0,
+      "receipt": "pair-14-attempt-00.json",
+      "log": "pair-14-attempt-00.log"
+    },
+    {
+      "pair": 15,
+      "attempt": 1,
+      "exit": 0,
+      "receipt": "pair-15-attempt-00.json",
+      "log": "pair-15-attempt-00.log"
+    },
+    {
+      "pair": 16,
+      "attempt": 1,
+      "exit": 0,
+      "receipt": "pair-16-attempt-00.json",
+      "log": "pair-16-attempt-00.log"
+    },
+    {
+      "pair": 17,
+      "attempt": 1,
+      "exit": 0,
+      "receipt": "pair-17-attempt-00.json",
+      "log": "pair-17-attempt-00.log"
+    },
+    {
+      "pair": 18,
+      "attempt": 1,
+      "exit": 0,
+      "receipt": "pair-18-attempt-00.json",
+      "log": "pair-18-attempt-00.log"
+    },
+    {
+      "pair": 19,
+      "attempt": 1,
+      "exit": 0,
+      "receipt": "pair-19-attempt-00.json",
+      "log": "pair-19-attempt-00.log"
+    }
+  ],
+  "complete": true,
+  "screenLock": "one interleaved pair per lock; low-load waits hold only the outer quiet lock",
+  "configuration": "Release",
+  "method": "automation request start to first native display-link tick; page submit to loading=false plus document complete and first contentful paint",
+  "externalMethod": "time before LaunchServices open(1) delivery to performance.timeOrigin + FCP; wall/monotonic clock stability checked",
+  "typedDelayMs": 0,
+  "memory": "App metrics totalRSS: App and owned helpers; one loaded window minus baseline",
+  "mainBundle": "<main-worktree>/build/Release/Open.app",
+  "branchBundle": "<branch-worktree>/build/Release/Open.app",
+  "summary": {
+    "main": {
+      "openToFCPMs": {
+        "median": 264.9959716796875,
+        "p95": 281.6259765625
+      },
+      "windowRSS": {
+        "median": 378511360.0,
+        "p95": 380583936
+      },
+      "loadedRSS": {
+        "median": 947142656.0,
+        "p95": 950403072
+      }
+    },
+    "branch": {
+      "openToFCPMs": {
+        "median": 277.97802734375,
+        "p95": 291.641845703125
+      },
+      "windowRSS": {
+        "median": 385908736.0,
+        "p95": 387301376
+      },
+      "loadedRSS": {
+        "median": 955547648.0,
+        "p95": 956760064
+      },
+      "browserCreationToReadyMs": {
+        "median": 125.23139583208831,
+        "p95": 132.662749994779
+      }
+    }
+  },
+  "extraHiddenBrowserRSS": 7397376.0,
+  "provenance": "provenance.json"
+}

@@ -17,7 +17,7 @@ enum FeatureCLI {
     static func defaults() -> UserDefaults {
         let name = "Open.M4.Harness.\(UUID().uuidString)"; defaultSuites.append(name)
         let d = UserDefaults(suiteName: name)!
-        d.register(defaults: ["open.peek.otherSites": true, "open.peek.shiftClick": true, "open.links.littleOpenNUXSeen": true]); return d
+        d.register(defaults: ["open.links.openPeekOtherSites": true, "open.links.openPeekShiftClick": true, "open.links.littleOpenNUXSeen": true]); return d
     }
     static func run(_ args: [String]) async throws {
         guard let cmd = args.first else { throw CLIError(description: RenderCLI.usage) }
@@ -45,7 +45,15 @@ enum FeatureCLI {
             return
         }
         if cmd == "check" {
-            if args == ["check", "--only", "idle"] {
+            if args == ["check", "--only", "save-sheet"] {
+                var passed = 0, failed = 0
+                SaveSheetScenes.check { ok, label in
+                    print("\(ok ? "PASS" : "FAIL") \(label)")
+                    if ok { passed += 1 } else { failed += 1 }
+                }
+                print("save-sheet check: \(passed) passed, \(failed) failed")
+                if failed > 0 { throw CLIError(description: "save sheet checks failed") }
+            } else if args == ["check", "--only", "idle"] {
                 var passed = 0, failed = 0
                 try await IdleChecks.run { ok, label in
                     print("\(ok ? "PASS" : "FAIL") \(label)")
@@ -64,11 +72,12 @@ enum FeatureCLI {
             } else if args == ["check"] {
                 try await FeatureChecks.run()
             } else {
-                throw CLIError(description: "check accepts only --only auto-archive or --only idle (use tools/verification/features-idle.py for idle)")
+                throw CLIError(description: "check accepts --only save-sheet, --only auto-archive or --only idle (use tools/verification/features-idle.py for idle)")
             }
             return
         }
         if cmd == "pip" { try PiPScene.run(args); return }
+        if cmd == "save-sheet" { try SaveSheetScenes.render(args); return }
         if cmd == "translate" { try TranslateChecks.render(args); return }
         if cmd == "capture" { try CaptureChecks.render(args); return }
         if cmd == "compare" { try FeatureCompare.run(args); return }
@@ -184,9 +193,11 @@ enum FeatureCLI {
     static func waitForLoads(_ factory: FakeWebContentHostFactory, root: NSView) async throws {
         let deadline = ContinuousClock.now + .seconds(5)
         repeat {
+            // show() creates nonfocused split hosts on the next main-queue turn.
+            // Yield before inspecting an empty/already-loaded factory, too.
+            try await Task.sleep(for: .milliseconds(20))
             OffscreenRenderer.settle(root, runLoop: 0.01)
             if factory.made.filter({ !$0.isClosed }).allSatisfy({ !$0.isLoading }) { return }
-            try await Task.sleep(for: .milliseconds(20))
         } while ContinuousClock.now < deadline
         throw CLIError(description: "fake host did not finish loading within 5 seconds")
     }

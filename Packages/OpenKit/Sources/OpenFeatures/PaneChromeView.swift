@@ -1,6 +1,7 @@
 import AppKit
 import OpenDesign
 import OpenModel
+import OpenExtensionsUI
 
 @MainActor
 final class ActionButton: NSButton {
@@ -56,6 +57,11 @@ public final class PaneChromeView: NSView {
     var fallbackColor: NSColor = .white
     let label = NSTextField(labelWithString: "")
     private var buttons: [ActionButton] = []
+    public var extensionsUI: ExtensionsUIContext? { didSet { if extensionsUI !== oldValue { extensionStrip?.removeFromSuperview(); extensionStrip = nil; needsLayout = true } } }
+    public private(set) var extensionStrip: ExtensionStripView?
+    private var reloadShowsStop: Bool?
+    /// App permission popovers anchor to the toolbar URL area (S11).
+    public var urlAreaFrame: CGRect { label.frame }
     public var isFocused = false { didSet { update() } }
     /// F0081: the focused pane shows every control; an unfocused pane shows back,
     /// forward, the copy button, the host, and Close (AX and pixels).
@@ -82,29 +88,54 @@ public final class PaneChromeView: NSView {
     @available(*, unavailable) required init?(coder: NSCoder) { fatalError() }
     public override var isFlipped: Bool { true }
     func update() {
-        layer?.backgroundColor = (host?.pageBackgroundColor ?? fallbackColor).cgColor
-        label.stringValue = role == .toolbar && showsFullURL ? host?.currentURL?.absoluteString ?? ""
+        let background = (host?.pageBackgroundColor ?? fallbackColor).cgColor
+        if layer?.backgroundColor != background { layer?.backgroundColor = background }
+        let text = role == .toolbar && showsFullURL ? host?.currentURL?.absoluteString ?? ""
             : host?.currentURL?.host()?.replacingOccurrences(of: "www.", with: "") ?? ""
+        var layoutChanged = false
+        if label.stringValue != text { label.stringValue = text; layoutChanged = true }
         for (i, b) in buttons.enumerated() {
-            b.isHidden = role == .toolbar ? i >= 5 : !isFocused && !Self.unfocusedControls.contains(i)
+            let hidden = role == .toolbar ? i >= 5 : !isFocused && !Self.unfocusedControls.contains(i)
+            if b.isHidden != hidden { b.isHidden = hidden; layoutChanged = true }
         }
-        buttons[0].isEnabled = host?.canGoBack ?? false; buttons[1].isEnabled = host?.canGoForward ?? false
-        buttons[4].isEnabled = false
-        buttons[2].image = NSImage(systemSymbolName: host?.isLoading == true ? "xmark" : "arrow.clockwise", accessibilityDescription: "Reload or Stop")
-        needsLayout = true
+        let back = host?.canGoBack ?? false, forward = host?.canGoForward ?? false
+        if buttons[0].isEnabled != back { buttons[0].isEnabled = back }
+        if buttons[1].isEnabled != forward { buttons[1].isEnabled = forward }
+        if buttons[4].isEnabled { buttons[4].isEnabled = false }
+        let loading = host?.isLoading == true
+        if reloadShowsStop != loading {
+            buttons[2].image = NSImage(systemSymbolName: loading ? "xmark" : "arrow.clockwise", accessibilityDescription: "Reload or Stop")
+            reloadShowsStop = loading
+        }
+        // Metadata and warm selections often repeat identical inputs. Keep the
+        // same pixels without rebuilding symbols or invalidating layout again.
+        if layoutChanged { needsLayout = true }
     }
     public override func layout() {
         super.layout(); let w = bounds.width
+        let stripStyle: ExtensionStripStyle = role == .toolbar ? .toolbar : .paneBar
+        if extensionStrip?.style != stripStyle { extensionStrip?.removeFromSuperview(); extensionStrip = nil }
+        if extensionStrip == nil, let extensionsUI {
+            let strip = ExtensionStripView(style: stripStyle, context: extensionsUI)
+            strip.onVisibilityChange = { [weak self] in self?.needsLayout = true }
+            addSubview(strip); extensionStrip = strip
+        }
+        if let strip = extensionStrip {
+            strip.frame = bounds; strip.isFocused = isFocused || role == .toolbar; strip.hasPage = host != nil
+            strip.hostTextWidth = ceil((label.stringValue as NSString).size(withAttributes: [.font: label.font ?? .systemFont(ofSize: 13)]).width)
+            strip.layoutSubtreeIfNeeded()
+        }
         buttons[0].frame = SplitMetrics.back; buttons[1].frame = SplitMetrics.forward; buttons[2].frame = SplitMetrics.reload
         let toolbar = role == .toolbar, focused = isFocused || toolbar
-        buttons[4].frame = toolbar ? ToolbarMetrics.siteControls(width: w, extensionsShown: false) : CGRect(x: w - 105, y: 2, width: 32, height: 28)
+        buttons[4].frame = toolbar ? ToolbarMetrics.siteControls(width: w, stripWidth: extensionStrip?.geometry.stripWidth ?? 0) : CGRect(x: w - 105, y: 2, width: 32, height: 28)
         buttons[5].frame = CGRect(x: w - 69, y: 4, width: 32, height: 24)
         buttons[6].frame = CGRect(x: w - 37, y: 4, width: 32, height: 24)
         // Centered group (F0081 AX): copy 24 · 3 · host · 3 · an empty 24 pt slot, so the
         // host sits on the bar's center line. Narrow panes truncate the host; with no room
         // for a few characters, the host and copy button hide. guess: no narrow capture.
         let left = (focused ? buttons[2].frame.maxX : buttons[1].frame.maxX) + SplitMetrics.barControlGap
-        let right = (focused ? buttons[4].frame.minX : buttons[6].frame.minX) - SplitMetrics.barControlGap
+        let stripLeft = extensionStrip?.showsActions == true ? extensionStrip?.geometry.frames.map(\.minX).min() : nil
+        let right = min((focused ? buttons[4].frame.minX : buttons[6].frame.minX), stripLeft ?? .greatestFiniteMagnitude) - SplitMetrics.barControlGap
         let slot = SplitMetrics.hostSlot
         let text = ceil((label.stringValue as NSString).size(withAttributes: [.font: label.font ?? .systemFont(ofSize: 13)]).width) + 4
         let box = min(text, right - left - 2 * slot)

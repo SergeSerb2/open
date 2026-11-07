@@ -149,10 +149,12 @@ routing, and compares the built menu with
 from the RE report. It prints every missing, extra, and different item. The
 table keeps its reference titles. The comparison maps "New Little Arc Window"
 to "New Little Open Window" and "Open Little Arc or Peek in…" to
-"Move Little Open or Peek to Space…", then lists both under
+"Open Little Open or Peek in…", then lists both under
 `renamed (by design): 2`. The adapter must cover all 79 seed action ids.
 The only allowed gaps are the 11 out-of-scope Arc rows. Exit code is non-zero on
 any unexpected conflict or difference.
+
+`change-space-icon` opens the focused Space’s shared icon picker. It has no menu bar item or default shortcut. Search aliases: "Space Icon", "Change Icon", "Emoji"; symbol: `face.smiling`.
 
 ## Command table
 
@@ -205,7 +207,7 @@ Menu path `—` means the command has no menu item (keys or command bar only).
 | `find-next` | Find Next | Cmd+G | window | Edit > Find |
 | `find-previous` | Find Previous | Cmd+Shift+G | window | Edit > Find |
 | `find-and-replace` | Find and Replace… | Cmd+Opt+F | window | Edit > Find |
-| `use-selection-to-find` | Use Selection to Find | Cmd+E | web-content | Edit > Find |
+| `use-selection-to-find` | Use Selection to Find | — | web-content | Edit > Find |
 | `jump-to-selection` | Jump to Selection | Cmd+J | web-content | Edit > Find |
 | `emoji-and-symbols` | Emoji & Symbols | Cmd+Ctrl+Space | web-content | Edit |
 | `toggle-sidebar` | Show/Hide Sidebar | Cmd+S | window | View |
@@ -237,6 +239,7 @@ Menu path `—` means the command has no menu item (keys or command bar only).
 | `previous-space` | Previous Space | Cmd+Opt+Left | window | Spaces |
 | `manage-spaces` | Manage Spaces… | — | window | Spaces |
 | `rename-space` | Rename Space | — | window | Spaces |
+| `change-space-icon` | Change Space Icon… | — | window | — (code-only) |
 | `edit-theme` | Edit Theme… | — | window | Spaces |
 | `change-profile` | Change Profile | — | window | Spaces |
 | `pin-unpin-tab` | Pin/Unpin Tab | Cmd+D | window | Tabs |
@@ -256,12 +259,13 @@ Menu path `—` means the command has no menu item (keys or command bar only).
 | `reset-all-tabs-in-space` | Reset all tabs in this Space | — | window | Tabs |
 | `peek-email` | Peek Email… | Cmd+Shift+E | window | Tabs |
 | `join-meeting` | Join Meeting | Cmd+Ctrl+J | window | Tabs |
-| `open-in-current-space` | Move Little Open or Peek to Space… | Cmd+O | window | Tabs |
+| `open-in-current-space` | Open Little Open or Peek in… | Cmd+O | window | Tabs |
 | `go-back` | Go Back | Cmd+[, Cmd+Left | window | Archive |
 | `go-forward` | Go Forward | Cmd+], Cmd+Right | window | Archive |
 | `view-archive` | View Archive | — | window | Archive |
 | `view-history` | View History | Cmd+Y | window | Archive |
 | `clear-archive` | Clear Archive | — | window | Archive |
+| `open-extensions-picker` | Open Extensions | Cmd+E | window | Extensions |
 | `manage-extensions` | Manage Extensions… | — | window | Extensions |
 | `add-extension` | Add Extension… | — | window | Extensions |
 | `view-downloads` | View Downloads | Cmd+Shift+J | window | Window |
@@ -309,6 +313,7 @@ Menu path `—` means the command has no menu item (keys or command bar only).
 | `font-italic` | Italic | Cmd+I | web-content | Edit > Format > Font |
 | `font-underline` | Underline | Cmd+U | web-content | Edit > Format > Font |
 | `show-fonts` | Show Fonts | Cmd+T | web-content | Edit > Format > Font |
+| `extension-shortcuts` | Extension Shortcuts | — | window | — |
 | `add-to-favorites` | Add to Favorites | — | window | — |
 | `remove-from-favorites` | Remove from Favorites | — | window | — |
 | `replace-pinned-url` | Replace Pinned URL with Current Site | — | window | — |
@@ -393,3 +398,16 @@ fallback opens the browser find bar.
 `Tabs > Reveal Tab in Sidebar` has no default shortcut, matching the empty
 shortcut cell in docs/re/menus-and-hotkeys.md §Tabs. The separate View command
 keeps Ctrl+Space. The menu comparison JSON includes both titles.
+
+
+### Space theme editing (Step 5)
+
+`edit-theme` opens the theme panel for the focused Space. The Space context
+menu's “Edit Theme Color…” uses the same path, focusing its target first.
+No shortcut is added. Panel keys use the native responder chain; browser
+Cmd+T/L/W close and flush the editor before the existing browser command
+path runs. Undo/redo stay on the model's shared undo manager.
+
+The bottom Space switcher already uses the Space context menu. Edit Theme
+Color… is available there too. A repeated entry for the same Space focuses
+the open panel. An entry for another Space commits and retargets the same panel.

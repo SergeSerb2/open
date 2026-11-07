@@ -15,14 +15,14 @@ struct CLIError: Error, CustomStringConvertible { let description: String }
 enum CLI {
     static let foundationNames = ["scc-no-boosts","scc-hover-action","scc-pane-anchor","scc-clamped"]
     static let sccNames = ["scc-no-boosts","scc-boost","scc-adblock-on","scc-adblock-excluded","scc-adblock-unavailable","scc-insecure","scc-boosts-off","scc-incognito","scc-internal-page","scc-many","scc-pane-anchor","scc-clamped","scc-light","scc-hover-label","scc-hover-boost","scc-hover-action","scc-keyboard-focus","scc-reload","scc-menu","scc-picker","scc-tooltip","scc-tooltip-on","scc-tooltip-off","scc-tooltip-unavailable","scc-tooltip-private","scc-focus-boost"]
-    // Zap mode and code mode are deferred to P7/Steps 6–7; stored Zap counts render here.
-    static let editorNames = ["editor-first-run","editor-no-color","editor-color","editor-dragging","editor-advanced","editor-font-selected","editor-zap-count","editor-name-menu","editor-scope-menu","editor-delete-alert","editor-not-active","editor-global-off","editor-legacy","editor-neutral-page"]
+    // Zap scenes use the package host; real App entry remains gated by P7.
+    static let editorNames = ["editor-first-run","editor-no-color","editor-color","editor-dragging","editor-advanced","editor-font-selected","editor-zap-on","editor-zap-count","editor-name-menu","editor-scope-menu","editor-delete-alert","editor-not-active","editor-global-off","editor-legacy","editor-neutral-page","editor-code-css","editor-code-js-dirty"]
     static let names = sccNames + editorNames
     static func value(_ args: [String], _ name: String) -> String? {
         guard let i = args.firstIndex(of: name), i + 1 < args.count else { return nil }; return args[i + 1]
     }
     static func run(_ args: [String]) throws {
-        guard let command = args.first else { throw CLIError(description: "usage: sitecontrol-render render|ax|flows|check|bench|screens|motion|compare [--state scc-no-boosts] [--out FILE.png] [--scale 1|2] [--appearance light|dark]") }
+        guard let command = args.first else { throw CLIError(description: "usage: sitecontrol-render render|ax|flows|code-flows|code-review-flows|code-bench|extensions-check|check|bench|screens|motion|compare [--state scc-no-boosts] [--out FILE.png] [--scale 1|2] [--appearance light|dark]") }
         if command == "compare",!(value(args,"--state") ?? "").hasPrefix("editor-") { try MaterialFallback.configure(args) }
         let state = value(args, "--state") ?? "scc-no-boosts"
         guard names.contains(state) else { throw CLIError(description: "unknown state \(state)") }
@@ -33,7 +33,7 @@ enum CLI {
         switch command {
         case "editor-native-key":
             guard let out = value(args,"--out"),let attempt = Int(value(args,"--focus-attempt") ?? "1"),(1...3).contains(attempt) else { throw CLIError(description:"native key flow requires --out and attempt 1...3") }
-            EditorNativeKey.enterAppLoop(out:out,rendererPID: value(args,"--renderer-pid").flatMap(Int32.init),attempt: attempt)
+            EditorNativeKey.enterAppLoop(out:out,rendererPID: value(args,"--renderer-pid").flatMap(Int32.init),attempt: attempt,review: args.contains("--review"))
         case "render":
             guard let out = value(args, "--out") else { throw CLIError(description: "render requires --out") }
             let image = render(state,scale: scale,appearance: appearance)
@@ -42,6 +42,12 @@ enum CLI {
         case "ax":
             if state.hasPrefix("editor-") { let stage = EditorStage(state: state,scale: scale,appearance: .light); print(Flows.accessibilityDump(stage.view),terminator: "") }
             else { let stage = Stage(state: state,scale: scale,appearance: appearance); _ = stage.render(scale: scale); print(Flows.accessibilityDump(stage.controller.view.panel),terminator: "") }
+        case "zap-flows": report(EditorFlows.zapFlows())
+        case "extensions-check": report(SectionFlows.extensions())
+        case "code-bench": report(CodeFlows.bench())
+        case "code-flows": report(CodeFlows.run())
+        case "code-close-flow": report(CodeFlows.closeFlow())
+        case "code-review-flows": report(EditorNativeKey.run(review:true))
         case "flows": report(value(args,"--group") == "editor" ? EditorFlows.run() : Flows.run()+EditorFlows.run())
         case "cold-measure":
             guard args == ["cold-measure","--thread-instructions"] else { throw CLIError(description: "usage: sitecontrol-render cold-measure --thread-instructions") }
@@ -72,6 +78,7 @@ enum CLI {
             var checks = autoreleasepool { Bench.run(only: .cold) }
             checks += autoreleasepool { Flows.run() }
             checks += autoreleasepool { EditorFlows.run() }
+            checks += autoreleasepool { CodeFlows.run() }
             for name in sccNames { for appearance in [ContentAppearance.light,.dark] { for scale: CGFloat in [1,2] {
                 autoreleasepool {
                     let stage = Stage(state: name,scale: scale,appearance: appearance)
@@ -81,7 +88,7 @@ enum CLI {
             checks += autoreleasepool { EditorFlows.renders() }
             checks += try receipts()
             checks += autoreleasepool { Bench.run(only: .skeleton) }
-            checks += EditorBench.run(acceptInstructionCost: true); report(checks)
+            checks += EditorBench.run(acceptInstructionCost: true);checks += CodeFlows.bench();report(checks)
         case "screens":
             guard let out = value(args,"--out") else { throw CLIError(description: "screens requires --out") }
             let states = value(args,"--group") == "editor" ? editorNames : names
@@ -130,7 +137,7 @@ enum CLI {
         var root = URL(fileURLWithPath: #filePath).deletingLastPathComponent()
         while !FileManager.default.fileExists(atPath: root.appendingPathComponent("AGENTS.md").path) && root.path != "/" { root.deleteLastPathComponent() }
         let scc = Set(sccNames.flatMap { name in ["light","dark"].flatMap { mode in [1,2].map { "\(name)-\(mode)@\($0)x.png" } } })
-        let editor = Set(editorNames.flatMap { name in [1,2].map { "\(name)-light@\($0)x.png" } })
+        let editor = Set(editorNames.filter { !$0.hasPrefix("editor-code-") }.flatMap { name in [1,2].map { "\(name)-light@\($0)x.png" } })
         return try receiptChecks(root.appendingPathComponent("docs/sitecontrol/step-2"),required: scc)+receiptChecks(root.appendingPathComponent("docs/sitecontrol/step-4"),required: editor)+receiptChecks(root.appendingPathComponent("docs/sitecontrol/step-4/detail"),required: Set(["editor-first-run","editor-no-color","editor-color","editor-dragging","editor-advanced","editor-font-selected"].map { $0+"@1x.png" }))
     }
     static func receiptChecks(_ directory: URL,required: Set<String>) throws -> [Flows.Check] {

@@ -10,18 +10,24 @@ struct CLIError: Error, CustomStringConvertible { var description: String }
 @MainActor
 enum RenderCLI {
     static let usage = """
+    space-editor-render create --out FILE.png [--width 180|200|228|300|500] [--appearance dark|light]
     space-editor-render math [--arc-json FILE]
     space-editor-render editor --out FILE.png [--scale 1|2] [--appearance dark|light]
                                [--style JSON] [--page N] [--hover CONTROL] [--backdrop RRGGBB] [--empty]
                                [--pressed CONTROL] [--focus CONTROL]
+    space-editor-render picker --out FILE.png --page emoji|icons [--target space|tab|folder]
+                               [--scale 1|2] [--appearance dark|light]
     space-editor-render window --out FILE.png --snapshot DIR|--synthetic [--space N] [--style JSON]
                                [--size 2216x1394] [--width 228] [--scale 1|2] [--appearance dark|light]
-                               [--calibrated-import-intensity]
+                               [--calibrated-import-intensity] [--fixed-p3-blend]
+                               [--color-space-of CAPTURE.png | --onscreen]
     space-editor-render compare --arc CAPTURE.png --ours RENDER.png --spec editor|window|theme-window|session2-editor --out DIR
                                 [--noise 0|0.45] [--state empty|light|dark]
     space-editor-render compare --spec session2-pad --capture-root SESSION17 --out .re/DIR
+                                [--renderer offscreen|onscreen] [--blend display|fixed-p3]
     space-editor-render fit-light-glyphs --capture-root SESSIONS --out .re/DIR [--inspect]
     space-editor-render check
+    space-editor-render bench-blend [--ticks 240]
     """
     static func value(_ args: [String], _ key: String) -> String? {
         guard let index = args.firstIndex(of: key), index + 1 < args.count else { return nil }
@@ -60,6 +66,7 @@ enum RenderCLI {
         options.size = size
         let context = try context(model, args: args)
         let scene = RenderScene(context: context, options: options, delegate: RecordingDelegate())
+        scene.background.composesInDisplaySpace = !args.contains("--fixed-p3-blend")
         if (args.contains("--calibrated-import-intensity") || args.contains("--provisional-import-intensity")), let focused = context.focusedSpace {
             var style = SpaceThemeStyle(theme: focused.theme, system: context.systemAppearance)
             style.usesLegacyIntensity = false
@@ -84,10 +91,17 @@ enum RenderCLI {
             throw CLIError(description: "invalid size or scale")
         }
         let scene = try scene(model: model, args: args, size: CGSize(width: dimensions[0], height: dimensions[1]))
-        scene.background.renderScale = scale
-        let image = OffscreenRenderer().render(scene, scale: scale)
+        let image: CGImage
+        if args.contains("--onscreen") {
+            image = try OffscreenRenderer.onscreen(scene)
+        } else {
+            scene.background.renderScale = scale
+            // A capture's embedded display profile: composite as that display does.
+            let space = try value(args, "--color-space-of").map { try Bitmap.colorSpace(of: $0) } ?? OffscreenRenderer.sRGB
+            image = OffscreenRenderer().render(scene, scale: scale, colorSpace: space)
+        }
         OffscreenRenderer.writePNG(image, to: URL(fileURLWithPath: output))
-        print("window rendered \(image.width)x\(image.height)")
+        print("window rendered \(image.width)x\(image.height) in \(image.colorSpace?.name.map { $0 as String } ?? "display profile")")
     }
 
     static func run(_ args: [String]) throws {
@@ -97,10 +111,18 @@ enum RenderCLI {
         case "fit-light-glyphs": try LightGlyphFit.run(rest)
         case "math": try Checks.math(rest)
         case "check": try Checks.run()
+        case "bench": try LiveThemeChecks.bench(); if Checks.failed > 0 { throw CLIError(description: "bench failed") }
         case "lifetime-check": try EditorChecks.releasedControllerUndo()
+        case "bench-blend": try BlendBench.run(rest)
         case "compat-range-check": EditorChecks.compatibilityRange()
         case "window": try window(rest)
         case "editor": try EditorScene.render(rest)
+        case "create": try CreationChecks.render(rest)
+        case "creation-check": try CreationChecks.run(); if Checks.failed > 0 { throw CLIError(description: "creation checks failed") }
+        case "picker": try PickerScene.render(rest)
+        case "picker-check":
+            try PickerScene.check()
+            if Checks.failed > 0 { throw CLIError(description: "picker checks failed") }
         case "compare":
             if value(rest, "--spec") == "session2-pad" { try SessionTwoPadCompare.run(rest) }
             else if value(rest, "--spec") == "session2-editor" { try SessionTwoCompare.run(rest) }

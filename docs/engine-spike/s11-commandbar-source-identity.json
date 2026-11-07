@@ -1,0 +1,37 @@
+{
+  "product": "commandbar-render",
+  "baseline": "8db4ac8600ec4cec294b15da50041c7f11ec31d8",
+  "currentMain": "ebcf08d28df60ab9f0ebb259dbc8ee98cc938639",
+  "branch": "deeec4c34f7f6ad2a8355c9ba0599cbe64358996",
+  "sourceIdentity": true,
+  "inputs": [
+    {
+      "path": "Packages/OpenKit/Package.swift",
+      "treeOrBlob": "72c1958c570c66f46fe23865a81ba19eb71be1fe"
+    },
+    {
+      "path": "Packages/OpenKit/Sources/OpenModel",
+      "treeOrBlob": "e3d23071fa2c269a0360a64d0243256dd8b1fb85"
+    },
+    {
+      "path": "Packages/OpenKit/Sources/OpenStore",
+      "treeOrBlob": "009116f992d77ddd267536016653f899e81aa8c7"
+    },
+    {
+      "path": "Packages/OpenKit/Sources/OpenDesign",
+      "treeOrBlob": "7ee5868cc6f2766128eb71c8b4ad92c877deaf82"
+    },
+    {
+      "path": "Packages/OpenKit/Sources/OpenSuggest",
+      "treeOrBlob": "7c8b863d94059f3ae4ed92fe189a1575628c09d8"
+    },
+    {
+      "path": "Packages/OpenKit/Sources/OpenCommandBar",
+      "treeOrBlob": "d676dcf43349440d1cb0e57a7bd52449e7b6fb07"
+    },
+    {
+      "path": "Packages/OpenKit/Sources/commandbar-render",
+      "treeOrBlob": "2039d8e41c6f08c386ea6445b4824c16344c47e8"
+    }
+  ]
+}

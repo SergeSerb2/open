@@ -47,6 +47,8 @@ public final class LittleOpenCoordinator {
     @ObservationIgnored public var isActionEnabled: ((String, SpaceID?) -> Bool)?
     @ObservationIgnored public var presentWindows = true
     @ObservationIgnored public var onChange: (() -> Void)?
+    /// Return true while the App's page-close preflight owns the request.
+    @ObservationIgnored public var requestPageClose: ((WindowID, @escaping (Bool) -> Void) -> Bool)?
     @ObservationIgnored public var onOpenInMain: ((WindowID, ItemID, (any WebContentHost)?) -> Void)?
     @ObservationIgnored public var confirmProfileSwitch: ((ProfileID, @escaping (Bool) -> Void) -> Void)?
     @ObservationIgnored public var defaults = UserDefaults.standard
@@ -76,11 +78,11 @@ public final class LittleOpenCoordinator {
         model.windows.compactMap { model.space(id: $0.focusedSpaceID)?.profileID }.first ?? model.profiles.first?.id
     }
     public func open(url: URL, profileHint: ProfileID?) {
+        guard let profile = profileHint.flatMap({ model.profile(id: $0)?.id }) ?? defaultProfile else { return }
         let canonical = HostNormalizer.canonicalURLString(url)
-        if let session = sessions.first(where: { HostNormalizer.canonicalURLString(controllers[$0.id]?.currentURL ?? $0.tab.url) == canonical }) {
+        if let session = sessions.first(where: { $0.profileID == profile && HostNormalizer.canonicalURLString(controllers[$0.id]?.currentURL ?? $0.tab.url) == canonical }) {
             resurface(session.id); return
         }
-        guard let profile = profileHint.flatMap({ model.profile(id: $0)?.id }) ?? defaultProfile else { return }
         create(url: url, profile: profile, focus: false)
     }
     /// Every press creates a window; only duplicate delivery of the same key-down coalesces.
@@ -92,7 +94,10 @@ public final class LittleOpenCoordinator {
         guard let profile = defaultProfile else { return }
         create(url: URL(string: "about:blank")!, profile: profile, focus: focusURLField)
     }
-    private func create(url: URL, profile: ProfileID, focus: Bool) {
+    /// Explicit Profile pages (Settings and extension management) always create
+    /// a window; external-link URL reuse remains owned by open(url:profileHint:).
+    public func create(url: URL, profile: ProfileID, focus: Bool) {
+        guard model.profile(id:profile) != nil else { return }
         let tab = Tab(url: url); tab.live.sleepPhase = .live
         let session = LittleOpenSession(tab: tab, profileID: profile)
         let controller = LittleOpenWindowController(session: session, coordinator: self, factory: LittleHostFactory(makeWebContent), defaults: defaults)
@@ -136,8 +141,11 @@ public final class LittleOpenCoordinator {
     public func close(sessionID: WindowID, archiveReason: ArchiveReason?) {
         close(sessionID: sessionID, archiveReason: archiveReason, now: Date())
     }
-    private func close(sessionID: WindowID, archiveReason: ArchiveReason?, now: Date) {
+    private func close(sessionID: WindowID, archiveReason: ArchiveReason?, now: Date, preflight: Bool = true) {
         guard let session = sessions.first(where: { $0.id == sessionID }) else { return }
+        if preflight, archiveReason == nil, requestPageClose?(sessionID, { [weak self] allowed in
+            if allowed { self?.close(sessionID: sessionID, archiveReason: archiveReason, now: now, preflight: false) }
+        }) == true { return }
         if let reason = archiveReason { archiveSink?.archive([ArchiveEntry(tab: session.tab, reason: reason, originalLocation: "littleOpen:\(session.id)", spaceID: nil, profileID: session.profileID, archivedAt: now)]) }
         session.windowIsVisible = false
         sessions.removeAll { $0.id == sessionID }

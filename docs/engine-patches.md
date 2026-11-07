@@ -18,6 +18,93 @@ For this plan:
 
 ## Summary
 
+### E11/E12 and tab event follow-ups (2026-11-05)
+
+The E11 window hook is `chromium/0306-open-extension-windows-tabs.patch`.
+It owns `tabs_api.cc`; that file's P1 move/discard guards moved out of 0303
+to keep patch manifests disjoint. 0303 still owns the lifecycle-unit discard
+guard. New behavior lives in the overlay, not in generated C API files.
+
+`OpenTabStrip::CreateExtensionWindow` makes a hidden `TYPE_POPUP` Browser,
+with its own strip and hosted page. `OEBrowser` adopts it, then calls the
+engine delegate outside the model observer stack. The App hosts that page in
+`ExtensionWindowController`, a standard titled, closable, miniaturizable,
+resizable window with no toolbar or sidebar. Explicit frames take priority;
+otherwise AppKit restores `ExtensionPopupWindow`, or the App centers a 400×600
+frame on its parent. Window bounds/focus come from the actual native window.
+Normal windows requested by an extension become selected Today tabs in the
+active Open window of the profile, retaining that window's id (guess (lead)).
+Popup requests with multiple URLs are refused: this native surface hosts one
+page (guess (child)). Sized page `window.open` panels and Peek action Q4 remain
+separate follow-ups.
+
+`CefOpenOmnibox` uses Chromium's `ExtensionOmniboxEventRouter` and
+`OmniboxSuggestionsWatcher`, with enabled-keyword and profile guards. It sends
+start/change/enter/cancel/delete events, reads Chromium's parsed default
+suggestion, and reports default changes. Negative process-wide request ids
+stay separate from Chromium's positive autocomplete ids. Only the first
+reply to the latest text is delivered. The App bridges cancellation and
+supersession to nil async replies and provides enabled actions, keyword
+scopes, icons, and Cocoa shortcut keycaps to the command bar. Default refresh
+reuses the current reply and sends no extra input event.
+
+The minimal sidebar-to-Chromium event mapping is:
+
+| Open change | Equivalent strip change and extension event |
+|---|---|
+| Reorder within a Space | Move the live tab to its new flattened index; native `tabs.onMoved`. |
+| Move to another Space in the same profile | Move to the new flattened index, retaining tab/window ids; native `onMoved`. A Space change that leaves the strip index unchanged has no Chrome equivalent event. |
+| Pin/unpin | Change Chrome's pinned state and its required strip position; native `onUpdated({pinned})` and any corresponding `onMoved`. Favorites remain pinned. |
+| Focus another Split View pane | Activate and single-highlight the focused pane; native `onActivated` and `onHighlighted`. Other visible panes remain background strip tabs. |
+| Extension `tabs.update({pinned})` | Request the model's pin/unpin operation, then mirror the result. Favorites stay Favorites. |
+
+No synthetic duplicate events are sent. Array `tabs.move` requests capture
+neighbour WebContents in the observer, before later moves or shell syncs can
+change the model; the deferred bridge resolves those neighbours by identity.
+
+The real-App acceptance suite is `--only extensions-e2`; P3, actions,
+extensions, tabstrip and the shell regressions remain separate gates.
+
+Engine receipt (M5, 2026-11-05): baseline `engine-status` 8 PASS, 20 patches,
+47 overlays, 24 symbols; distribution
+`7b49090502568f8189aa0e94f7cf23344beec5bed537136eff5f7fce573ad35a`.
+After this change: 8 PASS, 21 patches, 50 overlays, 25 symbols; distribution
+`3f45b07b885e03b6aecc461c6b6bff7612814a2ad23b6cf37b2b142d828f0738`.
+The engine build uses the `open-engine-s8` root, `nice`, the engine lock,
+and 10 jobs. The main distribution root is not changed.
+
+Release `extensions-e2`: 26/26 rows PASS, including repeated pin/move/unpin and the 15-stage native drag and persisted-profile repair sequence. Deliberately removing the popup's
+resizable style, action keycaps, default-suggestion mapping, and exact moved-tab
+hint produced FAILs in their matching rows. Restoring the implementation and
+rebuilding returned all rows to PASS. Both failing runs and the restored run
+passed owned-process cleanup. Raw receipts remain in `.re/extensions-e2/`.
+
+Pin setter follow-up: `OpenExtensionsToolbar::SetPinned` now checks the current
+pin state before calling `ToolbarActionsModel::SetActionVisibility`. Chromium's
+setter requires a transition (`DCHECK_NE` in `toolbar_actions_model.cc`) and
+appends to the stored list on every true call in Release. Repeating true was
+the source of duplicate action ids; neither the live nor profile id merge
+created the duplicate. The real-App three-action sequence reproduces this on
+the old engine, including two entries with pinnedIndex 0. Its new
+`actions_pin_move_unique` row checks every pin/repeated pin/move/repeated move/
+unpin/repeated unpin: unique ids, exact pinned order, compact unique indices,
+and zero `extensions.duplicatesDropped` whenever the App guard is available.
+
+The native drag crash follow-up also checks inputs against
+`ToolbarActionsModel::pinned_action_ids()` before calling `MovePinnedAction`:
+unknown or unpinned ids, negative/out-of-range indices, and incognito or
+force-pinned changes are no-ops with a diagnostic. The ObjC bridge refuses
+`NSUInteger` values above `int` max before conversion. Window creation repairs
+the persisted duplicates produced by older Open builds, preserving the first
+occurrence and unloaded extension ids. This repairs the model itself, including
+the stored-neighbour lookup used by Chromium's move operation.
+`actions_native_drag_safety` replays uBO Lite + Dark Reader + Action Probe,
+Probe 2→0→2, repeated pinning, invalid shell requests, and a duplicate-profile
+relaunch. The pre-guard engine failed the same row: index equal to count moved
+the action, and 2³²+1 wrapped to index 1. The old pin setter separately produced
+duplicate ids; the lead's stock-engine crash receipt records the resulting
+unsafe `MovePinnedAction` call. No Chromium debugger was used.
+
 | # | Patch | Value | Effort (guess) | Needs |
 |---|---|---|---|---|
 | P1 | Tab-strip bridge: Open windows and tabs become Chrome windows and tabs, hosted in our NSViews | `chrome.tabs`/`chrome.windows` see sidebar tabs; extension-created tabs land in the sidebar; needed by P2 and P3 | 4–6 weeks | — |
@@ -29,7 +116,7 @@ For this plan:
 | P7 | Isolated-world scripts for Open's page runtimes | Zap picker and Boost applier out of the page's reach | 3–5 days | — |
 | P8 | Native ad-block engine | Already planned in [plans/adblock-fork.md](plans/adblock-fork.md); listed here only for order | see that plan | — |
 
-The series as built (P1 and P2). Two series with their own numbers:
+The extension series as built (P1–P3; excerpt). Two series with their own numbers:
 `Engine/fork/patches/chromium/series` for files outside `src/cef/`, and
 `Engine/fork/patches/cef/series` for files under it. New classes are overlay
 files (`Engine/fork/src/`), not patches; that includes the whole
@@ -40,8 +127,10 @@ wrappers `engine-apply` regenerates.
 # chromium/series
 0301-open-headless-browser-window.patch        # P1: Browser features without a BrowserView
 0302-open-hidden-browser-ui.patch              # P1: Chrome UI that assumes "no BrowserView => unit test"
-0303-open-hosted-tab-lifecycle.patch           # P1: hosted tabs are never discarded or moved
+0303-open-hosted-tab-lifecycle.patch           # P1: lifecycle-unit discard guard
 0304-open-hidden-browser-no-tab-groups.patch    # P1: hidden Browsers have no tab group model
+0305-open-extension-prompts.patch              # P3: install and uninstall consent, native fallback
+0306-open-extension-windows-tabs.patch         # E11: AppKit windows; P1: tabs API move/discard guards
 0401-open-media-session.patch                   # Media: tab volume; per-player PiP availability
 0402-open-video-pip-window.patch                # Media EM-4: Open's own video PiP window
 0403-open-document-pip-window.patch             # Media EM-7: Document PiP in Open's panel
@@ -49,13 +138,13 @@ wrappers `engine-apply` regenerates.
 0302-open-hosted-tabs.patch                    # P1: hosted Chrome style tabs
 0303-open-context-menu-submenu-commands.patch  # P1: submenu commands with their own delegate
 0304-open-extension-popups.patch               # P2: popup browser hosts (ChromeBrowserDelegate friend)
+0305-open-webstore-downloads.patch             # P3: active manager-owned internal Web Store downloads
 ```
 
-A new patch takes the next free number of its series, counting open PRs:
-#64 adds `chromium/0304-open-hidden-browser-no-tab-groups.patch`. Still
-planned: P3 (extension management API in the overlay; the install and
-uninstall prompts patch `chrome/browser/ui/views/extensions/`, so a
-Chromium series entry). P6 (audible state) landed without a patch of its
+A new patch takes the next free number of its series, counting open PRs.
+P3's management API is in the overlay; its two install/uninstall platform
+hooks are `chromium/0305-open-extension-prompts.patch`.
+P6 (audible state) landed without a patch of its
 own, inside the media controller overlay (Section 3, "Media"). Section 3
 uses `04xx`, Section 8 `05xx`.
 
@@ -109,9 +198,20 @@ Deviations from the plan:
 - Badge text and color, title, and enabled (part of P2) came along: `browserDidUpdateExtensionActions` fires on `chrome.action` changes.
 - Found on the way: `OEEngineConfiguration.userAgentProduct = "Open/0.1"` replaced Chrome's `Chrome/156` UA token, and Bitwarden (like many sites) took its Safari code path and never loaded. The shell no longer sets it.
 
+Window activation lifecycle (2026-11-06, X-19 / #192): `OpenBrowserWindow`
+stops its NSWindow key observers when real closing starts and when the Browser
+reports its close. A close request that the embedder can refuse keeps its
+observers. Activation requires a Browser that is still registered in
+`GlobalBrowserCollection`; this also covers `SetBrowser` and `SetHostView`.
+Chromium's collection checks stay intact. The automation-only diagnostic
+counts and refuses an unsafe activation before that check, so the real-App
+`window` row `engine_close_host_activation` can prove the old behavior fails
+without ending the App. The row includes immediate focus after a Profile
+switch, then closes twice and changes native key state before deferred deletion.
+
 Review round 1 (PR #53; engine review by Opus, shell review by Muse; lead decisions 2026-10-26):
 
-- **Discards.** Chrome never discards a hosted tab: Open sleeps tabs itself. `chrome.tabs.discard(tabId)` becomes a request (`OnTabDiscardRequested` → `-browser:requestsDiscardOfWebContent:`). The shell unloads a tab that is not on screen and refuses the visible one (Chrome's "Cannot discard tab" error). On success the extension gets the tab object with `discarded: false`; the tab then leaves `chrome.tabs` when its page closes. `chrome.tabs.discard()` without an id finds nothing to discard. A replaced `WebContents` (only discards replace one) is logged, never reported as a page close.
+- **Discards.** Chrome never discards a hosted tab: Open sleeps tabs itself. `chrome.tabs.discard(tabId)` becomes a request (`OnTabDiscardRequested` → `-browser:requestsDiscardOfWebContent:`). The shell refuses the visible tab (Chrome's "Cannot discard tab" error). The current App uses `SleepController.debugSleepNow`: it discards a background renderer and keeps the sleeping page and its tab id until a later destroy deadline. `OEWebContent.isDiscarded` reports that renderer state. Desktop `chrome.tabs` still reports `discarded: false` because Chrome's own lifecycle unit did not perform the discard; this metadata mapping remains a P1 follow-up. The tab leaves `chrome.tabs` only when the page closes. `chrome.tabs.discard()` without an id finds nothing to discard. A replaced `WebContents` (only discards replace one) is logged, never reported as a page close.
 - **Windows own their tabs.** `tabs.move` to or from another window, `tabs.group` into another window, and `windows.create({tabId})` fail with "Tabs cannot be moved between windows in this browser." A hosted tab that still leaves its window by another path is put back. `-[OEBrowser insertWebContent:atIndex:]` refuses a page of another profile or another hidden window.
 - **`chrome.windows.remove`** on an Open window with tabs becomes `OnCloseRequested` → `-browserRequestsClose:`; v1 refuses and logs it, and the extension's call still resolves. "Last tab gone" and the shell's own `-close` close for real; `-close` marks the window's pages closing first, so they are not reported as page closes.
 - **Non-default profiles.** Round 1 refused a tab strip for a context whose disk profile CEF could not create (it fell back to an off-the-record profile of the default profile, whose incognito-allowed extensions could see its tabs). The profile layout fix (`<root>/Engine/<dir>`, a direct child of `root_cache_path`) gives every profile a real disk profile. `OEEngine` now refuses (nil) a context folder that is not a direct child of the root, and the guard stays as a backstop (`LOG(ERROR)`) for a CEF failure of any other kind (engine review r1, 88-3). e2e `--only profiles`: `extension_isolation` (the default profile's probe allowed in incognito sees no Work tab, in both directions) and `disk_profiles_on_disk` (each profile has its own `Preferences`, a `Local State` entry, and a Chrome window).
@@ -134,7 +234,7 @@ Cost (`--only measure --style chrome`, `results-measure-release-p1.json`, load a
 
 Not done in this step:
 
-- `chrome.windows.create({url})` still makes a Chrome Views window (`OEDefaultClient` reloads its URL into an Open tab, losing identity).
+- Extension `chrome.windows.create({url})` was a gap in P1; E11 above now routes normal requests to Today tabs and popup requests to native windows, retaining identity.
 - Moving a hosted tab to another window or profile is refused (review round 1, above).
 
 ## P2. Extension actions and popups for our UI
@@ -217,6 +317,55 @@ Results: `docs/engine-spike/results-actions-p2.json`, `results-extensions-chrome
 
 - Management API on `CefRequestContext` (or a new `CefExtensionManager`): list (`ExtensionRegistry`), enable/disable, reload, uninstall (`ExtensionRegistrar`/`ExtensionService`), install unpacked (`UnpackedInstaller`), install from the Web Store by id (`WebstoreInstallWithPrompt`), and events (`ExtensionRegistryObserver`: installed, uninstalled, loaded, unloaded; load errors). This replaces the Preferences-file reader in `OEExtensions.mm`.
 - Consent: `ExtensionInstallPrompt::GetDefaultShowDialogCallback()` (`chrome/browser/extensions/extension_install_prompt.h:61`) has one implementation per platform: Views `chrome/browser/ui/views/extensions/extension_install_dialog_view.cc:734`, Android `chrome/browser/ui/android/extensions/extension_install_dialog_view_android.cc:202`. A CEF implementation forwards the prompt (extension name, icon, permission messages, retained files and devices) to `CefExtensionHandler::OnInstallPrompt(prompt, callback)`. Uninstall and permission-increase prompts go the same way. This matches Arc's `webContents:askForExtensionInstallationConsent:completion:` (docs/re/arccore-engine.md §4.1).
+
+
+### Status: implemented (Section 6, `s6/engine-p3`)
+
+P3 implements E8/E9/E10 of extensions-ui §7 ([#177](https://github.com/SergeSerb2/open/pull/177)).
+The App's designed sheets and in-window shortcut routing are now wired in
+[#189](https://github.com/SergeSerb2/open/pull/189); `extensions-ui` proves those paths.
+
+| Part | Implementation |
+|---|---|
+| CEF API | Overlay `cef/include/cef_extension_manager.h`: per-context manager, handler, prompt and install completion. Experimental API; C API and wrappers generated by the CEF translator via `engine-apply`, never hand-edited. |
+| Registry/commands | Overlay `open/browser/extensions/open_extension_manager.mm`: observes each profile's registry, command service, load errors and readiness. Lists live non-component extensions, manages enable/disable/reload/uninstall/Web Store installs, creates `ExtensionCommandsGlobalRegistry` per profile, and dispatches named commands with the active tab and Chromium's activeTab grant. |
+| Consent hooks | Chromium `0305-open-extension-prompts.patch`: thin hooks in `extension_install_dialog_view.cc` and `extension_uninstall_dialog_impl.cc`. Header-only hook table, as with 0504: Chromium targets do not depend on libcef. No shell handler means the original platform dialog path. |
+| Web Store downloads | CEF `0305-open-webstore-downloads.patch`: its orphan-download guard permits only `EXTENSION_INSTALLER` downloads from an exact dummy WebContents owned by an active manager request. Chrome still chooses the target and verifies the manifest and CRX signature. Normal orphan downloads keep CEF's rejection path. |
+| OpenEngine | Live registry replaces `OEExtensions.mm`'s Preferences/manifest reader and watcher. Public prompt metadata, once-only accept/cancel and release-to-cancel, command snapshots/execution, action shortcut fields and registry delegate events. |
+| Automation | `AutomationExtensions.swift`: `ext-prompt`, `ext-manage`, `ext-commands`, `ext-run-command`. The shared App presenter owns pending prompts and designed Open sheets (#189); automation observes/answers them. `--only extensions-p3` uses a locally signed CRX3 through `CrxInstaller`, not `--load-extension`, for install consent. |
+| P2 review | Process-wide non-recycling menu ids reject stale toolbar generations (R2-5). `popup_` outlives `model_` (R2-11). Skip same-document refreshes and delete `_actionsNeedRefresh`'s duplicate rebuild (R2-10). Prune removed extensions' images; document main-thread menu release (R2-13). |
+
+Deviations and limits:
+
+- One new manager API, rather than methods on `CefRequestContext`; new code
+  stays in `//open`. Hooks cover the two platform dialog entry points and
+  CEF's orphan-download guard. The latter otherwise cancels the by-id
+  installer's dummy-page download with `USER_CANCELED`.
+- Chromium 156 removed retained files/devices from `InstallPromptData`.
+  Their public arrays are empty; permission messages and their details are
+  forwarded from the current API.
+- `byUser` is true for a fresh non-policy, non-command-line install and false
+  for updates/startup command-line loads (guess (child): the registry observer
+  has no user-gesture argument). E11/E12 use registry events and the live
+  `omniboxKeyword`; those APIs/windows landed separately in #184, as described
+  in the summary above.
+- Bridge snapshots are limited to 1,024 extensions/commands/permission lines
+  and 64 KiB per string. Manifest icons use at most 4 MiB encoded and
+  2,048×2,048 decoded 8-bit pixels in known color models (16 MiB). There is no new polling timer.
+- Global registration uses Chromium's profile registry. OS-level global key
+  delivery is not proved by an in-process command execution check.
+- Management installs keep at most 32 pending requestors per profile; duplicate
+  ids and excess requests fail their completion. No browsing page becomes an
+  install referrer. Chromium does not install into off-the-record profiles;
+  those requests fail explicitly before reaching `CrxInstaller`'s CHECK.
+
+Verification: the local-CRX `extensions-p3` suite passes all 14 feature rows,
+including the unchanged native-dialog fallback; its deliberate install-cancel
+fault fails X-1 and the restored run passes. Engine status is 8/8 with 20
+patches and distribution SHA-256
+`7b49090502568f8189aa0e94f7cf23344beec5bed537136eff5f7fce573ad35a`.
+See the [P3 receipt](engine-spike/extensions-p3-receipt.md) and the PR's final
+regression/full-verification tables.
 
 ## P4. Proprietary codecs and Widevine
 
@@ -385,6 +534,15 @@ The engine requests of [plans/page-platform.md](plans/page-platform.md) §6. One
 | chromium | `0501-page-history-swipe-hooks.patch` | `chrome/browser/ui/cocoa/history_overlay_controller.mm` | EP-1: the history overlay reports began / changed / completed / cancelled with direction and progress to the page's `CefOpenPageHandler`, and stays hidden when the page asked for no engine overlay. Both swipe paths (trackpad, Magic Mouse) go through this controller. |
 | chromium | `0504-page-notification-click.patch` | `chrome/browser/notifications/notification_display_service_impl.cc` | EP-6: a web notification click reaches the request context's `CefOpenNotificationHandler` before Chromium dispatches it to the page (one hook in `ProcessNotificationOperation`, the entry point of the macOS response). |
 | cef | `0505-page-website-color-scheme.patch` | `libcef/browser/chrome/chrome_content_browser_client_cef.{h,cc}` | EP-9b: a request context's website color scheme (`CefSetWebsiteColorScheme`) wins over Chrome's in `OverrideWebPreferences` and again in a new `OverrideWebPreferencesAfterNavigation` override (Chrome recomputes the scheme after every navigation). DevTools and chrome:// pages keep Chrome's. |
+| chromium | `0506-page-automation-notification-guard.patch` | `chrome/browser/notifications/mac/notification_platform_bridge_mac.cc` | With `--open-automation-skip-macos-notifications`, `NotificationPlatformBridge::Create()` returns null before constructing the banner or Alerts dispatchers. Chromium's existing delegator uses its message-center fallback. No provider, Mojo pipe or Alerts helper is created by this path. Without the switch, the original native path is unchanged. |
+
+0506 is the next page-platform number after Chromium 0501/0504 and CEF
+0505. Its switch constant is local to Chromium; it uses
+`base::CommandLine::ForCurrentProcess()` and adds no dependency on libcef.
+The App adds the switch only in automation builds when the e2e environment
+opts out. Notification fixtures explicitly opt in to the original native
+path. See [the guard receipt](engine-spike/automation-notification-guard-blocked.md)
+for the fresh Release and native control evidence; U-N1 delivery stays separate.
 
 Section 8 decisions (differences from page-platform §6, with the reason):
 
@@ -407,7 +565,7 @@ Section 8 decisions (differences from page-platform §6, with the reason):
 2. `chrome.windows`: one Chrome window per Open window. Its tab strip holds every LIVE tab of that window across all Spaces (placeholders and sleeping tabs are absent until loaded); the focused tab is the active tab. Space switches do not churn the strip.
 3. ~~Folders map to `chrome.tabGroups` (title = folder name, collapsed = folder collapsed) after core P1 works.~~ Superseded (lead, 2026-10-25): follow Arc. There is no evidence that Arc maps folders to tab groups (docs/re/arccore-engine.md §4.3.1), so v1 has no tab groups (an Open decision, not an Arc fact): folder tabs keep their pinned state in `chrome.tabs` (`groupId` -1), and Open's hidden windows have no tab group model, so `chrome.tabs.group` fails with Chrome's own error and `chrome.tabGroups.query` is empty (patch `0304`, e2e `--only tabstrip` → `no_tab_groups`). Splits are not tab groups. Known v1 differences from Chrome (Open decisions, not Arc facts; docs/re/arccore-engine.md §4.3.1): `chrome.tabs.group` and `chrome.tabs.ungroup` reject with "Grouping is not supported by tabs in this window." (`ungroup` too, even for a tab in no group), `chrome.tabGroups.get/update/move` reject with no group for that id, `Tab.groupId` is -1 for every tab, and `tabGroups.on*` events never fire. Auto-grouping extensions and tab managers lose their grouping features.
 4. ~~Default profile engine data stays at `Profiles/Default/` (CEF's fixed default slot); other profiles use `Profiles/<dir>/Engine/`.~~ Superseded (lead, 2026-10-25): one engine root, `<root>/Engine/` = `root_cache_path`; `Engine/Default` for the default profile, `Engine/<dir>` for the others (CEF loads a disk profile only for a direct child of `root_cache_path`). Open's own files stay in `Profiles/<dir>/`. See docs/plans/profiles.md §6.2 and its appendix.
-5. Until P1 lands: extensions run in our own views; the Chrome-style window remains available (debug/advanced menu) for the Web Store and `chrome://extensions`.
+5. Historical pre-P1 fallback: extensions ran in our own views, with a Chrome-style debug window for the Web Store/management. Superseded by P1 and the native App wiring (#189): store/management pages now use Open tabs.
 
 ## Verification (Section 8, merged)
 
@@ -426,3 +584,62 @@ service observer's set, independent of native macOS delivery. It adds no series
 entry. Its distribution receipt is `e949ff69`; N1 macOS delivery and N6
 clients.openWindow stay BLOCKED. App swipe and appearance wiring merged in
 [#162](https://github.com/SergeSerb2/open/pull/162) and [#164](https://github.com/SergeSerb2/open/pull/164). These are saved receipts, not checks run for this docs change.
+
+## Passwords Step 0 probe (2026-11-06; remaining rows 2026-11-07)
+
+The real Debug App used Chrome style and main's recorded engine distribution
+`af4b3cc3ad1b42439b229d79c8f7a869b13b0d3165733fba6c023e202340d1a5`.
+The [results](engine-spike/results-passwords-probe.json) retain per-row times,
+engine fingerprints, native window identities, and crash checks. These are
+observations, not password-feature acceptance. Each final-attempt row starts
+in a fresh App/profile; refill and cookie relaunch keep data within their row.
+
+| Row | Observation |
+|---|---|
+| PR-1 | Native typing matched and login POST reached welcome. No password bubble was identified. An AppKit toolbar window appeared and the native full-screen flag changed from false to true during the flow; its cause is unverified. |
+| PR-2 | The password-manager WebUI API added a synthetic login. Fields were empty immediately on reload. Clicking username showed a Chromium window. Native Down/Return did not fill both fields. |
+| PR-3 | Native address entry matched and POST reached welcome. No new visible window appeared. |
+| PR-4 | Native card entry matched and POST reached welcome. A Chromium window appeared on the refill attempt, but the number stayed empty. The mandatory re-auth path remains unverified. |
+| PR-5 | WebAuthn create showed an unparented `NativeWidgetMacNSWindow`; the promise was pending at 500 ms. Native Escape settled it with `NotAllowedError`. |
+| PR-6 | Credential Management get resolved to null within its 2-second deadline, without a new window. This secure localhost profile had no saved login, so the account chooser remains unverified. |
+| PR-7 | The fresh-profile HTTP Basic navigation killed Open. The late report is `Open-2026-11-06-203144.ips`, with `EXC_CRASH` / `SIGABRT`; its process matches this row. No retry followed. |
+| PR-8 | Selected run on 2026-11-07: `oe_lax`, `oe_persist`, and `oe_session` appeared before quit and after a clean relaunch with the same data root. Only cookie names were retained. |
+| PR-9 | Selected run on 2026-11-07: `pages` showed Chrome/browser 1 for a tab and both Split View panes; Peek was Alloy/browser 0, index -1. Little Open loaded successfully: Chrome/browser 2, content identifier 4, index 0, kind `unowned`; its session reported browserID 2 and state `page`. |
+
+PR-7's top symbols include `abort`, `logging::LogMessage::HandleFatal`,
+`tabs::TabDialogManager::CreateTabScopedDialog`,
+`tabs::TabDialogManager::CreateAndShowDialog`,
+`AskBeforeHttpDialogController::ShowDialog`, and
+`HttpsOnlyModeTabHelper::DidFinishNavigation`. This is evidence of the HTTPS
+fallback dialog path. It does not establish that the Basic-auth prompt itself
+caused the abort. The JSON contains symbol names only, not raw crash output.
+
+An earlier shared-window run showed a Basic-auth native window and no crash.
+It also left stale native key flags after a password dropdown; the probe now
+isolates rows so that state cannot invalidate later form observations. Earlier
+attempts and their limits are not counted as passes for the stopped attempt.
+A deliberate exit while WebAuthn was open proved cleanup: zero owned processes
+or windows remained, no force kill was needed, and no new crash report appeared.
+
+All on-screen work stopped after the 2026-11-06 crash report arrived. The lead
+confirmed a system crash dialog and held the M5 screen. The lead cleared it on
+2026-11-07 at 12:02 (-07:00). C2 then rebuilt Debug against main's recorded
+engine after merging `origin/main` and ran only PR-8 and PR-9 once, in one
+`--only passwords-probe --passwords-probe-rows PR-8,PR-9` call under the screen
+lock after the priority check. No new crash report appeared. All three App
+instances quit without force; each left zero owned processes and windows.
+
+The [selected-run receipt](engine-spike/results-passwords-probe-PR-8-PR-9.json)
+records source `cf60ae069ca8858e66c2c8bd5b950029499590f7`, the same engine
+distribution as above, and 12:10:33–12:10:44 (-07:00). Load averages at probe
+start were 18.23 / 12.64 / 9.37. The primary JSON now includes those two rows
+and their separate run provenance. Its original crash row, symbols, and
+post-quit crash evidence remain unchanged. Earlier observations remain labeled
+as historical. These are observations, not password-feature acceptance.
+
+PR-7 stays blocked until the engine lead approves the exact distribution hash
+with the fix. Patch 0806 is on another branch per the C2 brief; this probe did
+not validate it. The guard cannot navigate the known HTTPS-First crash path on
+the current engine. A different hash alone does not enable it. The selected-row
+run exercised the post-change runner without replaying PR-7. It did not exercise
+the death-stop path because no App died.

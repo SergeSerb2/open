@@ -3,6 +3,7 @@ import Observation
 import OpenModel
 import OpenDesign
 import OpenSidebar
+import OpenSpaceEditor
 import OpenCommands
 import OpenStore
 
@@ -13,6 +14,13 @@ public final class BrowserWindowController: NSWindowController, NSWindowDelegate
     public let model: BrowserModel
     let root: BrowserRootView
     public let background = ThemeBackgroundView(frame: .zero)
+    public private(set) var spaceCreationController: SpaceCreationController?
+    public var onSpaceCreationIcon: (@MainActor (SpaceIcon?, CGRect, @escaping @MainActor (SpaceIcon?) -> Void) -> Void)?
+    /// The App requests the real engine exit. Present only after its callback
+    /// and any native fullscreen transition, outside the engine delegate call.
+    public var onExitPageFullscreen: (@MainActor () -> Bool)?
+    private var pendingSpaceCreationOptions: SpaceCreationOptions?
+    public private(set) var themeEditor: ThemeEditorController?
     public let sidebar: SidebarView
     public let context: SidebarContext
     public let container: WebContentContainer
@@ -44,8 +52,12 @@ public final class BrowserWindowController: NSWindowController, NSWindowDelegate
     public var onCommandValidation: ((String, String) -> Bool?)?
     /// Runtime menu state from the App (page-platform §7.1); nil keeps the item as built.
     public var onMenuState: ((String) -> CommandMenuState?)?
+    /// Extension commands run after Open's bindings and before page delivery.
+    public var onExtensionShortcut: ((NSEvent) -> Bool)?
     /// Sees every key event of this window first (after the tab switcher); true consumes it.
     public var keyInterceptor: ((NSEvent) -> Bool)?
+    /// A native field editor retains plain editing keys before Peek/window routes.
+    public var shouldDeferKeyToFirstResponder: ((NSEvent) -> Bool)?
     public var ownsAdditionalKeyWindow: ((NSWindow) -> Bool)?
     public var isApplicationActive: (() -> Bool)?
     public var isCommandBarPresented = false
@@ -55,6 +67,8 @@ public final class BrowserWindowController: NSWindowController, NSWindowDelegate
     private var lastKeyRoute: (window: Int, code: UInt16, flags: UInt, timestamp: TimeInterval, handled: Bool)?
     public var onStateChange: (() -> Void)?
     public var onClose: (() -> Void)?
+    /// Cancel window-owned extension consent before AppKit checks attached sheets.
+    public var onCloseRequested: (() -> Void)?
     /// Ordinary keys, selection and window layout never create switcher state.
     public private(set) var existingTabSwitcher: TabSwitcherController?
     public var tabSwitcher: TabSwitcherController {
@@ -70,7 +84,13 @@ public final class BrowserWindowController: NSWindowController, NSWindowDelegate
     public var isChangingFullScreen: Bool { fullscreenTransition }
     /// Page fullscreen is transient and never changes the saved sidebar mode.
     public var isPageFullscreen = false {
-        didSet { if isPageFullscreen { dismissSidebarReveal() }; layoutContent() }
+        didSet {
+            if isPageFullscreen { dismissSidebarReveal() }
+            layoutContent()
+            if !isPageFullscreen, pendingSpaceCreationOptions != nil {
+                DispatchQueue.main.async { [weak self] in self?.resumePendingSpaceCreation() }
+            }
+        }
     }
     /// The hover-reveal card shows (or is sliding out).
     public var isSidebarRevealed: Bool { reveal.isShown }
@@ -154,6 +174,7 @@ public final class BrowserWindowController: NSWindowController, NSWindowDelegate
     private var anchoredSliding = false
     private var sidebarMotionRequestedAt: CFTimeInterval?
     private var dragStartWidth: CGFloat?
+    private var dragStartMode: SidebarMode?
     /// Actual animations read back from the layer when scheduled, retained after completion.
     public private(set) var sidebarAnimations: [String: CAAnimation] = [:]
     public private(set) var cardAnimations: [String: CAAnimation] = [:]
@@ -205,24 +226,26 @@ public final class BrowserWindowController: NSWindowController, NSWindowDelegate
     public private(set) var pendingConfirmation: NSAlert?
     /// Title of the newest toast shown, for checks.
     public var lastToastTitle: String { toasts.lastTitle }
-    public init(model: BrowserModel, windowID: WindowID, factory: any WebContentHostFactory, size: CGSize? = nil, defaults: UserDefaults = .standard, snapshotStore: SnapshotStore? = nil) {
+    public init(model: BrowserModel, windowID: WindowID, factory: any WebContentHostFactory, size: CGSize? = nil, defaults: UserDefaults = .standard, snapshotStore: SnapshotStore? = nil, incognitoTitle: String? = nil) {
         self.model = model; self.windowID = windowID; self.snapshotStore = snapshotStore
         self.factory = factory; self.defaults = defaults
         let state = model.windows.first { $0.id == windowID }
         let dimensions = size ?? CGSize(width: max(640, state?.frameWidth ?? 1280), height: max(480, state?.frameHeight ?? 800))
         root = BrowserRootView(frame: CGRect(origin: .zero, size: dimensions))
-        context = SidebarContext(model: model, windowID: windowID)
+        context = SidebarContext(model: model, windowID: windowID, incognitoTitle: incognitoTitle)
         context.systemAppearance = NSApp.effectiveAppearance.bestMatch(from: [.aqua, .darkAqua]) == .darkAqua ? .dark : .light
         sidebar = SidebarView(context: context); container = WebContentContainer(factory: factory)
         splitController = SplitViewController(model: model, windowID: windowID, container: container)
         let window = BrowserWindow(contentRect: root.bounds, styleMask: [.titled, .closable, .miniaturizable, .resizable, .fullSizeContentView], backing: .buffered, defer: false)
         window.isReleasedWhenClosed = false; window.isRestorable = false
-        window.title = "Open"; window.titleVisibility = .hidden; window.titlebarAppearsTransparent = true
+        window.title = incognitoTitle == nil ? "Open" : "Incognito";
+        if incognitoTitle != nil { window.appearance = NSAppearance(named: .darkAqua) }; window.titleVisibility = .hidden; window.titlebarAppearsTransparent = true
         window.tabbingMode = .disallowed; window.isMovableByWindowBackground = false
         window.minSize = CGSize(width: 640, height: 480)
         window.collectionBehavior.insert(.fullScreenPrimary); window.acceptsMouseMovedEvents = true
         super.init(window: window); window.contentView = root; window.delegate = self
         window.onLayoutPass = { [weak self] in self?.placeTrafficLights() }
+        window.onCloseRequest = { [weak self] in self?.onCloseRequested?() }
         if let state { window.setFrame(CGRect(x: state.frameX, y: state.frameY, width: dimensions.width, height: dimensions.height), display: false) }
         root.onAppearance = { [weak self] in
             guard let self else { return }
@@ -236,9 +259,7 @@ public final class BrowserWindowController: NSWindowController, NSWindowDelegate
         root.addSubview(container); root.addSubview(cardShadow); root.addSubview(sidebar); root.addSubview(resizeHandle)
         cardShadow.isHidden = true
         resizeHandle.onBegin = { [weak self] in self?.beginSidebarResize() }
-        resizeHandle.onCancel = { [weak self] in
-            self?.resizingSidebar = false; self?.dragStartWidth = nil
-        }
+        resizeHandle.onCancel = { [weak self] in self?.cancelSidebarResize() }
         resizeHandle.onReset = { [weak self] in self?.resetSidebarWidth() }
         resizeHandle.onResize = { [weak self] x, ended in self?.resizeSidebar(to: x, ended: ended) }
         reveal.geometry = { [weak self] in
@@ -250,7 +271,7 @@ public final class BrowserWindowController: NSWindowController, NSWindowDelegate
         }
         reveal.isEnabled = { [weak self] in
             guard let self else { return false }
-            return !self.isPageFullscreen && self.context.window?.sidebarMode == .hidden && self.peekStorage?.isShown != true
+            return self.spaceCreationController == nil && !self.isPageFullscreen && self.context.window?.sidebarMode == .hidden && self.peekStorage?.isShown != true
                 && !self.context.isNewTabCommandBarOpen && !self.resizingSidebar
         }
         reveal.onChange = { [weak self] shown in self?.setRevealCard(shown) }
@@ -259,6 +280,7 @@ public final class BrowserWindowController: NSWindowController, NSWindowDelegate
         // a deactivation comes from someone using the Mac, not from the check.
         trafficLightObservers.append(NotificationCenter.default.addObserver(forName: NSApplication.didResignActiveNotification, object: nil, queue: .main) { [weak self] _ in
             MainActor.assumeIsolated {
+                self?.cancelSidebarResize()
                 guard BrowserWindowController.pointerEventFilter == nil else { return }
                 self?.dismissSidebarReveal()
             }
@@ -296,7 +318,9 @@ public final class BrowserWindowController: NSWindowController, NSWindowDelegate
         container.onReturnPreviewHost = { [weak self] in
             self?.hoverPreview.hide(animated: false); self?.context.hoverPreviews.dismiss()
         }
-        container.onFocusedMetadata = { [weak self] in self?.window?.title = $0 }
+        container.onFocusedMetadata = { [weak self] title in
+            self?.window?.title = title.isEmpty && self?.context.isIncognito == true ? "Incognito" : title
+        }
         container.onURLField = { [weak self] in guard let self else { return }; self.onOpenCommandBar?(.urlField, self.context.currentTab?.url) }
         container.toasts = toasts
         container.onToolbarMenu = { [weak self] in self?.makeToolbarMenu() }
@@ -321,6 +345,9 @@ public final class BrowserWindowController: NSWindowController, NSWindowDelegate
         DispatchQueue.main.async { [weak self] in guard let self, self.observing else { return }; self.refreshPending = false; self.refresh() }
     }
     public func refresh() {
+        spaceCreationController?.closeThemeEditorIfSpaceChanged()
+        if let editor = themeEditor, let id = editor.session?.spaceID,
+           model.space(id: id) == nil || context.window?.focusedSpaceID != id { closeThemeEditor() }
         guard let space = context.focusedSpace else { return }
         if !observationArmed {
         observationArmed = true
@@ -332,7 +359,7 @@ public final class BrowserWindowController: NSWindowController, NSWindowDelegate
         } onChange: { [weak self] in Task { @MainActor [weak self] in self?.observationArmed = false; self?.scheduleRefresh() } }
         }
         // Sidebar's pager owns theme transitions. Never reset its cross-fade here.
-        if background.targetStyle != context.style(for: space) { background.crossfade(to: context.style(for: space), animated: window?.isVisible == true && !Motion.reducesMotion) }
+        if spaceCreationController == nil, background.targetStyle != context.style(for: space) { background.crossfade(to: context.style(for: space), animated: window?.isVisible == true && !Motion.reducesMotion && !context.isLiveThemePreview(space.id)) }
         container.style = context.style(for: space)
         container.showsToolbar = context.window?.showsToolbar == true
         let style = context.style(for: space)
@@ -340,9 +367,8 @@ public final class BrowserWindowController: NSWindowController, NSWindowDelegate
         peekStorage?.overlay.controlsFill = style.lightPalette?.title.nsColor ?? PeekMetrics.defaultControls.nsColor
         peekStorage?.overlay.scrimColor = style.darkPalette?.background.withAlpha(PeekMetrics.scrimAlpha).nsColor ?? PeekMetrics.defaultScrim.nsColor
         splitController.refresh()
-        // M4 refresh guarantees that every visible split pane is bound. Keep
-        // the single-pane path free of its former duplicate refresh.
-        if container.slots.count > 1 { container.refreshPlaceholders() }
+        // show() binds the focused host now and defers other panes one turn (§5.4).
+        // Refreshing placeholders here repeats every pane's chrome/layout work.
         peekStorage?.refresh(); layoutContent(); syncPeekSidebar(); onVisibilityChange?()
     }
     private func syncPeekSidebar() {
@@ -361,7 +387,8 @@ public final class BrowserWindowController: NSWindowController, NSWindowDelegate
         background.prepareForSnapshot()
     }
     public func layoutContent(animated: Bool = false) {
-        let size = root.bounds.size, hidden = isPageFullscreen || context.window?.sidebarMode == .hidden
+        defer { updateThemeEditorAnchor() }
+        let size = root.bounds.size, hidden = isPageFullscreen || (spaceCreationController == nil && context.window?.sidebarMode == .hidden)
         let width = context.sidebarWidth
         let panelFrame = isPageFullscreen ? root.bounds : PanelMetrics.frame(windowSize: size, sidebarWidth: width, sidebarHidden: hidden)
         if background.frame != root.bounds { background.frame = root.bounds }
@@ -381,6 +408,7 @@ public final class BrowserWindowController: NSWindowController, NSWindowDelegate
         let oldOffset = animate ? (sidebar.layer?.presentation()?.value(forKeyPath: "transform.translation.x") as? CGFloat ?? modelOffset) : modelOffset
         if cardState != .off {
             let card = WindowMetrics.revealCardFrame(windowSize: size, sidebarWidth: width)
+            sidebar.cardFieldFrame = CGRect(x: -card.minX, y: -card.minY, width: size.width, height: size.height)
             if sidebar.frame != card { sidebar.frame = card }
             if cardShadow.frame != card { cardShadow.frame = card }
             if container.frame != panelFrame { container.frame = panelFrame }
@@ -495,7 +523,7 @@ public final class BrowserWindowController: NSWindowController, NSWindowDelegate
     private func positionTrafficLights() {
         guard let window, !window.styleMask.contains(.fullScreen) else { return }
         observeTrafficLights(window)
-        let hidden = isPageFullscreen || (cardState == .off && context.window?.sidebarMode == .hidden && !anchoredSliding)
+        let hidden = isPageFullscreen || (spaceCreationController == nil && cardState == .off && context.window?.sidebarMode == .hidden && !anchoredSliding)
         for kind in Self.trafficLightKinds {
             guard let button = window.standardWindowButton(kind) else { continue }
             if button.isHidden != hidden { button.isHidden = hidden }
@@ -636,6 +664,7 @@ public final class BrowserWindowController: NSWindowController, NSWindowDelegate
             anchoredSliding = false
             sidebarAnimationGeneration += 1
             cardState = .shown
+            sidebar.cardFieldFrame = CGRect(x: -card.minX, y: -card.minY, width: size.width, height: size.height)
             sidebar.prepareFloatingCard(size: card.size)
             sidebar.presentation = .floatingCard
             sidebar.frame = card
@@ -767,18 +796,18 @@ public final class BrowserWindowController: NSWindowController, NSWindowDelegate
     private func beginSidebarResize() {
         guard dragStartWidth == nil else { return }
         dragStartWidth = context.sidebarWidth
+        dragStartMode = context.window?.sidebarMode
         resizingSidebar = true
         removeRevealCard()
     }
     public func resizeSidebar(to x: CGFloat, ended: Bool) {
-        guard x.isFinite, let state = context.window else { return }
-        if dragStartWidth == nil { beginSidebarResize() }
+        guard resizingSidebar, x.isFinite, let state = context.window else { return }
         let hidden = x < WindowMetrics.sidebarDragHidePoint
         context.sidebarWidthOverride = min(WindowMetrics.maxSidebarWidth, max(WindowMetrics.minSidebarWidth, x))
         let crossed = (state.sidebarMode == .hidden) != hidden
         if crossed {
             sidebarMotionRequestedAt = CACurrentMediaTime()
-            model.setSidebarMode(windowID: windowID, mode: hidden ? .hidden : .anchored)
+            model.setSidebarMode(windowID: windowID, mode: hidden ? .hidden : .anchored, registerUndo: false)
         }
         layoutContent(animated: crossed)
         guard ended else { return }
@@ -790,11 +819,23 @@ public final class BrowserWindowController: NSWindowController, NSWindowDelegate
             sidebarWidthCommits += 1
             model.setSidebarWidth(windowID: windowID, width: Double(context.sidebarWidth))
         }
-        resizingSidebar = false; dragStartWidth = nil
+        if let dragStartMode { model.registerSidebarModeUndo(windowID: windowID, from: dragStartMode) }
+        resizingSidebar = false; dragStartWidth = nil; dragStartMode = nil
         resizeHandle.isHidden = hidden
         if !hidden || !anchoredSliding { context.sidebarWidthOverride = nil }
         // A hidden flick keeps the live width until the running slide completes.
         changed()
+    }
+    /// All interruptions share this path. The stored width has never changed; dropping
+    /// the live override restores it. Reset the handle too, so late drag/up events do nothing.
+    private func cancelSidebarResize() {
+        resizeHandle.cancelDrag()
+        guard resizingSidebar else { return }
+        if let dragStartMode { model.setSidebarMode(windowID: windowID, mode: dragStartMode, registerUndo: false) }
+        resizingSidebar = false; dragStartWidth = nil; dragStartMode = nil
+        context.sidebarWidthOverride = nil
+        removeRevealCard()
+        layoutContent()
     }
     private func resetSidebarWidth() {
         guard context.window != nil else { return }
@@ -806,6 +847,11 @@ public final class BrowserWindowController: NSWindowController, NSWindowDelegate
         changed()
     }
     public var sidebarResizeActive: Bool { resizingSidebar }
+    public var sidebarResizeHandleDragging: Bool { resizeHandle.dragging }
+    public var sidebarResizeHandleVisible: Bool { !resizeHandle.isHidden }
+    public var sidebarResizeHasStart: Bool { dragStartWidth != nil || dragStartMode != nil }
+    /// True while the hover-reveal card draws its tint over the blurred page (automation).
+    public var cardDrawsPageBlur: Bool { cardState != .off && sidebar.cardDrawsPageBlur }
     /// Pointer location in root coordinates (also left of the window while it is key).
     public func trackSidebarPointer(_ point: CGPoint) { reveal.pointerMoved(to: point) }
     /// Hides the hover-reveal card (a tab selection, the command bar) with its slide.
@@ -835,9 +881,10 @@ public final class BrowserWindowController: NSWindowController, NSWindowDelegate
     }
 
     public var peekBadgeTabIDs: Set<ItemID> { peekStorage?.peekBadgeTabIDs ?? [] }
-    public var canExitModal: Bool { peekStorage?.isShown == true || container.maximizedTabID != nil }
+    public var canExitModal: Bool { (spaceCreationController != nil && !isCommandBarPresented) || peekStorage?.isShown == true || container.maximizedTabID != nil }
     /// View > Exit and Esc share this priority. The App validates the key standard window.
     @discardableResult public func exitModal() -> Bool {
+        if !isCommandBarPresented, let creation = spaceCreationController { creation.cancel(); return true }
         if let peek = peekStorage, peek.isShown { peek.escape(); return true }
         if container.maximizedTabID != nil {
             splitController.performCommand("escape"); container.cancelOperation(nil); return true
@@ -846,9 +893,18 @@ public final class BrowserWindowController: NSWindowController, NSWindowDelegate
     }
     /// Shared window-local key path. Focus comes from AppKit's current responder.
     @discardableResult public func handleKeyDown(_ event: NSEvent, unconsumed: Bool = false) -> Bool {
-        guard let eventWindow = event.window,
-              eventWindow === window || ownsAdditionalKeyWindow?(eventWindow) == true
+        // Window-less events belong here only while this controller's theme
+        // panel is key. Engine events from other windows must keep their owner.
+        let keyEditor = spaceCreationController?.themeEditor ?? themeEditor
+        let eventWindow = event.window ?? keyEditor.flatMap { NSApp.keyWindow === $0.panel ? $0.panel : nil }
+        guard let eventWindow,
+              eventWindow === window || eventWindow === keyEditor?.panel || ownsAdditionalKeyWindow?(eventWindow) == true
                 || existingTabSwitcher?.acceptsEventWindow(eventWindow) == true else { return false }
+        if eventWindow === keyEditor?.panel {
+            if event.modifierFlags.contains(.command), [13, 17, 37].contains(event.keyCode) {
+                keyEditor?.close()
+            } else { return false }
+        }
         if existingTabSwitcher?.handle(event) == true { return true }
         // A window-anchored popover the App shows (the translate popover, page-platform §4.7.3)
         // takes Esc and Return before any other route.
@@ -857,6 +913,12 @@ public final class BrowserWindowController: NSWindowController, NSWindowDelegate
         if eventWindow === window, let capture = captureStorage, capture.phase == .selecting || capture.phase == .showing,
            capture.handleKey(event) { return true }
         let flags = event.modifierFlags.rawValue
+        if shouldDeferKeyToFirstResponder?(event) == true {
+            // The editor may close itself and change focus. A re-offered copy
+            // of that same key must still stay away from the page and Peek.
+            lastKeyRoute = (eventWindow.windowNumber, event.keyCode, flags, event.timestamp, true)
+            return false
+        }
         if let last = lastKeyRoute, last.window == eventWindow.windowNumber, last.code == event.keyCode,
            last.flags == flags, unconsumed || (event.timestamp > 0 && last.timestamp == event.timestamp) { return last.handled }
         if event.keyCode == 53, !isCommandBarPresented,
@@ -892,6 +954,12 @@ public final class BrowserWindowController: NSWindowController, NSWindowDelegate
             lastKeyRoute = (eventWindow.windowNumber, event.keyCode, flags, event.timestamp, true)
             return true
         }
+        // Extensions run after Open's reserved and non-page-first bindings, before the page.
+        // The App drops conflicts with every Open default/user binding from this table.
+        if !routing.isCommandBarOpen, onExtensionShortcut?(event) == true {
+            lastKeyRoute = (eventWindow.windowNumber, event.keyCode, flags, event.timestamp, true)
+            return true
+        }
         guard case .browserCommand(let id)? = decision,
               handles(id) || onCommand != nil,
               isCommandEnabled(id, enabledKey: CommandRegistry.byID[id]?.enabledKey ?? EnabledKey.always) else { return false }
@@ -907,8 +975,9 @@ public final class BrowserWindowController: NSWindowController, NSWindowDelegate
         lastKeyRoute = (eventWindow.windowNumber, event.keyCode, flags, event.timestamp, true)
         return true
     }
-    private func handles(_ id: String) -> Bool { ["add-split-view", "close-split-pane", "expand-current-split", "separate-from-split-view", "next-split-pane", "previous-split-pane", "open-in-current-space", "go-back", "go-forward"].contains(id) || id.hasPrefix("focus-split-pane-") }
+    private func handles(_ id: String) -> Bool { ["edit-theme", "add-split-view", "close-split-pane", "expand-current-split", "separate-from-split-view", "next-split-pane", "previous-split-pane", "open-in-current-space", "go-back", "go-forward"].contains(id) || id.hasPrefix("focus-split-pane-") }
     public func performCommand(_ id: String) {
+        if id == "edit-theme" { if let space = context.focusedSpace { _ = editSpaceTheme(space.id) }; return }
         if id != "tab-switcher-forward", id != "tab-switcher-backward" { existingTabSwitcher?.cancel() }
         if onCommand?(id) == true { return }
         if id == "toggle-toolbar" { toggleToolbar(); return }
@@ -937,6 +1006,7 @@ public final class BrowserWindowController: NSWindowController, NSWindowDelegate
     }
     public func menuState(for id: String) -> CommandMenuState? { onMenuState?(id) }
     public func isCommandEnabled(_ id: String, enabledKey: String) -> Bool {
+        if id == "edit-theme" { return context.focusedSpace != nil }
         if let enabled = onCommandValidation?(id, enabledKey) { return enabled }
         if id == "toggle-toolbar" { return context.window?.style == .standard }
         if id == "open-in-current-space" { return peekStorage?.isShown == true }
@@ -952,6 +1022,7 @@ public final class BrowserWindowController: NSWindowController, NSWindowDelegate
         }
         if let handled = onSidebarIntent?(intent) { return handled }
         switch intent {
+        case .editSpaceTheme(let id): return editSpaceTheme(id)
         case .toggleSidebar: toggleSidebar(); return true
         case .setToolbarShown(let shown): return setToolbarShown(shown)
         case .setShowFullURL(let full): showsFullURLWithToolbar = full; return true
@@ -998,7 +1069,55 @@ public final class BrowserWindowController: NSWindowController, NSWindowDelegate
         }
         refresh(); changed(); return true
     }
+    /// One controller per window. A repeated entry focuses the existing panel.
+    @discardableResult public func editSpaceTheme(_ id: SpaceID) -> Bool {
+        guard model.space(id: id) != nil, let window else { return false }
+        if let editor = themeEditor, editor.session?.spaceID == id, !editor.isClosed {
+            editor.panel.makeKeyAndOrderFront(nil); return true
+        }
+        if let editor = themeEditor { _ = editor.retarget(to: id) }
+        if context.window?.focusedSpaceID != id {
+            let undo = model.undoManager; undo?.disableUndoRegistration()
+            model.focusSpace(windowID: windowID, spaceID: id)
+            undo?.enableUndoRegistration(); refresh(); snapshotStore?.scheduleSave(model: model)
+        }
+        if let editor = themeEditor {
+            updateThemeEditorAnchor(); editor.panel.makeKeyAndOrderFront(nil); return true
+        }
+        // Hidden and hover-revealed sidebars use the window's leading edge +8.
+        let frame = context.window?.sidebarMode == .hidden
+            ? CGRect(x: 8, y: 0, width: 0, height: root.bounds.height)
+            : root.convert(sidebar.bounds, from: sidebar)
+        let editor = ThemeEditorController(model: model, spaceID: id, window: window,
+                                          anchor: .sidebarTrailingEdge(sidebarFrameInWindow: frame))
+        themeEditor = editor
+        editor.onCommit = { [weak model, store = snapshotStore] in
+            guard let model else { return }; store?.scheduleSave(model: model)
+        }
+        editor.onClose = { [weak self, weak editor] in
+            guard let self, self.themeEditor === editor else { return }
+            self.themeEditor = nil
+            // Return keyboard focus to browser chrome. A page responder would
+            // otherwise consume Cmd+Z without reaching the shared model undo.
+            self.window?.makeFirstResponder(self.sidebar.focusedOutline)
+            if editor?.panel.isKeyWindow == true, NSApp.isActive { self.window?.makeKey() }
+        }
+        editor.show(); context.isWindowActive = true; background.isWindowActive = true; return true
+    }
+    private func updateThemeEditorAnchor() {
+        guard let editor = themeEditor else { return }
+        let frame = context.window?.sidebarMode == .hidden
+            ? CGRect(x: 8, y: 0, width: 0, height: root.bounds.height)
+            : root.convert(sidebar.bounds, from: sidebar)
+        editor.updateAnchor(.sidebarTrailingEdge(sidebarFrameInWindow: frame))
+    }
+    public func closeThemeEditor() { themeEditor?.close(); themeEditor = nil }
     public func windowWillClose(_ notification: Notification) {
+        pendingSpaceCreationOptions = nil
+        cancelSidebarResize()
+        spaceCreationController?.onFinish = nil
+        spaceCreationController?.cancel(); spaceCreationController = nil
+        closeThemeEditor()
         existingTabSwitcher?.cancel()
         saveWindowState(); visibilityOverride = .closed; removeRevealCard(); hintWork?.cancel(); hintWork = nil
         hoverPreview.hide(animated: false); captureStorage?.tearDown()
@@ -1008,6 +1127,7 @@ public final class BrowserWindowController: NSWindowController, NSWindowDelegate
     private lazy var nativeTextUndoManager = UndoManager()
     public func windowWillReturnUndoManager(_ window: NSWindow) -> UndoManager? {
         if let editor = onTextUndoManager?(window) { return editor }
+        if let creation = spaceCreationController { return creation.localUndoManager }
         if window.firstResponder is NSTextView || window.firstResponder is NSTextField { return nativeTextUndoManager }
         return model.undoManager
     }
@@ -1016,18 +1136,20 @@ public final class BrowserWindowController: NSWindowController, NSWindowDelegate
     public func windowDidEndLiveResize(_ notification: Notification) { saveWindowState(); snapshotStore?.scheduleSave(model: model) }
     public func windowWillEnterFullScreen(_ notification: Notification) { saveWindowState(); fullscreenTransition = true; applyTrafficLightDim(animated: false); dimmedLights.isHidden = true }
     public func windowWillExitFullScreen(_ notification: Notification) { fullscreenTransition = true; applyTrafficLightDim(animated: false) }
-    public func windowDidEnterFullScreen(_ notification: Notification) { fullscreenTransition = false; fullScreenTransitionCount += 1; layoutContent(); onVisibilityChange?() }
+    public func windowDidEnterFullScreen(_ notification: Notification) { fullscreenTransition = false; fullScreenTransitionCount += 1; layoutContent(); onVisibilityChange?(); resumePendingSpaceCreation() }
     public func windowDidExitFullScreen(_ notification: Notification) {
         fullscreenTransition = false; fullScreenTransitionCount += 1; layoutContent(); onVisibilityChange?()
         // The window is back at its frame; the pointer may or may not be over the buttons.
         dimmedLights.syncWithPointer()
+        resumePendingSpaceCreation()
     }
     public func windowDidBecomeKey(_ notification: Notification) {
         context.isWindowActive = true; background.isWindowActive = true; positionTrafficLights(); onFocus?()
         // Back from another app or a hide (Cmd+H): the pointer may have left the buttons meanwhile.
         dimmedLights.syncWithPointer()
     }
-    public func windowDidResignKey(_ notification: Notification) { existingTabSwitcher?.cancel(); context.isWindowActive = false; background.isWindowActive = false; positionTrafficLights() }
+    public func windowWillBeginSheet(_ notification: Notification) { cancelSidebarResize() }
+    public func windowDidResignKey(_ notification: Notification) { cancelSidebarResize(); existingTabSwitcher?.cancel(); let active = (themeEditor != nil || spaceCreationController?.themeEditor != nil) && NSApp.isActive; context.isWindowActive = active; background.isWindowActive = active; positionTrafficLights() }
     public func windowDidChangeBackingProperties(_ notification: Notification) { positionTrafficLights() }
     public func windowDidBecomeMain(_ notification: Notification) { context.isWindowActive = true }
     public func windowDidResignMain(_ notification: Notification) { context.isWindowActive = window?.isKeyWindow == true }
@@ -1046,6 +1168,11 @@ public final class BrowserWindowController: NSWindowController, NSWindowDelegate
 @MainActor
 final class BrowserWindow: NSWindow {
     var onLayoutPass: (() -> Void)?
+    var onCloseRequest: (() -> Void)?
+    override func performClose(_ sender: Any?) {
+        onCloseRequest?()
+        super.performClose(sender)
+    }
     private(set) var layoutPasses = 0
     override func layoutIfNeeded() {
         super.layoutIfNeeded()
@@ -1084,8 +1211,9 @@ final class SidebarResizeHandle: NSView {
     var onCancel: (() -> Void)?
     var onResize: ((CGFloat, Bool) -> Void)?
     var onReset: (() -> Void)?
-    private var dragging = false
+    private(set) var dragging = false
     private var moved = false
+    func cancelDrag() { dragging = false; moved = false }
     override func acceptsFirstMouse(for event: NSEvent?) -> Bool { true }
     override func resetCursorRects() { addCursorRect(bounds, cursor: .resizeLeftRight) }
     override func mouseDown(with event: NSEvent) {
@@ -1254,5 +1382,50 @@ extension BrowserWindowController {
         }
         hintWork = work
         DispatchQueue.main.asyncAfter(deadline: .now() + HintToastMetrics.outDuration, execute: work)
+    }
+}
+
+
+extension BrowserWindowController {
+    @discardableResult
+    public func beginSpaceCreation(options: SpaceCreationOptions = SpaceCreationOptions()) -> Bool {
+        if !isPageFullscreen, let creation = spaceCreationController { creation.focus(); return true }
+        guard let window, model.canCreateSpace(at: options.insertionIndex, moving: options.moving,
+                                               removingEmptyFolder: options.removingEmptyFolder) else { return false }
+        if isPageFullscreen {
+            pendingSpaceCreationOptions = options
+            guard onExitPageFullscreen?() == true else { pendingSpaceCreationOptions = nil; return false }
+            return true
+        }
+        closeThemeEditor()
+        dismissSidebarReveal()
+        let previousSpaceID = context.focusedSpace?.id
+        let creation = SpaceCreationController(model: model, windowID: windowID, options: options)
+        creation.creationView.systemAppearance = context.systemAppearance
+        creation.onPickIcon = { [weak self] icon, rect, pick in
+            self?.onSpaceCreationIcon?(icon, rect, pick)
+        }
+        creation.onDraftStyle = { [weak self] style in self?.sidebar.previewSpaceCreation(style) }
+        creation.onFinish = { [weak self, weak creation] space in
+            guard let self, self.spaceCreationController === creation else { return }
+            if space == nil, let previousSpaceID, self.model.space(id: previousSpaceID) != nil,
+               self.context.focusedSpace?.id != previousSpaceID {
+                self.model.undoManager?.disableUndoRegistration()
+                self.model.focusSpace(windowID: self.windowID, spaceID: previousSpaceID)
+                self.model.undoManager?.enableUndoRegistration()
+            }
+            self.sidebar.endSpaceCreation(focus: space?.id ?? previousSpaceID)
+            self.spaceCreationController = nil; window.makeFirstResponder(nil)
+            self.refresh(); if space != nil { self.changed() }
+        }
+        spaceCreationController = creation; layoutContent(animated: true)
+        sidebar.beginSpaceCreation(page: creation.view); creation.updatePreview(); creation.focus()
+        return true
+    }
+    private func resumePendingSpaceCreation() {
+        guard !isPageFullscreen, !fullscreenTransition, window?.isVisible == true,
+              let options = pendingSpaceCreationOptions else { return }
+        pendingSpaceCreationOptions = nil
+        _ = beginSpaceCreation(options: options)
     }
 }

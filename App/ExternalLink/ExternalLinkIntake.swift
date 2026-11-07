@@ -78,16 +78,29 @@ final class ExternalLinkIntake {
 }
 
 extension AppDelegate {
+  func consumeFirstExternalDestination(opensLittleOpen: Bool) {
+    guard !executedExternalLink else { return }
+    executedExternalLink = true
+    defer { autoCreatedLaunchWindowID = nil }
+    // Lead decision (routing §9.7): preserve every restored window. Only the
+    // explicitly tagged, still-unused fallback can close for the first link.
+    guard opensLittleOpen, let id = autoCreatedLaunchWindowID else { return }
+    discardUnusedLaunchWindow(id)
+  }
   func completeLinkRestoration() {
     #if OPEN_AUTOMATION
     // Guess (verification fixture): LaunchServices can deliver after a fast
     // launch is ready. Delay only this handoff to exercise a genuinely pending
     // AppleEvent through the same intake, executor and model. No URL injection.
     if ProcessInfo.processInfo.environment["OPEN_AUTOMATION_ROUTING_SLOW_READY"] == "1" {
-      DispatchQueue.main.asyncAfter(deadline: .now() + 2) { [weak self] in self?.linkIntake.markReady() }
+      DispatchQueue.main.asyncAfter(deadline: .now() + 2) { [weak self] in self?.finishExternalLinkRestoration() }
       return
     }
     #endif
+    finishExternalLinkRestoration()
+  }
+
+  private func finishExternalLinkRestoration() {
     linkIntake.markReady()
   }
 

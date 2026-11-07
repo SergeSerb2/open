@@ -16,6 +16,7 @@ public struct ImportPlan: Sendable {
     public var directory: URL
     public var spaces = true, tabs = true, favorites = true, folders = true, archive = true, history = false, searchSettings = true
     public var secretsRequested = false
+    public var boosts = true
     public private(set) var secretsConsented = false
     public init(directory: URL) { self.directory = directory }
     /// Only the explicit consent button should call this method.
@@ -33,14 +34,19 @@ public struct ImportOutcome: Sendable {
     public var counts: [String: Int]
     public var errorText: String?
     public var failures: [String: String]
-    public init(counts: [String: Int] = [:], errorText: String? = nil, failures: [String: String] = [:]) { self.counts = counts; self.errorText = errorText; self.failures = failures }
+    public var extensions: [ImportExtensionCandidate]
+    public var extensionProfileCount: Int
+    public init(counts: [String: Int] = [:], errorText: String? = nil, failures: [String: String] = [:], extensions: [ImportExtensionCandidate] = [], extensionProfileCount: Int = 0) {
+        self.counts = counts; self.errorText = errorText; self.failures = failures
+        self.extensions = extensions; self.extensionProfileCount = extensionProfileCount
+    }
 }
 
 /// One import action and capability shared by Settings and first run.
 /// Canonical adapter keys. Legacy display keys remain accepted at the one outcome boundary.
 public enum ImportOutcomeKeys {
     public static let spaces="Imported Spaces",tabs="Imported items",archive="Imported Archive",history="Imported History"
-    public static let imported=[spaces,tabs,archive,history,"Spaces","Imported tabs","Archive","History","Favorites","Folders","Search settings","Passwords and cookies"]
+    public static let imported=[spaces,tabs,archive,history,"Spaces","Imported tabs","Archive","History","Favorites","Folders","Search settings","Boosts","Passwords and cookies"]
 }
 public extension ImportOutcome {
     func importedCount(_ category:String)->Int {
@@ -53,8 +59,26 @@ public extension ImportOutcome {
 @MainActor public protocol ImportActions: AnyObject {
     var canImportPasswordsAndCookies: Bool { get }
     func runImport(plan: ImportPlan) async -> ImportOutcome
+    func installImportedExtension(_ candidate: ImportExtensionCandidate) async -> ImportExtensionInstallResult
 }
-public extension ImportActions { var canImportPasswordsAndCookies: Bool { false } }
+public extension ImportActions {
+    var canImportPasswordsAndCookies: Bool { false }
+    func installImportedExtension(_ candidate: ImportExtensionCandidate) async -> ImportExtensionInstallResult { .failed("Extension installation is unavailable.") }
+}
+
+public struct ExtensionShortcutConflict: Sendable, Hashable {
+    public var extensionName: String
+    public var commandDescription: String
+    public var shortcut: OpenCommands.KeyboardShortcut
+    public var openCommandID: String
+    public init(extensionName: String, commandDescription: String, shortcut: OpenCommands.KeyboardShortcut, openCommandID: String) {
+        self.extensionName = extensionName; self.commandDescription = commandDescription
+        self.shortcut = shortcut; self.openCommandID = openCommandID
+    }
+    public var notice: String {
+        "\(extensionName): \(shortcut.symbolDisplay) is used by \(CommandRegistry.byID[openCommandID]?.title ?? openCommandID), so it is off."
+    }
+}
 
 @MainActor public protocol SettingsActions: ImportActions {
     func setAsDefaultBrowser() -> String?
@@ -63,7 +87,9 @@ public extension ImportActions { var canImportPasswordsAndCookies: Bool { false 
     func openMoreSettings()
     func revealOpenDataFolder()
     func copyOpenInfoToPasteboard()
-    func deleteProfileData(profileID: ProfileID) -> String?
+    /// Called after irreversible model removal, with the directory captured before deletion.
+    func deleteProfileData(profileID: ProfileID, dataDirectoryName: String) async -> String?
+    func chooseProfileIcon(profileID: ProfileID, anchor: NSView)
     func clearBrowsingData(profileID: ProfileID, kinds: ClearDataKinds) async -> String?
     func clearBrowsingData(profileID: ProfileID, kinds: ClearDataKinds, range: ClearDataRange) async -> String?
     func openProfileSubpage(profileID: ProfileID, page: ProfilePage)
@@ -89,9 +115,12 @@ public extension ImportActions { var canImportPasswordsAndCookies: Bool { false 
     func makeSpaceManagerView() -> NSView?
     /// Settings ▸ Shortcuts "Learn the Essential Shortcuts": open the Essential Keyboard Shortcuts window
     /// (commandbar-completion §4.5.3, CC-29).
+    func extensionShortcutConflicts(profileID: ProfileID) -> [ExtensionShortcutConflict]
     func openEssentialShortcuts()
 }
 
 public extension SettingsActions {
+    func chooseProfileIcon(profileID: ProfileID, anchor: NSView) {}
+    func extensionShortcutConflicts(profileID: ProfileID) -> [ExtensionShortcutConflict] { [] }
     func makeSpaceManagerView() -> NSView? { nil }
 }

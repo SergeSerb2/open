@@ -3,6 +3,7 @@ import QuartzCore
 import CoreText
 import OpenDesign
 import OpenBoosts
+import OpenExtensionsUI
 
 @MainActor
 public final class SiteControlView: NSView {
@@ -94,8 +95,14 @@ public final class SiteControlPanelView: NSView {
     private let addExtension = SiteControlButton(id: "extension.add",label: "Add Extension",symbol: "plus",pointSize: 14)
     private var actions: [SiteControlButton] = []
     public var extensionsSectionVisible: Bool { true }
-    /// No extension data is duplicated before OpenExtensionsUI supplies its body.
-    public var hasExtensionItems: Bool { false }
+    /// App supplies the same per-window context used by its strips; no second store.
+    public var extensionsContext: ExtensionsUIContext? { didSet { reloadExtensions() } }
+    public private(set) lazy var extensionsBody = ExtensionsSectionBody(frame: .zero)
+    public var hasExtensionItems: Bool { extensionsContext?.actions.isEmpty == false }
+    public func reloadExtensions() {
+        guard let snapshot else { return }
+        rebuildSections(snapshot, animated: false); needsLayout = true
+    }
     public var boostsSectionVisible: Bool { snapshot?.boosts.isEmpty == false }
     public private(set) var extensionPickerFocusResolved = false
     public var arrowX: CGFloat? { didSet { needsLayout = true } }
@@ -209,13 +216,21 @@ extension SiteControlPanelView {
             body.addSubview(button); controls.append(button)
         }
         header("extensions","Extensions","Manage")
-        // OpenExtensionsUI owns its item data and pin order. Its host replaces
-        // this fallback without adding another extension store or snapshot shape.
-        let add = addExtension
-        add.style = .extensionTile; add.tooltipTitle = "Add Extension"
-        add.frame = CGRect(x: m.padding,y: y,width: m.extensionTile.width,height: m.extensionTile.height)
-        add.invoke = { [weak self] in self?.onAddExtension?() }; body.addSubview(add); controls.append(add)
-        y += m.extensionTile.height
+        if let context = extensionsContext {
+            _ = extensionsBody.setActions(context.actions)
+            // guess (child), S-5/S-11: the required 236 pt grid uses the SCC's
+            // complete 236 pt width; rows retain the SCC's existing 10 pt inset.
+            let x: CGFloat = extensionsBody.isGrid ? 0 : m.padding
+            extensionsBody.frame = CGRect(x: x, y: y, width: m.width - 2 * x, height: extensionsBody.intrinsicContentSize.height)
+            body.addSubview(extensionsBody); y += extensionsBody.frame.height
+        } else {
+            // Compatibility until the App supplies its window's extensions context.
+            let add = addExtension
+            add.style = .extensionTile; add.tooltipTitle = "Add Extension"
+            add.frame = CGRect(x: m.padding,y: y,width: m.extensionTile.width,height: m.extensionTile.height)
+            add.invoke = { [weak self] in self?.onAddExtension?() }; body.addSubview(add); controls.append(add)
+            y += m.extensionTile.height
+        }
         var nextBoosts: [BoostID: SiteControlBoostRow] = [:]
         if snapshot.context.isWebsite,!snapshot.boosts.isEmpty {
             y += m.sectionGap; header("boosts","Boosts","Manage")
@@ -286,15 +301,19 @@ extension SiteControlPanelView {
     public func control(id: String) -> SiteControlButton? { controls.first { $0.controlID == id } }
     func configureKeys(_ handler: @escaping (NSEvent) -> Bool) { controls.forEach { $0.onKey = handler } }
     public func focus(_ control: SiteControlButton,keyboard: Bool = true) {
+        if extensionsContext != nil { extensionsBody.pickerMode = false }
         controls.forEach { $0.showsKeyboardFocus = $0 === control && keyboard }
         control.scrollToVisible(control.bounds.insetBy(dx: -2,dy: -4)); window?.makeFirstResponder(control); control.needsDisplay = true
     }
     func focusExtensionPickerItem() {
         extensionPickerFocusResolved = false
-        // Blocked on OpenExtensionsUI: use its first pinned item here when the
-        // host lands. The real harness fails if items exist without this wiring.
-        guard !hasExtensionItems,let add = control(id: "extension.add") else { return }
-        focus(add); extensionPickerFocusResolved = true
+        if extensionsContext != nil {
+            controls.forEach { $0.showsKeyboardFocus = false }
+            extensionPickerFocusResolved = extensionsBody.focusFirst()
+            extensionsBody.scrollToVisible(extensionsBody.bounds.insetBy(dx: -2, dy: -2))
+        } else if let add = control(id: "extension.add") {
+            focus(add); extensionPickerFocusResolved = true
+        }
     }
     var structureRows: [CALayer] { body.subviews.compactMap { $0.layer } }
     func captureStructure(extra: [CALayer]) -> SiteControlStructure {

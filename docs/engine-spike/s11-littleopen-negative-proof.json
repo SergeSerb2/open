@@ -1,0 +1,52 @@
+{
+  "engineSHA256": "3f45b07b885e03b6aecc461c6b6bff7612814a2ad23b6cf37b2b142d828f0738",
+  "missingStandaloneVisibility": {
+    "mutation": "Return false for the standalone surface in PageChromeCoordinator.isVisible.",
+    "failedRows": [
+      "little_beforeunload_button",
+      "little_beforeunload_key",
+      "little_dialog_alert",
+      "little_dialog_confirm_cancel",
+      "little_dialog_confirm_ok",
+      "little_dialog_early_once",
+      "little_dialog_hidden_queue",
+      "little_dialog_prompt",
+      "little_permission_allow",
+      "little_permission_dismiss_miniaturize",
+      "little_permission_dismiss_navigate",
+      "little_permission_key_escape",
+      "little_permission_key_l",
+      "little_permission_key_return",
+      "little_permission_key_t",
+      "little_permission_key_w",
+      "little_permission_motion_false",
+      "little_permission_motion_true",
+      "little_permission_notnow",
+      "little_quit_cancel",
+      "little_quit_ok"
+    ],
+    "interruptions": 0,
+    "cleanup": true,
+    "forcedCleanup": false
+  },
+  "forcedPopover": {
+    "mutation": "Use the existing NSPopover path after resolving the standalone content anchor.",
+    "rows": {
+      "little_permission_allow": {
+        "ok": false,
+        "visible": true,
+        "presentation": "popover",
+        "reason": "Expected an in-window permission card"
+      },
+      "little_permission_notnow": {
+        "ok": false,
+        "visible": true,
+        "presentation": "popover",
+        "reason": "Expected an in-window permission card"
+      }
+    },
+    "interruptions": 0,
+    "cleanup": true,
+    "forcedCleanup": false
+  }
+}

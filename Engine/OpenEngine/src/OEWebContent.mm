@@ -478,6 +478,13 @@ typedef void (^OEDevToolsCompletion)(NSDictionary* _Nullable, NSError* _Nullable
   }];
 }
 
+- (void)prepareForDisplay {
+  if (_view.window && !_browser && !_creating && !_awaitingPopup &&
+      !_closeRequested) {
+    [self oe_createBrowser];
+  }
+}
+
 - (void)oe_createBrowserNow {
   if (_closeRequested || _browser) {
     _creating = NO;
@@ -1111,6 +1118,21 @@ typedef void (^OEDevToolsCompletion)(NSDictionary* _Nullable, NSError* _Nullable
     return;
   }
   CefRefPtr<CefBrowserHost> host = _browser->GetHost();
+  // DevTools input is real renderer input too. CEF's later navigation policy
+  // callback omits its flags, just as it omits flags for native AppKit input.
+  if ([method isEqualToString:@"Input.dispatchMouseEvent"] &&
+      ([parameters[@"type"] isEqual:@"mousePressed"] ||
+       [parameters[@"type"] isEqual:@"mouseReleased"])) {
+    NSUInteger flags = [parameters[@"modifiers"] unsignedIntegerValue];
+    NSEventModifierFlags modifiers = 0;
+    if (flags & 1) modifiers |= NSEventModifierFlagOption;
+    if (flags & 2) modifiers |= NSEventModifierFlagControl;
+    if (flags & 4) modifiers |= NSEventModifierFlagCommand;
+    if (flags & 8) modifiers |= NSEventModifierFlagShift;
+    OENoteNavigationInput(self.view.window, modifiers);
+  } else if ([method isEqualToString:@"Input.dispatchKeyEvent"]) {
+    OENoteNavigationInput(nil, 0);
+  }
   if (!_devToolsRegistration) {
     _devToolsRegistration = host->AddDevToolsMessageObserver(_client.get());
   }

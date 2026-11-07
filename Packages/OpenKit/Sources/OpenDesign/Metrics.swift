@@ -2,6 +2,14 @@ import CoreGraphics
 import Foundation
 import OpenModel
 
+/// guess S10-I1: Arc names ProfileIndicatorView but its exact header geometry is unverified.
+public enum ProfileIndicatorMetrics {
+    public static let glyphSize: CGFloat = 14
+    public static let hitSize: CGFloat = 20
+    public static let gap: CGFloat = 2
+    public static let opacity: CGFloat = 0.55
+}
+
 // Layout metrics in points. Frames are `[x, y, w, h]` from the window's top-left
 // corner (y grows down), measured on Arc 1.170.0 at sidebar width 228
 // (docs/re/runtime-observations.md §1, docs/re/interaction-states.md).
@@ -392,6 +400,10 @@ public enum BannerMetrics {
 /// The optional content toolbar (commandbar-completion §4.6.2). It is the split pane bar on a single
 /// pane: same height and left controls (`SplitMetrics`), no split menu, no close.
 public enum ToolbarMetrics {
+    /// Extensions lead decision: SCC stays 4 pt left of the complete strip.
+    public static func siteControls(width w: CGFloat, stripWidth: CGFloat) -> CGRect {
+        CGRect(x: stripWidth > 0 ? w - 5 - stripWidth - 4 - 32 : w - 37, y: 2, width: 32, height: 28)
+    }
     /// Arc `toolbar-display-height` default 32 (decoded, CC-33).
     public static let height: CGFloat = SplitMetrics.barHeight
     /// The extensions button slot, the close button's place (CC-34 `contentToolbarOpenExtensionsButton`;
@@ -440,6 +452,8 @@ public enum LittleOpenMetrics {
     public static let closeGlyphSize: CGFloat = 11
     public static func capsule(width w: CGFloat) -> CGRect { CGRect(x: 84, y: 8, width: max(0, w - 289), height: 31) }
     public static func copy(width w: CGFloat) -> CGRect { CGRect(x: w - 228, y: 16, width: 16, height: 16) }
+    /// guess (lead), capture S-7: extension action menu inside the URL capsule.
+    public static func extensions(width w: CGFloat) -> CGRect { CGRect(x: w - 252, y: 16, width: 16, height: 16) }
     public static func pill(width w: CGFloat) -> CGRect { CGRect(x: w - 196, y: 8, width: 188, height: 30) }
     public static func pillButton(width w: CGFloat) -> CGRect { CGRect(x: w - 191, y: 15, width: 148, height: 17) }
     public static func chevron(width w: CGFloat) -> CGRect { CGRect(x: w - 29, y: 15, width: 16, height: 16) }

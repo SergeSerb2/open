@@ -65,7 +65,13 @@ struct SidebarMenus {
     }
 
     /// Selection menu; folders use Delete only (lead decision Q1).
+    func emptyIncognito() -> NSMenu { menu([item("New Tab", .newTab)]) }
+
     func selection(_ ids: [ItemID]) -> NSMenu {
+        if context.isIncognito {
+            return menu([item("Copy Links", .copyLinks(ids: ids, markdown: false)),
+                item("Duplicate", .duplicateNodes(ids: ids)), item("Close Tabs", .archiveNodes(ids: ids))])
+        }
         let folders = ids.filter { context.model.node(id: $0)?.folder != nil }
         let tabs = ids.filter { context.model.node(id: $0).map { $0.folder == nil } ?? false }
         func hasLinks(_ node: SidebarNode) -> Bool {
@@ -110,6 +116,11 @@ struct SidebarMenus {
     /// Today (unpinned) tab: capture session 2, 08-folder-preview frame 0050.
     /// Archive Other Tabs remains a guessed Option alternate.
     func todayTab(_ tab: Tab) -> NSMenu {
+        if context.isIncognito {
+            return menu([item("Copy Link", .copyLink(nodeID: tab.id, markdown: false)),
+                item("Open in Split View", .openInSplitView(tabID: tab.id)),
+                item("Duplicate", .duplicate(nodeID: tab.id)), item("Close Tab", .close(nodeID: tab.id))])
+        }
         var items: [NSMenuItem] = [
             item("Copy Link", .copyLink(nodeID: tab.id, markdown: false)),
             .separator(),
@@ -191,13 +202,9 @@ struct SidebarMenus {
             header,
         ]
         items += split.panes.map { pane(of: split, $0) }
-        items += [
-            .separator(),
-            item("Duplicate", .duplicate(nodeID: split.id)),
-            moveTo(split.id),
-            .separator(),
-            item("Archive Item", .close(nodeID: split.id)),
-        ]
+        items += [.separator(), item("Duplicate", .duplicate(nodeID: split.id))]
+        if !context.isIncognito { items.append(moveTo(split.id)) }
+        items += [.separator(), item(context.isIncognito ? "Close Split View" : "Archive Item", .close(nodeID: split.id))]
         return menu(items)
     }
 
@@ -287,9 +294,17 @@ struct SidebarMenus {
 
     func plus() -> NSMenu {
         let space = context.focusedSpace
+        let canSplit: Bool = {
+            guard let tab = context.currentTab, let parent = context.model.parent(of: tab.id) else { return false }
+            switch parent {
+            case .favorites: return false
+            case .splitPane(let id): return (context.model.node(id: id)?.split?.panes.count ?? 4) < 4
+            default: return true
+            }
+        }()
         return menu([
             item("New Tab", .newTab),
-            item("New Split View", .newSplitView),
+            item("New Split View", enabled: canSplit, .newSplitView),
             space.map { item("New Folder", .newFolder(in: .spacePinned($0.id))) } ?? .separator(),
             .separator(),
             item("New Space…", .newSpace),

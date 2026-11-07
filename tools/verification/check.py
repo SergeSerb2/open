@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 """Fixtures and assertions for verify-all.sh; invokes real release interfaces only."""
 import contextlib
+import fcntl
 import json
 import os
 from pathlib import Path
@@ -81,7 +82,8 @@ def onscreen_suite(command):
     """Own lockf's shared FD; keep the 180 s execution budget after acquisition."""
     termination_signals = (signal.SIGTERM, signal.SIGINT, signal.SIGHUP)
     cancelled = None
-    directory = job = lock_file = lock_job = None
+    waiting_for_lock = False
+    directory = job = lock_file = None
     cleanup_complete = False
     output = ""
 
@@ -93,14 +95,6 @@ def onscreen_suite(command):
         # the short-lived ps children used to identify our registered app.
         previous_mask = signal.pthread_sigmask(signal.SIG_BLOCK, termination_signals)
         try:
-            if lock_job is not None:
-                if lock_job.poll() is None:
-                    lock_job.terminate()
-                    try:
-                        lock_job.wait(timeout=2)
-                    except subprocess.TimeoutExpired:
-                        lock_job.kill()
-                lock_job.wait()
             if job is not None:
                 if job.returncode is None:
                     with contextlib.suppress(ProcessLookupError):
@@ -121,7 +115,7 @@ def onscreen_suite(command):
             renderer = f"renderer {job.pid} reaped" if job is not None else "no renderer started"
             with contextlib.suppress(BrokenPipeError):
                 print(f"On-screen cleanup: {renderer}; native apps stopped={native_apps}; private root removed", flush=True)
-            # FD-mode lockf locks this shared open-file description. Reap all
+            # flock locks this shared open-file description. Reap all
             # helpers and remove the root before releasing our last descriptor.
             if lock_file is not None:
                 lock_file.close()
@@ -148,6 +142,10 @@ def onscreen_suite(command):
             cancelled = signum
         if cleanup_complete:
             exit_cancelled()
+        if waiting_for_lock:
+            # Raising prevents Python from restarting the blocking flock after
+            # the signal. Setup and child assignment still use deferred cancel.
+            raise InterruptedError("on-screen lock wait cancelled")
         # Do not raise asynchronously across TemporaryDirectory/Popen assignment:
         # a spawned child must be recorded before cancellation can unwind setup.
 
@@ -159,20 +157,30 @@ def onscreen_suite(command):
     try:
         lock_path = "/tmp/open-onscreen-e2e.lock"
         while cancelled is None:
-            lock_file = open(lock_path, "a+")
-            lock_job = subprocess.Popen(["/usr/bin/lockf", "-s", str(lock_file.fileno())],
-                                        pass_fds=(lock_file.fileno(),),
-                                        stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+            # TANDEM-RULES §3.4a: this native suite never creates a priority flag.
+            # Queue time stays outside the execution deadline, as for lock acquisition.
+            priority = Path("/tmp/open-onscreen-priority")
             while cancelled is None:
                 try:
-                    lock_job.wait(timeout=0.25)
+                    if time.time() - priority.stat().st_mtime >= 1800:
+                        break
+                except FileNotFoundError:
                     break
-                except subprocess.TimeoutExpired:
-                    pass
+                time.sleep(0.25)
             if cancelled is not None:
                 break
-            require(lock_job.returncode == 0, "cannot acquire the on-screen lock")
-            # Another default-mode lockf user may unlink the path at release.
+            lock_file = open(lock_path, "a+")
+            waiting_for_lock = True
+            try:
+                if cancelled is None:
+                    # Join the kernel's queue alongside lockf waiters. Polling
+                    # with LOCK_NB can starve behind already-blocked waiters.
+                    fcntl.flock(lock_file.fileno(), fcntl.LOCK_EX)
+            finally:
+                waiting_for_lock = False
+            if cancelled is not None:
+                break
+            # An older lockf user or external replacement may unlink the path.
             # Never start a suite on a locked inode that is no longer current.
             held = os.fstat(lock_file.fileno())
             try:
@@ -505,6 +513,8 @@ def route(cli, root, seed):
     decision = json.loads(run(cli, "route", save_snapshot(data), "https://example.com/", "--external-little-open", "off", "--json"))
     require("noSpaces" in decision["via"] and decision.get("resolved") is None, "A17 empty state did not report noSpaces")
     print("route A1-A17 passed")
+    runpy.run_path(str(root / "tools/verification/routing_atc.py"))["route_atc"](
+        cli, seed_snapshot(cli, seed), run, require, save_snapshot)
 
 
 @contextlib.contextmanager
@@ -729,18 +739,28 @@ def arc_import(cli):
         for line in text.splitlines():
             if re.match(r"^  (?:totalItems=|pinnedTabs=|folders=|skipped easels=|orphans=|archive filePresent=|archive check accounted=|containers\(structural\)=|accounted check:)", line):
                 print(line)
-        listed = run(cli, "archive-list", output, "--limit", "0", quiet=True)
-        matches(r"^archive rows total=\d+ showing=0$", listed)
-        stored = re.search(r"storedTotal=(\d+)", text)
-        if stored:
-            matches(r"^archive rows total=" + stored[1] + r" showing=0$", listed)
-        print(listed, end="")
-        # When available, P-9 inspects the imported profile through the public CLI.
+        # Archive is per Profile. The import report totals every store; the
+        # archive-list default alone cannot prove that total after a real
+        # multi-Profile import. Keep private IDs/names out of the receipt.
+        profile_refs = [None]
         usage = run(cli, quiet=True, expected=2)
         if re.search(r"[<|]profiles[|>]", usage):
-            listed = run(cli, "profiles", output, "list", quiet=True)
-            matches(r"dir=Default", listed)
-            print("importedProfiles=" + str(len(re.findall(r"^profile ", listed, re.MULTILINE))))
+            profiles = json.loads(run(cli, "profiles", output, "list", "--json", quiet=True))
+            require(any(p["dataDirectoryName"] == "Default" for p in profiles), "missing Default Profile")
+            profile_refs = [p["id"] for p in profiles]
+            print("importedProfiles=" + str(len(profiles)))
+        archive_rows = 0
+        for profile_ref in profile_refs:
+            selection = ("--profile", profile_ref) if profile_ref is not None else ()
+            listed = run(cli, "archive-list", output, "--limit", "0", *selection, quiet=True)
+            row = re.search(r"^archive rows total=(\d+) showing=0$", listed, re.MULTILINE)
+            require(row is not None, "missing per-Profile Archive count")
+            archive_rows += int(row[1])
+        print(f"archive rows total={archive_rows} showing=0")
+        print(f"archiveProfileStores={len(profile_refs)}")
+        stored = re.search(r"storedTotal=(\d+)", text)
+        if stored:
+            require(archive_rows == int(stored[1]), "per-Profile Archive total differs from import report")
         matches(r"roundtrip OK", run(cli, "roundtrip", output, quiet=True))
         print("importRoundtrip=1")
 
@@ -766,6 +786,21 @@ def main():
     cli = str(root / "Packages/OpenKit/.build/release/openkit")
     if name == "build":
         build(root)
+    elif name == "verify-secrets-fixture":
+        for args in [[], ["--stop-after", "logins"], ["--stop-after", "webData"], ["--stop-after", "cookies"]]:
+            text = run(cli, name, *args)
+            require("FAIL" not in text and "PASS final counts without duplicates" in text, "secrets fixture expectations")
+        run(sys.executable, str(root / "tools/verification/secrets-consent.py"), str(root))
+        source = Path("synthetic-arc").resolve()
+        profile = source / "Default"
+        profile.mkdir(parents=True, mode=0o700)
+        with sqlite3.connect(profile / "Login Data") as db:
+            db.execute("CREATE TABLE logins(blacklisted_by_user INTEGER)")
+        text = run(cli, "import-arc-secrets", "--arc-user-data", str(source), "--dry-run")
+        require("keychain: not requested" in text and "stored=0" in text and "logins rows=0" in text,
+                "empty dry-run stays outside Keychain")
+        run(cli, "import-arc-secrets", "--arc-user-data", str(source), expected=3)
+        run(cli, "verify-secrets-fixture", "--stop-after", "invalid", expected=2)
     elif name == "commands-demo":
         directory = Path("data").resolve()
         text = run(cli, name, str(directory))
@@ -779,7 +814,11 @@ def main():
         legacy_space_fixture(cli, root)
         space_icon_import(cli)
     elif name == "space-editor":
-        all_passed(run(str(root / "Packages/OpenKit/.build/release/space-editor-render"), "check"))
+        # The icon-picker checks send native events to real windows. Use the
+        # existing screen worker so another suite cannot take their focus.
+        all_passed(run(sys.executable, str(Path(__file__).resolve()), "onscreen-suite",
+                       str(root / "Packages/OpenKit/.build/release/space-editor-render"), "check",
+                       timeout=None, interrupted_exit=2))
     elif name == "space-pad-compare":
         text = run(sys.executable, str(root / "tools/verification/space-pad-compare.py"))
         matches(r"session2-pad: [1-9]\d* gate rows PASS", text)
@@ -841,8 +880,15 @@ def main():
         require(not any(line.startswith("default open.general.previewsDelaySeconds =") for line in dump.splitlines()),
                 "removed preview delay default was registered")
         pngs = sorted(output.glob("*.png"))
-        require(len(pngs) == 222, "missing settings/library/appearance/detail/sheet/state renders")
+        require(len(pngs) == 236, "missing settings/library/appearance/detail/sheet/state renders")
+        require({f"sheet-link-rule-profile-work@{scale}x.png" for scale in (1, 2)} <= {p.name for p in pngs},
+                "missing two-Profile destination renders")
+        require({f"{state}@{scale}x.png" for state in
+                 ("profile-icons", "profile-delete-disabled", "profile-delete-enabled", "profile-delete-unused")
+                 for scale in (1, 2)} <= {p.name for p in pngs}, "missing Profile icon/deletion renders")
         require({"library-spaces@1x.png", "library-spaces@2x.png"} <= {p.name for p in pngs}, "missing Library Spaces renders")
+        require({f"shortcuts-extension-conflicts-{appearance}@{scale}x.png" for appearance in ("light", "dark") for scale in (1, 2)} <= {p.name for p in pngs},
+                "missing extension shortcut conflict renders")
         # Essential Keyboard Shortcuts window (commandbar-completion Step 6): light, dark, and a custom key.
         require({f"essential-shortcuts-{n}@{s}x.png" for n in ("light", "dark", "custom-key") for s in (1, 2)} <= {p.name for p in pngs},
                 "missing Essential Keyboard Shortcuts renders")
@@ -860,10 +906,22 @@ def main():
             data = png.read_bytes()
             scale = 2 if "@2x" in png.name else 1
             sheets = {"previews": (480, 320), "search-engines": (520, 420), "clear-data": (460, 360),
-                      "adblock": (600, 560), "link-rule": (520, 380), "link-rule-invalid": (520, 380), "suggestion-notice": (400, 180), "search-engine-edit": (520, 540), "profile-create": (440, 330),
+                      "adblock": (600, 560), "link-rule": (520, 380), "link-rule-invalid": (520, 380), "link-rule-profile-work": (520, 380), "suggestion-notice": (400, 180), "search-engine-edit": (520, 540), "profile-create": (440, 330),
                       "profile-rename": (440, 180), "archive-scope": (500, 160)}
             expected = (440, 384) if png.name.startswith("essential-shortcuts-") else (560, 520) if png.name.startswith("first-run-") else ((960, 640) if png.name.startswith("library-") else ((640, 520) if png.name.startswith("import-") else (sheets[png.name.split("@")[0][6:]] if png.name.startswith("sheet-") else (684, 650))))
+            expected = {"profile-delete-disabled": (508, 310), "profile-delete-enabled": (508, 310),
+                        "profile-delete-unused": (508, 360)}.get(png.name.split("@")[0], expected)
             require(data[:8] == b"\x89PNG\r\n\x1a\n" and struct.unpack(">II", data[16:24]) == tuple(n * scale for n in expected), "bad pane dimensions: " + png.name)
+    elif name == "extensions-render":
+        renderer = str(root / "Packages/OpenKit/.build/release/extensions-render")
+        for scale in (1, 2):
+            for appearance in ("light", "dark"):
+                run(renderer, "all", "--scale", str(scale), "--appearance", appearance,
+                    "--out", str(Path("extensions-renders") / f"{appearance}-{scale}x"))
+        text = run(renderer, "check")
+        matches(r"extensions-render check: [1-9]\d* passed, 0 failed", text)
+        require(not re.search(r"^FAIL\b", text, re.MULTILINE), "extensions check failure")
+        run(renderer, "menus", "--out", str(Path("extensions-menus")))
     elif name == "features-render":
         run("python3", str(root / "tools/generate-sounds.py"), "--check")
         text = run(str(root / "Packages/OpenKit/.build/release/features-render"), "check")
@@ -878,7 +936,7 @@ def main():
             # release build and wholly offscreen checks need no on-screen lock.
             # Lock queue time is not suite execution time. The inner worker owns
             # the unchanged deadline and releases its lock after reaping children.
-            # The worker acquires lockf's FD-mode lock itself. A group signal
+            # The worker acquires the shared flock itself. A group signal
             # cannot kill a separate lock wrapper and unlock before cleanup.
             command = [sys.executable, str(Path(__file__).resolve()), "onscreen-suite", *command]
             all_passed(run(*command, timeout=None, interrupted_exit=2))

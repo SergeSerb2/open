@@ -1,4 +1,5 @@
 import AppKit
+import OpenExtensionsUI
 import OpenDesign
 import OpenModel
 
@@ -47,8 +48,11 @@ public final class SidebarView: NSView {
     public var spaceSlideAnimation: CAAnimation? { pager.lastSlideAnimation }
     let bottomBar: BottomBarView
     public let mediaControls: MediaControlsView
+    private var creationDraft: SpaceThemeStyle?
+    public private(set) var isCreatingSpace = false
     private var cardBackground: ThemeBackgroundView?
     private var pointerTracking: NSTrackingArea?
+    private var themePreviewObserver: UUID?
     private var observerID: UUID?
     private var loops: [ObservationLoop] = []
     private var modifierMonitor: Any?
@@ -108,6 +112,13 @@ public final class SidebarView: NSView {
         preferencesObserver = NotificationCenter.default.addObserver(forName: UserDefaults.didChangeNotification, object: nil, queue: .main) { [weak self] _ in
             MainActor.assumeIsolated { self?.syncBanner() }
         }
+        themePreviewObserver = ThemePreviewRegistry.shared.addObserver { [weak self] id in
+            guard let self, self.context.focusedSpace?.id == id else { return }
+            self.syncTheme()
+            if self.context.isLiveThemePreview(id) {
+                (self.presentation == .floatingCard ? self.cardBackground : self.themeBackground)?.prepareForSnapshot()
+            }
+        }
         syncTheme()
         syncPeekDim()
         syncBanner()
@@ -121,6 +132,7 @@ public final class SidebarView: NSView {
         if let preferencesObserver { NotificationCenter.default.removeObserver(preferencesObserver) }
         context.existingHoverPreviews?.dismiss()
         if let observerID { context.model.removeObserver(observerID) }
+        if let themePreviewObserver { ThemePreviewRegistry.shared.removeObserver(themePreviewObserver) }
         loops.forEach { $0.cancel() }
     }
 
@@ -132,13 +144,13 @@ public final class SidebarView: NSView {
 
     /// Window-level geometry for this sidebar's width.
     public var favoritesHeight: CGFloat {
-        FavoritesMetrics.sectionHeight(count: context.favoritesProfile?.favorites.count ?? 0, sidebarWidth: bounds.width)
+        context.isIncognito ? 0 : FavoritesMetrics.sectionHeight(count: context.favoritesProfile?.favorites.count ?? 0, sidebarWidth: bounds.width)
     }
 
     public override func layout() {
         super.layout()
         let w = bounds.width, h = bounds.height
-        if presentation == .floatingCard { cardBackground?.frame = bounds }
+        if presentation == .floatingCard { cardBackground?.frame = bounds; cardBackground?.fieldFrame = cardFieldFrame }
         toolbar.frame = CGRect(x: 0, y: 0, width: w, height: URLFieldMetrics.y)
         urlField.frame = CGRect(x: URLFieldMetrics.insetX, y: URLFieldMetrics.y, width: w - 2 * URLFieldMetrics.insetX, height: URLFieldMetrics.height)
         // With the content toolbar, the URL field hides and Favorites move up to its place (§4.6.3; layout guess, §9 item 1).
@@ -149,7 +161,8 @@ public final class SidebarView: NSView {
         let oldFavorites = favorites.frame, oldPagerFrame = pager.frame
         if statusShown || urlStatusButtonIfMade != nil { urlStatusButton.frame = URLStatusMetrics.frame(sidebarWidth: w) }
         let favTop = toolbarShown ? URLFieldMetrics.y : FavoritesMetrics.sectionTop + (statusShown ? URLStatusMetrics.pushDown : 0)
-        let favH = favoritesHeight
+        favorites.isHidden = isCreatingSpace || context.isIncognito
+        let favH = isCreatingSpace ? 0 : favoritesHeight
         favorites.frame = CGRect(x: 0, y: favTop, width: w, height: favH)
         let bottom = h - BottomBarMetrics.height
         let mediaHeight = mediaControls.requiredHeight
@@ -254,13 +267,19 @@ public final class SidebarView: NSView {
 
     /// Theme, appearance, and the window background.
     private func syncTheme() {
+        if let draft = creationDraft {
+            appearance = draft.resolvedAppearance(system: context.systemAppearance).nsAppearance
+            let bg = presentation == .floatingCard ? cardBackground : themeBackground
+            if bg?.targetStyle != draft { bg?.crossfade(to: draft, animated: false) }
+            return
+        }
         guard let space = context.focusedSpace else { return }
         appearance = context.appearance(for: space).nsAppearance
         let bg = presentation == .floatingCard ? cardBackground : themeBackground
         bg?.isWindowActive = context.isWindowActive
         // A theme edit on the focused Space shows at once; Space switches cross-fade in the pager.
         if let bg, bg.targetStyle != context.style(for: space), pager.currentPage?.space === space {
-            bg.crossfade(to: context.style(for: space), animated: animatesSidebarChanges)
+            bg.crossfade(to: context.style(for: space), animated: animatesSidebarChanges && !context.isLiveThemePreview(space.id), duration: Motion.themeCrossfade)
         }
         for v in [toolbar, urlField, favorites, bottomBar] as [NSView] { v.needsDisplay = true; v.needsLayout = true }
     }
@@ -268,10 +287,20 @@ public final class SidebarView: NSView {
     /// Builds the card's own theme background before the card shows, so its first frame
     /// is never empty: a new `ThemeBackgroundView` only fills its field on the next display
     /// tick. The view is kept (hidden) between reveals; only a theme or size change rebuilds it.
+    /// The window's bounds in the card's coordinates: the card shows the window's own
+    /// theme field at its place (`ThemeBackgroundView.fieldFrame`). Nil: the card's size.
+    /// True while the card shows and its background draws over the page blur.
+    public var cardDrawsPageBlur: Bool { presentation == .floatingCard && cardBackground?.drawsPageBlur == true }
+    public var cardFieldFrame: CGRect? {
+        didSet { if cardFieldFrame != oldValue, presentation == .floatingCard { cardBackground?.fieldFrame = cardFieldFrame } }
+    }
+
     public func prepareFloatingCard(size: CGSize) {
         let bg: ThemeBackgroundView
         if let cardBackground { bg = cardBackground } else {
             bg = ThemeBackgroundView(frame: CGRect(origin: .zero, size: size))
+            // Arc's card is translucent: its tint over the blurred page (WindowMaterial).
+            bg.material = .overPage
             bg.isHidden = presentation != .floatingCard
             addSubview(bg, positioned: .below, relativeTo: nil)
             cardBackground = bg
@@ -279,6 +308,7 @@ public final class SidebarView: NSView {
         if let space = context.focusedSpace, bg.targetStyle != context.style(for: space) { bg.style = context.style(for: space) }
         bg.isWindowActive = context.isWindowActive
         bg.frame = CGRect(origin: .zero, size: size)
+        bg.fieldFrame = cardFieldFrame
         bg.layoutSubtreeIfNeeded()
         bg.prepareForSnapshot()
     }
@@ -354,6 +384,17 @@ public final class SidebarView: NSView {
     @discardableResult
     public func perform(_ intent: SidebarIntent) -> Bool { context.send(intent) }
 
+    public func beginSpaceCreation(page: NSView) {
+        isCreatingSpace = true; context.existingHoverPreviews?.dismiss()
+        needsLayout = true; layoutSubtreeIfNeeded(); pager.beginCreation(page: page)
+    }
+    public func previewSpaceCreation(_ style: SpaceThemeStyle) {
+        creationDraft = style; syncTheme()
+    }
+    public func endSpaceCreation(focus: SpaceID?) {
+        isCreatingSpace = false; creationDraft = nil
+        pager.endCreation(); needsLayout = true; layoutSubtreeIfNeeded(); syncTheme()
+    }
     /// Starts inline rename of a row (or of the Space title when `nodeID` is nil).
     public func beginRename(nodeID: ItemID?) {
         pager.currentPage?.beginRename(nodeID: nodeID)
@@ -367,6 +408,22 @@ public final class SidebarView: NSView {
 
     public var spaceHeaderFrame: NSRect? {
         pager.currentPage.map { convert($0.header.bounds, from: $0.header) }
+    }
+
+    /// Icon anchors use AppKit window coordinates, including a floating sidebar.
+    public func headerIconFrame(for space: SpaceID) -> CGRect? {
+        guard let page = pager.currentPage, page.space.id == space else { return nil }
+        return page.header.iconFrameInWindow
+    }
+
+    public func rowIconFrame(for node: ItemID) -> CGRect? {
+        guard let page = pager.currentPage, let obj = context.model.node(id: node)?.object else { return nil }
+        let row = page.outline.row(forItem: obj)
+        guard row >= 0, page.outline.rows(in: page.outline.visibleRect).contains(row),
+              let cell = page.outline.view(atColumn: 0, row: row, makeIfNecessary: true) else { return nil }
+        if let tab = cell as? TabCellView { return tab.favicon.convert(tab.favicon.bounds, to: nil) }
+        if let folder = cell as? FolderCellView { return folder.icon.convert(folder.icon.bounds, to: nil) }
+        return nil
     }
 
     /// Scrolls the focused page so the node's row is visible.
@@ -643,9 +700,14 @@ extension SidebarView {
     }
     /// The compact toolbar's "More options" menu, built as a click would build it.
     public func toolbarMoreMenu() -> NSMenu { toolbar.makeMoreMenu() }
+    /// The same provider used when the bottom-bar plus button opens its menu.
+    public func plusMenu() -> NSMenu? { bottomBar.plus.menuProvider?() }
     /// The URL field's right-click menu, built as a click would build it.
     public func urlFieldMenu() -> NSMenu { SidebarMenus(context: context).urlField() }
     /// The URL field shows (it hides while the window shows the content toolbar).
+    public var extensionsStrip: ExtensionStripView? { urlField.extensionStrip }
+    public var siteControlsAnchor: NSView { urlField.siteControls }
+    public func refreshExtensionsLayout() { urlField.needsLayout = true; urlField.layoutSubtreeIfNeeded() }
     public var urlFieldVisible: Bool { !urlField.isHidden }
     /// The URL field's text right now (the host, or the full URL for a Developer Mode site).
     public var urlFieldText: String { context.pageHost ?? "" }
@@ -664,6 +726,13 @@ extension SidebarView {
 
     /// The text the URL field shows: the current page's host or the placeholder.
     public var displayedURLText: String { urlField.displayedText }
+    /// Read actual private-window view visibility for real-App acceptance.
+    public var incognitoChrome: [String: Bool] {
+        ["favoritesHidden": favorites.isHidden, "libraryHidden": bottomBar.home.isHidden,
+         "switcherEmpty": bottomBar.items.isEmpty, "headerMoreHidden": pager.currentPage?.header.more.isHidden == true,
+         "headerCollapseHidden": pager.currentPage?.header.chevron.isHidden == true,
+         "eyeglasses": pager.currentPage?.space.icon == .symbol("eyeglasses")]
+    }
 
     /// Chrome geometry in sidebar coordinates, for host checks: the URL field and its hover
     /// state, and the focused Space header band, its title frame and baseline, and its hover state.

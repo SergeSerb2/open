@@ -24,7 +24,7 @@ final class AppScriptEngineBridge: ScriptEngineBridge {
     }
     let history = await app.tabSleep.store?.sleepHistory(tabID: tabID)
     guard app.engineReady, !app.shutdownPrepared, app.model?.tab(id: tabID) === tab,
-          let factory = app.frontWindowController.flatMap({ app.hostFactories[$0.windowID] }) else { return nil }
+          let factory = app.frontStandardWindowController.flatMap({ app.hostFactories[$0.windowID] }) else { return nil }
     let restore = history.flatMap { OENavigationHistory(container: $0.container) }
     let page = factory.ensureContent(for: tab, history: restore)
     // Restored background pages have no renderer until a navigation starts. Reload
@@ -256,7 +256,8 @@ extension AppDelegate {
       guard !incognito else { return nil }
       return self?.makeWindow()?.windowID
     }
-    // Main has only showLittleOpenStub; no real section 9 executor exists yet.
+    // Standalone Little Open sessions are not model tabs. S11 still needs a
+    // standalone ScriptTab lookup before its app-level creation hook can return one.
     host.makeLittleTab = nil
     refreshScriptingEngine()
     host.purgeRemovedWrappers()

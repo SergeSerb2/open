@@ -4,12 +4,14 @@ import OpenFeatures
 import OpenDesign
 import OpenModel
 import OpenSuggest
+import OpenEngine
 
 /// One lazy native command-bar controller for one standard window.
 @MainActor
 final class AppCommandBarSession: CommandBarDelegate {
   unowned let factory: EngineWebContentHostFactory
   private(set) var controller: CommandBarController?
+  private lazy var extensionSource = EngineCommandBarSource(factory: factory)
   private var openedAt = 0.0
   private var queryAt = 0.0
   private var queryRevision = 0
@@ -32,12 +34,17 @@ final class AppCommandBarSession: CommandBarDelegate {
       factory.app.focusWindow(factory.windowState.id, activate: true)
     }
     windowController.dismissSidebarReveal()
-    let engine = factory.app.stores.suggest(for: profile.id)
+    guard let engine = factory.suggestEngine() else { return }
+    engine.extensionSource = extensionSource
     if controller?.engine !== engine {
       controller?.dismiss(reason: .programmatic)
       controller?.view.removeFromSuperview()
       let bar = CommandBarController(engine: engine)
       bar.delegate = self
+      extensionSource.onRowsChanged = { [weak bar] id in bar?.refreshExtensionSuggestions(extensionID: id) }
+      bar.extensionIcon = { [weak self] id in
+        self?.factory.focusedBrowser?.extensionActions.first { $0.extensionIdentifier == id }?.icon
+      }
       bar.isActionEnabled = { [weak self] id, space in self?.factory.isAppCommandEnabled(id, payload: space?.description) ?? false }
       bar.onQueryStarted = { [weak self] _ in
         guard let self else { return }
@@ -73,7 +80,7 @@ final class AppCommandBarSession: CommandBarDelegate {
       currentTabID: pinned?.id ?? (peek ? nil : factory.selectedTab?.id),
       currentTabURL: pinned?.pinnedURL ?? (peek ? factory.selectedContent?.url : factory.selectedTab?.url),
       currentTabTitle: pinned?.displayTitle ?? (peek ? factory.selectedContent?.title : factory.selectedTab?.displayTitle),
-      allowsRemoteSuggestions: profile.settings.searchSuggestEnabled && factory.app.settingsPresenter.prepareForRemoteSuggestions(profileID: profile.id), searchEngineID: profile.settings.searchEngineID))
+      allowsRemoteSuggestions: !factory.isIncognito && profile.settings.searchSuggestEnabled && factory.app.settingsPresenter.prepareForRemoteSuggestions(profileID: profile.id), searchEngineID: profile.settings.searchEngineID))
   }
   func contextDidChange() {
     guard isPresented else { return }
@@ -109,12 +116,19 @@ final class AppCommandBarSession: CommandBarDelegate {
     case .openSearchSettings(let profile):
       // Open keeps search engines per Profile: Settings ▸ Profiles for the bar's Profile (CC-42 "Search Settings…").
       factory.app.performCommand("search-settings", payload: (profile ?? factory.focusedProfile?.id)?.description)
+    case .runExtensionAction(let id):
+      factory.focusedBrowser?.executeExtensionAction(id, source: .menuEntry)
+    case .extensionOmnibox(let id, let content, let destination, let modifiers):
+      let disposition: OEOmniboxDisposition = modifiers.contains(.command) ? .newBackgroundTab
+        : destination == .currentTab ? .currentTab : .newForegroundTab
+      extensionSource.enter(content, extensionID: id, disposition: disposition)
     case .dismissed: break // didChangePresentation runs after the bar releases its editor.
     }
   }
   /// The (i) footer's "Dismiss": the same acknowledgement as Settings' notice ("Code 4"), then
   /// remote suggestions for this query when the Profile allows them (CC-42, D14).
   func commandBarDidDismissPrivacyNotice(_ commandBar: CommandBarController) {
+    guard !factory.isIncognito else { return }
     let presenter = factory.app.settingsPresenter
     presenter.settings.profiles.dismissSuggestNotice()
     guard let profile = commandBar.request?.profileID.flatMap({ factory.app.model.profile(id: $0) }) else { return }
@@ -137,6 +151,7 @@ final class AppCommandBarSession: CommandBarDelegate {
       "scope": bar.scope?.title ?? "", "fieldText": bar.fieldText, "pinnedEdit": pinnedEditTabID?.description ?? "",
       "rows": bar.suggestions.map { ["id": $0.id, "kind": $0.kind.rawValue, "title": $0.title,
         "url": $0.url?.absoluteString ?? "", "tab": $0.tabID?.description ?? "",
-        "space": $0.spaceID?.description ?? "", "action": $0.actionID ?? ""] }] as [String: Any]
+        "space": $0.spaceID?.description ?? "", "action": $0.actionID ?? "",
+        "extension": $0.extensionID ?? "", "content": $0.extensionContent ?? "", "keycaps": $0.shortcutKeys] }] as [String: Any]
   }
 }

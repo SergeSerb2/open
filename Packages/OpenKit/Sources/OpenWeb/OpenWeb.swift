@@ -1,4 +1,5 @@
 import Foundation
+import CoreGraphics
 
 // OpenWeb: the Swift view of the web engine for OpenKit libraries.
 //
@@ -9,6 +10,18 @@ import Foundation
 // out of every package. See docs/engine-api.md for the engine side.
 
 // MARK: - Web content
+
+public enum SavePromptKind: Sendable { case password, passwordUpdate, card, address, addressUpdate }
+public enum SavePromptAnswer: Sendable { case save, neverForSite, dismiss }
+
+/// Releasing an unanswered request means ignored, rather than a user dismissal.
+@MainActor public protocol SavePromptRequest: AnyObject {
+    var kind: SavePromptKind { get }
+    var displayHost: String { get }
+    var offersNeverForSite: Bool { get }
+    var isAnswered: Bool { get }
+    func answer(_ answer: SavePromptAnswer)
+}
 
 /// What changed in a web content. Mirrors the engine's change bits.
 public struct WebContentChange: OptionSet, Sendable, Hashable {
@@ -163,29 +176,102 @@ public protocol WebProfile: AnyObject {
 
 // MARK: - Extensions
 
-/// One toolbar action, ready to draw.
+/// Immutable engine image. Identity changes only when engine pixels change.
+/// At most 2048² RGBA pixels per rep (16 MiB single allocation).
+public final class ExtensionImage: @unchecked Sendable, Hashable {
+    public let cgImage: CGImage
+    public let pointSize: CGSize
+    public let image1x: CGImage?
+    public init?(cgImage: CGImage, pointSize: CGSize, image1x: CGImage? = nil) {
+        guard pointSize.width.isFinite, pointSize.height.isFinite,
+              pointSize.width > 0, pointSize.height > 0, pointSize.width <= 512, pointSize.height <= 512,
+              [cgImage, image1x].compactMap({ $0 }).allSatisfy({ $0.width <= 2048 && $0.height <= 2048 }) else { return nil }
+        self.cgImage = cgImage; self.pointSize = pointSize; self.image1x = image1x
+    }
+    public func representation(scale: CGFloat) -> CGImage { scale <= 1 ? image1x ?? cgImage : cgImage }
+    public static func == (lhs: ExtensionImage, rhs: ExtensionImage) -> Bool { lhs === rhs }
+    public func hash(into hasher: inout Hasher) { hasher.combine(ObjectIdentifier(self)) }
+}
+
 public struct ExtensionActionInfo: Sendable, Hashable, Identifiable {
     public var id: String { extensionID }
     public var extensionID: String
-    public var title: String
-    public var iconPNG: Data?
+    public var name: String
+    public var accessibleName: String
+    public var tooltip: String
+    public var toolbarImage: ExtensionImage?
+    public var menuIcon: ExtensionImage?
     public var badgeText: String?
     public var isEnabled: Bool
     public var hasPopup: Bool
-
-    public init(extensionID: String, title: String, iconPNG: Data?, badgeText: String?, isEnabled: Bool, hasPopup: Bool) {
-        self.extensionID = extensionID; self.title = title; self.iconPNG = iconPNG
+    public var isPinned: Bool
+    public var pinnedIndex: Int?
+    public var wantsToRun: Bool
+    public var isShowingPopup: Bool
+    public var shortcutKeys: [String]
+    /// Compatibility with the current App bridge; removed by the App wiring step.
+    public var title: String { get { tooltip } set { tooltip = newValue } }
+    public var iconPNG: Data?
+    public init(extensionID: String, name: String, accessibleName: String? = nil, tooltip: String? = nil,
+                toolbarImage: ExtensionImage? = nil, menuIcon: ExtensionImage? = nil, badgeText: String? = nil,
+                isEnabled: Bool = true, hasPopup: Bool = true, isPinned: Bool = false, pinnedIndex: Int? = nil,
+                wantsToRun: Bool = false, isShowingPopup: Bool = false, shortcutKeys: [String] = []) {
+        self.extensionID = extensionID; self.name = name; self.accessibleName = accessibleName ?? name
+        self.tooltip = tooltip ?? name; self.toolbarImage = toolbarImage; self.menuIcon = menuIcon
         self.badgeText = badgeText; self.isEnabled = isEnabled; self.hasPopup = hasPopup
+        self.isPinned = isPinned; self.pinnedIndex = pinnedIndex; self.wantsToRun = wantsToRun
+        self.isShowingPopup = isShowingPopup; self.shortcutKeys = shortcutKeys
+    }
+    public init(extensionID: String, title: String, iconPNG: Data?, badgeText: String?, isEnabled: Bool, hasPopup: Bool) {
+        self.init(extensionID: extensionID, name: title, badgeText: badgeText, isEnabled: isEnabled, hasPopup: hasPopup)
+        self.iconPNG = iconPNG
     }
 }
+public typealias ExtensionItem = ExtensionActionInfo
+public enum ExtensionRunSource: Sendable { case toolbarButton, menuEntry, command }
 
-/// Extension actions of one window (the engine's tab strip).
-@MainActor
-public protocol ExtensionHost: AnyObject {
+@MainActor public protocol ExtensionHost: AnyObject {
     var extensionActions: [ExtensionActionInfo] { get }
-    /// Like a click on the action's button. Returns false when it cannot run.
-    @discardableResult
-    func executeAction(extensionID: String) -> Bool
+    var actionsReady: Bool { get }
+    @discardableResult func executeAction(extensionID: String) -> Bool
+    @discardableResult func executeAction(extensionID: String, source: ExtensionRunSource) -> Bool
+    func setPinned(_ pinned: Bool, extensionID: String)
+    func movePinned(extensionID: String, to index: Int)
+    func contextMenu(extensionID: String, fromMenuItem: Bool) -> (any ExtensionMenu)?
+    func closePopup()
+    var onActionsChanged: (@MainActor () -> Void)? { get set }
+    var onActionChanged: (@MainActor (ExtensionActionInfo) -> Void)? { get set }
+}
+/// Compatibility defaults permit the old App bridge to compile unchanged.
+/// New adapters implement the source-aware call; the old call is its wrapper.
+extension ExtensionHost {
+    public var actionsReady: Bool { false }
+    public func executeAction(extensionID: String) -> Bool { executeAction(extensionID: extensionID, source: .toolbarButton) }
+    public func executeAction(extensionID: String, source: ExtensionRunSource) -> Bool { false }
+    public func setPinned(_ pinned: Bool, extensionID: String) {}
+    public func movePinned(extensionID: String, to index: Int) {}
+    public func contextMenu(extensionID: String, fromMenuItem: Bool) -> (any ExtensionMenu)? { nil }
+    public func closePopup() {}
+    public var onActionsChanged: (@MainActor () -> Void)? { get { nil } set {} }
+    public var onActionChanged: (@MainActor (ExtensionActionInfo) -> Void)? { get { nil } set {} }
+}
+@MainActor public protocol ExtensionMenu: AnyObject {
+    var items: [ExtensionMenuItem] { get }
+    func select(command: Int)
+    func cancel()
+}
+public struct ExtensionMenuItem: Sendable, Codable, Equatable {
+    public var command: Int
+    public var title: String
+    public var isEnabled: Bool
+    public var isSeparator: Bool
+    public var isChecked: Bool
+    public var submenu: [ExtensionMenuItem]
+    public init(command: Int = 0, title: String = "", isEnabled: Bool = true, isSeparator: Bool = false,
+                isChecked: Bool = false, submenu: [ExtensionMenuItem] = []) {
+        self.command = command; self.title = title; self.isEnabled = isEnabled
+        self.isSeparator = isSeparator; self.isChecked = isChecked; self.submenu = submenu
+    }
 }
 
 // MARK: - Media (engine-free values; media/PiP plan §7.1)

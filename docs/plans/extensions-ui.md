@@ -1,6 +1,6 @@
 # Extensions UI — implementation plan for Open (shell side of fork patches P2/P3)
 
-Status: plan (2026-10-25). Implementer: a coding agent with no other
+Status: shell/engine implemented on main (2026-11-06), except the explicit Section 12 X-13 presenter dependency. Little Open X-19 follow-up passes nine real-App rows; the full UI suite passes 53 rows with only X-13 BLOCKED. Verification notes below map Steps 1–8 to PRs and real evidence. Reference captures and unverified global/update gates remain open. Original plan: 2026-10-25. Implementer: a coding agent with no other
 context. Follow this file literally. "Open choice" means the choice is
 final for v1. "guess" means no Arc capture proves the value: build the
 value as written, and §12 lists the capture that will confirm or change
@@ -116,7 +116,7 @@ Ship Arc's extension UI on Open's own views:
 - System `NSMenu` for every menu (`features-advanced.md` AM-1 allows it).
 - AppKit for every view in this plan. No SwiftUI.
 
-## 1. Current state (merged tree `d1720e3`, P1 branch `a03d2a5`; re-verify before you edit)
+## 1. Historical starting state (merged tree `d1720e3`, P1 branch `a03d2a5`)
 
 | Area | What exists | File |
 |---|---|---|
@@ -263,15 +263,24 @@ more button only.
 
 ### 3.4 Little Open toolbar
 
+**Lead update 2026-11-05 22:32:** Section 9 now owns a 47 pt title bar.
+The Extensions button is inside its URL capsule, left of Copy URL. Its
+glyph/hit frame is `[w − 252, 16, 16, 16]`, matching Copy URL's button
+style, with `LittleOpenMetrics.text` and symbol `puzzlepiece.extension`.
+While shown, host text ends at `extensions.minX − hostGap`; when hidden,
+the existing layout is unchanged. It shows for at least one action and
+uses the same menu and popup anchor below. This replaces the original frame
+and URL-field width. **guess (lead), capture S-7.**
+
 Owner: `LittleOpenWindowController`. Add one `PlateButton`-style button
 "Extensions" (EX-3):
 
-- Frame `[w − 132, 6, 30, 28]`, left of Profile (Profile, Downloads, Open
-  in Space keep `w − 100 + 32k`). The URL field width becomes
-  `w − 234` while the button shows (today `w − 202`). guess: the
-  position; §12 S-7.
+- Frame `[w − 252, 16, 16, 16]`, inside the 47 pt title bar's URL capsule,
+  left of Copy URL. Host text ends at `extensions.minX − hostGap`.
+  This supersedes the original `[w − 132, 6, 30, 28]` plan.
+  **guess (lead), S-7.**
 - Glyph `.extensions`: SF Symbol `puzzlepiece.extension`, 16 pt regular,
-  tint `SidebarRole.toolbarGlyph`. Our glyph, not Arc's `ExtensionsIcon`
+  tint `LittleOpenMetrics.text`. Our glyph, not Arc's `ExtensionsIcon`
   asset.
 - Tooltip "Extensions".
 - Shown only when the window's profile has at least one action (Arc
@@ -454,9 +463,9 @@ impossible in practice. A popup never moves to another window.
 ### 3.8 Extension popup windows (`chrome.windows.create({type: "popup"})`)
 
 Bitwarden's "pop out" and similar flows open a small window (EX-12;
-Arc `BrowserExtensionWindow` with an autosaved frame). P1 does not cover
-this yet (engine-patches.md: "`chrome.windows.create` still makes a
-Chrome Views window"). Engine request E11 (§7).
+Arc `BrowserExtensionWindow` with an autosaved frame). E11 now covers
+this on main ([#184](https://github.com/SergeSerb2/open/pull/184)); the original
+P1 Chrome Views window gap is closed. Engine contract: E11 (§7).
 
 Shell: `ExtensionWindowController` (App). A standard titled window
 (`.titled, .closable, .miniaturizable, .resizable`), title = page title,
@@ -616,7 +625,7 @@ Behavior:
 - `manage-extensions`: select the existing `chrome://extensions` tab in
   the focused Space if there is one, else open it as a new selected
   Today tab (Chrome's singleton-tab rule; Arc opened `arc://extensions`,
-  which Open does not alias). The page renders because P1 tabs are Chrome
+  displayed as `open://extensions` by the display-only alias). The page renders because P1 tabs are Chrome
   style.
 - `add-extension`: open `https://chromewebstore.google.com/category/extensions`
   (the URL string in Arc's binary, `.re/extensions-ui/ext-strings.txt`)
@@ -1530,7 +1539,7 @@ in a P1 tab (X-1), not with `--load-extension`.
 | X-16 | Menu bar | `Extensions` menu (built via `menuNeedsUpdate`) lists pinned first, then the rest, then Manage…/Add…; choosing an item runs the action |
 | X-17 | Manage | `manage-extensions` twice → one `chrome://extensions` tab, selected |
 | X-18 | Split View | split two tabs, focus pane 2: pane-bar strip shows only in pane 2; slot click anchors the popup to the pane-bar slot |
-| X-19 | Little Open | Little Open window with an extension installed: Extensions button visible; menu runs an action; popup anchors to the button |
+| X-19 | Little Open | Button visible for ≥1 action and hidden for 0; popup-less onClicked reports the standalone page id/URL; activeTab script fails before click and succeeds after click; popup tabs.query returns that page and its panel anchors 6 pt below the Extensions button; extra extension tabs open selected in the most recent main window's Today while Little Open keeps its page; Profile replacement changes the action list/target and clears the old delegate/list |
 | X-20 | Popup window | Bitwarden "pop out" → an `ExtensionWindowController` window, not a Chrome Views window; `chrome.windows.getAll()` includes it as type popup |
 | X-21 | Idle | 10 s idle with all extensions loaded: 0 extension UI redraws (signpost counter) |
 | X-22 | Run by name | command bar "action pro" → `.extensionAction` row "Action Probe"; Return → popup opens anchored per A4 |
@@ -1538,12 +1547,12 @@ in a P1 tab (X-1), not with `--load-extension`.
 | X-24 | Omnibox accept | in scope, "beta" + Return from a Cmd+L bar → the current tab loads `https://example.com/?q=beta`; from a Cmd+T bar → a new selected Today tab |
 | X-25 | Omnibox stale rows | type fast ("a", "al", "alp"): the rows match "alp" only (the fixture answers "a" late on purpose) |
 | X-26 | Keyword conflict | an extension keyword "yt" → Tab enters Site Search YouTube, not the extension (Q9) |
-| X-27 | Settings ▸ Shortcuts | the "…" menu item "Extension Shortcuts" opens one `chrome://extensions/shortcuts` tab; with the fixture's Cmd+Shift+U also bound to an Open command, the pane shows the conflict line (`settings-preview` scene with a fake `SettingsActions`, and the real app) |
+| X-27 | Settings ▸ Shortcuts | the real "…" menu item "Extension Shortcuts" opens/selects one Today `chrome://extensions/shortcuts` tab on two invocations; saving Cmd+Shift+U for New Tab through `ShortcutsViewModel.record` → `KeyBindingStore` shows exactly "Action Probe: ⇧⌘U is used by New Tab…, so it is off.", reports `probe-named` dropped, and the real key opens the Open command bar without changing the extension counter; resetting the binding clears the notice and the key fires the extension again. `settings-preview` separately covers the engine-free notice scene. |
 
 Screenshots for the PR: one per surface in light and dark, Open's own
 windows only.
 
-### 10.4 Before P2/P3 land
+### 10.4 Historical staging before P2/P3 landed
 
 Steps 1–3 (§11) run on today's engine and P1: the strip, menus, and
 popup panel work with P1's action data (badge text and title live,
@@ -1647,3 +1656,171 @@ The engine side of E1–E7 is in (docs/engine-patches.md, P2 status; docs/engine
   - Manage Extension: opens `chrome://extensions/?id=…` as a new tab.
   - View Web Permissions: opens `chrome://settings/content/siteDetails?site=…` as a new tab.
   - Remove: shows Chrome's own uninstall dialog until P3 (E10).
+
+## Verification notes — Step 1: UI kit and metrics
+
+[#175](https://github.com/SergeSerb2/open/pull/175) adds `OpenExtensionsUI`,
+`ExtensionsMetrics`, immutable engine-image wrappers and `extensions-render`.
+The saved acceptance has 16/16 checks, 11 scenes × light/dark × 1x/2x
+(44 PNGs), and five menu models. `strip.*`, `pane.*`, `toolbar.nmax`,
+`placement.*` and `strip.no-idle-work` prove geometry, ordering, hidden hit
+refusal, drag intents and idle scheduling. These are real library CLI flows;
+real browser behavior belongs to the later App suites.
+
+## Verification notes — Step 2: hosted strips and popup panel
+
+[#189](https://github.com/SergeSerb2/open/pull/189) wires URL/pane/toolbar
+strips, `EngineExtensionHost` and `ExtensionPopupController`. `extensions-ui`
+X3/X4 prove native hover/forced visibility, per-tab badges and pixel changes;
+X6/X7 prove active-tab queries, key/ready panel state and content resize;
+X8 proves native dismissal, popup Cmd+W, sidebar hiding and Inspect Popup's
+blur exception; X18 proves the focused Split View pane's strip and anchor.
+`actions` independently covers real popup hosts, callbacks and API popups.
+The old M1 root bar, panel and placement/hiding bridge are removed.
+
+The App receipt also runs `find` (58 PASS) with pinned actions. Its six F33
+native-close rows cover toolbar off/on, both split panes, narrow panes and
+Peek. `extensions-ui find_strip_no_overlap_native_close` checks actual Find
+frames against URL/pane/toolbar/Peek strips, clicks the native close control,
+and requires page focus plus visible strips. Section 11's `FindController`
+([#187](https://github.com/SergeSerb2/open/pull/187)) is the only placement path.
+
+## Verification notes — Step 3: menus and management entry points
+
+[#175](https://github.com/SergeSerb2/open/pull/175) supplies native menu
+builders; [#179](https://github.com/SergeSerb2/open/pull/179) supplies the
+registry/management singleton; [#189](https://github.com/SergeSerb2/open/pull/189)
+wires lazy menu updates, overflow and Little Open's button/menu.
+`extensions-render menu.bar/menu.relabel` proves order and relabeling;
+`extensions-ui X16_menu_bar`, `X16_menu_run`, `X17_manage_singleton` and
+`overflow_menu_anchor` prove real actions and singleton selection.
+`X19_button_menu` and `X19_zero_actions` prove the Little Open control/list.
+Section 9 [#185](https://github.com/SergeSerb2/open/pull/185) supplies the standalone Chrome browser. The X-19 follow-up [#192](https://github.com/SergeSerb2/open/pull/192) binds only `factory.standaloneBrowser`, clears the old delegate/list on replacement, and keeps pending-page actions from borrowing a main-window target. Nine real-App rows PASS: button/menu, popup-less target, activeTab, popup tabs.query, popup anchor, extra-tab routing to main Today, one/zero actions and Profile replacement. Wrong-main-target and skipped re-attach faults each FAIL the intended row. Discarding extra tabs, or recreating them before their real URL arrives, FAILs the extra-tab row. All faults are removed and the restored flow PASSes; each final proof reports cleanup PASS. The final `extensions-ui` run has 53 PASS and only X-13 BLOCKED; 20 popup samples have ready-to-visible p95 7.55 ms (budget 16.7 ms, load1 7.49). The fixture requests optional activeTab/scripting permissions only for X-19, preserving the existing disabled-action checks. Section 9’s page creation and the engine are unchanged.
+The page-context-menu "Manage Extensions" hook remains open in Section 11;
+`PageContextMenuHooks.extensionItems` still defaults to empty.
+
+## Verification notes — Step 4: SCC body and keyboard picker
+
+[#175](https://github.com/SergeSerb2/open/pull/175) adds shared rows/tiles,
+pin/context intents, arrow/wrap/type-select/Return/Esc and scroll-to-focus.
+`extensions-render picker.keys` and `sitecontrol-render extensions-check`
+(17 native-host checks) prove the library paths, including capped scroll
+height and focus preservation across refresh. The App supplies a per-window
+`extensionsUIContext`/refresh seam in [#189](https://github.com/SergeSerb2/open/pull/189).
+`extensions-ui X13_picker` is BLOCKED: `.showSiteControls` is still a stub.
+Section 12 owns the App SCC presenter/data source and the real Cmd+E gate.
+**guess (child), S-5/S-11:** the 236 pt grid uses the SCC's whole width;
+rows keep the existing 10 pt inset. This existing guess is not new closeout work.
+
+## Verification notes — Step 5: P2 actions, pin/order and native drawing
+
+Engine [#93](https://github.com/SergeSerb2/open/pull/93), safety fixes
+[#177](https://github.com/SergeSerb2/open/pull/177) / [#184](https://github.com/SergeSerb2/open/pull/184),
+and App [#189](https://github.com/SergeSerb2/open/pull/189) complete E1–E7.
+`actions` (26 PASS) proves live snapshots, `setIcon`, real Chrome popup hosts,
+`onClicked`, API popup refusal/blur behavior and native menus. `extensions-ui`
+X2/X5/X9/X10/X11/X21 proves persisted pin/order, second-window consistency,
+native drag, uBO Lite DNR badge burst, popup-less execution, grayscale pixels,
+Options/site access, and ten seconds with zero redraws/layouts.
+`extensions-e2 actions_pin_move_unique` / `actions_native_drag_safety` prove
+repeated pins/moves, invalid indices and persisted-duplicate repair.
+`tabstrip` (35 PASS) remains the independent sidebar/Chrome identity gate.
+
+Chromium supplies the complete `toolbarImage`; no shell badge fallback remains.
+Per-action changes update one button; image conversion caches by identity.
+The App keeps the first occurrence of a duplicate ID in engine order, logs
+it and reports `extensions.duplicatesDropped`. Pin/order/drag acceptance
+requires that count to be zero; the guard does not hide an engine failure.
+The App refuses unknown/unpinned moves, clamps destinations and skips no-ops.
+The exact old crash sequence is pin uBO Lite, Dark Reader and probe; move
+2→0; native drag 0→2. #184 fixes the model itself, distribution `3f45b07b`.
+
+## Verification notes — Step 6: P3 management, prompts and commands
+
+[#177](https://github.com/SergeSerb2/open/pull/177) implements E8–E10 and
+P2 lifetime/cache fixes; [#175](https://github.com/SergeSerb2/open/pull/175)
+supplies sheets/queue; [#189](https://github.com/SergeSerb2/open/pull/189)
+wires the real presenters, toast and in-window shortcut table/router.
+`extensions-p3` (14 PASS) proves live registry, named/action commands, stale
+menu refusal, disable/re-enable, popup disable/uninstall, non-default Profile
+install and the native-dialog fallback. Its hosted-store receipt and
+`extensions` (8 PASS) prove the store/real-extension path.
+`extensions-ui prompt_install_cancel_add`, X12/X14/X15, FIFO, toast Pin,
+window-close and quit rows prove Open's exact sheets and routing. The UI
+suite uses packed local CRX3 for deterministic consent; it does not by itself
+prove a live Web Store install. The specific-sheet early-failure receipt in
+#189 proves zero owned windows/processes after an aborted dialog case.
+
+Open sheets are the normal handler. Chromium dialogs are used only when no
+shell handler implements `showPrompt:`. Optional-permission Deny/Allow and
+normal disable/re-enable are proven. Packed permission-increase update and
+re-enable consent remain UNVERIFIED. Chromium creates each Profile's global
+command registry, but OS delivery for `"global": true` remains UNVERIFIED;
+in-process dispatch does not prove it. Extensions follow their Profile's own
+context; Section 10 owns remaining per-Profile UI gaps. Q6 excludes
+`chrome.sidePanel` from v1.
+
+## Verification notes — Step 7: native extension windows (E11)
+
+[#184](https://github.com/SergeSerb2/open/pull/184) implements the hidden
+popup Browser/strip and `ExtensionWindowController`. `extensions-e2 X20_*`
+proves native controller class, retained page/view/window identity, requested
+bounds, resize/focus/update/remove, `chrome.windows` popup type and popup
+Cmd+W. The same suite proves normal extension windows become selected Today
+tabs and the sidebar move/pin/focus event mapping. Sized page `window.open`
+panels remain a separate P1 follow-up.
+
+## Verification notes — Step 8: command bar and Settings (X-22–X-27)
+
+[#179](https://github.com/SergeSerb2/open/pull/179) supplies providers,
+scopes and Settings; [#184](https://github.com/SergeSerb2/open/pull/184)
+supplies E12 / `EngineCommandBarSource`; [#189](https://github.com/SergeSerb2/open/pull/189)
+wires it to the focused Profile. `extensions-e2 X22–X26` proves by-name action
+execution, scope chip/suggestions/cancel, current/new/background acceptance,
+latest-text-only replies and Site Search priority. Its remaining E12 rows
+prove delete/default refresh, disabled filtering and text/style bounds.
+`suggest-check` extension scenarios, `commandbar-render` extension scenes
+and `settings-preview` conflict scenes separately prove the library/UI paths.
+`commands-dump` keeps missing/extra/different 0/0/0 and 11 allowed-missing rows.
+
+[Closeout PR](https://github.com/SergeSerb2/open/pull/190)
+adds `extensions-ui X27_shortcuts_menu_singleton`, `X27_binding_input_bounds`,
+`X27_user_binding_conflict` and `X27_restored_extension_command`. The real pane's native menu item opens
+and reselects one Today shortcuts tab. Its `record()` saves a New Tab user
+binding through `KeyBindingStore` and `AppSettingsActions.keyBindingsDidChange`.
+The rendered notice is exactly "Action Probe: ⇧⌘U is used by New Tab…, so it is off."
+The table reports the named command dropped; Cmd+Shift+U opens Open's New Tab
+command bar and leaves the extension counter unchanged. Reset removes the
+notice and the next key fires the extension command once. Each run resets
+bindings/defaults and restores them in `finally`. [Closeout receipt](../engine-spike/extensions-closeout-receipt.md)
+records the deliberate conflict-filter break, FAIL and restored PASS.
+Gap 37 is closed; global OS delivery remains separate.
+
+## Verification notes — lead decisions and remaining captures
+
+- **Toolbar, guess (lead), C1:** rightmost extension slot maxX = w−5;
+  host-group left limit 115. Capacities are 23 at w 984/host 160 and 10 at
+  w 600/host 120. SCC sits 4 pt left through
+  `ToolbarMetrics.siteControls(width:stripWidth:)`.
+- **Little Open, guess (lead), S-7:** button inside the URL capsule at
+  [w−252,16,16,16], replacing the original §3.4 frame after Section 9's
+  title bar changed. Host text yields to it.
+- **Little Open, lead ruling A:** pages become Chrome-style tabs of their
+  own `OEBrowser`; Section 9 implements this. Extension action/activeTab/
+  tabs.query must target that page, with no main-window fallback.
+- **Little Open extra extension tabs, guess (child), Section 6 lead ruling:**
+  keep the standalone page and open each extra tab selected in the most
+  recent main window's Today list. Hosted Chrome contents cannot change
+  browsers, so retain the unshown extra content until its real address
+  arrives, then recreate that URL there before closing the original on the
+  next main-loop turn. Arc parity is unconfirmed; capture
+  needed. `X19_extra_tab_main_today` exercises this route.
+- Prompt fallback and the App duplicate-ID guard are the policies stated in
+  Steps 5–6; the guard exposes `duplicatesDropped`, which acceptance requires
+  to be zero. Neither is a second extension state store.
+
+Raw receipts, negative patches and light/dark Open-only captures stay in
+`.re/extensions-ui/` (closeout receipts in `.re/extensions-closeout/`). The
+user's combined Arc session still owns §12 captures S-1…S-12 and toolbar C1;
+Open-only renders do not establish Arc pixel parity. No baseline, comparator,
+threshold or allowlist is loosened by this closeout.

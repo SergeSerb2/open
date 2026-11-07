@@ -149,7 +149,13 @@ targets:
       - package: OpenKit
         product: OpenStore
       - package: OpenKit
+        product: OpenBoosts
+      - package: OpenKit
         product: OpenWeb
+      - package: OpenKit
+        product: OpenExtensionsUI
+      - package: OpenKit
+        product: OpenSiteControl
       - package: OpenKit
         product: OpenFeatures
       - package: OpenKit
@@ -164,6 +170,8 @@ targets:
         product: OpenSuggest
       - package: OpenKit
         product: OpenSidebar
+      - package: OpenKit
+        product: OpenSpaceEditor
       - package: OpenKit
         product: OpenMedia
       - package: OpenKit

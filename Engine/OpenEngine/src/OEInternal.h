@@ -10,9 +10,11 @@
 #include "include/cef_app.h"
 #include "include/cef_browser.h"
 #include "include/cef_client.h"
+#include "include/cef_extension_manager.h"
 #include "include/cef_media_controller.h"
 #include "include/cef_navigation_history.h"
 #include "include/cef_open_page.h"
+#include "include/cef_open_omnibox.h"
 #include "include/cef_page_lifecycle.h"
 #include "include/cef_request_context.h"
 #include "include/cef_tab_strip.h"
@@ -21,6 +23,11 @@
 #include "include/views/cef_window.h"
 
 NS_ASSUME_NONNULL_BEGIN
+
+/// Native mouse modifiers survive the renderer's asynchronous navigation IPC.
+/// The next pointer/key event replaces them; only the originating window matches.
+NSEventModifierFlags OENavigationModifiersForWindow(NSWindow* _Nullable window);
+void OENoteNavigationInput(NSWindow* _Nullable window, NSEventModifierFlags modifiers);
 
 #pragma mark - String helpers
 
@@ -224,6 +231,8 @@ class OEDevToolsClient;
 
 @interface OEExtensionManager ()
 - (instancetype)initOEWithContext:(OEBrowserContext*)context;
+@property(nonatomic, readonly) CefRefPtr<CefExtensionManager> oe_manager;
+- (void)oe_contextClosed;
 @end
 
 @interface OEExtensionAction ()

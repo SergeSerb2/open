@@ -16,7 +16,7 @@ public struct SleepPolicy: Sendable {
     }
 
     public enum Gate: String, Sendable, CaseIterable {
-        case visible, keepAlive, notifications, audible, loading, capturing, devTools, downloading, unload, form
+        case visible, keepAlive, notifications, audible, loading, capturing, devTools, downloading, unload, form, never
     }
     public enum Action: Sendable { case none, freeze, discard, destroy }
 
@@ -25,6 +25,7 @@ public struct SleepPolicy: Sendable {
                                lastAudibleAt: Date?, lastCommitAt: Date?, downloading: Bool,
                                hasUnloadHandlers: Bool, forDiscard: Bool, keepAlive: Bool? = nil,
                                criticalPressure: Bool = false) -> Gate? {
+        if mode == .off { return .never }
         if visible.contains(tab.id) { return .visible }
         if keepAlive ?? keepAliveRules.matches(tab.url) { return .keepAlive }
         // Chrome parity (page-platform §4.5.6): notification permission blocks freeze and
@@ -61,6 +62,7 @@ public struct SleepPolicy: Sendable {
     /// Check phase deadlines before reading the more expensive runtime gates.
     /// A sleeping tab needs no hide clock; a frozen tab in off mode needs no work.
     public func timedAction(phase: SleepPhase, hiddenAt: Date, sleptAt: Date?, now: Date) -> Action {
+        guard mode != .off else { return .none }
         switch phase {
         case .placeholder: return .none
         case .live: return now.timeIntervalSince(hiddenAt) >= freezeDelay ? .freeze : .none

@@ -61,6 +61,22 @@ class CefTabStrip;
 class CefTabStripHandler : public virtual CefBaseRefCounted {
  public:
   ///
+  /// A new extension popup strip was created. Set its handler now, before its
+  /// tabs are made. Do not close it inside this callback. |requested_frame|
+  /// is in Chrome screen coordinates (top-left), empty when not specified.
+  ///
+  /*--cef()--*/
+  virtual void OnExtensionWindowCreated(CefRefPtr<CefTabStrip> parent,
+      CefRefPtr<CefTabStrip> window, const CefRect& requested_frame,
+      const CefString& extension_id) {}
+  ///
+  /// chrome.windows.update requested bounds/focus for this popup strip.
+  /// Delivered outside Chromium's notification. Host views report actual bounds.
+  ///
+  /*--cef()--*/
+  virtual void OnExtensionWindowFrameRequested(CefRefPtr<CefTabStrip> window,
+      const CefRect& frame, bool focused) {}
+  ///
   /// Chromium is about to create a tab in |tab_strip| on its own (for example
   /// chrome.tabs.create or an extension welcome page). |target_url| is the
   /// URL that the tab will load. Set |client|, |settings| and |extra_info|
@@ -97,12 +113,16 @@ class CefTabStripHandler : public virtual CefBaseRefCounted {
 
   ///
   /// Chromium moved |browser| to |index| in |tab_strip| (chrome.tabs.move).
+  /// |previous| and |next| are the neighbours at the model notification,
+  /// not at delivery time. Either can be null (or have closed meanwhile).
   /// Call UpdateTab with the position the embedder wants.
   ///
-  /*--cef()--*/
+  /*--cef(optional_param=previous,optional_param=next)--*/
   virtual void OnTabMoveRequested(CefRefPtr<CefTabStrip> tab_strip,
                                   CefRefPtr<CefBrowser> browser,
-                                  int index) {}
+                                  int index,
+                                  CefRefPtr<CefBrowser> previous,
+                                  CefRefPtr<CefBrowser> next) {}
 
   ///
   /// Chromium pinned or unpinned |browser| (chrome.tabs.update with pinned).
@@ -227,6 +247,11 @@ class CefTabStripHandler : public virtual CefBaseRefCounted {
 /*--cef(source=library,added=experimental)--*/
 class CefTabStrip : public virtual CefBaseRefCounted {
  public:
+  ///
+  /// Replaces the request handler, before adopting an extension popup strip.
+  ///
+  /*--cef()--*/
+  virtual void SetHandler(CefRefPtr<CefTabStripHandler> handler) = 0;
   ///
   /// Creates a tab strip for |request_context| (the global context if empty).
   /// Returns nullptr if the context is not initialized yet.
@@ -465,6 +490,16 @@ class CefTabStrip : public virtual CefBaseRefCounted {
   /*--cef()--*/
   virtual void Close() = 0;
 };
+
+///
+/// Automation diagnostic, available only with --open-automation on the UI
+/// thread. Returns the invalid host activation request count and the active
+/// Chrome window id, or nullptr outside automation. With |reset|, clears the
+/// count before returning it. Unsafe requests are counted and refused in
+/// automation so a regression reports a failure without ending the process.
+///
+/*--cef(added=experimental)--*/
+CefRefPtr<CefDictionaryValue> CefGetOpenBrowserActivationDiagnostics(bool reset);
 
 #endif  // CEF_API_ADDED(CEF_EXPERIMENTAL)
 

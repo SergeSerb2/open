@@ -10,6 +10,7 @@ enum EditorFlows {
         var checks: [Flows.Check] = []
         func check(_ name: String,_ pass: Bool) { checks.append(.init(name: name,pass: pass)) }
         checks += padAndWindowFlows()
+        checks += zapFlows()
         let stage = EditorStage(), store = stage.host.boostStore
         let id = stage.session.boost.id
         let initial = stage.session.boost
@@ -186,7 +187,8 @@ enum EditorFlows {
         for _ in 0..<40 { fonts.key(48,"\t"); if fonts.panel.firstResponder === fourth { break } }
         let visible = fourth.visibleRect
         check("F12 font grid keeps 26 pt cells and keyboard focus",fonts.panel.firstResponder === fourth && fourth.bounds.width == 26 && visible.width >= 25.9 && fourth.showsKeyboardFocus)
-        check("design 12 disabled tile copy is user-facing",fonts.view.control(id: "editor.tool.zap")?.tooltipTitle == "Zap isn’t available yet." && fonts.view.control(id: "editor.tool.code")?.tooltipTitle == "Code editing isn’t available yet.")
+        fonts.tap("editor.tool.zap")
+        check("design 12 unavailable Zap copy is user-facing and Code is available",fonts.view.control(id: "editor.tool.zap")?.tooltipTitle == "Zap isn't available yet." && fonts.view.control(id: "editor.tool.code")?.isEnabled == true)
         return checks
     }
     private static func scopeFlows() -> [Flows.Check] {
@@ -244,9 +246,9 @@ enum EditorFlows {
         var checks: [Flows.Check] = []
         for state in CLI.editorNames { for scale: CGFloat in [1,2] { autoreleasepool {
             let stage = EditorStage(state: state,scale: scale),image = stage.render(),body = stage.editorImage()
-            checks.append(.init(name: "render \(state) \(Int(scale))x light editor and opaque canvas",pass: image.width == Int(1200*scale) && image.height == Int(900*scale) && body.width == Int(183*scale) && CLI.fullyOpaque(image) && stage.panel.appearance?.name == .aqua))
+            checks.append(.init(name: "render \(state) \(Int(scale))x light editor and opaque canvas",pass: image.width == Int(1200*scale) && image.height == Int(900*scale) && body.width == Int((state.hasPrefix("editor-code-") ? 480 : 183)*scale) && CLI.fullyOpaque(image) && stage.panel.appearance?.name == .aqua))
             let m = BoostEditorMetrics.self
-            if !["editor-not-active","editor-global-off"].contains(state) {
+            if !state.hasPrefix("editor-code-") && !["editor-not-active","editor-global-off"].contains(state) {
                 checks.append(.init(name: "render \(state) control frames match captured AX",pass: stage.view.pad.frame == m.ringFrame && stage.view.control(id: "editor.done")?.frame == m.done && stage.view.control(id: "editor.tool.size")?.frame == m.size && stage.view.control(id: "editor.tool.code")?.frame == m.code))
             }
             if state == "editor-no-color" {
@@ -256,7 +258,8 @@ enum EditorFlows {
                 checks.append(.init(name: "knob-gradient probe \(Int(scale))x top darker / bottom lighter",pass: Int(top[0])+5<Int(mid[0]) && Int(mid[0])+5<Int(bottom[0])))
             }
             let dump = Flows.accessibilityDump(stage.view)
-            checks.append(.init(name: "render \(state) native AX hierarchy",pass: state == "editor-first-run" ? dump.contains("Make a Boost") && dump.contains("Maybe Later") : dump.contains("AXGroup label=Color") && dump.contains("AXSlider label=Hue") && dump.contains("AXSlider label=Intensity")))
+            let codeAX = dump.contains("AXTextArea label="+(state == "editor-code-css" ? "CSS code" : "JavaScript code")) && dump.contains("AXButton label=Back") && dump.contains("AXButton label=CSS") && dump.contains("AXButton label=JS") && !dump.contains("AXGroup label=Color")
+            checks.append(.init(name: "render \(state) native AX hierarchy",pass: state.hasPrefix("editor-code-") ? codeAX : state == "editor-first-run" ? dump.contains("Make a Boost") && dump.contains("Maybe Later") : dump.contains("AXGroup label=Color") && dump.contains("AXSlider label=Hue") && dump.contains("AXSlider label=Intensity")))
         } } }
         return checks
     }

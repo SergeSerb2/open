@@ -198,8 +198,11 @@ enum Checks {
     }
 
     static func run() throws {
-        fixtureMath(); harmonyAndPad(); appearances(); costs(); textures(); cacheBounds(); try persistence()
+        fixtureMath(); harmonyAndPad(); appearances(); costs(); textures(); cacheBounds(); displaySpaceBlend(); try persistence()
         try EditorChecks.run()
+        try LiveThemeChecks.run()
+        try CreationChecks.run()
+        try PickerScene.check()
         print("checks: \(passed) passed, \(failed) failed")
         if failed > 0 { throw CLIError(description: "checks failed") }
     }
@@ -214,11 +217,72 @@ enum Checks {
         for index in [4, 13, 22, 31, 40] {
             let style = SpaceThemeStyle(style: SpaceStylePresets.all[index].style, system: .dark)
             let start = ProcessInfo.processInfo.systemUptime
-            let image = ThemeField.makeImage(style: style, windowSize: CGSize(width: 2216, height: 1394), isActive: true)
+            let field = ThemeField.composition(style: style, windowSize: CGSize(width: 2216, height: 1394), isActive: true)
             let ms = (ProcessInfo.processInfo.systemUptime - start) * 1000
-            check(image != nil && ms < 250, String(format: "PERF field style %d %.2f ms (loose ceiling 250 ms)", index, ms))
+            check(field.map { $0.solid != nil || $0.image != nil } == true && ms < 250,
+                  String(format: "PERF field style %d %.2f ms (loose ceiling 250 ms)", index, ms))
         }
     }
+    /// §17 "Display-space blend": editor fills composite in the target's own
+    /// encoded space, as Arc's layers do on each display. BT.2020 with the
+    /// sRGB curve is the session captures' display profile. Display P3 must
+    /// reproduce #120's fixed law; legacy imports keep their precomputed mix.
+    static func displaySpaceBlend() {
+        let bt2020 = CGColorSpace(name: CGColorSpace.itur_2020_sRGBGamma)!, p3 = CGColorSpace(name: CGColorSpace.displayP3)!
+        // 64×64 points at 1x: one field texel per pixel, so gradient samples are exact.
+        let size = CGSize(width: 64, height: 64)
+        func render(_ style: SpaceThemeStyle, in space: CGColorSpace, to next: SpaceThemeStyle? = nil, progress: Double = 0) -> [Double] {
+            let view = ThemeBackgroundView(frame: CGRect(origin: .zero, size: size))
+            view.renderScale = 1
+            view.style = style
+            if let next { view.beginTransition(to: next); view.setTransitionProgress(progress) }
+            // Read back in the render's own space: raw encoded values.
+            return Bitmap(image: OffscreenRenderer().render(view, scale: 1, colorSpace: space), colorSpace: space).pixel(32, 32)
+        }
+        func encoded(_ c: P3, alpha: Double = 1, in space: CGColorSpace) -> [Double] {
+            let color = CGColor(colorSpace: p3, components: [CGFloat(c.r), CGFloat(c.g), CGFloat(c.b), 1])!
+            return color.converted(to: space, intent: .relativeColorimetric, options: nil)!.components!.prefix(3).map { Double($0) * 255 }
+        }
+        func mix(_ fill: [Double], _ alpha: Double, _ gray: Double) -> [Double] { fill.map { $0 * alpha + gray * 255 * (1 - alpha) } }
+        func error(_ a: [Double], _ b: [Double]) -> Double { zip(a, b).map { abs($0 - $1) }.max()! }
+        func text(_ c: [Double]) -> String { c.map { String(format: "%.1f", $0) }.joined(separator: "/") }
+        // F0139's olive key and a saturated green: their P3 and BT.2020 mixes
+        // differ by at least 2.5 levels, so #120's precomputed fill fails here.
+        let olive = SpaceStyle(keyColor: RGBAColor(red: 0.570741951, green: 0.392751396, blue: -0.130948484))
+        let green = SpaceStyle(keyColor: RGBAColor(red: -0.25, green: 0.78, blue: 0.12))
+        for (suffix, name, style) in [("a", "olive", SpaceThemeStyle(style: olive, system: .dark)), ("b", "green", SpaceThemeStyle(style: green, system: .dark)),
+                              ("c", "3 colors", SpaceThemeStyle(style: SpaceStylePresets.all[9].style, system: .dark))] {
+            let e = ThemeField.Evaluator(style: style, windowSize: size, isActive: true)
+            let (u, v) = (32.5 / size.width, 32.5 / size.height)
+            let (fill, alpha) = e.fill(u: u, v: v)
+            let gray = ThemeField.composition(style: style, windowSize: size, isActive: true)!.underlay.components![0]
+            let display = mix(encoded(fill, in: bt2020), alpha, Double(gray))
+            let fixed = e.color(u: u, v: v)
+            let fixedInDisplay = CGColor(colorSpace: CGColorSpace(name: CGColorSpace.extendedSRGB)!, components: [CGFloat(fixed.0), CGFloat(fixed.1), CGFloat(fixed.2), 1])!
+                .converted(to: bt2020, intent: .relativeColorimetric, options: nil)!.components!.prefix(3).map { Double($0) * 255 }
+            let rendered = render(style, in: bt2020)
+            check(error(rendered, display) <= 1.5 && (name == "3 colors" || error(display, fixedInDisplay) >= 2.5),
+                  "DB1\(suffix) \(name) editor fill blends in the BT.2020 target: rendered \(text(rendered)), display mix \(text(display)), #120 P3 mix \(text(fixedInDisplay))")
+            let renderedP3 = render(style, in: p3), law = mix(encoded(fill, in: p3), alpha, Double(gray))
+            check(error(renderedP3, law) <= 1.5, "DB2\(suffix) \(name) on a Display P3 target equals the fixed P3 law: rendered \(text(renderedP3)), law \(text(law))")
+        }
+        // Legacy stops keep #120's precomputed sRGB field in every target.
+        let legacy = SpaceThemeStyle(fill: .blended(base: [RGBA(hex: 0x3A7BD5)], overlay: []), usesLegacyIntensity: true)
+        let old = ThemeField.Evaluator(style: legacy, windowSize: size, isActive: true).color(u: 0.5, v: 0.5)
+        let oldInDisplay = CGColor(colorSpace: CGColorSpace(name: CGColorSpace.extendedSRGB)!, components: [CGFloat(old.0), CGFloat(old.1), CGFloat(old.2), 1])!
+            .converted(to: bt2020, intent: .relativeColorimetric, options: nil)!.components!.prefix(3).map { Double($0) * 255 }
+        let legacyRendered = render(legacy, in: bt2020)
+        check(error(legacyRendered, oldInDisplay) <= 1.5 && ThemeField.composition(style: legacy, windowSize: size, isActive: true) == nil,
+              "DB3 legacy stops keep the precomputed field: rendered \(text(legacyRendered)), precomputed \(text(oldInDisplay))")
+        // A cross-fade mixes the two whole themes (group opacity); per-layer
+        // opacity would show the incoming underlay through its fill.
+        let blue = SpaceThemeStyle(style: SpaceStyle(keyColor: RGBAColor(red: 0.1, green: 0.2, blue: 0.9), colorCount: 1), system: .dark)
+        let from = SpaceThemeStyle(style: olive, system: .dark)
+        let a = render(from, in: bt2020), b = render(blue, in: bt2020), half = render(from, in: bt2020, to: blue, progress: 0.5)
+        let expected = zip(a, b).map { ($0 + $1) / 2 }
+        check(error(half, expected) <= 1.5, "DB4 cross-fade at 0.5 mixes whole themes: rendered \(text(half)), expected \(text(expected))")
+    }
+
     static func cacheBounds() {
         let denimBefore = ThemeTexture.denimGenerationCount
         for bucket in 1...20 {

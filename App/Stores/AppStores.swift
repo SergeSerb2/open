@@ -55,6 +55,7 @@ final class AppStores {
     historyTail = Task { await previous?.value; await write(); historyWriteCount += 1 }
   }
   func flushHistory() async {
+    for host in app.littleOpenHosts.values { await host.historyRecorder.flush() }
     for factory in app.hostFactories.values {
       for host in factory.hosts.values { await host.historyRecorder.flush() }
       for page in factory.auxiliaryPages { await page.historyRecorder?.flush() }

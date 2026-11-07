@@ -1,4 +1,4 @@
-// Harness-only observation. Loaded by features-idle.py, never linked into Open.
+// Harness-only observation. Injected by feature and App e2e gates, never linked into Open.
 #import <AppKit/AppKit.h>
 #import <QuartzCore/QuartzCore.h>
 #import <CoreVideo/CoreVideo.h>
@@ -27,7 +27,13 @@ static CVDisplayLinkRef links[LIMIT];
 static unsigned timerCount, sourceCount, linkCount;
 static _Atomic uint64_t events[6]; // draw, layout, layer display, invalidation, scheduling, overflow
 static NSHashTable *views, *layers, *displayLinks;
+static NSHashTable *splitCreatedLinks, *unownedDisplayLinks;
 static NSMutableSet *hooked;
+
+static BOOL splitObservation(void) {
+    const char *owner = getenv("OPEN_IDLE_OWNER");
+    return owner && !strcmp(owner, "split");
+}
 
 // Attribute CF timers by their runtime caller. AppKit owns quiet-safe-quit,
 // outline cleanup and parked run-loop timers even in an empty native window.
@@ -43,13 +49,27 @@ static BOOL executableTimerCaller(void) {
         if (strstr(path, "idle-probe.dylib") || strstr(path, "/Foundation.framework/") ||
             strstr(path, "/CoreFoundation.framework/") || strstr(path, "/libswift") ||
             strstr(path, "/libdispatch.dylib")) continue;
+        // The split suite injects this observer into its own real Open instance.
+        // Keep the original harness attribution unchanged unless explicitly selected.
+        if (splitObservation()) {
+            if (!strstr(path, "/Open") || strstr(path, ".framework/")) return NO;
+            if (!info.dli_sname) return YES;
+            return strstr(info.dli_sname, "SplitViewController") || strstr(info.dli_sname, "SplitDividerView") ||
+                strstr(info.dli_sname, "SplitDropOverlayView") || strstr(info.dli_sname, "SplitLayout") ||
+                strstr(info.dli_sname, "WebContentContainer") || strstr(info.dli_sname, "PaneSlotView") ||
+                strstr(info.dli_sname, "PaneChromeView");
+        }
         if (getenv("OPEN_IDLE_DOWNLOADS")) {
             if (!strstr(path, "/Open.app/Contents/MacOS/Open")) return NO;
             if (!info.dli_sname) return YES;
             return strstr(info.dli_sname, "DownloadsCenter") || strstr(info.dli_sname, "HomeDownloadButton") ||
                    strstr(info.dli_sname, "DownloadRowView") || strstr(info.dli_sname, "downloadIdleProof");
         }
+#ifdef OPEN_APP_TIMER_PROBE
+        if (!strstr(path, "/Open.app/Contents/MacOS/Open")) return NO;
+#else
         if (!strstr(path, "/features-render")) return NO;
+#endif
         // Async harness waits can create transient Foundation timers too.
         // Attribute the first executable frame to the product or the canary.
         if (!info.dli_sname) return YES; // unresolved application frame: fail closed
@@ -218,7 +238,14 @@ static void hookDisplayLinkClass(Class cls) {
     if (!m) { events[5]++; return; }
     IMP old = method_getImplementation(m);
     class_replaceMethod(cls, add, imp_implementationWithBlock(^(id object, NSRunLoop *loop, NSRunLoopMode mode) {
-        if (armed) { [displayLinks addObject:object]; events[4]++; }
+        if (armed) {
+            // The real App also owns framework/engine links. Attribute this channel
+            // by the same call-site ownership as timers, including links made by
+            // a split view and registered later by AppKit.
+            BOOL owned = !splitObservation() || [splitCreatedLinks containsObject:object] || executableTimerCaller();
+            if (owned) { [displayLinks addObject:object]; [unownedDisplayLinks removeObject:object]; events[4]++; }
+            else { [unownedDisplayLinks addObject:object]; }
+        }
         ((void (*)(id, SEL, id, id))old)(object, add, loop, mode);
     }), method_getTypeEncoding(m));
     m = class_getInstanceMethod(cls, remove); IMP oldRemove = method_getImplementation(m);
@@ -229,6 +256,7 @@ static void hookDisplayLinkClass(Class cls) {
     m = class_getInstanceMethod(cls, invalidate); IMP oldInvalidate = method_getImplementation(m);
     class_replaceMethod(cls, invalidate, imp_implementationWithBlock(^(id object) {
         [displayLinks removeObject:object];
+        [splitCreatedLinks removeObject:object]; [unownedDisplayLinks removeObject:object];
         ((void (*)(id, SEL))oldInvalidate)(object, invalidate);
     }), method_getTypeEncoding(m));
 }
@@ -243,6 +271,12 @@ static void hookDisplayLinks(void) {
         class_replaceMethod(cls, sel, imp_implementationWithBlock(^id(id object, id target, SEL action) {
             id link = ((id (*)(id, SEL, id, SEL))old)(object, sel, target, action);
             hookDisplayLinkClass(object_getClass(link));
+            if (armed && splitObservation() && executableTimerCaller()) {
+                [splitCreatedLinks addObject:link];
+                if ([unownedDisplayLinks containsObject:link]) {
+                    [unownedDisplayLinks removeObject:link]; [displayLinks addObject:link]; events[4]++;
+                }
+            }
             return link;
         }), method_getTypeEncoding(m));
     }
@@ -253,6 +287,7 @@ void open_idle_begin(void) {
     dispatch_once(&once, ^{ hooked = [NSMutableSet new]; hookDisplayLinks(); });
     views = [NSHashTable weakObjectsHashTable]; layers = [NSHashTable weakObjectsHashTable];
     displayLinks = [NSHashTable weakObjectsHashTable];
+    splitCreatedLinks = [NSHashTable weakObjectsHashTable]; unownedDisplayLinks = [NSHashTable weakObjectsHashTable];
     for (int i = 0; i < 6; i++) atomic_store(&events[i], 0);
     armed = YES;
 }
@@ -261,8 +296,10 @@ void open_idle_reset_events(void) {
     for (int i = 0; i < 5; i++) atomic_store(&events[i], 0);
     pthread_mutex_unlock(&guard);
 }
+int open_idle_ready(void) { return armed && views != nil && layers != nil && displayLinks != nil && splitCreatedLinks != nil && unownedDisplayLinks != nil; }
 // 0...5 event counts; 6 live CF timers in any mode; 7 uncancelled dispatch
-// timers; 8 running CV links; 9 registered CA/NSView links (even if offscreen-paused).
+// timers; 8 running CV links; 9 registered owned CA/NSView links (even if offscreen-paused).
+// 10 is diagnostic only: registered links whose call sites are outside split code.
 uint64_t open_idle_count(int index) {
     pthread_mutex_lock(&guard);
     uint64_t count = 0;
@@ -282,6 +319,8 @@ uint64_t open_idle_count(int index) {
         for (unsigned i = 0; i < linkCount; i++) if (CVDisplayLinkIsRunning(links[i])) count++;
     } else if (index == 9) {
         count = displayLinks.count;
+    } else if (index == 10) {
+        count = unownedDisplayLinks.count;
     }
     pthread_mutex_unlock(&guard); return count;
 }
@@ -291,5 +330,5 @@ void open_idle_end(void) {
     for (unsigned i = 0; i < sourceCount; i++) sources[i] = nil;
     for (unsigned i = 0; i < linkCount; i++) CVDisplayLinkRelease(links[i]);
     timerCount = sourceCount = linkCount = 0;
-    views = nil; layers = nil; displayLinks = nil;
+    views = nil; layers = nil; displayLinks = nil; splitCreatedLinks = nil; unownedDisplayLinks = nil;
 }

@@ -13,6 +13,9 @@ LaunchTiming.shared.mark("main")
 UserDefaults.standard.register(defaults: ["ApplePersistenceIgnoreState": true])
 let appDelegate = AppDelegate()
 app.delegate = appDelegate
+#if OPEN_AUTOMATION
+AutomationOwnerWatch.install()
+#endif
 // Reserved app shortcuts beat the page (Cmd-T, Cmd-W, Cmd-L, ...).
 app.keyEquivalentHandler = { event in MainMenu.performReservedShortcut(event) }
 
@@ -30,9 +33,12 @@ appDelegate.drawWindowsBeforeEngine()
 // Wait for a display callback whose last refresh is later than the flushed
 // window transaction. Chromium's observers must first run in its own loop,
 // so return from this temporary AppKit loop before calling start.
-let firstFrame = FirstWindowFrameObserver(view: appDelegate.windowControllers.first?.window?.contentView)
+let firstFrame = FirstWindowFrameObserver(view: appDelegate.firstContentView)
 firstFrame.start()
 #if OPEN_AUTOMATION
+if ProcessInfo.processInfo.environment["OPEN_AUTOMATION_EARLY_LITTLE_OPEN"] == "1" {
+  appDelegate.openBlankLittleOpen(timestamp: ProcessInfo.processInfo.systemUptime)
+}
 if ProcessInfo.processInfo.environment["OPEN_AUTOMATION_QUIT_BEFORE_ENGINE"] == "1" {
   RunLoop.main.perform { MainActor.assumeIsolated { NSApp.terminate(nil) } }
 }
@@ -58,6 +64,8 @@ if firstFrame.presented {
   FileHandle.standardError.write(Data("Open: first window frame unconfirmed; continuing engine startup\n".utf8))
 }
 
+appDelegate.firstRunWindowController?.startProbeAfterDisplay()
+
 // Initialize outside the temporary AppKit runloop. Chromium installs native
 // runloop observers during start; those must first run in CefRunMessageLoop.
 let configuration = OEEngineConfiguration()
@@ -80,9 +88,12 @@ configuration.verboseLogging = options.verboseLogging
 // Developer ID builds use the "Open Safe Storage" keychain item.
 configuration.useMockKeychain = !CodeSignature.hasTeamIdentifier
 #if OPEN_AUTOMATION
-// The engine's notification test hooks (page-platform EP-7) run only with this
-// switch; release builds never pass it.
+// The engine's test hooks run only with this switch; normal Release builds
+// never pass it. E2E launchers separately suppress macOS notification setup.
 configuration.additionalSwitches = configuration.additionalSwitches + ["--open-automation"]
+if AutomationNotificationSetup.suppressesSystemSetup {
+  configuration.additionalSwitches.append(AutomationNotificationSetup.skipSwitch)
+}
 #endif
 
 OEEngine.shared.delegate = appDelegate

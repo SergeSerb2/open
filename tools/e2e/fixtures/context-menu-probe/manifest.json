@@ -1,0 +1,7 @@
+{
+  "manifest_version": 3,
+  "name": "Open context menu limits probe",
+  "version": "1.0",
+  "permissions": ["contextMenus"],
+  "background": {"service_worker": "background.js"}
+}

@@ -49,9 +49,9 @@ wide-gamut encoding explains the 0.12 ΔE00 on fills whose sRGB hex is identical
 ~/Library/Caches/OpenRE/scripts/heavy.sh tools/build.sh Debug
 ~/Library/Caches/OpenRE/scripts/heavy.sh nice -n 10 swift build --package-path Packages/OpenKit -c release -j 6 --product sidebar-render
 # Local driver (not committed): .re/section3/realwindow/realwin.py, harness `engine_e2e.Open`.
-/usr/bin/lockf /tmp/open-onscreen-e2e.lock python3 .re/section3/realwindow/realwin.py ax        .re/section3/realwindow/ax
-/usr/bin/lockf /tmp/open-onscreen-e2e.lock python3 .re/section3/realwindow/realwin.py ax        .re/section3/realwindow/ax2
-/usr/bin/lockf /tmp/open-onscreen-e2e.lock python3 .re/section3/realwindow/realwin.py synthetic .re/section3/realwindow/synthetic
+/usr/bin/lockf -k /tmp/open-onscreen-e2e.lock python3 .re/section3/realwindow/realwin.py ax        .re/section3/realwindow/ax
+/usr/bin/lockf -k /tmp/open-onscreen-e2e.lock python3 .re/section3/realwindow/realwin.py ax        .re/section3/realwindow/ax2
+/usr/bin/lockf -k /tmp/open-onscreen-e2e.lock python3 .re/section3/realwindow/realwin.py synthetic .re/section3/realwindow/synthetic
 # For each run (D = snapshot dir, O = output under .re/):
 sidebar-render compare-media --arc E2 --ours $D/R1-rest.png --out $O/R1 --state rest \
   --arc-reference E1 --ours-reference $D/ref-nomedia.png

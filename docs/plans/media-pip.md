@@ -348,7 +348,7 @@ are measured on the static view and the 1x render.
 
 Scroll budgets (`sidebar-render bench --rows 1000`, release, 2x, M5 Pro;
 baseline main `1b5e66d8` vs head, interleaved pairs in one session, under
-`lockf /tmp/open-onscreen-e2e.lock`; a Chromium build of another section kept
+`lockf -k /tmp/open-onscreen-e2e.lock`; a Chromium build of another section kept
 the 1-minute load average at 16–18 on 18 cores):
 
 | Session | Variant | Baseline median / mean p95 | Head median / mean p95 | Head vs baseline | Load (1 min) |
