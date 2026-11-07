@@ -36,7 +36,8 @@ def checks(factory, results, tmp, harness):
     base = 'http://127.0.0.1:%d' % server.server_address[1]
     app = None; saved = {}
     keys = ['open.links.optionCommandClickLittleOpen', 'open.general.searchSuggestNoticeDismissed',
-            'open.links.littleOpenHotkeyEnabled', 'open.general.previewsEnabled', 'open.advanced.playSoundEffects']
+            'open.links.littleOpenHotkeyEnabled', 'open.general.previewsEnabled', 'open.advanced.playSoundEffects',
+            'open.links.externalInLittleOpen']
     def check(name, ok, **evidence): results[name] = dict(ok=bool(ok), **evidence)
     def state(): return app.call('incognito-state', private=True)
     def windows(private=None):
@@ -85,7 +86,7 @@ def checks(factory, results, tmp, harness):
         app = factory(urls=(base + '/normal',), fresh=True)
         saved = {k: app.call('defaults', key=k, persistent=True) for k in keys}
         for k in keys: app.call('defaults', key=k, value=None)
-        for k, v in zip(keys, [True, True, False, False, False]): app.call('defaults', key=k, value=v)
+        for k, v in zip(keys, [True, True, False, False, False, False]): app.call('defaults', key=k, value=v)
         normal = windows(False)[0]; normal_tab = app.call('tabs')[0]['id']; app.call('wait', tab=normal_tab)
         profile = app.call('history-state')['profile']
         app.eval(normal_tab, "document.cookie='normalOnly=1; path=/'; true")
@@ -198,6 +199,19 @@ def checks(factory, results, tmp, harness):
         app.eval(private_tab, "window.addEventListener('beforeunload',e=>{e.preventDefault();e.returnValue='stay';});true")
         focus(normal); app.call('window-close')
         focus(linked or three)
+        # Only private windows remain: an external link must open a normal window
+        # (most recent Space), never a tab of the private window's model.
+        private_before = sorted(t['id'] for t in state()['tabs'])
+        external = base + '/external-only-private'
+        sent = subprocess.run(['/usr/bin/open', '-a', app.bundle, external], capture_output=True, text=True, timeout=15)
+        normal_again = wait(lambda: next((w for w in windows(False)), None), timeout=8, step=.05)
+        landed = wait(lambda: any(t['url'] == external for t in app.call('tabs')), timeout=8, step=.05) if normal_again else False
+        if normal_again: focus(normal_again)
+        landed_normal = landed and not state()['private'] and any(t['url'] == external and t['selected'] for t in app.call('tabs'))
+        focus(linked or three)
+        check('external_link_only_private_opens_normal', sent.returncode == 0 and bool(normal_again) and landed_normal
+              and sorted(t['id'] for t in state()['tabs']) == private_before, window=normal_again, stderr=sent.stderr[-300:])
+        if normal_again: focus(normal_again); app.call('window-close'); focus(linked or three)
         app.call('history-state', profile=profile)
         app.call('save'); quit_before = fingerprint()
         app.activation_trace = app.call('activation-events')

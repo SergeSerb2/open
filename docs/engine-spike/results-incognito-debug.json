@@ -7,18 +7,23 @@
         "forced": false,
         "ok": true,
         "owned_pids": [
-          68680,
-          68688,
-          68689,
-          68690,
-          68693,
-          68700,
-          68701,
-          68735,
-          68757,
-          68758,
-          68762,
-          68765
+          22177,
+          22308,
+          22309,
+          22310,
+          22311,
+          22312,
+          22336,
+          22337,
+          22346,
+          22382,
+          22383,
+          22389,
+          22435,
+          22493,
+          22494,
+          22495,
+          22496
         ],
         "remaining_processes": [],
         "windows_after_quit": {
@@ -64,6 +69,16 @@
     "cookie_private_absent_normal": {
       "ok": true
     },
+    "external_link_only_private_opens_normal": {
+      "ok": true,
+      "stderr": "",
+      "window": {
+        "id": "84AAC3FD-6796-4E96-8800-2D2BD4A49991",
+        "number": 396187,
+        "private": false,
+        "title": "Private fixture /normal"
+      }
+    },
     "last_window_ends_session": {
       "ok": true
     },
@@ -91,20 +106,20 @@
         "normalSpaces": 1,
         "normalTabs": 1,
         "normalWindows": 1,
-        "parent": "5C98BD52-2C69-4034-9BE9-1AA8AC44E044",
+        "parent": "5CC8CD38-8316-48A7-BBF8-790D858A1C37",
         "private": true,
         "snapshotSchedules": 9,
         "tabs": [],
         "windows": [
           {
-            "id": "2C6C00E7-BD0D-49A1-B033-A3BC9D754E70",
-            "number": 387003,
+            "id": "84AAC3FD-6796-4E96-8800-2D2BD4A49991",
+            "number": 396114,
             "private": false,
             "title": "Private fixture /normal"
           },
           {
-            "id": "9EE654D8-D9ED-4DEA-A87F-19F90C711F28",
-            "number": 387015,
+            "id": "D4C58ED9-F475-4950-8D1F-9C086BB619D4",
+            "number": 396122,
             "private": true,
             "title": "Incognito"
           }
@@ -123,7 +138,7 @@
     },
     "no_snapshot_history_change": {
       "after": {
-        "snapshot": "a8886c101ef7fff089dcc7444d0401d82c24f28801d70bcd2761cbdd8443a183",
+        "snapshot": "9b179418a8925593a23f7978a008392e6ab962f87ca9e755505466e30e9ba2af",
         "tables": {
           "Profiles/Default/State/archive.sqlite3": {
             "archived_tabs": 0
@@ -149,7 +164,7 @@
         "thumbnails": []
       },
       "before": {
-        "snapshot": "a8886c101ef7fff089dcc7444d0401d82c24f28801d70bcd2761cbdd8443a183",
+        "snapshot": "9b179418a8925593a23f7978a008392e6ab962f87ca9e755505466e30e9ba2af",
         "tables": {
           "Profiles/Default/State/archive.sqlite3": {
             "archived_tabs": 0
@@ -267,31 +282,31 @@
         "normalSpaces": 1,
         "normalTabs": 1,
         "normalWindows": 1,
-        "parent": "5C98BD52-2C69-4034-9BE9-1AA8AC44E044",
+        "parent": "5CC8CD38-8316-48A7-BBF8-790D858A1C37",
         "private": true,
         "snapshotSchedules": 9,
         "tabs": [
           {
-            "id": "C83D05DC-DF04-4284-9457-6FE7C955D31A",
-            "url": "http://127.0.0.1:59202/two"
+            "id": "2BC98625-5D55-4A1B-BD4B-2E60639E412C",
+            "url": "http://127.0.0.1:53437/two"
           }
         ],
         "windows": [
           {
-            "id": "2C6C00E7-BD0D-49A1-B033-A3BC9D754E70",
-            "number": 387003,
+            "id": "84AAC3FD-6796-4E96-8800-2D2BD4A49991",
+            "number": 396114,
             "private": false,
             "title": "Private fixture /normal"
           },
           {
-            "id": "9EE654D8-D9ED-4DEA-A87F-19F90C711F28",
-            "number": 387015,
+            "id": "D4C58ED9-F475-4950-8D1F-9C086BB619D4",
+            "number": 396122,
             "private": true,
             "title": "Private fixture /one"
           },
           {
-            "id": "E940E065-E5A8-41F5-9D51-130DDF0DD0EF",
-            "number": 387024,
+            "id": "3E5163E4-03ED-4912-9C45-D3D68C262FC5",
+            "number": 396131,
             "private": true,
             "title": "Private fixture /two"
           }
@@ -356,15 +371,15 @@
   },
   "interrupted_attempts": [],
   "load": [
-    34.38623046875,
-    35.7470703125,
-    34.0537109375
+    26.06982421875,
+    27.70068359375,
+    27.53125
   ],
   "source": {
     "clean": false,
-    "diffSHA256": "4c7131781dc03a2727913812597476e633f2ff88fba40026cca1e2b22c5b2825",
-    "head": "a008d0490418a58dc4998a8e1f121eae1a2e2fa7"
+    "diffSHA256": "227bc3ab09ec977a0a199cdf85ddca1b99bd7f984dd7668ec40f9f5382c07a2d",
+    "head": "e72050c00a1ee2b9ac8f221ad50228cda883b7d6"
   },
-  "started": "2026-11-06 17:15:37",
+  "started": "2026-11-06 17:43:58",
   "style": "chrome"
 }
