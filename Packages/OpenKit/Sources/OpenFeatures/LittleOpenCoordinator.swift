@@ -94,7 +94,10 @@ public final class LittleOpenCoordinator {
         guard let profile = defaultProfile else { return }
         create(url: URL(string: "about:blank")!, profile: profile, focus: focusURLField)
     }
-    private func create(url: URL, profile: ProfileID, focus: Bool) {
+    /// Explicit Profile pages (Settings and extension management) always create
+    /// a window; external-link URL reuse remains owned by open(url:profileHint:).
+    public func create(url: URL, profile: ProfileID, focus: Bool) {
+        guard model.profile(id:profile) != nil else { return }
         let tab = Tab(url: url); tab.live.sleepPhase = .live
         let session = LittleOpenSession(tab: tab, profileID: profile)
         let controller = LittleOpenWindowController(session: session, coordinator: self, factory: LittleHostFactory(makeWebContent), defaults: defaults)
