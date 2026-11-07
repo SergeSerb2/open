@@ -105,10 +105,10 @@ final class SyntheticSecretsFixture {
                 CREATE TABLE address_type_tokens(guid, type, value, verification_status);
                 CREATE TABLE credit_cards(guid, name_on_card, expiration_month, expiration_year, card_number_encrypted, nickname, use_count, use_date);
                 CREATE TABLE keywords(id); CREATE TABLE autofill(date_created, date_last_used);
-                INSERT INTO addresses VALUES('fixture-address-\(index)', 3, \(now), \(now), 'en', 0);
-                INSERT INTO address_type_tokens VALUES('fixture-address-\(index)', 7, 'Fixture Person', 3);
-                INSERT INTO address_type_tokens VALUES('fixture-address-\(index)', 30, '1 Example Street', 4);
-                INSERT INTO credit_cards VALUES('fixture-card-\(index)', 'Fixture Person', 12, 2030, \(try encrypted("4111 1111 1111 1111")), 'Fixture card', 4, \(now));
+                INSERT INTO addresses VALUES('00000000-0000-4000-8000-a0000000000\(index)', 3, \(now), \(now), 'en', 0);
+                INSERT INTO address_type_tokens VALUES('00000000-0000-4000-8000-a0000000000\(index)', 7, 'Fixture Person', 3);
+                INSERT INTO address_type_tokens VALUES('00000000-0000-4000-8000-a0000000000\(index)', 30, '1 Example Street', 4);
+                INSERT INTO credit_cards VALUES('00000000-0000-4000-8000-c0000000000\(index)', 'Fixture Person', 12, 2030, \(try encrypted("4111 1111 1111 1111")), 'Fixture card', 4, \(now));
                 """
             try createDatabase("Web Data", profile: profile, sql: web)
         }
