@@ -40,6 +40,8 @@
     var realSavePromptAnswers = NSMapTable<OESavePrompt, NSString>.weakToStrongObjects()
     // troubleshooting-setup recorder (page-platform Troubleshooting checks).
     private var revealedURLs: [URL] = []
+    var profileProofWindows: [String: ProfileEngineProofWindow] = [:]
+    var profileProofContexts: [String: OEBrowserContext] = [:]
 
     init(app: AppDelegate) { self.app = app; extensionAutomation.registerContexts(); Self.savePromptOwner = self }
 
@@ -97,6 +99,7 @@
       // App lifecycle commands remain available after the final window closes.
       switch cmd {
       case "child-dialog-button": return try await childDialogButton(a)
+      case "profile-engine": return try await runProfileEngineCommand(a)
       case "save-prompt": return try await savePrompt(a)
       case "events":
         let pageEvents = app.frontWindowController.flatMap { app.hostFactories[$0.windowID] }?.drainEvents() ?? []

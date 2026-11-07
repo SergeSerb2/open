@@ -509,6 +509,7 @@ class OETabStripHandler : public CefTabStripHandler {
 #pragma mark Hidden Chrome window (fork patch P1)
 
 - (CefRefPtr<CefTabStrip>)oe_tabStripCreatingIfNeeded:(BOOL)create {
+  if (!_context.oe_isReady || !_context.oe_requestContext) return nullptr;
   if (!_strip && create && !_closed && !_stripRefused) {
     _strip = CefTabStrip::Create(_context.oe_requestContext,
                                  new OETabStripHandler(self));
@@ -783,6 +784,7 @@ class OETabStripHandler : public CefTabStripHandler {
 }
 
 - (NSArray<OEExtensionAction*>*)extensionActions {
+  if (_closed || _context.state == OEBrowserContextStateClosed || _context.oe_closing) return @[];
   const BOOL live = self.extensionActionsReady;
   if (_actions && _actionsLive != live) {
     _actions = nil;
