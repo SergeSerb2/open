@@ -15,7 +15,8 @@ import OpenWeb
   }
   func answer(_ answer: SavePromptAnswer) {
     guard !isAnswered else { return }; isAnswered = true
-    didFinish(switch answer { case .save: "save"; case .neverForSite: "never"; case .dismiss: "dismiss" })
+    let value = switch answer { case .save: "save"; case .neverForSite: "never"; case .dismiss: "dismiss" }
+    didFinish(value)
   }
   isolated deinit { if !isAnswered { didFinish("ignored") } }
 }
@@ -41,7 +42,7 @@ extension AutomationController {
     guard args.keys.allSatisfy({ ["mock", "answer", "state", "withdraw"].contains($0) }),
           args.count == 1 else { throw Failure(message: "expected one of mock, answer, state, withdraw") }
     guard let factory = app.frontWindowController.flatMap({ app.hostFactories[$0.windowID] }), let presenter = factory.savePrompts else {
-      if args["state"] as? Bool == true { return ["visible": false, "queueLength": 0] }
+      if args["state"] as? Bool == true { return ["visible": false, "queueLength": 0] as [String: Any] }
       throw Failure(message: "no browser window")
     }
     if let mock = args["mock"] as? [String: Any] {
@@ -71,7 +72,7 @@ extension AutomationController {
       if let request = presenter.active?.request { presenter.withdraw(request) }
     } else if args["state"] as? Bool != true { throw Failure(message: "invalid save prompt arguments") }
     await Task.yield()
-    guard let sheet = presenter.active else { return ["visible": false, "queueLength": presenter.queuedCount] }
+    guard let sheet = presenter.active else { return ["visible": false, "queueLength": presenter.queuedCount] as [String: Any] }
     return ["visible": sheet.isVisible, "kind": sheet.kind.automationName, "title": sheet.title,
       "body": sheet.dialogView.bodyLabel.stringValue, "buttons": sheet.dialogView.buttonModels.map(\.label),
       "defaultButton": sheet.dialogView.primaryButton?.accessibilityLabel() ?? "",

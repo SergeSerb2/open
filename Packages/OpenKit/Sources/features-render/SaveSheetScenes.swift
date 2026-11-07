@@ -16,6 +16,12 @@ import OpenWeb
 /// credentials. Request lifetimes and user input are verified in the real App.
 @MainActor enum SaveSheetScenes {
     static func render(_ args: [String]) throws {
+        let allowed = ["--kind", "--out", "--scale", "--appearance"]
+        guard (5...9).contains(args.count), args.count % 2 == 1 else { throw CLIError(description: "invalid save-sheet options") }
+        let keys = stride(from: 1, to: args.count, by: 2).map { args[$0] }
+        guard keys.allSatisfy({ allowed.contains($0) }), Set(keys).count == keys.count else {
+            throw CLIError(description: "unknown or repeated save-sheet option")
+        }
         let kinds: [String: SavePromptKind] = ["password": .password, "update": .passwordUpdate, "card": .card, "address": .address]
         guard let raw = RenderCLI.value(args, "--kind"), let kind = kinds[raw],
               let out = RenderCLI.value(args, "--out"),

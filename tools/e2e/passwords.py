@@ -135,7 +135,7 @@ def run(factory, results, tmp, harness):
             assert gone() and [e['answer'] for e in events()] == ['ignored']
         row('M-3-page-close-ignored', page_close)
 
-        for key, modifiers, expected in [('escape', [], 'dismiss'), ('return', [], 'save'), ('.', ['command'], 'dismiss')]:
+        for key, modifiers, expected in [('escape', [], 'dismiss'), ('return', [], 'save'), ('enter', [], 'save'), ('.', ['command'], 'dismiss')]:
             def check_key(key=key, modifiers=modifiers, expected=expected):
                 events(); s = show()
                 app.call('key', window=s['window'], key=key, modifiers=modifiers)
