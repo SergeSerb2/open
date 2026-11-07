@@ -160,8 +160,22 @@ OE_EXPORT @interface OEEngine : NSObject
             completion:(void (^NS_SWIFT_UI_ACTOR _Nullable)(void))completion
     NS_SWIFT_NAME(releaseContext(_:completion:));
 
-/// A new in-memory context that writes nothing to disk (incognito windows).
-- (OEBrowserContext*)makeEphemeralContext;
+/// Shares one primary incognito session per initialized regular parent. The
+/// last private Browser closes the session. A later call creates a fresh one.
+/// Does not seed cookies. Native installation-wide files may still change.
+- (void)makeIncognitoContextForContext:(OEBrowserContext*)original
+                          completion:(void (^NS_SWIFT_UI_ACTOR)(
+                              OEBrowserContext* _Nullable context,
+                              NSError* _Nullable error))completion
+    NS_SWIFT_NAME(makeIncognitoContext(for:completion:));
+
+/// Closes this regular profile and its private children, wipes native browsing
+/// data, invalidates wrappers, waits for actual native destruction, then commits
+/// its Local State removal. Only successful completion permits folder removal.
+/// Rejects Default/private contexts. Duplicate calls share one operation.
+- (void)deleteContext:(OEBrowserContext*)context
+            completion:(void (^NS_SWIFT_UI_ACTOR)(NSError* _Nullable error))completion
+    NS_SWIFT_NAME(deleteContext(_:completion:));
 
 @property(nonatomic, readonly, copy) NSArray<OEBrowserContext*>* contexts;
 

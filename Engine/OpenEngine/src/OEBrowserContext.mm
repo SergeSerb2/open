@@ -259,10 +259,14 @@ OEPermissionKind OEPermissionKindsFromMedia(uint32_t m) {
                      webContent:(nullable OEWebContent*)webContent;
 - (void)oe_updateWithItem:(CefRefPtr<CefDownloadItem>)item
                  callback:(CefRefPtr<CefDownloadItemCallback>)callback;
+- (void)oe_setDestinationCallback:(CefRefPtr<CefBeforeDownloadCallback>)callback;
+- (void)oe_decideDestination:(nullable NSURL*)destination;
+- (void)oe_invalidate;
 @end
 
 @implementation OEDownload {
   CefRefPtr<CefDownloadItemCallback> _callback;
+  CefRefPtr<CefBeforeDownloadCallback> _destinationCallback;
 }
 
 - (instancetype)initOEWithItem:(CefRefPtr<CefDownloadItem>)item
@@ -303,6 +307,7 @@ OEPermissionKind OEPermissionKindsFromMedia(uint32_t m) {
 }
 
 - (void)cancel {
+  _destinationCallback = nullptr;
   if (_callback) _callback->Cancel();
 }
 - (void)pause {
@@ -310,6 +315,23 @@ OEPermissionKind OEPermissionKindsFromMedia(uint32_t m) {
 }
 - (void)resume {
   if (_callback) _callback->Resume();
+}
+
+- (void)oe_invalidate {
+  _destinationCallback = nullptr;
+  _callback = nullptr;
+}
+
+- (void)oe_setDestinationCallback:(CefRefPtr<CefBeforeDownloadCallback>)callback {
+  _destinationCallback = callback;
+}
+
+- (void)oe_decideDestination:(nullable NSURL*)destination {
+  // The shell may retain its completion after context teardown. Keep the CEF
+  // handle here so invalidation also makes that retained completion inert.
+  auto callback = _destinationCallback;
+  _destinationCallback = nullptr;
+  if (callback && destination) callback->Continue(OECef(destination.path), false);
 }
 
 @end
@@ -381,6 +403,36 @@ class OENotificationListCallback : public CefNotificationListCallback {
 
 #pragma mark - OEBrowserContext
 
+class OEProfileLifetimeHandler : public CefOpenProfileHandler {
+ public:
+  explicit OEProfileLifetimeHandler(OEBrowserContext* context) : context_(context) {}
+  void OnContextClosed() override { [context_ oe_nativeContextClosed]; }
+ private:
+  __weak OEBrowserContext* context_;
+  IMPLEMENT_REFCOUNTING(OEProfileLifetimeHandler);
+};
+
+class OEBrowsingDataCallback : public CefOpenProfileCallback {
+ public:
+  explicit OEBrowsingDataCallback(void (^done)(NSError*)) : done_([done copy]) {}
+  ~OEBrowsingDataCallback() override {
+    if (auto done = done_) {
+      dispatch_async(dispatch_get_main_queue(), ^{
+        done([NSError errorWithDomain:OEErrorDomain code:OEErrorContextClosed
+                             userInfo:@{NSLocalizedDescriptionKey: @"The profile closed before data removal completed."}]);
+      });
+    }
+  }
+  void OnComplete(const CefString& error) override {
+    auto done = done_; done_ = nil;
+    if (done) done(error.empty() ? nil : [NSError errorWithDomain:OEErrorDomain
+        code:OEErrorUnsupported userInfo:@{NSLocalizedDescriptionKey: OEString(error)}]);
+  }
+ private:
+  void (^done_)(NSError*);
+  IMPLEMENT_REFCOUNTING(OEBrowsingDataCallback);
+};
+
 @implementation OEBrowserContext {
   CefRefPtr<CefRequestContext> _context;
   CefRefPtr<OERequestContextHandler> _handler;
@@ -426,6 +478,25 @@ class OENotificationListCallback : public CefNotificationListCallback {
       _context = CefRequestContext::CreateContext(settings, _handler.get());
     }
     _extensions = [[OEExtensionManager alloc] initOEWithContext:self];
+    [OEEngine.shared oe_registerContext:self];
+  }
+  return self;
+}
+
+- (instancetype)initOEIncognitoWithIdentifier:(NSString*)identifier
+                                      original:(OEBrowserContext*)original {
+  if ((self = [super init])) {
+    _identifier = [identifier copy];
+    _originalContext = original;
+    _ephemeral = YES;
+    _scripts = [NSMutableArray array];
+    _downloads = [NSMutableDictionary dictionary];
+    _whenReady = [NSMutableArray array];
+    _handler = new OERequestContextHandler(self);
+    _context = CefCreateIncognitoContext(original.oe_requestContext, _handler);
+    if (!_context) return nil;
+    _extensions = [[OEExtensionManager alloc] initOEWithContext:self];
+    [OEEngine.shared oe_registerContext:self];
   }
   return self;
 }
@@ -434,18 +505,19 @@ class OENotificationListCallback : public CefNotificationListCallback {
   // A presenter may retain the manager after this context goes away. Its
   // CEF profile/observers must still close with the owning context.
   [_extensions oe_contextClosed];
+  if (_context) CefSetOpenProfileHandler(_context, nullptr);
 }
 
 - (CefRefPtr<CefRequestContext>)oe_requestContext {
-  return _context;
+  return _state == OEBrowserContextStateClosed ? nullptr : _context;
 }
 
 - (BOOL)oe_isReady {
-  return _ready;
+  return _ready && _state == OEBrowserContextStateLive && !_oe_closing;
 }
 
 - (void)oe_whenReady:(dispatch_block_t)block {
-  if (_ready) {
+  if (_ready || _state == OEBrowserContextStateClosed || _oe_closing) {
     block();
   } else {
     [_whenReady addObject:[block copy]];
@@ -453,7 +525,13 @@ class OENotificationListCallback : public CefNotificationListCallback {
 }
 
 - (void)oe_contextInitialized {
+  if (_state == OEBrowserContextStateClosed) return;
+  if (!_context || !CefIsOpenProfileContextLive(_context)) {
+    [self oe_invalidate];
+    return;
+  }
   _ready = YES;
+  CefSetOpenProfileHandler(_context, new OEProfileLifetimeHandler(self));
   // Notification clicks reach the delegate (page-platform EP-6).
   // Read the App-supplied configuration, not raw process arguments. Normal
   // Release Open never installs these switches in its configuration.
@@ -472,6 +550,37 @@ class OENotificationListCallback : public CefNotificationListCallback {
   for (dispatch_block_t b in blocks) {
     b();
   }
+}
+
+- (void)oe_invalidate {
+  if (_state == OEBrowserContextStateClosed && !_context) return;
+  _state = OEBrowserContextStateClosed;
+  _ready = NO;
+  _oe_closing = YES;
+  if (_context) CefSetOpenProfileHandler(_context, nullptr);
+  [_extensions oe_contextClosed];
+  for (OEDownload* download in _downloads.allValues) [download oe_invalidate];
+  [_downloads removeAllObjects];
+  if (_handler) _handler->SetFilter(nil);
+  _requestFilter = nil;
+  _context = nullptr;
+  _handler = nullptr;
+  NSArray<dispatch_block_t>* waiting = [_whenReady copy];
+  [_whenReady removeAllObjects];
+  for (dispatch_block_t block in waiting) block();
+  [OEEngine.shared oe_contextClosed:self];
+}
+
+- (void)oe_nativeContextClosed {
+  // Mark inert inside native observation, but release CEF only after the
+  // observer stack unwinds. Shutdown also calls oe_invalidate synchronously,
+  // so a queued block can retain only an inert ObjC wrapper after unload.
+  _state = OEBrowserContextStateClosed;
+  _ready = NO;
+  _oe_closing = YES;
+  if (_handler) _handler->SetFilter(nil);
+  dispatch_async(dispatch_get_main_queue(), ^{ [self oe_invalidate]; });
+  [OEEngine.shared oe_contextClosed:self];
 }
 
 #pragma mark Notifications
@@ -493,8 +602,9 @@ class OENotificationListCallback : public CefNotificationListCallback {
 
 - (void)displayedNotificationsWithCompletion:
     (void (^)(NSArray<NSDictionary<NSString*, NSString*>*>*))completion {
-  auto done = [completion copy];
+  void (^done)(NSArray<NSDictionary<NSString*, NSString*>*>*) = [completion copy];
   [self oe_whenReady:^{
+    if (!self.oe_isReady) { done(@[]); return; }
     CefGetDisplayedNotifications(self->_context,
                                  new OENotificationListCallback(done));
   }];
@@ -511,6 +621,7 @@ class OENotificationListCallback : public CefNotificationListCallback {
 }
 
 - (void)addUserScript:(OEUserScript*)script {
+  if (_state == OEBrowserContextStateClosed || _oe_closing) return;
   [self removeUserScriptWithIdentifier:script.identifier broadcast:NO];
   [_scripts addObject:script];
   [self oe_broadcastScripts];
@@ -561,6 +672,7 @@ class OENotificationListCallback : public CefNotificationListCallback {
 // Sends the script list to the current renderer of every web content. New
 // renderers get it from extra_info (creation) or OnRenderViewReady.
 - (void)oe_broadcastScripts {
+  if (_state == OEBrowserContextStateClosed || _oe_closing) return;
   for (OEWebContent* webContent in OEEngine.shared.allWebContents) {
     if (webContent.context != self || !webContent.oe_browser) {
       continue;
@@ -582,6 +694,7 @@ class OENotificationListCallback : public CefNotificationListCallback {
 }
 
 - (void)setRequestFilter:(OERequestFilter)requestFilter {
+  if (_state == OEBrowserContextStateClosed || _oe_closing) return;
   @synchronized(self) {
     _requestFilter = [requestFilter copy];
   }
@@ -593,7 +706,7 @@ class OENotificationListCallback : public CefNotificationListCallback {
 - (OEPermissionState)permissionStateForKind:(OEPermissionKind)kind
                                      origin:(NSURL*)origin {
   cef_content_setting_types_t type = OEContentSettingType(kind);
-  if (type == CEF_CONTENT_SETTING_TYPE_NUM_VALUES) {
+  if (!_context || _oe_closing || type == CEF_CONTENT_SETTING_TYPE_NUM_VALUES) {
     return OEPermissionStateAsk;
   }
   CefString url = OECef(origin.absoluteString);
@@ -611,7 +724,7 @@ class OENotificationListCallback : public CefNotificationListCallback {
                    forKind:(OEPermissionKind)kind
                     origin:(NSURL*)origin {
   cef_content_setting_types_t type = OEContentSettingType(kind);
-  if (type == CEF_CONTENT_SETTING_TYPE_NUM_VALUES) {
+  if (!_context || _oe_closing || type == CEF_CONTENT_SETTING_TYPE_NUM_VALUES) {
     return;
   }
   cef_content_setting_values_t value =
@@ -625,6 +738,7 @@ class OENotificationListCallback : public CefNotificationListCallback {
 #pragma mark Appearance
 
 - (void)setWebsiteColorScheme:(OEColorSchemePreference)scheme {
+  if (!_context || _oe_closing) return;
   // Chrome keeps the last value in the profile's prefs, so the first set
   // always reaches Chromium, even when it equals the initial Automatic.
   if (_colorSchemeApplied && scheme == _websiteColorScheme) {
@@ -656,13 +770,14 @@ class OENotificationListCallback : public CefNotificationListCallback {
 
 - (void)clearBrowsingDataForOrigin:(NSURL*)origin
                         completion:(void (^)(void))completion {
+  if (!_context || _oe_closing) { if (completion) completion(); return; }
   CefRefPtr<CefCookieManager> cookies = _context->GetCookieManager(nullptr);
   CefString url = origin ? OECef(origin.absoluteString) : CefString();
   void (^done)(void) = [completion copy];
   if (!cookies ||
       !cookies->DeleteCookies(url, CefString(),
                               new DeleteCookiesCallback(^{
-                                if (!origin) {
+                                if (!origin && self->_context && !self->_oe_closing) {
                                   self->_context->ClearHttpCache(nullptr);
                                 }
                                 if (done) {
@@ -675,6 +790,20 @@ class OENotificationListCallback : public CefNotificationListCallback {
   }
 }
 
+- (void)clearBrowsingData:(OEBrowsingDataKinds)kinds
+                     from:(NSDate*)begin
+                       to:(NSDate*)end
+               completion:(void (^)(NSError*))completion {
+  [self oe_whenReady:^{
+    CefRefPtr<OEBrowsingDataCallback> callback = new OEBrowsingDataCallback(completion);
+    if (!self.oe_isReady ||
+        !CefClearOpenProfileBrowsingData(self->_context, static_cast<int>(kinds),
+             begin.timeIntervalSince1970, end.timeIntervalSince1970,
+             callback))
+      callback->OnComplete("profile-unavailable-or-invalid-data-range");
+  }];
+}
+
 #pragma mark Downloads
 
 - (NSArray<OEDownload*>*)downloads {
@@ -685,14 +814,18 @@ class OENotificationListCallback : public CefNotificationListCallback {
                   suggestedName:(NSString*)name
                      webContent:(OEWebContent*)webContent
                        callback:(CefRefPtr<CefBeforeDownloadCallback>)callback {
-  OEDownload* download = [[OEDownload alloc] initOEWithItem:item
-                                                 webContent:webContent];
-  _downloads[@(download.identifier)] = download;
-  CefRefPtr<CefBeforeDownloadCallback> cb = callback;
+  if (_state == OEBrowserContextStateClosed || _oe_closing) return;
+  // Updated callbacks can arrive before the destination request. Reuse the
+  // tracked wrapper so a shell-retained earlier object cannot keep CEF alive.
+  OEDownload* download = _downloads[@(item->GetId())];
+  if (!download) {
+    download = [[OEDownload alloc] initOEWithItem:item webContent:webContent];
+    _downloads[@(download.identifier)] = download;
+  }
+  [download oe_setDestinationCallback:callback];
   void (^decide)(NSURL*) = ^(NSURL* destination) {
-    if (destination) {
-      cb->Continue(OECef(destination.path), false);
-    }
+    [download oe_decideDestination:
+        self.state == OEBrowserContextStateLive && !self.oe_closing ? destination : nil];
     // Not calling Continue cancels the download.
   };
   id<OEBrowserContextDelegate> delegate = _delegate;
@@ -713,6 +846,10 @@ class OENotificationListCallback : public CefNotificationListCallback {
 
 - (void)oe_handleDownloadUpdated:(CefRefPtr<CefDownloadItem>)item
                         callback:(CefRefPtr<CefDownloadItemCallback>)callback {
+  if (_state == OEBrowserContextStateClosed || _oe_closing) {
+    if (callback && item->IsInProgress()) callback->Cancel();
+    return;
+  }
   OEDownload* download = _downloads[@(item->GetId())];
   if (!download) {
     download = [[OEDownload alloc] initOEWithItem:item webContent:nil];

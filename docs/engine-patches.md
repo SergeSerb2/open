@@ -553,6 +553,51 @@ Section 8 decisions (differences from page-platform §6, with the reason):
 - **EP-6 reports no page.** Chromium keeps the creating document of a non-persistent notification inside content's dispatcher; the embedder finds the tab by origin.
 - **Test hooks** (`CefGetDisplayedNotifications`, `CefSimulateNotificationClick`, `CefSimulateHistorySwipe`) run only with the browser switch `--open-automation`, which only automation builds of the App pass. The swipe hook replays the overlay controller sequence and the navigation, not Chromium's gesture recognition (manual check U-S1).
 
+## Profiles (Section 10, 0701–0703)
+
+The Profile APIs use the experimental surface in overlay header
+`cef/include/cef_open_profile.h`. `engine-apply` generates the C API, wrappers
+and hashes. Swift calls only OpenEngine. New implementation lives in
+`open/browser/profiles/open_profile_context.{h,cc}` and is compiled through
+`open/open_libcef_sources.gni`; neither `cef/BUILD.gn` nor 0310's files gain
+another manifest owner.
+
+OpenEngine pins Chromium startup to `--profile-directory=Default`. On macOS,
+`GetStartupProfilePath` otherwise selects `ProfileManager::GetLastUsedProfileDir`
+(`chrome/browser/ui/startup/startup_browser_creator.cc:1756`), and CEF retains
+that initial Profile as its global request context
+(`cef/libcef/browser/chrome/chrome_browser_main_extra_parts_cef.cc:40–55`). A
+named Profile used before quit must not become the process context on relaunch:
+that would mix Default storage and keep the named Profile alive at deletion.
+Named Profiles still load lazily through their own request contexts.
+
+| Number | Change and reason | Files | Risk |
+|---|---|---|---|
+| 0701 | Chosen-parent primary OTR; observe native closure before CEF detaches it, and let a retained CEF wrapper report unavailable. Normal last-Browser cleanup stays with Chrome's ProfileDestroyer. A session released before its first Browser also goes through ProfileDestroyer. | `cef/0701-open-profile-lifecycle.patch`: `chrome/chrome_browser_context.cc`, `request_context_impl.h`; profile overlay and `cef_open_profile.h` | Primary OTR initializes before CEF adopts it. Native teardown can precede the shell's retained wrappers; they must become inert before another request. |
+| 0702 | Ordered deletion coordinator in the overlay: real `WIPE_PROFILE` completion, `OnStoreDeletionFromDisk`, release CEF, independent late destructor sentinel, then remove/commit Local State. The macOS probe passed with automatic unload; no ProfileManager hook is needed. Keep-alives are never force-cleared. | Profile overlay, OpenEngine context/engine lifecycle code | Keep-alives, downloads, workers or delayed IO can block teardown. Specific errors preserve folders and the App's crash/retry cleanup remains necessary. |
+| 0703 | Per-Profile browsing-data removal with completion, from begin through end, inclusive (Chromium semantics). This needs no upstream hunk: the public BrowsingDataRemover is reachable from the overlay. | Profile overlay, `cef_open_profile.h`, `OEBrowserContext.{h,mm}`, `AppSettingsActions.swift` | Storage backends use their own creation/modification timestamps; localStorage uses an origin's modification time. Open HistoryStore is separate. |
+
+`makeIncognitoContext(for:completion:)` shares one private session per regular
+parent, rejects unavailable/OTR/closing/policy-disabled parents, and never seeds
+cookies or falls back to Default. The primary OTR retains Chrome's extension
+opt-in and spanning/split behavior. This is an Open design choice; Arc's exact
+parent selection is not established by the static research.
+
+`deleteContext(_:completion:)` coalesces requests and retires the directory in
+the running process. It closes private children, Browsers, pages, popups and
+downloads before native deletion. The independent observer and late
+`SupportsUserData` sentinel distinguish CEF wrapper detachment from actual
+Profile destruction. The error diagnostics contain keep-alive origin numbers
+and counts, with no profile name or path. Only success permits the App to remove
+the Engine, cache and Open-store folders.
+
+Quit tracks wrappers independently of the disk-context registry and invalidates
+all managers/handles before `CefShutdown`, including the three-second deadline
+path. Retained Swift objects stay closed. The App automation command
+`profile-engine` provides native proof windows without introducing a second
+product incognito or teardown implementation. The `profiles` e2e suite includes
+the profile-engine flows; `--only profiles-engine` runs that portion alone.
+
 ## Decisions for the lead
 
 1. Spaces and windows in `chrome.windows`: one Chrome window per Open window (proposed), or one per Space? Arc: per window (`ArcBrowser` has a `windowIdentifier`, docs/re/arccore-engine.md §4.3).
