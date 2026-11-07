@@ -27,6 +27,7 @@ extension AutomationController {
       result["chrome"] = factory.controller?.sidebar.incognitoChrome ?? [:]
       result["ephemeral"] = factory.selectedContent?.context.isEphemeral ?? false
       result["context"] = factory.selectedContent?.context.identifier ?? ""
+      result["originalContext"] = factory.selectedContent?.context.originalContext?.identifier ?? ""
       result["appearance"] = factory.window?.effectiveAppearance.name.rawValue ?? ""
       result["extensions"] = factory.focusedBrowser?.extensionActions.map(\.extensionIdentifier) ?? []
       result["tabs"] = factory.orderedTabs.map { ["id": $0.id.description, "url": $0.url.absoluteString] }

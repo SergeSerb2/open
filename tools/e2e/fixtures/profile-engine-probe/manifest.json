@@ -1,0 +1,12 @@
+{
+  "manifest_version": 3,
+  "name": "Section 10 profile probe",
+  "version": "1.0",
+  "permissions": ["storage"],
+  "background": {"service_worker": "background.js"},
+  "content_scripts": [{
+    "matches": ["http://*.localhost/*", "http://127.0.0.1/*"],
+    "js": ["content.js"],
+    "run_at": "document_end"
+  }]
+}

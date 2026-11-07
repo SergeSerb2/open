@@ -7,6 +7,9 @@ final class AppFirstRunActions: FirstRunActions {
   var canImportPasswordsAndCookies: Bool { app.importRunner.canImportPasswordsAndCookies }
   var hasUnfinishedSecretsImport: Bool { app.importRunner.hasUnfinishedSecretsImport }
   func runImport(plan: ImportPlan) async -> ImportOutcome { await app.importRunner.run(plan: plan, firstRun: true) }
+  func installImportedExtension(_ candidate: ImportExtensionCandidate) async -> ImportExtensionInstallResult {
+    await app.importRunner.installExtension(candidate, window: app.firstRunWindowController?.window)
+  }
   func setAsDefaultBrowser() -> String? { app.settingsPresenter.setAsDefaultBrowser() }
   func isDefaultBrowser() -> Bool { app.settingsPresenter.isDefaultBrowser() }
   func finishFirstRun(imported: Bool) { app.finishFirstRun(imported: imported) }

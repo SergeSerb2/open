@@ -9,13 +9,14 @@ public struct ClearDataKinds: OptionSet, Sendable {
     public static let history = Self(rawValue: 1), cookies = Self(rawValue: 2), cache = Self(rawValue: 4), downloads = Self(rawValue: 8)
 }
 public enum ClearDataRange: String, CaseIterable, Sendable {
-    case lastHour = "Last hour", lastDay = "Last 24 hours", lastWeek = "Last 7 days", all = "All time"
+    case lastHour = "Last hour", lastDay = "Last 24 hours", lastWeek = "Last 7 days", lastFourWeeks = "Last 4 weeks", all = "All time"
 }
 public enum ProfilePage: String, Sendable { case privacy, passwords, paymentMethods, notifications }
 public struct ImportPlan: Sendable {
     public var directory: URL
     public var spaces = true, tabs = true, favorites = true, folders = true, archive = true, history = false, searchSettings = true
     public var secretsRequested = false
+    public var boosts = true
     public private(set) var secretsConsented = false
     public init(directory: URL) { self.directory = directory }
     /// Only the explicit consent button should call this method.
@@ -34,14 +35,20 @@ public struct ImportOutcome: Sendable {
     public var errorText: String?
     public var failures: [String: String]
     public var secretsReportLines: [String]
-    public init(counts: [String: Int] = [:], errorText: String? = nil, failures: [String: String] = [:], secretsReportLines: [String] = []) { self.counts = counts; self.errorText = errorText; self.failures = failures; self.secretsReportLines = secretsReportLines }
+    public var extensions: [ImportExtensionCandidate]
+    public var extensionProfileCount: Int
+    public init(counts: [String: Int] = [:], errorText: String? = nil, failures: [String: String] = [:], extensions: [ImportExtensionCandidate] = [], extensionProfileCount: Int = 0, secretsReportLines: [String] = []) {
+        self.counts = counts; self.errorText = errorText; self.failures = failures
+        self.extensions = extensions; self.extensionProfileCount = extensionProfileCount
+        self.secretsReportLines = secretsReportLines
+    }
 }
 
 /// One import action and capability shared by Settings and first run.
 /// Canonical adapter keys. Legacy display keys remain accepted at the one outcome boundary.
 public enum ImportOutcomeKeys {
     public static let spaces="Imported Spaces",tabs="Imported items",archive="Imported Archive",history="Imported History"
-    public static let imported=[spaces,tabs,archive,history,"Spaces","Imported tabs","Archive","History","Favorites","Folders","Search settings","Passwords and cookies","Passwords","Cookies","Addresses","Cards"]
+    public static let imported=[spaces,tabs,archive,history,"Spaces","Imported tabs","Archive","History","Favorites","Folders","Search settings","Boosts","Passwords and cookies","Passwords","Cookies","Addresses","Cards"]
 }
 public extension ImportOutcome {
     func importedCount(_ category:String)->Int {
@@ -55,10 +62,12 @@ public extension ImportOutcome {
     var canImportPasswordsAndCookies: Bool { get }
     var hasUnfinishedSecretsImport: Bool { get }
     func runImport(plan: ImportPlan) async -> ImportOutcome
+    func installImportedExtension(_ candidate: ImportExtensionCandidate) async -> ImportExtensionInstallResult
 }
 public extension ImportActions {
     var canImportPasswordsAndCookies: Bool { false }
     var hasUnfinishedSecretsImport: Bool { false }
+    func installImportedExtension(_ candidate: ImportExtensionCandidate) async -> ImportExtensionInstallResult { .failed("Extension installation is unavailable.") }
 }
 
 public struct ExtensionShortcutConflict: Sendable, Hashable {

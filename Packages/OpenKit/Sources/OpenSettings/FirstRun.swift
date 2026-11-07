@@ -55,7 +55,7 @@ public enum FirstRunWindow {public static let size=SettingsTokens.firstRunSize}
     }
     public var hasSelection:Bool {includeSpacesAndTabs || includeArchive || includeHistory || (includeSecrets && wizard.canImportPasswordsAndCookies)}
     public var outcome:ImportOutcome? {wizard.outcome}
-    public var busy:Bool {wizard.isImporting || step == .importing}
+    public var busy:Bool {wizard.isImporting || wizard.extensions.isInstalling || step == .importing}
     public var passwordsCopy:PasswordsImportCopy {.init(canImport:wizard.canImportPasswordsAndCookies,savedItems:probe?.secretsFound == false ? 0:probe?.savedItems)}
     public var welcomeStatus:String {
         guard let probe else {return "Checking for data to import…"}
@@ -82,6 +82,7 @@ public enum FirstRunWindow {public static let size=SettingsTokens.firstRunSize}
         guard [.importChoices,.failed].contains(step),hasSelection,!wizard.isImporting else {return}
         var plan=ImportPlan(directory:wizard.plan.directory)
         plan.spaces=includeSpacesAndTabs;plan.tabs=includeSpacesAndTabs;plan.favorites=includeSpacesAndTabs;plan.folders=includeSpacesAndTabs;plan.searchSettings=includeSpacesAndTabs
+        plan.boosts=includeSpacesAndTabs
         plan.archive=includeArchive;plan.history=includeHistory;plan.secretsRequested=includeSecrets && wizard.canImportPasswordsAndCookies
         errorText=nil;phaseText=includeSpacesAndTabs ? "Importing your Spaces and tabs…":includeArchive ? "Importing your archive…":includeHistory ? "Importing your history…":"Checking passwords and cookies…"
         step=plan.secretsRequested ? .secretsConsent:.importing
@@ -118,6 +119,7 @@ public enum FirstRunWindow {public static let size=SettingsTokens.firstRunSize}
     public static let freshSaveError="Open could not save your data. Try Start Fresh again."
     public func reportSaveFailure(imported:Bool) {errorText=imported ? Self.importedSaveError:Self.freshSaveError}
     public func reportValue(_ category:String)->String {
+        if category == "Boosts", let failure=outcome?.failures[category] {return failure}
         if outcome?.failures[category] != nil {return "Could not be read"}
         if category == "History" && !wizard.plan.history {return "Not selected"}
         if category == "Passwords and cookies" && !wizard.plan.secretsConsented {return includeSecrets && wizard.consentWasDecided ? "Not imported":"Not selected"}
@@ -267,9 +269,10 @@ public struct FirstRunView:View {
             if let failure = model.outcome?.failures["Passwords and cookies"] { Text(failure).foregroundStyle(secondary) }
             if let message = model.wizard.unfinishedSecretsImportMessage { Text(message).foregroundStyle(secondary) }
             if let duplicates=model.duplicateSummary {Text(duplicates).font(section).foregroundStyle(secondary).fixedSize(horizontal:false,vertical:true)}
+            ImportExtensionsSection(model:model.wizard.extensions) {Task {await model.wizard.installExtensions()}}
             if let note=model.reportNote {Text(note).font(section).foregroundStyle(model.reportNoteIsError ? Color.red:secondary).fixedSize(horizontal:false,vertical:true)}
         }.frame(maxWidth:.infinity,alignment:.leading)}.scrollIndicators(.automatic)
-        HStack {Spacer();if model.errorText == FirstRunViewModel.importedSaveError {primary("Try Again"){model.actions.finishFirstRun(imported:true)}} else if model.errorText != nil && !model.wizard.hasImportedData {Button("Continue"){model.enterDefaultBrowser()};primary("Try Again"){model.showImport()}} else {primary("Continue"){model.enterDefaultBrowser()}}}.fixedSize(horizontal:false,vertical:true)
+        HStack {Spacer();if model.errorText == FirstRunViewModel.importedSaveError {primary("Try Again"){model.actions.finishFirstRun(imported:true)}} else if model.errorText != nil && !model.wizard.hasImportedData {Button("Continue"){model.enterDefaultBrowser()};primary("Try Again"){model.showImport()}} else {primary("Continue"){model.enterDefaultBrowser()}}}.fixedSize(horizontal:false,vertical:true).disabled(model.wizard.extensions.isInstalling)
     }}
     private var defaultBrowser:some View {VStack(spacing:16) {
         sparse {VStack(spacing:8) {

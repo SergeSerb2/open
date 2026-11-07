@@ -175,7 +175,7 @@ extension AutomationController {
   /// Inspect pixels from our own native window. SwiftUI's in-process AX tree
   /// can be empty unless an outside assistive client has activated it. OCR
   /// proves the displayed copy and its geometry without such a client or input.
-  private func firstRunRenderedText(_ window: NSWindow) async throws -> (lines: [[String: Any]], retries: Int) {
+  func firstRunRenderedText(_ window: NSWindow) async throws -> (lines: [[String: Any]], retries: Int) {
     try await Task.sleep(for: .milliseconds(250)) // allow the normal step fade to finish
     let url = FileManager.default.temporaryDirectory.appendingPathComponent("open-firstrun-\(UUID()).png")
     defer { try? FileManager.default.removeItem(at: url) }

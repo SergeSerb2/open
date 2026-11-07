@@ -9,6 +9,7 @@ import OpenImport
     public enum Step: String, CaseIterable { case choose = "Choose", review = "Review", consent = "Passwords", progress = "Importing", report = "Report" }
     unowned let root: SettingsViewModel
     private let importActions: any ImportActions
+    public let extensions = ImportExtensionsViewModel()
     public var plan: ImportPlan
     public var step: Step = .choose
     public private(set) var counts: [String: Int] = [:]
@@ -21,7 +22,7 @@ import OpenImport
     public var phaseText = "Importing selected data…"
     public var progress: Double?
     public var browserHasLanded = false
-    public var busy:Bool {counting || isImporting}
+    public var busy:Bool {counting || isImporting || extensions.isInstalling}
     public private(set) var errorText = ""
     public private(set) var outcome: ImportOutcome?
     public private(set) var consentWasDecided = false
@@ -58,7 +59,7 @@ import OpenImport
         let found=category == "History" ? probe.historyFound:category == "Passwords and cookies" ? probe.secretsFound:category == "Archive" ? probe.archiveFound:probe.sidebarFound
         return found ? "Could not be read":"Not found"
     }
-    public static let reportCategories=["Spaces","Pinned and Today tabs","Favorites","Folders","Archive","History","Search settings","Passwords and cookies"]
+    public static let reportCategories=["Spaces","Pinned and Today tabs","Favorites","Folders","Archive","History","Search settings","Boosts","Passwords and cookies"]
     public var displayedReportCategories: [String] { Self.reportCategories.filter { $0 != "Passwords and cookies" || outcome?.secretsReportLines.isEmpty != false } }
     public var secretsReportLines: [String] { outcome?.secretsReportLines ?? [] }
     public var unfinishedSecretsImportMessage: String? {
@@ -107,6 +108,7 @@ import OpenImport
         isImporting = true; step = .progress
         let result = await importActions.runImport(plan: plan)
         outcome = result; errorText = result.errorText ?? ""; isImporting = false; step = .report
+        extensions.reset(candidates: result.extensions, profileCount: result.extensionProfileCount)
         unfinishedSecretsImport = importActions.hasUnfinishedSecretsImport
         root.profiles.refresh(); root.refreshLinks()
     }
@@ -117,6 +119,7 @@ import OpenImport
     }
     public func retry() { guard !busy else { return }; clearConsent(); outcome = nil; step = .choose }
     public func finish(openLibrary: Bool = false) { guard !busy else { return }; if outcome?.errorText == nil && outcome != nil { root.set(plan.directory.path, for: "open.import.lastArcDir") }; clearConsent(); root.showsImport = false; if openLibrary { root.actions.openLibrary() } }
+    public func installExtensions() async { guard step == .report else { return }; await extensions.install(using: importActions) }
 }
 public struct ImportWizard: View {
     @State private var model: ImportWizardViewModel
@@ -150,13 +153,14 @@ public struct ImportWizard: View {
                 case .report:
                     if model.outcome?.errorText == nil || model.hasImportedData {
                         Text(model.reportSummary).font(.headline)
-                        ForEach(model.displayedReportCategories,id:\.self) {name in HStack {Text(ImportCountCopy.displayCategory(name));Spacer();Text(model.outcome?.failures[name] == nil ? model.reportCount(name).formatted() : "Could not be read").monospacedDigit().foregroundStyle(model.outcome?.failures[name] == nil ? Color.primary : Color.red)}}
+                        ForEach(model.displayedReportCategories,id:\.self) {name in HStack {Text(ImportCountCopy.displayCategory(name));Spacer();Text(model.outcome?.failures[name] == nil ? model.reportCount(name).formatted() : (name == "Boosts" ? model.outcome?.failures[name] ?? "Could not be read" : "Could not be read")).monospacedDigit().foregroundStyle(model.outcome?.failures[name] == nil ? Color.primary : Color.red)}}
                         ForEach(model.secretsReportLines, id: \.self) { Text($0).monospacedDigit() }
                         if !model.reportSkipped.isEmpty {Text(model.reportSkipped).foregroundStyle(.secondary)}
                     }
                     if model.passwordsWereNotImported {Text("Passwords and cookies were not imported.").foregroundStyle(.secondary)}
                     if let failure = model.outcome?.failures["Passwords and cookies"] { Text(failure).foregroundStyle(.secondary) }
                     if let message = model.unfinishedSecretsImportMessage { Text(message).foregroundStyle(.secondary) }
+                    ImportExtensionsSection(model: model.extensions) { Task { await model.installExtensions() } }
                 }
                 SettingsError(text: model.errorText)
             }.frame(maxWidth: .infinity, alignment: .leading) }
@@ -175,7 +179,7 @@ public struct ImportWizard: View {
                 case .progress: EmptyView()
                 case .report: if model.outcome?.errorText != nil { Button("Try Again") { model.retry() } } else { Button("Open Library") { model.finish(openLibrary: true) } };Button("Done") { model.finish() }.keyboardShortcut(.defaultAction).buttonStyle(SettingsButtonStyle(prominent:true))
                 }
-            }
+            }.disabled(model.extensions.isInstalling)
         }.padding(24).frame(width: 640, height: 520).interactiveDismissDisabled(model.busy)
         .task { if !model.readable { await model.refreshCounts() } }
     }

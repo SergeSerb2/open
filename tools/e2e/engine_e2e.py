@@ -936,6 +936,8 @@ def feature_checks(app, style, results, tmp):
                 "playback": play, "cdm_versions": sorted(os.listdir(cdm)) if got else None}
 
     def crash_recovery():
+        if os.environ.get("OPEN_E2E_NO_CRASH_PROBES") == "1":
+            return {"status": "DEFERRED", "reason": "Crash probes prohibited for this run"}
         c = new_tab(app, "https://example.com/", background=True)
         try:
             app.call("navigate", tab=c, url="chrome://crash")
@@ -2241,6 +2243,8 @@ def window_checks(app_factory, results, tmp, config, chrome_only=False, material
     if material_only:
         window_material_checks(app_factory, results, tmp)
         return
+    import engine_activation
+    engine_activation.run(app_factory, results)
     sidebar_resize_gesture_checks(app_factory, results, tmp)
     window_chrome_followup_checks(app_factory, results, tmp)
     window_material_checks(app_factory, results, tmp)
@@ -5105,22 +5109,25 @@ def popup_teardown_checks(app, results, actions, action, popup_eval, open_popup,
     results["extension_update_with_popup"] = reload_with_popup("1.1")
     results["extension_reload_with_popup"] = reload_with_popup(None)
 
-    # The popup's renderer crashes: the popup closes and Chrome terminates
-    # the extension (its action goes away until it is reloaded); Open keeps
-    # running.
-    crash = {}
-    state = open_popup(ACTION_PROBE)
-    crash["opened"] = bool(state)
-    if state:
-        try:
-            app.call("devtools", tab=state["page"]["identifier"], method="Page.crash", timeout=5)
-        except Exception as e:  # the renderer dies before it answers
-            crash["crash_call"] = str(e)[:200]
-    crash["closed"] = bool(wait_until(lambda: not app.call("ext-popup").get("open"), timeout=10))
-    crash["action_gone"] = bool(wait_until(lambda: not action(ACTION_PROBE), timeout=10))
-    crash["alive"] = app.call("ping") is not None
-    results["popup_renderer_crash"] = {"ok": crash["opened"] and crash["closed"] and crash["action_gone"] and crash["alive"],
-                                       **crash}
+    if os.environ.get("OPEN_E2E_NO_CRASH_PROBES") == "1":
+        results["popup_renderer_crash"] = {"status": "DEFERRED", "reason": "Crash probes prohibited for this run"}
+    else:
+        # The popup's renderer crashes: the popup closes and Chrome terminates
+        # the extension (its action goes away until it is reloaded); Open keeps
+        # running.
+        crash = {}
+        state = open_popup(ACTION_PROBE)
+        crash["opened"] = bool(state)
+        if state:
+            try:
+                app.call("devtools", tab=state["page"]["identifier"], method="Page.crash", timeout=5)
+            except Exception as e:  # the renderer dies before it answers
+                crash["crash_call"] = str(e)[:200]
+        crash["closed"] = bool(wait_until(lambda: not app.call("ext-popup").get("open"), timeout=10))
+        crash["action_gone"] = bool(wait_until(lambda: not action(ACTION_PROBE), timeout=10))
+        crash["alive"] = app.call("ping") is not None
+        results["popup_renderer_crash"] = {"ok": crash["opened"] and crash["closed"] and crash["action_gone"] and crash["alive"],
+                                           **crash}
 
     # No live Chrome tab in the window: Chrome's model goes away (the shell
     # hears it), the list is the profile's (pins kept, not live), and an
@@ -5560,6 +5567,9 @@ def profiles_checks(factory, results, tmp, config):
               and os.path.exists(os.path.join(root, "Profiles", "Default", "Cookies"))
               and os.path.exists(os.path.join(root, "Engine", ".open-layout")),
         "log": [line for line in text.splitlines() if "engine layout" in line][:3]}
+
+    runpy.run_path(os.path.join(ROOT, "tools/e2e/profiles_engine.py"))["run"](
+        factory, results, tmp, config, new_tab, wait_until)
 
 
 # ----------------------------------------------------------------------------
@@ -11825,9 +11835,10 @@ def main():
     ap.add_argument("--engine-fingerprint-only", action="store_true", help="verify built engine artifacts and exit without launching Open")
     ap.add_argument("--extensions", default=os.path.join(ROOT, ".re", "ext", "unpacked"))
     ap.add_argument("--only", choices=["firstrun", "find", "shell", "extensions", "features", "measure", "tabstrip", "window", "sidebar", "peek", "split",
-                                       "commandbar", "app-actions", "actions", "extensions-p3", "extensions-ui", "extensions-e2", "profiles", "sidebar-completion", "toolbar", "numbering", "media", "relaunch", "page", "page-chrome",
+                                       "commandbar", "app-actions", "actions", "extensions-p3", "extensions-ui", "extensions-e2", "profiles", "profiles-engine", "sidebar-completion", "toolbar", "numbering", "media", "relaunch", "page", "page-chrome",
                                        "sleep", "context-menus", "routing", "littleopen", "history", "applescript", "downloads", "space-editor", "incognito", "passwords", "passwords-probe", "secrets-import"])
     ap.add_argument("--window-chrome-only", action="store_true", help="run only the window-chrome follow-up flows in the window suite")
+    ap.add_argument("--firstrun-boosts-only", action="store_true", help="run only the Boost import seam and CLI lock flows in firstrun")
     ap.add_argument("--window-material-only", action="store_true", help="run only the window material real-App flows in the window suite")
     ap.add_argument("--profiles-shell-only", action="store_true", help="run only the Section 10 real-App Profiles shell flows")
     ap.add_argument('--passwords-probe-rows', help='run only named Step 0 rows, e.g. PR-8,PR-9; never replay a crashed row')
@@ -11836,6 +11847,8 @@ def main():
     ap.add_argument("--focus-retry-delay-seconds", type=int, default=0,
                     help="wait between interrupted foreground attempts (0–600 seconds)")
     opts = ap.parse_args()
+    if opts.firstrun_boosts_only and opts.only != "firstrun":
+        ap.error("--firstrun-boosts-only requires --only firstrun")
     # Startup itself may migrate legacy Peek choices before the socket answers.
     # Preserve the pre-launch stored values, including absence, across every app
     # and every retry (the Peek suite also launches a second Find/Escape app).
@@ -11936,8 +11949,9 @@ def main():
         if not all(os.path.isdir(d) for d in dirs):
             sys.exit("missing unpacked extensions in %s" % opts.extensions)
         extra += ["--load-extension=" + ",".join(dirs), "--disable-features=DisableLoadExtensionCommandLineSwitch"]
-    if opts.only == "profiles":
-        extra += ["--load-extension=" + os.path.join(ROOT, "tools", "e2e", "fixtures", "tabs-probe"),
+    if opts.only in ("profiles", "profiles-engine", "incognito"):
+        extra += ["--load-extension=" + ",".join(os.path.join(ROOT, "tools", "e2e", "fixtures", name)
+                                               for name in ("tabs-probe", "profile-engine-probe")),
                   "--disable-features=DisableLoadExtensionCommandLineSwitch"]
     if opts.only == "tabstrip":
         dirs = [os.path.join(ROOT, "tools", "e2e", "fixtures", "tabs-probe"), os.path.join(opts.extensions, "bitwarden")]
@@ -11949,7 +11963,7 @@ def main():
     tracker = FocusTracker(stop_on_app_death=opts.only in ('secrets-import', 'firstrun', 'features'))
     _ACTIVE_FOCUS_TRACKER = tracker
 
-    def factory(urls=("about:blank",), fresh=False, snapshot=None, extra_env=None, extra_args=None, delivery_urls=()):
+    def factory(urls=("about:blank",), fresh=False, snapshot=None, extra_env=None, extra_args=None, delivery_urls=(), load_extensions=True):
         tracker.check_alive()
         if fresh or snapshot:
             shutil.rmtree(user_data, ignore_errors=True)
@@ -11957,7 +11971,8 @@ def main():
         if snapshot:
             os.makedirs(os.path.join(user_data, "State"), exist_ok=True)
             shutil.copyfile(snapshot, os.path.join(user_data, "State", "browser.json"))
-        app = Open(opts.config, opts.style, user_data, extra + list(extra_args or []), log, urls=urls, extra_env=extra_env, delivery_urls=delivery_urls, first_run=opts.only == "firstrun")
+        launch_args = [arg for arg in extra if load_extensions or not arg.startswith("--load-extension=")]
+        app = Open(opts.config, opts.style, user_data, launch_args + list(extra_args or []), log, urls=urls, extra_env=extra_env, delivery_urls=delivery_urls, first_run=opts.only == "firstrun")
         app.focus_tracker = tracker
         tracker.apps.append(app)
         return app
@@ -12056,8 +12071,12 @@ def main():
             results["firstrun"] = CheckedResults(tracker)
             # The executable's -I shebang omits the script directory from
             # sys.path. Load this owned sibling by its exact repository path.
-            runpy.run_path(os.path.join(ROOT, "tools", "e2e", "firstrun.py"))["run"](
-                factory, results["firstrun"], tmp, sys.modules[__name__])
+            if not opts.firstrun_boosts_only:
+                runpy.run_path(os.path.join(ROOT, "tools", "e2e", "firstrun.py"))["run"](
+                    factory, results["firstrun"], tmp, sys.modules[__name__])
+            if os.environ.get("OPEN_E2E_IMPORT_EXT_ONLY") != "1":
+                runpy.run_path(os.path.join(ROOT, "tools", "e2e", "firstrun_boosts.py"))["run"](
+                    factory, results["firstrun"], tmp, sys.modules[__name__])
         elif opts.only == "extensions-ui":
             results["extensions-ui"] = CheckedResults(tracker)
             import extensions_ui
@@ -12149,12 +12168,16 @@ def main():
         elif opts.only == "peek":
             results["peek"] = CheckedResults(tracker)
             peek_checks(factory, results["peek"], tmp)
-        elif opts.only == "profiles":
-            results["profiles"] = CheckedResults(tracker)
-            if not opts.profiles_shell_only:
-                profiles_checks(factory, results["profiles"], tmp, opts.config)
-            runpy.run_path(os.path.join(ROOT, "tools/e2e/profiles_shell.py"))["run"](
-                factory, results["profiles"], tmp, globals(), domain_before)
+        elif opts.only in ("profiles", "profiles-engine"):
+            results[opts.only] = CheckedResults(tracker)
+            if opts.only == "profiles":
+                if not opts.profiles_shell_only:
+                    profiles_checks(factory, results[opts.only], tmp, opts.config)
+                runpy.run_path(os.path.join(ROOT, "tools/e2e/profiles_shell.py"))["run"](
+                    factory, results[opts.only], tmp, globals(), domain_before)
+            else:
+                runpy.run_path(os.path.join(ROOT, "tools/e2e/profiles_engine.py"))["run"](
+                    factory, results[opts.only], tmp, opts.config, new_tab, wait_until)
         elif opts.only == "passwords":
             results["passwords"] = CheckedResults(tracker)
             runpy.run_path(os.path.join(ROOT, "tools/e2e/passwords.py"))["run"](
@@ -12252,14 +12275,14 @@ def main():
                                     else opts.config.lower()))
     with open(os.path.join(OUT, name), "w") as f:
         json.dump(results, f, indent=2, sort_keys=True)
-    for group in ("firstrun", "find", "shell", "extensions", "features", "measure", "tabstrip", "window", "sidebar", "peek", "split", "commandbar", "app-actions", "actions", "extensions-p3", "extensions-ui", "extensions-e2", "profiles", "sidebar-completion", "toolbar", "numbering", "media", "relaunch", "page", "page-chrome", "sleep", "context-menus", "routing", "littleopen", "history", "applescript", "downloads", "space-editor", "incognito", "passwords", "secrets-import"):
+    for group in ("firstrun", "find", "shell", "extensions", "features", "measure", "tabstrip", "window", "sidebar", "peek", "split", "commandbar", "app-actions", "actions", "extensions-p3", "extensions-ui", "extensions-e2", "profiles", "profiles-engine", "sidebar-completion", "toolbar", "numbering", "media", "relaunch", "page", "page-chrome", "sleep", "context-menus", "routing", "littleopen", "history", "applescript", "downloads", "space-editor", "incognito", "passwords", "secrets-import"):
         for k, v in results.get(group, {}).items():
             if isinstance(v, dict) and "ok" in v:
                 print("%-24s %s" % (k, "PASS" if v.get("ok") else "FAIL"))
             elif isinstance(v, dict) and v.get("status") in ("SKIP", "BLOCKED", "INTERRUPTED", "DEFERRED"):
                 print("%-24s %s: %s" % (k, v["status"], v.get("reason", "")))
     print("wrote", os.path.join(OUT, name))
-    failures = [k for group in ("firstrun", "find", "shell", "extensions", "features", "measure", "tabstrip", "window", "sidebar", "peek", "split", "commandbar", "app-actions", "actions", "extensions-p3", "extensions-ui", "extensions-e2", "profiles", "sidebar-completion", "toolbar", "numbering", "media", "relaunch", "page", "page-chrome", "sleep", "context-menus", "routing", "littleopen", "history", "applescript", "downloads", "space-editor", "incognito", "passwords", "secrets-import")
+    failures = [k for group in ("firstrun", "find", "shell", "extensions", "features", "measure", "tabstrip", "window", "sidebar", "peek", "split", "commandbar", "app-actions", "actions", "extensions-p3", "extensions-ui", "extensions-e2", "profiles", "profiles-engine", "sidebar-completion", "toolbar", "numbering", "media", "relaunch", "page", "page-chrome", "sleep", "context-menus", "routing", "littleopen", "history", "applescript", "downloads", "space-editor", "incognito", "passwords", "secrets-import")
                 for k, v in results.get(group, {}).items() if isinstance(v, dict) and v.get("ok") is False]
     if opts.only == 'passwords-probe':
         failures += [k for k, v in results[opts.only].items() if v.get('ok') is False]
