@@ -15,7 +15,7 @@ receipt. [#222](https://github.com/SergeSerb2/open/pull/222) later adds parent-P
 ancestry, no seeding, cross-Profile isolation and extension opt-in. The final
 Section 10 capture run is recorded separately below.
 
-Native M5 runs use main's engine distribution `af4b3cc3ad1b42439b229d79c8f7a869b13b0d3165733fba6c023e202340d1a5`. The first harness run found three assertion/lifecycle issues; corrected acceptance is reported separately.
+The original M5 runs used main's engine distribution `af4b3cc3ad1b42439b229d79c8f7a869b13b0d3165733fba6c023e202340d1a5`. The first harness run found three assertion/lifecycle issues; corrected acceptance is reported separately.
 
 | Check | Result |
 |---|---|
@@ -47,7 +47,24 @@ Each mode ran separately under `/usr/bin/lockf -k /tmp/open-onscreen-e2e.lock py
 - Split-extension matrix: the product parent-Profile and spanning content-script rows shipped in #222. Broader spanning/split cases remain engine follow-up evidence; owner: Section 10 lead.
 - Local CRX automation completion (0704) is in [#223](https://github.com/SergeSerb2/open/pull/223); that engine PR owns its evidence.
 - Section 12: fill SiteControlContext.isIncognito from factory.isIncognito; Boosts disabled in private windows (Arc fact: Boosts can't be installed or used in Incognito Mode)
-- Native 2x captures: M5 exposes only the 1x AW2726DM. The final pass reruns the native 2x capture on the M1 built-in Retina display through the App-side snapshot path. On an authorized native 2x display, check `/tmp/open-onscreen-priority`, then run:
+
+## Native capture final pass (2026-11-07)
+
+The suite now calls the App's `snapshot` command instead of the external
+`screencapture -l` command. This is the same window capture path used by
+Profiles shell. It checks the window's native scale, exact pixel dimensions
+against its size in points, and the empty sidebar's RGB pixels (±2 levels).
+
+M1 Pro, built-in Retina, head `f85bfc5e`: **30 PASS**, exit 0,
+zero interruptions and clean owned-process/window shutdown. Both light and
+dark captures use `windowserver+devtools`, at 2000 × 1400 pixels for a
+1000 × 700 point window. [Capture receipt](engine-spike/incognito/native-2x.json)
+records the pixel samples, hashes, scale and load. This closes the original
+SSH `screencapture` permission failure. These are synthetic Open fixture
+images; Arc appearance comparison still needs user-operated captures.
+
+The M5 1x rerun is recorded with the final acceptance below. To repeat 2x,
+check `/tmp/open-onscreen-priority`, then run:
 
 ```sh
 export OPEN_ENGINE_ROOT=$HOME/Developer/open-engine-s8-main

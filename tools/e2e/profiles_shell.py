@@ -118,7 +118,7 @@ def run(factory, results, tmp, api, defaults_before):
         manager = app.call('library-open')
 
         def request():
-            app.call('space-manager-menu', space=source['id'], item='Set Profile/Manager Work')
+            state(action='indicator-menu', library=True, item='Manager Work')
             return wait(lambda: state() if state()['managerSheet'] else None, timeout=3)
 
         def assigned():
@@ -162,7 +162,7 @@ def run(factory, results, tmp, api, defaults_before):
         suppressed = app.call('defaults', key=confirm_key, persistent=True) is False
         app.call('key', window=manager['window'], key='z', modifiers=['cmd'], route='app')
         assert wait(lambda: assigned() == source['profile'], timeout=5)
-        app.call('space-manager-menu', space=source['id'], item='Set Profile/Manager Work')
+        state(action='indicator-menu', library=True, item='Manager Work')
         results['shell_manager_profile_suppressed'] = {
             'ok': suppressed and assigned() == target['id'] and state()['managerSheet'] == 0
                   and not app.call('incognito-state')['windows']}

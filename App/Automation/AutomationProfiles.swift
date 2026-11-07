@@ -49,7 +49,12 @@ extension AutomationController {
       guard let raw=args["url"] as? String,raw.utf8.count <= 8192,let url=URL(string:raw) else {throw Failure(message:"invalid Profile URL")}
       adapter.openURL(url,profileID:adapter.settings.selectedProfileID)
     case "indicator-menu":
-      guard let view=profileIndicatorViews().first else {throw Failure(message:"no visible Profile indicator")}
+      let views = args["library"] as? Bool == true
+        ? profileIndicatorViews(in:adapter.libraryPresenter?.window?.contentView,identifier:"spaceManagerSpaceHeaderIndicator")
+        : profileIndicatorViews()
+      guard let view=views.first else {throw Failure(message:"no visible Profile indicator")}
+      let selection = args["item"] as? String
+      guard (selection?.utf8.count ?? 0) <= 1024 else {throw Failure(message:"Profile menu title too long")}
       profileIndicatorMenuTitles=[]
       let observer=NotificationCenter.default.addObserver(forName:NSMenu.didBeginTrackingNotification,object:nil,queue:.main) { [weak self] note in
         // NotificationCenter guarantees this observer's delivery on .main.
@@ -60,7 +65,12 @@ extension AutomationController {
           self?.profileIndicatorMenuTitles=menu.items.map(\.title)
           nonisolated(unsafe) let trackingMenu=menu
           let timer=Timer(timeInterval:0.05,repeats:false) { _ in
-            MainActor.assumeIsolated { trackingMenu.cancelTrackingWithoutAnimation() }
+            MainActor.assumeIsolated {
+              if let selection, let index=trackingMenu.items.firstIndex(where:{$0.title == selection && $0.isEnabled}) {
+                trackingMenu.performActionForItem(at:index)
+              }
+              trackingMenu.cancelTrackingWithoutAnimation()
+            }
           }
           RunLoop.main.add(timer,forMode:.eventTracking)
         }
@@ -69,6 +79,7 @@ extension AutomationController {
       // service an ordinary main-queue async block on this AppKit version.
       defer {NotificationCenter.default.removeObserver(observer)}
       _=view.accessibilityPerformPress()
+      if let selection, !profileIndicatorMenuTitles.contains(selection) {throw Failure(message:"Profile menu item not found")}
     default:throw Failure(message:"unknown Profiles shell action")
     }
     await Task.yield()

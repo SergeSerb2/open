@@ -1,0 +1,83 @@
+{
+  "machine": "M1 Pro",
+  "display": "built-in Retina",
+  "nativeScale": 2,
+  "date": "2026-11-07",
+  "head": "f85bfc5e",
+  "command": "OPEN_INCOGNITO_CAPTURE_SCALE=2 /usr/bin/lockf -k /tmp/open-onscreen-e2e.lock python3 tools/e2e/engine_e2e.py --config Debug --style chrome --only incognito",
+  "passedRows": 30,
+  "failedRows": 0,
+  "cleanup": true,
+  "interruptedAttempts": 0,
+  "load": [
+    2.29541015625,
+    12.689453125,
+    17.59619140625
+  ],
+  "captures": {
+    "snapshot_dark_2x": {
+      "method": "windowserver+devtools",
+      "ok": true,
+      "path": "docs/engine-spike/incognito/private-dark-2x.png",
+      "pixels": [
+        [
+          36,
+          35,
+          43
+        ],
+        [
+          38,
+          35,
+          43
+        ],
+        [
+          38,
+          35,
+          43
+        ]
+      ],
+      "scale": 2,
+      "size": [
+        2000,
+        1400
+      ],
+      "sizePoints": [
+        1000,
+        700
+      ],
+      "sha256": "357b7913d7f7ac799ba677f3d7b975f20de548e292a478eaf22e2d1397abb780"
+    },
+    "snapshot_light_2x": {
+      "method": "windowserver+devtools",
+      "ok": true,
+      "path": "docs/engine-spike/incognito/private-light-2x.png",
+      "pixels": [
+        [
+          36,
+          35,
+          43
+        ],
+        [
+          38,
+          35,
+          43
+        ],
+        [
+          38,
+          35,
+          43
+        ]
+      ],
+      "scale": 2,
+      "size": [
+        2000,
+        1400
+      ],
+      "sizePoints": [
+        1000,
+        700
+      ],
+      "sha256": "357b7913d7f7ac799ba677f3d7b975f20de548e292a478eaf22e2d1397abb780"
+    }
+  }
+}
