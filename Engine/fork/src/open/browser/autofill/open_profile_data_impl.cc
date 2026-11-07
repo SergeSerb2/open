@@ -279,7 +279,9 @@ class ProfileData final : public CefOpenProfileData,
   void GetCounts(CefRefPtr<CefOpenCountsCallback> callback) override {
     CEF_REQUIRE_UIT();
     if (!callback) return;
-    if (closed_) { callback->OnCounts(0, 0, 0, 0, 0); return; }
+    if (closed_ || jobs_.size() >= kMaxQueuedBatches) {
+      callback->OnCounts(0, 0, 0, 0, 0); return;
+    }
     jobs_.push_back({-1, nullptr, nullptr, callback}); RunNext();
   }
   void ImportLogins(Records records, CefRefPtr<CefOpenImportCallback> done) override {
@@ -335,7 +337,17 @@ class ProfileData final : public CefOpenProfileData,
       if (done) done->OnComplete(0, 0, records ? records->GetSize() : 0, closed_ ? 3 : 0);
       return;
     }
-    jobs_.push_back({kind, records, done, nullptr}); RunNext();
+    // Calls and input mutation belong to the UI thread. Take a bounded deep
+    // snapshot before yielding to store reads: the caller must not change a
+    // fixture-approved record into real data while that batch is waiting.
+    auto snapshot = records->Copy();
+    WipeRecords(records);
+    if (!ValidBatch(snapshot, kind)) {
+      WipeRecords(snapshot);
+      done->OnComplete(0, 0, records->GetSize(), 0);
+      return;
+    }
+    jobs_.push_back({kind, snapshot, done, nullptr}); RunNext();
   }
   void RunNext() {
     if (busy_ || closed_ || !profile_ || jobs_.empty()) return;
