@@ -127,8 +127,11 @@ returns false. Code mode uses the native CSS/JS text views from #203. CSS saves
 refresh live pages; JS saves replace future document-start scripts without live
 execution. The runtime retains the installed JS snapshot for each current
 document, independently of store changes and same-document navigation. Real
-document commits update that snapshot and notify the editor, so Refresh to Run
-clears after reload. Color uses the documented interim
+document commits update that snapshot and notify the editor. Main currently
+loses updated script registrations when a renderer is replaced, so prompt
+removal alone does not prove execution. B5 remains **BLOCKED: engine defect,
+fixed by #202 patch 0602** (lead, 2026-11-07); engine child E owns the fix and
+its page-execution proof. Color uses the documented interim
 filter math until the paint-time remap lands. The existing isolated-world harness
 receipts below do not prove the App's current world isolation.
 

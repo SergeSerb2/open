@@ -293,6 +293,7 @@ User-operated Arc captures are still needed for the editor layout and destinatio
 
 ## Section 12 Boost App runtime limits
 
+- B5 is **BLOCKED: engine defect, fixed by #202 patch 0602** (lead, 2026-11-07). CEF gives replacement renderers the script list captured at browser creation; the current-list update arrives after the main-world context. Main engine `af4b3cc3…`: reload has Boost version `null`, run count `0`, and no plain control; a fresh tab has version `one`, run count `1`, and the control. Zero focus interruptions; load 14.92/25.27/19.04 → 15.09/25.14/19.03. Evidence: `.re/handoff/sections/s12/B-evidence/M5-nov7-script-reload/`. Engine child E owns the fix and B5 validation. Keep the page-execution assertions; do not substitute postload evaluation.
 - Managed Boost scripts run in the main world until P7 adds isolated-world
   injection and a native page-message channel. Overlay secrecy is not proven.
   Zap entry is refused; existing saved Zap CSS can apply. Do not enable the
