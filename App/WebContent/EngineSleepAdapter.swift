@@ -44,10 +44,10 @@ final class EngineSleepAdapter: SleepEngine {
   /// The factory that should hold a new host: a window that shows the tab, else one whose
   /// focused Space holds it, else the front window.
   private func owningFactory(for id: ItemID) -> EngineWebContentHostFactory? {
-    let factories = app.windowControllers.compactMap { app.hostFactories[$0.windowID] }
+    let factories = app.windowControllers.compactMap { app.hostFactories[$0.windowID] }.filter { !$0.isIncognito }
     return factories.first { $0.visibleTabs.contains { $0.id == id } }
       ?? factories.first { factory in factory.focusedSpace.map { factory.space(for: id)?.id == $0.id } == true }
-      ?? app.frontWindowController.flatMap { app.hostFactories[$0.windowID] }
+      ?? app.frontStandardWindowController.flatMap { app.hostFactories[$0.windowID] }
   }
 
   /// The controller believes a tab has content, but no host exists (a host failed or closed

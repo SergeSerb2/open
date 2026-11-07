@@ -787,7 +787,11 @@ def main():
         legacy_space_fixture(cli, root)
         space_icon_import(cli)
     elif name == "space-editor":
-        all_passed(run(str(root / "Packages/OpenKit/.build/release/space-editor-render"), "check"))
+        # The icon-picker checks send native events to real windows. Use the
+        # existing screen worker so another suite cannot take their focus.
+        all_passed(run(sys.executable, str(Path(__file__).resolve()), "onscreen-suite",
+                       str(root / "Packages/OpenKit/.build/release/space-editor-render"), "check",
+                       timeout=None, interrupted_exit=2))
     elif name == "space-pad-compare":
         text = run(sys.executable, str(root / "tools/verification/space-pad-compare.py"))
         matches(r"session2-pad: [1-9]\d* gate rows PASS", text)
@@ -849,7 +853,10 @@ def main():
         require(not any(line.startswith("default open.general.previewsDelaySeconds =") for line in dump.splitlines()),
                 "removed preview delay default was registered")
         pngs = sorted(output.glob("*.png"))
-        require(len(pngs) == 226, "missing settings/library/appearance/detail/sheet/state renders")
+        require(len(pngs) == 234, "missing settings/library/appearance/detail/sheet/state renders")
+        require({f"{state}@{scale}x.png" for state in
+                 ("profile-icons", "profile-delete-disabled", "profile-delete-enabled", "profile-delete-unused")
+                 for scale in (1, 2)} <= {p.name for p in pngs}, "missing Profile icon/deletion renders")
         require({"library-spaces@1x.png", "library-spaces@2x.png"} <= {p.name for p in pngs}, "missing Library Spaces renders")
         require({f"shortcuts-extension-conflicts-{appearance}@{scale}x.png" for appearance in ("light", "dark") for scale in (1, 2)} <= {p.name for p in pngs},
                 "missing extension shortcut conflict renders")
@@ -873,6 +880,8 @@ def main():
                       "adblock": (600, 560), "link-rule": (520, 380), "link-rule-invalid": (520, 380), "suggestion-notice": (400, 180), "search-engine-edit": (520, 540), "profile-create": (440, 330),
                       "profile-rename": (440, 180), "archive-scope": (500, 160)}
             expected = (440, 384) if png.name.startswith("essential-shortcuts-") else (560, 520) if png.name.startswith("first-run-") else ((960, 640) if png.name.startswith("library-") else ((640, 520) if png.name.startswith("import-") else (sheets[png.name.split("@")[0][6:]] if png.name.startswith("sheet-") else (684, 650))))
+            expected = {"profile-delete-disabled": (508, 310), "profile-delete-enabled": (508, 310),
+                        "profile-delete-unused": (508, 360)}.get(png.name.split("@")[0], expected)
             require(data[:8] == b"\x89PNG\r\n\x1a\n" and struct.unpack(">II", data[16:24]) == tuple(n * scale for n in expected), "bad pane dimensions: " + png.name)
     elif name == "extensions-render":
         renderer = str(root / "Packages/OpenKit/.build/release/extensions-render")

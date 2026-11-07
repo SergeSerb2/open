@@ -483,7 +483,7 @@ enum AutoArchiveChecks {
     func openMoreSettings() {}
     func revealOpenDataFolder() {}
     func copyOpenInfoToPasteboard() {}
-    func deleteProfileData(profileID: ProfileID) -> String? { "unavailable" }
+    func deleteProfileData(profileID: ProfileID, dataDirectoryName: String) async -> String? { "unavailable" }
     func clearBrowsingData(profileID: ProfileID, kinds: ClearDataKinds) async -> String? { "unavailable" }
     func clearBrowsingData(profileID: ProfileID, kinds: ClearDataKinds, range: ClearDataRange) async -> String? { "unavailable" }
     func openProfileSubpage(profileID: ProfileID, page: ProfilePage) {}
