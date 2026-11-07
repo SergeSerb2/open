@@ -27,6 +27,8 @@ extension AutomationController {
       return ["open": true, "modelUndoGeneration": app.model.undoGeneration, "name": form.nameField.stringValue, "style": style,
         "icon": describeIcon(creation.draftIcon),
         "profile": creation.profilePicker.selectedProfileID?.description ?? "", "creatingProfile": creation.profilePicker.isCreatingProfile,
+        "profilePopupVisible": !form.profilePopup.isHiddenOrHasHiddenAncestor,
+        "profileMenuTitle": form.profilePopup.titleOfSelectedItem ?? "",
         "widthClass": form.widthClass.rawValue, "pinnedSubmit": form.submitIsPinned,
         "localUndo": creation.localUndoManager.canUndo, "modelUndo": app.undoManager.canUndo,
         "localUndoName": creation.localUndoManager.undoActionName, "localRedoName": creation.localUndoManager.redoActionName,

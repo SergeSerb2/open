@@ -10663,6 +10663,20 @@ def space_editor_creation_checks(factory, results, tmp):
         key('z', ['cmd', 'shift'])
         require('A5_text_theme_redo_keeps_both_steps', state()['name'] == 'abc' and state()['style'] == typing_theme
                 and spaces() == before, state=state())
+        pick_emoji()
+        app.call('editor-open', kind='create')
+        existing_profile, existing_title = state()['profile'], state()['profileMenuTitle']
+        app.call('editor-act', action='profile', name='New Profile…')
+        app.call('type', text='Draft typing')
+        profile_menu_visible = state()['profilePopupVisible']
+        if profile_menu_visible:
+            app.call('editor-act', action='profile', name=existing_title)
+        returned = state()
+        require('A5_inline_profile_returns_without_losing_draft', profile_menu_visible
+                and not returned['creatingProfile'] and returned['profile'] == existing_profile
+                and returned['name'] == 'abc' and returned['style'] == typing_theme
+                and returned['icon'] == {'type': 'emoji', 'value': '😀'}
+                and returned['localUndo'] and spaces() == before, state=returned)
         app.call('editor-act', action='profile', name='New Profile…')
         app.call('type', text='Draft typing')
         app.call('editor-open', kind='create')

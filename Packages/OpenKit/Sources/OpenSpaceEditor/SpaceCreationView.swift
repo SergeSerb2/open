@@ -131,9 +131,10 @@ public final class SpaceCreationView: NSView, NSTextFieldDelegate {
         profilePopup.removeAllItems()
         for choice in choices { profilePopup.addItem(withTitle: choice.name) }
         profilePopup.menu?.addItem(.separator()); profilePopup.addItem(withTitle: "New Profile…")
-        if let index = choices.firstIndex(where: { $0.id == selected }) { profilePopup.selectItem(at: index) }
+        if creating { profilePopup.selectItem(withTitle: "New Profile…") }
+        else if let index = choices.firstIndex(where: { $0.id == selected }) { profilePopup.selectItem(at: index) }
         creatingProfile = creating; profileNameField.isHidden = !creating
-        profilePopup.isHidden = creating; issueLabel.stringValue = issue ?? ""; issueLabel.isHidden = issue == nil
+        profilePopup.isHidden = false; issueLabel.stringValue = issue ?? ""; issueLabel.isHidden = issue == nil
         needsLayout = true
     }
 

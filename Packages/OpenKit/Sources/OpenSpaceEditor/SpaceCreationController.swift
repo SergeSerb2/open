@@ -53,9 +53,11 @@ public final class SpaceCreationController {
             guard let self else { return }
             if self.profilePicker.choices.indices.contains(index) {
                 self.profilePicker.selectedProfileID = self.profilePicker.choices[index].id
+                self.profilePicker.isCreatingProfile = false
             } else { self.profilePicker.isCreatingProfile = true }
             self.refreshProfiles()
             if self.profilePicker.isCreatingProfile { self.view.window?.makeFirstResponder(self.creationView.profileNameField) }
+            else { self.creationView.focusName() }
         }
         refreshProfiles()
     }
