@@ -42,7 +42,7 @@ def fixture_server(h, tmp):
 def run(factory, results, tmp, h):
     try:
         _run(factory, results, tmp, h)
-    except h.FocusInterruption:
+    except (h.FocusInterruption, h.AppDied):
         raise
     except Exception as error:
         # The harness prints tracebacks. Do not let an eval failure expose a
@@ -64,8 +64,10 @@ def _run(factory, results, tmp, h):
 
     def row(name, ok, **counts):
         if h._open_crash_reports() - crashes_before:
-            raise RuntimeError('new Open crash report; stopped before the next flow')
+            raise h.AppDied('new Open crash report; stopped before the next flow')
         results[name] = dict(ok=bool(ok), load=os.getloadavg(), **counts)
+        if not ok:
+            raise RuntimeError('synthetic secrets acceptance row failed: ' + name)
 
     def credentials(profile):
         value = app.call('credentials', profile=profile)
@@ -130,7 +132,8 @@ def _run(factory, results, tmp, h):
 
     def zero_consent():
         state = app.call('import-secrets-state')
-        return all(state[key] == 0 for key in ('consentAdapterCalls', 'keychainProbeCalls', 'keychainReadCalls'))
+        return not state['canImportPasswordsAndCookies'] and all(
+            state[key] == 0 for key in ('consentAdapterCalls', 'keychainProbeCalls', 'keychainReadCalls'))
 
     with fixture_server(h, tmp) as switches:
         def launch(fresh=False, allow=True):
@@ -263,6 +266,7 @@ def _run(factory, results, tmp, h):
                     and not state['secretsAllowVisible'] and not state['secretsAllowEnabled']
                     and not state['secretsConsented'] and skipped_without_consent and zero_consent(),
                     consentCalls=app.call('import-secrets-state')['consentAdapterCalls'],
+                    keychainProbeCalls=app.call('import-secrets-state')['keychainProbeCalls'],
                     keychainCalls=app.call('import-secrets-state')['keychainReadCalls'])
                 app.quit()
         finally:

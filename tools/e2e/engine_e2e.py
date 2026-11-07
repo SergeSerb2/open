@@ -61,13 +61,33 @@ class FocusInterruption(RuntimeError):
         self.evidence = evidence
 
 
+class AppDied(RuntimeError):
+    fatal_app_death = True
+
+
 class FocusTracker:
     """Native input and every timed polling/capture interval keep separate trace bounds."""
-    def __init__(self):
+    def __init__(self, stop_on_app_death=False):
         self.apps = []
         self.checkpoints = {}
         self.timing_checkpoints = {}
         self.observation_checkpoints = {}
+        self.crashes_before = _open_crash_reports()
+        self.fatal_app_death = False
+        self.stop_on_app_death = stop_on_app_death
+
+    def check_alive(self):
+        if not self.stop_on_app_death:
+            return
+        # Intentional quit/SIGKILL recovery closes the owned instance before
+        # recording a row or launching its replacement.
+        crashed = bool(_open_crash_reports() - self.crashes_before)
+        dead = any(app.pid and not app.closed and
+                   app.process_path(app.pid) != os.path.realpath(app.executable)
+                   for app in self.apps)
+        if crashed or dead:
+            self.fatal_app_death = True
+            raise AppDied('App death or new crash report; stopped before the next flow')
 
     def loss(self):
         interruptions = []
@@ -105,6 +125,7 @@ class CheckedResults(dict):
 
     def __setitem__(self, key, value):
         if isinstance(value, dict) and "ok" in value:
+            self.tracker.check_alive()
             interruptions = self.tracker.loss()
             if interruptions:
                 # Retain even a successful assertion as INTERRUPTED. It cannot
@@ -11925,10 +11946,11 @@ def main():
         extra += ["--load-extension=" + ",".join(dirs), "--disable-features=DisableLoadExtensionCommandLineSwitch"]
     log = os.path.join(tmp, "open.log")
 
-    tracker = FocusTracker()
+    tracker = FocusTracker(stop_on_app_death=opts.only in ('secrets-import', 'firstrun', 'features'))
     _ACTIVE_FOCUS_TRACKER = tracker
 
     def factory(urls=("about:blank",), fresh=False, snapshot=None, extra_env=None, extra_args=None, delivery_urls=()):
+        tracker.check_alive()
         if fresh or snapshot:
             shutil.rmtree(user_data, ignore_errors=True)
             shutil.rmtree(user_caches, ignore_errors=True)
@@ -12171,7 +12193,7 @@ def main():
     # Never replay a potentially crashing probe row after foreground loss.
     max_attempts = 1 if opts.only == 'passwords-probe' else 2 if opts.only == 'passwords' else 3
     for attempt in range(1, max_attempts + 1):
-        tracker = FocusTracker()
+        tracker = FocusTracker(stop_on_app_death=opts.only in ('secrets-import', 'firstrun', 'features'))
         _ACTIVE_FOCUS_TRACKER = tracker
         shutil.rmtree(user_data, ignore_errors=True)
         interruption = None
@@ -12184,11 +12206,17 @@ def main():
                 # Deterministic chrome captures; restore the user's value in finally.
                 _restore_defaults(None, {'open.sidebar.hideHintShown': True})
             execute()
+            tracker.check_alive()
         except FocusInterruption as error:
-            interruption = {"reason": str(error), "focus": error.evidence}
+            try:
+                tracker.check_alive()
+            except AppDied as death:
+                dict.__setitem__(results.setdefault(opts.only, {}), "suite", {"ok": False, "error": str(death)})
+            else:
+                interruption = {"reason": str(error), "focus": error.evidence}
         except Exception as error:
             try:
-                loss = [] if getattr(error, 'fatal_app_death', False) else tracker.loss()
+                loss = [] if getattr(error, 'fatal_app_death', False) or tracker.fatal_app_death else tracker.loss()
             except Exception:
                 loss = []  # A crashed owned app cannot answer a focus query.
             if loss:
