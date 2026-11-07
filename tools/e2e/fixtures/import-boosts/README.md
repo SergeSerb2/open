@@ -15,8 +15,9 @@ and Firestore protobuf wire layouts are reproduced by this own writer.
 
 Still inferred without a live content sample: the complete populated document,
 Storable version 1/set array encoding, and account-to-Default Profile assignment.
-The fixture uses binary-confirmed string enum cases and string `isActive` and
-`lastModified`, not an invented `StorableBoostsData.boosts` payload array.
+The fixture uses reflected text-transform case names (string JSON encoding is
+inferred) and proven string `isActive` and `lastModified` fields. It does not
+invent a `StorableBoostsData.boosts` payload array.
 
 Cases: enabled CSS/JS/font/case/Zap; disabled Boost; malformed content; unknown
 field; deletion and unknown-document markers; another collection; obsolete

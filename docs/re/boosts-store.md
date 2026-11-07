@@ -93,8 +93,9 @@ the decoder at `FUN_101150064` (`0x101150064`) and its inverse at
 - The create dictionary at `FUN_101166318` (`0x101166318`) adds `creatorID`.
 
 The fixture's complete populated document remains synthetic. Reflection proves
-the component types and keys; ordinary Codable shapes for the local ID set and
-color enum are inferences until a populated sample is available.
+the component types and keys; ordinary Codable shapes for the local ID set,
+string text-transform enum and color enum are inferences until a populated
+sample is available.
 
 `strings -a` also finds `BoostsClient/BoostsStorageFirebaseImpl.swift`,
 `queryBoostData(id:)`, `queryBoosts(for:matching:)`, and
