@@ -53,9 +53,10 @@ parser/assembler, but `ResourceStorage` starts with empty maps. The only
 scriptlet file reference in its assembler is a noncompiled test fixture;
 there is no `include_str!` or `include_bytes!` asset payload in its src tree.
 The OpenAdBlock Swift resource bundle has only catalog.json, list-pins.txt
-and public_suffix_list.dat. Neither the application nor the recorded engine
-distribution contains a uBO resource/scriptlet payload or seed filter DAT.
+and public_suffix_list.dat. The Release application manifest has 356 files/links, and the read-only
+engine distribution manifest has 1,028. Neither contains a uBO resource/scriptlet payload or seed filter DAT.
 Catalog URLs and user-installed extensions do not change this bundle fact.
+The full app list is [license-bundle-files.txt](license-bundle-files.txt).
 The generator omits GPL-3.0 for the current inventory. A future shipped GPL
 row requires the full text, a source URL and explicit source input.
 
