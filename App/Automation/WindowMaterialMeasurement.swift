@@ -16,6 +16,7 @@ final class WindowMaterialMeasurement: NSObject {
   private var frames: [[String: Any]] = []
   private var changes: [[String: Any]] = []
   private var started = 0.0
+  private var armedBefore: [Int]?
 
   private func themeViews(_ view: NSView) -> [ThemeBackgroundView] {
     (view as? ThemeBackgroundView).map { [$0] } ?? view.subviews.flatMap(themeViews)
@@ -28,7 +29,8 @@ final class WindowMaterialMeasurement: NSObject {
     guard let window = notification.object as? NSWindow,
           window === controller?.window else { return }
     changes.append(["time": CACurrentMediaTime(), "event": notification.name.rawValue,
-                    "before": fields.map(\.fieldRebuildCount)])
+                    "before": armedBefore ?? fields.map(\.fieldRebuildCount)])
+    armedBefore = nil
   }
   @objc private func tick(_ display: CADisplayLink) {
     guard let controller else { stop(); return }
@@ -57,7 +59,7 @@ final class WindowMaterialMeasurement: NSObject {
     if op == "start" {
       stop(); self.controller = controller
       fields = themeViews(controller.contentView)
-      frames = []; changes = []; started = CACurrentMediaTime()
+      frames = []; changes = []; armedBefore = nil; started = CACurrentMediaTime()
       for name in [NSWindow.didBecomeKeyNotification, NSWindow.didResignKeyNotification] {
         NotificationCenter.default.addObserver(self, selector: #selector(keyChanged(_:)), name: name, object: controller.window)
       }
@@ -67,6 +69,7 @@ final class WindowMaterialMeasurement: NSObject {
       link = display; display.add(to: .main, forMode: .common)
     }
     if op == "stop" { stop() }
+    if op == "arm" { armedBefore = fields.map(\.fieldRebuildCount); return true }
     if op == "observe" || op == "idle" {
       stop(); self.controller = controller; fields = themeViews(controller.contentView)
       typealias Action = @convention(c) () -> Void

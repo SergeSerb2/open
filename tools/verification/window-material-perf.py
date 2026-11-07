@@ -65,8 +65,21 @@ def main():
     p.add_argument('--bundle',required=True); p.add_argument('--label',required=True)
     p.add_argument('--out',required=True); p.add_argument('--probe',required=True)
     p.add_argument('--bench',required=True); p.add_argument('--cycles',type=int,default=20)
+    p.add_argument('--only',choices=('full','activation','scroll'),default='full')
     a = p.parse_args(); out = Path(a.out).resolve(); out.mkdir(parents=True,exist_ok=True)
     receipt = dict(label=a.label, bundle=a.bundle, start=stamp(), cycles=a.cycles, motion={}, idle={}, activation={},status='RUNNING')
+    def bench():
+        receipt['benchStart'] = stamp()
+        result = subprocess.run([a.bench,'bench','--rows','1000','--scale','2'],capture_output=True,text=True)
+        receipt['benchEnd'] = stamp(); receipt['bench'] = dict(code=result.returncode,stdout=result.stdout,stderr=result.stderr)
+        (out/'bench.txt').write_text(result.stdout+result.stderr)
+        return result.returncode
+    receipt['kind'] = a.only
+    if a.only == 'scroll':
+        code = bench(); receipt['status'] = 'COMPLETE' if code == 0 else 'ERROR'
+        (out/'receipt.json').write_text(json.dumps(receipt,indent=2))
+        print(json.dumps(receipt,indent=2),flush=True)
+        return code
     server = http.server.ThreadingHTTPServer(('127.0.0.1',0), Page)
     threading.Thread(target=server.serve_forever,daemon=True).start()
     origin = 'http://127.0.0.1:'+str(server.server_port)
@@ -96,7 +109,7 @@ def main():
         tid = app.call('tabs')[0]['id']; app.call('wait',tab=tid)
         if state()['sidebarMode'] != 'hidden': app.call('menu-perform',id='toggle-sidebar')
         time.sleep(.4); move(700)
-        for page in ('band','white'):
+        for page in (('band','white') if a.only == 'full' else ()):
             print(a.label,'motion',page,stamp(),flush=True)
             app.call('navigate',tab=tid,url=origin+'/'+page); app.call('wait',tab=tid)
             time.sleep(.5)
@@ -113,7 +126,7 @@ def main():
             receipt['motion'][page] = dict(start=start,end=stamp(),cycles=cycles,
                                            samples=monitor.samples,probe=motion)
             save()
-        for shown in (True,False):
+        for shown in ((True,False) if a.only == 'full' else ()):
             print(a.label,'idle','shown' if shown else 'hidden',stamp(),flush=True)
             move(3 if shown else 700); wait(shown); time.sleep(1)
             key = 'shown' if shown else 'hidden'; before = state()
@@ -134,6 +147,7 @@ def main():
         switches = []
         for index in range(20):
             target = second if index % 2 == 0 else wid
+            app.call('window-material-probe',op='arm')
             row = dict(target=target,start=stamp()); t = time.perf_counter()
             app.call('window-focus',id=target,activate=True)
             row['roundTripMs'] = (time.perf_counter()-t)*1000
@@ -147,7 +161,8 @@ def main():
         start_uptime = initial.get('uptime', 0)
         # Initial launch can precede foreground grant. Only events after the
         # first motion sampler start are part of measured foreground intervals.
-        start_uptime = min(v['probe']['started'] for v in receipt['motion'].values())
+        start_uptime = min((v['probe']['started'] for v in receipt['motion'].values()),
+                           default=receipt['activation']['probe']['started'])
         outside = [e for e in events if e['uptime'] >= start_uptime and
                    ((e['event']=='frontmostChanged' and e.get('frontmostPID') not in (None,0,app.pid)) or
                     e['event']=='NSApplicationDidResignActiveNotification')]
@@ -163,11 +178,7 @@ def main():
     # This bench uses an offscreen native window and a prohibited activation
     # policy. It runs after our App quits and cannot take the user's foreground.
     if exitcode == 0:
-        receipt['benchStart'] = stamp()
-        result = subprocess.run([a.bench,'bench','--rows','1000','--scale','2'],capture_output=True,text=True)
-        receipt['benchEnd'] = stamp(); receipt['bench'] = dict(code=result.returncode,stdout=result.stdout,stderr=result.stderr)
-        (out/'bench.txt').write_text(result.stdout+result.stderr)
-        save(); exitcode = result.returncode
+        exitcode = bench(); save()
     print(json.dumps({k:receipt.get(k) for k in ('label','status','error','start','end','quit')},indent=2),flush=True)
     return exitcode
 

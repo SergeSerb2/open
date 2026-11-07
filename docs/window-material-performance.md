@@ -39,6 +39,15 @@ load, presentation samples, activation events, snapshots, and cleanup evidence.
 Foreground loss invalidates the whole attempt. Keep interrupted receipts and
 rerun from a fresh profile. Stop on a crash or a no-space error.
 
+`--only scroll` runs only the preserved native sidebar bench, with the same
+locks and per-run loads, without starting Open. `--only activation` skips the
+motion and idle phases but retains the real two-window activation phase,
+cleanup, and final sidebar bench. For synchronous key updates, the runner
+arms the field-count baseline before each focus request; otherwise a rebuild
+before the key observer runs could be missed. Apply this revised hook to both
+comparison builds. It still observes the first later display callback, not
+Core Animation transaction completion or GPU presentation.
+
 The sampler measures callback pacing and presentation-layer values, not actual
 GPU-presented frames. It has overhead, as do socket polling and idle observers;
 use the same instrumentation on both builds. A field rebuild is first observed

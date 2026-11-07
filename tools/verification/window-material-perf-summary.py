@@ -53,7 +53,8 @@ def sensors(groups):
 def summarize(runs):
     answer={'runs':[r['label'] for r in runs],'motion':{},'idle':{},'activation':{}}
     for page in ('band','white'):
-        segments=[(r,r['motion'][page]) for r in runs]
+        segments=[(r,r['motion'][page]) for r in runs if page in r.get('motion',{})]
+        if not segments: continue
         motion={'sensors':sensors([(r['pid'],s['samples']) for r,s in segments])}
         for direction in ('in','out'):
             gaps=[]; timestamp_gaps=[]; intervals=[]; bad=0; count_by_cycle=[]
@@ -75,16 +76,18 @@ def summarize(runs):
                 requestedIntervalMs=stats(intervals),gapsOver1_5=bad,framesPerAnimation=stats(count_by_cycle))
         answer['motion'][page]=motion
     for key in ('shown','hidden'):
-        segments=[(r,r['idle'][key]) for r in runs]
+        segments=[(r,r['idle'][key]) for r in runs if key in r.get('idle',{})]
+        if not segments: continue
         answer['idle'][key]=dict(sensors=sensors([(r['pid'],s['samples']) for r,s in segments]),
             observerBefore=[s['probe']['before'] for _,s in segments],
             observerAfter=[s['probe']['after'] for _,s in segments],
             fieldsUnchanged=[s['probe']['fieldsBefore']==s['probe']['fieldsAfter'] for _,s in segments],
             pageBlur=[s['endState']['reveal'].get('pageBlur','not exposed') for _,s in segments])
-    changes=[c for r in runs for c in r['activation']['probe']['changes']]
-    switches=[c for r in runs for c in r['activation']['switches']]
+    changes=[c for r in runs for c in r.get('activation',{}).get('probe',{}).get('changes',[])]
+    switches=[c for r in runs for c in r.get('activation',{}).get('switches',[])]
     callback_gaps=[]; lower_bounds=[]; widths=[]
     for run in runs:
+        if not run.get('activation'): continue
         frames=run['activation']['probe']['frames']
         callback_gaps.extend((b['time']-a['time'])*1000 for a,b in zip(frames,frames[1:]))
         by_time={f['time']:i for i,f in enumerate(frames)}
@@ -115,7 +118,8 @@ def main():
     # are sequential; receipt completion mtimes preserve their actual order.
     paths=sorted(root.glob('runs/*/receipt.json'),key=lambda p:p.stat().st_mtime)
     runs=[json.loads(p.read_text()) for p in paths]
-    good=[r for r in runs if r.get('status')=='COMPLETE' and r.get('quit',{}).get('ok') and r.get('bench',{}).get('code')==0]
+    good=[r for r in runs if r.get('status')=='COMPLETE' and
+          (r.get('kind')=='scroll' or r.get('quit',{}).get('ok')) and r.get('bench',{}).get('code')==0]
     result={'order':[r['label'] for r in good],
             'excluded':[{k:r.get(k) for k in ('label','status','error','interruptions')} for r in runs if r not in good]}
     for build in ('main','branch'):
