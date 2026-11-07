@@ -33,3 +33,9 @@ _cef_media_controller_get_for_browser
 _cef_extension_manager_create
 # E12 omnibox session bridge (generated C API).
 _cef_open_omnibox_create
+# Section 10 profiles (generated from cef_open_profile.h).
+_cef_create_incognito_context
+_cef_is_open_profile_context_live
+_cef_set_open_profile_handler
+_cef_clear_open_profile_browsing_data
+_cef_delete_open_profile

@@ -364,7 +364,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, OEEngineDelegate, OEBr
   @discardableResult
   func makeIncognitoWindow(parent: Profile? = nil, url: URL? = nil) -> BrowserWindowController? {
     guard engineReady, let parent = parent ?? frontStandardWindowController?.context.focusedSpace.flatMap({ model.profile(id: $0.profileID) }) ?? model.defaultProfile else { return nil }
-    let session = incognitoSessions.acquire(parent: parent)
+    let session = incognitoSessions.acquire(parent: parent, app: self)
     let profile = Profile(name: parent.name, settings: parent.settings, dataDirectoryName: "Incognito")
     let space = Space(title: "Incognito", icon: .symbol("eyeglasses"), profileID: profile.id)
     let state = BrowserWindowState(focusedSpaceID: space.id)
