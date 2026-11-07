@@ -119,8 +119,7 @@ class OpenWebContentsModalDialogHost : public web_modal::WebContentsModalDialogH
 
  private:
   base::RepeatingCallback<gfx::NativeView()> view_;
-  base::ObserverList<web_modal::ModalDialogHostObserver>::Unchecked
-      observers_;
+  base::ObserverList<web_modal::ModalDialogHostObserver> observers_;
 };
 
 }  // namespace
