@@ -572,7 +572,7 @@ entry. Its distribution receipt is `e949ff69`; N1 macOS delivery and N6
 clients.openWindow stay BLOCKED. App swipe and appearance wiring merged in
 [#162](https://github.com/SergeSerb2/open/pull/162) and [#164](https://github.com/SergeSerb2/open/pull/164). These are saved receipts, not checks run for this docs change.
 
-## Passwords Step 0 probe (2026-11-06)
+## Passwords Step 0 probe (2026-11-06; remaining rows 2026-11-07)
 
 The real Debug App used Chrome style and main's recorded engine distribution
 `af4b3cc3ad1b42439b229d79c8f7a869b13b0d3165733fba6c023e202340d1a5`.
@@ -590,8 +590,8 @@ in a fresh App/profile; refill and cookie relaunch keep data within their row.
 | PR-5 | WebAuthn create showed an unparented `NativeWidgetMacNSWindow`; the promise was pending at 500 ms. Native Escape settled it with `NotAllowedError`. |
 | PR-6 | Credential Management get resolved to null within its 2-second deadline, without a new window. This secure localhost profile had no saved login, so the account chooser remains unverified. |
 | PR-7 | The fresh-profile HTTP Basic navigation killed Open. The late report is `Open-2026-11-06-203144.ips`, with `EXC_CRASH` / `SIGABRT`; its process matches this row. No retry followed. |
-| PR-8 | Not run after that crash. An earlier real-App run preserved `oe_lax`, `oe_persist`, and `oe_session` across clean quit/relaunch. The JSON labels this earlier evidence separately. |
-| PR-9 | Not run after that crash. Earlier `pages` output showed Chrome/browser 1 for normal and Split View panes, and Alloy/browser 0 for Peek. Little Open navigation did not complete through the tried automation path. |
+| PR-8 | Selected run on 2026-11-07: `oe_lax`, `oe_persist`, and `oe_session` appeared before quit and after a clean relaunch with the same data root. Only cookie names were retained. |
+| PR-9 | Selected run on 2026-11-07: `pages` showed Chrome/browser 1 for a tab and both Split View panes; Peek was Alloy/browser 0, index -1. Little Open loaded successfully: Chrome/browser 2, content identifier 4, index 0, kind `unowned`; its session reported browserID 2 and state `page`. |
 
 PR-7's top symbols include `abort`, `logging::LogMessage::HandleFatal`,
 `tabs::TabDialogManager::CreateTabScopedDialog`,
@@ -608,15 +608,25 @@ attempts and their limits are not counted as passes for the stopped attempt.
 A deliberate exit while WebAuthn was open proved cleanup: zero owned processes
 or windows remained, no force kill was needed, and no new crash report appeared.
 
-All on-screen work stopped after the crash report arrived. The lead confirmed a system crash dialog and placed the M5 screen on hold; no Open launch or e2e may start until the lead says "M5 clear". The probe now waits
-up to eight seconds for a delayed report after process death and supports
-`--passwords-probe-rows PR-8,PR-9` to finish unrun rows only after the lead has cleared
-the M5 screen hold. The crashed row must not be replayed until it is fixed.
+All on-screen work stopped after the 2026-11-06 crash report arrived. The lead
+confirmed a system crash dialog and held the M5 screen. The lead cleared it on
+2026-11-07 at 12:02 (-07:00). C2 then rebuilt Debug against main's recorded
+engine after merging `origin/main` and ran only PR-8 and PR-9 once, in one
+`--only passwords-probe --passwords-probe-rows PR-8,PR-9` call under the screen
+lock after the priority check. No new crash report appeared. All three App
+instances quit without force; each left zero owned processes and windows.
 
-PR-7 is now blocked in the probe until the engine lead approves an exact fixed
-engine distribution hash. It cannot navigate the known HTTPS-First crash path
-on the current engine. An unrelated engine update does not enable it. After
-"M5 clear", run only PR-8 and PR-9 once. Selected runs use a separate result file
-so that they cannot overwrite the recorded PR-7 crash. The post-crash guard,
-delayed-report polling, and selected-row changes have source/CLI validation;
-they have not been exercised in the App during the screen hold.
+The [selected-run receipt](engine-spike/results-passwords-probe-PR-8-PR-9.json)
+records source `cf60ae069ca8858e66c2c8bd5b950029499590f7`, the same engine
+distribution as above, and 12:10:33–12:10:44 (-07:00). Load averages at probe
+start were 18.23 / 12.64 / 9.37. The primary JSON now includes those two rows
+and their separate run provenance. Its original crash row, symbols, and
+post-quit crash evidence remain unchanged. Earlier observations remain labeled
+as historical. These are observations, not password-feature acceptance.
+
+PR-7 stays blocked until the engine lead approves the exact distribution hash
+with the fix. Patch 0806 is on another branch per the C2 brief; this probe did
+not validate it. The guard cannot navigate the known HTTPS-First crash path on
+the current engine. A different hash alone does not enable it. The selected-row
+run exercised the post-change runner without replaying PR-7. It did not exercise
+the death-stop path because no App died.

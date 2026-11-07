@@ -1085,7 +1085,12 @@ pre-launch value (including absence) in `finally`.
 Run `python3 -I tools/e2e/engine_e2e.py --config Debug --style chrome --only passwords-probe`
 under the on-screen lock, after the shared priority check. Export the current
 `OPEN_ENGINE_ROOT` as for builds. This uses only temporary App data and the
-mock Keychain. It records PR-1 through PR-9 as observations, with per-row App
-liveness and new-crash-report checks. It saves no screenshots or secret values.
+mock Keychain. It records selected PR-1 through PR-9 rows as observations, with
+per-row App liveness and new-crash-report checks. It saves no screenshots or secret values.
 The reusable fixture server and URL/switch dictionary are documented in
 [the fixtures README](../tools/e2e/fixtures/passwords/README.md).
+
+PR-7 stays blocked pending an approved engine-fix distribution hash. After the
+lead clears a prior crash dialog, resume remaining rows with
+`--passwords-probe-rows PR-8,PR-9`; do not replay the crashed row. Selected runs
+write a separate receipt so the primary crash evidence survives.
