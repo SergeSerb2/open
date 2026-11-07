@@ -138,7 +138,7 @@ class Scripts:
 def javascript_gate_checks(app, results):
     """D4 through actual Apple events, including the normal settings/menu command."""
     script = Scripts(app)
-    old = app.call('defaults', key=KEY)
+    old = app.call('defaults', key=KEY, persistent=True)
     try:
         app.call('defaults', key=KEY, value=None)
         tab = app.call('tabs')[0]['id']
@@ -159,7 +159,7 @@ def run(factory, results, tmp, fixture_server, restore_defaults, wait_until):
     """A1–A18/R1–R3 on a new App instance; repeat after cold relaunch with stable IDs."""
     server, origin = fixture_server('AppleScript')
     app = factory(urls=(origin + '/research-pinned',), fresh=True)
-    saved = {key: app.call('defaults', key=key) for key in (KEY,MODE_KEY)}
+    saved = {key: app.call('defaults', key=key, persistent=True) for key in (KEY,MODE_KEY)}
     try:
         for key in saved: app.call('defaults', key=key, value=None)
         script = Scripts(app)

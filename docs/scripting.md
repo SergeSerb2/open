@@ -337,8 +337,9 @@ Cocoa checks write-only access before resolving both reads and command receivers
 `ScriptGetCommand` reads the named transient tab's supported properties directly.
 `ScriptTransientTabCommand` resolves only an application unique-ID receiver; normal
 receivers keep Cocoa's path. `ScriptSetCommand` handles transient URL writes and
-delegates normal writes to NSSetCommand. Registration preserves each dictionary
-command's argument names, types and event codes. The dictionary stays unchanged.
+delegates normal writes to NSSetCommand. The dictionary binds the seven tab verbs
+to that receiver class; terms, argument types and event codes stay unchanged.
+Only the implicit set command needs runtime registration.
 
 `tools/e2e/applescript_littleopen.py` runs these flows through the actual bundled
 dictionary and Cocoa Apple events within `applescript`, on warm and cold launches.

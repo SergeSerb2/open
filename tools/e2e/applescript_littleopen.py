@@ -32,7 +32,7 @@ def run(app, script, results, wait_until, quote, key, off_message, prefix=''):
     server = http.server.ThreadingHTTPServer(('127.0.0.1', 0), Handler)
     threading.Thread(target=server.serve_forever, daemon=True).start()
     origin = 'http://127.0.0.1:%d' % server.server_address[1]
-    saved = {name: app.call('defaults', key=name) for name in (key, NUX)}
+    saved = {name: app.call('defaults', key=name, persistent=True) for name in (key, NUX)}
     original = {row['id'] for row in app.call('little-open-state')['sessions']}
     model_ids = {row['id'] for row in app.call('tabs')}
 
@@ -146,6 +146,8 @@ def run(app, script, results, wait_until, quote, key, off_message, prefix=''):
         finally:
             try:
                 for name, value in saved.items(): app.call('defaults', key=name, value=value)
+                restored = {name: app.call('defaults', key=name, persistent=True) for name in saved}
+                record('defaults_restored', restored == saved)
             finally:
                 server.shutdown(); server.server_close()
 

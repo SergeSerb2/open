@@ -19,37 +19,16 @@ enum ScriptTransientTarget {
     }
 
     static func install() {
-        for (eventClass, eventID) in [("core", "clos"), ("CrSe", "lect"), ("CrSu", "Back"),
-            ("CrSu", "Fwd "), ("CrSu", "Rlod"), ("CrSu", "stop"), ("CrSu", "ExJa")] {
-            register(eventClass, eventID, className: "ScriptTransientTabCommand")
-        }
-        register("core", "setd", className: "ScriptSetCommand")
-    }
-
-    private static func code(_ text: String) -> UInt32 {
-        text.utf8.reduce(0) { ($0 << 8) | UInt32($1) }
-    }
-    private static func text(_ code: UInt32) -> String {
-        String(bytes: [24, 16, 8, 0].map { UInt8(truncatingIfNeeded: code >> $0) }, encoding: .macOSRoman) ?? "****"
-    }
-    private static func register(_ eventClass: String, _ eventID: String, className: String) {
+        // Open.sdef binds the explicit commands, preserving Cocoa's receiver
+        // metadata. Only implicit core/setd needs registration, using the
+        // system NSCoreSuite's exact Value declaration.
         let registry = NSScriptSuiteRegistry.shared()
-        guard let original = registry.commandDescription(withAppleEventClass: code(eventClass), andAppleEventCode: code(eventID)) else { return }
-        // Retain the bundled dictionary's exact argument types, names and codes.
-        var arguments: [String: Any] = [:]
-        for name in original.argumentNames {
-            arguments[name] = ["AppleEventCode": text(original.appleEventCodeForArgument(withName: name)),
-                "Type": original.typeForArgument(withName: name) ?? "NSObject",
-                "Optional": original.isOptionalArgument(withName: name)]
-        }
-        var definition: [String: Any] = ["AppleEventClassCode": eventClass, "AppleEventCode": eventID,
-            "CommandClass": className, "Arguments": arguments]
-        if let type = original.returnType {
-            definition["Type"] = type
-            definition["ResultAppleEventCode"] = text(original.appleEventCodeForReturnType)
-        }
-        if let replacement = NSScriptCommandDescription(suiteName: original.suiteName,
-            commandName: original.commandName, dictionary: definition) { registry.register(replacement) }
+        guard let original = registry.commandDescription(withAppleEventClass: 0x636f7265, andAppleEventCode: 0x73657464),
+              let replacement = NSScriptCommandDescription(suiteName: original.suiteName,
+                commandName: original.commandName, dictionary: ["AppleEventClassCode": "core", "AppleEventCode": "setd",
+                    "CommandClass": "ScriptSetCommand",
+                    "Arguments": ["Value": ["AppleEventCode": "data", "Type": "NSObject"]]]) else { return }
+        registry.register(replacement)
     }
 }
 
@@ -85,6 +64,9 @@ public final class ScriptSetCommand: NSSetCommand {
     }
 
     private func setProperty() -> Any? {
+        if directParameter == nil, let descriptor = appleEvent?.paramDescriptor(forKeyword: 0x2d2d2d2d) {
+            directParameter = NSScriptObjectSpecifier(descriptor: descriptor)
+        }
         let requested = directParameter as? NSScriptObjectSpecifier ?? receiversSpecifier
         guard let (reference, id) = ScriptTransientTarget.reference(in: requested) else {
             return super.performDefaultImplementation()

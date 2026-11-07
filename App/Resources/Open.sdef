@@ -49,6 +49,7 @@
     </class>
 
     <command name="close" code="coreclos" description="Close an object.">
+      <cocoa class="ScriptTransientTabCommand"/>
       <direct-parameter description="The object to execute the command on." type="specifier"/>
     </command>
 
@@ -108,21 +109,27 @@
     </class>
 
     <command name="select" code="CrSelect" description="Select the tab.">
+      <cocoa class="ScriptTransientTabCommand"/>
       <direct-parameter description="The tab to execute the command in." type="specifier"/>
     </command>
     <command name="go back" code="CrSuBack" description="Go Back (If Possible).">
+      <cocoa class="ScriptTransientTabCommand"/>
       <direct-parameter description="The tab to execute the command in." type="specifier"/>
     </command>
     <command name="go forward" code="CrSuFwd " description="Go Forward (If Possible).">
+      <cocoa class="ScriptTransientTabCommand"/>
       <direct-parameter description="The tab to execute the command in." type="specifier"/>
     </command>
     <command name="reload" code="CrSuRlod" description="Reload a tab.">
+      <cocoa class="ScriptTransientTabCommand"/>
       <direct-parameter description="The tab to execute the command in." type="specifier"/>
     </command>
     <command name="stop" code="CrSustop" description="Stop the current tab from loading.">
+      <cocoa class="ScriptTransientTabCommand"/>
       <direct-parameter description="The tab to execute the command in." type="specifier"/>
     </command>
     <command name="execute" code="CrSuExJa" description="Execute a piece of javascript.">
+      <cocoa class="ScriptTransientTabCommand"/>
       <direct-parameter description="The tab to execute the command in." type="specifier"/>
       <parameter name="javascript" code="JvSc" description="The javascript code to execute." type="text">
         <cocoa key="javascript"/>
