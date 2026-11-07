@@ -12044,7 +12044,8 @@ def main():
         elif opts.only == "extensions-ui":
             results["extensions-ui"] = CheckedResults(tracker)
             runpy.run_path(os.path.join(ROOT, "tools", "e2e", "extensions_ui.py"))["run"](
-                factory, results["extensions-ui"], tmp, ROOT, wait_until, new_tab, frame, read_image, EXT)
+                factory, results["extensions-ui"], tmp, ROOT, wait_until, new_tab, frame, read_image, EXT,
+                sys.modules[__name__])
         elif opts.only == "split":
             import importlib.util
             spec = importlib.util.spec_from_file_location('split_checks', os.path.join(ROOT, 'tools/e2e/split_checks.py'))
