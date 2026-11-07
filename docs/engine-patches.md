@@ -197,6 +197,17 @@ Deviations from the plan:
 - Badge text and color, title, and enabled (part of P2) came along: `browserDidUpdateExtensionActions` fires on `chrome.action` changes.
 - Found on the way: `OEEngineConfiguration.userAgentProduct = "Open/0.1"` replaced Chrome's `Chrome/156` UA token, and Bitwarden (like many sites) took its Safari code path and never loaded. The shell no longer sets it.
 
+Window activation lifecycle (2026-11-06, X-19 / #192): `OpenBrowserWindow`
+stops its NSWindow key observers when real closing starts and when the Browser
+reports its close. A close request that the embedder can refuse keeps its
+observers. Activation requires a Browser that is still registered in
+`GlobalBrowserCollection`; this also covers `SetBrowser` and `SetHostView`.
+Chromium's collection checks stay intact. The automation-only diagnostic
+counts and refuses an unsafe activation before that check, so the real-App
+`window` row `engine_close_host_activation` can prove the old behavior fails
+without ending the App. The row includes immediate focus after a Profile
+switch, then closes twice and changes native key state before deferred deletion.
+
 Review round 1 (PR #53; engine review by Opus, shell review by Muse; lead decisions 2026-10-26):
 
 - **Discards.** Chrome never discards a hosted tab: Open sleeps tabs itself. `chrome.tabs.discard(tabId)` becomes a request (`OnTabDiscardRequested` → `-browser:requestsDiscardOfWebContent:`). The shell refuses the visible tab (Chrome's "Cannot discard tab" error). The current App uses `SleepController.debugSleepNow`: it discards a background renderer and keeps the sleeping page and its tab id until a later destroy deadline. `OEWebContent.isDiscarded` reports that renderer state. Desktop `chrome.tabs` still reports `discarded: false` because Chrome's own lifecycle unit did not perform the discard; this metadata mapping remains a P1 follow-up. The tab leaves `chrome.tabs` only when the page closes. `chrome.tabs.discard()` without an id finds nothing to discard. A replaced `WebContents` (only discards replace one) is logged, never reported as a page close.
