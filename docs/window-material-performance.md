@@ -47,6 +47,11 @@ arms the field-count baseline before each focus request; otherwise a rebuild
 before the key observer runs could be missed. Apply this revised hook to both
 comparison builds. It still observes the first later display callback, not
 Core Animation transaction completion or GPU presentation.
+Deep receipt directories can exceed the Unix-domain socket path limit. The
+runner then creates a short, unique synthetic profile under `.re/s5-perf/profile`
+and records its path. Exclude directories named `profile` from evidence copies.
+An overlong fallback path fails before launch. Startup timeout receipts also
+retain the constructor's owned-process cleanup report.
 
 The sampler measures callback pacing and presentation-layer values, not actual
 GPU-presented frames. It has overhead, as do socket polling and idle observers;

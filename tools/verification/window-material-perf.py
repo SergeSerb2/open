@@ -14,6 +14,7 @@ import plistlib
 import re
 import subprocess
 import threading
+import tempfile
 import time
 import traceback
 
@@ -96,7 +97,14 @@ def main():
         if value is None: raise RuntimeError('Card did not settle: '+str(state()['reveal']))
         return value
     try:
-        app = E.Open('Release','chrome',str(out/'profile'),['--use-mock-keychain'],str(out/'app.log'),
+        profile = out/'profile'
+        if len(os.fsencode(profile/'automation.sock')) > 100:
+            profiles = ROOT/'.re/s5-perf/profile'; profiles.mkdir(parents=True,exist_ok=True)
+            profile = Path(tempfile.mkdtemp(prefix='p-',dir=profiles))
+        if len(os.fsencode(profile/'automation.sock')) > 100:
+            raise RuntimeError('Automation profile path exceeds the Unix socket limit')
+        receipt['profile'] = str(profile)
+        app = E.Open('Release','chrome',str(profile),['--use-mock-keychain'],str(out/'app.log'),
                      urls=(origin+'/band',),extra_env={'OPEN_E2E_APP_BUNDLE':a.bundle,
                      'DYLD_INSERT_LIBRARIES':a.probe})
         receipt['pid'] = app.pid
@@ -171,6 +179,9 @@ def main():
         exitcode = 75 if outside else 0
     except Exception:
         receipt['status'] = 'ERROR'; receipt['error'] = traceback.format_exc()
+        # The constructor already cleans up after a readiness timeout. Retain
+        # that owned instance's cleanup report even though assignment failed.
+        if app is None and E._OWNED_APPS: app = E._OWNED_APPS[-1]
     finally:
         if app:
             app.quit(); receipt['quit'] = app.quit_report
