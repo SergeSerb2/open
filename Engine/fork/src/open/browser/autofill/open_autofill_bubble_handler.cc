@@ -2,6 +2,8 @@
 // Use of this source code is governed by a BSD-style license in LICENSE.
 #include "open/browser/autofill/open_autofill_bubble_handler.h"
 
+#include <string>
+
 #include "base/functional/bind.h"
 #include "base/memory/weak_ptr.h"
 #include "base/strings/string_util.h"
@@ -150,7 +152,8 @@ autofill::AutofillBubbleBase* OpenAutofillBubbleHandler::ShowUpdateAddressProfil
     std::unique_ptr<autofill::UpdateAddressBubbleController> controller, bool gesture) {
   auto profile = controller->GetProfileToSave();
   auto label = autofill::GetEnvelopeStyleAddress(profile,
-      g_browser_process->GetFeatures()->application_locale_storage()->GetTag().tag_string(),
+      std::string(g_browser_process->GetFeatures()->application_locale_storage()
+                      ->GetTag().tag_string()),
       /*include_recipient=*/true, /*include_country=*/true);
   return AddressPrompt(contents, std::move(controller), profile, label, 4, gesture);
 }

@@ -335,7 +335,17 @@ class ProfileData final : public CefOpenProfileData,
       if (done) done->OnComplete(0, 0, records ? records->GetSize() : 0, closed_ ? 3 : 0);
       return;
     }
-    jobs_.push_back({kind, records, done, nullptr}); RunNext();
+    // Calls and input mutation belong to the UI thread. Take a bounded deep
+    // snapshot before yielding to store reads: the caller must not change a
+    // fixture-approved record into real data while that batch is waiting.
+    auto snapshot = records->Copy();
+    WipeRecords(records);
+    if (!ValidBatch(snapshot, kind)) {
+      WipeRecords(snapshot);
+      done->OnComplete(0, 0, records->GetSize(), 0);
+      return;
+    }
+    jobs_.push_back({kind, snapshot, done, nullptr}); RunNext();
   }
   void RunNext() {
     if (busy_ || closed_ || !profile_ || jobs_.empty()) return;
@@ -665,7 +675,7 @@ void ProfileData::WriteNextCookie() {
     auto saved = *cookie;
     Cookies()->SetCanonicalCookie(*cookie, url, net::CookieOptions::MakeAllInclusive(),
         base::BindOnce([](base::WeakPtr<ProfileData> self, net::CanonicalCookie cookie,
-                         const net::CookieAccessResult& result) {
+                         net::CookieAccessResult result) {
           if (!self) return;
           if (result.status.IsInclude()) { ++self->added_; self->cookies_.push_back(cookie); }
           else ++self->failed_;
