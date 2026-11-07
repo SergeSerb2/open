@@ -103,7 +103,9 @@ under its own screen lock. The script refuses this smoke on the M5. It also
 checks the temporary app/helper DLV entitlement seals before launch. The copy
 and temporary entitlements are deleted. The app in `build/release` and the DMG
 keep exact committed entitlements, enforced by sealed-dictionary comparisons.
-Never relaunch a failed-to-load build. If anything crashes, stop on-screen work
+No mode launches an exact artifact; production runtime acceptance uses a
+separately approved lead receipt bound to the DMG. Never relaunch a failed-to-load
+build. If anything crashes, stop on-screen work
 and report it to the lead. U-9 is not defined in §10 or follow-ups.
 
 | ID | Fact | Evidence |

@@ -926,7 +926,7 @@ require_m1() {
 }
 supplemental_smoke() {
     local source=$1 evidence=$2
-    [[ $DRY == 1 ]] || { smoke "$source" "$evidence"; return; }
+    [[ $DRY == 1 ]] || die 'only the dry-run M1 temporary DLV copy may be launched by release.sh'
     [[ $SMOKE_ONLY == 1 ]] || die 'dry-run launch requires the explicit M1 --smoke-only path'
     require_m1
     log 'supplemental local-only launch copy, disable-library-validation exception, not the shipped signature'
@@ -952,6 +952,7 @@ PY
 }
 smoke() {
     local a=$1 evidence=$2
+    [[ $DRY == 1 && $SMOKE_ONLY == 1 ]] || die 'release.sh never launches an exact release artifact; only M1 temporary DLV smoke is permitted'
     if [[ $DRY == 1 ]]; then
         require_m1
         [[ $SMOKE_ONLY == 1 && -n "$SMOKE_DIR" && "$a" == "$SMOKE_DIR/Open.app" ]] || die 'refusing dry-run launch: only the temporary DLV copy may run'
@@ -1092,6 +1093,21 @@ assert j['launch_policy']=='supplemental local-only launch copy, disable-library
 assert j['results']=={'page_title':'Example Domain','javascript_dynamic_function_hot_loop':True,'renderer':True,'gpu':True,'sidebar_tab':True,'clean_quit':True}
 PY
 }
+production_launch_receipt_valid() {
+    # The lead's STOP-rule forbids automated exact-artifact launches here.
+    # Production acceptance needs separately approved, artifact-bound evidence.
+    python3 - "$REL/acceptance.json" "$DMG" <<'PY' >/dev/null 2>&1
+from pathlib import Path
+import hashlib,json,sys
+receipt,dmg=map(Path,sys.argv[1:])
+assert receipt.stat().st_size<=16384
+j=json.loads(receipt.read_text());h=hashlib.sha256()
+with dmg.open('rb') as f:
+ for chunk in iter(lambda:f.read(1048576),b''):h.update(chunk)
+assert j['dmg_sha256']==h.hexdigest() and j.get('evidence')
+assert all(j.get(k) is True for k in ('launch','helpers','mounted_launch'))
+PY
+}
 summary() {
     : > "$STAGE/acceptance.tsv"
     if ready 02-engine; then row A-1 PASS 'official args, matching distrib binary/commits, engine-status --strict'; else row A-1 mode-SKIP "$(reason 02-engine)"; fi
@@ -1104,21 +1120,26 @@ summary() {
         [[ ! -f "$runtime_receipt" ]] || runtime_hash=$(cat "$runtime_receipt")
         if [[ "$runtime_hash" != "$artifact_hash" ]]; then
             exact_entitlements "$APP"
-            if [[ $DRY == 1 ]]; then exact_signature_limit; else smoke "$APP" "$STAGE/launch.json"; fi
+            [[ $DRY != 1 ]] || exact_signature_limit
             MOUNT_DIR=$(mktemp -d "$STAGE/mount.XXXXXX")
             hdiutil attach -readonly -nobrowse -mountpoint "$MOUNT_DIR" "$DMG"
             codesign --verify --deep --strict "$MOUNT_DIR/Open.app"
             exact_entitlements "$MOUNT_DIR/Open.app"
-            [[ $DRY == 1 ]] || smoke "$MOUNT_DIR/Open.app" "$STAGE/mounted-launch.json"
             hdiutil detach "$MOUNT_DIR"
             rmdir "$MOUNT_DIR"; MOUNT_DIR=
             printf '%s\n' "$artifact_hash" > "$runtime_receipt"
         fi
         local launch_label='signed artifact'
-        local launch_status=PASS
+        local launch_status=FAIL
         if [[ $DRY == 1 ]]; then
+            launch_status=PASS
             launch_label='M1: supplemental local-only launch copy, disable-library-validation exception, not the shipped signature'
             if ! m1_receipt_valid; then launch_status=mode-SKIP; launch_label='M1 supplemental smoke pending; copy DMG to detached M1 worktree, run --dry-run --smoke-only, import m1-smoke.json'; fi
+        elif production_launch_receipt_valid; then
+            launch_status=PASS
+            launch_label='separately approved lead runtime evidence in acceptance.json, bound to final DMG'
+        else
+            launch_label='STOP-rule: no artifact launched; U-7 needs separately approved lead runtime evidence (acceptance.json: dmg_sha256, evidence, launch/helpers/mounted_launch:true)'
         fi
         row A-2 "$launch_status" "$launch_label; real page title, saved sidebar, clean quit"
         row A-3 "$launch_status" "$launch_label; renderer, GPU and JavaScript hot loop"

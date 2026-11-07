@@ -195,6 +195,15 @@ The pipeline's origin-based publish examples apply only if origin is that target
 No setup approval also approves publication.
 
 This fills the release PR's approval. It does not fill an environment variable.
+The lead also records approved runtime/About/update evidence in
+`build/release/<marketing>-<build>/acceptance.json`. It contains the exact
+`dmg_sha256`, an `evidence` path, and true values only for completed checks:
+`launch`, `helpers`, `mounted_launch`, `about`, and `real_update` (or
+`no_predecessor` for the first release). The file is at most 16384 bytes.
+`release.sh` never launches an exact artifact, in any mode. The STOP-rule still
+applies; a future production runtime check needs separate lead authorization.
+Re-running `tools/release.sh` verifies the receipt against the final DMG hash.
+Do not create success fields without real evidence.
 Agent verification after the approved upload:
 
 ```bash

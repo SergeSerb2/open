@@ -67,7 +67,9 @@ that temporary copy under the M1 screen lock, deletes it and its temporary
 entitlements, and detaches. `m1-smoke.json` binds the result to the DMG hash.
 The M5 summary accepts that receipt only for its exact DMG. Receipt import
 invalidates only the summary stamp. No failed-to-load build is relaunched.
-If anything crashes, on-screen work stops and the lead is told.
+If anything crashes, on-screen work stops and the lead is told. No mode of
+`release.sh` launches an exact artifact. Production runtime rows require a
+separately approved, DMG-bound lead receipt; this task creates none.
 
 ## Dry-run acceptance
 
@@ -81,7 +83,11 @@ Its M5 supplemental launches and original no-op run do not prove the new policy.
 
 The replacement protocol is M5 packaging/static checks, an M1-only temporary
 copy smoke, receipt import, then an unchanged M5 run with 12 NO-OP phases.
-Final results and hashes will be filled from that run.
+Final results and hashes will be filled from that run. Attempt 5 was stopped
+while queued for its build slot to close the remaining production launch path.
+No app was launched by attempt 5. The first full M5 gate was also stopped for
+the policy revision after 21 PASS rows; its trap printed `sitecontrol-render
+FAIL 0`. That is an interrupted run, not a Site Control failure or acceptance.
 
 The `file://` feed proves shape and Ed25519 signatures only. Pinned Sparkle
 2.10.1 rejects file feeds in the real App (lead: error 2001). No App update
