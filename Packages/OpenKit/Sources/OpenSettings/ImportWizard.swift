@@ -9,6 +9,7 @@ import OpenImport
     public enum Step: String, CaseIterable { case choose = "Choose", review = "Review", consent = "Passwords", progress = "Importing", report = "Report" }
     unowned let root: SettingsViewModel
     private let importActions: any ImportActions
+    public let extensions = ImportExtensionsViewModel()
     public var plan: ImportPlan
     public var step: Step = .choose
     public private(set) var counts: [String: Int] = [:]
@@ -21,7 +22,7 @@ import OpenImport
     public var phaseText = "Importing selected data…"
     public var progress: Double?
     public var browserHasLanded = false
-    public var busy:Bool {counting || isImporting}
+    public var busy:Bool {counting || isImporting || extensions.isInstalling}
     public private(set) var errorText = ""
     public private(set) var outcome: ImportOutcome?
     public private(set) var consentWasDecided = false
@@ -56,7 +57,7 @@ import OpenImport
         let found=category == "History" ? probe.historyFound:category == "Passwords and cookies" ? probe.secretsFound:category == "Archive" ? probe.archiveFound:probe.sidebarFound
         return found ? "Could not be read":"Not found"
     }
-    public static let reportCategories=["Spaces","Pinned and Today tabs","Favorites","Folders","Archive","History","Search settings","Passwords and cookies"]
+    public static let reportCategories=["Spaces","Pinned and Today tabs","Favorites","Folders","Archive","History","Search settings","Boosts","Passwords and cookies"]
     public var reportSummary:String {
         var parts:[String]=[]
         if outcome?.failures["Spaces"] == nil {parts.append(ImportCountCopy.phrase(reportCount("Spaces"),singular:"Space",plural:"Spaces"))}
@@ -96,9 +97,11 @@ import OpenImport
         isImporting = true; step = .progress
         let result = await importActions.runImport(plan: plan)
         outcome = result; errorText = result.errorText ?? ""; isImporting = false; step = .report
+        extensions.reset(candidates: result.extensions, profileCount: result.extensionProfileCount)
         root.profiles.refresh(); root.refreshLinks()
     }
     public func retry() { guard !busy else { return }; outcome = nil; step = .choose }
+    public func installExtensions() async { guard step == .report else { return }; await extensions.install(using: importActions) }
     public func finish(openLibrary: Bool = false) { guard !busy else { return }; if outcome?.errorText == nil && outcome != nil { root.set(plan.directory.path, for: "open.import.lastArcDir") }; root.showsImport = false; if openLibrary { root.actions.openLibrary() } }
 }
 public struct ImportWizard: View {
@@ -132,10 +135,11 @@ public struct ImportWizard: View {
                 case .report:
                     if model.outcome?.errorText == nil || model.hasImportedData {
                         Text(model.reportSummary).font(.headline)
-                        ForEach(ImportWizardViewModel.reportCategories,id:\.self) {name in HStack {Text(ImportCountCopy.displayCategory(name));Spacer();Text(model.outcome?.failures[name] == nil ? model.reportCount(name).formatted() : "Could not be read").monospacedDigit().foregroundStyle(model.outcome?.failures[name] == nil ? Color.primary : Color.red)}}
+                        ForEach(ImportWizardViewModel.reportCategories,id:\.self) {name in HStack {Text(ImportCountCopy.displayCategory(name));Spacer();Text(model.outcome?.failures[name] == nil ? model.reportCount(name).formatted() : (name == "Boosts" ? model.outcome?.failures[name] ?? "Could not be read" : "Could not be read")).monospacedDigit().foregroundStyle(model.outcome?.failures[name] == nil ? Color.primary : Color.red)}}
                         if !model.reportSkipped.isEmpty {Text(model.reportSkipped).foregroundStyle(.secondary)}
                     }
                     if model.passwordsWereNotImported {Text("Passwords and cookies were not imported.").foregroundStyle(.secondary)}
+                    ImportExtensionsSection(model: model.extensions) { Task { await model.installExtensions() } }
                 }
                 SettingsError(text: model.errorText)
             }.frame(maxWidth: .infinity, alignment: .leading) }
@@ -154,7 +158,7 @@ public struct ImportWizard: View {
                 case .progress: EmptyView()
                 case .report: if model.outcome?.errorText != nil { Button("Try Again") { model.retry() } } else { Button("Open Library") { model.finish(openLibrary: true) } };Button("Done") { model.finish() }.keyboardShortcut(.defaultAction).buttonStyle(SettingsButtonStyle(prominent:true))
                 }
-            }
+            }.disabled(model.extensions.isInstalling)
         }.padding(24).frame(width: 640, height: 520).interactiveDismissDisabled(model.busy)
         .task { if !model.readable { await model.refreshCounts() } }
     }
