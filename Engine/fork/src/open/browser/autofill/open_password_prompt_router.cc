@@ -36,7 +36,13 @@ bool OpenPasswordPromptRouter::Show(content::WebContents* contents,
                             : PasswordBubbleControllerBase::DisplayReason::kAutomatic);
   const auto username = delegate->GetPendingPassword().username_value;
   auto answer = base::BindOnce(
-      [](std::unique_ptr<SaveUpdateBubbleController> controller, int choice) {
+      [](std::unique_ptr<SaveUpdateBubbleController> controller,
+         base::WeakPtr<PasswordsModelDelegate> delegate,
+         password_manager::ui::State state, int choice) {
+        // The bubble controller caches its initial state. Its action handlers
+        // do not guard the live delegate's form manager after a state change.
+        // Close stale offers as ignored, without calling those handlers.
+        if (!delegate || delegate->GetState() != state) choice = 3;
         if (choice == 0) controller->OnSaveClicked();
         else if (choice == 1 && !controller->IsCurrentStateUpdate())
           controller->OnNeverForThisSiteClicked();
@@ -45,7 +51,7 @@ bool OpenPasswordPromptRouter::Show(content::WebContents* contents,
           else controller->OnNotNowClicked();
         }
         controller->OnBubbleClosing();
-      }, std::move(controller));
+      }, std::move(controller), delegate, state);
   CefRefPtr<OpenSavePrompt> prompt = new OpenSavePrompt(
       contents, state == password_manager::ui::PENDING_PASSWORD_STATE ? 0 : 1,
       user_action, std::move(answer));

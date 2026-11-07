@@ -675,7 +675,7 @@ void ProfileData::WriteNextCookie() {
     auto saved = *cookie;
     Cookies()->SetCanonicalCookie(*cookie, url, net::CookieOptions::MakeAllInclusive(),
         base::BindOnce([](base::WeakPtr<ProfileData> self, net::CanonicalCookie cookie,
-                         const net::CookieAccessResult& result) {
+                         net::CookieAccessResult result) {
           if (!self) return;
           if (result.status.IsInclude()) { ++self->added_; self->cookies_.push_back(cookie); }
           else ++self->failed_;

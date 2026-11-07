@@ -3,7 +3,6 @@
 #include "open/browser/autofill/open_save_prompt_impl.h"
 #include "cef/libcef/browser/browser_host_base.h"
 #include "components/url_formatter/elide_url.h"
-#include "content/public/browser/navigation_handle.h"
 #include "content/public/browser/web_contents.h"
 #include "open/browser/autofill/open_autofill_handler_registry.h"
 #include "url/origin.h"
@@ -54,10 +53,8 @@ void OpenSavePrompt::Withdraw() {
   Answer(3);
   NotifyPromptWithdrawn(browser, this);
 }
-void OpenSavePrompt::DidFinishNavigation(content::NavigationHandle* nav) {
-  if (nav->HasCommitted() && nav->IsInPrimaryMainFrame() &&
-      !nav->IsSameDocument()) Withdraw();
-}
+// Navigation alone does not withdraw an offer. Chromium keeps pending state
+// while its bubble is open; its own hide routes settle the corresponding offer.
 void OpenSavePrompt::WebContentsDestroyed() {
   Withdraw();
   Observe(nullptr);

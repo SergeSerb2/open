@@ -123,17 +123,24 @@ autofill::AutofillBubbleBase* OpenAutofillBubbleHandler::ShowSaveCreditCardBubbl
   auto weak = static_cast<SaveCardBubbleControllerImpl*>(controller)
                   ->GetBubbleControllerBaseWeakPtr();
   auto close = controller->GetOnBubbleClosedCallback();
+  const auto type = controller->GetPaymentsBubbleType();
   CefRefPtr<OpenSavePrompt> prompt = new OpenSavePrompt(contents, 2, user_gesture,
       base::BindOnce([](std::unique_ptr<PromptBubble> bubble,
                        base::WeakPtr<BubbleControllerBase> weak,
                        SaveCardBubbleController* controller,
                        base::OnceCallback<void(PaymentsUiClosedReason)> close,
+                       PaymentsBubbleType type,
                        int answer) {
+        // OnSaveButton CHECKs the pending callback and rejects inactive states.
+        // A controller that no longer shows this offer must only be ignored.
+        if (!weak || static_cast<SaveCardBubbleControllerImpl*>(controller)
+                         ->GetPaymentBubbleView() != bubble.get() ||
+            controller->GetPaymentsBubbleType() != type) answer = 3;
         if (weak && answer == 0) controller->OnSaveButton({});
         std::move(close).Run(answer == 0 ? PaymentsUiClosedReason::kAccepted
                             : answer == 2 ? PaymentsUiClosedReason::kCancelled
                                           : PaymentsUiClosedReason::kNotInteracted);
-      }, std::move(bubble), weak, controller, std::move(close)));
+      }, std::move(bubble), weak, controller, std::move(close), type));
   prompt->SetLabels({}, controller->GetCard().NetworkAndLastFourDigits(), {});
   result->prompt = prompt->GetWeakPtr();
   ShowSavePrompt(prompt);
