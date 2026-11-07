@@ -575,7 +575,7 @@ def run_engine(factory, results, tmp, h, guard, engine_distribution_sha256):
             def preference_inputs():
                 initial = app.call('credentials-prefs')
                 for invalid in [dict(profile='missing'), dict(passwordSaving=1), dict(cardsSaving='true'),
-                                dict(addressesSaving=None), dict(unknown=True), dict(profile='x'*4097)]:
+                                dict(addressesSaving=None), dict(cardReauthentication=1), dict(unknown=True), dict(profile='x'*4097)]:
                     try:
                         app.call('credentials-prefs', **invalid)
                         raise AssertionError('invalid credentials-prefs input was accepted')
@@ -588,8 +588,14 @@ def run_engine(factory, results, tmp, h, guard, engine_distribution_sha256):
                         raise AssertionError('invalid savePrompt policy was accepted')
                     except RuntimeError:
                         pass
-                return {'invalidInputsRejected': 9, 'preferencesUnchanged': True}
+                return {'invalidInputsRejected': 10, 'preferencesUnchanged': True}
             row('PW-PREFS-input', preference_inputs)
+
+            def reauthentication_default():
+                prefs = app.call('credentials-prefs')
+                assert prefs['canEnableCardsSaving'] and prefs['cardReauthentication'] is True
+                return {'freshProfile': True, 'cardReauthentication': True}
+            row('PW-REAUTH-default', reauthentication_default)
 
             def first():
                 tab, value = prompt('password', urls['login'])
@@ -708,12 +714,65 @@ def run_engine(factory, results, tmp, h, guard, engine_distribution_sha256):
                 assert wait(lambda: fields_match(tab, ['name', 'street', 'city', 'postal']), timeout=5, step=.05)
                 return {'addressFieldsMatch': True}
             row('P-10', address_fill, ['P-9'])
+            def http_card_guard():
+                prefs = app.call('credentials-prefs')
+                assert prefs['cardsSaving'] and prefs['canEnableCardsSaving']
+                assert app.call('credentials')['cards'] == 0
+                no_prompt(urls['http_card'])
+                counts(cards=0)
+                return {'scheme': 'http', 'cardSaveOffer': False, 'cardsUnchanged': True}
+            row('PW-CARD-HTTP', http_card_guard)
+
+            def secure_card_context():
+                tab = load(urls['card'])
+                assert app.eval(tab, 'location.protocol === "https:" && window.isSecureContext')
+                secure_type = dev(tab, 'Page.getFrameTree')['frameTree']['frame']['secureContextType']
+                assert secure_type in ['Secure', 'SecureLocalhost']
+                app.call('close', tab=tab)
+                return {'scheme': 'https', 'secureContext': True, 'secureContextType': secure_type}
+            row('PW-CARD-HTTPS', secure_card_context)
             row('P-11', lambda: (prompt('card', urls['card'], 'save'), counts(cards=1))[1])
             def card_fill():
-                tab = load(urls['card']); assert popup(tab, '#number'); choose()
-                assert wait(lambda: fields_match(tab, ['name', 'number', 'expiry']), timeout=5, step=.05)
-                return {'cardFieldsMatch': True}
+                # Only this synthetic profile opts out for unattended fill.
+                # New user profiles retain Chromium's mandatory device auth.
+                previous = app.call('credentials-prefs')['cardReauthentication']
+                try:
+                    app.call('credentials-prefs', cardReauthentication=False)
+                    assert wait(lambda: app.call('credentials-prefs')['cardReauthentication'] is False, timeout=3, step=.05)
+                    tab = load(urls['card']); assert popup(tab, '#number'); choose()
+                    assert wait(lambda: fields_match(tab, ['name', 'number', 'expiry']), timeout=5, step=.05)
+                    return {'cardFieldsMatch': True, 'syntheticProfileOptOut': True}
+                finally:
+                    app.call('credentials-prefs', cardReauthentication=previous)
+                    assert wait(lambda: app.call('credentials-prefs')['cardReauthentication'] is previous, timeout=3, step=.05)
             row('P-12', card_fill, ['P-11'])
+
+            def card_reauthentication():
+                assert app.call('credentials-prefs')['cardReauthentication'] is True
+                tab = load(urls['card']); assert popup(tab, '#number'); choose()
+                import socket
+                blocked = False
+                hist = []
+                try:
+                    hist = app.call('devtools', tab=tab, method='Browser.getHistograms',
+                                    params={'query': 'Autofill.PaymentMethods.CheckoutFlow.ReauthUsage', 'delta': False},
+                                    timeout=3)['histograms']
+                except socket.timeout:
+                    # Chromium's non-biometric fallback enters the macOS
+                    # Authorization Services modal loop. Do not answer it.
+                    blocked = True
+                time.sleep(1)
+                os.kill(app.pid, 0)
+                assert not h['_open_crash_reports']() - guard.baseline, 'card selection created a crash report'
+                # Verified-PID cleanup cancels this owned request before any
+                # later row. It does not send input to the system dialog.
+                relaunch()
+                assert app.call('credentials-prefs')['cardReauthentication'] is True
+                if blocked:
+                    raise PasswordBlocked('Native card authentication left the process alive with no crash, but its modal loop blocked automation; session-owner authentication is required to inspect completion')
+                assert any(any(b['low'] == 1 and b['count'] for b in item['buckets']) for item in hist), 'device authentication did not start for the saved card'
+                return {'deviceAuthenticationStarted': True, 'appAlive': True, 'histograms': hist}
+            row('PW-REAUTH-request', card_reauthentication, ['P-12'])
 
             def manage():
                 key('t', modifiers=['command']); app.call('key', text='Manage Passwords', route='app')
@@ -786,10 +845,26 @@ def run_engine(factory, results, tmp, h, guard, engine_distribution_sha256):
             row('P-18', at_rest, ['P-2'])
 
             def private():
+                parent = next(s for s in app.call('spaces') if s['focused'])['profile']
+                before = app.call('credentials', profile=parent)
+                selected = next(t for t in app.call('tabs') if t.get('selected'))
+                parent_context = app.page(selected['id'])['context']
                 app.call('menu-perform', id='new-incognito-window')
                 assert wait(lambda: app.call('incognito-state', private=True).get('private'), timeout=10, step=.1)
-                try: return no_prompt(urls['login'].replace('login.example.com', 'private.example.com'))
-                finally: app.call('window-close')
+                try:
+                    state = app.call('incognito-state', private=True)
+                    assert state['ephemeral'] and state['parent'] == parent
+                    assert state['originalContext'] == parent_context
+                    private_before = app.call('credentials')
+                    assert private_before['logins'] == 0
+                    no_prompt(urls['login'].replace('login.example.com', 'private.example.com'))
+                    private_after = app.call('credentials')
+                    assert private_after == private_before
+                finally:
+                    app.call('window-close')
+                assert app.call('credentials', profile=parent) == before
+                return {'sheetVisible': False, 'privateLogins': 0, 'privateStoreUnchanged': True,
+                        'parentProfileMatchesFocusedSpace': True, 'parentStoreUnchanged': True}
             row('P-19', private)
 
             def virtual_authenticator():
@@ -812,7 +887,7 @@ def run_engine(factory, results, tmp, h, guard, engine_distribution_sha256):
                 app.call('click', tab=tab, selector='#create')
                 child = wait(lambda: next((w for w in children() if w['number'] not in before), None), timeout=3, step=.05)
                 if not child:
-                    raise PasswordBlocked('H-7 WebAuthn native dialog is unavailable in this engine distribution')
+                    raise AssertionError('H-7 WebAuthn native dialog did not appear')
                 try:
                     labels = next(w.get('text', []) for w in app.call('windows', accessibility=True) if w['number'] == child['number'])
                     import re
