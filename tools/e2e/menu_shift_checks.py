@@ -84,17 +84,32 @@ def run(h, factory, results, tmp):
         app.call('menu-key-render', path=str(private / 'native-shift-menu-glyphs.png'))
         (private / 'native-shift-menu-inventory.json').write_text(h.json.dumps(rows, indent=2) + '\n')
 
-        # The unimplemented Incognito item stays disabled. Cmd+Shift+N has no
-        # browser-window effect with page focus; sidebar focus owns New Folder.
+        # Page focus owns Incognito; one native event creates one private
+        # window. Sidebar focus still owns New Folder for the same chord.
         browser_focus()
         windows, tree = app.call('shell-windows'), app.call('sidebar-tree')
-        disabled = next(r for r in app.call('menu-state') if r['id'] == 'new-incognito-window')
+        counts = app.call('incognito-state')
+        incognito = next(r for r in app.call('menu-state') if r['id'] == 'new-incognito-window')
         receipt = key('n')
-        check('new-incognito-window_disabled', not disabled['enabled']
-              and 'new-incognito-window' not in receipt['commands'] + receipt['menuActions']
-              and app.call('shell-windows') == windows and app.call('sidebar-tree') == tree,
-              receipt=receipt, menu=disabled)
-        tested.add('new-incognito-window')
+        private_windows = h.wait_until(lambda: (lambda rows: rows if rows else None)(
+            [w for w in app.call('incognito-state')['windows'] if w['private']]), timeout=5)
+        once('new-incognito-window', receipt, incognito['enabled'] and bool(private_windows)
+             and len(private_windows) == 1 and len(app.call('shell-windows')) == len(windows) + 1,
+             windows=private_windows, menu=incognito)
+        app.call('window-focus', id=private_windows[0]['id'], activate=True)
+        new_space = next(r for r in app.call('menu-state') if r['id'] == 'new-space')
+        refusal = ''
+        try:
+            app.call('menu-perform', id='new-space')
+        except RuntimeError as error:
+            refusal = str(error)
+        check('incognito_new_space_refused', not new_space['enabled'] and 'disabled menu item' in refusal
+              and not app.call('creation-state')['open']
+              and app.call('incognito-state')['normalSpaces'] == counts['normalSpaces'],
+              menu=new_space, refusal=refusal, creation=app.call('creation-state'))
+        app.call('window-close')
+        check('incognito_close_preserves_normal', bool(h.wait_until(
+            lambda: len(app.call('shell-windows')) == len(windows), timeout=5)))
         browser_focus(True)
         count = len(app.call('sidebar-tree')['pinned'])
         receipt = key('n')
