@@ -20,7 +20,9 @@ import CryptoKit
     private func digest(_ parts: [String], bytes: [UInt8] = []) -> Data {
         var hash = SHA256()
         for part in parts { hash.update(data: Data(part.utf8)); hash.update(data: Data([0])) }
-        hash.update(data: Data(bytes))
+        var secret = Data(bytes)
+        defer { secret.resetBytes(in: 0..<secret.count) }
+        hash.update(data: secret)
         return Data(hash.finalize())
     }
     private func count(_ inserted: [Bool]) -> SecretsWriteResult {
