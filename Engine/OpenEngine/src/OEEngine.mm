@@ -329,6 +329,15 @@ class OEEndTracingCallback : public CefEndTracingCallback {
   }
   NSAssert([NSApp isKindOfClass:[OEApplication class]],
            @"NSApp must be an OEApplication (CefAppProtocol)");
+  // Validate before loading CEF or allowing os_crypt to access any item.
+  if (!configuration.keychainServiceName.length ||
+      [configuration.keychainServiceName isEqualToString:@"Chromium Safe Storage"]) {
+    if (error) *error = [NSError errorWithDomain:OEErrorDomain
+        code:OEErrorInitializationFailed userInfo:@{
+          NSLocalizedDescriptionKey: @"Open requires its own Keychain service name"
+        }];
+    return NO;
+  }
   _configuration = [configuration copy];
 
   _loader = new CefScopedLibraryLoader();
@@ -418,6 +427,7 @@ class OEEndTracingCallback : public CefEndTracingCallback {
   }
   _defaultClient = new OEDefaultClient();
   _running = YES;
+  OEInstallAutofillHandler();
   return YES;
 }
 
@@ -510,6 +520,8 @@ class OEEndTracingCallback : public CefEndTracingCallback {
   if (!_running) {
     return;
   }
+  OERemoveAutofillHandler();
+  for (OEBrowserContext* context in _contexts.allValues) [context oe_closeAutofill];
   [_contexts removeAllObjects];
   _defaultContext = nil;
   _defaultClient = nullptr;

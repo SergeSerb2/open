@@ -116,9 +116,14 @@ Shell and libraries:
 | D-10 | The import writes per kind and per profile through store APIs in the engine: logins, then addresses and cards, then cookies. Existing Open data wins. Each step ends at a durability barrier and a ledger entry (§8). | Re-runs add nothing; a crash loses at most one step. Matches Arc's "skip existing cookies" (PW-9). |
 | D-11 | Leak detection, Password Checkup, and Credential Management auto sign-in are off by default (§4.5). | No Google services; Arc showed no leak or auto sign-in UI (PW-4). |
 
-## 4. Engine bridge (fork patches, series `05xx`)
+## 4. Engine bridge (fork patches, series `08xx`)
 
-Series numbers: `00xx` ad block, `01xx` tab sleep, `03xx` extensions, `04xx` media (media-pip.md). This plan takes `05xx`. All patches depend on P1 (`0301`, `0302`).
+Errata (Section 15, 2026-11-06): this plan originally reserved `05xx`.
+Section 8 already uses that range for page-platform patches. The lead assigned
+`0801`–`0805` to this work. `06xx` belongs to Section 12 and `07xx` to Section 10.
+The Step 0 HTTPS fallback crash has its own `0806` patch (lead ruling,
+2026-11-06); it does not belong to the empty credential factories in `0804`.
+All patches depend on P1 (`0301`, `0302`).
 
 ### 4.1 Chromium components we keep
 
@@ -142,12 +147,12 @@ Series numbers: `00xx` ad block, `01xx` tab sleep, `03xx` extensions, `04xx` med
 
 | Id | Chromium call | Today in a hosted tab | Open replacement | Patch |
 |---|---|---|---|---|
-| H-1 | `TabDialogsViews::ShowManagePasswordsBubble` / `HideManagePasswordsBubble` (`chrome/browser/ui/views/tab_dialogs_views.cc:63-80`), reached from `ManagePasswordsUIController::ShowBubble()` (`manage_passwords_ui_controller.cc:1536-1547`) after `BubbleManager` approves it (`QueueOrShowBubble`, 1668-1680) | Bubble returns early (no toolbar) | `open_engine::OpenPasswordPromptRouter::Show(web_contents, user_action)`: maps the controller state (table below) to a `CefSavePrompt` or to nothing. Returns `true` when Open handled it. The hook runs for every WebContents that has an Open client, hidden strip or not. | `chromium/0501-open-password-prompt-routing.patch` (one hunk per method in `tab_dialogs_views.cc`) |
+| H-1 | `TabDialogsViews::ShowManagePasswordsBubble` / `HideManagePasswordsBubble` (`chrome/browser/ui/views/tab_dialogs_views.cc:63-80`), reached from `ManagePasswordsUIController::ShowBubble()` (`manage_passwords_ui_controller.cc:1536-1547`) after `BubbleManager` approves it (`QueueOrShowBubble`, 1668-1680) | Bubble returns early (no toolbar) | `open_engine::OpenPasswordPromptRouter::Show(web_contents, user_action)`: maps the controller state (table below) to a `CefSavePrompt` or to nothing. Returns `true` when Open handled it. The hook runs for every WebContents that has an Open client, hidden strip or not. | `chromium/0801-open-password-prompt-routing.patch` (one hunk per method in `tab_dialogs_views.cc`) |
 | H-2 | `BrowserWindow::GetAutofillBubbleHandler()` and `AutofillBubbleHandler::Get(browser->GetUnownedUserDataHost())` | null | `open_engine::OpenAutofillBubbleHandler`, owned by `OpenBrowserWindow` and registered as unowned user data on the `Browser` (the way `AutofillBubbleHandlerImpl` does at `chrome/browser/ui/views/autofill/autofill_bubble_handler_impl.cc:98-102`). It forwards save card, save address, and update address to `CefSavePrompt`. Every other method returns a `NullAutofillBubble` (never null) and posts `OnBubbleClosed(kNotInteracted)` or the type's equivalent. | overlay `open/browser/autofill/open_autofill_bubble_handler.{h,cc}`; one line in PR #53's `open_browser_window.mm` (overlay) |
-| H-3 | `address_bubbles_controller.cc:55-99` reaches the handler through `BrowserWindow::FindBrowserWindowWithWebContents` (a `BrowserView` lookup) | null; no prompt | Use `AutofillBubbleHandler::Get(tab->GetBrowserWindowInterface()->GetUnownedUserDataHost())`, as the TODO at line 96 already asks (crbug.com/381390420) | `chromium/0502-open-address-bubble-handler-lookup.patch` |
-| H-4 | `ChromePasswordManagerClient::NavigateToManagePasswordsPage` (1409-1421) and `ChromeAutofillClient::ShowAutofillSettings` | Expected: a singleton tab in the hidden `Browser`, which P1 adopts as an unplaced Today tab (Step 0 confirms) | `CefOpenAutofillHandler::OnOpenAutofillPage(browser, page)`; the shell opens the page by its own rule (§6.3). Falls through to Chromium when no handler is set. | `chromium/0503-open-autofill-page-routing.patch` |
+| H-3 | `address_bubbles_controller.cc:55-99` reaches the handler through `BrowserWindow::FindBrowserWindowWithWebContents` (a `BrowserView` lookup) | null; no prompt | Use `AutofillBubbleHandler::Get(tab->GetBrowserWindowInterface()->GetUnownedUserDataHost())`, as the TODO at line 96 already asks (crbug.com/381390420) | `chromium/0802-open-address-bubble-handler-lookup.patch` |
+| H-4 | `ChromePasswordManagerClient::NavigateToManagePasswordsPage` (1409-1421) and `ChromeAutofillClient::ShowAutofillSettings` | Expected: a singleton tab in the hidden `Browser`, which P1 adopts as an unplaced Today tab (Step 0 confirms) | `CefOpenAutofillHandler::OnOpenAutofillPage(browser, page)`; the shell opens the page by its own rule (§6.3). Falls through to Chromium when no handler is set. | `chromium/0803-open-autofill-page-routing.patch` |
 | H-5 | `ManagePasswordsUIController::UpdateBubbleAndIconVisibility` (1230-1275) | Updates a page action icon that nobody draws | Keep. Step 0 confirms it does not crash (`BrowserActions` and `ManagePasswordsPageActionController` exist for hidden browsers: `browser_window_features.cc:348`, `tab_features.cc:357-361`). Add null checks only if Step 0 finds a crash. | none expected |
-| H-6 | `CreateAccountChooserPromptView`, `CreateAutoSigninPromptView`, `CreateCredentialLeakPromptView` (`chrome/browser/ui/passwords/password_dialog_prompts.h`), `CreateCardUnmaskPromptView`, `CreateAndShowAutofillErrorDialog` | Views dialogs with no host | Empty implementations, as in Arc (PW-4). Each posts its controller's close call from its `Show…` method (account chooser and auto sign-in: `CredentialManagerDialogController::OnCloseDialog()`, `credential_manager_dialog_controller_impl.cc:209`; leak: `CredentialLeakDialogController::OnCloseDialog()`), so `navigator.credentials.get` resolves with `null` instead of hanging | `chromium/0504-open-null-credential-dialogs.patch` (the five factories, under `open_engine::IsOpenWebContents()`) |
+| H-6 | `CreateAccountChooserPromptView`, `CreateAutoSigninPromptView`, `CreateCredentialLeakPromptView` (`chrome/browser/ui/passwords/password_dialog_prompts.h`), `CreateCardUnmaskPromptView`, `CreateAndShowAutofillErrorDialog` | Views dialogs with no host | Empty implementations, as in Arc (PW-4). Each posts its controller's close call from its `Show…` method (account chooser and auto sign-in: `CredentialManagerDialogController::OnCloseDialog()`, `credential_manager_dialog_controller_impl.cc:209`; leak: `CredentialLeakDialogController::OnCloseDialog()`), so `navigator.credentials.get` resolves with `null` instead of hanging | `chromium/0804-open-null-credential-dialogs.patch` (the five factories, under `open_engine::IsOpenWebContents()`) |
 | H-7 | `OpenBrowserWindow::GetWebContentsModalDialogHost()` (PR #53: host without a view) | WebAuthn and HTTP auth dialogs do not show | A real `WebContentsModalDialogHost`: host view = the hosted tab's parent NSView, position = top center of the page view at its top edge (Chrome's placement; guess for Arc), max size = page view size. Chromium's Views dialogs then show as child windows of the Open window. | overlay change in `open_browser_window.mm`; no new patch |
 
 Password states (`components/password_manager/core/common/password_manager_ui.h`) and what H-1 does:
@@ -160,7 +165,7 @@ Password states (`components/password_manager/core/common/password_manager_ui.h`
 | `KEYCHAIN_ERROR_STATE` | Toast "Open couldn't use your Keychain, so this password wasn't saved." (Open text) |
 | All other states (confirmations, auto sign-in, move to account, biometric promos, passkey confirmations, password change) | Nothing shown; the router calls `OnBubbleShown()` then `OnBubbleHidden()` so the controller does not wait |
 
-The router creates a `SaveUpdateBubbleController(PasswordsModelDelegateFromWebContents(wc), kAutomatic or kUserAction)`. Its constructor calls `OnBubbleShown()`; `OnBubbleClosing()` reports interactions and calls `OnBubbleHidden()` (`password_bubble_controller_base.cc:23, 31-36`). Answers: Save → `OnSaveClicked()`; Never → `OnNeverForThisSiteClicked()`; No / Esc → `OnNotNowClicked()`; withdrawn or tab gone → only `OnBubbleClosing()`. Then always `OnBubbleClosing()`.
+The router creates a `SaveUpdateBubbleController(PasswordsModelDelegateFromWebContents(wc), kAutomatic or kUserAction)`. Its constructor calls `OnBubbleShown()`; `OnBubbleClosing()` reports interactions and calls `OnBubbleHidden()` (`password_bubble_controller_base.cc:23, 31-36`). Answers: Save → `OnSaveClicked()`; Never → `OnNeverForThisSiteClicked()`; No / Esc → `OnNotNowClicked()` for a new password and `OnNoThanksClicked()` for an update, matching `password_save_update_view.cc` (`OnNotNowClicked` CHECKs new-password state); withdrawn or tab gone → only `OnBubbleClosing()`. Then always `OnBubbleClosing()`.
 
 Card and address answers: card Save → `OnSaveButton({})` then `OnBubbleClosed(kAccepted)`; Not Now → `OnBubbleClosed(kCancelled)`; withdrawn → `kNotInteracted` (`PaymentsUiClosedReason`, `components/autofill/core/browser/ui/payments/payments_ui_closed_reasons.h:14-28`). Address Save → `OnUserDecision(kAccepted, profile)`; No Thanks → `kDeclined`; withdrawn → `kIgnored` (`AddressPromptUserDecision`, `components/autofill/core/browser/foundations/autofill_client.h:213-233`), then `OnBubbleClosed()`.
 
@@ -244,20 +249,22 @@ Overlay implementation files (compiled into `libcef_static` through `//open/open
 
 ```text
 # Engine/fork/patches/chromium/series
-0501-open-password-prompt-routing.patch      # H-1: tab_dialogs_views.cc routes password bubbles to Open
-0502-open-address-bubble-handler-lookup.patch # H-3: address bubbles find the handler on the Browser
-0503-open-autofill-page-routing.patch        # H-4: "Manage passwords/addresses/payment methods" go to Open
-0504-open-null-credential-dialogs.patch      # H-6: account chooser, auto sign-in, leak, card unmask, error dialog
-0505-open-autofill-defaults.patch            # §4.5: fill on account select on; leak detection and auto sign-in off
+0801-open-password-prompt-routing.patch      # H-1: tab_dialogs_views.cc routes password bubbles to Open
+0802-open-address-bubble-handler-lookup.patch # H-3: address bubbles find the handler on the Browser
+0803-open-autofill-page-routing.patch        # H-4: "Manage passwords/addresses/payment methods" go to Open
+0804-open-null-credential-dialogs.patch      # H-6: account chooser, auto sign-in, leak, card unmask, error dialog
+0805-open-autofill-defaults.patch            # §4.5: fill on account select on; leak detection and auto sign-in off
+0806-open-https-fallback-dialog-host.patch   # Step 0 PR-7: native modal host, safe cancel if absent
 ```
 
 Manifest paths:
 
-- 0501: `chrome/browser/ui/views/tab_dialogs_views.cc`
-- 0502: `chrome/browser/ui/autofill/address_bubbles_controller.cc`
-- 0503: `chrome/browser/password_manager/chrome_password_manager_client.cc`, `chrome/browser/ui/autofill/chrome_autofill_client.cc`
-- 0504: `chrome/browser/ui/views/passwords/account_chooser_dialog_view.cc`, `auto_signin_first_run_dialog_view.cc`, `credential_leak_dialog_view.cc`, `chrome/browser/ui/views/autofill/payments/card_unmask_prompt_views.cc`, `autofill_error_dialog_view_native_views.cc` (each holds its `Create…` factory in 156). Arc replaced the same factories (PW-4).
-- 0505: `components/password_manager/core/browser/features/password_features.cc` (`kFillOnAccountSelect` default, line 113-115), `components/password_manager/core/browser/password_manager.cc` or the pref registration file for the two defaults.
+- 0801: `chrome/browser/ui/views/tab_dialogs_views.cc`
+- 0802: `chrome/browser/ui/autofill/address_bubbles_controller.cc`
+- 0803: `chrome/browser/password_manager/chrome_password_manager_client.cc`, `chrome/browser/ui/autofill/chrome_autofill_client.cc`
+- 0804: `chrome/browser/ui/views/passwords/account_chooser_dialog_view.cc`, `auto_signin_first_run_dialog_view.cc`, `credential_leak_dialog_view.cc`, `chrome/browser/ui/views/autofill/payments/card_unmask_prompt_views.cc`, `autofill_error_dialog_view_native_views.cc` (each holds its `Create…` factory in 156). Arc replaced the same factories (PW-4).
+- 0805: `components/password_manager/core/browser/features/password_features.cc` (`kFillOnAccountSelect` default, line 113-115), `components/password_manager/core/browser/password_manager.cc` or the pref registration file for the two defaults.
+- 0806: `chrome/browser/ssl/ask_before_http_dialog_controller.cc` (Step 0 PR-7 calls the Views-only `TabDialogManager::CreateTabScopedDialog`, whose absent host CHECK aborts Open). Retain the warning through the real native modal host, or cancel if no parent exists.
 
 No CEF series patch is needed: the API header and its implementation are overlay files, and PR #53 already adds `//open/open_libcef_sources.gni` to CEF's `BUILD.gn`.
 
@@ -265,14 +272,14 @@ No CEF series patch is needed: the API header and its implementation are overlay
 
 | Setting | Default | How |
 |---|---|---|
-| `kFillOnAccountSelect` ("fill-on-account-select") | on | 0505 (Chromium default is off, `password_features.cc:113-115`) |
+| `kFillOnAccountSelect` ("fill-on-account-select") | on | 0805 (Chromium default is off, `password_features.cc:113-115`) |
 | `credentials_enable_service` (offer to save passwords) | on | Chromium default; with the mock key, prompts are suppressed instead (§7.1) |
 | `autofill.profile_enabled`, `autofill.credit_card_enabled` | on | Chromium default; card prompts suppressed with the mock key (§7.1) |
-| `profile.password_manager_leak_detection` | off | 0505 (no Google services, D-11) |
-| `credentials_enable_autosignin` | off | 0505 (no auto sign-in UI, D-11) |
+| `profile.password_manager_leak_detection` | off | 0805 (no Google services, D-11) |
+| `credentials_enable_autosignin` | off | 0805 (no auto sign-in UI, D-11) |
 | `password_manager.biometric_authentication_filling` | off (Chromium default) | user can turn it on in the Password Manager settings page |
 | Password generation | off (no sync, `password_feature_manager_impl.cc:28-36`) | unchanged |
-| Card mandatory re-auth | Q-2 | — |
+| Card mandatory re-auth | on for new profiles; no opt-in bubble (Q-2) | 0805 (`autofill.payment_methods_mandatory_reauth`) |
 
 ### 4.6 Crash-proofing for hosted tabs
 
@@ -286,6 +293,12 @@ No CEF series patch is needed: the API header and its implementation are overlay
 New public header `Engine/OpenEngine/include/OpenEngine/OEAutofill.h`, added to `OpenEngine.h`. Main-thread classes are `NS_SWIFT_UI_ACTOR`, as in the rest of OpenEngine.
 
 ### 5.1 Save prompts
+
+Errata (lead decision, 2026-11-06): the optional delegate includes
+`webContentDidFailToSavePasswordForKeychainError(_:)`. H-1 calls it for
+`KEYCHAIN_ERROR_STATE`, then settles the existing shown/hidden lifecycle.
+The App shows "Open couldn't use your Keychain, so this password wasn't saved."
+This callback exposes no credential values.
 
 ```objc
 typedef NS_ENUM(NSInteger, OESavePromptKind) {
@@ -338,6 +351,9 @@ New optional `OEWebContentDelegate` methods (main thread):
 /// closing). The prompt is already answered as Ignored; remove it.
 - (void)webContent:(OEWebContent*)webContent withdrawSavePrompt:(OESavePrompt*)prompt
     NS_SWIFT_NAME(webContent(_:withdrawSavePrompt:));
+/// Chromium could not save because the Keychain is unavailable.
+- (void)webContentDidFailToSavePasswordForKeychainError:(OEWebContent*)webContent
+    NS_SWIFT_NAME(webContentDidFailToSavePasswordForKeychainError(_:));
 /// A Chromium "Manage…" link (dropdown footer, H-4).
 - (void)webContent:(OEWebContent*)webContent openAutofillPage:(OEAutofillPage)page
     NS_SWIFT_NAME(webContent(_:openAutofillPage:));
@@ -476,7 +492,7 @@ Engine-side mapping:
 
 ```objc
 @interface OEEngine (Autofill)
-/// YES when the running engine has the 05xx patches and §5.3.
+/// YES when the running engine has the 08xx patches and §5.3.
 @property(nonatomic, readonly) BOOL supportsSecretsImport;
 /// YES when the engine encrypts with the mock key (--use-mock-keychain).
 @property(nonatomic, readonly) BOOL usesMockKeychain;
@@ -610,7 +626,8 @@ Chromium's HTTP auth dialog is web-modal too. With H-7 it shows, and the passwor
    - The engine shows no password or card save prompt: H-1 and H-2 answer every save prompt as ignored without calling the shell (`open_engine::SecretsPromptsAllowed()` is false). No pref is written, so a later signed build on the same data keeps the user's settings. Addresses are not secrets and still prompt.
    - `canEnablePasswordSaving` and `canEnableCreditCardsSaving` return NO.
    - `canImportPasswordsAndCookies` is false (§7.4); the wizard shows its "can't be imported yet" copy.
-   - The e2e harness passes `--open-allow-mock-keychain-secrets`, which makes `SecretsPromptsAllowed()` true for fixture data. The switch never lifts the import rule; only the synthetic fixture command (§9.1) writes imported records on a mock-key build.
+   - The e2e harness passes `--open-allow-mock-keychain-secrets`, which permits password/card prompts and their `canEnable*` switches. It never permits imported real secrets.
+   - Errata (lead decision, 2026-11-06): all four §5.3 import methods fail closed with `OEErrorMockKeychain = 8` unless the process has that switch AND every record passes a browser-process fixture check before any write. Both login `signon_realm` and `origin_url` hosts must be `example.com`, a subdomain of `example.com`, `localhost`, or `127.0.0.1`. Cookie domains, after removing a leading dot, must match that host allowlist. Card numbers must be one of the public test values `4111111111111111`, `5555555555554444`, or `378282246310005`. Addresses are allowed with the switch. One non-fixture record rejects the whole batch without writes. Real-key engines do not apply the fixture check. The real wizard still refuses on mock-key engines (§7.4), even with the switch; only synthetic imports use this exception.
 5. Release builds: release.md §4.4 already treats repeated Keychain prompts as a defect. §9.5 adds the checks.
 
 ### 7.2 At rest
@@ -845,7 +862,7 @@ Ad-hoc builds cannot run K-1…K-3; the report says so.
 | Step | Owner | Work | Files | Acceptance |
 |---|---|---|---|---|
 | 0 | engine lead | Probe today's fork with P1: run §9.2 P-1, P-3, P-9, P-11, P-12, P-21 by hand through automation (passwords added through `chrome://password-manager` "Add"). Record what shows and every crash. | `docs/engine-spike/results-passwords-probe.json`; notes in `docs/engine-patches.md` | Results committed; crash list with stacks |
-| 1 | engine lead | Patches 0501–0505; overlay `open/browser/autofill/*`; H-2 and H-7 in `open_browser_window.mm` | `Engine/fork/patches/chromium/05xx-*`, `manifest`, `series`; overlay files | Engine builds; Step 0 flows run with no crash; Chromium's own bubbles never appear |
+| 1 | engine lead | Patches 0801–0805; overlay `open/browser/autofill/*`; H-2 and H-7 in `open_browser_window.mm` | `Engine/fork/patches/chromium/08xx-*`, `manifest`, `series`; overlay files | Engine builds; Step 0 flows run with no crash; Chromium's own bubbles never appear |
 | 2 | OpenEngine | §5 API; mock-key rule; startup name assertion; `docs/engine-api.md` section "Passwords and autofill" | `Engine/OpenEngine/include/OpenEngine/OEAutofill.h`, `src/OEAutofill.mm`, `OEWebContent.mm`, `OEEngine.mm`, `OEClient.mm` | Automation can list prompts and counts on the fork build |
 | 3 | shell | `DialogSheet` (shared), `SavePromptPresenter`, OpenWeb protocol, `features-render` sheet renders; design review by the lead and an Opus designer | `OpenDesign/DialogSheet.swift`, `OpenDesign/Typography.swift` (2 tokens), `OpenFeatures/SavePromptPresenter.swift`, `OpenWeb/OpenWeb.swift`, `features-render` scene | `features-render check` passes with the new renders |
 | 4 | shell (App) | Delegate wiring, Manage pages (§6.3), `manage-passwords` handler, `openProfileSubpage` adapter, automation commands, `--only passwords` suite | `App/EngineBridge.swift`, `App/…` window glue (app-shell files), `App/Automation/*`, `tools/e2e/engine_e2e.py`, `tools/e2e/fixtures/passwords/*` | §9.2 and §9.4 all pass; results in `docs/engine-spike/results-passwords.json` |
