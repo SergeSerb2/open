@@ -15,6 +15,7 @@ final class SpacePagerView: NSView {
     var menus: SidebarMenus
     weak var themeBackground: ThemeBackgroundView?
     /// Strip offset in points (page index × width) as the model state, not the presentation.
+    private var creationPage: NSView?
     private var offset: CGFloat = 0
     private var shownSpaceID: SpaceID?
     private var animating = false
@@ -67,12 +68,13 @@ final class SpacePagerView: NSView {
         super.layout()
         if shownSpaceID == nil { showFocused(animated: false); return }
         layoutPages()
-        if !animating && swipe == nil { offset = CGFloat(focusedIndex) * bounds.width }
+        if !animating && swipe == nil { offset = CGFloat(creationPage == nil ? focusedIndex : spaces.count) * bounds.width }
         placeStrip()
     }
 
     private func layoutPages() {
         let w = bounds.width, h = bounds.height
+        creationPage?.frame = CGRect(x: CGFloat(spaces.count) * w, y: 0, width: w, height: h)
         // Drop pages of deleted Spaces.
         let live = Set(spaces.map(\.id))
         for (id, p) in pages where !live.contains(id) { p.removeFromSuperview(); pages[id] = nil }
@@ -81,13 +83,14 @@ final class SpacePagerView: NSView {
 
     private func placeStrip() {
         CATransaction.begin(); CATransaction.setDisableActions(true)
-        strip.frame = CGRect(x: -offset, y: 0, width: max(CGFloat(spaces.count), 1) * bounds.width, height: bounds.height)
+        strip.frame = CGRect(x: -offset, y: 0, width: max(CGFloat(spaces.count + (creationPage == nil ? 0 : 1)), 1) * bounds.width, height: bounds.height)
         CATransaction.commit()
     }
 
     /// Slides to the focused Space. Every page between the old and the new one is
     /// shown during the slide (Arc passes through them, A0227).
     func showFocused(animated: Bool) {
+        guard creationPage == nil else { layoutPages(); offset = CGFloat(spaces.count) * bounds.width; placeStrip(); return }
         let requestedAt = CACurrentMediaTime()
         guard let focused = context.focusedSpace, bounds.width > 0, swipe == nil else { return }
         let previous = shownSpaceID
@@ -142,13 +145,33 @@ final class SpacePagerView: NSView {
     private func finishSlide() {
         guard !animating, swipe == nil else { return }
         let focused = context.focusedSpace?.id
-        for (id, p) in pages { p.isHidden = id != focused }
+        for (id, p) in pages { p.isHidden = creationPage != nil || id != focused }
+    }
+
+    func beginCreation(page: NSView) {
+        guard creationPage == nil else { return }
+        swipe = nil; creationPage = page; strip.addSubview(page)
+        let from = strip.layer?.presentation()?.position.x ?? strip.frame.minX
+        layoutPages(); offset = CGFloat(spaces.count) * bounds.width; placeStrip()
+        if animatesSidebarChanges && !Motion.reducesMotion { slide(from: from, spring: Motion.spaceSwitch) }
+        else { animating = false; finishSlide() }
+    }
+
+    func endCreation() {
+        let from = strip.layer?.presentation()?.position.x ?? strip.frame.minX
+        creationPage?.removeFromSuperview(); creationPage = nil
+        strip.layer?.removeAnimation(forKey: "slide"); animating = false
+        shownSpaceID = nil
+        showFocused(animated: false)
+        if animatesSidebarChanges && !Motion.reducesMotion { slide(from: from, spring: Motion.spaceSwitch) }
+        if let space = context.focusedSpace { themeBackground?.crossfade(to: context.style(for: space), animated: animatesSidebarChanges) }
     }
 
     // MARK: Swipe
 
     /// Two-finger horizontal swipe. Returns true when the event belonged to a swipe.
     func handleScroll(_ event: NSEvent) -> Bool {
+        guard creationPage == nil else { return false }
         if event.momentumPhase != [] { return swipe != nil || animating }
         let w = bounds.width
         guard w > 0 else { return false }

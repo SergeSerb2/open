@@ -55,7 +55,7 @@ final class EditorButton: SiteControlButton {
     // Only fixed 26 x 26 cells at 1x/2x enter this 128-entry cache. On the M5,
     // the largest bitmap has a padded 224-byte row: 11,648 bytes / 1.43 MiB total.
     private static var fontImages: [FontImageKey: CGImage] = [:]
-    enum Kind { case header,name,color,font,row,half,primary,secondary }
+    enum Kind { case header,name,color,font,row,half,primary,secondary,codeBack,codeSegment,codeRun,codeNoticeDismiss }
     var kind = Kind.color
     var selected = false { didSet { if oldValue != selected { fadeSelection = true; needsDisplay = true } } }
     var caption = "" { didSet { if oldValue != caption { needsDisplay = true } } }
@@ -94,7 +94,7 @@ final class EditorButton: SiteControlButton {
     private func paint() {
         let m = BoostEditorColors.self
         var color = isEnabled ? m.label.nsColor : m.disabledGlyph.nsColor
-        let r: CGFloat = kind == .font ? 13 : kind == .primary ? 10 : 9
+        let r: CGFloat = kind == .codeSegment ? BoostEditorMetrics.codeSegmentRadius : kind == .font ? 13 : kind == .primary ? 10 : 9
         var fill: NSColor?
         switch kind {
         case .header: color = (controlID == "editor.undo" && isEnabled ? RGBA(hex: 0x6E6E70) : m.headerGlyph).nsColor
@@ -104,6 +104,9 @@ final class EditorButton: SiteControlButton {
             fill = selected || pressed ? m.fontSelected.nsColor : hovered ? NSColor(white: 236/255,alpha: 1) : nil
         case .primary: fill = m.makeABoost.top.nsColor; color = .white
         case .secondary: color = m.maybeLater.nsColor
+        case .codeBack,.codeRun: color = m.label.nsColor
+        case .codeNoticeDismiss: color = m.codeNoticeDismiss.nsColor
+        case .codeSegment: fill = (selected ? m.codeSegmentSelected : m.codeSegmentIdle).nsColor;color = m.label.nsColor
         default: fill = selected ? (controlID == "editor.color.advanced" ? m.advancedOn : m.buttonOn).nsColor : (pressed ? m.buttonPressed : m.button).nsColor; if selected { color = .white }
         }
         if let fill {
@@ -113,6 +116,17 @@ final class EditorButton: SiteControlButton {
                 let gradient = NSGradient(colorsAndLocations: (m.makeABoost.top.nsColor,0),(NSColor(srgbRed: 72/255,green: 72/255,blue: 1,alpha: 1),0.2),(m.makeABoost.bottom.nsColor,1))!
                 gradient.draw(in: bounds,angle: 90); NSGraphicsContext.restoreGraphicsState()
             }
+        }
+        if kind == .codeNoticeDismiss {
+            EditorRaster.glyph(BoostEditorMetrics.codeNoticeDismissGlyph,in: bounds,size: BoostEditorMetrics.codeNoticeDismissGlyphSize,color: color,weight: BoostEditorMetrics.codeNoticeDismissWeight);return
+        }
+        if kind == .codeBack {
+            EditorRaster.glyph("arrow.left",in: CGRect(x: BoostEditorMetrics.codeBackGlyphOffset,y: 0,width: BoostEditorMetrics.codeBackGlyphWidth,height: bounds.height),size: BoostEditorMetrics.codeControlFont,color: BoostEditorColors.codeBackGlyph.nsColor,weight: .semibold)
+            SiteControlDrawing.text(caption,x: BoostEditorMetrics.codeBackLabelX,baseline: BoostEditorMetrics.codeBackBaseline,width: bounds.width-BoostEditorMetrics.codeBackLabelX,font: .systemFont(ofSize: BoostEditorMetrics.codeControlFont,weight: .medium),color: color);return
+        }
+        if kind == .codeSegment || kind == .codeRun {
+            let font = NSFont.systemFont(ofSize: BoostEditorMetrics.codeControlFont,weight: .medium)
+            SiteControlDrawing.text(caption,x: 0,baseline: (bounds.height+font.capHeight)/2+1,width: bounds.width,font: font,color: color,alignment: .center);return
         }
         if kind == .font {
             let font = fontFamily.flatMap { NSFont(name: $0,size: Typography.editorFontCell.size) ?? NSFontManager.shared.font(withFamily: $0,traits: [],weight: 5,size: Typography.editorFontCell.size) } ?? Typography.editorFontCell.font
@@ -130,7 +144,7 @@ final class EditorButton: SiteControlButton {
             if controlID == "editor.tool.zap",let count = accessibilityValue() as? Int,count>0 { SiteControlDrawing.text(String(count),x: bounds.width-43,baseline: 24,width: 28,font: Typography.editorButton.font,color: color,alignment: .right) }
             else { EditorRaster.glyph(symbol,in: CGRect(x: bounds.width-36,y: 0,width: 21,height: bounds.height),size: 15,color: color) }; return
         }
-        if !symbol.isEmpty { EditorRaster.glyph(symbol,in: bounds,size: controlID == "editor.done" ? 16 : 17,color: color) }
+        if !symbol.isEmpty { EditorRaster.glyph(symbol,in: controlID == "editor.code.devtools" ? bounds.offsetBy(dx: 0,dy: BoostEditorMetrics.codeHammerOffsetY) : bounds,size: controlID == "editor.code.devtools" ? BoostEditorMetrics.codeHammerGlyph : controlID.hasPrefix("editor.code.") ? BoostEditorMetrics.codeButtonGlyph : controlID == "editor.done" ? 16 : 17,color: controlID == "editor.code.devtools" ? BoostEditorColors.codeToolsGlyph.nsColor : color) }
         else if kind == .primary {
             let line = CTLineCreateWithAttributedString(NSAttributedString(string: caption,attributes: [.font: Typography.firstRunPrimary.font,.foregroundColor: color,.kern: BoostEditorMetrics.makeLabelKern]))
             let c = NSGraphicsContext.current!.cgContext,w = CTLineGetTypographicBounds(line,nil,nil,nil)
@@ -143,6 +157,21 @@ final class EditorButton: SiteControlButton {
 @MainActor
 public final class BoostEditorView: NSView {
     public let session: BoostEditorSession
+    public private(set) var codeView: BoostCodeView?
+    public private(set) var isCodeMode = false
+    public var onCodeMode: ((Bool)->Void)?
+    public func setCodeMode(_ enabled: Bool) {
+        guard isCodeMode != enabled else { return }
+        closeAdvanced();session.endInteractive();session.endCodeEditing();isCodeMode = enabled
+        if enabled && codeView == nil {
+            let code = BoostCodeView(session: session);code.onBack = { [weak self] in self?.onCodeMode?(false) };code.onKey = { [weak self] in self?.onKey?($0) ?? false }
+            codeView = code;addSubview(code)
+        }
+        for child in subviews { child.isHidden = enabled ? child !== codeView : child === codeView }
+        if !enabled { firstRun.isHidden = !session.showsInterstitial }
+        setAccessibilityChildren(enabled ? codeView.map { [$0] } ?? [] : [])
+        lastInterstitial = nil;refresh();needsLayout = true
+    }
     public let pad: BoostColorPadView
     public private(set) var controls: [SiteControlButton] = []
     public var onResize: ((CGFloat,Bool)->Void)?,onClose: (() -> Void)?,onMenu: ((NSMenu)->Void)?,onKey: ((NSEvent)->Bool)?
@@ -181,27 +210,25 @@ public final class BoostEditorView: NSView {
         }
         button("editor.tool.size","Change text size","",.half) { [weak self] in guard let self else { return }; self.session.cycleTextSize(backwards: (self.control(id: "editor.tool.size") as? EditorButton)?.activationModifiers.contains(.shift) == true) }
         button("editor.tool.case","Change text case","",.half) { [weak self] in guard let self else { return }; self.session.cycleTextCase(backwards: (self.control(id: "editor.tool.case") as? EditorButton)?.activationModifiers.contains(.shift) == true) }
-        button("editor.tool.zap","Zap","bolt.fill",.row) { [weak session] in session?.toggleZap() }; button("editor.tool.code","Code","curlybraces",.row) {}
-        for id in ["code"] {
-            // Blocked on P7: isolated world; App and the engine own the hook.
-            let b = control(id: "editor.tool."+id)!; b.isEnabled = false; b.tooltipTitle = id == "zap" ? "Zap isn’t available yet." : "Code editing isn’t available yet."
-        }
+        button("editor.tool.zap","Zap","bolt.fill",.row) { [weak session] in session?.toggleZap() }; button("editor.tool.code","Code","curlybraces",.row) { [weak self] in self?.onCodeMode?(true) }
         for size in [true,false] { (control(id: "editor.tool."+(size ? "size" : "case")) as? EditorButton)?.secondaryClick = { [weak self] in self?.showTextMenu(size: size) } }
         addSubview(firstRun); firstRun.make.invoke = { [weak session] in session?.dismissInterstitial() }; firstRun.later.invoke = { [weak self] in self?.onClose?() }
         session.onChange = { [weak self] in self?.refresh() }; pad.onKey = { [weak self] in self?.onKey?($0) ?? false }; refresh()
     }
     @available(*, unavailable) required init?(coder: NSCoder) { fatalError() }
     public var focusOrder: [NSView] {
+        if isCodeMode { return codeView?.focusOrder ?? [] }
         if session.showsInterstitial { return [firstRun.make,firstRun.later] }
         let ids = ["editor.done","editor.name","editor.undo"]
         return ids.compactMap { control(id: $0) }.filter(\.isEnabled)+(pad.acceptsFirstResponder ? [pad] : [])+["invert","advanced","reset"].compactMap { control(id: "editor.color."+$0) }.filter(\.isEnabled)+fontButtons.filter(\.isEnabled)+["size","case","zap","code"].compactMap { control(id: "editor.tool."+$0) }.filter(\.isEnabled)
     }
-    public func control(id: String) -> SiteControlButton? { (controls+fontButtons+[firstRun.make,firstRun.later]).first { $0.controlID == id } }
+    public func control(id: String) -> SiteControlButton? { codeView?.control(id) ?? (controls+fontButtons+[firstRun.make,firstRun.later]).first { $0.controlID == id } }
     private func button(_ id: String,_ label: String,_ symbol: String,_ kind: EditorButton.Kind,_ invoke: @escaping ()->Void) {
         let b = EditorButton(id: id,label: label,symbol: symbol,pointSize: 17); b.kind = kind; b.caption = label; b.invoke = invoke; b.tooltipTitle = label
         b.onKey = { [weak self] in self?.onKey?($0) ?? false }; controls.append(b); addSubview(b)
     }
     public func refresh(animated: Bool = false) {
+        if isCodeMode { codeView?.refresh();return }
         pad.refresh(); advancedPopover?.refresh()
         let wheel = session.displayWheel
         for id in ["invert","advanced","reset"] {
@@ -245,7 +272,7 @@ public final class BoostEditorView: NSView {
         if frame.height != height { onResize?(height,animated) }
     }
     public override func layout() {
-        super.layout();let m = BoostEditorMetrics.self,shift = bannerSizes.reduce(0,+)
+        super.layout();if isCodeMode { codeView?.frame = bounds;codeView?.needsLayout = true;return };let m = BoostEditorMetrics.self,shift = bannerSizes.reduce(0,+)
         control(id: "editor.done")?.frame = m.done; control(id: "editor.name")?.frame = m.name; control(id: "editor.undo")?.frame = m.undo
         var bannerY: CGFloat = 40
         for (label,height) in zip(bannerLabels,bannerSizes) { label.frame = CGRect(x: 14,y: bannerY+7,width: 155,height: height-14);bannerY += height }
@@ -257,6 +284,7 @@ public final class BoostEditorView: NSView {
         firstRun.frame = bounds; firstRun.needsLayout = true
     }
     private func paint() {
+        if isCodeMode { NSColor.white.setFill();bounds.fill();return }
         BoostEditorColors.background.nsColor.setFill();bounds.fill();BoostEditorColors.header.nsColor.setFill();CGRect(x: 0,y: 0,width: bounds.width,height: 40).fill()
         BoostEditorColors.hairline.nsColor.setFill();CGRect(x: 0,y: 39,width: bounds.width,height: 1).fill()
         var y: CGFloat = 40

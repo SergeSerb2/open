@@ -10,6 +10,7 @@ struct CLIError: Error, CustomStringConvertible { var description: String }
 @MainActor
 enum RenderCLI {
     static let usage = """
+    space-editor-render create --out FILE.png [--width 180|200|228|300|500] [--appearance dark|light]
     space-editor-render math [--arc-json FILE]
     space-editor-render editor --out FILE.png [--scale 1|2] [--appearance dark|light]
                                [--style JSON] [--page N] [--hover CONTROL] [--backdrop RRGGBB] [--empty]
@@ -116,6 +117,8 @@ enum RenderCLI {
         case "compat-range-check": EditorChecks.compatibilityRange()
         case "window": try window(rest)
         case "editor": try EditorScene.render(rest)
+        case "create": try CreationChecks.render(rest)
+        case "creation-check": try CreationChecks.run(); if Checks.failed > 0 { throw CLIError(description: "creation checks failed") }
         case "picker": try PickerScene.render(rest)
         case "picker-check":
             try PickerScene.check()
