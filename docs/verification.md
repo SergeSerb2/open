@@ -146,9 +146,11 @@ and `suggest`. Leave this variable unset for positive and full runs.
 ```sh
 export OPEN_ENGINE_ROOT=$HOME/Developer/open-engine-s8-main # M5 only
 ~/Library/Caches/OpenRE/scripts/heavy.sh tools/verify-all.sh
-/usr/bin/lockf -k /tmp/open-m5-quiet.lock \
-  ~/Library/Caches/OpenRE/scripts/heavy.sh env OPEN_VERIFY_BREAK=all \
-  tools/verify-all.sh --only space-legacy,space-editor,suggest-check,sidebar-compare
+~/Library/Caches/OpenRE/scripts/heavy.sh env OPEN_VERIFY_BREAK=all \
+  tools/verify-all.sh --only space-legacy,space-editor,sidebar-compare
+~/Library/Caches/OpenRE/scripts/heavy.sh \
+  /usr/bin/lockf -k /tmp/open-m5-quiet.lock env OPEN_VERIFY_BREAK=suggest \
+  tools/verify-all.sh --only suggest-check
 ```
 
 Run M1 jobs through `m1.sh` in a detached checkout of the pushed branch, per
@@ -156,6 +158,103 @@ TANDEM §4M. Never commit or edit source there. The normal runner retains the
 on-screen lock and owned-window cleanup for the native editor suite. Private
 capture inputs and comparison images remain in ignored `.re/` or private
 receipt directories; the committed references use synthetic fixtures only.
+The lead's 2026-11-07 lock ruling places the heavy slot outside the quiet lock.
+Visual negative proofs take no quiet lock; only the timer proof does.
+
+#### Recorded controls (2026-11-07)
+
+The trusted-main control used `df4767ad235106863983b45b2a1ffd87c7bd1b46`.
+On the M5 AW2726DM, all four focused gates passed. Its timer measured 395 ms
+at load 13.8/25.6/24.3. All 13 sidebar tables were byte-identical between the
+paired processes. On the M1, unchanged main failed the original three visual
+gates: legacy Space 0, all three editor P1 PNGs, and the three color caps
+listed above. Its timer happened to pass at 390 ms, load 54.7/34.3/16.5.
+The historical timer miss is load dependent; this control does not reproduce it.
+
+The strictness receipt compares all six original PNG files with that trusted
+commit: every byte is unchanged. All 13 original color caps also match exactly.
+The M5 timer decision still compares the raw elapsed time with 600 ms.
+These checks are recorded in `m5-strictness-proof.json` under
+`.re/s16/gate-portability/` in the main checkout.
+
+Unknown-key proof used disposable copies of the real command scripts and
+metadata. Removing only the current display entry while keeping the other
+committed key made both legacy and sidebar `--probe` exit 1 on each machine,
+with the actual key and `no fallback` in the error. Missing private captures
+cannot turn that unknown-display failure into SKIP.
+The real renderer also rejected the other committed key on each machine.
+The M5 requested render scale 2 with the M1 key; its actual host reported the
+1x AW2726DM key and exited 1 before creating a PNG. The M1 rejected the
+opposite request in the same way. Both errors included `no fallback`.
+
+The first M1 focused positive run passed all four gates. Timer #31 measured
+398.894 ms raw, 376.058 ms calibrated, reference median 403.075 ms, at load
+22.4/29.1/22.2. All 13 paired sidebar tables were byte-identical, with zero
+color drift. Both PNG checks required exact bytes.
+
+M1 negative proof changed one rendered pixel by 1/255: legacy Space 0 and all
+three editor P1 PNG rows failed. The real 300 ms timeout break failed all three
+attempts: raw 712.104/724.916/715.039 ms, calibrated
+693.081/705.551/695.938 ms, reference 390.430 ms, load 18.9/23.6/21.9.
+The first color probe used 2/255 and did not fail selected-pinned. The final
+6/255 probe failed all 13 states on all three paired attempts. The required
+static-inactive/selected-pinned/yellow drifts were 0.18/0.83/1.40 ΔE00,
+each above the unchanged 0.15 limit. References stayed unchanged.
+
+The first full runs used `33b60a4a` and each had 22 PASS / 2 FAIL. A branch
+regression moved ordered motion hosts onto the screen: sidebar RI and two MC15
+rows failed on both machines. `50bb3808` restores those hosts to their original
+offscreen position; only never-ordered snapshot hosts use a screen-associated
+frame. The M5 also missed command-bar CPU p95 (10.26 ms against 8 ms, load
+12.0/13.9/17.9). The M1 also missed unrelated suggestion row #56 (extension actions
+p95 0.3120 ms against 0.2 ms, load 8.31/12.78/17.29). Its quiet rerun passed
+all 56 suggestion checks: row #56 p95 0.1608 ms, load 14.11/10.49/12.39.
+These original misses remain in the receipts.
+
+The next M1 run confirmed RI/MC15 passed, but two folder-hover checks failed
+(622 sidebar checks passed). They use ordinary snapshot hosts, which also need
+the original offscreen frame. `5c443a56` limits screen association to explicitly
+keyed verification renders. Ordinary snapshots and motion hosts keep the
+original placement. The reference and color-comparison paths remain keyed.
+
+#### Final M1 full gate
+
+The detached M1 run on `5c443a56` passed **24/24**, with zero FAIL and zero
+SKIP. Start load was 5.85/8.44/9.50; end load was 4.96/5.57/7.02. Timer #31
+measured 384.295 ms raw, 365.684 ms calibrated, reference median 399.340 ms,
+load 7.6/7.4/8.7. Sidebar passed 624/624. Its 13 paired color tables were
+byte-identical, with zero drift. The preceding `50bb3808` full run ended
+23 PASS / 1 FAIL (the two folder-hover rows); its receipt is retained.
+
+The receipts were copied back before the owned detached M1 worktree was
+removed. No owned M1 job remains. `CLAUDE.md` remains a symlink to `AGENTS.md`.
+
+| Check | M1 result | Seconds |
+|---|---|---:|
+| `build` | PASS | 39 |
+| `commands-demo` | PASS | 1 |
+| `roundtrip` | PASS | 0 |
+| `space-legacy` | PASS | 2 |
+| `space-editor` | PASS | 160 |
+| `space-pad-compare` | PASS | 3 |
+| `suggest-check` | PASS | 35 |
+| `commands-dump` | PASS | 0 |
+| `route` | PASS | 2 |
+| `favicons` | PASS | 0 |
+| `media-demo` | PASS | 0 |
+| `sleep-demo` | PASS | 1 |
+| `adblock-perf` | PASS | 1 |
+| `adblock-catalog` | PASS | 0 |
+| `profiles` | PASS | 0 |
+| `settings-preview` | PASS | 94 |
+| `sidebar-render` | PASS | 115 |
+| `sidebar-compare` | PASS | 20 |
+| `commandbar-render` | PASS | 41 |
+| `features-render` | PASS | 94 |
+| `extensions-render` | PASS | 7 |
+| `sitecontrol-render` | PASS | 76 |
+| `boosts` | PASS | 4 |
+| `verify-secrets-fixture` | PASS | 4 |
 
 ## Section 1 completion (2026-10-28)
 
