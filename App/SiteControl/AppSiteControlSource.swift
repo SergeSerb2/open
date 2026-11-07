@@ -141,7 +141,9 @@ final class AppSiteControlSource: SiteControlDataSource, SiteControlActions {
         }
       }
     }
-    let boosts = context.isWebsite && !context.isIncognito ? boostProvider?.matchingBoosts(url: url, profileID: profileID) ?? [] : []
+    // Matching is read-only. Private windows keep disabled matching rows;
+    // the view and the action guards refuse creation, editing and toggles.
+    let boosts = context.isWebsite ? boostProvider?.matchingBoosts(url: url, profileID: profileID) ?? [] : []
     return SiteControlSnapshot(context: context, tiles: tiles, boosts: boosts,
       boostsGloballyEnabled: boostProvider?.boostsGloballyEnabled ?? true,
       capabilities: factory.extensions.host == nil ? [] : [.extensionPinning],
