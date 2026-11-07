@@ -15,7 +15,6 @@ struct PageContextMenuHooks {
 
   init(manageExtensions: @escaping @MainActor () -> Void) {
     extensionItems = { request in
-      guard !request.targets.contains(.editable) else { return [] }
       return [Item(title: "Manage Extensions", action: manageExtensions)]
     }
   }
