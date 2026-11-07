@@ -199,7 +199,13 @@ def run(factory, results, tmp, h):
                         if kind == 'prompt': js += ',' + json.dumps(default)
                         js += ')'
                         if kind == 'alert': js = '(' + js + ',"done")'
-                        schedule(js); state = visible(ds)
+                        app.call('events'); schedule(js)
+                        state = wait(lambda: (lambda s: s if s.get('visible') else None)(ds()), timeout=5, step=.02)
+                        if not state:
+                            refusals = [e for e in app.call('events') if e['type'] == 'pageChromeRefused']
+                            checks.append(dict(kind=kind, boundary=boundary, sourceBytes=len(source.encode()),
+                                               ok=False, visible=False, refusals=refusals))
+                            continue
                         shown = state['informativeText'] if name == 'message' else state['text']
                         # Press the real OK button without replacing the default field.
                         answer()
