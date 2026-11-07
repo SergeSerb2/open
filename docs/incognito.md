@@ -22,11 +22,14 @@ Native M5 runs use main's engine distribution `af4b3cc3ad1b42439b229d79c8f7a869b
 | Native 1x light/dark | PASS; real window captures under light/dark app appearances, with empty sidebar pixels within 2 RGB levels of #26232B. The system appearance setting is untouched. |
 | Source fault: normal model | PASS: `no_snapshot_history_change FAIL`, exit 1, cleanup PASS; [receipt](engine-spike/incognito/negative-model.json) |
 | Source fault: disk context | PASS: `cookie_normal_absent_private FAIL`, exit 1, cleanup PASS; [receipt](engine-spike/incognito/negative-disk.json) |
-| Required regressions / full verify | Pending |
+| Required regressions | PASS: sidebar 19, features 19, window 76, Little Open 39, Profiles 14, context-menus 34, commandbar 77; zero failed/interrupted, cleanup PASS. [Receipt](engine-spike/incognito/regressions.json) |
+| Full verify | Pending |
 
 The suite resets each preference key it uses and restores the persistent values in `finally`. HTTP fixtures, data/cache directories, and ports belong to the run. Keys use `route=app`; Option-Command-click uses engine input dispatch. The quit row checks an actual process exit before harness cleanup.
 
-The initial regression batch used Alloy. Its Profiles extension popup and six native context-menu rows failed; those flows require Chrome and are rerun with `--style chrome`. Both attempts had zero interruptions and clean shutdown. The initial Profiles failure also exposed an existing exit-aggregation omission: `profiles` now participates in the harness failure list. The failed attempt summary is [retained](engine-spike/incognito/regression-initial-attempts.json).
+The initial regression batch used Alloy. Its Profiles extension popup and six native context-menu rows failed; those flows require Chrome and were rerun with `--style chrome`. Both attempts had zero interruptions and clean shutdown. The initial Profiles failure also exposed an existing exit-aggregation omission: `profiles` now participates in the harness failure list. The failed attempt summary is [retained](engine-spike/incognito/regression-initial-attempts.json).
+
+The first Chrome Profiles attempt also caught a popup closing during a queued tab/focus change. The harness now waits for window focus and uses the existing tabstrip suite's bounded reopen policy for a closed popup, with unchanged isolation assertions. The complete Chrome rerun passes all 14 gates, including extension isolation, durable cookies and every migration case.
 
 ## Break-and-revert procedure
 
@@ -42,7 +45,7 @@ Each mode ran separately under `/usr/bin/lockf -k /tmp/open-onscreen-e2e.lock py
 
 ```sh
 export OPEN_ENGINE_ROOT=$HOME/Developer/open-engine-s8-main
-OPEN_INCOGNITO_CAPTURE_SCALE=2 /usr/bin/lockf -k /tmp/open-onscreen-e2e.lock python3 tools/e2e/engine_e2e.py --config Debug --only incognito
+OPEN_INCOGNITO_CAPTURE_SCALE=2 /usr/bin/lockf -k /tmp/open-onscreen-e2e.lock python3 tools/e2e/engine_e2e.py --config Debug --style chrome --only incognito
 ```
 
 The command writes `docs/engine-spike/incognito/private-light-2x.png` and `private-dark-2x.png`. It requires a physical 2x screen; it never upscales a 1x image.
