@@ -43,6 +43,9 @@ extension AutomationController {
     guard let controller = factory.controller else { throw Failure(message: "no browser window") }
     let action = args["action"] as? String ?? "state"
     switch action {
+    case "customize":
+      guard let tab = factory.selectedTab else { throw Failure(message: "no selected tab") }
+      return factory.performSidebar(.customizePage(tabID: tab.id)) == true
     case "open":
       guard args["mode"] == nil || ["simple", "code"].contains(args["mode"] as? String ?? "") else { throw Failure(message: "unknown editor mode") }
       if let raw = args["tab"] as? String, UUID(uuidString: raw) == nil { throw Failure(message: "invalid tab ID") }

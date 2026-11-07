@@ -123,7 +123,7 @@ final class AppBoosts: BoostsProvider {
     app.hostFactories.values.first { $0.hosts[id] != nil }
   }
   func canEdit(tabID: ItemID) -> Bool {
-    guard let factory = factory(for: tabID), factory.controller != nil, let host = factory.hosts[tabID], !host.closed,
+    guard let factory = factory(for: tabID), !factory.isIncognito, factory.controller != nil, let host = factory.hosts[tabID], !host.closed,
           !host.content.context.isEphemeral, let url = host.content.url,
           ["http", "https"].contains(url.scheme?.lowercased() ?? ""), url.host != nil else { return false }
     return true

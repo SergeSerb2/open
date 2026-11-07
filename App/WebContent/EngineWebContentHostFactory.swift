@@ -687,7 +687,7 @@ final class EngineWebContentHostFactory: NSResponder, WebContentHostFactory {
     }
     switch intent {
     case .customizePage(let id):
-      guard app.stores.boosts.canEdit(tabID: id) else { return false }
+      guard !isIncognito, app.stores.boosts.canEdit(tabID: id) else { return false }
       app.stores.boosts.editCurrent(tabID: id); return true
     case .dismissAutoArchiveBanner: app.dismissAutoArchiveEducation(); return true
     case .openProfileSettings(let id):

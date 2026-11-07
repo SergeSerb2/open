@@ -1048,7 +1048,7 @@ Frame preferences are restored after quit through the shared defaults fallback.
 |---|---|---|
 | `boosts` | `action: list\|get`, optional `profile` UUID, `boost` UUID for get | Values from the App's loaded Profile store. No mutation API. |
 | `boost-library` | `action: rename\|enabled\|delete`, `boost` UUID, `name` or `enabled` | Requires a visible Boosts Library row; calls its real LibraryActions boundary after confirmation. It does not prove native button or confirmation input. |
-| `boost-editor` | `action: open\|close\|state\|drag\|key\|tap\|type`, optional `boost`, `tab` for open | Real simple/Code editor and session (`mode: simple|code`). Private or non-http(s) tabs refuse open. |
+| `boost-editor` | `action: open\|close\|state\|drag\|key\|tap\|type\|customize`, optional `boost`, `tab` for open | Real simple/Code editor and session (`mode: simple|code`). Private or non-http(s) tabs refuse open. `customize` invokes the selected tab’s real Customize Page sidebar action and returns its success. `incognito-state` exposes read-only `boostScriptIDs` for private script-isolation checks. |
 
 `drag` takes 2–512 finite `[x,y]` points within the color pad, in editor-view
 coordinates. It sends mouse down, drag through the final point, then mouse up.

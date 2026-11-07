@@ -124,7 +124,7 @@ extension EngineWebContentHostFactory {
     if ["new-boost", "edit-boost", "new-legacy-boost"].contains(id) {
       // Menu validation runs during first-window composition. No page is
       // editable yet, and it must not initialize Boost services on that path.
-      guard app.engineReady else { return false }
+      guard app.engineReady, !isIncognito else { return false }
       return selectedTab.map { app.stores.boosts.canEdit(tabID: $0.id) } ?? false
     }
     if id == "boost-gallery" { return false }

@@ -110,9 +110,11 @@ start when it wakes or reloads. A close racing an engine reply is also ignored.
 
 Global off removes scripts and clears live pages. Global on rebuilds scripts and
 refreshes pages. Editor commands refuse ephemeral and non-http(s) pages.
-The planner supports incognito, but the private-window presenter integration is
-deferred (lead, 2026-11-06 16:12). Private windows use local Profile identities,
-which never load a persistent Boost store or receive a plan from this adapter.
+Private windows never register or prepare Boost scripts, load a Boost store, or
+receive a live plan. This also applies to OTR contexts that share a regular
+Profile parent. Editor commands and Customize Page refuse private windows
+(lead, 2026-11-07 15:32). The real Incognito suite checks a matching regular
+and private page from the same parent Profile.
 
 The simple editor is bound to one tab and one window. Tab, Space, Profile and
 window changes close it; navigation outside scope keeps it open with the native

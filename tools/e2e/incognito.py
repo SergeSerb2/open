@@ -88,6 +88,10 @@ def checks(factory, results, tmp, harness):
         for k in keys: app.call('defaults', key=k, value=None)
         for k, v in zip(keys, [True, True, False, False, False, False]): app.call('defaults', key=k, value=v)
         normal = windows(False)[0]; normal_tab = app.call('tabs')[0]['id']; app.call('wait', tab=normal_tab)
+        if os.environ.get('OPEN_BOOST_PRIVATE_ONLY') == '1':
+            from incognito_boosts import check_boosts_private
+            check_boosts_private(app, normal, base, wait, results, harness)
+            return
         profile = app.call('history-state')['profile']
         app.eval(normal_tab, "document.cookie='normalOnly=1; path=/'; true")
         # Drain normal launch metadata and durable writes before the private session.
@@ -280,7 +284,8 @@ def checks(factory, results, tmp, harness):
               before=before_allow, grant=grant, work_script=bool(ran), default_script=default_script)
         focus(work_private); app.call('window-close')
         focus(default_private); app.call('window-close')
-        results['boosts_disabled'] = dict(status='DEFERRED', reason='Lead ruling 16:12: Section 12 consumes factory.isIncognito when its App presenter lands.')
+        from incognito_boosts import check_boosts_private
+        check_boosts_private(app, normal, base, wait, results, harness)
     finally:
         if saved: harness._restore_defaults(app, saved)
         if app: app.quit()
