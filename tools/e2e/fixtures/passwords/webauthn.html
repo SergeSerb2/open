@@ -1,0 +1,34 @@
+<!doctype html>
+<meta charset="utf-8"><title>Open WebAuthn fixture</title>
+<h1>WebAuthn fixture</h1>
+<button id="create">Create passkey</button>
+<button id="get">Get passkey</button>
+<output id="result">idle</output>
+<script>
+let pending, credentialId;
+async function credential(operation) {
+  pending?.abort();
+  const controller = new AbortController();
+  pending = controller;
+  const timer = setTimeout(() => controller.abort(), 5000);
+  document.querySelector('#result').textContent = 'pending';
+  const challenge = new Uint8Array(32).fill(7);
+  const publicKey = operation === 'create' ? {
+    challenge, rp: {name: 'Open fixture'},
+    user: {id: new Uint8Array([1]), name: 'fixture-user', displayName: 'Fixture User'},
+    pubKeyCredParams: [{type: 'public-key', alg: -7}],
+    authenticatorSelection: {authenticatorAttachment: 'cross-platform'},
+    timeout: 4000, attestation: 'none'
+  } : {challenge, timeout: 4000, userVerification: 'discouraged',
+    ...(credentialId ? {allowCredentials: [{type: 'public-key', id: credentialId}]} : {})};
+  try {
+    const result = await navigator.credentials[operation]({publicKey, signal: controller.signal});
+    if (operation === 'create' && result) credentialId = result.rawId;
+    document.querySelector('#result').textContent = result ? 'resolved' : 'null';
+  } catch (error) {
+    document.querySelector('#result').textContent = error.name;
+  } finally { clearTimeout(timer); }
+}
+document.querySelector('#create').onclick = () => credential('create');
+document.querySelector('#get').onclick = () => credential('get');
+</script>
