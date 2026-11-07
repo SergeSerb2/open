@@ -167,7 +167,8 @@ the existing deterministic UUID algorithm with namespace `boost`. Creation time
 comes from the Document timestamp, with modification time as fallback. A missing
 modification time falls back to the Document update time, then the Unix epoch.
 Bare hosts and leading `*.` hosts are accepted. Broader/path patterns are skipped
-rather than silently widened. Open's existing site match includes subdomains.
+rather than silently widened. Open's existing site match includes subdomains;
+equivalence to Arc's bare-host matching remains unverified without a live sample.
 
 Local enablement is the intersection of `locallyEnabledBoostIDs` and remote
 `isActive`. If the local file is absent or unreadable, imported Boosts are

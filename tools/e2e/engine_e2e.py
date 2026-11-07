@@ -11769,6 +11769,7 @@ def main():
                                        "commandbar", "app-actions", "actions", "extensions-p3", "extensions-ui", "extensions-e2", "profiles", "sidebar-completion", "toolbar", "numbering", "media", "relaunch", "page", "page-chrome",
                                        "sleep", "context-menus", "routing", "littleopen", "history", "applescript", "downloads", "space-editor", "incognito"])
     ap.add_argument("--window-chrome-only", action="store_true", help="run only the window-chrome follow-up flows in the window suite")
+    ap.add_argument("--firstrun-boosts-only", action="store_true", help="run only the Boost import seam and CLI lock flows in firstrun")
     ap.add_argument("--window-material-only", action="store_true", help="run only the window material real-App flows in the window suite")
     ap.add_argument("--profiles-shell-only", action="store_true", help="run only the Section 10 real-App Profiles shell flows")
     ap.add_argument("--keep", action="store_true",
@@ -11776,6 +11777,8 @@ def main():
     ap.add_argument("--focus-retry-delay-seconds", type=int, default=0,
                     help="wait between interrupted foreground attempts (0–600 seconds)")
     opts = ap.parse_args()
+    if opts.firstrun_boosts_only and opts.only != "firstrun":
+        ap.error("--firstrun-boosts-only requires --only firstrun")
     # Startup itself may migrate legacy Peek choices before the socket answers.
     # Preserve the pre-launch stored values, including absence, across every app
     # and every retry (the Peek suite also launches a second Find/Escape app).
@@ -11967,8 +11970,9 @@ def main():
             results["firstrun"] = CheckedResults(tracker)
             # The executable's -I shebang omits the script directory from
             # sys.path. Load this owned sibling by its exact repository path.
-            runpy.run_path(os.path.join(ROOT, "tools", "e2e", "firstrun.py"))["run"](
-                factory, results["firstrun"], tmp, sys.modules[__name__])
+            if not opts.firstrun_boosts_only:
+                runpy.run_path(os.path.join(ROOT, "tools", "e2e", "firstrun.py"))["run"](
+                    factory, results["firstrun"], tmp, sys.modules[__name__])
             runpy.run_path(os.path.join(ROOT, "tools", "e2e", "firstrun_boosts.py"))["run"](
                 factory, results["firstrun"], tmp, sys.modules[__name__])
         elif opts.only == "extensions-ui":
