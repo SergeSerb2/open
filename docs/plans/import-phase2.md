@@ -952,14 +952,20 @@ Never print a full path. Print counts only. See section 5 for the ID flag rule.
 
 ### 4.3 Reinstall plan
 
-**Implementation errata (Section 14 C3, 2026-11-06):** Branch implementation;
-acceptance is blocked on an engine completion hook for local CRX failures.
-The real-App block passes 14/15 rows, but a damaged signature logs a Chromium
-error without a manager failure event. The bounded automation timeout is not
-accepted as error propagation. Final nested-Profile, negative-proof, and full
-regression checks remain pending.
+**Implementation errata (Section 14 C3b, 2026-11-06):** The App queue has
+no install deadline. An unanswered Chromium consent sheet remains pending.
+`EI_failure_reported_app` gates offline App failure handling: a missing fixture
+is refused before `installLocalCRX`, the row retains the error, the summary
+counts it, and the next candidate installs. `EI_failure_reported_engine` is
+**BLOCKED**, because `installLocalCRX` has no failure completion for a damaged
+signature; the lead filed the engine need. The damaged-signature fixture stays
+in the harness for that future hook. No engine change is part of this work.
+A production Web Store request for a well-formed nonexistent ID is an INFO
+receipt, bounded to two minutes by the harness. That bound never marks a row
+failed or advances the App queue. C1's nested ProfileRef fixture and final full
+verification depend on C1 reaching `origin/main`.
 
- The App now detects
+The App now detects
 extensions during import for each `sourceProfileDirectories` entry. It retains
 only in-memory metadata, grouped by the imported Open Profile ID, and records
 total, internal, candidate, and missing-manifest counts in `ImportReport`.

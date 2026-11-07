@@ -16,6 +16,7 @@ final class AppImportRunner {
   var installingExtension = false
   #if OPEN_AUTOMATION
   var extensionFixtures: [String: URL] = [:]
+  var extensionWebStoreCompletion: (installed: Bool, error: String?)?
   #endif
   private(set) var historyInProgress = false
   private(set) var historyProcessed = 0

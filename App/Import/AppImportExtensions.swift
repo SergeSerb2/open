@@ -61,6 +61,11 @@ extension AppImportRunner {
     defer { extensionAttempt = nil }
     #if OPEN_AUTOMATION
     if let file = extensionFixtures[candidate.extensionID] {
+      // An initiation failure belongs to the App. Once Chromium starts an
+      // install, only its answer/event may complete it; consent has no deadline.
+      guard FileManager.default.isReadableFile(atPath: file.path) else {
+        return .failed("The local fixture file is missing or unreadable.")
+      }
       // A fresh, hidden page in precisely the target context lets Chromium's
       // existing automation-only local installer run its real consent flow.
       let content = OEWebContent(configuration: OEWebContentConfiguration(context: context), url: URL(string: "about:blank"))
@@ -75,22 +80,22 @@ extension AppImportRunner {
       }
       guard content.isLive else { return .failed("The fixture page did not become ready.") }
       attempt.localFile = file
-      let timeout = Task { @MainActor in
-        do { try await Task.sleep(for: .seconds(45)) } catch { return }
-        attempt.completeLocal(.failed("The local fixture install timed out."))
-        app.extensionPrompts.cancel(window: window)
-      }
-      defer { timeout.cancel() }
       return await withCheckedContinuation { continuation in
         attempt.localCompletion = { continuation.resume(returning: $0) }
         if !manager.installLocalCRX(file, webContent: content) { attempt.completeLocal(.failed("The local fixture could not be installed.")) }
       }
     }
     #endif
+    #if OPEN_AUTOMATION
+    extensionWebStoreCompletion = nil
+    #endif
     return await withCheckedContinuation { continuation in
       manager.install(fromWebStore: candidate.extensionID, window: window) { installed, error in
         Task { @MainActor in
           await Task.yield()
+          #if OPEN_AUTOMATION
+          self.extensionWebStoreCompletion = (installed, error)
+          #endif
           manager.reload()
           if installed, manager.extension(identifier: candidate.extensionID) != nil { continuation.resume(returning: .installed) }
           else if attempt.cancelled { continuation.resume(returning: .skipped("cancelled")) }

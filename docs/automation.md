@@ -148,6 +148,13 @@ with synthetic data. `OPEN_E2E_IMPORT_EXT_ONLY=1` runs this block alone inside
 `firstrun`. `OPEN_E2E_IMPORT_EXT_NEGATIVE=detection` and `queue` deliberately
 change fixture ownership/classification and real actions, so the matching EI
 gates must FAIL; clear both variables for normal acceptance.
+The fixture mapping may name a missing file to verify App initiation failure.
+Once a local install starts, no App timeout completes it or cancels its sheet.
+`EI_failure_reported_engine` stays BLOCKED until the engine supplies completion
+for damaged signatures. `OPEN_E2E_IMPORT_EXT_NETWORK=1` adds one INFO Web Store
+receipt (no fixture mapping), observed for at most two minutes; no answer leaves
+the queue pending. `OPEN_E2E_IMPORT_EXT_NEGATIVE=detection` and `queue` apply
+real source/action faults to qualify the EI gates; normal runs restore them.
 
 Run the synthetic first-run flow with:
 

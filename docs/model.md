@@ -349,9 +349,13 @@ not require installing. Undo Import leaves these separate user installs in
 place. The automation-only fixture mapping uses signed local CRX3s and the
 same consent sheet; production never installs from an Arc cache or payload.
 
-C3 acceptance is pending: the offline local CRX API returns only initiation,
-and a damaged-signature rejection has not reached the failure delegate. A
-completion hook from the engine owner is required before that gate can pass.
+The queue has no install timeout; a consent sheet can remain open indefinitely.
+The offline App failure gate refuses a missing fixture before calling the
+engine, reports the error, counts the failure, and continues. The separate
+engine failure row is BLOCKED: local CRX initiation has no completion for a
+damaged-signature rejection. The lead filed that engine need. A real production
+Web Store failure receipt is INFO, with a two-minute harness observation bound
+that never changes queue results.
 
 The CLI prints counts only. An explicit manifest request writes only candidate
 IDs, atomically with mode 600. It omits the destination path from its success

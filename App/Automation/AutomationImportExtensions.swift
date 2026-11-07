@@ -60,6 +60,9 @@ extension AutomationController {
     return ["visible": reportVisible && !model.rows.isEmpty,
       "showsProfiles": model.showsProfiles, "canInstall": model.canInstall,
       "installing": model.isInstalling, "summary": model.summary ?? "",
+      "webStoreCompletion": app.importRunner.extensionWebStoreCompletion.map {
+        ["installed": $0.installed, "error": $0.error ?? ""] as [String: Any]
+      } ?? [:],
       // Names stay on screen only. This command does not log manifest names.
       "rows": model.rows.map { row in ["row": row.id, "extension": row.candidate.extensionID,
         "profile": row.candidate.profileID.description, "selected": row.selected,
