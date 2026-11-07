@@ -297,3 +297,17 @@ User-operated Arc captures are still needed for the editor layout and destinatio
   imports selections only for newly added Spaces; it does not recreate Arc
   window layout. User-operated Arc evidence is needed for exact inactive-Profile
   session behavior. See [multi-profile import](import-multiprofile.md).
+
+- C1 acceptance (2026-11-06): rerun the latest `firstrun`/`MP_*` positives,
+  all 11 negative proofs, forced dialog cleanup, counts-only real-App audit,
+  and real-App `routing`/`sidebar` after the unowned `UserNotificationCenter`
+  foreground blocker is gone. Earlier 62/62 first-run and 10-row proofs apply
+  to the initial implementation. The later session/source-directory/default
+  isolation changes have Debug/Release and CLI proof, but no accepted latest
+  App run. The full verifier has 22 PASS, command-bar timing misses, and Site
+  Control timing plus F25 foreground interruptions. No threshold changed.
+
+- Earlier Settings imports can have merged Arc Default into an arbitrary live
+  Default ID. C1 now matches stable import IDs only, but adds no provenance
+  migration. Decide a migration separately; do not infer ownership from a
+  display name or silently move existing sidebar IDs between Profiles.
