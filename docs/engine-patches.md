@@ -523,6 +523,41 @@ remove a replacement offer. The window also provides the hosted page's
 parent NSView, size, and resize notifications for web-modal dialogs. Its
 top-center placement follows Chrome and remains a guess for Arc.
 
+Navigation does not withdraw an Open save prompt. Chromium 156 keeps the
+password state while the bubble is open (`chrome/browser/ui/passwords/
+manage_passwords_ui_controller.cc:1368-1383`); the adapter constructor calls
+`OnBubbleShown()` (`bubble_controllers/password_bubble_controller_base.cc:13-24`
+under that directory). If Chromium resets that state instead, `DestroyPopups()`
+calls `HideBubble()` (`manage_passwords_ui_controller.cc:1446-1451,1542-1546`),
+which reaches the 0801 hide hook in `chrome/browser/ui/views/
+tab_dialogs_views.cc:77-79`, then `OpenPasswordPromptRouter::Hide` and the prompt
+registry. A replacement offer and WebContents destruction also withdraw it.
+
+Card and address controllers have no navigation reset in this version. Both
+inherit `chrome/browser/ui/autofill/autofill_bubble_controller_base.h:36-61`,
+whose observer callbacks handle visibility and destruction. Its hide and
+destruction paths call the returned view's `Hide()` (`autofill_bubble_controller_base.cc:
+28-44,77-81,149-155` in that directory); H-2's `PromptBubble::Hide()` withdraws
+the Open offer. `BubbleManagerImpl` handles tab backgrounding and preemption
+through those same controller hide methods (`bubble_manager_impl.cc:236-243,
+416-427`). Save/update address actions already check their weak delegate
+(`save_address_bubble_controller.cc:234-253`,
+`update_address_bubble_controller.cc:114-133`).
+
+Stale password answers become ignored before any action: the bubble caches its
+initial state (`chrome/browser/ui/passwords/bubble_controllers/
+common_saved_account_manager_bubble_controller.cc:45-50`), while Save/Never/No
+do not validate the live delegate's form manager (`save_update_bubble_controller.cc:
+140-166`, `common_saved_account_manager_bubble_controller.cc:56-63`, and
+`manage_passwords_ui_controller.cc:915-935,961-975`). Ignored close is safe:
+`OnNoInteraction()` checks the live pending state (`manage_passwords_ui_controller.cc:
+900-913`). Card answers also require a live controller, the same bubble view,
+and the original bubble type before calling `OnSaveButton`, which CHECKs its
+callback (`chrome/browser/ui/autofill/payments/save_card_bubble_controller_impl.cc:
+450-455,500-514`). Its close callback uses a weak pointer (`:421-424`). These
+are source checks; navigation and stale-answer runtime acceptance remain for
+the lead's on-screen run.
+
 The Step 0 crash is in `AskBeforeHttpDialogController::ShowDialog` calling
 `TabDialogManager::CreateTabScopedDialog`, which CHECKs its absent Views
 host. See the [probe receipt](engine-spike/results-passwords-probe.json),
@@ -554,7 +589,33 @@ cookies wait for FlushCookieStore. Secret source buffers and bridge-owned
 binary buffers are cleared on acceptance and rejection. No new LOG, VLOG,
 or os_log statement contains a credential value.
 
-Build and real-App receipts will be recorded here after verification.
+Offscreen receipt (M5, 2026-11-07), engine source head `b0c70383`:
+
+- The interrupted, unchanged `c5a7c4be` baseline resumed and built
+  `cefsimple cefclient` successfully in 448 seconds. Its inherited reset
+  audit matched 478 Chromium and 21 CEF tracked files, with no overlay
+  mismatch. The lead waived a separate unchanged-App launch.
+- `engine-apply --all` applied 0801–0806 and regenerated the CEF API.
+  The patched `engine-build --target 'cefsimple cefclient'` passed after
+  fixing a checked-observer list and the cookie completion value type.
+  The first two attempts failed compilation; no runtime flow ran in them.
+- `engine-distrib --run --skip-build` produced the distribution under
+  `$HOME/Developer/open-engine-s15`. Its framework SHA-256 is
+  `3baedcd6e50ba56a02bc2aa295f0e12cf5ceda81af92dbf5f8b9467bd4f5b67a`.
+  `engine-status` passed 8/8: 28 active patches, 63 matching overlays,
+  27 expected symbols, and 117/117 CEF patches.
+- `tools/build.sh Debug` passed with `OPEN_ENGINE_ROOT` set to that s15
+  root. Engine jobs used `/usr/bin/lockf -k /tmp/open-engine-build.lock`
+  and the scripts' ten-worker limit. The App build used heavy letter `b`.
+- `tools/verify-all.sh --only commands-dump` passed its release build
+  (zero warnings and errors) and command check under heavy letter `b`.
+
+The M5 screen hold still blocks real-App acceptance: save delegates and
+counts, card/address prompts, null Credential Management completion,
+HTTPS warning buttons, mock-key prompt suppression, and the `features`,
+`page`, and `extensions-ui` suites are unverified. No Open process or e2e
+suite was launched for this receipt. The engine PR remains pending those
+checks.
 
 ## Tab sleeping (memory fork, Section 8 PR #158)
 
