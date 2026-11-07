@@ -639,3 +639,52 @@ service observer's set, independent of native macOS delivery. It adds no series
 entry. Its distribution receipt is `e949ff69`; N1 macOS delivery and N6
 clients.openWindow stay BLOCKED. App swipe and appearance wiring merged in
 [#162](https://github.com/SergeSerb2/open/pull/162) and [#164](https://github.com/SergeSerb2/open/pull/164). These are saved receipts, not checks run for this docs change.
+
+## Passwords Step 0 probe (2026-11-06)
+
+The real Debug App used Chrome style and main's recorded engine distribution
+`af4b3cc3ad1b42439b229d79c8f7a869b13b0d3165733fba6c023e202340d1a5`.
+The [results](engine-spike/results-passwords-probe.json) retain per-row times,
+engine fingerprints, native window identities, and crash checks. These are
+observations, not password-feature acceptance. Each final-attempt row starts
+in a fresh App/profile; refill and cookie relaunch keep data within their row.
+
+| Row | Observation |
+|---|---|
+| PR-1 | Native typing matched and login POST reached welcome. No password bubble was identified. An AppKit toolbar window appeared and the native full-screen flag changed from false to true during the flow; its cause is unverified. |
+| PR-2 | The password-manager WebUI API added a synthetic login. Fields were empty immediately on reload. Clicking username showed a Chromium window. Native Down/Return did not fill both fields. |
+| PR-3 | Native address entry matched and POST reached welcome. No new visible window appeared. |
+| PR-4 | Native card entry matched and POST reached welcome. A Chromium window appeared on the refill attempt, but the number stayed empty. The mandatory re-auth path remains unverified. |
+| PR-5 | WebAuthn create showed an unparented `NativeWidgetMacNSWindow`; the promise was pending at 500 ms. Native Escape settled it with `NotAllowedError`. |
+| PR-6 | Credential Management get resolved to null within its 2-second deadline, without a new window. This secure localhost profile had no saved login, so the account chooser remains unverified. |
+| PR-7 | The fresh-profile HTTP Basic navigation killed Open. The late report is `Open-2026-11-06-203144.ips`, with `EXC_CRASH` / `SIGABRT`; its process matches this row. No retry followed. |
+| PR-8 | Not run after that crash. An earlier real-App run preserved `oe_lax`, `oe_persist`, and `oe_session` across clean quit/relaunch. The JSON labels this earlier evidence separately. |
+| PR-9 | Not run after that crash. Earlier `pages` output showed Chrome/browser 1 for normal and Split View panes, and Alloy/browser 0 for Peek. Little Open navigation did not complete through the tried automation path. |
+
+PR-7's top symbols include `abort`, `logging::LogMessage::HandleFatal`,
+`tabs::TabDialogManager::CreateTabScopedDialog`,
+`tabs::TabDialogManager::CreateAndShowDialog`,
+`AskBeforeHttpDialogController::ShowDialog`, and
+`HttpsOnlyModeTabHelper::DidFinishNavigation`. This is evidence of the HTTPS
+fallback dialog path. It does not establish that the Basic-auth prompt itself
+caused the abort. The JSON contains symbol names only, not raw crash output.
+
+An earlier shared-window run showed a Basic-auth native window and no crash.
+It also left stale native key flags after a password dropdown; the probe now
+isolates rows so that state cannot invalidate later form observations. Earlier
+attempts and their limits are not counted as passes for the stopped attempt.
+A deliberate exit while WebAuthn was open proved cleanup: zero owned processes
+or windows remained, no force kill was needed, and no new crash report appeared.
+
+All on-screen work stopped after the crash report arrived. The lead confirmed a system crash dialog and placed the M5 screen on hold; no Open launch or e2e may start until the lead says "M5 clear". The probe now waits
+up to eight seconds for a delayed report after process death and supports
+`--passwords-probe-rows PR-8,PR-9` to finish unrun rows only after the lead has cleared
+the M5 screen hold. The crashed row must not be replayed until it is fixed.
+
+PR-7 is now blocked in the probe until the engine lead approves an exact fixed
+engine distribution hash. It cannot navigate the known HTTPS-First crash path
+on the current engine. An unrelated engine update does not enable it. After
+"M5 clear", run only PR-8 and PR-9 once. Selected runs use a separate result file
+so that they cannot overwrite the recorded PR-7 crash. The post-crash guard,
+delayed-report polling, and selected-row changes have source/CLI validation;
+they have not been exercised in the App during the screen hold.

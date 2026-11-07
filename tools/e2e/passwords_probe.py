@@ -1,0 +1,394 @@
+"""Step 0 observations on the unpatched engine, through real App automation.
+
+No feature assertions: `ok` means alive and no new crash report only. Values
+stay in the fixture source/browser. No screenshots, arbitrary DOM text, or
+credential/cookie/card/address values are retained in the report.
+"""
+import datetime
+import json
+import os
+import re
+import time
+from pathlib import Path
+
+
+# Fail closed until the engine lead supplies the exact distribution containing
+# the TabDialogManager / HTTPS-First fallback fix. A different engine hash alone
+# is not evidence that PR-7 is safe to replay.
+PR7_FIXED_ENGINE_DISTRIBUTIONS = frozenset()
+
+
+class ProbeAbort(RuntimeError):
+    """Deliberate early exit to verify real-dialog cleanup, never a crash."""
+
+
+def timestamp():
+    return datetime.datetime.now().astimezone().isoformat(timespec='seconds')
+
+
+def crash_symbols(h, names):
+    """Keep symbol names only, from the faulting thread; never copy a report."""
+    symbols = []
+    for name in names:
+        path = Path(h._CRASH_DIR) / name
+        try:
+            if path.stat().st_size > 16 * 1024 * 1024:
+                continue
+            raw = path.read_text(errors='replace')
+            if name.endswith('.ips'):
+                decoder = json.JSONDecoder()
+                _, offset = decoder.raw_decode(raw)
+                body, _ = decoder.raw_decode(raw[offset:].lstrip())
+                threads = body.get('threads', [])
+                fault = body.get('faultingThread', -1)
+                for index, thread in enumerate(threads):
+                    if thread.get('triggered') or index == fault:
+                        symbols.extend(f['symbol'] for f in thread.get('frames', [])[:16] if 'symbol' in f)
+            else:
+                match = re.search(r'Thread \d+ Crashed[^\n]*:\n(.*?)(?:\n\n|\Z)', raw, re.S)
+                if match:
+                    for line in match[1].splitlines()[:12]:
+                        frame = re.match(r'\d+\s+\S+\s+0x[0-9a-f]+\s+(.+?)(?:\s+\+\s+\d+)?$', line)
+                        if frame:
+                            symbols.append(frame[1])
+        except (OSError, ValueError, TypeError):
+            continue
+    return symbols[:24]
+
+
+def run(h, factory, results, tmp, row_ids=None,
+        result_name='results-passwords-probe.json', engine_distribution_sha256=None):
+    app = None
+    last_tab = None
+    baseline = h._open_crash_reports()
+    out = Path(h.OUT) / result_name
+    evidence = {'started': timestamp(), 'featureAssertions': False, 'load': os.getloadavg(), 'rows': results,
+                'isolation': 'fresh App/profile per row; saved-data refill and cookie relaunch stay inside their row',
+                'requestedRows': row_ids or ['PR-%d' % n for n in range(1, 10)]}
+    root_readme = Path(os.environ['OPEN_ENGINE_ROOT']) / 'README.txt'
+    hashes = re.findall(r'framework SHA-256 ([0-9a-f]{64})', root_readme.read_text())
+    if not hashes:
+        raise RuntimeError('main engine root README has no distribution hash')
+    evidence['recordedDistributionSHA256'] = hashes[-1]
+    evidence['distributionHashSource'] = 'OPEN_ENGINE_ROOT/README.txt (last framework SHA-256)'
+    pr7_enabled = (engine_distribution_sha256 in PR7_FIXED_ENGINE_DISTRIBUTIONS
+                   and engine_distribution_sha256 == evidence['recordedDistributionSHA256'])
+    evidence['pr7EngineFixReceipt'] = {'enabled': pr7_enabled,
+        'actualDistributionSHA256': engine_distribution_sha256,
+        'reason': 'Exact fixed distribution receipt required before replaying the HTTPS-First crash path.'}
+    if 'PR-7' in evidence['requestedRows'] and not pr7_enabled:
+        results['PR-7'] = {'status': 'BLOCKED',
+            'reason': 'HTTPS-First fallback crash: PR-7 is disabled until the engine fix has an approved distribution hash.'}
+        print('PR-7 BLOCKED: engine fix receipt required; no HTTP Basic navigation attempted.', flush=True)
+    readme = Path(h.ROOT) / 'Vendor/cef/README.txt'
+    if readme.exists():
+        import hashlib
+        data = readme.read_bytes()
+        evidence['engineReadmeSHA256'] = hashlib.sha256(data).hexdigest()
+        # Open's distribution receipt is at the end of README.txt. Retain
+        # only hash facts, never absolute paths from the vendor stamp.
+        evidence['engineReceiptLines'] = [s.strip() for s in data.decode(errors='replace').splitlines()
+                                          if re.search(r'(?i)(sha256|overlay|patch).*\b[0-9a-f]{40,64}\b', s)][:12]
+    def persist():
+        evidence['updated'] = timestamp()
+        out.write_text(json.dumps(evidence, indent=2, sort_keys=True) + '\n')
+
+    if not any(rid != 'PR-7' or pr7_enabled for rid in evidence['requestedRows']):
+        evidence['finished'] = timestamp()
+        persist()
+        return {k: v for k, v in evidence.items() if k != 'rows'}
+
+    def windows():
+        return [{k: w[k] for k in ('number', 'class', 'visible', 'parent', 'sheet', 'key') if k in w}
+                for w in app.call('windows', timeout=5)]
+
+    def visible_delta(before):
+        old = {w['number'] for w in before if w['visible']}
+        return [w for w in windows() if w['visible'] and w['number'] not in old]
+
+    def prepare_window():
+        state = app.call('window-state')
+        evidence.setdefault('launchWindowState', []).append({k:state[k] for k in
+            ('fullscreen', 'fullscreenTransition', 'isKeyWindow', 'keySameObject')})
+        if state['fullscreen']:
+            app.call('window-fullscreen')
+            if not h.wait_until(lambda: (lambda s: not s['fullscreen'] and not s['fullscreenTransition'])(app.call('window-state')),
+                                timeout=12, step=.1):
+                raise RuntimeError('owned probe window did not leave native fullscreen')
+        app.call('window-frame', frame=[80, 80, 1100, 800])
+
+    def load(url):
+        nonlocal last_tab
+        last_tab = h.new_tab(app, url)
+        ready = h.wait_until(lambda: app.eval(last_tab, 'document.readyState') == 'complete', timeout=15, step=.2)
+        if not ready:
+            raise RuntimeError('fixture document did not become ready')
+        return last_tab
+
+    def fill(tab):
+        app.call('focus', tab=tab)
+        fields = app.eval(tab, 'Array.from(document.querySelectorAll("input[data-fixture]")).map(e => e.id)')
+        for field in fields:
+            app.call('click', tab=tab, selector='#' + field)
+            value = app.eval(tab, 'document.getElementById(%s).dataset.fixture' % json.dumps(field))
+            app.call('key', text=value, route='app')
+        return app.eval(tab, 'Array.from(document.querySelectorAll("input[data-fixture]")).every(e => e.value === e.dataset.fixture)')
+
+    def submitted(tab):
+        app.call('click', tab=tab, selector='#submit')
+        return bool(h.wait_until(lambda: app.eval(tab, 'location.pathname === "/welcome"'), timeout=5, step=.2))
+
+    def choose_suggestion(tab, row):
+        try:
+            app.call('key', key='down', route='app')
+            app.call('key', key='return', route='app')
+            row['selectionKeyPath'] = 'NSApplication.sendEvent'
+        except h.FocusInterruption:
+            raise
+        except RuntimeError:
+            # Preserve a native-readiness refusal. CDP dispatches real browser
+            # key events, without assigning field values. It proves only the
+            # engine path, not App key routing through a native popup.
+            row['selectionKeyPath'] = 'CDP fallback after native key refusal'
+            for key, code, number in [('ArrowDown', 'ArrowDown', 40), ('Enter', 'Enter', 13)]:
+                for kind in ('keyDown', 'keyUp'):
+                    params = {'type': kind, 'key': key, 'code': code,
+                              'windowsVirtualKeyCode': number, 'nativeVirtualKeyCode': number}
+                    if key == 'Enter' and kind == 'keyDown':
+                        params['text'] = '\r'
+                    app.call('devtools', tab=tab, method='Input.dispatchKeyEvent', params=params)
+
+    def record(rowid, action):
+        row = {'started': timestamp(), 'status': 'OBSERVED'}
+        results[rowid] = row
+        persist()  # An interrupted/dead row always has a durable start record.
+        try:
+            action(row)
+        except ProbeAbort:
+            row['status'] = 'FORCED_FAILURE'
+            raise
+        except h.FocusInterruption:
+            row['status'] = 'INTERRUPTED'
+            raise
+        except Exception as error:
+            row['status'] = 'UNVERIFIED'
+            row['errorType'] = type(error).__name__
+        finally:
+            time.sleep(.3)  # Allow the OS crash reporter to publish its receipt.
+            alive = bool(app and app.pid and app.process_path(app.pid) == os.path.realpath(app.executable))
+            try:
+                responsive = bool(alive and app.call('ping', timeout=3))
+                row['windowsAfter'] = windows() if responsive else []
+                if responsive:
+                    state = app.call('window-state', timeout=5)
+                    row['nativeWindowState'] = {k:state[k] for k in ('fullscreen', 'fullscreenTransition', 'isKeyWindow', 'keySameObject')}
+            except Exception:
+                responsive = False
+            if not alive or not responsive:
+                # ReportCrash publishes asynchronously. Do not lose the stack
+                # or launch another App while its system dialog may appear.
+                deadline = time.monotonic() + 8
+                while not h._open_crash_reports() - baseline and time.monotonic() < deadline:
+                    time.sleep(.2)
+            new = sorted(h._open_crash_reports() - baseline)
+            row.update(appAlive=alive, automationResponsive=responsive, newCrashReports=new,
+                       crashTopSymbols=crash_symbols(h, new), finished=timestamp(), ok=alive and responsive and not new)
+            persist()
+        print('%s safety=%s status=%s' % (rowid, 'PASS' if row['ok'] else 'FAIL', row['status']), flush=True)
+        if not row['ok']:
+            # Never relaunch after a crash: a system crash dialog may own focus.
+            evidence['stopped'] = 'Process death, unresponsive automation, or new crash report; no retry.'
+            persist()
+            return False
+        app.cleanup_surfaces()
+        return True
+
+    with h.passwords_fixture_server() as urls:
+        app = factory(urls=(), fresh=True, extra_args=urls['engine_switches'])
+        evidence['fixturePort'] = urls['port']
+        evidence['engineSwitches'] = urls['engine_switches']
+        try:
+            prepare_window()
+            def login(row):
+                tab = load(urls['login'])
+                before = windows()
+                row['typedFieldsMatch'] = fill(tab)
+                row['submitted'] = submitted(tab)
+                time.sleep(.5)
+                row['newVisibleWindows'] = visible_delta(before)
+            def saved_login(row):
+                nonlocal last_tab
+                # Use the same backend API as Chromium's Add Password WebUI,
+                # if today's distribution exposes it. No DB/keychain writes.
+                fixtures = h.runpy.run_path(os.path.join(h.ROOT, 'tools/e2e/fixtures/passwords/server.py'))
+                tab = load('chrome://password-manager/passwords')
+                row['webuiLoaded'] = app.eval(tab, 'location.protocol === "chrome:" && !!document.querySelector("password-manager-app")')
+                script = '''(async () => {
+                  if (!chrome.passwordsPrivate?.addPassword) return {status:'api-unavailable'};
+                  return await Promise.race([
+                    new Promise(resolve => chrome.passwordsPrivate.addPassword(%s, success => resolve({status:chrome.runtime.lastError ? 'backend-error' : success === false ? 'backend-refused' : 'added'}))),
+                    new Promise(resolve => setTimeout(() => resolve({status:'timeout'}), 2000))]);
+                })()''' % json.dumps({'url': urls['login'], 'username': fixtures['USERNAME'], 'password': fixtures['PASSWORD'], 'note': '', 'useAccountStore': False})
+                try:
+                    row['seed'] = app.eval(tab, script)
+                except RuntimeError:
+                    row['seed'] = {'status': 'api-refused'}
+                row['seedMethod'] = 'chrome.passwordsPrivate.addPassword (WebUI API)'
+                tab = load(urls['login'])
+                row['emptyOnLoad'] = app.eval(tab, '!document.querySelector("#username").value && !document.querySelector("#password").value')
+                before = windows()
+                app.call('focus', tab=tab)
+                app.call('click', tab=tab, selector='#username')
+                time.sleep(.5)
+                row['newVisibleWindows'] = visible_delta(before)
+                choose_suggestion(tab, row)
+                row['filledFieldsMatch'] = app.eval(tab, 'Array.from(document.querySelectorAll("input[data-fixture]")).every(e => e.value === e.dataset.fixture)')
+                if row['seed'].get('status') != 'added':
+                    row['limitation'] = 'No saved-login prerequisite established; dropdown/refill outcome is inconclusive.'
+            def address(row):
+                tab = load(urls['address'])
+                before = windows()
+                row['typedFieldsMatch'] = fill(tab)
+                row['submitted'] = submitted(tab)
+                row['newVisibleWindows'] = visible_delta(before)
+            def card(row):
+                tab = load(urls['card'])
+                before = windows()
+                row['typedFieldsMatch'] = fill(tab)
+                row['submitted'] = submitted(tab)
+                row['newVisibleWindowsAfterSubmit'] = visible_delta(before)
+                tab = load(urls['card'])
+                before = windows()
+                app.call('focus', tab=tab)
+                app.call('click', tab=tab, selector='#number')
+                time.sleep(.5)
+                row['newVisibleWindowsForRefill'] = visible_delta(before)
+                choose_suggestion(tab, row)
+                row['refilled'] = app.eval(tab, '!!document.querySelector("#number")?.value')
+                row['limitation'] = 'Card re-auth path is exercised only if a saved card is offered and selected.'
+            def webauthn(row):
+                tab = load(urls['webauthn'])
+                row['secureContext'] = app.eval(tab, 'isSecureContext')
+                before = windows()
+                app.call('click', tab=tab, selector='#create')
+                time.sleep(.5)
+                row['newVisibleWindows'] = visible_delta(before)
+                row['promiseAt500ms'] = app.eval(tab, 'document.querySelector("#result").textContent')
+                if os.environ.get('OPEN_E2E_PASSWORDS_PROBE_ABORT_DIALOG') == '1':
+                    raise ProbeAbort('Deliberate exit with WebAuthn dialog open (cleanup verification)')
+                target = row['newVisibleWindows'][0]['number'] if row['newVisibleWindows'] else None
+                try:
+                    app.call('key', key='escape', route='app', **({'window': target} if target else {}))
+                    row['escape'] = 'native'
+                except RuntimeError:
+                    row['escape'] = 'native focus refused; waiting for fixture abort'
+                row['promiseAfterEscapeOrTimeout'] = app.eval(tab, 'new Promise(resolve => {const end=Date.now()+6000; const tick=()=>{const s=document.querySelector("#result").textContent; if(s!=="pending" || Date.now()>=end) resolve(s); else setTimeout(tick,50)};tick()})')
+            def credential_get(row):
+                tab = load(urls['local_login'])
+                row['secureContext'] = app.eval(tab, 'isSecureContext')
+                row['savedLoginForThisOrigin'] = False
+                before = windows()
+                row['promise'] = app.eval(tab, '''Promise.race([
+                    navigator.credentials.get({password:true}).then(x=>x===null?'null':'credential',e=>e.name),
+                    new Promise(resolve=>setTimeout(()=>resolve('timeout'),2000))])''')
+                row['newVisibleWindows'] = visible_delta(before)
+                row['limitation'] = 'Secure localhost origin has no seeded saved login; account chooser not established.'
+            def basic(row):
+                if not pr7_enabled:
+                    raise ProbeAbort('PR-7 engine fix receipt is absent; HTTP navigation refused')
+                # Do not wait for navigation completion while auth is pending.
+                before = windows()
+                tab = app.call('open', url=urls['basic'])['id']
+                time.sleep(1)
+                row['newVisibleWindows'] = visible_delta(before)
+                target = row['newVisibleWindows'][0]['number'] if row['newVisibleWindows'] else None
+                try:
+                    app.call('key', key='escape', route='app', **({'window': target} if target else {}))
+                    row['escape'] = 'native'
+                except RuntimeError:
+                    row['escape'] = 'native focus refused; cleanup uses dismiss'
+                row['requested'] = True
+            def cookies(row):
+                nonlocal app
+                load(urls['set_cookies'])
+                tab = load(urls['echo_cookies'])
+                row['beforeQuit'] = app.eval(tab, 'JSON.parse(document.body.innerText)')
+                app.quit()
+                row['quitClean'] = app.quit_report.get('ok', False) and not app.quit_report.get('forced', True)
+                if not row['quitClean'] or app.quit_report.get('reply') is not True:
+                    raise RuntimeError('cookie relaunch refused after an unconfirmed shutdown')
+                new = sorted(h._open_crash_reports() - baseline)
+                if new:
+                    raise RuntimeError('new crash report during quit; relaunch refused')
+                app = factory(urls=(), extra_args=urls['engine_switches'])
+                prepare_window()
+                tab = load(urls['echo_cookies'])
+                row['afterRelaunch'] = app.eval(tab, 'JSON.parse(document.body.innerText)')
+            def pages(row):
+                def page_rows():
+                    return [{k:p[k] for k in ('identifier','kind','style','browser','browserIndex','hidden') if k in p}
+                            for p in app.call('pages')]
+                tab = load(urls['login'])
+                row['normal'] = page_rows()
+                other = load(urls['signup'])
+                app.call('select', tab=tab)
+                app.call('split')
+                row['split'] = page_rows()
+                app.call('split')
+                app.call('peek-open', tab=tab, url=urls['change'])
+                time.sleep(.5)
+                row['peek'] = page_rows()
+                app.call('peek-close')
+                try:
+                    state = app.call('little-open-action', action='blank', timeout=10)
+                    session = state['sessions'][-1]
+                    app.call('little-open-action', id=session['id'], action='dismiss-intro')
+                    h.wait_until(lambda: any(s.get('browserID') for s in app.call('little-open-state')['sessions']), timeout=8, step=.2)
+                    app.call('key', window=session['window'], text=urls['local_login'] + '\r')
+                    loaded = h.wait_until(lambda: any(s['state'] == 'page' and not s['loading']
+                                                    for s in app.call('little-open-state')['sessions']), timeout=12, step=.2)
+                    row['littleOpenLoaded'] = bool(loaded)
+                    row['littleOpen'] = page_rows()
+                    state = app.call('little-open-state')
+                    row['littleOpenSessions'] = [{k:s.get(k) for k in ('state','content','browserID')} for s in state['sessions']]
+                finally:
+                    for session in app.call('little-open-state')['sessions']:
+                        app.call('little-open-action', id=session['id'], action='close')
+            actions = [('PR-1', login), ('PR-2', saved_login), ('PR-3', address), ('PR-4', card),
+                       ('PR-5', webauthn), ('PR-6', credential_get), ('PR-7', basic), ('PR-8', cookies), ('PR-9', pages)]
+            actions = [(rid, action) for rid, action in actions if rid in evidence['requestedRows']
+                       and (rid != 'PR-7' or pr7_enabled)]
+            for index, (rowid, action) in enumerate(actions):
+                if index:
+                    # A popup can leave native AppKit key flags stale even
+                    # after dismissal. Keep independent feature observations
+                    # independent; do not let that window state invalidate
+                    # every later form. No restart follows a crash.
+                    live_before_quit = bool(app.pid and app.process_path(app.pid) == os.path.realpath(app.executable))
+                    app.quit()
+                    if (not live_before_quit or app.quit_report.get('reply') is not True
+                            or app.quit_report.get('forced') or h._open_crash_reports() - baseline):
+                        previous = results[actions[index - 1][0]]
+                        previous.update(ok=False, betweenRowShutdownConfirmed=False)
+                        evidence['stopped'] = 'Process death, unconfirmed shutdown, or new crash report between rows; relaunch refused.'
+                        persist()
+                        break
+                    app = factory(urls=(), fresh=True, extra_args=urls['engine_switches'])
+                    prepare_window()
+                if not record(rowid, action):
+                    break
+        finally:
+            app.quit()
+            time.sleep(1)
+            evidence['cleanup'] = app.quit_report.get('ok', False)
+            evidence['newCrashReportsAfterQuit'] = sorted(h._open_crash_reports() - baseline)
+            results['postQuitSafety'] = {'ok': not evidence['newCrashReportsAfterQuit'],
+                                        'newCrashReports': evidence['newCrashReportsAfterQuit'],
+                                        'crashTopSymbols': crash_symbols(h, evidence['newCrashReportsAfterQuit'])}
+            for index in range(1, 10):
+                rid = 'PR-%d' % index
+                results.setdefault(rid, {'status': 'NOT_RUN' if rid in evidence['requestedRows'] else 'NOT_REQUESTED',
+                                        'reason': evidence.get('stopped', 'Probe interrupted before row') if rid in evidence['requestedRows'] else 'Outside selected rows'})
+            evidence['finished'] = timestamp()
+            persist()
+    return {k: v for k, v in evidence.items() if k != 'rows'}
