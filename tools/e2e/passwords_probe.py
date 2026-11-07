@@ -37,7 +37,7 @@ def crash_symbols(h, names):
                 fault = body.get('faultingThread', -1)
                 for index, thread in enumerate(threads):
                     if thread.get('triggered') or index == fault:
-                        symbols.extend(f['symbol'] for f in thread.get('frames', [])[:12] if 'symbol' in f)
+                        symbols.extend(f['symbol'] for f in thread.get('frames', [])[:16] if 'symbol' in f)
             else:
                 match = re.search(r'Thread \d+ Crashed[^\n]*:\n(.*?)(?:\n\n|\Z)', raw, re.S)
                 if match:
@@ -50,13 +50,14 @@ def crash_symbols(h, names):
     return symbols[:24]
 
 
-def run(h, factory, results, tmp):
+def run(h, factory, results, tmp, row_ids=None):
     app = None
     last_tab = None
     baseline = h._open_crash_reports()
     out = Path(h.OUT) / 'results-passwords-probe.json'
     evidence = {'started': timestamp(), 'featureAssertions': False, 'load': os.getloadavg(), 'rows': results,
-                'isolation': 'fresh App/profile per row; saved-data refill and cookie relaunch stay inside their row'}
+                'isolation': 'fresh App/profile per row; saved-data refill and cookie relaunch stay inside their row',
+                'requestedRows': row_ids or ['PR-%d' % n for n in range(1, 10)]}
     root_readme = Path(os.environ['OPEN_ENGINE_ROOT']) / 'README.txt'
     hashes = re.findall(r'framework SHA-256 ([0-9a-f]{64})', root_readme.read_text())
     if not hashes:
@@ -330,8 +331,9 @@ def run(h, factory, results, tmp):
                         app.call('little-open-action', id=session['id'], action='close')
             actions = [('PR-1', login), ('PR-2', saved_login), ('PR-3', address), ('PR-4', card),
                        ('PR-5', webauthn), ('PR-6', credential_get), ('PR-7', basic), ('PR-8', cookies), ('PR-9', pages)]
-            for rowid, action in actions:
-                if rowid != 'PR-1':
+            actions = [(rid, action) for rid, action in actions if rid in evidence['requestedRows']]
+            for index, (rowid, action) in enumerate(actions):
+                if index:
                     # A popup can leave native AppKit key flags stale even
                     # after dismissal. Keep independent feature observations
                     # independent; do not let that window state invalidate
@@ -353,7 +355,9 @@ def run(h, factory, results, tmp):
                                         'newCrashReports': evidence['newCrashReportsAfterQuit'],
                                         'crashTopSymbols': crash_symbols(h, evidence['newCrashReportsAfterQuit'])}
             for index in range(1, 10):
-                results.setdefault('PR-%d' % index, {'status': 'NOT_RUN', 'reason': evidence.get('stopped', 'Probe interrupted before row')})
+                rid = 'PR-%d' % index
+                results.setdefault(rid, {'status': 'NOT_RUN' if rid in evidence['requestedRows'] else 'NOT_REQUESTED',
+                                        'reason': evidence.get('stopped', 'Probe interrupted before row') if rid in evidence['requestedRows'] else 'Outside selected rows'})
             evidence['finished'] = timestamp()
             persist()
     return {k: v for k, v in evidence.items() if k != 'rows'}

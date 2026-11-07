@@ -11809,6 +11809,7 @@ def main():
     ap.add_argument("--window-chrome-only", action="store_true", help="run only the window-chrome follow-up flows in the window suite")
     ap.add_argument("--window-material-only", action="store_true", help="run only the window material real-App flows in the window suite")
     ap.add_argument("--profiles-shell-only", action="store_true", help="run only the Section 10 real-App Profiles shell flows")
+    ap.add_argument('--passwords-probe-rows', help='run only named Step 0 rows, e.g. PR-8,PR-9; never replay a crashed row')
     ap.add_argument("--keep", action="store_true",
                     help="keep this run's data root, cache root and scratch folder (paths printed at the end)")
     ap.add_argument("--focus-retry-delay-seconds", type=int, default=0,
@@ -11833,6 +11834,10 @@ def main():
         ap.error("--only is required unless --engine-fingerprint-only is set")
     if opts.only == 'passwords-probe' and opts.style != 'chrome':
         ap.error('passwords-probe requires --style chrome')
+    if opts.passwords_probe_rows is not None and (opts.only != 'passwords-probe' or
+            not re.fullmatch(r'PR-[1-9](,PR-[1-9])*', opts.passwords_probe_rows) or
+            len(set(opts.passwords_probe_rows.split(','))) != len(opts.passwords_probe_rows.split(','))):
+        ap.error('--passwords-probe-rows requires passwords-probe and unique PR-1 through PR-9 ids')
     if opts.engine_sha256 and not re.fullmatch(r"[0-9a-f]{64}", opts.engine_sha256):
         ap.error("--engine-sha256 must be 64 lowercase hexadecimal characters")
 
@@ -12013,7 +12018,8 @@ def main():
         if opts.only == 'passwords-probe':
             results[opts.only] = {}
             results['probeMetadata'] = runpy.run_path(os.path.join(ROOT, 'tools/e2e/passwords_probe.py'))['run'](
-                sys.modules[__name__], factory, results[opts.only], tmp)
+                sys.modules[__name__], factory, results[opts.only], tmp,
+                row_ids=opts.passwords_probe_rows.split(',') if opts.passwords_probe_rows else None)
         elif opts.only == "firstrun":
             results["firstrun"] = CheckedResults(tracker)
             # The executable's -I shebang omits the script directory from
