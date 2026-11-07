@@ -17,6 +17,10 @@ PAGES = {name + '.html' for name in ('login', 'change', 'signup', 'iframe', 'add
 class Handler(http.server.BaseHTTPRequestHandler):
     server_version = 'OpenFixture/1'
 
+    def setup(self):
+        super().setup()
+        self.connection.settimeout(10)
+
     def log_message(self, *_):
         pass  # Never log request bodies, authorization, cookies or form values.
 
@@ -47,8 +51,12 @@ class Handler(http.server.BaseHTTPRequestHandler):
                 ('Set-Cookie', 'oe_lax=fixture; Path=/; Max-Age=86400; SameSite=Lax')])
         elif path == '/echo-cookies':
             cookies = SimpleCookie()
+            header = self.headers.get('Cookie', '')
+            if len(header) > MAX_BODY:
+                self.reply(431, b'Cookie header too large', 'text/plain')
+                return
             try:
-                cookies.load(self.headers.get('Cookie', '')[:MAX_BODY])
+                cookies.load(header)
             except CookieError:
                 pass
             # Only the synthetic cookie NAMES cross this endpoint.
