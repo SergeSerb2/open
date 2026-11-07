@@ -4916,21 +4916,30 @@ def profiles_checks(factory, results, tmp, config):
         and whether it may run in incognito. Chrome loads --load-extension
         into each profile when it starts."""
         wait_until(lambda: any(e["id"] == PROBE for e in app.call("extensions")["installed"]), timeout=30)
+        app.call("window-focus", id=app.call("window-state")["id"], activate=True)
 
         def open_popup():
             try:
                 return app.call("popup", extension=PROBE)["identifier"]
             except RuntimeError:
                 return None  # the action is not ready for this tab yet
-        pop = wait_until(open_popup, timeout=20)
-        if pop is None:
-            raise RuntimeError("tabs probe popup did not open")
-        wait_until(lambda: app.eval(pop, "window.currentTab !== undefined"), timeout=20)
-        seen = app.eval(pop, "Promise.all([chrome.tabs.query({}), chrome.windows.getAll(),"
-                             " chrome.extension.isAllowedIncognitoAccess()]).then(([ts, ws, incognito]) =>"
-                             " ({urls: ts.map(t => t.url || t.pendingUrl), windows: ws.map(w => w.id), incognito}))")
-        app.call("popup-close")
-        return seen
+        # A queued tab/focus change can close the first popup (Chrome's rule).
+        # Use the same bounded reopen policy as tabstrip_checks; isolation
+        # assertions still use a live extension popup in the chosen Profile.
+        for attempt in range(3):
+            try:
+                pop = wait_until(open_popup, timeout=20)
+                if pop is None:
+                    raise RuntimeError("tabs probe popup did not open")
+                wait_until(lambda: app.eval(pop, "window.currentTab !== undefined"), timeout=20)
+                return app.eval(pop, "Promise.all([chrome.tabs.query({}), chrome.windows.getAll(),"
+                                     " chrome.extension.isAllowedIncognitoAccess()]).then(([ts, ws, incognito]) =>"
+                                     " ({urls: ts.map(t => t.url || t.pendingUrl), windows: ws.map(w => w.id), incognito}))")
+            except RuntimeError as error:
+                if not ("error 4." in str(error) or "no page for" in str(error)) or attempt == 2:
+                    raise
+            finally:
+                app.call("popup-close")
 
     def allow_probe_in_incognito(app):
         """The E5 threat: a default-profile extension allowed in incognito.
@@ -11447,7 +11456,7 @@ def main():
             elif isinstance(v, dict) and v.get("status") in ("SKIP", "BLOCKED", "INTERRUPTED", "DEFERRED"):
                 print("%-24s %s: %s" % (k, v["status"], v.get("reason", "")))
     print("wrote", os.path.join(OUT, name))
-    failures = [k for group in ("firstrun", "find", "shell", "extensions", "features", "measure", "tabstrip", "window", "sidebar", "peek", "split", "commandbar", "app-actions", "actions", "extensions-p3", "extensions-ui", "extensions-e2", "sidebar-completion", "toolbar", "numbering", "media", "relaunch", "page", "page-chrome", "sleep", "context-menus", "routing", "littleopen", "history", "applescript", "downloads", "space-editor", "incognito")
+    failures = [k for group in ("firstrun", "find", "shell", "extensions", "features", "measure", "tabstrip", "window", "sidebar", "peek", "split", "commandbar", "app-actions", "actions", "extensions-p3", "extensions-ui", "extensions-e2", "profiles", "sidebar-completion", "toolbar", "numbering", "media", "relaunch", "page", "page-chrome", "sleep", "context-menus", "routing", "littleopen", "history", "applescript", "downloads", "space-editor", "incognito")
                 for k, v in results.get(group, {}).items() if isinstance(v, dict) and v.get("ok") is False]
     if failures or not results["cleanup"]["ok"]:
         sys.exit(1)

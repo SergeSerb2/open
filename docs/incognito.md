@@ -19,12 +19,14 @@ Native M5 runs use main's engine distribution `af4b3cc3ad1b42439b229d79c8f7a869b
 | Real-App `incognito` | 25 PASS, 0 FAIL, 0 interruptions; owned processes and windows cleaned |
 | Cookie lifetime | Normal/private isolation in both directions; two private windows share; one close retains; final close resets |
 | No Open records | `browser.json` SHA-256, all Open SQLite table row counts, capture/thumbnail inventory, normal model counts, history writes, and download history unchanged after private navigations, close, and download |
-| Native 1x light/dark | PASS; real window captures, with empty sidebar pixels within 2 RGB levels of #26232B |
+| Native 1x light/dark | PASS; real window captures under light/dark app appearances, with empty sidebar pixels within 2 RGB levels of #26232B. The system appearance setting is untouched. |
 | Source fault: normal model | PASS: `no_snapshot_history_change FAIL`, exit 1, cleanup PASS; [receipt](engine-spike/incognito/negative-model.json) |
 | Source fault: disk context | PASS: `cookie_normal_absent_private FAIL`, exit 1, cleanup PASS; [receipt](engine-spike/incognito/negative-disk.json) |
 | Required regressions / full verify | Pending |
 
 The suite resets each preference key it uses and restores the persistent values in `finally`. HTTP fixtures, data/cache directories, and ports belong to the run. Keys use `route=app`; Option-Command-click uses engine input dispatch. The quit row checks an actual process exit before harness cleanup.
+
+The initial regression batch used Alloy. Its Profiles extension popup and six native context-menu rows failed; those flows require Chrome and are rerun with `--style chrome`. Both attempts had zero interruptions and clean shutdown. The initial Profiles failure also exposed an existing exit-aggregation omission: `profiles` now participates in the harness failure list. The failed attempt summary is [retained](engine-spike/incognito/regression-initial-attempts.json).
 
 ## Break-and-revert procedure
 

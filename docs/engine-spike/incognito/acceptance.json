@@ -7,19 +7,18 @@
         "forced": false,
         "ok": true,
         "owned_pids": [
-          46425,
-          46530,
-          46531,
-          46532,
-          46534,
-          46535,
-          46557,
-          46558,
-          46633,
-          46682,
-          46683,
-          46690,
-          46764
+          68680,
+          68688,
+          68689,
+          68690,
+          68693,
+          68700,
+          68701,
+          68735,
+          68757,
+          68758,
+          68762,
+          68765
         ],
         "remaining_processes": [],
         "windows_after_quit": {
@@ -92,20 +91,20 @@
         "normalSpaces": 1,
         "normalTabs": 1,
         "normalWindows": 1,
-        "parent": "E9F3DD6A-85F1-4D5F-A3DD-BC9A5C873001",
+        "parent": "5C98BD52-2C69-4034-9BE9-1AA8AC44E044",
         "private": true,
         "snapshotSchedules": 9,
         "tabs": [],
         "windows": [
           {
-            "id": "A4088813-816D-4352-BC4B-BEC0A3AB5075",
-            "number": 384215,
+            "id": "2C6C00E7-BD0D-49A1-B033-A3BC9D754E70",
+            "number": 387003,
             "private": false,
             "title": "Private fixture /normal"
           },
           {
-            "id": "2656E5E9-5F64-49B5-804E-E0AA2A2A325A",
-            "number": 384216,
+            "id": "9EE654D8-D9ED-4DEA-A87F-19F90C711F28",
+            "number": 387015,
             "private": true,
             "title": "Incognito"
           }
@@ -124,7 +123,7 @@
     },
     "no_snapshot_history_change": {
       "after": {
-        "snapshot": "c23524f3ed33fa72048213fd00e42d1e1a84b874c3966898617335b95eae9fb0",
+        "snapshot": "a8886c101ef7fff089dcc7444d0401d82c24f28801d70bcd2761cbdd8443a183",
         "tables": {
           "Profiles/Default/State/archive.sqlite3": {
             "archived_tabs": 0
@@ -150,7 +149,7 @@
         "thumbnails": []
       },
       "before": {
-        "snapshot": "c23524f3ed33fa72048213fd00e42d1e1a84b874c3966898617335b95eae9fb0",
+        "snapshot": "a8886c101ef7fff089dcc7444d0401d82c24f28801d70bcd2761cbdd8443a183",
         "tables": {
           "Profiles/Default/State/archive.sqlite3": {
             "archived_tabs": 0
@@ -268,31 +267,31 @@
         "normalSpaces": 1,
         "normalTabs": 1,
         "normalWindows": 1,
-        "parent": "E9F3DD6A-85F1-4D5F-A3DD-BC9A5C873001",
+        "parent": "5C98BD52-2C69-4034-9BE9-1AA8AC44E044",
         "private": true,
         "snapshotSchedules": 9,
         "tabs": [
           {
-            "id": "5265FBF4-CF68-4368-9C30-4D04A86ABFD0",
-            "url": "http://127.0.0.1:52530/two"
+            "id": "C83D05DC-DF04-4284-9457-6FE7C955D31A",
+            "url": "http://127.0.0.1:59202/two"
           }
         ],
         "windows": [
           {
-            "id": "A4088813-816D-4352-BC4B-BEC0A3AB5075",
-            "number": 384215,
+            "id": "2C6C00E7-BD0D-49A1-B033-A3BC9D754E70",
+            "number": 387003,
             "private": false,
             "title": "Private fixture /normal"
           },
           {
-            "id": "2656E5E9-5F64-49B5-804E-E0AA2A2A325A",
-            "number": 384216,
+            "id": "9EE654D8-D9ED-4DEA-A87F-19F90C711F28",
+            "number": 387015,
             "private": true,
             "title": "Private fixture /one"
           },
           {
-            "id": "CAEDDE16-7985-4CC1-8EE5-904C8A0FAC28",
-            "number": 384224,
+            "id": "E940E065-E5A8-41F5-9D51-130DDF0DD0EF",
+            "number": 387024,
             "private": true,
             "title": "Private fixture /two"
           }
@@ -357,15 +356,15 @@
   },
   "interrupted_attempts": [],
   "load": [
-    17.91162109375,
-    26.19873046875,
-    40.5537109375
+    34.38623046875,
+    35.7470703125,
+    34.0537109375
   ],
   "source": {
     "clean": false,
-    "diffSHA256": "ef5c160715c11efba23c52e6216ab2e71e3b37a4774b0f4187c295a5c4915811",
-    "head": "98350a07f42ff19abb1852869e00ba81d922e772"
+    "diffSHA256": "4c7131781dc03a2727913812597476e633f2ff88fba40026cca1e2b22c5b2825",
+    "head": "a008d0490418a58dc4998a8e1f121eae1a2e2fa7"
   },
-  "started": "2026-11-06 17:00:29",
-  "style": "alloy"
+  "started": "2026-11-06 17:15:37",
+  "style": "chrome"
 }
