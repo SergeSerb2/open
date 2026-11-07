@@ -38,7 +38,7 @@ import OpenImport
         return (path as NSString).abbreviatingWithTildeInPath
     }
     public var canContinue: Bool { readable && !busy && (plan.spaces || plan.tabs || plan.favorites || plan.folders || plan.archive || plan.history || plan.searchSettings || (plan.secretsRequested && canImportPasswordsAndCookies)) }
-    public func choose(directory: URL) async { guard !busy else { return }; clearConsent(); plan.directory = directory; await refreshCounts() }
+    public func choose(directory: URL) async { guard !isImporting else { return }; clearConsent(); plan.directory = directory; await refreshCounts() }
     public func refreshCounts() async {
         let request=UUID();countRequest=request
         readable=false;counting=true;errorText="";probe=nil
@@ -146,7 +146,7 @@ public struct ImportWizard: View {
                 case .progress:
                     if let progress = model.progress { ProgressView(value: progress) } else { ProgressView() }
                     Text(model.phaseText)
-                    if model.browserHasLanded { Text("Your browser is ready. History is still importing in the background.").foregroundStyle(.secondary) }
+                    if model.browserHasLanded && model.phaseText == "Importing your history…" { Text("Your browser is ready. History is still importing in the background.").foregroundStyle(.secondary) }
                 case .report:
                     if model.outcome?.errorText == nil || model.hasImportedData {
                         Text(model.reportSummary).font(.headline)

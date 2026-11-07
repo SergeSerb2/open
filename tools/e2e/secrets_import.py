@@ -116,6 +116,8 @@ def _run(factory, results, tmp, h):
         own = sum(any('fixture-%d-%d' % (index, n) in label for label in labels) for n in (1, 2))
         foreign = sum('fixture-%d-' % (1 - index) in label for label in labels)
         app.call('key', key='escape', route='app')
+        assert h.wait_until(lambda: not popup_ids.intersection(
+            w['number'] for w in dropdown['autofill_child_windows'](app)), timeout=5), 'autofill dropdown did not close'
         fill_from_dropdown(app, tab, h.wait_until)
         matched = h.wait_until(lambda: app.eval(tab, '''(() => {
           const u = document.querySelector('#username').value, p = document.querySelector('#password').value;
@@ -190,6 +192,7 @@ def _run(factory, results, tmp, h):
             app.call('click', tab=tab, selector='#username')
             app.call('key', text='fixture-0-1', route='app')
             app.call('key', key='escape', route='app')
+            assert h.wait_until(lambda: not dropdown['autofill_child_windows'](app), timeout=5), 'autofill dropdown did not close'
             fill_from_dropdown(app, tab, h.wait_until)
             newer = h.wait_until(lambda: app.eval(tab, 'document.querySelector("#username").value === "fixture-0-1" && document.querySelector("#password").value === "fixture-open-newer"'), timeout=5, step=.1)
             row('I-4', updated and newer and report_correct(existing, 0, 1), updated=int(bool(updated)), newerFilled=int(bool(newer)))

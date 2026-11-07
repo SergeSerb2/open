@@ -251,7 +251,7 @@ public struct FirstRunView:View {
         brand.padding(.bottom,16)
         Text(model.phaseText).font(.headline).padding(.bottom,12)
         Group {if let value=model.progress {ProgressView(value:value)} else {ProgressView().progressViewStyle(.linear)}}.frame(width:320).accessibilityValue(model.phaseText)
-        if model.browserHasLanded {Text("Your browser is ready. History is still importing in the background.").frame(width:SettingsTokens.firstRunSparseTextWidth).foregroundStyle(secondary).fixedSize(horizontal:false,vertical:true).padding(.top,12)}
+        if model.browserHasLanded && model.phaseText == "Importing your history…" {Text("Your browser is ready. History is still importing in the background.").frame(width:SettingsTokens.firstRunSparseTextWidth).foregroundStyle(secondary).fixedSize(horizontal:false,vertical:true).padding(.top,12)}
     }}}
     private var report:some View {VStack(alignment:.leading,spacing:10) {
         Text("Import complete").font(.title2)
