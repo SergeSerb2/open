@@ -199,7 +199,10 @@ enum Checks {
 
     static func run() throws {
         fixtureMath(); harmonyAndPad(); appearances(); costs(); textures(); cacheBounds(); displaySpaceBlend(); try persistence()
-        try EditorChecks.run(); try LiveThemeChecks.run(); try PickerScene.check()
+        try EditorChecks.run()
+        try LiveThemeChecks.run()
+        try CreationChecks.run()
+        try PickerScene.check()
         print("checks: \(passed) passed, \(failed) failed")
         if failed > 0 { throw CLIError(description: "checks failed") }
     }

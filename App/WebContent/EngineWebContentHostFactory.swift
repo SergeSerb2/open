@@ -4,6 +4,7 @@ import OpenFeatures
 import OpenModel
 import OpenStore
 import OpenSidebar
+import OpenSpaceEditor
 import OpenCommands
 import OpenCommandBar
 import OpenSuggest
@@ -81,6 +82,7 @@ final class EngineWebContentHostFactory: NSResponder, WebContentHostFactory {
   var findController: FindController?
   var findKeyRequestedAt: TimeInterval?
   var hasFindSelectionTask: Bool { findController?.hasSelectionTask == true }
+  var pendingSpaceProfileAlert: NSAlert?
   var pendingRenameAlert: NSAlert?
   var iconPicker: IconPickerController?
   var iconPickerSpaceID: SpaceID?
@@ -216,6 +218,14 @@ final class EngineWebContentHostFactory: NSResponder, WebContentHostFactory {
     }
     controller.onTextUndoManager = { [weak self] window in
       self?.commandBarSession?.controller?.editingUndoManager(for: window.firstResponder)
+    }
+    controller.onSpaceCreationIcon = { [weak self] current, anchor, onPick in
+      self?.openDraftSpaceIconPicker(current: current, anchor: anchor, onPick: onPick)
+    }
+    controller.onExitPageFullscreen = { [weak self] in
+      guard let page = self?.selectedContent else { return false }
+      do { try page.exitFullscreen(); return true }
+      catch { return false }
     }
     controller.keyBindingOverrides = app.keyBindings
     let previousLinkPolicy = controller.container.onLinkClicked
@@ -684,8 +694,16 @@ final class EngineWebContentHostFactory: NSResponder, WebContentHostFactory {
     case .media(let intent): return app.media.perform(intent)
     case .resetToPinnedURL(let id):
       guard let tab = model.tab(id: id), let url = tab.pinnedURL else { return false }; model.resetPinnedTab(id: id); hosts[id]?.load(url); scheduleSave(); return true
+    case .renameSpace(let id, let title):
+      guard let space = model.space(id: id) else { return false }
+      let trimmed = title.trimmingCharacters(in: .whitespacesAndNewlines)
+      guard space.title != (trimmed.isEmpty ? nil : trimmed) else { return true }
+      app.undoManager.beginUndoGrouping()
+      model.renameSpace(id: id, title: title); app.undoManager.setActionName("Rename Space")
+      app.undoManager.endUndoGrouping(); scheduleSave(); return true
+    case .setSpaceProfile(let space, let profile): return requestSpaceProfileChange(spaceID: space, profileID: profile)
     case .newSpace:
-      guard let profile = focusedProfile else { return false }; focus(space: model.createSpace(title: "Space", profileID: profile.id)); return true
+      return controller?.beginSpaceCreation() == true
     case .openURL(let url, let parent, let index):
       let before = Set(model.index.keys)
       guard let context = controller?.context, ModelSidebarActions(context: context).perform(.openURL(url, in: parent, index: index)),
@@ -698,14 +716,9 @@ final class EngineWebContentHostFactory: NSResponder, WebContentHostFactory {
     case .moveNodesToNewSpace(let ids): return moveSelectionToNewSpace(ids: ids)
     case .moveToNewSpace(let id): return moveSelectionToNewSpace(ids: [id])
     case .turnFolderIntoSpace(let id):
-      // The App disables event grouping. Name the action while this explicit
-      // group is open, before the model's one-step registration is closed.
-      app.undoManager.beginUndoGrouping()
-      defer { app.undoManager.endUndoGrouping() }
-      guard let space = model.turnFolderIntoSpace(id: id) else { return false }
-      let actionName: String = "New Space"
-      app.undoManager.setActionName(actionName)
-      focus(space: space); scheduleSave(); app.scheduleMenuRebuild(); return true
+      guard let folder = model.node(id: id)?.folder else { return false }
+      return controller?.beginSpaceCreation(options: SpaceCreationOptions(moving: folder.children.map(\.id),
+        prefillTitle: folder.title, placement: .today, removingEmptyFolder: id)) == true
     case .share(let id): return shareSidebarTab(id)
     case .duplicate(let id): return model.duplicateNode(id: id) != nil
     case .showLibrary:
@@ -765,10 +778,8 @@ final class EngineWebContentHostFactory: NSResponder, WebContentHostFactory {
   }
 
   private func moveSelectionToNewSpace(ids: [ItemID]) -> Bool {
-    guard let profile = focusedProfile, controller?.context.canMoveNodesToNewSpace(ids) == true,
-      let space = model.createSpace(title: "Space", profileID: profile.id, icon: nil, theme: SpaceTheme(), at: nil, moving: ids)
-    else { return false }
-    focus(space: space); scheduleSave(); app.scheduleMenuRebuild(); return true
+    guard controller?.context.canMoveNodesToNewSpace(ids) == true else { return false }
+    return controller?.beginSpaceCreation(options: SpaceCreationOptions(moving: ids, placement: .preserveSection)) == true
   }
 
   /// One close rule for Cmd-W, the sidebar, window.close() and
@@ -815,6 +826,8 @@ final class EngineWebContentHostFactory: NSResponder, WebContentHostFactory {
     pendingSavePanel = nil
     if let sheet = pendingRenameAlert?.window { window?.endSheet(sheet, returnCode: .cancel); sheet.orderOut(nil) }
     pendingRenameAlert = nil
+    if let sheet = pendingSpaceProfileAlert?.window { window?.endSheet(sheet, returnCode: .cancel); sheet.orderOut(nil) }
+    pendingSpaceProfileAlert = nil
     sidebarSharePicker?.close(); sidebarSharePicker = nil
     spaceProfileMenu?.cancelTrackingWithoutAnimation(); spaceProfileMenu = nil
     #if OPEN_AUTOMATION
@@ -896,7 +909,7 @@ extension EngineWebContentHostFactory {
   @objc func focusAddressBar(_ sender: Any?) { showCommandBar(.editCurrentURL) }
 
   func ownsKeyWindow(_ candidate: NSWindow) -> Bool {
-    if candidate === controller?.themeEditor?.panel { return true }
+    if candidate === controller?.themeEditor?.panel || candidate === controller?.spaceCreationController?.themeEditor?.panel { return true }
     return candidate === window || candidate === iconPicker?.panel || candidate === iconPicker?.toneWindow || candidate === popupPanel || auxiliaryPages.contains { $0.panel === candidate } || pageChrome.owns(candidate)
   }
   func navigateFromCommandBar(_ url: URL, current: Bool, background: Bool = false) {
