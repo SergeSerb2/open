@@ -277,15 +277,6 @@ def main():
     parser.add_argument("--record-limits", action="store_true",
                         help="propose a new display key from a clean origin/main export; never overwrite a key")
     args = parser.parse_args()
-    root = (args.capture_root or default_inputs()).resolve()
-    try:
-        captures = inputs(root)
-    except FileNotFoundError as error:
-        print("SKIP: sidebar captures absent: " + str(error))
-        return 77 if args.probe else 1
-    if args.probe:
-        print("13 sidebar capture states available")
-        return 0
     portability = runpy.run_path(str(Path(__file__).with_name("portable-baselines.py")))
     environment = portability["display_environment"]()
     key = environment["key"]
@@ -300,6 +291,15 @@ def main():
     if args.record_limits and (entry or args.baseline_renderer or args.baseline_ref != "origin/main"):
         raise ValueError("recording requires a new key and a clean origin/main build, without baseline overrides")
     print(f"sidebar color environment: {key}; limits: {'recorded' if entry else 'original strict M5'}", flush=True)
+    root = (args.capture_root or default_inputs()).resolve()
+    try:
+        captures = inputs(root)
+    except FileNotFoundError as error:
+        print("SKIP: sidebar captures absent: " + str(error))
+        return 77 if args.probe else 1
+    if args.probe:
+        print("13 sidebar capture states available")
+        return 0
     # verify-all gives each check a disposable TMPDIR. Private comparison evidence
     # must survive that cleanup and must stay outside the repository/artifact logs.
     out = args.out.resolve() if args.out else Path(tempfile.mkdtemp(prefix="open-sidebar-compare-", dir="/tmp"))
