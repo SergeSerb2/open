@@ -83,6 +83,17 @@ def run(h, factory, results, tmp):
         old = {w['number'] for w in before if w['visible']}
         return [w for w in windows() if w['visible'] and w['number'] not in old]
 
+    def prepare_window():
+        state = app.call('window-state')
+        evidence.setdefault('launchWindowState', []).append({k:state[k] for k in
+            ('fullscreen', 'fullscreenTransition', 'isKeyWindow', 'keySameObject')})
+        if state['fullscreen']:
+            app.call('window-fullscreen')
+            if not h.wait_until(lambda: (lambda s: not s['fullscreen'] and not s['fullscreenTransition'])(app.call('window-state')),
+                                timeout=12, step=.1):
+                raise RuntimeError('owned probe window did not leave native fullscreen')
+        app.call('window-frame', frame=[80, 80, 1100, 800])
+
     def load(url):
         nonlocal last_tab
         last_tab = h.new_tab(app, url)
@@ -168,6 +179,7 @@ def run(h, factory, results, tmp):
         evidence['fixturePort'] = urls['port']
         evidence['engineSwitches'] = urls['engine_switches']
         try:
+            prepare_window()
             def login(row):
                 tab = load(urls['login'])
                 before = windows()
@@ -236,7 +248,11 @@ def run(h, factory, results, tmp):
                 if os.environ.get('OPEN_E2E_PASSWORDS_PROBE_ABORT_DIALOG') == '1':
                     raise ProbeAbort('Deliberate exit with WebAuthn dialog open (cleanup verification)')
                 target = row['newVisibleWindows'][0]['number'] if row['newVisibleWindows'] else None
-                app.call('key', key='escape', route='app', **({'window': target} if target else {}))
+                try:
+                    app.call('key', key='escape', route='app', **({'window': target} if target else {}))
+                    row['escape'] = 'native'
+                except RuntimeError:
+                    row['escape'] = 'native focus refused; waiting for fixture abort'
                 row['promiseAfterEscapeOrTimeout'] = app.eval(tab, 'new Promise(resolve => {const end=Date.now()+6000; const tick=()=>{const s=document.querySelector("#result").textContent; if(s!=="pending" || Date.now()>=end) resolve(s); else setTimeout(tick,50)};tick()})')
             def credential_get(row):
                 tab = load(urls['local_login'])
@@ -255,7 +271,11 @@ def run(h, factory, results, tmp):
                 time.sleep(1)
                 row['newVisibleWindows'] = visible_delta(before)
                 target = row['newVisibleWindows'][0]['number'] if row['newVisibleWindows'] else None
-                app.call('key', key='escape', route='app', **({'window': target} if target else {}))
+                try:
+                    app.call('key', key='escape', route='app', **({'window': target} if target else {}))
+                    row['escape'] = 'native'
+                except RuntimeError:
+                    row['escape'] = 'native focus refused; cleanup uses dismiss'
                 row['requested'] = True
             def cookies(row):
                 nonlocal app
@@ -268,6 +288,7 @@ def run(h, factory, results, tmp):
                 if new:
                     raise RuntimeError('new crash report during quit; relaunch refused')
                 app = factory(urls=(), extra_args=urls['engine_switches'])
+                prepare_window()
                 tab = load(urls['echo_cookies'])
                 row['afterRelaunch'] = app.eval(tab, 'JSON.parse(document.body.innerText)')
             def pages(row):
