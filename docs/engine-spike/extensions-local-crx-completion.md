@@ -106,8 +106,8 @@ and replaced with the recorded hash. System prompts were never dismissed.
 **23 PASS / 1 FAIL.** `sitecontrol-render` passed 1547/1548 assertions but
 failed `F25 registered native harness produced its result`. Its native
 performance diagnostics ran at load1 5.32 and 8.23. This is not either named
-main import bug, and no clean main control has qualified it. A focused rerun
-is queued under the Section 10 token limit; the original failure stays recorded.
+main import bug, and no clean main control has qualified it. The focused rerun
+below passed; the original full-gate failure stays recorded.
 
 Command: `s10-heavy.sh tools/verify-all.sh`, with the owned engine root exported.
 The machine-slot wait was 210 seconds. Execution-start load: (14.14, 19.39, 19.49);
@@ -139,6 +139,26 @@ final load: (7.96, 7.69, 10.76). No baseline, comparator, threshold, or allowlis
 | sitecontrol-render | FAIL | 600 |
 | boosts | PASS | 4 |
 | verify-secrets-fixture | PASS | 7 |
+
+### Focused Site Control rerun
+
+Command: `s10-heavy.sh tools/verify-all.sh --only sitecontrol-render`, with
+`OPEN_ENGINE_ROOT=$HOME/Developer/open-engine-s10`. Finished at 16:52:08
+(-07:00) with exit 0: build PASS (4 s), Site Control PASS (238 s),
+**1549/1549 assertions PASS**. F25 produced its native result and all ten
+checks passed. The renderer was reaped and its private root was removed.
+
+The detached job took 909 s including Section 10, machine-slot and screen-lock
+waits. Job-start load was (12.41, 8.94, 11.05); execution-start load was
+(29.93, 24.51, 17.37); final load was (19.57, 22.17, 18.09). F25 ran at
+load1 20.41. Four INFO rows carry no acceptance result; the editor CPU p95
+diagnostic was 14.637 ms against 12 ms at load1 19.57. This receipt does not
+claim quiet-machine performance acceptance.
+
+PR #223 is ready for review, with the uBlock popup regression still **FAIL**.
+The raw full-gate result remains 23/24; the focused Site Control rerun passed.
+Section 14's consumer update and blocked queue row remain separate work.
+No owned check or App process remains running.
 
 ## Review checklist
 
