@@ -156,6 +156,32 @@ and `settings-done`. State then includes `settingsStep`, `settingsOutcome`,
 and `settingsError`. These actions use the real cached wizard and shared App
 runner. `lastOutcome` and `lastFailures` remain readable after the first-run window closes. History streams through the existing Profile stores; passwords/cookies stay disabled. `OPEN_AUTOMATION_HISTORY_DELAY_MS` (automation builds only, at most 10000 ms per batch) pauses after the reader yields a real batch, before its transaction, so the suite can verify browsing while imported visits are still absent.
 
+`import-extensions` reads the report's candidate rows, selection, per-row
+status, queue state, and final counts. It omits manifest and Profile names.
+`action=toggle row=ROW on=BOOL` changes an unprocessed checkbox;
+`action=install` uses the report's Install Extensions action and returns while
+the serial queue waits for normal `ext-prompt` consent. `action=registries`
+reads installed IDs by Open Profile for synthetic isolation checks.
+`action=fixtures files='{"<candidate-id>":"<signed-local-crx>"}'` supplies at
+most 4,096 automation-only ID/file mappings (32 a–p characters per ID and
+4,096 UTF-8 bytes per path). Production has no fixture path.
+`action=inspect` scrolls and reads pixels from the report window; it is
+available only after synthetic fixture mappings are configured. Use it only
+with synthetic data. `OPEN_E2E_IMPORT_EXT_ONLY=1` runs this block alone inside
+`firstrun`. `OPEN_E2E_IMPORT_EXT_NEGATIVE=detection` and `queue` deliberately
+change fixture ownership/classification and real actions, so the matching EI
+gates must FAIL; clear both variables for normal acceptance.
+The synthetic second Profile uses `custom._0.directoryBasename = Profile 2`.
+`EI_default_role_mapping` reimports into a live Default with a different ID;
+`EI_default_role_target` checks its actual manager and the other Profile.
+The fixture mapping may name a missing file to verify App initiation failure.
+Once a local install starts, no App timeout completes it or cancels its sheet.
+`EI_failure_reported_engine` stays BLOCKED until the engine supplies completion
+for damaged signatures. `OPEN_E2E_IMPORT_EXT_NETWORK=1` adds one INFO Web Store
+receipt (no fixture mapping), observed for at most two minutes; no answer leaves
+the queue pending. `OPEN_E2E_IMPORT_EXT_NEGATIVE=detection` and `queue` apply
+real source/action faults to qualify the EI gates; normal runs restore them.
+
 Run the synthetic first-run flow with:
 
 ```sh
