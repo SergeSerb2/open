@@ -169,11 +169,6 @@ def onscreen_suite(command):
                 time.sleep(0.25)
             if cancelled is not None:
                 break
-            # Wait outside the screen lock; recheck after the kernel queue.
-            while cancelled is None and os.getloadavg()[0] > 60:
-                time.sleep(0.25)
-            if cancelled is not None:
-                break
             lock_file = open(lock_path, "a+")
             waiting_for_lock = True
             try:
@@ -192,7 +187,7 @@ def onscreen_suite(command):
                 current = os.stat(lock_path)
             except FileNotFoundError:
                 current = None
-            if current is not None and (held.st_dev, held.st_ino) == (current.st_dev, current.st_ino) and os.getloadavg()[0] <= 60:
+            if current is not None and (held.st_dev, held.st_ino) == (current.st_dev, current.st_ino):
                 break
             lock_file.close()
             lock_file = None
