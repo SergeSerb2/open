@@ -19,6 +19,9 @@ def run(app, results, tmp, new_tab, wait_until):
               window.handoffAtStart = {
                 page:document.documentElement.getAttribute('data-handoff-page'),
                 open:document.documentElement.getAttribute('data-handoff-open')};
+              window.privateAtStart = {
+                page:document.documentElement.getAttribute('data-private-page'),
+                open:document.documentElement.getAttribute('data-private-open')};
               </script></head><body>P7 local fixture<iframe src="/child"></iframe></body></html>'''
             if self.path.startswith('/child'):
                 body = b'<!doctype html><html><body>child frame</body></html>'
@@ -213,6 +216,8 @@ def run(app, results, tmp, new_tab, wait_until):
                 "processesBefore": before_processes, "processesAfterSwap": swapped_processes}
         except Exception as error:
             results["open_world_replacement_renderer"] = {"ok": False, "error": str(error)}
+        runpy.run_path(str(Path(__file__).with_name("open_world_private.py")))["run"](
+            app, results, new_tab, wait_until, server.server_port, other)
     finally:
         app.call("script-remove", id="p7-handoff-page")
         app.call("script-remove", id="p7-handoff-open")

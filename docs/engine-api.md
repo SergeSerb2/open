@@ -415,6 +415,11 @@ snapshot before notifying the current renderer, so scripts added after a tab
 exists run at document start after a renderer replacement too. The existing
 `OnRenderViewReady` resend remains in place.
 
+This includes private (OTR) browsers. Broadcasts select web contents by their
+exact `OEBrowserContext` identity; each snapshot reads that context's scripts.
+An OTR context has its own script list, so scripts installed only in its parent
+profile do not appear in it, and private-only scripts do not reach the parent.
+
 `evaluateJavaScript(_:inWorld:)` evaluates in the current document. The Open
 world shares the DOM, with separate globals and DOM wrappers. It grants no
 user gesture, awaits promises, returns JSON-compatible values (undefined and

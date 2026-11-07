@@ -435,6 +435,14 @@ into the renderer reply. `OEApp.mm`'s `OnBrowserCreated` reads `oe.scripts`
 before `OnContextCreated`. Updating that stored value therefore reaches a
 replacement process before its first document-start script.
 
+The broadcast includes OTR browsers owned by the changed `OEBrowserContext`,
+using exact context identity and each web content's own script list. It does
+not inherit scripts from the parent Profile. The real-App
+`open_world_private_renderer` row installs page/Open scripts after a private
+tab exists, checks both at document start after a process swap, and checks
+normal/private script isolation in both directions. CEF 0601 and 0602 follow
+main's 0701 in the series, as directed for this stack; their numbers stay fixed.
+
 The overlay API `cef_open_world.h` creates or gets that world's context using
 Blink's `ExecuteScriptInIsolatedWorld` and `GetScriptContextFromWorldId`.
 `OEApp::OnContextCreated` filters to the main world, then runs matching Open

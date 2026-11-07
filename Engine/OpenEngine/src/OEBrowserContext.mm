@@ -679,6 +679,8 @@ class OEBrowsingDataCallback : public CefOpenProfileCallback {
 // renderers receive it before document start; OnRenderViewReady also resends it.
 - (void)oe_broadcastScripts {
   if (_state == OEBrowserContextStateClosed || _oe_closing) return;
+  // OTR web contents have their own context. Match that exact owner, so updates
+  // cover its browsers without installing a parent profile's scripts there.
   for (OEWebContent* webContent in OEEngine.shared.allWebContents) {
     if (webContent.context != self || !webContent.oe_browser) {
       continue;
